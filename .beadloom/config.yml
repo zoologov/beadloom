@@ -1,0 +1,6 @@
+languages:
+- .py
+scan_paths:
+- src
+sync:
+  hook_mode: warn

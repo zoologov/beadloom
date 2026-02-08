@@ -9,9 +9,6 @@ dist/
 build/
 .venv/
 
-# Beadloom (auto-generated)
-.beadloom/beadloom.db
-
 # IDE
 .idea/
 .vscode/
@@ -28,5 +25,5 @@ htmlcov/
 # ruff
 .ruff_cache/
 
-# Beads
-.beads/
+# Beadloom (auto-generated)
+.beadloom/beadloom.db
