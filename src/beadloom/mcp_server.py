@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 # --- Tool handler functions (sync, testable without transport) ---
 
 
+# beadloom:service=mcp-server
 def handle_get_context(
     conn: sqlite3.Connection,
     *,
@@ -74,9 +75,10 @@ def handle_list_nodes(
 def handle_sync_check(
     conn: sqlite3.Connection,
     ref_id: str | None = None,
+    project_root: Path | None = None,
 ) -> list[dict[str, str]]:
     """Check sync status, optionally for a specific ref_id."""
-    results = check_sync(conn)
+    results = check_sync(conn, project_root=project_root)
     if ref_id:
         results = [r for r in results if r["ref_id"] == ref_id]
     return results
@@ -226,7 +228,7 @@ def create_server(project_root: Path) -> Server:
         args = arguments or {}
         conn = open_db(db_path)
         try:
-            result = _dispatch_tool(conn, name, args)
+            result = _dispatch_tool(conn, name, args, project_root=project_root)
             return [mcp.TextContent(
                 type="text",
                 text=json.dumps(result, ensure_ascii=False, indent=2),
@@ -243,6 +245,7 @@ def _dispatch_tool(
     conn: sqlite3.Connection,
     name: str,
     args: dict[str, Any],
+    project_root: Path | None = None,
 ) -> Any:
     """Route tool call to the appropriate handler."""
     if name == "get_context":
@@ -262,7 +265,9 @@ def _dispatch_tool(
     if name == "list_nodes":
         return handle_list_nodes(conn, kind=args.get("kind"))
     if name == "sync_check":
-        return handle_sync_check(conn, ref_id=args.get("ref_id"))
+        return handle_sync_check(
+            conn, ref_id=args.get("ref_id"), project_root=project_root,
+        )
     if name == "get_status":
         return handle_get_status(conn)
 

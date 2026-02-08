@@ -77,6 +77,7 @@ def suggest_ref_id(conn: sqlite3.Connection, ref_id: str) -> list[str]:
     return [rid for rid, dist in scored[:_MAX_SUGGESTIONS] if dist <= max_dist]
 
 
+# beadloom:domain=context-oracle
 def bfs_subgraph(
     conn: sqlite3.Connection,
     focus_ref_ids: list[str],

@@ -375,7 +375,7 @@ def sync_check(
         sys.exit(1)
 
     conn = open_db(db_path)
-    results = check_sync(conn)
+    results = check_sync(conn, project_root=project_root)
     conn.close()
 
     if ref_filter:
@@ -523,7 +523,7 @@ def sync_update(
         return
 
     conn = open_db(db_path)
-    results = check_sync(conn)
+    results = check_sync(conn, project_root=project_root)
     filtered = [r for r in results if r["ref_id"] == ref_id]
 
     if not filtered:

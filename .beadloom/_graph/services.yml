@@ -1,0 +1,67 @@
+nodes:
+  - ref_id: beadloom
+    kind: service
+    summary: "Beadloom CLI + MCP server — Context Oracle + Doc Sync Engine"
+    source: src/beadloom/
+    docs:
+      - docs/architecture.md
+      - docs/getting-started.md
+
+  - ref_id: context-oracle
+    kind: domain
+    summary: "Context bundle building via BFS graph traversal"
+    docs:
+      - docs/architecture.md
+
+  - ref_id: doc-sync
+    kind: domain
+    summary: "Doc-code synchronization tracking and stale detection"
+    docs:
+      - docs/sync-engine.md
+
+  - ref_id: mcp-server
+    kind: service
+    summary: "MCP stdio server with 5 tools for AI agents"
+    docs:
+      - docs/mcp-server.md
+
+  - ref_id: cli
+    kind: service
+    summary: "Click-based CLI with 11 commands"
+    docs:
+      - docs/cli-reference.md
+
+  - ref_id: graph-format
+    kind: domain
+    summary: "YAML graph format specification and loader"
+    docs:
+      - docs/graph-format.md
+
+edges:
+  - src: context-oracle
+    dst: beadloom
+    kind: part_of
+  - src: doc-sync
+    dst: beadloom
+    kind: part_of
+  - src: mcp-server
+    dst: beadloom
+    kind: part_of
+  - src: cli
+    dst: beadloom
+    kind: part_of
+  - src: graph-format
+    dst: beadloom
+    kind: part_of
+  - src: mcp-server
+    dst: context-oracle
+    kind: uses
+  - src: cli
+    dst: context-oracle
+    kind: uses
+  - src: cli
+    dst: doc-sync
+    kind: uses
+  - src: cli
+    dst: graph-format
+    kind: uses

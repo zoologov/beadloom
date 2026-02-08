@@ -140,6 +140,23 @@ def _index_code_files(
     return count, warnings
 
 
+def _build_initial_sync_state(conn: sqlite3.Connection) -> None:
+    """Populate sync_state table from docs and code_symbols with shared ref_ids."""
+    from beadloom.sync_engine import build_sync_state
+
+    now = datetime.now(tz=timezone.utc).isoformat()
+    pairs = build_sync_state(conn)
+    for pair in pairs:
+        conn.execute(
+            "INSERT OR IGNORE INTO sync_state "
+            "(doc_path, code_path, ref_id, code_hash_at_sync, doc_hash_at_sync, "
+            "synced_at, status) VALUES (?, ?, ?, ?, ?, ?, 'ok')",
+            (pair.doc_path, pair.code_path, pair.ref_id,
+             pair.code_hash, pair.doc_hash, now),
+        )
+    conn.commit()
+
+
 def reindex(project_root: Path) -> ReindexResult:
     """Full reindex: drop all tables, re-create schema, reload everything.
 
@@ -191,7 +208,10 @@ def reindex(project_root: Path) -> ReindexResult:
     result.symbols_indexed = symbols_count
     result.warnings.extend(sym_warnings)
 
-    # 4. Set meta.
+    # 4. Build initial sync state.
+    _build_initial_sync_state(conn)
+
+    # 5. Set meta.
     now = datetime.now(tz=timezone.utc).isoformat()
     set_meta(conn, "last_reindex_at", now)
     set_meta(conn, "beadloom_version", __version__)

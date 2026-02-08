@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -21,6 +23,7 @@ class SyncPair:
     code_hash: str
 
 
+# beadloom:domain=doc-sync
 def build_sync_state(conn: sqlite3.Connection) -> list[SyncPair]:
     """Build sync pairs from docs and code_symbols sharing a ref_id.
 
@@ -63,15 +66,40 @@ def build_sync_state(conn: sqlite3.Connection) -> list[SyncPair]:
     return pairs
 
 
-def check_sync(conn: sqlite3.Connection) -> list[dict[str, str]]:
-    """Check sync_state entries against current doc and code hashes.
+def _file_hash(path: Path) -> str | None:
+    """Compute SHA-256 hash of a file, or None if file doesn't exist."""
+    if not path.is_file():
+        return None
+    content = path.read_text(encoding="utf-8")
+    return hashlib.sha256(content.encode()).hexdigest()
 
-    Compares stored hashes with current hashes from docs and code_symbols.
+
+def check_sync(
+    conn: sqlite3.Connection,
+    project_root: Path | None = None,
+) -> list[dict[str, str]]:
+    """Check sync_state entries against actual file hashes on disk.
+
+    Reads files directly from disk to detect changes since last sync,
+    independent of whether reindex has been run.
+
+    Parameters
+    ----------
+    conn:
+        Open SQLite connection.
+    project_root:
+        Project root directory. If None, inferred from DB path.
+
     Returns list of dicts with doc_path, code_path, ref_id, status.
     """
     sync_rows = conn.execute("SELECT * FROM sync_state").fetchall()
     if not sync_rows:
         return []
+
+    # Infer project root from database path if not provided.
+    if project_root is None:
+        db_path = conn.execute("PRAGMA database_list").fetchone()[2]
+        project_root = Path(db_path).parent.parent  # .beadloom/beadloom.db → project
 
     results: list[dict[str, str]] = []
 
@@ -82,17 +110,9 @@ def check_sync(conn: sqlite3.Connection) -> list[dict[str, str]]:
         stored_code_hash = row["code_hash_at_sync"]
         stored_doc_hash = row["doc_hash_at_sync"]
 
-        # Get current hashes.
-        doc_row = conn.execute(
-            "SELECT hash FROM docs WHERE path = ?", (doc_path,)
-        ).fetchone()
-        current_doc_hash = doc_row["hash"] if doc_row else None
-
-        sym_row = conn.execute(
-            "SELECT file_hash FROM code_symbols WHERE file_path = ? LIMIT 1",
-            (code_path,),
-        ).fetchone()
-        current_code_hash = sym_row["file_hash"] if sym_row else None
+        # Hash actual files on disk.
+        current_doc_hash = _file_hash(project_root / "docs" / doc_path)
+        current_code_hash = _file_hash(project_root / code_path)
 
         status = "ok"
         if current_code_hash and current_code_hash != stored_code_hash:
