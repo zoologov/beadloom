@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import unittest.mock
 from typing import TYPE_CHECKING
 
 from click.testing import CliRunner
@@ -114,3 +115,68 @@ class TestSyncUpdateCommand:
             main, ["sync-update", "NOPE", "--check", "--project", str(project)]
         )
         assert result.exit_code == 0  # No stale pairs, just empty output.
+
+
+class TestSyncUpdateInteractive:
+    """Tests for interactive sync-update (opening $EDITOR)."""
+
+    def test_opens_editor_on_stale(self, tmp_path: Path) -> None:
+        """When stale, should call click.edit() with doc path."""
+        project = _setup_project_with_sync(tmp_path)
+
+        # Make it stale by modifying code.
+        (project / "src" / "api.py").write_text(
+            "# beadloom:feature=F1\ndef handler():\n    return 'changed'\n"
+        )
+
+        # Mock click.edit to not actually open editor.
+        with unittest.mock.patch("beadloom.cli.click.edit") as mock_edit:
+            runner = CliRunner()
+            result = runner.invoke(
+                main, ["sync-update", "F1", "--project", str(project)],
+                input="y\n",
+            )
+        assert result.exit_code == 0, result.output
+        assert mock_edit.called
+        assert "Synced" in result.output
+
+    def test_skips_when_user_declines(self, tmp_path: Path) -> None:
+        """When user says no, should not open editor."""
+        project = _setup_project_with_sync(tmp_path)
+        (project / "src" / "api.py").write_text(
+            "# beadloom:feature=F1\ndef handler():\n    return 'changed'\n"
+        )
+
+        with unittest.mock.patch("beadloom.cli.click.edit") as mock_edit:
+            runner = CliRunner()
+            result = runner.invoke(
+                main, ["sync-update", "F1", "--project", str(project)],
+                input="n\n",
+            )
+        assert result.exit_code == 0
+        assert not mock_edit.called
+
+    def test_updates_sync_state_after_edit(self, tmp_path: Path) -> None:
+        """After editing, sync_state should be updated to 'ok'."""
+        project = _setup_project_with_sync(tmp_path)
+        (project / "src" / "api.py").write_text(
+            "# beadloom:feature=F1\ndef handler():\n    return 'changed'\n"
+        )
+
+        with unittest.mock.patch("beadloom.cli.click.edit"):
+            runner = CliRunner()
+            runner.invoke(
+                main, ["sync-update", "F1", "--project", str(project)],
+                input="y\n",
+            )
+
+        # Verify sync_state is now 'ok'.
+        from beadloom.db import open_db
+
+        db_path = project / ".beadloom" / "beadloom.db"
+        conn = open_db(db_path)
+        rows = conn.execute(
+            "SELECT status FROM sync_state WHERE ref_id = 'F1'"
+        ).fetchall()
+        conn.close()
+        assert all(r["status"] == "ok" for r in rows)

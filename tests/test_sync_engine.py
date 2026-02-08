@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from beadloom.db import create_schema, open_db
-from beadloom.sync_engine import SyncPair, build_sync_state, check_sync
+from beadloom.sync_engine import SyncPair, build_sync_state, check_sync, mark_synced
 
 if TYPE_CHECKING:
     import sqlite3
@@ -181,3 +181,32 @@ class TestCheckSync:
         """If no sync_state entries, check_sync returns empty."""
         results = check_sync(conn, project_root=project)
         assert results == []
+
+
+class TestMarkSynced:
+    def test_updates_hashes_and_status(self, conn: sqlite3.Connection, project: Path) -> None:
+        """mark_synced should update hashes and set status to 'ok'."""
+        # Create files on disk.
+        (project / "docs" / "spec.md").write_text("# Spec\n\nContent.\n")
+        (project / "src" / "api.py").write_text("def handler():\n    pass\n")
+
+        # Insert a node and stale sync_state.
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary) VALUES ('F1', 'feature', 'test')"
+        )
+        conn.execute(
+            "INSERT INTO sync_state (doc_path, code_path, ref_id, "
+            "code_hash_at_sync, doc_hash_at_sync, synced_at, status) "
+            "VALUES ('spec.md', 'src/api.py', 'F1', 'old_hash', 'old_hash', "
+            "'2025-01-01', 'stale')"
+        )
+        conn.commit()
+
+        mark_synced(conn, "spec.md", "src/api.py", project)
+
+        row = conn.execute(
+            "SELECT * FROM sync_state WHERE doc_path = 'spec.md'"
+        ).fetchone()
+        assert row["status"] == "ok"
+        assert row["doc_hash_at_sync"] != "old_hash"
+        assert row["code_hash_at_sync"] != "old_hash"

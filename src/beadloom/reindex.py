@@ -29,7 +29,7 @@ _TABLES_TO_DROP = [
 ]
 
 # File extensions to scan for code symbols.
-_CODE_EXTENSIONS = frozenset({".py"})
+_CODE_EXTENSIONS = frozenset({".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"})
 
 
 @dataclass

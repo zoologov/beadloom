@@ -197,3 +197,113 @@ def import_docs(
         )
 
     return results
+
+
+def interactive_init(project_root: Path) -> dict[str, Any]:
+    """Run interactive initialization wizard.
+
+    Shows a menu to choose init mode, handles re-init detection,
+    and guides the user through the setup process.
+
+    Returns dict with summary of what was done.
+    """
+    from rich.console import Console
+    from rich.prompt import Prompt
+
+    console = Console()
+    beadloom_dir = project_root / ".beadloom"
+
+    result: dict[str, Any] = {"mode": None, "reinit": False}
+
+    # Re-init detection.
+    if beadloom_dir.exists():
+        console.print("\n[yellow]⚠ .beadloom/ already exists in this project.[/yellow]\n")
+        choice = Prompt.ask(
+            "What would you like to do?",
+            choices=["overwrite", "cancel"],
+            default="cancel",
+        )
+        if choice == "cancel":
+            console.print("Cancelled.")
+            result["mode"] = "cancelled"
+            return result
+        result["reinit"] = True
+
+    # Show project scan summary.
+    scan = scan_project(project_root)
+    console.print("\n[bold]Project scan:[/bold]")
+    if scan["manifests"]:
+        console.print(f"  Manifests: {', '.join(scan['manifests'])}")
+    if scan["source_dirs"]:
+        console.print(f"  Source dirs: {', '.join(scan['source_dirs'])}")
+    console.print(f"  Code files: {scan['file_count']}")
+    if scan["languages"]:
+        console.print(f"  Languages: {', '.join(scan['languages'])}")
+
+    # Check for existing docs.
+    docs_dir = project_root / "docs"
+    has_docs = docs_dir.is_dir() and any(docs_dir.rglob("*.md"))
+
+    console.print("")
+
+    # Mode selection.
+    if has_docs and scan["file_count"] > 0:
+        # Both code and docs exist.
+        mode = Prompt.ask(
+            "Choose init mode",
+            choices=["bootstrap", "import", "both"],
+            default="both",
+        )
+    elif has_docs:
+        mode = Prompt.ask(
+            "Choose init mode",
+            choices=["import", "bootstrap"],
+            default="import",
+        )
+    elif scan["file_count"] > 0:
+        mode = Prompt.ask(
+            "Choose init mode",
+            choices=["bootstrap", "import"],
+            default="bootstrap",
+        )
+    else:
+        console.print("[yellow]No source files or docs found.[/yellow]")
+        mode = Prompt.ask(
+            "Choose init mode",
+            choices=["bootstrap", "import"],
+            default="bootstrap",
+        )
+
+    result["mode"] = mode
+
+    # Execute chosen mode.
+    if mode in ("bootstrap", "both"):
+        console.print("\n[bold]Bootstrapping from code...[/bold]")
+        bs_result = bootstrap_project(project_root)
+        result["bootstrap"] = bs_result
+        console.print(f"  Generated {bs_result['nodes_generated']} nodes")
+        console.print("  Config: .beadloom/config.yml")
+
+    if mode in ("import", "both"):
+        if not has_docs:
+            import_dir_str = Prompt.ask("Documentation directory", default="docs")
+            import_dir = project_root / import_dir_str
+        else:
+            import_dir = docs_dir
+
+        if import_dir.is_dir():
+            console.print(f"\n[bold]Importing docs from {import_dir.name}/...[/bold]")
+            docs_result = import_docs(project_root, import_dir)
+            result["import"] = docs_result
+            console.print(f"  Classified {len(docs_result)} documents")
+        else:
+            console.print(f"[red]Directory {import_dir} does not exist.[/red]")
+
+    # Final instructions.
+    console.print("\n[green bold]✓ Initialization complete![/green bold]")
+    console.print("\nNext steps:")
+    console.print("  1. Review .beadloom/_graph/*.yml")
+    console.print("  2. Run [bold]beadloom reindex[/bold]")
+    console.print("  3. Run [bold]beadloom doctor[/bold] to verify")
+
+    return result

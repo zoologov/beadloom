@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -135,3 +136,22 @@ def check_sync(
 
     conn.commit()
     return results
+
+
+def mark_synced(
+    conn: sqlite3.Connection,
+    doc_path: str,
+    code_path: str,
+    project_root: Path,
+) -> None:
+    """Recompute hashes for a doc-code pair and mark as synced."""
+    doc_hash = _file_hash(project_root / "docs" / doc_path)
+    code_hash = _file_hash(project_root / code_path)
+
+    now = datetime.now(tz=timezone.utc).isoformat()
+    conn.execute(
+        "UPDATE sync_state SET doc_hash_at_sync = ?, code_hash_at_sync = ?, "
+        "synced_at = ?, status = 'ok' WHERE doc_path = ? AND code_path = ?",
+        (doc_hash, code_hash, now, doc_path, code_path),
+    )
+    conn.commit()

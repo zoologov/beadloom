@@ -10,6 +10,7 @@ from beadloom.onboarding import (
     bootstrap_project,
     classify_doc,
     import_docs,
+    interactive_init,
     scan_project,
 )
 
@@ -178,3 +179,86 @@ class TestInitCli:
             main, ["init", "--import", str(docs), "--project", str(tmp_path)]
         )
         assert result.exit_code == 0, result.output
+
+    def test_init_interactive_bootstrap(self, tmp_path: Path) -> None:
+        """init without flags should trigger interactive mode."""
+        from unittest.mock import patch
+
+        from click.testing import CliRunner
+
+        from beadloom.cli import main
+
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "app.py").write_text("def main():\n    pass\n")
+
+        # Mock rich.prompt to avoid actual terminal interaction.
+        with patch("rich.prompt.Prompt.ask", return_value="bootstrap"), \
+             patch("rich.console.Console"):
+            runner = CliRunner()
+            result = runner.invoke(
+                main, ["init", "--project", str(tmp_path)]
+            )
+        assert result.exit_code == 0, result.output
+
+
+class TestInteractiveInit:
+    """Tests for interactive init mode."""
+
+    def test_bootstrap_mode(self, tmp_path: Path) -> None:
+        """Interactive init with bootstrap selection."""
+        from unittest.mock import patch
+
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "app.py").write_text("def main():\n    pass\n")
+
+        with patch("rich.prompt.Prompt.ask", return_value="bootstrap"), \
+             patch("rich.console.Console"):
+            result = interactive_init(tmp_path)
+
+        assert result["mode"] == "bootstrap"
+        assert (tmp_path / ".beadloom" / "_graph").is_dir()
+
+    def test_import_mode(self, tmp_path: Path) -> None:
+        """Interactive init with import selection."""
+        from unittest.mock import patch
+
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        (docs / "readme.md").write_text("# Hello\n\nWorld.\n")
+
+        with patch("rich.prompt.Prompt.ask", return_value="import"), \
+             patch("rich.console.Console"):
+            result = interactive_init(tmp_path)
+
+        assert result["mode"] == "import"
+
+    def test_reinit_cancel(self, tmp_path: Path) -> None:
+        """Re-init detection with cancel choice."""
+        from unittest.mock import patch
+
+        (tmp_path / ".beadloom").mkdir()
+
+        with patch("rich.prompt.Prompt.ask", return_value="cancel"), \
+             patch("rich.console.Console"):
+            result = interactive_init(tmp_path)
+
+        assert result["mode"] == "cancelled"
+        assert result["reinit"] is False
+
+    def test_reinit_overwrite(self, tmp_path: Path) -> None:
+        """Re-init detection with overwrite choice."""
+        from unittest.mock import patch
+
+        (tmp_path / ".beadloom").mkdir()
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "app.py").write_text("def main():\n    pass\n")
+
+        with patch("rich.prompt.Prompt.ask", side_effect=["overwrite", "bootstrap"]), \
+             patch("rich.console.Console"):
+            result = interactive_init(tmp_path)
+
+        assert result["reinit"] is True
+        assert result["mode"] == "bootstrap"

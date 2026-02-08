@@ -546,12 +546,35 @@ def sync_update(
         conn.close()
         return
 
-    # Interactive mode: show stale pairs and offer to open editor.
-    for r in stale:
-        click.echo(f"  [stale] {r['doc_path']} <-> {r['code_path']}")
+    # Interactive mode: open editor for each stale doc.
+    from beadloom.sync_engine import mark_synced
 
-    click.echo("")
-    click.echo("Run `beadloom sync-update <ref_id>` without --check to edit docs.")
+    # Group stale pairs by doc_path (one doc may have multiple code files).
+    doc_stale: dict[str, list[dict[str, str]]] = {}
+    for r in stale:
+        doc_stale.setdefault(r["doc_path"], []).append(r)
+
+    for doc_path, pairs in doc_stale.items():
+        click.echo(f"\n  Doc: {doc_path}")
+        for r in pairs:
+            click.echo(f"    Code changed: {r['code_path']}")
+
+        doc_full_path = project_root / "docs" / doc_path
+        if not doc_full_path.exists():
+            click.echo(f"    Warning: {doc_full_path} does not exist, skipping.")
+            continue
+
+        if not click.confirm(f"\n  Open {doc_path} in editor?", default=True):
+            continue
+
+        # Open in $EDITOR.
+        click.edit(filename=str(doc_full_path))
+
+        # Mark all pairs for this doc as synced.
+        for r in pairs:
+            mark_synced(conn, r["doc_path"], r["code_path"], project_root)
+        click.echo(f"  Synced: {doc_path}")
+
     conn.close()
 
 
@@ -721,11 +744,9 @@ def init(
         click.echo("Next: review .beadloom/_graph/imported.yml, then run `beadloom reindex`")
         return
 
-    # Default: show help.
-    click.echo("Welcome to Beadloom!")
-    click.echo("")
-    click.echo("Usage:")
-    click.echo("  beadloom init --bootstrap    Generate graph from code")
-    click.echo("  beadloom init --import DIR   Import existing docs")
-    click.echo("")
-    click.echo("See `beadloom init --help` for more options.")
+    # Default: interactive mode.
+    from beadloom.onboarding import interactive_init
+
+    result = interactive_init(project_root)
+    if result["mode"] == "cancelled":
+        sys.exit(0)

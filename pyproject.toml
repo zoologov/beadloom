@@ -36,12 +36,20 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+languages = [
+    "tree-sitter-typescript>=0.23",
+    "tree-sitter-go>=0.23",
+    "tree-sitter-rust>=0.23",
+]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "ruff>=0.8",
     "mypy>=1.13",
     "types-PyYAML>=6.0",
+]
+all = [
+    "beadloom[languages,dev]",
 ]
 
 [project.scripts]
