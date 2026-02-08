@@ -93,6 +93,35 @@ def _format_markdown(bundle: dict[str, object]) -> str:
 
 
 @main.command()
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: current directory).",
+)
+def reindex(*, project: Path | None) -> None:
+    """Drop and rebuild the SQLite index from Git sources."""
+    from beadloom.reindex import reindex as do_reindex
+
+    project_root = project or Path.cwd()
+    result = do_reindex(project_root)
+
+    click.echo(f"Nodes:   {result.nodes_loaded}")
+    click.echo(f"Edges:   {result.edges_loaded}")
+    click.echo(f"Docs:    {result.docs_indexed}")
+    click.echo(f"Chunks:  {result.chunks_indexed}")
+    click.echo(f"Symbols: {result.symbols_indexed}")
+    if result.errors:
+        click.echo("")
+        for err in result.errors:
+            click.echo(f"  [ERR] {err}")
+    if result.warnings:
+        click.echo("")
+        for warn in result.warnings:
+            click.echo(f"  [warn] {warn}")
+
+
+@main.command()
 @click.argument("ref_ids", nargs=-1, required=True)
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON.")
 @click.option("--markdown", "output_md", is_flag=True, help="Output as Markdown (default).")
