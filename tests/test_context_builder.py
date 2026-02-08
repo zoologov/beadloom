@@ -105,6 +105,33 @@ class TestSuggestRefId:
         result = suggest_ref_id(conn, "N-000")
         assert len(result) <= 5
 
+    def test_prefix_match_short_input(self, conn: sqlite3.Connection) -> None:
+        _insert_node(conn, "mcp-server", "service", "MCP Server")
+        result = suggest_ref_id(conn, "mcp")
+        assert result == ["mcp-server"]
+
+    def test_prefix_match_case_insensitive(self, conn: sqlite3.Connection) -> None:
+        _insert_node(conn, "mcp-server", "service", "MCP Server")
+        result = suggest_ref_id(conn, "MCP")
+        assert result == ["mcp-server"]
+
+    def test_reverse_prefix_match(self, conn: sqlite3.Connection) -> None:
+        _insert_node(conn, "mcp", "domain", "MCP domain")
+        result = suggest_ref_id(conn, "mcp-server-v2")
+        assert "mcp" in result
+
+    def test_prefix_and_levenshtein_combined(self, conn: sqlite3.Connection) -> None:
+        _insert_node(conn, "mcp-server", "service", "MCP Server")
+        _insert_node(conn, "mcq", "domain", "MCQ domain")
+        result = suggest_ref_id(conn, "mcp")
+        assert result[0] == "mcp-server"  # prefix match first
+        assert "mcq" in result  # levenshtein match also present
+
+    def test_prefix_match_no_false_positives(self, conn: sqlite3.Connection) -> None:
+        _insert_node(conn, "xyz-server", "service", "XYZ Server")
+        result = suggest_ref_id(conn, "abc")
+        assert result == []
+
 
 # --- bfs_subgraph ---
 

@@ -53,10 +53,11 @@ def _levenshtein(s: str, t: str) -> int:
 
 
 def suggest_ref_id(conn: sqlite3.Connection, ref_id: str) -> list[str]:
-    """Suggest existing ref_ids similar to a missing one (Levenshtein).
+    """Suggest existing ref_ids similar to a missing one.
 
-    Returns up to 5 suggestions sorted by distance, or empty list if
-    the ref_id actually exists or DB is empty.
+    Uses prefix matching (case-insensitive) as primary strategy,
+    supplemented by Levenshtein distance for typo correction.
+    Returns up to 5 suggestions sorted by relevance.
     """
     row = conn.execute(
         "SELECT ref_id FROM nodes WHERE ref_id = ?", (ref_id,)
@@ -70,11 +71,29 @@ def suggest_ref_id(conn: sqlite3.Connection, ref_id: str) -> list[str]:
     if not all_ids:
         return []
 
+    ref_lower = ref_id.lower()
+
+    # Strategy 1: Prefix matches (case-insensitive).
+    prefix_matches = [
+        rid for rid in all_ids
+        if rid.lower().startswith(ref_lower) or ref_lower.startswith(rid.lower())
+    ]
+
+    # Strategy 2: Levenshtein distance within threshold.
     scored = [(rid, _levenshtein(ref_id, rid)) for rid in all_ids]
     scored.sort(key=lambda x: x[1])
-    # Only return suggestions within a reasonable distance.
     max_dist = max(len(ref_id) // 2, 3)
-    return [rid for rid, dist in scored[:_MAX_SUGGESTIONS] if dist <= max_dist]
+    lev_matches = [rid for rid, dist in scored if dist <= max_dist]
+
+    # Combine: prefix first, then Levenshtein, deduplicated.
+    seen: set[str] = set()
+    combined: list[str] = []
+    for rid in prefix_matches + lev_matches:
+        if rid not in seen:
+            seen.add(rid)
+            combined.append(rid)
+
+    return combined[:_MAX_SUGGESTIONS]
 
 
 # beadloom:domain=context-oracle

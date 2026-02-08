@@ -86,6 +86,8 @@ def extract_symbols(file_path: Path) -> list[dict[str, Any]]:
 
     symbols: list[dict[str, Any]] = []
     pending_annotation: dict[str, str] = {}
+    module_annotation: dict[str, str] = {}
+    found_first_symbol = False
 
     for child in tree.root_node.children:
         # Check for comment with beadloom annotation.
@@ -94,6 +96,8 @@ def extract_symbols(file_path: Path) -> list[dict[str, Any]]:
             ann = parse_annotations(text)
             if ann:
                 pending_annotation = ann
+                if not found_first_symbol:
+                    module_annotation.update(ann)
             continue
 
         if child.type not in _SYMBOL_TYPES:
@@ -106,17 +110,22 @@ def extract_symbols(file_path: Path) -> list[dict[str, Any]]:
             pending_annotation = {}
             continue
 
+        found_first_symbol = True
         name, kind = info
         # tree-sitter uses 0-based rows; we want 1-based lines.
         line_start = child.start_point.row + 1
         line_end = child.end_point.row + 1
+
+        # Module-level annotations apply to all symbols; symbol-specific
+        # annotations (pending) take precedence via dict merge order.
+        merged = {**module_annotation, **pending_annotation}
 
         symbols.append({
             "symbol_name": name,
             "kind": kind,
             "line_start": line_start,
             "line_end": line_end,
-            "annotations": pending_annotation,
+            "annotations": merged,
             "file_hash": file_hash,
         })
         pending_annotation = {}

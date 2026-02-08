@@ -174,3 +174,104 @@ class TestReindex:
         result = reindex(project)
         assert isinstance(result, ReindexResult)
         assert result.nodes_loaded >= 0
+
+    def test_doc_ref_map_conflict_warns(self, project: Path) -> None:
+        """When two YAML nodes reference the same doc, a warning is emitted."""
+        # Arrange
+        graph_dir = project / ".beadloom" / "_graph"
+        docs = project / "docs"
+        (docs / "architecture.md").write_text("## Architecture\n\nShared doc.\n")
+        (graph_dir / "a_first.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: beadloom\n"
+            "    kind: domain\n"
+            '    summary: "Beadloom core"\n'
+            "    docs:\n"
+            "      - docs/architecture.md\n"
+        )
+        (graph_dir / "b_second.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: context-oracle\n"
+            "    kind: domain\n"
+            '    summary: "Context Oracle"\n'
+            "    docs:\n"
+            "      - docs/architecture.md\n"
+        )
+
+        # Act
+        result = reindex(project)
+
+        # Assert
+        conflict_warnings = [
+            w for w in result.warnings if "architecture.md" in w
+        ]
+        assert len(conflict_warnings) == 1
+        assert "beadloom" in conflict_warnings[0]
+        assert "context-oracle" in conflict_warnings[0]
+
+    def test_doc_ref_map_conflict_keeps_first(
+        self, project: Path, db_path: Path
+    ) -> None:
+        """When two YAML nodes reference the same doc, the first mapping wins."""
+        # Arrange
+        graph_dir = project / ".beadloom" / "_graph"
+        docs = project / "docs"
+        (docs / "architecture.md").write_text("## Architecture\n\nShared doc.\n")
+        (graph_dir / "a_first.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: beadloom\n"
+            "    kind: domain\n"
+            '    summary: "Beadloom core"\n'
+            "    docs:\n"
+            "      - docs/architecture.md\n"
+        )
+        (graph_dir / "b_second.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: context-oracle\n"
+            "    kind: domain\n"
+            '    summary: "Context Oracle"\n'
+            "    docs:\n"
+            "      - docs/architecture.md\n"
+        )
+
+        # Act
+        reindex(project)
+
+        # Assert — doc should be linked to the FIRST node (beadloom), not the last
+        conn = open_db(db_path)
+        row = conn.execute(
+            "SELECT ref_id FROM docs WHERE path = ?", ("architecture.md",)
+        ).fetchone()
+        assert row is not None
+        assert row["ref_id"] == "beadloom"
+        conn.close()
+
+    def test_doc_ref_map_no_conflict(self, project: Path) -> None:
+        """Two nodes with different docs produce no doc-conflict warnings."""
+        # Arrange
+        graph_dir = project / ".beadloom" / "_graph"
+        docs = project / "docs"
+        (docs / "api.md").write_text("## API\n\nAPI docs.\n")
+        (docs / "guide.md").write_text("## Guide\n\nUser guide.\n")
+        (graph_dir / "features.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: api-module\n"
+            "    kind: feature\n"
+            '    summary: "API"\n'
+            "    docs:\n"
+            "      - docs/api.md\n"
+            "  - ref_id: guide-module\n"
+            "    kind: feature\n"
+            '    summary: "Guide"\n'
+            "    docs:\n"
+            "      - docs/guide.md\n"
+        )
+
+        # Act
+        result = reindex(project)
+
+        # Assert — no conflict warnings (other warnings like graph warnings are ok)
+        conflict_warnings = [
+            w for w in result.warnings if "referenced by both" in w
+        ]
+        assert len(conflict_warnings) == 0

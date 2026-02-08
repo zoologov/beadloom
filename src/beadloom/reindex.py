@@ -55,15 +55,22 @@ def _drop_all_tables(conn: sqlite3.Connection) -> None:
 def _build_doc_ref_map(
     graph_dir: Path,
     project_root: Path,
-) -> dict[str, str]:
+) -> tuple[dict[str, str], list[str]]:
     """Build a mapping of relative doc path → ref_id from YAML graph nodes.
 
     Scans YAML graph files for nodes with ``docs`` lists and maps each
     doc path to the node's ref_id.
+
+    Returns
+    -------
+    tuple[dict[str, str], list[str]]
+        ``(ref_map, warnings)`` where *warnings* lists any doc path conflicts
+        (i.e. a doc referenced by more than one node).
     """
     import yaml
 
     ref_map: dict[str, str] = {}
+    warnings: list[str] = []
     for yml_path in sorted(graph_dir.glob("*.yml")):
         text = yml_path.read_text(encoding="utf-8")
         data = yaml.safe_load(text)
@@ -79,8 +86,14 @@ def _build_doc_ref_map(
                     rel = str(abs_path.relative_to(docs_root))
                 else:
                     rel = doc_path_str
-                ref_map[rel] = ref_id
-    return ref_map
+                if rel in ref_map and ref_map[rel] != ref_id:
+                    warnings.append(
+                        f"Doc '{rel}' referenced by both '{ref_map[rel]}' and '{ref_id}'; "
+                        f"keeping '{ref_map[rel]}'"
+                    )
+                else:
+                    ref_map[rel] = ref_id
+    return ref_map, warnings
 
 
 def _index_code_files(
@@ -198,7 +211,11 @@ def reindex(project_root: Path) -> ReindexResult:
     # 2. Index documents.
     docs_dir = project_root / "docs"
     if docs_dir.is_dir():
-        ref_map = _build_doc_ref_map(graph_dir, project_root) if graph_dir.is_dir() else {}
+        if graph_dir.is_dir():
+            ref_map, doc_ref_warnings = _build_doc_ref_map(graph_dir, project_root)
+            result.warnings.extend(doc_ref_warnings)
+        else:
+            ref_map = {}
         doc_result = index_docs(docs_dir, conn, ref_id_map=ref_map)
         result.docs_indexed = doc_result.docs_indexed
         result.chunks_indexed = doc_result.chunks_indexed
