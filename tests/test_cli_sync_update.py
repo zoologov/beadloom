@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import unittest.mock
 from typing import TYPE_CHECKING
 
+import yaml
 from click.testing import CliRunner
 
 from beadloom.cli import main
@@ -180,3 +182,163 @@ class TestSyncUpdateInteractive:
         ).fetchall()
         conn.close()
         assert all(r["status"] == "ok" for r in rows)
+
+
+def _setup_project_with_llm_config(tmp_path: Path) -> Path:
+    """Create project with sync_state and LLM config."""
+    project = _setup_project_with_sync(tmp_path)
+
+    # Write config with LLM section.
+    config_path = project / ".beadloom" / "config.yml"
+    config = {
+        "languages": [".py"],
+        "llm": {
+            "provider": "anthropic",
+            "model": "claude-sonnet-4-20250514",
+            "api_key_env": "TEST_ANTHROPIC_KEY",
+        },
+    }
+    config_path.write_text(yaml.dump(config), encoding="utf-8")
+
+    # Make it stale.
+    (project / "src" / "api.py").write_text(
+        "# beadloom:feature=F1\ndef handler():\n    return 'updated'\n"
+    )
+
+    return project
+
+
+class TestSyncUpdateAuto:
+    """Tests for sync-update --auto (LLM integration)."""
+
+    def test_auto_no_llm_config(self, tmp_path: Path) -> None:
+        """--auto without llm config shows error."""
+        project = _setup_project_with_sync(tmp_path)
+        # Write config without llm section.
+        config_path = project / ".beadloom" / "config.yml"
+        config_path.write_text(yaml.dump({"languages": [".py"]}), encoding="utf-8")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["sync-update", "F1", "--auto", "--project", str(project)]
+        )
+        assert result.exit_code != 0
+        assert "LLM not configured" in result.output
+
+    def test_auto_applies_llm_changes(self, tmp_path: Path) -> None:
+        """--auto with accept should apply LLM-proposed changes and mark synced."""
+        project = _setup_project_with_llm_config(tmp_path)
+
+        proposed_doc = "## Spec\n\nUpdated feature spec for handler returning 'updated'.\n"
+
+        mock_response = unittest.mock.MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "content": [{"type": "text", "text": proposed_doc}],
+        }
+
+        with (
+            unittest.mock.patch.dict(os.environ, {"TEST_ANTHROPIC_KEY": "sk-test-123"}),
+            unittest.mock.patch("beadloom.llm_updater.httpx") as mock_httpx,
+        ):
+            mock_httpx.post.return_value = mock_response
+            runner = CliRunner()
+            result = runner.invoke(
+                main, ["sync-update", "F1", "--auto", "--project", str(project)],
+                input="yes\n",
+            )
+
+        assert result.exit_code == 0, result.output
+        assert "Applied and synced" in result.output
+
+        # Verify doc was updated.
+        doc_content = (project / "docs" / "spec.md").read_text(encoding="utf-8")
+        assert "Updated feature spec" in doc_content
+
+        # Verify sync_state is ok.
+        from beadloom.db import open_db
+
+        conn = open_db(project / ".beadloom" / "beadloom.db")
+        rows = conn.execute(
+            "SELECT status FROM sync_state WHERE ref_id = 'F1'"
+        ).fetchall()
+        conn.close()
+        assert all(r["status"] == "ok" for r in rows)
+
+    def test_auto_rejects_changes(self, tmp_path: Path) -> None:
+        """--auto with reject should not modify doc."""
+        project = _setup_project_with_llm_config(tmp_path)
+
+        original_doc = (project / "docs" / "spec.md").read_text(encoding="utf-8")
+        proposed_doc = "## Spec\n\nDifferent content.\n"
+
+        mock_response = unittest.mock.MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "content": [{"type": "text", "text": proposed_doc}],
+        }
+
+        with (
+            unittest.mock.patch.dict(os.environ, {"TEST_ANTHROPIC_KEY": "sk-test-123"}),
+            unittest.mock.patch("beadloom.llm_updater.httpx") as mock_httpx,
+        ):
+            mock_httpx.post.return_value = mock_response
+            runner = CliRunner()
+            result = runner.invoke(
+                main, ["sync-update", "F1", "--auto", "--project", str(project)],
+                input="no\n",
+            )
+
+        assert result.exit_code == 0
+        assert "Skipped" in result.output
+
+        # Doc should not be changed.
+        current_doc = (project / "docs" / "spec.md").read_text(encoding="utf-8")
+        assert current_doc == original_doc
+
+    def test_auto_all_synced(self, tmp_path: Path) -> None:
+        """--auto when nothing is stale should report up to date."""
+        project = _setup_project_with_sync(tmp_path)
+
+        # Write config with LLM section but don't make anything stale.
+        config_path = project / ".beadloom" / "config.yml"
+        config = {
+            "languages": [".py"],
+            "llm": {
+                "provider": "anthropic",
+                "model": "claude-sonnet-4-20250514",
+                "api_key_env": "TEST_ANTHROPIC_KEY",
+            },
+        }
+        config_path.write_text(yaml.dump(config), encoding="utf-8")
+
+        with unittest.mock.patch.dict(os.environ, {"TEST_ANTHROPIC_KEY": "sk-test"}):
+            runner = CliRunner()
+            result = runner.invoke(
+                main, ["sync-update", "F1", "--auto", "--project", str(project)]
+            )
+
+        assert result.exit_code == 0
+        assert "up to date" in result.output
+
+    def test_auto_llm_api_error(self, tmp_path: Path) -> None:
+        """--auto should handle LLM API errors gracefully."""
+        project = _setup_project_with_llm_config(tmp_path)
+
+        mock_response = unittest.mock.MagicMock()
+        mock_response.status_code = 500
+        mock_response.text = "Internal Server Error"
+
+        with (
+            unittest.mock.patch.dict(os.environ, {"TEST_ANTHROPIC_KEY": "sk-test-123"}),
+            unittest.mock.patch("beadloom.llm_updater.httpx") as mock_httpx,
+        ):
+            mock_httpx.post.return_value = mock_response
+            runner = CliRunner()
+            result = runner.invoke(
+                main, ["sync-update", "F1", "--auto", "--project", str(project)]
+            )
+
+        # Should not crash — error is printed per-doc.
+        assert result.exit_code == 0
+        assert "Error" in result.output
