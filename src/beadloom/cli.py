@@ -63,8 +63,8 @@ def _format_markdown(bundle: dict[str, object]) -> str:
         lines.append("## Documentation")
         lines.append("")
         for chunk in text_chunks:
-            lines.append(f"### {chunk['heading']} ({chunk['section']})")
-            lines.append(f"_Source: {chunk['doc_path']}_")
+            lines.append("---")
+            lines.append(f"**{chunk['heading']}** | `{chunk['section']}` | _{chunk['doc_path']}_")
             lines.append("")
             lines.append(chunk["content"])
             lines.append("")
@@ -99,12 +99,18 @@ def _format_markdown(bundle: dict[str, object]) -> str:
     default=None,
     help="Project root (default: current directory).",
 )
-def reindex(*, project: Path | None) -> None:
+@click.option(
+    "--docs-dir",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Documentation directory (default: from config.yml or 'docs/').",
+)
+def reindex(*, project: Path | None, docs_dir: Path | None) -> None:
     """Drop and rebuild the SQLite index from Git sources."""
     from beadloom.reindex import reindex as do_reindex
 
     project_root = project or Path.cwd()
-    result = do_reindex(project_root)
+    result = do_reindex(project_root, docs_dir=docs_dir)
 
     click.echo(f"Nodes:   {result.nodes_loaded}")
     click.echo(f"Edges:   {result.edges_loaded}")
@@ -232,15 +238,11 @@ def graph(
         # All nodes and edges.
         node_rows = conn.execute("SELECT ref_id, kind, summary FROM nodes").fetchall()
         nodes = [
-            {"ref_id": r["ref_id"], "kind": r["kind"], "summary": r["summary"]}
-            for r in node_rows
+            {"ref_id": r["ref_id"], "kind": r["kind"], "summary": r["summary"]} for r in node_rows
         ]
-        edge_rows = conn.execute(
-            "SELECT src_ref_id, dst_ref_id, kind FROM edges"
-        ).fetchall()
+        edge_rows = conn.execute("SELECT src_ref_id, dst_ref_id, kind FROM edges").fetchall()
         edges = [
-            {"src": r["src_ref_id"], "dst": r["dst_ref_id"], "kind": r["kind"]}
-            for r in edge_rows
+            {"src": r["src_ref_id"], "dst": r["dst_ref_id"], "kind": r["kind"]} for r in edge_rows
         ]
 
     if output_json:
@@ -322,8 +324,7 @@ def status(*, project: Path | None) -> None:
 
     # Coverage: nodes with at least one doc linked.
     covered = conn.execute(
-        "SELECT count(DISTINCT n.ref_id) FROM nodes n "
-        "JOIN docs d ON d.ref_id = n.ref_id"
+        "SELECT count(DISTINCT n.ref_id) FROM nodes n JOIN docs d ON d.ref_id = n.ref_id"
     ).fetchone()[0]
 
     last_reindex = get_meta(conn, "last_reindex_at", "never")
@@ -395,10 +396,7 @@ def sync_check(
         else:
             for r in results:
                 marker = "[stale]" if r["status"] == "stale" else "[ok]"
-                click.echo(
-                    f"  {marker} {r['ref_id']}: "
-                    f"{r['doc_path']} <-> {r['code_path']}"
-                )
+                click.echo(f"  {marker} {r['ref_id']}: {r['doc_path']} <-> {r['code_path']}")
 
     if has_stale:
         sys.exit(2)
@@ -681,7 +679,8 @@ def mcp_serve(*, project: Path | None) -> None:
 @main.command()
 @click.option("--bootstrap", is_flag=True, help="Bootstrap: generate graph from code.")
 @click.option(
-    "--import", "import_path",
+    "--import",
+    "import_path",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     default=None,
     help="Import: classify existing documentation from directory.",

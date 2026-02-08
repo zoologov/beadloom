@@ -55,11 +55,21 @@ def _drop_all_tables(conn: sqlite3.Connection) -> None:
 def _build_doc_ref_map(
     graph_dir: Path,
     project_root: Path,
+    docs_dir: Path,
 ) -> tuple[dict[str, str], list[str]]:
     """Build a mapping of relative doc path → ref_id from YAML graph nodes.
 
     Scans YAML graph files for nodes with ``docs`` lists and maps each
     doc path to the node's ref_id.
+
+    Parameters
+    ----------
+    graph_dir:
+        Path to ``.beadloom/_graph`` directory containing YAML files.
+    project_root:
+        Root of the project.
+    docs_dir:
+        Resolved documentation directory (absolute path).
 
     Returns
     -------
@@ -79,11 +89,10 @@ def _build_doc_ref_map(
         for node in data.get("nodes") or []:
             ref_id = node.get("ref_id", "")
             for doc_path_str in node.get("docs") or []:
-                # Normalize: if path starts with docs/, strip to make it relative to docs_dir.
+                # Normalize: if path starts with docs dir prefix, strip to make it relative.
                 abs_path = project_root / doc_path_str
-                docs_root = project_root / "docs"
-                if abs_path.is_relative_to(docs_root):
-                    rel = str(abs_path.relative_to(docs_root))
+                if abs_path.is_relative_to(docs_dir):
+                    rel = str(abs_path.relative_to(docs_dir))
                 else:
                     rel = doc_path_str
                 if rel in ref_map and ref_map[rel] != ref_id:
@@ -170,13 +179,35 @@ def _build_initial_sync_state(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def reindex(project_root: Path) -> ReindexResult:
+def _resolve_docs_dir(project_root: Path) -> Path:
+    """Resolve docs directory from config.yml or use default ``docs``.
+
+    Checks ``.beadloom/config.yml`` for a ``docs_dir`` key.  If present,
+    returns ``project_root / <value>``.  Otherwise falls back to
+    ``project_root / "docs"``.
+    """
+    config_path = project_root / ".beadloom" / "config.yml"
+    if config_path.exists():
+        import yaml
+
+        config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+        docs_path = config.get("docs_dir")
+        if isinstance(docs_path, str) and docs_path:
+            return project_root / docs_path
+    return project_root / "docs"
+
+
+def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResult:
     """Full reindex: drop all tables, re-create schema, reload everything.
 
     Parameters
     ----------
     project_root:
         Root of the project (where ``.beadloom/`` lives).
+    docs_dir:
+        Optional explicit documentation directory.  When *None* the
+        directory is resolved from ``.beadloom/config.yml`` (key
+        ``docs_dir``) with a fallback to ``<project_root>/docs``.
 
     Returns
     -------
@@ -209,10 +240,13 @@ def reindex(project_root: Path) -> ReindexResult:
     }
 
     # 2. Index documents.
-    docs_dir = project_root / "docs"
+    if docs_dir is None:
+        docs_dir = _resolve_docs_dir(project_root)
     if docs_dir.is_dir():
         if graph_dir.is_dir():
-            ref_map, doc_ref_warnings = _build_doc_ref_map(graph_dir, project_root)
+            ref_map, doc_ref_warnings = _build_doc_ref_map(
+                graph_dir, project_root, docs_dir,
+            )
             result.warnings.extend(doc_ref_warnings)
         else:
             ref_map = {}

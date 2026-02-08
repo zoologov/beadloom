@@ -275,3 +275,124 @@ class TestReindex:
             w for w in result.warnings if "referenced by both" in w
         ]
         assert len(conflict_warnings) == 0
+
+
+class TestReindexDocsDir:
+    """Tests for configurable docs_dir in reindex."""
+
+    def test_default_docs_dir_when_no_config(
+        self, project: Path, db_path: Path
+    ) -> None:
+        """Without config.yml, default 'docs/' directory is used."""
+        docs = project / "docs"
+        (docs / "readme.md").write_text("## Hello\n\nWorld.\n")
+        result = reindex(project)
+        assert result.docs_indexed == 1
+
+        conn = open_db(db_path)
+        row = conn.execute("SELECT * FROM docs").fetchone()
+        assert row is not None
+        assert row["path"] == "readme.md"
+        conn.close()
+
+    def test_docs_dir_from_config_yml(
+        self, project: Path, db_path: Path
+    ) -> None:
+        """docs_dir from .beadloom/config.yml is used when present."""
+        import yaml
+
+        # Create a custom docs directory.
+        custom_docs = project / "documentation"
+        custom_docs.mkdir()
+        (custom_docs / "guide.md").write_text("## Guide\n\nCustom docs.\n")
+
+        # Write config.yml with docs_dir setting.
+        config_path = project / ".beadloom" / "config.yml"
+        config_path.write_text(yaml.dump({"docs_dir": "documentation"}))
+
+        result = reindex(project)
+        assert result.docs_indexed == 1
+
+        conn = open_db(db_path)
+        row = conn.execute("SELECT * FROM docs").fetchone()
+        assert row is not None
+        assert row["path"] == "guide.md"
+        conn.close()
+
+    def test_explicit_docs_dir_overrides_config(
+        self, project: Path, db_path: Path
+    ) -> None:
+        """Explicit docs_dir parameter overrides config.yml."""
+        import yaml
+
+        # Config points to 'documentation/', but we pass 'doc/' explicitly.
+        config_path = project / ".beadloom" / "config.yml"
+        config_path.write_text(yaml.dump({"docs_dir": "documentation"}))
+
+        explicit_docs = project / "doc"
+        explicit_docs.mkdir()
+        (explicit_docs / "notes.md").write_text("## Notes\n\nExplicit.\n")
+
+        result = reindex(project, docs_dir=explicit_docs)
+        assert result.docs_indexed == 1
+
+        conn = open_db(db_path)
+        row = conn.execute("SELECT * FROM docs").fetchone()
+        assert row is not None
+        assert row["path"] == "notes.md"
+        conn.close()
+
+    def test_config_yml_without_docs_dir_falls_back(
+        self, project: Path, db_path: Path
+    ) -> None:
+        """config.yml exists but has no docs_dir key — falls back to 'docs/'."""
+        import yaml
+
+        config_path = project / ".beadloom" / "config.yml"
+        config_path.write_text(yaml.dump({"some_other_key": "value"}))
+
+        docs = project / "docs"
+        (docs / "readme.md").write_text("## Readme\n\nFallback.\n")
+
+        result = reindex(project)
+        assert result.docs_indexed == 1
+
+        conn = open_db(db_path)
+        row = conn.execute("SELECT * FROM docs").fetchone()
+        assert row is not None
+        assert row["path"] == "readme.md"
+        conn.close()
+
+    def test_custom_docs_dir_with_graph_ref_linking(
+        self, project: Path, db_path: Path
+    ) -> None:
+        """Doc ref linking works correctly with custom docs_dir."""
+        import yaml
+
+        custom_docs = project / "documentation"
+        custom_docs.mkdir()
+        (custom_docs / "spec.md").write_text("## Spec\n\nContent.\n")
+
+        config_path = project / ".beadloom" / "config.yml"
+        config_path.write_text(yaml.dump({"docs_dir": "documentation"}))
+
+        graph_dir = project / ".beadloom" / "_graph"
+        (graph_dir / "f.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: F1\n"
+            "    kind: feature\n"
+            '    summary: "Feature"\n'
+            "    docs:\n"
+            "      - documentation/spec.md\n"
+        )
+
+        result = reindex(project)
+        assert result.docs_indexed == 1
+
+        conn = open_db(db_path)
+        row = conn.execute(
+            "SELECT ref_id FROM docs WHERE path = ?", ("spec.md",)
+        ).fetchone()
+        assert row is not None
+        assert row["ref_id"] == "F1"
+        conn.close()

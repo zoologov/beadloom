@@ -188,3 +188,51 @@ class TestReindexCommand:
         # Assert
         assert result.exit_code == 0, result.output
         assert db_path.exists()
+
+
+class TestReindexDocsDirFlag:
+    """Tests for --docs-dir CLI flag."""
+
+    def test_docs_dir_flag(self, tmp_path: Path) -> None:
+        """--docs-dir flag makes reindex use custom docs directory."""
+        # Arrange
+        project = _minimal_project(tmp_path)
+        custom_docs = project / "documentation"
+        custom_docs.mkdir()
+        (custom_docs / "guide.md").write_text("## Guide\n\nCustom.\n")
+
+        runner = CliRunner()
+
+        # Act
+        result = runner.invoke(
+            main,
+            ["reindex", "--project", str(project), "--docs-dir", str(custom_docs)],
+        )
+
+        # Assert
+        assert result.exit_code == 0, result.output
+        assert "Docs:    1" in result.output
+
+    def test_docs_dir_flag_overrides_default(self, tmp_path: Path) -> None:
+        """--docs-dir flag is used instead of default docs/ directory."""
+        # Arrange
+        project = _minimal_project(tmp_path)
+        # Default docs/ has a file
+        (project / "docs" / "default.md").write_text("## Default\n\nDefault.\n")
+        # Custom dir has a different file
+        custom_docs = project / "doc"
+        custom_docs.mkdir()
+        (custom_docs / "custom.md").write_text("## Custom\n\nCustom.\n")
+
+        runner = CliRunner()
+
+        # Act
+        result = runner.invoke(
+            main,
+            ["reindex", "--project", str(project), "--docs-dir", str(custom_docs)],
+        )
+
+        # Assert
+        assert result.exit_code == 0, result.output
+        # Should index only from custom dir (1 doc, not from default docs/)
+        assert "Docs:    1" in result.output
