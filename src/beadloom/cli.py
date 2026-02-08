@@ -185,10 +185,13 @@ def _format_mermaid(
     lines = ["graph LR"]
     for node in nodes:
         rid = node["ref_id"]
-        label = f"{rid}\\n({node['kind']})"
-        lines.append(f'    {rid}["{label}"]')
+        safe_id = rid.replace("-", "_")
+        label = f"{rid}<br/>({node['kind']})"
+        lines.append(f'    {safe_id}["{label}"]')
     for edge in edges:
-        lines.append(f"    {edge['src']} -->|{edge['kind']}| {edge['dst']}")
+        src = edge["src"].replace("-", "_")
+        dst = edge["dst"].replace("-", "_")
+        lines.append(f"    {src} -->|{edge['kind']}| {dst}")
     return "\n".join(lines)
 
 
