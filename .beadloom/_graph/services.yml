@@ -11,7 +11,7 @@ nodes:
     kind: domain
     summary: "Context bundle building via BFS graph traversal"
     docs:
-      - docs/architecture.md
+      - docs/context-oracle.md
 
   - ref_id: doc-sync
     kind: domain
