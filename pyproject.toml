@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "beadloom"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Context Oracle + Doc Sync Engine for AI-assisted development"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -46,6 +46,9 @@ dev = [
 
 [project.scripts]
 beadloom = "beadloom.cli:main"
+
+[tool.hatch.version]
+path = "src/beadloom/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/beadloom"]
