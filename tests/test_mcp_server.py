@@ -137,3 +137,133 @@ class TestMcpToolHandlers:
 
         server = create_server(project)
         assert server is not None
+
+
+class TestDispatchTool:
+    """Test _dispatch_tool routing to correct handlers."""
+
+    def test_dispatch_get_context(self, db_conn: sqlite3.Connection) -> None:
+        # Arrange
+        from beadloom.mcp_server import _dispatch_tool
+
+        args = {"ref_id": "FEAT-1"}
+
+        # Act
+        result = _dispatch_tool(db_conn, "get_context", args)
+
+        # Assert
+        assert result["version"] == 1
+        assert result["focus"]["ref_id"] == "FEAT-1"
+
+    def test_dispatch_get_context_with_optional_args(self, db_conn: sqlite3.Connection) -> None:
+        # Arrange
+        from beadloom.mcp_server import _dispatch_tool
+
+        args = {"ref_id": "FEAT-1", "depth": 1, "max_nodes": 5, "max_chunks": 3}
+
+        # Act
+        result = _dispatch_tool(db_conn, "get_context", args)
+
+        # Assert
+        assert result["version"] == 1
+        assert result["focus"]["ref_id"] == "FEAT-1"
+
+    def test_dispatch_get_graph(self, db_conn: sqlite3.Connection) -> None:
+        # Arrange
+        from beadloom.mcp_server import _dispatch_tool
+
+        args = {"ref_id": "FEAT-1"}
+
+        # Act
+        result = _dispatch_tool(db_conn, "get_graph", args)
+
+        # Assert
+        assert "nodes" in result
+        assert "edges" in result
+        node_ids = {n["ref_id"] for n in result["nodes"]}
+        assert "FEAT-1" in node_ids
+
+    def test_dispatch_get_graph_with_depth(self, db_conn: sqlite3.Connection) -> None:
+        # Arrange
+        from beadloom.mcp_server import _dispatch_tool
+
+        args = {"ref_id": "FEAT-1", "depth": 1}
+
+        # Act
+        result = _dispatch_tool(db_conn, "get_graph", args)
+
+        # Assert
+        assert "nodes" in result
+
+    def test_dispatch_list_nodes(self, db_conn: sqlite3.Connection) -> None:
+        # Arrange
+        from beadloom.mcp_server import _dispatch_tool
+
+        args: dict[str, str] = {}
+
+        # Act
+        result = _dispatch_tool(db_conn, "list_nodes", args)
+
+        # Assert
+        assert len(result) >= 2
+        assert any(n["ref_id"] == "FEAT-1" for n in result)
+
+    def test_dispatch_list_nodes_with_kind(self, db_conn: sqlite3.Connection) -> None:
+        # Arrange
+        from beadloom.mcp_server import _dispatch_tool
+
+        args = {"kind": "domain"}
+
+        # Act
+        result = _dispatch_tool(db_conn, "list_nodes", args)
+
+        # Assert
+        assert all(n["kind"] == "domain" for n in result)
+
+    def test_dispatch_sync_check(self, db_conn: sqlite3.Connection) -> None:
+        # Arrange
+        from beadloom.mcp_server import _dispatch_tool
+
+        args: dict[str, str] = {}
+
+        # Act
+        result = _dispatch_tool(db_conn, "sync_check", args)
+
+        # Assert
+        assert isinstance(result, list)
+
+    def test_dispatch_sync_check_with_ref_id(self, db_conn: sqlite3.Connection) -> None:
+        # Arrange
+        from beadloom.mcp_server import _dispatch_tool
+
+        args = {"ref_id": "FEAT-1"}
+
+        # Act
+        result = _dispatch_tool(db_conn, "sync_check", args)
+
+        # Assert
+        assert isinstance(result, list)
+
+    def test_dispatch_get_status(self, db_conn: sqlite3.Connection) -> None:
+        # Arrange
+        from beadloom.mcp_server import _dispatch_tool
+
+        args: dict[str, str] = {}
+
+        # Act
+        result = _dispatch_tool(db_conn, "get_status", args)
+
+        # Assert
+        assert "nodes_count" in result
+        assert "edges_count" in result
+        assert "docs_count" in result
+
+    def test_dispatch_unknown_tool(self, db_conn: sqlite3.Connection) -> None:
+        # Arrange
+        from beadloom.mcp_server import _dispatch_tool
+
+        args: dict[str, str] = {}
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="Unknown tool: unknown"):
+            _dispatch_tool(db_conn, "unknown", args)

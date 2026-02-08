@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import mcp
 from mcp.server import Server
+from mcp.types import TextContent
 
 from beadloom import __version__
 from beadloom.context_builder import bfs_subgraph, build_context
@@ -216,25 +217,25 @@ def create_server(project_root: Path) -> Server:
 
     db_path = project_root / ".beadloom" / "beadloom.db"
 
-    @server.list_tools()  # type: ignore[misc]
+    @server.list_tools()  # type: ignore[no-untyped-call,untyped-decorator]
     async def _list_tools() -> list[mcp.Tool]:
         return _TOOLS
 
-    @server.call_tool()  # type: ignore[misc]
+    @server.call_tool()  # type: ignore[untyped-decorator]
     async def _call_tool(
         name: str,
         arguments: dict[str, Any] | None,
-    ) -> list[mcp.TextContent]:
+    ) -> list[TextContent]:
         args = arguments or {}
         conn = open_db(db_path)
         try:
             result = _dispatch_tool(conn, name, args, project_root=project_root)
-            return [mcp.TextContent(
+            return [TextContent(
                 type="text",
                 text=json.dumps(result, ensure_ascii=False, indent=2),
             )]
         except LookupError as exc:
-            return [mcp.TextContent(type="text", text=f"Error: {exc}")]
+            return [TextContent(type="text", text=f"Error: {exc}")]
         finally:
             conn.close()
 

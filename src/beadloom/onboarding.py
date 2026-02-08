@@ -171,7 +171,7 @@ def import_docs(
     graph_dir.mkdir(parents=True, exist_ok=True)
 
     results: list[dict[str, str]] = []
-    nodes: list[dict[str, str]] = []
+    nodes: list[dict[str, Any]] = []
 
     for md_path in sorted(docs_dir.rglob("*.md")):
         if not md_path.is_file():

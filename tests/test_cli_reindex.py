@@ -1,0 +1,190 @@
+"""Tests for `beadloom reindex` CLI command."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+import yaml
+from click.testing import CliRunner
+
+from beadloom.cli import main
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+
+def _minimal_project(tmp_path: Path) -> Path:
+    """Create a minimal project skeleton with `.beadloom/_graph/` and `docs/`."""
+    project = tmp_path / "proj"
+    project.mkdir()
+    (project / ".beadloom" / "_graph").mkdir(parents=True)
+    (project / "docs").mkdir()
+    return project
+
+
+class TestReindexCommand:
+    def test_reindex_basic(self, tmp_path: Path) -> None:
+        """Reindex a minimal project with one node and one doc."""
+        # Arrange
+        project = _minimal_project(tmp_path)
+        graph_dir = project / ".beadloom" / "_graph"
+        docs_dir = project / "docs"
+
+        (graph_dir / "test.yml").write_text(
+            yaml.dump({
+                "nodes": [
+                    {"ref_id": "F1", "kind": "feature", "summary": "Feature 1"},
+                ],
+            })
+        )
+        (docs_dir / "spec.md").write_text("## Spec\n\nContent.\n")
+
+        runner = CliRunner()
+
+        # Act
+        result = runner.invoke(main, ["reindex", "--project", str(project)])
+
+        # Assert
+        assert result.exit_code == 0, result.output
+        assert "Nodes:" in result.output
+        assert "Edges:" in result.output
+        assert "Docs:" in result.output
+        assert "Chunks:" in result.output
+        assert "Symbols:" in result.output
+
+    def test_reindex_shows_counts(self, tmp_path: Path) -> None:
+        """Reindex a project and verify correct counts in output."""
+        # Arrange
+        project = _minimal_project(tmp_path)
+        graph_dir = project / ".beadloom" / "_graph"
+        docs_dir = project / "docs"
+
+        (graph_dir / "graph.yml").write_text(
+            yaml.dump({
+                "nodes": [
+                    {"ref_id": "F1", "kind": "feature", "summary": "Feature 1"},
+                    {"ref_id": "F2", "kind": "feature", "summary": "Feature 2"},
+                ],
+                "edges": [
+                    {"src": "F1", "dst": "F2", "kind": "depends_on"},
+                ],
+            })
+        )
+        (docs_dir / "overview.md").write_text("## Overview\n\nProject overview.\n")
+
+        # Add a code file under src/ so symbols can be indexed.
+        src_dir = project / "src"
+        src_dir.mkdir()
+        (src_dir / "app.py").write_text(
+            "# beadloom:feature=F1\ndef handler():\n    pass\n"
+        )
+
+        runner = CliRunner()
+
+        # Act
+        result = runner.invoke(main, ["reindex", "--project", str(project)])
+
+        # Assert
+        assert result.exit_code == 0, result.output
+        assert "Nodes:   2" in result.output
+        assert "Edges:   1" in result.output
+        assert "Docs:    1" in result.output
+
+    def test_reindex_empty_project(self, tmp_path: Path) -> None:
+        """Reindex an empty project (dirs exist but no files in them)."""
+        # Arrange
+        project = _minimal_project(tmp_path)
+        runner = CliRunner()
+
+        # Act
+        result = runner.invoke(main, ["reindex", "--project", str(project)])
+
+        # Assert
+        assert result.exit_code == 0, result.output
+        assert "Nodes:   0" in result.output
+        assert "Edges:   0" in result.output
+        assert "Docs:    0" in result.output
+        assert "Chunks:  0" in result.output
+        assert "Symbols: 0" in result.output
+
+    def test_reindex_shows_warnings(self, tmp_path: Path) -> None:
+        """Reindex triggers a warning when a doc is referenced by two nodes."""
+        # Arrange
+        project = _minimal_project(tmp_path)
+        graph_dir = project / ".beadloom" / "_graph"
+        docs_dir = project / "docs"
+
+        # Two nodes both reference the same doc -- triggers doc-ref conflict.
+        (graph_dir / "conflict.yml").write_text(
+            yaml.dump({
+                "nodes": [
+                    {
+                        "ref_id": "A1",
+                        "kind": "feature",
+                        "summary": "Alpha",
+                        "docs": ["docs/shared.md"],
+                    },
+                    {
+                        "ref_id": "A2",
+                        "kind": "feature",
+                        "summary": "Beta",
+                        "docs": ["docs/shared.md"],
+                    },
+                ],
+            })
+        )
+        (docs_dir / "shared.md").write_text("## Shared\n\nShared content.\n")
+
+        runner = CliRunner()
+
+        # Act
+        result = runner.invoke(main, ["reindex", "--project", str(project)])
+
+        # Assert
+        assert result.exit_code == 0, result.output
+        assert "[warn]" in result.output
+
+    def test_reindex_shows_errors(self, tmp_path: Path) -> None:
+        """Reindex with an edge referencing a non-existent node produces a warning."""
+        # Arrange
+        project = _minimal_project(tmp_path)
+        graph_dir = project / ".beadloom" / "_graph"
+
+        # Edge references node "GHOST" which does not exist.
+        (graph_dir / "bad_edge.yml").write_text(
+            yaml.dump({
+                "nodes": [
+                    {"ref_id": "X1", "kind": "feature", "summary": "Existing"},
+                ],
+                "edges": [
+                    {"src": "X1", "dst": "GHOST", "kind": "depends_on"},
+                ],
+            })
+        )
+
+        runner = CliRunner()
+
+        # Act
+        result = runner.invoke(main, ["reindex", "--project", str(project)])
+
+        # Assert
+        assert result.exit_code == 0, result.output
+        # The graph_loader emits a warning for edges referencing missing nodes.
+        assert "[warn]" in result.output
+        assert "GHOST" in result.output
+
+    def test_reindex_creates_db(self, tmp_path: Path) -> None:
+        """After reindex, the SQLite database file must exist."""
+        # Arrange
+        project = _minimal_project(tmp_path)
+        db_path = project / ".beadloom" / "beadloom.db"
+        assert not db_path.exists()
+
+        runner = CliRunner()
+
+        # Act
+        result = runner.invoke(main, ["reindex", "--project", str(project)])
+
+        # Assert
+        assert result.exit_code == 0, result.output
+        assert db_path.exists()
