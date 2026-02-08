@@ -1,1 +1,32 @@
 .DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+
+# Beadloom (auto-generated)
+.beadloom/beadloom.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+
+# ruff
+.ruff_cache/
+
+# Beads
+.beads/

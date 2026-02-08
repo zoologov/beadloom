@@ -20,8 +20,8 @@ bd ready
 bd update <bead-id> --status in_progress --claim
 
 # 3. Read context
-# docs/features/{ISSUE-KEY}/{ISSUE-KEY}.CONTEXT.md
-# docs/features/{ISSUE-KEY}/{ISSUE-KEY}.ACTIVE.md
+# .claude/development/docs/features/{ISSUE-KEY}/CONTEXT.md
+# .claude/development/docs/features/{ISSUE-KEY}/ACTIVE.md
 
 # 4. Confirm understanding to user
 ```
@@ -118,7 +118,7 @@ bd dep add <id> <depends-on-id>
 ## 3. File Memory (protection against auto-compaction)
 
 ```
-docs/features/{ISSUE-KEY}/
+.claude/development/docs/features/{ISSUE-KEY}/
 ├── CONTEXT.md   <- CORE: state, decisions, standards
 ├── ACTIVE.md    <- FOCUS: current work, progress
 ├── RFC.md       <- ARCHITECTURE: technical solution

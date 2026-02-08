@@ -15,8 +15,8 @@ bd ready
 bd update <bead-id> --status in_progress --claim
 
 # 3. Read the context
-# - docs/features/{ISSUE-KEY}/{ISSUE-KEY}.CONTEXT.md
-# - docs/features/{ISSUE-KEY}/{ISSUE-KEY}.ACTIVE.md
+# - .claude/development/docs/features/{ISSUE-KEY}/CONTEXT.md
+# - .claude/development/docs/features/{ISSUE-KEY}/ACTIVE.md
 ```
 
 **Confirm to the user:**

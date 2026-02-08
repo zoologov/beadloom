@@ -41,7 +41,7 @@ Answer the questions or press Enter for default values:
 ## Step 2: Create the structure
 
 ```bash
-mkdir -p docs/features/{ISSUE-KEY}
+mkdir -p .claude/development/docs/features/{ISSUE-KEY}
 ```
 
 Create files (use `/templates` for templates):
@@ -139,7 +139,7 @@ Display to the user:
 ## Initialization checklist
 
 - [ ] Surveyed the user about standards
-- [ ] Created the structure `docs/features/{ISSUE-KEY}/`
+- [ ] Created the structure `.claude/development/docs/features/{ISSUE-KEY}/`
 - [ ] Filled in PRD.md -> **approved**
 - [ ] Filled in RFC.md -> **approved**
 - [ ] Filled in CONTEXT.md (including code standards) -> **approved**
