@@ -1,5 +1,7 @@
 """L1 in-memory cache for context bundles."""
 
+# beadloom:domain=context-oracle
+
 from __future__ import annotations
 
 import time

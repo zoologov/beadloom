@@ -1,5 +1,7 @@
 """LLM-powered documentation auto-updater."""
 
+# beadloom:domain=llm-updater
+
 from __future__ import annotations
 
 import os

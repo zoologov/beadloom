@@ -37,6 +37,26 @@ nodes:
     docs:
       - docs/graph-format.md
 
+  - ref_id: reindex
+    kind: domain
+    summary: "Full reindex pipeline — drop, re-create, reload graph/docs/code/sync"
+
+  - ref_id: onboarding
+    kind: domain
+    summary: "Project bootstrap, doc import, and interactive initialization"
+
+  - ref_id: llm-updater
+    kind: domain
+    summary: "LLM-powered documentation auto-updater (Anthropic/OpenAI)"
+
+  - ref_id: db
+    kind: domain
+    summary: "SQLite database layer — schema, connection management, meta helpers"
+
+  - ref_id: doctor
+    kind: domain
+    summary: "Validation checks for graph and data integrity"
+
 edges:
   - src: context-oracle
     dst: beadloom
@@ -64,4 +84,52 @@ edges:
     kind: uses
   - src: cli
     dst: graph-format
+    kind: uses
+  - src: reindex
+    dst: beadloom
+    kind: part_of
+  - src: onboarding
+    dst: beadloom
+    kind: part_of
+  - src: llm-updater
+    dst: beadloom
+    kind: part_of
+  - src: db
+    dst: beadloom
+    kind: part_of
+  - src: doctor
+    dst: beadloom
+    kind: part_of
+  - src: reindex
+    dst: db
+    kind: uses
+  - src: reindex
+    dst: graph-format
+    kind: uses
+  - src: reindex
+    dst: doc-sync
+    kind: uses
+  - src: context-oracle
+    dst: db
+    kind: uses
+  - src: doc-sync
+    dst: db
+    kind: uses
+  - src: cli
+    dst: reindex
+    kind: uses
+  - src: cli
+    dst: doctor
+    kind: uses
+  - src: cli
+    dst: onboarding
+    kind: uses
+  - src: cli
+    dst: llm-updater
+    kind: uses
+  - src: mcp-server
+    dst: db
+    kind: uses
+  - src: mcp-server
+    dst: doc-sync
     kind: uses

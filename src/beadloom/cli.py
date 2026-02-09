@@ -1,5 +1,7 @@
 """Beadloom CLI entry point."""
 
+# beadloom:service=cli
+
 from __future__ import annotations
 
 import json
@@ -11,6 +13,7 @@ import click
 from beadloom import __version__
 
 
+# beadloom:service=cli
 @click.group()
 @click.version_option(version=__version__, prog_name="beadloom")
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output.")
@@ -23,6 +26,7 @@ def main(ctx: click.Context, *, verbose: bool, quiet: bool) -> None:
     ctx.obj["quiet"] = quiet
 
 
+# beadloom:domain=context-oracle
 def _format_markdown(bundle: dict[str, object]) -> str:
     """Format a context bundle as human-readable Markdown."""
     from typing import Any, cast
@@ -92,6 +96,7 @@ def _format_markdown(bundle: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
+# beadloom:domain=reindex
 @main.command()
 @click.option(
     "--project",
@@ -127,6 +132,7 @@ def reindex(*, project: Path | None, docs_dir: Path | None) -> None:
             click.echo(f"  [warn] {warn}")
 
 
+# beadloom:domain=context-oracle
 @main.command()
 @click.argument("ref_ids", nargs=-1, required=True)
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON.")
@@ -183,6 +189,7 @@ def ctx(
     conn.close()
 
 
+# beadloom:domain=graph-format
 def _format_mermaid(
     nodes: list[dict[str, str]],
     edges: list[dict[str, str]],
@@ -201,6 +208,7 @@ def _format_mermaid(
     return "\n".join(lines)
 
 
+# beadloom:domain=graph-format
 @main.command()
 @click.argument("ref_ids", nargs=-1)
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON.")
@@ -253,6 +261,7 @@ def graph(
     conn.close()
 
 
+# beadloom:domain=doctor
 @main.command()
 @click.option(
     "--project",
@@ -288,6 +297,7 @@ def doctor(*, project: Path | None) -> None:
         click.echo(f"  {icon} {check.description}")
 
 
+# beadloom:service=cli
 @main.command()
 @click.option(
     "--project",
@@ -349,6 +359,7 @@ def status(*, project: Path | None) -> None:
         click.echo(f"  Stale docs:   {stale_count}")
 
 
+# beadloom:domain=doc-sync
 @main.command("sync-check")
 @click.option("--porcelain", is_flag=True, help="TAB-separated machine-readable output.")
 @click.option("--ref", "ref_filter", default=None, help="Filter by ref_id.")
@@ -440,6 +451,7 @@ fi
 """
 
 
+# beadloom:domain=doc-sync
 @main.command("install-hooks")
 @click.option(
     "--mode",
@@ -486,6 +498,7 @@ def install_hooks(
     click.echo(f"Installed pre-commit hook (mode: {mode}).")
 
 
+# beadloom:domain=doc-sync
 @main.command("sync-update")
 @click.argument("ref_id")
 @click.option("--check", "check_only", is_flag=True, help="Only show status, don't open editor.")
@@ -578,6 +591,7 @@ def sync_update(
     conn.close()
 
 
+# beadloom:domain=llm-updater
 def _handle_auto_sync(project_root: Path, ref_id: str) -> None:
     """Handle --auto flag: call LLM to auto-update stale docs."""
     import difflib
@@ -723,6 +737,7 @@ def _handle_auto_sync(project_root: Path, ref_id: str) -> None:
     conn.close()
 
 
+# beadloom:service=mcp-server
 @main.command("setup-mcp")
 @click.option("--remove", is_flag=True, help="Remove beadloom from .mcp.json.")
 @click.option(
@@ -771,6 +786,7 @@ def setup_mcp(*, remove: bool, project: Path | None) -> None:
     click.echo(f"Updated {mcp_json_path}")
 
 
+# beadloom:service=mcp-server
 @main.command("mcp-serve")
 @click.option(
     "--project",
@@ -806,6 +822,7 @@ def mcp_serve(*, project: Path | None) -> None:
     anyio.run(_run)
 
 
+# beadloom:domain=onboarding
 @main.command()
 @click.option("--bootstrap", is_flag=True, help="Bootstrap: generate graph from code.")
 @click.option(

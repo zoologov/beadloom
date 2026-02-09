@@ -1,5 +1,7 @@
 """Onboarding: project bootstrap, doc import, and initialization."""
 
+# beadloom:domain=onboarding
+
 from __future__ import annotations
 
 import re

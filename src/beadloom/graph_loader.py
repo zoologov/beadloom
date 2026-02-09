@@ -4,6 +4,8 @@ Reads ``.beadloom/_graph/*.yml`` files and populates the ``nodes`` and
 ``edges`` tables.  Validates ref_id uniqueness and edge integrity.
 """
 
+# beadloom:domain=graph-format
+
 from __future__ import annotations
 
 import json

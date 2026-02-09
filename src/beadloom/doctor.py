@@ -1,5 +1,7 @@
 """Doctor: validation checks for graph and data integrity."""
 
+# beadloom:domain=doctor
+
 from __future__ import annotations
 
 import enum

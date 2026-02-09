@@ -1,5 +1,7 @@
 """MCP server: stdio-based tool server for AI agents."""
 
+# beadloom:service=mcp-server
+
 from __future__ import annotations
 
 import json

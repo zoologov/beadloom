@@ -1,5 +1,7 @@
 """Sync engine: doc-code synchronization state management."""
 
+# beadloom:domain=doc-sync
+
 from __future__ import annotations
 
 import hashlib

@@ -1,5 +1,7 @@
 """Reindex orchestrator: drop + re-create SQLite from Git sources."""
 
+# beadloom:domain=reindex
+
 from __future__ import annotations
 
 import json
