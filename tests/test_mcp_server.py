@@ -377,6 +377,103 @@ class TestCacheIntegration:
         assert "cached" not in r
 
 
+class TestL2CacheIntegration:
+    """Test L2 (SQLite) cache integration in MCP dispatch."""
+
+    def test_l2_stores_on_first_call(
+        self, project: Path, db_conn: sqlite3.Connection,
+    ) -> None:
+        from beadloom.cache import ContextCache, SqliteCache
+        from beadloom.mcp_server import _dispatch_tool
+
+        cache = ContextCache()
+        l2 = SqliteCache(db_conn)
+        result = _dispatch_tool(
+            db_conn, "get_context", {"ref_id": "FEAT-1"},
+            project_root=project, cache=cache, l2_cache=l2,
+        )
+        assert result["version"] == 1
+
+        # L2 should have the entry now.
+        l2_result = l2.get("FEAT-1:2:20:10")
+        assert l2_result is not None
+
+    def test_l2_hit_populates_l1(
+        self, project: Path, db_conn: sqlite3.Connection,
+    ) -> None:
+        from beadloom.cache import ContextCache, SqliteCache
+        from beadloom.mcp_server import _dispatch_tool
+
+        cache = ContextCache()
+        l2 = SqliteCache(db_conn)
+
+        # First call fills both caches.
+        _dispatch_tool(
+            db_conn, "get_context", {"ref_id": "FEAT-1"},
+            project_root=project, cache=cache, l2_cache=l2,
+        )
+
+        # Clear L1, keep L2.
+        cache.clear()
+
+        # Second call should hit L2 and return full bundle (not cached response).
+        result = _dispatch_tool(
+            db_conn, "get_context", {"ref_id": "FEAT-1"},
+            project_root=project, cache=cache, l2_cache=l2,
+        )
+        assert result["version"] == 1
+        assert "cached" not in result  # Full bundle, not short response.
+
+        # Now L1 is populated, third call returns cached response.
+        result3 = _dispatch_tool(
+            db_conn, "get_context", {"ref_id": "FEAT-1"},
+            project_root=project, cache=cache, l2_cache=l2,
+        )
+        assert result3["cached"] is True
+
+    def test_l2_graph_tool_cached(
+        self, project: Path, db_conn: sqlite3.Connection,
+    ) -> None:
+        from beadloom.cache import ContextCache, SqliteCache
+        from beadloom.mcp_server import _dispatch_tool
+
+        cache = ContextCache()
+        l2 = SqliteCache(db_conn)
+
+        _dispatch_tool(
+            db_conn, "get_graph", {"ref_id": "FEAT-1"},
+            project_root=project, cache=cache, l2_cache=l2,
+        )
+
+        # L2 should have graph entry.
+        l2_result = l2.get("graph:FEAT-1:2")
+        assert l2_result is not None
+
+    def test_l2_invalidated_on_update_node(
+        self, project: Path, db_conn: sqlite3.Connection,
+    ) -> None:
+        from beadloom.cache import ContextCache, SqliteCache
+        from beadloom.mcp_server import _dispatch_tool
+
+        cache = ContextCache()
+        l2 = SqliteCache(db_conn)
+
+        # Populate cache.
+        _dispatch_tool(
+            db_conn, "get_context", {"ref_id": "FEAT-1"},
+            project_root=project, cache=cache, l2_cache=l2,
+        )
+        assert l2.get("FEAT-1:2:20:10") is not None
+
+        # update_node should invalidate L2.
+        _dispatch_tool(
+            db_conn, "update_node",
+            {"ref_id": "FEAT-1", "summary": "New summary"},
+            project_root=project, cache=cache, l2_cache=l2,
+        )
+        assert l2.get("FEAT-1:2:20:10") is None
+
+
 class TestWriteTools:
     """Test MCP write tool handlers."""
 

@@ -12,7 +12,7 @@ from mcp.server import Server
 from mcp.types import TextContent
 
 from beadloom import __version__
-from beadloom.cache import ContextCache, compute_etag
+from beadloom.cache import ContextCache, SqliteCache, compute_etag
 from beadloom.context_builder import bfs_subgraph, build_context
 from beadloom.db import get_meta, open_db
 from beadloom.graph_loader import update_node_in_yaml
@@ -217,8 +217,14 @@ def handle_search(
     query: str,
     kind: str | None = None,
     limit: int = 10,
-) -> list[dict[str, str]]:
-    """Search nodes by keyword (SQL LIKE). Upgraded to FTS5 in Phase 4.6."""
+) -> list[dict[str, Any]]:
+    """Search using FTS5 with fallback to SQL LIKE."""
+    from beadloom.search import has_fts5, search_fts5
+
+    if has_fts5(conn):
+        return search_fts5(conn, query, kind=kind, limit=limit)
+
+    # Fallback to SQL LIKE when FTS5 is not populated.
     like_pattern = f"%{query}%"
     if kind:
         rows = conn.execute(
@@ -433,10 +439,12 @@ def create_server(project_root: Path) -> Server:
                 conn = open_db(db_path)
                 cache.clear()
 
+            l2 = SqliteCache(conn)
             result = _dispatch_tool(
                 conn, name, args,
                 project_root=project_root,
                 cache=cache,
+                l2_cache=l2,
             )
             return [TextContent(
                 type="text",
@@ -456,6 +464,7 @@ def _dispatch_tool(
     args: dict[str, Any],
     project_root: Path | None = None,
     cache: ContextCache | None = None,
+    l2_cache: SqliteCache | None = None,
 ) -> Any:
     """Route tool call to the appropriate handler."""
     if name == "get_context":
@@ -463,6 +472,7 @@ def _dispatch_tool(
         depth = args.get("depth", 2)
         max_nodes = args.get("max_nodes", 20)
         max_chunks = args.get("max_chunks", 10)
+        cache_key = f"{ref_id}:{depth}:{max_nodes}:{max_chunks}"
 
         # L1 cache check
         if cache is not None and project_root is not None:
@@ -483,6 +493,20 @@ def _dispatch_tool(
             graph_mt = 0.0
             docs_mt = 0.0
 
+        # L2 cache check
+        if l2_cache is not None:
+            l2_result = l2_cache.get(
+                cache_key, graph_mtime=graph_mt, docs_mtime=docs_mt,
+            )
+            if l2_result is not None:
+                bundle = l2_result[0]
+                if cache is not None:
+                    cache.put(
+                        ref_id, depth, max_nodes, max_chunks, bundle,
+                        graph_mtime=graph_mt, docs_mtime=docs_mt,
+                    )
+                return bundle
+
         bundle = handle_get_context(
             conn, ref_id=ref_id, depth=depth,
             max_nodes=max_nodes, max_chunks=max_chunks,
@@ -491,6 +515,11 @@ def _dispatch_tool(
         if cache is not None:
             cache.put(
                 ref_id, depth, max_nodes, max_chunks, bundle,
+                graph_mtime=graph_mt, docs_mtime=docs_mt,
+            )
+        if l2_cache is not None:
+            l2_cache.put(
+                cache_key, bundle,
                 graph_mtime=graph_mt, docs_mtime=docs_mt,
             )
 
@@ -502,6 +531,7 @@ def _dispatch_tool(
 
         # L1 cache (graph key space: "graph:<ref_id>")
         cache_ref = f"graph:{ref_id}"
+        graph_cache_key = f"graph:{ref_id}:{depth}"
         if cache is not None and project_root is not None:
             graph_mt, _ = _compute_mtimes(project_root)
             entry = cache.get_entry(
@@ -519,11 +549,30 @@ def _dispatch_tool(
         else:
             graph_mt = 0.0
 
+        # L2 cache check
+        if l2_cache is not None:
+            l2_result = l2_cache.get(
+                graph_cache_key, graph_mtime=graph_mt,
+            )
+            if l2_result is not None:
+                result = l2_result[0]
+                if cache is not None:
+                    cache.put(
+                        cache_ref, depth, 0, 0, result,
+                        graph_mtime=graph_mt, docs_mtime=0.0,
+                    )
+                return result
+
         result = handle_get_graph(conn, ref_id=ref_id, depth=depth)
 
         if cache is not None:
             cache.put(
                 cache_ref, depth, 0, 0, result,
+                graph_mtime=graph_mt, docs_mtime=0.0,
+            )
+        if l2_cache is not None:
+            l2_cache.put(
+                graph_cache_key, result,
                 graph_mtime=graph_mt, docs_mtime=0.0,
             )
 
@@ -552,6 +601,8 @@ def _dispatch_tool(
         # Invalidate cache for this ref_id.
         if cache is not None:
             cache.clear_ref(args["ref_id"])
+        if l2_cache is not None:
+            l2_cache.clear_ref(args["ref_id"])
         return result
 
     if name == "mark_synced":

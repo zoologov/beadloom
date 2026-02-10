@@ -9,7 +9,10 @@ import json as _json
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import sqlite3
 
 # Cache key: (ref_id, depth, max_nodes, max_chunks)
 CacheKey = tuple[str, int, int, int]
@@ -136,3 +139,73 @@ class ContextCache:
     def stats(self) -> dict[str, int]:
         """Return cache statistics."""
         return {"entries": len(self._store)}
+
+
+class SqliteCache:
+    """L2 persistent cache backed by SQLite ``bundle_cache`` table.
+
+    Survives MCP server restarts.  Invalidation via mtime comparison.
+    """
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
+
+    def get(
+        self,
+        cache_key: str,
+        *,
+        graph_mtime: float = 0.0,
+        docs_mtime: float = 0.0,
+    ) -> tuple[dict[str, Any], str, str] | None:
+        """Get cached entry.  Returns ``(bundle, etag, created_at)`` or *None*."""
+        row = self._conn.execute(
+            "SELECT bundle_json, etag, created_at, graph_mtime, docs_mtime "
+            "FROM bundle_cache WHERE cache_key = ?",
+            (cache_key,),
+        ).fetchone()
+        if row is None:
+            return None
+        if row["graph_mtime"] < graph_mtime or row["docs_mtime"] < docs_mtime:
+            self._conn.execute(
+                "DELETE FROM bundle_cache WHERE cache_key = ?", (cache_key,),
+            )
+            self._conn.commit()
+            return None
+        return (
+            _json.loads(row["bundle_json"]),
+            str(row["etag"]),
+            str(row["created_at"]),
+        )
+
+    def put(
+        self,
+        cache_key: str,
+        bundle: dict[str, Any],
+        *,
+        graph_mtime: float,
+        docs_mtime: float,
+    ) -> None:
+        """Store a bundle in L2 cache."""
+        etag = compute_etag(bundle)
+        now = datetime.now(tz=timezone.utc).isoformat()
+        bundle_json = _json.dumps(bundle, sort_keys=True, ensure_ascii=False)
+        self._conn.execute(
+            "INSERT OR REPLACE INTO bundle_cache "
+            "(cache_key, bundle_json, etag, graph_mtime, docs_mtime, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (cache_key, bundle_json, etag, graph_mtime, docs_mtime, now),
+        )
+        self._conn.commit()
+
+    def clear(self) -> None:
+        """Clear all L2 cache entries."""
+        self._conn.execute("DELETE FROM bundle_cache")
+        self._conn.commit()
+
+    def clear_ref(self, ref_id: str) -> None:
+        """Remove L2 entries containing *ref_id* in their cache key."""
+        self._conn.execute(
+            "DELETE FROM bundle_cache WHERE cache_key LIKE ?",
+            (f"%{ref_id}%",),
+        )
+        self._conn.commit()

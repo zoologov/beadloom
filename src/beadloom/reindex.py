@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
 # Tables to drop on reindex (order matters for FK constraints).
 _TABLES_TO_DROP = [
+    "search_index",
     "sync_state",
     "code_symbols",
     "chunks",
@@ -266,16 +267,25 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
     # 4. Build initial sync state.
     _build_initial_sync_state(conn)
 
-    # 5. Set meta.
+    # 5. Populate FTS5 search index.
+    from beadloom.search import populate_search_index
+
+    populate_search_index(conn)
+
+    # 5b. Clear persistent bundle cache (invalidated by full reindex).
+    conn.execute("DELETE FROM bundle_cache")
+    conn.commit()
+
+    # 6. Set meta.
     now = datetime.now(tz=timezone.utc).isoformat()
     set_meta(conn, "last_reindex_at", now)
     set_meta(conn, "beadloom_version", __version__)
     set_meta(conn, "schema_version", SCHEMA_VERSION)
 
-    # 6. Take health snapshot for trend tracking.
+    # 7. Take health snapshot for trend tracking.
     take_snapshot(conn)
 
-    # 7. Populate file_index for subsequent incremental runs.
+    # 8. Populate file_index for subsequent incremental runs.
     current_files = _scan_project_files(project_root, docs_dir)
     _populate_file_index(conn, current_files)
 
@@ -622,6 +632,15 @@ def incremental_reindex(
     # Rebuild sync_state (cheap full rebuild).
     conn.execute("DELETE FROM sync_state")
     _build_initial_sync_state(conn)
+
+    # Rebuild FTS5 search index.
+    from beadloom.search import populate_search_index
+
+    populate_search_index(conn)
+
+    # Clear persistent bundle cache (conservative invalidation).
+    conn.execute("DELETE FROM bundle_cache")
+    conn.commit()
 
     # Update file_index.
     _update_file_index(conn, current_files, changed, added, deleted)

@@ -1,8 +1,13 @@
-"""Tests for beadloom.cache — L1 in-memory cache for context bundles."""
+"""Tests for beadloom.cache — L1 in-memory and L2 SQLite caches."""
 
 from __future__ import annotations
 
-from beadloom.cache import ContextCache, compute_etag
+from typing import TYPE_CHECKING
+
+from beadloom.cache import ContextCache, SqliteCache, compute_etag
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class TestContextCache:
@@ -124,3 +129,79 @@ class TestComputeEtag:
         e1 = compute_etag({"v": 1})
         e2 = compute_etag({"v": 2})
         assert e1 != e2
+
+
+class TestSqliteCache:
+    """Tests for L2 persistent SQLite cache."""
+
+    @staticmethod
+    def _make_conn(tmp_path: Path) -> object:
+        from beadloom.db import create_schema, open_db
+
+        db_path = tmp_path / "test.db"
+        conn = open_db(db_path)
+        create_schema(conn)
+        return conn
+
+    def test_get_miss(self, tmp_path: Path) -> None:
+        conn = self._make_conn(tmp_path)
+        l2 = SqliteCache(conn)  # type: ignore[arg-type]
+        assert l2.get("key:1:2:3") is None
+
+    def test_put_and_get(self, tmp_path: Path) -> None:
+        conn = self._make_conn(tmp_path)
+        l2 = SqliteCache(conn)  # type: ignore[arg-type]
+        bundle = {"version": 1, "data": "hello"}
+        l2.put("key:1:2:3", bundle, graph_mtime=1.0, docs_mtime=1.0)
+
+        result = l2.get("key:1:2:3", graph_mtime=1.0, docs_mtime=1.0)
+        assert result is not None
+        assert result[0] == bundle
+        assert result[1].startswith("sha256:")
+        assert "T" in result[2]  # ISO datetime
+
+    def test_stale_graph_invalidates(self, tmp_path: Path) -> None:
+        conn = self._make_conn(tmp_path)
+        l2 = SqliteCache(conn)  # type: ignore[arg-type]
+        l2.put("k", {"v": 1}, graph_mtime=1.0, docs_mtime=1.0)
+
+        # Newer graph_mtime → stale
+        assert l2.get("k", graph_mtime=2.0, docs_mtime=1.0) is None
+
+    def test_stale_docs_invalidates(self, tmp_path: Path) -> None:
+        conn = self._make_conn(tmp_path)
+        l2 = SqliteCache(conn)  # type: ignore[arg-type]
+        l2.put("k", {"v": 1}, graph_mtime=1.0, docs_mtime=1.0)
+
+        # Newer docs_mtime → stale
+        assert l2.get("k", graph_mtime=1.0, docs_mtime=2.0) is None
+
+    def test_clear(self, tmp_path: Path) -> None:
+        conn = self._make_conn(tmp_path)
+        l2 = SqliteCache(conn)  # type: ignore[arg-type]
+        l2.put("a", {"v": 1}, graph_mtime=1.0, docs_mtime=1.0)
+        l2.put("b", {"v": 2}, graph_mtime=1.0, docs_mtime=1.0)
+        l2.clear()
+        assert l2.get("a") is None
+        assert l2.get("b") is None
+
+    def test_clear_ref(self, tmp_path: Path) -> None:
+        conn = self._make_conn(tmp_path)
+        l2 = SqliteCache(conn)  # type: ignore[arg-type]
+        l2.put("FEAT-1:2:20:10", {"v": 1}, graph_mtime=1.0, docs_mtime=1.0)
+        l2.put("OTHER:2:20:10", {"v": 2}, graph_mtime=1.0, docs_mtime=1.0)
+        l2.clear_ref("FEAT-1")
+        assert l2.get("FEAT-1:2:20:10") is None
+        assert l2.get("OTHER:2:20:10") is not None
+
+    def test_persists_across_new_cache_instance(self, tmp_path: Path) -> None:
+        """L2 data survives creating a new SqliteCache (simulates restart)."""
+        conn = self._make_conn(tmp_path)
+        l2a = SqliteCache(conn)  # type: ignore[arg-type]
+        l2a.put("k", {"v": 42}, graph_mtime=1.0, docs_mtime=1.0)
+
+        # New instance, same connection
+        l2b = SqliteCache(conn)  # type: ignore[arg-type]
+        result = l2b.get("k", graph_mtime=1.0, docs_mtime=1.0)
+        assert result is not None
+        assert result[0]["v"] == 42

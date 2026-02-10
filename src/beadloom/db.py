@@ -112,6 +112,25 @@ CREATE TABLE IF NOT EXISTS file_index (
     indexed_at TEXT NOT NULL
 );
 
+-- Bundle cache (L2 persistent, survives restarts)
+CREATE TABLE IF NOT EXISTS bundle_cache (
+    cache_key   TEXT PRIMARY KEY,
+    bundle_json TEXT NOT NULL,
+    etag        TEXT NOT NULL,
+    graph_mtime REAL NOT NULL,
+    docs_mtime  REAL NOT NULL,
+    created_at  TEXT NOT NULL
+);
+
+-- Full-text search index (FTS5)
+CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(
+    ref_id,
+    kind,
+    summary,
+    content,
+    tokenize='porter unicode61'
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_nodes_kind ON nodes(kind);
 CREATE INDEX IF NOT EXISTS idx_edges_src ON edges(src_ref_id);

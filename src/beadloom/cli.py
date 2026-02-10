@@ -986,6 +986,85 @@ def link(
     click.echo(f"Added [{detected_label}] {url} to {ref_id}.")
 
 
+# beadloom:domain=search
+@main.command()
+@click.argument("query")
+@click.option(
+    "--kind",
+    type=click.Choice(["domain", "feature", "service", "entity", "adr"]),
+    default=None,
+    help="Filter results by node kind.",
+)
+@click.option("--limit", default=10, type=int, help="Max results.")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON.")
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: current directory).",
+)
+def search(
+    query: str,
+    *,
+    kind: str | None,
+    limit: int,
+    output_json: bool,
+    project: Path | None,
+) -> None:
+    """Search nodes and documentation by keyword.
+
+    Uses FTS5 full-text search when available, falls back to SQL LIKE.
+    Run `beadloom reindex` first to populate the search index.
+    """
+    from beadloom.db import open_db
+    from beadloom.search import has_fts5, search_fts5
+
+    project_root = project or Path.cwd()
+    db_path = project_root / ".beadloom" / "beadloom.db"
+
+    if not db_path.exists():
+        click.echo("Error: database not found. Run `beadloom reindex` first.", err=True)
+        sys.exit(1)
+
+    conn = open_db(db_path)
+
+    if has_fts5(conn):
+        results = search_fts5(conn, query, kind=kind, limit=limit)
+    else:
+        # Fallback to LIKE.
+        like_pattern = f"%{query}%"
+        if kind:
+            rows = conn.execute(
+                "SELECT ref_id, kind, summary FROM nodes "
+                "WHERE kind = ? AND (ref_id LIKE ? OR summary LIKE ?) LIMIT ?",
+                (kind, like_pattern, like_pattern, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT ref_id, kind, summary FROM nodes "
+                "WHERE ref_id LIKE ? OR summary LIKE ? LIMIT ?",
+                (like_pattern, like_pattern, limit),
+            ).fetchall()
+        results = [
+            {"ref_id": r["ref_id"], "kind": r["kind"], "summary": r["summary"]}
+            for r in rows
+        ]
+
+    conn.close()
+
+    if output_json:
+        click.echo(json.dumps(results, ensure_ascii=False, indent=2))
+    else:
+        if not results:
+            click.echo("No results found.")
+        else:
+            for r in results:
+                snippet = r.get("snippet", "")
+                click.echo(f"  [{r['kind']}] {r['ref_id']}: {r['summary']}")
+                if snippet:
+                    click.echo(f"    {snippet}")
+
+
 # beadloom:service=mcp-server
 @main.command("mcp-serve")
 @click.option(

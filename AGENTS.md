@@ -8,7 +8,7 @@ For project overview and installation, see [README.md](README.md).
 
 **Beadloom** is a local CLI + MCP server that provides a queryable knowledge graph over project documentation and code. It solves two problems: context window waste (agents searching for context) and documentation rot (docs going stale after code changes).
 
-- **Stack:** Python 3.10+, SQLite (WAL), Click + Rich (CLI), tree-sitter, MCP (stdio), httpx
+- **Stack:** Python 3.10+, SQLite (WAL), Click + Rich (CLI), tree-sitter, MCP (stdio)
 - **Package manager:** [uv](https://docs.astral.sh/uv/)
 - **Distribution:** PyPI (`uv tool install beadloom`)
 - **License:** MIT
@@ -19,20 +19,21 @@ For project overview and installation, see [README.md](README.md).
 beadloom/
 ├── src/beadloom/
 │   ├── __init__.py          # Version string
-│   ├── cli.py               # Click CLI (11 commands)
-│   ├── mcp_server.py        # MCP stdio server (5 tools)
+│   ├── cli.py               # Click CLI (12 commands)
+│   ├── mcp_server.py        # MCP stdio server (8 tools: 6 read + 2 write)
 │   ├── context_builder.py   # BFS traversal, context bundle assembly
 │   ├── sync_engine.py       # Doc-code sync state management
-│   ├── llm_updater.py       # LLM-powered doc auto-updater
 │   ├── db.py                # SQLite schema and helpers
-│   ├── graph_loader.py      # YAML graph parser
+│   ├── graph_loader.py      # YAML graph parser + update_node_in_yaml
 │   ├── doc_indexer.py       # Markdown chunker
 │   ├── code_indexer.py      # tree-sitter symbol extractor
-│   ├── reindex.py           # Full reindex pipeline
+│   ├── reindex.py           # Full + incremental reindex pipeline
+│   ├── search.py            # FTS5 keyword search engine
 │   ├── doctor.py            # Graph validation checks
 │   ├── onboarding.py        # init --bootstrap / --import
-│   └── cache.py             # Context cache
-├── tests/                   # pytest tests (354 tests, ~2s)
+│   ├── cache.py             # L1 in-memory + L2 SQLite cache
+│   └── health.py            # Health snapshots and trend tracking
+├── tests/                   # pytest tests (464 tests, ~3s)
 ├── docs/                    # Project documentation (7 files)
 ├── .beadloom/               # Project's own beadloom data
 │   ├── _graph/services.yml  # Knowledge graph definition
@@ -61,7 +62,7 @@ beadloom/
 Run all three before committing:
 
 ```bash
-uv run pytest                    # Tests (354 tests, ~2s)
+uv run pytest                    # Tests (464 tests, ~3s)
 uv run ruff check src/ tests/   # Lint
 uv run mypy                     # Type checking
 ```
@@ -72,8 +73,7 @@ uv run mypy                     # Type checking
 - Test files mirror source: `src/beadloom/foo.py` → `tests/test_foo.py`
 - CLI tests use `click.testing.CliRunner`
 - Use `tmp_path` fixture for filesystem tests
-- Mock external calls (httpx, filesystem) — never hit real APIs in tests
-- All LLM tests use `unittest.mock.patch("beadloom.llm_updater.httpx.post")`
+- Mock external calls (filesystem) — never hit real APIs in tests
 
 ### Before Committing
 
@@ -112,6 +112,33 @@ beadloom sync-check --porcelain
 beadloom sync-update doc-sync --check
 ```
 
+### Agent Workflows (MCP Write Tools)
+
+Beadloom exposes write tools via MCP — the agent reads context and makes
+intelligent updates without requiring a separate LLM API.
+
+**Update stale documentation:**
+
+1. Call `sync_check()` → get list of stale ref_ids
+2. Call `get_context(ref_id)` → get full context + stale details
+3. Read the doc file and changed code file
+4. Update the doc file (using your own intelligence)
+5. Call `mark_synced(ref_id)` → sync state reset to "ok"
+
+**Improve node summaries:**
+
+1. Call `get_status()` → see nodes with empty summaries
+2. Call `get_context(ref_id)` → read code and docs
+3. Generate a summary
+4. Call `update_node(ref_id, summary="...")` → YAML + SQLite updated
+
+**Search for relevant context:**
+
+```bash
+beadloom search "payment processing"     # FTS5 keyword search
+beadloom search "auth" --kind service    # Filter by kind
+```
+
 ### After Changing Code
 
 If `sync-check` shows stale pairs after your changes:
@@ -120,8 +147,6 @@ If `sync-check` shows stale pairs after your changes:
 2. Update the doc to reflect the code changes
 3. Run `beadloom reindex` to rebuild the index
 4. Verify with `beadloom sync-check` — all pairs should be `[ok]`
-
-You **do not need** a separate LLM API key for this. As an AI agent, you can read the context via `beadloom ctx` and update the docs directly.
 
 ## Agent Warning: Interactive Commands
 
