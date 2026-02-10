@@ -1,5 +1,7 @@
 # Beadloom
 
+> Read this in other languages: [Русский](README.ru.md)
+
 **Your architecture shouldn't live in one person's head.**
 
 [![License: MIT](https://img.shields.io/github/license/zoologov/beadloom)](LICENSE)
