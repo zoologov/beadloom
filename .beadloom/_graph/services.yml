@@ -45,10 +45,6 @@ nodes:
     kind: domain
     summary: "Project bootstrap, doc import, and interactive initialization"
 
-  - ref_id: llm-updater
-    kind: domain
-    summary: "LLM-powered documentation auto-updater (Anthropic/OpenAI)"
-
   - ref_id: db
     kind: domain
     summary: "SQLite database layer — schema, connection management, meta helpers"
@@ -91,9 +87,6 @@ edges:
   - src: onboarding
     dst: beadloom
     kind: part_of
-  - src: llm-updater
-    dst: beadloom
-    kind: part_of
   - src: db
     dst: beadloom
     kind: part_of
@@ -123,9 +116,6 @@ edges:
     kind: uses
   - src: cli
     dst: onboarding
-    kind: uses
-  - src: cli
-    dst: llm-updater
     kind: uses
   - src: mcp-server
     dst: db

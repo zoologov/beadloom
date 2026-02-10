@@ -139,7 +139,7 @@ The Doc Sync Engine tracks which documentation files correspond to which code fi
 | `status` | Project index statistics and documentation coverage |
 | `doctor` | Validate the knowledge graph |
 | `sync-check` | Check doc↔code synchronization status |
-| `sync-update REF_ID` | Review and update stale docs (supports `--auto` with LLM) |
+| `sync-update REF_ID` | Review and update stale docs |
 | `install-hooks` | Install the beadloom pre-commit hook |
 | `setup-mcp` | Configure MCP server for AI agents |
 | `mcp-serve` | Run the MCP server (stdio transport) |

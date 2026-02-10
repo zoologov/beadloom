@@ -100,15 +100,17 @@ Exit codes: 0 = all OK, 1 = error, 2 = stale pairs found.
 
 ### beadloom sync-update
 
-Update stale documentation.
+Review and update stale documentation.
 
 ```bash
-# Show status
+# Show sync status for a ref_id
 beadloom sync-update REF_ID --check [--project DIR]
 
-# Auto-update via LLM (not implemented)
-beadloom sync-update REF_ID --auto [--project DIR]
+# Interactive: open stale docs in $EDITOR, mark synced after editing
+beadloom sync-update REF_ID [--project DIR]
 ```
+
+For automated doc updates, use your AI agent (Claude Code, Cursor, etc.) with Beadloom's MCP tools. See `.beadloom/AGENTS.md` for agent instructions.
 
 ### beadloom install-hooks
 

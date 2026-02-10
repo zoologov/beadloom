@@ -9,6 +9,7 @@ import yaml
 from beadloom.onboarding import (
     bootstrap_project,
     classify_doc,
+    generate_agents_md,
     import_docs,
     interactive_init,
     scan_project,
@@ -73,6 +74,32 @@ class TestClassifyDoc:
         assert classify_doc(doc) == "other"
 
 
+class TestGenerateAgentsMd:
+    def test_creates_file(self, tmp_path: Path) -> None:
+        path = generate_agents_md(tmp_path)
+        assert path.exists()
+        assert path == tmp_path / ".beadloom" / "AGENTS.md"
+
+    def test_contains_mcp_tools(self, tmp_path: Path) -> None:
+        generate_agents_md(tmp_path)
+        content = (tmp_path / ".beadloom" / "AGENTS.md").read_text()
+        assert "get_context" in content
+        assert "sync_check" in content
+        assert "list_nodes" in content
+
+    def test_contains_instructions(self, tmp_path: Path) -> None:
+        generate_agents_md(tmp_path)
+        content = (tmp_path / ".beadloom" / "AGENTS.md").read_text()
+        assert "Before starting work" in content
+        assert "After changing code" in content
+        assert "beadloom:feature=" in content
+
+    def test_idempotent(self, tmp_path: Path) -> None:
+        generate_agents_md(tmp_path)
+        generate_agents_md(tmp_path)
+        assert (tmp_path / ".beadloom" / "AGENTS.md").exists()
+
+
 class TestBootstrapProject:
     def test_creates_graph_dir(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
@@ -87,6 +114,13 @@ class TestBootstrapProject:
         bootstrap_project(tmp_path)
         config = tmp_path / ".beadloom" / "config.yml"
         assert config.exists()
+
+    def test_creates_agents_md(self, tmp_path: Path) -> None:
+        (tmp_path / "src").mkdir()
+        result = bootstrap_project(tmp_path)
+        agents = tmp_path / ".beadloom" / "AGENTS.md"
+        assert agents.exists()
+        assert result["agents_md_created"] is True
 
     def test_creates_yaml_files(self, tmp_path: Path) -> None:
         src = tmp_path / "src"

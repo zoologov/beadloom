@@ -502,7 +502,7 @@ def install_hooks(
 @main.command("sync-update")
 @click.argument("ref_id")
 @click.option("--check", "check_only", is_flag=True, help="Only show status, don't open editor.")
-@click.option("--auto", is_flag=True, help="Use LLM to auto-update docs (requires config).")
+@click.option("--auto", is_flag=True, hidden=True, help="Deprecated.")
 @click.option(
     "--project",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
@@ -519,7 +519,9 @@ def sync_update(
     """Show sync status and update docs for a ref_id.
 
     Use --check to only display status without opening an editor.
-    Use --auto to update docs using LLM (requires llm config in config.yml).
+
+    For automated doc updates, use your AI agent (Claude Code, Cursor, etc.)
+    with Beadloom's MCP tools.  See .beadloom/AGENTS.md for instructions.
     """
     from beadloom.db import open_db
     from beadloom.sync_engine import check_sync
@@ -531,10 +533,15 @@ def sync_update(
         click.echo("Error: database not found. Run `beadloom reindex` first.", err=True)
         sys.exit(1)
 
-    # Handle --auto mode.
+    # Handle deprecated --auto flag.
     if auto:
-        _handle_auto_sync(project_root, ref_id)
-        return
+        click.echo(
+            "Warning: --auto is deprecated and will be removed in v0.4.\n"
+            "Use your AI agent with Beadloom's MCP tools instead.\n"
+            "See: .beadloom/AGENTS.md",
+            err=True,
+        )
+        sys.exit(1)
 
     conn = open_db(db_path)
     results = check_sync(conn, project_root=project_root)
@@ -587,152 +594,6 @@ def sync_update(
         for r in pairs:
             mark_synced(conn, r["doc_path"], r["code_path"], project_root)
         click.echo(f"  Synced: {doc_path}")
-
-    conn.close()
-
-
-# beadloom:domain=llm-updater
-def _handle_auto_sync(project_root: Path, ref_id: str) -> None:
-    """Handle --auto flag: call LLM to auto-update stale docs."""
-    import difflib
-
-    import yaml as _yaml
-
-    from beadloom.db import open_db
-    from beadloom.llm_updater import LLMError, auto_update_doc, parse_llm_config
-    from beadloom.sync_engine import check_sync, mark_synced
-
-    # 1. Parse LLM config.
-    config_path = project_root / ".beadloom" / "config.yml"
-    if not config_path.exists():
-        click.echo(
-            "Error: LLM not configured. Add 'llm' section to .beadloom/config.yml",
-            err=True,
-        )
-        sys.exit(1)
-
-    raw_config = _yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    llm_raw = raw_config.get("llm")
-    if not llm_raw:
-        click.echo(
-            "Error: LLM not configured. Add 'llm' section to .beadloom/config.yml",
-            err=True,
-        )
-        sys.exit(1)
-
-    try:
-        llm_config = parse_llm_config(llm_raw)
-    except ValueError as exc:
-        click.echo(f"Error: {exc}", err=True)
-        sys.exit(1)
-
-    # Validate API key is available before doing any work.
-    import os
-
-    if not os.environ.get(llm_config.api_key_env):
-        click.echo(
-            f"Error: API key not found. Set environment variable: {llm_config.api_key_env}",
-            err=True,
-        )
-        sys.exit(1)
-
-    # 2. Find stale pairs.
-    db_path = project_root / ".beadloom" / "beadloom.db"
-    if not db_path.exists():
-        click.echo("Error: database not found. Run `beadloom reindex` first.", err=True)
-        sys.exit(1)
-
-    conn = open_db(db_path)
-    results = check_sync(conn, project_root=project_root)
-    stale = [r for r in results if r["ref_id"] == ref_id and r["status"] == "stale"]
-
-    if not stale:
-        click.echo(f"All docs for {ref_id} are up to date.")
-        conn.close()
-        return
-
-    # 3. Group by doc and collect code changes.
-    doc_stale: dict[str, list[dict[str, str]]] = {}
-    for r in stale:
-        doc_stale.setdefault(r["doc_path"], []).append(r)
-
-    for doc_rel_path, pairs in doc_stale.items():
-        doc_full_path = project_root / "docs" / doc_rel_path
-        if not doc_full_path.exists():
-            click.echo(f"  Warning: {doc_full_path} does not exist, skipping.")
-            continue
-
-        # Read changed code files.
-        code_changes: list[dict[str, str]] = []
-        for r in pairs:
-            code_file = project_root / r["code_path"]
-            if code_file.is_file():
-                code_changes.append({
-                    "code_path": r["code_path"],
-                    "content": code_file.read_text(encoding="utf-8"),
-                })
-
-        if not code_changes:
-            continue
-
-        click.echo(f"\n  Updating: {doc_rel_path}")
-        for c in code_changes:
-            click.echo(f"    Changed: {c['code_path']}")
-
-        # 4. Call LLM.
-        click.echo(
-            f"  Calling {llm_config.provider}/{llm_config.model}..."
-        )
-        try:
-            proposed = auto_update_doc(
-                llm_config,
-                doc_full_path,
-                code_changes,
-            )
-        except LLMError as exc:
-            click.echo(f"  Error: {exc}", err=True)
-            continue
-
-        # 5. Show diff.
-        original = doc_full_path.read_text(encoding="utf-8")
-        diff = difflib.unified_diff(
-            original.splitlines(keepends=True),
-            proposed.splitlines(keepends=True),
-            fromfile=f"a/{doc_rel_path}",
-            tofile=f"b/{doc_rel_path}",
-        )
-        diff_text = "".join(diff)
-
-        if not diff_text:
-            click.echo("  No changes proposed.")
-            for r in pairs:
-                mark_synced(conn, r["doc_path"], r["code_path"], project_root)
-            continue
-
-        click.echo("\n  Proposed changes:")
-        click.echo(diff_text)
-
-        # 6. Confirm.
-        action = click.prompt(
-            "  Apply changes?",
-            type=click.Choice(["yes", "edit", "no"]),
-            default="yes",
-        )
-
-        if action == "yes":
-            doc_full_path.write_text(proposed, encoding="utf-8")
-            for r in pairs:
-                mark_synced(conn, r["doc_path"], r["code_path"], project_root)
-            click.echo(f"  Applied and synced: {doc_rel_path}")
-        elif action == "edit":
-            # Write proposed content, then open in editor.
-            doc_full_path.write_text(proposed, encoding="utf-8")
-            click.edit(filename=str(doc_full_path))
-            for r in pairs:
-                mark_synced(conn, r["doc_path"], r["code_path"], project_root)
-            click.echo(f"  Edited and synced: {doc_rel_path}")
-        else:
-            click.echo(f"  Skipped: {doc_rel_path}")
 
     conn.close()
 
@@ -855,6 +716,7 @@ def init(
         click.echo(f"Scanned {scan['file_count']} files")
         click.echo(f"Generated {result['nodes_generated']} nodes")
         click.echo(f"Config: {project_root / '.beadloom' / 'config.yml'}")
+        click.echo(f"Agent instructions: {project_root / '.beadloom' / 'AGENTS.md'}")
         click.echo("")
         click.echo("Next: review .beadloom/_graph/*.yml, then run `beadloom reindex`")
         return
