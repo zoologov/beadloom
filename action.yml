@@ -1,0 +1,45 @@
+name: "Beadloom Doc Sync Check"
+description: "Check documentation freshness and post PR summary"
+inputs:
+  comment:
+    description: "Post PR comment with sync report"
+    default: "true"
+  fail-on-stale:
+    description: "Fail the check if stale docs are found"
+    default: "false"
+  python-version:
+    description: "Python version to use"
+    default: "3.12"
+runs:
+  using: "composite"
+  steps:
+    - uses: astral-sh/setup-uv@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+    - run: uv tool install beadloom
+      shell: bash
+    - run: beadloom reindex
+      shell: bash
+    - id: sync-check
+      run: |
+        beadloom sync-check --report > /tmp/beadloom-report.md 2>&1 || true
+        beadloom sync-check --porcelain > /dev/null 2>&1
+        echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+      shell: bash
+    - if: inputs.comment == 'true' && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const body = fs.readFileSync('/tmp/beadloom-report.md', 'utf8');
+          if (body.trim()) {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+          }
+    - if: inputs.fail-on-stale == 'true' && steps.sync-check.outputs.exit_code == '2'
+      run: exit 1
+      shell: bash

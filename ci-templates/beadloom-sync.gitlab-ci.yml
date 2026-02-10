@@ -1,0 +1,40 @@
+# Beadloom Doc Sync Check — GitLab CI Template
+#
+# Usage in your .gitlab-ci.yml:
+#
+#   include:
+#     - local: ci-templates/beadloom-sync.gitlab-ci.yml
+#     # or remote:
+#     # - remote: https://raw.githubusercontent.com/owner/beadloom/main/ci-templates/beadloom-sync.gitlab-ci.yml
+#
+#   doc-sync:
+#     extends: .beadloom-sync-check
+#     variables:
+#       BEADLOOM_COMMENT: "true"
+#     allow_failure: true  # or false for fail-on-stale behavior
+
+.beadloom-sync-check:
+  image: python:3.12-slim
+  before_script:
+    - pip install uv
+    - uv tool install beadloom
+    - beadloom reindex
+  script:
+    - beadloom sync-check --report > beadloom-report.md || true
+    - |
+      if [ "$BEADLOOM_COMMENT" = "true" ] && [ -n "$CI_MERGE_REQUEST_IID" ]; then
+        curl --request POST \
+          --header "PRIVATE-TOKEN: $BEADLOOM_GITLAB_TOKEN" \
+          --header "Content-Type: application/json" \
+          --data "$(jq -n --arg body "$(cat beadloom-report.md)" '{body: $body}')" \
+          "$CI_API_V4_URL/projects/$CI_PROJECT_ID/merge_requests/$CI_MERGE_REQUEST_IID/notes"
+      fi
+    - beadloom sync-check --porcelain > /dev/null 2>&1
+  variables:
+    BEADLOOM_COMMENT: "true"
+  artifacts:
+    paths:
+      - beadloom-report.md
+    when: always
+  rules:
+    - if: $CI_MERGE_REQUEST_IID

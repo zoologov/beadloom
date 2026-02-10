@@ -76,13 +76,15 @@ beadloom graph REF_ID [REF_ID...] [--depth N] [--json]
 
 ### beadloom status
 
-Index statistics.
+Index statistics with health trends.
 
 ```bash
-beadloom status [--project DIR]
+beadloom status [--json] [--project DIR]
 ```
 
-Shows: node count (broken down by kind), edges, documents, chunks, symbols, documentation coverage, stale documents.
+Shows Rich-formatted dashboard with: node count (broken down by kind), edges, documents, symbols, per-kind documentation coverage, stale docs, isolated nodes, empty summaries. Includes trend indicators (▲/▼) comparing current reindex with previous snapshot.
+
+`--json` — structured JSON output.
 
 ### beadloom doctor
 
@@ -103,12 +105,14 @@ Checks:
 Check doc↔code synchronization.
 
 ```bash
-beadloom sync-check [--porcelain] [--ref REF_ID] [--project DIR]
+beadloom sync-check [--porcelain] [--json] [--report] [--ref REF_ID] [--project DIR]
 ```
 
 Exit codes: 0 = all OK, 1 = error, 2 = stale pairs found.
 
-`--porcelain` — TAB-separated output for scripts.
+- `--porcelain` — TAB-separated output for scripts.
+- `--json` — structured JSON output with summary and pair details.
+- `--report` — ready-to-post Markdown report for CI (GitHub/GitLab).
 
 ### beadloom sync-update
 
@@ -136,14 +140,35 @@ beadloom install-hooks [--mode warn|block] [--project DIR]
 beadloom install-hooks --remove [--project DIR]
 ```
 
-### beadloom setup-mcp
+### beadloom link
 
-Configure MCP server in `.mcp.json`.
+Manage external tracker links on graph nodes.
 
 ```bash
-beadloom setup-mcp [--project DIR]
-beadloom setup-mcp --remove [--project DIR]
+# Add a link (label auto-detected from URL)
+beadloom link REF_ID URL [--label LABEL] [--project DIR]
+
+# List links for a node
+beadloom link REF_ID [--project DIR]
+
+# Remove a link
+beadloom link REF_ID --remove URL [--project DIR]
 ```
+
+Auto-detected labels: `github`, `github-pr`, `jira`, `linear`, `link` (fallback).
+
+### beadloom setup-mcp
+
+Configure MCP server for your editor.
+
+```bash
+beadloom setup-mcp [--tool {claude-code,cursor,windsurf}] [--project DIR]
+beadloom setup-mcp --remove [--tool {claude-code,cursor,windsurf}] [--project DIR]
+```
+
+- `claude-code` (default) — `.mcp.json` in project root
+- `cursor` — `.cursor/mcp.json` in project root
+- `windsurf` — `~/.codeium/windsurf/mcp_config.json` (global)
 
 ### beadloom mcp-serve
 

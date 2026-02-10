@@ -91,6 +91,19 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
+-- Health snapshots (trend tracking, persists across reindexes)
+CREATE TABLE IF NOT EXISTS health_snapshots (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    taken_at        TEXT NOT NULL,
+    nodes_count     INTEGER NOT NULL,
+    edges_count     INTEGER NOT NULL,
+    docs_count      INTEGER NOT NULL,
+    coverage_pct    REAL NOT NULL,
+    stale_count     INTEGER NOT NULL,
+    isolated_count  INTEGER NOT NULL,
+    extra           TEXT DEFAULT '{}'
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_nodes_kind ON nodes(kind);
 CREATE INDEX IF NOT EXISTS idx_edges_src ON edges(src_ref_id);

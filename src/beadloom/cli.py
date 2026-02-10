@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -48,6 +49,10 @@ def _format_markdown(bundle: dict[str, object]) -> str:
     # Focus.
     lines.append(f"# {focus['ref_id']} ({focus['kind']})")
     lines.append(f"{focus['summary']}")
+    focus_links: list[dict[str, str]] = cast("list[dict[str, str]]", focus.get("links", []))
+    if focus_links:
+        link_strs = [f"{lnk.get('label', 'link')}: {lnk['url']}" for lnk in focus_links]
+        lines.append(f"Links: {', '.join(link_strs)}")
     lines.append("")
 
     # Graph.
@@ -305,9 +310,11 @@ def doctor(*, project: Path | None) -> None:
     default=None,
     help="Project root (default: current directory).",
 )
-def status(*, project: Path | None) -> None:
-    """Show project index statistics."""
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON.")
+def status(*, project: Path | None, output_json: bool) -> None:
+    """Show project index statistics with health trends."""
     from beadloom.db import get_meta, open_db
+    from beadloom.health import compute_trend, get_latest_snapshots
 
     project_root = project or Path.cwd()
     db_path = project_root / ".beadloom" / "beadloom.db"
@@ -318,12 +325,12 @@ def status(*, project: Path | None) -> None:
 
     conn = open_db(db_path)
 
-    nodes_count = conn.execute("SELECT count(*) FROM nodes").fetchone()[0]
-    edges_count = conn.execute("SELECT count(*) FROM edges").fetchone()[0]
-    docs_count = conn.execute("SELECT count(*) FROM docs").fetchone()[0]
-    chunks_count = conn.execute("SELECT count(*) FROM chunks").fetchone()[0]
-    symbols_count = conn.execute("SELECT count(*) FROM code_symbols").fetchone()[0]
-    stale_count = conn.execute(
+    nodes_count: int = conn.execute("SELECT count(*) FROM nodes").fetchone()[0]
+    edges_count: int = conn.execute("SELECT count(*) FROM edges").fetchone()[0]
+    docs_count: int = conn.execute("SELECT count(*) FROM docs").fetchone()[0]
+    chunks_count: int = conn.execute("SELECT count(*) FROM chunks").fetchone()[0]
+    symbols_count: int = conn.execute("SELECT count(*) FROM code_symbols").fetchone()[0]
+    stale_count: int = conn.execute(
         "SELECT count(*) FROM sync_state WHERE status = 'stale'"
     ).fetchone()[0]
 
@@ -333,35 +340,139 @@ def status(*, project: Path | None) -> None:
     ).fetchall()
 
     # Coverage: nodes with at least one doc linked.
-    covered = conn.execute(
+    covered: int = conn.execute(
         "SELECT count(DISTINCT n.ref_id) FROM nodes n JOIN docs d ON d.ref_id = n.ref_id"
+    ).fetchone()[0]
+
+    # Per-kind coverage.
+    kind_coverage_rows = conn.execute(
+        "SELECT n.kind, count(DISTINCT n.ref_id) as covered "
+        "FROM nodes n JOIN docs d ON d.ref_id = n.ref_id GROUP BY n.kind"
+    ).fetchall()
+    kind_covered: dict[str, int] = {r["kind"]: r["covered"] for r in kind_coverage_rows}
+    kind_total: dict[str, int] = {r["kind"]: r["cnt"] for r in kind_rows}
+
+    # Isolated nodes count.
+    isolated_count: int = conn.execute(
+        "SELECT count(*) FROM nodes n "
+        "LEFT JOIN edges e1 ON e1.src_ref_id = n.ref_id "
+        "LEFT JOIN edges e2 ON e2.dst_ref_id = n.ref_id "
+        "WHERE e1.src_ref_id IS NULL AND e2.dst_ref_id IS NULL"
+    ).fetchone()[0]
+
+    # Empty summaries count.
+    empty_summaries: int = conn.execute(
+        "SELECT count(*) FROM nodes WHERE summary = '' OR summary IS NULL"
     ).fetchone()[0]
 
     last_reindex = get_meta(conn, "last_reindex_at", "never")
     version = get_meta(conn, "beadloom_version", "unknown")
 
+    # Trend data.
+    snapshots = get_latest_snapshots(conn, n=2)
+    current = snapshots[0] if snapshots else None
+    previous = snapshots[1] if len(snapshots) >= 2 else None
+    trends = compute_trend(current, previous) if current and previous else {}
+
     conn.close()
 
-    click.echo(f"Beadloom v{version}")
-    click.echo(f"Last reindex: {last_reindex}")
-    click.echo("")
-    click.echo(f"  Nodes:        {nodes_count}")
+    coverage_pct = (covered / nodes_count * 100) if nodes_count > 0 else 0.0
+
+    if output_json:
+        data = {
+            "version": version,
+            "last_reindex": last_reindex,
+            "nodes_count": nodes_count,
+            "edges_count": edges_count,
+            "docs_count": docs_count,
+            "chunks_count": chunks_count,
+            "symbols_count": symbols_count,
+            "coverage_pct": round(coverage_pct, 1),
+            "covered_count": covered,
+            "stale_count": stale_count,
+            "isolated_count": isolated_count,
+            "empty_summaries": empty_summaries,
+            "by_kind": {kr["kind"]: kr["cnt"] for kr in kind_rows},
+            "trends": trends,
+        }
+        click.echo(json.dumps(data, ensure_ascii=False, indent=2))
+        return
+
+    # Rich-formatted output.
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.table import Table
+
+    console = Console()
+
+    # Header panel.
+    console.print(Panel(
+        f"Last reindex: {last_reindex}",
+        title=f"Beadloom v{version}",
+        border_style="blue",
+    ))
+    console.print()
+
+    # Summary line.
+    t_nodes = trends.get("nodes_count", "")
+    t_edges = trends.get("edges_count", "")
+    t_docs = trends.get("docs_count", "")
+    console.print(
+        f"  Nodes: [bold]{nodes_count}[/] {t_nodes}   "
+        f"Edges: [bold]{edges_count}[/] {t_edges}   "
+        f"Docs: [bold]{docs_count}[/] {t_docs}   "
+        f"Symbols: [bold]{symbols_count}[/]"
+    )
+    console.print()
+
+    # Two-column layout: By Kind + Doc Coverage.
+    kind_table = Table(title="By Kind", show_header=False, box=None, padding=(0, 1))
+    kind_table.add_column("kind", style="cyan")
+    kind_table.add_column("count", justify="right")
     for kr in kind_rows:
-        click.echo(f"    {kr['kind']:12s} {kr['cnt']}")
-    click.echo(f"  Edges:        {edges_count}")
-    click.echo(f"  Docs:         {docs_count}")
-    click.echo(f"  Chunks:       {chunks_count}")
-    click.echo(f"  Code symbols: {symbols_count}")
-    click.echo("")
-    coverage_pct = (covered / nodes_count * 100) if nodes_count > 0 else 0
-    click.echo(f"  Doc coverage: {covered}/{nodes_count} ({coverage_pct:.0f}%)")
-    if stale_count > 0:
-        click.echo(f"  Stale docs:   {stale_count}")
+        kind_table.add_row(kr["kind"], str(kr["cnt"]))
+
+    cov_table = Table(title="Doc Coverage", show_header=False, box=None, padding=(0, 1))
+    cov_table.add_column("scope", style="cyan")
+    cov_table.add_column("coverage", justify="right")
+    cov_table.add_column("trend")
+
+    cov_trend = trends.get("coverage_pct", "")
+    cov_table.add_row(
+        "Overall",
+        f"{covered}/{nodes_count} ({coverage_pct:.0f}%)",
+        cov_trend,
+    )
+    for kind_name in sorted(kind_total):
+        kc = kind_covered.get(kind_name, 0)
+        kt = kind_total[kind_name]
+        kpct = (kc / kt * 100) if kt > 0 else 0
+        cov_table.add_row(kind_name, f"{kc}/{kt} ({kpct:.0f}%)", "")
+
+    console.print(kind_table)
+    console.print()
+    console.print(cov_table)
+    console.print()
+
+    # Health section.
+    health_table = Table(title="Health", show_header=False, box=None, padding=(0, 1))
+    health_table.add_column("metric", style="cyan")
+    health_table.add_column("value", justify="right")
+    health_table.add_column("trend")
+
+    stale_trend = trends.get("stale_count", "")
+    iso_trend = trends.get("isolated_count", "")
+    health_table.add_row("Stale docs", str(stale_count), stale_trend)
+    health_table.add_row("Isolated nodes", str(isolated_count), iso_trend)
+    health_table.add_row("Empty summaries", str(empty_summaries), "")
+    console.print(health_table)
 
 
 # beadloom:domain=doc-sync
 @main.command("sync-check")
 @click.option("--porcelain", is_flag=True, help="TAB-separated machine-readable output.")
+@click.option("--json", "output_json", is_flag=True, help="Structured JSON output.")
+@click.option("--report", "output_report", is_flag=True, help="Markdown report for CI posting.")
 @click.option("--ref", "ref_filter", default=None, help="Filter by ref_id.")
 @click.option(
     "--project",
@@ -372,6 +483,8 @@ def status(*, project: Path | None) -> None:
 def sync_check(
     *,
     porcelain: bool,
+    output_json: bool,
+    output_report: bool,
     ref_filter: str | None,
     project: Path | None,
 ) -> None:
@@ -398,7 +511,29 @@ def sync_check(
 
     has_stale = any(r["status"] == "stale" for r in results)
 
-    if porcelain:
+    if output_json:
+        ok_count = sum(1 for r in results if r["status"] == "ok")
+        stale_count = sum(1 for r in results if r["status"] == "stale")
+        data = {
+            "summary": {
+                "total": len(results),
+                "ok": ok_count,
+                "stale": stale_count,
+            },
+            "pairs": [
+                {
+                    "status": r["status"],
+                    "ref_id": r["ref_id"],
+                    "doc_path": r["doc_path"],
+                    "code_path": r["code_path"],
+                }
+                for r in results
+            ],
+        }
+        click.echo(json.dumps(data, ensure_ascii=False, indent=2))
+    elif output_report:
+        click.echo(_build_sync_report(results))
+    elif porcelain:
         for r in results:
             click.echo(f"{r['status']}\t{r['ref_id']}\t{r['doc_path']}\t{r['code_path']}")
     else:
@@ -411,6 +546,41 @@ def sync_check(
 
     if has_stale:
         sys.exit(2)
+
+
+def _build_sync_report(results: list[dict[str, str]]) -> str:
+    """Build a Markdown report from sync-check results."""
+    ok_count = sum(1 for r in results if r["status"] == "ok")
+    stale_count = sum(1 for r in results if r["status"] == "stale")
+    stale_pairs = [r for r in results if r["status"] == "stale"]
+
+    lines: list[str] = [
+        "## Beadloom Doc Sync Report",
+        "",
+        "| Status | Count |",
+        "|--------|-------|",
+        f"| OK | {ok_count} |",
+        f"| Stale | {stale_count} |",
+    ]
+
+    if stale_pairs:
+        lines.extend([
+            "",
+            "### Stale Documents",
+            "",
+            "| Node | Doc | Changed Code |",
+            "|------|-----|-------------|",
+        ])
+        for r in stale_pairs:
+            lines.append(f"| {r['ref_id']} | `{r['doc_path']}` | `{r['code_path']}` |")
+        lines.extend([
+            "",
+            "> Run `beadloom sync-update <ref_id>` to review and update.",
+        ])
+    else:
+        lines.extend(["", "All documentation is up to date."])
+
+    return "\n".join(lines)
 
 
 _HOOK_TEMPLATE_WARN = """\
@@ -599,20 +769,51 @@ def sync_update(
 
 
 # beadloom:service=mcp-server
+_MCP_TOOL_CONFIGS: dict[str, dict[str, str]] = {
+    "claude-code": {"path_template": "{project}/.mcp.json", "scope": "project"},
+    "cursor": {"path_template": "{project}/.cursor/mcp.json", "scope": "project"},
+    "windsurf": {
+        "path_template": "{home}/.codeium/windsurf/mcp_config.json",
+        "scope": "global",
+    },
+}
+
+
 @main.command("setup-mcp")
-@click.option("--remove", is_flag=True, help="Remove beadloom from .mcp.json.")
+@click.option("--remove", is_flag=True, help="Remove beadloom from MCP config.")
+@click.option(
+    "--tool",
+    "tool_name",
+    type=click.Choice(["claude-code", "cursor", "windsurf"]),
+    default="claude-code",
+    help="Editor/tool to configure (default: claude-code).",
+)
 @click.option(
     "--project",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     default=None,
     help="Project root (default: current directory).",
 )
-def setup_mcp(*, remove: bool, project: Path | None) -> None:
-    """Create or update .mcp.json for beadloom MCP server."""
+def setup_mcp(*, remove: bool, tool_name: str, project: Path | None) -> None:
+    """Create or update MCP config for beadloom MCP server.
+
+    Supports Claude Code (.mcp.json), Cursor (.cursor/mcp.json),
+    and Windsurf (~/.codeium/windsurf/mcp_config.json).
+    """
     import shutil
 
     project_root = project or Path.cwd()
-    mcp_json_path = project_root / ".mcp.json"
+    tool_cfg = _MCP_TOOL_CONFIGS[tool_name]
+
+    mcp_json_path = Path(
+        tool_cfg["path_template"].format(
+            project=project_root,
+            home=Path.home(),
+        )
+    )
+
+    # Ensure parent directory exists.
+    mcp_json_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Load existing or create new.
     if mcp_json_path.exists():
@@ -629,15 +830,20 @@ def setup_mcp(*, remove: bool, project: Path | None) -> None:
             json.dumps(data, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
-        click.echo("Removed beadloom from .mcp.json.")
+        click.echo(f"Removed beadloom from {mcp_json_path}")
         return
 
     # Find beadloom command path.
     beadloom_path = shutil.which("beadloom") or "beadloom"
 
+    args: list[str] = ["mcp-serve"]
+    # Global configs need explicit --project path.
+    if tool_cfg["scope"] == "global":
+        args.extend(["--project", str(project_root.resolve())])
+
     data["mcpServers"]["beadloom"] = {
         "command": beadloom_path,
-        "args": ["mcp-serve"],
+        "args": args,
     }
 
     mcp_json_path.write_text(
@@ -645,6 +851,135 @@ def setup_mcp(*, remove: bool, project: Path | None) -> None:
         encoding="utf-8",
     )
     click.echo(f"Updated {mcp_json_path}")
+
+
+# beadloom:domain=links
+_LINK_LABEL_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"github\.com/.+/pull/"), "github-pr"),
+    (re.compile(r"github\.com/.+/issues/"), "github"),
+    (re.compile(r"(.*\.atlassian\.net/|jira\.)"), "jira"),
+    (re.compile(r"linear\.app/"), "linear"),
+]
+
+
+def _detect_link_label(url: str) -> str:
+    """Auto-detect tracker label from URL pattern."""
+    for pattern, label in _LINK_LABEL_PATTERNS:
+        if pattern.search(url):
+            return label
+    return "link"
+
+
+@main.command()
+@click.argument("ref_id")
+@click.argument("url", required=False, default=None)
+@click.option("--label", default=None, help="Link label (auto-detected if omitted).")
+@click.option("--remove", "remove_url", default=None, help="URL to remove.")
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: current directory).",
+)
+def link(
+    ref_id: str,
+    url: str | None,
+    *,
+    label: str | None,
+    remove_url: str | None,
+    project: Path | None,
+) -> None:
+    """Manage external tracker links on graph nodes.
+
+    Add a link: beadloom link AUTH-001 https://github.com/org/repo/issues/42
+
+    List links: beadloom link AUTH-001
+
+    Remove a link: beadloom link AUTH-001 --remove https://github.com/org/repo/issues/42
+    """
+    import yaml
+
+    project_root = project or Path.cwd()
+    graph_dir = project_root / ".beadloom" / "_graph"
+
+    if not graph_dir.is_dir():
+        click.echo("Error: graph directory not found. Run `beadloom init` first.", err=True)
+        sys.exit(1)
+
+    # Find the YAML file containing this ref_id.
+    target_file: Path | None = None
+    target_data: dict[str, object] | None = None
+    node_index: int | None = None
+
+    for yml_path in sorted(graph_dir.glob("*.yml")):
+        text = yml_path.read_text(encoding="utf-8")
+        data = yaml.safe_load(text)
+        if data is None:
+            continue
+        for i, node in enumerate(data.get("nodes") or []):
+            if node.get("ref_id") == ref_id:
+                target_file = yml_path
+                target_data = data
+                node_index = i
+                break
+        if target_file is not None:
+            break
+
+    if target_file is None or target_data is None or node_index is None:
+        click.echo(f"Error: node '{ref_id}' not found in graph YAML files.", err=True)
+        sys.exit(1)
+
+    from typing import cast as _cast
+
+    nodes_list: list[dict[str, object]] = _cast(
+        "list[dict[str, object]]", target_data.get("nodes") or []
+    )
+    node = nodes_list[node_index]
+    links: list[dict[str, str]] = _cast(
+        "list[dict[str, str]]", node.get("links") or []
+    )
+
+    # List links mode.
+    if url is None and remove_url is None:
+        if not links:
+            click.echo(f"No links for {ref_id}.")
+        else:
+            for lnk in links:
+                click.echo(f"  [{lnk.get('label', 'link')}] {lnk['url']}")
+        return
+
+    # Remove mode.
+    if remove_url is not None:
+        original_len = len(links)
+        links = [lnk for lnk in links if lnk["url"] != remove_url]
+        if len(links) == original_len:
+            click.echo(f"Link not found: {remove_url}")
+            return
+        node["links"] = links if links else None
+        if not links and "links" in node:
+            del node["links"]
+        target_file.write_text(
+            yaml.dump(target_data, default_flow_style=False, sort_keys=False),
+            encoding="utf-8",
+        )
+        click.echo(f"Removed link from {ref_id}.")
+        return
+
+    # Add mode — url is guaranteed non-None at this point.
+    assert url is not None
+    detected_label = label or _detect_link_label(url)
+    # Check for duplicates.
+    if any(lnk["url"] == url for lnk in links):
+        click.echo(f"Link already exists: {url}")
+        return
+
+    links.append({"url": url, "label": detected_label})
+    node["links"] = links
+    target_file.write_text(
+        yaml.dump(target_data, default_flow_style=False, sort_keys=False),
+        encoding="utf-8",
+    )
+    click.echo(f"Added [{detected_label}] {url} to {ref_id}.")
 
 
 # beadloom:service=mcp-server

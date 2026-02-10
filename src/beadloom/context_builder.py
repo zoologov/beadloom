@@ -346,27 +346,36 @@ def build_context(
 
     # Step 5: Build focus info (first ref_id).
     focus_node = conn.execute(
-        "SELECT ref_id, kind, summary FROM nodes WHERE ref_id = ?",
+        "SELECT ref_id, kind, summary, extra FROM nodes WHERE ref_id = ?",
         (ref_ids[0],),
     ).fetchone()
 
     # Step 6: Check sync status.
     stale_docs = _check_sync_status(conn, subgraph_ref_ids)
 
-    # Step 7: Check stale index warning.
+    # Step 7: Extract links from focus node's extra field.
+    focus_extra_raw: str = str(focus_node["extra"]) if focus_node["extra"] else "{}"
+    focus_extra: dict[str, Any] = json.loads(focus_extra_raw) if focus_extra_raw else {}
+    focus_links: list[dict[str, str]] = focus_extra.get("links", [])
+
+    # Step 8: Check stale index warning.
     last_reindex = get_meta(conn, "last_reindex_at")
     warning: str | None = None
     # Warning is set externally when file mtimes are newer than last_reindex_at.
     # This module only checks meta; CLI layer handles mtime comparison.
     _ = last_reindex  # Used by CLI layer for mtime comparison.
 
+    focus_dict: dict[str, Any] = {
+        "ref_id": focus_node["ref_id"],
+        "kind": focus_node["kind"],
+        "summary": focus_node["summary"],
+    }
+    if focus_links:
+        focus_dict["links"] = focus_links
+
     return {
         "version": 1,
-        "focus": {
-            "ref_id": focus_node["ref_id"],
-            "kind": focus_node["kind"],
-            "summary": focus_node["summary"],
-        },
+        "focus": focus_dict,
         "graph": {
             "nodes": nodes,
             "edges": edges,

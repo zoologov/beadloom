@@ -14,6 +14,7 @@ from beadloom.code_indexer import extract_symbols
 from beadloom.db import SCHEMA_VERSION, create_schema, open_db, set_meta
 from beadloom.doc_indexer import index_docs
 from beadloom.graph_loader import load_graph
+from beadloom.health import take_snapshot
 
 if TYPE_CHECKING:
     import sqlite3
@@ -269,6 +270,9 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
     set_meta(conn, "last_reindex_at", now)
     set_meta(conn, "beadloom_version", __version__)
     set_meta(conn, "schema_version", SCHEMA_VERSION)
+
+    # 6. Take health snapshot for trend tracking.
+    take_snapshot(conn)
 
     conn.close()
     return result
