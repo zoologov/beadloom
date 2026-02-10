@@ -267,3 +267,271 @@ class TestDispatchTool:
         # Act & Assert
         with pytest.raises(ValueError, match="Unknown tool: unknown"):
             _dispatch_tool(db_conn, "unknown", args)
+
+
+class TestCacheIntegration:
+    """Test L1 cache integration in MCP dispatch."""
+
+    def test_first_call_returns_full_bundle(
+        self, project: Path, db_conn: sqlite3.Connection,
+    ) -> None:
+        from beadloom.cache import ContextCache
+        from beadloom.mcp_server import _dispatch_tool
+
+        cache = ContextCache()
+        result = _dispatch_tool(
+            db_conn, "get_context", {"ref_id": "FEAT-1"},
+            project_root=project, cache=cache,
+        )
+        assert result["version"] == 1
+        assert result["focus"]["ref_id"] == "FEAT-1"
+
+    def test_second_call_returns_cached_response(
+        self, project: Path, db_conn: sqlite3.Connection,
+    ) -> None:
+        from beadloom.cache import ContextCache
+        from beadloom.mcp_server import _dispatch_tool
+
+        cache = ContextCache()
+        args = {"ref_id": "FEAT-1"}
+
+        # First call — full bundle
+        r1 = _dispatch_tool(
+            db_conn, "get_context", args,
+            project_root=project, cache=cache,
+        )
+        assert r1["version"] == 1
+
+        # Second call — cached short response
+        r2 = _dispatch_tool(
+            db_conn, "get_context", args,
+            project_root=project, cache=cache,
+        )
+        assert r2["cached"] is True
+        assert r2["etag"].startswith("sha256:")
+        assert "unchanged_since" in r2
+        assert "hint" in r2
+
+    def test_cache_invalidated_on_graph_change(
+        self, project: Path, db_conn: sqlite3.Connection,
+    ) -> None:
+        import time
+
+        from beadloom.cache import ContextCache
+        from beadloom.mcp_server import _dispatch_tool
+
+        cache = ContextCache()
+        args = {"ref_id": "FEAT-1"}
+
+        # Populate cache
+        _dispatch_tool(
+            db_conn, "get_context", args,
+            project_root=project, cache=cache,
+        )
+
+        # Touch graph file
+        time.sleep(0.05)
+        graph_file = project / ".beadloom" / "_graph" / "graph.yml"
+        graph_file.write_text(graph_file.read_text())
+
+        # Should get full response (cache invalidated by mtime)
+        r = _dispatch_tool(
+            db_conn, "get_context", args,
+            project_root=project, cache=cache,
+        )
+        assert r["version"] == 1
+        assert "cached" not in r
+
+    def test_graph_tool_cached(
+        self, project: Path, db_conn: sqlite3.Connection,
+    ) -> None:
+        from beadloom.cache import ContextCache
+        from beadloom.mcp_server import _dispatch_tool
+
+        cache = ContextCache()
+        args = {"ref_id": "FEAT-1"}
+
+        # First call — full result
+        r1 = _dispatch_tool(
+            db_conn, "get_graph", args,
+            project_root=project, cache=cache,
+        )
+        assert "nodes" in r1
+
+        # Second call — cached
+        r2 = _dispatch_tool(
+            db_conn, "get_graph", args,
+            project_root=project, cache=cache,
+        )
+        assert r2["cached"] is True
+        assert r2["etag"].startswith("sha256:")
+
+    def test_no_cache_falls_back_to_full_bundle(
+        self, db_conn: sqlite3.Connection,
+    ) -> None:
+        from beadloom.mcp_server import _dispatch_tool
+
+        # Without cache parameter — original behavior
+        r = _dispatch_tool(db_conn, "get_context", {"ref_id": "FEAT-1"})
+        assert r["version"] == 1
+        assert "cached" not in r
+
+
+class TestWriteTools:
+    """Test MCP write tool handlers."""
+
+    def test_update_node_summary(
+        self, project: Path, db_conn: sqlite3.Connection,
+    ) -> None:
+        from beadloom.mcp_server import handle_update_node
+
+        result = handle_update_node(
+            db_conn, project, ref_id="FEAT-1", summary="Updated summary",
+        )
+        assert result["updated"] is True
+
+        # Verify SQLite updated.
+        row = db_conn.execute(
+            "SELECT summary FROM nodes WHERE ref_id = ?", ("FEAT-1",)
+        ).fetchone()
+        assert row["summary"] == "Updated summary"
+
+        # Verify YAML updated.
+        import yaml
+
+        graph_file = project / ".beadloom" / "_graph" / "graph.yml"
+        data = yaml.safe_load(graph_file.read_text())
+        node = next(n for n in data["nodes"] if n["ref_id"] == "FEAT-1")
+        assert node["summary"] == "Updated summary"
+
+    def test_update_node_not_found(
+        self, project: Path, db_conn: sqlite3.Connection,
+    ) -> None:
+        from beadloom.mcp_server import handle_update_node
+
+        with pytest.raises(LookupError, match="not found"):
+            handle_update_node(
+                db_conn, project, ref_id="NONEXISTENT", summary="x",
+            )
+
+    def test_mark_synced(
+        self, project: Path, db_conn: sqlite3.Connection,
+    ) -> None:
+        from beadloom.mcp_server import handle_mark_synced
+
+        result = handle_mark_synced(db_conn, project, ref_id="FEAT-1")
+        assert "pairs_synced" in result
+
+    def test_search_by_keyword(
+        self, db_conn: sqlite3.Connection,
+    ) -> None:
+        from beadloom.mcp_server import handle_search
+
+        results = handle_search(db_conn, query="Track")
+        assert len(results) >= 1
+        assert any(r["ref_id"] == "FEAT-1" for r in results)
+
+    def test_search_by_kind(
+        self, db_conn: sqlite3.Connection,
+    ) -> None:
+        from beadloom.mcp_server import handle_search
+
+        results = handle_search(db_conn, query="Routing", kind="domain")
+        assert all(r["kind"] == "domain" for r in results)
+
+    def test_search_no_results(
+        self, db_conn: sqlite3.Connection,
+    ) -> None:
+        from beadloom.mcp_server import handle_search
+
+        results = handle_search(db_conn, query="zzzznonexistent")
+        assert results == []
+
+    def test_dispatch_update_node(
+        self, project: Path, db_conn: sqlite3.Connection,
+    ) -> None:
+        from beadloom.mcp_server import _dispatch_tool
+
+        result = _dispatch_tool(
+            db_conn, "update_node",
+            {"ref_id": "FEAT-1", "summary": "Dispatch test"},
+            project_root=project,
+        )
+        assert result["updated"] is True
+
+    def test_dispatch_mark_synced(
+        self, project: Path, db_conn: sqlite3.Connection,
+    ) -> None:
+        from beadloom.mcp_server import _dispatch_tool
+
+        result = _dispatch_tool(
+            db_conn, "mark_synced",
+            {"ref_id": "FEAT-1"},
+            project_root=project,
+        )
+        assert "pairs_synced" in result
+
+    def test_dispatch_search(
+        self, db_conn: sqlite3.Connection,
+    ) -> None:
+        from beadloom.mcp_server import _dispatch_tool
+
+        result = _dispatch_tool(
+            db_conn, "search",
+            {"query": "Track"},
+        )
+        assert isinstance(result, list)
+
+
+class TestAutoReindex:
+    """Test auto-reindex stale detection."""
+
+    def test_is_index_stale_when_files_changed(
+        self, project: Path, db_conn: sqlite3.Connection,
+    ) -> None:
+        import time
+
+        from beadloom.mcp_server import _is_index_stale
+
+        # Index is fresh right after reindex.
+        assert _is_index_stale(project, db_conn) is False
+
+        # Touch a graph file.
+        time.sleep(0.05)
+        graph_file = project / ".beadloom" / "_graph" / "graph.yml"
+        graph_file.write_text(graph_file.read_text())
+
+        assert _is_index_stale(project, db_conn) is True
+
+    def test_ensure_fresh_index_triggers_reindex(
+        self, project: Path,
+    ) -> None:
+        import time
+
+        from beadloom.db import open_db
+        from beadloom.mcp_server import _ensure_fresh_index
+
+        db_path = project / ".beadloom" / "beadloom.db"
+
+        # Touch a doc file to make index stale.
+        time.sleep(0.05)
+        (project / "docs" / "spec.md").write_text("## Updated\n\nNew.\n")
+
+        conn = open_db(db_path)
+        reindexed = _ensure_fresh_index(project, conn)
+        conn.close()
+
+        assert reindexed is True
+
+    def test_ensure_fresh_index_no_op_when_fresh(
+        self, project: Path,
+    ) -> None:
+        from beadloom.db import open_db
+        from beadloom.mcp_server import _ensure_fresh_index
+
+        db_path = project / ".beadloom" / "beadloom.db"
+        conn = open_db(db_path)
+        reindexed = _ensure_fresh_index(project, conn)
+        conn.close()
+
+        assert reindexed is False

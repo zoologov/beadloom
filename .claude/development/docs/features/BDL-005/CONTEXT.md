@@ -19,14 +19,14 @@ Make Beadloom fast, searchable, and fully agent-native — with no LLM API depen
 
 | # | Item | Status | Bead |
 |---|------|--------|------|
-| 4.1 | L1 cache integration in MCP | TODO | — |
-| 4.7 | Remove --auto + LLM API | TODO | — |
-| 4.2 | Incremental reindex | TODO | — |
-| 4.5 | MCP write tools (update_node, mark_synced) | TODO | — |
-| 4.3 | Auto-reindex in MCP | TODO | — |
-| 4.4 | Bundle caching in SQLite | TODO | — |
-| 4.8 | AGENTS.md update | TODO | — |
-| 4.6 | Semantic search (FTS5 + sqlite-vec) | TODO | — |
+| 4.1 | L1 cache integration in MCP | TODO | beadloom-oaz |
+| 4.7 | Remove --auto + LLM API | BLOCKED(4.5) | beadloom-v6b |
+| 4.2 | Incremental reindex | TODO | beadloom-6km |
+| 4.5 | MCP write tools (update_node, mark_synced) | TODO | beadloom-gjh |
+| 4.3 | Auto-reindex in MCP | BLOCKED(4.2) | beadloom-9lr |
+| 4.4 | Bundle caching in SQLite | BLOCKED(4.1) | beadloom-p5q |
+| 4.8 | AGENTS.md update | BLOCKED(4.5,4.7) | beadloom-21b |
+| 4.6 | Semantic search (FTS5 + sqlite-vec) | BLOCKED(4.2) | beadloom-vg5 |
 
 ## Key Decisions
 

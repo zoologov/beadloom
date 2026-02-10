@@ -185,8 +185,22 @@ class TestReindex:
 
         first = runner.invoke(main, ["reindex", "--project", str(project)])
         assert first.exit_code == 0, first.output
+        assert "Nodes:   2" in first.output
 
+        # Second run is incremental — nothing changed, counts are 0.
         second = runner.invoke(main, ["reindex", "--project", str(project)])
+        assert second.exit_code == 0, second.output
+
+    def test_reindex_full_flag(self, tmp_path: Path) -> None:
+        """--full forces a complete rebuild."""
+        project = _create_mini_project(tmp_path)
+        runner = CliRunner()
+
+        runner.invoke(main, ["reindex", "--project", str(project)])
+
+        second = runner.invoke(
+            main, ["reindex", "--project", str(project), "--full"],
+        )
         assert second.exit_code == 0, second.output
         assert "Nodes:   2" in second.output
 

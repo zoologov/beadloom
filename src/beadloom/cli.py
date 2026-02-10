@@ -115,12 +115,28 @@ def _format_markdown(bundle: dict[str, object]) -> str:
     default=None,
     help="Documentation directory (default: from config.yml or 'docs/').",
 )
-def reindex(*, project: Path | None, docs_dir: Path | None) -> None:
-    """Drop and rebuild the SQLite index from Git sources."""
-    from beadloom.reindex import reindex as do_reindex
+@click.option(
+    "--full",
+    is_flag=True,
+    default=False,
+    help="Force full rebuild (drop all tables and re-create).",
+)
+def reindex(*, project: Path | None, docs_dir: Path | None, full: bool) -> None:
+    """Rebuild the SQLite index from Git sources.
 
+    By default, performs an incremental reindex (only changed files).
+    Use --full to force a complete rebuild.
+    """
     project_root = project or Path.cwd()
-    result = do_reindex(project_root, docs_dir=docs_dir)
+
+    if full:
+        from beadloom.reindex import reindex as do_reindex
+
+        result = do_reindex(project_root, docs_dir=docs_dir)
+    else:
+        from beadloom.reindex import incremental_reindex
+
+        result = incremental_reindex(project_root, docs_dir=docs_dir)
 
     click.echo(f"Nodes:   {result.nodes_loaded}")
     click.echo(f"Edges:   {result.edges_loaded}")
@@ -672,7 +688,6 @@ def install_hooks(
 @main.command("sync-update")
 @click.argument("ref_id")
 @click.option("--check", "check_only", is_flag=True, help="Only show status, don't open editor.")
-@click.option("--auto", is_flag=True, hidden=True, help="Deprecated.")
 @click.option(
     "--project",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
@@ -683,7 +698,6 @@ def sync_update(
     ref_id: str,
     *,
     check_only: bool,
-    auto: bool,
     project: Path | None,
 ) -> None:
     """Show sync status and update docs for a ref_id.
@@ -691,7 +705,7 @@ def sync_update(
     Use --check to only display status without opening an editor.
 
     For automated doc updates, use your AI agent (Claude Code, Cursor, etc.)
-    with Beadloom's MCP tools.  See .beadloom/AGENTS.md for instructions.
+    with Beadloom's MCP tools (update_node, mark_synced).
     """
     from beadloom.db import open_db
     from beadloom.sync_engine import check_sync
@@ -701,16 +715,6 @@ def sync_update(
 
     if not db_path.exists():
         click.echo("Error: database not found. Run `beadloom reindex` first.", err=True)
-        sys.exit(1)
-
-    # Handle deprecated --auto flag.
-    if auto:
-        click.echo(
-            "Warning: --auto is deprecated and will be removed in v0.4.\n"
-            "Use your AI agent with Beadloom's MCP tools instead.\n"
-            "See: .beadloom/AGENTS.md",
-            err=True,
-        )
         sys.exit(1)
 
     conn = open_db(db_path)

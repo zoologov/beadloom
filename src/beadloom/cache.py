@@ -4,12 +4,21 @@
 
 from __future__ import annotations
 
+import hashlib
+import json as _json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any
 
 # Cache key: (ref_id, depth, max_nodes, max_chunks)
 CacheKey = tuple[str, int, int, int]
+
+
+def compute_etag(bundle: dict[str, Any]) -> str:
+    """Compute SHA-256 etag for a context bundle."""
+    raw = _json.dumps(bundle, sort_keys=True, ensure_ascii=False)
+    return f"sha256:{hashlib.sha256(raw.encode()).hexdigest()[:16]}"
 
 
 @dataclass
@@ -20,6 +29,7 @@ class CacheEntry:
     created_at: float
     graph_mtime: float
     docs_mtime: float
+    created_at_iso: str = field(default="")
 
 
 class ContextCache:
@@ -63,6 +73,35 @@ class ContextCache:
 
         return entry.bundle
 
+    def get_entry(
+        self,
+        ref_id: str,
+        depth: int,
+        max_nodes: int,
+        max_chunks: int,
+        *,
+        graph_mtime: float | None = None,
+        docs_mtime: float | None = None,
+    ) -> CacheEntry | None:
+        """Get the full cache entry, or None if miss or stale.
+
+        Same invalidation logic as ``get()``, but returns the
+        :class:`CacheEntry` instead of just the bundle dict.
+        """
+        key: CacheKey = (ref_id, depth, max_nodes, max_chunks)
+        entry = self._store.get(key)
+        if entry is None:
+            return None
+
+        if graph_mtime is not None and entry.graph_mtime < graph_mtime:
+            del self._store[key]
+            return None
+        if docs_mtime is not None and entry.docs_mtime < docs_mtime:
+            del self._store[key]
+            return None
+
+        return entry
+
     def put(
         self,
         ref_id: str,
@@ -81,6 +120,7 @@ class ContextCache:
             created_at=time.monotonic(),
             graph_mtime=graph_mtime,
             docs_mtime=docs_mtime,
+            created_at_iso=datetime.now(tz=timezone.utc).isoformat(),
         )
 
     def clear(self) -> None:

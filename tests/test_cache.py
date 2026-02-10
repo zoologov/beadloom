@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from beadloom.cache import ContextCache
+from beadloom.cache import ContextCache, compute_etag
 
 
 class TestContextCache:
@@ -80,3 +80,47 @@ class TestContextCache:
         cache.put("A", 2, 20, 10, {"v": 1}, graph_mtime=1000.0, docs_mtime=1000.0)
         # No mtime args → always hit (no invalidation check).
         assert cache.get("A", 2, 20, 10) is not None
+
+    def test_get_entry_returns_cache_entry(self) -> None:
+        cache = ContextCache()
+        bundle = {"version": 1}
+        cache.put("A", 2, 20, 10, bundle, graph_mtime=1.0, docs_mtime=1.0)
+        entry = cache.get_entry("A", 2, 20, 10)
+        assert entry is not None
+        assert entry.bundle == bundle
+        assert entry.created_at_iso != ""
+
+    def test_get_entry_miss(self) -> None:
+        cache = ContextCache()
+        assert cache.get_entry("NOPE", 2, 20, 10) is None
+
+    def test_get_entry_stale_graph(self) -> None:
+        cache = ContextCache()
+        cache.put("A", 2, 20, 10, {"v": 1}, graph_mtime=1.0, docs_mtime=1.0)
+        assert cache.get_entry("A", 2, 20, 10, graph_mtime=2.0) is None
+
+    def test_get_entry_stale_docs(self) -> None:
+        cache = ContextCache()
+        cache.put("A", 2, 20, 10, {"v": 1}, graph_mtime=1.0, docs_mtime=1.0)
+        assert cache.get_entry("A", 2, 20, 10, docs_mtime=2.0) is None
+
+    def test_created_at_iso_populated(self) -> None:
+        cache = ContextCache()
+        cache.put("A", 2, 20, 10, {"v": 1}, graph_mtime=1.0, docs_mtime=1.0)
+        entry = cache.get_entry("A", 2, 20, 10)
+        assert entry is not None
+        assert "T" in entry.created_at_iso  # ISO 8601 format
+
+
+class TestComputeEtag:
+    def test_deterministic(self) -> None:
+        bundle = {"version": 1, "focus": {"ref_id": "A"}}
+        assert compute_etag(bundle) == compute_etag(bundle)
+
+    def test_prefix(self) -> None:
+        assert compute_etag({"v": 1}).startswith("sha256:")
+
+    def test_different_bundles_different_etags(self) -> None:
+        e1 = compute_etag({"v": 1})
+        e2 = compute_etag({"v": 2})
+        assert e1 != e2

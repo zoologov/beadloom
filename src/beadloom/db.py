@@ -104,6 +104,14 @@ CREATE TABLE IF NOT EXISTS health_snapshots (
     extra           TEXT DEFAULT '{}'
 );
 
+-- File hash index (for incremental reindex)
+CREATE TABLE IF NOT EXISTS file_index (
+    path       TEXT PRIMARY KEY,
+    hash       TEXT NOT NULL,
+    kind       TEXT NOT NULL CHECK(kind IN ('graph','doc','code')),
+    indexed_at TEXT NOT NULL
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_nodes_kind ON nodes(kind);
 CREATE INDEX IF NOT EXISTS idx_edges_src ON edges(src_ref_id);

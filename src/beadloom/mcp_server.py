@@ -12,13 +12,68 @@ from mcp.server import Server
 from mcp.types import TextContent
 
 from beadloom import __version__
+from beadloom.cache import ContextCache, compute_etag
 from beadloom.context_builder import bfs_subgraph, build_context
 from beadloom.db import get_meta, open_db
-from beadloom.sync_engine import check_sync
+from beadloom.graph_loader import update_node_in_yaml
+from beadloom.reindex import incremental_reindex
+from beadloom.sync_engine import check_sync, mark_synced_by_ref
 
 if TYPE_CHECKING:
     import sqlite3
     from pathlib import Path
+
+
+# --- Mtime helpers for cache invalidation ---
+
+
+def _compute_dir_mtime(directory: Path) -> float:
+    """Return the max mtime of all files under *directory*."""
+    max_mtime = 0.0
+    if not directory.exists():
+        return max_mtime
+    for f in directory.rglob("*"):
+        if f.is_file():
+            try:
+                mt = f.stat().st_mtime
+                if mt > max_mtime:
+                    max_mtime = mt
+            except OSError:
+                continue
+    return max_mtime
+
+
+def _compute_mtimes(project_root: Path) -> tuple[float, float]:
+    """Compute (graph_mtime, docs_mtime) for a project."""
+    graph_dir = project_root / ".beadloom" / "_graph"
+    docs_dir = project_root / "docs"
+    return _compute_dir_mtime(graph_dir), _compute_dir_mtime(docs_dir)
+
+
+# --- Auto-reindex ---
+
+
+def _is_index_stale(project_root: Path, conn: sqlite3.Connection) -> bool:
+    """Check if the index is stale by comparing mtimes with last_reindex_at."""
+    last_reindex = get_meta(conn, "last_reindex_at")
+    if last_reindex is None:
+        return False
+    from datetime import datetime
+
+    try:
+        last_ts = datetime.fromisoformat(last_reindex).timestamp()
+    except ValueError:
+        return False
+    graph_mt, docs_mt = _compute_mtimes(project_root)
+    return max(graph_mt, docs_mt) > last_ts
+
+
+def _ensure_fresh_index(project_root: Path, conn: sqlite3.Connection) -> bool:
+    """Auto-reindex if stale. Returns ``True`` if reindex was performed."""
+    if not _is_index_stale(project_root, conn):
+        return False
+    incremental_reindex(project_root)
+    return True
 
 
 # --- Tool handler functions (sync, testable without transport) ---
@@ -118,6 +173,74 @@ def handle_get_status(
     }
 
 
+# --- Write tool handlers ---
+
+
+def handle_update_node(
+    conn: sqlite3.Connection,
+    project_root: Path,
+    *,
+    ref_id: str,
+    summary: str | None = None,
+    source: str | None = None,
+) -> dict[str, Any]:
+    """Update a graph node's summary/source in YAML and SQLite."""
+    graph_dir = project_root / ".beadloom" / "_graph"
+    if not graph_dir.is_dir():
+        msg = f"Graph directory not found: {graph_dir}"
+        raise LookupError(msg)
+
+    updated = update_node_in_yaml(
+        graph_dir, conn, ref_id, summary=summary, source=source,
+    )
+    if not updated:
+        msg = f"Node '{ref_id}' not found in graph YAML"
+        raise LookupError(msg)
+
+    return {"updated": True, "ref_id": ref_id}
+
+
+def handle_mark_synced(
+    conn: sqlite3.Connection,
+    project_root: Path,
+    *,
+    ref_id: str,
+) -> dict[str, Any]:
+    """Mark all doc-code pairs for ref_id as synced."""
+    count = mark_synced_by_ref(conn, ref_id, project_root)
+    return {"ref_id": ref_id, "pairs_synced": count}
+
+
+def handle_search(
+    conn: sqlite3.Connection,
+    *,
+    query: str,
+    kind: str | None = None,
+    limit: int = 10,
+) -> list[dict[str, str]]:
+    """Search nodes by keyword (SQL LIKE). Upgraded to FTS5 in Phase 4.6."""
+    like_pattern = f"%{query}%"
+    if kind:
+        rows = conn.execute(
+            "SELECT ref_id, kind, summary FROM nodes "
+            "WHERE kind = ? AND (ref_id LIKE ? OR summary LIKE ?) "
+            "LIMIT ?",
+            (kind, like_pattern, like_pattern, limit),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT ref_id, kind, summary FROM nodes "
+            "WHERE ref_id LIKE ? OR summary LIKE ? "
+            "LIMIT ?",
+            (like_pattern, like_pattern, limit),
+        ).fetchall()
+
+    return [
+        {"ref_id": r["ref_id"], "kind": r["kind"], "summary": r["summary"]}
+        for r in rows
+    ]
+
+
 # --- MCP Server creation ---
 
 _TOOLS = [
@@ -206,6 +329,76 @@ _TOOLS = [
         ),
         inputSchema={"type": "object", "properties": {}},
     ),
+    mcp.Tool(
+        name="update_node",
+        description=(
+            "Update a graph node's summary or metadata. Modifies YAML graph "
+            "(source of truth) and SQLite index. Use after reading context to "
+            "improve node descriptions."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "ref_id": {
+                    "type": "string",
+                    "description": "Node identifier",
+                },
+                "summary": {
+                    "type": "string",
+                    "description": "New summary text (optional)",
+                },
+                "source": {
+                    "type": "string",
+                    "description": "New source path (optional)",
+                },
+            },
+            "required": ["ref_id"],
+        },
+    ),
+    mcp.Tool(
+        name="mark_synced",
+        description=(
+            "Mark documentation as synchronized with code for a ref_id. "
+            "Call this after updating stale documentation to reset sync state."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "ref_id": {
+                    "type": "string",
+                    "description": "Node whose doc-code pairs should be marked synced",
+                },
+            },
+            "required": ["ref_id"],
+        },
+    ),
+    mcp.Tool(
+        name="search",
+        description=(
+            "Search for nodes, documents, and code symbols by keyword. "
+            "Returns ranked results with ref_ids and summaries."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query (keywords)",
+                },
+                "kind": {
+                    "type": "string",
+                    "enum": ["domain", "feature", "service", "entity", "adr"],
+                    "description": "Filter by node kind (optional)",
+                },
+                "limit": {
+                    "type": "integer",
+                    "default": 10,
+                    "description": "Max results",
+                },
+            },
+            "required": ["query"],
+        },
+    ),
 ]
 
 
@@ -218,6 +411,7 @@ def create_server(project_root: Path) -> Server:
     )
 
     db_path = project_root / ".beadloom" / "beadloom.db"
+    cache = ContextCache()
 
     @server.list_tools()  # type: ignore[no-untyped-call,untyped-decorator]
     async def _list_tools() -> list[mcp.Tool]:
@@ -231,7 +425,19 @@ def create_server(project_root: Path) -> Server:
         args = arguments or {}
         conn = open_db(db_path)
         try:
-            result = _dispatch_tool(conn, name, args, project_root=project_root)
+            # Auto-reindex if stale (4.3).
+            reindexed = _ensure_fresh_index(project_root, conn)
+            if reindexed:
+                # Reopen connection after reindex (schema may have changed).
+                conn.close()
+                conn = open_db(db_path)
+                cache.clear()
+
+            result = _dispatch_tool(
+                conn, name, args,
+                project_root=project_root,
+                cache=cache,
+            )
             return [TextContent(
                 type="text",
                 text=json.dumps(result, ensure_ascii=False, indent=2),
@@ -249,22 +455,80 @@ def _dispatch_tool(
     name: str,
     args: dict[str, Any],
     project_root: Path | None = None,
+    cache: ContextCache | None = None,
 ) -> Any:
     """Route tool call to the appropriate handler."""
     if name == "get_context":
-        return handle_get_context(
-            conn,
-            ref_id=args["ref_id"],
-            depth=args.get("depth", 2),
-            max_nodes=args.get("max_nodes", 20),
-            max_chunks=args.get("max_chunks", 10),
+        ref_id = args["ref_id"]
+        depth = args.get("depth", 2)
+        max_nodes = args.get("max_nodes", 20)
+        max_chunks = args.get("max_chunks", 10)
+
+        # L1 cache check
+        if cache is not None and project_root is not None:
+            graph_mt, docs_mt = _compute_mtimes(project_root)
+            entry = cache.get_entry(
+                ref_id, depth, max_nodes, max_chunks,
+                graph_mtime=graph_mt, docs_mtime=docs_mt,
+            )
+            if entry is not None:
+                return {
+                    "cached": True,
+                    "etag": compute_etag(entry.bundle),
+                    "unchanged_since": entry.created_at_iso,
+                    "hint": "Context unchanged since last request. "
+                            "Use previous bundle.",
+                }
+        else:
+            graph_mt = 0.0
+            docs_mt = 0.0
+
+        bundle = handle_get_context(
+            conn, ref_id=ref_id, depth=depth,
+            max_nodes=max_nodes, max_chunks=max_chunks,
         )
+
+        if cache is not None:
+            cache.put(
+                ref_id, depth, max_nodes, max_chunks, bundle,
+                graph_mtime=graph_mt, docs_mtime=docs_mt,
+            )
+
+        return bundle
+
     if name == "get_graph":
-        return handle_get_graph(
-            conn,
-            ref_id=args["ref_id"],
-            depth=args.get("depth", 2),
-        )
+        ref_id = args["ref_id"]
+        depth = args.get("depth", 2)
+
+        # L1 cache (graph key space: "graph:<ref_id>")
+        cache_ref = f"graph:{ref_id}"
+        if cache is not None and project_root is not None:
+            graph_mt, _ = _compute_mtimes(project_root)
+            entry = cache.get_entry(
+                cache_ref, depth, 0, 0,
+                graph_mtime=graph_mt,
+            )
+            if entry is not None:
+                return {
+                    "cached": True,
+                    "etag": compute_etag(entry.bundle),
+                    "unchanged_since": entry.created_at_iso,
+                    "hint": "Graph unchanged since last request. "
+                            "Use previous result.",
+                }
+        else:
+            graph_mt = 0.0
+
+        result = handle_get_graph(conn, ref_id=ref_id, depth=depth)
+
+        if cache is not None:
+            cache.put(
+                cache_ref, depth, 0, 0, result,
+                graph_mtime=graph_mt, docs_mtime=0.0,
+            )
+
+        return result
+
     if name == "list_nodes":
         return handle_list_nodes(conn, kind=args.get("kind"))
     if name == "sync_check":
@@ -273,6 +537,38 @@ def _dispatch_tool(
         )
     if name == "get_status":
         return handle_get_status(conn)
+
+    # --- Write tools ---
+    if name == "update_node":
+        if project_root is None:
+            msg = "update_node requires project_root"
+            raise ValueError(msg)
+        result = handle_update_node(
+            conn, project_root,
+            ref_id=args["ref_id"],
+            summary=args.get("summary"),
+            source=args.get("source"),
+        )
+        # Invalidate cache for this ref_id.
+        if cache is not None:
+            cache.clear_ref(args["ref_id"])
+        return result
+
+    if name == "mark_synced":
+        if project_root is None:
+            msg = "mark_synced requires project_root"
+            raise ValueError(msg)
+        return handle_mark_synced(
+            conn, project_root, ref_id=args["ref_id"],
+        )
+
+    if name == "search":
+        return handle_search(
+            conn,
+            query=args["query"],
+            kind=args.get("kind"),
+            limit=args.get("limit", 10),
+        )
 
     msg = f"Unknown tool: {name}"
     raise ValueError(msg)

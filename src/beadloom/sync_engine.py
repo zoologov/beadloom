@@ -157,3 +157,37 @@ def mark_synced(
         (doc_hash, code_hash, now, doc_path, code_path),
     )
     conn.commit()
+
+
+def mark_synced_by_ref(
+    conn: sqlite3.Connection,
+    ref_id: str,
+    project_root: Path,
+) -> int:
+    """Mark all doc-code pairs for *ref_id* as synced.
+
+    Recomputes current file hashes and updates sync_state.
+    Returns the number of rows updated.
+    """
+    rows = conn.execute(
+        "SELECT doc_path, code_path FROM sync_state WHERE ref_id = ?",
+        (ref_id,),
+    ).fetchall()
+
+    if not rows:
+        return 0
+
+    now = datetime.now(tz=timezone.utc).isoformat()
+    count = 0
+    for row in rows:
+        doc_hash = _file_hash(project_root / "docs" / row["doc_path"])
+        code_hash = _file_hash(project_root / row["code_path"])
+        conn.execute(
+            "UPDATE sync_state SET doc_hash_at_sync = ?, code_hash_at_sync = ?, "
+            "synced_at = ?, status = 'ok' WHERE doc_path = ? AND code_path = ?",
+            (doc_hash, code_hash, now, row["doc_path"], row["code_path"]),
+        )
+        count += 1
+
+    conn.commit()
+    return count

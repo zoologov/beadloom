@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from beadloom.db import get_meta, open_db
-from beadloom.reindex import reindex
+from beadloom.reindex import incremental_reindex, reindex
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -395,4 +395,230 @@ class TestReindexDocsDir:
         ).fetchone()
         assert row is not None
         assert row["ref_id"] == "F1"
+        conn.close()
+
+
+class TestFullReindexPopulatesFileIndex:
+    """Full reindex should populate file_index for subsequent incremental runs."""
+
+    def test_file_index_populated_after_full_reindex(
+        self, project: Path, db_path: Path,
+    ) -> None:
+        graph_dir = project / ".beadloom" / "_graph"
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n  - ref_id: X\n    kind: domain\n    summary: X\n"
+        )
+        (project / "docs" / "a.md").write_text("## A\n\nContent.\n")
+        (project / "src" / "f.py").write_text("def foo():\n    pass\n")
+
+        reindex(project)
+
+        conn = open_db(db_path)
+        rows = conn.execute("SELECT path, kind FROM file_index").fetchall()
+        paths = {r["path"]: r["kind"] for r in rows}
+        assert ".beadloom/_graph/g.yml" in paths
+        assert paths[".beadloom/_graph/g.yml"] == "graph"
+        assert "docs/a.md" in paths
+        assert paths["docs/a.md"] == "doc"
+        assert "src/f.py" in paths
+        assert paths["src/f.py"] == "code"
+        conn.close()
+
+
+class TestIncrementalReindex:
+    """Tests for incremental_reindex."""
+
+    def test_first_run_falls_back_to_full(
+        self, project: Path, db_path: Path,
+    ) -> None:
+        """First incremental call = full reindex + file_index populated."""
+        graph_dir = project / ".beadloom" / "_graph"
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n  - ref_id: N1\n    kind: domain\n    summary: N1\n"
+        )
+        result = incremental_reindex(project)
+        assert result.nodes_loaded == 1
+
+        conn = open_db(db_path)
+        fi = conn.execute("SELECT count(*) FROM file_index").fetchone()[0]
+        assert fi >= 1
+        conn.close()
+
+    def test_no_changes_skips_reindex(
+        self, project: Path, db_path: Path,
+    ) -> None:
+        """Nothing changed → no re-processing."""
+        graph_dir = project / ".beadloom" / "_graph"
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n  - ref_id: N1\n    kind: domain\n    summary: N1\n"
+        )
+        (project / "docs" / "a.md").write_text("## A\n\nContent.\n")
+
+        incremental_reindex(project)
+
+        # Second run — nothing changed.
+        result = incremental_reindex(project)
+        assert result.nodes_loaded == 0
+        assert result.docs_indexed == 0
+        assert result.symbols_indexed == 0
+
+    def test_changed_doc_reindexed(
+        self, project: Path, db_path: Path,
+    ) -> None:
+        """Modified doc file is re-indexed."""
+        graph_dir = project / ".beadloom" / "_graph"
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n  - ref_id: N1\n    kind: domain\n    summary: N1\n"
+        )
+        doc = project / "docs" / "spec.md"
+        doc.write_text("## Spec\n\nOriginal.\n")
+
+        incremental_reindex(project)
+
+        # Change doc content.
+        doc.write_text("## Spec\n\nUpdated content.\n")
+        result = incremental_reindex(project)
+
+        assert result.docs_indexed == 1
+
+        conn = open_db(db_path)
+        chunk = conn.execute(
+            "SELECT content FROM chunks ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        assert chunk is not None
+        assert "Updated" in chunk["content"]
+        conn.close()
+
+    def test_added_code_file_indexed(
+        self, project: Path, db_path: Path,
+    ) -> None:
+        """New code file is picked up."""
+        graph_dir = project / ".beadloom" / "_graph"
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n  - ref_id: N1\n    kind: domain\n    summary: N1\n"
+        )
+        incremental_reindex(project)
+
+        # Add a new code file.
+        (project / "src" / "new.py").write_text("def new_func():\n    pass\n")
+        result = incremental_reindex(project)
+
+        assert result.symbols_indexed >= 1
+
+        conn = open_db(db_path)
+        row = conn.execute(
+            "SELECT * FROM code_symbols WHERE symbol_name = ?", ("new_func",)
+        ).fetchone()
+        assert row is not None
+        conn.close()
+
+    def test_deleted_doc_removed(
+        self, project: Path, db_path: Path,
+    ) -> None:
+        """Deleted doc file is removed from DB."""
+        graph_dir = project / ".beadloom" / "_graph"
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n  - ref_id: N1\n    kind: domain\n    summary: N1\n"
+        )
+        doc = project / "docs" / "gone.md"
+        doc.write_text("## Gone\n\nWill be deleted.\n")
+
+        incremental_reindex(project)
+
+        conn = open_db(db_path)
+        assert conn.execute(
+            "SELECT count(*) FROM docs WHERE path = ?", ("gone.md",)
+        ).fetchone()[0] == 1
+        conn.close()
+
+        # Delete the doc.
+        doc.unlink()
+        incremental_reindex(project)
+
+        conn = open_db(db_path)
+        assert conn.execute(
+            "SELECT count(*) FROM docs WHERE path = ?", ("gone.md",)
+        ).fetchone()[0] == 0
+        conn.close()
+
+    def test_deleted_code_file_removed(
+        self, project: Path, db_path: Path,
+    ) -> None:
+        """Deleted code file symbols are removed."""
+        graph_dir = project / ".beadloom" / "_graph"
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n  - ref_id: N1\n    kind: domain\n    summary: N1\n"
+        )
+        code = project / "src" / "old.py"
+        code.write_text("def old_func():\n    pass\n")
+
+        incremental_reindex(project)
+
+        conn = open_db(db_path)
+        assert conn.execute(
+            "SELECT count(*) FROM code_symbols WHERE file_path = ?",
+            ("src/old.py",),
+        ).fetchone()[0] >= 1
+        conn.close()
+
+        # Delete code file.
+        code.unlink()
+        incremental_reindex(project)
+
+        conn = open_db(db_path)
+        assert conn.execute(
+            "SELECT count(*) FROM code_symbols WHERE file_path = ?",
+            ("src/old.py",),
+        ).fetchone()[0] == 0
+        conn.close()
+
+    def test_graph_change_triggers_full_reindex(
+        self, project: Path, db_path: Path,
+    ) -> None:
+        """Graph YAML change → full reindex (nodes replaced)."""
+        graph_dir = project / ".beadloom" / "_graph"
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n  - ref_id: OLD\n    kind: domain\n    summary: Old\n"
+        )
+        incremental_reindex(project)
+
+        # Change graph.
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n  - ref_id: NEW\n    kind: domain\n    summary: New\n"
+        )
+        result = incremental_reindex(project)
+
+        assert result.nodes_loaded == 1
+        conn = open_db(db_path)
+        refs = {
+            r["ref_id"]
+            for r in conn.execute("SELECT ref_id FROM nodes").fetchall()
+        }
+        assert "NEW" in refs
+        assert "OLD" not in refs
+        conn.close()
+
+    def test_file_index_updated_after_incremental(
+        self, project: Path, db_path: Path,
+    ) -> None:
+        """file_index is updated to reflect current state."""
+        graph_dir = project / ".beadloom" / "_graph"
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n  - ref_id: N1\n    kind: domain\n    summary: N1\n"
+        )
+        (project / "src" / "a.py").write_text("def a():\n    pass\n")
+
+        incremental_reindex(project)
+
+        # Add another file.
+        (project / "src" / "b.py").write_text("def b():\n    pass\n")
+        incremental_reindex(project)
+
+        conn = open_db(db_path)
+        paths = {
+            r["path"]
+            for r in conn.execute("SELECT path FROM file_index").fetchall()
+        }
+        assert "src/b.py" in paths
+        assert "src/a.py" in paths
         conn.close()

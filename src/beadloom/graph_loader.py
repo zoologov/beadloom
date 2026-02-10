@@ -54,6 +54,60 @@ def parse_graph_file(path: Path) -> ParsedFile:
     return ParsedFile(nodes=nodes, edges=edges)
 
 
+def update_node_in_yaml(
+    graph_dir: Path,
+    conn: sqlite3.Connection,
+    ref_id: str,
+    *,
+    summary: str | None = None,
+    source: str | None = None,
+) -> bool:
+    """Update a node's fields in the YAML source and SQLite.
+
+    Scans YAML files for *ref_id*, updates the specified fields in-place,
+    writes the YAML back to disk, and updates the ``nodes`` table.
+
+    Returns ``True`` if the node was found and updated.
+    """
+    for yml_path in sorted(graph_dir.glob("*.yml")):
+        text = yml_path.read_text(encoding="utf-8")
+        data = yaml.safe_load(text)
+        if data is None:
+            continue
+        nodes_list: list[dict[str, Any]] = data.get("nodes") or []
+        for node in nodes_list:
+            if node.get("ref_id") != ref_id:
+                continue
+
+            # Update YAML node in memory.
+            if summary is not None:
+                node["summary"] = summary
+            if source is not None:
+                node["source"] = source
+
+            # Write YAML back to disk.
+            yml_path.write_text(
+                yaml.dump(data, default_flow_style=False, allow_unicode=True),
+                encoding="utf-8",
+            )
+
+            # Update SQLite.
+            if summary is not None:
+                conn.execute(
+                    "UPDATE nodes SET summary = ? WHERE ref_id = ?",
+                    (summary, ref_id),
+                )
+            if source is not None:
+                conn.execute(
+                    "UPDATE nodes SET source = ? WHERE ref_id = ?",
+                    (source, ref_id),
+                )
+            conn.commit()
+            return True
+
+    return False
+
+
 def load_graph(graph_dir: Path, conn: sqlite3.Connection) -> GraphLoadResult:
     """Load all ``*.yml`` files from *graph_dir* into SQLite.
 

@@ -1,9 +1,10 @@
-"""Reindex orchestrator: drop + re-create SQLite from Git sources."""
+"""Reindex orchestrator: full rebuild and incremental reindex."""
 
 # beadloom:domain=reindex
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -12,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 from beadloom import __version__
 from beadloom.code_indexer import extract_symbols
 from beadloom.db import SCHEMA_VERSION, create_schema, open_db, set_meta
-from beadloom.doc_indexer import index_docs
+from beadloom.doc_indexer import chunk_markdown, index_docs
 from beadloom.graph_loader import load_graph
 from beadloom.health import take_snapshot
 
@@ -272,6 +273,365 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
     set_meta(conn, "schema_version", SCHEMA_VERSION)
 
     # 6. Take health snapshot for trend tracking.
+    take_snapshot(conn)
+
+    # 7. Populate file_index for subsequent incremental runs.
+    current_files = _scan_project_files(project_root, docs_dir)
+    _populate_file_index(conn, current_files)
+
+    conn.close()
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Incremental reindex helpers
+# ---------------------------------------------------------------------------
+
+_SCAN_DIRS = ("src", "lib", "app")
+
+
+def _compute_file_hash(path: Path) -> str:
+    """Compute SHA-256 hash of a file."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _scan_project_files(
+    project_root: Path,
+    docs_dir: Path,
+) -> dict[str, tuple[str, str]]:
+    """Scan project files and return ``{relative_path: (sha256, kind)}``."""
+    files: dict[str, tuple[str, str]] = {}
+
+    # Graph YAML files
+    graph_dir = project_root / ".beadloom" / "_graph"
+    if graph_dir.is_dir():
+        for f in sorted(graph_dir.glob("*.yml")):
+            rel = str(f.relative_to(project_root))
+            files[rel] = (_compute_file_hash(f), "graph")
+
+    # Doc files
+    if docs_dir.is_dir():
+        for f in sorted(docs_dir.rglob("*.md")):
+            rel = str(f.relative_to(project_root))
+            files[rel] = (_compute_file_hash(f), "doc")
+
+    # Code files
+    for dirname in _SCAN_DIRS:
+        scan_dir = project_root / dirname
+        if not scan_dir.is_dir():
+            continue
+        for f in sorted(scan_dir.rglob("*")):
+            if f.suffix not in _CODE_EXTENSIONS or not f.is_file():
+                continue
+            rel = str(f.relative_to(project_root))
+            files[rel] = (_compute_file_hash(f), "code")
+
+    return files
+
+
+def _get_stored_file_index(
+    conn: sqlite3.Connection,
+) -> dict[str, tuple[str, str]]:
+    """Read file_index from DB. Returns ``{path: (hash, kind)}``."""
+    try:
+        rows = conn.execute(
+            "SELECT path, hash, kind FROM file_index"
+        ).fetchall()
+    except Exception:  # table may not exist on first run
+        return {}
+    return {row["path"]: (row["hash"], row["kind"]) for row in rows}
+
+
+def _diff_files(
+    current: dict[str, tuple[str, str]],
+    stored: dict[str, tuple[str, str]],
+) -> tuple[set[str], set[str], set[str]]:
+    """Compare current vs stored files. Returns ``(changed, added, deleted)``."""
+    changed: set[str] = set()
+    added: set[str] = set()
+
+    for path, (hash_, _kind) in current.items():
+        if path not in stored:
+            added.add(path)
+        elif stored[path][0] != hash_:
+            changed.add(path)
+
+    deleted = stored.keys() - current.keys()
+    return changed, added, deleted
+
+
+def _populate_file_index(
+    conn: sqlite3.Connection,
+    current_files: dict[str, tuple[str, str]],
+) -> None:
+    """Replace the entire file_index with *current_files*."""
+    conn.execute("DELETE FROM file_index")
+    now = datetime.now(tz=timezone.utc).isoformat()
+    for path, (hash_, kind) in current_files.items():
+        conn.execute(
+            "INSERT INTO file_index (path, hash, kind, indexed_at) "
+            "VALUES (?, ?, ?, ?)",
+            (path, hash_, kind, now),
+        )
+    conn.commit()
+
+
+def _update_file_index(
+    conn: sqlite3.Connection,
+    current_files: dict[str, tuple[str, str]],
+    changed: set[str],
+    added: set[str],
+    deleted: set[str],
+) -> None:
+    """Incrementally update file_index for affected paths."""
+    now = datetime.now(tz=timezone.utc).isoformat()
+    for path in deleted:
+        conn.execute("DELETE FROM file_index WHERE path = ?", (path,))
+    for path in changed | added:
+        hash_, kind = current_files[path]
+        conn.execute(
+            "INSERT INTO file_index (path, hash, kind, indexed_at) "
+            "VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(path) DO UPDATE SET hash=excluded.hash, "
+            "indexed_at=excluded.indexed_at",
+            (path, hash_, kind, now),
+        )
+    conn.commit()
+
+
+def _index_single_doc(
+    conn: sqlite3.Connection,
+    md_path: Path,
+    docs_dir: Path,
+    ref_map: dict[str, str],
+) -> tuple[int, int]:
+    """Index one doc file. Returns ``(docs_count, chunks_count)``."""
+    content = md_path.read_text(encoding="utf-8")
+    rel_path = str(md_path.relative_to(docs_dir))
+    file_hash = hashlib.sha256(content.encode()).hexdigest()
+    ref_id = ref_map.get(rel_path)
+
+    conn.execute(
+        "INSERT INTO docs (path, kind, ref_id, hash) VALUES (?, ?, ?, ?)",
+        (rel_path, "other", ref_id, file_hash),
+    )
+    doc_id = conn.execute(
+        "SELECT id FROM docs WHERE path = ?", (rel_path,)
+    ).fetchone()[0]
+
+    chunks = chunk_markdown(content)
+    for chunk in chunks:
+        conn.execute(
+            "INSERT INTO chunks (doc_id, chunk_index, heading, section, "
+            "content, node_ref_id) VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                doc_id,
+                chunk["chunk_index"],
+                chunk["heading"],
+                chunk["section"],
+                chunk["content"],
+                ref_id,
+            ),
+        )
+    conn.commit()
+    return 1, len(chunks)
+
+
+def _index_single_code_file(
+    conn: sqlite3.Connection,
+    file_path: Path,
+    project_root: Path,
+    seen_ref_ids: set[str],
+) -> int:
+    """Index one code file. Returns symbol count."""
+    symbols = extract_symbols(file_path)
+    rel_path = str(file_path.relative_to(project_root))
+    count = 0
+
+    for sym in symbols:
+        conn.execute(
+            "INSERT INTO code_symbols (file_path, symbol_name, kind, "
+            "line_start, line_end, annotations, file_hash) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                rel_path,
+                sym["symbol_name"],
+                sym["kind"],
+                sym["line_start"],
+                sym["line_end"],
+                json.dumps(sym["annotations"], ensure_ascii=False),
+                sym["file_hash"],
+            ),
+        )
+        count += 1
+
+        annotations: dict[str, Any] = sym["annotations"]
+        for _key, ref_id in annotations.items():
+            if ref_id in seen_ref_ids:
+                conn.execute(
+                    "INSERT OR IGNORE INTO edges "
+                    "(src_ref_id, dst_ref_id, kind) VALUES (?, ?, ?)",
+                    (ref_id, ref_id, "touches_code"),
+                )
+
+    conn.commit()
+    return count
+
+
+def incremental_reindex(
+    project_root: Path,
+    *,
+    docs_dir: Path | None = None,
+) -> ReindexResult:
+    """Incremental reindex: only process changed files.
+
+    Falls back to full reindex when:
+    - ``file_index`` is empty (first run after upgrade)
+    - Any graph YAML file changed (safest: full reload)
+
+    Parameters
+    ----------
+    project_root:
+        Root of the project.
+    docs_dir:
+        Optional explicit docs directory.
+
+    Returns
+    -------
+    ReindexResult
+        Summary with counts for re-indexed items.
+    """
+    result = ReindexResult()
+
+    db_path = project_root / ".beadloom" / "beadloom.db"
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    conn = open_db(db_path)
+    create_schema(conn)
+
+    if docs_dir is None:
+        docs_dir = _resolve_docs_dir(project_root)
+
+    # Scan current files on disk.
+    current_files = _scan_project_files(project_root, docs_dir)
+
+    # Read stored hashes from previous run.
+    stored_files = _get_stored_file_index(conn)
+
+    if not stored_files:
+        # First run — fall back to full reindex.
+        conn.close()
+        return reindex(project_root, docs_dir=docs_dir)
+
+    changed, added, deleted = _diff_files(current_files, stored_files)
+
+    if not changed and not added and not deleted:
+        # Nothing changed — just update timestamp.
+        now = datetime.now(tz=timezone.utc).isoformat()
+        set_meta(conn, "last_reindex_at", now)
+        take_snapshot(conn)
+        conn.close()
+        return result
+
+    # If any graph YAML changed → full reindex (graph is small, reload is safe).
+    all_affected = changed | added | deleted
+    graph_affected = any(
+        (current_files.get(p) or stored_files.get(p, ("", "")))[1] == "graph"
+        for p in all_affected
+    )
+
+    if graph_affected:
+        conn.close()
+        return reindex(project_root, docs_dir=docs_dir)
+
+    # --- Only docs / code changed — true incremental path ---
+
+    docs_dir_rel = docs_dir.relative_to(project_root)
+
+    # Known ref_ids for edge creation.
+    seen_ref_ids: set[str] = {
+        row[0] for row in conn.execute("SELECT ref_id FROM nodes").fetchall()
+    }
+
+    # Doc → ref_id mapping (from graph YAML).
+    graph_dir = project_root / ".beadloom" / "_graph"
+    if graph_dir.is_dir():
+        ref_map, doc_ref_warns = _build_doc_ref_map(
+            graph_dir, project_root, docs_dir,
+        )
+        result.warnings.extend(doc_ref_warns)
+    else:
+        ref_map = {}
+
+    # Process deleted files.
+    for path in deleted:
+        kind = stored_files[path][1]
+        if kind == "doc":
+            doc_rel = str(type(docs_dir_rel)(path).relative_to(docs_dir_rel))
+            conn.execute(
+                "DELETE FROM sync_state WHERE doc_path = ?", (doc_rel,),
+            )
+            conn.execute("DELETE FROM docs WHERE path = ?", (doc_rel,))
+        elif kind == "code":
+            conn.execute(
+                "DELETE FROM code_symbols WHERE file_path = ?", (path,),
+            )
+            conn.execute(
+                "DELETE FROM sync_state WHERE code_path = ?", (path,),
+            )
+
+    # Process changed files (delete old data, re-index).
+    for path in changed:
+        kind = current_files[path][1]
+        if kind == "doc":
+            doc_rel = str(type(docs_dir_rel)(path).relative_to(docs_dir_rel))
+            conn.execute("DELETE FROM docs WHERE path = ?", (doc_rel,))
+            conn.execute(
+                "DELETE FROM sync_state WHERE doc_path = ?", (doc_rel,),
+            )
+            abs_path = project_root / path
+            d, c = _index_single_doc(conn, abs_path, docs_dir, ref_map)
+            result.docs_indexed += d
+            result.chunks_indexed += c
+        elif kind == "code":
+            conn.execute(
+                "DELETE FROM code_symbols WHERE file_path = ?", (path,),
+            )
+            conn.execute(
+                "DELETE FROM sync_state WHERE code_path = ?", (path,),
+            )
+            abs_path = project_root / path
+            result.symbols_indexed += _index_single_code_file(
+                conn, abs_path, project_root, seen_ref_ids,
+            )
+
+    # Process added files.
+    for path in added:
+        kind = current_files[path][1]
+        if kind == "doc":
+            abs_path = project_root / path
+            d, c = _index_single_doc(conn, abs_path, docs_dir, ref_map)
+            result.docs_indexed += d
+            result.chunks_indexed += c
+        elif kind == "code":
+            abs_path = project_root / path
+            result.symbols_indexed += _index_single_code_file(
+                conn, abs_path, project_root, seen_ref_ids,
+            )
+
+    # Rebuild sync_state (cheap full rebuild).
+    conn.execute("DELETE FROM sync_state")
+    _build_initial_sync_state(conn)
+
+    # Update file_index.
+    _update_file_index(conn, current_files, changed, added, deleted)
+
+    # Update meta.
+    now = datetime.now(tz=timezone.utc).isoformat()
+    set_meta(conn, "last_reindex_at", now)
+    set_meta(conn, "beadloom_version", __version__)
+
+    # Health snapshot.
     take_snapshot(conn)
 
     conn.close()

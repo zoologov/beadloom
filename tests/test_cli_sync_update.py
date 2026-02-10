@@ -182,16 +182,14 @@ class TestSyncUpdateInteractive:
         assert all(r["status"] == "ok" for r in rows)
 
 
-class TestSyncUpdateAutoDeprecated:
-    """Tests for deprecated --auto flag."""
+class TestSyncUpdateAutoRemoved:
+    """--auto flag was removed in v0.6.0."""
 
-    def test_auto_shows_deprecation_warning(self, tmp_path: Path) -> None:
-        """--auto should print deprecation warning and exit with code 1."""
+    def test_auto_flag_rejected(self, tmp_path: Path) -> None:
+        """--auto should be rejected as unknown option."""
         project = _setup_project_with_sync(tmp_path)
         runner = CliRunner()
         result = runner.invoke(
             main, ["sync-update", "F1", "--auto", "--project", str(project)]
         )
         assert result.exit_code != 0
-        assert "deprecated" in result.output.lower()
-        assert "AGENTS.md" in result.output
