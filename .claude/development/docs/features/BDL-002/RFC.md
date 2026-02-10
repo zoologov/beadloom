@@ -1,0 +1,157 @@
+# RFC-0002: Phase 1 — Foundation & Agent-Native Pivot
+
+> **Status:** Accepted (implemented in v0.3.0)
+> **Date:** 2026-02-10
+> **Phase:** 1 (Strategy v0.3)
+> **Depends on:** BDL-001 (v0.2.0 — all CLI commands implemented)
+
+---
+
+## 1. Summary
+
+This RFC defines the deliverables for Phase 1 of the Beadloom improvement strategy: **Foundation & Agent-Native Pivot**. The goal is to establish the agent-native architecture and clean up the codebase before building new features in Phases 2-5.
+
+Phase 1 includes:
+- **AGENTS.md** — instruction file that teaches agents how to use Beadloom (the Beads pattern)
+- **Deprecation of `--auto` LLM integration** — removing built-in LLM calls in favor of agent-native workflow
+- **cli-reference.md update** — reflecting the new agent-native approach
+
+Use-case guides and demo (originally planned for Phase 1) have been moved to **Phase 6** — they should describe the finished product, not a moving target. The README (positioning, value prop) is already done and won't need revision as features evolve.
+
+## 2. Motivation
+
+### 2.1 Problem: Built-in LLM integration is the wrong abstraction
+
+`beadloom sync-update --auto` calls LLM APIs (Anthropic/OpenAI) directly to generate doc updates. This requires:
+- Separate API key configuration in `.beadloom/config.yml`
+- Separate API costs on top of the agent the developer already pays for
+- LLM SDK dependencies in Beadloom's codebase
+- A narrow prompt that sees only the diff + old doc (while the running agent has full project context)
+
+In a world where developers already run Claude Code, Cursor, or Codex — all of which *are* LLMs — having Beadloom call yet another LLM is redundant and costly. The agent that triggered the code change should update the docs itself, using Beadloom's MCP tools for data and its own intelligence for writing.
+
+**Design principle:** Beadloom = data + rules + tracking. Agent = intelligence + action. Beadloom teaches agents how to work with it via `.beadloom/AGENTS.md` (following the pattern from steveyegge/beads).
+
+### 2.2 Problem: cli-reference.md is out of date
+
+`docs/cli-reference.md` says `sync-update --auto` is "not implemented". This section needs to be updated to reflect the new agent-native approach (deprecation of `--auto`, replaced by agent instructions).
+
+## 3. Deliverables
+
+### 3.1 README rewrite (DONE)
+
+**Commit:** `f9933d3`
+
+New README includes:
+- "Why Beadloom?" section with three real pain points
+- "Deterministic context, not probabilistic guessing" differentiator
+- Comparison table (Semantic search vs Beadloom)
+- Three persona descriptions (Tech Lead, Platform/DevEx, Individual Dev)
+- Badges, platform info, simplified quick start
+- Russian translation (README.ru.md)
+
+### 3.2 Agent instruction file: `.beadloom/AGENTS.md` (DONE)
+
+**Commit:** `11d0954`
+
+**Implementation:**
+- `generate_agents_md()` in `src/beadloom/onboarding.py` — generates `.beadloom/AGENTS.md`
+- `_AGENTS_MD_TEMPLATE` — template with MCP tool table and workflow instructions
+- Called from both `bootstrap_project()` and `interactive_init()`
+- `beadloom init --bootstrap` prints path to generated AGENTS.md
+
+**Content sections:**
+- Before starting work (get_context, list_nodes)
+- After changing code (sync_check, update stale docs)
+- When creating new features (annotations, graph nodes)
+- Conventions (feature IDs, doc layout, graph location)
+- Available MCP tools (5-tool reference table)
+
+### 3.3 Deprecate `sync-update --auto` LLM integration (DONE)
+
+**Commit:** `11d0954`
+
+**What changed:**
+
+| Component | Action |
+|-----------|--------|
+| `src/beadloom/llm_updater.py` | Removed entirely (247 lines) |
+| `src/beadloom/cli.py` | `_handle_auto_sync()` removed; `--auto` prints deprecation warning |
+| `.beadloom/_graph/services.yml` | `llm-updater` node and edges removed |
+| `tests/test_llm_updater.py` | Removed (343 lines) |
+| `tests/test_cli_sync_auto.py` | Removed (82 lines) |
+| `tests/test_cli_sync_update.py` | LLM tests replaced with deprecation warning test |
+
+**What stays:**
+- `beadloom sync-update REF_ID` (interactive mode) — developer reviews diff and edits doc manually
+- `beadloom sync-check` — detection is unchanged
+- MCP `sync_check` tool — agents use this to discover stale docs
+- All sync tracking logic — hashes, sync_state table, everything
+
+**Migration path:**
+- `--auto` flag prints a deprecation warning pointing to AGENTS.md (v0.3)
+- Next minor version (v0.4) removes `--auto` flag entirely
+
+### 3.4 Update cli-reference.md (DONE)
+
+**Commit:** `11d0954`
+
+**Changes applied:**
+- Removed `--auto` flag documentation
+- Added interactive mode usage example
+- Added note: "For automated doc updates, use your AI agent with Beadloom's MCP tools. See `.beadloom/AGENTS.md`."
+- Updated README.md and README.ru.md to remove `--auto` from CLI table
+
+## 4. File Structure
+
+```
+.beadloom/
+  AGENTS.md                           # 3.2 (generated by init, editable)
+
+docs/
+  cli-reference.md                    # 3.4 (updated)
+
+src/beadloom/
+  llm_updater.py                      # 3.3 (DELETED)
+  cli.py                              # 3.3 (--auto → deprecation warning)
+  onboarding.py                       # 3.2 (generate_agents_md added)
+```
+
+## 5. Execution Plan
+
+| # | Deliverable | Status | Commit |
+|---|-------------|--------|--------|
+| 1.1 | README rewrite | DONE | `f9933d3` |
+| 1.2 | README.ru.md | DONE | `c9b5d49` |
+| 1.3 | Deprecate `--auto`, remove `llm_updater.py` | DONE | `11d0954` |
+| 1.4 | Create `.beadloom/AGENTS.md` generation | DONE | `11d0954` |
+| 1.5 | Update cli-reference.md | DONE | `11d0954` |
+
+## 6. Success Criteria
+
+Phase 1 is complete when:
+
+- [x] `llm_updater.py` removed, `--auto` prints deprecation warning
+- [x] `.beadloom/AGENTS.md` created and generated by `beadloom init`
+- [x] `cli-reference.md` updated to reflect agent-native workflow
+- [x] All tests pass (`uv run pytest` — 329 passed)
+- [x] `mypy --strict` passes
+
+## 7. Non-Goals
+
+- No new CLI commands or flags (except deprecation warning on `--auto`)
+- No use-case guides or demos (moved to Phase 6 — after features stabilize)
+- No CI integration (Phase 3)
+- No architecture presets (Phase 2)
+
+## 8. Deferred to Phase 6
+
+The following items were originally in Phase 1 but are deferred until after development phases (2-5) to avoid documentation churn:
+
+- Use-case guide: "Onboarding a new developer in 1 day"
+- Use-case guide: "Multi-agent workflow with Beadloom + Claude Code"
+- Use-case guide: "Keeping docs alive in a fast-moving codebase"
+- Quick demo GIF/asciicast for README
+- Update README.ru.md for final feature set
+
+See STRATEGY.md Phase 6 for full specifications of these items.
