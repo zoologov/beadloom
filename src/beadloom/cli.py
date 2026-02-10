@@ -1174,3 +1174,88 @@ def init(
     result = interactive_init(project_root)
     if result["mode"] == "cancelled":
         sys.exit(0)
+
+
+# beadloom:domain=impact-analysis
+@main.command()
+@click.argument("ref_id")
+@click.option("--depth", default=3, type=int, help="BFS traversal depth.")
+@click.option("--json", "as_json", is_flag=True, help="JSON output.")
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: current directory).",
+)
+def why(ref_id: str, *, depth: int, as_json: bool, project: Path | None) -> None:
+    """Show impact analysis for a node (upstream deps + downstream dependents)."""
+    from beadloom.db import open_db
+    from beadloom.why import analyze_node, render_why, result_to_dict
+
+    project_root = project or Path.cwd()
+    db_path = project_root / ".beadloom" / "beadloom.db"
+
+    if not db_path.exists():
+        click.echo("Error: database not found. Run `beadloom reindex` first.", err=True)
+        sys.exit(1)
+
+    conn = open_db(db_path)
+    try:
+        result = analyze_node(conn, ref_id, depth=depth)
+    except LookupError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        conn.close()
+        sys.exit(1)
+
+    if as_json:
+        click.echo(json.dumps(result_to_dict(result), ensure_ascii=False, indent=2))
+    else:
+        from rich.console import Console
+
+        console = Console()
+        render_why(result, console)
+
+    conn.close()
+
+
+# beadloom:domain=graph-diff
+@main.command("diff")
+@click.option("--since", default="HEAD", help="Git ref to compare against.")
+@click.option("--json", "as_json", is_flag=True, help="JSON output.")
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: current directory).",
+)
+def diff_cmd(*, since: str, as_json: bool, project: Path | None) -> None:
+    """Show graph changes since a git ref.
+
+    Compares current graph YAML with state at the given ref (default: HEAD).
+    Exit code 0 = no changes, 1 = changes detected.
+    """
+    from beadloom.diff import compute_diff, diff_to_dict, render_diff
+
+    project_root = project or Path.cwd()
+    graph_dir = project_root / ".beadloom" / "_graph"
+
+    if not graph_dir.is_dir():
+        click.echo("Error: graph directory not found. Run `beadloom init` first.", err=True)
+        sys.exit(1)
+
+    try:
+        result = compute_diff(project_root, since=since)
+    except ValueError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+    if as_json:
+        click.echo(json.dumps(diff_to_dict(result), ensure_ascii=False, indent=2))
+    else:
+        from rich.console import Console
+
+        console = Console()
+        render_diff(result, console)
+
+    if result.has_changes:
+        sys.exit(1)
