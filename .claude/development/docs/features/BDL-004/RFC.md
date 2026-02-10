@@ -98,10 +98,10 @@ Both GitHub Action and GitLab CI template just capture `--report` output and pos
 
 #### 3.1.2 GitHub — Composite Action
 
-`action.yml` at repo root. Users add one step:
+`ci-templates/action.yml`. Users add one step:
 
 ```yaml
-- uses: owner/beadloom@v0.5
+- uses: owner/beadloom/ci-templates@v0.5
   with:
     comment: true          # Post PR comment with stale summary
     fail-on-stale: false   # Exit 1 if stale docs found (default: false)
@@ -435,7 +435,7 @@ Add a `docs/mcp-setup.md` guide with step-by-step instructions for each editor, 
 | `src/beadloom/cli.py` | Add `--json` to sync-check; enhance `status` with Rich + trends; add `link` command; extend `setup-mcp` with `--tool` |
 | `src/beadloom/context_builder.py` | Include links from `extra` in focus node |
 | `src/beadloom/mcp_server.py` | Include links in get_context response |
-| `action.yml` | NEW — Composite GitHub Action |
+| `ci-templates/action.yml` | NEW — Composite GitHub Action |
 | `ci-templates/beadloom-sync.gitlab-ci.yml` | NEW — GitLab CI template |
 | `docs/ci-setup.md` | NEW — CI setup guide (GitHub + GitLab) |
 | `docs/mcp-setup.md` | NEW — MCP setup guide per editor |

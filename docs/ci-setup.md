@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: owner/beadloom@v0.5
+      - uses: owner/beadloom/ci-templates@v0.5
         with:
           comment: true          # Post PR comment with sync report
           fail-on-stale: false   # Set to true to block merging on stale docs
