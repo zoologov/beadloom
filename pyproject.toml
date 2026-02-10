@@ -45,6 +45,12 @@ search = [
     "sqlite-vec>=0.1",
     "fastembed>=0.4",
 ]
+watch = [
+    "watchfiles>=0.20",
+]
+tui = [
+    "textual>=0.50",
+]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
@@ -53,7 +59,7 @@ dev = [
     "types-PyYAML>=6.0",
 ]
 all = [
-    "beadloom[languages,dev]",
+    "beadloom[languages,dev,tui,watch]",
 ]
 
 [project.scripts]
