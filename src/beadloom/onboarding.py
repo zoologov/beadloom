@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -80,7 +81,7 @@ def classify_doc(doc_path: Path) -> str:
 def _cluster_by_dirs(project_root: Path) -> dict[str, list[str]]:
     """Cluster source files by top-level subdirectories.
 
-    Returns dict of dir_name → list of code file paths (relative).
+    Returns dict of dir_name -> list of code file paths (relative).
     """
     clusters: dict[str, list[str]] = {}
 
@@ -99,6 +100,79 @@ def _cluster_by_dirs(project_root: Path) -> dict[str, list[str]]:
                     clusters[sub.name] = files
 
     return clusters
+
+
+def _cluster_with_children(
+    project_root: Path,
+) -> dict[str, dict[str, Any]]:
+    """Two-level directory scan for preset-aware bootstrap.
+
+    Returns dict of dir_name -> {files, children, source_dir} where
+    children is a dict of child_name -> {files}.
+    """
+    result: dict[str, dict[str, Any]] = {}
+
+    for src_dir_name in _SOURCE_DIRS:
+        src_dir = project_root / src_dir_name
+        if not src_dir.is_dir():
+            continue
+
+        for sub in sorted(src_dir.iterdir()):
+            if not sub.is_dir() or sub.name.startswith("_"):
+                continue
+
+            files: list[str] = []
+            children: dict[str, list[str]] = {}
+
+            for item in sorted(sub.iterdir()):
+                if item.is_file() and item.suffix in _CODE_EXTENSIONS:
+                    files.append(str(item.relative_to(project_root)))
+                elif item.is_dir() and not item.name.startswith("_"):
+                    child_files = []
+                    for f in item.rglob("*"):
+                        if f.is_file() and f.suffix in _CODE_EXTENSIONS:
+                            child_files.append(
+                                str(f.relative_to(project_root))
+                            )
+                    if child_files:
+                        children[item.name] = child_files
+                        files.extend(child_files)
+
+            if files:
+                result[sub.name] = {
+                    "files": files,
+                    "children": children,
+                    "source_dir": src_dir_name,
+                }
+
+    return result
+
+
+def _read_manifest_deps(package_dir: Path) -> list[str]:
+    """Read internal dependency names from a package manifest.
+
+    Supports package.json workspace/file/link dependencies.
+    Returns only names that look like local/workspace packages.
+    """
+    deps: list[str] = []
+
+    pkg_json = package_dir / "package.json"
+    if pkg_json.is_file():
+        try:
+            data = json.loads(pkg_json.read_text(encoding="utf-8"))
+            for key in ("dependencies", "devDependencies"):
+                for dep_name, ver in (data.get(key) or {}).items():
+                    if isinstance(ver, str) and (
+                        ver.startswith("workspace:")
+                        or ver.startswith("file:")
+                        or ver.startswith("link:")
+                    ):
+                        clean = dep_name.split("/")[-1]
+                        deps.append(clean)
+        except (json.JSONDecodeError, KeyError):
+            pass
+
+    return deps
 
 
 _AGENTS_MD_TEMPLATE = """\
@@ -153,54 +227,131 @@ def generate_agents_md(project_root: Path) -> Path:
     return agents_path
 
 
-def bootstrap_project(project_root: Path) -> dict[str, Any]:
+def bootstrap_project(
+    project_root: Path,
+    *,
+    preset_name: str | None = None,
+) -> dict[str, Any]:
     """Bootstrap a project: scan, cluster, generate YAML graph and config.
+
+    When *preset_name* is given (or auto-detected), the bootstrap uses
+    architecture-aware rules for node kind classification and edge inference.
 
     Returns summary dict with generated file counts.
     """
+    from beadloom.presets import PRESETS, detect_preset
+
     beadloom_dir = project_root / ".beadloom"
     graph_dir = beadloom_dir / "_graph"
     graph_dir.mkdir(parents=True, exist_ok=True)
 
     scan = scan_project(project_root)
-    clusters = _cluster_by_dirs(project_root)
 
-    # Generate nodes from clusters.
+    # Resolve preset.
+    if preset_name and preset_name in PRESETS:
+        preset = PRESETS[preset_name]
+    else:
+        preset = detect_preset(project_root)
+
+    clusters = _cluster_with_children(project_root)
+
     nodes: list[dict[str, str]] = []
-    for name, files in clusters.items():
-        nodes.append({
-            "ref_id": name,
-            "kind": "service",
-            "summary": f"Service: {name} ({len(files)} files)",
-            "confidence": "medium",
-            "source": f"src/{name}/",
-        })
+    edges: list[dict[str, str]] = []
+    seen_ref_ids: set[str] = set()
 
-    # If no clusters found, create a minimal node from scan.
+    for name, info in clusters.items():
+        kind, confidence = preset.classify_dir(name)
+        all_files: list[str] = info["files"]
+        children: dict[str, list[str]] = info["children"]
+        source_dir: str = info["source_dir"]
+
+        # Top-level node.
+        ref_id = name
+        kind_label = kind.capitalize()
+        nodes.append({
+            "ref_id": ref_id,
+            "kind": kind,
+            "summary": f"{kind_label}: {name} ({len(all_files)} files)",
+            "confidence": confidence,
+            "source": f"{source_dir}/{name}/",
+        })
+        seen_ref_ids.add(ref_id)
+
+        # Child nodes (level 2) + part_of edges.
+        if preset.infer_part_of and children:
+            for child_name, child_files in children.items():
+                child_kind, child_conf = preset.classify_dir(child_name)
+                child_ref_id = f"{name}-{child_name}"
+                nodes.append({
+                    "ref_id": child_ref_id,
+                    "kind": child_kind,
+                    "summary": (
+                        f"{child_kind.capitalize()}: "
+                        f"{child_name} ({len(child_files)} files)"
+                    ),
+                    "confidence": child_conf,
+                    "source": f"{source_dir}/{name}/{child_name}/",
+                })
+                seen_ref_ids.add(child_ref_id)
+                edges.append({
+                    "src": child_ref_id,
+                    "dst": ref_id,
+                    "kind": "part_of",
+                })
+
+    # Fallback: no clusters found, create minimal nodes from scan.
     if not nodes and scan["source_dirs"]:
         for sd in scan["source_dirs"]:
             nodes.append({
                 "ref_id": sd,
-                "kind": "service",
+                "kind": preset.default_kind,
                 "summary": f"Source directory: {sd}",
                 "confidence": "low",
                 "source": f"{sd}/",
             })
+            seen_ref_ids.add(sd)
+
+    # Monorepo: infer depends_on edges from manifest files.
+    if preset.infer_deps_from_manifests:
+        for name, info in clusters.items():
+            source_dir = info["source_dir"]
+            pkg_dir = project_root / source_dir / name
+            dep_names = _read_manifest_deps(pkg_dir)
+            for dep in dep_names:
+                if dep in seen_ref_ids and dep != name:
+                    edges.append({
+                        "src": name,
+                        "dst": dep,
+                        "kind": "depends_on",
+                    })
 
     # Write YAML graph.
     if nodes:
-        graph_data = {"nodes": nodes}
+        graph_data: dict[str, Any] = {"nodes": nodes}
+        if edges:
+            graph_data["edges"] = edges
         (graph_dir / "services.yml").write_text(
-            yaml.dump(graph_data, default_flow_style=False, allow_unicode=True),
+            yaml.dump(
+                graph_data,
+                default_flow_style=False,
+                allow_unicode=True,
+            ),
             encoding="utf-8",
         )
 
+    # Check for docs.
+    docs_dir = project_root / "docs"
+    has_docs = docs_dir.is_dir() and any(docs_dir.rglob("*.md"))
+
     # Create config.
-    config = {
+    config: dict[str, Any] = {
         "scan_paths": scan["source_dirs"] or ["src"],
         "languages": scan["languages"] or ["python"],
         "sync": {"hook_mode": "warn"},
+        "preset": preset.name,
     }
+    if not has_docs:
+        config["docs_dir"] = None
     (beadloom_dir / "config.yml").write_text(
         yaml.dump(config, default_flow_style=False, allow_unicode=True),
         encoding="utf-8",
@@ -211,9 +362,13 @@ def bootstrap_project(project_root: Path) -> dict[str, Any]:
 
     return {
         "nodes_generated": len(nodes),
+        "edges_generated": len(edges),
+        "preset": preset.name,
         "config_created": True,
         "agents_md_created": True,
         "scan": scan,
+        "nodes": nodes,
+        "edges": edges,
     }
 
 
@@ -248,13 +403,36 @@ def import_docs(
         })
 
     if nodes:
-        graph_data = {"nodes": nodes}
+        graph_data: dict[str, Any] = {"nodes": nodes}
         (graph_dir / "imported.yml").write_text(
             yaml.dump(graph_data, default_flow_style=False, allow_unicode=True),
             encoding="utf-8",
         )
 
     return results
+
+
+def _format_review_table(
+    nodes: list[dict[str, str]],
+    edges: list[dict[str, str]],
+) -> str:
+    """Format nodes and edges as a plain-text review table."""
+    lines: list[str] = []
+
+    lines.append(f"  Nodes ({len(nodes)}):")
+    for n in nodes:
+        conf = n.get("confidence", "")
+        conf_tag = f" [{conf}]" if conf else ""
+        lines.append(
+            f"    {n['ref_id']:30s} {n['kind']:10s} {n.get('source', '')}{conf_tag}"
+        )
+
+    if edges:
+        lines.append(f"\n  Edges ({len(edges)}):")
+        for e in edges:
+            lines.append(f"    {e['src']} --{e['kind']}--> {e['dst']}")
+
+    return "\n".join(lines)
 
 
 def interactive_init(project_root: Path) -> dict[str, Any]:
@@ -275,7 +453,7 @@ def interactive_init(project_root: Path) -> dict[str, Any]:
 
     # Re-init detection.
     if beadloom_dir.exists():
-        console.print("\n[yellow]⚠ .beadloom/ already exists in this project.[/yellow]\n")
+        console.print("\n[yellow]Warning: .beadloom/ already exists.[/yellow]\n")
         choice = Prompt.ask(
             "What would you like to do?",
             choices=["overwrite", "cancel"],
@@ -302,11 +480,23 @@ def interactive_init(project_root: Path) -> dict[str, Any]:
     docs_dir = project_root / "docs"
     has_docs = docs_dir.is_dir() and any(docs_dir.rglob("*.md"))
 
+    if not has_docs:
+        console.print(
+            "\n[dim]No docs/ directory found — that's fine![/dim]"
+        )
+        console.print(
+            "[dim]Beadloom works great with code-only: "
+            "graph, annotations, context oracle.[/dim]"
+        )
+        console.print(
+            "[dim]Add docs later when you need "
+            "doc-sync tracking.[/dim]"
+        )
+
     console.print("")
 
     # Mode selection.
     if has_docs and scan["file_count"] > 0:
-        # Both code and docs exist.
         mode = Prompt.ask(
             "Choose init mode",
             choices=["bootstrap", "import", "both"],
@@ -321,7 +511,7 @@ def interactive_init(project_root: Path) -> dict[str, Any]:
     elif scan["file_count"] > 0:
         mode = Prompt.ask(
             "Choose init mode",
-            choices=["bootstrap", "import"],
+            choices=["bootstrap"],
             default="bootstrap",
         )
     else:
@@ -339,32 +529,80 @@ def interactive_init(project_root: Path) -> dict[str, Any]:
         console.print("\n[bold]Bootstrapping from code...[/bold]")
         bs_result = bootstrap_project(project_root)
         result["bootstrap"] = bs_result
-        console.print(f"  Generated {bs_result['nodes_generated']} nodes")
+
+        nodes = bs_result.get("nodes", [])
+        edges = bs_result.get("edges", [])
+        preset_name = bs_result.get("preset", "monolith")
+        console.print(f"  Preset: {preset_name}")
+        console.print(
+            f"  Generated {len(nodes)} nodes, {len(edges)} edges"
+        )
+
+        # Interactive review.
+        if nodes:
+            console.print(
+                f"\n{_format_review_table(nodes, edges)}"
+            )
+            console.print("")
+            review = Prompt.ask(
+                "Proceed with this graph?",
+                choices=["yes", "edit", "cancel"],
+                default="yes",
+            )
+            if review == "cancel":
+                console.print("Cancelled.")
+                result["mode"] = "cancelled"
+                return result
+            if review == "edit":
+                graph_path = (
+                    project_root / ".beadloom" / "_graph" / "services.yml"
+                )
+                console.print(
+                    f"\n[bold]Edit:[/bold] {graph_path}"
+                )
+                console.print(
+                    "Edit the file, then run "
+                    "[bold]beadloom reindex[/bold]."
+                )
+                result["review"] = "edit"
+                # Generate AGENTS.md before early return.
+                generate_agents_md(project_root)
+                result["agents_md_created"] = True
+                return result
+
         console.print("  Config: .beadloom/config.yml")
 
     if mode in ("import", "both"):
         if not has_docs:
-            import_dir_str = Prompt.ask("Documentation directory", default="docs")
+            import_dir_str = Prompt.ask(
+                "Documentation directory", default="docs"
+            )
             import_dir = project_root / import_dir_str
         else:
             import_dir = docs_dir
 
         if import_dir.is_dir():
-            console.print(f"\n[bold]Importing docs from {import_dir.name}/...[/bold]")
+            console.print(
+                f"\n[bold]Importing docs from {import_dir.name}/...[/bold]"
+            )
             docs_result = import_docs(project_root, import_dir)
             result["import"] = docs_result
             console.print(f"  Classified {len(docs_result)} documents")
         else:
-            console.print(f"[red]Directory {import_dir} does not exist.[/red]")
+            console.print(
+                f"[red]Directory {import_dir} does not exist.[/red]"
+            )
 
     # Generate AGENTS.md.
     generate_agents_md(project_root)
     result["agents_md_created"] = True
 
     # Final instructions.
-    console.print("\n[green bold]✓ Initialization complete![/green bold]")
+    console.print("\n[green bold]Initialization complete![/green bold]")
     console.print("\nGenerated:")
-    console.print("  .beadloom/AGENTS.md — agent instructions for MCP tools")
+    console.print(
+        "  .beadloom/AGENTS.md — agent instructions for MCP tools"
+    )
     console.print("\nNext steps:")
     console.print("  1. Review .beadloom/_graph/*.yml")
     console.print("  2. Run [bold]beadloom reindex[/bold]")

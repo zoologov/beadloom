@@ -687,6 +687,12 @@ def mcp_serve(*, project: Path | None) -> None:
 @main.command()
 @click.option("--bootstrap", is_flag=True, help="Bootstrap: generate graph from code.")
 @click.option(
+    "--preset",
+    type=click.Choice(["monolith", "microservices", "monorepo"]),
+    default=None,
+    help="Architecture preset (auto-detected if omitted).",
+)
+@click.option(
     "--import",
     "import_path",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
@@ -702,6 +708,7 @@ def mcp_serve(*, project: Path | None) -> None:
 def init(
     *,
     bootstrap: bool,
+    preset: str | None,
     import_path: Path | None,
     project: Path | None,
 ) -> None:
@@ -711,14 +718,24 @@ def init(
     project_root = project or Path.cwd()
 
     if bootstrap:
-        result = bootstrap_project(project_root)
+        result = bootstrap_project(project_root, preset_name=preset)
         scan = result["scan"]
+        click.echo(f"Preset: {result['preset']}")
         click.echo(f"Scanned {scan['file_count']} files")
-        click.echo(f"Generated {result['nodes_generated']} nodes")
+        click.echo(
+            f"Generated {result['nodes_generated']} nodes, "
+            f"{result['edges_generated']} edges"
+        )
         click.echo(f"Config: {project_root / '.beadloom' / 'config.yml'}")
-        click.echo(f"Agent instructions: {project_root / '.beadloom' / 'AGENTS.md'}")
+        click.echo(
+            f"Agent instructions: "
+            f"{project_root / '.beadloom' / 'AGENTS.md'}"
+        )
         click.echo("")
-        click.echo("Next: review .beadloom/_graph/*.yml, then run `beadloom reindex`")
+        click.echo(
+            "Next: review .beadloom/_graph/*.yml, "
+            "then run `beadloom reindex`"
+        )
         return
 
     if import_path:
@@ -727,7 +744,10 @@ def init(
         for r in results:
             click.echo(f"  [{r['kind']}] {r['path']}")
         click.echo("")
-        click.echo("Next: review .beadloom/_graph/imported.yml, then run `beadloom reindex`")
+        click.echo(
+            "Next: review .beadloom/_graph/imported.yml, "
+            "then run `beadloom reindex`"
+        )
         return
 
     # Default: interactive mode.

@@ -19,6 +19,45 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_src_tree(tmp_path: Path) -> Path:
+    """Create a multi-level src tree for bootstrap tests."""
+    src = tmp_path / "src"
+    src.mkdir()
+
+    # Top-level: auth domain with models and api subdirs.
+    auth = src / "auth"
+    auth.mkdir()
+    (auth / "login.py").write_text("def login(): pass\n")
+    models = auth / "models"
+    models.mkdir()
+    (models / "user.py").write_text("class User: pass\n")
+    api = auth / "api"
+    api.mkdir()
+    (api / "routes.py").write_text("def get_users(): pass\n")
+
+    # Top-level: billing domain.
+    billing = src / "billing"
+    billing.mkdir()
+    (billing / "invoice.py").write_text("def create_invoice(): pass\n")
+
+    # Top-level: utils (utility dir).
+    utils = src / "utils"
+    utils.mkdir()
+    (utils / "helpers.py").write_text("def format_date(): pass\n")
+
+    return src
+
+
+# ---------------------------------------------------------------------------
+# scan_project
+# ---------------------------------------------------------------------------
+
+
 class TestScanProject:
     def test_detects_pyproject(self, tmp_path: Path) -> None:
         (tmp_path / "pyproject.toml").write_text("[project]\nname='test'\n")
@@ -52,6 +91,11 @@ class TestScanProject:
         assert result["source_dirs"] == []
 
 
+# ---------------------------------------------------------------------------
+# classify_doc
+# ---------------------------------------------------------------------------
+
+
 class TestClassifyDoc:
     def test_adr(self, tmp_path: Path) -> None:
         doc = tmp_path / "adr-001.md"
@@ -72,6 +116,11 @@ class TestClassifyDoc:
         doc = tmp_path / "readme.md"
         doc.write_text("# README\n\nJust a readme.\n")
         assert classify_doc(doc) == "other"
+
+
+# ---------------------------------------------------------------------------
+# generate_agents_md
+# ---------------------------------------------------------------------------
 
 
 class TestGenerateAgentsMd:
@@ -98,6 +147,11 @@ class TestGenerateAgentsMd:
         generate_agents_md(tmp_path)
         generate_agents_md(tmp_path)
         assert (tmp_path / ".beadloom" / "AGENTS.md").exists()
+
+
+# ---------------------------------------------------------------------------
+# bootstrap_project — basic
+# ---------------------------------------------------------------------------
 
 
 class TestBootstrapProject:
@@ -135,9 +189,7 @@ class TestBootstrapProject:
         assert len(yml_files) >= 1
 
     def test_generated_yaml_is_valid(self, tmp_path: Path) -> None:
-        src = tmp_path / "src"
-        src.mkdir()
-        (src / "main.py").write_text("class App:\n    pass\n")
+        _make_src_tree(tmp_path)
         bootstrap_project(tmp_path)
         graph_dir = tmp_path / ".beadloom" / "_graph"
         for yml_path in graph_dir.glob("*.yml"):
@@ -153,6 +205,194 @@ class TestBootstrapProject:
         bootstrap_project(tmp_path)
         # Second call should not crash.
         bootstrap_project(tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# bootstrap_project — preset-aware
+# ---------------------------------------------------------------------------
+
+
+class TestBootstrapPresets:
+    """Tests for preset-aware bootstrap with multi-level scanning."""
+
+    def test_monolith_top_dirs_are_domains(self, tmp_path: Path) -> None:
+        _make_src_tree(tmp_path)
+        result = bootstrap_project(tmp_path, preset_name="monolith")
+        assert result["preset"] == "monolith"
+        nodes = result["nodes"]
+        top_names = {n["ref_id"] for n in nodes if "-" not in n["ref_id"]}
+        # auth, billing → domain; utils → service (utility pattern)
+        auth_node = next(n for n in nodes if n["ref_id"] == "auth")
+        assert auth_node["kind"] == "domain"
+        billing_node = next(n for n in nodes if n["ref_id"] == "billing")
+        assert billing_node["kind"] == "domain"
+        assert "auth" in top_names
+        assert "billing" in top_names
+
+    def test_monolith_child_models_are_entities(self, tmp_path: Path) -> None:
+        _make_src_tree(tmp_path)
+        result = bootstrap_project(tmp_path, preset_name="monolith")
+        nodes = result["nodes"]
+        models_node = next(
+            (n for n in nodes if n["ref_id"] == "auth-models"), None
+        )
+        assert models_node is not None
+        assert models_node["kind"] == "entity"
+
+    def test_monolith_child_api_are_features(self, tmp_path: Path) -> None:
+        _make_src_tree(tmp_path)
+        result = bootstrap_project(tmp_path, preset_name="monolith")
+        nodes = result["nodes"]
+        api_node = next(
+            (n for n in nodes if n["ref_id"] == "auth-api"), None
+        )
+        assert api_node is not None
+        assert api_node["kind"] == "feature"
+
+    def test_part_of_edges_generated(self, tmp_path: Path) -> None:
+        _make_src_tree(tmp_path)
+        result = bootstrap_project(tmp_path, preset_name="monolith")
+        edges = result["edges"]
+        assert len(edges) > 0
+        part_of = [e for e in edges if e["kind"] == "part_of"]
+        assert len(part_of) >= 2  # auth-models, auth-api → auth
+        srcs = {e["src"] for e in part_of}
+        assert "auth-models" in srcs
+        assert "auth-api" in srcs
+
+    def test_microservices_top_dirs_are_services(self, tmp_path: Path) -> None:
+        _make_src_tree(tmp_path)
+        result = bootstrap_project(tmp_path, preset_name="microservices")
+        assert result["preset"] == "microservices"
+        nodes = result["nodes"]
+        auth_node = next(n for n in nodes if n["ref_id"] == "auth")
+        assert auth_node["kind"] == "service"
+
+    def test_auto_detect_preset(self, tmp_path: Path) -> None:
+        """Without explicit preset, bootstrap auto-detects."""
+        _make_src_tree(tmp_path)
+        result = bootstrap_project(tmp_path)
+        # Default for src/ layout is monolith.
+        assert result["preset"] == "monolith"
+
+    def test_auto_detect_microservices(self, tmp_path: Path) -> None:
+        (tmp_path / "services").mkdir()
+        svc = tmp_path / "services" / "auth"
+        svc.mkdir()
+        (svc / "main.go").write_text("package main\n")
+        result = bootstrap_project(tmp_path)
+        assert result["preset"] == "microservices"
+
+    def test_auto_detect_monorepo(self, tmp_path: Path) -> None:
+        (tmp_path / "packages").mkdir()
+        pkg = tmp_path / "packages" / "core"
+        pkg.mkdir()
+        (pkg / "index.ts").write_text("export default {}\n")
+        result = bootstrap_project(tmp_path)
+        assert result["preset"] == "monorepo"
+
+    def test_edges_generated_count(self, tmp_path: Path) -> None:
+        _make_src_tree(tmp_path)
+        result = bootstrap_project(tmp_path, preset_name="monolith")
+        assert result["edges_generated"] >= 2
+
+    def test_config_includes_preset(self, tmp_path: Path) -> None:
+        _make_src_tree(tmp_path)
+        bootstrap_project(tmp_path, preset_name="monolith")
+        config = yaml.safe_load(
+            (tmp_path / ".beadloom" / "config.yml").read_text()
+        )
+        assert config["preset"] == "monolith"
+
+
+# ---------------------------------------------------------------------------
+# bootstrap_project — zero-doc mode
+# ---------------------------------------------------------------------------
+
+
+class TestBootstrapZeroDoc:
+    """Tests for zero-doc mode support."""
+
+    def test_no_docs_dir_sets_null(self, tmp_path: Path) -> None:
+        """Config docs_dir is null when no docs/ exists."""
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "app.py").write_text("pass\n")
+        bootstrap_project(tmp_path)
+        config = yaml.safe_load(
+            (tmp_path / ".beadloom" / "config.yml").read_text()
+        )
+        assert config.get("docs_dir") is None
+
+    def test_with_docs_dir_no_null(self, tmp_path: Path) -> None:
+        """Config omits docs_dir=null when docs/ exists."""
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "app.py").write_text("pass\n")
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        (docs / "readme.md").write_text("# Hello\n")
+        bootstrap_project(tmp_path)
+        config = yaml.safe_load(
+            (tmp_path / ".beadloom" / "config.yml").read_text()
+        )
+        assert "docs_dir" not in config
+
+    def test_bootstrap_succeeds_without_docs(self, tmp_path: Path) -> None:
+        _make_src_tree(tmp_path)
+        result = bootstrap_project(tmp_path)
+        assert result["nodes_generated"] > 0
+        assert result["config_created"] is True
+
+
+# ---------------------------------------------------------------------------
+# bootstrap_project — monorepo manifest deps
+# ---------------------------------------------------------------------------
+
+
+class TestBootstrapMonorepoDeps:
+    """Tests for monorepo depends_on edge inference from manifests."""
+
+    def test_package_json_workspace_deps(self, tmp_path: Path) -> None:
+        pkgs = tmp_path / "packages"
+        pkgs.mkdir()
+
+        # Package A depends on B via workspace protocol.
+        a = pkgs / "app"
+        a.mkdir()
+        (a / "index.ts").write_text("import b from 'core'\n")
+        (a / "package.json").write_text(
+            '{"dependencies": {"@org/core": "workspace:*"}}'
+        )
+
+        b = pkgs / "core"
+        b.mkdir()
+        (b / "index.ts").write_text("export default {}\n")
+
+        result = bootstrap_project(tmp_path, preset_name="monorepo")
+        dep_edges = [
+            e for e in result["edges"] if e["kind"] == "depends_on"
+        ]
+        assert len(dep_edges) >= 1
+        assert dep_edges[0]["src"] == "app"
+        assert dep_edges[0]["dst"] == "core"
+
+    def test_no_deps_no_edges(self, tmp_path: Path) -> None:
+        pkgs = tmp_path / "packages"
+        pkgs.mkdir()
+        a = pkgs / "solo"
+        a.mkdir()
+        (a / "main.ts").write_text("console.log('hi')\n")
+        result = bootstrap_project(tmp_path, preset_name="monorepo")
+        dep_edges = [
+            e for e in result["edges"] if e["kind"] == "depends_on"
+        ]
+        assert dep_edges == []
+
+
+# ---------------------------------------------------------------------------
+# import_docs
+# ---------------------------------------------------------------------------
 
 
 class TestImportDocs:
@@ -183,6 +423,11 @@ class TestImportDocs:
         assert result == []
 
 
+# ---------------------------------------------------------------------------
+# CLI init
+# ---------------------------------------------------------------------------
+
+
 class TestInitCli:
     def test_init_bootstrap(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
@@ -198,6 +443,25 @@ class TestInitCli:
         )
         assert result.exit_code == 0, result.output
         assert (tmp_path / ".beadloom" / "_graph").is_dir()
+
+    def test_init_bootstrap_with_preset(self, tmp_path: Path) -> None:
+        from click.testing import CliRunner
+
+        from beadloom.cli import main
+
+        _make_src_tree(tmp_path)
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "init", "--bootstrap",
+                "--preset", "monolith",
+                "--project", str(tmp_path),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "monolith" in result.output
+        assert "nodes" in result.output
 
     def test_init_import(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
@@ -226,14 +490,20 @@ class TestInitCli:
         src.mkdir()
         (src / "app.py").write_text("def main():\n    pass\n")
 
-        # Mock rich.prompt to avoid actual terminal interaction.
-        with patch("rich.prompt.Prompt.ask", return_value="bootstrap"), \
-             patch("rich.console.Console"):
+        with patch(
+            "rich.prompt.Prompt.ask",
+            side_effect=["bootstrap", "yes"],
+        ), patch("rich.console.Console"):
             runner = CliRunner()
             result = runner.invoke(
                 main, ["init", "--project", str(tmp_path)]
             )
         assert result.exit_code == 0, result.output
+
+
+# ---------------------------------------------------------------------------
+# interactive_init
+# ---------------------------------------------------------------------------
 
 
 class TestInteractiveInit:
@@ -245,10 +515,14 @@ class TestInteractiveInit:
 
         src = tmp_path / "src"
         src.mkdir()
-        (src / "app.py").write_text("def main():\n    pass\n")
+        svc = src / "api"
+        svc.mkdir()
+        (svc / "app.py").write_text("def main():\n    pass\n")
 
-        with patch("rich.prompt.Prompt.ask", return_value="bootstrap"), \
-             patch("rich.console.Console"):
+        with patch(
+            "rich.prompt.Prompt.ask",
+            side_effect=["bootstrap", "yes"],
+        ), patch("rich.console.Console"):
             result = interactive_init(tmp_path)
 
         assert result["mode"] == "bootstrap"
@@ -288,11 +562,72 @@ class TestInteractiveInit:
         (tmp_path / ".beadloom").mkdir()
         src = tmp_path / "src"
         src.mkdir()
-        (src / "app.py").write_text("def main():\n    pass\n")
+        svc = src / "api"
+        svc.mkdir()
+        (svc / "app.py").write_text("def main():\n    pass\n")
 
-        with patch("rich.prompt.Prompt.ask", side_effect=["overwrite", "bootstrap"]), \
-             patch("rich.console.Console"):
+        with patch(
+            "rich.prompt.Prompt.ask",
+            side_effect=["overwrite", "bootstrap", "yes"],
+        ), patch("rich.console.Console"):
             result = interactive_init(tmp_path)
 
         assert result["reinit"] is True
         assert result["mode"] == "bootstrap"
+
+    def test_zero_doc_no_import_choice(self, tmp_path: Path) -> None:
+        """Without docs dir, only bootstrap is offered."""
+        from unittest.mock import MagicMock, patch
+
+        src = tmp_path / "src"
+        src.mkdir()
+        svc = src / "api"
+        svc.mkdir()
+        (svc / "app.py").write_text("pass\n")
+
+        ask_mock = MagicMock(side_effect=["bootstrap", "yes"])
+        with patch("rich.prompt.Prompt.ask", ask_mock), \
+             patch("rich.console.Console"):
+            result = interactive_init(tmp_path)
+
+        assert result["mode"] == "bootstrap"
+        # Verify the first prompt offered only bootstrap.
+        first_call = ask_mock.call_args_list[0]
+        assert first_call[1].get("choices") == ["bootstrap"]
+
+    def test_review_edit_returns_early(self, tmp_path: Path) -> None:
+        """Choosing 'edit' during review returns without reindex hint."""
+        from unittest.mock import patch
+
+        src = tmp_path / "src"
+        src.mkdir()
+        svc = src / "api"
+        svc.mkdir()
+        (svc / "app.py").write_text("pass\n")
+
+        with patch(
+            "rich.prompt.Prompt.ask",
+            side_effect=["bootstrap", "edit"],
+        ), patch("rich.console.Console"):
+            result = interactive_init(tmp_path)
+
+        assert result.get("review") == "edit"
+        assert result["agents_md_created"] is True
+
+    def test_review_cancel(self, tmp_path: Path) -> None:
+        """Choosing 'cancel' during review aborts."""
+        from unittest.mock import patch
+
+        src = tmp_path / "src"
+        src.mkdir()
+        svc = src / "api"
+        svc.mkdir()
+        (svc / "app.py").write_text("pass\n")
+
+        with patch(
+            "rich.prompt.Prompt.ask",
+            side_effect=["bootstrap", "cancel"],
+        ), patch("rich.console.Console"):
+            result = interactive_init(tmp_path)
+
+        assert result["mode"] == "cancelled"

@@ -16,19 +16,31 @@ beadloom [--verbose|-v] [--quiet|-q] [--version] COMMAND
 
 ### beadloom init
 
-Project initialization. Two modes:
+Project initialization. Three modes:
 
 ```bash
-# Generate graph from code structure
-beadloom init --bootstrap [--project DIR]
+# Generate graph from code structure (auto-detects architecture)
+beadloom init --bootstrap [--preset {monolith,microservices,monorepo}] [--project DIR]
 
 # Import existing documentation
 beadloom init --import DOCS_DIR [--project DIR]
+
+# Interactive mode (default when no flags given)
+beadloom init [--project DIR]
 ```
 
-`--bootstrap` scans source directories (src, lib, app), clusters by subdirectories, and generates `.beadloom/_graph/services.yml` + `.beadloom/config.yml`.
+`--bootstrap` scans source directories (src, lib, app, services, packages), classifies subdirectories using architecture-aware preset rules, infers edges from directory nesting, and generates `.beadloom/_graph/services.yml` + `.beadloom/config.yml`.
+
+`--preset` selects an architecture preset:
+- `monolith` — top dirs are domains; subdirs map to features, entities, services
+- `microservices` — top dirs are services; shared code becomes domains
+- `monorepo` — packages/apps are services; manifest deps become edges
+
+When `--preset` is omitted, Beadloom auto-detects: `services/` or `cmd/` → microservices, `packages/` or `apps/` → monorepo, otherwise → monolith.
 
 `--import` classifies .md files (ADR, feature, architecture, other) and generates `.beadloom/_graph/imported.yml`.
+
+Projects without a `docs/` directory work fine — Beadloom operates in zero-doc mode with code-only context (graph nodes, annotations, context oracle).
 
 ### beadloom reindex
 
