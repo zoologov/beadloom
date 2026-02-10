@@ -7,7 +7,7 @@
 
 | Deliverable | Bead | Status |
 |-------------|------|--------|
-| Epic | beadloom-fwo | closing |
+| Epic | beadloom-fwo | **closed** |
 | 5.1 Why | beadloom-fzb | **closed** (26 tests) |
 | 5.2 Diff | beadloom-q6b | **closed** (22 tests) |
 | 5.3 TUI | beadloom-1c1 | **closed** (10 tests) |
@@ -28,7 +28,7 @@
 - [x] 5.4 Watch — watcher.py, test_watcher.py (16), test_cli_watch.py (3)
 - [x] Version bump to 0.7.0
 - [x] All quality gates pass
-- [ ] Git committed and pushed
+- [x] Git committed and pushed
 
 ## Quality Gates
 

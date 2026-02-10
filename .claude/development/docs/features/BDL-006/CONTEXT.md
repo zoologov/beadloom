@@ -2,8 +2,8 @@
 
 > **Last updated:** 2026-02-11
 > **Phase:** Strategy Phase 5
-> **Status:** IN PROGRESS
-> **Version:** 0.7.0 (target)
+> **Status:** COMPLETE
+> **Version:** 0.7.0
 > **Depends on:** BDL-005 (v0.6.0 complete)
 
 ---
@@ -22,10 +22,10 @@ No new data collection. All features are read-only consumers of the existing SQL
 
 | # | Item | Status | Bead |
 |---|------|--------|------|
-| 5.1 | `beadloom why` — impact analysis | OPEN | beadloom-fzb |
-| 5.2 | `beadloom diff` — graph delta | OPEN | beadloom-q6b |
-| 5.3 | `beadloom ui` — TUI dashboard | BLOCKED | beadloom-1c1 |
-| 5.4 | `beadloom watch` — auto-reindex | OPEN | beadloom-6fr |
+| 5.1 | `beadloom why` — impact analysis | DONE | beadloom-fzb |
+| 5.2 | `beadloom diff` — graph delta | DONE | beadloom-q6b |
+| 5.3 | `beadloom ui` — TUI dashboard | DONE | beadloom-1c1 |
+| 5.4 | `beadloom watch` — auto-reindex | DONE | beadloom-6fr |
 
 ## Key Decisions
 

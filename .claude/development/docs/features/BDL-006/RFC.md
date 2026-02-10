@@ -1,6 +1,6 @@
 # RFC-0006: Phase 5 — Developer Experience (v0.7)
 
-> **Status:** Approved
+> **Status:** Implemented (v0.7.0)
 > **Date:** 2026-02-11
 > **Phase:** 5 (v0.7)
 > **Depends on:** BDL-005 (v0.6.0 — Performance complete)

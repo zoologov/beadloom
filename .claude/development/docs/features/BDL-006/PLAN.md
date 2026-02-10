@@ -1,7 +1,7 @@
 # PLAN: BDL-006 — Phase 5: Developer Experience (v0.7)
 
 > **Last updated:** 2026-02-11
-> **Status:** Approved
+> **Status:** Executed (v0.7.0)
 
 ---
 
@@ -21,10 +21,10 @@ graph LR
 
 | # | Bead | Title | Priority | Effort | Depends on | Status |
 |---|------|-------|----------|--------|------------|--------|
-| 5.1 | beadloom-fzb | `beadloom why` — impact analysis | P1 | M | — | open |
-| 5.2 | beadloom-q6b | `beadloom diff` — graph delta | P1 | M | — | open |
-| 5.3 | beadloom-1c1 | `beadloom ui` — TUI dashboard | P1 | L | 5.1, 5.2 | blocked |
-| 5.4 | beadloom-6fr | `beadloom watch` — auto-reindex | P2 | M | — | open |
+| 5.1 | beadloom-fzb | `beadloom why` — impact analysis | P1 | M | — | done |
+| 5.2 | beadloom-q6b | `beadloom diff` — graph delta | P1 | M | — | done |
+| 5.3 | beadloom-1c1 | `beadloom ui` — TUI dashboard | P1 | L | 5.1, 5.2 | done |
+| 5.4 | beadloom-6fr | `beadloom watch` — auto-reindex | P2 | M | — | done |
 
 ## Critical Path
 
@@ -61,9 +61,9 @@ graph LR
 
 ## Quality Gates
 
-- [ ] All tests pass (`uv run pytest`)
-- [ ] >= 80% coverage
-- [ ] mypy --strict clean
-- [ ] ruff clean
-- [ ] TUI launches on macOS
-- [ ] Total tests >= 520
+- [x] All tests pass (`uv run pytest`) — 541 passed
+- [x] >= 80% coverage
+- [x] mypy --strict clean — 25 files, 0 issues
+- [x] ruff clean
+- [x] TUI launches on macOS
+- [x] Total tests >= 520 — 541
