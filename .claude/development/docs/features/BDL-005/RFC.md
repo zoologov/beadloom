@@ -1,9 +1,10 @@
 # RFC-0005: Phase 4 — Performance & Agent-Native Evolution
 
-> **Status:** Accepted
+> **Status:** Implemented
 > **Date:** 2026-02-11
 > **Phase:** 4 (v0.6.0)
 > **Depends on:** BDL-004 (v0.5.0 — team adoption complete)
+> **Implemented:** 2026-02-11 — all 8 deliverables complete, 464 tests
 
 ---
 
@@ -590,4 +591,52 @@ Phase 4.3: Auto-reindex in MCP      (P1, Small)    — depends on 4.2
 Phase 4.4: Bundle Cache SQLite      (P1, Medium)   — depends on 4.1
 Phase 4.8: AGENTS.md Update         (P1, Small)    — depends on 4.5, 4.7
 Phase 4.6: Semantic Search          (P2, Large)    — depends on 4.2
+```
+
+---
+
+## 13. Implementation Notes
+
+**All 8 deliverables implemented and shipped as v0.6.0.**
+
+### Deviations from RFC
+
+| Item | RFC Plan | Actual | Reason |
+|------|----------|--------|--------|
+| Graph YAML incremental | Partial reload of affected nodes | Full reindex on any graph change | Graph changes are rare; full reload is safer |
+| `vec_nodes` table | Created conditionally | Not created (FTS5 only) | sqlite-vec integration deferred; FTS5 is sufficient |
+| Auto-reindex config | `config.yml` `mcp.auto_reindex` | Always on (no config) | Simplicity; no user has asked to disable |
+| `_ensure_fresh_index` | async | sync | MCP handlers call it synchronously before dispatch |
+| L2 cache on hit | RFC unclear | Returns full bundle (not short) | Agent needs data in new session; L1 returns short cached |
+
+### Test Coverage
+
+| Area | Tests |
+|------|-------|
+| L1 cache (ContextCache) | 13 |
+| L2 cache (SqliteCache) | 8 |
+| MCP L2 integration | 4 |
+| Incremental reindex | 10 |
+| MCP write tools | 9 |
+| Auto-reindex | 3 |
+| FTS5 search | 13 |
+| CLI search | 5 |
+| --auto removal | 1 |
+| **Total new** | **66** |
+| **Total project** | **464** |
+
+### Files Changed
+
+```
+src/beadloom/__init__.py      # 0.5.0 → 0.6.0
+src/beadloom/cache.py         # +SqliteCache, +compute_etag, +get_entry
+src/beadloom/cli.py           # +search command, +--full flag, -auto flag
+src/beadloom/db.py            # +file_index, +bundle_cache, +search_index (FTS5)
+src/beadloom/graph_loader.py  # +update_node_in_yaml
+src/beadloom/mcp_server.py    # +3 write tools, +L1/L2 cache, +auto-reindex
+src/beadloom/reindex.py       # +incremental_reindex, +FTS5 population
+src/beadloom/search.py        # NEW: FTS5 search engine
+src/beadloom/sync_engine.py   # +mark_synced_by_ref
+AGENTS.md                     # -httpx, -llm_updater, +MCP write tools docs
+pyproject.toml                # +[search] optional deps
 ```

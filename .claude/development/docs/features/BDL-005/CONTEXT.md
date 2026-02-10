@@ -2,7 +2,8 @@
 
 > **Last updated:** 2026-02-11
 > **Phase:** Strategy Phase 4
-> **Status:** ACCEPTED
+> **Status:** COMPLETE
+> **Version:** 0.6.0
 > **Depends on:** BDL-004 (v0.5.0 complete)
 
 ---
@@ -19,14 +20,14 @@ Make Beadloom fast, searchable, and fully agent-native — with no LLM API depen
 
 | # | Item | Status | Bead |
 |---|------|--------|------|
-| 4.1 | L1 cache integration in MCP | TODO | beadloom-oaz |
-| 4.7 | Remove --auto + LLM API | BLOCKED(4.5) | beadloom-v6b |
-| 4.2 | Incremental reindex | TODO | beadloom-6km |
-| 4.5 | MCP write tools (update_node, mark_synced) | TODO | beadloom-gjh |
-| 4.3 | Auto-reindex in MCP | BLOCKED(4.2) | beadloom-9lr |
-| 4.4 | Bundle caching in SQLite | BLOCKED(4.1) | beadloom-p5q |
-| 4.8 | AGENTS.md update | BLOCKED(4.5,4.7) | beadloom-21b |
-| 4.6 | Semantic search (FTS5 + sqlite-vec) | BLOCKED(4.2) | beadloom-vg5 |
+| 4.1 | L1 cache integration in MCP | DONE | beadloom-oaz |
+| 4.2 | Incremental reindex | DONE | beadloom-6km |
+| 4.3 | Auto-reindex in MCP | DONE | beadloom-9lr |
+| 4.4 | Bundle caching in SQLite (L2) | DONE | beadloom-p5q |
+| 4.5 | MCP write tools (update_node, mark_synced, search) | DONE | beadloom-gjh |
+| 4.6 | Semantic search (FTS5 + sqlite-vec) | DONE | beadloom-vg5 |
+| 4.7 | Remove --auto + LLM API | DONE | beadloom-v6b |
+| 4.8 | AGENTS.md cleanup & update | DONE | beadloom-21b |
 
 ## Key Decisions
 
@@ -40,20 +41,39 @@ Make Beadloom fast, searchable, and fully agent-native — with no LLM API depen
 | **sqlite-vec + fastembed** | Lightweight local embeddings (~80MB), no API calls |
 | **MCP write tools** | Agent needs mutation capability to complete agent-native workflow |
 | **Additive schema only** | No SCHEMA_VERSION bump, backward compatible |
+| **Graph YAML change → full reindex** | Pragmatic escape hatch; incremental graph is complex |
+| **L2 returns full bundle** | Agent in new session needs data; L1 returns short cached response |
 
-## Existing Infrastructure (validated)
+## Implementation Summary
 
-| Component | Status | Location |
-|-----------|--------|----------|
-| `ContextCache` class | EXISTS (unused) | `cache.py:1-98` |
-| `--auto` flag (hidden, deprecated) | EXISTS | `cli.py:675` |
-| `reindex()` (full rebuild) | EXISTS | `reindex.py:45-278` |
-| `file_hash` in code_symbols | EXISTS | `code_symbols.file_hash` |
-| `docs.hash` | EXISTS | `docs.hash` |
-| `meta.last_reindex_at` | EXISTS | `meta` table |
-| Stale index warning in MCP | EXISTS | `mcp_server.py` |
-| Levenshtein suggestions | EXISTS | `context_builder.py:suggest_ref_id()` |
-| `mark_synced()` in sync_engine | EXISTS (partial) | `sync_engine.py` |
-| `health_snapshots` table | EXISTS | `db.py` |
-| YAML graph loader | EXISTS | `graph_loader.py` |
-| MCP server (5 tools) | EXISTS | `mcp_server.py` |
+| Component | Files Changed | Tests Added |
+|-----------|---------------|-------------|
+| L1 cache + etag | `cache.py`, `mcp_server.py` | 8 |
+| Incremental reindex | `reindex.py`, `db.py`, `cli.py` | 10 |
+| Auto-reindex | `mcp_server.py` | 3 |
+| L2 SQLite cache | `cache.py`, `db.py`, `mcp_server.py` | 8 |
+| MCP write tools | `mcp_server.py`, `graph_loader.py`, `sync_engine.py` | 9 |
+| FTS5 search | `search.py` (new), `db.py`, `reindex.py`, `cli.py`, `mcp_server.py` | 23 |
+| Remove --auto | `cli.py`, `test_cli_sync_update.py` | 1 |
+| AGENTS.md | `AGENTS.md` | 0 |
+
+**Total:** 398 → 464 tests (+66), mypy strict clean, ruff clean
+
+## New Schema Tables
+
+| Table | Type | Drops on reindex? |
+|-------|------|-------------------|
+| `file_index` | Regular | No (updated incrementally) |
+| `bundle_cache` | Regular | No (cleared, not dropped) |
+| `search_index` | FTS5 virtual | Yes (rebuilt from nodes+chunks) |
+
+## New/Updated Modules
+
+| Module | Purpose |
+|--------|---------|
+| `search.py` (NEW) | FTS5 query builder, populate_search_index, has_fts5 |
+| `cache.py` | Added `SqliteCache` L2 class, `compute_etag()` |
+| `reindex.py` | Added `incremental_reindex()`, file hash diffing |
+| `mcp_server.py` | 8 tools (5→8), two-tier cache, auto-reindex |
+| `graph_loader.py` | Added `update_node_in_yaml()` |
+| `sync_engine.py` | Added `mark_synced_by_ref()` |
