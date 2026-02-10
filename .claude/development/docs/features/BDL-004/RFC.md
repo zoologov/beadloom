@@ -1,6 +1,6 @@
 # RFC-0004: Phase 3 — Team Adoption
 
-> **Status:** Accepted
+> **Status:** Accepted (implemented in v0.5.0)
 > **Date:** 2026-02-10
 > **Phase:** 3 (Strategy v0.5)
 > **Depends on:** BDL-003 (v0.4.0 — lower the barrier complete)
