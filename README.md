@@ -1,14 +1,53 @@
 # Beadloom
 
-**From documentation bedlam to structured knowledge.**
+**Your architecture shouldn't live in one person's head.**
 
-Beadloom is a local developer tool that turns scattered documentation, code, and architectural knowledge into a queryable context layer for humans and AI agents.
+[![License: MIT](https://img.shields.io/github/license/zoologov/beadloom)](LICENSE)
+[![GitHub release](https://img.shields.io/github/v/release/zoologov/beadloom)](https://github.com/zoologov/beadloom/releases)
+[![PyPI](https://img.shields.io/pypi/v/beadloom)](https://pypi.org/project/beadloom/)
+[![Python](https://img.shields.io/pypi/pyversions/beadloom)](https://pypi.org/project/beadloom/)
+[![CI](https://img.shields.io/github/actions/workflow/status/zoologov/beadloom/ci.yml?label=CI)](https://github.com/zoologov/beadloom/actions)
+[![mypy: strict](https://img.shields.io/badge/mypy-strict-blue)](https://mypy-lang.org/)
+[![code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![coverage: 80%+](https://img.shields.io/badge/coverage-80%25%2B-green)](pyproject.toml)
 
-It solves two problems of AI-assisted development on large codebases:
+---
 
-1. **Context window waste.** Agents spend most of their tokens searching and reading docs/code before doing actual work. Beadloom provides a ready-made, compact context bundle for any feature/domain/service — zero search tokens.
+Beadloom is a knowledge management tool for codebases. It turns scattered architecture knowledge into an explicit, queryable graph that lives in your Git repository — accessible to both humans and AI agents.
 
-2. **Documentation rot.** After code changes, related docs go stale silently. Beadloom tracks doc↔code links and flags outdated documentation on every commit.
+> IDE finds code. Beadloom tells you what that code means in the context of your system.
+
+**Platforms:** macOS, Linux, Windows &nbsp;|&nbsp; **Python:** 3.10+
+
+## Why Beadloom?
+
+Large codebases have a knowledge problem that code search alone doesn't solve:
+
+- **"Only two people understand how this system works."** Architecture knowledge lives in heads, not in the repo. When those people leave, the knowledge goes with them.
+- **"The docs are lying."** Documentation goes stale within weeks. Nobody notices until an agent or a new hire builds on top of outdated specs.
+- **"AI agents reinvent context every session."** Each agent run starts from scratch — grepping, reading READMEs, guessing which files matter. Most of the context window burns on orientation, not on actual work.
+
+Beadloom solves this with two primitives:
+
+1. **Context Oracle** — a knowledge graph (YAML in Git) that maps your domains, features, services, and their relationships. Query any node and get a deterministic, compact context bundle in <20ms. Same query, same result, every time.
+
+2. **Doc Sync Engine** — tracks which docs correspond to which code. Detects stale documentation on every commit. No more "the spec says X but the code does Y".
+
+### Deterministic context, not probabilistic guessing
+
+IDE indexers use semantic search — an LLM decides what's relevant. This works for "find similar code", but fails for "explain this feature in the context of the whole system".
+
+Beadloom uses **deterministic graph traversal**: your team defines the architecture graph, and BFS produces the same context bundle every time. The graph is YAML in Git — reviewable in PRs, auditable, version-controlled.
+
+|  | Semantic search (IDE) | Beadloom |
+|---|---|---|
+| **Answers** | "Where is this class?" | "What is this feature and how does it fit?" |
+| **Method** | Embeddings + LLM ranking | Explicit graph + BFS traversal |
+| **Result** | Probabilistic file list | Deterministic context bundle |
+| **Docs** | Doesn't track freshness | Catches stale docs on every commit |
+| **Knowledge** | Dies with the session | Lives in Git, survives team changes |
+
+Beadloom doesn't replace your IDE. It gives your IDE — and your agents — the architectural context they can't infer from code alone.
 
 ## Install
 
@@ -20,31 +59,27 @@ pipx install beadloom            # alternative
 ## Quick start
 
 ```bash
-# 1. Bootstrap: scan code and generate an initial knowledge graph
+# 1. Scan your codebase and generate a knowledge graph
 beadloom init --bootstrap
 
-# 2. Review and edit the generated graph YAML files
-#    (nodes = features, services, entities; edges = relationships)
-vi .beadloom/_graph/bootstrap.yml
+# 2. Review the generated graph (edit domains, rename nodes, add edges)
+vi .beadloom/_graph/services.yml
 
-# 3. Build the SQLite index from graph + docs + code
+# 3. Build the index and start using it
 beadloom reindex
-
-# 4. Check project status
-beadloom status
-
-# 5. Get a context bundle for a feature or domain
-beadloom ctx AUTH-001              # human-readable Markdown
-beadloom ctx AUTH-001 --json       # machine-readable JSON
-
-# 6. Check documentation freshness
-beadloom sync-check
-
-# 7. Set up MCP for AI agents
-beadloom setup-mcp
+beadloom ctx AUTH-001              # get context for a feature
+beadloom sync-check                # check if docs are up to date
 ```
 
-Agents connect via MCP (Model Context Protocol) -- no HTTP daemon, no extra setup:
+No documentation required to start — Beadloom bootstraps from code structure alone.
+
+### Connect AI agents via MCP
+
+```bash
+beadloom setup-mcp                 # creates .mcp.json automatically
+```
+
+Agents call `get_context("AUTH-001")` and receive a ready-made bundle — zero search tokens:
 
 ```json
 {
@@ -57,37 +92,86 @@ Agents connect via MCP (Model Context Protocol) -- no HTTP daemon, no extra setu
 }
 ```
 
+Works with Claude Code, Cursor, and any MCP-compatible tool.
+
+## Who is it for?
+
+**Tech Lead / Architect** — You want architecture knowledge to be explicit, versionable, and survive team rotation. Beadloom makes the implicit explicit: domains, features, services, dependencies — all in YAML, all in Git.
+
+**Platform / DevEx Engineer** — You build tooling for the team. Beadloom gives your agents structured context out of the box (via MCP), and your CI pipeline a doc freshness check that actually works.
+
+**Individual Developer** — You're tired of spending the first hour on every task figuring out "how does this part of the system work?" `beadloom ctx FEATURE-ID` gives you the answer in seconds.
+
 ## Key features
 
-- **Context Oracle** — deterministic graph traversal → compact JSON bundle in <20ms
-- **Doc Sync Engine** — tracks code changes, detects stale documentation, integrates with git hooks
-- **Onboarding** — bootstrap graph from code (no docs needed), import existing docs, incremental coverage
+- **Context Oracle** — deterministic graph traversal, compact JSON bundle in <20ms
+- **Doc Sync Engine** — tracks code↔doc relationships, detects stale documentation, integrates with git hooks
+- **Code-first onboarding** — bootstrap a knowledge graph from code structure alone; no docs needed to start
+- **Doc import** — classify and link existing scattered documentation (`init --import`)
 - **MCP server** — native integration with Claude Code, Cursor, and other MCP-compatible agents
-- **Local-first** — single CLI binary + single SQLite file, no Docker, no cloud dependencies
+- **Local-first** — single CLI + single SQLite file, no Docker, no cloud dependencies
 
 ## How it works
 
-Beadloom maintains a **knowledge graph** that maps your project's architecture. The graph is
-defined in YAML files under `.beadloom/_graph/` and consists of **nodes** (features, services,
-domains, entities, ADRs) connected by **edges** (part_of, uses, depends_on, etc.).
+Beadloom maintains a **knowledge graph** defined in YAML files under `.beadloom/_graph/`. The graph consists of **nodes** (features, services, domains, entities, ADRs) connected by **edges** (part_of, uses, depends_on, etc.).
 
-The **indexing pipeline** reads three sources and merges them into a single SQLite database:
+The indexing pipeline merges three sources into a single SQLite database:
 
-1. **Graph YAML** -- nodes and edges that describe the project structure.
-2. **Documentation** -- Markdown files linked to graph nodes, split into searchable chunks.
-3. **Code** -- source files parsed with tree-sitter to extract symbols (functions, classes) and
-   `# beadloom:key=value` annotations that link code to graph nodes.
+1. **Graph YAML** — nodes and edges that describe the project architecture
+2. **Documentation** — Markdown files linked to graph nodes, split into searchable chunks
+3. **Code** — source files parsed with tree-sitter to extract symbols and `# beadloom:feature=AUTH-001` annotations
 
-When an agent (or human) requests context for a node, the **Context Oracle** runs a
-breadth-first traversal from that node, collects the relevant subgraph, documentation chunks,
-and code symbols, then returns a compact JSON bundle -- typically in under 20ms.
+When you request context for a node, the Context Oracle runs a breadth-first traversal, collects the relevant subgraph, documentation, and code symbols, and returns a compact bundle.
 
-The **Doc Sync Engine** tracks which documentation files correspond to which code files. On every
-commit (via a git hook), it detects stale docs and either warns or blocks the commit.
+The Doc Sync Engine tracks which documentation files correspond to which code files. On every commit (via a git hook), it detects stale docs and either warns or blocks the commit.
+
+## CLI commands
+
+| Command | Description |
+|---------|-------------|
+| `init --bootstrap` | Scan code and generate an initial knowledge graph |
+| `init --import DIR` | Import and classify existing documentation |
+| `reindex` | Rebuild the SQLite index from graph, docs, and code |
+| `ctx REF_ID` | Get a context bundle (Markdown or `--json`) |
+| `graph [REF_ID]` | Visualize the knowledge graph (Mermaid or JSON) |
+| `status` | Project index statistics and documentation coverage |
+| `doctor` | Validate the knowledge graph |
+| `sync-check` | Check doc↔code synchronization status |
+| `sync-update REF_ID` | Review and update stale docs (supports `--auto` with LLM) |
+| `install-hooks` | Install the beadloom pre-commit hook |
+| `setup-mcp` | Configure MCP server for AI agents |
+| `mcp-serve` | Run the MCP server (stdio transport) |
+
+## MCP tools
+
+| Tool | Description |
+|------|-------------|
+| `get_context` | Context bundle for a ref_id (graph + docs + code symbols) |
+| `get_graph` | Subgraph around a node (nodes and edges as JSON) |
+| `list_nodes` | List graph nodes, optionally filtered by kind |
+| `sync_check` | Check if documentation is up-to-date with code |
+| `get_status` | Documentation coverage and index statistics |
+
+## Configuration
+
+All project data lives under `.beadloom/` in your repository root:
+
+- **`.beadloom/config.yml`** — scan paths, languages, sync engine settings
+- **`.beadloom/_graph/*.yml`** — knowledge graph definition (YAML, version-controlled)
+- **`.beadloom/beadloom.db`** — SQLite index (auto-generated, add to `.gitignore`)
+
+Link code to graph nodes with annotations:
+
+```python
+# beadloom:feature=AUTH-001
+# beadloom:service=user-service
+def authenticate(user_id: str) -> bool:
+    ...
+```
 
 ## Documentation structure
 
-Beadloom uses a **domain-first** layout — features are grouped under their domain, not in a flat list:
+Beadloom uses a domain-first layout:
 
 ```
 docs/
@@ -95,18 +179,14 @@ docs/
   decisions/
     ADR-001-cache-strategy.md
   domains/
-    routing/
-      README.md              # domain overview, invariants
+    auth/
+      README.md                  # domain overview, invariants
       features/
-        PROJ-123/
+        AUTH-001/
           SPEC.md
-          API.md
     billing/
       README.md
-      features/
-        PROJ-456/
-          SPEC.md
-  _imported/                 # unclassified docs from import
+  _imported/                     # unclassified docs from import
 ```
 
 ## Beads integration
@@ -117,82 +197,27 @@ Beadloom complements [Beads](https://github.com/steveyegge/beads) by providing s
 
 Beadloom works independently of Beads — the integration is optional.
 
-## CLI commands
-
-| Command | Description |
-|---------|-------------|
-| `init --bootstrap` | Scan code and generate an initial knowledge graph |
-| `init --import DIR` | Import and classify existing documentation |
-| `reindex` | Drop and rebuild the SQLite index from graph, docs, and code |
-| `ctx REF_ID` | Get a context bundle (graph + docs + code symbols) |
-| `graph [REF_ID]` | Show the knowledge graph as Mermaid or JSON |
-| `status` | Show project index statistics and doc coverage |
-| `doctor` | Run validation checks on the knowledge graph |
-| `sync-check` | Check doc-code synchronization status |
-| `sync-update REF_ID` | Show stale docs and update them (supports `--auto`) |
-| `install-hooks` | Install or remove the beadloom pre-commit hook |
-| `setup-mcp` | Create or update `.mcp.json` for the MCP server |
-| `mcp-serve` | Run the MCP server (stdio transport) |
-
-All commands accept `--project PATH` to specify a project root other than the current directory.
-
-## MCP tools
-
-AI agents connect via MCP and can call these tools:
-
-| Tool | Description |
-|------|-------------|
-| `get_context` | Get a context bundle for a ref_id (graph + docs + code symbols) |
-| `get_graph` | Get a subgraph around a node (nodes and edges as JSON) |
-| `list_nodes` | List all graph nodes, optionally filtered by kind |
-| `sync_check` | Check if documentation is up-to-date with code |
-| `get_status` | Get project documentation coverage and index statistics |
-
-## Configuration
-
-Beadloom stores all project data under `.beadloom/` in your repository root:
-
-- **`.beadloom/config.yml`** -- project settings: `scan_paths`, `languages`, sync engine options.
-- **`.beadloom/_graph/*.yml`** -- knowledge graph definition (nodes and edges in YAML).
-- **`.beadloom/beadloom.db`** -- SQLite index (auto-generated by `reindex`, add to `.gitignore`).
-
-Code annotations link source files to graph nodes:
-
-```python
-# beadloom:feature=AUTH-001
-# beadloom:service=user-service
-def authenticate(user_id: str) -> bool:
-    ...
-```
-
 ## Development
 
 ```bash
-# Install with dev dependencies
-uv sync --dev
-
-# Run tests
-uv run pytest
-
-# Lint and format
-uv run ruff check src/
-uv run ruff format src/
-
-# Type checking
-uv run mypy
+uv sync --dev              # install with dev dependencies
+uv run pytest              # run tests
+uv run ruff check src/     # lint
+uv run ruff format src/    # format
+uv run mypy                # type checking (strict mode)
 ```
 
-## Documentation
+## Docs
 
 | Document | Description |
 |----------|-------------|
-| [docs/architecture.md](docs/architecture.md) | System design and component overview |
-| [docs/getting-started.md](docs/getting-started.md) | Quick start guide |
-| [docs/context-oracle.md](docs/context-oracle.md) | BFS algorithm and context assembly |
-| [docs/cli-reference.md](docs/cli-reference.md) | CLI commands reference |
-| [docs/mcp-server.md](docs/mcp-server.md) | MCP integration guide |
-| [docs/sync-engine.md](docs/sync-engine.md) | Doc sync engine details |
-| [docs/graph-format.md](docs/graph-format.md) | YAML graph format specification |
+| [architecture.md](docs/architecture.md) | System design and component overview |
+| [getting-started.md](docs/getting-started.md) | Quick start guide |
+| [context-oracle.md](docs/context-oracle.md) | BFS algorithm and context assembly |
+| [cli-reference.md](docs/cli-reference.md) | CLI commands reference |
+| [mcp-server.md](docs/mcp-server.md) | MCP integration guide |
+| [sync-engine.md](docs/sync-engine.md) | Doc sync engine details |
+| [graph-format.md](docs/graph-format.md) | YAML graph format specification |
 
 ## License
 
