@@ -53,7 +53,7 @@ dev = [
     "types-PyYAML>=6.0",
 ]
 all = [
-    "beadloom[languages,search,dev]",
+    "beadloom[languages,dev]",
 ]
 
 [project.scripts]
