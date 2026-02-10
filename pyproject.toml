@@ -118,6 +118,10 @@ disallow_any_generics = true
 packages = ["beadloom"]
 mypy_path = "src"
 
+[[tool.mypy.overrides]]
+module = ["watchfiles", "watchfiles.*"]
+ignore_missing_imports = true
+
 [tool.coverage.run]
 source = ["beadloom"]
 branch = true

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterable
 
 DEFAULT_DEBOUNCE_MS = 500
 
@@ -49,7 +49,7 @@ def _is_graph_file(path_str: str, project_root: Path) -> bool:
 
 
 def _filter_relevant(
-    changes: set[tuple[object, str]],
+    changes: Iterable[tuple[object, str]],
     project_root: Path,
 ) -> list[tuple[object, str]]:
     """Keep only changes with watched extensions, ignoring hidden/temp files."""
@@ -114,7 +114,7 @@ def watch(
     Requires ``watchfiles`` (optional dependency).
     """
     from rich.console import Console
-    from watchfiles import watch as fs_watch  # type: ignore[import-not-found]  # optional dep
+    from watchfiles import watch as fs_watch
 
     console = Console()
 
