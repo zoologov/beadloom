@@ -553,6 +553,26 @@ class TestIndexImports:
         count = index_imports(tmp_path, conn)
         assert count == 2
 
+    def test_stores_relative_paths(
+        self,
+        tmp_path: Path,
+        conn: sqlite3.Connection,
+    ) -> None:
+        """file_path in code_imports is stored as relative, not absolute."""
+        from beadloom.import_resolver import index_imports
+
+        src = tmp_path / "src" / "myapp"
+        src.mkdir(parents=True)
+        (src / "main.py").write_text("import os\n")
+
+        index_imports(tmp_path, conn)
+
+        row = conn.execute("SELECT file_path FROM code_imports").fetchone()
+        assert row is not None
+        path = row["file_path"]
+        assert not path.startswith("/"), f"Expected relative path, got: {path}"
+        assert path == "src/myapp/main.py"
+
     def test_idempotent_reindex(
         self,
         tmp_path: Path,
@@ -571,3 +591,245 @@ class TestIndexImports:
 
         rows = conn.execute("SELECT * FROM code_imports").fetchall()
         assert len(rows) == 1
+
+
+# ===================================================================
+# Hierarchical source-prefix resolution
+# ===================================================================
+
+
+class TestHierarchicalResolution:
+    """Tests for the new path-prefix matching resolver."""
+
+    def test_resolves_django_import_via_source(
+        self,
+        tmp_path: Path,
+        conn: sqlite3.Connection,
+    ) -> None:
+        """Django-style import resolves via node source prefix."""
+        from beadloom.import_resolver import resolve_import_to_node
+
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("apps-accounts", "domain", "Accounts", "backend/apps/accounts/"),
+        )
+        conn.commit()
+
+        result = resolve_import_to_node(
+            "apps.accounts.models", tmp_path, conn,
+            scan_paths=["backend"],
+        )
+        assert result == "apps-accounts"
+
+    def test_resolves_deepest_node(
+        self,
+        tmp_path: Path,
+        conn: sqlite3.Connection,
+    ) -> None:
+        """When multiple nodes match, returns the deepest (most specific)."""
+        from beadloom.import_resolver import resolve_import_to_node
+
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("apps", "domain", "Apps", "backend/apps/"),
+        )
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("apps-core", "service", "Core", "backend/apps/core/"),
+        )
+        conn.commit()
+
+        result = resolve_import_to_node(
+            "apps.core.models", tmp_path, conn,
+            scan_paths=["backend"],
+        )
+        assert result == "apps-core"
+
+    def test_ts_alias_resolves(
+        self,
+        tmp_path: Path,
+        conn: sqlite3.Connection,
+    ) -> None:
+        """TS @/ alias resolves to node under src/."""
+        from beadloom.import_resolver import resolve_import_to_node
+
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("src-shared", "service", "Shared", "frontend/src/shared/"),
+        )
+        conn.commit()
+
+        result = resolve_import_to_node(
+            "@/shared/utils", tmp_path, conn,
+            scan_paths=["frontend"], is_ts=True,
+        )
+        assert result == "src-shared"
+
+    def test_npm_package_returns_none(
+        self,
+        tmp_path: Path,
+        conn: sqlite3.Connection,
+    ) -> None:
+        """npm package imports return None (not local code)."""
+        from beadloom.import_resolver import resolve_import_to_node
+
+        result = resolve_import_to_node(
+            "vue", tmp_path, conn, is_ts=True,
+        )
+        assert result is None
+
+    def test_ts_tilde_alias_resolves(
+        self,
+        tmp_path: Path,
+        conn: sqlite3.Connection,
+    ) -> None:
+        """TS ~/ alias also resolves to src/."""
+        from beadloom.import_resolver import resolve_import_to_node
+
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("src-hooks", "domain", "Hooks", "frontend/src/hooks/"),
+        )
+        conn.commit()
+
+        result = resolve_import_to_node(
+            "~/hooks/useSomething", tmp_path, conn,
+            scan_paths=["frontend"], is_ts=True,
+        )
+        assert result == "src-hooks"
+
+
+# ===================================================================
+# create_import_edges
+# ===================================================================
+
+
+class TestCreateImportEdges:
+    """Tests for depends_on edge creation from resolved imports."""
+
+    def test_creates_depends_on_edge(
+        self,
+        conn: sqlite3.Connection,
+    ) -> None:
+        """Resolved import creates a depends_on edge between nodes."""
+        from beadloom.import_resolver import create_import_edges
+
+        # Setup: two nodes.
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("apps-tasks", "domain", "Tasks", "backend/apps/tasks/"),
+        )
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("apps-core", "service", "Core", "backend/apps/core/"),
+        )
+        # A resolved import from tasks → core.
+        conn.execute(
+            "INSERT INTO code_imports "
+            "(file_path, line_number, import_path, resolved_ref_id, file_hash) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("backend/apps/tasks/views.py", 1, "apps.core.models", "apps-core", "abc"),
+        )
+        conn.commit()
+
+        edges = create_import_edges(conn)
+        assert edges == 1
+
+        row = conn.execute(
+            "SELECT * FROM edges WHERE kind = 'depends_on'"
+        ).fetchone()
+        assert row is not None
+        assert row["src_ref_id"] == "apps-tasks"
+        assert row["dst_ref_id"] == "apps-core"
+
+    def test_no_self_edges(
+        self,
+        conn: sqlite3.Connection,
+    ) -> None:
+        """Import within the same node does not create an edge."""
+        from beadloom.import_resolver import create_import_edges
+
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("apps-core", "service", "Core", "backend/apps/core/"),
+        )
+        conn.execute(
+            "INSERT INTO code_imports "
+            "(file_path, line_number, import_path, resolved_ref_id, file_hash) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("backend/apps/core/views.py", 1, "apps.core.models", "apps-core", "abc"),
+        )
+        conn.commit()
+
+        edges = create_import_edges(conn)
+        assert edges == 0
+
+    def test_deduplicates_edges(
+        self,
+        conn: sqlite3.Connection,
+    ) -> None:
+        """Multiple imports between same nodes create only one edge."""
+        from beadloom.import_resolver import create_import_edges
+
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("apps-tasks", "domain", "Tasks", "backend/apps/tasks/"),
+        )
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("apps-core", "service", "Core", "backend/apps/core/"),
+        )
+        # Two different imports from same source to same target.
+        conn.execute(
+            "INSERT INTO code_imports "
+            "(file_path, line_number, import_path, resolved_ref_id, file_hash) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("backend/apps/tasks/views.py", 1, "apps.core.models", "apps-core", "abc"),
+        )
+        conn.execute(
+            "INSERT INTO code_imports "
+            "(file_path, line_number, import_path, resolved_ref_id, file_hash) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("backend/apps/tasks/views.py", 2, "apps.core.choices", "apps-core", "abc"),
+        )
+        conn.commit()
+
+        edges = create_import_edges(conn)
+        assert edges == 1
+
+    def test_index_imports_creates_edges(
+        self,
+        tmp_path: Path,
+        conn: sqlite3.Connection,
+    ) -> None:
+        """Full index_imports pipeline creates depends_on edges."""
+        from beadloom.import_resolver import index_imports
+
+        # Setup: nodes with source directories.
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("api", "feature", "API", "src/api/"),
+        )
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("auth", "domain", "Auth", "src/auth/"),
+        )
+        conn.commit()
+
+        # File in api/ imports from auth.
+        api_dir = tmp_path / "src" / "api"
+        api_dir.mkdir(parents=True)
+        (api_dir / "views.py").write_text("from auth import tokens\n")
+
+        auth_dir = tmp_path / "src" / "auth"
+        auth_dir.mkdir(parents=True)
+        (auth_dir / "tokens.py").write_text("TOKEN = 'abc'\n")
+
+        index_imports(tmp_path, conn)
+
+        edges = conn.execute(
+            "SELECT * FROM edges WHERE kind = 'depends_on'"
+        ).fetchall()
+        assert len(edges) == 1
+        assert edges[0]["src_ref_id"] == "api"
+        assert edges[0]["dst_ref_id"] == "auth"

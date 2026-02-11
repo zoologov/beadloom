@@ -40,6 +40,14 @@ _RECURSIVE_SKIP = frozenset({
     ".pytest_cache", "htmlcov", "coverage",
 })
 
+# Directories to exclude from architecture node generation during clustering.
+# These contain generated/third-party/non-code assets, not project architecture.
+_CLUSTER_SKIP = frozenset({
+    "static", "staticfiles", "templates", "migrations", "fixtures",
+    "locale", "locales", "media", "assets", "css", "scss", "fonts",
+    "images", "img", "icons",
+})
+
 # Code extensions to scan.
 _CODE_EXTENSIONS = frozenset({
     ".py", ".ts", ".tsx", ".js", ".jsx", ".vue", ".go", ".rs",
@@ -156,7 +164,12 @@ def _cluster_by_dirs(
             continue
 
         for sub in sorted(src_dir.iterdir()):
-            if sub.is_dir() and not sub.name.startswith("_") and sub.name not in _RECURSIVE_SKIP:
+            if (
+                sub.is_dir()
+                and not sub.name.startswith("_")
+                and sub.name not in _RECURSIVE_SKIP
+                and sub.name not in _CLUSTER_SKIP
+            ):
                 files = []
                 for f in sub.rglob("*"):
                     if (
@@ -199,7 +212,7 @@ def _cluster_with_children(
         for sub in sorted(src_dir.iterdir()):
             if not sub.is_dir() or sub.name.startswith("_"):
                 continue
-            if sub.name in _RECURSIVE_SKIP:
+            if sub.name in _RECURSIVE_SKIP or sub.name in _CLUSTER_SKIP:
                 continue
 
             files: list[str] = []
@@ -209,7 +222,7 @@ def _cluster_with_children(
                 if item.is_file() and item.suffix in _CODE_EXTENSIONS:
                     files.append(str(item.relative_to(project_root)))
                 elif item.is_dir() and not item.name.startswith("_"):
-                    if item.name in _RECURSIVE_SKIP:
+                    if item.name in _RECURSIVE_SKIP or item.name in _CLUSTER_SKIP:
                         continue
                     child_files = []
                     for f in item.rglob("*"):
@@ -686,6 +699,21 @@ def interactive_init(project_root: Path) -> dict[str, Any]:
     generate_agents_md(project_root)
     result["agents_md_created"] = True
 
+    # Auto-reindex: populate DB with imports, edges, FTS.
+    console.print("\n[bold]Running reindex...[/bold]")
+    from beadloom.reindex import reindex as do_reindex
+
+    ri = do_reindex(project_root)
+    console.print(
+        f"  Indexed {ri.symbols_indexed} symbols, "
+        f"{ri.imports_indexed} imports"
+    )
+    result["reindex"] = {
+        "symbols": ri.symbols_indexed,
+        "imports": ri.imports_indexed,
+        "edges": ri.edges_loaded,
+    }
+
     # Final instructions.
     console.print("\n[green bold]Initialization complete![/green bold]")
     console.print("\nGenerated:")
@@ -694,7 +722,6 @@ def interactive_init(project_root: Path) -> dict[str, Any]:
     )
     console.print("\nNext steps:")
     console.print("  1. Review .beadloom/_graph/*.yml")
-    console.print("  2. Run [bold]beadloom reindex[/bold]")
-    console.print("  3. Run [bold]beadloom doctor[/bold] to verify")
+    console.print("  2. Run [bold]beadloom doctor[/bold] to verify")
 
     return result
