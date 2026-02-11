@@ -27,4 +27,6 @@ htmlcov/
 
 # Beadloom (auto-generated)
 .beadloom/beadloom.db
+.beadloom/beadloom.db-shm
+.beadloom/beadloom.db-wal
 .claude/development/STRATEGY.md
