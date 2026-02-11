@@ -1,6 +1,6 @@
 # PRD: BDL-007 — Architecture as Code & Ecosystem (v1.0)
 
-> **Status:** Draft
+> **Status:** Completed
 > **Date:** 2026-02-11
 > **Phase:** 6
 > **Target version:** 1.0.0

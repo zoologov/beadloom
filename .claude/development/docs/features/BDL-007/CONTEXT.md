@@ -3,7 +3,7 @@
 > **Phase:** 6
 > **Version:** 1.0.0
 > **RFC:** RFC-0007
-> **Status:** Planning
+> **Status:** Completed
 
 ---
 
@@ -142,11 +142,13 @@ Transform Beadloom from architecture documentation into an **Architecture as Cod
 
 ---
 
-## 7. Current State
+## 7. Final State
 
-- **Version:** 0.7.0
-- **Tests:** 541 passing
-- **Coverage:** 88.51%
-- **Beads:** 67 closed, 0 open
-- **CI:** green on Python 3.10–3.13
-- **Quality:** mypy strict clean, ruff clean
+- **Version:** 1.0.0
+- **Tests:** 653 passing (112 new for Phase 6)
+- **New modules:** import_resolver.py (404 lines), rule_engine.py (555 lines), linter.py (260 lines)
+- **New CLI command:** `beadloom lint` (--format, --strict, --no-reindex)
+- **DB schema:** v2 (+code_imports, +rules tables)
+- **Context bundle:** v2 (+constraints field)
+- **Self-lint:** clean (0 violations)
+- **Quality:** mypy --strict clean, ruff clean

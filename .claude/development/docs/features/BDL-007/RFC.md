@@ -1,6 +1,6 @@
 # RFC-0007: Architecture as Code — Rules, Lint & Constraints
 
-> **Status:** Draft
+> **Status:** Implemented
 > **Date:** 2026-02-11
 > **Phase:** 6 (v1.0)
 > **PRD:** BDL-007

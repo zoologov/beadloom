@@ -3,6 +3,7 @@
 > **Date:** 2026-02-11
 > **RFC:** RFC-0007
 > **Beads:** 6 + 1 epic
+> **Status:** Completed — all beads closed, v1.0.0 released
 
 ---
 
@@ -201,15 +202,15 @@ graph TD
 
 ## 4. Quality Gates
 
-| Gate | Target |
-|------|--------|
-| All tests pass | >= 620 total |
-| New tests | >= 85 |
-| Coverage | >= 80% |
-| mypy --strict | 0 errors |
-| ruff | 0 violations |
-| CI green | Python 3.10–3.13 |
-| Self-lint | beadloom lint on own codebase |
+| Gate | Target | Actual |
+|------|--------|--------|
+| All tests pass | >= 620 total | 653 |
+| New tests | >= 85 | 112 |
+| Coverage | >= 80% | met |
+| mypy --strict | 0 errors | 0 |
+| ruff | 0 violations | 0 |
+| CI green | Python 3.10–3.13 | pending push |
+| Self-lint | beadloom lint on own codebase | 0 violations |
 
 ---
 
