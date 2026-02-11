@@ -1294,7 +1294,15 @@ def ui(*, project: Path | None) -> None:
         click.echo("Error: database not found. Run `beadloom reindex` first.", err=True)
         sys.exit(1)
 
-    launch(db_path=db_path, project_root=project_root)
+    try:
+        launch(db_path=db_path, project_root=project_root)
+    except ImportError:
+        click.echo(
+            "Error: TUI requires 'textual'. "
+            "Install with: pip install beadloom[tui]",
+            err=True,
+        )
+        sys.exit(1)
 
 
 # beadloom:domain=watcher
