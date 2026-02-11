@@ -62,6 +62,13 @@ class BeadloomApp(App[None]):
 
             status_bar = self.query_one("#status-bar", StatusBar)
             status_bar.load_stats(conn)
+
+            # Auto-select first domain to populate detail panel
+            if domain_list.option_count > 0:
+                first = domain_list.get_option_at_index(0)
+                if first.id is not None:
+                    detail = self.query_one("#node-detail", NodeDetail)
+                    detail.show_node(conn, str(first.id))
         finally:
             conn.close()
 
@@ -72,7 +79,7 @@ class BeadloomApp(App[None]):
         conn = self._open_db()
         try:
             detail = self.query_one("#node-detail", NodeDetail)
-            detail.show_domain(conn, event.ref_id)
+            detail.show_node(conn, event.ref_id)
         finally:
             conn.close()
 

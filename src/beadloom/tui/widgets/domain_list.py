@@ -41,10 +41,11 @@ class DomainList(OptionList):
         for row in rows:
             ref_id: str = row["ref_id"]
 
-            # Count child nodes (nodes in this domain)
+            # Count edges involving this domain
             child_count: int = conn.execute(
-                "SELECT count(*) FROM edges WHERE dst_ref_id = ? AND kind = 'part_of'",
-                (ref_id,),
+                "SELECT count(*) FROM edges "
+                "WHERE src_ref_id = ? OR dst_ref_id = ?",
+                (ref_id, ref_id),
             ).fetchone()[0]
 
             # Check doc coverage
@@ -63,6 +64,13 @@ class DomainList(OptionList):
     def on_option_list_option_selected(
         self, event: OptionList.OptionSelected
     ) -> None:
-        """Handle option selection."""
+        """Handle option selection (click / Enter)."""
+        if event.option.id is not None:
+            self.post_message(self.DomainSelected(str(event.option.id)))
+
+    def on_option_list_option_highlighted(
+        self, event: OptionList.OptionHighlighted
+    ) -> None:
+        """Handle highlight change (arrow keys)."""
         if event.option.id is not None:
             self.post_message(self.DomainSelected(str(event.option.id)))
