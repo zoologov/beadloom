@@ -344,6 +344,83 @@ class TestBootstrapPresets:
 
 
 # ---------------------------------------------------------------------------
+# bootstrap_project — noise directory filtering (DEEP-04)
+# ---------------------------------------------------------------------------
+
+
+class TestBootstrapNoiseFilter:
+    """Non-code directories should not become architecture nodes."""
+
+    def test_static_dir_excluded(self, tmp_path: Path) -> None:
+        """static/ should not generate a node even if it has .js files."""
+        be = tmp_path / "backend"
+        be.mkdir()
+        # Real code dir.
+        apps = be / "apps"
+        apps.mkdir()
+        (apps / "views.py").write_text("def index(): pass\n")
+        # Noise dir with JS files (like Django staticfiles).
+        static = be / "static"
+        static.mkdir()
+        admin = static / "admin"
+        admin.mkdir()
+        (admin / "jquery.js").write_text("// jQuery\n")
+
+        result = bootstrap_project(tmp_path, preset_name="monolith")
+        ref_ids = {n["ref_id"] for n in result["nodes"]}
+        assert "apps" in ref_ids
+        assert "static" not in ref_ids
+
+    def test_templates_dir_excluded(self, tmp_path: Path) -> None:
+        """templates/ directory should be excluded from clustering."""
+        be = tmp_path / "backend"
+        be.mkdir()
+        apps = be / "apps"
+        apps.mkdir()
+        (apps / "views.py").write_text("pass\n")
+        tpl = be / "templates"
+        tpl.mkdir()
+        # Even with a .py file, templates should be skipped.
+        (tpl / "tags.py").write_text("pass\n")
+
+        result = bootstrap_project(tmp_path, preset_name="monolith")
+        ref_ids = {n["ref_id"] for n in result["nodes"]}
+        assert "templates" not in ref_ids
+
+    def test_migrations_dir_excluded(self, tmp_path: Path) -> None:
+        """migrations/ as a child dir should not become a node."""
+        src = tmp_path / "src"
+        src.mkdir()
+        apps = src / "users"
+        apps.mkdir()
+        (apps / "models.py").write_text("class User: pass\n")
+        mig = apps / "migrations"
+        mig.mkdir()
+        (mig / "0001_initial.py").write_text("pass\n")
+
+        result = bootstrap_project(tmp_path, preset_name="monolith")
+        ref_ids = {n["ref_id"] for n in result["nodes"]}
+        assert "users" in ref_ids
+        assert "users-migrations" not in ref_ids
+
+    def test_fixtures_dir_excluded(self, tmp_path: Path) -> None:
+        """fixtures/ directory should not become a node."""
+        src = tmp_path / "src"
+        src.mkdir()
+        apps = src / "core"
+        apps.mkdir()
+        (apps / "models.py").write_text("pass\n")
+        fix = apps / "fixtures"
+        fix.mkdir()
+        (fix / "data.py").write_text("pass\n")
+
+        result = bootstrap_project(tmp_path, preset_name="monolith")
+        ref_ids = {n["ref_id"] for n in result["nodes"]}
+        assert "core" in ref_ids
+        assert "core-fixtures" not in ref_ids
+
+
+# ---------------------------------------------------------------------------
 # bootstrap_project — zero-doc mode
 # ---------------------------------------------------------------------------
 
@@ -669,3 +746,27 @@ class TestInteractiveInit:
             result = interactive_init(tmp_path)
 
         assert result["mode"] == "cancelled"
+
+    def test_auto_reindex_after_bootstrap(self, tmp_path: Path) -> None:
+        """Interactive init runs reindex automatically after bootstrap."""
+        from unittest.mock import patch
+
+        src = tmp_path / "src"
+        src.mkdir()
+        svc = src / "api"
+        svc.mkdir()
+        (svc / "app.py").write_text("import os\ndef main():\n    pass\n")
+
+        with patch(
+            "rich.prompt.Prompt.ask",
+            side_effect=["bootstrap", "yes"],
+        ), patch("rich.console.Console"):
+            result = interactive_init(tmp_path)
+
+        assert result["mode"] == "bootstrap"
+        assert "reindex" in result
+        assert result["reindex"]["symbols"] >= 1
+
+        # Verify DB was created and populated.
+        db_path = tmp_path / ".beadloom" / "beadloom.db"
+        assert db_path.exists()

@@ -1168,15 +1168,27 @@ def init(
             f"Generated {result['nodes_generated']} nodes, "
             f"{result['edges_generated']} edges"
         )
+
+        # Auto-reindex to populate import analysis and depends_on edges.
+        from beadloom.db import open_db
+        from beadloom.reindex import reindex as do_reindex
+
+        ri = do_reindex(project_root)
+        if ri.imports_indexed > 0:
+            db_path = project_root / ".beadloom" / "beadloom.db"
+            conn = open_db(db_path)
+            dep_count = conn.execute(
+                "SELECT COUNT(*) FROM edges WHERE kind = 'depends_on'"
+            ).fetchone()[0]
+            conn.close()
+            click.echo(
+                f"Indexed {ri.imports_indexed} imports, "
+                f"{dep_count} dependency edges"
+            )
         click.echo(f"Config: {project_root / '.beadloom' / 'config.yml'}")
         click.echo(
             f"Agent instructions: "
             f"{project_root / '.beadloom' / 'AGENTS.md'}"
-        )
-        click.echo("")
-        click.echo(
-            "Next: review .beadloom/_graph/*.yml, "
-            "then run `beadloom reindex`"
         )
         return
 

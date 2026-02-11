@@ -23,6 +23,12 @@ if TYPE_CHECKING:
 # Rust built-in crates to skip.
 _RUST_BUILTIN_CRATES: frozenset[str] = frozenset({"std", "core", "alloc"})
 
+# Well-known TS/JS path aliases mapped to directory names.
+_TS_ALIAS_MAP: dict[str, str] = {
+    "@/": "src/",
+    "~/": "src/",
+}
+
 # Go standard library packages have no '/' in their path (heuristic).
 # We skip those.
 
@@ -298,25 +304,90 @@ def _import_path_to_file_paths(
     return candidates
 
 
+def _normalize_ts_import(import_path: str) -> str | None:
+    """Normalize a TS/JS import path, resolving known aliases.
+
+    Returns the normalized path (e.g. ``src/shared/utils``) or *None*
+    if the import is an npm package (not resolvable to a local node).
+    """
+    for alias, replacement in _TS_ALIAS_MAP.items():
+        if import_path.startswith(alias):
+            return replacement + import_path[len(alias):]
+    # Non-aliased, non-relative imports are npm packages — skip.
+    return None
+
+
+def _find_node_by_source_prefix(
+    dir_path: str,
+    scan_paths: list[str],
+    conn: sqlite3.Connection,
+) -> str | None:
+    """Find the graph node whose ``source`` directory contains *dir_path*.
+
+    Walks up the path hierarchy to find the deepest (most specific) node.
+    Handles both ``source`` values with and without trailing slashes.
+    """
+    prefixes = [f"{p}/" for p in scan_paths]
+    prefixes.append("")  # bare path
+
+    for prefix in prefixes:
+        candidate = f"{prefix}{dir_path}"
+        parts = candidate.split("/")
+        # Walk from deepest to shallowest.
+        for i in range(len(parts), 0, -1):
+            segment = "/".join(parts[:i])
+            # Try with and without trailing slash.
+            for source in (f"{segment}/", segment):
+                row = conn.execute(
+                    "SELECT ref_id FROM nodes WHERE source = ?",
+                    (source,),
+                ).fetchone()
+                if row is not None:
+                    return str(row[0])
+    return None
+
+
+def _find_node_for_file(
+    rel_path: str,
+    conn: sqlite3.Connection,
+) -> str | None:
+    """Find the graph node that *owns* a file by its relative path.
+
+    Walks up the directory hierarchy, matching against ``nodes.source``.
+    """
+    parts = rel_path.split("/")
+    # Skip the filename itself — start from its parent directory.
+    for i in range(len(parts) - 1, 0, -1):
+        segment = "/".join(parts[:i])
+        for source in (f"{segment}/", segment):
+            row = conn.execute(
+                "SELECT ref_id FROM nodes WHERE source = ?",
+                (source,),
+            ).fetchone()
+            if row is not None:
+                return str(row[0])
+    return None
+
+
 def resolve_import_to_node(
     import_path: str,
-    file_path: Path,  # kept for future use (relative resolution)
+    file_path: Path,
     conn: sqlite3.Connection,
     scan_paths: list[str] | None = None,
+    *,
+    is_ts: bool = False,
 ) -> str | None:
     """Map an import path to a graph node ref_id.
 
-    Strategy:
-    1. Convert import path to possible file paths
-    2. Look up file_path in code_symbols -> get annotations -> find matching node
-    3. Fallback: match file path against nodes.source column
+    Strategy (in order):
+    1. Code-symbols annotation lookup (``# beadloom:domain=X``).
+    2. Hierarchical source-prefix matching against ``nodes.source``.
 
     Returns ``None`` if no mapping found.
     """
-    prefixes = [f"{p}/" for p in (scan_paths or ["src", "lib", "app"])]
-    prefixes.append("")
+    effective_scan = scan_paths or ["src", "lib", "app"]
 
-    # Strategy 1: check code_symbols for files matching the import path
+    # Strategy 1: code_symbols annotation match.
     possible_files = _import_path_to_file_paths(import_path, scan_paths)
 
     for candidate in possible_files:
@@ -332,7 +403,6 @@ def resolve_import_to_node(
             except (json.JSONDecodeError, TypeError):
                 continue
 
-            # Look for domain/service/feature annotation and match to node ref_id
             for kind in ("domain", "service", "feature"):
                 value = annotations.get(kind)
                 if value is not None:
@@ -344,19 +414,16 @@ def resolve_import_to_node(
                     if node_row is not None:
                         return str(node_row[0])
 
-    # Strategy 2: match against nodes.source column
-    # Convert dotted path to directory-like path for matching
-    dir_path = import_path.replace(".", "/")
-    for prefix in prefixes:
-        candidate_source = f"{prefix}{dir_path}"
-        node_row = conn.execute(
-            "SELECT ref_id FROM nodes WHERE source = ?",
-            (candidate_source,),
-        ).fetchone()
-        if node_row is not None:
-            return str(node_row[0])
+    # Strategy 2: hierarchical source-prefix matching.
+    if is_ts:
+        normalized = _normalize_ts_import(import_path)
+        if normalized is None:
+            return None  # npm package — not resolvable
+        dir_path = normalized
+    else:
+        dir_path = import_path.replace(".", "/")
 
-    return None
+    return _find_node_by_source_prefix(dir_path, effective_scan, conn)
 
 
 def _collect_source_files(project_root: Path) -> list[Path]:
@@ -377,10 +444,51 @@ def _collect_source_files(project_root: Path) -> list[Path]:
     return sorted(files)
 
 
+def create_import_edges(conn: sqlite3.Connection) -> int:
+    """Create ``depends_on`` edges from resolved code imports.
+
+    For each resolved import, finds the importing file's owning node
+    and creates a ``depends_on`` edge to the target node (if different).
+
+    Returns the number of edges created.
+    """
+    rows = conn.execute(
+        "SELECT DISTINCT file_path, resolved_ref_id "
+        "FROM code_imports WHERE resolved_ref_id IS NOT NULL"
+    ).fetchall()
+
+    edges_created = 0
+    seen: set[tuple[str, str]] = set()
+
+    for row in rows:
+        rel_path: str = row[0]
+        target_ref_id: str = row[1]
+
+        source_ref_id = _find_node_for_file(rel_path, conn)
+        if not source_ref_id or source_ref_id == target_ref_id:
+            continue
+
+        edge_key = (source_ref_id, target_ref_id)
+        if edge_key in seen:
+            continue
+        seen.add(edge_key)
+
+        conn.execute(
+            "INSERT OR IGNORE INTO edges (src_ref_id, dst_ref_id, kind) "
+            "VALUES (?, ?, 'depends_on')",
+            (source_ref_id, target_ref_id),
+        )
+        edges_created += 1
+
+    conn.commit()
+    return edges_created
+
+
 def index_imports(project_root: Path, conn: sqlite3.Connection) -> int:
     """Scan all source files and index their imports into the code_imports table.
 
     Scans directories listed in ``scan_paths`` from config.yml.
+    After indexing, creates ``depends_on`` edges from resolved imports.
     Returns the count of imports indexed.
     """
     from beadloom.reindex import resolve_scan_paths
@@ -389,22 +497,26 @@ def index_imports(project_root: Path, conn: sqlite3.Connection) -> int:
     source_files = _collect_source_files(project_root)
     total = 0
 
+    ts_extensions = frozenset({".ts", ".tsx", ".js", ".jsx", ".vue"})
+
     for file_path in source_files:
         imports = extract_imports(file_path)
         if not imports:
             continue
 
-        # Compute file hash for the import records
         try:
             content = file_path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
 
         file_hash = hashlib.sha256(content.encode()).hexdigest()
+        rel_path = str(file_path.relative_to(project_root))
+        is_ts = file_path.suffix in ts_extensions
 
         for imp in imports:
             resolved = resolve_import_to_node(
-                imp.import_path, file_path, conn, scan_paths=scan_paths,
+                imp.import_path, file_path, conn,
+                scan_paths=scan_paths, is_ts=is_ts,
             )
             conn.execute(
                 "INSERT INTO code_imports"
@@ -413,9 +525,13 @@ def index_imports(project_root: Path, conn: sqlite3.Connection) -> int:
                 " ON CONFLICT(file_path, line_number, import_path)"
                 " DO UPDATE SET resolved_ref_id = excluded.resolved_ref_id,"
                 " file_hash = excluded.file_hash",
-                (str(file_path), imp.line_number, imp.import_path, resolved, file_hash),
+                (rel_path, imp.line_number, imp.import_path, resolved, file_hash),
             )
             total += 1
 
     conn.commit()
+
+    # Create depends_on edges from resolved imports.
+    create_import_edges(conn)
+
     return total
