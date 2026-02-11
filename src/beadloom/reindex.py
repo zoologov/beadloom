@@ -36,7 +36,12 @@ _TABLES_TO_DROP = [
 ]
 
 # File extensions to scan for code symbols.
-_CODE_EXTENSIONS = frozenset({".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"})
+_CODE_EXTENSIONS = frozenset({
+    ".py", ".ts", ".tsx", ".js", ".jsx", ".vue", ".go", ".rs",
+})
+
+# Default scan directories when config.yml has no scan_paths.
+_DEFAULT_SCAN_DIRS = ("src", "lib", "app")
 
 
 @dataclass
@@ -127,8 +132,8 @@ def _index_code_files(
     count = 0
     warnings: list[str] = []
 
-    # Scan common source directories.
-    scan_dirs = [project_root / "src", project_root / "lib", project_root / "app"]
+    # Scan directories from config.yml (or defaults).
+    scan_dirs = [project_root / d for d in resolve_scan_paths(project_root)]
     for scan_dir in scan_dirs:
         if not scan_dir.is_dir():
             continue
@@ -275,6 +280,23 @@ def _resolve_docs_dir(project_root: Path) -> Path:
     return project_root / "docs"
 
 
+def resolve_scan_paths(project_root: Path) -> list[str]:
+    """Resolve source scan directories from config.yml.
+
+    Reads ``scan_paths`` from ``.beadloom/config.yml``.  Falls back to
+    ``["src", "lib", "app"]`` when config is absent or has no scan_paths.
+    """
+    config_path = project_root / ".beadloom" / "config.yml"
+    if config_path.exists():
+        import yaml
+
+        config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+        paths = config.get("scan_paths")
+        if isinstance(paths, list) and paths:
+            return [str(p) for p in paths]
+    return list(_DEFAULT_SCAN_DIRS)
+
+
 def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResult:
     """Full reindex: drop all tables, re-create schema, reload everything.
 
@@ -380,9 +402,6 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
 # Incremental reindex helpers
 # ---------------------------------------------------------------------------
 
-_SCAN_DIRS = ("src", "lib", "app")
-
-
 def _compute_file_hash(path: Path) -> str:
     """Compute SHA-256 hash of a file."""
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -409,7 +428,7 @@ def _scan_project_files(
             files[rel] = (_compute_file_hash(f), "doc")
 
     # Code files
-    for dirname in _SCAN_DIRS:
+    for dirname in resolve_scan_paths(project_root):
         scan_dir = project_root / dirname
         if not scan_dir.is_dir():
             continue

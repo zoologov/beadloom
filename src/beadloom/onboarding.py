@@ -22,11 +22,28 @@ _MANIFESTS = frozenset({
 # Known source directories.
 _SOURCE_DIRS = frozenset({
     "src", "lib", "app", "services", "packages", "cmd", "internal",
+    "backend", "frontend", "server", "client", "api", "web", "mobile",
+})
+
+# Directories to skip during top-level fallback scan.
+_SKIP_DIRS = frozenset({
+    "node_modules", "venv", "__pycache__", "dist", "build",
+    "target", "vendor", "coverage", "htmlcov", "static", "assets",
+    "docs", "test", "tests", "scripts", "bin", "tmp", "log", "logs",
+    "mysql-data", "nginx",
+})
+
+# Directories to skip during recursive file scanning (inside source dirs).
+_RECURSIVE_SKIP = frozenset({
+    "node_modules", "__pycache__", "venv", ".venv", "dist", "build",
+    "target", "vendor", ".git", ".mypy_cache", ".ruff_cache",
+    ".pytest_cache", "htmlcov", "coverage",
 })
 
 # Code extensions to scan.
 _CODE_EXTENSIONS = frozenset({
-    ".py", ".ts", ".js", ".go", ".rs", ".java", ".kt", ".rb",
+    ".py", ".ts", ".tsx", ".js", ".jsx", ".vue", ".go", ".rs",
+    ".java", ".kt", ".rb",
 })
 
 # Doc classification patterns.
@@ -35,27 +52,63 @@ _FEATURE_RE = re.compile(r"(user\s+story|feature|requirement|spec)", re.I)
 _ARCH_RE = re.compile(r"(architect|system\s+design|infrastructure|deployment)", re.I)
 
 
+def _is_in_skip_dir(file_path: Path, base: Path) -> bool:
+    """Check if *file_path* is inside a directory that should be skipped."""
+    return any(part in _RECURSIVE_SKIP for part in file_path.relative_to(base).parts)
+
+
 def scan_project(project_root: Path) -> dict[str, Any]:
     """Scan project structure and return summary.
 
     Returns dict with manifests, source_dirs, file_count, languages.
+
+    Discovery strategy:
+    1. Look for directories matching ``_SOURCE_DIRS`` (known names).
+    2. If none found, fall back to scanning all non-hidden, non-vendor
+       directories for code files.
     """
     manifests: list[str] = []
     source_dirs: list[str] = []
     file_count = 0
     extensions: set[str] = set()
 
+    all_dirs: list[str] = []
+
     for item in sorted(project_root.iterdir()):
         if item.name.startswith("."):
             continue
         if item.is_file() and item.name in _MANIFESTS:
             manifests.append(item.name)
-        if item.is_dir() and item.name in _SOURCE_DIRS:
-            source_dirs.append(item.name)
-            for f in item.rglob("*"):
-                if f.is_file() and f.suffix in _CODE_EXTENSIONS:
-                    file_count += 1
+        if item.is_dir():
+            if item.name in _SOURCE_DIRS:
+                source_dirs.append(item.name)
+                for f in item.rglob("*"):
+                    if (
+                        f.is_file()
+                        and f.suffix in _CODE_EXTENSIONS
+                        and not _is_in_skip_dir(f, item)
+                    ):
+                        file_count += 1
+                        extensions.add(f.suffix)
+            elif item.name not in _SKIP_DIRS:
+                all_dirs.append(item.name)
+
+    # Fallback: no known source dirs found — scan all non-skipped dirs.
+    if not source_dirs:
+        for dir_name in all_dirs:
+            dir_path = project_root / dir_name
+            count = 0
+            for f in dir_path.rglob("*"):
+                if (
+                    f.is_file()
+                    and f.suffix in _CODE_EXTENSIONS
+                    and not _is_in_skip_dir(f, dir_path)
+                ):
+                    count += 1
                     extensions.add(f.suffix)
+            if count > 0:
+                source_dirs.append(dir_name)
+                file_count += count
 
     return {
         "manifests": manifests,
@@ -78,23 +131,39 @@ def classify_doc(doc_path: Path) -> str:
     return "other"
 
 
-def _cluster_by_dirs(project_root: Path) -> dict[str, list[str]]:
+def _cluster_by_dirs(
+    project_root: Path,
+    source_dirs: list[str] | None = None,
+) -> dict[str, list[str]]:
     """Cluster source files by top-level subdirectories.
+
+    Parameters
+    ----------
+    project_root:
+        Root of the project.
+    source_dirs:
+        Discovered source directories.  When *None*, falls back to
+        ``_SOURCE_DIRS`` for backwards compatibility.
 
     Returns dict of dir_name -> list of code file paths (relative).
     """
     clusters: dict[str, list[str]] = {}
+    dirs_to_scan = source_dirs if source_dirs is not None else list(_SOURCE_DIRS)
 
-    for src_dir_name in _SOURCE_DIRS:
+    for src_dir_name in dirs_to_scan:
         src_dir = project_root / src_dir_name
         if not src_dir.is_dir():
             continue
 
         for sub in sorted(src_dir.iterdir()):
-            if sub.is_dir() and not sub.name.startswith("_"):
+            if sub.is_dir() and not sub.name.startswith("_") and sub.name not in _RECURSIVE_SKIP:
                 files = []
                 for f in sub.rglob("*"):
-                    if f.is_file() and f.suffix in _CODE_EXTENSIONS:
+                    if (
+                        f.is_file()
+                        and f.suffix in _CODE_EXTENSIONS
+                        and not _is_in_skip_dir(f, sub)
+                    ):
                         files.append(str(f.relative_to(project_root)))
                 if files:
                     clusters[sub.name] = files
@@ -104,21 +173,33 @@ def _cluster_by_dirs(project_root: Path) -> dict[str, list[str]]:
 
 def _cluster_with_children(
     project_root: Path,
+    source_dirs: list[str] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Two-level directory scan for preset-aware bootstrap.
+
+    Parameters
+    ----------
+    project_root:
+        Root of the project.
+    source_dirs:
+        Discovered source directories.  When *None*, falls back to
+        ``_SOURCE_DIRS`` for backwards compatibility.
 
     Returns dict of dir_name -> {files, children, source_dir} where
     children is a dict of child_name -> {files}.
     """
     result: dict[str, dict[str, Any]] = {}
+    dirs_to_scan = source_dirs if source_dirs is not None else list(_SOURCE_DIRS)
 
-    for src_dir_name in _SOURCE_DIRS:
+    for src_dir_name in dirs_to_scan:
         src_dir = project_root / src_dir_name
         if not src_dir.is_dir():
             continue
 
         for sub in sorted(src_dir.iterdir()):
             if not sub.is_dir() or sub.name.startswith("_"):
+                continue
+            if sub.name in _RECURSIVE_SKIP:
                 continue
 
             files: list[str] = []
@@ -128,9 +209,15 @@ def _cluster_with_children(
                 if item.is_file() and item.suffix in _CODE_EXTENSIONS:
                     files.append(str(item.relative_to(project_root)))
                 elif item.is_dir() and not item.name.startswith("_"):
+                    if item.name in _RECURSIVE_SKIP:
+                        continue
                     child_files = []
                     for f in item.rglob("*"):
-                        if f.is_file() and f.suffix in _CODE_EXTENSIONS:
+                        if (
+                            f.is_file()
+                            and f.suffix in _CODE_EXTENSIONS
+                            and not _is_in_skip_dir(f, item)
+                        ):
                             child_files.append(
                                 str(f.relative_to(project_root))
                             )
@@ -253,7 +340,9 @@ def bootstrap_project(
     else:
         preset = detect_preset(project_root)
 
-    clusters = _cluster_with_children(project_root)
+    clusters = _cluster_with_children(
+        project_root, source_dirs=scan["source_dirs"] or None,
+    )
 
     nodes: list[dict[str, str]] = []
     edges: list[dict[str, str]] = []

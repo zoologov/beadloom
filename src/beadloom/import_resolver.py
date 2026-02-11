@@ -272,19 +272,27 @@ def extract_imports(file_path: Path) -> list[ImportInfo]:
     return []
 
 
-def _import_path_to_file_paths(import_path: str) -> list[str]:
+def _import_path_to_file_paths(
+    import_path: str,
+    scan_paths: list[str] | None = None,
+) -> list[str]:
     """Convert a Python dotted import path to possible file paths.
 
-    E.g. ``beadloom.auth.tokens`` -> [
-        ``src/beadloom/auth/tokens.py``,
-        ``src/beadloom/auth/tokens/__init__.py``,
-        ``beadloom/auth/tokens.py``,
-        ``beadloom/auth/tokens/__init__.py``,
-    ]
+    Uses *scan_paths* as directory prefixes.  Always includes the bare
+    (no-prefix) variant for packages installed at root level.
+
+    E.g. with ``scan_paths=["src"]`` and ``beadloom.auth.tokens``::
+
+        src/beadloom/auth/tokens.py
+        src/beadloom/auth/tokens/__init__.py
+        beadloom/auth/tokens.py
+        beadloom/auth/tokens/__init__.py
     """
     parts = import_path.replace(".", "/")
+    prefixes = [f"{p}/" for p in (scan_paths or ["src", "lib", "app"])]
+    prefixes.append("")  # bare path (no prefix)
     candidates: list[str] = []
-    for prefix in ("src/", "lib/", "app/", ""):
+    for prefix in prefixes:
         candidates.append(f"{prefix}{parts}.py")
         candidates.append(f"{prefix}{parts}/__init__.py")
     return candidates
@@ -294,6 +302,7 @@ def resolve_import_to_node(
     import_path: str,
     file_path: Path,  # kept for future use (relative resolution)
     conn: sqlite3.Connection,
+    scan_paths: list[str] | None = None,
 ) -> str | None:
     """Map an import path to a graph node ref_id.
 
@@ -304,8 +313,11 @@ def resolve_import_to_node(
 
     Returns ``None`` if no mapping found.
     """
+    prefixes = [f"{p}/" for p in (scan_paths or ["src", "lib", "app"])]
+    prefixes.append("")
+
     # Strategy 1: check code_symbols for files matching the import path
-    possible_files = _import_path_to_file_paths(import_path)
+    possible_files = _import_path_to_file_paths(import_path, scan_paths)
 
     for candidate in possible_files:
         rows = conn.execute(
@@ -335,7 +347,7 @@ def resolve_import_to_node(
     # Strategy 2: match against nodes.source column
     # Convert dotted path to directory-like path for matching
     dir_path = import_path.replace(".", "/")
-    for prefix in ("src/", "lib/", "app/", ""):
+    for prefix in prefixes:
         candidate_source = f"{prefix}{dir_path}"
         node_row = conn.execute(
             "SELECT ref_id FROM nodes WHERE source = ?",
@@ -348,13 +360,14 @@ def resolve_import_to_node(
 
 
 def _collect_source_files(project_root: Path) -> list[Path]:
-    """Collect all supported source files from src/, lib/, app/ directories."""
+    """Collect all supported source files from configured scan directories."""
     from beadloom.code_indexer import supported_extensions
+    from beadloom.reindex import resolve_scan_paths
 
     exts = supported_extensions()
     files: list[Path] = []
 
-    for dir_name in ("src", "lib", "app"):
+    for dir_name in resolve_scan_paths(project_root):
         base = project_root / dir_name
         if not base.is_dir():
             continue
@@ -367,9 +380,12 @@ def _collect_source_files(project_root: Path) -> list[Path]:
 def index_imports(project_root: Path, conn: sqlite3.Connection) -> int:
     """Scan all source files and index their imports into the code_imports table.
 
-    Scans ``src/``, ``lib/``, and ``app/`` directories.
+    Scans directories listed in ``scan_paths`` from config.yml.
     Returns the count of imports indexed.
     """
+    from beadloom.reindex import resolve_scan_paths
+
+    scan_paths = resolve_scan_paths(project_root)
     source_files = _collect_source_files(project_root)
     total = 0
 
@@ -387,7 +403,9 @@ def index_imports(project_root: Path, conn: sqlite3.Connection) -> int:
         file_hash = hashlib.sha256(content.encode()).hexdigest()
 
         for imp in imports:
-            resolved = resolve_import_to_node(imp.import_path, file_path, conn)
+            resolved = resolve_import_to_node(
+                imp.import_path, file_path, conn, scan_paths=scan_paths,
+            )
             conn.execute(
                 "INSERT INTO code_imports"
                 " (file_path, line_number, import_path, resolved_ref_id, file_hash)"

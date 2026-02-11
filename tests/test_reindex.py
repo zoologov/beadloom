@@ -622,3 +622,50 @@ class TestIncrementalReindex:
         assert "src/b.py" in paths
         assert "src/a.py" in paths
         conn.close()
+
+
+# ---------------------------------------------------------------------------
+# resolve_scan_paths
+# ---------------------------------------------------------------------------
+
+
+class TestResolveScanPaths:
+    """Tests for config-driven scan path resolution."""
+
+    def test_reads_from_config(self, tmp_path: Path) -> None:
+        """scan_paths from config.yml are used."""
+        from beadloom.reindex import resolve_scan_paths
+
+        beadloom_dir = tmp_path / ".beadloom"
+        beadloom_dir.mkdir()
+        (beadloom_dir / "config.yml").write_text(
+            "scan_paths:\n- backend\n- frontend/src\n"
+        )
+        result = resolve_scan_paths(tmp_path)
+        assert result == ["backend", "frontend/src"]
+
+    def test_defaults_without_config(self, tmp_path: Path) -> None:
+        """Falls back to defaults when no config exists."""
+        from beadloom.reindex import resolve_scan_paths
+
+        result = resolve_scan_paths(tmp_path)
+        assert result == ["src", "lib", "app"]
+
+    def test_reindex_uses_config_scan_paths(self, tmp_path: Path) -> None:
+        """Full reindex respects scan_paths from config.yml."""
+        # Setup project with backend/ dir (not in old hardcoded list).
+        beadloom_dir = tmp_path / ".beadloom"
+        graph_dir = beadloom_dir / "_graph"
+        graph_dir.mkdir(parents=True)
+        (tmp_path / "docs").mkdir()
+        (beadloom_dir / "config.yml").write_text(
+            "scan_paths:\n- backend\nlanguages:\n- python\n"
+        )
+        backend = tmp_path / "backend"
+        backend.mkdir()
+        (backend / "views.py").write_text(
+            "# beadloom:feature=API-001\n"
+            "def index():\n    pass\n"
+        )
+        result = reindex(tmp_path)
+        assert result.symbols_indexed >= 1

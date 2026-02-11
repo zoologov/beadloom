@@ -90,6 +90,44 @@ class TestScanProject:
         assert result["manifests"] == []
         assert result["source_dirs"] == []
 
+    def test_detects_backend_frontend(self, tmp_path: Path) -> None:
+        """backend/ and frontend/ are in the known source dirs list."""
+        be = tmp_path / "backend"
+        be.mkdir()
+        (be / "manage.py").write_text("pass")
+        fe = tmp_path / "frontend"
+        fe.mkdir()
+        (fe / "App.tsx").write_text("export default {}")
+        result = scan_project(tmp_path)
+        assert "backend" in result["source_dirs"]
+        assert "frontend" in result["source_dirs"]
+
+    def test_fallback_discovers_unknown_dirs(self, tmp_path: Path) -> None:
+        """Dirs not in _SOURCE_DIRS are found via fallback scan."""
+        custom = tmp_path / "myapp"
+        custom.mkdir()
+        (custom / "main.py").write_text("def main(): pass\n")
+        result = scan_project(tmp_path)
+        assert "myapp" in result["source_dirs"]
+        assert result["file_count"] >= 1
+
+    def test_fallback_skips_node_modules(self, tmp_path: Path) -> None:
+        """node_modules should be skipped during fallback scan."""
+        nm = tmp_path / "node_modules"
+        nm.mkdir()
+        (nm / "pkg.js").write_text("module.exports = {}")
+        result = scan_project(tmp_path)
+        assert "node_modules" not in result["source_dirs"]
+
+    def test_detects_vue_files(self, tmp_path: Path) -> None:
+        """Vue.js .vue files are counted as code."""
+        fe = tmp_path / "frontend"
+        fe.mkdir()
+        (fe / "App.vue").write_text("<template><div/></template>")
+        result = scan_project(tmp_path)
+        assert result["file_count"] >= 1
+        assert ".vue" in result["languages"]
+
 
 # ---------------------------------------------------------------------------
 # classify_doc
