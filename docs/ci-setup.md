@@ -1,6 +1,7 @@
 # CI Setup Guide
 
-Beadloom integrates with CI/CD to check documentation freshness on every PR/MR.
+Beadloom integrates with CI/CD to check documentation freshness and enforce
+architecture boundaries on every PR/MR.
 
 ## GitHub Actions
 
@@ -56,6 +57,59 @@ doc-sync:
 | `BEADLOOM_GITLAB_TOKEN` | — | GitLab API token for MR comments |
 
 Set `allow_failure: false` to block merging when docs are stale.
+
+## Architecture Lint (v1.0+)
+
+### GitHub Actions
+
+Add to your workflow (`.github/workflows/beadloom-lint.yml`):
+
+```yaml
+name: Architecture Lint
+on: [pull_request]
+jobs:
+  arch-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install beadloom
+      - run: beadloom reindex
+      - run: beadloom lint --strict --format json
+```
+
+### GitLab CI
+
+```yaml
+arch-lint:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - pip install beadloom
+    - beadloom reindex
+    - beadloom lint --strict --format json
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+```
+
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | No violations (or violations without `--strict`) |
+| `1` | Violations found (with `--strict`) |
+| `2` | Configuration error (invalid rules.yml, missing DB) |
+
+### Output Formats
+
+```bash
+beadloom lint                     # Human-readable (rich) — default in TTY
+beadloom lint --format json       # Structured JSON for scripts
+beadloom lint --format porcelain  # Machine-readable, one line per violation
+beadloom lint --no-reindex        # Skip reindex (faster, uses existing DB)
+```
 
 ## Custom Integration
 

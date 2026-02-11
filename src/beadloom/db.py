@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 # Schema version — increment on breaking changes
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"
 
 _SCHEMA_SQL = """\
 -- Graph nodes
@@ -131,6 +131,27 @@ CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(
     tokenize='porter unicode61'
 );
 
+-- Code imports (resolved import relationships)
+CREATE TABLE IF NOT EXISTS code_imports (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_path       TEXT NOT NULL,
+    line_number     INTEGER NOT NULL,
+    import_path     TEXT NOT NULL,
+    resolved_ref_id TEXT,
+    file_hash       TEXT NOT NULL,
+    UNIQUE(file_path, line_number, import_path)
+);
+
+-- Architecture rules (parsed from rules.yml)
+CREATE TABLE IF NOT EXISTS rules (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL DEFAULT '',
+    rule_type   TEXT NOT NULL CHECK(rule_type IN ('deny', 'require')),
+    rule_json   TEXT NOT NULL,
+    enabled     INTEGER NOT NULL DEFAULT 1
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_nodes_kind ON nodes(kind);
 CREATE INDEX IF NOT EXISTS idx_edges_src ON edges(src_ref_id);
@@ -141,6 +162,8 @@ CREATE INDEX IF NOT EXISTS idx_chunks_node ON chunks(node_ref_id);
 CREATE INDEX IF NOT EXISTS idx_symbols_file ON code_symbols(file_path);
 CREATE INDEX IF NOT EXISTS idx_sync_status ON sync_state(status);
 CREATE INDEX IF NOT EXISTS idx_sync_ref ON sync_state(ref_id);
+CREATE INDEX IF NOT EXISTS idx_imports_file ON code_imports(file_path);
+CREATE INDEX IF NOT EXISTS idx_imports_ref ON code_imports(resolved_ref_id);
 """
 
 

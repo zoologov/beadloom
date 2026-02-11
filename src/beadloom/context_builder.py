@@ -268,6 +268,77 @@ def _collect_code_symbols(
     return all_symbols
 
 
+def _matcher_applies(
+    matcher_data: dict[str, str],
+    ref_ids: set[str],
+    conn: sqlite3.Connection,
+) -> bool:
+    """Check if a matcher could match any node in the given ref_ids."""
+    matcher_ref_id = matcher_data.get("ref_id")
+    matcher_kind = matcher_data.get("kind")
+
+    for ref_id in ref_ids:
+        row = conn.execute(
+            "SELECT kind FROM nodes WHERE ref_id = ?", (ref_id,)
+        ).fetchone()
+        if row is None:
+            continue
+        node_kind: str = row[0]
+
+        # AND logic: all specified fields must match.
+        if matcher_ref_id is not None and matcher_ref_id != ref_id:
+            continue
+        if matcher_kind is not None and matcher_kind != node_kind:
+            continue
+        return True
+    return False
+
+
+def _collect_constraints(
+    conn: sqlite3.Connection,
+    ref_ids: set[str],
+) -> list[dict[str, Any]]:
+    """Collect architecture rules that apply to nodes in the subgraph.
+
+    Loads rules from the ``rules`` table and filters to those relevant
+    to the given set of ref_ids (i.e., rule matchers that could match
+    any node in the subgraph).
+    """
+    rows = conn.execute(
+        "SELECT name, description, rule_type, rule_json FROM rules WHERE enabled = 1"
+    ).fetchall()
+
+    constraints: list[dict[str, Any]] = []
+    for row in rows:
+        rule_name: str = row["name"]
+        rule_desc: str = row["description"]
+        rule_type: str = row["rule_type"]
+        rule_json: dict[str, Any] = json.loads(row["rule_json"])
+
+        relevant = False
+        if rule_type == "deny":
+            from_matcher: dict[str, str] = rule_json.get("from", {})
+            to_matcher: dict[str, str] = rule_json.get("to", {})
+            if _matcher_applies(from_matcher, ref_ids, conn) or _matcher_applies(
+                to_matcher, ref_ids, conn
+            ):
+                relevant = True
+        elif rule_type == "require":
+            for_matcher: dict[str, str] = rule_json.get("for", {})
+            if _matcher_applies(for_matcher, ref_ids, conn):
+                relevant = True
+
+        if relevant:
+            constraints.append({
+                "rule": rule_name,
+                "description": rule_desc,
+                "type": rule_type,
+                "definition": rule_json,
+            })
+
+    return constraints
+
+
 def _check_sync_status(
     conn: sqlite3.Connection,
     ref_ids: set[str],
@@ -358,7 +429,10 @@ def build_context(
     focus_extra: dict[str, Any] = json.loads(focus_extra_raw) if focus_extra_raw else {}
     focus_links: list[dict[str, str]] = focus_extra.get("links", [])
 
-    # Step 8: Check stale index warning.
+    # Step 8: Collect architecture constraints.
+    constraints = _collect_constraints(conn, subgraph_ref_ids)
+
+    # Step 9: Check stale index warning.
     last_reindex = get_meta(conn, "last_reindex_at")
     warning: str | None = None
     # Warning is set externally when file mtimes are newer than last_reindex_at.
@@ -374,7 +448,7 @@ def build_context(
         focus_dict["links"] = focus_links
 
     return {
-        "version": 1,
+        "version": 2,
         "focus": focus_dict,
         "graph": {
             "nodes": nodes,
@@ -386,5 +460,6 @@ def build_context(
             "stale_docs": stale_docs,
             "last_reindex": last_reindex,
         },
+        "constraints": constraints,
         "warning": warning,
     }

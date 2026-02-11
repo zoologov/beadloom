@@ -143,6 +143,8 @@ def reindex(*, project: Path | None, docs_dir: Path | None, full: bool) -> None:
     click.echo(f"Docs:    {result.docs_indexed}")
     click.echo(f"Chunks:  {result.chunks_indexed}")
     click.echo(f"Symbols: {result.symbols_indexed}")
+    click.echo(f"Imports: {result.imports_indexed}")
+    click.echo(f"Rules:   {result.rules_loaded}")
     if result.errors:
         click.echo("")
         for err in result.errors:
@@ -1329,3 +1331,74 @@ def watch_cmd(*, debounce: int, project: Path | None) -> None:
         sys.exit(1)
 
     watch(project_root, debounce_ms=debounce)
+
+
+# beadloom:domain=context-oracle
+@main.command()
+@click.option(
+    "--format",
+    "fmt",
+    type=click.Choice(["rich", "json", "porcelain"]),
+    default=None,
+    help="Output format (default: rich if TTY, porcelain if piped).",
+)
+@click.option(
+    "--strict",
+    is_flag=True,
+    default=False,
+    help="Exit 1 if violations found.",
+)
+@click.option(
+    "--no-reindex",
+    is_flag=True,
+    default=False,
+    help="Skip reindex before linting.",
+)
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: current directory).",
+)
+def lint(
+    *,
+    fmt: str | None,
+    strict: bool,
+    no_reindex: bool,
+    project: Path | None,
+) -> None:
+    """Run architecture lint rules against the project.
+
+    Checks cross-boundary imports against rules defined in rules.yml.
+    Exit codes: 0 = clean or violations without --strict,
+    1 = violations with --strict, 2 = configuration error.
+    """
+    from beadloom.linter import LintError
+    from beadloom.linter import format_json as _format_json
+    from beadloom.linter import format_porcelain as _format_porcelain
+    from beadloom.linter import format_rich as _format_rich
+    from beadloom.linter import lint as run_lint
+
+    project_root = project or Path.cwd()
+
+    # Resolve output format: explicit flag > TTY detection.
+    if fmt is None:
+        fmt = "rich" if sys.stdout.isatty() else "porcelain"
+
+    try:
+        result = run_lint(project_root, reindex_before=not no_reindex)
+    except LintError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(2)
+
+    formatters = {
+        "rich": _format_rich,
+        "json": _format_json,
+        "porcelain": _format_porcelain,
+    }
+    output = formatters[fmt](result)
+    if output:
+        click.echo(output)
+
+    if strict and result.violations:
+        sys.exit(1)

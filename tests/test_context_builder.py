@@ -321,12 +321,13 @@ class TestBuildContext:
     def test_bundle_structure(self, conn: sqlite3.Connection) -> None:
         self._setup_graph(conn)
         bundle = build_context(conn, ["PROJ-1"])
-        assert bundle["version"] == 1
+        assert bundle["version"] == 2
         assert "focus" in bundle
         assert "graph" in bundle
         assert "text_chunks" in bundle
         assert "code_symbols" in bundle
         assert "sync_status" in bundle
+        assert "constraints" in bundle
         assert "warning" in bundle
 
     def test_focus_field(self, conn: sqlite3.Connection) -> None:

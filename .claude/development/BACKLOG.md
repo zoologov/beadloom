@@ -1,8 +1,8 @@
 # Beadloom: Backlog & Deferred Work
 
 > **Last updated:** 2026-02-11
-> **Current version:** 0.6.0
-> **Completed phases:** 1 (v0.3), 2 (v0.4), 3 (v0.5), 4 (v0.6)
+> **Current version:** 1.0.0
+> **Completed phases:** 1 (v0.3), 2 (v0.4), 3 (v0.5), 4 (v0.6), 5 (v0.7), 6 (v1.0)
 
 ---
 
@@ -105,6 +105,6 @@ Items planned in RFC-0005 but consciously deferred during implementation.
 | 2 — Lower Barrier | v0.4 | Done | ~330 | Presets, smarter bootstrap, zero-doc mode |
 | 3 — Team Adoption | v0.5 | Done | 398 | CI integration, health dashboard, links, MCP templates |
 | 4 — Performance | v0.6 | Done | 464 | L1+L2 cache, incremental reindex, write tools, FTS5 search |
-| 5 — DX | v0.7 | Next | — | TUI, graph diff, why, watch |
-| 6 — AaC | v1.0 | — | — | Lint, constraints, multi-repo, plugins |
+| 5 — DX | v0.7 | Done | 541 | TUI, graph diff, why, watch |
+| 6 — AaC | v1.0 | Done | 646 | Lint, rules engine, import resolver, constraints |
 | 7 — Guides | post | — | — | Use-case guides, demos |

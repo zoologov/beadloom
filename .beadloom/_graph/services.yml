@@ -27,7 +27,7 @@ nodes:
 
   - ref_id: cli
     kind: service
-    summary: "Click-based CLI with 11 commands"
+    summary: "Click-based CLI with 12 commands"
     docs:
       - docs/cli-reference.md
 
@@ -52,6 +52,10 @@ nodes:
   - ref_id: doctor
     kind: domain
     summary: "Validation checks for graph and data integrity"
+
+  - ref_id: linter
+    kind: domain
+    summary: "Architecture-as-Code linter — import resolver, rule engine, lint orchestrator"
 
 edges:
   - src: context-oracle
@@ -122,4 +126,16 @@ edges:
     kind: uses
   - src: mcp-server
     dst: doc-sync
+    kind: uses
+  - src: linter
+    dst: beadloom
+    kind: part_of
+  - src: linter
+    dst: db
+    kind: uses
+  - src: linter
+    dst: reindex
+    kind: uses
+  - src: cli
+    dst: linter
     kind: uses

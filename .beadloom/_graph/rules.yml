@@ -1,0 +1,8 @@
+version: 1
+rules:
+  - name: domain-needs-parent
+    description: "Every domain must be part_of the beadloom service"
+    require:
+      for: { kind: domain }
+      has_edge_to: { ref_id: beadloom }
+      edge_kind: part_of

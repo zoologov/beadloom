@@ -61,7 +61,7 @@ class TestCtxCommand:
         result = runner.invoke(main, ["ctx", "PROJ-1", "--json", "--project", str(project)])
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
-        assert data["version"] == 1
+        assert data["version"] == 2
         assert data["focus"]["ref_id"] == "PROJ-1"
 
     def test_ctx_markdown_output(self, tmp_path: Path) -> None:
@@ -92,7 +92,7 @@ class TestCtxCommand:
         )
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
-        assert data["version"] == 1
+        assert data["version"] == 2
 
     def test_ctx_max_nodes_flag(self, tmp_path: Path) -> None:
         project = _setup_project(tmp_path)

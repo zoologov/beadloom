@@ -25,6 +25,8 @@ if TYPE_CHECKING:
 _TABLES_TO_DROP = [
     "search_index",
     "sync_state",
+    "code_imports",
+    "rules",
     "code_symbols",
     "chunks",
     "docs",
@@ -46,6 +48,8 @@ class ReindexResult:
     docs_indexed: int = 0
     chunks_indexed: int = 0
     symbols_indexed: int = 0
+    imports_indexed: int = 0
+    rules_loaded: int = 0
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -184,6 +188,74 @@ def _build_initial_sync_state(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _load_rules_into_db(
+    rules_path: Path,
+    conn: sqlite3.Connection,
+    result: ReindexResult,
+) -> None:
+    """Load architecture rules from rules.yml into the rules table."""
+    from beadloom.rule_engine import DenyRule, RequireRule, load_rules
+
+    try:
+        rules = load_rules(rules_path)
+    except ValueError as exc:
+        result.errors.append(f"Rules loading error: {exc}")
+        return
+
+    for rule in rules:
+        if isinstance(rule, DenyRule):
+            rule_type = "deny"
+            rule_def: dict[str, object] = {
+                "from": {},
+                "to": {},
+            }
+            from_dict = rule_def["from"]
+            assert isinstance(from_dict, dict)
+            to_dict = rule_def["to"]
+            assert isinstance(to_dict, dict)
+            if rule.from_matcher.ref_id is not None:
+                from_dict["ref_id"] = rule.from_matcher.ref_id
+            if rule.from_matcher.kind is not None:
+                from_dict["kind"] = rule.from_matcher.kind
+            if rule.to_matcher.ref_id is not None:
+                to_dict["ref_id"] = rule.to_matcher.ref_id
+            if rule.to_matcher.kind is not None:
+                to_dict["kind"] = rule.to_matcher.kind
+            if rule.unless_edge:
+                rule_def["unless_edge"] = list(rule.unless_edge)
+        elif isinstance(rule, RequireRule):
+            rule_type = "require"
+            rule_def = {
+                "for": {},
+                "has_edge_to": {},
+            }
+            for_dict = rule_def["for"]
+            assert isinstance(for_dict, dict)
+            has_edge_dict = rule_def["has_edge_to"]
+            assert isinstance(has_edge_dict, dict)
+            if rule.for_matcher.ref_id is not None:
+                for_dict["ref_id"] = rule.for_matcher.ref_id
+            if rule.for_matcher.kind is not None:
+                for_dict["kind"] = rule.for_matcher.kind
+            if rule.has_edge_to.ref_id is not None:
+                has_edge_dict["ref_id"] = rule.has_edge_to.ref_id
+            if rule.has_edge_to.kind is not None:
+                has_edge_dict["kind"] = rule.has_edge_to.kind
+            if rule.edge_kind is not None:
+                rule_def["edge_kind"] = rule.edge_kind
+        else:
+            continue  # pragma: no cover
+
+        conn.execute(
+            "INSERT INTO rules (name, description, rule_type, rule_json, enabled) "
+            "VALUES (?, ?, ?, ?, 1)",
+            (rule.name, rule.description, rule_type, json.dumps(rule_def)),
+        )
+        result.rules_loaded += 1
+
+    conn.commit()
+
+
 def _resolve_docs_dir(project_root: Path) -> Path:
     """Resolve docs directory from config.yml or use default ``docs``.
 
@@ -263,6 +335,16 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
     symbols_count, sym_warnings = _index_code_files(project_root, conn, seen_ref_ids)
     result.symbols_indexed = symbols_count
     result.warnings.extend(sym_warnings)
+
+    # 3b. Extract and index code imports.
+    from beadloom.import_resolver import index_imports
+
+    result.imports_indexed = index_imports(project_root, conn)
+
+    # 3c. Load architecture rules from rules.yml.
+    rules_path = project_root / ".beadloom" / "_graph" / "rules.yml"
+    if rules_path.is_file():
+        _load_rules_into_db(rules_path, conn, result)
 
     # 4. Build initial sync state.
     _build_initial_sync_state(conn)

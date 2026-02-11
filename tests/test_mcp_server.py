@@ -69,14 +69,14 @@ class TestMcpToolHandlers:
         from beadloom.mcp_server import handle_get_context
 
         result = handle_get_context(db_conn, ref_id="FEAT-1")
-        assert result["version"] == 1
+        assert result["version"] == 2
         assert result["focus"]["ref_id"] == "FEAT-1"
 
     def test_handle_get_context_with_params(self, db_conn: sqlite3.Connection) -> None:
         from beadloom.mcp_server import handle_get_context
 
         result = handle_get_context(db_conn, ref_id="FEAT-1", depth=1, max_nodes=5, max_chunks=3)
-        assert result["version"] == 1
+        assert result["version"] == 2
 
     def test_handle_get_context_not_found(self, db_conn: sqlite3.Connection) -> None:
         from beadloom.mcp_server import handle_get_context
@@ -152,7 +152,7 @@ class TestDispatchTool:
         result = _dispatch_tool(db_conn, "get_context", args)
 
         # Assert
-        assert result["version"] == 1
+        assert result["version"] == 2
         assert result["focus"]["ref_id"] == "FEAT-1"
 
     def test_dispatch_get_context_with_optional_args(self, db_conn: sqlite3.Connection) -> None:
@@ -165,7 +165,7 @@ class TestDispatchTool:
         result = _dispatch_tool(db_conn, "get_context", args)
 
         # Assert
-        assert result["version"] == 1
+        assert result["version"] == 2
         assert result["focus"]["ref_id"] == "FEAT-1"
 
     def test_dispatch_get_graph(self, db_conn: sqlite3.Connection) -> None:
@@ -283,7 +283,7 @@ class TestCacheIntegration:
             db_conn, "get_context", {"ref_id": "FEAT-1"},
             project_root=project, cache=cache,
         )
-        assert result["version"] == 1
+        assert result["version"] == 2
         assert result["focus"]["ref_id"] == "FEAT-1"
 
     def test_second_call_returns_cached_response(
@@ -300,7 +300,7 @@ class TestCacheIntegration:
             db_conn, "get_context", args,
             project_root=project, cache=cache,
         )
-        assert r1["version"] == 1
+        assert r1["version"] == 2
 
         # Second call — cached short response
         r2 = _dispatch_tool(
@@ -339,7 +339,7 @@ class TestCacheIntegration:
             db_conn, "get_context", args,
             project_root=project, cache=cache,
         )
-        assert r["version"] == 1
+        assert r["version"] == 2
         assert "cached" not in r
 
     def test_graph_tool_cached(
@@ -373,7 +373,7 @@ class TestCacheIntegration:
 
         # Without cache parameter — original behavior
         r = _dispatch_tool(db_conn, "get_context", {"ref_id": "FEAT-1"})
-        assert r["version"] == 1
+        assert r["version"] == 2
         assert "cached" not in r
 
 
@@ -392,7 +392,7 @@ class TestL2CacheIntegration:
             db_conn, "get_context", {"ref_id": "FEAT-1"},
             project_root=project, cache=cache, l2_cache=l2,
         )
-        assert result["version"] == 1
+        assert result["version"] == 2
 
         # L2 should have the entry now.
         l2_result = l2.get("FEAT-1:2:20:10")
@@ -421,7 +421,7 @@ class TestL2CacheIntegration:
             db_conn, "get_context", {"ref_id": "FEAT-1"},
             project_root=project, cache=cache, l2_cache=l2,
         )
-        assert result["version"] == 1
+        assert result["version"] == 2
         assert "cached" not in result  # Full bundle, not short response.
 
         # Now L1 is populated, third call returns cached response.

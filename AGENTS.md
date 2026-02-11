@@ -19,7 +19,7 @@ For project overview and installation, see [README.md](README.md).
 beadloom/
 ├── src/beadloom/
 │   ├── __init__.py          # Version string
-│   ├── cli.py               # Click CLI (12 commands)
+│   ├── cli.py               # Click CLI (13 commands)
 │   ├── mcp_server.py        # MCP stdio server (8 tools: 6 read + 2 write)
 │   ├── context_builder.py   # BFS traversal, context bundle assembly
 │   ├── sync_engine.py       # Doc-code sync state management
@@ -32,8 +32,15 @@ beadloom/
 │   ├── doctor.py            # Graph validation checks
 │   ├── onboarding.py        # init --bootstrap / --import
 │   ├── cache.py             # L1 in-memory + L2 SQLite cache
-│   └── health.py            # Health snapshots and trend tracking
-├── tests/                   # pytest tests (464 tests, ~3s)
+│   ├── health.py            # Health snapshots and trend tracking
+│   ├── import_resolver.py   # tree-sitter import extraction + resolution
+│   ├── rule_engine.py       # YAML deny/require rule parser + evaluator
+│   ├── linter.py            # Lint orchestrator + output formatters
+│   ├── why.py               # Impact analysis (upstream/downstream)
+│   ├── diff.py              # Graph diff against git refs
+│   ├── tui.py               # Interactive terminal dashboard (Textual)
+│   └── watcher.py           # File watcher for auto-reindex
+├── tests/                   # pytest tests (646+ tests, ~5s)
 ├── docs/                    # Project documentation (7 files)
 ├── .beadloom/               # Project's own beadloom data
 │   ├── _graph/services.yml  # Knowledge graph definition
@@ -137,6 +144,30 @@ intelligent updates without requiring a separate LLM API.
 ```bash
 beadloom search "payment processing"     # FTS5 keyword search
 beadloom search "auth" --kind service    # Filter by kind
+```
+
+### Architecture Lint
+
+Beadloom enforces architectural boundaries via `beadloom lint`. Rules are defined in
+`.beadloom/_graph/rules.yml` (deny/require patterns).
+
+```bash
+# Run architecture lint
+beadloom lint                     # Human-readable output
+beadloom lint --format json       # JSON for scripts
+beadloom lint --strict            # Exit 1 on violations (CI mode)
+beadloom lint --no-reindex        # Skip reindex before lint
+
+# Context bundles include constraints for the focus node
+beadloom ctx AUTH-001 --json      # "constraints" field in v2 bundles
+```
+
+**CI integration** (add to your CI pipeline):
+
+```bash
+pip install beadloom
+beadloom reindex
+beadloom lint --strict --format json
 ```
 
 ### After Changing Code

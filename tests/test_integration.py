@@ -238,7 +238,7 @@ class TestCtx:
         # Assert
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
-        assert data["version"] == 1
+        assert data["version"] == 2
         assert data["focus"]["ref_id"] == "myapp"
         assert data["focus"]["kind"] == "service"
         assert data["focus"]["summary"] == "Test application"
@@ -639,7 +639,7 @@ class TestFullPipeline:
         )
         assert result.exit_code == 0, f"ctx failed: {result.output}"
         bundle = json.loads(result.output)
-        assert bundle["version"] == 1
+        assert bundle["version"] == 2
         assert bundle["focus"]["ref_id"] == "myapp"
         assert len(bundle["graph"]["nodes"]) >= 2
 
