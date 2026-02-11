@@ -1,8 +1,8 @@
 # Beadloom: Strategy & Improvement Plan
 
-> **Status:** Draft for discussion
-> **Date:** 2026-02-10
-> **Current version:** 0.2.0 (Alpha)
+> **Status:** Completed (all 6 development phases delivered)
+> **Date:** 2026-02-11
+> **Current version:** 1.0.0 (Production/Stable)
 
 ---
 
@@ -59,7 +59,7 @@ This means:
 
 ## 2. Roadmap
 
-### Phase 1: Foundation & Agent-Native Pivot (v0.3)
+### Phase 1: Foundation & Agent-Native Pivot (v0.3) — DONE
 
 **Goal:** Establish the agent-native architecture and clean up the codebase before building new features.
 
@@ -73,7 +73,7 @@ This means:
 | 1.4 | **Deprecate `--auto` LLM integration** — remove `llm_updater.py` and LLM SDK dependencies | code | P0 | S |
 | 1.5 | **Update cli-reference.md** — reflect agent-native workflow, remove LLM config docs | docs | P1 | S |
 
-### Phase 2: Lower the Barrier (v0.4)
+### Phase 2: Lower the Barrier (v0.4) — DONE
 
 **Goal:** From `pip install` to useful context in under 5 minutes, on any project.
 
@@ -84,7 +84,7 @@ This means:
 | 2.3 | **Zero-doc mode** — explicitly support and document "no Markdown files at all" workflow | feature | P1 | S |
 | 2.4 | **Interactive bootstrap review** — after auto-generating graph, show it in terminal and let user confirm/edit nodes | feature | P2 | M |
 
-### Phase 3: Team Adoption (v0.5)
+### Phase 3: Team Adoption (v0.5) — DONE
 
 **Goal:** Make Beadloom useful for the whole team, not just the person who set it up.
 
@@ -95,7 +95,7 @@ This means:
 | 3.3 | **Issue tracker linking** — `beadloom link AUTH-001 https://github.com/org/repo/issues/123` to connect graph nodes to Jira/GitHub/Linear | feature | P2 | S |
 | 3.4 | **MCP templates** — ready-made `.mcp.json` snippets for Cursor, Claude Code, Windsurf | docs | P1 | S |
 
-### Phase 4: Performance & Agent-Native Evolution (v0.6)
+### Phase 4: Performance & Agent-Native Evolution (v0.6) — DONE
 
 **Goal:** Make Beadloom fast, searchable, and fully agent-native — with no LLM API dependency.
 
@@ -112,7 +112,7 @@ This means:
 | 4.7 | **Remove LLM API** — delete `--auto` flag entirely, clean up all LLM references | cleanup | P0 | S |
 | 4.8 | **AGENTS.md update** — reflect write tools, remove llm_updater references, update file tree | docs | P1 | S |
 
-### Phase 5: Developer Experience (v0.7)
+### Phase 5: Developer Experience (v0.7) — DONE
 
 **Goal:** Make Beadloom a joy to use, not just useful.
 
@@ -123,7 +123,7 @@ This means:
 | 5.3 | **`beadloom why REF_ID`** — explain a node's role in the system (upstream/downstream, who depends on it, what breaks if it changes) | feature | P2 | M |
 | 5.4 | **Watch mode** — `beadloom watch` auto-reindexes on file changes during development | feature | P3 | M |
 
-### Phase 6: Architecture as Code & Ecosystem (v1.0)
+### Phase 6: Architecture as Code & Ecosystem (v1.0) — DONE
 
 **Goal:** Beadloom evolves from "architecture documentation" to a full **Architecture as Code** platform — where architecture is not just described, but validated, enforced, and delivered to AI agents as executable constraints.
 
@@ -339,57 +339,32 @@ Beadloom becomes the first tool that closes the full loop: **describe → valida
 
 ---
 
-## 6. Priority Summary
+## 6. Priority Summary — All Phases Complete
 
-**Phase 1 — Foundation (v0.3, now):**
-- ~~Rewrite README~~ DONE
-- ~~README.ru.md~~ DONE
-- Create `.beadloom/AGENTS.md` — agent instruction file
-- Deprecate `sync-update --auto`, remove `llm_updater.py`
-- Update cli-reference.md
+| Phase | Version | Status |
+|-------|---------|--------|
+| 1 — Foundation | v0.3 | DONE |
+| 2 — Lower the Barrier | v0.4 | DONE |
+| 3 — Team Adoption | v0.5 | DONE |
+| 4 — Performance | v0.6 | DONE |
+| 5 — Developer Experience | v0.7 | DONE |
+| 6 — Architecture as Code | v1.0 | DONE |
+| 7 — Messaging & Guides | post-dev | Planned |
 
-**Phase 2 — Lower the Barrier (v0.4):**
-- Architecture presets
-- Smarter bootstrap
-- Zero-doc mode
+**Current totals:** 18 CLI commands, 8 MCP tools, 653 tests, 21 modules, 4 languages in import resolver.
 
-**Phase 3 — Team Adoption (v0.5):**
-- CI integration (GitHub Action)
-- Architecture health metrics in `beadloom status`
-- MCP templates for popular tools
-
-**Phase 4 — Performance & Agent-Native (v0.6):**
-- L1 cache in MCP, incremental reindex, bundle caching
-- MCP write tools (update_node, mark_synced, search)
-- Semantic search (FTS5 + sqlite-vec)
-- Remove LLM API, AGENTS.md update
-
-**Phase 5 — Developer Experience (v0.7):**
-- TUI
-- Graph diff
-- `beadloom why`
-- Watch mode
-
-**Phase 6 — Architecture as Code (v1.0):**
-- Architecture rules & `beadloom lint`
-- Constraint language (rules.yml)
-- Agent-aware constraints in MCP responses
-- CI architecture gate
-- Multi-repo, plugins
-
-**Phase 7 — Messaging & Guides (post-dev):**
-- Use-case guides (onboarding, multi-agent, keeping docs alive)
-- Demo GIF/asciicast
-- Update README.ru.md for final feature set
+**Next steps:** See `BACKLOG.md` for deferred work and `STRATEGY-2.md` (planned) for the next roadmap.
 
 ---
 
-## Open Questions
+## Open Questions — Resolved
 
-1. **Presets scope:** Start with 3 presets (monolith, microservices, monorepo) or add more (mobile+backend, data pipeline)?
-2. **TUI framework:** Textual vs. simple Rich-based interactive mode?
-3. **CI action:** Standalone GitHub Action repo or just a docs recipe with `beadloom sync-check --porcelain`?
-4. **Naming:** "Knowledge Graph" vs "Architecture Graph" — which resonates more?
-5. **Pricing model (if ever):** Open core? Fully open? Cloud layer for teams?
-6. **AaC rule engine:** Simple YAML-based deny/require rules, or invest in a proper DSL (like OPA/Rego)?
-7. **AaC scope:** Start with import-boundary validation only, or also cover naming conventions, file placement, and graph completeness from day one?
+| # | Question | Answer | Phase |
+|---|----------|--------|-------|
+| 1 | Presets scope? | 3 presets (monolith, microservices, monorepo) | Phase 2 |
+| 2 | TUI framework? | Textual — full-featured, pure-Python, async | Phase 5 |
+| 3 | CI action? | Docs recipe with `beadloom sync-check --porcelain` | Phase 3 |
+| 4 | Naming? | "Knowledge Graph" (used consistently in docs) | Phase 1 |
+| 5 | Pricing model? | Fully open (MIT) | — |
+| 6 | AaC rule engine? | YAML deny/require — simple, PR-reviewable | Phase 6 |
+| 7 | AaC scope? | Import-boundary validation (Python, TS/JS, Go, Rust) | Phase 6 |

@@ -108,9 +108,12 @@ Works with Claude Code, Cursor, and any MCP-compatible tool.
 
 - **Context Oracle** — deterministic graph traversal, compact JSON bundle in <20ms
 - **Doc Sync Engine** — tracks code↔doc relationships, detects stale documentation, integrates with git hooks
+- **Architecture as Code** — define boundary rules in YAML, validate with `beadloom lint`, enforce in CI
+- **Full-text search** — FTS5-powered search across nodes, docs, and code symbols
+- **Impact analysis** — `beadloom why` shows what depends on a node and what breaks if it changes
 - **Code-first onboarding** — bootstrap a knowledge graph from code structure alone; no docs needed to start
-- **Doc import** — classify and link existing scattered documentation (`init --import`)
-- **MCP server** — native integration with Claude Code, Cursor, and other MCP-compatible agents
+- **MCP server** — 8 tools for AI agents, including write operations and search
+- **Interactive TUI** — `beadloom ui` terminal dashboard for browsing the graph
 - **Local-first** — single CLI + single SQLite file, no Docker, no cloud dependencies
 
 ## How it works
@@ -127,6 +130,39 @@ When you request context for a node, the Context Oracle runs a breadth-first tra
 
 The Doc Sync Engine tracks which documentation files correspond to which code files. On every commit (via a git hook), it detects stale docs and either warns or blocks the commit.
 
+## Architecture as Code
+
+Beadloom doesn't just describe architecture — it enforces it. Define boundary rules in YAML, validate with `beadloom lint`, and block violations in CI.
+
+**Rules** (`.beadloom/_graph/rules.yml`):
+
+```yaml
+rules:
+  - name: billing-auth-boundary
+    description: "Billing must not import from auth directly"
+    deny:
+      from: { domain: billing }
+      to: { domain: auth }
+
+  - name: core-has-docs
+    description: "Every service must have documentation"
+    require:
+      for: { kind: service }
+      has: documentation
+```
+
+**Validate:**
+
+```bash
+beadloom lint                 # rich output in terminal
+beadloom lint --strict        # exit 1 on violations (for CI)
+beadloom lint --format json   # machine-readable output
+```
+
+**Agent-aware constraints** — when an agent calls `get_context("AUTH-001")`, the response includes active rules for that node. Agents respect architectural boundaries by design, not by accident.
+
+Supported languages for import analysis: **Python, TypeScript/JavaScript, Go, Rust**.
+
 ## CLI commands
 
 | Command | Description |
@@ -136,10 +172,17 @@ The Doc Sync Engine tracks which documentation files correspond to which code fi
 | `reindex` | Rebuild the SQLite index from graph, docs, and code |
 | `ctx REF_ID` | Get a context bundle (Markdown or `--json`) |
 | `graph [REF_ID]` | Visualize the knowledge graph (Mermaid or JSON) |
+| `search QUERY` | Full-text search across nodes, docs, and code symbols |
 | `status` | Project index statistics and documentation coverage |
 | `doctor` | Validate the knowledge graph |
 | `sync-check` | Check doc↔code synchronization status |
 | `sync-update REF_ID` | Review and update stale docs |
+| `lint` | Validate code against architecture boundary rules |
+| `why REF_ID` | Impact analysis — upstream deps and downstream dependents |
+| `diff` | Show graph changes since a git ref |
+| `link REF_ID [URL]` | Manage external tracker links on graph nodes |
+| `ui` | Interactive terminal dashboard (requires `beadloom[tui]`) |
+| `watch` | Auto-reindex on file changes (requires `beadloom[watch]`) |
 | `install-hooks` | Install the beadloom pre-commit hook |
 | `setup-mcp` | Configure MCP server for AI agents |
 | `mcp-serve` | Run the MCP server (stdio transport) |
@@ -148,11 +191,14 @@ The Doc Sync Engine tracks which documentation files correspond to which code fi
 
 | Tool | Description |
 |------|-------------|
-| `get_context` | Context bundle for a ref_id (graph + docs + code symbols) |
+| `get_context` | Context bundle for a ref_id (graph + docs + code symbols + constraints) |
 | `get_graph` | Subgraph around a node (nodes and edges as JSON) |
 | `list_nodes` | List graph nodes, optionally filtered by kind |
 | `sync_check` | Check if documentation is up-to-date with code |
 | `get_status` | Documentation coverage and index statistics |
+| `update_node` | Update a node's summary or metadata in YAML and SQLite |
+| `mark_synced` | Mark documentation as synchronized with code |
+| `search` | Full-text search across nodes, docs, and code symbols |
 
 ## Configuration
 
