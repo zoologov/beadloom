@@ -50,6 +50,7 @@ class ReindexResult:
     symbols_indexed: int = 0
     imports_indexed: int = 0
     rules_loaded: int = 0
+    nothing_changed: bool = False
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -623,6 +624,7 @@ def incremental_reindex(
         set_meta(conn, "last_reindex_at", now)
         take_snapshot(conn)
         conn.close()
+        result.nothing_changed = True
         return result
 
     # If any graph YAML changed → full reindex (graph is small, reload is safe).

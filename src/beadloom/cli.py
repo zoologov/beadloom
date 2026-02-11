@@ -138,13 +138,35 @@ def reindex(*, project: Path | None, docs_dir: Path | None, full: bool) -> None:
 
         result = incremental_reindex(project_root, docs_dir=docs_dir)
 
-    click.echo(f"Nodes:   {result.nodes_loaded}")
-    click.echo(f"Edges:   {result.edges_loaded}")
-    click.echo(f"Docs:    {result.docs_indexed}")
-    click.echo(f"Chunks:  {result.chunks_indexed}")
-    click.echo(f"Symbols: {result.symbols_indexed}")
-    click.echo(f"Imports: {result.imports_indexed}")
-    click.echo(f"Rules:   {result.rules_loaded}")
+    if result.nothing_changed:
+        # Nothing changed — show current DB totals instead.
+        db_path = project_root / ".beadloom" / "beadloom.db"
+        if db_path.exists():
+            import sqlite3
+
+            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            try:
+                counts = {
+                    "Nodes": conn.execute("SELECT count(*) FROM nodes").fetchone()[0],
+                    "Edges": conn.execute("SELECT count(*) FROM edges").fetchone()[0],
+                    "Docs": conn.execute("SELECT count(*) FROM docs").fetchone()[0],
+                    "Symbols": conn.execute("SELECT count(*) FROM code_symbols").fetchone()[0],
+                }
+                click.echo("No changes detected. Index is up to date.")
+                for label, count in counts.items():
+                    click.echo(f"{label + ':':9s}{count}")
+            finally:
+                conn.close()
+        else:
+            click.echo("No changes detected.")
+    else:
+        click.echo(f"Nodes:   {result.nodes_loaded}")
+        click.echo(f"Edges:   {result.edges_loaded}")
+        click.echo(f"Docs:    {result.docs_indexed}")
+        click.echo(f"Chunks:  {result.chunks_indexed}")
+        click.echo(f"Symbols: {result.symbols_indexed}")
+        click.echo(f"Imports: {result.imports_indexed}")
+        click.echo(f"Rules:   {result.rules_loaded}")
     if result.errors:
         click.echo("")
         for err in result.errors:
@@ -1338,7 +1360,15 @@ def watch_cmd(*, debounce: int, project: Path | None) -> None:
         click.echo("Error: graph directory not found. Run `beadloom init` first.", err=True)
         sys.exit(1)
 
-    watch(project_root, debounce_ms=debounce)
+    try:
+        watch(project_root, debounce_ms=debounce)
+    except ImportError:
+        click.echo(
+            "Error: watch requires 'watchfiles'. "
+            "Install with: pip install beadloom[watch]",
+            err=True,
+        )
+        sys.exit(1)
 
 
 # beadloom:domain=context-oracle
