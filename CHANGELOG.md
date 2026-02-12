@@ -5,6 +5,22 @@ All notable changes to Beadloom are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-02-12
+
+Improved import analysis and broader project support.
+
+### Added
+- **Deep import analysis** — `depends_on` edges generated from resolved imports between graph nodes
+- **Hierarchical source-prefix resolver** — handles Django-style imports (`apps.core.models`), TypeScript `@/` aliases, and nodes with/without trailing slash
+- **Auto-reindex after init** — no more manual `beadloom reindex` needed after `--bootstrap` or interactive setup
+- **Noise directory filtering** — `static`, `templates`, `migrations`, `fixtures`, `locale`, `media`, `assets` excluded from architecture node generation
+
+### Fixed
+- Source dir discovery expanded (`backend`, `frontend`, `server`, `client`, etc.) with fallback to scanning all non-vendor dirs
+- `reindex` and `import_resolver` now read `scan_paths` from `config.yml` instead of hardcoding `src/lib/app`
+- `node_modules` and other junk dirs filtered from recursive scans
+- `.vue` files recognized as code extensions
+
 ## [1.0.0] - 2026-02-11
 
 Architecture as Code: Beadloom evolves from documentation tool to architecture enforcement platform.
