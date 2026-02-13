@@ -69,10 +69,16 @@ def _write_if_missing(path: Path, content: str) -> bool:
 
 def _find_root_node(
     nodes: list[dict[str, Any]],
+    edges: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
-    """Return the root service node (kind=service, empty source)."""
+    """Return the root service node.
+
+    Root = service node that has no ``part_of`` edge as *src*
+    (i.e. it is not a child of any other node).
+    """
+    part_of_srcs = {e["src"] for e in edges if e.get("kind") == "part_of"}
     for node in nodes:
-        if node.get("kind") == "service" and not node.get("source", "").strip():
+        if node.get("kind") == "service" and node["ref_id"] not in part_of_srcs:
             return node
     return None
 
@@ -81,10 +87,15 @@ def _edges_for(
     ref_id: str,
     edges: list[dict[str, Any]],
 ) -> tuple[list[str], list[str]]:
-    """Return (depends_on, used_by) lists for a given *ref_id*."""
+    """Return (depends_on, used_by) lists for a given *ref_id*.
+
+    Excludes ``part_of`` edges — those are structural, not dependency.
+    """
     depends_on: list[str] = []
     used_by: list[str] = []
     for edge in edges:
+        if edge.get("kind") == "part_of":
+            continue
         if edge.get("src") == ref_id:
             depends_on.append(edge.get("dst", ""))
         if edge.get("dst") == ref_id:
@@ -116,7 +127,122 @@ def _parent_of(
 
 
 # ------------------------------------------------------------------
-# Architecture page
+# Path resolution
+# ------------------------------------------------------------------
+
+
+def _doc_path_for_node(
+    node: dict[str, Any],
+    edges: list[dict[str, Any]],
+    project_root: Path,
+) -> Path | None:
+    """Determine the correct doc path for a node.
+
+    Priority: ``docs:`` field from graph node > convention-based fallback.
+    Returns ``None`` when no path can be determined.
+    """
+    from pathlib import Path as _Path
+
+    # Explicit docs field — use the first entry.
+    docs_field: list[str] = node.get("docs", [])
+    if docs_field:
+        return _Path(project_root) / docs_field[0]
+
+    kind = node.get("kind", "")
+    ref_id: str = node["ref_id"]
+    docs_dir = _Path(project_root) / "docs"
+
+    if kind == "domain":
+        return docs_dir / "domains" / ref_id / "README.md"
+    if kind == "service":
+        return docs_dir / "services" / f"{ref_id}.md"
+    if kind == "feature":
+        parent = _parent_of(ref_id, edges)
+        if parent:
+            return docs_dir / "domains" / parent / "features" / ref_id / "SPEC.md"
+        return docs_dir / "features" / ref_id / "SPEC.md"
+    return None
+
+
+# ------------------------------------------------------------------
+# Symbols (best-effort from SQLite)
+# ------------------------------------------------------------------
+
+
+def _load_symbols_by_source(project_root: Path) -> dict[str, list[dict[str, Any]]]:
+    """Load code symbols from SQLite grouped by file path.
+
+    Returns empty dict when no database exists or the table is missing.
+    """
+    from pathlib import Path as _Path
+
+    db_path = _Path(project_root) / ".beadloom" / "beadloom.db"
+    if not db_path.exists():
+        return {}
+
+    import sqlite3
+
+    symbols_by_source: dict[str, list[dict[str, Any]]] = {}
+    try:
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT symbol_name, kind, file_path, line_start, line_end FROM code_symbols"
+        ).fetchall()
+        for row in rows:
+            fp: str = row["file_path"]
+            symbols_by_source.setdefault(fp, []).append(dict(row))
+        conn.close()
+    except sqlite3.OperationalError:
+        pass
+    return symbols_by_source
+
+
+def _symbols_for_node(
+    node: dict[str, Any],
+    symbols_by_source: dict[str, list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    """Return code symbols whose file path starts with *node*'s source."""
+    source = node.get("source", "").rstrip("/")
+    if not source:
+        return []
+    result: list[dict[str, Any]] = []
+    for fp, syms in symbols_by_source.items():
+        if fp.startswith(source):
+            result.extend(syms)
+    return result
+
+
+def _render_symbols_section(symbols: list[dict[str, Any]]) -> str:
+    """Render a ``## Public API`` markdown table from *symbols*.
+
+    Filters out private symbols (leading ``_``) and deduplicates.
+    Returns empty string when no public symbols are found.
+    """
+    if not symbols:
+        return ""
+    public: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for s in symbols:
+        name = s.get("symbol_name", "")
+        if name.startswith("_") or name in seen:
+            continue
+        seen.add(name)
+        public.append(s)
+    if not public:
+        return ""
+    lines = [
+        "## Public API\n",
+        "| Symbol | Kind |",
+        "|--------|------|",
+    ]
+    for s in sorted(public, key=lambda x: x.get("symbol_name", "")):
+        lines.append(f"| `{s['symbol_name']}` | {s.get('kind', '')} |")
+    return "\n".join(lines) + "\n"
+
+
+# ------------------------------------------------------------------
+# Render functions
 # ------------------------------------------------------------------
 
 
@@ -174,8 +300,9 @@ def _render_architecture(
 def _render_domain_readme(
     node: dict[str, Any],
     edges: list[dict[str, Any]],
+    symbols: list[dict[str, Any]] | None = None,
 ) -> str:
-    """Render ``docs/domains/{name}/README.md`` content."""
+    """Render domain README content."""
     ref_id: str = node["ref_id"]
     summary: str = node.get("summary", "")
     source: str = node.get("source", "")
@@ -187,26 +314,23 @@ def _render_domain_readme(
     used_list = ", ".join(used_by) if used_by else "(none)"
     feat_list = "\n".join(f"- {c}" for c in children) if children else "(none)"
 
-    return (
-        f"# {ref_id}\n"
-        "\n"
-        f"> {summary}\n"
-        "\n"
-        "## Source\n"
-        "\n"
-        f"`{source}`\n"
-        "\n"
-        "## Dependencies\n"
-        "\n"
-        f"- Depends on: {dep_list}\n"
-        f"- Used by: {used_list}\n"
-        "\n"
-        "## Features\n"
-        "\n"
-        f"{feat_list}\n"
-        "\n"
-        "<!-- enrich with: beadloom docs polish -->\n"
+    symbols_section = _render_symbols_section(symbols or [])
+
+    parts = [
+        f"# {ref_id}\n",
+        f"> {summary}\n",
+        f"## Source\n\n`{source}`\n",
+    ]
+    if symbols_section:
+        parts.append(symbols_section)
+    parts.extend(
+        [
+            f"## Dependencies\n\n- Depends on: {dep_list}\n- Used by: {used_list}\n",
+            f"## Features\n\n{feat_list}\n",
+            "<!-- enrich with: beadloom docs polish -->\n",
+        ]
     )
+    return "\n".join(parts)
 
 
 # ------------------------------------------------------------------
@@ -217,8 +341,9 @@ def _render_domain_readme(
 def _render_service(
     node: dict[str, Any],
     edges: list[dict[str, Any]],
+    symbols: list[dict[str, Any]] | None = None,
 ) -> str:
-    """Render ``docs/services/{name}.md`` content."""
+    """Render service page content."""
     ref_id: str = node["ref_id"]
     summary: str = node.get("summary", "")
     source: str = node.get("source", "")
@@ -227,22 +352,22 @@ def _render_service(
     dep_list = ", ".join(depends_on) if depends_on else "(none)"
     used_list = ", ".join(used_by) if used_by else "(none)"
 
-    return (
-        f"# {ref_id}\n"
-        "\n"
-        f"> {summary}\n"
-        "\n"
-        "## Source\n"
-        "\n"
-        f"`{source}`\n"
-        "\n"
-        "## Dependencies\n"
-        "\n"
-        f"- Depends on: {dep_list}\n"
-        f"- Used by: {used_list}\n"
-        "\n"
-        "<!-- enrich with: beadloom docs polish -->\n"
+    symbols_section = _render_symbols_section(symbols or [])
+
+    parts = [
+        f"# {ref_id}\n",
+        f"> {summary}\n",
+        f"## Source\n\n`{source}`\n",
+    ]
+    if symbols_section:
+        parts.append(symbols_section)
+    parts.extend(
+        [
+            f"## Dependencies\n\n- Depends on: {dep_list}\n- Used by: {used_list}\n",
+            "<!-- enrich with: beadloom docs polish -->\n",
+        ]
     )
+    return "\n".join(parts)
 
 
 # ------------------------------------------------------------------
@@ -253,66 +378,35 @@ def _render_service(
 def _render_feature_spec(
     node: dict[str, Any],
     edges: list[dict[str, Any]],
+    symbols: list[dict[str, Any]] | None = None,
 ) -> str:
-    """Render ``docs/features/{name}/SPEC.md`` content."""
+    """Render feature SPEC content."""
     ref_id: str = node["ref_id"]
     summary: str = node.get("summary", "")
     source: str = node.get("source", "")
     parent = _parent_of(ref_id, edges) or "(unknown)"
 
-    return (
-        f"# {ref_id}\n"
-        "\n"
-        f"> {summary}\n"
-        "\n"
-        "## Source\n"
-        "\n"
-        f"`{source}`\n"
-        "\n"
-        "## Parent\n"
-        "\n"
-        f"{parent}\n"
-        "\n"
-        "<!-- enrich with: beadloom docs polish -->\n"
+    depends_on, used_by = _edges_for(ref_id, edges)
+    dep_list = ", ".join(depends_on) if depends_on else "(none)"
+    used_list = ", ".join(used_by) if used_by else "(none)"
+
+    symbols_section = _render_symbols_section(symbols or [])
+
+    parts = [
+        f"# {ref_id}\n",
+        f"> {summary}\n",
+        f"## Source\n\n`{source}`\n",
+    ]
+    if symbols_section:
+        parts.append(symbols_section)
+    parts.extend(
+        [
+            f"## Dependencies\n\n- Depends on: {dep_list}\n- Used by: {used_list}\n",
+            f"## Parent\n\n{parent}\n",
+            "<!-- enrich with: beadloom docs polish -->\n",
+        ]
     )
-
-
-# ------------------------------------------------------------------
-# Polish helpers
-# ------------------------------------------------------------------
-
-
-def _symbols_for_node(
-    node: dict[str, Any],
-    symbols_by_source: dict[str, list[dict[str, Any]]],
-) -> list[dict[str, Any]]:
-    """Return code symbols whose file path starts with *node*'s source."""
-    source = node.get("source", "").rstrip("/")
-    if not source:
-        return []
-    result: list[dict[str, Any]] = []
-    for fp, syms in symbols_by_source.items():
-        if fp.startswith(source):
-            result.extend(syms)
-    return result
-
-
-def _read_existing_doc(project_root: Path, node: dict[str, Any]) -> str | None:
-    """Return existing doc content for *node*, or ``None`` if absent."""
-    kind = node.get("kind", "")
-    ref_id: str = node["ref_id"]
-    docs_dir = project_root / "docs"
-    candidates: list[Path] = []
-    if kind == "domain":
-        candidates.append(docs_dir / "domains" / ref_id / "README.md")
-    elif kind == "service":
-        candidates.append(docs_dir / "services" / f"{ref_id}.md")
-    elif kind == "feature":
-        candidates.append(docs_dir / "features" / ref_id / "SPEC.md")
-    for c in candidates:
-        if c.exists():
-            return c.read_text(encoding="utf-8")
-    return None
+    return "\n".join(parts)
 
 
 # ------------------------------------------------------------------
@@ -333,29 +427,14 @@ def generate_polish_data(
 
     If *ref_id* is given, returns data for that single node.
     """
-    from pathlib import Path as _Path  # runtime import
-
     nodes, edges = _load_graph_from_yaml(project_root)
 
     # Detect project name from root node.
-    root_node = _find_root_node(nodes)
+    root_node = _find_root_node(nodes, edges)
     project_name: str = root_node["ref_id"] if root_node else project_root.name
 
     # Load code symbols from SQLite DB (if available).
-    db_path = _Path(project_root) / ".beadloom" / "beadloom.db"
-    symbols_by_source: dict[str, list[dict[str, Any]]] = {}
-    if db_path.exists():
-        import sqlite3
-
-        conn = sqlite3.connect(str(db_path))
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            "SELECT symbol_name, kind, file_path, line_start, line_end FROM code_symbols"
-        ).fetchall()
-        for row in rows:
-            fp: str = row["file_path"]
-            symbols_by_source.setdefault(fp, []).append(dict(row))
-        conn.close()
+    symbols_by_source = _load_symbols_by_source(project_root)
 
     # Build node data list.
     target_nodes = nodes
@@ -366,6 +445,13 @@ def generate_polish_data(
     for node in target_nodes:
         depends_on, used_by = _edges_for(node["ref_id"], edges)
         children = _children_of(node["ref_id"], edges)
+
+        # Read existing doc content via resolved path.
+        doc_path = _doc_path_for_node(node, edges, project_root)
+        existing_doc: str | None = None
+        if doc_path is not None and doc_path.exists():
+            existing_doc = doc_path.read_text(encoding="utf-8")
+
         node_data: dict[str, Any] = {
             "ref_id": node["ref_id"],
             "kind": node.get("kind", ""),
@@ -375,7 +461,7 @@ def generate_polish_data(
             "depends_on": depends_on,
             "used_by": used_by,
             "features": children,
-            "existing_docs": _read_existing_doc(project_root, node),
+            "existing_docs": existing_doc,
         }
         node_data_list.append(node_data)
 
@@ -409,17 +495,22 @@ def generate_skeletons(
 ) -> dict[str, int]:
     """Generate doc skeletons from graph nodes and edges.
 
-    If *nodes*/*edges* are not provided, reads from the graph YAML files
-    in ``.beadloom/_graph/``.
+    Uses ``docs:`` paths from graph nodes when available, falls back to
+    convention-based paths.  Features use ``docs/domains/{parent}/features/``
+    layout.  Never overwrites existing files.
 
     Returns ``{"files_created": N, "files_skipped": M}``.
     """
     if nodes is None or edges is None:
         nodes, edges = _load_graph_from_yaml(project_root)
 
-    # Detect project name from root node.
-    root_node = _find_root_node(nodes)
+    # Detect project name and root node.
+    root_node = _find_root_node(nodes, edges)
     project_name: str = root_node["ref_id"] if root_node else project_root.name
+    root_ref_id: str | None = root_node["ref_id"] if root_node else None
+
+    # Best-effort symbol loading.
+    symbols_by_source = _load_symbols_by_source(project_root)
 
     docs_dir = project_root / "docs"
     docs_dir.mkdir(parents=True, exist_ok=True)
@@ -434,38 +525,32 @@ def generate_skeletons(
     else:
         skipped += 1
 
-    # 2. Domain READMEs
+    # 2. Node docs (domains, services, features)
     for node in nodes:
-        if node.get("kind") != "domain":
-            continue
-        name = node["ref_id"]
-        content = _render_domain_readme(node, edges)
-        if _write_if_missing(docs_dir / "domains" / name / "README.md", content):
-            created += 1
-        else:
-            skipped += 1
+        kind = node.get("kind", "")
+        ref_id = node["ref_id"]
 
-    # 3. Service pages (skip root node — empty source)
-    for node in nodes:
-        if node.get("kind") != "service":
+        # Skip root service — covered by architecture.md.
+        if ref_id == root_ref_id:
             continue
-        if not node.get("source", "").strip():
-            # Root node — do not create a service page.
-            continue
-        name = node["ref_id"]
-        content = _render_service(node, edges)
-        if _write_if_missing(docs_dir / "services" / f"{name}.md", content):
-            created += 1
-        else:
-            skipped += 1
 
-    # 4. Feature SPECs
-    for node in nodes:
-        if node.get("kind") != "feature":
+        if kind not in ("domain", "service", "feature"):
             continue
-        name = node["ref_id"]
-        content = _render_feature_spec(node, edges)
-        if _write_if_missing(docs_dir / "features" / name / "SPEC.md", content):
+
+        doc_path = _doc_path_for_node(node, edges, project_root)
+        if doc_path is None:
+            continue
+
+        node_symbols = _symbols_for_node(node, symbols_by_source)
+
+        if kind == "domain":
+            content = _render_domain_readme(node, edges, node_symbols)
+        elif kind == "service":
+            content = _render_service(node, edges, node_symbols)
+        else:
+            content = _render_feature_spec(node, edges, node_symbols)
+
+        if _write_if_missing(doc_path, content):
             created += 1
         else:
             skipped += 1
