@@ -306,3 +306,127 @@ class TestGeneratePolishData:
         auth_node = result["nodes"][0]
         assert auth_node["existing_docs"] is not None
         assert "Auth Domain" in auth_node["existing_docs"]
+
+
+# ---------------------------------------------------------------------------
+# TestPatchDocsField — docs: field written back to YAML
+# ---------------------------------------------------------------------------
+
+
+class TestPatchDocsField:
+    """Tests for ``_patch_docs_field`` and its integration with ``generate_skeletons``."""
+
+    def test_generate_skeletons_writes_docs_field(self, tmp_path: Path) -> None:
+        """After skeleton generation, nodes in services.yml must have ``docs:``."""
+        graph_data: dict[str, Any] = {
+            "nodes": [
+                _root_node(),
+                _domain_node("auth"),
+                _service_node("cli"),
+                _feature_node("auth-api"),
+            ],
+            "edges": [
+                {"src": "auth", "dst": "myproject", "kind": "part_of"},
+                {"src": "cli", "dst": "myproject", "kind": "part_of"},
+                {"src": "auth-api", "dst": "auth", "kind": "part_of"},
+            ],
+        }
+        _write_graph_yaml(tmp_path, graph_data)
+
+        # Run skeleton generation (will load from YAML automatically).
+        result = generate_skeletons(tmp_path)
+        assert result["files_created"] > 0
+
+        # Re-read the YAML and verify docs: fields were written.
+        yml_path = tmp_path / ".beadloom" / "_graph" / "services.yml"
+        updated = yaml.safe_load(yml_path.read_text(encoding="utf-8"))
+
+        nodes_by_id = {n["ref_id"]: n for n in updated["nodes"]}
+
+        # Domain node should have docs field.
+        assert "docs" in nodes_by_id["auth"]
+        assert nodes_by_id["auth"]["docs"] == ["docs/domains/auth/README.md"]
+
+        # Service node should have docs field.
+        assert "docs" in nodes_by_id["cli"]
+        assert nodes_by_id["cli"]["docs"] == ["docs/services/cli.md"]
+
+        # Feature node should have docs field.
+        assert "docs" in nodes_by_id["auth-api"]
+        assert nodes_by_id["auth-api"]["docs"] == ["docs/domains/auth/features/auth-api/SPEC.md"]
+
+    def test_existing_docs_field_not_overwritten(self, tmp_path: Path) -> None:
+        """Nodes that already have ``docs:`` must keep their original value."""
+        existing_docs = ["docs/custom/my-auth.md"]
+        graph_data: dict[str, Any] = {
+            "nodes": [
+                _root_node(),
+                {
+                    "ref_id": "auth",
+                    "kind": "domain",
+                    "summary": "auth domain",
+                    "source": "src/auth/",
+                    "docs": existing_docs,
+                },
+            ],
+            "edges": [
+                {"src": "auth", "dst": "myproject", "kind": "part_of"},
+            ],
+        }
+        _write_graph_yaml(tmp_path, graph_data)
+
+        # Pre-create the doc file at the custom path so _write_if_missing
+        # uses the existing docs path (since docs field is set).
+        custom_doc = tmp_path / "docs" / "custom" / "my-auth.md"
+        custom_doc.parent.mkdir(parents=True, exist_ok=True)
+        custom_doc.write_text("# Custom Auth\n", encoding="utf-8")
+
+        generate_skeletons(tmp_path)
+
+        # Re-read and check the docs field is unchanged.
+        yml_path = tmp_path / ".beadloom" / "_graph" / "services.yml"
+        updated = yaml.safe_load(yml_path.read_text(encoding="utf-8"))
+        nodes_by_id = {n["ref_id"]: n for n in updated["nodes"]}
+
+        assert nodes_by_id["auth"]["docs"] == existing_docs
+
+    def test_docs_field_only_for_created_files(self, tmp_path: Path) -> None:
+        """Skipped (already existing) doc files must NOT get ``docs:`` added."""
+        graph_data: dict[str, Any] = {
+            "nodes": [
+                _root_node(),
+                _domain_node("auth"),
+                _domain_node("billing"),
+            ],
+            "edges": [
+                {"src": "auth", "dst": "myproject", "kind": "part_of"},
+                {"src": "billing", "dst": "myproject", "kind": "part_of"},
+            ],
+        }
+        _write_graph_yaml(tmp_path, graph_data)
+
+        # Pre-create the auth README so it gets skipped.
+        auth_doc = tmp_path / "docs" / "domains" / "auth" / "README.md"
+        auth_doc.parent.mkdir(parents=True, exist_ok=True)
+        auth_doc.write_text("# Existing Auth\n", encoding="utf-8")
+
+        generate_skeletons(tmp_path)
+
+        yml_path = tmp_path / ".beadloom" / "_graph" / "services.yml"
+        updated = yaml.safe_load(yml_path.read_text(encoding="utf-8"))
+        nodes_by_id = {n["ref_id"]: n for n in updated["nodes"]}
+
+        # auth was skipped — no docs: field should be added.
+        assert "docs" not in nodes_by_id["auth"]
+
+        # billing was created — docs: field should exist.
+        assert "docs" in nodes_by_id["billing"]
+        assert nodes_by_id["billing"]["docs"] == ["docs/domains/billing/README.md"]
+
+    def test_no_graph_dir_does_not_crash(self, tmp_path: Path) -> None:
+        """When called with explicit nodes/edges and no graph dir, no crash."""
+        nodes = _basic_nodes()
+        edges = _basic_edges()
+        # No .beadloom/_graph/ directory — should not raise.
+        result = generate_skeletons(tmp_path, nodes=nodes, edges=edges)
+        assert result["files_created"] > 0

@@ -86,12 +86,18 @@ class Violation:
 # ---------------------------------------------------------------------------
 
 
-def _parse_node_matcher(data: dict[str, object], context: str) -> NodeMatcher:
-    """Parse a node matcher dict into a NodeMatcher, validating fields."""
+def _parse_node_matcher(
+    data: dict[str, object], context: str, *, allow_empty: bool = False
+) -> NodeMatcher:
+    """Parse a node matcher dict into a NodeMatcher, validating fields.
+
+    When *allow_empty* is True an empty dict ``{}`` is accepted and produces
+    a ``NodeMatcher(ref_id=None, kind=None)`` that matches **any** node.
+    """
     ref_id = data.get("ref_id")
     kind = data.get("kind")
 
-    if ref_id is None and kind is None:
+    if ref_id is None and kind is None and not allow_empty:
         msg = f"{context}: node matcher must have at least one of 'ref_id' or 'kind'"
         raise ValueError(msg)
 
@@ -158,7 +164,9 @@ def _parse_require_rule(
         raise ValueError(msg)
 
     for_matcher = _parse_node_matcher(for_data, f"Rule '{name}' require.for")
-    has_edge_to = _parse_node_matcher(has_edge_to_data, f"Rule '{name}' require.has_edge_to")
+    has_edge_to = _parse_node_matcher(
+        has_edge_to_data, f"Rule '{name}' require.has_edge_to", allow_empty=True
+    )
 
     edge_kind_raw = require_data.get("edge_kind")
     edge_kind: str | None = str(edge_kind_raw) if edge_kind_raw is not None else None

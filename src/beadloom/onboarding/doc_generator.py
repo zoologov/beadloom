@@ -410,6 +410,54 @@ def _render_feature_spec(
 
 
 # ------------------------------------------------------------------
+# YAML patching — write docs: field back to graph files
+# ------------------------------------------------------------------
+
+
+def _patch_docs_field(graph_dir: Path, docs_map: dict[str, str]) -> None:
+    """Write ``docs:`` entries into graph YAML files for newly created docs.
+
+    For each ``.yml`` file in *graph_dir*, if a node's ``ref_id`` appears in
+    *docs_map* **and** the node does not already have a ``docs:`` field, a
+    ``docs: [<relative_path>]`` entry is added.
+
+    Parameters
+    ----------
+    graph_dir:
+        Path to ``.beadloom/_graph/`` directory.
+    docs_map:
+        Mapping of ``{ref_id: relative_doc_path}`` for files that were
+        **newly created** (not skipped).
+    """
+    import yaml
+
+    if not docs_map:
+        return
+
+    for yml in sorted(graph_dir.glob("*.yml")):
+        if yml.name == "rules.yml":
+            continue
+
+        data = yaml.safe_load(yml.read_text(encoding="utf-8"))
+        if not data or "nodes" not in data:
+            continue
+
+        modified = False
+        for node in data["nodes"]:
+            ref_id = node.get("ref_id", "")
+            if ref_id in docs_map and "docs" not in node:
+                node["docs"] = [docs_map[ref_id]]
+                modified = True
+
+        if modified:
+            yml.write_text(
+                yaml.dump(data, sort_keys=False, allow_unicode=True),
+                encoding="utf-8",
+            )
+            logger.info("Patched docs: field in %s", yml)
+
+
+# ------------------------------------------------------------------
 # Public API
 # ------------------------------------------------------------------
 
@@ -517,6 +565,8 @@ def generate_skeletons(
 
     created = 0
     skipped = 0
+    # Track ref_id -> relative doc path for newly created files.
+    docs_map: dict[str, str] = {}
 
     # 1. architecture.md
     arch_content = _render_architecture(project_name, nodes, edges)
@@ -552,8 +602,19 @@ def generate_skeletons(
 
         if _write_if_missing(doc_path, content):
             created += 1
+            # Record relative path from project root for the docs: field.
+            try:
+                rel_path = doc_path.relative_to(project_root)
+            except ValueError:
+                rel_path = doc_path
+            docs_map[ref_id] = str(rel_path)
         else:
             skipped += 1
+
+    # 3. Patch docs: field into graph YAML for newly created files.
+    graph_dir = project_root / ".beadloom" / "_graph"
+    if graph_dir.is_dir() and docs_map:
+        _patch_docs_field(graph_dir, docs_map)
 
     logger.info("Doc skeletons: %d created, %d skipped", created, skipped)
     return {"files_created": created, "files_skipped": skipped}
