@@ -659,3 +659,101 @@ class TestNodeMatcher:
         assert m.matches("billing", "domain") is True
         assert m.matches("billing", "service") is False
         assert m.matches("auth", "domain") is False
+
+    def test_empty_matcher_matches_any_node(self) -> None:
+        """NodeMatcher with both fields None matches any node."""
+        m = NodeMatcher()
+        assert m.matches("billing", "domain") is True
+        assert m.matches("auth", "service") is True
+        assert m.matches("anything", "feature") is True
+
+
+# ---------------------------------------------------------------------------
+# TestEmptyMatcher — empty has_edge_to in require rules
+# ---------------------------------------------------------------------------
+
+
+class TestEmptyMatcher:
+    """Tests for empty has_edge_to matcher (matches any target node)."""
+
+    def test_empty_matcher_parses_from_yaml(self, tmp_path: Path) -> None:
+        """Parse YAML with has_edge_to: {} creates a valid RequireRule."""
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 1\n"
+            "rules:\n"
+            "  - name: domain-needs-parent\n"
+            '    description: "Every domain must have a part_of edge"\n'
+            "    require:\n"
+            "      for: { kind: domain }\n"
+            "      has_edge_to: {}\n"
+            "      edge_kind: part_of\n"
+        )
+        rules = load_rules(rules_path)
+        assert len(rules) == 1
+        rule = rules[0]
+        assert isinstance(rule, RequireRule)
+        assert rule.has_edge_to == NodeMatcher(ref_id=None, kind=None)
+        assert rule.has_edge_to.matches("anything", "service") is True
+
+    def test_empty_matcher_requires_any_outgoing_edge(
+        self, db_with_data: sqlite3.Connection
+    ) -> None:
+        """RequireRule with empty has_edge_to matches nodes with ANY outgoing edge."""
+        rules = [
+            RequireRule(
+                name="domain-needs-parent",
+                description="Every domain must have a part_of edge",
+                for_matcher=NodeMatcher(kind="domain"),
+                has_edge_to=NodeMatcher(),  # empty — matches any node
+                edge_kind="part_of",
+            ),
+        ]
+        # In db_with_data: billing and auth are domains.
+        # payments-svc -> billing (part_of) exists, but no edge FROM billing or auth.
+        violations = evaluate_require_rules(db_with_data, rules)
+        # Both billing and auth have no outgoing part_of edges → 2 violations.
+        assert len(violations) == 2
+        violated_refs = {v.from_ref_id for v in violations}
+        assert "billing" in violated_refs
+        assert "auth" in violated_refs
+
+    def test_empty_matcher_satisfied_by_any_edge(self, db_with_data: sqlite3.Connection) -> None:
+        """Adding a part_of edge from a domain to any node satisfies the rule."""
+        # Add part_of edges from both domains to any target.
+        db_with_data.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES (?, ?, ?)",
+            ("billing", "payments-svc", "part_of"),
+        )
+        db_with_data.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES (?, ?, ?)",
+            ("auth", "users-svc", "part_of"),
+        )
+        db_with_data.commit()
+
+        rules = [
+            RequireRule(
+                name="domain-needs-parent",
+                description="Every domain must have a part_of edge",
+                for_matcher=NodeMatcher(kind="domain"),
+                has_edge_to=NodeMatcher(),  # empty — matches any node
+                edge_kind="part_of",
+            ),
+        ]
+        violations = evaluate_require_rules(db_with_data, rules)
+        assert len(violations) == 0
+
+    def test_empty_for_matcher_still_rejected_in_deny(self, tmp_path: Path) -> None:
+        """Empty matcher in deny.from position is still rejected."""
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 1\n"
+            "rules:\n"
+            "  - name: bad-matcher\n"
+            '    description: "empty deny from"\n'
+            "    deny:\n"
+            "      from: {}\n"
+            "      to: { ref_id: b }\n"
+        )
+        with pytest.raises(ValueError, match=r"at least one"):
+            load_rules(rules_path)

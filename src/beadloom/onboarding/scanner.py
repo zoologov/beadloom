@@ -413,20 +413,17 @@ def generate_rules(
     kinds = {n["kind"] for n in nodes}
     rules: list[dict[str, Any]] = []
 
-    # Determine root ref_id (the node without outgoing part_of edges).
-    part_of_srcs = {e["src"] for e in edges if e["kind"] == "part_of"}
-    root_candidates = [n for n in nodes if n["ref_id"] not in part_of_srcs]
-    root_ref_id = root_candidates[0]["ref_id"] if root_candidates else project_name
-
-    # Rule 1: every domain must be part_of the root.
+    # Rule 1: every domain must have a part_of edge (to any node).
+    # Using an empty matcher so sub-domains pointing at a parent domain
+    # (rather than the root) are not flagged as violations.
     if "domain" in kinds:
         rules.append(
             {
                 "name": "domain-needs-parent",
-                "description": f"Every domain must be part_of {root_ref_id}",
+                "description": "Every domain must have a part_of edge",
                 "require": {
                     "for": {"kind": "domain"},
-                    "has_edge_to": {"ref_id": root_ref_id},
+                    "has_edge_to": {},
                     "edge_kind": "part_of",
                 },
             }
@@ -441,22 +438,6 @@ def generate_rules(
                 "require": {
                     "for": {"kind": "feature"},
                     "has_edge_to": {"kind": "domain"},
-                    "edge_kind": "part_of",
-                },
-            }
-        )
-
-    # Rule 3: every service (excluding root) must be part_of the root.
-    # Only generate if there are service nodes besides the root itself.
-    service_nodes = [n for n in nodes if n["kind"] == "service" and n["ref_id"] != root_ref_id]
-    if service_nodes:
-        rules.append(
-            {
-                "name": "service-needs-parent",
-                "description": f"Every service must be part_of {root_ref_id}",
-                "require": {
-                    "for": {"kind": "service"},
-                    "has_edge_to": {"ref_id": root_ref_id},
                     "edge_kind": "part_of",
                 },
             }

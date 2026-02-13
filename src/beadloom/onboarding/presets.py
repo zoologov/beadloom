@@ -9,6 +9,7 @@ monolith, microservices, and monorepo.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -133,11 +134,34 @@ PRESETS: dict[str, Preset] = {
 def detect_preset(project_root: Path) -> Preset:
     """Auto-detect the best preset for a project.
 
-    Heuristic:
-    - ``services/`` or ``cmd/`` directory -> microservices
-    - ``packages/`` or ``apps/`` directory -> monorepo
-    - Otherwise -> monolith
+    Heuristic (evaluated in order):
+    1. Mobile app indicators (React Native / Expo / Flutter) -> monolith
+    2. ``services/`` or ``cmd/`` directory -> microservices
+    3. ``packages/`` or ``apps/`` directory -> monorepo
+    4. Otherwise -> monolith
+
+    Mobile apps often have a ``services/`` directory containing internal API
+    modules, not independent microservices.  We check for mobile indicators
+    first so these projects are not misclassified as microservices.
     """
+    # --- Mobile app detection (must come before services/cmd check) ---
+    pkg_json = project_root / "package.json"
+    if pkg_json.exists():
+        try:
+            data = json.loads(pkg_json.read_text(encoding="utf-8"))
+            all_deps: dict[str, object] = {
+                **data.get("dependencies", {}),
+                **data.get("devDependencies", {}),
+            }
+            if "react-native" in all_deps or "expo" in all_deps:
+                return MONOLITH
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    if (project_root / "pubspec.yaml").exists():
+        return MONOLITH
+
+    # --- Standard directory-based heuristics ---
     children = {
         p.name for p in project_root.iterdir() if p.is_dir() and not p.name.startswith(".")
     }

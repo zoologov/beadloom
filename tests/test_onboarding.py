@@ -1025,7 +1025,8 @@ class TestGenerateRules:
         assert len(data["rules"]) == 1
         assert data["rules"][0]["name"] == "domain-needs-parent"
         assert data["rules"][0]["require"]["for"] == {"kind": "domain"}
-        assert data["rules"][0]["require"]["has_edge_to"] == {"ref_id": "myproject"}
+        # Empty matcher: matches any node (no false positives on hierarchical graphs)
+        assert data["rules"][0]["require"]["has_edge_to"] == {}
         assert data["rules"][0]["require"]["edge_kind"] == "part_of"
 
     def test_domains_and_features(self, tmp_path: Path) -> None:
@@ -1056,7 +1057,11 @@ class TestGenerateRules:
         assert "feature-needs-domain" in rule_names
 
     def test_all_three_kinds(self, tmp_path: Path) -> None:
-        """Root (service) + domain + feature + extra service node produce 3 rules."""
+        """Root (service) + domain + feature + extra service node produce 2 rules.
+
+        service-needs-parent was removed to avoid false positives on the root
+        node which has kind=service but no outgoing part_of edges.
+        """
         from beadloom.onboarding.scanner import generate_rules
 
         nodes = [
@@ -1083,12 +1088,12 @@ class TestGenerateRules:
         rules_path = tmp_path / "rules.yml"
         count = generate_rules(nodes, edges, "myproj", rules_path)
 
-        assert count == 3
+        assert count == 2
         data = yaml.safe_load(rules_path.read_text())
         rule_names = {r["name"] for r in data["rules"]}
         assert "domain-needs-parent" in rule_names
         assert "feature-needs-domain" in rule_names
-        assert "service-needs-parent" in rule_names
+        assert "service-needs-parent" not in rule_names
 
     def test_empty_graph(self, tmp_path: Path) -> None:
         """Empty nodes list returns 0 and does not create the file."""
@@ -1136,7 +1141,7 @@ class TestGenerateRules:
         assert data["rules"][0]["name"] == "domain-needs-parent"
 
     def test_root_detection_from_edges(self, tmp_path: Path) -> None:
-        """Root is the node without outgoing part_of edges; its ref_id appears in rules."""
+        """Root is detected correctly; domain rule uses empty matcher."""
         from beadloom.onboarding.scanner import generate_rules
 
         nodes = [
@@ -1151,8 +1156,9 @@ class TestGenerateRules:
 
         data = yaml.safe_load(rules_path.read_text())
         domain_rule = data["rules"][0]
-        assert domain_rule["require"]["has_edge_to"]["ref_id"] == "theroot"
-        assert "theroot" in domain_rule["description"]
+        # Empty matcher matches any node — avoids false positives on hierarchical graphs.
+        assert domain_rule["require"]["has_edge_to"] == {}
+        assert "part_of" in domain_rule["description"]
 
     def test_yaml_valid_for_rule_engine(self, tmp_path: Path) -> None:
         """Generated YAML matches rule_engine schema."""
@@ -1167,17 +1173,10 @@ class TestGenerateRules:
                 "summary": "Feature: api",
                 "source": "src/core/api/",
             },
-            {
-                "ref_id": "infra",
-                "kind": "service",
-                "summary": "Service: infra",
-                "source": "src/infra/",
-            },
         ]
         edges = [
             {"src": "core", "dst": "proj", "kind": "part_of"},
             {"src": "core-api", "dst": "core", "kind": "part_of"},
-            {"src": "infra", "dst": "proj", "kind": "part_of"},
         ]
         rules_path = tmp_path / "rules.yml"
         generate_rules(nodes, edges, "proj", rules_path)
@@ -1185,6 +1184,7 @@ class TestGenerateRules:
         data = yaml.safe_load(rules_path.read_text())
         assert data["version"] == 1
         assert isinstance(data["rules"], list)
+        assert len(data["rules"]) == 2  # domain-needs-parent + feature-needs-domain
 
         for rule in data["rules"]:
             assert "name" in rule
@@ -1195,6 +1195,122 @@ class TestGenerateRules:
             assert "has_edge_to" in require
             assert "edge_kind" in require
             assert require["edge_kind"] == "part_of"
+
+    def test_yaml_parseable_by_rule_engine(self, tmp_path: Path) -> None:
+        """Generated rules.yml can be loaded by rule_engine.load_rules()."""
+        from beadloom.graph.rule_engine import RequireRule, load_rules
+        from beadloom.onboarding.scanner import generate_rules
+
+        nodes = [
+            {"ref_id": "proj", "kind": "service", "summary": "Root: proj", "source": ""},
+            {"ref_id": "core", "kind": "domain", "summary": "Domain: core", "source": "src/core/"},
+            {
+                "ref_id": "core-api",
+                "kind": "feature",
+                "summary": "Feature: api",
+                "source": "src/core/api/",
+            },
+        ]
+        edges = [
+            {"src": "core", "dst": "proj", "kind": "part_of"},
+            {"src": "core-api", "dst": "core", "kind": "part_of"},
+        ]
+        rules_path = tmp_path / "rules.yml"
+        generate_rules(nodes, edges, "proj", rules_path)
+
+        # Must not raise — validates that has_edge_to: {} is accepted.
+        rules = load_rules(rules_path)
+        assert len(rules) == 2
+        for rule in rules:
+            assert isinstance(rule, RequireRule)
+
+    def test_generate_rules_uses_empty_matcher(self, tmp_path: Path) -> None:
+        """domain-needs-parent rule uses empty has_edge_to (not hardcoded to root)."""
+        from beadloom.onboarding.scanner import generate_rules
+
+        nodes = [
+            {"ref_id": "myproj", "kind": "service", "summary": "Root", "source": ""},
+            {"ref_id": "auth", "kind": "domain", "summary": "Domain", "source": "src/auth/"},
+            {"ref_id": "auth-sub", "kind": "domain", "summary": "Sub-domain", "source": ""},
+        ]
+        edges = [
+            {"src": "auth", "dst": "myproj", "kind": "part_of"},
+            {"src": "auth-sub", "dst": "auth", "kind": "part_of"},
+        ]
+        rules_path = tmp_path / "rules.yml"
+        generate_rules(nodes, edges, "myproj", rules_path)
+
+        data = yaml.safe_load(rules_path.read_text())
+        domain_rule = next(r for r in data["rules"] if r["name"] == "domain-needs-parent")
+        # Empty dict — matches any node, not just root.
+        assert domain_rule["require"]["has_edge_to"] == {}
+
+    def test_hierarchical_domains_no_violations(self, tmp_path: Path) -> None:
+        """Nested domains with part_of edges to parents produce 0 violations."""
+        from beadloom.graph.rule_engine import RequireRule, evaluate_require_rules
+        from beadloom.infrastructure.db import create_schema, open_db
+        from beadloom.onboarding.scanner import generate_rules
+
+        # Build a hierarchical graph: root -> auth -> auth-sub.
+        nodes = [
+            {"ref_id": "myproj", "kind": "service", "summary": "Root", "source": ""},
+            {"ref_id": "auth", "kind": "domain", "summary": "Domain", "source": "src/auth/"},
+            {"ref_id": "auth-sub", "kind": "domain", "summary": "Sub-domain", "source": ""},
+        ]
+        edges = [
+            {"src": "auth", "dst": "myproj", "kind": "part_of"},
+            {"src": "auth-sub", "dst": "auth", "kind": "part_of"},
+        ]
+        rules_path = tmp_path / "rules.yml"
+        generate_rules(nodes, edges, "myproj", rules_path)
+
+        # Set up DB with nodes and edges matching the graph.
+        db_path = tmp_path / "test.db"
+        conn = open_db(db_path)
+        create_schema(conn)
+        for n in nodes:
+            conn.execute(
+                "INSERT INTO nodes (ref_id, kind, summary) VALUES (?, ?, ?)",
+                (n["ref_id"], n["kind"], n["summary"]),
+            )
+        for e in edges:
+            conn.execute(
+                "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES (?, ?, ?)",
+                (e["src"], e["dst"], e["kind"]),
+            )
+        conn.commit()
+
+        # Build RequireRule matching what generate_rules() produces.
+        from beadloom.graph.rule_engine import load_rules
+
+        loaded_rules = load_rules(rules_path)
+        require_rules = [r for r in loaded_rules if isinstance(r, RequireRule)]
+
+        violations = evaluate_require_rules(conn, require_rules)
+        # auth -> myproj (part_of) and auth-sub -> auth (part_of) both satisfy
+        # the "domain must have a part_of edge to any node" rule.
+        assert len(violations) == 0
+        conn.close()
+
+    def test_service_needs_parent_not_generated(self, tmp_path: Path) -> None:
+        """service-needs-parent rule is no longer generated."""
+        from beadloom.onboarding.scanner import generate_rules
+
+        nodes = [
+            {"ref_id": "myproj", "kind": "service", "summary": "Root", "source": ""},
+            {"ref_id": "auth", "kind": "domain", "summary": "Domain", "source": "src/auth/"},
+            {"ref_id": "utils", "kind": "service", "summary": "Service", "source": "src/utils/"},
+        ]
+        edges = [
+            {"src": "auth", "dst": "myproj", "kind": "part_of"},
+            {"src": "utils", "dst": "myproj", "kind": "part_of"},
+        ]
+        rules_path = tmp_path / "rules.yml"
+        generate_rules(nodes, edges, "myproj", rules_path)
+
+        data = yaml.safe_load(rules_path.read_text())
+        rule_names = {r["name"] for r in data["rules"]}
+        assert "service-needs-parent" not in rule_names
 
 
 # ---------------------------------------------------------------------------

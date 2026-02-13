@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 from beadloom.onboarding.presets import (
@@ -101,6 +102,38 @@ class TestDetectPreset:
     def test_empty_project_monolith(self, tmp_path: Path) -> None:
         preset = detect_preset(tmp_path)
         assert preset.name == "monolith"
+
+    def test_detect_preset_react_native_with_services_dir(self, tmp_path: Path) -> None:
+        """React Native project with services/ dir should be monolith, not microservices."""
+        (tmp_path / "services").mkdir()
+        pkg = {"dependencies": {"react-native": "0.72.0"}}
+        (tmp_path / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+        preset = detect_preset(tmp_path)
+        assert preset.name == "monolith"
+
+    def test_detect_preset_expo_with_services_dir(self, tmp_path: Path) -> None:
+        """Expo project with services/ dir should be monolith, not microservices."""
+        (tmp_path / "services").mkdir()
+        pkg = {"dependencies": {"expo": "~49.0.0", "react": "18.2.0"}}
+        (tmp_path / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+        preset = detect_preset(tmp_path)
+        assert preset.name == "monolith"
+
+    def test_detect_preset_flutter(self, tmp_path: Path) -> None:
+        """Flutter project with services/ dir should be monolith, not microservices."""
+        (tmp_path / "services").mkdir()
+        (tmp_path / "pubspec.yaml").write_text(
+            "name: my_app\ndependencies:\n  flutter:\n    sdk: flutter\n",
+            encoding="utf-8",
+        )
+        preset = detect_preset(tmp_path)
+        assert preset.name == "monolith"
+
+    def test_detect_preset_non_mobile_services(self, tmp_path: Path) -> None:
+        """Non-mobile project with services/ dir should still be microservices."""
+        (tmp_path / "services").mkdir()
+        preset = detect_preset(tmp_path)
+        assert preset.name == "microservices"
 
 
 class TestPresetsRegistry:
