@@ -5,7 +5,7 @@ All notable changes to Beadloom are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.0] - 2026-02-13
 
 DDD restructuring: code, docs, and knowledge graph now follow domain-driven design.
 
@@ -15,15 +15,15 @@ DDD restructuring: code, docs, and knowledge graph now follow domain-driven desi
 - **Services layer** — `cli.py` and `mcp_server.py` moved into `services/` package
 - **Loose files absorbed** — `doctor.py` → `infrastructure/`, `watcher.py` → `infrastructure/`, `why.py` → `context_oracle/`
 - **Docs → domain-first layout** — `docs/` restructured into `domains/`, `services/`, `guides/` directories
-- **Knowledge graph updated** — 18 nodes (5 domains, 3 services, 8 features, 1 root), 32+ edges reflecting DDD structure; `doctor` and `watcher` reclassified as features under `infrastructure`
+- **Knowledge graph updated** — 18 nodes (5 domains, 3 services, 9 features, 1 root), 32+ edges reflecting DDD structure; `doctor` and `watcher` reclassified as features under `infrastructure`
 - **Architecture lint rules** — 2 rules: `domain-needs-parent`, `feature-needs-domain`
 - **CLI reference** — all 18 commands documented
 - **MCP docs** — all 8 tools documented
-- **README.md + README.ru.md** — updated doc links to domain-first layout
 - **Doc coverage 100%** — SPEC.md for all 9 features (cache, search, why, graph-diff, rule-engine, import-resolver, doctor, reindex, watcher) + TUI service doc
 - **`guides/ci-setup.md`** — linked to `beadloom` root node in knowledge graph
 - **`architecture.md` constraints** — updated for multi-language support and configurable paths
 - **`import-resolver` summary** — corrected from "Python import analysis" to "Multi-language import analysis"
+- **README.md + README.ru.md** — abstract examples replaced with real Beadloom data (architecture rules, docs tree, context bundle example)
 
 ### Fixed
 - Circular import in `graph/linter.py` resolved via lazy import of `incremental_reindex`
