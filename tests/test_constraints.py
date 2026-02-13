@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.context_builder import build_context
-from beadloom.db import create_schema, open_db
+from beadloom.context_oracle.builder import build_context
+from beadloom.infrastructure.db import create_schema, open_db
 
 if TYPE_CHECKING:
     import sqlite3
@@ -127,9 +127,7 @@ class TestContextBundleConstraints:
         bundle = build_context(db_with_constraints, ["billing"])
         assert "constraints" in bundle
 
-    def test_bundle_version_is_2(
-        self, db_with_constraints: sqlite3.Connection
-    ) -> None:
+    def test_bundle_version_is_2(self, db_with_constraints: sqlite3.Connection) -> None:
         """Context bundle version should be 2 now that constraints are included."""
         bundle = build_context(db_with_constraints, ["billing"])
         assert bundle["version"] == 2
@@ -151,37 +149,27 @@ class TestContextBundleConstraints:
         names = [c["rule"] for c in bundle["constraints"]]
         assert "services-need-domain" in names
 
-    def test_unrelated_rule_excluded(
-        self, db_with_constraints: sqlite3.Connection
-    ) -> None:
+    def test_unrelated_rule_excluded(self, db_with_constraints: sqlite3.Connection) -> None:
         """A rule that doesn't match any subgraph node should NOT be included."""
         bundle = build_context(db_with_constraints, ["billing"])
         names = [c["rule"] for c in bundle["constraints"]]
         assert "unrelated-rule" not in names
 
-    def test_disabled_rule_excluded(
-        self, db_with_constraints: sqlite3.Connection
-    ) -> None:
+    def test_disabled_rule_excluded(self, db_with_constraints: sqlite3.Connection) -> None:
         """A disabled rule should NOT be included even if it matches."""
         bundle = build_context(db_with_constraints, ["billing"])
         names = [c["rule"] for c in bundle["constraints"]]
         assert "disabled-rule" not in names
 
-    def test_no_rules_in_db_empty_constraints(
-        self, db_no_rules: sqlite3.Connection
-    ) -> None:
+    def test_no_rules_in_db_empty_constraints(self, db_no_rules: sqlite3.Connection) -> None:
         """When the rules table is empty, constraints should be an empty list."""
         bundle = build_context(db_no_rules, ["billing"])
         assert bundle["constraints"] == []
 
-    def test_constraint_dict_structure(
-        self, db_with_constraints: sqlite3.Connection
-    ) -> None:
+    def test_constraint_dict_structure(self, db_with_constraints: sqlite3.Connection) -> None:
         """Each constraint dict should have rule, description, type, definition keys."""
         bundle = build_context(db_with_constraints, ["billing"])
-        deny_constraints = [
-            c for c in bundle["constraints"] if c["rule"] == "billing-no-auth"
-        ]
+        deny_constraints = [c for c in bundle["constraints"] if c["rule"] == "billing-no-auth"]
         assert len(deny_constraints) == 1
         constraint = deny_constraints[0]
         assert constraint["rule"] == "billing-no-auth"

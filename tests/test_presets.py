@@ -1,10 +1,10 @@
-"""Tests for beadloom.presets — architecture preset definitions."""
+"""Tests for beadloom.onboarding.presets — architecture preset definitions."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from beadloom.presets import (
+from beadloom.onboarding.presets import (
     MICROSERVICES,
     MONOLITH,
     MONOREPO,

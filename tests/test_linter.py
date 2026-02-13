@@ -8,8 +8,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.db import create_schema, open_db
-from beadloom.linter import (
+from beadloom.graph.linter import (
     LintError,
     LintResult,
     format_json,
@@ -17,7 +16,8 @@ from beadloom.linter import (
     format_rich,
     lint,
 )
-from beadloom.rule_engine import Violation
+from beadloom.graph.rule_engine import Violation
+from beadloom.infrastructure.db import create_schema, open_db
 
 if TYPE_CHECKING:
     import sqlite3
@@ -182,7 +182,7 @@ class TestLint:
         pattern in test_rule_engine where data is manually populated because
         the import_resolver and rule_engine use different ref_id conventions.
         """
-        from beadloom.db import open_db as _open_db
+        from beadloom.infrastructure.db import open_db as _open_db
 
         # First reindex to populate the DB with nodes, symbols, etc.
         result = lint(lint_project, reindex_before=True)
@@ -265,16 +265,16 @@ class TestLint:
         # First do a real reindex so the DB exists
         lint(lint_project, reindex_before=True)
 
-        import beadloom.linter as linter_mod
+        import beadloom.infrastructure.reindex as reindex_mod
 
-        original_incremental = linter_mod.incremental_reindex
+        original_incremental = reindex_mod.incremental_reindex
 
         def mock_reindex(project_root: Path) -> None:
             nonlocal reindex_called
             reindex_called = True
             return original_incremental(project_root)
 
-        monkeypatch.setattr(linter_mod, "incremental_reindex", mock_reindex)
+        monkeypatch.setattr(reindex_mod, "incremental_reindex", mock_reindex)
 
         result = lint(lint_project, reindex_before=False)
         assert not reindex_called
@@ -306,7 +306,7 @@ class TestLint:
         The current reindex does not populate code_imports, so we inject
         records manually (same pattern as test_lint_with_violations).
         """
-        from beadloom.db import open_db as _open_db
+        from beadloom.infrastructure.db import open_db as _open_db
 
         # First lint to create the DB
         lint(lint_project, reindex_before=True)

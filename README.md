@@ -261,11 +261,17 @@ uv run mypy                # type checking (strict mode)
 |----------|-------------|
 | [architecture.md](docs/architecture.md) | System design and component overview |
 | [getting-started.md](docs/getting-started.md) | Quick start guide |
-| [context-oracle.md](docs/context-oracle.md) | BFS algorithm and context assembly |
-| [cli-reference.md](docs/cli-reference.md) | CLI commands reference |
-| [mcp-server.md](docs/mcp-server.md) | MCP integration guide |
-| [sync-engine.md](docs/sync-engine.md) | Doc sync engine details |
-| [graph-format.md](docs/graph-format.md) | YAML graph format specification |
+| **Domains** | |
+| [Context Oracle](docs/domains/context-oracle/README.md) | BFS algorithm, context assembly, caching, search |
+| [Graph](docs/domains/graph/README.md) | YAML graph format, diff, rule engine, linter |
+| [Doc Sync](docs/domains/doc-sync/README.md) | Doc↔code synchronization engine |
+| [Onboarding](docs/domains/onboarding/README.md) | Project bootstrap and presets |
+| [Infrastructure](docs/domains/infrastructure/README.md) | Database, health metrics, reindex |
+| **Services** | |
+| [CLI Reference](docs/services/cli.md) | All 18 CLI commands |
+| [MCP Server](docs/services/mcp.md) | All 8 MCP tools for AI agents |
+| **Guides** | |
+| [CI Setup](docs/guides/ci-setup.md) | GitHub Actions / GitLab CI integration |
 
 ## License
 

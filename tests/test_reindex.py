@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.db import get_meta, open_db
-from beadloom.reindex import incremental_reindex, reindex
+from beadloom.infrastructure.db import get_meta, open_db
+from beadloom.infrastructure.reindex import incremental_reindex, reindex
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -37,9 +37,7 @@ class TestReindex:
         conn = open_db(db_path)
         tables = {
             row[0]
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         }
         assert "nodes" in tables
         assert "edges" in tables
@@ -48,10 +46,7 @@ class TestReindex:
     def test_loads_graph(self, project: Path, db_path: Path) -> None:
         graph_dir = project / ".beadloom" / "_graph"
         (graph_dir / "domains.yml").write_text(
-            "nodes:\n"
-            "  - ref_id: routing\n"
-            "    kind: domain\n"
-            '    summary: "Routing"\n'
+            'nodes:\n  - ref_id: routing\n    kind: domain\n    summary: "Routing"\n'
         )
         reindex(project)
         conn = open_db(db_path)
@@ -96,19 +91,13 @@ class TestReindex:
         """Second reindex should clear old data."""
         graph_dir = project / ".beadloom" / "_graph"
         (graph_dir / "d.yml").write_text(
-            "nodes:\n"
-            "  - ref_id: old\n"
-            "    kind: domain\n"
-            '    summary: "Old"\n'
+            'nodes:\n  - ref_id: old\n    kind: domain\n    summary: "Old"\n'
         )
         reindex(project)
 
         # Change graph.
         (graph_dir / "d.yml").write_text(
-            "nodes:\n"
-            "  - ref_id: new\n"
-            "    kind: domain\n"
-            '    summary: "New"\n'
+            'nodes:\n  - ref_id: new\n    kind: domain\n    summary: "New"\n'
         )
         reindex(project)
 
@@ -122,22 +111,13 @@ class TestReindex:
     def test_annotated_code_creates_edges(self, project: Path, db_path: Path) -> None:
         graph_dir = project / ".beadloom" / "_graph"
         (graph_dir / "f.yml").write_text(
-            "nodes:\n"
-            "  - ref_id: FEAT-1\n"
-            "    kind: feature\n"
-            '    summary: "Feature"\n'
+            'nodes:\n  - ref_id: FEAT-1\n    kind: feature\n    summary: "Feature"\n'
         )
         src = project / "src"
-        (src / "handler.py").write_text(
-            "# beadloom:feature=FEAT-1\n"
-            "def do_thing():\n"
-            "    pass\n"
-        )
+        (src / "handler.py").write_text("# beadloom:feature=FEAT-1\ndef do_thing():\n    pass\n")
         reindex(project)
         conn = open_db(db_path)
-        edges = conn.execute(
-            "SELECT * FROM edges WHERE kind = 'touches_code'"
-        ).fetchall()
+        edges = conn.execute("SELECT * FROM edges WHERE kind = 'touches_code'").fetchall()
         assert len(edges) >= 1
         conn.close()
 
@@ -169,7 +149,7 @@ class TestReindex:
         conn.close()
 
     def test_returns_result(self, project: Path) -> None:
-        from beadloom.reindex import ReindexResult
+        from beadloom.infrastructure.reindex import ReindexResult
 
         result = reindex(project)
         assert isinstance(result, ReindexResult)
@@ -202,16 +182,12 @@ class TestReindex:
         result = reindex(project)
 
         # Assert
-        conflict_warnings = [
-            w for w in result.warnings if "architecture.md" in w
-        ]
+        conflict_warnings = [w for w in result.warnings if "architecture.md" in w]
         assert len(conflict_warnings) == 1
         assert "beadloom" in conflict_warnings[0]
         assert "context-oracle" in conflict_warnings[0]
 
-    def test_doc_ref_map_conflict_keeps_first(
-        self, project: Path, db_path: Path
-    ) -> None:
+    def test_doc_ref_map_conflict_keeps_first(self, project: Path, db_path: Path) -> None:
         """When two YAML nodes reference the same doc, the first mapping wins."""
         # Arrange
         graph_dir = project / ".beadloom" / "_graph"
@@ -271,18 +247,14 @@ class TestReindex:
         result = reindex(project)
 
         # Assert — no conflict warnings (other warnings like graph warnings are ok)
-        conflict_warnings = [
-            w for w in result.warnings if "referenced by both" in w
-        ]
+        conflict_warnings = [w for w in result.warnings if "referenced by both" in w]
         assert len(conflict_warnings) == 0
 
 
 class TestReindexDocsDir:
     """Tests for configurable docs_dir in reindex."""
 
-    def test_default_docs_dir_when_no_config(
-        self, project: Path, db_path: Path
-    ) -> None:
+    def test_default_docs_dir_when_no_config(self, project: Path, db_path: Path) -> None:
         """Without config.yml, default 'docs/' directory is used."""
         docs = project / "docs"
         (docs / "readme.md").write_text("## Hello\n\nWorld.\n")
@@ -295,9 +267,7 @@ class TestReindexDocsDir:
         assert row["path"] == "readme.md"
         conn.close()
 
-    def test_docs_dir_from_config_yml(
-        self, project: Path, db_path: Path
-    ) -> None:
+    def test_docs_dir_from_config_yml(self, project: Path, db_path: Path) -> None:
         """docs_dir from .beadloom/config.yml is used when present."""
         import yaml
 
@@ -319,9 +289,7 @@ class TestReindexDocsDir:
         assert row["path"] == "guide.md"
         conn.close()
 
-    def test_explicit_docs_dir_overrides_config(
-        self, project: Path, db_path: Path
-    ) -> None:
+    def test_explicit_docs_dir_overrides_config(self, project: Path, db_path: Path) -> None:
         """Explicit docs_dir parameter overrides config.yml."""
         import yaml
 
@@ -342,9 +310,7 @@ class TestReindexDocsDir:
         assert row["path"] == "notes.md"
         conn.close()
 
-    def test_config_yml_without_docs_dir_falls_back(
-        self, project: Path, db_path: Path
-    ) -> None:
+    def test_config_yml_without_docs_dir_falls_back(self, project: Path, db_path: Path) -> None:
         """config.yml exists but has no docs_dir key — falls back to 'docs/'."""
         import yaml
 
@@ -363,9 +329,7 @@ class TestReindexDocsDir:
         assert row["path"] == "readme.md"
         conn.close()
 
-    def test_custom_docs_dir_with_graph_ref_linking(
-        self, project: Path, db_path: Path
-    ) -> None:
+    def test_custom_docs_dir_with_graph_ref_linking(self, project: Path, db_path: Path) -> None:
         """Doc ref linking works correctly with custom docs_dir."""
         import yaml
 
@@ -390,9 +354,7 @@ class TestReindexDocsDir:
         assert result.docs_indexed == 1
 
         conn = open_db(db_path)
-        row = conn.execute(
-            "SELECT ref_id FROM docs WHERE path = ?", ("spec.md",)
-        ).fetchone()
+        row = conn.execute("SELECT ref_id FROM docs WHERE path = ?", ("spec.md",)).fetchone()
         assert row is not None
         assert row["ref_id"] == "F1"
         conn.close()
@@ -402,7 +364,9 @@ class TestFullReindexPopulatesFileIndex:
     """Full reindex should populate file_index for subsequent incremental runs."""
 
     def test_file_index_populated_after_full_reindex(
-        self, project: Path, db_path: Path,
+        self,
+        project: Path,
+        db_path: Path,
     ) -> None:
         graph_dir = project / ".beadloom" / "_graph"
         (graph_dir / "g.yml").write_text(
@@ -429,7 +393,9 @@ class TestIncrementalReindex:
     """Tests for incremental_reindex."""
 
     def test_first_run_falls_back_to_full(
-        self, project: Path, db_path: Path,
+        self,
+        project: Path,
+        db_path: Path,
     ) -> None:
         """First incremental call = full reindex + file_index populated."""
         graph_dir = project / ".beadloom" / "_graph"
@@ -445,7 +411,9 @@ class TestIncrementalReindex:
         conn.close()
 
     def test_no_changes_skips_reindex(
-        self, project: Path, db_path: Path,
+        self,
+        project: Path,
+        db_path: Path,
     ) -> None:
         """Nothing changed → no re-processing."""
         graph_dir = project / ".beadloom" / "_graph"
@@ -463,7 +431,9 @@ class TestIncrementalReindex:
         assert result.symbols_indexed == 0
 
     def test_changed_doc_reindexed(
-        self, project: Path, db_path: Path,
+        self,
+        project: Path,
+        db_path: Path,
     ) -> None:
         """Modified doc file is re-indexed."""
         graph_dir = project / ".beadloom" / "_graph"
@@ -482,15 +452,15 @@ class TestIncrementalReindex:
         assert result.docs_indexed == 1
 
         conn = open_db(db_path)
-        chunk = conn.execute(
-            "SELECT content FROM chunks ORDER BY id DESC LIMIT 1"
-        ).fetchone()
+        chunk = conn.execute("SELECT content FROM chunks ORDER BY id DESC LIMIT 1").fetchone()
         assert chunk is not None
         assert "Updated" in chunk["content"]
         conn.close()
 
     def test_added_code_file_indexed(
-        self, project: Path, db_path: Path,
+        self,
+        project: Path,
+        db_path: Path,
     ) -> None:
         """New code file is picked up."""
         graph_dir = project / ".beadloom" / "_graph"
@@ -513,7 +483,9 @@ class TestIncrementalReindex:
         conn.close()
 
     def test_deleted_doc_removed(
-        self, project: Path, db_path: Path,
+        self,
+        project: Path,
+        db_path: Path,
     ) -> None:
         """Deleted doc file is removed from DB."""
         graph_dir = project / ".beadloom" / "_graph"
@@ -526,9 +498,10 @@ class TestIncrementalReindex:
         incremental_reindex(project)
 
         conn = open_db(db_path)
-        assert conn.execute(
-            "SELECT count(*) FROM docs WHERE path = ?", ("gone.md",)
-        ).fetchone()[0] == 1
+        assert (
+            conn.execute("SELECT count(*) FROM docs WHERE path = ?", ("gone.md",)).fetchone()[0]
+            == 1
+        )
         conn.close()
 
         # Delete the doc.
@@ -536,13 +509,16 @@ class TestIncrementalReindex:
         incremental_reindex(project)
 
         conn = open_db(db_path)
-        assert conn.execute(
-            "SELECT count(*) FROM docs WHERE path = ?", ("gone.md",)
-        ).fetchone()[0] == 0
+        assert (
+            conn.execute("SELECT count(*) FROM docs WHERE path = ?", ("gone.md",)).fetchone()[0]
+            == 0
+        )
         conn.close()
 
     def test_deleted_code_file_removed(
-        self, project: Path, db_path: Path,
+        self,
+        project: Path,
+        db_path: Path,
     ) -> None:
         """Deleted code file symbols are removed."""
         graph_dir = project / ".beadloom" / "_graph"
@@ -555,10 +531,13 @@ class TestIncrementalReindex:
         incremental_reindex(project)
 
         conn = open_db(db_path)
-        assert conn.execute(
-            "SELECT count(*) FROM code_symbols WHERE file_path = ?",
-            ("src/old.py",),
-        ).fetchone()[0] >= 1
+        assert (
+            conn.execute(
+                "SELECT count(*) FROM code_symbols WHERE file_path = ?",
+                ("src/old.py",),
+            ).fetchone()[0]
+            >= 1
+        )
         conn.close()
 
         # Delete code file.
@@ -566,14 +545,19 @@ class TestIncrementalReindex:
         incremental_reindex(project)
 
         conn = open_db(db_path)
-        assert conn.execute(
-            "SELECT count(*) FROM code_symbols WHERE file_path = ?",
-            ("src/old.py",),
-        ).fetchone()[0] == 0
+        assert (
+            conn.execute(
+                "SELECT count(*) FROM code_symbols WHERE file_path = ?",
+                ("src/old.py",),
+            ).fetchone()[0]
+            == 0
+        )
         conn.close()
 
     def test_graph_change_triggers_full_reindex(
-        self, project: Path, db_path: Path,
+        self,
+        project: Path,
+        db_path: Path,
     ) -> None:
         """Graph YAML change → full reindex (nodes replaced)."""
         graph_dir = project / ".beadloom" / "_graph"
@@ -590,16 +574,15 @@ class TestIncrementalReindex:
 
         assert result.nodes_loaded == 1
         conn = open_db(db_path)
-        refs = {
-            r["ref_id"]
-            for r in conn.execute("SELECT ref_id FROM nodes").fetchall()
-        }
+        refs = {r["ref_id"] for r in conn.execute("SELECT ref_id FROM nodes").fetchall()}
         assert "NEW" in refs
         assert "OLD" not in refs
         conn.close()
 
     def test_file_index_updated_after_incremental(
-        self, project: Path, db_path: Path,
+        self,
+        project: Path,
+        db_path: Path,
     ) -> None:
         """file_index is updated to reflect current state."""
         graph_dir = project / ".beadloom" / "_graph"
@@ -615,10 +598,7 @@ class TestIncrementalReindex:
         incremental_reindex(project)
 
         conn = open_db(db_path)
-        paths = {
-            r["path"]
-            for r in conn.execute("SELECT path FROM file_index").fetchall()
-        }
+        paths = {r["path"] for r in conn.execute("SELECT path FROM file_index").fetchall()}
         assert "src/b.py" in paths
         assert "src/a.py" in paths
         conn.close()
@@ -634,19 +614,17 @@ class TestResolveScanPaths:
 
     def test_reads_from_config(self, tmp_path: Path) -> None:
         """scan_paths from config.yml are used."""
-        from beadloom.reindex import resolve_scan_paths
+        from beadloom.infrastructure.reindex import resolve_scan_paths
 
         beadloom_dir = tmp_path / ".beadloom"
         beadloom_dir.mkdir()
-        (beadloom_dir / "config.yml").write_text(
-            "scan_paths:\n- backend\n- frontend/src\n"
-        )
+        (beadloom_dir / "config.yml").write_text("scan_paths:\n- backend\n- frontend/src\n")
         result = resolve_scan_paths(tmp_path)
         assert result == ["backend", "frontend/src"]
 
     def test_defaults_without_config(self, tmp_path: Path) -> None:
         """Falls back to defaults when no config exists."""
-        from beadloom.reindex import resolve_scan_paths
+        from beadloom.infrastructure.reindex import resolve_scan_paths
 
         result = resolve_scan_paths(tmp_path)
         assert result == ["src", "lib", "app"]
@@ -658,14 +636,9 @@ class TestResolveScanPaths:
         graph_dir = beadloom_dir / "_graph"
         graph_dir.mkdir(parents=True)
         (tmp_path / "docs").mkdir()
-        (beadloom_dir / "config.yml").write_text(
-            "scan_paths:\n- backend\nlanguages:\n- python\n"
-        )
+        (beadloom_dir / "config.yml").write_text("scan_paths:\n- backend\nlanguages:\n- python\n")
         backend = tmp_path / "backend"
         backend.mkdir()
-        (backend / "views.py").write_text(
-            "# beadloom:feature=API-001\n"
-            "def index():\n    pass\n"
-        )
+        (backend / "views.py").write_text("# beadloom:feature=API-001\ndef index():\n    pass\n")
         result = reindex(tmp_path)
         assert result.symbols_indexed >= 1

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from click.testing import CliRunner
 
-from beadloom.cli import main
+from beadloom.services.cli import main
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -23,17 +23,19 @@ def _setup_project(tmp_path: Path) -> Path:
     graph_dir = project / ".beadloom" / "_graph"
     graph_dir.mkdir(parents=True)
     (graph_dir / "graph.yml").write_text(
-        yaml.dump({
-            "nodes": [
-                {"ref_id": "FEAT-1", "kind": "feature", "summary": "Feature one"},
-                {"ref_id": "routing", "kind": "domain", "summary": "Routing domain"},
-                {"ref_id": "api-gw", "kind": "service", "summary": "API Gateway"},
-            ],
-            "edges": [
-                {"src": "FEAT-1", "dst": "routing", "kind": "part_of"},
-                {"src": "FEAT-1", "dst": "api-gw", "kind": "uses"},
-            ],
-        })
+        yaml.dump(
+            {
+                "nodes": [
+                    {"ref_id": "FEAT-1", "kind": "feature", "summary": "Feature one"},
+                    {"ref_id": "routing", "kind": "domain", "summary": "Routing domain"},
+                    {"ref_id": "api-gw", "kind": "service", "summary": "API Gateway"},
+                ],
+                "edges": [
+                    {"src": "FEAT-1", "dst": "routing", "kind": "part_of"},
+                    {"src": "FEAT-1", "dst": "api-gw", "kind": "uses"},
+                ],
+            }
+        )
     )
 
     docs_dir = project / "docs"
@@ -41,7 +43,7 @@ def _setup_project(tmp_path: Path) -> Path:
     src_dir = project / "src"
     src_dir.mkdir()
 
-    from beadloom.reindex import reindex
+    from beadloom.infrastructure.reindex import reindex
 
     reindex(project)
     return project

@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.db import create_schema, open_db
-from beadloom.doc_indexer import chunk_markdown, classify_section, index_docs
+from beadloom.doc_sync.doc_indexer import chunk_markdown, classify_section, index_docs
+from beadloom.infrastructure.db import create_schema, open_db
 
 if TYPE_CHECKING:
     import sqlite3
@@ -134,9 +134,7 @@ class TestIndexDocs:
             "## Business rules\n\nRule 1.\n\n## API\n\nGET /endpoint\n"
         )
         index_docs(docs_dir, db)
-        chunks = db.execute(
-            "SELECT heading, section FROM chunks ORDER BY chunk_index"
-        ).fetchall()
+        chunks = db.execute("SELECT heading, section FROM chunks ORDER BY chunk_index").fetchall()
         assert len(chunks) == 2
         assert chunks[0]["section"] == "spec"
         assert chunks[1]["section"] == "api"

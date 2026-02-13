@@ -1,4 +1,4 @@
-"""Tests for beadloom.doctor — graph and data validation checks."""
+"""Tests for beadloom.infrastructure.doctor — graph and data validation checks."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.db import create_schema, open_db
-from beadloom.doctor import Check, Severity, run_checks
+from beadloom.infrastructure.db import create_schema, open_db
+from beadloom.infrastructure.doctor import Check, Severity, run_checks
 
 if TYPE_CHECKING:
     import sqlite3
@@ -108,8 +108,8 @@ class TestDoctorCli:
     def test_doctor_command(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
 
-        from beadloom.cli import main
-        from beadloom.reindex import reindex
+        from beadloom.infrastructure.reindex import reindex
+        from beadloom.services.cli import main
 
         project = tmp_path / "proj"
         project.mkdir()
@@ -125,7 +125,7 @@ class TestDoctorCli:
     def test_doctor_no_db(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
 
-        from beadloom.cli import main
+        from beadloom.services.cli import main
 
         project = tmp_path / "empty"
         project.mkdir()

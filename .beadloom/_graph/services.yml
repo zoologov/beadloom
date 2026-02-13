@@ -1,141 +1,232 @@
 nodes:
+  # Root service
   - ref_id: beadloom
     kind: service
-    summary: "Beadloom CLI + MCP server — Context Oracle + Doc Sync Engine"
+    summary: "Beadloom CLI + MCP server — Context Oracle + Doc Sync Engine (v1.1.0)"
     source: src/beadloom/
     docs:
       - docs/architecture.md
       - docs/getting-started.md
 
+  # Domain: Context Oracle
   - ref_id: context-oracle
     kind: domain
-    summary: "Context bundle building via BFS graph traversal"
+    summary: "Context bundle building via BFS graph traversal, code indexing, caching, search"
+    source: src/beadloom/context_oracle/
     docs:
-      - docs/context-oracle.md
+      - docs/domains/context-oracle/README.md
 
+  # Domain: Doc Sync
   - ref_id: doc-sync
     kind: domain
     summary: "Doc-code synchronization tracking and stale detection"
+    source: src/beadloom/doc_sync/
     docs:
-      - docs/sync-engine.md
+      - docs/domains/doc-sync/README.md
 
-  - ref_id: mcp-server
-    kind: service
-    summary: "MCP stdio server with 5 tools for AI agents"
-    docs:
-      - docs/mcp-server.md
-
-  - ref_id: cli
-    kind: service
-    summary: "Click-based CLI with 12 commands"
-    docs:
-      - docs/cli-reference.md
-
-  - ref_id: graph-format
+  # Domain: Graph
+  - ref_id: graph
     kind: domain
-    summary: "YAML graph format specification and loader"
+    summary: "YAML graph format, loader, diff, rule engine, import resolver, linter"
+    source: src/beadloom/graph/
     docs:
-      - docs/graph-format.md
+      - docs/domains/graph/README.md
 
-  - ref_id: reindex
-    kind: domain
-    summary: "Full reindex pipeline — drop, re-create, reload graph/docs/code/sync"
-
+  # Domain: Onboarding
   - ref_id: onboarding
     kind: domain
-    summary: "Project bootstrap, doc import, and interactive initialization"
+    summary: "Project bootstrap, doc import, architecture-aware presets"
+    source: src/beadloom/onboarding/
+    docs:
+      - docs/domains/onboarding/README.md
 
-  - ref_id: db
+  # Domain: Infrastructure
+  - ref_id: infrastructure
     kind: domain
-    summary: "SQLite database layer — schema, connection management, meta helpers"
+    summary: "SQLite database layer, health metrics, reindex orchestrator"
+    source: src/beadloom/infrastructure/
+    docs:
+      - docs/domains/infrastructure/README.md
 
+  # Service: CLI
+  - ref_id: cli
+    kind: service
+    summary: "Click-based CLI with 18 commands"
+    source: src/beadloom/services/cli.py
+    docs:
+      - docs/services/cli.md
+
+  # Service: MCP Server
+  - ref_id: mcp-server
+    kind: service
+    summary: "MCP stdio server with 8 tools for AI agents"
+    source: src/beadloom/services/mcp_server.py
+    docs:
+      - docs/services/mcp.md
+
+  # Service: TUI
+  - ref_id: tui
+    kind: service
+    summary: "Interactive terminal dashboard (Textual)"
+    source: src/beadloom/tui/
+
+  # Feature: Doctor
   - ref_id: doctor
-    kind: domain
+    kind: feature
     summary: "Validation checks for graph and data integrity"
+    source: src/beadloom/infrastructure/doctor.py
 
-  - ref_id: linter
-    kind: domain
-    summary: "Architecture-as-Code linter — import resolver, rule engine, lint orchestrator"
+  # Service: Why (Impact Analysis)
+  - ref_id: why
+    kind: feature
+    summary: "Impact analysis — upstream deps and downstream consumers via bidirectional BFS"
+    source: src/beadloom/context_oracle/why.py
+
+  # Feature: Watcher
+  - ref_id: watcher
+    kind: feature
+    summary: "File watcher for auto-reindex on changes"
+    source: src/beadloom/infrastructure/watcher.py
+
+  # Feature: Search
+  - ref_id: search
+    kind: feature
+    summary: "FTS5 full-text search across nodes and documentation"
+    source: src/beadloom/context_oracle/search.py
+
+  # Feature: Graph Diff
+  - ref_id: graph-diff
+    kind: feature
+    summary: "Git ref comparison — added/removed/changed nodes and edges"
+    source: src/beadloom/graph/diff.py
+
+  # Feature: Rule Engine
+  - ref_id: rule-engine
+    kind: feature
+    summary: "Architecture-as-Code rule engine with require/deny rules"
+    source: src/beadloom/graph/rule_engine.py
+
+  # Feature: Import Resolver
+  - ref_id: import-resolver
+    kind: feature
+    summary: "Python import analysis and depends_on edge generation"
+    source: src/beadloom/graph/import_resolver.py
+
+  # Feature: Cache
+  - ref_id: cache
+    kind: feature
+    summary: "ETag-based context bundle cache (in-memory + SQLite)"
+    source: src/beadloom/context_oracle/cache.py
+
+  # Feature: Reindex
+  - ref_id: reindex
+    kind: feature
+    summary: "Full reindex pipeline — drop, recreate, reload graph/docs/code/sync"
+    source: src/beadloom/infrastructure/reindex.py
 
 edges:
+  # Domains are part_of beadloom
   - src: context-oracle
     dst: beadloom
     kind: part_of
   - src: doc-sync
     dst: beadloom
     kind: part_of
-  - src: mcp-server
-    dst: beadloom
-    kind: part_of
-  - src: cli
-    dst: beadloom
-    kind: part_of
-  - src: graph-format
-    dst: beadloom
-    kind: part_of
-  - src: mcp-server
-    dst: context-oracle
-    kind: uses
-  - src: cli
-    dst: context-oracle
-    kind: uses
-  - src: cli
-    dst: doc-sync
-    kind: uses
-  - src: cli
-    dst: graph-format
-    kind: uses
-  - src: reindex
+  - src: graph
     dst: beadloom
     kind: part_of
   - src: onboarding
     dst: beadloom
     kind: part_of
-  - src: db
+  - src: infrastructure
+    dst: beadloom
+    kind: part_of
+
+  # Services are part_of beadloom
+  - src: cli
+    dst: beadloom
+    kind: part_of
+  - src: mcp-server
+    dst: beadloom
+    kind: part_of
+  - src: tui
     dst: beadloom
     kind: part_of
   - src: doctor
-    dst: beadloom
+    dst: infrastructure
+    kind: part_of
+  - src: watcher
+    dst: infrastructure
+    kind: part_of
+
+  # Features are part_of their parent domains
+  - src: search
+    dst: context-oracle
+    kind: part_of
+  - src: cache
+    dst: context-oracle
+    kind: part_of
+  - src: why
+    dst: context-oracle
+    kind: part_of
+  - src: graph-diff
+    dst: graph
+    kind: part_of
+  - src: rule-engine
+    dst: graph
+    kind: part_of
+  - src: import-resolver
+    dst: graph
     kind: part_of
   - src: reindex
-    dst: db
+    dst: infrastructure
+    kind: part_of
+
+  # Service → domain usage edges
+  - src: cli
+    dst: context-oracle
     kind: uses
-  - src: reindex
-    dst: graph-format
-    kind: uses
-  - src: reindex
+  - src: cli
     dst: doc-sync
     kind: uses
-  - src: context-oracle
-    dst: db
-    kind: uses
-  - src: doc-sync
-    dst: db
-    kind: uses
   - src: cli
-    dst: reindex
-    kind: uses
-  - src: cli
-    dst: doctor
+    dst: graph
     kind: uses
   - src: cli
     dst: onboarding
     kind: uses
+  - src: cli
+    dst: infrastructure
+    kind: uses
   - src: mcp-server
-    dst: db
+    dst: context-oracle
     kind: uses
   - src: mcp-server
     dst: doc-sync
     kind: uses
-  - src: linter
-    dst: beadloom
-    kind: part_of
-  - src: linter
-    dst: db
+  - src: mcp-server
+    dst: graph
     kind: uses
-  - src: linter
-    dst: reindex
+  - src: mcp-server
+    dst: infrastructure
     kind: uses
-  - src: cli
-    dst: linter
+
+  # Cross-domain dependencies
+  - src: context-oracle
+    dst: infrastructure
+    kind: depends_on
+  - src: doc-sync
+    dst: infrastructure
+    kind: depends_on
+  - src: graph
+    dst: infrastructure
+    kind: depends_on
+  - src: reindex
+    dst: context-oracle
+    kind: uses
+  - src: reindex
+    dst: doc-sync
+    kind: uses
+  - src: reindex
+    dst: graph
     kind: uses

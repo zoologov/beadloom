@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 import pytest
 import yaml
 
-from beadloom.diff import (
+from beadloom.graph.diff import (
     EdgeChange,
     GraphDiff,
     NodeChange,

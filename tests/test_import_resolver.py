@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.code_indexer import clear_cache
-from beadloom.db import create_schema, open_db
+from beadloom.context_oracle.code_indexer import clear_cache
+from beadloom.infrastructure.db import create_schema, open_db
 
 if TYPE_CHECKING:
     import sqlite3
@@ -73,7 +73,7 @@ class TestExtractImportsPython:
 
     def test_import_os(self, tmp_path: Path) -> None:
         """Plain `import os` produces import_path='os'."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         py = tmp_path / "module.py"
         py.write_text("import os\n")
@@ -85,7 +85,7 @@ class TestExtractImportsPython:
 
     def test_import_dotted(self, tmp_path: Path) -> None:
         """`import beadloom.core` -> import_path='beadloom.core'."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         py = tmp_path / "module.py"
         py.write_text("import beadloom.core\n")
@@ -95,7 +95,7 @@ class TestExtractImportsPython:
 
     def test_from_import(self, tmp_path: Path) -> None:
         """`from beadloom.auth import tokens` -> import_path='beadloom.auth'."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         py = tmp_path / "module.py"
         py.write_text("from beadloom.auth import tokens\n")
@@ -105,7 +105,7 @@ class TestExtractImportsPython:
 
     def test_from_deep_import(self, tmp_path: Path) -> None:
         """`from beadloom.auth.models import User` -> import_path='beadloom.auth.models'."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         py = tmp_path / "module.py"
         py.write_text("from beadloom.auth.models import User\n")
@@ -115,7 +115,7 @@ class TestExtractImportsPython:
 
     def test_relative_import_dot_skipped(self, tmp_path: Path) -> None:
         """`from . import sibling` is skipped (relative import)."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         py = tmp_path / "module.py"
         py.write_text("from . import sibling\n")
@@ -124,7 +124,7 @@ class TestExtractImportsPython:
 
     def test_relative_import_dotdot_skipped(self, tmp_path: Path) -> None:
         """`from ..parent import thing` is skipped (relative import)."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         py = tmp_path / "module.py"
         py.write_text("from ..parent import thing\n")
@@ -133,7 +133,7 @@ class TestExtractImportsPython:
 
     def test_relative_import_dot_module_skipped(self, tmp_path: Path) -> None:
         """`from .local import helper` is skipped (relative import)."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         py = tmp_path / "module.py"
         py.write_text("from .local import helper\n")
@@ -142,7 +142,7 @@ class TestExtractImportsPython:
 
     def test_multiple_imports_in_file(self, tmp_path: Path) -> None:
         """Multiple import statements yield multiple ImportInfo entries."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         py = tmp_path / "multi.py"
         py.write_text("import os\nimport json\nfrom pathlib import Path\n")
@@ -153,7 +153,7 @@ class TestExtractImportsPython:
 
     def test_file_path_recorded(self, tmp_path: Path) -> None:
         """ImportInfo records the file path."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         py = tmp_path / "check_path.py"
         py.write_text("import os\n")
@@ -162,7 +162,7 @@ class TestExtractImportsPython:
 
     def test_empty_file(self, tmp_path: Path) -> None:
         """Empty Python file yields no imports."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         py = tmp_path / "empty.py"
         py.write_text("")
@@ -171,7 +171,7 @@ class TestExtractImportsPython:
 
     def test_unsupported_extension(self, tmp_path: Path) -> None:
         """Unsupported file extension returns empty list."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         txt = tmp_path / "data.txt"
         txt.write_text("import os\n")
@@ -190,7 +190,7 @@ class TestExtractImportsTypeScript:
     @pytest.mark.skipif(not _ts_available(), reason="tree-sitter-typescript not installed")
     def test_named_import(self, tmp_path: Path) -> None:
         """`import { X } from 'some-module'` -> import_path='some-module'."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         ts = tmp_path / "app.ts"
         ts.write_text("import { X } from 'some-module';\n")
@@ -201,7 +201,7 @@ class TestExtractImportsTypeScript:
     @pytest.mark.skipif(not _ts_available(), reason="tree-sitter-typescript not installed")
     def test_default_import(self, tmp_path: Path) -> None:
         """`import X from 'path'` -> import_path='path'."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         ts = tmp_path / "app.ts"
         ts.write_text("import Y from 'path';\n")
@@ -212,7 +212,7 @@ class TestExtractImportsTypeScript:
     @pytest.mark.skipif(not _ts_available(), reason="tree-sitter-typescript not installed")
     def test_relative_import_skipped(self, tmp_path: Path) -> None:
         """`import './relative'` is skipped."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         ts = tmp_path / "app.ts"
         ts.write_text("import './relative';\n")
@@ -222,7 +222,7 @@ class TestExtractImportsTypeScript:
     @pytest.mark.skipif(not _ts_available(), reason="tree-sitter-typescript not installed")
     def test_relative_parent_import_skipped(self, tmp_path: Path) -> None:
         """`import { A } from '../parent'` is skipped (relative)."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         ts = tmp_path / "app.ts"
         ts.write_text("import { A } from '../parent';\n")
@@ -232,7 +232,7 @@ class TestExtractImportsTypeScript:
     @pytest.mark.skipif(not _ts_available(), reason="tree-sitter-typescript not installed")
     def test_js_file_uses_ts_parser(self, tmp_path: Path) -> None:
         """JavaScript file is parsed the same way as TypeScript."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         js = tmp_path / "app.js"
         js.write_text("import { handler } from 'express';\n")
@@ -243,7 +243,7 @@ class TestExtractImportsTypeScript:
     @pytest.mark.skipif(not _ts_available(), reason="tree-sitter-typescript not installed")
     def test_namespace_import(self, tmp_path: Path) -> None:
         """`import * as pkg from 'external-pkg'` -> import_path='external-pkg'."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         ts = tmp_path / "app.ts"
         ts.write_text("import * as pkg from 'external-pkg';\n")
@@ -263,7 +263,7 @@ class TestExtractImportsGo:
     @pytest.mark.skipif(not _go_available(), reason="tree-sitter-go not installed")
     def test_stdlib_import_skipped(self, tmp_path: Path) -> None:
         """`import "fmt"` is skipped (stdlib, no slash)."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         go = tmp_path / "main.go"
         go.write_text('package main\n\nimport "fmt"\n')
@@ -273,7 +273,7 @@ class TestExtractImportsGo:
     @pytest.mark.skipif(not _go_available(), reason="tree-sitter-go not installed")
     def test_third_party_import(self, tmp_path: Path) -> None:
         """`import "github.com/org/repo/pkg"` -> import_path with slash."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         go = tmp_path / "main.go"
         go.write_text('package main\n\nimport "github.com/org/repo/pkg"\n')
@@ -284,7 +284,7 @@ class TestExtractImportsGo:
     @pytest.mark.skipif(not _go_available(), reason="tree-sitter-go not installed")
     def test_grouped_imports(self, tmp_path: Path) -> None:
         """Grouped import block extracts multiple entries, skipping stdlib."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         go = tmp_path / "main.go"
         go.write_text('package main\n\nimport (\n    "os"\n    "github.com/other/lib"\n)\n')
@@ -296,7 +296,7 @@ class TestExtractImportsGo:
     @pytest.mark.skipif(not _go_available(), reason="tree-sitter-go not installed")
     def test_aliased_import(self, tmp_path: Path) -> None:
         """Aliased import `alias "github.com/x/y"` still extracts the path."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         go = tmp_path / "main.go"
         go.write_text('package main\n\nimport (\n    myalias "github.com/aliased/pkg"\n)\n')
@@ -316,7 +316,7 @@ class TestExtractImportsRust:
     @pytest.mark.skipif(not _rust_available(), reason="tree-sitter-rust not installed")
     def test_std_skipped(self, tmp_path: Path) -> None:
         """`use std::collections::HashMap` is skipped (std crate)."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         rs = tmp_path / "lib.rs"
         rs.write_text("use std::collections::HashMap;\n")
@@ -326,7 +326,7 @@ class TestExtractImportsRust:
     @pytest.mark.skipif(not _rust_available(), reason="tree-sitter-rust not installed")
     def test_crate_import(self, tmp_path: Path) -> None:
         """`use crate::auth::tokens` -> import_path='crate::auth::tokens'."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         rs = tmp_path / "lib.rs"
         rs.write_text("use crate::auth::tokens;\n")
@@ -337,7 +337,7 @@ class TestExtractImportsRust:
     @pytest.mark.skipif(not _rust_available(), reason="tree-sitter-rust not installed")
     def test_external_crate_import(self, tmp_path: Path) -> None:
         """`use mylib::core` -> import_path='mylib::core'."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         rs = tmp_path / "lib.rs"
         rs.write_text("use mylib::core;\n")
@@ -348,7 +348,7 @@ class TestExtractImportsRust:
     @pytest.mark.skipif(not _rust_available(), reason="tree-sitter-rust not installed")
     def test_core_and_alloc_skipped(self, tmp_path: Path) -> None:
         """`use core::...` and `use alloc::...` are skipped (builtin crates)."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         rs = tmp_path / "lib.rs"
         rs.write_text("use core::fmt::Display;\nuse alloc::vec::Vec;\n")
@@ -358,7 +358,7 @@ class TestExtractImportsRust:
     @pytest.mark.skipif(not _rust_available(), reason="tree-sitter-rust not installed")
     def test_super_skipped(self, tmp_path: Path) -> None:
         """`use super::parent` is skipped (relative)."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         rs = tmp_path / "lib.rs"
         rs.write_text("use super::parent;\n")
@@ -368,7 +368,7 @@ class TestExtractImportsRust:
     @pytest.mark.skipif(not _rust_available(), reason="tree-sitter-rust not installed")
     def test_self_skipped(self, tmp_path: Path) -> None:
         """`use self::internal::helper` is skipped (relative)."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         rs = tmp_path / "lib.rs"
         rs.write_text("use self::internal::helper;\n")
@@ -378,7 +378,7 @@ class TestExtractImportsRust:
     @pytest.mark.skipif(not _rust_available(), reason="tree-sitter-rust not installed")
     def test_mod_declaration_skipped(self, tmp_path: Path) -> None:
         """`mod internal;` is not an import — must be skipped."""
-        from beadloom.import_resolver import extract_imports
+        from beadloom.graph.import_resolver import extract_imports
 
         rs = tmp_path / "lib.rs"
         rs.write_text("mod internal;\n")
@@ -400,7 +400,7 @@ class TestResolveImportToNode:
         conn: sqlite3.Connection,
     ) -> None:
         """Import resolves to a node via code_symbols annotation match."""
-        from beadloom.import_resolver import resolve_import_to_node
+        from beadloom.graph.import_resolver import resolve_import_to_node
 
         # Insert a node
         conn.execute(
@@ -433,7 +433,7 @@ class TestResolveImportToNode:
         conn: sqlite3.Connection,
     ) -> None:
         """Fallback: import resolves via nodes.source column match."""
-        from beadloom.import_resolver import resolve_import_to_node
+        from beadloom.graph.import_resolver import resolve_import_to_node
 
         conn.execute(
             "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
@@ -450,7 +450,7 @@ class TestResolveImportToNode:
         conn: sqlite3.Connection,
     ) -> None:
         """Returns None if no node matches the import path."""
-        from beadloom.import_resolver import resolve_import_to_node
+        from beadloom.graph.import_resolver import resolve_import_to_node
 
         result = resolve_import_to_node("unknown.module", tmp_path, conn)
         assert result is None
@@ -470,7 +470,7 @@ class TestIndexImports:
         conn: sqlite3.Connection,
     ) -> None:
         """Indexes imports from Python source files in src/ directory."""
-        from beadloom.import_resolver import index_imports
+        from beadloom.graph.import_resolver import index_imports
 
         src = tmp_path / "src" / "myapp"
         src.mkdir(parents=True)
@@ -489,7 +489,7 @@ class TestIndexImports:
         conn: sqlite3.Connection,
     ) -> None:
         """Verify the data inserted into code_imports is correct."""
-        from beadloom.import_resolver import index_imports
+        from beadloom.graph.import_resolver import index_imports
 
         src = tmp_path / "src" / "myapp"
         src.mkdir(parents=True)
@@ -513,7 +513,7 @@ class TestIndexImports:
         conn: sqlite3.Connection,
     ) -> None:
         """Returns the number of imports indexed."""
-        from beadloom.import_resolver import index_imports
+        from beadloom.graph.import_resolver import index_imports
 
         src = tmp_path / "src" / "pkg"
         src.mkdir(parents=True)
@@ -529,7 +529,7 @@ class TestIndexImports:
         conn: sqlite3.Connection,
     ) -> None:
         """No source directories -> 0 imports."""
-        from beadloom.import_resolver import index_imports
+        from beadloom.graph.import_resolver import index_imports
 
         count = index_imports(tmp_path, conn)
         assert count == 0
@@ -540,7 +540,7 @@ class TestIndexImports:
         conn: sqlite3.Connection,
     ) -> None:
         """Also scans lib/ and app/ directories."""
-        from beadloom.import_resolver import index_imports
+        from beadloom.graph.import_resolver import index_imports
 
         lib = tmp_path / "lib"
         lib.mkdir()
@@ -559,7 +559,7 @@ class TestIndexImports:
         conn: sqlite3.Connection,
     ) -> None:
         """file_path in code_imports is stored as relative, not absolute."""
-        from beadloom.import_resolver import index_imports
+        from beadloom.graph.import_resolver import index_imports
 
         src = tmp_path / "src" / "myapp"
         src.mkdir(parents=True)
@@ -579,7 +579,7 @@ class TestIndexImports:
         conn: sqlite3.Connection,
     ) -> None:
         """Re-indexing the same files replaces old records (upsert)."""
-        from beadloom.import_resolver import index_imports
+        from beadloom.graph.import_resolver import index_imports
 
         src = tmp_path / "src" / "pkg"
         src.mkdir(parents=True)
@@ -607,7 +607,7 @@ class TestHierarchicalResolution:
         conn: sqlite3.Connection,
     ) -> None:
         """Django-style import resolves via node source prefix."""
-        from beadloom.import_resolver import resolve_import_to_node
+        from beadloom.graph.import_resolver import resolve_import_to_node
 
         conn.execute(
             "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
@@ -616,7 +616,9 @@ class TestHierarchicalResolution:
         conn.commit()
 
         result = resolve_import_to_node(
-            "apps.accounts.models", tmp_path, conn,
+            "apps.accounts.models",
+            tmp_path,
+            conn,
             scan_paths=["backend"],
         )
         assert result == "apps-accounts"
@@ -627,7 +629,7 @@ class TestHierarchicalResolution:
         conn: sqlite3.Connection,
     ) -> None:
         """When multiple nodes match, returns the deepest (most specific)."""
-        from beadloom.import_resolver import resolve_import_to_node
+        from beadloom.graph.import_resolver import resolve_import_to_node
 
         conn.execute(
             "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
@@ -640,7 +642,9 @@ class TestHierarchicalResolution:
         conn.commit()
 
         result = resolve_import_to_node(
-            "apps.core.models", tmp_path, conn,
+            "apps.core.models",
+            tmp_path,
+            conn,
             scan_paths=["backend"],
         )
         assert result == "apps-core"
@@ -651,7 +655,7 @@ class TestHierarchicalResolution:
         conn: sqlite3.Connection,
     ) -> None:
         """TS @/ alias resolves to node under src/."""
-        from beadloom.import_resolver import resolve_import_to_node
+        from beadloom.graph.import_resolver import resolve_import_to_node
 
         conn.execute(
             "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
@@ -660,8 +664,11 @@ class TestHierarchicalResolution:
         conn.commit()
 
         result = resolve_import_to_node(
-            "@/shared/utils", tmp_path, conn,
-            scan_paths=["frontend"], is_ts=True,
+            "@/shared/utils",
+            tmp_path,
+            conn,
+            scan_paths=["frontend"],
+            is_ts=True,
         )
         assert result == "src-shared"
 
@@ -671,10 +678,13 @@ class TestHierarchicalResolution:
         conn: sqlite3.Connection,
     ) -> None:
         """npm package imports return None (not local code)."""
-        from beadloom.import_resolver import resolve_import_to_node
+        from beadloom.graph.import_resolver import resolve_import_to_node
 
         result = resolve_import_to_node(
-            "vue", tmp_path, conn, is_ts=True,
+            "vue",
+            tmp_path,
+            conn,
+            is_ts=True,
         )
         assert result is None
 
@@ -684,7 +694,7 @@ class TestHierarchicalResolution:
         conn: sqlite3.Connection,
     ) -> None:
         """TS ~/ alias also resolves to src/."""
-        from beadloom.import_resolver import resolve_import_to_node
+        from beadloom.graph.import_resolver import resolve_import_to_node
 
         conn.execute(
             "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
@@ -693,8 +703,11 @@ class TestHierarchicalResolution:
         conn.commit()
 
         result = resolve_import_to_node(
-            "~/hooks/useSomething", tmp_path, conn,
-            scan_paths=["frontend"], is_ts=True,
+            "~/hooks/useSomething",
+            tmp_path,
+            conn,
+            scan_paths=["frontend"],
+            is_ts=True,
         )
         assert result == "src-hooks"
 
@@ -712,7 +725,7 @@ class TestCreateImportEdges:
         conn: sqlite3.Connection,
     ) -> None:
         """Resolved import creates a depends_on edge between nodes."""
-        from beadloom.import_resolver import create_import_edges
+        from beadloom.graph.import_resolver import create_import_edges
 
         # Setup: two nodes.
         conn.execute(
@@ -735,9 +748,7 @@ class TestCreateImportEdges:
         edges = create_import_edges(conn)
         assert edges == 1
 
-        row = conn.execute(
-            "SELECT * FROM edges WHERE kind = 'depends_on'"
-        ).fetchone()
+        row = conn.execute("SELECT * FROM edges WHERE kind = 'depends_on'").fetchone()
         assert row is not None
         assert row["src_ref_id"] == "apps-tasks"
         assert row["dst_ref_id"] == "apps-core"
@@ -747,7 +758,7 @@ class TestCreateImportEdges:
         conn: sqlite3.Connection,
     ) -> None:
         """Import within the same node does not create an edge."""
-        from beadloom.import_resolver import create_import_edges
+        from beadloom.graph.import_resolver import create_import_edges
 
         conn.execute(
             "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
@@ -769,7 +780,7 @@ class TestCreateImportEdges:
         conn: sqlite3.Connection,
     ) -> None:
         """Multiple imports between same nodes create only one edge."""
-        from beadloom.import_resolver import create_import_edges
+        from beadloom.graph.import_resolver import create_import_edges
 
         conn.execute(
             "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
@@ -803,7 +814,7 @@ class TestCreateImportEdges:
         conn: sqlite3.Connection,
     ) -> None:
         """Full index_imports pipeline creates depends_on edges."""
-        from beadloom.import_resolver import index_imports
+        from beadloom.graph.import_resolver import index_imports
 
         # Setup: nodes with source directories.
         conn.execute(
@@ -827,9 +838,7 @@ class TestCreateImportEdges:
 
         index_imports(tmp_path, conn)
 
-        edges = conn.execute(
-            "SELECT * FROM edges WHERE kind = 'depends_on'"
-        ).fetchall()
+        edges = conn.execute("SELECT * FROM edges WHERE kind = 'depends_on'").fetchall()
         assert len(edges) == 1
         assert edges[0]["src_ref_id"] == "api"
         assert edges[0]["dst_ref_id"] == "auth"

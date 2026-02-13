@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from click.testing import CliRunner
 
-from beadloom.cli import main
+from beadloom.services.cli import main
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -56,9 +56,7 @@ def _project_with_rules(tmp_path: Path) -> Path:
     # Source file that does NOT create a violation (no cross-boundary import).
     src_dir = project / "src" / "billing"
     src_dir.mkdir(parents=True)
-    (src_dir / "invoice.py").write_text(
-        "# beadloom:domain=billing\ndef process(): pass\n"
-    )
+    (src_dir / "invoice.py").write_text("# beadloom:domain=billing\ndef process(): pass\n")
     return project
 
 
@@ -73,9 +71,7 @@ def _project_with_violations(tmp_path: Path) -> Path:
     # Also create the auth module.
     auth_dir = project / "src" / "auth"
     auth_dir.mkdir(parents=True)
-    (auth_dir / "tokens.py").write_text(
-        "# beadloom:domain=auth\ndef verify(): pass\n"
-    )
+    (auth_dir / "tokens.py").write_text("# beadloom:domain=auth\ndef verify(): pass\n")
     return project
 
 
@@ -86,7 +82,7 @@ def _inject_violation(project: Path) -> None:
     code_imports table may not have resolved_ref_id set, so we insert
     a record manually.
     """
-    from beadloom.db import open_db
+    from beadloom.infrastructure.db import open_db
 
     db_path = project / ".beadloom" / "beadloom.db"
     conn = open_db(db_path)
@@ -157,9 +153,7 @@ class TestLintCommand:
         """--format json -> valid JSON output."""
         project = _project_with_rules(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["lint", "--project", str(project), "--format", "json"]
-        )
+        result = runner.invoke(main, ["lint", "--project", str(project), "--format", "json"])
         assert result.exit_code == 0, result.output
         parsed = json.loads(result.output)
         assert "violations" in parsed
@@ -189,16 +183,12 @@ class TestLintCommand:
         """--format rich -> human-readable output with rule counts."""
         project = _project_with_rules(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["lint", "--project", str(project), "--format", "rich"]
-        )
+        result = runner.invoke(main, ["lint", "--project", str(project), "--format", "rich"])
         assert result.exit_code == 0, result.output
         assert "Rules:" in result.output
         assert "Files:" in result.output
 
-    def test_lint_no_reindex(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_lint_no_reindex(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """--no-reindex skips the reindex step."""
         project = _project_with_rules(tmp_path)
         runner = CliRunner()
@@ -209,16 +199,16 @@ class TestLintCommand:
         # Monkeypatch incremental_reindex to track if it's called.
         reindex_called = False
 
-        import beadloom.linter as linter_mod
+        import beadloom.infrastructure.reindex as reindex_mod
 
-        original_fn = linter_mod.incremental_reindex
+        original_fn = reindex_mod.incremental_reindex
 
         def mock_reindex(project_root: Path) -> object:
             nonlocal reindex_called
             reindex_called = True
             return original_fn(project_root)
 
-        monkeypatch.setattr(linter_mod, "incremental_reindex", mock_reindex)
+        monkeypatch.setattr(reindex_mod, "incremental_reindex", mock_reindex)
 
         # Run with --no-reindex.
         result = runner.invoke(

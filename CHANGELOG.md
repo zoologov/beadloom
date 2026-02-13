@@ -5,6 +5,26 @@ All notable changes to Beadloom are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+DDD restructuring: code, docs, and knowledge graph now follow domain-driven design.
+
+### Changed
+- **Code → DDD packages** — flat modules reorganized into 5 domain packages (`infrastructure/`, `context_oracle/`, `doc_sync/`, `onboarding/`, `graph/`) with `__init__.py` re-exports
+- **Package names aligned to docs** — `context/` → `context_oracle/`, `sync/` → `doc_sync/`, `infra/` → `infrastructure/`
+- **Services layer** — `cli.py` and `mcp_server.py` moved into `services/` package
+- **Loose files absorbed** — `doctor.py` → `infrastructure/`, `watcher.py` → `infrastructure/`, `why.py` → `context_oracle/`
+- **Docs → domain-first layout** — `docs/` restructured into `domains/`, `services/`, `guides/` directories
+- **Knowledge graph updated** — 18 nodes (5 domains, 3 services, 8 features, 1 root), 32+ edges reflecting DDD structure; `doctor` and `watcher` reclassified as features under `infrastructure`
+- **Architecture lint rules** — 2 rules: `domain-needs-parent`, `feature-needs-domain`
+- **CLI reference** — all 18 commands documented
+- **MCP docs** — all 8 tools documented
+- **README.md + README.ru.md** — updated doc links to domain-first layout
+
+### Fixed
+- Circular import in `graph/linter.py` resolved via lazy import of `incremental_reindex`
+- Integration tests updated for new graph structure (domain nodes instead of `linter` node)
+
 ## [1.1.0] - 2026-02-12
 
 Improved import analysis and broader project support.

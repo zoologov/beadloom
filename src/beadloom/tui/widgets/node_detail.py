@@ -42,8 +42,7 @@ class NodeDetail(Static):
 
         for child in children:
             lines.append(
-                f"  \u251c\u2500\u2500 {child['ref_id']} ({child['kind']}): "
-                f"{child['summary']}"
+                f"  \u251c\u2500\u2500 {child['ref_id']} ({child['kind']}): {child['summary']}"
             )
 
         if not children:
@@ -70,8 +69,7 @@ class NodeDetail(Static):
 
         # Outgoing edges
         out_edges = conn.execute(
-            "SELECT dst_ref_id, kind FROM edges "
-            "WHERE src_ref_id = ? ORDER BY kind, dst_ref_id",
+            "SELECT dst_ref_id, kind FROM edges WHERE src_ref_id = ? ORDER BY kind, dst_ref_id",
             (ref_id,),
         ).fetchall()
 
@@ -83,8 +81,7 @@ class NodeDetail(Static):
 
         # Incoming edges
         in_edges = conn.execute(
-            "SELECT src_ref_id, kind FROM edges "
-            "WHERE dst_ref_id = ? ORDER BY kind, src_ref_id",
+            "SELECT src_ref_id, kind FROM edges WHERE dst_ref_id = ? ORDER BY kind, src_ref_id",
             (ref_id,),
         ).fetchall()
 
@@ -108,8 +105,7 @@ class NodeDetail(Static):
 
         # Sync status
         stale = conn.execute(
-            "SELECT doc_path, code_path FROM sync_state "
-            "WHERE ref_id = ? AND status = 'stale'",
+            "SELECT doc_path, code_path FROM sync_state WHERE ref_id = ? AND status = 'stale'",
             (ref_id,),
         ).fetchall()
 

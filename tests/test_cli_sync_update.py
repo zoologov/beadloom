@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from click.testing import CliRunner
 
-from beadloom.cli import main
+from beadloom.services.cli import main
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -23,16 +23,18 @@ def _setup_project_with_sync(tmp_path: Path) -> Path:
     graph_dir = project / ".beadloom" / "_graph"
     graph_dir.mkdir(parents=True)
     (graph_dir / "graph.yml").write_text(
-        _yaml.dump({
-            "nodes": [
-                {
-                    "ref_id": "F1",
-                    "kind": "feature",
-                    "summary": "Feature 1",
-                    "docs": ["docs/spec.md"],
-                },
-            ],
-        })
+        _yaml.dump(
+            {
+                "nodes": [
+                    {
+                        "ref_id": "F1",
+                        "kind": "feature",
+                        "summary": "Feature 1",
+                        "docs": ["docs/spec.md"],
+                    },
+                ],
+            }
+        )
     )
 
     docs_dir = project / "docs"
@@ -41,17 +43,15 @@ def _setup_project_with_sync(tmp_path: Path) -> Path:
 
     src_dir = project / "src"
     src_dir.mkdir()
-    (src_dir / "api.py").write_text(
-        "# beadloom:feature=F1\ndef handler():\n    pass\n"
-    )
+    (src_dir / "api.py").write_text("# beadloom:feature=F1\ndef handler():\n    pass\n")
 
-    from beadloom.reindex import reindex
+    from beadloom.infrastructure.reindex import reindex
 
     reindex(project)
 
     # Populate sync_state.
-    from beadloom.db import open_db
-    from beadloom.sync_engine import build_sync_state
+    from beadloom.doc_sync.engine import build_sync_state
+    from beadloom.infrastructure.db import open_db
 
     db_path = project / ".beadloom" / "beadloom.db"
     conn = open_db(db_path)
@@ -61,8 +61,15 @@ def _setup_project_with_sync(tmp_path: Path) -> Path:
             "INSERT OR REPLACE INTO sync_state "
             "(doc_path, code_path, ref_id, code_hash_at_sync, doc_hash_at_sync, "
             "synced_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (pair.doc_path, pair.code_path, pair.ref_id,
-             pair.code_hash, pair.doc_hash, "2025-01-01", "ok"),
+            (
+                pair.doc_path,
+                pair.code_path,
+                pair.ref_id,
+                pair.code_hash,
+                pair.doc_hash,
+                "2025-01-01",
+                "ok",
+            ),
         )
     conn.commit()
     conn.close()
@@ -76,7 +83,7 @@ class TestSyncUpdateCommand:
         project = _setup_project_with_sync(tmp_path)
 
         # Make it stale.
-        from beadloom.db import open_db
+        from beadloom.infrastructure.db import open_db
 
         db_path = project / ".beadloom" / "beadloom.db"
         conn = open_db(db_path)
@@ -85,35 +92,27 @@ class TestSyncUpdateCommand:
         conn.close()
 
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["sync-update", "F1", "--check", "--project", str(project)]
-        )
+        result = runner.invoke(main, ["sync-update", "F1", "--check", "--project", str(project)])
         assert result.exit_code == 0, result.output
         assert "stale" in result.output.lower() or "F1" in result.output
 
     def test_no_stale(self, tmp_path: Path) -> None:
         project = _setup_project_with_sync(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["sync-update", "F1", "--check", "--project", str(project)]
-        )
+        result = runner.invoke(main, ["sync-update", "F1", "--check", "--project", str(project)])
         assert result.exit_code == 0, result.output
 
     def test_no_db(self, tmp_path: Path) -> None:
         project = tmp_path / "empty"
         project.mkdir()
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["sync-update", "F1", "--project", str(project)]
-        )
+        result = runner.invoke(main, ["sync-update", "F1", "--project", str(project)])
         assert result.exit_code != 0
 
     def test_unknown_ref(self, tmp_path: Path) -> None:
         project = _setup_project_with_sync(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["sync-update", "NOPE", "--check", "--project", str(project)]
-        )
+        result = runner.invoke(main, ["sync-update", "NOPE", "--check", "--project", str(project)])
         assert result.exit_code == 0  # No stale pairs, just empty output.
 
 
@@ -130,10 +129,11 @@ class TestSyncUpdateInteractive:
         )
 
         # Mock click.edit to not actually open editor.
-        with unittest.mock.patch("beadloom.cli.click.edit") as mock_edit:
+        with unittest.mock.patch("beadloom.services.cli.click.edit") as mock_edit:
             runner = CliRunner()
             result = runner.invoke(
-                main, ["sync-update", "F1", "--project", str(project)],
+                main,
+                ["sync-update", "F1", "--project", str(project)],
                 input="y\n",
             )
         assert result.exit_code == 0, result.output
@@ -147,10 +147,11 @@ class TestSyncUpdateInteractive:
             "# beadloom:feature=F1\ndef handler():\n    return 'changed'\n"
         )
 
-        with unittest.mock.patch("beadloom.cli.click.edit") as mock_edit:
+        with unittest.mock.patch("beadloom.services.cli.click.edit") as mock_edit:
             runner = CliRunner()
             result = runner.invoke(
-                main, ["sync-update", "F1", "--project", str(project)],
+                main,
+                ["sync-update", "F1", "--project", str(project)],
                 input="n\n",
             )
         assert result.exit_code == 0
@@ -163,21 +164,20 @@ class TestSyncUpdateInteractive:
             "# beadloom:feature=F1\ndef handler():\n    return 'changed'\n"
         )
 
-        with unittest.mock.patch("beadloom.cli.click.edit"):
+        with unittest.mock.patch("beadloom.services.cli.click.edit"):
             runner = CliRunner()
             runner.invoke(
-                main, ["sync-update", "F1", "--project", str(project)],
+                main,
+                ["sync-update", "F1", "--project", str(project)],
                 input="y\n",
             )
 
         # Verify sync_state is now 'ok'.
-        from beadloom.db import open_db
+        from beadloom.infrastructure.db import open_db
 
         db_path = project / ".beadloom" / "beadloom.db"
         conn = open_db(db_path)
-        rows = conn.execute(
-            "SELECT status FROM sync_state WHERE ref_id = 'F1'"
-        ).fetchall()
+        rows = conn.execute("SELECT status FROM sync_state WHERE ref_id = 'F1'").fetchall()
         conn.close()
         assert all(r["status"] == "ok" for r in rows)
 
@@ -189,7 +189,5 @@ class TestSyncUpdateAutoRemoved:
         """--auto should be rejected as unknown option."""
         project = _setup_project_with_sync(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["sync-update", "F1", "--auto", "--project", str(project)]
-        )
+        result = runner.invoke(main, ["sync-update", "F1", "--auto", "--project", str(project)])
         assert result.exit_code != 0

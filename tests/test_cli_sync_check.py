@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from click.testing import CliRunner
 
-from beadloom.cli import main
+from beadloom.services.cli import main
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -22,16 +22,18 @@ def _setup_project(tmp_path: Path) -> Path:
     graph_dir = project / ".beadloom" / "_graph"
     graph_dir.mkdir(parents=True)
     (graph_dir / "graph.yml").write_text(
-        yaml.dump({
-            "nodes": [
-                {
-                    "ref_id": "F1",
-                    "kind": "feature",
-                    "summary": "Feature 1",
-                    "docs": ["docs/spec.md"],
-                },
-            ],
-        })
+        yaml.dump(
+            {
+                "nodes": [
+                    {
+                        "ref_id": "F1",
+                        "kind": "feature",
+                        "summary": "Feature 1",
+                        "docs": ["docs/spec.md"],
+                    },
+                ],
+            }
+        )
     )
 
     docs_dir = project / "docs"
@@ -40,17 +42,15 @@ def _setup_project(tmp_path: Path) -> Path:
 
     src_dir = project / "src"
     src_dir.mkdir()
-    (src_dir / "api.py").write_text(
-        "# beadloom:feature=F1\ndef handler():\n    pass\n"
-    )
+    (src_dir / "api.py").write_text("# beadloom:feature=F1\ndef handler():\n    pass\n")
 
-    from beadloom.reindex import reindex
+    from beadloom.infrastructure.reindex import reindex
 
     reindex(project)
 
     # Populate sync_state.
-    from beadloom.db import open_db
-    from beadloom.sync_engine import build_sync_state
+    from beadloom.doc_sync.engine import build_sync_state
+    from beadloom.infrastructure.db import open_db
 
     db_path = project / ".beadloom" / "beadloom.db"
     conn = open_db(db_path)
@@ -60,8 +60,15 @@ def _setup_project(tmp_path: Path) -> Path:
             "INSERT OR REPLACE INTO sync_state "
             "(doc_path, code_path, ref_id, code_hash_at_sync, doc_hash_at_sync, "
             "synced_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (pair.doc_path, pair.code_path, pair.ref_id,
-             pair.code_hash, pair.doc_hash, "2025-01-01", "ok"),
+            (
+                pair.doc_path,
+                pair.code_path,
+                pair.ref_id,
+                pair.code_hash,
+                pair.doc_hash,
+                "2025-01-01",
+                "ok",
+            ),
         )
     conn.commit()
     conn.close()
@@ -79,9 +86,7 @@ class TestSyncCheckCommand:
     def test_porcelain_output(self, tmp_path: Path) -> None:
         project = _setup_project(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["sync-check", "--porcelain", "--project", str(project)]
-        )
+        result = runner.invoke(main, ["sync-check", "--porcelain", "--project", str(project)])
         assert result.exit_code == 0, result.output
         # Porcelain uses TAB-separated format.
         if result.output.strip():
@@ -91,13 +96,11 @@ class TestSyncCheckCommand:
         project = _setup_project(tmp_path)
 
         # Make sync_state stale by changing code hash.
-        from beadloom.db import open_db
+        from beadloom.infrastructure.db import open_db
 
         db_path = project / ".beadloom" / "beadloom.db"
         conn = open_db(db_path)
-        conn.execute(
-            "UPDATE sync_state SET code_hash_at_sync = 'OLD_HASH'"
-        )
+        conn.execute("UPDATE sync_state SET code_hash_at_sync = 'OLD_HASH'")
         conn.commit()
         conn.close()
 
@@ -108,17 +111,13 @@ class TestSyncCheckCommand:
     def test_ref_filter(self, tmp_path: Path) -> None:
         project = _setup_project(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["sync-check", "--ref", "F1", "--project", str(project)]
-        )
+        result = runner.invoke(main, ["sync-check", "--ref", "F1", "--project", str(project)])
         assert result.exit_code == 0, result.output
 
     def test_ref_filter_nonexistent(self, tmp_path: Path) -> None:
         project = _setup_project(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["sync-check", "--ref", "NOPE", "--project", str(project)]
-        )
+        result = runner.invoke(main, ["sync-check", "--ref", "NOPE", "--project", str(project)])
         # Should still succeed (no pairs matched).
         assert result.exit_code == 0
 

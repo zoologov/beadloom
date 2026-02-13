@@ -6,8 +6,13 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.db import create_schema, open_db
-from beadloom.health import HealthSnapshot, compute_trend, get_latest_snapshots, take_snapshot
+from beadloom.infrastructure.db import create_schema, open_db
+from beadloom.infrastructure.health import (
+    HealthSnapshot,
+    compute_trend,
+    get_latest_snapshots,
+    take_snapshot,
+)
 
 if TYPE_CHECKING:
     import sqlite3
@@ -23,9 +28,7 @@ def conn(tmp_path: Path) -> sqlite3.Connection:
     return c
 
 
-def _insert_node(
-    conn: sqlite3.Connection, ref_id: str, kind: str, summary: str
-) -> None:
+def _insert_node(conn: sqlite3.Connection, ref_id: str, kind: str, summary: str) -> None:
     conn.execute(
         "INSERT INTO nodes (ref_id, kind, summary) VALUES (?, ?, ?)",
         (ref_id, kind, summary),
@@ -33,9 +36,7 @@ def _insert_node(
     conn.commit()
 
 
-def _insert_edge(
-    conn: sqlite3.Connection, src: str, dst: str, kind: str
-) -> None:
+def _insert_edge(conn: sqlite3.Connection, src: str, dst: str, kind: str) -> None:
     conn.execute(
         "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES (?, ?, ?)",
         (src, dst, kind),

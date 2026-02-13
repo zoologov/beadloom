@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from click.testing import CliRunner
 
-from beadloom.cli import main
+from beadloom.services.cli import main
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -21,11 +21,9 @@ class TestCliWatchNoWatchfiles:
 
         runner = CliRunner()
 
-        # Simulate ImportError when CLI tries to import beadloom.watcher
-        with patch.dict("sys.modules", {"beadloom.watcher": None}):
-            result = runner.invoke(
-                main, ["watch", "--project", str(tmp_path)]
-            )
+        # Simulate ImportError when CLI tries to import beadloom.infrastructure.watcher
+        with patch.dict("sys.modules", {"beadloom.infrastructure.watcher": None}):
+            result = runner.invoke(main, ["watch", "--project", str(tmp_path)])
             assert result.exit_code != 0
             assert "watchfiles" in result.output or "Error" in result.output
 

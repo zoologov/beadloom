@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from click.testing import CliRunner
 
-from beadloom.cli import main
+from beadloom.services.cli import main
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -48,7 +48,7 @@ def _setup_project(tmp_path: Path) -> Path:
     (src_dir / "api.py").write_text("# beadloom:feature=PROJ-1\ndef list_tracks():\n    pass\n")
 
     # Reindex to populate DB.
-    from beadloom.reindex import reindex
+    from beadloom.infrastructure.reindex import reindex
 
     reindex(project)
     return project
@@ -148,7 +148,7 @@ class TestFormatMarkdownUnit:
     def test_chunk_separator_uses_hr(self) -> None:
         """Chunk headers use --- separator instead of ### heading."""
         # Arrange
-        from beadloom.cli import _format_markdown
+        from beadloom.services.cli import _format_markdown
 
         bundle: dict[str, object] = {
             "focus": {"ref_id": "X-1", "kind": "feature", "summary": "Test"},
@@ -176,7 +176,7 @@ class TestFormatMarkdownUnit:
     def test_multiple_chunks_each_have_hr(self) -> None:
         """Each chunk boundary gets its own --- separator."""
         # Arrange
-        from beadloom.cli import _format_markdown
+        from beadloom.services.cli import _format_markdown
 
         bundle: dict[str, object] = {
             "focus": {"ref_id": "X-1", "kind": "feature", "summary": "Test"},
@@ -210,7 +210,7 @@ class TestFormatMarkdownUnit:
     def test_no_heading_collision_with_content(self) -> None:
         """Content with ### headings does not collide with chunk boundaries."""
         # Arrange
-        from beadloom.cli import _format_markdown
+        from beadloom.services.cli import _format_markdown
 
         bundle: dict[str, object] = {
             "focus": {"ref_id": "X-1", "kind": "feature", "summary": "Test"},

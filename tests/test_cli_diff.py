@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 import yaml
 from click.testing import CliRunner
 
-from beadloom.cli import main
+from beadloom.services.cli import main
 
 if TYPE_CHECKING:
     from pathlib import Path

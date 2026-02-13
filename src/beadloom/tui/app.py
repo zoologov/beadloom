@@ -72,9 +72,7 @@ class BeadloomApp(App[None]):
         finally:
             conn.close()
 
-    def on_domain_list_domain_selected(
-        self, event: DomainList.DomainSelected
-    ) -> None:
+    def on_domain_list_domain_selected(self, event: DomainList.DomainSelected) -> None:
         """Handle domain selection."""
         conn = self._open_db()
         try:
@@ -83,9 +81,7 @@ class BeadloomApp(App[None]):
         finally:
             conn.close()
 
-    def on_domain_list_node_selected(
-        self, event: DomainList.NodeSelected
-    ) -> None:
+    def on_domain_list_node_selected(self, event: DomainList.NodeSelected) -> None:
         """Handle node selection."""
         conn = self._open_db()
         try:
@@ -96,7 +92,7 @@ class BeadloomApp(App[None]):
 
     def action_reindex(self) -> None:
         """Trigger reindex."""
-        from beadloom.reindex import incremental_reindex
+        from beadloom.infrastructure.reindex import incremental_reindex
 
         incremental_reindex(self.project_root)
         self._refresh_data()

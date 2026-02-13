@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 import yaml
 from click.testing import CliRunner
 
-from beadloom.cli import main
+from beadloom.services.cli import main
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -85,8 +85,7 @@ def _create_mini_project(tmp_path: Path, *, with_git: bool = False) -> Path:
     docs_dir = project / "docs"
     docs_dir.mkdir()
     (docs_dir / "overview.md").write_text(
-        "## Overview\n\nThis is the project overview.\n\n"
-        "## API\n\nPublic API description.\n",
+        "## Overview\n\nThis is the project overview.\n\n## API\n\nPublic API description.\n",
         encoding="utf-8",
     )
 
@@ -199,7 +198,8 @@ class TestReindex:
         runner.invoke(main, ["reindex", "--project", str(project)])
 
         second = runner.invoke(
-            main, ["reindex", "--project", str(project), "--full"],
+            main,
+            ["reindex", "--project", str(project), "--full"],
         )
         assert second.exit_code == 0, second.output
         assert "Nodes:   2" in second.output
@@ -231,9 +231,7 @@ class TestCtx:
         runner = CliRunner()
 
         # Act
-        result = runner.invoke(
-            main, ["ctx", "myapp", "--json", "--project", str(project)]
-        )
+        result = runner.invoke(main, ["ctx", "myapp", "--json", "--project", str(project)])
 
         # Assert
         assert result.exit_code == 0, result.output
@@ -256,9 +254,7 @@ class TestCtx:
         runner = CliRunner()
 
         # Act
-        result = runner.invoke(
-            main, ["ctx", "myapp", "--json", "--project", str(project)]
-        )
+        result = runner.invoke(main, ["ctx", "myapp", "--json", "--project", str(project)])
 
         # Assert
         assert result.exit_code == 0, result.output
@@ -273,9 +269,7 @@ class TestCtx:
         runner = CliRunner()
 
         # Act
-        result = runner.invoke(
-            main, ["ctx", "myapp", "--json", "--project", str(project)]
-        )
+        result = runner.invoke(main, ["ctx", "myapp", "--json", "--project", str(project)])
 
         # Assert
         assert result.exit_code == 0, result.output
@@ -292,9 +286,7 @@ class TestCtx:
         runner = CliRunner()
 
         # Act
-        result = runner.invoke(
-            main, ["ctx", "NONEXISTENT", "--project", str(project)]
-        )
+        result = runner.invoke(main, ["ctx", "NONEXISTENT", "--project", str(project)])
 
         # Assert
         assert result.exit_code != 0
@@ -353,9 +345,7 @@ class TestGraph:
         runner = CliRunner()
 
         # Act
-        result = runner.invoke(
-            main, ["graph", "myapp", "--json", "--project", str(project)]
-        )
+        result = runner.invoke(main, ["graph", "myapp", "--json", "--project", str(project)])
 
         # Assert
         assert result.exit_code == 0, result.output
@@ -448,9 +438,7 @@ class TestSyncCheck:
         runner = CliRunner()
 
         # Act
-        result = runner.invoke(
-            main, ["sync-check", "--porcelain", "--project", str(project)]
-        )
+        result = runner.invoke(main, ["sync-check", "--porcelain", "--project", str(project)])
 
         # Assert
         assert result.exit_code == 0, result.output
@@ -465,7 +453,7 @@ class TestSyncCheck:
         _reindex_project(project)
 
         # Mutate a code file to make the hash diverge from sync_state.
-        from beadloom.db import open_db
+        from beadloom.infrastructure.db import open_db
 
         db_path = project / ".beadloom" / "beadloom.db"
         conn = open_db(db_path)
@@ -510,9 +498,7 @@ class TestSetupMcp:
         # Arrange
         project = _create_mini_project(tmp_path)
         existing = {"mcpServers": {"other-tool": {"command": "other"}}}
-        (project / ".mcp.json").write_text(
-            json.dumps(existing), encoding="utf-8"
-        )
+        (project / ".mcp.json").write_text(json.dumps(existing), encoding="utf-8")
 
         runner = CliRunner()
 
@@ -532,9 +518,7 @@ class TestSetupMcp:
         runner.invoke(main, ["setup-mcp", "--project", str(project)])
 
         # Act
-        result = runner.invoke(
-            main, ["setup-mcp", "--remove", "--project", str(project)]
-        )
+        result = runner.invoke(main, ["setup-mcp", "--remove", "--project", str(project)])
 
         # Assert
         assert result.exit_code == 0, result.output
@@ -592,9 +576,7 @@ class TestInstallHooks:
         assert hook_path.exists()
 
         # Act
-        result = runner.invoke(
-            main, ["install-hooks", "--remove", "--project", str(project)]
-        )
+        result = runner.invoke(main, ["install-hooks", "--remove", "--project", str(project)])
 
         # Assert
         assert result.exit_code == 0, result.output
@@ -634,9 +616,7 @@ class TestFullPipeline:
         assert "Edges:   1" in result.output
 
         # -- 3. ctx (JSON) — verify full bundle -------------------------
-        result = runner.invoke(
-            main, ["ctx", "myapp", "--json", "--project", str(project)]
-        )
+        result = runner.invoke(main, ["ctx", "myapp", "--json", "--project", str(project)])
         assert result.exit_code == 0, f"ctx failed: {result.output}"
         bundle = json.loads(result.output)
         assert bundle["version"] == 2
@@ -672,9 +652,7 @@ class TestFullPipeline:
         # -- 9. setup-mcp -----------------------------------------------
         result = runner.invoke(main, ["setup-mcp", "--project", str(project)])
         assert result.exit_code == 0, f"setup-mcp failed: {result.output}"
-        mcp_data = json.loads(
-            (project / ".mcp.json").read_text(encoding="utf-8")
-        )
+        mcp_data = json.loads((project / ".mcp.json").read_text(encoding="utf-8"))
         assert "beadloom" in mcp_data["mcpServers"]
 
         # -- 10. install-hooks ------------------------------------------
@@ -684,8 +662,6 @@ class TestFullPipeline:
         assert hook.exists()
 
         # -- 11. remove hooks -------------------------------------------
-        result = runner.invoke(
-            main, ["install-hooks", "--remove", "--project", str(project)]
-        )
+        result = runner.invoke(main, ["install-hooks", "--remove", "--project", str(project)])
         assert result.exit_code == 0, f"install-hooks --remove failed: {result.output}"
         assert not hook.exists()
