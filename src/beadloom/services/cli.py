@@ -1535,6 +1535,8 @@ def lint(
     output = formatters[fmt](result)
     if output:
         click.echo(output)
+    elif not result.violations:
+        click.echo(f"0 violations, {result.rules_evaluated} rules evaluated")
 
     if strict and result.violations:
         sys.exit(1)
