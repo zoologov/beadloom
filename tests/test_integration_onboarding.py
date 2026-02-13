@@ -178,21 +178,22 @@ class TestDocsGenerateIntegration:
         assert "Source" in content
 
     def test_docs_generate_creates_feature_files(self, tmp_path: Path) -> None:
-        """Bootstrap with monolith preset should create feature SPECs for sub-dirs."""
+        """Bootstrap with monolith preset should create feature SPECs under domains."""
         _create_sample_project(tmp_path)
         _bootstrap(tmp_path, preset="monolith")
 
-        features_dir = tmp_path / "docs" / "features"
-        if features_dir.exists():
-            specs = list(features_dir.rglob("SPEC.md"))
+        # Features now live under docs/domains/{parent}/features/{name}/SPEC.md.
+        domains_dir = tmp_path / "docs" / "domains"
+        specs: list[Path] = []
+        if domains_dir.exists():
+            specs = list(domains_dir.rglob("features/*/SPEC.md"))
+        if specs:
             assert len(specs) >= 1, "at least one feature SPEC expected"
         else:
-            # If no features directory, verify that child nodes classified as
-            # features exist in the graph (monolith preset classifies api/models).
+            # Fallback: verify feature nodes exist in graph.
             services_yml = tmp_path / ".beadloom" / "_graph" / "services.yml"
             data = yaml.safe_load(services_yml.read_text(encoding="utf-8"))
             feature_nodes = [n for n in data["nodes"] if n["kind"] == "feature"]
-            # The sample project has auth/api which maps to feature with monolith.
             assert len(feature_nodes) >= 1, (
                 "monolith preset should classify api/ or models/ sub-dirs as features"
             )

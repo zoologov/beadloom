@@ -109,7 +109,8 @@ class TestGenerateSkeletons:
         edges = _basic_edges()
         generate_skeletons(tmp_path, nodes=nodes, edges=edges)
 
-        spec = tmp_path / "docs" / "features" / "auth-api" / "SPEC.md"
+        # Features go under their parent domain directory.
+        spec = tmp_path / "docs" / "domains" / "auth" / "features" / "auth-api" / "SPEC.md"
         assert spec.exists()
         content = spec.read_text(encoding="utf-8")
         assert "## Parent" in content
@@ -120,7 +121,7 @@ class TestGenerateSkeletons:
         edges = _basic_edges()
         generate_skeletons(tmp_path, nodes=nodes, edges=edges)
 
-        # Root node "myproject" has empty source — no service file expected.
+        # Root node "myproject" has no part_of edge — no service file expected.
         root_svc = tmp_path / "docs" / "services" / "myproject.md"
         assert not root_svc.exists()
 
