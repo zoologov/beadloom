@@ -5,7 +5,7 @@
 **Архитектура вашего проекта не должна жить в голове одного человека.**
 
 [![License: MIT](https://img.shields.io/github/license/zoologov/beadloom)](LICENSE)
-[![GitHub release](https://img.shields.io/github/v/release/zoologov/beadloom)](https://github.com/zoologov/beadloom/releases)
+[![GitHub release](https://img.shields.io/github/v/release/zoologov/beadloom?include_prereleases&sort=semver)](https://github.com/zoologov/beadloom/releases)
 [![PyPI](https://img.shields.io/pypi/v/beadloom)](https://pypi.org/project/beadloom/)
 [![Python](https://img.shields.io/pypi/pyversions/beadloom)](https://pypi.org/project/beadloom/)
 [![CI](https://img.shields.io/github/actions/workflow/status/zoologov/beadloom/ci.yml?label=CI)](https://github.com/zoologov/beadloom/actions)
