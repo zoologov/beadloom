@@ -32,7 +32,7 @@ All dataclasses are frozen (immutable).
 
 #### `NodeMatcher`
 
-Matches graph nodes by `ref_id` and/or `kind`. At least one field must be non-`None`.
+Matches graph nodes by `ref_id` and/or `kind`. In deny rules, at least one field must be non-`None`. In require rules, an empty matcher (`has_edge_to: {}`) is allowed and matches **any** node — used for "must have at least one edge of this kind" semantics.
 
 | Field    | Type           | Description                                     |
 |----------|----------------|-------------------------------------------------|
@@ -102,7 +102,7 @@ rules:
     # OR
     require:
       for:         { ref_id: ..., kind: ... }  # NodeMatcher
-      has_edge_to: { ref_id: ..., kind: ... }  # NodeMatcher
+      has_edge_to: { ref_id: ..., kind: ... }  # NodeMatcher (or {} for any node)
       edge_kind: <edge_kind>                   # optional
 ```
 
@@ -121,7 +121,7 @@ def load_rules(rules_path: Path) -> list[Rule]
    d. Parse the corresponding block:
       - **Deny:** Extract `from` and `to` as `NodeMatcher` instances. Parse `unless_edge` as a list of edge kinds (validated against `VALID_EDGE_KINDS`).
       - **Require:** Extract `for` and `has_edge_to` as `NodeMatcher` instances. Parse optional `edge_kind` (validated against `VALID_EDGE_KINDS`).
-4. `NodeMatcher` parsing validates: at least one of `ref_id` or `kind` is present; `kind` (if present) is in `VALID_NODE_KINDS`.
+4. `NodeMatcher` parsing validates: for deny rules, at least one of `ref_id` or `kind` must be present. For require rules, `has_edge_to` accepts an empty dict `{}` (matches any node) via `allow_empty=True`. `kind` (if present) is validated against `VALID_NODE_KINDS`.
 
 ### Validation Against Database
 
@@ -176,7 +176,7 @@ Partitions rules into `DenyRule` and `RequireRule` lists. Calls `evaluate_deny_r
 
 | Function              | Description                                                                                    |
 |-----------------------|------------------------------------------------------------------------------------------------|
-| `_parse_node_matcher` | Parse a dict into a `NodeMatcher`, validating `kind` against `VALID_NODE_KINDS`.               |
+| `_parse_node_matcher` | Parse a dict into a `NodeMatcher`, validating `kind` against `VALID_NODE_KINDS`. Accepts `allow_empty=True` for require rule targets. |
 | `_parse_deny_rule`    | Parse a deny block into a `DenyRule` with validated matchers and `unless_edge`.                 |
 | `_parse_require_rule` | Parse a require block into a `RequireRule` with validated matchers and optional `edge_kind`.    |
 | `_get_file_node`      | Look up the owning node for a file via `code_symbols.annotations` JSON.                        |
@@ -264,7 +264,7 @@ beadloom lint [--format {rich,json,porcelain}] [--strict] [--no-reindex]
 - Each rule contains exactly one of `deny` or `require` (never both, never neither).
 - Self-references (`source_ref_id == target_ref_id`) are skipped during deny evaluation and never produce violations.
 - `evaluate_all` output is deterministically sorted by `(rule_name, file_path or "")`.
-- `NodeMatcher.matches` returns `True` only when all non-`None` fields match.
+- `NodeMatcher.matches` returns `True` only when all non-`None` fields match. An empty matcher (`NodeMatcher()`) matches any node.
 - All `kind` values in matchers are validated against `VALID_NODE_KINDS` at parse time.
 - All edge kind values (`unless_edge`, `edge_kind`) are validated against `VALID_EDGE_KINDS` at parse time.
 
@@ -273,7 +273,7 @@ beadloom lint [--format {rich,json,porcelain}] [--strict] [--no-reindex]
 ## Constraints
 
 - `rules.yml` must declare `version: 1`. Other versions are rejected with `ValueError`.
-- `NodeMatcher` must have at least one of `ref_id` or `kind`; providing neither raises `ValueError`.
+- `NodeMatcher` must have at least one of `ref_id` or `kind` in deny rules; providing neither raises `ValueError`. In require rules, `has_edge_to` accepts empty `{}` for "any node" matching.
 - Deny rules depend on the `code_imports` table being populated (typically via a prior `reindex` step).
 - Require rules depend on the `nodes` and `edges` tables.
 - `validate_rules` is advisory: it returns warnings but does not raise exceptions.
@@ -294,7 +294,11 @@ beadloom lint [--format {rich,json,porcelain}] [--strict] [--no-reindex]
 - **Neither deny nor require.** Assert `ValueError` when a rule has neither block.
 - **Invalid node kind.** Assert `ValueError` for `kind: "unknown"` in a matcher.
 - **Invalid edge kind.** Assert `ValueError` for `unless_edge: ["unknown"]`.
-- **Matcher missing both fields.** Assert `ValueError` when `NodeMatcher` has neither `ref_id` nor `kind`.
+- **Matcher missing both fields.** Assert `ValueError` when `NodeMatcher` has neither `ref_id` nor `kind` (in deny rules).
+- **Empty matcher in require rules.** Assert `has_edge_to: {}` parses successfully and matches any node.
+- **Empty matcher detects violations.** Assert nodes without outgoing edges of the required kind produce violations.
+- **Empty matcher satisfied.** Assert adding any `part_of` edge satisfies the empty-matcher rule.
+- **Empty for-matcher rejected in deny.** Assert empty matchers are still rejected in deny rule positions.
 
 ### Deny Evaluation Tests
 

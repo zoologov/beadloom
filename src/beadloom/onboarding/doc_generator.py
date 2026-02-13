@@ -122,7 +122,7 @@ def _parent_of(
     """Return the parent ref_id (via ``part_of`` edge) for *ref_id*."""
     for edge in edges:
         if edge.get("kind") == "part_of" and edge.get("src") == ref_id:
-            return edge.get("dst", "")
+            return str(edge.get("dst", ""))
     return None
 
 
