@@ -6,3 +6,10 @@ rules:
       for: { kind: domain }
       has_edge_to: { ref_id: beadloom }
       edge_kind: part_of
+
+  - name: feature-needs-domain
+    description: "Every feature must be part_of a domain"
+    require:
+      for: { kind: feature }
+      has_edge_to: { kind: domain }
+      edge_kind: part_of

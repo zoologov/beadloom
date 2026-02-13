@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.code_indexer import (
+from beadloom.context_oracle.code_indexer import (
     clear_cache,
     extract_symbols,
     get_lang_config,
@@ -81,11 +81,7 @@ class TestExtractSymbols:
 
     def test_extract_multiple(self, tmp_path: Path) -> None:
         py = tmp_path / "multi.py"
-        py.write_text(
-            "class Foo:\n    pass\n\n"
-            "def bar():\n    pass\n\n"
-            "def baz():\n    pass\n"
-        )
+        py.write_text("class Foo:\n    pass\n\ndef bar():\n    pass\n\ndef baz():\n    pass\n")
         symbols = extract_symbols(py)
         names = {s["symbol_name"] for s in symbols}
         assert names == {"Foo", "bar", "baz"}
@@ -101,11 +97,7 @@ class TestExtractSymbols:
 
     def test_annotation_attached_to_symbol(self, tmp_path: Path) -> None:
         py = tmp_path / "annotated.py"
-        py.write_text(
-            "# beadloom:feature=PROJ-1 domain=routing\n"
-            "def list_tracks():\n"
-            "    pass\n"
-        )
+        py.write_text("# beadloom:feature=PROJ-1 domain=routing\ndef list_tracks():\n    pass\n")
         symbols = extract_symbols(py)
         assert len(symbols) == 1
         assert symbols[0]["annotations"] == {"feature": "PROJ-1", "domain": "routing"}
@@ -128,7 +120,8 @@ class TestExtractSymbols:
         assert third["annotations"] == {}
 
     def test_module_level_annotation_applies_to_all_symbols(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Module-level annotation at top applies to every symbol in the file."""
         # Arrange
@@ -155,7 +148,8 @@ class TestExtractSymbols:
         assert processor["annotations"] == {"domain": "context-oracle"}
 
     def test_module_annotation_with_symbol_specific_override(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Symbol-specific annotation merges with module-level annotation."""
         # Arrange
@@ -181,7 +175,8 @@ class TestExtractSymbols:
         }
 
     def test_module_annotation_symbol_specific_overrides_key(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Symbol-specific annotation overrides same key from module annotation."""
         # Arrange
@@ -204,7 +199,8 @@ class TestExtractSymbols:
         assert handler["annotations"] == {"domain": "special"}
 
     def test_module_annotation_after_symbol_not_applied(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Annotation after first symbol does NOT become module-level."""
         # Arrange
@@ -294,6 +290,7 @@ class TestGetLangConfig:
 def _ts_available() -> bool:
     try:
         import tree_sitter_typescript  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -302,6 +299,7 @@ def _ts_available() -> bool:
 def _go_available() -> bool:
     try:
         import tree_sitter_go  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -310,6 +308,7 @@ def _go_available() -> bool:
 def _rust_available() -> bool:
     try:
         import tree_sitter_rust  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -321,9 +320,7 @@ class TestExtractSymbolsTypeScript:
     @pytest.mark.skipif(not _ts_available(), reason="tree-sitter-typescript not installed")
     def test_function_declaration(self, tmp_path: Path) -> None:
         ts_file = tmp_path / "app.ts"
-        ts_file.write_text(
-            "function greet(name: string): string {\n  return name;\n}\n"
-        )
+        ts_file.write_text("function greet(name: string): string {\n  return name;\n}\n")
         symbols = extract_symbols(ts_file)
         assert len(symbols) >= 1
         assert symbols[0]["symbol_name"] == "greet"
@@ -347,9 +344,7 @@ class TestExtractSymbolsTypeScript:
     @pytest.mark.skipif(not _ts_available(), reason="tree-sitter-typescript not installed")
     def test_interface_declaration(self, tmp_path: Path) -> None:
         ts_file = tmp_path / "types.ts"
-        ts_file.write_text(
-            "interface Config {\n  host: string;\n  port: number;\n}\n"
-        )
+        ts_file.write_text("interface Config {\n  host: string;\n  port: number;\n}\n")
         symbols = extract_symbols(ts_file)
         assert len(symbols) >= 1
         assert symbols[0]["symbol_name"] == "Config"
@@ -378,10 +373,7 @@ class TestExtractSymbolsTypeScript:
     def test_annotation_in_typescript(self, tmp_path: Path) -> None:
         """Beadloom annotations should work in TypeScript comments."""
         ts_file = tmp_path / "annotated.ts"
-        ts_file.write_text(
-            "// beadloom:feature=AUTH-1\n"
-            "function login(): void {}\n"
-        )
+        ts_file.write_text("// beadloom:feature=AUTH-1\nfunction login(): void {}\n")
         symbols = extract_symbols(ts_file)
         assert len(symbols) >= 1
         assert symbols[0]["annotations"] == {"feature": "AUTH-1"}
@@ -399,11 +391,7 @@ class TestExtractSymbolsTypeScript:
     def test_tsx_file(self, tmp_path: Path) -> None:
         """TSX files should use the TSX parser."""
         tsx_file = tmp_path / "component.tsx"
-        tsx_file.write_text(
-            "function App(): JSX.Element {\n"
-            "  return <div>Hello</div>;\n"
-            "}\n"
-        )
+        tsx_file.write_text("function App(): JSX.Element {\n  return <div>Hello</div>;\n}\n")
         symbols = extract_symbols(tsx_file)
         assert len(symbols) >= 1
         assert symbols[0]["symbol_name"] == "App"
@@ -415,9 +403,7 @@ class TestExtractSymbolsGo:
     @pytest.mark.skipif(not _go_available(), reason="tree-sitter-go not installed")
     def test_function_declaration(self, tmp_path: Path) -> None:
         go_file = tmp_path / "main.go"
-        go_file.write_text(
-            "package main\n\nfunc Hello() string {\n\treturn \"hello\"\n}\n"
-        )
+        go_file.write_text('package main\n\nfunc Hello() string {\n\treturn "hello"\n}\n')
         symbols = extract_symbols(go_file)
         assert len(symbols) >= 1
         assert symbols[0]["symbol_name"] == "Hello"
@@ -426,11 +412,7 @@ class TestExtractSymbolsGo:
     @pytest.mark.skipif(not _go_available(), reason="tree-sitter-go not installed")
     def test_method_declaration(self, tmp_path: Path) -> None:
         go_file = tmp_path / "server.go"
-        go_file.write_text(
-            "package main\n\n"
-            "type Server struct{}\n\n"
-            "func (s *Server) Start() {}\n"
-        )
+        go_file.write_text("package main\n\ntype Server struct{}\n\nfunc (s *Server) Start() {}\n")
         symbols = extract_symbols(go_file)
         methods = [s for s in symbols if s["symbol_name"] == "Start"]
         assert len(methods) >= 1
@@ -439,10 +421,7 @@ class TestExtractSymbolsGo:
     @pytest.mark.skipif(not _go_available(), reason="tree-sitter-go not installed")
     def test_type_declaration_struct(self, tmp_path: Path) -> None:
         go_file = tmp_path / "types.go"
-        go_file.write_text(
-            "package main\n\n"
-            "type Config struct {\n\tHost string\n\tPort int\n}\n"
-        )
+        go_file.write_text("package main\n\ntype Config struct {\n\tHost string\n\tPort int\n}\n")
         symbols = extract_symbols(go_file)
         assert any(s["symbol_name"] == "Config" and s["kind"] == "type" for s in symbols)
 
@@ -450,11 +429,7 @@ class TestExtractSymbolsGo:
     def test_annotation_in_go(self, tmp_path: Path) -> None:
         """Beadloom annotations should work in Go comments."""
         go_file = tmp_path / "annotated.go"
-        go_file.write_text(
-            "package main\n\n"
-            "// beadloom:domain=api\n"
-            "func ServeHTTP() {}\n"
-        )
+        go_file.write_text("package main\n\n// beadloom:domain=api\nfunc ServeHTTP() {}\n")
         symbols = extract_symbols(go_file)
         assert len(symbols) >= 1
         assert symbols[0]["annotations"] == {"domain": "api"}
@@ -466,9 +441,7 @@ class TestExtractSymbolsRust:
     @pytest.mark.skipif(not _rust_available(), reason="tree-sitter-rust not installed")
     def test_function_item(self, tmp_path: Path) -> None:
         rs_file = tmp_path / "lib.rs"
-        rs_file.write_text(
-            'fn greet(name: &str) -> String {\n    format!("Hello, {}", name)\n}\n'
-        )
+        rs_file.write_text('fn greet(name: &str) -> String {\n    format!("Hello, {}", name)\n}\n')
         symbols = extract_symbols(rs_file)
         assert len(symbols) >= 1
         assert symbols[0]["symbol_name"] == "greet"
@@ -505,10 +478,7 @@ class TestExtractSymbolsRust:
     def test_annotation_in_rust(self, tmp_path: Path) -> None:
         """Beadloom annotations should work in Rust line comments."""
         rs_file = tmp_path / "annotated.rs"
-        rs_file.write_text(
-            "// beadloom:domain=auth\n"
-            "fn authenticate() {}\n"
-        )
+        rs_file.write_text("// beadloom:domain=auth\nfn authenticate() {}\n")
         symbols = extract_symbols(rs_file)
         assert len(symbols) >= 1
         assert symbols[0]["annotations"] == {"domain": "auth"}
@@ -517,9 +487,7 @@ class TestExtractSymbolsRust:
     def test_multiple_symbols(self, tmp_path: Path) -> None:
         rs_file = tmp_path / "multi.rs"
         rs_file.write_text(
-            "fn foo() {}\n\n"
-            "struct Bar {\n    x: i32,\n}\n\n"
-            "enum Baz {\n    A,\n    B,\n}\n"
+            "fn foo() {}\n\nstruct Bar {\n    x: i32,\n}\n\nenum Baz {\n    A,\n    B,\n}\n"
         )
         symbols = extract_symbols(rs_file)
         names = {s["symbol_name"] for s in symbols}

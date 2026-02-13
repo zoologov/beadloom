@@ -10,7 +10,7 @@ import yaml
 from click.testing import CliRunner
 
 from beadloom import __version__
-from beadloom.cli import main
+from beadloom.services.cli import main
 
 # ---------------------------------------------------------------------------
 # Project root detection
@@ -33,27 +33,30 @@ class TestVersion:
 
 
 class TestGraphCompleteness:
-    """Verify the knowledge graph has the linter domain."""
+    """Verify the knowledge graph has the DDD domain structure."""
 
-    def test_graph_has_linter_node(self) -> None:
+    def test_graph_has_domain_nodes(self) -> None:
         graph_path = _PROJECT_ROOT / ".beadloom" / "_graph" / "services.yml"
         data = yaml.safe_load(graph_path.read_text(encoding="utf-8"))
         ref_ids = {n["ref_id"] for n in data["nodes"]}
-        assert "linter" in ref_ids
+        # All 5 DDD domains must be present
+        for domain in ("context-oracle", "doc-sync", "graph", "onboarding", "infrastructure"):
+            assert domain in ref_ids, f"Missing domain: {domain}"
+        # Rule engine feature (was "linter" domain)
+        assert "rule-engine" in ref_ids
 
-    def test_graph_linter_edges(self) -> None:
+    def test_graph_domain_edges(self) -> None:
         graph_path = _PROJECT_ROOT / ".beadloom" / "_graph" / "services.yml"
         data = yaml.safe_load(graph_path.read_text(encoding="utf-8"))
         edges = data["edges"]
-        # linter part_of beadloom
+        # graph domain part_of beadloom
         assert any(
-            e["src"] == "linter" and e["dst"] == "beadloom" and e["kind"] == "part_of"
+            e["src"] == "graph" and e["dst"] == "beadloom" and e["kind"] == "part_of"
             for e in edges
         )
-        # cli uses linter
+        # cli uses graph
         assert any(
-            e["src"] == "cli" and e["dst"] == "linter" and e["kind"] == "uses"
-            for e in edges
+            e["src"] == "cli" and e["dst"] == "graph" and e["kind"] == "uses" for e in edges
         )
 
     def test_rules_yml_exists(self) -> None:
@@ -70,9 +73,7 @@ class TestSelfLint:
     def test_self_lint_clean(self) -> None:
         """Self-lint should produce 0 violations."""
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["lint", "--project", str(_PROJECT_ROOT), "--format", "json"]
-        )
+        result = runner.invoke(main, ["lint", "--project", str(_PROJECT_ROOT), "--format", "json"])
         assert result.exit_code == 0, result.output
         parsed = json.loads(result.output)
         assert parsed["summary"]["violations_count"] == 0

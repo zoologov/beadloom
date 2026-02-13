@@ -20,8 +20,7 @@ class StatusBar(Static):
         docs_count: int = conn.execute("SELECT count(*) FROM docs").fetchone()[0]
 
         covered: int = conn.execute(
-            "SELECT count(DISTINCT n.ref_id) FROM nodes n "
-            "JOIN docs d ON d.ref_id = n.ref_id"
+            "SELECT count(DISTINCT n.ref_id) FROM nodes n JOIN docs d ON d.ref_id = n.ref_id"
         ).fetchone()[0]
 
         coverage_pct = (covered / nodes_count * 100) if nodes_count > 0 else 0.0

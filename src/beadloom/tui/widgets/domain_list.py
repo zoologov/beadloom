@@ -43,8 +43,7 @@ class DomainList(OptionList):
 
             # Count edges involving this domain
             child_count: int = conn.execute(
-                "SELECT count(*) FROM edges "
-                "WHERE src_ref_id = ? OR dst_ref_id = ?",
+                "SELECT count(*) FROM edges WHERE src_ref_id = ? OR dst_ref_id = ?",
                 (ref_id, ref_id),
             ).fetchone()[0]
 
@@ -61,16 +60,12 @@ class DomainList(OptionList):
             label = f"{indicator} {ref_id} [{child_count}]"
             self.add_option(Option(label, id=ref_id))
 
-    def on_option_list_option_selected(
-        self, event: OptionList.OptionSelected
-    ) -> None:
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         """Handle option selection (click / Enter)."""
         if event.option.id is not None:
             self.post_message(self.DomainSelected(str(event.option.id)))
 
-    def on_option_list_option_highlighted(
-        self, event: OptionList.OptionHighlighted
-    ) -> None:
+    def on_option_list_option_highlighted(self, event: OptionList.OptionHighlighted) -> None:
         """Handle highlight change (arrow keys)."""
         if event.option.id is not None:
             self.post_message(self.DomainSelected(str(event.option.id)))

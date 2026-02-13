@@ -7,8 +7,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.db import create_schema, open_db
-from beadloom.rule_engine import (
+from beadloom.graph.rule_engine import (
     DenyRule,
     NodeMatcher,
     RequireRule,
@@ -18,6 +17,7 @@ from beadloom.rule_engine import (
     load_rules,
     validate_rules,
 )
+from beadloom.infrastructure.db import create_schema, open_db
 
 if TYPE_CHECKING:
     import sqlite3
@@ -291,12 +291,7 @@ class TestLoadRulesValidationErrors:
 
     def test_rule_with_neither_deny_nor_require(self, tmp_path: Path) -> None:
         rules_path = tmp_path / "rules.yml"
-        rules_path.write_text(
-            "version: 1\n"
-            "rules:\n"
-            "  - name: empty\n"
-            '    description: "no type"\n'
-        )
+        rules_path.write_text('version: 1\nrules:\n  - name: empty\n    description: "no type"\n')
         with pytest.raises(ValueError, match="exactly one"):
             load_rules(rules_path)
 

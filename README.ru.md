@@ -266,11 +266,17 @@ uv run mypy                # проверка типов (strict mode)
 |----------|----------|
 | [architecture.md](docs/architecture.md) | Архитектура системы и обзор компонентов |
 | [getting-started.md](docs/getting-started.md) | Руководство по быстрому старту |
-| [context-oracle.md](docs/context-oracle.md) | Алгоритм BFS и сборка контекста |
-| [cli-reference.md](docs/cli-reference.md) | Справочник CLI-команд |
-| [mcp-server.md](docs/mcp-server.md) | Руководство по интеграции MCP |
-| [sync-engine.md](docs/sync-engine.md) | Детали Doc Sync Engine |
-| [graph-format.md](docs/graph-format.md) | Спецификация формата YAML-графа |
+| **Домены** | |
+| [Context Oracle](docs/domains/context-oracle/README.md) | Алгоритм BFS, сборка контекста, кэширование, поиск |
+| [Graph](docs/domains/graph/README.md) | Формат YAML-графа, diff, rule engine, линтер |
+| [Doc Sync](docs/domains/doc-sync/README.md) | Механизм синхронизации док↔код |
+| [Onboarding](docs/domains/onboarding/README.md) | Бутстрап проекта и пресеты |
+| [Infrastructure](docs/domains/infrastructure/README.md) | База данных, метрики здоровья, реиндекс |
+| **Сервисы** | |
+| [CLI Reference](docs/services/cli.md) | Все 18 CLI-команд |
+| [MCP Server](docs/services/mcp.md) | Все 8 MCP-инструментов для AI-агентов |
+| **Руководства** | |
+| [CI Setup](docs/guides/ci-setup.md) | Интеграция с GitHub Actions / GitLab CI |
 
 ## Лицензия
 

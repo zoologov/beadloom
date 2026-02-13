@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.db import create_schema, open_db
-from beadloom.sync_engine import SyncPair, build_sync_state, check_sync, mark_synced
+from beadloom.doc_sync.engine import SyncPair, build_sync_state, check_sync, mark_synced
+from beadloom.infrastructure.db import create_schema, open_db
 
 if TYPE_CHECKING:
     import sqlite3
@@ -139,8 +139,15 @@ class TestCheckSync:
                 "INSERT INTO sync_state "
                 "(doc_path, code_path, ref_id, code_hash_at_sync, doc_hash_at_sync, "
                 "synced_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (pair.doc_path, pair.code_path, pair.ref_id,
-                 pair.code_hash, pair.doc_hash, "2025-01-01", "ok"),
+                (
+                    pair.doc_path,
+                    pair.code_path,
+                    pair.ref_id,
+                    pair.code_hash,
+                    pair.doc_hash,
+                    "2025-01-01",
+                    "ok",
+                ),
             )
         conn.commit()
         results = check_sync(conn, project_root=project)
@@ -154,8 +161,15 @@ class TestCheckSync:
             "INSERT INTO sync_state "
             "(doc_path, code_path, ref_id, code_hash_at_sync, doc_hash_at_sync, "
             "synced_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            ("spec.md", "src/api.py", "F1", "OLD_HASH",
-             _file_hash(doc_content), "2025-01-01", "ok"),
+            (
+                "spec.md",
+                "src/api.py",
+                "F1",
+                "OLD_HASH",
+                _file_hash(doc_content),
+                "2025-01-01",
+                "ok",
+            ),
         )
         conn.commit()
         results = check_sync(conn, project_root=project)
@@ -169,8 +183,15 @@ class TestCheckSync:
             "INSERT INTO sync_state "
             "(doc_path, code_path, ref_id, code_hash_at_sync, doc_hash_at_sync, "
             "synced_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            ("spec.md", "src/api.py", "F1",
-             _file_hash(code_content), "OLD_DOC_HASH", "2025-01-01", "ok"),
+            (
+                "spec.md",
+                "src/api.py",
+                "F1",
+                _file_hash(code_content),
+                "OLD_DOC_HASH",
+                "2025-01-01",
+                "ok",
+            ),
         )
         conn.commit()
         results = check_sync(conn, project_root=project)
@@ -191,9 +212,7 @@ class TestMarkSynced:
         (project / "src" / "api.py").write_text("def handler():\n    pass\n")
 
         # Insert a node and stale sync_state.
-        conn.execute(
-            "INSERT INTO nodes (ref_id, kind, summary) VALUES ('F1', 'feature', 'test')"
-        )
+        conn.execute("INSERT INTO nodes (ref_id, kind, summary) VALUES ('F1', 'feature', 'test')")
         conn.execute(
             "INSERT INTO sync_state (doc_path, code_path, ref_id, "
             "code_hash_at_sync, doc_hash_at_sync, synced_at, status) "
@@ -204,9 +223,7 @@ class TestMarkSynced:
 
         mark_synced(conn, "spec.md", "src/api.py", project)
 
-        row = conn.execute(
-            "SELECT * FROM sync_state WHERE doc_path = 'spec.md'"
-        ).fetchone()
+        row = conn.execute("SELECT * FROM sync_state WHERE doc_path = 'spec.md'").fetchone()
         assert row["status"] == "ok"
         assert row["doc_hash_at_sync"] != "old_hash"
         assert row["code_hash_at_sync"] != "old_hash"

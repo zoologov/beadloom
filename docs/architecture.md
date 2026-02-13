@@ -4,11 +4,19 @@ Beadloom is a tool for managing codebase context, synchronizing documentation wi
 
 ## System Design
 
-The system consists of three domains:
+The system is organized into five DDD domain packages and top-level services:
 
-1. **Context Oracle** — the core that builds context bundles via BFS traversal of the knowledge graph
-2. **Doc Sync Engine** — tracks desynchronization between documentation and code
-3. **MCP Server** — a stdio server providing 5 tools for AI agents
+**Domains:**
+1. **Context Oracle** (`context_oracle/`) — BFS graph traversal, context bundle assembly, code indexing, caching, FTS5 search
+2. **Doc Sync** (`doc_sync/`) — doc↔code synchronization tracking and stale detection
+3. **Graph** (`graph/`) — YAML graph loader, diff, rule engine, import resolver, architecture linter
+4. **Onboarding** (`onboarding/`) — project bootstrap, doc import, architecture-aware presets
+5. **Infrastructure** (`infrastructure/`) — SQLite database layer, health metrics, reindex orchestrator, doctor, watcher
+
+**Services:**
+- **CLI** (`services/cli.py`) — Click-based CLI with 18 commands
+- **MCP Server** (`services/mcp_server.py`) — stdio server with 8 tools for AI agents
+- **TUI** (`tui/`) — interactive terminal dashboard (Textual)
 
 ## Specification
 
@@ -17,15 +25,15 @@ The system consists of three domains:
 ```
 YAML Graph Files (.beadloom/_graph/*.yml)
        ↓
-   graph_loader.py → SQLite (nodes, edges)
+   graph/loader.py    → SQLite (nodes, edges)
        ↓
-   doc_indexer.py  → SQLite (docs, chunks)
+   doc_sync/doc_indexer.py → SQLite (docs, chunks)
        ↓
-   code_indexer.py → SQLite (code_symbols)
+   context_oracle/code_indexer.py → SQLite (code_symbols)
        ↓
-   context_builder.py ← BFS traversal → context bundle (JSON)
+   context_oracle/builder.py ← BFS traversal → context bundle (JSON)
        ↓
-   CLI / MCP Server → user / AI agent
+   services/cli.py / services/mcp_server.py → user / AI agent
 ```
 
 ### SQLite Schema

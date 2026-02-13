@@ -64,7 +64,7 @@ all = [
 ]
 
 [project.scripts]
-beadloom = "beadloom.cli:main"
+beadloom = "beadloom.services.cli:main"
 
 [tool.hatch.version]
 path = "src/beadloom/__init__.py"

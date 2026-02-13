@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from click.testing import CliRunner
 
-from beadloom.cli import main
+from beadloom.services.cli import main
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -57,9 +57,7 @@ class TestSetupMcpCommand:
         # Setup first.
         runner.invoke(main, ["setup-mcp", "--project", str(project)])
         # Remove.
-        result = runner.invoke(
-            main, ["setup-mcp", "--remove", "--project", str(project)]
-        )
+        result = runner.invoke(main, ["setup-mcp", "--remove", "--project", str(project)])
         assert result.exit_code == 0, result.output
         data = json.loads((project / ".mcp.json").read_text())
         assert "beadloom" not in data["mcpServers"]
@@ -69,9 +67,7 @@ class TestSetupMcpCommand:
         project.mkdir()
         runner = CliRunner()
         # Global setup writes to home, but we test the command runs.
-        result = runner.invoke(
-            main, ["setup-mcp", "--project", str(project)]
-        )
+        result = runner.invoke(main, ["setup-mcp", "--project", str(project)])
         assert result.exit_code == 0
 
 

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import yaml
 from click.testing import CliRunner
 
-from beadloom.cli import _detect_link_label, main
+from beadloom.services.cli import _detect_link_label, main
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -19,12 +19,14 @@ def _setup_project(tmp_path: Path) -> Path:
     graph_dir = project / ".beadloom" / "_graph"
     graph_dir.mkdir(parents=True)
     (graph_dir / "graph.yml").write_text(
-        yaml.dump({
-            "nodes": [
-                {"ref_id": "F1", "kind": "feature", "summary": "Feature 1"},
-                {"ref_id": "F2", "kind": "feature", "summary": "Feature 2"},
-            ],
-        })
+        yaml.dump(
+            {
+                "nodes": [
+                    {"ref_id": "F1", "kind": "feature", "summary": "Feature 1"},
+                    {"ref_id": "F2", "kind": "feature", "summary": "Feature 2"},
+                ],
+            }
+        )
     )
     return project
 
@@ -55,8 +57,7 @@ class TestLinkCommand:
         runner = CliRunner()
         result = runner.invoke(
             main,
-            ["link", "F1", "https://github.com/org/repo/issues/42",
-             "--project", str(project)],
+            ["link", "F1", "https://github.com/org/repo/issues/42", "--project", str(project)],
         )
         assert result.exit_code == 0, result.output
         assert "Added" in result.output
@@ -74,8 +75,15 @@ class TestLinkCommand:
         runner = CliRunner()
         result = runner.invoke(
             main,
-            ["link", "F1", "https://example.com/ticket/1",
-             "--label", "custom", "--project", str(project)],
+            [
+                "link",
+                "F1",
+                "https://example.com/ticket/1",
+                "--label",
+                "custom",
+                "--project",
+                str(project),
+            ],
         )
         assert result.exit_code == 0
         assert "custom" in result.output
@@ -83,9 +91,7 @@ class TestLinkCommand:
     def test_list_links_empty(self, tmp_path: Path) -> None:
         project = _setup_project(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["link", "F1", "--project", str(project)]
-        )
+        result = runner.invoke(main, ["link", "F1", "--project", str(project)])
         assert result.exit_code == 0
         assert "No links" in result.output
 
@@ -95,13 +101,10 @@ class TestLinkCommand:
         # Add a link first.
         runner.invoke(
             main,
-            ["link", "F1", "https://github.com/org/repo/issues/42",
-             "--project", str(project)],
+            ["link", "F1", "https://github.com/org/repo/issues/42", "--project", str(project)],
         )
         # List.
-        result = runner.invoke(
-            main, ["link", "F1", "--project", str(project)]
-        )
+        result = runner.invoke(main, ["link", "F1", "--project", str(project)])
         assert result.exit_code == 0
         assert "github" in result.output
         assert "issues/42" in result.output
@@ -111,13 +114,9 @@ class TestLinkCommand:
         runner = CliRunner()
         url = "https://github.com/org/repo/issues/42"
         # Add.
-        runner.invoke(
-            main, ["link", "F1", url, "--project", str(project)]
-        )
+        runner.invoke(main, ["link", "F1", url, "--project", str(project)])
         # Remove.
-        result = runner.invoke(
-            main, ["link", "F1", "--remove", url, "--project", str(project)]
-        )
+        result = runner.invoke(main, ["link", "F1", "--remove", url, "--project", str(project)])
         assert result.exit_code == 0
         assert "Removed" in result.output
 
@@ -131,12 +130,8 @@ class TestLinkCommand:
         project = _setup_project(tmp_path)
         runner = CliRunner()
         url = "https://github.com/org/repo/issues/42"
-        runner.invoke(
-            main, ["link", "F1", url, "--project", str(project)]
-        )
-        result = runner.invoke(
-            main, ["link", "F1", url, "--project", str(project)]
-        )
+        runner.invoke(main, ["link", "F1", url, "--project", str(project)])
+        result = runner.invoke(main, ["link", "F1", url, "--project", str(project)])
         assert "already exists" in result.output
 
     def test_remove_nonexistent_link(self, tmp_path: Path) -> None:
@@ -144,8 +139,7 @@ class TestLinkCommand:
         runner = CliRunner()
         result = runner.invoke(
             main,
-            ["link", "F1", "--remove", "https://nope.com",
-             "--project", str(project)],
+            ["link", "F1", "--remove", "https://nope.com", "--project", str(project)],
         )
         assert "not found" in result.output
 
@@ -154,8 +148,7 @@ class TestLinkCommand:
         runner = CliRunner()
         result = runner.invoke(
             main,
-            ["link", "NONEXISTENT", "https://example.com",
-             "--project", str(project)],
+            ["link", "NONEXISTENT", "https://example.com", "--project", str(project)],
         )
         assert result.exit_code != 0
 
@@ -165,7 +158,6 @@ class TestLinkCommand:
         runner = CliRunner()
         result = runner.invoke(
             main,
-            ["link", "F1", "https://example.com",
-             "--project", str(project)],
+            ["link", "F1", "https://example.com", "--project", str(project)],
         )
         assert result.exit_code != 0

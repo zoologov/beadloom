@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from click.testing import CliRunner
 
-from beadloom.cli import main
+from beadloom.services.cli import main
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -79,8 +79,6 @@ class TestInstallHooksCommand:
         hook_path = project / ".git" / "hooks" / "pre-commit"
         assert hook_path.exists()
         # Remove.
-        result = runner.invoke(
-            main, ["install-hooks", "--remove", "--project", str(project)]
-        )
+        result = runner.invoke(main, ["install-hooks", "--remove", "--project", str(project)])
         assert result.exit_code == 0, result.output
         assert not hook_path.exists()

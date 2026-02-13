@@ -6,13 +6,13 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.context_builder import (
+from beadloom.context_oracle.builder import (
     bfs_subgraph,
     build_context,
     collect_chunks,
     suggest_ref_id,
 )
-from beadloom.db import create_schema, open_db
+from beadloom.infrastructure.db import create_schema, open_db
 
 if TYPE_CHECKING:
     import sqlite3
@@ -419,7 +419,7 @@ class TestBuildContext:
     def test_stale_index_warning(self, conn: sqlite3.Connection, tmp_path: Path) -> None:
         """If last_reindex_at is set, warning should be null (no staleness check without files)."""
         self._setup_graph(conn)
-        from beadloom.db import set_meta
+        from beadloom.infrastructure.db import set_meta
 
         set_meta(conn, "last_reindex_at", "2025-01-01T00:00:00+00:00")
         bundle = build_context(conn, ["PROJ-1"])

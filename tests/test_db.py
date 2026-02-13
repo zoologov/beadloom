@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.db import create_schema, get_meta, open_db, set_meta
+from beadloom.infrastructure.db import create_schema, get_meta, open_db, set_meta
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -70,9 +70,7 @@ class TestCreateSchema:
     def test_all_tables_exist(self, conn: sqlite3.Connection) -> None:
         tables = {
             row[0]
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         }
         expected = {"nodes", "edges", "docs", "chunks", "code_symbols", "sync_state", "meta"}
         assert expected.issubset(tables)
@@ -287,9 +285,7 @@ class TestCreateSchema:
     def test_idempotent_schema_creation(self, conn: sqlite3.Connection) -> None:
         """create_schema should be safe to call multiple times."""
         create_schema(conn)  # second call
-        tables = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()
+        tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         assert len(tables) > 0
 
 

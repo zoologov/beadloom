@@ -34,7 +34,7 @@ def populated_db(tmp_path: Path) -> tuple[Path, Path]:
     conn.row_factory = sqlite3.Row
 
     # Create schema
-    from beadloom.db import create_schema
+    from beadloom.infrastructure.db import create_schema
 
     create_schema(conn)
 
@@ -210,7 +210,7 @@ def test_cli_ui_missing_textual() -> None:
     """CLI shows friendly error when textual not installed."""
     from click.testing import CliRunner
 
-    from beadloom.cli import ui
+    from beadloom.services.cli import ui
 
     runner = CliRunner()
 
@@ -225,7 +225,7 @@ def test_cli_ui_missing_db(tmp_path: Path) -> None:
     """CLI shows error when database does not exist."""
     from click.testing import CliRunner
 
-    from beadloom.cli import ui
+    from beadloom.services.cli import ui
 
     runner = CliRunner()
     result = runner.invoke(ui, ["--project", str(tmp_path)])

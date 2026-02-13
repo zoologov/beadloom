@@ -1,4 +1,4 @@
-"""Tests for beadloom.why — Impact analysis: bidirectional BFS from a target node."""
+"""Tests for beadloom.context_oracle.why — impact analysis via bidirectional BFS."""
 
 from __future__ import annotations
 
@@ -6,14 +6,14 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.db import create_schema, open_db
-from beadloom.why import (
+from beadloom.context_oracle.why import (
     TreeNode,
     WhyResult,
     analyze_node,
     render_why,
     result_to_dict,
 )
+from beadloom.infrastructure.db import create_schema, open_db
 
 if TYPE_CHECKING:
     import sqlite3

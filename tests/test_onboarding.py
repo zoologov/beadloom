@@ -271,9 +271,7 @@ class TestBootstrapPresets:
         _make_src_tree(tmp_path)
         result = bootstrap_project(tmp_path, preset_name="monolith")
         nodes = result["nodes"]
-        models_node = next(
-            (n for n in nodes if n["ref_id"] == "auth-models"), None
-        )
+        models_node = next((n for n in nodes if n["ref_id"] == "auth-models"), None)
         assert models_node is not None
         assert models_node["kind"] == "entity"
 
@@ -281,9 +279,7 @@ class TestBootstrapPresets:
         _make_src_tree(tmp_path)
         result = bootstrap_project(tmp_path, preset_name="monolith")
         nodes = result["nodes"]
-        api_node = next(
-            (n for n in nodes if n["ref_id"] == "auth-api"), None
-        )
+        api_node = next((n for n in nodes if n["ref_id"] == "auth-api"), None)
         assert api_node is not None
         assert api_node["kind"] == "feature"
 
@@ -337,9 +333,7 @@ class TestBootstrapPresets:
     def test_config_includes_preset(self, tmp_path: Path) -> None:
         _make_src_tree(tmp_path)
         bootstrap_project(tmp_path, preset_name="monolith")
-        config = yaml.safe_load(
-            (tmp_path / ".beadloom" / "config.yml").read_text()
-        )
+        config = yaml.safe_load((tmp_path / ".beadloom" / "config.yml").read_text())
         assert config["preset"] == "monolith"
 
 
@@ -434,9 +428,7 @@ class TestBootstrapZeroDoc:
         src.mkdir()
         (src / "app.py").write_text("pass\n")
         bootstrap_project(tmp_path)
-        config = yaml.safe_load(
-            (tmp_path / ".beadloom" / "config.yml").read_text()
-        )
+        config = yaml.safe_load((tmp_path / ".beadloom" / "config.yml").read_text())
         assert config.get("docs_dir") is None
 
     def test_with_docs_dir_no_null(self, tmp_path: Path) -> None:
@@ -448,9 +440,7 @@ class TestBootstrapZeroDoc:
         docs.mkdir()
         (docs / "readme.md").write_text("# Hello\n")
         bootstrap_project(tmp_path)
-        config = yaml.safe_load(
-            (tmp_path / ".beadloom" / "config.yml").read_text()
-        )
+        config = yaml.safe_load((tmp_path / ".beadloom" / "config.yml").read_text())
         assert "docs_dir" not in config
 
     def test_bootstrap_succeeds_without_docs(self, tmp_path: Path) -> None:
@@ -476,18 +466,14 @@ class TestBootstrapMonorepoDeps:
         a = pkgs / "app"
         a.mkdir()
         (a / "index.ts").write_text("import b from 'core'\n")
-        (a / "package.json").write_text(
-            '{"dependencies": {"@org/core": "workspace:*"}}'
-        )
+        (a / "package.json").write_text('{"dependencies": {"@org/core": "workspace:*"}}')
 
         b = pkgs / "core"
         b.mkdir()
         (b / "index.ts").write_text("export default {}\n")
 
         result = bootstrap_project(tmp_path, preset_name="monorepo")
-        dep_edges = [
-            e for e in result["edges"] if e["kind"] == "depends_on"
-        ]
+        dep_edges = [e for e in result["edges"] if e["kind"] == "depends_on"]
         assert len(dep_edges) >= 1
         assert dep_edges[0]["src"] == "app"
         assert dep_edges[0]["dst"] == "core"
@@ -499,9 +485,7 @@ class TestBootstrapMonorepoDeps:
         a.mkdir()
         (a / "main.ts").write_text("console.log('hi')\n")
         result = bootstrap_project(tmp_path, preset_name="monorepo")
-        dep_edges = [
-            e for e in result["edges"] if e["kind"] == "depends_on"
-        ]
+        dep_edges = [e for e in result["edges"] if e["kind"] == "depends_on"]
         assert dep_edges == []
 
 
@@ -547,31 +531,32 @@ class TestInitCli:
     def test_init_bootstrap(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
 
-        from beadloom.cli import main
+        from beadloom.services.cli import main
 
         src = tmp_path / "src"
         src.mkdir()
         (src / "app.py").write_text("def main():\n    pass\n")
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["init", "--bootstrap", "--project", str(tmp_path)]
-        )
+        result = runner.invoke(main, ["init", "--bootstrap", "--project", str(tmp_path)])
         assert result.exit_code == 0, result.output
         assert (tmp_path / ".beadloom" / "_graph").is_dir()
 
     def test_init_bootstrap_with_preset(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
 
-        from beadloom.cli import main
+        from beadloom.services.cli import main
 
         _make_src_tree(tmp_path)
         runner = CliRunner()
         result = runner.invoke(
             main,
             [
-                "init", "--bootstrap",
-                "--preset", "monolith",
-                "--project", str(tmp_path),
+                "init",
+                "--bootstrap",
+                "--preset",
+                "monolith",
+                "--project",
+                str(tmp_path),
             ],
         )
         assert result.exit_code == 0, result.output
@@ -581,16 +566,14 @@ class TestInitCli:
     def test_init_import(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
 
-        from beadloom.cli import main
+        from beadloom.services.cli import main
 
         docs = tmp_path / "docs"
         docs.mkdir()
         (docs / "readme.md").write_text("# Hello\n\nWorld.\n")
         (tmp_path / ".beadloom" / "_graph").mkdir(parents=True)
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["init", "--import", str(docs), "--project", str(tmp_path)]
-        )
+        result = runner.invoke(main, ["init", "--import", str(docs), "--project", str(tmp_path)])
         assert result.exit_code == 0, result.output
 
     def test_init_interactive_bootstrap(self, tmp_path: Path) -> None:
@@ -599,20 +582,21 @@ class TestInitCli:
 
         from click.testing import CliRunner
 
-        from beadloom.cli import main
+        from beadloom.services.cli import main
 
         src = tmp_path / "src"
         src.mkdir()
         (src / "app.py").write_text("def main():\n    pass\n")
 
-        with patch(
-            "rich.prompt.Prompt.ask",
-            side_effect=["bootstrap", "yes"],
-        ), patch("rich.console.Console"):
+        with (
+            patch(
+                "rich.prompt.Prompt.ask",
+                side_effect=["bootstrap", "yes"],
+            ),
+            patch("rich.console.Console"),
+        ):
             runner = CliRunner()
-            result = runner.invoke(
-                main, ["init", "--project", str(tmp_path)]
-            )
+            result = runner.invoke(main, ["init", "--project", str(tmp_path)])
         assert result.exit_code == 0, result.output
 
 
@@ -634,10 +618,13 @@ class TestInteractiveInit:
         svc.mkdir()
         (svc / "app.py").write_text("def main():\n    pass\n")
 
-        with patch(
-            "rich.prompt.Prompt.ask",
-            side_effect=["bootstrap", "yes"],
-        ), patch("rich.console.Console"):
+        with (
+            patch(
+                "rich.prompt.Prompt.ask",
+                side_effect=["bootstrap", "yes"],
+            ),
+            patch("rich.console.Console"),
+        ):
             result = interactive_init(tmp_path)
 
         assert result["mode"] == "bootstrap"
@@ -651,8 +638,7 @@ class TestInteractiveInit:
         docs.mkdir()
         (docs / "readme.md").write_text("# Hello\n\nWorld.\n")
 
-        with patch("rich.prompt.Prompt.ask", return_value="import"), \
-             patch("rich.console.Console"):
+        with patch("rich.prompt.Prompt.ask", return_value="import"), patch("rich.console.Console"):
             result = interactive_init(tmp_path)
 
         assert result["mode"] == "import"
@@ -663,8 +649,7 @@ class TestInteractiveInit:
 
         (tmp_path / ".beadloom").mkdir()
 
-        with patch("rich.prompt.Prompt.ask", return_value="cancel"), \
-             patch("rich.console.Console"):
+        with patch("rich.prompt.Prompt.ask", return_value="cancel"), patch("rich.console.Console"):
             result = interactive_init(tmp_path)
 
         assert result["mode"] == "cancelled"
@@ -681,10 +666,13 @@ class TestInteractiveInit:
         svc.mkdir()
         (svc / "app.py").write_text("def main():\n    pass\n")
 
-        with patch(
-            "rich.prompt.Prompt.ask",
-            side_effect=["overwrite", "bootstrap", "yes"],
-        ), patch("rich.console.Console"):
+        with (
+            patch(
+                "rich.prompt.Prompt.ask",
+                side_effect=["overwrite", "bootstrap", "yes"],
+            ),
+            patch("rich.console.Console"),
+        ):
             result = interactive_init(tmp_path)
 
         assert result["reinit"] is True
@@ -701,8 +689,7 @@ class TestInteractiveInit:
         (svc / "app.py").write_text("pass\n")
 
         ask_mock = MagicMock(side_effect=["bootstrap", "yes"])
-        with patch("rich.prompt.Prompt.ask", ask_mock), \
-             patch("rich.console.Console"):
+        with patch("rich.prompt.Prompt.ask", ask_mock), patch("rich.console.Console"):
             result = interactive_init(tmp_path)
 
         assert result["mode"] == "bootstrap"
@@ -720,10 +707,13 @@ class TestInteractiveInit:
         svc.mkdir()
         (svc / "app.py").write_text("pass\n")
 
-        with patch(
-            "rich.prompt.Prompt.ask",
-            side_effect=["bootstrap", "edit"],
-        ), patch("rich.console.Console"):
+        with (
+            patch(
+                "rich.prompt.Prompt.ask",
+                side_effect=["bootstrap", "edit"],
+            ),
+            patch("rich.console.Console"),
+        ):
             result = interactive_init(tmp_path)
 
         assert result.get("review") == "edit"
@@ -739,10 +729,13 @@ class TestInteractiveInit:
         svc.mkdir()
         (svc / "app.py").write_text("pass\n")
 
-        with patch(
-            "rich.prompt.Prompt.ask",
-            side_effect=["bootstrap", "cancel"],
-        ), patch("rich.console.Console"):
+        with (
+            patch(
+                "rich.prompt.Prompt.ask",
+                side_effect=["bootstrap", "cancel"],
+            ),
+            patch("rich.console.Console"),
+        ):
             result = interactive_init(tmp_path)
 
         assert result["mode"] == "cancelled"
@@ -757,10 +750,13 @@ class TestInteractiveInit:
         svc.mkdir()
         (svc / "app.py").write_text("import os\ndef main():\n    pass\n")
 
-        with patch(
-            "rich.prompt.Prompt.ask",
-            side_effect=["bootstrap", "yes"],
-        ), patch("rich.console.Console"):
+        with (
+            patch(
+                "rich.prompt.Prompt.ask",
+                side_effect=["bootstrap", "yes"],
+            ),
+            patch("rich.console.Console"),
+        ):
             result = interactive_init(tmp_path)
 
         assert result["mode"] == "bootstrap"

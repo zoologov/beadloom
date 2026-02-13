@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from beadloom.cache import ContextCache, SqliteCache, compute_etag
+from beadloom.context_oracle.cache import ContextCache, SqliteCache, compute_etag
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -136,7 +136,7 @@ class TestSqliteCache:
 
     @staticmethod
     def _make_conn(tmp_path: Path) -> object:
-        from beadloom.db import create_schema, open_db
+        from beadloom.infrastructure.db import create_schema, open_db
 
         db_path = tmp_path / "test.db"
         conn = open_db(db_path)

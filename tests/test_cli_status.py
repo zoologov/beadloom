@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from click.testing import CliRunner
 
-from beadloom.cli import main
+from beadloom.services.cli import main
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -21,17 +21,19 @@ def _setup_project(tmp_path: Path) -> Path:
     graph_dir = project / ".beadloom" / "_graph"
     graph_dir.mkdir(parents=True)
     (graph_dir / "graph.yml").write_text(
-        yaml.dump({
-            "nodes": [
-                {"ref_id": "F1", "kind": "feature", "summary": "Feature 1"},
-                {"ref_id": "F2", "kind": "feature", "summary": "Feature 2"},
-                {"ref_id": "routing", "kind": "domain", "summary": "Routing"},
-            ],
-            "edges": [
-                {"src": "F1", "dst": "routing", "kind": "part_of"},
-                {"src": "F2", "dst": "routing", "kind": "part_of"},
-            ],
-        })
+        yaml.dump(
+            {
+                "nodes": [
+                    {"ref_id": "F1", "kind": "feature", "summary": "Feature 1"},
+                    {"ref_id": "F2", "kind": "feature", "summary": "Feature 2"},
+                    {"ref_id": "routing", "kind": "domain", "summary": "Routing"},
+                ],
+                "edges": [
+                    {"src": "F1", "dst": "routing", "kind": "part_of"},
+                    {"src": "F2", "dst": "routing", "kind": "part_of"},
+                ],
+            }
+        )
     )
 
     docs_dir = project / "docs"
@@ -40,11 +42,9 @@ def _setup_project(tmp_path: Path) -> Path:
 
     src_dir = project / "src"
     src_dir.mkdir()
-    (src_dir / "api.py").write_text(
-        "# beadloom:feature=F1\ndef handler():\n    pass\n"
-    )
+    (src_dir / "api.py").write_text("# beadloom:feature=F1\ndef handler():\n    pass\n")
 
-    from beadloom.reindex import reindex
+    from beadloom.infrastructure.reindex import reindex
 
     reindex(project)
     return project
@@ -81,7 +81,7 @@ class TestStatusCommand:
         (project / "docs").mkdir()
         (project / "src").mkdir()
 
-        from beadloom.reindex import reindex
+        from beadloom.infrastructure.reindex import reindex
 
         reindex(project)
         runner = CliRunner()

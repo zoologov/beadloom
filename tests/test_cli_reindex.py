@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import yaml
 from click.testing import CliRunner
 
-from beadloom.cli import main
+from beadloom.services.cli import main
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -31,11 +31,13 @@ class TestReindexCommand:
         docs_dir = project / "docs"
 
         (graph_dir / "test.yml").write_text(
-            yaml.dump({
-                "nodes": [
-                    {"ref_id": "F1", "kind": "feature", "summary": "Feature 1"},
-                ],
-            })
+            yaml.dump(
+                {
+                    "nodes": [
+                        {"ref_id": "F1", "kind": "feature", "summary": "Feature 1"},
+                    ],
+                }
+            )
         )
         (docs_dir / "spec.md").write_text("## Spec\n\nContent.\n")
 
@@ -60,24 +62,24 @@ class TestReindexCommand:
         docs_dir = project / "docs"
 
         (graph_dir / "graph.yml").write_text(
-            yaml.dump({
-                "nodes": [
-                    {"ref_id": "F1", "kind": "feature", "summary": "Feature 1"},
-                    {"ref_id": "F2", "kind": "feature", "summary": "Feature 2"},
-                ],
-                "edges": [
-                    {"src": "F1", "dst": "F2", "kind": "depends_on"},
-                ],
-            })
+            yaml.dump(
+                {
+                    "nodes": [
+                        {"ref_id": "F1", "kind": "feature", "summary": "Feature 1"},
+                        {"ref_id": "F2", "kind": "feature", "summary": "Feature 2"},
+                    ],
+                    "edges": [
+                        {"src": "F1", "dst": "F2", "kind": "depends_on"},
+                    ],
+                }
+            )
         )
         (docs_dir / "overview.md").write_text("## Overview\n\nProject overview.\n")
 
         # Add a code file under src/ so symbols can be indexed.
         src_dir = project / "src"
         src_dir.mkdir()
-        (src_dir / "app.py").write_text(
-            "# beadloom:feature=F1\ndef handler():\n    pass\n"
-        )
+        (src_dir / "app.py").write_text("# beadloom:feature=F1\ndef handler():\n    pass\n")
 
         runner = CliRunner()
 
@@ -116,22 +118,24 @@ class TestReindexCommand:
 
         # Two nodes both reference the same doc -- triggers doc-ref conflict.
         (graph_dir / "conflict.yml").write_text(
-            yaml.dump({
-                "nodes": [
-                    {
-                        "ref_id": "A1",
-                        "kind": "feature",
-                        "summary": "Alpha",
-                        "docs": ["docs/shared.md"],
-                    },
-                    {
-                        "ref_id": "A2",
-                        "kind": "feature",
-                        "summary": "Beta",
-                        "docs": ["docs/shared.md"],
-                    },
-                ],
-            })
+            yaml.dump(
+                {
+                    "nodes": [
+                        {
+                            "ref_id": "A1",
+                            "kind": "feature",
+                            "summary": "Alpha",
+                            "docs": ["docs/shared.md"],
+                        },
+                        {
+                            "ref_id": "A2",
+                            "kind": "feature",
+                            "summary": "Beta",
+                            "docs": ["docs/shared.md"],
+                        },
+                    ],
+                }
+            )
         )
         (docs_dir / "shared.md").write_text("## Shared\n\nShared content.\n")
 
@@ -152,14 +156,16 @@ class TestReindexCommand:
 
         # Edge references node "GHOST" which does not exist.
         (graph_dir / "bad_edge.yml").write_text(
-            yaml.dump({
-                "nodes": [
-                    {"ref_id": "X1", "kind": "feature", "summary": "Existing"},
-                ],
-                "edges": [
-                    {"src": "X1", "dst": "GHOST", "kind": "depends_on"},
-                ],
-            })
+            yaml.dump(
+                {
+                    "nodes": [
+                        {"ref_id": "X1", "kind": "feature", "summary": "Existing"},
+                    ],
+                    "edges": [
+                        {"src": "X1", "dst": "GHOST", "kind": "depends_on"},
+                    ],
+                }
+            )
         )
 
         runner = CliRunner()

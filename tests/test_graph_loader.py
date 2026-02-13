@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.db import create_schema, open_db
-from beadloom.graph_loader import load_graph, parse_graph_file
+from beadloom.graph.loader import load_graph, parse_graph_file
+from beadloom.infrastructure.db import create_schema, open_db
 
 if TYPE_CHECKING:
     import sqlite3
@@ -35,10 +35,7 @@ class TestParseGraphFile:
     def test_parse_nodes(self, graph_dir: Path) -> None:
         yml = graph_dir / "domains.yml"
         yml.write_text(
-            "nodes:\n"
-            "  - ref_id: routing\n"
-            "    kind: domain\n"
-            '    summary: "Routing domain"\n'
+            'nodes:\n  - ref_id: routing\n    kind: domain\n    summary: "Routing domain"\n'
         )
         result = parse_graph_file(yml)
         assert len(result.nodes) == 1
@@ -102,10 +99,7 @@ class TestParseGraphFile:
     def test_nodes_only_no_edges(self, graph_dir: Path) -> None:
         yml = graph_dir / "entities.yml"
         yml.write_text(
-            "nodes:\n"
-            "  - ref_id: Track\n"
-            "    kind: entity\n"
-            '    summary: "Track record"\n'
+            'nodes:\n  - ref_id: Track\n    kind: entity\n    summary: "Track record"\n'
         )
         result = parse_graph_file(yml)
         assert len(result.nodes) == 1
@@ -175,32 +169,20 @@ class TestLoadGraph:
 
     def test_multiple_yml_files(self, db: sqlite3.Connection, graph_dir: Path) -> None:
         (graph_dir / "domains.yml").write_text(
-            "nodes:\n"
-            "  - ref_id: dom1\n"
-            "    kind: domain\n"
-            '    summary: "D1"\n'
+            'nodes:\n  - ref_id: dom1\n    kind: domain\n    summary: "D1"\n'
         )
         (graph_dir / "services.yml").write_text(
-            "nodes:\n"
-            "  - ref_id: svc1\n"
-            "    kind: service\n"
-            '    summary: "S1"\n'
+            'nodes:\n  - ref_id: svc1\n    kind: service\n    summary: "S1"\n'
         )
         result = load_graph(graph_dir, db)
         assert result.nodes_loaded == 2
 
     def test_duplicate_ref_id_error(self, db: sqlite3.Connection, graph_dir: Path) -> None:
         (graph_dir / "a.yml").write_text(
-            "nodes:\n"
-            "  - ref_id: dup\n"
-            "    kind: domain\n"
-            '    summary: "First"\n'
+            'nodes:\n  - ref_id: dup\n    kind: domain\n    summary: "First"\n'
         )
         (graph_dir / "b.yml").write_text(
-            "nodes:\n"
-            "  - ref_id: dup\n"
-            "    kind: service\n"
-            '    summary: "Second"\n'
+            'nodes:\n  - ref_id: dup\n    kind: service\n    summary: "Second"\n'
         )
         result = load_graph(graph_dir, db)
         assert len(result.errors) > 0
@@ -256,10 +238,7 @@ class TestLoadGraph:
 
     def test_edges_across_files(self, db: sqlite3.Connection, graph_dir: Path) -> None:
         (graph_dir / "domains.yml").write_text(
-            "nodes:\n"
-            "  - ref_id: dom\n"
-            "    kind: domain\n"
-            '    summary: "D"\n'
+            'nodes:\n  - ref_id: dom\n    kind: domain\n    summary: "D"\n'
         )
         (graph_dir / "features.yml").write_text(
             "nodes:\n"
