@@ -2,7 +2,7 @@ nodes:
   # Root service
   - ref_id: beadloom
     kind: service
-    summary: "Beadloom CLI + MCP server — Context Oracle + Doc Sync Engine (v1.2.0)"
+    summary: "Beadloom CLI + MCP server — Context Oracle + Doc Sync Engine (v1.3.0)"
     source: src/beadloom/
     docs:
       - docs/architecture.md
@@ -36,10 +36,18 @@ nodes:
   # Domain: Onboarding
   - ref_id: onboarding
     kind: domain
-    summary: "Project bootstrap, doc import, architecture-aware presets"
+    summary: "Project bootstrap, doc import, architecture-aware presets, doc generation"
     source: src/beadloom/onboarding/
     docs:
       - docs/domains/onboarding/README.md
+
+  # Feature: Doc Generator
+  - ref_id: doc-generator
+    kind: feature
+    summary: "Doc skeleton generation + AI polish data from knowledge graph"
+    source: src/beadloom/onboarding/doc_generator.py
+    docs:
+      - docs/domains/onboarding/features/doc-generator/SPEC.md
 
   # Domain: Infrastructure
   - ref_id: infrastructure
@@ -52,7 +60,7 @@ nodes:
   # Service: CLI
   - ref_id: cli
     kind: service
-    summary: "Click-based CLI with 18 commands"
+    summary: "Click-based CLI with 20 commands"
     source: src/beadloom/services/cli.py
     docs:
       - docs/services/cli.md
@@ -60,7 +68,7 @@ nodes:
   # Service: MCP Server
   - ref_id: mcp-server
     kind: service
-    summary: "MCP stdio server with 8 tools for AI agents"
+    summary: "MCP stdio server with 9 tools for AI agents"
     source: src/beadloom/services/mcp_server.py
     docs:
       - docs/services/mcp.md
@@ -180,6 +188,10 @@ edges:
     dst: infrastructure
     kind: part_of
 
+  - src: doc-generator
+    dst: onboarding
+    kind: part_of
+
   # Features are part_of their parent domains
   - src: search
     dst: context-oracle
@@ -230,6 +242,9 @@ edges:
     kind: uses
   - src: mcp-server
     dst: infrastructure
+    kind: uses
+  - src: mcp-server
+    dst: onboarding
     kind: uses
 
   # Cross-domain dependencies

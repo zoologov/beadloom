@@ -215,6 +215,28 @@ beadloom watch [--debounce MS] [--project DIR]
 
 Monitors graph YAML, documentation, and source files. Graph changes trigger full reindex; other changes trigger incremental. Requires: `pip install beadloom[watch]`.
 
+### beadloom docs generate
+
+Generate documentation skeletons from the knowledge graph.
+
+```bash
+beadloom docs generate [--project DIR]
+```
+
+Creates `docs/` tree: `architecture.md`, domain READMEs, service pages, feature SPECs. Never overwrites existing files. All generated files include `<!-- enrich with: beadloom docs polish -->` markers.
+
+### beadloom docs polish
+
+Generate structured data for AI-driven documentation enrichment.
+
+```bash
+beadloom docs polish [--format {text,json}] [--ref REF_ID] [--project DIR]
+```
+
+- `text` (default) — human-readable summary with enrichment instructions
+- `json` — structured JSON with nodes (symbols, dependencies, existing docs), Mermaid diagram, and AI prompt
+- `--ref` — filter to a single node
+
 ### beadloom setup-mcp
 
 Configure MCP server for your editor.

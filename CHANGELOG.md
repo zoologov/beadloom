@@ -5,6 +5,21 @@ All notable changes to Beadloom are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-02-13
+
+Plug & Play Onboarding: from install to first useful result in one command.
+
+### Added
+- **`beadloom docs generate`** — generate doc skeletons (architecture.md, domain READMEs, service pages, feature SPECs) from knowledge graph
+- **`beadloom docs polish`** — structured JSON/text output with code symbols, Mermaid diagrams, and AI enrichment prompts for agent-driven doc polish
+- **`generate_docs` MCP tool** — 9th tool, returns polish data as JSON for AI agents
+- **Auto-rules generation** — `beadloom init --bootstrap` now generates `rules.yml` with structural require rules (domain-needs-parent, feature-needs-domain, service-needs-parent)
+- **Auto MCP config** — bootstrap auto-detects editor (Cursor, Windsurf, Claude Code) and creates `.mcp.json`
+- **Root node + project name detection** — reads name from pyproject.toml/package.json/go.mod/Cargo.toml with directory fallback
+- **Enhanced init output** — summary with Graph/Rules/Docs/MCP/Index counts and Next steps
+- **Doc-generator feature** — added to knowledge graph under onboarding domain
+- **13 end-to-end integration tests** — full pipeline from bootstrap through docs generate/polish with idempotency checks
+
 ## [1.2.0] - 2026-02-13
 
 DDD restructuring: code, docs, and knowledge graph now follow domain-driven design.
