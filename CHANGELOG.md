@@ -5,6 +5,22 @@ All notable changes to Beadloom are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-02-13
+
+Onboarding Quality: 10 bug-fixes from dogfooding on real projects (cdeep, dreamteam).
+
+### Fixed
+- **Doctor 0% coverage** — `generate_skeletons()` writes `docs:` field back to services.yml (cdeep: 0% → 95%, dreamteam: 0% → 83%)
+- **Lint false positives** — empty `has_edge_to: {}` matcher (any node), removed `service-needs-parent` rule (cdeep: 33 → 0 violations)
+- **Polish deps empty** — `generate_polish_data()` reads `depends_on` edges from SQLite post-reindex
+- **Polish text = 1 line** — new `format_polish_text()` with node details, symbols, deps, doc status
+- **Preset misclassifies mobile** — `detect_preset()` checks React Native/Expo/Flutter before `services/` heuristic
+- **Missing parser warning** — `check_parser_availability()` warns about missing tree-sitter grammars in bootstrap/reindex
+- **Generic summaries** — detects Django apps, React components, Python packages, Dockerized services
+- **Parenthesized ref_ids** — strips `()` from Expo router dirs (`(tabs)` → `tabs`)
+- **Reindex ignores parsers** — parser fingerprint tracked; new parsers trigger full reindex
+- **Skeleton count** — CLI shows "N created, M skipped (pre-existing)"
+
 ## [1.3.0] - 2026-02-13
 
 Plug & Play Onboarding: from install to first useful result in one command.
