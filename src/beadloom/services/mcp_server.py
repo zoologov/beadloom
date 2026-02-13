@@ -400,6 +400,24 @@ _TOOLS = [
             "required": ["query"],
         },
     ),
+    mcp.Tool(
+        name="generate_docs",
+        description=(
+            "Generate or enrich documentation for a graph node. Returns structured data: "
+            "node summary, public API symbols, dependencies, dependents, and a prompt "
+            "for writing human-readable documentation. After generating, use update_node "
+            "to save improved summaries. Call without ref_id for all nodes."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "ref_id": {
+                    "type": "string",
+                    "description": "Node to generate docs for. Omit for all nodes.",
+                },
+            },
+        },
+    ),
 ]
 
 
@@ -659,6 +677,15 @@ def _dispatch_tool(
             kind=args.get("kind"),
             limit=args.get("limit", 10),
         )
+
+    if name == "generate_docs":
+        if project_root is None:
+            msg = "generate_docs requires project_root"
+            raise ValueError(msg)
+        from beadloom.onboarding.doc_generator import generate_polish_data
+
+        ref_id = args.get("ref_id")
+        return generate_polish_data(project_root, ref_id=ref_id)
 
     msg = f"Unknown tool: {name}"
     raise ValueError(msg)

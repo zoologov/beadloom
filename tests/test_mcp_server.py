@@ -722,3 +722,89 @@ class TestAutoReindex:
         conn.close()
 
         assert reindexed is False
+
+
+class TestGenerateDocsTool:
+    """Tests for the generate_docs MCP tool."""
+
+    def test_generate_docs_tool_listed(self) -> None:
+        """Check that 'generate_docs' appears in the _TOOLS list."""
+        from beadloom.services.mcp_server import _TOOLS
+
+        tool_names = [t.name for t in _TOOLS]
+        assert "generate_docs" in tool_names
+
+    def test_generate_docs_all_nodes(
+        self,
+        project: Path,
+        db_conn: sqlite3.Connection,
+    ) -> None:
+        """Calling generate_docs without ref_id returns all nodes."""
+        from beadloom.services.mcp_server import _dispatch_tool
+
+        result = _dispatch_tool(
+            db_conn,
+            "generate_docs",
+            {},
+            project_root=project,
+        )
+
+        assert "nodes" in result
+        assert isinstance(result["nodes"], list)
+        assert len(result["nodes"]) >= 2
+        assert "instructions" in result
+        assert "architecture" in result
+
+    def test_generate_docs_single_ref_id(
+        self,
+        project: Path,
+        db_conn: sqlite3.Connection,
+    ) -> None:
+        """Calling generate_docs with ref_id returns a single node."""
+        from beadloom.services.mcp_server import _dispatch_tool
+
+        result = _dispatch_tool(
+            db_conn,
+            "generate_docs",
+            {"ref_id": "FEAT-1"},
+            project_root=project,
+        )
+
+        assert "nodes" in result
+        assert len(result["nodes"]) == 1
+        assert result["nodes"][0]["ref_id"] == "FEAT-1"
+
+    def test_generate_docs_response_format(
+        self,
+        project: Path,
+        db_conn: sqlite3.Connection,
+    ) -> None:
+        """Response is a dict with expected top-level keys and valid structure."""
+        import json
+
+        from beadloom.services.mcp_server import _dispatch_tool
+
+        result = _dispatch_tool(
+            db_conn,
+            "generate_docs",
+            {},
+            project_root=project,
+        )
+
+        # Result should be JSON-serialisable.
+        text = json.dumps(result, ensure_ascii=False, indent=2)
+        parsed = json.loads(text)
+        assert "nodes" in parsed
+        assert "architecture" in parsed
+        assert "instructions" in parsed
+        assert isinstance(parsed["instructions"], str)
+
+    def test_generate_docs_requires_project_root(
+        self,
+        db_conn: sqlite3.Connection,
+    ) -> None:
+        """generate_docs raises ValueError when project_root is None."""
+        from beadloom.services.mcp_server import _dispatch_tool
+
+        with pytest.raises(ValueError, match="generate_docs requires project_root"):
+            _dispatch_tool(db_conn, "generate_docs", {})

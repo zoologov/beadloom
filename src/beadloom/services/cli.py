@@ -1139,6 +1139,66 @@ def mcp_serve(*, project: Path | None) -> None:
 
 
 # beadloom:domain=onboarding
+@main.group()
+def docs() -> None:
+    """Documentation generation and management."""
+
+
+@docs.command("generate")
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: current directory).",
+)
+def docs_generate(*, project: Path | None) -> None:
+    """Generate doc skeletons from the knowledge graph."""
+    from beadloom.onboarding.doc_generator import generate_skeletons
+
+    project_root = project or Path.cwd()
+    result = generate_skeletons(project_root)
+    click.echo(
+        f"Created {result['files_created']} files, skipped {result['files_skipped']} existing"
+    )
+
+
+@docs.command("polish")
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: current directory).",
+)
+@click.option(
+    "--ref-id",
+    default=None,
+    help="Polish specific node docs only.",
+)
+@click.option(
+    "--format",
+    "fmt",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    help="Output format (default: text).",
+)
+def docs_polish(
+    *,
+    project: Path | None,
+    ref_id: str | None,
+    fmt: str,
+) -> None:
+    """Output structured data for AI agent to enrich documentation."""
+    from beadloom.onboarding.doc_generator import generate_polish_data
+
+    project_root = project or Path.cwd()
+    data = generate_polish_data(project_root, ref_id=ref_id)
+    if fmt == "json":
+        click.echo(json.dumps(data, indent=2, ensure_ascii=False))
+    else:
+        click.echo(data["instructions"])
+
+
+# beadloom:domain=onboarding
 @main.command()
 @click.option("--bootstrap", is_flag=True, help="Bootstrap: generate graph from code.")
 @click.option(
