@@ -458,6 +458,69 @@ def _patch_docs_field(graph_dir: Path, docs_map: dict[str, str]) -> None:
 
 
 # ------------------------------------------------------------------
+# SQLite edge enrichment
+# ------------------------------------------------------------------
+
+
+def _enrich_edges_from_sqlite(
+    project_root: Path,
+    node_data_list: list[dict[str, Any]],
+) -> None:
+    """Enrich *node_data_list* with ``depends_on`` / ``used_by`` from SQLite.
+
+    At bootstrap time only ``part_of`` edges exist in the YAML graph files.
+    Real ``depends_on`` edges are created by the import resolver during
+    ``reindex``.  This function reads those edges from SQLite and merges
+    them into the node data dictionaries (without duplicates).
+
+    Modifies *node_data_list* in place.  Silently skips when the database
+    does not exist or the edges table is missing.
+    """
+    from pathlib import Path as _Path
+
+    db_path = _Path(project_root) / ".beadloom" / "beadloom.db"
+    if not db_path.exists():
+        return
+
+    import sqlite3
+
+    try:
+        conn = sqlite3.connect(str(db_path))
+        try:
+            for node_data in node_data_list:
+                ref_id: str = node_data["ref_id"]
+
+                # Forward: this node depends on …
+                rows = conn.execute(
+                    "SELECT dst_ref_id FROM edges WHERE src_ref_id = ? AND kind = 'depends_on'",
+                    (ref_id,),
+                ).fetchall()
+                if rows:
+                    existing = set(node_data.get("depends_on") or [])
+                    for (dst,) in rows:
+                        if dst not in existing:
+                            node_data.setdefault("depends_on", []).append(dst)
+                            existing.add(dst)
+
+                # Reverse: … depends on this node
+                rows = conn.execute(
+                    "SELECT src_ref_id FROM edges WHERE dst_ref_id = ? AND kind = 'depends_on'",
+                    (ref_id,),
+                ).fetchall()
+                if rows:
+                    existing = set(node_data.get("used_by") or [])
+                    for (src,) in rows:
+                        if src not in existing:
+                            node_data.setdefault("used_by", []).append(src)
+                            existing.add(src)
+        finally:
+            conn.close()
+    except sqlite3.OperationalError:
+        # Table may not exist yet — graceful degradation.
+        pass
+
+
+# ------------------------------------------------------------------
 # Public API
 # ------------------------------------------------------------------
 
@@ -497,8 +560,10 @@ def generate_polish_data(
         # Read existing doc content via resolved path.
         doc_path = _doc_path_for_node(node, edges, project_root)
         existing_doc: str | None = None
+        doc_status: str = "missing"
         if doc_path is not None and doc_path.exists():
             existing_doc = doc_path.read_text(encoding="utf-8")
+            doc_status = "exists"
 
         node_data: dict[str, Any] = {
             "ref_id": node["ref_id"],
@@ -510,8 +575,13 @@ def generate_polish_data(
             "used_by": used_by,
             "features": children,
             "existing_docs": existing_doc,
+            "doc_path": str(doc_path) if doc_path is not None else None,
+            "doc_status": doc_status,
         }
         node_data_list.append(node_data)
+
+    # Enrich with real dependency edges from SQLite (post-reindex).
+    _enrich_edges_from_sqlite(project_root, node_data_list)
 
     # Build Mermaid diagram.
     mermaid_str = _generate_mermaid(nodes, edges)
@@ -534,6 +604,65 @@ def generate_polish_data(
         },
         "instructions": instructions,
     }
+
+
+def format_polish_text(data: dict[str, Any]) -> str:
+    """Format ``generate_polish_data()`` output as human-readable text.
+
+    Renders all nodes with their metadata (source, summary, dependencies,
+    symbols, doc status) followed by the AI instructions prompt.
+    """
+    lines: list[str] = []
+
+    arch = data.get("architecture", {})
+    project_name: str = arch.get("project_name", "project")
+    nodes_list: list[dict[str, Any]] = data.get("nodes", [])
+
+    lines.append(f"# {project_name}")
+    lines.append(f"Nodes needing enrichment: {len(nodes_list)}")
+    lines.append("")
+
+    for node in nodes_list:
+        ref_id: str = node.get("ref_id", "?")
+        kind: str = node.get("kind", "?")
+        source: str = node.get("source", "")
+        summary: str = node.get("summary", "")
+        depends_on: list[str] = node.get("depends_on", [])
+        used_by: list[str] = node.get("used_by", [])
+        symbols: list[dict[str, Any]] = node.get("symbols", [])
+        doc_path: str | None = node.get("doc_path")
+        doc_status: str = node.get("doc_status", "missing")
+
+        lines.append(f"## {ref_id} ({kind})")
+        lines.append(f"   Source: {source}")
+        lines.append(f"   Summary: {summary}")
+        dep_str = ", ".join(depends_on) if depends_on else "(none)"
+        used_str = ", ".join(used_by) if used_by else "(none)"
+        lines.append(f"   Depends on: {dep_str}")
+        lines.append(f"   Used by: {used_str}")
+
+        if symbols:
+            # Show public symbols only (skip _private).
+            pub = [
+                s.get("symbol_name", "")
+                for s in symbols
+                if not s.get("symbol_name", "").startswith("_")
+            ]
+            if pub:
+                lines.append(f"   Symbols: {', '.join(sorted(pub))}")
+            else:
+                lines.append("   Symbols: (none public)")
+        else:
+            lines.append("   Symbols: (none)")
+
+        doc_display = doc_path if doc_path else "(none)"
+        lines.append(f"   Doc: {doc_display} ({doc_status})")
+        lines.append("")
+
+    lines.append("---")
+    lines.append(data.get("instructions", ""))
+
+    return "\n".join(lines)
 
 
 def generate_skeletons(

@@ -9,6 +9,7 @@ from beadloom.context_oracle.builder import (
 from beadloom.context_oracle.cache import CacheEntry, ContextCache, SqliteCache, compute_etag
 from beadloom.context_oracle.code_indexer import (
     LangConfig,
+    check_parser_availability,
     clear_cache,
     extract_symbols,
     get_lang_config,
@@ -24,6 +25,7 @@ __all__ = [
     "SqliteCache",
     "bfs_subgraph",
     "build_context",
+    "check_parser_availability",
     "clear_cache",
     "collect_chunks",
     "compute_etag",

@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 from tree_sitter import Language, Parser
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterable
     from pathlib import Path
 
     from tree_sitter import Node as TSNode
@@ -159,6 +159,22 @@ def supported_extensions() -> frozenset[str]:
 def clear_cache() -> None:
     """Clear the language config cache (useful for testing)."""
     _LANG_CACHE.clear()
+
+
+def check_parser_availability(extensions: Iterable[str]) -> dict[str, bool]:
+    """Check whether a tree-sitter parser is available for each extension.
+
+    Parameters
+    ----------
+    extensions:
+        An iterable of file extensions (e.g. ``[".ts", ".tsx", ".py"]``).
+
+    Returns
+    -------
+    dict[str, bool]
+        Mapping of extension to ``True`` if a parser is installed, ``False`` otherwise.
+    """
+    return {ext: get_lang_config(ext) is not None for ext in extensions}
 
 
 def parse_annotations(line: str) -> dict[str, str]:

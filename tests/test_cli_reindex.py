@@ -242,3 +242,91 @@ class TestReindexDocsDirFlag:
         assert result.exit_code == 0, result.output
         # Should index only from custom dir (1 doc, not from default docs/)
         assert "Docs:    1" in result.output
+
+
+class TestReindexMissingParserWarning:
+    """Tests for missing parser warnings during reindex."""
+
+    def test_reindex_warns_missing_parsers(self, tmp_path: Path) -> None:
+        """Reindex with 0 symbols and configured languages shows a warning."""
+        from unittest.mock import patch
+
+        # Arrange
+        project = _minimal_project(tmp_path)
+
+        # Create config.yml with TypeScript language configured.
+        config_content = "languages:\n- .ts\n- .tsx\nscan_paths:\n- src\n"
+        (project / ".beadloom" / "config.yml").write_text(config_content)
+
+        # Create a .ts file under src/ (no parser will be available).
+        src_dir = project / "src"
+        src_dir.mkdir()
+        (src_dir / "app.ts").write_text("function hello(): void {}\n")
+
+        runner = CliRunner()
+
+        # Mock get_lang_config to return None for .ts/.tsx (parser not installed).
+        def mock_config(ext: str) -> object | None:
+            if ext in (".ts", ".tsx"):
+                return None
+            # Use the real function for other extensions.
+            from beadloom.context_oracle.code_indexer import _EXTENSION_LOADERS
+
+            loader = _EXTENSION_LOADERS.get(ext)
+            if loader is None:
+                return None
+            try:
+                return loader()
+            except ImportError:
+                return None
+
+        with patch(
+            "beadloom.context_oracle.code_indexer.get_lang_config",
+            side_effect=mock_config,
+        ):
+            # Also clear cache so mock is used.
+            from beadloom.context_oracle.code_indexer import clear_cache
+
+            clear_cache()
+            result = runner.invoke(main, ["reindex", "--full", "--project", str(project)])
+
+        # Assert
+        assert result.exit_code == 0, result.output
+        assert "No parser available for" in result.output
+        assert "beadloom[languages]" in result.output
+
+    def test_reindex_no_warning_when_symbols_found(self, tmp_path: Path) -> None:
+        """No warning when symbols are successfully extracted."""
+        # Arrange
+        project = _minimal_project(tmp_path)
+
+        # Create config.yml with Python language configured.
+        config_content = "languages:\n- python\nscan_paths:\n- src\n"
+        (project / ".beadloom" / "config.yml").write_text(config_content)
+
+        # Create a .py file under src/ (Python parser is always available).
+        src_dir = project / "src"
+        src_dir.mkdir()
+        (src_dir / "app.py").write_text("def handler():\n    pass\n")
+
+        runner = CliRunner()
+
+        # Act
+        result = runner.invoke(main, ["reindex", "--full", "--project", str(project)])
+
+        # Assert
+        assert result.exit_code == 0, result.output
+        assert "No parser available" not in result.output
+
+    def test_reindex_no_warning_without_config(self, tmp_path: Path) -> None:
+        """No warning when there is no config.yml file."""
+        # Arrange
+        project = _minimal_project(tmp_path)
+        runner = CliRunner()
+
+        # Act
+        result = runner.invoke(main, ["reindex", "--full", "--project", str(project)])
+
+        # Assert
+        assert result.exit_code == 0, result.output
+        assert "No parser available" not in result.output

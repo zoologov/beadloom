@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from beadloom import __version__
-from beadloom.context_oracle.code_indexer import extract_symbols
+from beadloom.context_oracle.code_indexer import extract_symbols, supported_extensions
 from beadloom.doc_sync.doc_indexer import chunk_markdown, index_docs
 from beadloom.graph.loader import load_graph
 from beadloom.infrastructure.db import SCHEMA_VERSION, create_schema, open_db, set_meta
@@ -402,6 +402,9 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
     current_files = _scan_project_files(project_root, docs_dir)
     _populate_file_index(conn, current_files)
 
+    # 9. Store parser fingerprint for incremental reindex to detect new parsers.
+    _store_parser_fingerprint(conn, _compute_parser_fingerprint())
+
     conn.close()
     return result
 
@@ -409,6 +412,45 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
 # ---------------------------------------------------------------------------
 # Incremental reindex helpers
 # ---------------------------------------------------------------------------
+
+
+def _compute_parser_fingerprint() -> str:
+    """Compute a fingerprint of currently available tree-sitter parsers.
+
+    Returns a sorted, comma-separated string of supported extensions.
+    When new parser packages are installed, this string changes, signalling
+    that a full code reindex is needed.
+    """
+    exts = supported_extensions()
+    return ",".join(sorted(exts))
+
+
+def _get_stored_parser_fingerprint(conn: sqlite3.Connection) -> str | None:
+    """Read the stored parser fingerprint from file_index.
+
+    Uses a sentinel row with ``path='__parser_fingerprint__'``.
+    Returns ``None`` if not stored.
+    """
+    try:
+        row = conn.execute(
+            "SELECT hash FROM file_index WHERE path = '__parser_fingerprint__'"
+        ).fetchone()
+    except Exception:
+        return None
+    return row["hash"] if row else None
+
+
+def _store_parser_fingerprint(conn: sqlite3.Connection, fingerprint: str) -> None:
+    """Store the parser fingerprint in file_index as a sentinel row."""
+    now = datetime.now(tz=timezone.utc).isoformat()
+    conn.execute(
+        "INSERT INTO file_index (path, hash, kind, indexed_at) "
+        "VALUES ('__parser_fingerprint__', ?, 'code', ?) "
+        "ON CONFLICT(path) DO UPDATE SET hash=excluded.hash, "
+        "indexed_at=excluded.indexed_at",
+        (fingerprint, now),
+    )
+    conn.commit()
 
 
 def _compute_file_hash(path: Path) -> str:
@@ -458,7 +500,9 @@ def _get_stored_file_index(
         rows = conn.execute("SELECT path, hash, kind FROM file_index").fetchall()
     except Exception:  # table may not exist on first run
         return {}
-    return {row["path"]: (row["hash"], row["kind"]) for row in rows}
+    return {
+        row["path"]: (row["hash"], row["kind"]) for row in rows if not row["path"].startswith("__")
+    }
 
 
 def _diff_files(
@@ -635,6 +679,13 @@ def incremental_reindex(
 
     if not stored_files:
         # First run — fall back to full reindex.
+        conn.close()
+        return reindex(project_root, docs_dir=docs_dir)
+
+    # Check if parser availability changed (e.g. new tree-sitter grammar installed).
+    current_fingerprint = _compute_parser_fingerprint()
+    stored_fingerprint = _get_stored_parser_fingerprint(conn)
+    if stored_fingerprint is not None and current_fingerprint != stored_fingerprint:
         conn.close()
         return reindex(project_root, docs_dir=docs_dir)
 

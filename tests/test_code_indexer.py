@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from beadloom.context_oracle.code_indexer import (
+    check_parser_availability,
     clear_cache,
     extract_symbols,
     get_lang_config,
@@ -508,3 +509,46 @@ class TestExtractSymbolsUnsupported:
         f.write_text("hello world\n")
         symbols = extract_symbols(f)
         assert symbols == []
+
+
+# --- check_parser_availability ---
+
+
+class TestCheckParserAvailability:
+    def test_all_available(self) -> None:
+        """When get_lang_config returns a config for all extensions, all map to True."""
+        from unittest.mock import patch
+
+        fake_config = object()  # truthy
+        with patch(
+            "beadloom.context_oracle.code_indexer.get_lang_config",
+            return_value=fake_config,
+        ):
+            result = check_parser_availability([".py", ".ts", ".tsx"])
+        assert result == {".py": True, ".ts": True, ".tsx": True}
+
+    def test_missing_parser(self) -> None:
+        """When get_lang_config returns None for .ts, it maps to False."""
+        from unittest.mock import patch
+
+        def mock_config(ext: str) -> object | None:
+            if ext == ".ts":
+                return None
+            return object()
+
+        with patch(
+            "beadloom.context_oracle.code_indexer.get_lang_config",
+            side_effect=mock_config,
+        ):
+            result = check_parser_availability([".py", ".ts"])
+        assert result == {".py": True, ".ts": False}
+
+    def test_empty_input(self) -> None:
+        """Empty input returns empty dict."""
+        result = check_parser_availability([])
+        assert result == {}
+
+    def test_python_always_available(self) -> None:
+        """Python parser should always be available (it is a core dependency)."""
+        result = check_parser_availability([".py"])
+        assert result == {".py": True}

@@ -27,6 +27,66 @@ def main(ctx: click.Context, *, verbose: bool, quiet: bool) -> None:
     ctx.obj["quiet"] = quiet
 
 
+def _warn_missing_parsers(project_root: Path) -> None:
+    """Print a warning if configured languages lack tree-sitter parsers.
+
+    Reads ``languages`` from ``.beadloom/config.yml`` and checks parser
+    availability via ``check_parser_availability``.  When missing parsers
+    are detected, emits a ``click.secho`` warning with install instructions.
+    """
+    config_path = project_root / ".beadloom" / "config.yml"
+    if not config_path.exists():
+        return
+
+    import yaml
+
+    from beadloom.context_oracle.code_indexer import check_parser_availability
+
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    languages: list[str] = config.get("languages", [])
+    if not languages:
+        return
+
+    # Normalise: config may store bare names ("python") or extensions (".py").
+    # Map common language names to their canonical extensions.
+    name_to_exts: dict[str, list[str]] = {
+        "python": [".py"],
+        "typescript": [".ts", ".tsx"],
+        "javascript": [".js", ".jsx"],
+        "go": [".go"],
+        "rust": [".rs"],
+    }
+
+    extensions: set[str] = set()
+    for lang in languages:
+        lang_lower = lang.lower().strip()
+        if lang_lower.startswith("."):
+            extensions.add(lang_lower)
+        elif lang_lower in name_to_exts:
+            extensions.update(name_to_exts[lang_lower])
+        else:
+            # Try treating it as an extension anyway.
+            extensions.add(f".{lang_lower}")
+
+    if not extensions:
+        return
+
+    availability = check_parser_availability(extensions)
+    missing = sorted(ext for ext, available in availability.items() if not available)
+    if not missing:
+        return
+
+    exts_str = ", ".join(missing)
+    click.secho(
+        f"\u26a0 No parser available for {exts_str} files.",
+        fg="yellow",
+    )
+    click.secho(
+        '  Install language support: uv tool install "beadloom[languages]"',
+        fg="yellow",
+    )
+
+
 # beadloom:domain=context-oracle
 def _format_markdown(bundle: dict[str, object]) -> str:
     """Format a context bundle as human-readable Markdown."""
@@ -175,6 +235,10 @@ def reindex(*, project: Path | None, docs_dir: Path | None, full: bool) -> None:
         click.echo("")
         for warn in result.warnings:
             click.echo(f"  [warn] {warn}")
+
+    # Warn about missing language parsers when symbols == 0.
+    if result.symbols_indexed == 0 and not result.nothing_changed:
+        _warn_missing_parsers(project_root)
 
 
 # beadloom:domain=context-oracle
@@ -1188,14 +1252,14 @@ def docs_polish(
     fmt: str,
 ) -> None:
     """Output structured data for AI agent to enrich documentation."""
-    from beadloom.onboarding.doc_generator import generate_polish_data
+    from beadloom.onboarding.doc_generator import format_polish_text, generate_polish_data
 
     project_root = project or Path.cwd()
     data = generate_polish_data(project_root, ref_id=ref_id)
     if fmt == "json":
         click.echo(json.dumps(data, indent=2, ensure_ascii=False))
     else:
-        click.echo(data["instructions"])
+        click.echo(format_polish_text(data))
 
 
 # beadloom:domain=onboarding
@@ -1267,7 +1331,13 @@ def init(
             click.echo(
                 f"\u2713 Rules: {result['rules_generated']} rules in .beadloom/_graph/rules.yml"
             )
-        click.echo(f"\u2713 Docs: {docs_result['files_created']} skeletons in docs/")
+        if docs_result["files_skipped"] > 0:
+            click.echo(
+                f"\u2713 Docs: {docs_result['files_created']} skeletons created, "
+                f"{docs_result['files_skipped']} skipped (pre-existing)"
+            )
+        else:
+            click.echo(f"\u2713 Docs: {docs_result['files_created']} skeletons created")
         if result.get("mcp_editor"):
             click.echo(
                 f"\u2713 MCP: configured for {result['mcp_editor']} "
@@ -1278,6 +1348,11 @@ def init(
             f"{ri.imports_indexed} imports"
             + (f", {dep_count} dependency edges" if dep_count else "")
         )
+
+        # Warn about missing language parsers when symbols == 0.
+        if ri.symbols_indexed == 0:
+            _warn_missing_parsers(project_root)
+
         click.echo("")
         click.echo("Next steps:")
         click.echo("  1. Review docs/ and .beadloom/_graph/services.yml")
