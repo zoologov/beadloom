@@ -20,6 +20,10 @@ DDD restructuring: code, docs, and knowledge graph now follow domain-driven desi
 - **CLI reference** — all 18 commands documented
 - **MCP docs** — all 8 tools documented
 - **README.md + README.ru.md** — updated doc links to domain-first layout
+- **Doc coverage 100%** — SPEC.md for all 9 features (cache, search, why, graph-diff, rule-engine, import-resolver, doctor, reindex, watcher) + TUI service doc
+- **`guides/ci-setup.md`** — linked to `beadloom` root node in knowledge graph
+- **`architecture.md` constraints** — updated for multi-language support and configurable paths
+- **`import-resolver` summary** — corrected from "Python import analysis" to "Multi-language import analysis"
 
 ### Fixed
 - Circular import in `graph/linter.py` resolved via lazy import of `incremental_reindex`
