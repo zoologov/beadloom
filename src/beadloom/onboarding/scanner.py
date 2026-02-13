@@ -399,6 +399,80 @@ def _detect_project_name(project_root: Path) -> str:
     return project_root.name
 
 
+def generate_rules(
+    nodes: list[dict[str, str]],
+    edges: list[dict[str, str]],
+    project_name: str,
+    rules_path: Path,
+) -> int:
+    """Generate ``rules.yml`` from discovered graph structure.
+
+    Only creates structural *require* rules — no *deny* rules by default.
+    Returns the number of rules written.
+    """
+    kinds = {n["kind"] for n in nodes}
+    rules: list[dict[str, Any]] = []
+
+    # Determine root ref_id (the node without outgoing part_of edges).
+    part_of_srcs = {e["src"] for e in edges if e["kind"] == "part_of"}
+    root_candidates = [n for n in nodes if n["ref_id"] not in part_of_srcs]
+    root_ref_id = root_candidates[0]["ref_id"] if root_candidates else project_name
+
+    # Rule 1: every domain must be part_of the root.
+    if "domain" in kinds:
+        rules.append(
+            {
+                "name": "domain-needs-parent",
+                "description": f"Every domain must be part_of {root_ref_id}",
+                "require": {
+                    "for": {"kind": "domain"},
+                    "has_edge_to": {"ref_id": root_ref_id},
+                    "edge_kind": "part_of",
+                },
+            }
+        )
+
+    # Rule 2: every feature must be part_of a domain.
+    if "feature" in kinds:
+        rules.append(
+            {
+                "name": "feature-needs-domain",
+                "description": "Every feature must be part_of a domain",
+                "require": {
+                    "for": {"kind": "feature"},
+                    "has_edge_to": {"kind": "domain"},
+                    "edge_kind": "part_of",
+                },
+            }
+        )
+
+    # Rule 3: every service (excluding root) must be part_of the root.
+    # Only generate if there are service nodes besides the root itself.
+    service_nodes = [n for n in nodes if n["kind"] == "service" and n["ref_id"] != root_ref_id]
+    if service_nodes:
+        rules.append(
+            {
+                "name": "service-needs-parent",
+                "description": f"Every service must be part_of {root_ref_id}",
+                "require": {
+                    "for": {"kind": "service"},
+                    "has_edge_to": {"ref_id": root_ref_id},
+                    "edge_kind": "part_of",
+                },
+            }
+        )
+
+    if not rules:
+        return 0
+
+    data: dict[str, Any] = {"version": 1, "rules": rules}
+    rules_path.write_text(
+        yaml.dump(data, default_flow_style=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+    return len(rules)
+
+
 # MCP config paths per editor (mirrors _MCP_TOOL_CONFIGS in cli.py).
 _MCP_EDITOR_MARKERS: tuple[tuple[str, str], ...] = (
     (".cursor", "cursor"),
@@ -654,6 +728,13 @@ def bootstrap_project(
             encoding="utf-8",
         )
 
+    # Generate rules.yml (only if it doesn't already exist).
+    rules_path = graph_dir / "rules.yml"
+    if nodes and not rules_path.exists():
+        rules_count = generate_rules(nodes, edges, project_name, rules_path)
+    else:
+        rules_count = 0
+
     # Check for docs.
     docs_dir = project_root / "docs"
     has_docs = docs_dir.is_dir() and any(docs_dir.rglob("*.md"))
@@ -682,6 +763,7 @@ def bootstrap_project(
         "project_name": project_name,
         "nodes_generated": len(nodes),
         "edges_generated": len(edges),
+        "rules_generated": rules_count,
         "preset": preset.name,
         "config_created": True,
         "agents_md_created": True,

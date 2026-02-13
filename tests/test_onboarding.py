@@ -986,3 +986,248 @@ class TestBootstrapMcpIntegration:
         result = bootstrap_project(tmp_path)
         assert result["mcp_editor"] is not None
         assert result["mcp_editor"] == "claude-code"
+
+
+# ---------------------------------------------------------------------------
+# generate_rules — unit tests
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateRules:
+    """Tests for generate_rules() auto-rules generation."""
+
+    def test_domains_only(self, tmp_path: Path) -> None:
+        """Nodes with domain kinds produce exactly 1 rule (domain-needs-parent)."""
+        from beadloom.onboarding.scanner import generate_rules
+
+        nodes = [
+            {"ref_id": "myproject", "kind": "service", "summary": "Root: myproject", "source": ""},
+            {"ref_id": "auth", "kind": "domain", "summary": "Domain: auth", "source": "src/auth/"},
+            {
+                "ref_id": "billing",
+                "kind": "domain",
+                "summary": "Domain: billing",
+                "source": "src/billing/",
+            },
+        ]
+        edges = [
+            {"src": "auth", "dst": "myproject", "kind": "part_of"},
+            {"src": "billing", "dst": "myproject", "kind": "part_of"},
+        ]
+        rules_path = tmp_path / "rules.yml"
+        count = generate_rules(nodes, edges, "myproject", rules_path)
+
+        assert count == 1
+        assert rules_path.exists()
+
+        data = yaml.safe_load(rules_path.read_text())
+        assert data["version"] == 1
+        assert len(data["rules"]) == 1
+        assert data["rules"][0]["name"] == "domain-needs-parent"
+        assert data["rules"][0]["require"]["for"] == {"kind": "domain"}
+        assert data["rules"][0]["require"]["has_edge_to"] == {"ref_id": "myproject"}
+        assert data["rules"][0]["require"]["edge_kind"] == "part_of"
+
+    def test_domains_and_features(self, tmp_path: Path) -> None:
+        """Domain + feature nodes produce 2 rules."""
+        from beadloom.onboarding.scanner import generate_rules
+
+        nodes = [
+            {"ref_id": "myproj", "kind": "service", "summary": "Root: myproj", "source": ""},
+            {"ref_id": "auth", "kind": "domain", "summary": "Domain: auth", "source": "src/auth/"},
+            {
+                "ref_id": "auth-api",
+                "kind": "feature",
+                "summary": "Feature: api",
+                "source": "src/auth/api/",
+            },
+        ]
+        edges = [
+            {"src": "auth", "dst": "myproj", "kind": "part_of"},
+            {"src": "auth-api", "dst": "auth", "kind": "part_of"},
+        ]
+        rules_path = tmp_path / "rules.yml"
+        count = generate_rules(nodes, edges, "myproj", rules_path)
+
+        assert count == 2
+        data = yaml.safe_load(rules_path.read_text())
+        rule_names = {r["name"] for r in data["rules"]}
+        assert "domain-needs-parent" in rule_names
+        assert "feature-needs-domain" in rule_names
+
+    def test_all_three_kinds(self, tmp_path: Path) -> None:
+        """Root (service) + domain + feature + extra service node produce 3 rules."""
+        from beadloom.onboarding.scanner import generate_rules
+
+        nodes = [
+            {"ref_id": "myproj", "kind": "service", "summary": "Root: myproj", "source": ""},
+            {"ref_id": "auth", "kind": "domain", "summary": "Domain: auth", "source": "src/auth/"},
+            {
+                "ref_id": "auth-api",
+                "kind": "feature",
+                "summary": "Feature: api",
+                "source": "src/auth/api/",
+            },
+            {
+                "ref_id": "utils",
+                "kind": "service",
+                "summary": "Service: utils",
+                "source": "src/utils/",
+            },
+        ]
+        edges = [
+            {"src": "auth", "dst": "myproj", "kind": "part_of"},
+            {"src": "auth-api", "dst": "auth", "kind": "part_of"},
+            {"src": "utils", "dst": "myproj", "kind": "part_of"},
+        ]
+        rules_path = tmp_path / "rules.yml"
+        count = generate_rules(nodes, edges, "myproj", rules_path)
+
+        assert count == 3
+        data = yaml.safe_load(rules_path.read_text())
+        rule_names = {r["name"] for r in data["rules"]}
+        assert "domain-needs-parent" in rule_names
+        assert "feature-needs-domain" in rule_names
+        assert "service-needs-parent" in rule_names
+
+    def test_empty_graph(self, tmp_path: Path) -> None:
+        """Empty nodes list returns 0 and does not create the file."""
+        from beadloom.onboarding.scanner import generate_rules
+
+        rules_path = tmp_path / "rules.yml"
+        count = generate_rules([], [], "myproj", rules_path)
+
+        assert count == 0
+        assert not rules_path.exists()
+
+    def test_service_only_root(self, tmp_path: Path) -> None:
+        """Only a root service node (no other services/domains/features) generates 0 rules."""
+        from beadloom.onboarding.scanner import generate_rules
+
+        nodes = [
+            {"ref_id": "myproj", "kind": "service", "summary": "Root: myproj", "source": ""},
+        ]
+        edges: list[dict[str, str]] = []
+        rules_path = tmp_path / "rules.yml"
+        count = generate_rules(nodes, edges, "myproj", rules_path)
+
+        assert count == 0
+        assert not rules_path.exists()
+
+    def test_idempotent_skip_existing(self, tmp_path: Path) -> None:
+        """generate_rules overwrites if called directly (idempotency is in bootstrap_project)."""
+        from beadloom.onboarding.scanner import generate_rules
+
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text("version: 1\nrules: []\n")
+
+        nodes = [
+            {"ref_id": "myproj", "kind": "service", "summary": "Root: myproj", "source": ""},
+            {"ref_id": "auth", "kind": "domain", "summary": "Domain: auth", "source": "src/auth/"},
+        ]
+        edges = [
+            {"src": "auth", "dst": "myproj", "kind": "part_of"},
+        ]
+        count = generate_rules(nodes, edges, "myproj", rules_path)
+
+        assert count == 1
+        data = yaml.safe_load(rules_path.read_text())
+        assert len(data["rules"]) == 1
+        assert data["rules"][0]["name"] == "domain-needs-parent"
+
+    def test_root_detection_from_edges(self, tmp_path: Path) -> None:
+        """Root is the node without outgoing part_of edges; its ref_id appears in rules."""
+        from beadloom.onboarding.scanner import generate_rules
+
+        nodes = [
+            {"ref_id": "theroot", "kind": "service", "summary": "Root: theroot", "source": ""},
+            {"ref_id": "web", "kind": "domain", "summary": "Domain: web", "source": "src/web/"},
+        ]
+        edges = [
+            {"src": "web", "dst": "theroot", "kind": "part_of"},
+        ]
+        rules_path = tmp_path / "rules.yml"
+        generate_rules(nodes, edges, "theroot", rules_path)
+
+        data = yaml.safe_load(rules_path.read_text())
+        domain_rule = data["rules"][0]
+        assert domain_rule["require"]["has_edge_to"]["ref_id"] == "theroot"
+        assert "theroot" in domain_rule["description"]
+
+    def test_yaml_valid_for_rule_engine(self, tmp_path: Path) -> None:
+        """Generated YAML matches rule_engine schema."""
+        from beadloom.onboarding.scanner import generate_rules
+
+        nodes = [
+            {"ref_id": "proj", "kind": "service", "summary": "Root: proj", "source": ""},
+            {"ref_id": "core", "kind": "domain", "summary": "Domain: core", "source": "src/core/"},
+            {
+                "ref_id": "core-api",
+                "kind": "feature",
+                "summary": "Feature: api",
+                "source": "src/core/api/",
+            },
+            {
+                "ref_id": "infra",
+                "kind": "service",
+                "summary": "Service: infra",
+                "source": "src/infra/",
+            },
+        ]
+        edges = [
+            {"src": "core", "dst": "proj", "kind": "part_of"},
+            {"src": "core-api", "dst": "core", "kind": "part_of"},
+            {"src": "infra", "dst": "proj", "kind": "part_of"},
+        ]
+        rules_path = tmp_path / "rules.yml"
+        generate_rules(nodes, edges, "proj", rules_path)
+
+        data = yaml.safe_load(rules_path.read_text())
+        assert data["version"] == 1
+        assert isinstance(data["rules"], list)
+
+        for rule in data["rules"]:
+            assert "name" in rule
+            assert "description" in rule
+            assert "require" in rule
+            require = rule["require"]
+            assert "for" in require
+            assert "has_edge_to" in require
+            assert "edge_kind" in require
+            assert require["edge_kind"] == "part_of"
+
+
+# ---------------------------------------------------------------------------
+# bootstrap_project — rules integration
+# ---------------------------------------------------------------------------
+
+
+class TestBootstrapRulesIntegration:
+    """Tests that bootstrap_project integrates generate_rules correctly."""
+
+    def test_bootstrap_creates_rules_yml(self, tmp_path: Path) -> None:
+        """Bootstrap with a real source tree creates rules.yml in _graph/ dir."""
+        _make_src_tree(tmp_path)
+        bootstrap_project(tmp_path)
+        rules_path = tmp_path / ".beadloom" / "_graph" / "rules.yml"
+        assert rules_path.exists()
+
+    def test_bootstrap_rules_count_in_result(self, tmp_path: Path) -> None:
+        """Bootstrap with monolith preset reports rules_generated >= 1."""
+        _make_src_tree(tmp_path)
+        result = bootstrap_project(tmp_path, preset_name="monolith")
+        assert "rules_generated" in result
+        assert result["rules_generated"] >= 1
+
+    def test_bootstrap_rules_idempotent(self, tmp_path: Path) -> None:
+        """Pre-existing rules.yml is not overwritten by bootstrap_project."""
+        _make_src_tree(tmp_path)
+        graph_dir = tmp_path / ".beadloom" / "_graph"
+        graph_dir.mkdir(parents=True)
+        rules_path = graph_dir / "rules.yml"
+        original_content = "version: 1\nrules:\n- name: custom-rule\n"
+        rules_path.write_text(original_content)
+
+        result = bootstrap_project(tmp_path)
+        assert result["rules_generated"] == 0
+        assert rules_path.read_text() == original_content

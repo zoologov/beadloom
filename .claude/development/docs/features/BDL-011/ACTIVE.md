@@ -1,6 +1,6 @@
 # ACTIVE: BDL-011 — Plug & Play Onboarding
 
-> **Current wave:** 1→2 (Foundation done, Doc generation next)
+> **Current wave:** 2→3 (Doc gen done, CLI + MCP next)
 > **In progress:** —
 > **Blocked:** —
 
@@ -11,23 +11,23 @@
 | Bead | ID | Status | Notes |
 |------|----|--------|-------|
 | BEAD-01: Root node + project name detection | `beadloom-dj9.1` | **done** | _detect_project_name + root node + part_of edges |
-| BEAD-02: Auto-rules generation | `beadloom-dj9.2` | ready | P0, unblocked |
+| BEAD-02: Auto-rules generation | `beadloom-dj9.2` | **done** | generate_rules() — 3 rule types |
 | BEAD-03: Auto MCP config | `beadloom-dj9.3` | **done** | setup_mcp_auto + editor detection |
 
-## Wave 2 — Doc generation
+## Wave 2 — Doc generation (DONE)
 
 | Bead | ID | Status | Notes |
 |------|----|--------|-------|
-| BEAD-04: Doc skeleton generation | `beadloom-dj9.4` | ready | new file: doc_generator.py, unblocked |
-| BEAD-05: Polish data generation | `beadloom-dj9.5` | blocked by 04 | |
+| BEAD-04: Doc skeleton generation | `beadloom-dj9.4` | **done** | doc_generator.py, 4 doc types |
+| BEAD-05: Polish data generation | `beadloom-dj9.5` | ready | unblocked |
 
 ## Wave 3 — CLI + MCP
 
 | Bead | ID | Status | Notes |
 |------|----|--------|-------|
-| BEAD-06: CLI docs generate + polish | `beadloom-dj9.6` | blocked by 04,05 | |
+| BEAD-06: CLI docs generate + polish | `beadloom-dj9.6` | blocked by 05 | |
 | BEAD-07: MCP tool generate_docs | `beadloom-dj9.7` | blocked by 05 | |
-| BEAD-08: Enhanced init output | `beadloom-dj9.8` | blocked by 02,04 | |
+| BEAD-08: Enhanced init output | `beadloom-dj9.8` | ready | unblocked |
 
 ## Wave 4 — Tests
 
@@ -46,4 +46,4 @@
 
 ## Next Action
 
-Claim BEAD-02 (`beadloom-dj9.2`) + BEAD-04 (`beadloom-dj9.4`) in parallel.
+Claim BEAD-05 (`beadloom-dj9.5`) + BEAD-08 (`beadloom-dj9.8`) in parallel.
