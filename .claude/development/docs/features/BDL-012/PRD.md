@@ -2,7 +2,7 @@
 
 ## Problem
 
-Beadloom v1.3.0 Plug & Play Onboarding (`beadloom init --bootstrap`) works end-to-end but produces low-quality results on real projects. Dogfooding on two projects revealed 9 open issues:
+Beadloom v1.3.0 Plug & Play Onboarding (`beadloom init --bootstrap`) works end-to-end but produces low-quality results on real projects. Dogfooding on two projects revealed 10 open issues:
 
 - **core-monolith** — Django + Vue monolith, 44 nodes, backend/frontend split
 - **secondary-system** — React Native (Expo) + TypeScript, 6 nodes, mobile app
@@ -34,6 +34,7 @@ Beadloom v1.3.0 Plug & Play Onboarding (`beadloom init --bootstrap`) works end-t
 | 10 | LOW | Parenthesized ref_ids from Expo router | secondary-system |
 | 12 | LOW | `reindex` ignores new parser availability | secondary-system |
 | 13 | INFO | Bootstrap skeleton count includes pre-existing files | secondary-system |
+| 14 | MEDIUM | Preset auto-detect picks `microservices` for mobile apps | secondary-system |
 
 ### Out of scope
 
@@ -44,7 +45,7 @@ Beadloom v1.3.0 Plug & Play Onboarding (`beadloom init --bootstrap`) works end-t
 ## Success Criteria
 
 - `beadloom init --bootstrap` on core-monolith → `doctor` 0 warnings, `lint` 0 violations
-- `beadloom init --bootstrap` on secondary-system → `doctor` 0 warnings, `lint` 0 violations, symbols > 0
+- `beadloom init --bootstrap` on secondary-system → `doctor` 0 warnings, `lint` 0 violations, symbols > 0, preset = monolith
 - Skeleton docs contain real dependencies from import resolver
 - `beadloom docs polish` text output includes node list with symbols
 - All existing tests pass (756+), new tests for each fix
