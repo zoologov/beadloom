@@ -13,6 +13,7 @@ from beadloom.onboarding import (
     import_docs,
     interactive_init,
     scan_project,
+    setup_mcp_auto,
 )
 
 if TYPE_CHECKING:
@@ -766,3 +767,222 @@ class TestInteractiveInit:
         # Verify DB was created and populated.
         db_path = tmp_path / ".beadloom" / "beadloom.db"
         assert db_path.exists()
+
+
+# ---------------------------------------------------------------------------
+# _detect_project_name
+# ---------------------------------------------------------------------------
+
+
+class TestDetectProjectName:
+    """Tests for _detect_project_name() private helper."""
+
+    def test_pyproject_toml(self, tmp_path: Path) -> None:
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "myproject"\n')
+        from beadloom.onboarding.scanner import _detect_project_name
+
+        assert _detect_project_name(tmp_path) == "myproject"
+
+    def test_package_json(self, tmp_path: Path) -> None:
+        (tmp_path / "package.json").write_text('{"name": "mypackage"}')
+        from beadloom.onboarding.scanner import _detect_project_name
+
+        assert _detect_project_name(tmp_path) == "mypackage"
+
+    def test_package_json_scoped(self, tmp_path: Path) -> None:
+        (tmp_path / "package.json").write_text('{"name": "@org/core"}')
+        from beadloom.onboarding.scanner import _detect_project_name
+
+        assert _detect_project_name(tmp_path) == "core"
+
+    def test_go_mod(self, tmp_path: Path) -> None:
+        (tmp_path / "go.mod").write_text("module github.com/org/myapp\n")
+        from beadloom.onboarding.scanner import _detect_project_name
+
+        assert _detect_project_name(tmp_path) == "myapp"
+
+    def test_cargo_toml(self, tmp_path: Path) -> None:
+        (tmp_path / "Cargo.toml").write_text('[package]\nname = "rustproj"\n')
+        from beadloom.onboarding.scanner import _detect_project_name
+
+        assert _detect_project_name(tmp_path) == "rustproj"
+
+    def test_directory_fallback(self, tmp_path: Path) -> None:
+        from beadloom.onboarding.scanner import _detect_project_name
+
+        assert _detect_project_name(tmp_path) == tmp_path.name
+
+    def test_priority_pyproject_over_package_json(self, tmp_path: Path) -> None:
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "from-pyproject"\n')
+        (tmp_path / "package.json").write_text('{"name": "from-package"}')
+        from beadloom.onboarding.scanner import _detect_project_name
+
+        assert _detect_project_name(tmp_path) == "from-pyproject"
+
+
+# ---------------------------------------------------------------------------
+# bootstrap_project — root node
+# ---------------------------------------------------------------------------
+
+
+class TestBootstrapRootNode:
+    """Tests for root node creation in bootstrap_project()."""
+
+    def test_root_node_exists(self, tmp_path: Path) -> None:
+        _make_src_tree(tmp_path)
+        result = bootstrap_project(tmp_path)
+        nodes = result["nodes"]
+        assert len(nodes) >= 1
+        root = nodes[0]
+        assert root["kind"] == "service"
+        assert root["summary"].startswith("Root:")
+
+    def test_root_node_ref_id_from_pyproject(self, tmp_path: Path) -> None:
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "testproj"\n')
+        _make_src_tree(tmp_path)
+        result = bootstrap_project(tmp_path)
+        root = result["nodes"][0]
+        assert root["ref_id"] == "testproj"
+
+    def test_root_node_ref_id_fallback(self, tmp_path: Path) -> None:
+        _make_src_tree(tmp_path)
+        result = bootstrap_project(tmp_path)
+        root = result["nodes"][0]
+        assert root["ref_id"] == tmp_path.name
+
+    def test_part_of_edges_to_root(self, tmp_path: Path) -> None:
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "myproj"\n')
+        _make_src_tree(tmp_path)
+        result = bootstrap_project(tmp_path, preset_name="monolith")
+        edges = result["edges"]
+        root_part_of = [e for e in edges if e["kind"] == "part_of" and e["dst"] == "myproj"]
+        cluster_names = {"auth", "billing", "utils"}
+        sources = {e["src"] for e in root_part_of}
+        for name in cluster_names:
+            assert name in sources, f"Expected '{name}' to have a part_of edge to root"
+
+    def test_project_name_in_result(self, tmp_path: Path) -> None:
+        _make_src_tree(tmp_path)
+        result = bootstrap_project(tmp_path)
+        assert "project_name" in result
+        assert isinstance(result["project_name"], str)
+        assert len(result["project_name"]) > 0
+
+    def test_root_node_empty_source(self, tmp_path: Path) -> None:
+        _make_src_tree(tmp_path)
+        result = bootstrap_project(tmp_path)
+        root = result["nodes"][0]
+        assert root["source"] == ""
+
+
+# ---------------------------------------------------------------------------
+# setup_mcp_auto
+# ---------------------------------------------------------------------------
+
+
+class TestSetupMcpAuto:
+    """Tests for setup_mcp_auto() — editor detection and MCP config generation."""
+
+    def test_default_claude_code(self, tmp_path: Path) -> None:
+        """Clean directory defaults to claude-code editor."""
+        import json
+
+        result = setup_mcp_auto(tmp_path)
+        assert result == "claude-code"
+
+        mcp_path = tmp_path / ".mcp.json"
+        assert mcp_path.exists()
+
+        data = json.loads(mcp_path.read_text(encoding="utf-8"))
+        assert "mcpServers" in data
+        assert "beadloom" in data["mcpServers"]
+        assert isinstance(data["mcpServers"]["beadloom"]["command"], str)
+        assert data["mcpServers"]["beadloom"]["args"] == ["mcp-serve"]
+
+    def test_detect_cursor(self, tmp_path: Path) -> None:
+        """Presence of .cursor dir selects cursor editor."""
+        (tmp_path / ".cursor").mkdir()
+
+        result = setup_mcp_auto(tmp_path)
+        assert result == "cursor"
+        assert (tmp_path / ".cursor" / "mcp.json").exists()
+
+    def test_detect_windsurf(self, tmp_path: Path) -> None:
+        """Presence of .windsurfrules selects windsurf; config in mocked home."""
+        import json
+        from unittest.mock import patch
+
+        (tmp_path / ".windsurfrules").write_text("")
+
+        fake_home = tmp_path / "fake_home"
+        fake_home.mkdir()
+
+        with patch("pathlib.Path.home", return_value=fake_home):
+            result = setup_mcp_auto(tmp_path)
+
+        assert result == "windsurf"
+        windsurf_cfg = fake_home / ".codeium" / "windsurf" / "mcp_config.json"
+        assert windsurf_cfg.exists()
+
+        data = json.loads(windsurf_cfg.read_text(encoding="utf-8"))
+        assert "--project" in data["mcpServers"]["beadloom"]["args"]
+
+    def test_detect_claude_marker(self, tmp_path: Path) -> None:
+        """Presence of .claude dir selects claude-code."""
+        (tmp_path / ".claude").mkdir()
+
+        result = setup_mcp_auto(tmp_path)
+        assert result == "claude-code"
+
+    def test_idempotent_skip_existing(self, tmp_path: Path) -> None:
+        """Existing .mcp.json is not overwritten; returns None."""
+        mcp_path = tmp_path / ".mcp.json"
+        mcp_path.write_text('{"existing": true}\n')
+
+        result = setup_mcp_auto(tmp_path)
+        assert result is None
+
+    def test_cursor_priority_over_claude(self, tmp_path: Path) -> None:
+        """Cursor marker is more specific and wins over .claude."""
+        (tmp_path / ".cursor").mkdir()
+        (tmp_path / ".claude").mkdir()
+
+        result = setup_mcp_auto(tmp_path)
+        assert result == "cursor"
+
+    def test_valid_json_structure(self, tmp_path: Path) -> None:
+        """Generated MCP config has the correct JSON structure."""
+        import json
+
+        setup_mcp_auto(tmp_path)
+
+        mcp_path = tmp_path / ".mcp.json"
+        data = json.loads(mcp_path.read_text(encoding="utf-8"))
+
+        assert "mcpServers" in data
+        assert "beadloom" in data["mcpServers"]
+        server = data["mcpServers"]["beadloom"]
+        assert isinstance(server["command"], str)
+        assert isinstance(server["args"], list)
+
+
+# ---------------------------------------------------------------------------
+# bootstrap_project — MCP integration
+# ---------------------------------------------------------------------------
+
+
+class TestBootstrapMcpIntegration:
+    """Tests that bootstrap_project calls setup_mcp_auto."""
+
+    def test_bootstrap_creates_mcp_config(self, tmp_path: Path) -> None:
+        """Bootstrap creates .mcp.json in the project root."""
+        _make_src_tree(tmp_path)
+        bootstrap_project(tmp_path)
+        assert (tmp_path / ".mcp.json").exists()
+
+    def test_bootstrap_mcp_editor_in_result(self, tmp_path: Path) -> None:
+        """Bootstrap result includes mcp_editor field."""
+        _make_src_tree(tmp_path)
+        result = bootstrap_project(tmp_path)
+        assert result["mcp_editor"] is not None
+        assert result["mcp_editor"] == "claude-code"

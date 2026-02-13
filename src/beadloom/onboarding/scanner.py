@@ -352,6 +352,115 @@ def _read_manifest_deps(package_dir: Path) -> list[str]:
     return deps
 
 
+def _detect_project_name(project_root: Path) -> str:
+    """Detect project name from manifest files or directory name.
+
+    Checks (in order): pyproject.toml, package.json, go.mod, Cargo.toml.
+    Falls back to the directory name.
+    """
+    # pyproject.toml — [project] or [tool.poetry] name.
+    pyproject = project_root / "pyproject.toml"
+    if pyproject.is_file():
+        text = pyproject.read_text(encoding="utf-8")
+        match = re.search(r'^\s*name\s*=\s*["\']([^"\']+)["\']', text, re.MULTILINE)
+        if match:
+            return match.group(1)
+
+    # package.json.
+    pkg_json = project_root / "package.json"
+    if pkg_json.is_file():
+        try:
+            data = json.loads(pkg_json.read_text(encoding="utf-8"))
+            name = data.get("name", "")
+            if name:
+                # Handle scoped packages: @org/name → name.
+                return str(name).split("/")[-1]
+        except (json.JSONDecodeError, KeyError):
+            pass
+
+    # go.mod.
+    go_mod = project_root / "go.mod"
+    if go_mod.is_file():
+        text = go_mod.read_text(encoding="utf-8")
+        match = re.search(r"^module\s+(\S+)", text, re.MULTILINE)
+        if match:
+            # Handle full paths: github.com/org/name → name.
+            return match.group(1).split("/")[-1]
+
+    # Cargo.toml.
+    cargo = project_root / "Cargo.toml"
+    if cargo.is_file():
+        text = cargo.read_text(encoding="utf-8")
+        match = re.search(r'^\s*name\s*=\s*["\']([^"\']+)["\']', text, re.MULTILINE)
+        if match:
+            return match.group(1)
+
+    # Fallback: directory name.
+    return project_root.name
+
+
+# MCP config paths per editor (mirrors _MCP_TOOL_CONFIGS in cli.py).
+_MCP_EDITOR_MARKERS: tuple[tuple[str, str], ...] = (
+    (".cursor", "cursor"),
+    (".windsurfrules", "windsurf"),
+    (".claude", "claude-code"),
+    ("CLAUDE.md", "claude-code"),
+)
+
+_MCP_DEFAULT_EDITOR = "claude-code"
+
+
+def setup_mcp_auto(project_root: Path) -> str | None:
+    """Auto-detect editor and create MCP config.
+
+    Returns editor name on success, or *None* if config already exists.
+    """
+    import shutil
+
+    # Detect editor (most specific marker first).
+    editor = _MCP_DEFAULT_EDITOR
+    for marker, name in _MCP_EDITOR_MARKERS:
+        if (project_root / marker).exists():
+            editor = name
+            break
+
+    # Resolve MCP config path.
+    from pathlib import Path as _Path
+
+    paths: dict[str, Path] = {
+        "claude-code": project_root / ".mcp.json",
+        "cursor": project_root / ".cursor" / "mcp.json",
+        "windsurf": _Path.home() / ".codeium" / "windsurf" / "mcp_config.json",
+    }
+    mcp_path = paths[editor]
+
+    # Never overwrite existing config.
+    if mcp_path.exists():
+        return None
+
+    mcp_path.parent.mkdir(parents=True, exist_ok=True)
+
+    beadloom_cmd = shutil.which("beadloom") or "beadloom"
+    args: list[str] = ["mcp-serve"]
+    if editor == "windsurf":
+        args.extend(["--project", str(project_root.resolve())])
+
+    data = {
+        "mcpServers": {
+            "beadloom": {
+                "command": beadloom_cmd,
+                "args": args,
+            }
+        }
+    }
+
+    mcp_path.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return editor
+
+
 _AGENTS_MD_TEMPLATE = """\
 # Beadloom — Agent Instructions
 
@@ -514,6 +623,23 @@ def bootstrap_project(
                         }
                     )
 
+    # Create root node + part_of edges from top-level nodes.
+    project_name = _detect_project_name(project_root)
+    if nodes:
+        root_node: dict[str, str] = {
+            "ref_id": project_name,
+            "kind": "service",
+            "summary": f"Root: {project_name}",
+            "source": "",
+        }
+        nodes.insert(0, root_node)
+        seen_ref_ids.add(project_name)
+
+        # Top-level cluster nodes → part_of root.
+        for cluster_name in clusters:
+            if cluster_name != project_name:
+                edges.append({"src": cluster_name, "dst": project_name, "kind": "part_of"})
+
     # Write YAML graph.
     if nodes:
         graph_data: dict[str, Any] = {"nodes": nodes}
@@ -549,12 +675,17 @@ def bootstrap_project(
     # Generate AGENTS.md.
     generate_agents_md(project_root)
 
+    # Auto-configure MCP for detected editor.
+    mcp_editor = setup_mcp_auto(project_root)
+
     return {
+        "project_name": project_name,
         "nodes_generated": len(nodes),
         "edges_generated": len(edges),
         "preset": preset.name,
         "config_created": True,
         "agents_md_created": True,
+        "mcp_editor": mcp_editor,
         "scan": scan,
         "nodes": nodes,
         "edges": edges,

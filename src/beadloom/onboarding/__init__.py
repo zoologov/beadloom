@@ -16,6 +16,7 @@ from beadloom.onboarding.scanner import (
     import_docs,
     interactive_init,
     scan_project,
+    setup_mcp_auto,
 )
 
 __all__ = [
@@ -32,4 +33,5 @@ __all__ = [
     "import_docs",
     "interactive_init",
     "scan_project",
+    "setup_mcp_auto",
 ]
