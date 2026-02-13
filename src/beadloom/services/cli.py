@@ -813,6 +813,16 @@ _MCP_TOOL_CONFIGS: dict[str, dict[str, str]] = {
 }
 
 
+def _mcp_path_for_editor(editor: str, project_root: Path) -> str:
+    """Return the MCP config file path for display."""
+    paths = {
+        "claude-code": ".mcp.json",
+        "cursor": ".cursor/mcp.json",
+        "windsurf": "~/.codeium/windsurf/mcp_config.json",
+    }
+    return paths.get(editor, ".mcp.json")
+
+
 @main.command("setup-mcp")
 @click.option("--remove", is_flag=True, help="Remove beadloom from MCP config.")
 @click.option(
@@ -1164,28 +1174,55 @@ def init(
 
     if bootstrap:
         result = bootstrap_project(project_root, preset_name=preset)
-        scan = result["scan"]
-        click.echo(f"Preset: {result['preset']}")
-        click.echo(f"Scanned {scan['file_count']} files")
-        click.echo(
-            f"Generated {result['nodes_generated']} nodes, {result['edges_generated']} edges"
-        )
+
+        # Generate doc skeletons.
+        from beadloom.onboarding.doc_generator import generate_skeletons
+
+        docs_result = generate_skeletons(project_root, result["nodes"], result["edges"])
 
         # Auto-reindex to populate import analysis and depends_on edges.
-        from beadloom.infrastructure.db import open_db
         from beadloom.infrastructure.reindex import reindex as do_reindex
 
         ri = do_reindex(project_root)
+
+        # Count dependency edges from DB.
+        dep_count = 0
         if ri.imports_indexed > 0:
+            from beadloom.infrastructure.db import open_db
+
             db_path = project_root / ".beadloom" / "beadloom.db"
             conn = open_db(db_path)
             dep_count = conn.execute(
                 "SELECT COUNT(*) FROM edges WHERE kind = 'depends_on'"
             ).fetchone()[0]
             conn.close()
-            click.echo(f"Indexed {ri.imports_indexed} imports, {dep_count} dependency edges")
-        click.echo(f"Config: {project_root / '.beadloom' / 'config.yml'}")
-        click.echo(f"Agent instructions: {project_root / '.beadloom' / 'AGENTS.md'}")
+
+        # Print summary.
+        click.echo("")
+        click.echo(
+            f"\u2713 Graph: {result['nodes_generated']} nodes, "
+            f"{result['edges_generated']} edges (preset: {result['preset']})"
+        )
+        if result.get("rules_generated", 0) > 0:
+            click.echo(
+                f"\u2713 Rules: {result['rules_generated']} rules in .beadloom/_graph/rules.yml"
+            )
+        click.echo(f"\u2713 Docs: {docs_result['files_created']} skeletons in docs/")
+        if result.get("mcp_editor"):
+            click.echo(
+                f"\u2713 MCP: configured for {result['mcp_editor']} "
+                f"({_mcp_path_for_editor(result['mcp_editor'], project_root)})"
+            )
+        click.echo(
+            f"\u2713 Index: {ri.symbols_indexed} symbols, "
+            f"{ri.imports_indexed} imports"
+            + (f", {dep_count} dependency edges" if dep_count else "")
+        )
+        click.echo("")
+        click.echo("Next steps:")
+        click.echo("  1. Review docs/ and .beadloom/_graph/services.yml")
+        click.echo("  2. Run 'beadloom lint' to validate architecture")
+        click.echo("  3. Run 'beadloom docs polish' with your AI agent for richer docs")
         return
 
     if import_path:

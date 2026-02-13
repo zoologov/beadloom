@@ -8,6 +8,7 @@ import yaml
 
 from beadloom.onboarding.doc_generator import (
     _generate_mermaid,
+    generate_polish_data,
     generate_skeletons,
 )
 
@@ -217,3 +218,90 @@ class TestGenerateMermaid:
         ]
         result = _generate_mermaid([], edges)
         assert "auth -.-> root" in result
+
+
+# ---------------------------------------------------------------------------
+# Helpers for TestGeneratePolishData
+# ---------------------------------------------------------------------------
+
+
+def _write_graph_yaml(tmp_path: Path, data: dict[str, Any]) -> None:
+    """Write a graph YAML file so ``generate_polish_data`` can load it."""
+    graph_dir = tmp_path / ".beadloom" / "_graph"
+    graph_dir.mkdir(parents=True, exist_ok=True)
+    (graph_dir / "services.yml").write_text(
+        yaml.dump(data, default_flow_style=False), encoding="utf-8"
+    )
+
+
+def _default_graph_data() -> dict[str, Any]:
+    """Return a minimal graph with root + 2 domains + 1 feature."""
+    return {
+        "nodes": [
+            _root_node(),
+            _domain_node("auth"),
+            _domain_node("billing"),
+            _feature_node("auth-api"),
+        ],
+        "edges": [
+            {"src": "auth", "dst": "myproject", "kind": "part_of"},
+            {"src": "billing", "dst": "myproject", "kind": "part_of"},
+            {"src": "auth-api", "dst": "auth", "kind": "part_of"},
+            {"src": "auth", "dst": "billing", "kind": "depends_on"},
+        ],
+    }
+
+
+# ---------------------------------------------------------------------------
+# TestGeneratePolishData
+# ---------------------------------------------------------------------------
+
+
+class TestGeneratePolishData:
+    """Tests for :func:`generate_polish_data`."""
+
+    def test_returns_nodes_list(self, tmp_path: Path) -> None:
+        _write_graph_yaml(tmp_path, _default_graph_data())
+        result = generate_polish_data(tmp_path)
+        assert "nodes" in result
+        assert isinstance(result["nodes"], list)
+        assert len(result["nodes"]) > 0
+
+    def test_single_ref_id(self, tmp_path: Path) -> None:
+        _write_graph_yaml(tmp_path, _default_graph_data())
+        result = generate_polish_data(tmp_path, ref_id="auth")
+        assert len(result["nodes"]) == 1
+        assert result["nodes"][0]["ref_id"] == "auth"
+
+    def test_node_has_symbols_field(self, tmp_path: Path) -> None:
+        _write_graph_yaml(tmp_path, _default_graph_data())
+        result = generate_polish_data(tmp_path)
+        for node in result["nodes"]:
+            assert "symbols" in node
+            assert isinstance(node["symbols"], list)
+
+    def test_architecture_has_mermaid(self, tmp_path: Path) -> None:
+        _write_graph_yaml(tmp_path, _default_graph_data())
+        result = generate_polish_data(tmp_path)
+        assert "architecture" in result
+        assert isinstance(result["architecture"]["mermaid"], str)
+
+    def test_instructions_is_string(self, tmp_path: Path) -> None:
+        _write_graph_yaml(tmp_path, _default_graph_data())
+        result = generate_polish_data(tmp_path)
+        assert isinstance(result["instructions"], str)
+        assert len(result["instructions"]) > 0
+
+    def test_existing_docs_included(self, tmp_path: Path) -> None:
+        _write_graph_yaml(tmp_path, _default_graph_data())
+
+        # Create existing doc for the "auth" domain.
+        doc_dir = tmp_path / "docs" / "domains" / "auth"
+        doc_dir.mkdir(parents=True, exist_ok=True)
+        doc_content = "# Auth Domain\n\nAuthentication and authorization."
+        (doc_dir / "README.md").write_text(doc_content, encoding="utf-8")
+
+        result = generate_polish_data(tmp_path, ref_id="auth")
+        auth_node = result["nodes"][0]
+        assert auth_node["existing_docs"] is not None
+        assert "Auth Domain" in auth_node["existing_docs"]
