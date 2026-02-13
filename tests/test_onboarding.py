@@ -1231,3 +1231,54 @@ class TestBootstrapRulesIntegration:
         result = bootstrap_project(tmp_path)
         assert result["rules_generated"] == 0
         assert rules_path.read_text() == original_content
+
+
+# ---------------------------------------------------------------------------
+# CLI init — enhanced output (BEAD-08)
+# ---------------------------------------------------------------------------
+
+
+class TestInitEnhancedOutput:
+    """Tests for the enhanced init --bootstrap summary output."""
+
+    def test_init_bootstrap_shows_summary(self, tmp_path: Path) -> None:
+        """Bootstrap prints Graph, Docs, Index, and Next steps."""
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        _make_src_tree(tmp_path)
+        runner = CliRunner()
+        result = runner.invoke(main, ["init", "--bootstrap", "--project", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+        assert "Graph:" in result.output
+        assert "Docs:" in result.output
+        assert "Index:" in result.output
+        assert "Next steps:" in result.output
+
+    def test_init_bootstrap_shows_rules(self, tmp_path: Path) -> None:
+        """Bootstrap with pyproject.toml shows Rules line."""
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "testproj"\n')
+        _make_src_tree(tmp_path)
+        runner = CliRunner()
+        result = runner.invoke(main, ["init", "--bootstrap", "--project", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+        assert "Rules:" in result.output
+        assert "rules.yml" in result.output
+
+    def test_init_bootstrap_shows_mcp(self, tmp_path: Path) -> None:
+        """Bootstrap shows MCP configuration line."""
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        _make_src_tree(tmp_path)
+        runner = CliRunner()
+        result = runner.invoke(main, ["init", "--bootstrap", "--project", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+        assert "MCP:" in result.output
+        assert "configured for" in result.output

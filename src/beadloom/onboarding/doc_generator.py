@@ -278,8 +278,128 @@ def _render_feature_spec(
 
 
 # ------------------------------------------------------------------
+# Polish helpers
+# ------------------------------------------------------------------
+
+
+def _symbols_for_node(
+    node: dict[str, Any],
+    symbols_by_source: dict[str, list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    """Return code symbols whose file path starts with *node*'s source."""
+    source = node.get("source", "").rstrip("/")
+    if not source:
+        return []
+    result: list[dict[str, Any]] = []
+    for fp, syms in symbols_by_source.items():
+        if fp.startswith(source):
+            result.extend(syms)
+    return result
+
+
+def _read_existing_doc(project_root: Path, node: dict[str, Any]) -> str | None:
+    """Return existing doc content for *node*, or ``None`` if absent."""
+    kind = node.get("kind", "")
+    ref_id: str = node["ref_id"]
+    docs_dir = project_root / "docs"
+    candidates: list[Path] = []
+    if kind == "domain":
+        candidates.append(docs_dir / "domains" / ref_id / "README.md")
+    elif kind == "service":
+        candidates.append(docs_dir / "services" / f"{ref_id}.md")
+    elif kind == "feature":
+        candidates.append(docs_dir / "features" / ref_id / "SPEC.md")
+    for c in candidates:
+        if c.exists():
+            return c.read_text(encoding="utf-8")
+    return None
+
+
+# ------------------------------------------------------------------
 # Public API
 # ------------------------------------------------------------------
+
+
+def generate_polish_data(
+    project_root: Path,
+    ref_id: str | None = None,
+) -> dict[str, Any]:
+    """Generate structured data for AI agent to enrich documentation.
+
+    Returns a dict with:
+    - nodes: list of node data with symbols, deps, dependents
+    - architecture: project overview
+    - instructions: str prompt for the AI agent
+
+    If *ref_id* is given, returns data for that single node.
+    """
+    from pathlib import Path as _Path  # runtime import
+
+    nodes, edges = _load_graph_from_yaml(project_root)
+
+    # Detect project name from root node.
+    root_node = _find_root_node(nodes)
+    project_name: str = root_node["ref_id"] if root_node else project_root.name
+
+    # Load code symbols from SQLite DB (if available).
+    db_path = _Path(project_root) / ".beadloom" / "beadloom.db"
+    symbols_by_source: dict[str, list[dict[str, Any]]] = {}
+    if db_path.exists():
+        import sqlite3
+
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT symbol_name, kind, file_path, line_start, line_end FROM code_symbols"
+        ).fetchall()
+        for row in rows:
+            fp: str = row["file_path"]
+            symbols_by_source.setdefault(fp, []).append(dict(row))
+        conn.close()
+
+    # Build node data list.
+    target_nodes = nodes
+    if ref_id is not None:
+        target_nodes = [n for n in nodes if n["ref_id"] == ref_id]
+
+    node_data_list: list[dict[str, Any]] = []
+    for node in target_nodes:
+        depends_on, used_by = _edges_for(node["ref_id"], edges)
+        children = _children_of(node["ref_id"], edges)
+        node_data: dict[str, Any] = {
+            "ref_id": node["ref_id"],
+            "kind": node.get("kind", ""),
+            "summary": node.get("summary", ""),
+            "source": node.get("source", ""),
+            "symbols": _symbols_for_node(node, symbols_by_source),
+            "depends_on": depends_on,
+            "used_by": used_by,
+            "features": children,
+            "existing_docs": _read_existing_doc(project_root, node),
+        }
+        node_data_list.append(node_data)
+
+    # Build Mermaid diagram.
+    mermaid_str = _generate_mermaid(nodes, edges)
+
+    # Build instructions prompt.
+    instructions = (
+        "You are enriching documentation for the software project "
+        f"'{project_name}'. For each node below, write a concise but "
+        "informative description based on its public API symbols, "
+        "dependencies, and source paths. Replace placeholder text and "
+        "expand skeleton docs with real architectural context. "
+        "Use the update_node MCP tool to save improved summaries."
+    )
+
+    return {
+        "nodes": node_data_list,
+        "architecture": {
+            "project_name": project_name,
+            "mermaid": mermaid_str,
+        },
+        "instructions": instructions,
+    }
 
 
 def generate_skeletons(

@@ -1,6 +1,6 @@
 """Onboarding domain — project bootstrap, doc import, and presets."""
 
-from beadloom.onboarding.doc_generator import generate_skeletons
+from beadloom.onboarding.doc_generator import generate_polish_data, generate_skeletons
 from beadloom.onboarding.presets import (
     MICROSERVICES,
     MONOLITH,
@@ -32,6 +32,7 @@ __all__ = [
     "classify_doc",
     "detect_preset",
     "generate_agents_md",
+    "generate_polish_data",
     "generate_rules",
     "generate_skeletons",
     "import_docs",
