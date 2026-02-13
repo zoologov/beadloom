@@ -134,21 +134,23 @@ The Doc Sync Engine tracks which documentation files correspond to which code fi
 
 Beadloom doesn't just describe architecture — it enforces it. Define boundary rules in YAML, validate with `beadloom lint`, and block violations in CI.
 
-**Rules** (`.beadloom/_graph/rules.yml`):
+**Rules** (`.beadloom/_graph/rules.yml`) — real rules from this project:
 
 ```yaml
 rules:
-  - name: billing-auth-boundary
-    description: "Billing must not import from auth directly"
-    deny:
-      from: { domain: billing }
-      to: { domain: auth }
-
-  - name: core-has-docs
-    description: "Every service must have documentation"
+  - name: domain-needs-parent
+    description: "Every domain must be part_of the beadloom service"
     require:
-      for: { kind: service }
-      has: documentation
+      for: { kind: domain }
+      has_edge_to: { ref_id: beadloom }
+      edge_kind: part_of
+
+  - name: feature-needs-domain
+    description: "Every feature must be part_of a domain"
+    require:
+      for: { kind: feature }
+      has_edge_to: { kind: domain }
+      edge_kind: part_of
 ```
 
 **Validate:**
@@ -159,7 +161,7 @@ beadloom lint --strict        # exit 1 on violations (for CI)
 beadloom lint --format json   # machine-readable output
 ```
 
-**Agent-aware constraints** — when an agent calls `get_context("AUTH-001")`, the response includes active rules for that node. Agents respect architectural boundaries by design, not by accident.
+**Agent-aware constraints** — when an agent calls `get_context("why")`, the response includes active rules for that node. Agents respect architectural boundaries by design, not by accident.
 
 Supported languages for import analysis: **Python, TypeScript/JavaScript, Go, Rust**.
 
@@ -219,23 +221,78 @@ def authenticate(user_id: str) -> bool:
 
 ## Documentation structure
 
-Beadloom uses a domain-first layout:
+Beadloom uses a domain-first layout. Here is the actual structure from this project:
 
 ```
 docs/
-  architecture.md
-  decisions/
-    ADR-001-cache-strategy.md
+  architecture.md                                  # system design
+  getting-started.md                               # quick start guide
+  guides/
+    ci-setup.md                                    # CI integration
   domains/
-    auth/
-      README.md                  # domain overview, invariants
+    context-oracle/
+      README.md                                    # domain overview
       features/
-        AUTH-001/
-          SPEC.md
-    billing/
+        cache/SPEC.md                              # L1+L2 cache spec
+        search/SPEC.md                             # FTS5 search spec
+        why/SPEC.md                                # impact analysis spec
+    graph/
       README.md
-  _imported/                     # unclassified docs from import
+      features/
+        graph-diff/SPEC.md
+        rule-engine/SPEC.md
+        import-resolver/SPEC.md
+    doc-sync/
+      README.md
+    onboarding/
+      README.md
+    infrastructure/
+      README.md
+      features/
+        doctor/SPEC.md
+        reindex/SPEC.md
+        watcher/SPEC.md
+  services/
+    cli.md                                         # 18 CLI commands
+    mcp.md                                         # 8 MCP tools
+    tui.md                                         # TUI dashboard
 ```
+
+Each domain gets a `README.md` (overview, invariants, API). Each feature gets a `SPEC.md` (purpose, data structures, algorithm, constraints).
+
+## Context bundle example
+
+`beadloom ctx why --json` returns a deterministic context bundle — graph, docs, and code symbols assembled via BFS in <20ms:
+
+```json
+{
+  "version": 2,
+  "focus": {
+    "ref_id": "why",
+    "kind": "feature",
+    "summary": "Impact analysis — upstream deps and downstream consumers via bidirectional BFS"
+  },
+  "graph": {
+    "nodes": [
+      { "ref_id": "why", "kind": "feature", "summary": "Impact analysis ..." },
+      { "ref_id": "context-oracle", "kind": "domain", "summary": "BFS graph traversal, caching, search" },
+      { "ref_id": "beadloom", "kind": "service", "summary": "CLI + MCP server" },
+      { "ref_id": "search", "kind": "feature", "summary": "FTS5 full-text search" },
+      { "ref_id": "cache", "kind": "feature", "summary": "ETag-based bundle cache" }
+    ],
+    "edges": [
+      { "src": "why", "dst": "context-oracle", "kind": "part_of" },
+      { "src": "context-oracle", "dst": "beadloom", "kind": "part_of" },
+      { "src": "cli", "dst": "context-oracle", "kind": "uses" }
+    ]
+  },
+  "text_chunks": ["... 10 doc chunks from SPEC.md files ..."],
+  "code_symbols": ["... 146 symbols from traversed modules ..."],
+  "sync_status": { "stale_docs": [], "last_reindex": "2026-02-13T..." }
+}
+```
+
+BFS depth=2 from `why` traverses: `why` → `context-oracle` (parent domain) → sibling features (`search`, `cache`), services (`cli`, `mcp-server`), cross-domain deps (`infrastructure`, `graph`) — 10 nodes, 12 edges total.
 
 ## Beads integration
 

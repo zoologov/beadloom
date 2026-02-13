@@ -35,7 +35,7 @@ Beadloom решает это тремя механизмами:
 
 2. **Doc Sync Engine** — отслеживает, какие документы соответствуют какому коду. Обнаруживает устаревшую документацию при каждом коммите. Больше никакого «в спеке написано X, а в коде Y».
 
-3. **Architecture as Code** — архитектурные правила в YAML, валидация через `beadloom lint`, блокировка нарушений в CI. Агенты получают не только контекст, но и ограничения — и соблюдают границы архитектуры by design.
+3. **Architecture as Code** — архитектурные правила в YAML, валидация через `beadloom lint`, блокировка нарушений в CI. Агенты получают не только контекст, но и ограничения — и соблюдают границы архитектуры конструктивно, а не случайно.
 
 ### Детерминированный контекст, а не вероятностное угадывание
 
@@ -138,21 +138,23 @@ Doc Sync Engine отслеживает, какие файлы документа
 
 Beadloom не просто описывает архитектуру — он её защищает. Определяйте правила границ в YAML, валидируйте через `beadloom lint`, блокируйте нарушения в CI.
 
-**Правила** (`.beadloom/_graph/rules.yml`):
+**Правила** (`.beadloom/_graph/rules.yml`) — реальные правила из этого проекта:
 
 ```yaml
 rules:
-  - name: billing-auth-boundary
-    description: "Billing не должен импортировать из auth напрямую"
-    deny:
-      from: { domain: billing }
-      to: { domain: auth }
-
-  - name: core-has-docs
-    description: "У каждого сервиса должна быть документация"
+  - name: domain-needs-parent
+    description: "Every domain must be part_of the beadloom service"
     require:
-      for: { kind: service }
-      has: documentation
+      for: { kind: domain }
+      has_edge_to: { ref_id: beadloom }
+      edge_kind: part_of
+
+  - name: feature-needs-domain
+    description: "Every feature must be part_of a domain"
+    require:
+      for: { kind: feature }
+      has_edge_to: { kind: domain }
+      edge_kind: part_of
 ```
 
 **Валидация:**
@@ -163,7 +165,7 @@ beadloom lint --strict        # exit 1 при нарушениях (для CI)
 beadloom lint --format json   # машиночитаемый вывод
 ```
 
-**Ограничения для агентов** — когда агент вызывает `get_context("AUTH-001")`, ответ включает активные правила для этого узла. Агенты соблюдают архитектурные границы by design, а не по случайности.
+**Ограничения для агентов** — когда агент вызывает `get_context("why")`, ответ включает активные правила для этого узла. Агенты соблюдают архитектурные границы не случайно, а конструктивно — это заложено в протокол.
 
 Поддерживаемые языки для анализа импортов: **Python, TypeScript/JavaScript, Go, Rust**.
 
@@ -224,23 +226,78 @@ def authenticate(user_id: str) -> bool:
 
 ## Структура документации
 
-Beadloom использует domain-first раскладку:
+Beadloom использует domain-first раскладку. Вот реальная структура этого проекта:
 
 ```
 docs/
-  architecture.md
-  decisions/
-    ADR-001-cache-strategy.md
+  architecture.md                                  # архитектура системы
+  getting-started.md                               # быстрый старт
+  guides/
+    ci-setup.md                                    # интеграция с CI
   domains/
-    auth/
-      README.md                  # обзор домена, инварианты
+    context-oracle/
+      README.md                                    # обзор домена
       features/
-        AUTH-001/
-          SPEC.md
-    billing/
+        cache/SPEC.md                              # спецификация L1+L2 кэша
+        search/SPEC.md                             # спецификация FTS5 поиска
+        why/SPEC.md                                # спецификация анализа влияния
+    graph/
       README.md
-  _imported/                     # неклассифицированные доки после импорта
+      features/
+        graph-diff/SPEC.md
+        rule-engine/SPEC.md
+        import-resolver/SPEC.md
+    doc-sync/
+      README.md
+    onboarding/
+      README.md
+    infrastructure/
+      README.md
+      features/
+        doctor/SPEC.md
+        reindex/SPEC.md
+        watcher/SPEC.md
+  services/
+    cli.md                                         # 18 CLI-команд
+    mcp.md                                         # 8 MCP-инструментов
+    tui.md                                         # TUI-дашборд
 ```
+
+Каждый домен получает `README.md` (обзор, инварианты, API). Каждая фича — `SPEC.md` (назначение, структуры данных, алгоритм, ограничения).
+
+## Пример контекстного бандла
+
+`beadloom ctx why --json` возвращает детерминированный пакет контекста — граф, документация и символы кода, собранные через BFS за <20мс:
+
+```json
+{
+  "version": 2,
+  "focus": {
+    "ref_id": "why",
+    "kind": "feature",
+    "summary": "Impact analysis — upstream deps and downstream consumers via bidirectional BFS"
+  },
+  "graph": {
+    "nodes": [
+      { "ref_id": "why", "kind": "feature", "summary": "Impact analysis ..." },
+      { "ref_id": "context-oracle", "kind": "domain", "summary": "BFS graph traversal, caching, search" },
+      { "ref_id": "beadloom", "kind": "service", "summary": "CLI + MCP server" },
+      { "ref_id": "search", "kind": "feature", "summary": "FTS5 full-text search" },
+      { "ref_id": "cache", "kind": "feature", "summary": "ETag-based bundle cache" }
+    ],
+    "edges": [
+      { "src": "why", "dst": "context-oracle", "kind": "part_of" },
+      { "src": "context-oracle", "dst": "beadloom", "kind": "part_of" },
+      { "src": "cli", "dst": "context-oracle", "kind": "uses" }
+    ]
+  },
+  "text_chunks": ["... 10 чанков из SPEC.md файлов ..."],
+  "code_symbols": ["... 146 символов из модулей подграфа ..."],
+  "sync_status": { "stale_docs": [], "last_reindex": "2026-02-13T..." }
+}
+```
+
+BFS depth=2 от ноды `why` обходит: `why` → `context-oracle` (родительский домен) → соседние фичи (`search`, `cache`), сервисы (`cli`, `mcp-server`), кросс-доменные зависимости (`infrastructure`, `graph`) — 10 нод, 12 рёбер.
 
 ## Интеграция с Beads
 
