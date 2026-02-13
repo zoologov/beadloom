@@ -8,6 +8,7 @@ import yaml
 
 from beadloom.onboarding.doc_generator import (
     _generate_mermaid,
+    format_polish_text,
     generate_polish_data,
     generate_skeletons,
 )
@@ -430,3 +431,328 @@ class TestPatchDocsField:
         # No .beadloom/_graph/ directory — should not raise.
         result = generate_skeletons(tmp_path, nodes=nodes, edges=edges)
         assert result["files_created"] > 0
+
+
+# ---------------------------------------------------------------------------
+# Helpers for SQLite edge tests
+# ---------------------------------------------------------------------------
+
+
+def _create_sqlite_db(tmp_path: Path) -> Path:
+    """Create a minimal beadloom.db with nodes and edges tables."""
+    import sqlite3
+
+    db_dir = tmp_path / ".beadloom"
+    db_dir.mkdir(parents=True, exist_ok=True)
+    db_path = db_dir / "beadloom.db"
+
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS nodes ("
+        "  ref_id TEXT PRIMARY KEY,"
+        "  kind TEXT NOT NULL,"
+        "  summary TEXT NOT NULL DEFAULT '',"
+        "  source TEXT,"
+        "  extra TEXT DEFAULT '{}'"
+        ")"
+    )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS edges ("
+        "  src_ref_id TEXT NOT NULL,"
+        "  dst_ref_id TEXT NOT NULL,"
+        "  kind TEXT NOT NULL,"
+        "  extra TEXT DEFAULT '{}',"
+        "  PRIMARY KEY (src_ref_id, dst_ref_id, kind)"
+        ")"
+    )
+    conn.commit()
+    conn.close()
+    return db_path
+
+
+def _insert_nodes(db_path: Path, nodes: list[dict[str, Any]]) -> None:
+    """Insert node records into the database."""
+    import sqlite3
+
+    conn = sqlite3.connect(str(db_path))
+    for n in nodes:
+        conn.execute(
+            "INSERT OR REPLACE INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            (n["ref_id"], n.get("kind", "domain"), n.get("summary", ""), n.get("source", "")),
+        )
+    conn.commit()
+    conn.close()
+
+
+def _insert_edges(db_path: Path, edges: list[tuple[str, str, str]]) -> None:
+    """Insert edge records into the database.
+
+    Each edge is a tuple of ``(src_ref_id, dst_ref_id, kind)``.
+    """
+    import sqlite3
+
+    conn = sqlite3.connect(str(db_path))
+    for src, dst, kind in edges:
+        conn.execute(
+            "INSERT OR REPLACE INTO edges (src_ref_id, dst_ref_id, kind) VALUES (?, ?, ?)",
+            (src, dst, kind),
+        )
+    conn.commit()
+    conn.close()
+
+
+# ---------------------------------------------------------------------------
+# TestPolishDataSQLiteEdges
+# ---------------------------------------------------------------------------
+
+
+class TestPolishDataSQLiteEdges:
+    """Tests that ``generate_polish_data`` reads depends_on edges from SQLite."""
+
+    def test_polish_data_includes_sqlite_edges(self, tmp_path: Path) -> None:
+        """Edges from SQLite are merged into polish data nodes."""
+        # Write YAML graph — only part_of edges.
+        graph_data: dict[str, Any] = {
+            "nodes": [
+                _root_node(),
+                _domain_node("auth"),
+                _domain_node("billing"),
+            ],
+            "edges": [
+                {"src": "auth", "dst": "myproject", "kind": "part_of"},
+                {"src": "billing", "dst": "myproject", "kind": "part_of"},
+            ],
+        }
+        _write_graph_yaml(tmp_path, graph_data)
+
+        # Create SQLite DB with depends_on edges (simulates post-reindex).
+        db_path = _create_sqlite_db(tmp_path)
+        _insert_nodes(db_path, graph_data["nodes"])
+        _insert_edges(db_path, [
+            ("auth", "billing", "depends_on"),
+        ])
+
+        result = generate_polish_data(tmp_path, ref_id="auth")
+        auth_node = result["nodes"][0]
+
+        # auth depends_on billing (from SQLite).
+        assert "billing" in auth_node["depends_on"]
+
+    def test_polish_data_includes_used_by_from_sqlite(self, tmp_path: Path) -> None:
+        """Reverse depends_on edges appear as used_by."""
+        graph_data: dict[str, Any] = {
+            "nodes": [
+                _root_node(),
+                _domain_node("auth"),
+                _domain_node("billing"),
+            ],
+            "edges": [
+                {"src": "auth", "dst": "myproject", "kind": "part_of"},
+                {"src": "billing", "dst": "myproject", "kind": "part_of"},
+            ],
+        }
+        _write_graph_yaml(tmp_path, graph_data)
+
+        db_path = _create_sqlite_db(tmp_path)
+        _insert_nodes(db_path, graph_data["nodes"])
+        _insert_edges(db_path, [
+            ("billing", "auth", "depends_on"),
+        ])
+
+        result = generate_polish_data(tmp_path, ref_id="auth")
+        auth_node = result["nodes"][0]
+
+        # billing depends_on auth => auth used_by billing.
+        assert "billing" in auth_node["used_by"]
+
+    def test_polish_data_no_duplicate_edges(self, tmp_path: Path) -> None:
+        """Edges present in both YAML and SQLite are not duplicated."""
+        graph_data: dict[str, Any] = {
+            "nodes": [
+                _root_node(),
+                _domain_node("auth"),
+                _domain_node("billing"),
+            ],
+            "edges": [
+                {"src": "auth", "dst": "myproject", "kind": "part_of"},
+                {"src": "billing", "dst": "myproject", "kind": "part_of"},
+                {"src": "auth", "dst": "billing", "kind": "depends_on"},
+            ],
+        }
+        _write_graph_yaml(tmp_path, graph_data)
+
+        # Same edge in SQLite.
+        db_path = _create_sqlite_db(tmp_path)
+        _insert_nodes(db_path, graph_data["nodes"])
+        _insert_edges(db_path, [
+            ("auth", "billing", "depends_on"),
+        ])
+
+        result = generate_polish_data(tmp_path, ref_id="auth")
+        auth_node = result["nodes"][0]
+
+        # Should have exactly one entry for billing.
+        assert auth_node["depends_on"].count("billing") == 1
+
+    def test_polish_text_without_db(self, tmp_path: Path) -> None:
+        """Polish data works gracefully when no SQLite DB exists."""
+        graph_data: dict[str, Any] = {
+            "nodes": [
+                _root_node(),
+                _domain_node("auth"),
+            ],
+            "edges": [
+                {"src": "auth", "dst": "myproject", "kind": "part_of"},
+            ],
+        }
+        _write_graph_yaml(tmp_path, graph_data)
+
+        # No SQLite DB created — should not raise.
+        result = generate_polish_data(tmp_path)
+        assert "nodes" in result
+        assert len(result["nodes"]) > 0
+
+
+# ---------------------------------------------------------------------------
+# TestFormatPolishText
+# ---------------------------------------------------------------------------
+
+
+class TestFormatPolishText:
+    """Tests for :func:`format_polish_text`."""
+
+    def test_polish_text_format_multiline(self, tmp_path: Path) -> None:
+        """Text output contains multiple lines with node info and instructions."""
+        graph_data: dict[str, Any] = {
+            "nodes": [
+                _root_node(),
+                _domain_node("auth"),
+                _domain_node("billing"),
+            ],
+            "edges": [
+                {"src": "auth", "dst": "myproject", "kind": "part_of"},
+                {"src": "billing", "dst": "myproject", "kind": "part_of"},
+                {"src": "auth", "dst": "billing", "kind": "depends_on"},
+            ],
+        }
+        _write_graph_yaml(tmp_path, graph_data)
+
+        data = generate_polish_data(tmp_path)
+        text = format_polish_text(data)
+
+        lines = text.strip().split("\n")
+        # Must be multi-line (not a single AI prompt string).
+        assert len(lines) > 5
+
+        # Must contain project name.
+        assert "myproject" in text
+
+        # Must contain node ref_ids.
+        assert "auth" in text
+        assert "billing" in text
+
+        # Must contain section markers.
+        assert "## auth (domain)" in text
+        assert "## billing (domain)" in text
+
+        # Must contain dependency info.
+        assert "Depends on:" in text
+        assert "Used by:" in text
+
+        # Must contain instructions at the end.
+        assert "---" in text
+        assert "enriching documentation" in text
+
+    def test_polish_text_contains_node_count(self, tmp_path: Path) -> None:
+        """Text header shows count of nodes needing enrichment."""
+        graph_data: dict[str, Any] = {
+            "nodes": [
+                _root_node(),
+                _domain_node("auth"),
+            ],
+            "edges": [
+                {"src": "auth", "dst": "myproject", "kind": "part_of"},
+            ],
+        }
+        _write_graph_yaml(tmp_path, graph_data)
+
+        data = generate_polish_data(tmp_path)
+        text = format_polish_text(data)
+
+        assert "Nodes needing enrichment:" in text
+
+    def test_polish_text_shows_doc_status(self, tmp_path: Path) -> None:
+        """Text output shows doc path and status for each node."""
+        graph_data: dict[str, Any] = {
+            "nodes": [
+                _root_node(),
+                _domain_node("auth"),
+            ],
+            "edges": [
+                {"src": "auth", "dst": "myproject", "kind": "part_of"},
+            ],
+        }
+        _write_graph_yaml(tmp_path, graph_data)
+
+        data = generate_polish_data(tmp_path)
+        text = format_polish_text(data)
+
+        assert "Doc:" in text
+        # The auth domain doc should show as missing (not created yet).
+        assert "missing" in text
+
+    def test_polish_text_with_existing_doc(self, tmp_path: Path) -> None:
+        """Text shows 'exists' status when doc file is present."""
+        graph_data: dict[str, Any] = {
+            "nodes": [
+                _root_node(),
+                _domain_node("auth"),
+            ],
+            "edges": [
+                {"src": "auth", "dst": "myproject", "kind": "part_of"},
+            ],
+        }
+        _write_graph_yaml(tmp_path, graph_data)
+
+        # Create the doc file.
+        doc_dir = tmp_path / "docs" / "domains" / "auth"
+        doc_dir.mkdir(parents=True, exist_ok=True)
+        (doc_dir / "README.md").write_text("# Auth\n", encoding="utf-8")
+
+        data = generate_polish_data(tmp_path, ref_id="auth")
+        text = format_polish_text(data)
+
+        assert "(exists)" in text
+
+    def test_format_polish_text_standalone(self) -> None:
+        """format_polish_text works with manually constructed data dict."""
+        data: dict[str, Any] = {
+            "nodes": [
+                {
+                    "ref_id": "my-node",
+                    "kind": "domain",
+                    "summary": "Test node",
+                    "source": "src/my_node/",
+                    "symbols": [
+                        {"symbol_name": "my_func", "kind": "function"},
+                        {"symbol_name": "_private", "kind": "function"},
+                    ],
+                    "depends_on": ["other-node"],
+                    "used_by": [],
+                    "doc_path": "docs/domains/my-node/README.md",
+                    "doc_status": "exists",
+                },
+            ],
+            "architecture": {"project_name": "testproject"},
+            "instructions": "Enrich the docs.",
+        }
+        text = format_polish_text(data)
+
+        assert "# testproject" in text
+        assert "## my-node (domain)" in text
+        assert "my_func" in text
+        # Private symbol should be filtered out.
+        assert "_private" not in text
+        assert "Depends on: other-node" in text
+        assert "Used by: (none)" in text
+        assert "Enrich the docs." in text

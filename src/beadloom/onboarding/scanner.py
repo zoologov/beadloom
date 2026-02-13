@@ -352,6 +352,49 @@ def _read_manifest_deps(package_dir: Path) -> list[str]:
     return deps
 
 
+def _sanitize_ref_id(name: str) -> str:
+    """Sanitize a directory name for use as a ref_id.
+
+    Strips parentheses so that names like ``(tabs)`` become ``tabs``.
+    """
+    return name.replace("(", "").replace(")", "")
+
+
+def _detect_framework_summary(
+    dir_path: Path,
+    name: str,
+    kind: str,
+    file_count: int,
+) -> str:
+    """Detect framework patterns and return a descriptive summary.
+
+    Checks for known framework markers in the directory and returns
+    a framework-aware summary instead of the generic "Kind: name (N files)".
+    Summaries are kept under 120 characters.
+    """
+    # Django app: contains apps.py
+    if (dir_path / "apps.py").exists():
+        return f"Django app: {name} ({file_count} files)"
+
+    # React component: contains index.tsx or index.jsx
+    if (dir_path / "index.tsx").exists() or (dir_path / "index.jsx").exists():
+        return f"React component: {name} ({file_count} files)"
+
+    # Python package: contains __init__.py + (setup.py or pyproject.toml)
+    if (dir_path / "__init__.py").exists() and (
+        (dir_path / "setup.py").exists() or (dir_path / "pyproject.toml").exists()
+    ):
+        return f"Python package: {name} ({file_count} files)"
+
+    # Containerized service: contains Dockerfile
+    if (dir_path / "Dockerfile").exists():
+        return f"Containerized service: {name} ({file_count} files)"
+
+    # Default: use kind label
+    kind_label = kind.capitalize()
+    return f"{kind_label}: {name} ({file_count} files)"
+
+
 def _detect_project_name(project_root: Path) -> str:
     """Detect project name from manifest files or directory name.
 
@@ -610,13 +653,14 @@ def bootstrap_project(
         source_dir: str = info["source_dir"]
 
         # Top-level node.
-        ref_id = name
-        kind_label = kind.capitalize()
+        ref_id = _sanitize_ref_id(name)
+        dir_path = project_root / source_dir / name
+        summary = _detect_framework_summary(dir_path, name, kind, len(all_files))
         nodes.append(
             {
                 "ref_id": ref_id,
                 "kind": kind,
-                "summary": f"{kind_label}: {name} ({len(all_files)} files)",
+                "summary": summary,
                 "confidence": confidence,
                 "source": f"{source_dir}/{name}/",
             }
@@ -627,14 +671,16 @@ def bootstrap_project(
         if preset.infer_part_of and children:
             for child_name, child_files in children.items():
                 child_kind, child_conf = preset.classify_dir(child_name)
-                child_ref_id = f"{name}-{child_name}"
+                child_ref_id = f"{_sanitize_ref_id(name)}-{_sanitize_ref_id(child_name)}"
+                child_dir_path = project_root / source_dir / name / child_name
+                child_summary = _detect_framework_summary(
+                    child_dir_path, child_name, child_kind, len(child_files)
+                )
                 nodes.append(
                     {
                         "ref_id": child_ref_id,
                         "kind": child_kind,
-                        "summary": (
-                            f"{child_kind.capitalize()}: {child_name} ({len(child_files)} files)"
-                        ),
+                        "summary": child_summary,
                         "confidence": child_conf,
                         "source": f"{source_dir}/{name}/{child_name}/",
                     }
@@ -668,12 +714,14 @@ def bootstrap_project(
             source_dir = info["source_dir"]
             pkg_dir = project_root / source_dir / name
             dep_names = _read_manifest_deps(pkg_dir)
+            sanitized_name = _sanitize_ref_id(name)
             for dep in dep_names:
-                if dep in seen_ref_ids and dep != name:
+                sanitized_dep = _sanitize_ref_id(dep)
+                if sanitized_dep in seen_ref_ids and sanitized_dep != sanitized_name:
                     edges.append(
                         {
-                            "src": name,
-                            "dst": dep,
+                            "src": sanitized_name,
+                            "dst": sanitized_dep,
                             "kind": "depends_on",
                         }
                     )
@@ -692,8 +740,9 @@ def bootstrap_project(
 
         # Top-level cluster nodes → part_of root.
         for cluster_name in clusters:
-            if cluster_name != project_name:
-                edges.append({"src": cluster_name, "dst": project_name, "kind": "part_of"})
+            sanitized_cluster = _sanitize_ref_id(cluster_name)
+            if sanitized_cluster != project_name:
+                edges.append({"src": sanitized_cluster, "dst": project_name, "kind": "part_of"})
 
     # Write YAML graph.
     if nodes:
