@@ -8,7 +8,7 @@
 [![GitHub release](https://img.shields.io/github/v/release/zoologov/beadloom?include_prereleases&sort=semver)](https://github.com/zoologov/beadloom/releases)
 [![PyPI](https://img.shields.io/pypi/v/beadloom)](https://pypi.org/project/beadloom/)
 [![Python](https://img.shields.io/pypi/pyversions/beadloom)](https://pypi.org/project/beadloom/)
-[![CI](https://img.shields.io/github/actions/workflow/status/zoologov/beadloom/ci.yml?label=CI)](https://github.com/zoologov/beadloom/actions)
+[![Tests](https://img.shields.io/github/actions/workflow/status/zoologov/beadloom/tests.yml?label=Tests)](https://github.com/zoologov/beadloom/actions)
 [![mypy: strict](https://img.shields.io/badge/mypy-strict-blue)](https://mypy-lang.org/)
 [![code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![coverage: 80%+](https://img.shields.io/badge/coverage-80%25%2B-green)](pyproject.toml)
