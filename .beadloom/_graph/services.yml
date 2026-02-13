@@ -7,6 +7,7 @@ nodes:
     docs:
       - docs/architecture.md
       - docs/getting-started.md
+      - docs/guides/ci-setup.md
 
   # Domain: Context Oracle
   - ref_id: context-oracle
@@ -69,60 +70,80 @@ nodes:
     kind: service
     summary: "Interactive terminal dashboard (Textual)"
     source: src/beadloom/tui/
+    docs:
+      - docs/services/tui.md
 
   # Feature: Doctor
   - ref_id: doctor
     kind: feature
     summary: "Validation checks for graph and data integrity"
     source: src/beadloom/infrastructure/doctor.py
+    docs:
+      - docs/domains/infrastructure/features/doctor/SPEC.md
 
-  # Service: Why (Impact Analysis)
+  # Feature: Why (Impact Analysis)
   - ref_id: why
     kind: feature
     summary: "Impact analysis — upstream deps and downstream consumers via bidirectional BFS"
     source: src/beadloom/context_oracle/why.py
+    docs:
+      - docs/domains/context-oracle/features/why/SPEC.md
 
   # Feature: Watcher
   - ref_id: watcher
     kind: feature
     summary: "File watcher for auto-reindex on changes"
     source: src/beadloom/infrastructure/watcher.py
+    docs:
+      - docs/domains/infrastructure/features/watcher/SPEC.md
 
   # Feature: Search
   - ref_id: search
     kind: feature
     summary: "FTS5 full-text search across nodes and documentation"
     source: src/beadloom/context_oracle/search.py
+    docs:
+      - docs/domains/context-oracle/features/search/SPEC.md
 
   # Feature: Graph Diff
   - ref_id: graph-diff
     kind: feature
     summary: "Git ref comparison — added/removed/changed nodes and edges"
     source: src/beadloom/graph/diff.py
+    docs:
+      - docs/domains/graph/features/graph-diff/SPEC.md
 
   # Feature: Rule Engine
   - ref_id: rule-engine
     kind: feature
     summary: "Architecture-as-Code rule engine with require/deny rules"
     source: src/beadloom/graph/rule_engine.py
+    docs:
+      - docs/domains/graph/features/rule-engine/SPEC.md
 
   # Feature: Import Resolver
   - ref_id: import-resolver
     kind: feature
-    summary: "Python import analysis and depends_on edge generation"
+    summary: "Multi-language import analysis and depends_on edge generation"
     source: src/beadloom/graph/import_resolver.py
+    docs:
+      - docs/domains/graph/features/import-resolver/SPEC.md
 
   # Feature: Cache
   - ref_id: cache
     kind: feature
     summary: "ETag-based context bundle cache (in-memory + SQLite)"
     source: src/beadloom/context_oracle/cache.py
+    docs:
+      - docs/domains/context-oracle/features/cache/SPEC.md
 
   # Feature: Reindex
   - ref_id: reindex
     kind: feature
     summary: "Full reindex pipeline — drop, recreate, reload graph/docs/code/sync"
     source: src/beadloom/infrastructure/reindex.py
+    docs:
+      - docs/domains/infrastructure/features/reindex/SPEC.md
 
 edges:
   # Domains are part_of beadloom

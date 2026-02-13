@@ -263,13 +263,23 @@ uv run mypy                # type checking (strict mode)
 | [getting-started.md](docs/getting-started.md) | Quick start guide |
 | **Domains** | |
 | [Context Oracle](docs/domains/context-oracle/README.md) | BFS algorithm, context assembly, caching, search |
+| &nbsp;&nbsp;[Cache](docs/domains/context-oracle/features/cache/SPEC.md) | L1 in-memory + L2 SQLite bundle cache |
+| &nbsp;&nbsp;[Search](docs/domains/context-oracle/features/search/SPEC.md) | FTS5 full-text search |
+| &nbsp;&nbsp;[Why](docs/domains/context-oracle/features/why/SPEC.md) | Impact analysis via bidirectional BFS |
 | [Graph](docs/domains/graph/README.md) | YAML graph format, diff, rule engine, linter |
+| &nbsp;&nbsp;[Graph Diff](docs/domains/graph/features/graph-diff/SPEC.md) | Git ref comparison for graph changes |
+| &nbsp;&nbsp;[Rule Engine](docs/domains/graph/features/rule-engine/SPEC.md) | Architecture-as-Code deny/require rules |
+| &nbsp;&nbsp;[Import Resolver](docs/domains/graph/features/import-resolver/SPEC.md) | Multi-language import analysis |
 | [Doc Sync](docs/domains/doc-sync/README.md) | Doc↔code synchronization engine |
 | [Onboarding](docs/domains/onboarding/README.md) | Project bootstrap and presets |
 | [Infrastructure](docs/domains/infrastructure/README.md) | Database, health metrics, reindex |
+| &nbsp;&nbsp;[Doctor](docs/domains/infrastructure/features/doctor/SPEC.md) | Graph validation checks |
+| &nbsp;&nbsp;[Reindex](docs/domains/infrastructure/features/reindex/SPEC.md) | Full and incremental reindex pipeline |
+| &nbsp;&nbsp;[Watcher](docs/domains/infrastructure/features/watcher/SPEC.md) | Auto-reindex on file changes |
 | **Services** | |
 | [CLI Reference](docs/services/cli.md) | All 18 CLI commands |
 | [MCP Server](docs/services/mcp.md) | All 8 MCP tools for AI agents |
+| [TUI Dashboard](docs/services/tui.md) | Interactive terminal dashboard |
 | **Guides** | |
 | [CI Setup](docs/guides/ci-setup.md) | GitHub Actions / GitLab CI integration |
 

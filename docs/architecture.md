@@ -74,8 +74,10 @@ BFS traverses the graph bidirectionally (outgoing + incoming edges), sorting nei
 
 ## Constraints
 
-- Only Python (.py) is supported for code_indexer (tree-sitter)
-- Documentation is scanned only from `docs/` (hardcoded path)
+- Code indexer supports `.py`, `.js`, `.jsx`, `.ts`, `.tsx`, `.go`, `.rs` (tree-sitter)
+- Import analysis supports Python, TypeScript/JavaScript, Go, Rust
+- Documentation root is configurable via `docs_dir` in `.beadloom/config.yml` (default: `docs/`)
+- Source scan paths are configurable via `scan_paths` in `.beadloom/config.yml` (default: `src`, `lib`, `app`)
 - Graph is read only from `.beadloom/_graph/*.yml`
 - Maximum chunk size: 2000 characters
 - Levenshtein suggestions: maximum 5, distance threshold = max(len/2, 3)

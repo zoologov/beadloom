@@ -268,13 +268,23 @@ uv run mypy                # проверка типов (strict mode)
 | [getting-started.md](docs/getting-started.md) | Руководство по быстрому старту |
 | **Домены** | |
 | [Context Oracle](docs/domains/context-oracle/README.md) | Алгоритм BFS, сборка контекста, кэширование, поиск |
+| &nbsp;&nbsp;[Cache](docs/domains/context-oracle/features/cache/SPEC.md) | L1 in-memory + L2 SQLite кэш бандлов |
+| &nbsp;&nbsp;[Search](docs/domains/context-oracle/features/search/SPEC.md) | Полнотекстовый поиск FTS5 |
+| &nbsp;&nbsp;[Why](docs/domains/context-oracle/features/why/SPEC.md) | Анализ влияния через двунаправленный BFS |
 | [Graph](docs/domains/graph/README.md) | Формат YAML-графа, diff, rule engine, линтер |
+| &nbsp;&nbsp;[Graph Diff](docs/domains/graph/features/graph-diff/SPEC.md) | Сравнение графа с git ref |
+| &nbsp;&nbsp;[Rule Engine](docs/domains/graph/features/rule-engine/SPEC.md) | Architecture-as-Code правила deny/require |
+| &nbsp;&nbsp;[Import Resolver](docs/domains/graph/features/import-resolver/SPEC.md) | Мультиязычный анализ импортов |
 | [Doc Sync](docs/domains/doc-sync/README.md) | Механизм синхронизации док↔код |
 | [Onboarding](docs/domains/onboarding/README.md) | Бутстрап проекта и пресеты |
 | [Infrastructure](docs/domains/infrastructure/README.md) | База данных, метрики здоровья, реиндекс |
+| &nbsp;&nbsp;[Doctor](docs/domains/infrastructure/features/doctor/SPEC.md) | Проверки валидации графа |
+| &nbsp;&nbsp;[Reindex](docs/domains/infrastructure/features/reindex/SPEC.md) | Полный и инкрементальный реиндекс |
+| &nbsp;&nbsp;[Watcher](docs/domains/infrastructure/features/watcher/SPEC.md) | Автореиндекс при изменении файлов |
 | **Сервисы** | |
 | [CLI Reference](docs/services/cli.md) | Все 18 CLI-команд |
 | [MCP Server](docs/services/mcp.md) | Все 8 MCP-инструментов для AI-агентов |
+| [TUI Dashboard](docs/services/tui.md) | Интерактивный терминальный дашборд |
 | **Руководства** | |
 | [CI Setup](docs/guides/ci-setup.md) | Интеграция с GitHub Actions / GitLab CI |
 
