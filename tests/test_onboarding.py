@@ -12,8 +12,10 @@ from beadloom.onboarding import (
     generate_agents_md,
     import_docs,
     interactive_init,
+    prime_context,
     scan_project,
     setup_mcp_auto,
+    setup_rules_auto,
 )
 
 if TYPE_CHECKING:
@@ -171,9 +173,16 @@ class TestGenerateAgentsMd:
     def test_contains_mcp_tools(self, tmp_path: Path) -> None:
         generate_agents_md(tmp_path)
         content = (tmp_path / ".beadloom" / "AGENTS.md").read_text()
+        assert "prime" in content
         assert "get_context" in content
         assert "sync_check" in content
         assert "list_nodes" in content
+        assert "search" in content
+        assert "update_node" in content
+        assert "mark_synced" in content
+        assert "generate_docs" in content
+        assert "get_graph" in content
+        assert "get_status" in content
 
     def test_contains_instructions(self, tmp_path: Path) -> None:
         generate_agents_md(tmp_path)
@@ -181,11 +190,78 @@ class TestGenerateAgentsMd:
         assert "Before starting work" in content
         assert "After changing code" in content
         assert "beadloom:feature=" in content
+        assert "Call MCP tool `prime`" in content
+        assert "beadloom reindex" in content
+        assert "beadloom lint --strict" in content
 
     def test_idempotent(self, tmp_path: Path) -> None:
         generate_agents_md(tmp_path)
         generate_agents_md(tmp_path)
         assert (tmp_path / ".beadloom" / "AGENTS.md").exists()
+
+    def test_contains_custom_marker(self, tmp_path: Path) -> None:
+        generate_agents_md(tmp_path)
+        content = (tmp_path / ".beadloom" / "AGENTS.md").read_text()
+        assert "## Custom" in content
+        assert "preserved on regeneration" in content
+
+    def test_preserves_custom_content(self, tmp_path: Path) -> None:
+        # First generation
+        generate_agents_md(tmp_path)
+        agents_path = tmp_path / ".beadloom" / "AGENTS.md"
+
+        # Append user content below ## Custom
+        text = agents_path.read_text(encoding="utf-8")
+        marker = "## Custom"
+        idx = text.find(marker)
+        custom_addition = "\n\nMy custom instructions here.\n"
+        modified = text[: idx + len(marker)] + custom_addition
+        agents_path.write_text(modified, encoding="utf-8")
+
+        # Regenerate — custom content must survive
+        generate_agents_md(tmp_path)
+        content = agents_path.read_text(encoding="utf-8")
+        assert "My custom instructions here." in content
+        assert "## Custom" in content
+
+    def test_includes_rules(self, tmp_path: Path) -> None:
+        # Create rules.yml with architecture rules
+        graph_dir = tmp_path / ".beadloom" / "_graph"
+        graph_dir.mkdir(parents=True, exist_ok=True)
+        rules_data = {
+            "rules": [
+                {
+                    "name": "no-cross-domain",
+                    "deny": {"from": "auth", "to": "billing"},
+                    "description": "Auth must not depend on billing",
+                },
+                {
+                    "name": "core-required",
+                    "require": {"from": "api", "to": "core"},
+                    "description": "API must use core",
+                },
+            ],
+        }
+        (graph_dir / "rules.yml").write_text(
+            yaml.dump(rules_data), encoding="utf-8"
+        )
+
+        generate_agents_md(tmp_path)
+        content = (tmp_path / ".beadloom" / "AGENTS.md").read_text()
+        assert "## Architecture Rules" in content
+        assert "no-cross-domain" in content
+        assert "deny" in content
+        assert "core-required" in content
+        assert "require" in content
+
+    def test_no_rules_file(self, tmp_path: Path) -> None:
+        # No rules.yml — should generate without rules section
+        generate_agents_md(tmp_path)
+        content = (tmp_path / ".beadloom" / "AGENTS.md").read_text()
+        assert "## Architecture Rules" not in content
+        # But the rest should be there
+        assert "## Before starting work" in content
+        assert "## Custom" in content
 
 
 # ---------------------------------------------------------------------------
@@ -1398,3 +1474,259 @@ class TestInitEnhancedOutput:
         assert result.exit_code == 0, result.output
         assert "MCP:" in result.output
         assert "configured for" in result.output
+
+
+# ---------------------------------------------------------------------------
+# setup_rules_auto — IDE adapter generation
+# ---------------------------------------------------------------------------
+
+
+class TestSetupRulesAuto:
+    """Tests for setup_rules_auto() — IDE adapter generation."""
+
+    def test_creates_cursorrules_when_marker_exists(self, tmp_path: Path) -> None:
+        """Creates .cursorrules when .cursor marker dir exists."""
+        (tmp_path / ".cursor").mkdir()
+        result = setup_rules_auto(tmp_path)
+        assert ".cursorrules" in result
+        assert (tmp_path / ".cursorrules").exists()
+        content = (tmp_path / ".cursorrules").read_text()
+        assert "AGENTS.md" in content
+
+    def test_windsurf_marker_same_as_path_no_overwrite(self, tmp_path: Path) -> None:
+        """Windsurf marker == rules path, so auto-detect never overwrites.
+
+        For windsurf the marker and rules file are the same (.windsurfrules).
+        If the marker exists the rules file already exists, so we skip.
+        Use --tool flag to create windsurf adapter explicitly.
+        """
+        (tmp_path / ".windsurfrules").write_text("")
+        result = setup_rules_auto(tmp_path)
+        # Marker exists but equals rules path, so no creation
+        assert ".windsurfrules" not in result
+
+    def test_cline_marker_same_as_path_no_overwrite(self, tmp_path: Path) -> None:
+        """Cline marker == rules path, so auto-detect never overwrites.
+
+        Same logic as windsurf — marker and path are the same file.
+        """
+        (tmp_path / ".clinerules").write_text("")
+        result = setup_rules_auto(tmp_path)
+        assert ".clinerules" not in result
+
+    def test_no_marker_no_creation(self, tmp_path: Path) -> None:
+        """Does not create files when no IDE markers are found."""
+        result = setup_rules_auto(tmp_path)
+        assert result == []
+        assert not (tmp_path / ".cursorrules").exists()
+        assert not (tmp_path / ".clinerules").exists()
+
+    def test_no_overwrite_existing(self, tmp_path: Path) -> None:
+        """Does not overwrite existing rules files."""
+        (tmp_path / ".cursor").mkdir()
+        existing_content = "# My custom rules\n"
+        (tmp_path / ".cursorrules").write_text(existing_content)
+        result = setup_rules_auto(tmp_path)
+        assert ".cursorrules" not in result
+        assert (tmp_path / ".cursorrules").read_text() == existing_content
+
+    def test_multiple_ides_detected(self, tmp_path: Path) -> None:
+        """Creates adapters for multiple detected IDEs.
+
+        Only Cursor has distinct marker (.cursor/) and rules file
+        (.cursorrules), so only it gets auto-created. Windsurf and
+        cline share marker == path so their existing files are skipped.
+        """
+        (tmp_path / ".cursor").mkdir()
+        (tmp_path / ".windsurfrules").write_text("")  # marker for windsurf
+        result = setup_rules_auto(tmp_path)
+        assert ".cursorrules" in result
+        # windsurf marker exists but equals rules path, skipped
+        assert ".windsurfrules" not in result
+        assert len(result) == 1
+
+
+class TestSetupRulesCli:
+    """Tests for setup-rules CLI command."""
+
+    def test_setup_rules_auto_detect(self, tmp_path: Path) -> None:
+        """Auto-detect mode creates rules for detected IDEs."""
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        (tmp_path / ".cursor").mkdir()
+        runner = CliRunner()
+        result = runner.invoke(main, ["setup-rules", "--project", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+        assert ".cursorrules" in result.output
+
+    def test_setup_rules_explicit_tool(self, tmp_path: Path) -> None:
+        """Explicit --tool creates rules file without marker detection."""
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["setup-rules", "--tool", "cursor", "--project", str(tmp_path)]
+        )
+        assert result.exit_code == 0, result.output
+        assert (tmp_path / ".cursorrules").exists()
+
+    def test_setup_rules_no_overwrite(self, tmp_path: Path) -> None:
+        """Does not overwrite existing rules files."""
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        (tmp_path / ".cursorrules").write_text("# existing\n")
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["setup-rules", "--tool", "cursor", "--project", str(tmp_path)]
+        )
+        assert result.exit_code == 0
+        assert "already exists" in result.output
+
+    def test_setup_rules_no_markers(self, tmp_path: Path) -> None:
+        """No markers detected shows help message."""
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["setup-rules", "--project", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "No IDE markers" in result.output
+
+
+# ---------------------------------------------------------------------------
+# prime_context
+# ---------------------------------------------------------------------------
+
+
+class TestPrimeContext:
+    """Tests for prime_context() — project context builder."""
+
+    def test_prime_markdown_format(self, tmp_path: Path) -> None:
+        """Basic markdown output with bootstrapped project."""
+        _make_src_tree(tmp_path)
+        bootstrap_project(tmp_path)
+        from beadloom.infrastructure.reindex import reindex as do_reindex
+
+        do_reindex(tmp_path)
+
+        result = prime_context(tmp_path)
+        assert isinstance(result, str)
+        assert "# Project:" in result
+        assert "Architecture:" in result
+        assert "## Key Commands" in result
+        assert "## Agent Instructions" in result
+
+    def test_prime_json_format(self, tmp_path: Path) -> None:
+        """JSON output returns dict with expected keys."""
+        _make_src_tree(tmp_path)
+        bootstrap_project(tmp_path)
+        from beadloom.infrastructure.reindex import reindex as do_reindex
+
+        do_reindex(tmp_path)
+
+        result = prime_context(tmp_path, fmt="json")
+        assert isinstance(result, dict)
+        assert "project" in result
+        assert "architecture" in result
+        assert "health" in result
+        assert "rules" in result
+        assert "domains" in result
+        assert "instructions" in result
+
+    def test_prime_no_db(self, tmp_path: Path) -> None:
+        """Graceful degradation without DB."""
+        result = prime_context(tmp_path)
+        assert isinstance(result, str)
+        assert "Database not found" in result
+
+    def test_prime_no_db_json(self, tmp_path: Path) -> None:
+        """JSON output with no DB has warning field."""
+        result = prime_context(tmp_path, fmt="json")
+        assert isinstance(result, dict)
+        assert "warning" in result
+
+    def test_prime_with_rules(self, tmp_path: Path) -> None:
+        """Prime includes rules from rules.yml."""
+        _make_src_tree(tmp_path)
+        bootstrap_project(tmp_path)
+        from beadloom.infrastructure.reindex import reindex as do_reindex
+
+        do_reindex(tmp_path)
+
+        result = prime_context(tmp_path)
+        assert isinstance(result, str)
+        assert "## Architecture Rules" in result
+
+    def test_prime_markdown_sections_order(self, tmp_path: Path) -> None:
+        """Markdown output has sections in correct order."""
+        _make_src_tree(tmp_path)
+        bootstrap_project(tmp_path)
+        from beadloom.infrastructure.reindex import reindex as do_reindex
+
+        do_reindex(tmp_path)
+
+        result = prime_context(tmp_path)
+        assert isinstance(result, str)
+        # Verify section order
+        arch_idx = result.index("Architecture:")
+        rules_idx = result.index("## Architecture Rules")
+        cmds_idx = result.index("## Key Commands")
+        instr_idx = result.index("## Agent Instructions")
+        stale_idx = result.index("## Stale Docs")
+        lint_idx = result.index("## Lint Violations")
+        assert arch_idx < rules_idx < cmds_idx < instr_idx < stale_idx < lint_idx
+
+    def test_prime_json_architecture_keys(self, tmp_path: Path) -> None:
+        """JSON architecture section has expected numeric keys."""
+        _make_src_tree(tmp_path)
+        bootstrap_project(tmp_path)
+        from beadloom.infrastructure.reindex import reindex as do_reindex
+
+        do_reindex(tmp_path)
+
+        result = prime_context(tmp_path, fmt="json")
+        assert isinstance(result, dict)
+        arch = result["architecture"]
+        assert "domains" in arch
+        assert "services" in arch
+        assert "features" in arch
+        assert "symbols" in arch
+        assert isinstance(arch["symbols"], int)
+
+    def test_prime_json_health_keys(self, tmp_path: Path) -> None:
+        """JSON health section has expected keys."""
+        _make_src_tree(tmp_path)
+        bootstrap_project(tmp_path)
+        from beadloom.infrastructure.reindex import reindex as do_reindex
+
+        do_reindex(tmp_path)
+
+        result = prime_context(tmp_path, fmt="json")
+        assert isinstance(result, dict)
+        health = result["health"]
+        assert "stale_docs" in health
+        assert "lint_violations" in health
+        assert "last_reindex" in health
+        assert isinstance(health["stale_docs"], list)
+        assert isinstance(health["lint_violations"], list)
+
+    def test_prime_no_db_still_has_commands(self, tmp_path: Path) -> None:
+        """Even without DB, key commands and instructions are shown."""
+        result = prime_context(tmp_path)
+        assert isinstance(result, str)
+        assert "## Key Commands" in result
+        assert "## Agent Instructions" in result
+
+    def test_prime_json_version(self, tmp_path: Path) -> None:
+        """JSON output includes version string."""
+        result = prime_context(tmp_path, fmt="json")
+        assert isinstance(result, dict)
+        assert "version" in result
+        assert isinstance(result["version"], str)

@@ -17,8 +17,10 @@ from beadloom.onboarding.scanner import (
     generate_rules,
     import_docs,
     interactive_init,
+    prime_context,
     scan_project,
     setup_mcp_auto,
+    setup_rules_auto,
 )
 
 __all__ = [
@@ -37,6 +39,8 @@ __all__ = [
     "generate_skeletons",
     "import_docs",
     "interactive_init",
+    "prime_context",
     "scan_project",
     "setup_mcp_auto",
+    "setup_rules_auto",
 ]
