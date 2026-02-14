@@ -7,27 +7,16 @@
 
 ## Test structure
 
+Tests are in `tests/` (flat layout). Discover test files:
+
+```bash
+ls tests/test_*.py               # all test files
+beadloom ctx <domain> --json     # see source files → derive test file names
 ```
-tests/
-├── conftest.py              # Shared fixtures
-├── unit/                    # Unit tests (<10ms)
-│   ├── test_graph.py
-│   ├── test_context.py
-│   ├── test_chunker.py
-│   ├── test_sync.py
-│   └── test_doctor.py
-├── integration/             # Integration tests (<1s)
-│   ├── test_indexer.py
-│   ├── test_cli.py
-│   └── test_mcp.py
-└── fixtures/                # Test data
-    ├── sample_graph/        # YAML graphs for tests
-    │   ├── domains.yml
-    │   └── features.yml
-    └── sample_docs/         # Markdown files for tests
-        └── routing/
-            └── SPEC.md
-```
+
+Naming convention: `src/beadloom/<module>.py` → `tests/test_<module>.py`
+CLI tests: `tests/test_cli_<command>.py`
+Integration tests: `tests/test_integration*.py`
 
 ---
 

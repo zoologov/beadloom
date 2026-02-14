@@ -1,4 +1,4 @@
-"""Documentation skeleton generator from knowledge graph."""
+"""Documentation skeleton generator from architecture graph."""
 
 # beadloom:domain=onboarding
 
@@ -11,6 +11,72 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+_BEADLOOM_README_TEMPLATE = """\
+# {project_name} — AI Agent Native Architecture Graph
+
+This project uses **Beadloom** for architecture-as-code — a local architecture
+graph that keeps documentation in sync with code, enforces architectural
+boundaries, and provides structured context to AI agents.
+
+## What is Beadloom?
+
+Beadloom is a Context Oracle + Doc Sync Engine designed for AI-assisted
+development. It maintains a queryable architecture graph over your codebase,
+so agents spend less time searching and more time building.
+
+## Quick Start
+
+### Essential Commands
+
+    # Project overview
+    beadloom status
+
+    # Architecture graph (Mermaid)
+    beadloom graph
+
+    # Context bundle for a domain/feature
+    beadloom ctx <ref-id>
+
+    # Check doc-code freshness
+    beadloom sync-check
+
+    # Architecture boundary lint
+    beadloom lint
+
+    # Full-text search
+    beadloom search "<query>"
+
+    # Rebuild index after changes
+    beadloom reindex
+
+### For AI Agents (MCP)
+
+Beadloom exposes tools via Model Context Protocol (MCP):
+
+    beadloom mcp-serve             # start MCP server (stdio)
+    beadloom setup-mcp             # configure your editor
+
+MCP tools: `get_context`, `get_graph`, `list_nodes`, `sync_check`,
+`search`, `update_node`, `mark_synced`, `generate_docs`.
+
+## Directory Contents
+
+    .beadloom/
+    \u251c\u2500\u2500 _graph/
+    \u2502   \u251c\u2500\u2500 services.yml    # Architecture graph (nodes + edges)
+    \u2502   \u2514\u2500\u2500 rules.yml       # Architecture lint rules
+    \u251c\u2500\u2500 config.yml          # Project configuration
+    \u251c\u2500\u2500 beadloom.db         # SQLite index (gitignored)
+    \u2514\u2500\u2500 README.md           # This file
+
+## Why Beadloom?
+
+- **Agent Native** \u2014 structured context for LLMs, not another LLM wrapper
+- **Doc Sync** \u2014 detects when docs go stale after code changes
+- **AaC Lint** \u2014 enforces architectural boundaries via deny/require rules
+- **Local-first** \u2014 SQLite + YAML, no cloud services, no API keys
+"""
 
 
 def _load_graph_from_yaml(
@@ -65,6 +131,15 @@ def _write_if_missing(path: Path, content: str) -> bool:
     path.write_text(content, encoding="utf-8")
     logger.info("Created: %s", path)
     return True
+
+
+def _generate_beadloom_readme(project_root: Path, project_name: str) -> Path:
+    """Generate ``.beadloom/README.md`` with quick-start instructions."""
+    readme_path = project_root / ".beadloom" / "README.md"
+    content = _BEADLOOM_README_TEMPLATE.format(project_name=project_name)
+    if _write_if_missing(readme_path, content):
+        logger.info("Created: %s", readme_path)
+    return readme_path
 
 
 def _find_root_node(
@@ -740,7 +815,10 @@ def generate_skeletons(
         else:
             skipped += 1
 
-    # 3. Patch docs: field into graph YAML for newly created files.
+    # 3. Generate .beadloom/README.md with quick-start instructions.
+    _generate_beadloom_readme(project_root, project_name)
+
+    # 4. Patch docs: field into graph YAML for newly created files.
     graph_dir = project_root / ".beadloom" / "_graph"
     if graph_dir.is_dir() and docs_map:
         _patch_docs_field(graph_dir, docs_map)

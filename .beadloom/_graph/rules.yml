@@ -13,3 +13,17 @@ rules:
       for: { kind: feature }
       has_edge_to: { kind: domain }
       edge_kind: part_of
+
+  - name: service-needs-parent
+    description: "Every service must be part_of the beadloom service"
+    require:
+      for: { kind: service }
+      has_edge_to: { ref_id: beadloom }
+      edge_kind: part_of
+
+  - name: no-domain-depends-on-service
+    description: "Domains must not have depends_on edges to services"
+    deny:
+      from: { kind: domain }
+      to: { kind: service }
+      unless_edge: [part_of]

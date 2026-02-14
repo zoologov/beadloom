@@ -31,7 +31,7 @@ Large codebases have a knowledge problem that code search alone doesn't solve:
 
 Beadloom solves this with two primitives:
 
-1. **Context Oracle** — a knowledge graph (YAML in Git) that maps your domains, features, services, and their relationships. Query any node and get a deterministic, compact context bundle in <20ms. Same query, same result, every time.
+1. **Context Oracle** — an architecture graph (YAML in Git) that maps your domains, features, services, and their relationships. Query any node and get a deterministic, compact context bundle in <20ms. Same query, same result, every time.
 
 2. **Doc Sync Engine** — tracks which docs correspond to which code. Detects stale documentation on every commit. No more "the spec says X but the code does Y".
 
@@ -61,7 +61,7 @@ pipx install beadloom            # alternative
 ## Quick start
 
 ```bash
-# 1. Scan your codebase and generate a knowledge graph
+# 1. Scan your codebase and generate an architecture graph
 beadloom init --bootstrap
 
 # 2. Review the generated graph (edit domains, rename nodes, add edges)
@@ -111,14 +111,14 @@ Works with Claude Code, Cursor, and any MCP-compatible tool.
 - **Architecture as Code** — define boundary rules in YAML, validate with `beadloom lint`, enforce in CI
 - **Full-text search** — FTS5-powered search across nodes, docs, and code symbols
 - **Impact analysis** — `beadloom why` shows what depends on a node and what breaks if it changes
-- **Code-first onboarding** — bootstrap a knowledge graph from code structure alone; no docs needed to start
+- **Code-first onboarding** — bootstrap an architecture graph from code structure alone; no docs needed to start
 - **MCP server** — 8 tools for AI agents, including write operations and search
 - **Interactive TUI** — `beadloom ui` terminal dashboard for browsing the graph
 - **Local-first** — single CLI + single SQLite file, no Docker, no cloud dependencies
 
 ## How it works
 
-Beadloom maintains a **knowledge graph** defined in YAML files under `.beadloom/_graph/`. The graph consists of **nodes** (features, services, domains, entities, ADRs) connected by **edges** (part_of, uses, depends_on, etc.).
+Beadloom maintains an **architecture graph** defined in YAML files under `.beadloom/_graph/`. The graph consists of **nodes** (features, services, domains, entities, ADRs) connected by **edges** (part_of, uses, depends_on, etc.).
 
 The indexing pipeline merges three sources into a single SQLite database:
 
@@ -169,14 +169,14 @@ Supported languages for import analysis: **Python, TypeScript/JavaScript, Go, Ru
 
 | Command | Description |
 |---------|-------------|
-| `init --bootstrap` | Scan code and generate an initial knowledge graph |
+| `init --bootstrap` | Scan code and generate an initial architecture graph |
 | `init --import DIR` | Import and classify existing documentation |
 | `reindex` | Rebuild the SQLite index from graph, docs, and code |
 | `ctx REF_ID` | Get a context bundle (Markdown or `--json`) |
-| `graph [REF_ID]` | Visualize the knowledge graph (Mermaid or JSON) |
+| `graph [REF_ID]` | Visualize the architecture graph (Mermaid or JSON) |
 | `search QUERY` | Full-text search across nodes, docs, and code symbols |
 | `status` | Project index statistics and documentation coverage |
-| `doctor` | Validate the knowledge graph |
+| `doctor` | Validate the architecture graph |
 | `sync-check` | Check doc↔code synchronization status |
 | `sync-update REF_ID` | Review and update stale docs |
 | `lint` | Validate code against architecture boundary rules |
@@ -207,7 +207,7 @@ Supported languages for import analysis: **Python, TypeScript/JavaScript, Go, Ru
 All project data lives under `.beadloom/` in your repository root:
 
 - **`.beadloom/config.yml`** — scan paths, languages, sync engine settings
-- **`.beadloom/_graph/*.yml`** — knowledge graph definition (YAML, version-controlled)
+- **`.beadloom/_graph/*.yml`** — architecture graph definition (YAML, version-controlled)
 - **`.beadloom/beadloom.db`** — SQLite index (auto-generated, add to `.gitignore`)
 
 Link code to graph nodes with annotations:

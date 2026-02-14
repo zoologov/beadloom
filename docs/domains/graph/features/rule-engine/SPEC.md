@@ -1,6 +1,6 @@
 # Rule Engine
 
-Architecture-as-Code rule engine: parse `rules.yml`, validate rule definitions, and evaluate them against the knowledge graph and code imports.
+Architecture-as-Code rule engine: parse `rules.yml`, validate rule definitions, and evaluate them against the architecture graph and code imports.
 
 **Source:** `src/beadloom/graph/rule_engine.py`
 

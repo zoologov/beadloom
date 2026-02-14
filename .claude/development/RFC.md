@@ -4,7 +4,7 @@
 
 This RFC describes the architecture of Beadloom -- a local CLI tool and MCP server that solve two problems of agentic development on large codebases:
 
-1. **Context Oracle** -- instant delivery of compact context bundles by feature/domain/service identifier through deterministic knowledge graph traversal.
+1. **Context Oracle** -- instant delivery of compact context bundles by feature/domain/service identifier through deterministic architecture graph traversal.
 2. **Doc Sync Engine** -- tracking documentation-to-code relationships and detecting documentation staleness.
 
 Additionally, Beadloom provides **onboarding for existing projects**: automatic generation of an initial graph and documentation from the codebase.
@@ -36,7 +36,7 @@ After an agent or human modifies code:
 
 For new Beadloom users (and any similar tool):
 
-- there is no knowledge graph, which must be created from scratch;
+- there is no architecture graph, which must be created from scratch;
 - there is no structured documentation;
 - manually filling a graph for 50+ services is unrealistic.
 

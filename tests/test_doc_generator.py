@@ -756,3 +756,67 @@ class TestFormatPolishText:
         assert "Depends on: other-node" in text
         assert "Used by: (none)" in text
         assert "Enrich the docs." in text
+
+
+# ---------------------------------------------------------------------------
+# TestGenerateBeadloomReadme
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateBeadloomReadme:
+    """Tests for :func:`_generate_beadloom_readme`."""
+
+    def test_generate_beadloom_readme(self, tmp_path: Path) -> None:
+        """Test that _generate_beadloom_readme creates .beadloom/README.md."""
+        from beadloom.onboarding.doc_generator import _generate_beadloom_readme
+
+        beadloom_dir = tmp_path / ".beadloom"
+        beadloom_dir.mkdir()
+
+        result = _generate_beadloom_readme(tmp_path, "test-project")
+
+        assert result == beadloom_dir / "README.md"
+        assert result.exists()
+        content = result.read_text()
+        assert "test-project" in content
+        assert "AI Agent Native Architecture Graph" in content
+        assert "beadloom status" in content
+
+    def test_generate_beadloom_readme_does_not_overwrite(self, tmp_path: Path) -> None:
+        """Existing .beadloom/README.md must not be overwritten."""
+        from beadloom.onboarding.doc_generator import _generate_beadloom_readme
+
+        beadloom_dir = tmp_path / ".beadloom"
+        beadloom_dir.mkdir()
+        existing = beadloom_dir / "README.md"
+        existing.write_text("DO NOT OVERWRITE", encoding="utf-8")
+
+        _generate_beadloom_readme(tmp_path, "test-project")
+
+        assert existing.read_text(encoding="utf-8") == "DO NOT OVERWRITE"
+
+    def test_generate_skeletons_creates_beadloom_readme(self, tmp_path: Path) -> None:
+        """Test that generate_skeletons creates .beadloom/README.md."""
+        graph_dir = tmp_path / ".beadloom" / "_graph"
+        graph_dir.mkdir(parents=True)
+
+        data: dict[str, Any] = {
+            "nodes": [
+                _root_node(),
+                _domain_node("auth"),
+            ],
+            "edges": [
+                {"src": "auth", "dst": "myproject", "kind": "part_of"},
+            ],
+        }
+        (graph_dir / "services.yml").write_text(
+            yaml.dump(data, default_flow_style=False), encoding="utf-8"
+        )
+
+        generate_skeletons(tmp_path)
+
+        readme = tmp_path / ".beadloom" / "README.md"
+        assert readme.exists()
+        content = readme.read_text(encoding="utf-8")
+        assert "myproject" in content
+        assert "AI Agent Native Architecture Graph" in content

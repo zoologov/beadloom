@@ -8,7 +8,7 @@ Beadloom is a local developer tool that solves two key problems of agentic devel
 
 2. **Documentation degradation.** After an agent or human modifies code, related documentation becomes stale. Nobody updates it in time, and within a month any index starts lying. Beadloom tracks doc-to-code relationships and signals when documentation is outdated.
 
-Beadloom is a **Context Oracle + Doc Sync Engine** on top of a Git repository: a knowledge graph in YAML, an index in SQLite, a CLI for humans, and an MCP server for agents.
+Beadloom is a **Context Oracle + Doc Sync Engine** on top of a Git repository: an architecture graph in YAML, an index in SQLite, a CLI for humans, and an MCP server for agents.
 
 ## 2. Goals and Non-Goals
 

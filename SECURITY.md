@@ -30,7 +30,7 @@ Beadloom stores index data locally in:
 ### MCP Server Security
 
 - The MCP server runs over **stdio** transport only (no network exposure)
-- It provides read-only access to the knowledge graph
+- It provides read-only access to the architecture graph
 - No write operations are exposed via MCP tools
 - The server opens the SQLite database in WAL mode with read-only intent for queries
 

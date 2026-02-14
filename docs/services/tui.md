@@ -1,6 +1,6 @@
 # TUI Dashboard
 
-Beadloom TUI is built on Textual and provides an interactive terminal dashboard for browsing the knowledge graph.
+Beadloom TUI is built on Textual and provides an interactive terminal dashboard for browsing the architecture graph.
 
 ## Specification
 

@@ -1,6 +1,6 @@
 # doc-generator
 
-> Doc skeleton generation + AI polish data from knowledge graph
+> Doc skeleton generation + AI polish data from architecture graph
 
 ## Source
 
@@ -8,7 +8,7 @@
 
 ## Overview
 
-Generates documentation skeletons from the knowledge graph, and produces
+Generates documentation skeletons from the architecture graph, and produces
 structured data for AI agents to enrich those skeletons. Part of the
 `beadloom init --bootstrap` pipeline and available as standalone CLI commands
 (`beadloom docs generate`, `beadloom docs polish`) and MCP tool (`generate_docs`).

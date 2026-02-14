@@ -1,6 +1,6 @@
 # Graph Format
 
-YAML format for describing the project knowledge graph.
+YAML format for describing the project architecture graph.
 
 ## Specification
 

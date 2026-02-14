@@ -8,7 +8,7 @@ Source: `src/beadloom/infrastructure/doctor.py`
 
 ### Purpose
 
-The doctor module runs a suite of read-only validation checks against the populated SQLite knowledge graph. It identifies structural issues such as missing summaries, orphaned documents, undocumented nodes, and isolated nodes. Each check returns one or more `Check` results with an associated severity level, enabling operators and CI pipelines to assess graph health without modifying any data.
+The doctor module runs a suite of read-only validation checks against the populated SQLite architecture graph. It identifies structural issues such as missing summaries, orphaned documents, undocumented nodes, and isolated nodes. Each check returns one or more `Check` results with an associated severity level, enabling operators and CI pipelines to assess graph health without modifying any data.
 
 ### Severity Enum
 

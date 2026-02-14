@@ -63,7 +63,7 @@ Get a subgraph from specified nodes or the entire graph.
 
 #### list_nodes
 
-List all nodes in the knowledge graph.
+List all nodes in the architecture graph.
 
 ```json
 {
@@ -143,7 +143,7 @@ Search nodes and documentation by keyword (FTS5 with LIKE fallback).
 
 #### generate_docs
 
-Generate structured documentation data from the knowledge graph for AI-driven enrichment.
+Generate structured documentation data from the architecture graph for AI-driven enrichment.
 
 ```json
 {

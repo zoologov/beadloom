@@ -1,6 +1,6 @@
 # Why (Impact Analysis)
 
-Bidirectional BFS impact analysis for a knowledge graph node -- shows upstream dependencies and downstream dependents with aggregated impact metrics.
+Bidirectional BFS impact analysis for an architecture graph node -- shows upstream dependencies and downstream dependents with aggregated impact metrics.
 
 Source: `src/beadloom/context_oracle/why.py`
 

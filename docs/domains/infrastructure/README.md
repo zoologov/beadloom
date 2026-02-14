@@ -15,7 +15,7 @@ SQLite database layer, health metrics, and reindex orchestrator.
 ### Database Schema
 
 Stored in `.beadloom/beadloom.db` (WAL mode):
-- `nodes`, `edges` — knowledge graph
+- `nodes`, `edges` — architecture graph
 - `docs`, `chunks` — document index
 - `code_symbols` — code symbol index
 - `code_imports` — resolved import relationships

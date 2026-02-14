@@ -33,7 +33,7 @@ class TestVersion:
 
 
 class TestGraphCompleteness:
-    """Verify the knowledge graph has the DDD domain structure."""
+    """Verify the architecture graph has the DDD domain structure."""
 
     def test_graph_has_domain_nodes(self) -> None:
         graph_path = _PROJECT_ROOT / ".beadloom" / "_graph" / "services.yml"

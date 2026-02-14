@@ -426,7 +426,7 @@ def create_server(project_root: Path) -> Server:
     server = Server(
         name="beadloom",
         version=__version__,
-        instructions="Beadloom Context Oracle — knowledge graph for AI-assisted development.",
+        instructions="Beadloom Context Oracle — architecture graph for AI-assisted development.",
     )
 
     db_path = project_root / ".beadloom" / "beadloom.db"

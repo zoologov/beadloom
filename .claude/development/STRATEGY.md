@@ -33,7 +33,7 @@ Beadloom teaches agents how to work with it via instruction files (`.beadloom/AG
 
 | Pain | Who feels it | How Beadloom solves it |
 |------|-------------|----------------------|
-| "Nobody understands the full system except 2 people" | Tech Lead / Architect | Knowledge graph makes architecture explicit and queryable |
+| "Nobody understands the full system except 2 people" | Tech Lead / Architect | Architecture graph makes architecture explicit and queryable |
 | "Docs are always outdated, nobody trusts them" | Entire team | Doc Sync Engine detects stale docs on every commit |
 | "AI agents hallucinate because they grab random context" | DevEx / Platform Eng | Deterministic graph traversal — same query, same result, every time |
 | "New developer needs 2 weeks to understand the system" | Engineering Manager | `beadloom ctx DOMAIN` gives a structured context bundle in seconds |
@@ -137,7 +137,7 @@ This means:
 | 6.4 | **CI architecture gate** — `beadloom lint` as a CI check that blocks PRs violating architecture rules | feature | P1 | M |
 | 6.5 | **Multi-repo support** — federated graphs across repositories | feature | P1 | L |
 | 6.6 | **Plugin system** — custom node kinds, edge types, indexers, rule types | feature | P2 | L |
-| 6.7 | **Web dashboard** — read-only visualization of the knowledge graph for non-CLI users | feature | P3 | L |
+| 6.7 | **Web dashboard** — read-only visualization of the architecture graph for non-CLI users | feature | P3 | L |
 
 ### Phase 7: Messaging & Use-Case Guides (post-development)
 
@@ -254,7 +254,7 @@ Technology: **Textual** (Python TUI framework, same ecosystem, rich rendering).
 
 **Problem:** Beadloom describes architecture (graph) and delivers context (Oracle), but doesn't enforce architectural rules. Agents receive context about how the system works, but nothing prevents them from violating architectural boundaries. Traditional AaC tools (ArchUnit, Deptrac) enforce rules but don't deliver context to agents. No tool does both.
 
-**Solution:** Turn Beadloom's knowledge graph into an enforceable architecture definition:
+**Solution:** Turn Beadloom's architecture graph into an enforceable architecture definition:
 
 **Rules language** (`.beadloom/_graph/rules.yml`):
 
@@ -364,7 +364,7 @@ Beadloom becomes the first tool that closes the full loop: **describe → valida
 | 1 | Presets scope? | 3 presets (monolith, microservices, monorepo) | Phase 2 |
 | 2 | TUI framework? | Textual — full-featured, pure-Python, async | Phase 5 |
 | 3 | CI action? | Docs recipe with `beadloom sync-check --porcelain` | Phase 3 |
-| 4 | Naming? | "Knowledge Graph" (used consistently in docs) | Phase 1 |
+| 4 | Naming? | "Architecture Graph" (used consistently in docs) | Phase 1 |
 | 5 | Pricing model? | Fully open (MIT) | — |
 | 6 | AaC rule engine? | YAML deny/require — simple, PR-reviewable | Phase 6 |
 | 7 | AaC scope? | Import-boundary validation (Python, TS/JS, Go, Rust) | Phase 6 |

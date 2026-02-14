@@ -1,6 +1,6 @@
 # Context Oracle
 
-Context Oracle is the core of beadloom, responsible for building context bundles via BFS traversal of the knowledge graph.
+Context Oracle is the core of beadloom, responsible for building context bundles via BFS traversal of the architecture graph.
 
 ## Specification
 

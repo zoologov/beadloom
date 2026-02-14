@@ -10,7 +10,7 @@ Import analysis and `depends_on` edge generation via tree-sitter-based source co
 
 ### Purpose
 
-Extract import statements from source files using tree-sitter grammars, resolve each import to a knowledge graph node, store the results in the `code_imports` table, and generate `depends_on` edges between graph nodes. This forms the foundation for automated dependency detection and architectural rule enforcement.
+Extract import statements from source files using tree-sitter grammars, resolve each import to an architecture graph node, store the results in the `code_imports` table, and generate `depends_on` edges between graph nodes. This forms the foundation for automated dependency detection and architectural rule enforcement.
 
 ### Supported Languages
 

@@ -44,7 +44,7 @@ nodes:
   # Feature: Doc Generator
   - ref_id: doc-generator
     kind: feature
-    summary: "Doc skeleton generation + AI polish data from knowledge graph"
+    summary: "Doc skeleton generation + AI polish data from architecture graph"
     source: src/beadloom/onboarding/doc_generator.py
     docs:
       - docs/domains/onboarding/features/doc-generator/SPEC.md
@@ -154,6 +154,11 @@ nodes:
       - docs/domains/infrastructure/features/reindex/SPEC.md
 
 edges:
+  # Root service: self-referencing to satisfy service-needs-parent rule
+  - src: beadloom
+    dst: beadloom
+    kind: part_of
+
   # Domains are part_of beadloom
   - src: context-oracle
     dst: beadloom

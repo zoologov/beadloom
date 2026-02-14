@@ -1,6 +1,6 @@
 # Reindex
 
-Full and incremental reindex pipeline for rebuilding the knowledge graph database.
+Full and incremental reindex pipeline for rebuilding the architecture graph database.
 
 Source: `src/beadloom/infrastructure/reindex.py`
 

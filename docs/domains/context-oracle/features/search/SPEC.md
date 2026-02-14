@@ -1,6 +1,6 @@
 # Search
 
-FTS5 full-text search over knowledge graph nodes and their associated documentation chunks.
+FTS5 full-text search over architecture graph nodes and their associated documentation chunks.
 
 Source: `src/beadloom/context_oracle/search.py`
 
