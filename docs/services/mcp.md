@@ -37,7 +37,7 @@ Get a context bundle for a set of ref_id(s).
 {
   "name": "get_context",
   "arguments": {
-    "ref_ids": ["context-oracle"],
+    "ref_id": "context-oracle",
     "depth": 2,
     "max_nodes": 20,
     "max_chunks": 10
@@ -55,7 +55,7 @@ Get a subgraph from specified nodes or the entire graph.
 {
   "name": "get_graph",
   "arguments": {
-    "ref_ids": ["beadloom"],
+    "ref_id": "beadloom",
     "depth": 2
   }
 }
@@ -68,9 +68,13 @@ List all nodes in the architecture graph.
 ```json
 {
   "name": "list_nodes",
-  "arguments": {}
+  "arguments": {
+    "kind": "domain"
+  }
 }
 ```
+
+`kind` is optional. When provided, filters by node type: `domain`, `feature`, `service`, `entity`, `adr`.
 
 #### sync_check
 

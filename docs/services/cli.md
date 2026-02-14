@@ -47,10 +47,13 @@ Projects without a `docs/` directory work fine — Beadloom operates in zero-doc
 Full reindex: drops all tables and reloads from scratch.
 
 ```bash
-beadloom reindex [--project DIR]
+beadloom reindex [--full] [--docs-dir DIR] [--project DIR]
 ```
 
-Order: drop tables → create schema → load graph YAML → index docs → index code → set meta.
+- `--full` — force full rebuild (drop all tables and re-create)
+- `--docs-dir` — documentation directory (default: from config.yml or `docs/`)
+
+Order: drop tables → create schema → load graph YAML → index docs → index code → resolve imports → load rules → build sync state → populate FTS5 → take health snapshot.
 
 ### beadloom ctx
 
@@ -230,12 +233,12 @@ Creates `docs/` tree: `architecture.md`, domain READMEs, service pages, feature 
 Generate structured data for AI-driven documentation enrichment.
 
 ```bash
-beadloom docs polish [--format {text,json}] [--ref REF_ID] [--project DIR]
+beadloom docs polish [--format {text,json}] [--ref-id REF_ID] [--project DIR]
 ```
 
 - `text` (default) — human-readable summary with enrichment instructions
 - `json` — structured JSON with nodes (symbols, dependencies, existing docs), Mermaid diagram, and AI prompt
-- `--ref` — filter to a single node
+- `--ref-id` — filter to a single node
 
 ### beadloom prime
 
