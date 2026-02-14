@@ -112,7 +112,7 @@ Works with Claude Code, Cursor, and any MCP-compatible tool.
 - **Full-text search** — FTS5-powered search across nodes, docs, and code symbols
 - **Impact analysis** — `beadloom why` shows what depends on a node and what breaks if it changes
 - **Code-first onboarding** — bootstrap an architecture graph from code structure alone; no docs needed to start
-- **MCP server** — 8 tools for AI agents, including write operations and search
+- **MCP server** — 10 tools for AI agents, including write operations and search
 - **Interactive TUI** — `beadloom ui` terminal dashboard for browsing the graph
 - **Local-first** — single CLI + single SQLite file, no Docker, no cloud dependencies
 
@@ -253,8 +253,8 @@ docs/
         reindex/SPEC.md
         watcher/SPEC.md
   services/
-    cli.md                                         # 18 CLI commands
-    mcp.md                                         # 8 MCP tools
+    cli.md                                         # 21 CLI commands
+    mcp.md                                         # 10 MCP tools
     tui.md                                         # TUI dashboard
 ```
 
@@ -334,11 +334,20 @@ uv run mypy                # type checking (strict mode)
 | &nbsp;&nbsp;[Reindex](docs/domains/infrastructure/features/reindex/SPEC.md) | Full and incremental reindex pipeline |
 | &nbsp;&nbsp;[Watcher](docs/domains/infrastructure/features/watcher/SPEC.md) | Auto-reindex on file changes |
 | **Services** | |
-| [CLI Reference](docs/services/cli.md) | All 18 CLI commands |
-| [MCP Server](docs/services/mcp.md) | All 8 MCP tools for AI agents |
+| [CLI Reference](docs/services/cli.md) | All 21 CLI commands |
+| [MCP Server](docs/services/mcp.md) | All 10 MCP tools for AI agents |
 | [TUI Dashboard](docs/services/tui.md) | Interactive terminal dashboard |
 | **Guides** | |
 | [CI Setup](docs/guides/ci-setup.md) | GitHub Actions / GitLab CI integration |
+
+## Known Issues
+
+See [UX Issues Log](.claude/development/BDL-UX-Issues.md) for the full list of known issues and limitations discovered during dogfooding.
+
+Key open items:
+- `sync-check` tracks file-level hash changes but does not detect semantic drift (code changed, doc content didn't) — [#15, #18]
+- `setup-rules` auto-detection doesn't work for Windsurf/Cline (marker file = rules file) — [#17]
+- `AGENTS.md` is not auto-generated during `beadloom init --bootstrap` — [#19]
 
 ## License
 

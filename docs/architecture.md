@@ -14,8 +14,8 @@ The system is organized into five DDD domain packages and top-level services:
 5. **Infrastructure** (`infrastructure/`) — SQLite database layer, health metrics, reindex orchestrator, doctor, watcher
 
 **Services:**
-- **CLI** (`services/cli.py`) — Click-based CLI with 18 commands
-- **MCP Server** (`services/mcp_server.py`) — stdio server with 8 tools for AI agents
+- **CLI** (`services/cli.py`) — Click-based CLI with 21 commands
+- **MCP Server** (`services/mcp_server.py`) — stdio server with 10 tools for AI agents
 - **TUI** (`tui/`) — interactive terminal dashboard (Textual)
 
 ## Specification

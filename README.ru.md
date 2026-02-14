@@ -116,7 +116,7 @@ beadloom setup-mcp                 # создаёт .mcp.json автоматич
 - **Полнотекстовый поиск** — FTS5-поиск по узлам, документам и символам кода
 - **Анализ влияния** — `beadloom why` показывает, что зависит от узла и что сломается при изменении
 - **Code-first онбординг** — архитектурный граф строится из структуры кода; документация не нужна для старта
-- **MCP-сервер** — 8 инструментов для AI-агентов, включая запись и поиск
+- **MCP-сервер** — 10 инструментов для AI-агентов, включая запись и поиск
 - **Интерактивный TUI** — `beadloom ui` — терминальный дашборд для навигации по графу
 - **Local-first** — один CLI + один файл SQLite, без Docker, без облачных зависимостей
 
@@ -258,8 +258,8 @@ docs/
         reindex/SPEC.md
         watcher/SPEC.md
   services/
-    cli.md                                         # 18 CLI-команд
-    mcp.md                                         # 8 MCP-инструментов
+    cli.md                                         # 21 CLI-команд
+    mcp.md                                         # 10 MCP-инструментов
     tui.md                                         # TUI-дашборд
 ```
 
@@ -339,11 +339,20 @@ uv run mypy                # проверка типов (strict mode)
 | &nbsp;&nbsp;[Reindex](docs/domains/infrastructure/features/reindex/SPEC.md) | Полный и инкрементальный реиндекс |
 | &nbsp;&nbsp;[Watcher](docs/domains/infrastructure/features/watcher/SPEC.md) | Автореиндекс при изменении файлов |
 | **Сервисы** | |
-| [CLI Reference](docs/services/cli.md) | Все 18 CLI-команд |
-| [MCP Server](docs/services/mcp.md) | Все 8 MCP-инструментов для AI-агентов |
+| [CLI Reference](docs/services/cli.md) | Все 21 CLI-команд |
+| [MCP Server](docs/services/mcp.md) | Все 10 MCP-инструментов для AI-агентов |
 | [TUI Dashboard](docs/services/tui.md) | Интерактивный терминальный дашборд |
 | **Руководства** | |
 | [CI Setup](docs/guides/ci-setup.md) | Интеграция с GitHub Actions / GitLab CI |
+
+## Известные проблемы
+
+Полный список известных проблем и ограничений: [UX Issues Log](.claude/development/BDL-UX-Issues.md).
+
+Основные открытые вопросы:
+- `sync-check` отслеживает хеши файлов, но не обнаруживает семантическое расхождение (код изменился, содержимое документации — нет) — [#15, #18]
+- `setup-rules` автодетекция не работает для Windsurf/Cline (файл-маркер = файл правил) — [#17]
+- `AGENTS.md` не генерируется автоматически при `beadloom init --bootstrap` — [#19]
 
 ## Лицензия
 

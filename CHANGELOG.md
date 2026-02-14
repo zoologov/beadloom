@@ -5,6 +5,27 @@ All notable changes to Beadloom are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-02-14
+
+Agent Prime: cross-IDE context injection for AI agents. Full documentation audit.
+
+### Added
+- **`beadloom prime`** — output compact project context (architecture summary, health, rules, domains) for AI agent session start
+- **`prime` MCP tool** — 10th tool; returns JSON context for agent sessions
+- **`beadloom setup-rules`** — create IDE adapter files (`.cursorrules`, `.windsurfrules`, `.clinerules`) that reference `.beadloom/AGENTS.md`
+- **AGENTS.md v2** — `generate_agents_md()` produces `.beadloom/AGENTS.md` with MCP tool list, architecture rules from `rules.yml`, and `## Custom` section preservation
+- **`prime_context()`** — three-layer architecture: static config + dynamic DB queries with graceful degradation
+- **`setup_rules_auto()`** — auto-detect IDEs by marker files; integrated into `beadloom init --bootstrap`
+- **`agent-prime` graph node** — 20th node in architecture graph (feature under onboarding)
+- **Architecture lint CI** — `.github/workflows/beadloom-aac-lint.yml` runs `beadloom lint --strict` on PRs
+- **Known Issues section** — README.md and README.ru.md link to UX Issues Log
+- **36 new tests** (847 total)
+
+### Fixed
+- **12 documentation discrepancies** — README/architecture/CLI/MCP docs all said "18 commands, 8 tools" (actual: 21 commands, 10 tools); `docs polish` documented `--ref` flag but code uses `--ref-id`; MCP docs used `ref_ids` (array) but schema is `ref_id` (string); `list_nodes` had undocumented `kind` filter; onboarding README missing 3 exported functions; infrastructure README missing 5 reindex pipeline steps; getting-started.md said "Python only" (supports 4 languages); root graph node said "v1.3.0" (was v1.3.1)
+- **`docs/getting-started.md`** — fully rewritten to reflect current bootstrap flow (rules, skeletons, MCP, IDE adapters, sync-check)
+- **`.beadloom/README.md`** — added missing `get_status` and `prime` to MCP tools list
+
 ## [1.3.1] - 2026-02-13
 
 Onboarding Quality: 10 bug-fixes from dogfooding on real projects (cdeep, dreamteam).
