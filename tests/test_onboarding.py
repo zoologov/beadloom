@@ -242,9 +242,7 @@ class TestGenerateAgentsMd:
                 },
             ],
         }
-        (graph_dir / "rules.yml").write_text(
-            yaml.dump(rules_data), encoding="utf-8"
-        )
+        (graph_dir / "rules.yml").write_text(yaml.dump(rules_data), encoding="utf-8")
 
         generate_agents_md(tmp_path)
         content = (tmp_path / ".beadloom" / "AGENTS.md").read_text()
@@ -1601,6 +1599,50 @@ class TestSetupRulesCli:
 
 
 # ---------------------------------------------------------------------------
+# bootstrap_project — setup_rules_auto integration
+# ---------------------------------------------------------------------------
+
+
+class TestBootstrapSetupRulesIntegration:
+    """Tests for setup_rules_auto integration in bootstrap_project."""
+
+    def test_bootstrap_calls_setup_rules(self, tmp_path: Path) -> None:
+        """bootstrap_project includes rules_files in result."""
+        # Create .cursor marker to trigger auto-detection.
+        (tmp_path / ".cursor").mkdir()
+        _make_src_tree(tmp_path)
+
+        result = bootstrap_project(tmp_path)
+
+        assert "rules_files" in result
+        assert ".cursorrules" in result["rules_files"]
+        assert (tmp_path / ".cursorrules").exists()
+
+    def test_bootstrap_no_ide_markers(self, tmp_path: Path) -> None:
+        """bootstrap_project returns empty rules_files when no IDE detected."""
+        _make_src_tree(tmp_path)
+
+        result = bootstrap_project(tmp_path)
+
+        assert result.get("rules_files") == []
+
+    def test_init_shows_rules_output(self, tmp_path: Path) -> None:
+        """init --bootstrap shows IDE rules in output."""
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        (tmp_path / ".cursor").mkdir()
+        _make_src_tree(tmp_path)
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["init", "--bootstrap", "--project", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+        assert "IDE rules:" in result.output
+        assert ".cursorrules" in result.output
+
+
+# ---------------------------------------------------------------------------
 # prime_context
 # ---------------------------------------------------------------------------
 
@@ -1730,3 +1772,160 @@ class TestPrimeContext:
         assert isinstance(result, dict)
         assert "version" in result
         assert isinstance(result["version"], str)
+
+
+# ---------------------------------------------------------------------------
+# prime CLI command
+# ---------------------------------------------------------------------------
+
+
+class TestPrimeCli:
+    """Tests for the ``beadloom prime`` CLI command."""
+
+    def test_prime_cli_default_markdown(self, tmp_path: Path) -> None:
+        """Default invocation outputs markdown with project header."""
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        beadloom_dir = tmp_path / ".beadloom"
+        beadloom_dir.mkdir()
+        (beadloom_dir / "config.yml").write_text("project_name: test-project\n")
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["prime", "--project", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+        assert "# Project:" in result.output
+
+    def test_prime_cli_json_output(self, tmp_path: Path) -> None:
+        """--json flag produces valid JSON with 'project' key."""
+        import json
+
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        beadloom_dir = tmp_path / ".beadloom"
+        beadloom_dir.mkdir()
+        (beadloom_dir / "config.yml").write_text("project_name: test-project\n")
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["prime", "--json", "--project", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert "project" in data
+
+    def test_prime_cli_update_flag(self, tmp_path: Path) -> None:
+        """--update regenerates AGENTS.md before outputting context."""
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        beadloom_dir = tmp_path / ".beadloom"
+        beadloom_dir.mkdir()
+        (beadloom_dir / "config.yml").write_text("project_name: test-project\n")
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["prime", "--update", "--project", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+        assert (beadloom_dir / "AGENTS.md").exists()
+
+    def test_prime_cli_project_option(self, tmp_path: Path) -> None:
+        """--project points to a custom directory."""
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["prime", "--project", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+
+
+# ---------------------------------------------------------------------------
+# MCP prime tool
+# ---------------------------------------------------------------------------
+
+
+class TestMcpPrime:
+    """Tests for the MCP prime tool."""
+
+    def test_mcp_prime_tool_listed(self) -> None:
+        """Verify 'prime' is in the _TOOLS list."""
+        from beadloom.services.mcp_server import _TOOLS
+
+        tool_names = [t.name for t in _TOOLS]
+        assert "prime" in tool_names
+
+    def test_mcp_prime_dispatches(self, tmp_path: Path) -> None:
+        """_dispatch_tool with name='prime' returns a dict with 'project' key."""
+        import sqlite3
+
+        from beadloom.services.mcp_server import _dispatch_tool
+
+        # Setup minimal project
+        beadloom_dir = tmp_path / ".beadloom"
+        beadloom_dir.mkdir()
+        (beadloom_dir / "config.yml").write_text("project_name: test\n")
+
+        # Create minimal DB
+        db_path = beadloom_dir / "beadloom.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        conn.execute("CREATE TABLE nodes (ref_id TEXT, kind TEXT, summary TEXT)")
+        conn.execute("CREATE TABLE edges (src_ref_id TEXT, dst_ref_id TEXT, kind TEXT)")
+        conn.execute("CREATE TABLE docs (ref_id TEXT, path TEXT)")
+        conn.execute("CREATE TABLE chunks (id INTEGER)")
+        conn.execute(
+            "CREATE TABLE code_symbols"
+            " (id INTEGER, symbol_name TEXT, kind TEXT,"
+            " file_path TEXT, line_start INT, line_end INT)"
+        )
+        conn.execute(
+            "CREATE TABLE sync_state (doc_path TEXT, code_path TEXT, ref_id TEXT, status TEXT)"
+        )
+        conn.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT)")
+        conn.commit()
+
+        result = _dispatch_tool(conn, "prime", {}, project_root=tmp_path)
+        conn.close()
+        assert isinstance(result, dict)
+        assert "project" in result
+
+    def test_mcp_prime_returns_json_format(self, tmp_path: Path) -> None:
+        """Verify the result is a dict (not a string), has expected keys."""
+        import sqlite3
+
+        from beadloom.services.mcp_server import _dispatch_tool
+
+        # Setup minimal project
+        beadloom_dir = tmp_path / ".beadloom"
+        beadloom_dir.mkdir()
+        (beadloom_dir / "config.yml").write_text("project_name: test\n")
+
+        # Create minimal DB
+        db_path = beadloom_dir / "beadloom.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        conn.execute("CREATE TABLE nodes (ref_id TEXT, kind TEXT, summary TEXT)")
+        conn.execute("CREATE TABLE edges (src_ref_id TEXT, dst_ref_id TEXT, kind TEXT)")
+        conn.execute("CREATE TABLE docs (ref_id TEXT, path TEXT)")
+        conn.execute("CREATE TABLE chunks (id INTEGER)")
+        conn.execute(
+            "CREATE TABLE code_symbols"
+            " (id INTEGER, symbol_name TEXT, kind TEXT,"
+            " file_path TEXT, line_start INT, line_end INT)"
+        )
+        conn.execute(
+            "CREATE TABLE sync_state (doc_path TEXT, code_path TEXT, ref_id TEXT, status TEXT)"
+        )
+        conn.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT)")
+        conn.commit()
+
+        result = _dispatch_tool(conn, "prime", {}, project_root=tmp_path)
+        conn.close()
+        assert isinstance(result, dict)
+        assert not isinstance(result, str)
+        assert "project" in result
+        assert "version" in result
+        assert "rules" in result
+        assert "instructions" in result

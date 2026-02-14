@@ -418,6 +418,16 @@ _TOOLS = [
             },
         },
     ),
+    mcp.Tool(
+        name="prime",
+        description=(
+            "Get compact project context for session start. "
+            "Returns architecture overview, health status, "
+            "lint violations, stale docs, and agent instructions. "
+            "Call this at the beginning of every session."
+        ),
+        inputSchema={"type": "object", "properties": {}},
+    ),
 ]
 
 
@@ -686,6 +696,14 @@ def _dispatch_tool(
 
         ref_id = args.get("ref_id")
         return generate_polish_data(project_root, ref_id=ref_id)
+
+    if name == "prime":
+        if project_root is None:
+            msg = "prime requires project_root"
+            raise ValueError(msg)
+        from beadloom.onboarding import prime_context
+
+        return prime_context(project_root, fmt="json")
 
     msg = f"Unknown tool: {name}"
     raise ValueError(msg)
