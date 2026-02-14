@@ -764,10 +764,7 @@ def _format_prime_markdown(
     lines: list[str] = [f"# Project: {project_name}", ""]
 
     if not dynamic:
-        lines.append(
-            "Warning: Database not found."
-            " Run `beadloom reindex` for full context."
-        )
+        lines.append("Warning: Database not found. Run `beadloom reindex` for full context.")
         lines.append("")
     else:
         # Architecture summary
@@ -778,9 +775,7 @@ def _format_prime_markdown(
             if count:
                 parts.append(f"{count} {kind}s")
         arch_str = ", ".join(parts) if parts else "no nodes"
-        lines.append(
-            f"Architecture: {arch_str} | {dynamic['symbols']} symbols"
-        )
+        lines.append(f"Architecture: {arch_str} | {dynamic['symbols']} symbols")
 
         stale_count = len(dynamic.get("stale_docs", []))
         violations_count = len(dynamic.get("violations", []))
@@ -808,29 +803,17 @@ def _format_prime_markdown(
     lines.append("| Command | Description |")
     lines.append("|---------|-------------|")
     lines.append("| `beadloom ctx <ref_id>` | Full context bundle for a node |")
-    lines.append(
-        '| `beadloom search "<query>"` | FTS5 search across nodes and docs |'
-    )
-    lines.append(
-        "| `beadloom lint --strict` | Architecture boundary validation |"
-    )
+    lines.append('| `beadloom search "<query>"` | FTS5 search across nodes and docs |')
+    lines.append("| `beadloom lint --strict` | Architecture boundary validation |")
     lines.append("| `beadloom sync-check` | Check doc-code freshness |")
     lines.append("")
 
     # Agent Instructions
     lines.append("## Agent Instructions")
-    lines.append(
-        "- Before work: call `get_context(ref_id)` or `prime` MCP tool"
-    )
-    lines.append(
-        "- After code changes: call `sync_check()`, update stale docs"
-    )
-    lines.append(
-        "- New features: add `# beadloom:feature=REF_ID` annotations"
-    )
-    lines.append(
-        "- Graph changes: run `beadloom reindex` after editing YAML"
-    )
+    lines.append("- Before work: call `get_context(ref_id)` or `prime` MCP tool")
+    lines.append("- After code changes: call `sync_check()`, update stale docs")
+    lines.append("- New features: add `# beadloom:feature=REF_ID` annotations")
+    lines.append("- Graph changes: run `beadloom reindex` after editing YAML")
     lines.append("")
 
     # Domains
@@ -892,9 +875,7 @@ def _format_prime_json(
         }
         result["domains"] = dynamic.get("domains", [])
     else:
-        result["warning"] = (
-            "Database not found. Run `beadloom reindex` for full context."
-        )
+        result["warning"] = "Database not found. Run `beadloom reindex` for full context."
 
     result["rules"] = rules
     result["instructions"] = (
@@ -954,19 +935,14 @@ def prime_context(
             kind_rows = conn.execute(
                 "SELECT kind, count(*) AS cnt FROM nodes GROUP BY kind"
             ).fetchall()
-            kind_counts: dict[str, int] = {
-                str(r["kind"]): int(r["cnt"]) for r in kind_rows
-            }
+            kind_counts: dict[str, int] = {str(r["kind"]): int(r["cnt"]) for r in kind_rows}
 
             # Symbols count
-            symbols: int = int(
-                conn.execute("SELECT count(*) FROM code_symbols").fetchone()[0]
-            )
+            symbols: int = int(conn.execute("SELECT count(*) FROM code_symbols").fetchone()[0])
 
             # Domain list
             domain_rows = conn.execute(
-                "SELECT ref_id, summary FROM nodes"
-                " WHERE kind = 'domain' ORDER BY ref_id"
+                "SELECT ref_id, summary FROM nodes WHERE kind = 'domain' ORDER BY ref_id"
             ).fetchall()
             domains: list[dict[str, str]] = [
                 {"ref_id": str(r["ref_id"]), "summary": str(r["summary"] or "")}
@@ -975,8 +951,7 @@ def prime_context(
 
             # Stale docs
             stale_rows = conn.execute(
-                "SELECT doc_path, code_path, ref_id"
-                " FROM sync_state WHERE status = 'stale'"
+                "SELECT doc_path, code_path, ref_id FROM sync_state WHERE status = 'stale'"
             ).fetchall()
             stale_docs: list[dict[str, str]] = [
                 {
@@ -1188,6 +1163,9 @@ def bootstrap_project(
     # Auto-configure MCP for detected editor.
     mcp_editor = setup_mcp_auto(project_root)
 
+    # Auto-create IDE rules files.
+    rules_created = setup_rules_auto(project_root)
+
     return {
         "project_name": project_name,
         "nodes_generated": len(nodes),
@@ -1197,6 +1175,7 @@ def bootstrap_project(
         "config_created": True,
         "agents_md_created": True,
         "mcp_editor": mcp_editor,
+        "rules_files": rules_created,
         "scan": scan,
         "nodes": nodes,
         "edges": edges,

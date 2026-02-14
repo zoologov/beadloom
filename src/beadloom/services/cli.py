@@ -1008,6 +1008,36 @@ def setup_rules(*, tool_name: str | None, project: Path | None) -> None:
             click.echo("No IDE markers detected. Use --tool to specify.")
 
 
+# beadloom:domain=onboarding
+@main.command()
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
+@click.option("--update", is_flag=True, help="Also regenerate AGENTS.md.")
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: cwd).",
+)
+def prime(*, as_json: bool, update: bool, project: Path | None) -> None:
+    """Output compact project context for AI agent injection."""
+    project_root = project or Path.cwd()
+
+    if update:
+        from beadloom.onboarding import generate_agents_md
+
+        generate_agents_md(project_root)
+
+    from beadloom.onboarding import prime_context
+
+    fmt = "json" if as_json else "markdown"
+    result = prime_context(project_root, fmt=fmt)
+
+    if as_json:
+        click.echo(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        click.echo(result)
+
+
 # beadloom:domain=links
 _LINK_LABEL_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"github\.com/.+/pull/"), "github-pr"),
@@ -1390,6 +1420,9 @@ def init(
                 f"\u2713 MCP: configured for {result['mcp_editor']} "
                 f"({_mcp_path_for_editor(result['mcp_editor'], project_root)})"
             )
+        if result.get("rules_files"):
+            for rf in result["rules_files"]:
+                click.echo(f"\u2713 IDE rules: {rf}")
         click.echo(
             f"\u2713 Index: {ri.symbols_indexed} symbols, "
             f"{ri.imports_indexed} imports"
