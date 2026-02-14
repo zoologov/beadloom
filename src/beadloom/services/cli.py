@@ -961,6 +961,53 @@ def setup_mcp(*, remove: bool, tool_name: str, project: Path | None) -> None:
     click.echo(f"Updated {mcp_json_path}")
 
 
+@main.command("setup-rules")
+@click.option(
+    "--tool",
+    "tool_name",
+    type=click.Choice(["cursor", "windsurf", "cline"]),
+    default=None,
+    help="Target IDE (default: auto-detect all).",
+)
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: current directory).",
+)
+def setup_rules(*, tool_name: str | None, project: Path | None) -> None:
+    """Create IDE rules files that reference .beadloom/AGENTS.md.
+
+    Auto-detects installed IDEs (Cursor, Windsurf, Cline) by marker
+    files and creates thin adapter files. Does not overwrite existing files.
+    """
+    from beadloom.onboarding.scanner import (
+        _RULES_ADAPTER_TEMPLATE,
+        _RULES_CONFIGS,
+        setup_rules_auto,
+    )
+
+    project_root = project or Path.cwd()
+
+    if tool_name:
+        # Explicit IDE specified — create without marker detection.
+        cfg = _RULES_CONFIGS[tool_name]
+        rules_path = project_root / cfg["path"]
+        if rules_path.exists():
+            click.echo(f"Skipped: {cfg['path']} already exists.")
+            return
+        rules_path.write_text(_RULES_ADAPTER_TEMPLATE, encoding="utf-8")
+        click.echo(f"Created {cfg['path']}")
+    else:
+        # Auto-detect.
+        created = setup_rules_auto(project_root)
+        if created:
+            for f in created:
+                click.echo(f"Created {f}")
+        else:
+            click.echo("No IDE markers detected. Use --tool to specify.")
+
+
 # beadloom:domain=links
 _LINK_LABEL_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"github\.com/.+/pull/"), "github-pr"),
