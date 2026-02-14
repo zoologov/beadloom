@@ -335,7 +335,7 @@ def graph(
     depth: int,
     project: Path | None,
 ) -> None:
-    """Show knowledge graph (Mermaid or JSON)."""
+    """Show architecture graph (Mermaid or JSON)."""
     from beadloom.context_oracle.builder import bfs_subgraph
     from beadloom.infrastructure.db import open_db
 
@@ -379,7 +379,7 @@ def graph(
     help="Project root (default: current directory).",
 )
 def doctor(*, project: Path | None) -> None:
-    """Run validation checks on the knowledge graph."""
+    """Run validation checks on the architecture graph."""
     from beadloom.infrastructure.db import open_db
     from beadloom.infrastructure.doctor import Severity, run_checks
 
@@ -1216,7 +1216,7 @@ def docs() -> None:
     help="Project root (default: current directory).",
 )
 def docs_generate(*, project: Path | None) -> None:
-    """Generate doc skeletons from the knowledge graph."""
+    """Generate doc skeletons from the architecture graph."""
     from beadloom.onboarding.doc_generator import generate_skeletons
 
     project_root = project or Path.cwd()

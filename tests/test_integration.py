@@ -294,7 +294,7 @@ class TestCtx:
 
 
 class TestGraph:
-    """``beadloom graph`` — knowledge graph output."""
+    """``beadloom graph`` — architecture graph output."""
 
     def test_graph_mermaid_output(self, tmp_path: Path) -> None:
         # Arrange

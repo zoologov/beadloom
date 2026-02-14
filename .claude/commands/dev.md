@@ -51,71 +51,30 @@ REPEAT   → Next test case
 
 ## Beadloom Architecture
 
-### Layers
+### Discover project structure (always use these, never hardcode paths)
 
-```
-CLI (Click + Rich)  →  Core Logic  →  Storage (SQLite)
-         ↓                 ↓                ↓
-    commands/         graph.py         database.py
-    formatters/       context.py       models.py
-                      sync.py
-                      chunker.py
-                         ↓
-                    Parsers (tree-sitter)
+```bash
+beadloom graph                   # Mermaid diagram: domains, features, services, edges
+beadloom ctx <domain>            # full context for a domain: source files, symbols, docs
+beadloom ctx <feature>           # full context for a feature
+beadloom status                  # overview: node counts, doc coverage, health
 ```
 
-**Rule:** dependencies point inward. CLI depends on Core, Core depends on Storage. Reverse dependencies are forbidden.
-
-### Package structure
+### Layers (conceptual, verify with `beadloom graph`)
 
 ```
-src/beadloom/
-├── __init__.py
-├── __main__.py          # python -m beadloom
-├── cli/                 # Click commands
-│   ├── __init__.py
-│   ├── main.py          # cli group
-│   ├── init_cmd.py
-│   ├── reindex_cmd.py
-│   ├── ctx_cmd.py
-│   └── ...
-├── core/                # Business logic (no dependency on CLI/MCP)
-│   ├── __init__.py
-│   ├── graph.py         # BFS, subgraphs
-│   ├── context.py       # Context Oracle — bundle assembly
-│   ├── sync.py          # Doc Sync Engine
-│   ├── chunker.py       # Markdown → chunks
-│   ├── indexer.py       # YAML + docs + code → SQLite
-│   └── doctor.py        # Integrity validation
-├── storage/             # SQLite, schema, migrations
-│   ├── __init__.py
-│   ├── database.py      # Connection, WAL, PRAGMA
-│   ├── schema.py        # CREATE TABLE
-│   └── queries.py       # Named SQL queries
-├── parsers/             # tree-sitter, annotations
-│   ├── __init__.py
-│   ├── symbols.py       # Symbol extraction
-│   └── annotations.py   # beadloom: comments
-├── mcp/                 # MCP server
-│   ├── __init__.py
-│   ├── server.py        # stdio transport
-│   ├── tools.py         # get_context, get_graph, ...
-│   └── cache.py         # L1 in-memory cache
-└── models.py            # Dataclasses: Node, Edge, Bundle, ...
-tests/
-├── conftest.py          # Shared fixtures
-├── unit/
-│   ├── test_graph.py
-│   ├── test_context.py
-│   ├── test_chunker.py
-│   └── ...
-├── integration/
-│   ├── test_indexer.py
-│   ├── test_cli.py
-│   └── ...
-└── fixtures/            # Test YAML, MD files
-    ├── sample_graph/
-    └── sample_docs/
+Services (CLI, MCP, TUI) → Domains (context-oracle, graph, doc-sync, onboarding, infrastructure)
+```
+
+Dependencies point inward. Services depend on domains. Reverse is forbidden.
+
+### Validation during development
+
+```bash
+beadloom reindex                 # after code/graph changes
+beadloom sync-check              # before commit: are docs fresh?
+beadloom lint --strict           # before commit: architecture boundaries ok?
+beadloom doctor                  # graph integrity
 ```
 
 ---
@@ -246,7 +205,12 @@ uv run pytest
 uv run ruff check src/ tests/
 uv run mypy src/
 
-# 3. Add final checkpoint
+# 3. Beadloom validation
+beadloom reindex
+beadloom sync-check
+beadloom lint --strict
+
+# 4. Add final checkpoint
 bd comments add <bead-id> "$(cat <<'EOF'
 COMPLETED:
 - What was done: [list]
@@ -256,10 +220,10 @@ COMPLETED:
 EOF
 )"
 
-# 4. Close the bead
+# 5. Close the bead
 bd close <bead-id>
 
-# 5. Check what got unblocked
+# 6. Check what got unblocked
 bd ready
 ```
 
@@ -318,6 +282,9 @@ logger.info("Reindex completed", extra={"nodes": count, "duration_ms": elapsed})
 - [ ] `uv run pytest` — all tests pass
 - [ ] `uv run ruff check` — linter is clean
 - [ ] `uv run mypy src/` — typing is ok
+- [ ] `beadloom reindex` — index is fresh
+- [ ] `beadloom sync-check` — no stale docs
+- [ ] `beadloom lint --strict` — no architecture violations
 - [ ] Final checkpoint in beads
 - [ ] `bd close <bead-id>`
 - [ ] ACTIVE.md cleared for the next bead

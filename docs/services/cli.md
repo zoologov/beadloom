@@ -64,7 +64,7 @@ Outputs Markdown by default. `--json` for machine-readable format.
 
 ### beadloom graph
 
-Knowledge graph visualization.
+Architecture graph visualization.
 
 ```bash
 # Full graph in Mermaid format
@@ -88,7 +88,7 @@ Shows Rich-formatted dashboard with: node count (broken down by kind), edges, do
 
 ### beadloom doctor
 
-Knowledge graph validation.
+Architecture graph validation.
 
 ```bash
 beadloom doctor [--project DIR]
@@ -217,7 +217,7 @@ Monitors graph YAML, documentation, and source files. Graph changes trigger full
 
 ### beadloom docs generate
 
-Generate documentation skeletons from the knowledge graph.
+Generate documentation skeletons from the architecture graph.
 
 ```bash
 beadloom docs generate [--project DIR]

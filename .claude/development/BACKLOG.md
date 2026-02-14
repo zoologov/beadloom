@@ -165,7 +165,7 @@ Organized by theme. No decisions made — these are candidates for evaluation.
 
 | # | Question | Context |
 |---|----------|---------|
-| 1 | **Naming:** "Knowledge Graph" vs "Architecture Graph"? | README uses both; pick one |
+| 1 | **Naming:** "Architecture Graph" (decided) | Renamed codebase-wide in BDL-013 D13 |
 | 2 | **Multi-repo:** Git submodules? Remote graph refs? Federation protocol? | No design yet |
 | 3 | **Plugin system:** Entry points? Hook-based? Config-driven? | No design yet |
 | 4 | **Web dashboard:** Static site generator? SPA? Server? | Trade-offs differ for sharing vs interactivity |

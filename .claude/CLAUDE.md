@@ -41,10 +41,15 @@ bd comments add <bead-id> "CHECKPOINT: [what was done]"
 # 1. Tests pass
 uv run pytest
 
-# 2. Final checkpoint
+# 2. Beadloom validation
+beadloom reindex
+beadloom sync-check
+beadloom lint --strict
+
+# 3. Final checkpoint
 bd comments add <bead-id> "COMPLETED: [results]"
 
-# 3. Close bead
+# 4. Close bead
 bd close <bead-id>
 ```
 
@@ -112,6 +117,36 @@ bd dep add <id> <depends-on-id>
 - `bd update --append-notes` — for notes
 - NEVER work on a task without `--claim`
 - ALWAYS close via `bd close`
+
+---
+
+## 2.1 Beadloom CLI — Essentials
+
+```bash
+# Project structure (use instead of hardcoded paths)
+beadloom status                  # overview: nodes, edges, docs, coverage
+beadloom graph                   # Mermaid architecture diagram
+beadloom ctx <ref-id>            # full context: code, docs, constraints
+beadloom ctx <ref-id> --json     # structured JSON for parsing
+beadloom search "<query>"        # FTS5 search across nodes and docs
+
+# Validation (run before committing)
+beadloom reindex                 # rebuild index after code/graph changes
+beadloom sync-check              # check doc-code freshness (exit 2 = stale)
+beadloom lint --strict           # architecture boundary check (exit 1 = violation)
+beadloom doctor                  # graph integrity validation
+
+# After changing code
+# 1. beadloom reindex            — re-index changed files
+# 2. beadloom sync-check         — check if docs went stale
+# 3. If stale: update the doc, then beadloom reindex again
+# 4. beadloom lint --strict      — verify architecture boundaries
+```
+
+**IMPORTANT:**
+- NEVER hardcode file paths — use `beadloom ctx`/`graph` to discover structure
+- ALWAYS run `beadloom sync-check` before committing
+- If sync-check reports stale docs, update them before proceeding
 
 ---
 
@@ -201,6 +236,15 @@ Example:
 - Completing a bead without `bd comments add`
 - Completing without `bd close`
 - Committing with failing tests
+
+### Beadloom
+- Committing without `beadloom sync-check`
+- Hardcoding file paths instead of using `beadloom ctx`/`graph`
+- Skipping `beadloom reindex` after graph YAML changes
+- Ignoring `beadloom lint` violations
+
+### Shell
+- Using `cp`, `mv`, `rm` without `-f` flag (may hang on interactive prompts)
 
 ### Code
 - Using `Any` / `# type: ignore` without reason

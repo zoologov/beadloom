@@ -80,6 +80,16 @@ bd comments <bead-id>
 
 ---
 
+## Beadloom Checklist
+
+- [ ] `beadloom sync-check` — no stale doc-code pairs
+- [ ] `beadloom lint --strict` — no architecture violations
+- [ ] `beadloom doctor` — graph integrity ok
+- [ ] If graph YAML changed: edges are correct, no orphaned nodes
+- [ ] If new domain/feature added: has documentation in docs/
+
+---
+
 ## Review result
 
 ### If everything is ok:

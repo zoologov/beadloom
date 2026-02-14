@@ -88,7 +88,11 @@ Agent-2 (developer):
 # 1. All tests pass
 uv run pytest
 
-# 2. Add checkpoint with results
+# 2. Beadloom validation
+beadloom reindex
+beadloom sync-check
+
+# 3. Add checkpoint with results
 bd comments add <bead-id> "$(cat <<'EOF'
 COMPLETED:
 - What was done: [list]
@@ -99,10 +103,10 @@ COMPLETED:
 EOF
 )"
 
-# 3. Close the bead
+# 4. Close the bead
 bd close <bead-id>
 
-# 4. Notify the coordinator
+# 5. Notify the coordinator
 ```
 
 ---
@@ -120,6 +124,10 @@ BEFORE WAVE COMMIT:
   - "Last updated" is filled in
 □ ACTIVE.md reflects completed work
 □ All tests pass (uv run pytest)
+□ beadloom reindex — index is fresh
+□ beadloom sync-check — no stale docs
+□ beadloom lint --strict — no architecture violations
+□ beadloom doctor — graph integrity ok
 □ All beads are closed (bd close)
 ```
 
