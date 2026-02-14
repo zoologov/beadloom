@@ -1,6 +1,6 @@
 # MCP Server
 
-Beadloom provides an MCP (Model Context Protocol) server with 9 tools for integration with AI agents.
+Beadloom provides an MCP (Model Context Protocol) server with 10 tools for integration with AI agents.
 
 ## Specification
 
@@ -155,6 +155,19 @@ Generate structured documentation data from the architecture graph for AI-driven
 ```
 
 Returns JSON with: nodes (ref_id, kind, summary, source, symbols, dependencies, existing_doc), architecture (mermaid diagram), and instructions (AI enrichment prompt). Omit `ref_id` for all nodes.
+
+#### prime
+
+Get compact project context for session start. Call this at the beginning of every session.
+
+```json
+{
+  "name": "prime",
+  "arguments": {}
+}
+```
+
+Returns JSON with: project name, version, architecture summary (domain/service/feature counts, symbols), health (stale docs, lint violations, last reindex), architecture rules, domain list, and agent instructions.
 
 ## API
 

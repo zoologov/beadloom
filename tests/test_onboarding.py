@@ -1929,3 +1929,69 @@ class TestMcpPrime:
         assert "version" in result
         assert "rules" in result
         assert "instructions" in result
+
+
+# ---------------------------------------------------------------------------
+# prime_context — stale docs & lint violations
+# ---------------------------------------------------------------------------
+
+
+class TestPrimeContextStaleAndViolations:
+    """Tests for stale docs and lint violations in prime output."""
+
+    def test_prime_stale_docs_in_markdown(self, tmp_path: Path) -> None:
+        """Stale docs appear in markdown output."""
+        import sqlite3
+
+        _make_src_tree(tmp_path)
+        bootstrap_project(tmp_path)
+        from beadloom.infrastructure.reindex import reindex as do_reindex
+
+        do_reindex(tmp_path)
+
+        # Inject a stale record directly into the DB.
+        db_path = tmp_path / ".beadloom" / "beadloom.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "INSERT INTO sync_state"
+            " (doc_path, code_path, ref_id, code_hash_at_sync,"
+            "  doc_hash_at_sync, synced_at, status)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("docs/stale.md", "src/stale.py", "my-node", "aaa", "bbb", "2026-01-01", "stale"),
+        )
+        conn.commit()
+        conn.close()
+
+        result = prime_context(tmp_path)
+        assert isinstance(result, str)
+        assert "## Stale Docs" in result
+        assert "docs/stale.md" in result
+
+    def test_prime_stale_docs_in_json(self, tmp_path: Path) -> None:
+        """JSON output includes stale docs in health section."""
+        import sqlite3
+
+        _make_src_tree(tmp_path)
+        bootstrap_project(tmp_path)
+        from beadloom.infrastructure.reindex import reindex as do_reindex
+
+        do_reindex(tmp_path)
+
+        # Inject a stale record directly into the DB.
+        db_path = tmp_path / ".beadloom" / "beadloom.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "INSERT INTO sync_state"
+            " (doc_path, code_path, ref_id, code_hash_at_sync,"
+            "  doc_hash_at_sync, synced_at, status)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("docs/stale.md", "src/stale.py", "my-node", "aaa", "bbb", "2026-01-01", "stale"),
+        )
+        conn.commit()
+        conn.close()
+
+        result = prime_context(tmp_path, fmt="json")
+        assert isinstance(result, dict)
+        stale = result["health"]["stale_docs"]
+        assert len(stale) >= 1
+        assert any(s["doc_path"] == "docs/stale.md" for s in stale)

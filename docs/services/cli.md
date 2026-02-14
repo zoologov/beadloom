@@ -237,6 +237,33 @@ beadloom docs polish [--format {text,json}] [--ref REF_ID] [--project DIR]
 - `json` — structured JSON with nodes (symbols, dependencies, existing docs), Mermaid diagram, and AI prompt
 - `--ref` — filter to a single node
 
+### beadloom prime
+
+Output compact project context for AI agent injection.
+
+```bash
+beadloom prime [--json] [--update] [--project DIR]
+```
+
+- `--json` — structured JSON output
+- `--update` — regenerate `.beadloom/AGENTS.md` before outputting context
+
+Returns architecture summary, health status (stale docs, lint violations), architecture rules, domain list, and agent instructions.
+
+### beadloom setup-rules
+
+Create IDE rules files that reference `.beadloom/AGENTS.md`.
+
+```bash
+# Auto-detect installed IDEs
+beadloom setup-rules [--project DIR]
+
+# Target a specific IDE
+beadloom setup-rules --tool {cursor,windsurf,cline} [--project DIR]
+```
+
+Creates thin adapter files (`.cursorrules`, `.windsurfrules`, `.clinerules`) that instruct agents to read AGENTS.md.
+
 ### beadloom setup-mcp
 
 Configure MCP server for your editor.

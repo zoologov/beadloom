@@ -60,7 +60,7 @@ nodes:
   # Service: CLI
   - ref_id: cli
     kind: service
-    summary: "Click-based CLI with 20 commands"
+    summary: "Click-based CLI with 21 commands"
     source: src/beadloom/services/cli.py
     docs:
       - docs/services/cli.md
@@ -68,7 +68,7 @@ nodes:
   # Service: MCP Server
   - ref_id: mcp-server
     kind: service
-    summary: "MCP stdio server with 9 tools for AI agents"
+    summary: "MCP stdio server with 10 tools for AI agents"
     source: src/beadloom/services/mcp_server.py
     docs:
       - docs/services/mcp.md
@@ -145,6 +145,14 @@ nodes:
     docs:
       - docs/domains/context-oracle/features/cache/SPEC.md
 
+  # Feature: Agent Prime
+  - ref_id: agent-prime
+    kind: feature
+    summary: "Cross-IDE context injection via prime CLI/MCP + AGENTS.md + IDE adapters"
+    source: src/beadloom/onboarding/scanner.py
+    docs:
+      - docs/domains/onboarding/features/agent-prime/SPEC.md
+
   # Feature: Reindex
   - ref_id: reindex
     kind: feature
@@ -194,6 +202,9 @@ edges:
     kind: part_of
 
   - src: doc-generator
+    dst: onboarding
+    kind: part_of
+  - src: agent-prime
     dst: onboarding
     kind: part_of
 
