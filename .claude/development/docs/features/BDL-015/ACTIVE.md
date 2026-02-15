@@ -1,8 +1,8 @@
 # BDL-015: Active Work
 
 ## Current task
-**Bead:** Wave 1 — Batch 2 (5 parallel agents)
-**Goal:** Implement next 5 beads (3 P0 Phase 8, 2 P0 Phase 8.5/9)
+**Bead:** Wave 2 (3 parallel agents)
+**Goal:** Implement final 3 beads (BEAD-05, BEAD-16, BEAD-17)
 **Readiness criterion:** All beads pass tests, no regressions
 
 ## Session plan
@@ -11,8 +11,8 @@
 - [x] Create epic + 17 beads in bd
 - [x] Set up dependencies + get user approval
 - [x] Wave 1 Batch 1: BEAD-01, BEAD-08, BEAD-11, BEAD-13 (committed faf50d4)
-- [ ] Wave 1 Batch 2: BEAD-02, BEAD-03, BEAD-09, BEAD-10, BEAD-14
-- [ ] Wave 1 Batch 3: BEAD-04, BEAD-15, BEAD-06, BEAD-07
+- [x] Wave 1 Batch 2: BEAD-02, BEAD-03, BEAD-09, BEAD-10, BEAD-14 (committed f75e7f6)
+- [x] Wave 1 Batch 3: BEAD-04, BEAD-15, BEAD-06, BEAD-07, BEAD-12 (committed 2ecc668)
 - [ ] Wave 2: BEAD-05, BEAD-16, BEAD-17
 
 ## Wave 1 Batch 1 — DONE (faf50d4)
@@ -23,14 +23,30 @@
 | BEAD-11 (beadloom-8ev.12) | Reindex fix | 9 | CLOSED |
 | BEAD-13 (beadloom-8ev.8) | Kotlin support | 22 | CLOSED |
 
-## Wave 1 Batch 2 Status
+## Wave 1 Batch 2 — DONE (f75e7f6)
+| Bead | Task | Tests | Status |
+|------|------|-------|--------|
+| BEAD-02 (beadloom-8ev.2) | Framework detection 15+ | 18 | CLOSED |
+| BEAD-03 (beadloom-8ev.3) | Entry point discovery | 15 | CLOSED |
+| BEAD-09 (beadloom-8ev.6) | Doctor drift warnings | 12 | CLOSED |
+| BEAD-10 (beadloom-8ev.9) | Symbol diff in polish | 12 | CLOSED |
+| BEAD-14 (beadloom-8ev.11) | Java language support | 20 | CLOSED |
+
+## Wave 1 Batch 3 — DONE (2ecc668)
+| Bead | Task | Tests | Status |
+|------|------|-------|--------|
+| BEAD-04 (beadloom-8ev.5) | Import analysis | 11 | CLOSED |
+| BEAD-15 (beadloom-8ev.14) | Swift support | 21 | CLOSED |
+| BEAD-06 (beadloom-8ev.10) | AGENTS.md fix | 9 | CLOSED |
+| BEAD-07 (beadloom-8ev.13) | service-needs-parent | 8 | CLOSED |
+| BEAD-12 (beadloom-8ev.15) | setup-rules fix | 17 | CLOSED |
+
+## Wave 2 Status
 | Bead | Task | Agent | Status |
 |------|------|-------|--------|
-| BEAD-02 (beadloom-8ev.2) | Framework detection 15+ | a1eed0b | Running |
-| BEAD-03 (beadloom-8ev.3) | Entry point discovery | a10db86 | Running |
-| BEAD-09 (beadloom-8ev.6) | Doctor drift warnings | a49dbb0 | Running |
-| BEAD-10 (beadloom-8ev.9) | Symbol diff in polish | abf030b | Running |
-| BEAD-14 (beadloom-8ev.11) | Java language support | acc3748 | Running |
+| BEAD-05 (beadloom-8ev.7) | Contextual summaries | — | Launching |
+| BEAD-16 (beadloom-8ev.16) | C/C++ support | — | Launching |
+| BEAD-17 (beadloom-8ev.17) | Obj-C support | — | Launching |
 
 ## Notes
 ### Session 1: Codebase exploration
@@ -42,10 +58,15 @@ Three parallel agents explored Phase 8/8.5/9 code.
 - Committed and pushed (faf50d4)
 
 ### Session 3: Wave 1 Batch 2
-- BEAD-09 and BEAD-10 unblocked after BEAD-08 closed
-- 5 agents launched for: framework detection, entry points, doctor drift, symbol diff polish, Java
-- BEAD-04 deferred to Batch 3 (scanner.py conflict risk with BEAD-02/03)
-- BEAD-15 deferred to Batch 3 (code_indexer.py conflict risk with BEAD-14)
+- 5 agents completed all beads successfully
+- 1015 tests total, all passing
+- Committed and pushed (f75e7f6)
+
+### Session 4: Wave 1 Batch 3
+- 5 agents completed all beads successfully
+- 1073 tests total, all passing
+- Fixed parallel edit conflicts (test_onboarding.py, ruff lint)
+- Committed and pushed (2ecc668)
 
 ## Next step
-Monitor Batch 2 agents, commit, then launch Batch 3
+Monitor Wave 2 agents, commit, then close the epic

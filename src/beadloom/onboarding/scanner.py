@@ -530,6 +530,131 @@ def _detect_framework_summary(
     return f"{kind_label}: {name} ({file_count} files)"
 
 
+# Maximum files to scan for symbols per cluster (performance guard).
+_SUMMARY_MAX_SYMBOL_FILES = 20
+
+
+def _build_contextual_summary(
+    dir_path: Path,
+    name: str,
+    kind: str,
+    files: list[str],
+    project_root: Path,
+    entry_points: list[dict[str, str]] | None = None,
+) -> str:
+    """Build a context-rich summary for a cluster node.
+
+    Combines:
+    - Framework detection (via ``_detect_framework_summary``)
+    - Key symbol counts (classes, functions) from source files
+    - README excerpt from the directory
+    - Entry point information
+
+    Returns a summary string under 120 characters.
+
+    Example: ``"FastAPI service: auth — JWT auth, 3 classes, 5 functions"``
+    """
+    file_count = len(files)
+
+    # 1. Get framework-aware base summary (e.g. "FastAPI service: auth (5 files)").
+    base = _detect_framework_summary(dir_path, name, kind, file_count)
+
+    # Extract the prefix (everything before the parenthesized file count).
+    # e.g. "FastAPI service: auth" from "FastAPI service: auth (5 files)"
+    paren_idx = base.rfind(" (")
+    prefix = base[:paren_idx] if paren_idx > 0 else base
+
+    # 2. Count symbols from code files using tree-sitter.
+    class_count = 0
+    function_count = 0
+    if files:
+        try:
+            from beadloom.context_oracle.code_indexer import extract_symbols
+        except ImportError:
+            extract_symbols = None  # type: ignore[assignment]
+
+        if extract_symbols is not None:
+            for rel_path in files[:_SUMMARY_MAX_SYMBOL_FILES]:
+                abs_path = project_root / rel_path
+                if not abs_path.is_file():
+                    continue
+                try:
+                    symbols = extract_symbols(abs_path)
+                except Exception:  # noqa: S112
+                    continue
+                for sym in symbols:
+                    if sym["kind"] == "class":
+                        class_count += 1
+                    elif sym["kind"] == "function":
+                        function_count += 1
+
+    # 3. Read per-directory README excerpt.
+    readme_excerpt = ""
+    for readme_name in ("README.md", "readme.md", "README.rst"):
+        readme_path = dir_path / readme_name
+        if readme_path.is_file():
+            try:
+                readme_text = readme_path.read_text(encoding="utf-8")
+                readme_excerpt = _extract_first_paragraph(readme_text)
+            except (OSError, UnicodeDecodeError):
+                pass
+            break
+
+    # 4. Check for entry points relevant to this cluster.
+    ep_labels: list[str] = []
+    if entry_points:
+        for ep in entry_points:
+            ep_file = ep.get("file_path", "")
+            # Check if the entry point file belongs to this cluster.
+            for f in files:
+                if ep_file == f:
+                    ep_kind = ep.get("kind", "")
+                    if ep_kind == "cli":
+                        ep_labels.append("CLI entry")
+                    elif ep_kind == "server":
+                        ep_labels.append("server entry")
+                    elif ep_kind == "app":
+                        ep_labels.append("app entry")
+                    break
+
+    # 5. Assemble detail fragments.
+    details: list[str] = []
+
+    # README excerpt (truncated to fit).
+    if readme_excerpt:
+        # Truncate to ~50 chars to leave room for other details.
+        if len(readme_excerpt) > 50:
+            readme_excerpt = readme_excerpt[:47] + "..."
+        details.append(readme_excerpt)
+
+    # Entry point labels.
+    if ep_labels:
+        details.extend(ep_labels[:2])  # At most 2 entry point labels.
+
+    # Symbol counts.
+    sym_parts: list[str] = []
+    if class_count:
+        sym_parts.append(f"{class_count} class{'es' if class_count != 1 else ''}")
+    if function_count:
+        sym_parts.append(f"{function_count} fn{'s' if function_count != 1 else ''}")
+    if sym_parts:
+        details.append(", ".join(sym_parts))
+
+    # 6. Build final summary.
+    if details:
+        detail_str = ", ".join(details)
+        summary = f"{prefix} — {detail_str}"
+    else:
+        # No extra details — use the base summary as-is.
+        summary = base
+
+    # Enforce 120-char limit.
+    if len(summary) > 120:
+        summary = summary[:117] + "..."
+
+    return summary
+
+
 def _detect_project_name(project_root: Path) -> str:
     """Detect project name from manifest files or directory name.
 
@@ -1627,16 +1752,26 @@ def bootstrap_project(
     edges: list[dict[str, str]] = []
     seen_ref_ids: set[str] = set()
 
+    # Discover entry points early so they can enrich cluster summaries.
+    all_entry_points = _discover_entry_points(project_root, scan["source_dirs"] or [])
+
     for name, info in clusters.items():
         kind, confidence = preset.classify_dir(name)
         all_files: list[str] = info["files"]
         children: dict[str, list[str]] = info["children"]
         source_dir: str = info["source_dir"]
 
-        # Top-level node.
+        # Top-level node — contextual summary with symbols, README, entry points.
         ref_id = _sanitize_ref_id(name)
         dir_path = project_root / source_dir / name
-        summary = _detect_framework_summary(dir_path, name, kind, len(all_files))
+        summary = _build_contextual_summary(
+            dir_path,
+            name,
+            kind,
+            all_files,
+            project_root,
+            entry_points=all_entry_points,
+        )
         nodes.append(
             {
                 "ref_id": ref_id,
@@ -1654,8 +1789,13 @@ def bootstrap_project(
                 child_kind, child_conf = preset.classify_dir(child_name)
                 child_ref_id = f"{_sanitize_ref_id(name)}-{_sanitize_ref_id(child_name)}"
                 child_dir_path = project_root / source_dir / name / child_name
-                child_summary = _detect_framework_summary(
-                    child_dir_path, child_name, child_kind, len(child_files)
+                child_summary = _build_contextual_summary(
+                    child_dir_path,
+                    child_name,
+                    child_kind,
+                    child_files,
+                    project_root,
+                    entry_points=all_entry_points,
                 )
                 nodes.append(
                     {
@@ -1723,11 +1863,10 @@ def bootstrap_project(
         nodes.insert(0, root_node)
         seen_ref_ids.add(project_name)
 
-        # Discover entry points.
-        entry_points = _discover_entry_points(project_root, scan["source_dirs"] or [])
-        if entry_points:
+        # Attach entry points to root (discovered earlier for cluster summaries).
+        if all_entry_points:
             root_extra = json.loads(root_node.get("extra", "{}"))
-            root_extra["entry_points"] = entry_points
+            root_extra["entry_points"] = all_entry_points
             root_node["extra"] = json.dumps(root_extra, ensure_ascii=False)
 
         # Ingest README/doc metadata into root node.

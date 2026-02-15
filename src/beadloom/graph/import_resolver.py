@@ -377,6 +377,242 @@ def _extract_swift_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
     return results
 
 
+# C/C++ standard and system headers to skip.
+_C_SYSTEM_HEADERS: frozenset[str] = frozenset(
+    {
+        # C standard headers
+        "stdio.h",
+        "stdlib.h",
+        "string.h",
+        "math.h",
+        "assert.h",
+        "ctype.h",
+        "errno.h",
+        "float.h",
+        "limits.h",
+        "locale.h",
+        "setjmp.h",
+        "signal.h",
+        "stdarg.h",
+        "stddef.h",
+        "time.h",
+        "stdint.h",
+        "stdbool.h",
+        "inttypes.h",
+        "complex.h",
+        "fenv.h",
+        "iso646.h",
+        "tgmath.h",
+        "wchar.h",
+        "wctype.h",
+        # C++ standard headers
+        "iostream",
+        "string",
+        "vector",
+        "map",
+        "set",
+        "algorithm",
+        "memory",
+        "functional",
+        "utility",
+        "numeric",
+        "iterator",
+        "fstream",
+        "sstream",
+        "iomanip",
+        "cstdlib",
+        "cstdio",
+        "cstring",
+        "cmath",
+        "cassert",
+        "climits",
+        "cstdint",
+        "array",
+        "deque",
+        "list",
+        "queue",
+        "stack",
+        "unordered_map",
+        "unordered_set",
+        "tuple",
+        "bitset",
+        "chrono",
+        "thread",
+        "mutex",
+        "condition_variable",
+        "atomic",
+        "future",
+        "type_traits",
+        "stdexcept",
+        "exception",
+        "new",
+        "typeinfo",
+        "initializer_list",
+        "optional",
+        "variant",
+        "any",
+        "filesystem",
+        "regex",
+        "random",
+        "ratio",
+        "complex",
+    }
+)
+
+
+def _extract_c_cpp_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
+    """Extract ``#include`` directives from C/C++ files.
+
+    Skips well-known C/C++ standard library headers.
+    """
+    results: list[ImportInfo] = []
+    for node in root.children:
+        if node.type != "preproc_include":
+            continue
+        path_node = node.child_by_field_name("path")
+        if path_node is None:
+            continue
+        raw = path_node.text.decode("utf-8") if path_node.text else ""
+        # Strip surrounding quotes or angle brackets.
+        raw = raw.strip('"<>')
+        if not raw:
+            continue
+        if raw in _C_SYSTEM_HEADERS:
+            continue
+        results.append(
+            ImportInfo(
+                file_path=file_path,
+                line_number=node.start_point.row + 1,
+                import_path=raw,
+                resolved_ref_id=None,
+            )
+        )
+    return results
+
+
+# Apple/system frameworks to skip for Objective-C imports.
+_OBJC_SYSTEM_FRAMEWORKS: frozenset[str] = frozenset(
+    {
+        "Foundation",
+        "UIKit",
+        "AppKit",
+        "CoreData",
+        "CoreGraphics",
+        "CoreFoundation",
+        "CoreLocation",
+        "CoreBluetooth",
+        "CoreMedia",
+        "CoreText",
+        "CoreImage",
+        "CoreAnimation",
+        "CoreML",
+        "CoreMotion",
+        "CoreTelephony",
+        "CoreServices",
+        "MapKit",
+        "MessageUI",
+        "Photos",
+        "QuartzCore",
+        "Security",
+        "StoreKit",
+        "SystemConfiguration",
+        "WebKit",
+        "AVFoundation",
+        "GameKit",
+        "HealthKit",
+        "HomeKit",
+        "MediaPlayer",
+        "Metal",
+        "MetalKit",
+        "MultipeerConnectivity",
+        "ARKit",
+        "RealityKit",
+        "SceneKit",
+        "SpriteKit",
+        "Vision",
+        "NaturalLanguage",
+        "CloudKit",
+        "WidgetKit",
+        "WatchKit",
+        "Accessibility",
+        "Combine",
+        "SwiftUI",
+        "ObjectiveC",
+        "XCTest",
+    }
+)
+
+
+def _extract_objc_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
+    """Extract ``#import`` and ``@import`` directives from Objective-C files.
+
+    Skips well-known Apple/system frameworks.
+    """
+    results: list[ImportInfo] = []
+    for node in root.children:
+        if node.type == "preproc_include":
+            # #import <Framework/Header.h> or #import "Header.h"
+            # In tree-sitter-objc, #import uses preproc_include with:
+            #   - system_lib_string for angle-bracket imports
+            #   - string_literal for quoted imports
+            for child in node.children:
+                if child.type == "system_lib_string":
+                    raw = child.text.decode("utf-8") if child.text else ""
+                    raw = raw.strip("<>")
+                    if not raw:
+                        continue
+                    # Check if it's a system framework (e.g. Foundation/Foundation.h)
+                    base = raw.split("/")[0] if "/" in raw else raw
+                    if base in _OBJC_SYSTEM_FRAMEWORKS:
+                        continue
+                    results.append(
+                        ImportInfo(
+                            file_path=file_path,
+                            line_number=node.start_point.row + 1,
+                            import_path=raw,
+                            resolved_ref_id=None,
+                        )
+                    )
+                elif child.type == "string_literal":
+                    # Quoted import: #import "MyHeader.h"
+                    # Extract text from string_content child
+                    for sub in child.children:
+                        if sub.type == "string_content":
+                            raw = sub.text.decode("utf-8") if sub.text else ""
+                            if raw:
+                                results.append(
+                                    ImportInfo(
+                                        file_path=file_path,
+                                        line_number=node.start_point.row + 1,
+                                        import_path=raw,
+                                        resolved_ref_id=None,
+                                    )
+                                )
+                            break
+
+        elif node.type == "module_import":
+            # @import Module; or @import Module.SubModule;
+            # Identifiers are direct children separated by dots
+            parts: list[str] = []
+            for child in node.children:
+                if child.type == "identifier":
+                    parts.append(child.text.decode("utf-8") if child.text else "")
+            if parts:
+                module_name = ".".join(parts)
+                root_module = parts[0]
+                if root_module not in _OBJC_SYSTEM_FRAMEWORKS:
+                    results.append(
+                        ImportInfo(
+                            file_path=file_path,
+                            line_number=node.start_point.row + 1,
+                            import_path=module_name,
+                            resolved_ref_id=None,
+                        )
+                    )
+
+    return results
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -422,6 +658,10 @@ def extract_imports(file_path: Path) -> list[ImportInfo]:
         return _extract_java_imports(root, file_str)
     if ext == ".swift":
         return _extract_swift_imports(root, file_str)
+    if ext in (".m", ".mm"):
+        return _extract_objc_imports(root, file_str)
+    if ext in (".c", ".h", ".cpp", ".hpp"):
+        return _extract_c_cpp_imports(root, file_str)
 
     return []
 
