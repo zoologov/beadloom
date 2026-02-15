@@ -141,16 +141,17 @@
 
 ```
 src/beadloom/
-├── cli/              # Click commands
-├── core/             # Business logic
-├── storage/          # SQLite
-├── parsers/          # tree-sitter
-├── mcp/              # MCP server
-└── models.py         # Dataclasses
+├── infrastructure/   # DB, reindex, cache, doctor, watcher
+├── context_oracle/   # BFS traversal, context bundles, search, why
+├── doc_sync/         # Sync engine, sync state, staleness detection
+├── onboarding/       # Bootstrap, presets, docs gen/polish, prime
+├── graph/            # YAML loader, linter, rule engine, import resolver
+├── services/         # cli.py (Click), mcp_server.py (MCP stdio)
+└── tui/              # Interactive terminal dashboard (Textual)
 tests/
-├── unit/
-├── integration/
-└── fixtures/
+├── conftest.py
+├── test_*.py         # Flat layout: test_cli_*, test_integration*, test_<module>
+└── ...
 ```
 
 ---
@@ -160,19 +161,25 @@ tests/
 ### 5.1 Layers
 
 ```
-CLI (Click + Rich)  →  Core Logic  →  Storage (SQLite)
-                           ↓
-                      Parsers (tree-sitter)
+Services (CLI, MCP, TUI) → Domains (5 packages) → Infrastructure (DB, reindex)
+                                    ↓
+                              tree-sitter parsers
 ```
+
+Dependencies point inward. Services depend on domains. Reverse is forbidden.
 
 ### 5.2 Components
 
-| Component | Description | Technology |
-|-----------|-------------|------------|
-| CLI | Commands for humans | Click + Rich |
-| Core | Business logic | Python stdlib |
-| Storage | Data storage | SQLite (WAL) |
-| MCP | Integration with agents | mcp-python (stdio) |
+| Component | Package | Technology |
+|-----------|---------|------------|
+| CLI | `services/cli.py` | Click + Rich |
+| MCP Server | `services/mcp_server.py` | mcp-python (stdio) |
+| TUI | `tui/` | Textual |
+| Context Oracle | `context_oracle/` | BFS, FTS5, caching |
+| Doc Sync | `doc_sync/` | Hash-based staleness |
+| Onboarding | `onboarding/` | Bootstrap, presets, docs gen |
+| Graph | `graph/` | YAML loader, linter, rules |
+| Infrastructure | `infrastructure/` | SQLite (WAL), reindex |
 
 ---
 
@@ -188,19 +195,14 @@ CLI (Click + Rich)  →  Core Logic  →  Storage (SQLite)
 ### 6.2 Python Interfaces
 
 ```python
-@dataclass(frozen=True)
-class Node:
-    ref_id: str
-    kind: str
-    summary: str
-    source: str | None = None
-
-@dataclass(frozen=True)
-class ContextBundle:
-    focus: Node
-    graph: SubGraph
-    text_chunks: list[Chunk]
-    code_symbols: list[CodeSymbol]
+# Nodes and edges are stored in SQLite, accessed via sql queries
+# Key functions:
+from beadloom.context_oracle.builder import build_context, bfs_subgraph
+from beadloom.infrastructure.db import open_db, create_schema
+from beadloom.infrastructure.reindex import incremental_reindex
+from beadloom.graph.loader import load_graph_yamls
+from beadloom.doc_sync.engine import check_sync
+from beadloom.graph.linter import lint_graph
 ```
 
 ---
@@ -291,9 +293,7 @@ CREATE TABLE edges (
 
 ### A. Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ANTHROPIC_API_KEY` | — | API key for sync-update --auto |
+Beadloom has no external API dependencies. All operations are local and deterministic.
 ```
 
 ---

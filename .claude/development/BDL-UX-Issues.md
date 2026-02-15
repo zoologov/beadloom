@@ -1,6 +1,6 @@
 # BDL UX Feedback Log
 
-> Collected during implementation of Plug & Play Onboarding.
+> Collected during development and dogfooding.
 > Format: `[DATE] [SEVERITY] Description — Context`
 
 ---
@@ -52,3 +52,11 @@
 20. [2026-02-14] [LOW] `.beadloom/README.md` MCP tools list was stale after BDL-014 — Listed 8 tools, missing `get_status` and `prime`. The file is generated once by BDL-013 but never auto-updated. Unlike AGENTS.md which has `generate_agents_md()`, README.md has no regeneration mechanism. Low severity because `.beadloom/README.md` is a static guide, not agent-facing. **→ Not planned (low severity, manual)**
 
 21. [2026-02-14] [HIGH] `beadloom reindex` (incremental) returns `Nodes: 0, Edges: 0` after `services.yml` edit — After changing the root node summary in `.beadloom/_graph/services.yml` (version string update), `beadloom reindex` (incremental, default mode) reported `Nodes: 0, Edges: 0, Docs: 1`. A `beadloom reindex --full` correctly showed `Nodes: 20, Edges: 36`. The incremental reindex appears to either skip graph YAML reloading entirely or fail silently when graph YAML changes. Users who edit `services.yml` and run `beadloom reindex` without `--full` will get a corrupted index. **Workaround:** always use `beadloom reindex --full` after editing graph YAML files. **→ Planned in STRATEGY-2 Phase 8.5.4 (v1.5)**
+
+22. [2026-02-15] [HIGH] `.claude/CLAUDE.md` references obsolete project phases — §0.1 listed `Phases: 0-Onboarding -> 1-Context Oracle -> 2-MCP -> 3-Doc Sync -> 4-Polish` (original RFC from v0.1-v0.2). Actual: Phases 1-6 completed, STRATEGY-2 starts at Phase 8. Also referenced `PRD.md`, `RFC.md` as project documentation instead of actual project docs (STRATEGY-2.md, BACKLOG.md, BDL-UX-Issues.md, CHANGELOG.md). **Root cause:** CLAUDE.md was written for the original single-epic workflow and never updated for DDD restructuring (v1.2) or STRATEGY-2. **FIXED** — Updated phases, docs references, added architecture line.
+
+23. [2026-02-15] [HIGH] `/templates` (templates.md) has completely wrong project structure — RFC template showed old flat layout (`cli/`, `core/`, `storage/`, `parsers/`, `mcp/`, `models.py`) instead of current DDD packages (`infrastructure/`, `context_oracle/`, `doc_sync/`, `onboarding/`, `graph/`, `services/`, `tui/`). Architecture layers diagram showed `CLI → Core Logic → Storage` instead of `Services → Domains → Infrastructure`. Python interfaces referenced non-existent `beadloom.models.Node` and `beadloom.models.ContextBundle`. Environment variables section listed `ANTHROPIC_API_KEY` for `sync-update --auto` which was **removed in v0.6.0**. **Root cause:** templates.md was written during v0.1 and never updated after DDD restructuring (v1.2) and LLM removal (v0.6). **FIXED** — Updated structure, layers, interfaces, removed dead env var.
+
+24. [2026-02-15] [HIGH] `/test` (test.md) has wrong import paths and test directory layout — Referenced `from beadloom.storage.database import Database` (doesn't exist; actual: `from beadloom.infrastructure.db import open_db, create_schema`), `from beadloom.cli.main import cli` (actual: `from beadloom.services.cli import main`), `from beadloom.models import Node, Edge` (no standalone models module). Also described `tests/unit/` and `tests/integration/` subdirectories that don't exist (tests are flat in `tests/`). **Root cause:** test.md was written during v0.1 and never updated for DDD restructuring (v1.2). **FIXED** — Updated all import paths, directory layout, factory pattern.
+
+25. [2026-02-15] [MEDIUM] `/review` (review.md) references old architecture layers — Said `CLI -> Core -> Storage` instead of `Services → Domains → Infrastructure`. **Root cause:** same DDD restructuring gap as #23-24. **FIXED** — Updated layer names and package list.

@@ -62,8 +62,9 @@ bd close <bead-id>
 - **Tests:** pytest + pytest-cov (>=80% coverage)
 - **Linter/formatter:** ruff (lint + format)
 - **Type checking:** mypy --strict
-- **Project documentation:** `.claude/development/PRD.md`, `.claude/development/RFC.md`
-- **Phases:** 0-Onboarding -> 1-Context Oracle -> 2-MCP -> 3-Doc Sync -> 4-Polish
+- **Project documentation:** `.claude/development/STRATEGY-2.md`, `.claude/development/BACKLOG.md`, `.claude/development/BDL-UX-Issues.md`, `CHANGELOG.md`
+- **Architecture:** DDD packages — `infrastructure/`, `context_oracle/`, `doc_sync/`, `onboarding/`, `graph/` + `services/` (CLI, MCP) + `tui/`
+- **Current version:** 1.4.0 (Phases 1-6 done; STRATEGY-2 starts at Phase 8)
 
 ---
 
