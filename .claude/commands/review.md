@@ -29,10 +29,10 @@ bd comments <bead-id>
 - [ ] Variable/function names are clear (snake_case)
 
 ### Architecture
-- [ ] Layer separation is respected: CLI -> Core -> Storage
-- [ ] Core does not depend on CLI/MCP
+- [ ] Layer separation is respected: Services → Domains → Infrastructure
+- [ ] Domains do not depend on Services (CLI/MCP/TUI)
 - [ ] No circular imports
-- [ ] Matches the structure from RFC.md
+- [ ] Matches the DDD package structure (`infrastructure/`, `context_oracle/`, `doc_sync/`, `onboarding/`, `graph/`)
 - [ ] `pathlib.Path` instead of `os.path`
 
 ### Typing

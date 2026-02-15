@@ -7,16 +7,17 @@
 
 ## Test structure
 
-Tests are in `tests/` (flat layout). Discover test files:
+Tests are in `tests/` (flat layout, no subdirectories). Discover test files:
 
 ```bash
 ls tests/test_*.py               # all test files
 beadloom ctx <domain> --json     # see source files → derive test file names
 ```
 
-Naming convention: `src/beadloom/<module>.py` → `tests/test_<module>.py`
-CLI tests: `tests/test_cli_<command>.py`
-Integration tests: `tests/test_integration*.py`
+Naming conventions:
+- Domain module: `src/beadloom/<domain>/<module>.py` → `tests/test_<module>.py`
+- CLI commands: `tests/test_cli_<command>.py`
+- Integration: `tests/test_integration*.py`
 
 ---
 
@@ -58,16 +59,16 @@ def test_get_context_returns_bundle_for_valid_ref_id(db: Database) -> None:
 
 ```python
 import pytest
+import sqlite3
 from pathlib import Path
-from beadloom.storage.database import Database
+from beadloom.infrastructure.db import open_db, create_schema
 
 @pytest.fixture
-def db(tmp_path: Path) -> Database:
+def db(tmp_path: Path) -> sqlite3.Connection:
     """Clean SQLite database for each test."""
-    db_path = tmp_path / "test.db"
-    database = Database(db_path)
-    database.init_schema()
-    return database
+    conn = open_db(tmp_path / "test.db")
+    create_schema(conn)
+    return conn
 
 @pytest.fixture
 def sample_graph(tmp_path: Path) -> Path:
@@ -136,14 +137,11 @@ uv run pytest
 # With coverage
 uv run pytest --cov=src/beadloom --cov-report=term-missing
 
-# Unit only
-uv run pytest tests/unit/
-
 # Integration only
-uv run pytest tests/integration/
+uv run pytest tests/test_integration*.py
 
 # Single file
-uv run pytest tests/unit/test_graph.py
+uv run pytest tests/test_graph_loader.py
 
 # With verbose
 uv run pytest -v
@@ -186,10 +184,10 @@ def test_sync_check_detects_stale(db: Database, monkeypatch: pytest.MonkeyPatch)
 def test_cli_ctx_outputs_json(tmp_path: Path) -> None:
     """Integration test for CLI via CliRunner."""
     from click.testing import CliRunner
-    from beadloom.cli.main import cli
+    from beadloom.services.cli import main
 
     runner = CliRunner()
-    result = runner.invoke(cli, ["ctx", "PROJ-123", "--json"])
+    result = runner.invoke(main, ["ctx", "PROJ-123", "--json"])
 
     assert result.exit_code == 0
     data = json.loads(result.output)
@@ -199,23 +197,31 @@ def test_cli_ctx_outputs_json(tmp_path: Path) -> None:
 ### Factory for test data
 
 ```python
-# tests/factories.py
-from beadloom.models import Node, Edge
+# tests/helpers.py — factory helpers for test data
+import sqlite3
 
-def make_node(
+def insert_node(
+    conn: sqlite3.Connection,
     ref_id: str = "test-node",
     kind: str = "feature",
     summary: str = "Test node",
-    **kwargs: Any,
-) -> Node:
-    return Node(ref_id=ref_id, kind=kind, summary=summary, **kwargs)
+    source: str | None = None,
+) -> None:
+    conn.execute(
+        "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+        (ref_id, kind, summary, source),
+    )
 
-def make_edge(
+def insert_edge(
+    conn: sqlite3.Connection,
     src: str = "a",
     dst: str = "b",
     kind: str = "part_of",
-) -> Edge:
-    return Edge(src_ref_id=src, dst_ref_id=dst, kind=kind)
+) -> None:
+    conn.execute(
+        "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES (?, ?, ?)",
+        (src, dst, kind),
+    )
 ```
 
 ---
