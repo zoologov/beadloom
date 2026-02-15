@@ -127,6 +127,25 @@ def _load_kotlin() -> LangConfig:
     )
 
 
+def _load_java() -> LangConfig:
+    """Java language configuration (tree-sitter-java)."""
+    import tree_sitter_java as ts_java
+
+    return LangConfig(
+        language=Language(ts_java.language()),
+        comment_types=frozenset({"line_comment", "block_comment"}),
+        symbol_types={
+            "class_declaration": "class",
+            "enum_declaration": "class",
+            "record_declaration": "class",
+            "interface_declaration": "type",
+            "annotation_type_declaration": "type",
+            "method_declaration": "function",
+        },
+        wrapper_types=frozenset(),
+    )
+
+
 # Extension -> loader function mapping.
 _EXTENSION_LOADERS: dict[str, Callable[[], LangConfig]] = {
     ".py": _load_python,
@@ -138,6 +157,7 @@ _EXTENSION_LOADERS: dict[str, Callable[[], LangConfig]] = {
     ".rs": _load_rust,
     ".kt": _load_kotlin,
     ".kts": _load_kotlin,
+    ".java": _load_java,
 }
 
 # Cache for loaded languages (None means "tried and failed / unsupported").
