@@ -50,6 +50,12 @@ _CODE_EXTENSIONS = frozenset(
         ".kts",
         ".java",
         ".swift",
+        ".m",
+        ".mm",
+        ".c",
+        ".h",
+        ".cpp",
+        ".hpp",
     }
 )
 

@@ -162,6 +162,59 @@ def _load_swift() -> LangConfig:
     )
 
 
+def _load_objc() -> LangConfig:
+    """Objective-C language configuration (tree-sitter-objc)."""
+    import tree_sitter_objc as ts_objc
+
+    return LangConfig(
+        language=Language(ts_objc.language()),
+        comment_types=frozenset({"comment"}),
+        symbol_types={
+            "class_interface": "class",
+            "class_implementation": "class",
+            "protocol_declaration": "type",
+            "function_definition": "function",
+        },
+        wrapper_types=frozenset(),
+    )
+
+
+def _load_c() -> LangConfig:
+    """C language configuration (tree-sitter-c)."""
+    import tree_sitter_c as ts_c
+
+    return LangConfig(
+        language=Language(ts_c.language()),
+        comment_types=frozenset({"comment"}),
+        symbol_types={
+            "function_definition": "function",
+            "struct_specifier": "class",
+            "enum_specifier": "class",
+            "type_definition": "type",
+        },
+        wrapper_types=frozenset(),
+    )
+
+
+def _load_cpp() -> LangConfig:
+    """C++ language configuration (tree-sitter-cpp)."""
+    import tree_sitter_cpp as ts_cpp
+
+    return LangConfig(
+        language=Language(ts_cpp.language()),
+        comment_types=frozenset({"comment"}),
+        symbol_types={
+            "function_definition": "function",
+            "class_specifier": "class",
+            "struct_specifier": "class",
+            "enum_specifier": "class",
+            "namespace_definition": "class",
+            "type_definition": "type",
+        },
+        wrapper_types=frozenset(),
+    )
+
+
 # Extension -> loader function mapping.
 _EXTENSION_LOADERS: dict[str, Callable[[], LangConfig]] = {
     ".py": _load_python,
@@ -175,6 +228,12 @@ _EXTENSION_LOADERS: dict[str, Callable[[], LangConfig]] = {
     ".kts": _load_kotlin,
     ".java": _load_java,
     ".swift": _load_swift,
+    ".m": _load_objc,
+    ".mm": _load_objc,
+    ".c": _load_c,
+    ".h": _load_c,
+    ".cpp": _load_cpp,
+    ".hpp": _load_cpp,
 }
 
 # Cache for loaded languages (None means "tried and failed / unsupported").
@@ -248,8 +307,11 @@ def parse_annotations(line: str) -> dict[str, str]:
 def _get_symbol_name(node: TSNode) -> str | None:
     """Extract symbol name from a definition node.
 
-    Handles standard ``name`` field, plus Go ``type_declaration``
-    where the name lives inside a ``type_spec`` child.
+    Handles standard ``name`` field, Go ``type_declaration``
+    where the name lives inside a ``type_spec`` child, and
+    C/C++ declarator chains (``function_definition``,
+    ``type_definition``) where the name is nested inside
+    ``declarator`` fields.
     """
     name_node = node.child_by_field_name("name")
     if name_node is not None:
@@ -261,6 +323,24 @@ def _get_symbol_name(node: TSNode) -> str | None:
             spec_name = child.child_by_field_name("name")
             if spec_name is not None:
                 return spec_name.text.decode("utf-8") if spec_name.text else None
+
+    # C/C++ declarator chain: function_definition -> declarator (function_declarator)
+    # -> declarator (identifier); type_definition -> declarator (type_identifier).
+    declarator = node.child_by_field_name("declarator")
+    if declarator is not None:
+        # For type_definition the declarator IS the type_identifier leaf.
+        if declarator.type == "type_identifier":
+            return declarator.text.decode("utf-8") if declarator.text else None
+        # For function_definition, drill into the inner declarator.
+        inner = declarator.child_by_field_name("declarator")
+        if inner is not None:
+            return inner.text.decode("utf-8") if inner.text else None
+
+    # Objective-C: class_interface, class_implementation, protocol_declaration
+    # have no ``name`` field.  The first ``identifier`` child is the name.
+    for child in node.children:
+        if child.type == "identifier":
+            return child.text.decode("utf-8") if child.text else None
 
     return None
 
