@@ -1,24 +1,24 @@
 # Beadloom: Backlog & Deferred Work
 
-> **Last updated:** 2026-02-11
-> **Current version:** 1.0.0
-> **Completed phases:** 1 (v0.3), 2 (v0.4), 3 (v0.5), 4 (v0.6), 5 (v0.7), 6 (v1.0)
+> **Last updated:** 2026-02-15
+> **Current version:** 1.4.0
+> **Completed phases:** 1 (v0.3), 2 (v0.4), 3 (v0.5), 4 (v0.6), 5 (v0.7), 6 (v1.0), Agent Prime (v1.4)
 
 ---
 
 ## 1. Documentation Debt (P0) — ALL DONE
 
-All items fixed in v1.0.0 release preparation.
+All items fixed in v1.0.0 release preparation. Counts updated in v1.4.0 doc audit.
 
 | # | Item | Status |
 |---|------|--------|
-| D1 | README.md: all 18 CLI commands listed | DONE |
-| D2 | README.md: all 8 MCP tools listed | DONE |
+| D1 | README.md: all 21 CLI commands listed | DONE (updated v1.4) |
+| D2 | README.md: all 10 MCP tools listed | DONE (updated v1.4) |
 | D3 | README.md: Architecture-as-Code section added | DONE |
-| D4 | README.ru.md fully synced with English version | DONE |
+| D4 | README.ru.md fully synced with English version | DONE (updated v1.4) |
 | D5 | STRATEGY.md updated — all phases marked DONE, version 1.0.0 | DONE |
 | D6 | pyproject.toml: classifier set to `5 - Production/Stable` | DONE |
-| D7 | CHANGELOG.md created covering v0.1.0 through v1.0.0 | DONE |
+| D7 | CHANGELOG.md created covering v0.1.0 through v1.4.0 | DONE (updated v1.4) |
 
 ---
 
@@ -26,37 +26,25 @@ All items fixed in v1.0.0 release preparation.
 
 Items planned in RFC-0005 but consciously deferred during implementation.
 
-| Item | RFC Section | Why Deferred | Effort | Blocker? |
-|------|-------------|--------------|--------|----------|
-| **sqlite-vec integration** | §3.6 Tier 2 | FTS5 covers 95% of search; sqlite-vec needs fastembed (~80MB), ONNX Runtime | M | No |
-| **`vec_nodes` table** | §3.6 | Depends on sqlite-vec; table schema designed but not created | S | sqlite-vec |
-| **Incremental graph YAML reindex** | §3.2 step 4 | Graph changes cascade (edges, docs, sync_state); full reindex is safe and fast | L | No |
-| **Atomic YAML writes** | §10 risk row | `update_node_in_yaml` writes directly; temp-file+rename not implemented | S | No |
-
-### sqlite-vec Integration Plan (when needed)
-
-```
-1. pip install beadloom[search]  → gets sqlite-vec + fastembed
-2. On reindex: detect fastembed → generate embeddings for nodes+chunks
-3. Store in vec_nodes table (float[384], BAAI/bge-small-en-v1.5)
-4. search.py: try vec similarity first → fall back to FTS5 → fall back to LIKE
-5. First run downloads model (~33MB) — show progress bar
-```
+| Item | RFC Section | Why Deferred | Effort | Status |
+|------|-------------|--------------|--------|--------|
+| **sqlite-vec integration** | §3.6 Tier 2 | FTS5 covers 95% at single-repo scale | M | **Planned in STRATEGY-2 Phase 13.3 (v2.0)** |
+| **`vec_nodes` table** | §3.6 | Depends on sqlite-vec | S | **Planned in STRATEGY-2 Phase 13.3 (v2.0)** |
+| **Incremental graph YAML reindex** | §3.2 step 4 | Graph changes cascade; full reindex is safe and fast | L | **Not planned** — UX #21 fix in Phase 8.5.4 addresses the specific bug |
+| **Atomic YAML writes** | §10 risk row | `update_node_in_yaml` writes directly; temp-file+rename not implemented | S | **Planned in STRATEGY-2 Phase 14.1 (cross-cutting)** |
 
 ---
 
 ## 3. Deferred from Phase 6 (v1.0)
 
-Items planned but scoped out of BDL-007 per CONTEXT.md §2.
-
-| Item | Why Deferred | Effort | Notes |
-|------|--------------|--------|-------|
-| **Multi-repo federated graphs** (6.5) | Design complexity; no multi-repo user yet | L | Git submodules? Remote refs? Federation protocol? |
-| **Plugin system** (6.6) | Premature; need real extension requests first | L | Entry points? Hook-based? Config-driven? |
-| **Web dashboard** (6.7) | Read-only Mermaid graph; TUI covers interactive use for now | L | Could be a simple static site generator |
-| **Rule severity levels / tags** | YAML deny/require covers 80%; warn vs error adds complexity | S | Useful once teams have many rules |
-| **DSL-based rules (OPA/Rego)** | YAML is simpler, PR-reviewable; no demand for complex logic | L | Revisit if YAML becomes limiting |
-| **Re-export / alias resolution** | Import resolver handles direct imports; re-exports are rare edge case | M | Needs cross-file analysis |
+| Item | Why Deferred | Effort | Status |
+|------|--------------|--------|--------|
+| **Multi-repo federated graphs** (6.5) | Design complexity | L | **Planned in STRATEGY-2 Phase 12.1 (v1.7) + Phase 13.1 (v2.0)** |
+| **Plugin system** (6.6) | Premature; need real extension requests | L | **Planned in STRATEGY-2 Phase 13.5 (v2.0)** |
+| **Web dashboard** (6.7) | TUI covers interactive use | L | **Deferred to STRATEGY-3** |
+| **Rule severity levels / tags** | YAML deny/require covers 80% | S | Severity: **Planned in Phase 10.4 (v1.6)**. Tags: **Deferred to STRATEGY-3** |
+| **DSL-based rules (OPA/Rego)** | YAML is simpler, PR-reviewable | L | **Not planned** — YAML sufficient |
+| **Re-export / alias resolution** | Import resolver handles direct imports | M | **Planned in STRATEGY-2 Phase 14.3 (cross-cutting)** |
 
 ---
 
@@ -78,76 +66,76 @@ Bugs found during self-testing on the beadloom repository. All fixed and pushed.
 ## 5. Phase 7: Messaging & Guides (post-dev)
 
 > **Source:** STRATEGY.md §2, Phase 7
+> **Status:** **Planned in STRATEGY-2 Phase 7 (parallel)**
 
-| # | Item | Type | Priority | Effort | Notes |
-|---|------|------|----------|--------|-------|
-| 7.1 | **Guide: "Onboarding a new developer in 1 day"** | docs | P1 | S | Step-by-step with beadloom ctx flow |
-| 7.2 | **Guide: "Multi-agent workflow with Beadloom + Claude Code"** | docs | P1 | S | MCP tools, constraints, context bundles |
-| 7.3 | **Guide: "Keeping docs alive in a fast-moving codebase"** | docs | P1 | S | Hooks, sync-check, CI gate |
-| 7.4 | **Quick demo GIF/asciicast** | docs | P1 | S | Record with asciinema or VHS |
-| 7.5 | **Update README.ru.md** for v1.0 features | docs | P1 | S | Overlaps with D4 above |
+| # | Item | Type | Priority | Effort | Status |
+|---|------|------|----------|--------|--------|
+| 7.1 | **Guide: "Onboarding a new developer in 1 day"** | docs | P1 | S | Planned in STRATEGY-2 |
+| 7.2 | **Guide: "Multi-agent workflow with Beadloom + Claude Code"** | docs | P1 | S | Planned in STRATEGY-2 |
+| 7.3 | **Guide: "Keeping docs alive in a fast-moving codebase"** | docs | P1 | S | Planned in STRATEGY-2 |
+| 7.4 | **Quick demo GIF/asciicast** | docs | P1 | S | Planned in STRATEGY-2 |
+| 7.5 | **Update README.ru.md** for v1.4+ features | docs | P1 | S | Planned in STRATEGY-2 |
 
 ---
 
-## 6. Future Feature Ideas (for STRATEGY-2)
-
-Organized by theme. No decisions made — these are candidates for evaluation.
+## 6. Future Feature Ideas — Status after STRATEGY-2
 
 ### 6a. Architecture as Code — Enhancements
 
-| Item | Description | Effort | Value |
-|------|-------------|--------|-------|
-| Rule severity levels | `warn` vs `error` per rule; `--strict` only fails on errors | S | High for adoption |
-| Rule tags / categories | Group rules (`security`, `perf`, `style`); filter in lint | S | High for large teams |
-| Autofix suggestions | Lint output includes "move import to X" or "add node Y" | M | Nice DX |
-| Re-export resolution | Track `from X import Y` chains through re-exports | M | Correctness |
-| More languages | Java, C#, C++ import resolution (tree-sitter grammars exist) | M per lang | Reach |
+| Item | Effort | Status |
+|------|--------|--------|
+| Rule severity levels | S | **Planned: Phase 10.4 (v1.6)** |
+| Rule tags / categories | S | **Deferred to STRATEGY-3** |
+| Autofix suggestions | M | **Not planned** — low ROI |
+| Re-export resolution | M | **Planned: Phase 14.3 (cross-cutting)** |
+| More languages (Java, Kotlin, Swift, C/C++) | M/lang | **Planned: Phase 9 (v1.5)** — elevated to P0 |
+| C# | M | **Deferred to STRATEGY-3** — no dogfood project |
 
 ### 6b. Scale & Federation
 
-| Item | Description | Effort | Value |
-|------|-------------|--------|-------|
-| Multi-repo graphs | Federated graphs across repositories | L | Enterprise |
-| Remote graph refs | Reference nodes from external repos (`@org/other-repo:AUTH-001`) | L | Enterprise |
-| Monorepo workspace support | Multiple `_graph/` roots in one repo | M | Monorepo users |
+| Item | Effort | Status |
+|------|--------|--------|
+| Multi-repo graphs | L | **Planned: Phase 12.1 (v1.7) + Phase 13.1 (v2.0)** |
+| Remote graph refs | L | **Planned: Phase 12.1 (v1.7)** |
+| Monorepo workspace support | M | **Planned: Phase 12.4 (v1.7)** |
 
 ### 6c. Visualization & DX
 
-| Item | Description | Effort | Value |
-|------|-------------|--------|-------|
-| Web dashboard | Static site with interactive graph (D3/Cytoscape) | L | Sharing |
-| VS Code extension | Graph overlay, node navigation, lint diagnostics | L | Adoption |
-| TUI graph view | Visual graph panel in Textual TUI (currently only list + detail) | M | Power users |
-| `beadloom export` | Export graph to DOT, D2, Mermaid file, JSON | S | Interop |
-| ASCII graph in terminal | `beadloom graph --ascii` for environments without Mermaid renderer | S | DX |
+| Item | Effort | Status |
+|------|--------|--------|
+| Web dashboard | L | **Deferred to STRATEGY-3** |
+| VS Code extension | L | **Deferred to STRATEGY-3** |
+| TUI graph view | M | **Deferred to STRATEGY-3** |
+| `beadloom export` | S | **Planned: Phase 12.3 (v1.7)** |
+| ASCII graph in terminal | S | **Deferred to STRATEGY-3** |
 
 ### 6d. Integration & Ecosystem
 
-| Item | Description | Effort | Value |
-|------|-------------|--------|-------|
-| GitHub Actions marketplace action | `uses: beadloom/lint-action@v1` | M | Adoption |
-| pre-commit framework hook | `.pre-commit-config.yaml` integration | S | Adoption |
-| More MCP tools | Expose `lint`, `diff`, `why` via MCP | M | Agent DX |
-| Slack / Discord notifications | Stale doc alerts, lint failures | M | Team workflow |
-| GitLab / Bitbucket CI recipes | Extend beyond GitHub Actions | S | Reach |
+| Item | Effort | Status |
+|------|--------|--------|
+| GitHub Actions marketplace action | M | **Deferred to STRATEGY-3** |
+| pre-commit framework hook | S | **Deferred to STRATEGY-3** |
+| More MCP tools (lint, diff, why) | M | **Planned: Phase 11.1-11.3 (v1.6)** — elevated to P0-P1 |
+| Slack / Discord notifications | M | **Not planned** — not our zone |
+| GitLab / Bitbucket CI recipes | S | **Deferred to STRATEGY-3** |
 
 ### 6e. Search & Intelligence
 
-| Item | Description | Effort | Value |
-|------|-------------|--------|-------|
-| sqlite-vec semantic search | Vector similarity over node+chunk embeddings | M | Fuzzy search |
-| Symbol-level search | Find functions by signature, not just name | M | Code navigation |
-| "Did you mean?" suggestions | Fuzzy matching on ref_id typos | S | DX |
-| Cross-reference report | "Which features touch this file?" reverse lookup | S | Impact analysis |
+| Item | Effort | Status |
+|------|--------|--------|
+| sqlite-vec semantic search | M | **Planned: Phase 13.3-13.4 (v2.0)** — tied to multi-repo scale |
+| Symbol-level search | M | **Deferred to STRATEGY-3** |
+| "Did you mean?" suggestions | S | **Deferred to STRATEGY-3** — Levenshtein already in MCP |
+| Cross-reference report | S | **Not planned** — covered by `beadloom why` |
 
 ### 6f. Robustness & Quality
 
-| Item | Description | Effort | Value |
-|------|-------------|--------|-------|
-| Performance benchmarks | Automated benchmark suite, track regressions | M | Confidence |
-| Atomic YAML writes | temp-file + rename for crash safety | S | Reliability |
-| Schema migrations | Versioned SQLite schema with forward migration | M | Upgrades |
-| Property-based testing | Hypothesis for graph/reindex edge cases | M | Correctness |
+| Item | Effort | Status |
+|------|--------|--------|
+| Performance benchmarks | M | **Planned: Phase 14.4 (cross-cutting)** |
+| Atomic YAML writes | S | **Planned: Phase 14.1 (cross-cutting)** |
+| Schema migrations | M | **Planned: Phase 14.2 (cross-cutting)** |
+| Property-based testing | M | **Planned: Phase 14.5 (cross-cutting)** |
 
 ---
 
@@ -160,16 +148,22 @@ Organized by theme. No decisions made — these are candidates for evaluation.
 | TUI framework? | **Textual** — full-featured, pure-Python, async | Phase 5 |
 | AaC rule engine? | **YAML deny/require** — simple, PR-reviewable | Phase 6 |
 | AaC scope? | **Import boundaries** — deny/require cross-boundary imports | Phase 6 |
+| Naming? | **Architecture Graph** — renamed in BDL-013 | v1.2 |
+| Semantic layer: when? | **v2.0** — tied to multi-repo scale | STRATEGY-2 rev2 |
+| Language order? | **Kotlin → Java → Swift → C/C++ → Obj-C** — by dogfood priority | STRATEGY-2 rev2 |
+| Routes storage? | **JSON in `nodes.extra`** | STRATEGY-2 rev2 |
+| Git analysis depth? | **6 months, configurable** | STRATEGY-2 rev2 |
+| Framework detection approach? | **File markers + import scan side-effect** | STRATEGY-2 rev2 |
 
 ### Still Open
 
 | # | Question | Context |
 |---|----------|---------|
-| 1 | **Naming:** "Architecture Graph" (decided) | Renamed codebase-wide in BDL-013 D13 |
-| 2 | **Multi-repo:** Git submodules? Remote graph refs? Federation protocol? | No design yet |
-| 3 | **Plugin system:** Entry points? Hook-based? Config-driven? | No design yet |
-| 4 | **Web dashboard:** Static site generator? SPA? Server? | Trade-offs differ for sharing vs interactivity |
-| 5 | **Version strategy post-1.0:** SemVer strict? Calendar versioning? | Affects schema migration story |
+| 1 | **Multi-repo refs format?** | `@org/repo:REF_ID`? Config in `config.yml`? Git submodules? |
+| 2 | **Federation protocol?** | Shared SQLite? JSON API? File-based? |
+| 3 | **Plugin system format?** | Entry points? Hook-based? Config-driven? |
+| 4 | **Embedding model for code?** | Start with bge-small, switch to code-specific if needed? |
+| 5 | **Version strategy post-1.0?** | SemVer strict? Affects schema migration story |
 
 ---
 
@@ -183,12 +177,14 @@ Organized by theme. No decisions made — these are candidates for evaluation.
 | 4 — Performance | v0.6 | Done | 464 | L1+L2 cache, incremental reindex, write tools, FTS5 search |
 | 5 — DX | v0.7 | Done | 541 | TUI, graph diff, why, watch |
 | 6 — AaC | v1.0 | Done | 653 | Lint, rules engine, import resolver, agent constraints |
-| 7 — Guides | post | — | — | Use-case guides, demos |
+| Onboarding QA | v1.3.1 | Done | 811 | 10 bug-fixes from dogfooding |
+| Agent Prime | v1.4.0 | Done | 847 | Prime CLI/MCP, setup-rules, AGENTS.md v2, doc audit |
+| 7 — Guides | planned | — | — | Use-case guides, demos |
 
-### Current Totals (v1.0.0)
+### Current Totals (v1.4.0)
 
-- **18 CLI commands**, **8 MCP tools**
-- **653 tests**, 0 TODO/FIXME in source
-- **21 modules** + TUI subpackage
-- **4 languages** supported in import resolver (Python, TS/JS, Go, Rust)
+- **21 CLI commands**, **10 MCP tools**
+- **847 tests**, 0 TODO/FIXME in source
+- **35 modules** across 7 domain packages
+- **4 languages** in import resolver (Python, TS/JS, Go, Rust) — expanding to 9 in v1.5
 - Self-tested: beadloom lint on beadloom = 0 violations
