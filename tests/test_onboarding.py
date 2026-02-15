@@ -194,6 +194,17 @@ class TestGenerateAgentsMd:
         assert "beadloom reindex" in content
         assert "beadloom lint --strict" in content
 
+    def test_contains_key_cli_commands(self, tmp_path: Path) -> None:
+        """AGENTS.md must reference key beadloom CLI commands."""
+        generate_agents_md(tmp_path)
+        content = (tmp_path / ".beadloom" / "AGENTS.md").read_text()
+        assert "beadloom ctx" in content
+        assert "beadloom search" in content
+        assert "beadloom sync-check" in content
+        assert "beadloom lint" in content
+        assert "beadloom reindex" in content
+        assert "beadloom prime" in content
+
     def test_idempotent(self, tmp_path: Path) -> None:
         generate_agents_md(tmp_path)
         generate_agents_md(tmp_path)
@@ -1071,7 +1082,7 @@ class TestGenerateRules:
     """Tests for generate_rules() auto-rules generation."""
 
     def test_domains_only(self, tmp_path: Path) -> None:
-        """Nodes with domain kinds produce exactly 1 rule (domain-needs-parent)."""
+        """Nodes with domain + service kinds produce 2 rules."""
         from beadloom.onboarding.scanner import generate_rules
 
         nodes = [
@@ -1091,20 +1102,22 @@ class TestGenerateRules:
         rules_path = tmp_path / "rules.yml"
         count = generate_rules(nodes, edges, "myproject", rules_path)
 
-        assert count == 1
+        assert count == 2
         assert rules_path.exists()
 
         data = yaml.safe_load(rules_path.read_text())
         assert data["version"] == 1
-        assert len(data["rules"]) == 1
-        assert data["rules"][0]["name"] == "domain-needs-parent"
-        assert data["rules"][0]["require"]["for"] == {"kind": "domain"}
+        assert len(data["rules"]) == 2
+        domain_rule = next(r for r in data["rules"] if r["name"] == "domain-needs-parent")
+        assert domain_rule["require"]["for"] == {"kind": "domain"}
         # Empty matcher: matches any node (no false positives on hierarchical graphs)
-        assert data["rules"][0]["require"]["has_edge_to"] == {}
-        assert data["rules"][0]["require"]["edge_kind"] == "part_of"
+        assert domain_rule["require"]["has_edge_to"] == {}
+        assert domain_rule["require"]["edge_kind"] == "part_of"
+        svc_rule = next(r for r in data["rules"] if r["name"] == "service-needs-parent")
+        assert svc_rule["require"]["for"] == {"kind": "service"}
 
     def test_domains_and_features(self, tmp_path: Path) -> None:
-        """Domain + feature nodes produce 2 rules."""
+        """Domain + feature + service nodes produce 3 rules."""
         from beadloom.onboarding.scanner import generate_rules
 
         nodes = [
@@ -1124,17 +1137,17 @@ class TestGenerateRules:
         rules_path = tmp_path / "rules.yml"
         count = generate_rules(nodes, edges, "myproj", rules_path)
 
-        assert count == 2
+        assert count == 3
         data = yaml.safe_load(rules_path.read_text())
         rule_names = {r["name"] for r in data["rules"]}
         assert "domain-needs-parent" in rule_names
         assert "feature-needs-domain" in rule_names
+        assert "service-needs-parent" in rule_names
 
     def test_all_three_kinds(self, tmp_path: Path) -> None:
-        """Root (service) + domain + feature + extra service node produce 2 rules.
+        """Root (service) + domain + feature + extra service node produce 3 rules.
 
-        service-needs-parent was removed to avoid false positives on the root
-        node which has kind=service but no outgoing part_of edges.
+        service-needs-parent validates every service has a part_of edge to a parent.
         """
         from beadloom.onboarding.scanner import generate_rules
 
@@ -1162,12 +1175,12 @@ class TestGenerateRules:
         rules_path = tmp_path / "rules.yml"
         count = generate_rules(nodes, edges, "myproj", rules_path)
 
-        assert count == 2
+        assert count == 3
         data = yaml.safe_load(rules_path.read_text())
         rule_names = {r["name"] for r in data["rules"]}
         assert "domain-needs-parent" in rule_names
         assert "feature-needs-domain" in rule_names
-        assert "service-needs-parent" not in rule_names
+        assert "service-needs-parent" in rule_names
 
     def test_empty_graph(self, tmp_path: Path) -> None:
         """Empty nodes list returns 0 and does not create the file."""
@@ -1180,7 +1193,7 @@ class TestGenerateRules:
         assert not rules_path.exists()
 
     def test_service_only_root(self, tmp_path: Path) -> None:
-        """Only a root service node (no other services/domains/features) generates 0 rules."""
+        """Only a root service node generates 1 rule (service-needs-parent)."""
         from beadloom.onboarding.scanner import generate_rules
 
         nodes = [
@@ -1190,8 +1203,10 @@ class TestGenerateRules:
         rules_path = tmp_path / "rules.yml"
         count = generate_rules(nodes, edges, "myproj", rules_path)
 
-        assert count == 0
-        assert not rules_path.exists()
+        assert count == 1
+        assert rules_path.exists()
+        data = yaml.safe_load(rules_path.read_text())
+        assert data["rules"][0]["name"] == "service-needs-parent"
 
     def test_idempotent_skip_existing(self, tmp_path: Path) -> None:
         """generate_rules overwrites if called directly (idempotency is in bootstrap_project)."""
@@ -1209,10 +1224,12 @@ class TestGenerateRules:
         ]
         count = generate_rules(nodes, edges, "myproj", rules_path)
 
-        assert count == 1
+        assert count == 2
         data = yaml.safe_load(rules_path.read_text())
-        assert len(data["rules"]) == 1
-        assert data["rules"][0]["name"] == "domain-needs-parent"
+        assert len(data["rules"]) == 2
+        rule_names = {r["name"] for r in data["rules"]}
+        assert "domain-needs-parent" in rule_names
+        assert "service-needs-parent" in rule_names
 
     def test_root_detection_from_edges(self, tmp_path: Path) -> None:
         """Root is detected correctly; domain rule uses empty matcher."""
@@ -1258,7 +1275,8 @@ class TestGenerateRules:
         data = yaml.safe_load(rules_path.read_text())
         assert data["version"] == 1
         assert isinstance(data["rules"], list)
-        assert len(data["rules"]) == 2  # domain-needs-parent + feature-needs-domain
+        # domain-needs-parent + feature-needs-domain + service-needs-parent
+        assert len(data["rules"]) == 3
 
         for rule in data["rules"]:
             assert "name" in rule
@@ -1294,7 +1312,7 @@ class TestGenerateRules:
 
         # Must not raise — validates that has_edge_to: {} is accepted.
         rules = load_rules(rules_path)
-        assert len(rules) == 2
+        assert len(rules) == 3
         for rule in rules:
             assert isinstance(rule, RequireRule)
 
@@ -1320,7 +1338,7 @@ class TestGenerateRules:
         assert domain_rule["require"]["has_edge_to"] == {}
 
     def test_hierarchical_domains_no_violations(self, tmp_path: Path) -> None:
-        """Nested domains with part_of edges to parents produce 0 violations."""
+        """Nested domains with part_of edges to parents produce 0 domain violations."""
         from beadloom.graph.rule_engine import RequireRule, evaluate_require_rules
         from beadloom.infrastructure.db import create_schema, open_db
         from beadloom.onboarding.scanner import generate_rules
@@ -1358,16 +1376,21 @@ class TestGenerateRules:
         from beadloom.graph.rule_engine import load_rules
 
         loaded_rules = load_rules(rules_path)
-        require_rules = [r for r in loaded_rules if isinstance(r, RequireRule)]
+        # Only evaluate domain rules to verify hierarchical domains pass.
+        domain_rules = [
+            r
+            for r in loaded_rules
+            if isinstance(r, RequireRule) and r.name != "service-needs-parent"
+        ]
 
-        violations = evaluate_require_rules(conn, require_rules)
+        violations = evaluate_require_rules(conn, domain_rules)
         # auth -> myproj (part_of) and auth-sub -> auth (part_of) both satisfy
         # the "domain must have a part_of edge to any node" rule.
         assert len(violations) == 0
         conn.close()
 
-    def test_service_needs_parent_not_generated(self, tmp_path: Path) -> None:
-        """service-needs-parent rule is no longer generated."""
+    def test_service_needs_parent_generated(self, tmp_path: Path) -> None:
+        """service-needs-parent rule is generated when service nodes exist."""
         from beadloom.onboarding.scanner import generate_rules
 
         nodes = [
@@ -1384,7 +1407,7 @@ class TestGenerateRules:
 
         data = yaml.safe_load(rules_path.read_text())
         rule_names = {r["name"] for r in data["rules"]}
-        assert "service-needs-parent" not in rule_names
+        assert "service-needs-parent" in rule_names
 
 
 # ---------------------------------------------------------------------------

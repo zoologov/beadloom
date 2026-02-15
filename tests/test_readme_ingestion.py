@@ -108,9 +108,7 @@ class TestIngestReadme:
         """_ingest_readme reads docs/README.md when no root README.md exists."""
         docs = tmp_path / "docs"
         docs.mkdir()
-        (docs / "README.md").write_text(
-            "# Docs\n\nDocumentation for the project.\n"
-        )
+        (docs / "README.md").write_text("# Docs\n\nDocumentation for the project.\n")
         from beadloom.onboarding.scanner import _ingest_readme
 
         result = _ingest_readme(tmp_path)
@@ -120,9 +118,7 @@ class TestIngestReadme:
         """Architecture notes are truncated to 500 chars of non-heading content."""
         (tmp_path / "README.md").write_text("# Project\n\nA project.\n")
         long_content = "x" * 600
-        (tmp_path / "ARCHITECTURE.md").write_text(
-            f"# Architecture\n\n{long_content}\n"
-        )
+        (tmp_path / "ARCHITECTURE.md").write_text(f"# Architecture\n\n{long_content}\n")
         from beadloom.onboarding.scanner import _ingest_readme
 
         result = _ingest_readme(tmp_path)
@@ -130,9 +126,7 @@ class TestIngestReadme:
 
     def test_tech_stack_uses_word_boundaries(self, tmp_path: Path) -> None:
         """Tech keywords are matched with word boundaries, not substrings."""
-        (tmp_path / "README.md").write_text(
-            "# Project\n\nExpression handling library.\n"
-        )
+        (tmp_path / "README.md").write_text("# Project\n\nExpression handling library.\n")
         from beadloom.onboarding.scanner import _ingest_readme
 
         result = _ingest_readme(tmp_path)
@@ -167,9 +161,7 @@ class TestBootstrapReadmeIntegration:
 
     def test_bootstrap_uses_readme_description_in_summary(self, tmp_path: Path) -> None:
         """bootstrap_project updates root node summary with readme description."""
-        (tmp_path / "README.md").write_text(
-            "# Test Project\n\nA test project for unit testing.\n"
-        )
+        (tmp_path / "README.md").write_text("# Test Project\n\nA test project for unit testing.\n")
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "testproj"\n')
         _make_src_tree(tmp_path)
 
@@ -183,9 +175,7 @@ class TestBootstrapReadmeIntegration:
     def test_bootstrap_truncates_long_description(self, tmp_path: Path) -> None:
         """Root node summary is truncated to 100 chars when description is long."""
         long_desc = "A" * 120
-        (tmp_path / "README.md").write_text(
-            f"# Test\n\n{long_desc}\n"
-        )
+        (tmp_path / "README.md").write_text(f"# Test\n\n{long_desc}\n")
         _make_src_tree(tmp_path)
 
         from beadloom.onboarding.scanner import bootstrap_project
@@ -225,9 +215,7 @@ class TestBootstrapReadmeIntegration:
 
     def test_bootstrap_readme_data_in_yaml(self, tmp_path: Path) -> None:
         """README data is persisted in the services.yml YAML file."""
-        (tmp_path / "README.md").write_text(
-            "# Project\n\nA cool project using Python.\n"
-        )
+        (tmp_path / "README.md").write_text("# Project\n\nA cool project using Python.\n")
         _make_src_tree(tmp_path)
 
         from beadloom.onboarding.scanner import bootstrap_project

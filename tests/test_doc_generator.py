@@ -528,9 +528,12 @@ class TestPolishDataSQLiteEdges:
         # Create SQLite DB with depends_on edges (simulates post-reindex).
         db_path = _create_sqlite_db(tmp_path)
         _insert_nodes(db_path, graph_data["nodes"])
-        _insert_edges(db_path, [
-            ("auth", "billing", "depends_on"),
-        ])
+        _insert_edges(
+            db_path,
+            [
+                ("auth", "billing", "depends_on"),
+            ],
+        )
 
         result = generate_polish_data(tmp_path, ref_id="auth")
         auth_node = result["nodes"][0]
@@ -555,9 +558,12 @@ class TestPolishDataSQLiteEdges:
 
         db_path = _create_sqlite_db(tmp_path)
         _insert_nodes(db_path, graph_data["nodes"])
-        _insert_edges(db_path, [
-            ("billing", "auth", "depends_on"),
-        ])
+        _insert_edges(
+            db_path,
+            [
+                ("billing", "auth", "depends_on"),
+            ],
+        )
 
         result = generate_polish_data(tmp_path, ref_id="auth")
         auth_node = result["nodes"][0]
@@ -584,9 +590,12 @@ class TestPolishDataSQLiteEdges:
         # Same edge in SQLite.
         db_path = _create_sqlite_db(tmp_path)
         _insert_nodes(db_path, graph_data["nodes"])
-        _insert_edges(db_path, [
-            ("auth", "billing", "depends_on"),
-        ])
+        _insert_edges(
+            db_path,
+            [
+                ("auth", "billing", "depends_on"),
+            ],
+        )
 
         result = generate_polish_data(tmp_path, ref_id="auth")
         auth_node = result["nodes"][0]

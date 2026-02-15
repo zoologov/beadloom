@@ -143,7 +143,7 @@ def check_sync(
             status = "stale"
 
         # Symbol-level drift detection.
-        stored_symbols_hash = row["symbols_hash"] if "symbols_hash" in row.keys() else ""
+        stored_symbols_hash = row["symbols_hash"] if "symbols_hash" in row.keys() else ""  # noqa: SIM118 - sqlite3.Row `in` checks values, not keys
         if stored_symbols_hash:
             current_symbols_hash = _compute_symbols_hash(conn, ref_id)
             if current_symbols_hash != stored_symbols_hash and status == "ok":
