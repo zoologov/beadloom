@@ -112,6 +112,21 @@ def _load_rust() -> LangConfig:
     )
 
 
+def _load_kotlin() -> LangConfig:
+    import tree_sitter_kotlin as tskotlin
+
+    return LangConfig(
+        language=Language(tskotlin.language()),
+        comment_types=frozenset({"line_comment", "block_comment"}),
+        symbol_types={
+            "class_declaration": "class",
+            "object_declaration": "class",
+            "function_declaration": "function",
+        },
+        wrapper_types=frozenset(),
+    )
+
+
 # Extension -> loader function mapping.
 _EXTENSION_LOADERS: dict[str, Callable[[], LangConfig]] = {
     ".py": _load_python,
@@ -121,6 +136,8 @@ _EXTENSION_LOADERS: dict[str, Callable[[], LangConfig]] = {
     ".jsx": _load_tsx,
     ".go": _load_go,
     ".rs": _load_rust,
+    ".kt": _load_kotlin,
+    ".kts": _load_kotlin,
 }
 
 # Cache for loaded languages (None means "tried and failed / unsupported").

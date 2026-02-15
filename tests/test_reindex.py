@@ -603,6 +603,213 @@ class TestIncrementalReindex:
         assert "src/a.py" in paths
         conn.close()
 
+    def test_graph_summary_edit_detected_by_incremental(
+        self,
+        project: Path,
+        db_path: Path,
+    ) -> None:
+        """UX #21 regression: editing a node summary in graph YAML must trigger
+        a full reindex so that the updated summary appears in the DB and the
+        result reports non-zero node/edge counts.
+        """
+        graph_dir = project / ".beadloom" / "_graph"
+        (graph_dir / "services.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: svc-api\n"
+            "    kind: service\n"
+            '    summary: "API Gateway v1.0"\n'
+            "  - ref_id: svc-auth\n"
+            "    kind: service\n"
+            '    summary: "Auth Service"\n'
+            "edges:\n"
+            "  - src: svc-api\n"
+            "    dst: svc-auth\n"
+            "    kind: depends_on\n"
+        )
+        (project / "docs" / "readme.md").write_text("## Hello\n\nWorld.\n")
+
+        # Baseline: full reindex via first incremental call (empty file_index).
+        r1 = incremental_reindex(project)
+        assert r1.nodes_loaded == 2
+        assert r1.edges_loaded == 1
+
+        # Edit ONLY the graph summary (version bump).
+        (graph_dir / "services.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: svc-api\n"
+            "    kind: service\n"
+            '    summary: "API Gateway v2.0"\n'
+            "  - ref_id: svc-auth\n"
+            "    kind: service\n"
+            '    summary: "Auth Service"\n'
+            "edges:\n"
+            "  - src: svc-api\n"
+            "    dst: svc-auth\n"
+            "    kind: depends_on\n"
+        )
+
+        # Incremental reindex MUST detect the graph change.
+        r2 = incremental_reindex(project)
+        assert r2.nodes_loaded == 2, f"Expected 2 nodes after graph edit, got {r2.nodes_loaded}"
+        assert r2.edges_loaded == 1
+
+        # Verify the updated summary is in the DB.
+        conn = open_db(db_path)
+        row = conn.execute("SELECT summary FROM nodes WHERE ref_id = ?", ("svc-api",)).fetchone()
+        assert row is not None
+        assert "v2.0" in row["summary"]
+        conn.close()
+
+    def test_graph_yaml_added_triggers_full_reindex(
+        self,
+        project: Path,
+        db_path: Path,
+    ) -> None:
+        """Adding a new graph YAML file must trigger full reindex."""
+        graph_dir = project / ".beadloom" / "_graph"
+        (graph_dir / "base.yml").write_text(
+            "nodes:\n  - ref_id: A\n    kind: domain\n    summary: A\n"
+        )
+        incremental_reindex(project)
+
+        # Add a second graph YAML.
+        (graph_dir / "extra.yml").write_text(
+            "nodes:\n  - ref_id: B\n    kind: domain\n    summary: B\n"
+        )
+        result = incremental_reindex(project)
+
+        assert result.nodes_loaded == 2
+        conn = open_db(db_path)
+        refs = {r["ref_id"] for r in conn.execute("SELECT ref_id FROM nodes").fetchall()}
+        assert refs == {"A", "B"}
+        conn.close()
+
+    def test_graph_yaml_deleted_triggers_full_reindex(
+        self,
+        project: Path,
+        db_path: Path,
+    ) -> None:
+        """Deleting a graph YAML file must trigger full reindex."""
+        graph_dir = project / ".beadloom" / "_graph"
+        (graph_dir / "a.yml").write_text(
+            "nodes:\n  - ref_id: A\n    kind: domain\n    summary: A\n"
+        )
+        (graph_dir / "b.yml").write_text(
+            "nodes:\n  - ref_id: B\n    kind: domain\n    summary: B\n"
+        )
+        incremental_reindex(project)
+
+        conn = open_db(db_path)
+        assert conn.execute("SELECT count(*) FROM nodes").fetchone()[0] == 2
+        conn.close()
+
+        # Delete one graph file.
+        (graph_dir / "b.yml").unlink()
+        result = incremental_reindex(project)
+
+        assert result.nodes_loaded == 1
+        conn = open_db(db_path)
+        refs = {r["ref_id"] for r in conn.execute("SELECT ref_id FROM nodes").fetchall()}
+        assert refs == {"A"}
+        conn.close()
+
+    def test_graph_change_with_concurrent_doc_change(
+        self,
+        project: Path,
+        db_path: Path,
+    ) -> None:
+        """When both graph YAML and a doc change, graph change takes priority
+        and full reindex runs (not incremental doc-only path).
+        """
+        graph_dir = project / ".beadloom" / "_graph"
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n  - ref_id: N1\n    kind: domain\n    summary: N1\n"
+        )
+        doc = project / "docs" / "spec.md"
+        doc.write_text("## Spec v1\n\nOriginal.\n")
+        incremental_reindex(project)
+
+        # Change both graph and doc.
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: N1\n    kind: domain\n    summary: N1 updated\n"
+            "  - ref_id: N2\n    kind: domain\n    summary: N2 new\n"
+        )
+        doc.write_text("## Spec v2\n\nUpdated.\n")
+
+        result = incremental_reindex(project)
+
+        # Full reindex should have run — nodes_loaded reflects graph reload.
+        assert result.nodes_loaded == 2
+        assert result.docs_indexed == 1
+
+
+# ---------------------------------------------------------------------------
+# _graph_yaml_changed
+# ---------------------------------------------------------------------------
+
+
+class TestGraphYamlChanged:
+    """Unit tests for the _graph_yaml_changed helper."""
+
+    def test_no_graph_files_returns_false(self) -> None:
+        from beadloom.infrastructure.reindex import _graph_yaml_changed
+
+        current: dict[str, tuple[str, str]] = {
+            "docs/a.md": ("abc", "doc"),
+            "src/b.py": ("def", "code"),
+        }
+        stored: dict[str, tuple[str, str]] = {
+            "docs/a.md": ("abc", "doc"),
+            "src/b.py": ("def", "code"),
+        }
+        assert _graph_yaml_changed(current, stored) is False
+
+    def test_same_graph_returns_false(self) -> None:
+        from beadloom.infrastructure.reindex import _graph_yaml_changed
+
+        current: dict[str, tuple[str, str]] = {
+            ".beadloom/_graph/g.yml": ("aaa", "graph"),
+            "docs/a.md": ("bbb", "doc"),
+        }
+        stored: dict[str, tuple[str, str]] = {
+            ".beadloom/_graph/g.yml": ("aaa", "graph"),
+            "docs/a.md": ("bbb", "doc"),
+        }
+        assert _graph_yaml_changed(current, stored) is False
+
+    def test_changed_hash_returns_true(self) -> None:
+        from beadloom.infrastructure.reindex import _graph_yaml_changed
+
+        current: dict[str, tuple[str, str]] = {
+            ".beadloom/_graph/g.yml": ("new_hash", "graph"),
+        }
+        stored: dict[str, tuple[str, str]] = {
+            ".beadloom/_graph/g.yml": ("old_hash", "graph"),
+        }
+        assert _graph_yaml_changed(current, stored) is True
+
+    def test_added_graph_returns_true(self) -> None:
+        from beadloom.infrastructure.reindex import _graph_yaml_changed
+
+        current: dict[str, tuple[str, str]] = {
+            ".beadloom/_graph/g.yml": ("aaa", "graph"),
+            ".beadloom/_graph/extra.yml": ("bbb", "graph"),
+        }
+        stored: dict[str, tuple[str, str]] = {
+            ".beadloom/_graph/g.yml": ("aaa", "graph"),
+        }
+        assert _graph_yaml_changed(current, stored) is True
+
+    def test_deleted_graph_returns_true(self) -> None:
+        from beadloom.infrastructure.reindex import _graph_yaml_changed
+
+        current: dict[str, tuple[str, str]] = {}
+        stored: dict[str, tuple[str, str]] = {
+            ".beadloom/_graph/g.yml": ("aaa", "graph"),
+        }
+        assert _graph_yaml_changed(current, stored) is True
+
 
 # ---------------------------------------------------------------------------
 # resolve_scan_paths

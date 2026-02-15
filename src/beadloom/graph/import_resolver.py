@@ -235,6 +235,32 @@ def _extract_rust_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
     return results
 
 
+# Kotlin standard-library package prefixes to skip.
+_KOTLIN_STDLIB_PREFIXES: tuple[str, ...] = ("kotlin.", "kotlinx.", "java.", "javax.", "android.")
+
+
+def _extract_kotlin_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
+    """Extract imports from a Kotlin AST root node."""
+    results: list[ImportInfo] = []
+    for child in root.children:
+        if child.type == "import":
+            # Find the qualified_identifier (dotted path)
+            for sub in child.children:
+                if sub.type == "qualified_identifier":
+                    path = sub.text.decode("utf-8") if sub.text else ""
+                    if path and not any(path.startswith(p) for p in _KOTLIN_STDLIB_PREFIXES):
+                        results.append(
+                            ImportInfo(
+                                file_path=file_path,
+                                line_number=child.start_point.row + 1,
+                                import_path=path,
+                                resolved_ref_id=None,
+                            )
+                        )
+                    break
+    return results
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -274,6 +300,8 @@ def extract_imports(file_path: Path) -> list[ImportInfo]:
         return _extract_go_imports(root, file_str)
     if ext == ".rs":
         return _extract_rust_imports(root, file_str)
+    if ext in (".kt", ".kts"):
+        return _extract_kotlin_imports(root, file_str)
 
     return []
 

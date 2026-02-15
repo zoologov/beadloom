@@ -15,6 +15,23 @@ if TYPE_CHECKING:
     import sqlite3
 
 
+def _compute_symbols_hash(conn: sqlite3.Connection, ref_id: str) -> str:
+    """Compute SHA-256 of sorted code_symbols for a *ref_id*.
+
+    Returns an empty string when no symbols are annotated with the given
+    ref_id, allowing callers to skip drift checks for unlinked nodes.
+    """
+    rows = conn.execute(
+        "SELECT symbol_name, kind FROM code_symbols "
+        "WHERE annotations LIKE ? ORDER BY file_path, symbol_name",
+        (f'%"{ref_id}"%',),
+    ).fetchall()
+    if not rows:
+        return ""
+    data = "|".join(f"{r['symbol_name']}:{r['kind']}" for r in rows)
+    return hashlib.sha256(data.encode()).hexdigest()
+
+
 @dataclass
 class SyncPair:
     """A doc-code pair linked through a shared ref_id."""
@@ -124,6 +141,14 @@ def check_sync(
             status = "stale"
         if current_doc_hash and current_doc_hash != stored_doc_hash:
             status = "stale"
+
+        # Symbol-level drift detection.
+        stored_symbols_hash = row["symbols_hash"] if "symbols_hash" in row.keys() else ""
+        if stored_symbols_hash:
+            current_symbols_hash = _compute_symbols_hash(conn, ref_id)
+            if current_symbols_hash != stored_symbols_hash and status == "ok":
+                # Code symbols changed but doc hash is same -> semantic drift.
+                status = "stale"
 
         # Update status in DB.
         conn.execute(
