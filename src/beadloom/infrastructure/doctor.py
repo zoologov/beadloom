@@ -99,6 +99,80 @@ def _check_isolated_nodes(conn: sqlite3.Connection) -> list[Check]:
     ]
 
 
+def _check_symbol_drift(conn: sqlite3.Connection) -> list[Check]:
+    """Check for nodes with code symbol changes since last doc sync.
+
+    Uses symbols_hash stored in sync_state (from BEAD-08) to detect
+    when code symbols have changed but documentation hasn't been updated.
+    """
+    from beadloom.doc_sync.engine import _compute_symbols_hash
+
+    # Gracefully handle old DBs without symbols_hash column.
+    try:
+        rows = conn.execute(
+            "SELECT ref_id, doc_path, symbols_hash FROM sync_state "
+            "WHERE symbols_hash != '' AND status = 'ok'"
+        ).fetchall()
+    except Exception:  # OperationalError on missing column
+        return [
+            Check(
+                "symbol_drift",
+                Severity.OK,
+                "symbols_hash column not present — skipping drift check.",
+            )
+        ]
+
+    if not rows:
+        return [
+            Check(
+                "symbol_drift",
+                Severity.OK,
+                "No sync entries with symbols_hash to check.",
+            )
+        ]
+
+    drifted: list[Check] = []
+    for row in rows:
+        ref_id: str = row["ref_id"]
+        doc_path: str = row["doc_path"]
+        stored_hash: str = row["symbols_hash"]
+        current_hash = _compute_symbols_hash(conn, ref_id)
+        if current_hash and current_hash != stored_hash:
+            drifted.append(
+                Check(
+                    "symbol_drift",
+                    Severity.WARNING,
+                    f"Node '{ref_id}' has code changes since last doc update ({doc_path})",
+                )
+            )
+
+    if not drifted:
+        return [Check("symbol_drift", Severity.OK, "No symbol drift detected.")]
+    return drifted
+
+
+def _check_stale_sync(conn: sqlite3.Connection) -> list[Check]:
+    """Report sync_state entries already marked as stale."""
+    try:
+        rows = conn.execute(
+            "SELECT ref_id, doc_path, code_path FROM sync_state WHERE status = 'stale'"
+        ).fetchall()
+    except Exception:  # OperationalError on missing table
+        return [Check("stale_sync", Severity.OK, "sync_state not available — skipping.")]
+
+    if not rows:
+        return [Check("stale_sync", Severity.OK, "No stale sync entries.")]
+
+    return [
+        Check(
+            "stale_sync",
+            Severity.WARNING,
+            f"Sync stale for '{r['ref_id']}': doc={r['doc_path']}, code={r['code_path']}",
+        )
+        for r in rows
+    ]
+
+
 def run_checks(conn: sqlite3.Connection) -> list[Check]:
     """Run all validation checks and return results."""
     results: list[Check] = []
@@ -106,4 +180,6 @@ def run_checks(conn: sqlite3.Connection) -> list[Check]:
     results.extend(_check_unlinked_docs(conn))
     results.extend(_check_nodes_without_docs(conn))
     results.extend(_check_isolated_nodes(conn))
+    results.extend(_check_symbol_drift(conn))
+    results.extend(_check_stale_sync(conn))
     return results

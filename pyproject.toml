@@ -41,6 +41,7 @@ languages = [
     "tree-sitter-go>=0.23",
     "tree-sitter-rust>=0.23",
     "tree-sitter-kotlin>=1.1",
+    "tree-sitter-java>=0.23",
 ]
 search = [
     "sqlite-vec>=0.1",

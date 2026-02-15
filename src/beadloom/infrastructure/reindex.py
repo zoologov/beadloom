@@ -48,6 +48,7 @@ _CODE_EXTENSIONS = frozenset(
         ".rs",
         ".kt",
         ".kts",
+        ".java",
     }
 )
 

@@ -371,10 +371,145 @@ def _detect_framework_summary(
     Checks for known framework markers in the directory and returns
     a framework-aware summary instead of the generic "Kind: name (N files)".
     Summaries are kept under 120 characters.
+
+    Detection order: most specific to least specific to avoid false positives.
     """
+
+    def _safe_read(path: Path) -> str:
+        """Read file text, returning empty string on errors."""
+        try:
+            return path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            return ""
+
+    # --- Highly specific: unique config/marker files ---
+
+    # NestJS: nest-cli.json or *.module.ts pattern
+    if (dir_path / "nest-cli.json").exists() or list(dir_path.glob("*.module.ts")):
+        return f"NestJS module: {name} ({file_count} files)"
+
+    # Angular: angular.json or *.component.ts pattern
+    if (dir_path / "angular.json").exists() or list(dir_path.glob("*.component.ts")):
+        return f"Angular app: {name} ({file_count} files)"
+
+    # Next.js: next.config.js / next.config.mjs / next.config.ts
+    if (
+        (dir_path / "next.config.js").exists()
+        or (dir_path / "next.config.mjs").exists()
+        or (dir_path / "next.config.ts").exists()
+    ):
+        return f"Next.js app: {name} ({file_count} files)"
+
+    # Expo / React Native: app.json with "expo" key or react-native in package.json
+    app_json = dir_path / "app.json"
+    if app_json.exists():
+        app_json_text = _safe_read(app_json)
+        if '"expo"' in app_json_text:
+            return f"Expo app: {name} ({file_count} files)"
+
+    pkg_json = dir_path / "package.json"
+    if pkg_json.exists():
+        pkg_text = _safe_read(pkg_json)
+        if '"react-native"' in pkg_text:
+            return f"React Native app: {name} ({file_count} files)"
+
     # Django app: contains apps.py
     if (dir_path / "apps.py").exists():
         return f"Django app: {name} ({file_count} files)"
+
+    # Spring Boot: pom.xml or build.gradle with spring-boot
+    pom_xml = dir_path / "pom.xml"
+    if pom_xml.exists():
+        pom_text = _safe_read(pom_xml)
+        if "spring-boot" in pom_text:
+            return f"Spring Boot service: {name} ({file_count} files)"
+
+    build_gradle = dir_path / "build.gradle"
+    if build_gradle.exists():
+        gradle_text = _safe_read(build_gradle)
+        if "spring-boot" in gradle_text or "springframework.boot" in gradle_text:
+            return f"Spring Boot service: {name} ({file_count} files)"
+
+    # Actix: Cargo.toml with actix-web
+    cargo_toml = dir_path / "Cargo.toml"
+    if cargo_toml.exists():
+        cargo_text = _safe_read(cargo_toml)
+        if "actix-web" in cargo_text:
+            return f"Actix service: {name} ({file_count} files)"
+
+    # FastAPI: main.py or app.py with FastAPI imports, or manifest with fastapi
+    for entry_file in ("main.py", "app.py"):
+        entry = dir_path / entry_file
+        if entry.exists():
+            entry_text = _safe_read(entry)
+            if "FastAPI" in entry_text or "fastapi" in entry_text:
+                return f"FastAPI service: {name} ({file_count} files)"
+
+    req_txt = dir_path / "requirements.txt"
+    if req_txt.exists():
+        req_text = _safe_read(req_txt)
+        if "fastapi" in req_text.lower():
+            return f"FastAPI service: {name} ({file_count} files)"
+
+    pyproject = dir_path / "pyproject.toml"
+    if pyproject.exists():
+        pyproject_text = _safe_read(pyproject)
+        if "fastapi" in pyproject_text.lower():
+            return f"FastAPI service: {name} ({file_count} files)"
+
+    # Flask: app.py with Flask pattern, or requirements.txt with flask
+    flask_app = dir_path / "app.py"
+    if flask_app.exists():
+        flask_text = _safe_read(flask_app)
+        if "Flask" in flask_text or "flask" in flask_text:
+            return f"Flask app: {name} ({file_count} files)"
+
+    if req_txt.exists():
+        req_text = _safe_read(req_txt)
+        if "flask" in req_text.lower():
+            return f"Flask app: {name} ({file_count} files)"
+
+    # Express: package.json with express dependency
+    if pkg_json.exists():
+        pkg_text = _safe_read(pkg_json)
+        if '"express"' in pkg_text:
+            return f"Express service: {name} ({file_count} files)"
+
+    # Vue: *.vue files or vue.config.js
+    if (dir_path / "vue.config.js").exists() or list(dir_path.glob("*.vue")):
+        return f"Vue app: {name} ({file_count} files)"
+
+    # Gin: Go files with gin-gonic/gin import
+    go_files = list(dir_path.glob("*.go"))
+    if go_files:
+        for go_file in go_files:
+            go_text = _safe_read(go_file)
+            if "github.com/gin-gonic/gin" in go_text:
+                return f"Gin service: {name} ({file_count} files)"
+
+    # SwiftUI: .swift files with import SwiftUI
+    swift_files = list(dir_path.glob("*.swift"))
+    if swift_files:
+        for sf in swift_files:
+            sf_text = _safe_read(sf)
+            if "import SwiftUI" in sf_text:
+                return f"SwiftUI app: {name} ({file_count} files)"
+
+    # Jetpack Compose: .kt files with import androidx.compose
+    kt_files = list(dir_path.glob("*.kt"))
+    if kt_files:
+        for kf in kt_files:
+            kf_text = _safe_read(kf)
+            if "import androidx.compose" in kf_text:
+                return f"Jetpack Compose app: {name} ({file_count} files)"
+
+    # UIKit: .swift or .m files with import UIKit
+    uikit_files = list(dir_path.glob("*.swift")) + list(dir_path.glob("*.m"))
+    if uikit_files:
+        for uf in uikit_files:
+            uf_text = _safe_read(uf)
+            if "import UIKit" in uf_text:
+                return f"UIKit app: {name} ({file_count} files)"
 
     # React component: contains index.tsx or index.jsx
     if (dir_path / "index.tsx").exists() or (dir_path / "index.jsx").exists():
@@ -1136,6 +1271,198 @@ def _ingest_readme(project_root: Path) -> dict[str, str | list[str]]:
     return result
 
 
+# Entry-point detection patterns (compiled once).
+_EP_IF_NAME_RE = re.compile(
+    r"""if\s+__name__\s*==\s*['"]__main__['"]""",
+)
+_EP_CLICK_RE = re.compile(r"@click\.(command|group)")
+_EP_TYPER_RE = re.compile(r"typer\.Typer\(\)")
+_EP_ARGPARSE_RE = re.compile(r"argparse\.ArgumentParser")
+_EP_GO_MAIN_RE = re.compile(r"func\s+main\(\)")
+_EP_RUST_MAIN_RE = re.compile(r"fn\s+main\(\)")
+_EP_JAVA_MAIN_RE = re.compile(r"public\s+static\s+void\s+main")
+_EP_KOTLIN_MAIN_RE = re.compile(r"fun\s+main\(")
+_EP_SWIFT_MAIN_RE = re.compile(r"@main")
+_EP_SERVER_RE = re.compile(r"(uvicorn\.run|app\.run\(|\.listen\()")
+
+# Max files per extension to avoid slow scans.
+_EP_MAX_FILES_PER_EXT = 50
+# Max total entry points to return.
+_EP_MAX_RESULTS = 20
+
+# Extensions eligible for entry-point scanning.
+_EP_EXTENSIONS: dict[str, str] = {
+    ".py": "python",
+    ".go": "go",
+    ".rs": "rust",
+    ".java": "java",
+    ".kt": "kotlin",
+    ".swift": "swift",
+    ".js": "javascript",
+    ".ts": "typescript",
+}
+
+
+def _discover_entry_points(
+    project_root: Path,
+    source_dirs: list[str],
+) -> list[dict[str, str]]:
+    """Discover application entry points across source directories.
+
+    Detects:
+    - __main__.py files (Python CLI entry)
+    - if __name__ == "__main__" blocks (Python scripts)
+    - Click/Typer/argparse CLI definitions
+    - main() in Go/Rust/Java/Kotlin files
+    - @main in Swift
+    - Server bootstrap patterns (uvicorn, gunicorn, express.listen, etc.)
+
+    Returns list of dicts with: file_path (relative), kind (cli|script|server|app),
+    description.
+    """
+    results: list[dict[str, str]] = []
+    seen_paths: set[str] = set()
+
+    def _add(rel: str, kind: str, desc: str) -> None:
+        if rel not in seen_paths and len(results) < _EP_MAX_RESULTS:
+            seen_paths.add(rel)
+            results.append({"file_path": rel, "kind": kind, "description": desc})
+
+    # Collect files per extension, capped.
+    files_by_ext: dict[str, list[Path]] = {}
+    for sd_name in source_dirs:
+        sd = project_root / sd_name
+        if not sd.is_dir():
+            continue
+        for f in sd.rglob("*"):
+            if not f.is_file():
+                continue
+            if any(part in _RECURSIVE_SKIP for part in f.relative_to(project_root).parts):
+                continue
+            ext = f.suffix
+            if ext not in _EP_EXTENSIONS:
+                continue
+            bucket = files_by_ext.setdefault(ext, [])
+            if len(bucket) < _EP_MAX_FILES_PER_EXT:
+                bucket.append(f)
+
+    # 1. Python __main__.py detection (file existence).
+    for py_file in files_by_ext.get(".py", []):
+        if py_file.name == "__main__.py":
+            rel = str(py_file.relative_to(project_root))
+            _add(rel, "cli", "Python CLI entry (__main__.py)")
+
+    # 2-5. Python content patterns.
+    for py_file in files_by_ext.get(".py", []):
+        if len(results) >= _EP_MAX_RESULTS:
+            break
+        rel = str(py_file.relative_to(project_root))
+        if rel in seen_paths:
+            continue
+        try:
+            text = py_file.read_text(encoding="utf-8", errors="replace")
+        except (OSError, UnicodeDecodeError):
+            continue
+
+        # Click CLI.
+        if _EP_CLICK_RE.search(text):
+            _add(rel, "cli", "Click CLI definition")
+            continue
+        # Typer CLI.
+        if _EP_TYPER_RE.search(text):
+            _add(rel, "cli", "Typer CLI definition")
+            continue
+        # argparse CLI.
+        if _EP_ARGPARSE_RE.search(text):
+            _add(rel, "cli", "argparse CLI definition")
+            continue
+        # Server bootstrap.
+        if _EP_SERVER_RE.search(text):
+            _add(rel, "server", "Server bootstrap (Python)")
+            continue
+        # if __name__ == "__main__".
+        if _EP_IF_NAME_RE.search(text):
+            _add(rel, "script", 'Python script (if __name__ == "__main__")')
+            continue
+
+    # 6. Go main.
+    for go_file in files_by_ext.get(".go", []):
+        if len(results) >= _EP_MAX_RESULTS:
+            break
+        try:
+            text = go_file.read_text(encoding="utf-8", errors="replace")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if _EP_GO_MAIN_RE.search(text):
+            rel = str(go_file.relative_to(project_root))
+            _add(rel, "app", "Go application entry (func main)")
+
+    # 7. Rust main.
+    for rs_file in files_by_ext.get(".rs", []):
+        if len(results) >= _EP_MAX_RESULTS:
+            break
+        if rs_file.name != "main.rs":
+            continue
+        try:
+            text = rs_file.read_text(encoding="utf-8", errors="replace")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if _EP_RUST_MAIN_RE.search(text):
+            rel = str(rs_file.relative_to(project_root))
+            _add(rel, "app", "Rust application entry (fn main)")
+
+    # 8. Java main.
+    for java_file in files_by_ext.get(".java", []):
+        if len(results) >= _EP_MAX_RESULTS:
+            break
+        try:
+            text = java_file.read_text(encoding="utf-8", errors="replace")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if _EP_JAVA_MAIN_RE.search(text):
+            rel = str(java_file.relative_to(project_root))
+            _add(rel, "app", "Java application entry (public static void main)")
+
+    # 9. Kotlin main.
+    for kt_file in files_by_ext.get(".kt", []):
+        if len(results) >= _EP_MAX_RESULTS:
+            break
+        try:
+            text = kt_file.read_text(encoding="utf-8", errors="replace")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if _EP_KOTLIN_MAIN_RE.search(text):
+            rel = str(kt_file.relative_to(project_root))
+            _add(rel, "app", "Kotlin application entry (fun main)")
+
+    # 10. Swift @main.
+    for swift_file in files_by_ext.get(".swift", []):
+        if len(results) >= _EP_MAX_RESULTS:
+            break
+        try:
+            text = swift_file.read_text(encoding="utf-8", errors="replace")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if _EP_SWIFT_MAIN_RE.search(text):
+            rel = str(swift_file.relative_to(project_root))
+            _add(rel, "app", "Swift application entry (@main)")
+
+    # 11. Server bootstrap in JS/TS.
+    for ext in (".js", ".ts"):
+        for js_file in files_by_ext.get(ext, []):
+            if len(results) >= _EP_MAX_RESULTS:
+                break
+            try:
+                text = js_file.read_text(encoding="utf-8", errors="replace")
+            except (OSError, UnicodeDecodeError):
+                continue
+            if _EP_SERVER_RE.search(text):
+                rel = str(js_file.relative_to(project_root))
+                _add(rel, "server", "Server bootstrap (JS/TS)")
+
+    return results
+
+
 def bootstrap_project(
     project_root: Path,
     *,
@@ -1263,10 +1590,19 @@ def bootstrap_project(
         nodes.insert(0, root_node)
         seen_ref_ids.add(project_name)
 
+        # Discover entry points.
+        entry_points = _discover_entry_points(project_root, scan["source_dirs"] or [])
+        if entry_points:
+            root_extra = json.loads(root_node.get("extra", "{}"))
+            root_extra["entry_points"] = entry_points
+            root_node["extra"] = json.dumps(root_extra, ensure_ascii=False)
+
         # Ingest README/doc metadata into root node.
         readme_data = _ingest_readme(project_root)
         if readme_data:
-            root_node["extra"] = json.dumps(readme_data, ensure_ascii=False)
+            existing_extra = json.loads(root_node.get("extra", "{}"))
+            existing_extra.update(readme_data)
+            root_node["extra"] = json.dumps(existing_extra, ensure_ascii=False)
 
             # Update summary with description.
             if readme_data.get("readme_description"):

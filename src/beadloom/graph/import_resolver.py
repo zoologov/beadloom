@@ -261,6 +261,48 @@ def _extract_kotlin_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
     return results
 
 
+# Java standard-library package prefixes to skip.
+_JAVA_STDLIB_PREFIXES: tuple[str, ...] = ("java.", "javax.", "android.", "sun.", "com.sun.")
+
+
+def _extract_java_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
+    """Extract imports from Java files."""
+    results: list[ImportInfo] = []
+    for child in root.children:
+        if child.type != "import_declaration":
+            continue
+
+        # Find the scoped_identifier or identifier child for the import path.
+        path: str | None = None
+        is_wildcard = False
+        for sub in child.children:
+            if sub.type in ("scoped_identifier", "identifier"):
+                path = sub.text.decode("utf-8") if sub.text else ""
+            elif sub.type == "asterisk":
+                is_wildcard = True
+
+        if not path:
+            continue
+
+        # For wildcard imports, append .* to the path.
+        if is_wildcard:
+            path = f"{path}.*"
+
+        # Skip standard library imports.
+        if any(path.startswith(p) for p in _JAVA_STDLIB_PREFIXES):
+            continue
+
+        results.append(
+            ImportInfo(
+                file_path=file_path,
+                line_number=child.start_point.row + 1,
+                import_path=path,
+                resolved_ref_id=None,
+            )
+        )
+    return results
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -302,6 +344,8 @@ def extract_imports(file_path: Path) -> list[ImportInfo]:
         return _extract_rust_imports(root, file_str)
     if ext in (".kt", ".kts"):
         return _extract_kotlin_imports(root, file_str)
+    if ext == ".java":
+        return _extract_java_imports(root, file_str)
 
     return []
 

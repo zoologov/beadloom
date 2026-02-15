@@ -8,6 +8,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    import sqlite3
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -596,6 +597,120 @@ def _enrich_edges_from_sqlite(
 
 
 # ------------------------------------------------------------------
+# Symbol change detection (BEAD-10)
+# ------------------------------------------------------------------
+
+
+def _detect_symbol_changes(
+    project_root: Path,
+    ref_id: str,
+) -> dict[str, Any] | None:
+    """Detect symbol drift for *ref_id* by comparing stored vs current symbols hash.
+
+    Opens the SQLite database, queries the ``sync_state`` and ``code_symbols``
+    tables, and returns a dict describing the drift (or ``None`` when there is
+    no database, no sync_state entry, or no drift detected).
+
+    Returns
+    -------
+    dict or None
+        ``None`` when drift cannot be determined or no drift exists.
+        Otherwise a dict with keys:
+        - ``has_drift``: ``True``
+        - ``current_symbols``: list of ``{"name": str, "kind": str}``
+        - ``message``: human-readable summary
+    """
+    import sqlite3
+    from pathlib import Path as _Path
+
+    db_path = _Path(project_root) / ".beadloom" / "beadloom.db"
+    if not db_path.exists():
+        return None
+
+    try:
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        try:
+            return _detect_symbol_changes_with_conn(conn, ref_id)
+        finally:
+            conn.close()
+    except sqlite3.OperationalError:
+        return None
+
+
+def _detect_symbol_changes_with_conn(
+    conn: sqlite3.Connection,
+    ref_id: str,
+) -> dict[str, Any] | None:
+    """Core logic for symbol change detection (requires an open connection).
+
+    Compares the ``symbols_hash`` stored in ``sync_state`` against the
+    current hash computed from ``code_symbols``.  When they differ the
+    current symbol list is returned so the AI agent can see what the
+    API looks like now.
+    """
+    import hashlib
+    import sqlite3 as _sqlite3
+
+    # 1. Load stored symbols hash from sync_state.
+    try:
+        sync_rows = conn.execute(
+            "SELECT symbols_hash FROM sync_state WHERE ref_id = ?",
+            (ref_id,),
+        ).fetchall()
+    except _sqlite3.OperationalError:
+        # Table may not exist.
+        return None
+
+    if not sync_rows:
+        return None
+
+    # Collect all stored hashes for this ref_id (may have multiple code paths).
+    stored_hashes = [row["symbols_hash"] for row in sync_rows if row["symbols_hash"]]
+    if not stored_hashes:
+        # No symbols_hash recorded yet — cannot determine drift.
+        return None
+
+    # 2. Compute current symbols hash (same algorithm as engine._compute_symbols_hash).
+    try:
+        current_rows = conn.execute(
+            "SELECT symbol_name, kind FROM code_symbols "
+            "WHERE annotations LIKE ? ORDER BY file_path, symbol_name",
+            (f'%"{ref_id}"%',),
+        ).fetchall()
+    except _sqlite3.OperationalError:
+        return None
+
+    if not current_rows:
+        # No current symbols — if there were stored hashes, symbols were removed.
+        current_hash = ""
+    else:
+        data = "|".join(f"{r['symbol_name']}:{r['kind']}" for r in current_rows)
+        current_hash = hashlib.sha256(data.encode()).hexdigest()
+
+    # 3. Compare: if ANY stored hash differs from current, there is drift.
+    has_drift = any(h != current_hash for h in stored_hashes)
+    if not has_drift:
+        return None
+
+    # 4. Build the current symbols list for the AI agent.
+    current_symbols = (
+        [{"name": r["symbol_name"], "kind": r["kind"]} for r in current_rows]
+        if current_rows
+        else []
+    )
+
+    n_symbols = len(current_symbols)
+    message = f"symbols changed since last doc sync ({n_symbols} current symbols)"
+
+    return {
+        "has_drift": True,
+        "current_symbols": current_symbols,
+        "message": message,
+    }
+
+
+# ------------------------------------------------------------------
 # Public API
 # ------------------------------------------------------------------
 
@@ -653,6 +768,12 @@ def generate_polish_data(
             "doc_path": str(doc_path) if doc_path is not None else None,
             "doc_status": doc_status,
         }
+
+        # Symbol change detection (BEAD-10).
+        symbol_changes = _detect_symbol_changes(project_root, node["ref_id"])
+        if symbol_changes:
+            node_data["symbol_changes"] = symbol_changes
+
         node_data_list.append(node_data)
 
     # Enrich with real dependency edges from SQLite (post-reindex).
@@ -668,6 +789,8 @@ def generate_polish_data(
         "informative description based on its public API symbols, "
         "dependencies, and source paths. Replace placeholder text and "
         "expand skeleton docs with real architectural context. "
+        "Pay special attention to nodes marked with symbol drift — their "
+        "docs are likely stale and need updating to reflect API changes. "
         "Use the update_node MCP tool to save improved summaries."
     )
 
@@ -729,6 +852,11 @@ def format_polish_text(data: dict[str, Any]) -> str:
                 lines.append("   Symbols: (none public)")
         else:
             lines.append("   Symbols: (none)")
+
+        # Symbol changes (BEAD-10).
+        changes = node.get("symbol_changes")
+        if changes and changes.get("has_drift"):
+            lines.append(f"   \u26a0 Symbol drift: {changes.get('message', 'symbols changed')}")
 
         doc_display = doc_path if doc_path else "(none)"
         lines.append(f"   Doc: {doc_display} ({doc_status})")
