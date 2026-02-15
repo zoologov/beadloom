@@ -303,6 +303,80 @@ def _extract_java_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
     return results
 
 
+# Apple/system frameworks to skip for Swift imports.
+_SWIFT_STDLIB_MODULES: frozenset[str] = frozenset(
+    {
+        "Foundation",
+        "UIKit",
+        "SwiftUI",
+        "Combine",
+        "CoreData",
+        "CoreGraphics",
+        "MapKit",
+        "AVFoundation",
+        "CoreLocation",
+        "CoreImage",
+        "CoreText",
+        "CoreAnimation",
+        "CoreML",
+        "ARKit",
+        "RealityKit",
+        "SceneKit",
+        "SpriteKit",
+        "GameplayKit",
+        "Metal",
+        "MetalKit",
+        "Vision",
+        "NaturalLanguage",
+        "CloudKit",
+        "StoreKit",
+        "WidgetKit",
+        "AppKit",
+        "WatchKit",
+        "Accessibility",
+        "Swift",
+        "os",
+        "Darwin",
+        "Dispatch",
+        "ObjectiveC",
+        "XCTest",
+    }
+)
+
+
+def _extract_swift_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
+    """Extract imports from a Swift AST root node."""
+    results: list[ImportInfo] = []
+    for child in root.children:
+        if child.type != "import_declaration":
+            continue
+
+        # Find the identifier child (contains the module path).
+        for sub in child.children:
+            if sub.type == "identifier":
+                path = sub.text.decode("utf-8") if sub.text else ""
+                if not path:
+                    break
+
+                # Determine root module name (before first dot).
+                root_module = path.split(".")[0] if "." in path else path
+
+                # Skip Apple/system frameworks.
+                if root_module in _SWIFT_STDLIB_MODULES:
+                    break
+
+                results.append(
+                    ImportInfo(
+                        file_path=file_path,
+                        line_number=child.start_point.row + 1,
+                        import_path=path,
+                        resolved_ref_id=None,
+                    )
+                )
+                break
+    return results
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -346,6 +420,8 @@ def extract_imports(file_path: Path) -> list[ImportInfo]:
         return _extract_kotlin_imports(root, file_str)
     if ext == ".java":
         return _extract_java_imports(root, file_str)
+    if ext == ".swift":
+        return _extract_swift_imports(root, file_str)
 
     return []
 

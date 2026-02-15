@@ -146,6 +146,22 @@ def _load_java() -> LangConfig:
     )
 
 
+def _load_swift() -> LangConfig:
+    """Swift language configuration (tree-sitter-swift)."""
+    import tree_sitter_swift as ts_swift
+
+    return LangConfig(
+        language=Language(ts_swift.language()),
+        comment_types=frozenset({"comment", "multiline_comment"}),
+        symbol_types={
+            "class_declaration": "class",
+            "protocol_declaration": "type",
+            "function_declaration": "function",
+        },
+        wrapper_types=frozenset(),
+    )
+
+
 # Extension -> loader function mapping.
 _EXTENSION_LOADERS: dict[str, Callable[[], LangConfig]] = {
     ".py": _load_python,
@@ -158,6 +174,7 @@ _EXTENSION_LOADERS: dict[str, Callable[[], LangConfig]] = {
     ".kt": _load_kotlin,
     ".kts": _load_kotlin,
     ".java": _load_java,
+    ".swift": _load_swift,
 }
 
 # Cache for loaded languages (None means "tried and failed / unsupported").
