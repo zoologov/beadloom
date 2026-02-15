@@ -46,6 +46,8 @@ _CODE_EXTENSIONS = frozenset(
         ".vue",
         ".go",
         ".rs",
+        ".kt",
+        ".kts",
     }
 )
 
@@ -188,7 +190,7 @@ def _index_code_files(
 
 def _build_initial_sync_state(conn: sqlite3.Connection) -> None:
     """Populate sync_state table from docs and code_symbols with shared ref_ids."""
-    from beadloom.doc_sync.engine import build_sync_state
+    from beadloom.doc_sync.engine import _compute_symbols_hash, build_sync_state
 
     now = datetime.now(tz=timezone.utc).isoformat()
     pairs = build_sync_state(conn)
@@ -198,6 +200,12 @@ def _build_initial_sync_state(conn: sqlite3.Connection) -> None:
             "(doc_path, code_path, ref_id, code_hash_at_sync, doc_hash_at_sync, "
             "synced_at, status) VALUES (?, ?, ?, ?, ?, ?, 'ok')",
             (pair.doc_path, pair.code_path, pair.ref_id, pair.code_hash, pair.doc_hash, now),
+        )
+        # Store symbols hash for symbol-level drift detection.
+        symbols_hash = _compute_symbols_hash(conn, pair.ref_id)
+        conn.execute(
+            "UPDATE sync_state SET symbols_hash = ? WHERE doc_path = ? AND code_path = ?",
+            (symbols_hash, pair.doc_path, pair.code_path),
         )
     conn.commit()
 
@@ -523,6 +531,29 @@ def _diff_files(
     return changed, added, deleted
 
 
+def _graph_yaml_changed(
+    current_files: dict[str, tuple[str, str]],
+    stored_files: dict[str, tuple[str, str]],
+) -> bool:
+    """Check whether any graph YAML file was added, removed, or modified.
+
+    This is a direct comparison of hashes for files with ``kind == "graph"``
+    in *current_files* vs *stored_files*.  Unlike :func:`_diff_files` (which
+    relies on ``file_index`` being perfectly in sync), this function
+    explicitly filters by kind so that graph changes are never missed — even
+    when ``file_index`` is stale or partially populated.
+    """
+    current_graph = {p: h for p, (h, k) in current_files.items() if k == "graph"}
+    stored_graph = {p: h for p, (h, k) in stored_files.items() if k == "graph"}
+
+    # Different set of graph files → change.
+    if current_graph.keys() != stored_graph.keys():
+        return True
+
+    # Same set — compare hashes.
+    return any(current_graph[p] != stored_graph[p] for p in current_graph)
+
+
 def _populate_file_index(
     conn: sqlite3.Connection,
     current_files: dict[str, tuple[str, str]],
@@ -689,6 +720,14 @@ def incremental_reindex(
         conn.close()
         return reindex(project_root, docs_dir=docs_dir)
 
+    # Belt-and-suspenders: always check graph YAML files directly.
+    # This catches changes even if file_index got out of sync with the DB
+    # (e.g. interrupted reindex, partial writes, or upgrade edge cases).
+    graph_affected = _graph_yaml_changed(current_files, stored_files)
+    if graph_affected:
+        conn.close()
+        return reindex(project_root, docs_dir=docs_dir)
+
     changed, added, deleted = _diff_files(current_files, stored_files)
 
     if not changed and not added and not deleted:
@@ -699,16 +738,6 @@ def incremental_reindex(
         conn.close()
         result.nothing_changed = True
         return result
-
-    # If any graph YAML changed → full reindex (graph is small, reload is safe).
-    all_affected = changed | added | deleted
-    graph_affected = any(
-        (current_files.get(p) or stored_files.get(p, ("", "")))[1] == "graph" for p in all_affected
-    )
-
-    if graph_affected:
-        conn.close()
-        return reindex(project_root, docs_dir=docs_dir)
 
     # --- Only docs / code changed — true incremental path ---
 

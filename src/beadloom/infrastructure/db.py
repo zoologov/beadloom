@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS sync_state (
     doc_hash_at_sync  TEXT NOT NULL,
     synced_at       TEXT NOT NULL,
     status          TEXT NOT NULL DEFAULT 'ok' CHECK(status IN ('ok','stale')),
+    symbols_hash    TEXT DEFAULT '',
     UNIQUE(doc_path, code_path)
 );
 
@@ -182,12 +183,25 @@ def open_db(db_path: Path) -> sqlite3.Connection:
     return conn
 
 
+def ensure_schema_migrations(conn: sqlite3.Connection) -> None:
+    """Apply incremental schema migrations for new columns.
+
+    Handles the case where tables already exist but lack newer columns
+    (e.g. ``symbols_hash`` added in BEAD-08).  Safe to call multiple times.
+    """
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(sync_state)").fetchall()}
+    if "symbols_hash" not in columns:
+        conn.execute("ALTER TABLE sync_state ADD COLUMN symbols_hash TEXT DEFAULT ''")
+        conn.commit()
+
+
 def create_schema(conn: sqlite3.Connection) -> None:
     """Create all tables and indexes if they don't exist.
 
     Safe to call multiple times (uses IF NOT EXISTS).
     """
     conn.executescript(_SCHEMA_SQL)
+    ensure_schema_migrations(conn)
 
 
 def get_meta(conn: sqlite3.Connection, key: str, default: str | None = None) -> str | None:
