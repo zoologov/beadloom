@@ -1,4 +1,4 @@
-"""Tests for new MCP tools — BEAD-05 (why) + BEAD-06 (diff).
+"""Tests for new MCP tools — BEAD-05 (why) + BEAD-06 (diff) + BEAD-12 (lint).
 
 Tests cover:
 - why tool with valid ref_id (mock DB with nodes and edges)
@@ -7,6 +7,11 @@ Tests cover:
 - diff tool with mock git state
 - diff tool with default "HEAD~1"
 - diff tool response structure
+- lint tool listed in _TOOLS
+- lint tool with no violations
+- lint tool with violations (mock)
+- lint severity filter (all, error, warn)
+- lint response structure
 """
 
 from __future__ import annotations
@@ -65,9 +70,7 @@ def project_with_graph(tmp_path: Path) -> Path:
 
     src_dir = proj / "src"
     src_dir.mkdir()
-    (src_dir / "api.py").write_text(
-        "# beadloom:feature=FEAT-1\ndef list_tracks():\n    pass\n"
-    )
+    (src_dir / "api.py").write_text("# beadloom:feature=FEAT-1\ndef list_tracks():\n    pass\n")
 
     from beadloom.infrastructure.reindex import reindex
 
@@ -197,9 +200,7 @@ class TestMcpDiffTool:
 
         mock_diff = GraphDiff(
             since_ref="HEAD~1",
-            nodes=(
-                NodeChange(ref_id="new-feat", kind="feature", change_type="added"),
-            ),
+            nodes=(NodeChange(ref_id="new-feat", kind="feature", change_type="added"),),
             edges=(
                 EdgeChange(src="new-feat", dst="routing", kind="part_of", change_type="added"),
             ),
@@ -260,9 +261,7 @@ class TestMcpDiffTool:
 
         assert result["since"] == "main"
 
-    def test_diff_no_changes(
-        self, project_with_graph: Path, db_conn: sqlite3.Connection
-    ) -> None:
+    def test_diff_no_changes(self, project_with_graph: Path, db_conn: sqlite3.Connection) -> None:
         """diff tool with no changes returns empty lists."""
         from beadloom.graph.diff import GraphDiff
         from beadloom.services.mcp_server import _dispatch_tool
@@ -305,9 +304,7 @@ class TestMcpDiffTool:
             ),
             edges=(
                 EdgeChange(src="new-feat", dst="routing", kind="part_of", change_type="added"),
-                EdgeChange(
-                    src="old-feat", dst="routing", kind="part_of", change_type="removed"
-                ),
+                EdgeChange(src="old-feat", dst="routing", kind="part_of", change_type="removed"),
             ),
         )
 
@@ -328,11 +325,338 @@ class TestMcpDiffTool:
         assert len(result["added_edges"]) == 1
         assert len(result["removed_edges"]) == 1
 
-    def test_diff_requires_project_root(
-        self, db_conn: sqlite3.Connection
-    ) -> None:
+    def test_diff_requires_project_root(self, db_conn: sqlite3.Connection) -> None:
         """diff tool raises ValueError when project_root is None."""
         from beadloom.services.mcp_server import _dispatch_tool
 
         with pytest.raises(ValueError, match="diff requires project_root"):
             _dispatch_tool(db_conn, "diff", {})
+
+
+# ---------------------------------------------------------------------------
+# Tests: MCP 'lint' tool (BEAD-12)
+# ---------------------------------------------------------------------------
+
+
+class TestMcpLintTool:
+    """Tests for the MCP 'lint' tool."""
+
+    def test_lint_tool_listed(self) -> None:
+        """Check that 'lint' appears in the _TOOLS list."""
+        from beadloom.services.mcp_server import _TOOLS
+
+        tool_names = [t.name for t in _TOOLS]
+        assert "lint" in tool_names
+
+    def test_lint_tool_schema(self) -> None:
+        """Verify lint tool has correct inputSchema with severity enum."""
+        from beadloom.services.mcp_server import _TOOLS
+
+        lint_tool = next(t for t in _TOOLS if t.name == "lint")
+        props = lint_tool.inputSchema["properties"]
+        assert "severity" in props
+        assert props["severity"]["enum"] == ["all", "error", "warn"]
+
+    def test_lint_no_violations(
+        self, project_with_graph: Path, db_conn: sqlite3.Connection
+    ) -> None:
+        """lint tool returns empty violations when no rules are violated."""
+        from beadloom.graph.linter import LintResult
+        from beadloom.services.mcp_server import _dispatch_tool
+
+        mock_result = LintResult(
+            violations=[],
+            rules_evaluated=3,
+            files_scanned=10,
+            imports_resolved=5,
+            elapsed_ms=42.0,
+        )
+
+        with patch("beadloom.services.mcp_server.lint", return_value=mock_result):
+            result = _dispatch_tool(
+                db_conn,
+                "lint",
+                {},
+                project_root=project_with_graph,
+            )
+
+        assert result["violations"] == []
+        assert result["summary"]["errors"] == 0
+        assert result["summary"]["warnings"] == 0
+        assert result["summary"]["rules_evaluated"] == 3
+
+    def test_lint_with_violations(
+        self, project_with_graph: Path, db_conn: sqlite3.Connection
+    ) -> None:
+        """lint tool returns violations from linter."""
+        from beadloom.graph.linter import LintResult
+        from beadloom.graph.rule_engine import Violation
+        from beadloom.services.mcp_server import _dispatch_tool
+
+        violations = [
+            Violation(
+                rule_name="no-cross-domain",
+                rule_description="No cross-domain imports",
+                rule_type="deny",
+                severity="error",
+                file_path="src/billing/invoice.py",
+                line_number=12,
+                from_ref_id="billing",
+                to_ref_id="auth",
+                message="Import from 'billing' to 'auth' violates deny rule",
+            ),
+            Violation(
+                rule_name="domain-needs-parent",
+                rule_description="Domains must have part_of edge",
+                rule_type="require",
+                severity="warn",
+                file_path=None,
+                line_number=None,
+                from_ref_id="orphan",
+                to_ref_id=None,
+                message="Node 'orphan' has no part_of edge",
+            ),
+        ]
+        mock_result = LintResult(
+            violations=violations,
+            rules_evaluated=4,
+            files_scanned=15,
+            imports_resolved=8,
+            elapsed_ms=55.0,
+        )
+
+        with patch("beadloom.services.mcp_server.lint", return_value=mock_result):
+            result = _dispatch_tool(
+                db_conn,
+                "lint",
+                {},
+                project_root=project_with_graph,
+            )
+
+        assert len(result["violations"]) == 2
+        assert result["summary"]["errors"] == 1
+        assert result["summary"]["warnings"] == 1
+        assert result["summary"]["rules_evaluated"] == 4
+
+    def test_lint_severity_filter_error(
+        self, project_with_graph: Path, db_conn: sqlite3.Connection
+    ) -> None:
+        """lint tool with severity=error returns only error violations."""
+        from beadloom.graph.linter import LintResult
+        from beadloom.graph.rule_engine import Violation
+        from beadloom.services.mcp_server import _dispatch_tool
+
+        violations = [
+            Violation(
+                rule_name="no-cross-domain",
+                rule_description="No cross-domain imports",
+                rule_type="deny",
+                severity="error",
+                file_path="src/a.py",
+                line_number=1,
+                from_ref_id="a",
+                to_ref_id="b",
+                message="error violation",
+            ),
+            Violation(
+                rule_name="soft-rule",
+                rule_description="Soft warning",
+                rule_type="require",
+                severity="warn",
+                file_path=None,
+                line_number=None,
+                from_ref_id="c",
+                to_ref_id=None,
+                message="warning violation",
+            ),
+        ]
+        mock_result = LintResult(
+            violations=violations,
+            rules_evaluated=2,
+            files_scanned=5,
+            imports_resolved=3,
+            elapsed_ms=10.0,
+        )
+
+        with patch("beadloom.services.mcp_server.lint", return_value=mock_result):
+            result = _dispatch_tool(
+                db_conn,
+                "lint",
+                {"severity": "error"},
+                project_root=project_with_graph,
+            )
+
+        assert len(result["violations"]) == 1
+        assert result["violations"][0]["severity"] == "error"
+        assert result["summary"]["errors"] == 1
+        assert result["summary"]["warnings"] == 0
+
+    def test_lint_severity_filter_warn(
+        self, project_with_graph: Path, db_conn: sqlite3.Connection
+    ) -> None:
+        """lint tool with severity=warn returns only warn violations."""
+        from beadloom.graph.linter import LintResult
+        from beadloom.graph.rule_engine import Violation
+        from beadloom.services.mcp_server import _dispatch_tool
+
+        violations = [
+            Violation(
+                rule_name="no-cross-domain",
+                rule_description="No cross-domain imports",
+                rule_type="deny",
+                severity="error",
+                file_path="src/a.py",
+                line_number=1,
+                from_ref_id="a",
+                to_ref_id="b",
+                message="error violation",
+            ),
+            Violation(
+                rule_name="soft-rule",
+                rule_description="Soft warning",
+                rule_type="require",
+                severity="warn",
+                file_path=None,
+                line_number=None,
+                from_ref_id="c",
+                to_ref_id=None,
+                message="warning violation",
+            ),
+        ]
+        mock_result = LintResult(
+            violations=violations,
+            rules_evaluated=2,
+            files_scanned=5,
+            imports_resolved=3,
+            elapsed_ms=10.0,
+        )
+
+        with patch("beadloom.services.mcp_server.lint", return_value=mock_result):
+            result = _dispatch_tool(
+                db_conn,
+                "lint",
+                {"severity": "warn"},
+                project_root=project_with_graph,
+            )
+
+        assert len(result["violations"]) == 1
+        assert result["violations"][0]["severity"] == "warn"
+        assert result["summary"]["errors"] == 0
+        assert result["summary"]["warnings"] == 1
+
+    def test_lint_severity_filter_all(
+        self, project_with_graph: Path, db_conn: sqlite3.Connection
+    ) -> None:
+        """lint tool with severity=all returns all violations (same as default)."""
+        from beadloom.graph.linter import LintResult
+        from beadloom.graph.rule_engine import Violation
+        from beadloom.services.mcp_server import _dispatch_tool
+
+        violations = [
+            Violation(
+                rule_name="rule-a",
+                rule_description="Rule A",
+                rule_type="deny",
+                severity="error",
+                file_path="src/a.py",
+                line_number=1,
+                from_ref_id="a",
+                to_ref_id="b",
+                message="error",
+            ),
+            Violation(
+                rule_name="rule-b",
+                rule_description="Rule B",
+                rule_type="require",
+                severity="warn",
+                file_path=None,
+                line_number=None,
+                from_ref_id="c",
+                to_ref_id=None,
+                message="warn",
+            ),
+        ]
+        mock_result = LintResult(
+            violations=violations,
+            rules_evaluated=2,
+            files_scanned=5,
+            imports_resolved=3,
+            elapsed_ms=10.0,
+        )
+
+        with patch("beadloom.services.mcp_server.lint", return_value=mock_result):
+            result = _dispatch_tool(
+                db_conn,
+                "lint",
+                {"severity": "all"},
+                project_root=project_with_graph,
+            )
+
+        assert len(result["violations"]) == 2
+        assert result["summary"]["errors"] == 1
+        assert result["summary"]["warnings"] == 1
+
+    def test_lint_response_structure(
+        self, project_with_graph: Path, db_conn: sqlite3.Connection
+    ) -> None:
+        """lint response has expected JSON structure with violations and summary."""
+        from beadloom.graph.linter import LintResult
+        from beadloom.graph.rule_engine import Violation
+        from beadloom.services.mcp_server import _dispatch_tool
+
+        violations = [
+            Violation(
+                rule_name="test-rule",
+                rule_description="Test rule description",
+                rule_type="deny",
+                severity="error",
+                file_path="src/test.py",
+                line_number=42,
+                from_ref_id="src-node",
+                to_ref_id="dst-node",
+                message="Test violation message",
+            ),
+        ]
+        mock_result = LintResult(
+            violations=violations,
+            rules_evaluated=3,
+            files_scanned=10,
+            imports_resolved=5,
+            elapsed_ms=99.0,
+        )
+
+        with patch("beadloom.services.mcp_server.lint", return_value=mock_result):
+            result = _dispatch_tool(
+                db_conn,
+                "lint",
+                {},
+                project_root=project_with_graph,
+            )
+
+        # Top-level keys
+        assert "violations" in result
+        assert "summary" in result
+
+        # Violation structure
+        v = result["violations"][0]
+        assert v["rule"] == "test-rule"
+        assert v["severity"] == "error"
+        assert v["rule_type"] == "deny"
+        assert v["file_path"] == "src/test.py"
+        assert v["line_number"] == 42
+        assert v["from_ref_id"] == "src-node"
+        assert v["to_ref_id"] == "dst-node"
+        assert v["message"] == "Test violation message"
+
+        # Summary structure
+        s = result["summary"]
+        assert s["errors"] == 1
+        assert s["warnings"] == 0
+        assert s["rules_evaluated"] == 3
+
+    def test_lint_requires_project_root(self, db_conn: sqlite3.Connection) -> None:
+        """lint tool raises ValueError when project_root is None."""
+        from beadloom.services.mcp_server import _dispatch_tool
+
+        with pytest.raises(ValueError, match="lint requires project_root"):
+            _dispatch_tool(db_conn, "lint", {})

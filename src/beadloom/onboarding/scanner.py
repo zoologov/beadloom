@@ -1869,6 +1869,14 @@ def bootstrap_project(
             root_extra["entry_points"] = all_entry_points
             root_node["extra"] = json.dumps(root_extra, ensure_ascii=False)
 
+        # Ingest deep config (scripts, workspaces, path aliases) into root node.
+        from beadloom.onboarding.config_reader import read_deep_config
+
+        deep_config = read_deep_config(project_root)
+        root_extra = json.loads(root_node.get("extra", "{}"))
+        root_extra["config"] = deep_config
+        root_node["extra"] = json.dumps(root_extra, ensure_ascii=False)
+
         # Ingest README/doc metadata into root node.
         readme_data = _ingest_readme(project_root)
         if readme_data:

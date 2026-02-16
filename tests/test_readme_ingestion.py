@@ -203,15 +203,18 @@ class TestBootstrapReadmeIntegration:
         summary = root["summary"]
         assert "Python" in summary or "python" in summary.lower()
 
-    def test_bootstrap_no_readme_no_extra(self, tmp_path: Path) -> None:
-        """bootstrap_project without README does not add extra to root node."""
+    def test_bootstrap_no_readme_no_readme_extra(self, tmp_path: Path) -> None:
+        """bootstrap_project without README does not add readme fields to extra."""
         _make_src_tree(tmp_path)
 
         from beadloom.onboarding.scanner import bootstrap_project
 
         result = bootstrap_project(tmp_path)
         root = result["nodes"][0]
-        assert "extra" not in root
+        if "extra" in root:
+            extra = json.loads(root["extra"])
+            assert "tech_stack" not in extra
+            assert "summary" not in extra
 
     def test_bootstrap_readme_data_in_yaml(self, tmp_path: Path) -> None:
         """README data is persisted in the services.yml YAML file."""

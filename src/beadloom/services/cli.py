@@ -117,6 +117,33 @@ def _format_markdown(bundle: dict[str, object]) -> str:
     if focus_links:
         link_strs = [f"{lnk.get('label', 'link')}: {lnk['url']}" for lnk in focus_links]
         lines.append(f"Links: {', '.join(link_strs)}")
+
+    # Tests.
+    tests_info = cast("dict[str, Any] | None", bundle.get("tests"))
+    if tests_info is not None:
+        file_count = len(tests_info.get("test_files", []))
+        lines.append(
+            f"Tests: {tests_info['framework']}, "
+            f"{tests_info['test_count']} tests in {file_count} files "
+            f"({tests_info['coverage_estimate']} coverage)"
+        )
+
+    # Activity.
+    activity_info = cast("dict[str, Any] | None", focus.get("activity"))
+    if activity_info is not None:
+        _activity_emojis: dict[str, str] = {
+            "hot": "\U0001f525",
+            "warm": "\u2600\ufe0f",
+            "cold": "\u2744\ufe0f",
+            "dormant": "\U0001f9ca",
+        }
+        level: str = activity_info.get("level", "dormant")
+        emoji = _activity_emojis.get(level, "")
+        commits_30d = activity_info.get("commits_30d", 0)
+        if level == "dormant":
+            lines.append(f"Activity: {emoji} dormant")
+        else:
+            lines.append(f"Activity: {emoji} {level} ({commits_30d} commits/30d)")
     lines.append("")
 
     # Graph.
@@ -150,6 +177,20 @@ def _format_markdown(bundle: dict[str, object]) -> str:
             lines.append(
                 f"- `{sym['symbol_name']}` ({sym['kind']}) "
                 f"in `{sym['file_path']}:{sym['line_start']}-{sym['line_end']}`"
+            )
+        lines.append("")
+
+    # API Routes.
+    routes = cast("list[dict[str, Any]]", bundle.get("routes", []))
+    if routes:
+        lines.append("## API Routes")
+        lines.append("")
+        for route in routes:
+            handler = route.get("handler", "<anonymous>")
+            file_ref = route.get("file", "")
+            line_num = route.get("line", 0)
+            lines.append(
+                f"- {route['method']} {route['path']} \u2192 {handler}() {file_ref}:{line_num}"
             )
         lines.append("")
 

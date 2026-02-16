@@ -451,6 +451,15 @@ def build_context(
     # This module only checks meta; CLI layer handles mtime comparison.
     _ = last_reindex  # Used by CLI layer for mtime comparison.
 
+    # Step 10: Extract test mapping from focus node's extra.
+    tests_info: dict[str, Any] | None = focus_extra.get("tests")
+
+    # Step 11: Extract git activity from focus node's extra.
+    activity_info: dict[str, Any] | None = focus_extra.get("activity")
+
+    # Step 12: Extract API routes from focus node's extra.
+    routes_info: list[dict[str, Any]] = focus_extra.get("routes", [])
+
     focus_dict: dict[str, Any] = {
         "ref_id": focus_node["ref_id"],
         "kind": focus_node["kind"],
@@ -458,6 +467,8 @@ def build_context(
     }
     if focus_links:
         focus_dict["links"] = focus_links
+    if activity_info:
+        focus_dict["activity"] = activity_info
 
     return {
         "version": 2,
@@ -473,5 +484,7 @@ def build_context(
             "last_reindex": last_reindex,
         },
         "constraints": constraints,
+        "routes": routes_info,
+        "tests": tests_info,
         "warning": warning,
     }
