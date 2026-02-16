@@ -2,7 +2,7 @@
 
 > **Version:** 3.0 (Optimized)
 > **Integration:** steveyegge/beads CLI
-> **Skills:** `/epic-init`, `/dev`, `/review`, `/test`, `/coordinator`, `/templates`, `/checkpoint`
+> **Skills:** `/task-init`, `/dev`, `/review`, `/test`, `/coordinator`, `/templates`, `/checkpoint`, `/tech-writer`
 
 ---
 
@@ -79,12 +79,13 @@ bd close <bead-id>
 
 | Situation | Command | Description |
 |-----------|---------|-------------|
-| New epic/feature | `/epic-init` | Setup, standards, alignment |
+| New work item | `/task-init` | Setup any type: epic, feature, bug, task, chore |
 | Code development | `/dev` | TDD, patterns, workflow |
 | Code review | `/review` | Quality checklists |
 | Writing tests | `/test` | AAA pattern, coverage |
 | Parallel work | `/coordinator` | Distribution, synchronization |
-| Need templates | `/templates` | PRD, RFC, CONTEXT, PLAN |
+| Doc updates | `/tech-writer` | Systematic doc refresh, sync-check fixes |
+| Need templates | `/templates` | PRD, RFC, CONTEXT, PLAN, ACTIVE, BRIEF |
 | Create checkpoint | `/checkpoint` | Format, rules |
 
 **Rule:** Invoke a skill when you need detailed instructions.
@@ -176,11 +177,12 @@ beadloom setup-mcp               # configure MCP server for IDE
 
 ```
 .claude/development/docs/features/{ISSUE-KEY}/
-├── CONTEXT.md   <- CORE: state, decisions, standards
-├── ACTIVE.md    <- FOCUS: current work, progress
-├── RFC.md       <- ARCHITECTURE: technical solution
-├── PLAN.md      <- DAG: beads and dependencies
-└── PRD.md       <- REQUIREMENTS: business goals
+├── PRD.md       <- REQUIREMENTS: business goals (epic/feature only)
+├── RFC.md       <- ARCHITECTURE: technical solution (epic/feature only)
+├── CONTEXT.md   <- CORE: state, decisions, standards (epic/feature only)
+├── PLAN.md      <- DAG: beads and dependencies (epic/feature only)
+├── BRIEF.md     <- COMBINED: problem + solution + plan (bug/task/chore only)
+└── ACTIVE.md    <- FOCUS: current work, progress (ALL types)
 ```
 
 | Priority | File | When to read |
@@ -200,6 +202,7 @@ beadloom setup-mcp               # configure MCP server for IDE
 | **Developer** | `/dev` | Implementing beads |
 | **Reviewer** | `/review` | Quality verification |
 | **Tester** | `/test` | Writing tests |
+| **Tech Writer** | `/tech-writer` | Documentation updates |
 | **Coordinator** | `/coordinator` | Multi-agent work |
 
 ### Single agent
@@ -305,9 +308,9 @@ bd close <id>
 bd ready  # what got unblocked?
 ```
 
-### New epic
+### New work item
 ```
-/epic-init
+/task-init
 ```
 
 ### Need templates
@@ -341,4 +344,4 @@ bd ready  # what got unblocked?
 ---
 
 > **Need detailed instructions?** Invoke the corresponding skill:
-> `/epic-init` | `/dev` | `/review` | `/test` | `/coordinator` | `/templates` | `/checkpoint`
+> `/task-init` | `/dev` | `/review` | `/test` | `/coordinator` | `/tech-writer` | `/templates` | `/checkpoint`
