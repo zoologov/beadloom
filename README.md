@@ -345,7 +345,7 @@ uv run mypy                # type checking (strict mode)
 See [UX Issues Log](.claude/development/BDL-UX-Issues.md) for the full list of known issues and limitations discovered during dogfooding.
 
 Key open items:
-- `sync-check` tracks file-level hash changes but does not detect semantic drift (code changed, doc content didn't) — [#15, #18]
+- ~~`sync-check` tracks file-level hash changes but does not detect semantic drift (code changed, doc content didn't) — [#15, #18]~~ **Fixed in v1.5.1** — symbol-level drift detection now works end-to-end
 - `setup-rules` auto-detection doesn't work for Windsurf/Cline (marker file = rules file) — [#17]
 - `AGENTS.md` is not auto-generated during `beadloom init --bootstrap` — [#19]
 

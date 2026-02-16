@@ -175,15 +175,28 @@ def mark_synced(
     code_path: str,
     project_root: Path,
 ) -> None:
-    """Recompute hashes for a doc-code pair and mark as synced."""
+    """Recompute hashes for a doc-code pair and mark as synced.
+
+    Also updates ``symbols_hash`` to the current value so that future
+    :func:`check_sync` calls use this as the new baseline for symbol drift
+    detection.
+    """
     doc_hash = _file_hash(project_root / "docs" / doc_path)
     code_hash = _file_hash(project_root / code_path)
+
+    # Look up ref_id for this pair to recompute symbols_hash.
+    row = conn.execute(
+        "SELECT ref_id FROM sync_state WHERE doc_path = ? AND code_path = ?",
+        (doc_path, code_path),
+    ).fetchone()
+    symbols_hash = _compute_symbols_hash(conn, row["ref_id"]) if row else ""
 
     now = datetime.now(tz=timezone.utc).isoformat()
     conn.execute(
         "UPDATE sync_state SET doc_hash_at_sync = ?, code_hash_at_sync = ?, "
-        "synced_at = ?, status = 'ok' WHERE doc_path = ? AND code_path = ?",
-        (doc_hash, code_hash, now, doc_path, code_path),
+        "symbols_hash = ?, synced_at = ?, status = 'ok' "
+        "WHERE doc_path = ? AND code_path = ?",
+        (doc_hash, code_hash, symbols_hash, now, doc_path, code_path),
     )
     conn.commit()
 
@@ -195,7 +208,8 @@ def mark_synced_by_ref(
 ) -> int:
     """Mark all doc-code pairs for *ref_id* as synced.
 
-    Recomputes current file hashes and updates sync_state.
+    Recomputes current file hashes and ``symbols_hash``, establishing a new
+    baseline for symbol drift detection.
     Returns the number of rows updated.
     """
     rows = conn.execute(
@@ -206,6 +220,7 @@ def mark_synced_by_ref(
     if not rows:
         return 0
 
+    symbols_hash = _compute_symbols_hash(conn, ref_id)
     now = datetime.now(tz=timezone.utc).isoformat()
     count = 0
     for row in rows:
@@ -213,8 +228,9 @@ def mark_synced_by_ref(
         code_hash = _file_hash(project_root / row["code_path"])
         conn.execute(
             "UPDATE sync_state SET doc_hash_at_sync = ?, code_hash_at_sync = ?, "
-            "synced_at = ?, status = 'ok' WHERE doc_path = ? AND code_path = ?",
-            (doc_hash, code_hash, now, row["doc_path"], row["code_path"]),
+            "symbols_hash = ?, synced_at = ?, status = 'ok' "
+            "WHERE doc_path = ? AND code_path = ?",
+            (doc_hash, code_hash, symbols_hash, now, row["doc_path"], row["code_path"]),
         )
         count += 1
 

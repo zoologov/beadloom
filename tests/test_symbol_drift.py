@@ -260,6 +260,240 @@ class TestBuildInitialSyncStateSymbolsHash:
         assert stored == expected
         assert stored != ""
 
+    def test_preserved_symbols_hash(self, conn: sqlite3.Connection) -> None:
+        """When preserved_symbols is provided, old hash is kept."""
+        from beadloom.doc_sync.engine import _compute_symbols_hash
+        from beadloom.infrastructure.reindex import _build_initial_sync_state
+
+        _insert_node(conn)
+        _insert_doc(conn, doc_hash="dochash1")
+        _insert_symbol(conn, ref_id="F1", file_hash="codehash1")
+
+        # Build initial state (baseline).
+        _build_initial_sync_state(conn)
+        baseline_hash = conn.execute("SELECT symbols_hash FROM sync_state").fetchone()[
+            "symbols_hash"
+        ]
+
+        # Add a new symbol — changes the computed hash.
+        _insert_symbol(
+            conn,
+            file_path="src/utils.py",
+            symbol_name="new_helper",
+            kind="function",
+            ref_id="F1",
+            file_hash="newhash",
+        )
+        new_computed = _compute_symbols_hash(conn, "F1")
+        assert new_computed != baseline_hash
+
+        # Rebuild sync_state with preserved hash.
+        conn.execute("DELETE FROM sync_state")
+        _build_initial_sync_state(conn, preserved_symbols={"F1": baseline_hash})
+
+        stored = conn.execute("SELECT symbols_hash FROM sync_state").fetchone()["symbols_hash"]
+        assert stored == baseline_hash  # Old hash preserved, not recomputed
+
+
+class TestIncrementalReindexPreservesSymbolDrift:
+    """E2E: incremental reindex preserves old symbols_hash for drift detection."""
+
+    def test_incremental_reindex_detects_symbol_drift(self, project: Path) -> None:
+        """After adding a function and reindexing, sync-check should detect stale."""
+        import yaml
+
+        from beadloom.doc_sync.engine import check_sync
+        from beadloom.infrastructure.db import open_db
+        from beadloom.infrastructure.reindex import incremental_reindex
+        from beadloom.infrastructure.reindex import reindex as full_reindex
+
+        # Set up minimal project structure.
+        graph_dir = project / ".beadloom" / "_graph"
+        graph_dir.mkdir(parents=True, exist_ok=True)
+        (project / ".beadloom" / "config.yml").write_text("scan_paths: [src]\n")
+
+        # Graph with one feature node linked to a doc.
+        graph_data = {
+            "nodes": [
+                {
+                    "ref_id": "F1",
+                    "kind": "feature",
+                    "summary": "Test feature",
+                    "source": "src/",
+                    "docs": ["docs/spec.md"],
+                }
+            ],
+            "edges": [],
+        }
+        (graph_dir / "services.yml").write_text(yaml.dump(graph_data))
+
+        # Doc file.
+        (project / "docs").mkdir(exist_ok=True)
+        (project / "docs" / "spec.md").write_text("# F1 Spec\nInitial content.\n")
+
+        # Code file with one function.
+        (project / "src").mkdir(exist_ok=True)
+        (project / "src" / "api.py").write_text(
+            "# beadloom:feature=F1\ndef handler():\n    pass\n"
+        )
+
+        # Step 1: Full reindex — establishes baseline.
+        full_reindex(project)
+
+        # Verify baseline is ok.
+        db_path = project / ".beadloom" / "beadloom.db"
+        conn = open_db(db_path)
+        results = check_sync(conn, project_root=project)
+        assert all(r["status"] == "ok" for r in results)
+
+        baseline_hash = conn.execute(
+            "SELECT symbols_hash FROM sync_state WHERE ref_id = 'F1'"
+        ).fetchone()["symbols_hash"]
+        assert baseline_hash != ""
+        conn.close()
+
+        # Step 2: Add a new function to the code file.
+        (project / "src" / "api.py").write_text(
+            "# beadloom:feature=F1\ndef handler():\n    pass\n\n"
+            "# beadloom:feature=F1\ndef new_helper():\n    return 42\n"
+        )
+
+        # Step 3: Incremental reindex — should preserve old symbols_hash.
+        incremental_reindex(project)
+
+        # Step 4: check_sync should detect symbol drift.
+        conn = open_db(db_path)
+        results = check_sync(conn, project_root=project)
+        stale = [r for r in results if r["status"] == "stale"]
+        assert len(stale) > 0, "Expected stale status due to symbol drift"
+        assert stale[0]["ref_id"] == "F1"
+        conn.close()
+
+    def test_mark_synced_resets_symbol_baseline(self, project: Path) -> None:
+        """After mark_synced_by_ref, symbol drift is no longer detected."""
+        import yaml
+
+        from beadloom.doc_sync.engine import check_sync, mark_synced_by_ref
+        from beadloom.infrastructure.db import open_db
+        from beadloom.infrastructure.reindex import incremental_reindex
+        from beadloom.infrastructure.reindex import reindex as full_reindex
+
+        # Set up project.
+        graph_dir = project / ".beadloom" / "_graph"
+        graph_dir.mkdir(parents=True, exist_ok=True)
+        (project / ".beadloom" / "config.yml").write_text("scan_paths: [src]\n")
+
+        graph_data = {
+            "nodes": [
+                {
+                    "ref_id": "F1",
+                    "kind": "feature",
+                    "summary": "Test feature",
+                    "source": "src/",
+                    "docs": ["docs/spec.md"],
+                }
+            ],
+            "edges": [],
+        }
+        (graph_dir / "services.yml").write_text(yaml.dump(graph_data))
+        (project / "docs").mkdir(exist_ok=True)
+        (project / "docs" / "spec.md").write_text("# F1 Spec\nContent.\n")
+        (project / "src").mkdir(exist_ok=True)
+        (project / "src" / "api.py").write_text(
+            "# beadloom:feature=F1\ndef handler():\n    pass\n"
+        )
+
+        # Full reindex baseline.
+        full_reindex(project)
+
+        # Add new function and incremental reindex.
+        (project / "src" / "api.py").write_text(
+            "# beadloom:feature=F1\ndef handler():\n    pass\n\n"
+            "# beadloom:feature=F1\ndef new_helper():\n    return 42\n"
+        )
+        incremental_reindex(project)
+
+        # Now mark as synced (user updated the doc).
+        (project / "docs" / "spec.md").write_text("# F1 Spec\nUpdated: now includes new_helper.\n")
+        db_path = project / ".beadloom" / "beadloom.db"
+        conn = open_db(db_path)
+        mark_synced_by_ref(conn, "F1", project)
+
+        # After marking synced, sync-check should be ok.
+        results = check_sync(conn, project_root=project)
+        assert all(r["status"] == "ok" for r in results)
+        conn.close()
+
+
+class TestMarkSyncedUpdatesSymbolsHash:
+    """Test that mark_synced and mark_synced_by_ref update symbols_hash."""
+
+    def test_mark_synced_updates_symbols_hash(
+        self,
+        conn: sqlite3.Connection,
+        project: Path,
+    ) -> None:
+        """mark_synced should update symbols_hash to current value."""
+        from beadloom.doc_sync.engine import _compute_symbols_hash, mark_synced
+
+        doc_content = "# Spec\nFeature spec.\n"
+        code_content = "# beadloom:feature=F1\ndef handler():\n    pass\n"
+
+        (project / "docs" / "spec.md").write_text(doc_content)
+        (project / "src" / "api.py").write_text(code_content)
+
+        _insert_node(conn)
+        _insert_doc(conn, doc_hash=_file_hash(doc_content))
+        _insert_symbol(conn, ref_id="F1", file_hash=_file_hash(code_content))
+
+        # Set up sync_state with old symbols_hash.
+        _insert_sync_state(
+            conn,
+            code_hash=_file_hash(code_content),
+            doc_hash=_file_hash(doc_content),
+            symbols_hash="old_hash_placeholder",
+        )
+
+        # Mark synced — should update symbols_hash.
+        mark_synced(conn, "spec.md", "src/api.py", project)
+
+        row = conn.execute("SELECT symbols_hash FROM sync_state").fetchone()
+        expected = _compute_symbols_hash(conn, "F1")
+        assert row["symbols_hash"] == expected
+        assert row["symbols_hash"] != "old_hash_placeholder"
+
+    def test_mark_synced_by_ref_updates_symbols_hash(
+        self,
+        conn: sqlite3.Connection,
+        project: Path,
+    ) -> None:
+        """mark_synced_by_ref should update symbols_hash to current value."""
+        from beadloom.doc_sync.engine import _compute_symbols_hash, mark_synced_by_ref
+
+        doc_content = "# Spec\nFeature spec.\n"
+        code_content = "# beadloom:feature=F1\ndef handler():\n    pass\n"
+
+        (project / "docs" / "spec.md").write_text(doc_content)
+        (project / "src" / "api.py").write_text(code_content)
+
+        _insert_node(conn)
+        _insert_doc(conn, doc_hash=_file_hash(doc_content))
+        _insert_symbol(conn, ref_id="F1", file_hash=_file_hash(code_content))
+
+        _insert_sync_state(
+            conn,
+            code_hash=_file_hash(code_content),
+            doc_hash=_file_hash(doc_content),
+            symbols_hash="old_hash_placeholder",
+        )
+
+        count = mark_synced_by_ref(conn, "F1", project)
+        assert count == 1
+
+        row = conn.execute("SELECT symbols_hash FROM sync_state").fetchone()
+        expected = _compute_symbols_hash(conn, "F1")
+        assert row["symbols_hash"] == expected
+
 
 class TestEnsureSchemaMigrations:
     """Test ensure_schema_migrations adds column if missing."""
