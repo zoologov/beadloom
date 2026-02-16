@@ -400,13 +400,31 @@ def check_source_coverage(
         for row in sync_rows:
             tracked.add(row["code_path"])
 
-        # 6. Also collect file_paths from code_symbols annotated with this ref_id
-        sym_rows = conn.execute(
-            "SELECT file_path FROM code_symbols WHERE annotations LIKE ?",
-            (f'%"{ref_id}"%',),
+        # 5b. Also include files tracked under child nodes (part_of this ref_id)
+        child_rows = conn.execute(
+            "SELECT src_ref_id FROM edges WHERE dst_ref_id = ? AND kind = 'part_of'",
+            (ref_id,),
         ).fetchall()
-        for row in sym_rows:
-            tracked.add(row["file_path"])
+        child_ref_ids = [r["src_ref_id"] for r in child_rows]
+
+        for child_id in child_ref_ids:
+            child_sync = conn.execute(
+                "SELECT code_path FROM sync_state WHERE ref_id = ?",
+                (child_id,),
+            ).fetchall()
+            for r in child_sync:
+                tracked.add(r["code_path"])
+
+        # 6. Also collect file_paths from code_symbols annotated with this ref_id
+        #    OR any child ref_id
+        all_ref_ids = [ref_id] + child_ref_ids
+        for rid in all_ref_ids:
+            sym_rows = conn.execute(
+                "SELECT file_path FROM code_symbols WHERE annotations LIKE ?",
+                (f'%"{rid}"%',),
+            ).fetchall()
+            for row in sym_rows:
+                tracked.add(row["file_path"])
 
         # 7. Find untracked files
         untracked = sorted(disk_files - tracked)

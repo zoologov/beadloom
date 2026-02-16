@@ -323,3 +323,122 @@ class TestSourceCoverageMultipleNodes:
 
         results = check_source_coverage(conn, project)
         assert results == []
+
+
+def _insert_edge(
+    conn: sqlite3.Connection,
+    src_ref_id: str,
+    dst_ref_id: str,
+    kind: str = "part_of",
+) -> None:
+    """Insert an edge between two nodes."""
+    conn.execute(
+        "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES (?, ?, ?)",
+        (src_ref_id, dst_ref_id, kind),
+    )
+    conn.commit()
+
+
+class TestSourceCoverageHierarchy:
+    """Hierarchy-aware coverage: child part_of edges are considered."""
+
+    def test_child_feature_tracked_via_hierarchy(
+        self, conn: sqlite3.Connection, project: Path
+    ) -> None:
+        """File annotated to child feature (part_of parent) should NOT be
+        flagged as untracked for parent domain."""
+        # Parent node owns the source directory
+        _insert_node(conn, "infrastructure", "src/mymodule/", kind="domain")
+        _insert_doc(conn, "infrastructure.md", "infrastructure")
+
+        # Child node is part_of parent
+        _insert_node(conn, "doctor", None, kind="feature")
+        _insert_edge(conn, "doctor", "infrastructure", "part_of")
+
+        # Create file on disk inside parent's source dir
+        (project / "src" / "mymodule" / "doctor.py").write_text(
+            "def run_doctor(): pass\n"
+        )
+
+        # File annotated to the *child* ref_id, not the parent
+        _insert_code_symbol(conn, "src/mymodule/doctor.py", "doctor")
+
+        results = check_source_coverage(conn, project)
+        # Should be empty: child annotation covers the file
+        assert results == []
+
+    def test_truly_untracked_not_hidden_by_hierarchy(
+        self, conn: sqlite3.Connection, project: Path
+    ) -> None:
+        """File NOT annotated to any child feature should still be flagged."""
+        _insert_node(conn, "infrastructure", "src/mymodule/", kind="domain")
+        _insert_doc(conn, "infrastructure.md", "infrastructure")
+
+        _insert_node(conn, "doctor", None, kind="feature")
+        _insert_edge(conn, "doctor", "infrastructure", "part_of")
+
+        # Two files on disk
+        (project / "src" / "mymodule" / "doctor.py").write_text(
+            "def run_doctor(): pass\n"
+        )
+        (project / "src" / "mymodule" / "orphan.py").write_text(
+            "def orphan(): pass\n"
+        )
+
+        # Only doctor.py is annotated to the child feature
+        _insert_code_symbol(conn, "src/mymodule/doctor.py", "doctor")
+
+        results = check_source_coverage(conn, project)
+        assert len(results) == 1
+        assert results[0]["ref_id"] == "infrastructure"
+        assert "src/mymodule/orphan.py" in results[0]["untracked_files"]
+        # doctor.py should NOT be in untracked
+        assert "src/mymodule/doctor.py" not in results[0]["untracked_files"]
+
+    def test_no_children_works_as_before(
+        self, conn: sqlite3.Connection, project: Path
+    ) -> None:
+        """Node with no part_of children still works — no regression."""
+        _insert_node(conn, "mymod", "src/mymodule/")
+        _insert_doc(conn, "mymodule.md", "mymod")
+
+        (project / "src" / "mymodule" / "handler.py").write_text(
+            "def handler(): pass\n"
+        )
+
+        # Track directly via sync_state on the parent
+        _insert_sync_state(conn, "mymodule.md", "src/mymodule/handler.py", "mymod")
+
+        results = check_source_coverage(conn, project)
+        assert results == []
+
+    def test_multiple_children_all_counted(
+        self, conn: sqlite3.Connection, project: Path
+    ) -> None:
+        """Multiple child features — files from different children all counted."""
+        _insert_node(conn, "infrastructure", "src/mymodule/", kind="domain")
+        _insert_doc(conn, "infrastructure.md", "infrastructure")
+
+        # Two child features
+        _insert_node(conn, "doctor", None, kind="feature")
+        _insert_edge(conn, "doctor", "infrastructure", "part_of")
+
+        _insert_node(conn, "linter", None, kind="feature")
+        _insert_edge(conn, "linter", "infrastructure", "part_of")
+
+        # Files on disk
+        (project / "src" / "mymodule" / "doctor.py").write_text(
+            "def run_doctor(): pass\n"
+        )
+        (project / "src" / "mymodule" / "linter.py").write_text(
+            "def run_lint(): pass\n"
+        )
+
+        # Each file annotated to its respective child feature
+        _insert_code_symbol(conn, "src/mymodule/doctor.py", "doctor")
+        _insert_code_symbol(
+            conn, "src/mymodule/linter.py", "linter", symbol_name="run_lint"
+        )
+
+        results = check_source_coverage(conn, project)
+        assert results == []

@@ -1,3 +1,4 @@
+# beadloom:service=tui
 """Main Textual application for Beadloom TUI."""
 
 from __future__ import annotations

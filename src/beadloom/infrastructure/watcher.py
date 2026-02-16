@@ -1,6 +1,6 @@
 """File watcher: auto-reindex on file changes."""
 
-# beadloom:domain=watcher
+# beadloom:domain=infrastructure
 
 from __future__ import annotations
 
