@@ -129,6 +129,10 @@ mypy_path = "src"
 module = ["watchfiles", "watchfiles.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["tomli"]
+ignore_missing_imports = true
+
 [tool.coverage.run]
 source = ["beadloom"]
 branch = true
