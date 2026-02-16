@@ -38,7 +38,7 @@ def _read_toml(path: Path) -> dict[str, Any]:
         _tomllib = tomllib
     else:
         try:
-            import tomli  # type: ignore[import-not-found]  # optional on <3.11
+            import tomli  # optional fallback for Python <3.11
 
             _tomllib = tomli
         except ImportError:
