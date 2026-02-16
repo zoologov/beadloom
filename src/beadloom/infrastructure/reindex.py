@@ -196,8 +196,23 @@ def _index_code_files(
     return count, warnings
 
 
-def _build_initial_sync_state(conn: sqlite3.Connection) -> None:
-    """Populate sync_state table from docs and code_symbols with shared ref_ids."""
+def _build_initial_sync_state(
+    conn: sqlite3.Connection,
+    *,
+    preserved_symbols: dict[str, str] | None = None,
+) -> None:
+    """Populate sync_state table from docs and code_symbols with shared ref_ids.
+
+    Parameters
+    ----------
+    preserved_symbols:
+        Optional mapping of ``ref_id → symbols_hash`` from a previous sync
+        state.  When provided, the old hash is kept so that
+        :func:`~beadloom.doc_sync.engine.check_sync` can detect symbol drift
+        (new/removed public symbols since the last time docs were marked
+        synced).  When *None* (default), a fresh hash is computed — used on
+        first full reindex to establish a baseline.
+    """
     from beadloom.doc_sync.engine import _compute_symbols_hash, build_sync_state
 
     now = datetime.now(tz=timezone.utc).isoformat()
@@ -209,8 +224,11 @@ def _build_initial_sync_state(conn: sqlite3.Connection) -> None:
             "synced_at, status) VALUES (?, ?, ?, ?, ?, ?, 'ok')",
             (pair.doc_path, pair.code_path, pair.ref_id, pair.code_hash, pair.doc_hash, now),
         )
-        # Store symbols hash for symbol-level drift detection.
-        symbols_hash = _compute_symbols_hash(conn, pair.ref_id)
+        # Preserve old symbols hash to detect drift, or compute fresh baseline.
+        if preserved_symbols is not None and pair.ref_id in preserved_symbols:
+            symbols_hash = preserved_symbols[pair.ref_id]
+        else:
+            symbols_hash = _compute_symbols_hash(conn, pair.ref_id)
         conn.execute(
             "UPDATE sync_state SET symbols_hash = ? WHERE doc_path = ? AND code_path = ?",
             (symbols_hash, pair.doc_path, pair.code_path),
@@ -768,6 +786,13 @@ def incremental_reindex(
     else:
         ref_map = {}
 
+    # Snapshot symbols_hash BEFORE deleting/re-indexing files so we can
+    # preserve the baseline for symbol drift detection.
+    old_symbols: dict[str, str] = {}
+    for row in conn.execute("SELECT ref_id, symbols_hash FROM sync_state").fetchall():
+        if row[1]:  # symbols_hash is non-empty
+            old_symbols[row[0]] = row[1]
+
     # Process deleted files.
     for path in deleted:
         kind = stored_files[path][1]
@@ -836,9 +861,9 @@ def incremental_reindex(
                 seen_ref_ids,
             )
 
-    # Rebuild sync_state (cheap full rebuild).
+    # Rebuild sync_state (cheap full rebuild) using preserved symbols_hash.
     conn.execute("DELETE FROM sync_state")
-    _build_initial_sync_state(conn)
+    _build_initial_sync_state(conn, preserved_symbols=old_symbols or None)
 
     # Rebuild FTS5 search index.
     from beadloom.context_oracle.search import populate_search_index
