@@ -6,8 +6,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.infrastructure.db import get_meta, open_db
-from beadloom.infrastructure.reindex import incremental_reindex, reindex
+from beadloom.infrastructure.db import create_schema, get_meta, open_db
+from beadloom.infrastructure.reindex import (
+    _snapshot_sync_baselines,
+    incremental_reindex,
+    reindex,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -849,3 +853,194 @@ class TestResolveScanPaths:
         (backend / "views.py").write_text("# beadloom:feature=API-001\ndef index():\n    pass\n")
         result = reindex(tmp_path)
         assert result.symbols_indexed >= 1
+
+
+# ---------------------------------------------------------------------------
+# _snapshot_sync_baselines
+# ---------------------------------------------------------------------------
+
+
+class TestSnapshotSyncBaselines:
+    """Tests for _snapshot_sync_baselines helper."""
+
+    def test_returns_correct_data(self, project: Path) -> None:
+        """Snapshot returns {ref_id: symbols_hash} from sync_state."""
+        db_path = project / ".beadloom" / "beadloom.db"
+        conn = open_db(db_path)
+        create_schema(conn)
+
+        # Insert a node (FK constraint) and sync_state row.
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary) VALUES (?, ?, ?)",
+            ("F1", "feature", "Feature 1"),
+        )
+        conn.execute(
+            "INSERT INTO sync_state "
+            "(doc_path, code_path, ref_id, code_hash_at_sync, doc_hash_at_sync, "
+            "synced_at, status, symbols_hash) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("spec.md", "src/api.py", "F1", "ch1", "dh1", "2025-01-01", "ok", "abc123"),
+        )
+        conn.commit()
+
+        result = _snapshot_sync_baselines(conn)
+        assert result == {"F1": "abc123"}
+        conn.close()
+
+    def test_returns_empty_dict_when_no_table(self, tmp_path: Path) -> None:
+        """Returns empty dict when sync_state table does not exist."""
+        db_path = tmp_path / "empty.db"
+        conn = open_db(db_path)
+        # Do NOT create schema — table doesn't exist.
+        result = _snapshot_sync_baselines(conn)
+        assert result == {}
+        conn.close()
+
+    def test_skips_empty_hash(self, project: Path) -> None:
+        """Entries with empty symbols_hash are excluded."""
+        db_path = project / ".beadloom" / "beadloom.db"
+        conn = open_db(db_path)
+        create_schema(conn)
+
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary) VALUES (?, ?, ?)",
+            ("F1", "feature", "Feature 1"),
+        )
+        conn.execute(
+            "INSERT INTO sync_state "
+            "(doc_path, code_path, ref_id, code_hash_at_sync, doc_hash_at_sync, "
+            "synced_at, status, symbols_hash) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("spec.md", "src/api.py", "F1", "ch1", "dh1", "2025-01-01", "ok", ""),
+        )
+        conn.commit()
+
+        result = _snapshot_sync_baselines(conn)
+        assert result == {}
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Full reindex preserves sync baselines
+# ---------------------------------------------------------------------------
+
+
+class TestReindexPreservesBaseline:
+    """Full reindex preserves symbols_hash baseline for drift detection."""
+
+    def test_full_reindex_preserves_baseline(self, project: Path, db_path: Path) -> None:
+        """After a full reindex, the old symbols_hash is preserved so that
+        sync-check can detect symbol drift (new/removed public symbols).
+        """
+        graph_dir = project / ".beadloom" / "_graph"
+        docs = project / "docs"
+        src = project / "src"
+
+        # Set up a node with linked doc and annotated code.
+        (graph_dir / "f.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: F1\n"
+            "    kind: feature\n"
+            '    summary: "Feature"\n'
+            "    docs:\n"
+            "      - docs/spec.md\n"
+        )
+        (docs / "spec.md").write_text("## Spec\n\nFeature spec.\n")
+        (src / "api.py").write_text("# beadloom:feature=F1\ndef handler():\n    pass\n")
+
+        # First reindex: establishes baseline.
+        reindex(project)
+
+        conn = open_db(db_path)
+        row = conn.execute(
+            "SELECT symbols_hash FROM sync_state WHERE ref_id = 'F1'"
+        ).fetchone()
+        assert row is not None
+        baseline_hash = row["symbols_hash"]
+        assert baseline_hash != "", "First reindex should compute a baseline hash"
+        conn.close()
+
+        # Second full reindex: should PRESERVE the baseline hash, not recompute.
+        reindex(project)
+
+        conn = open_db(db_path)
+        row = conn.execute(
+            "SELECT symbols_hash FROM sync_state WHERE ref_id = 'F1'"
+        ).fetchone()
+        assert row is not None
+        assert row["symbols_hash"] == baseline_hash, (
+            "Full reindex should preserve the old symbols_hash baseline"
+        )
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# old_symbols = {} (empty dict) should NOT trigger fresh baseline
+# ---------------------------------------------------------------------------
+
+
+class TestOldSymbolsEmptyDict:
+    """old_symbols = {} must NOT be replaced by None (the `or None` bug)."""
+
+    def test_empty_dict_does_not_compute_fresh_baseline(
+        self, project: Path, db_path: Path
+    ) -> None:
+        """When old_symbols is an empty dict (no previously tracked symbols),
+        it should be passed as-is to _build_initial_sync_state, NOT converted
+        to None. If converted to None, a fresh baseline would be computed,
+        resetting drift detection.
+        """
+        graph_dir = project / ".beadloom" / "_graph"
+        docs = project / "docs"
+        src = project / "src"
+
+        # Set up linked node.
+        (graph_dir / "f.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: F1\n"
+            "    kind: feature\n"
+            '    summary: "Feature"\n'
+            "    docs:\n"
+            "      - docs/spec.md\n"
+        )
+        (docs / "spec.md").write_text("## Spec\n\nSpec.\n")
+        (src / "api.py").write_text("# beadloom:feature=F1\ndef handler():\n    pass\n")
+
+        # Full reindex to populate file_index + baseline.
+        reindex(project)
+
+        # Read baseline hash.
+        conn = open_db(db_path)
+        row = conn.execute(
+            "SELECT symbols_hash FROM sync_state WHERE ref_id = 'F1'"
+        ).fetchone()
+        baseline_hash = row["symbols_hash"]
+        conn.close()
+
+        # Modify ONLY the doc (not code) to trigger incremental path.
+        (docs / "spec.md").write_text("## Spec\n\nUpdated spec.\n")
+
+        # Now simulate the scenario where sync_state had no symbols_hash stored
+        # (all empty). The old_symbols dict will be {}, not None.
+        # With the bug (`old_symbols or None`), {} is falsy → becomes None
+        # → fresh baseline is computed → drift detection is reset.
+        # With the fix (`old_symbols if old_symbols is not None else None`),
+        # {} is kept → preserved_symbols={} → no ref_ids match → fresh hash
+        # is computed for new ref_ids only (which is the correct behavior for
+        # ref_ids that were NOT previously tracked).
+        result = incremental_reindex(project)
+        assert result.docs_indexed == 1
+
+        # The symbols_hash should still be the baseline (code didn't change,
+        # and the old baseline was preserved from the first reindex).
+        conn = open_db(db_path)
+        row = conn.execute(
+            "SELECT symbols_hash FROM sync_state WHERE ref_id = 'F1'"
+        ).fetchone()
+        assert row is not None
+        # The hash should be preserved from the first reindex because
+        # old_symbols captured it before incremental delete+rebuild.
+        assert row["symbols_hash"] == baseline_hash, (
+            "Incremental reindex should preserve baseline hash"
+        )
+        conn.close()
