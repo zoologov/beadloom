@@ -2,7 +2,8 @@
 
 > **Status:** Completed (all 6 development phases delivered)
 > **Date:** 2026-02-11
-> **Current version:** 1.0.0 (Production/Stable)
+> **Current version:** 1.5.0 (see STRATEGY-2.md for Phases 8-14)
+> **Successor:** STRATEGY-2.md (Phases 8-14, current roadmap)
 
 ---
 
@@ -351,9 +352,11 @@ Beadloom becomes the first tool that closes the full loop: **describe → valida
 | 6 — Architecture as Code | v1.0 | DONE |
 | 7 — Messaging & Guides | post-dev | Planned |
 
-**Current totals:** 18 CLI commands, 8 MCP tools, 653 tests, 21 modules, 4 languages in import resolver.
+**Totals at v1.0:** 18 CLI commands, 8 MCP tools, 653 tests, 21 modules, 4 languages in import resolver.
 
-**Next steps:** See `BACKLOG.md` for deferred work and `STRATEGY-2.md` (planned) for the next roadmap.
+**Current totals (v1.5.0):** 21 CLI commands, 10 MCP tools, 1158 tests, 26 modules, 9 languages.
+
+**Next steps:** See `STRATEGY-2.md` for the active roadmap (Phases 8-14) and `BACKLOG.md` for deferred work.
 
 ---
 

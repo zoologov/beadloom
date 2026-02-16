@@ -1,6 +1,6 @@
 # RFC: BDL-015 — Beadloom v1.5 Technical Specification
 
-**Status:** Draft
+**Status:** Implemented (v1.5.0)
 **Created:** 2026-02-15
 **Reference:** STRATEGY-2.md §4-5
 

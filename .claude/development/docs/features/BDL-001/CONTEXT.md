@@ -1,8 +1,8 @@
 # CONTEXT: BDL-001 — Beadloom v0
 
-> **Last updated:** 2026-02-08
+> **Last updated:** 2026-02-16
 > **Phase:** 0 → 1 → 2 → 3 (Onboarding → Context Oracle → MCP → Doc Sync)
-> **Status:** Scaffolding done, development starting
+> **Status:** COMPLETE — delivered as v0.2.0
 
 ---
 

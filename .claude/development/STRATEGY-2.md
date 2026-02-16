@@ -1,7 +1,7 @@
 # Beadloom: Strategy 2 — Architecture Infrastructure for the AI Agent Era
 
-> **Status:** Approved
-> **Date:** 2026-02-15 (revision 2)
+> **Status:** Active (Phases 8-9 complete, Phase 10+ planned)
+> **Date:** 2026-02-16 (revision 3)
 > **Current version:** 1.5.0
 > **Predecessor:** STRATEGY.md (Phases 1-6, all completed)
 > **Sources:** STRATEGY.md, BACKLOG.md §2-§6, BDL-UX-Issues.md, competitive analysis February 2026
@@ -46,15 +46,15 @@ A typical 50-100 module project is ~500K-2M tokens. Models **can already** read 
 | **Context Oracle (<20ms)** | In multi-step workflows (plan→code→review→test) 2K in 20ms >> 500K in 30s |
 | **YAML graph in Git** | Diffable, reviewable, mergeable — no cloud SaaS offers this |
 
-### What's Still Broken
+### What Was Broken (Fixed in v1.5.0)
 
-**Three critical problems:**
+**Three critical problems — ALL SOLVED:**
 
-1. **Bootstrap is shallow** — `Domain: auth (15 files)` tells an agent nothing. No frameworks, entry points, dependencies, routes.
+1. ~~**Bootstrap is shallow**~~ **FIXED (Phase 8)** — Bootstrap now ingests README, detects 18+ frameworks, discovers entry points, runs import analysis, and generates contextual summaries like "FastAPI service: auth — JWT auth, 3 classes, 5 fns".
 
-2. **Doc Sync is broken** — sync-check shows "31/31 OK" with 12 real discrepancies (UX Issues #15, #18). Hash-based detection doesn't catch semantic drift. The killer feature doesn't truly work.
+2. ~~**Doc Sync is broken**~~ **FIXED (Phase 8.5 + BDL-016)** — Symbol-level drift detection via `symbols_hash` catches semantic drift. BDL-016 fixed the incremental reindex path to preserve baselines. `sync-check` now honestly reports stale docs.
 
-3. **4 languages aren't enough** — no Java/Kotlin (Android), Swift (iOS), C/C++ (native modules). Mobile and cross-platform projects get empty nodes.
+3. ~~**4 languages aren't enough**~~ **FIXED (Phase 9)** — Added Kotlin, Java, Swift, C/C++, Objective-C. 9 languages total.
 
 ### Strategy 2 Key Message
 
@@ -126,51 +126,53 @@ Beadloom is for engineers who build and maintain serious IT systems. YAML graph 
 
 ## 4. Roadmap
 
-### Phase 8: Smart Bootstrap (v1.5)
+### Phase 8: Smart Bootstrap (v1.5) — DONE
 
 **Goal:** `beadloom init` creates a graph with real architectural meaning, not just file counts.
 
 **Metric:** Bootstrapping a 50-module project yields nodes with framework, entry points, key symbols, and dependency edges.
 
-| # | Task | Type | P | Effort |
-|---|------|------|---|--------|
-| 8.1 | **README/documentation ingestion** — parse README.md, CONTRIBUTING.md; extract project description, tech stack, architecture notes; store as root node metadata | feature | P0 | S |
-| 8.2 | **Extended framework detection** — 15+ frameworks by files and imports: FastAPI, Flask, Django, Express, NestJS, Next.js, Vue, Spring Boot, Gin, Actix, **Expo/React Native**, **SwiftUI**, **Jetpack Compose**, **UIKit** | feature | P0 | M |
-| 8.3 | **Entry point discovery** — `__main__.py`, `if __name__`, CLI (Click/Typer/argparse), `main()` in Go/Rust/Java/Kotlin, `@main` in Swift, `AppDelegate`/`@UIApplicationMain`, server bootstraps | feature | P0 | M |
-| 8.4 | **Import analysis at bootstrap** — run tree-sitter import extraction in `bootstrap_project()`, build `depends_on` edges before reindex; first graph has real dependencies | feature | P0 | L |
-| 8.5 | **Contextual node summaries** — replace "Domain: auth (15 files)" with "FastAPI service: auth — JWT auth, 3 routes, 5 public classes" from extracted data | feature | P1 | M |
-| 8.6 | **AGENTS.md in bootstrap** — call `generate_agents_md()` from `bootstrap_project()` automatically (fix UX Issue #19) | fix | P1 | S |
-| 8.7 | **`service-needs-parent` rule** — auto-generate in `generate_rules()`: every service must have a `part_of` edge | fix | P1 | S |
+**Delivered in:** BDL-015 (17 beads, 306 new tests). Released as v1.5.0.
 
-### Phase 8.5: Doc Sync v2 — Semantic Drift Detection (v1.5)
+| # | Task | Type | P | Status |
+|---|------|------|---|--------|
+| 8.1 | **README/documentation ingestion** — `_ingest_readme()` extracts project description, tech stack, architecture notes | feature | P0 | DONE |
+| 8.2 | **Extended framework detection** — 18+ frameworks detected by files and imports | feature | P0 | DONE |
+| 8.3 | **Entry point discovery** — `_discover_entry_points()` across 6 languages | feature | P0 | DONE |
+| 8.4 | **Import analysis at bootstrap** — `_quick_import_scan()` builds `depends_on` edges | feature | P0 | DONE |
+| 8.5 | **Contextual node summaries** — `_build_contextual_summary()` with rich descriptions | feature | P1 | DONE |
+| 8.6 | **AGENTS.md in bootstrap** — auto-called from `bootstrap_project()` (fix UX #19) | fix | P1 | DONE |
+| 8.7 | **`service-needs-parent` rule** — auto-generated in `generate_rules()` | fix | P1 | DONE |
+
+### Phase 8.5: Doc Sync v2 — Semantic Drift Detection (v1.5) — DONE
 
 **Goal:** Doc Sync honestly catches discrepancies between code and documentation, rather than creating a false sense of security.
 
 **Metric:** After changing 3 functions in a module, `sync-check` shows "stale" for the corresponding documentation, even if the doc file hasn't changed between reindexes.
 
-**Fix:** UX Issues #15, #18 — critical product problems.
+**Fix:** UX Issues #15, #18 — critical product problems. **Additionally fixed E2E in BDL-016.**
 
-| # | Task | Type | P | Effort |
+| # | Task | Type | P | Status |
 |---|------|------|---|--------|
-| 8.5.1 | **Symbol-level drift detection** — on reindex, compute `symbols_hash` for each node (hash of sorted `code_symbols` list); store in `sync_state`; on `sync-check` compare current `symbols_hash` vs stored → if code changed but doc didn't, mark as stale | feature | P0 | M |
-| 8.5.2 | **`doctor` warns about drift** — "N nodes have code changes since last doc update"; doesn't replace 100% coverage, adds a second layer of verification | feature | P0 | S |
-| 8.5.3 | **Symbol diff in `docs polish`** — `generate_polish_data()` includes diff: "added functions X, Y; removed class Z; changed signature W"; agent receives specific update instructions | feature | P0 | M |
-| 8.5.4 | **Incremental reindex: graph YAML** — incremental reindex must pick up changes in `services.yml` (fix UX Issue #21) | fix | P0 | M |
-| 8.5.5 | **`setup-rules` auto-detect fix** — for Windsurf/Cline, check existing file content, not just presence (fix UX Issue #17) | fix | P2 | S |
+| 8.5.1 | **Symbol-level drift detection** — `_compute_symbols_hash()` + `symbols_hash` in `sync_state` | feature | P0 | DONE |
+| 8.5.2 | **`doctor` warns about drift** — `_check_symbol_drift()` + `_check_stale_sync()` | feature | P0 | DONE |
+| 8.5.3 | **Symbol diff in `docs polish`** — `_detect_symbol_changes()` in polish output | feature | P0 | DONE |
+| 8.5.4 | **Incremental reindex: graph YAML** — `_graph_yaml_changed()` (fix UX #21) | fix | P0 | DONE |
+| 8.5.5 | **`setup-rules` auto-detect fix** — content check instead of presence (fix UX #17) | fix | P2 | DONE |
 
-### Phase 9: Mobile and Server Languages (v1.5)
+### Phase 9: Mobile and Server Languages (v1.5) — DONE
 
 **Goal:** Beadloom supports mobile, cross-platform, and server-side development languages. Critical for dogfood project (dreamteam: React Native + Expo + Valhalla C++ + Meshtastic).
 
 **Metric:** `beadloom reindex` on a project with `.kt`, `.swift`, `.cpp`, `.m` files extracts symbols, imports, and dependencies.
 
-| # | Task | Type | P | Effort |
+| # | Task | Type | P | Status |
 |---|------|------|---|--------|
-| 9.1 | **Kotlin** — tree-sitter-kotlin: classes, data classes, annotations (`@Composable`, `@HiltViewModel`), imports; `.kt`, `.kts` | feature | P0 | M |
-| 9.2 | **Java** — tree-sitter-java: classes, interfaces, annotations (`@RestController`, `@Service`), imports; `.java` | feature | P0 | M |
-| 9.3 | **Swift** — tree-sitter-swift: classes, structs, protocols, `@main`, `import`; `.swift` | feature | P0 | M |
-| 9.4 | **C/C++** — tree-sitter-c / tree-sitter-cpp: functions, classes, `#include`; `.h`, `.c`, `.cpp` | feature | P1 | L |
-| 9.5 | **Objective-C** — tree-sitter-objc: classes, methods, `#import`, `@interface`; `.m`, `.mm` | feature | P1 | M |
+| 9.1 | **Kotlin** — `_load_kotlin()`, `_extract_kotlin_imports()` with stdlib filtering | feature | P0 | DONE |
+| 9.2 | **Java** — `_load_java()`, `_extract_java_imports()` with static/wildcard imports | feature | P0 | DONE |
+| 9.3 | **Swift** — `_load_swift()`, `_extract_swift_imports()` with 35 Apple framework filters | feature | P0 | DONE |
+| 9.4 | **C/C++** — `_load_c()`, `_load_cpp()`, `_extract_c_cpp_imports()` with 80+ system headers | feature | P1 | DONE |
+| 9.5 | **Objective-C** — `_load_objc()`, `_extract_objc_imports()` with 48 system frameworks | feature | P1 | DONE |
 
 ### Phase 10: Deep Code Analysis (v1.6)
 
@@ -439,30 +441,11 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
 ## 6. Dependency Map
 
 ```
-v1.5 ──────────────────────────────────────────────────────
+v1.5 ── DONE ─────────────────────────────────────────────
 │
-├── Phase 8 (Smart Bootstrap) ─── no dependencies
-│   ├── 8.1 README ingest ──────── standalone
-│   ├── 8.2 Framework detection ── standalone
-│   ├── 8.3 Entry points ──────── standalone
-│   ├── 8.4 Import analysis ───── reuses import_resolver.py
-│   ├── 8.5 Contextual summaries ─ depends on 8.1-8.4
-│   ├── 8.6 AGENTS.md in bootstrap standalone (fix UX #19)
-│   └── 8.7 service-needs-parent ─ standalone
-│
-├── Phase 8.5 (Doc Sync v2) ──── parallel with Phase 8
-│   ├── 8.5.1 Symbol-level drift ─ standalone
-│   ├── 8.5.2 Doctor drift warn ── depends on 8.5.1
-│   ├── 8.5.3 Symbol diff polish ─ depends on 8.5.1
-│   ├── 8.5.4 Incremental fix ──── standalone (fix UX #21)
-│   └── 8.5.5 setup-rules fix ──── standalone (fix UX #17)
-│
-└── Phase 9 (Languages) ──────── parallel with Phases 8, 8.5
-    ├── 9.1 Kotlin ───────────── standalone
-    ├── 9.2 Java ─────────────── standalone (parallel with 9.1)
-    ├── 9.3 Swift ────────────── standalone
-    ├── 9.4 C/C++ ────────────── standalone
-    └── 9.5 Objective-C ──────── standalone
+├── Phase 8 (Smart Bootstrap) ─── DONE (7/7 tasks)
+├── Phase 8.5 (Doc Sync v2) ───── DONE (5/5 tasks)
+└── Phase 9 (Languages) ──────── DONE (5/5 tasks)
 
 v1.6 ──────────────────────────────────────────────────────
 │
@@ -508,13 +491,14 @@ Cross-cutting ──────────────────────
 
 ## 7. Success Metrics
 
-| Metric | v1.4 (current) | v1.5 (target) | v1.6 (target) | v1.7 (target) | v2.0 (target) |
-|--------|----------------|---------------|---------------|---------------|---------------|
-| **Node summaries** | "15 files" | Framework + entry points | + routes, activity | + cross-repo | + cross-repo |
-| **First graph edges** | `part_of` only | `part_of` + `depends_on` | + API contracts | + inter-repo | + federated |
-| **Doc drift detection** | file-hash only | **symbol-level** | + symbol diff | + cross-repo | + cross-repo |
-| **Frameworks** | 4 patterns | 15+ | 15+ with routes | 15+ | + custom |
+| Metric | v1.4 | v1.5 (current) | v1.6 (target) | v1.7 (target) | v2.0 (target) |
+|--------|------|----------------|---------------|---------------|---------------|
+| **Node summaries** | "15 files" | **Framework + entry points** | + routes, activity | + cross-repo | + cross-repo |
+| **First graph edges** | `part_of` only | **`part_of` + `depends_on`** | + API contracts | + inter-repo | + federated |
+| **Doc drift detection** | file-hash only | **symbol-level (E2E)** | + symbol diff | + cross-repo | + cross-repo |
+| **Frameworks** | 4 patterns | **18+** | 18+ with routes | 18+ | + custom |
 | **Languages** | 4 | **9** (+Kt, Java, Swift, C/C++, ObjC) | 9 | 9 | 9+ |
+| **Tests** | 847 | **1158** | — | — | — |
 | **MCP tools** | 10 | 10 | **13** (+lint, why, diff) | 13 | 13+ |
 | **Multi-repo** | No | No | No | **refs** | **federation** |
 | **Search** | FTS5 | FTS5 | FTS5 | FTS5 | FTS5 + **semantic** |
@@ -523,19 +507,21 @@ Cross-cutting ──────────────────────
 
 ## 8. Priority Summary
 
-| Phase | Version | Tasks | Effort | Key outcome |
+| Phase | Version | Tasks | Status | Key outcome |
 |-------|---------|-------|--------|-------------|
-| **8 — Smart Bootstrap** | v1.5 | 7 | M-L | Rich graph from first `init` |
-| **8.5 — Doc Sync v2** | v1.5 | 5 | M | Honest drift tracking (fix #15, #18, #21) |
-| **9 — Mobile Languages** | v1.5 | 5 | M-L | +Kotlin, Java, Swift, C/C++, Obj-C |
-| **10 — Deep Analysis** | v1.6 | 5 | M-L | Routes, activity, tests |
-| **11 — Agent Infra** | v1.6 | 5 | M | MCP lint/why/diff, metrics |
-| **12 — Cross-System** | v1.7 | 4 | L | Multi-repo refs, export |
-| **13 — Full Cross + Semantic** | v2.0 | 7 | L | Federation, semantic search |
-| **14 — Quality** | cross-cutting | 5 | M | Atomic writes, migrations |
-| **7 — Guides** | parallel | 5 | S | Guides, demos |
+| **8 — Smart Bootstrap** | v1.5 | 7 | **DONE** | Rich graph from first `init` |
+| **8.5 — Doc Sync v2** | v1.5 | 5 | **DONE** | Honest drift tracking (fix #15, #18, #21) |
+| **9 — Mobile Languages** | v1.5 | 5 | **DONE** | +Kotlin, Java, Swift, C/C++, Obj-C |
+| **10 — Deep Analysis** | v1.6 | 5 | Planned | Routes, activity, tests |
+| **11 — Agent Infra** | v1.6 | 5 | Planned | MCP lint/why/diff, metrics |
+| **12 — Cross-System** | v1.7 | 4 | Planned | Multi-repo refs, export |
+| **13 — Full Cross + Semantic** | v2.0 | 7 | Planned | Federation, semantic search |
+| **14 — Quality** | cross-cutting | 5 | Planned | Atomic writes, migrations |
+| **7 — Guides** | parallel | 5 | Planned | Guides, demos |
 
-**v1.5 priority:** Phases 8 + 8.5 + 9 in parallel. Three critical problems solved in one release.
+**v1.5 delivered:** Phases 8 + 8.5 + 9 in parallel. Three critical problems solved in one release (BDL-015, 17 beads, 306 new tests).
+
+**Next priority:** Phases 10 + 11 for v1.6.
 
 ---
 
@@ -552,7 +538,7 @@ Cross-cutting ──────────────────────
 | Rule severity levels (§3) | Phase 10.4 | Planned (v1.6) |
 | Re-export resolution (§3) | Phase 14.3 | Planned (cross-cutting) |
 | Phase 7 guides (§5) | Phase 7 | Planned (parallel) |
-| More languages — Java, Kotlin, Swift, C/C++ (§6a) | Phase 9 | **Elevated to v1.5** |
+| More languages — Java, Kotlin, Swift, C/C++ (§6a) | Phase 9 | **DONE (v1.5)** |
 | C# (§6a) | Deferred to STRATEGY-3 | — |
 | Rule tags/categories (§6a) | Deferred to STRATEGY-3 | — |
 | Monorepo workspace (§6b) | Phase 12.4 | Planned (v1.7) |
@@ -582,15 +568,15 @@ Cross-cutting ──────────────────────
 
 ## 10. BDL-UX-Issues.md Integration
 
-| UX Issue | Where resolved | Phase |
-|----------|---------------|-------|
-| #15 [HIGH] doctor 100% coverage misleading | Phase 8.5.1 + 8.5.2 | v1.5 |
-| #16 [MEDIUM] beadloom's own docs outdated | Manual update (hygiene) | — |
-| #17 [LOW] setup-rules auto-detect for Windsurf/Cline | Phase 8.5.5 | v1.5 |
-| #18 [HIGH] sync-check "31/31 OK" despite drift | Phase 8.5.1 | v1.5 |
-| #19 [MEDIUM] AGENTS.md not in bootstrap | Phase 8.6 | v1.5 |
-| #20 [LOW] .beadloom/README.md no auto-update | Low priority; manual | — |
-| #21 [HIGH] incremental reindex Nodes: 0 | Phase 8.5.4 | v1.5 |
+| UX Issue | Where resolved | Status |
+|----------|---------------|--------|
+| #15 [HIGH] doctor 100% coverage misleading | Phase 8.5.1 + 8.5.2 + BDL-016 | **DONE** |
+| #16 [MEDIUM] beadloom's own docs outdated | Manual update (hygiene) | Open |
+| #17 [LOW] setup-rules auto-detect for Windsurf/Cline | Phase 8.5.5 | **DONE** |
+| #18 [HIGH] sync-check "31/31 OK" despite drift | Phase 8.5.1 + BDL-016 | **DONE** |
+| #19 [MEDIUM] AGENTS.md not in bootstrap | Phase 8.6 | **DONE** |
+| #20 [LOW] .beadloom/README.md no auto-update | Low priority; manual | Open |
+| #21 [HIGH] incremental reindex Nodes: 0 | Phase 8.5.4 | **DONE** |
 
 ---
 

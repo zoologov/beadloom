@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0e17"/>
+      <stop offset="100%" style="stop-color:#131b2e"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#6366f1"/>
+      <stop offset="100%" style="stop-color:#818cf8"/>
+    </linearGradient>
+    <linearGradient id="edge-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:0.35"/>
+      <stop offset="100%" style="stop-color:#818cf8;stop-opacity:0.1"/>
+    </linearGradient>
+    <filter id="node-glow">
+      <feGaussianBlur stdDeviation="14" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="title-glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="640" fill="url(#bg)"/>
+
+  <!-- Graph decoration — left cluster -->
+  <g opacity="0.18">
+    <line x1="140" y1="80" x2="260" y2="200" stroke="url(#edge-grad)" stroke-width="3"/>
+    <line x1="140" y1="80" x2="60" y2="220" stroke="url(#edge-grad)" stroke-width="3"/>
+    <line x1="260" y1="200" x2="180" y2="380" stroke="url(#edge-grad)" stroke-width="3"/>
+    <line x1="60" y1="220" x2="180" y2="380" stroke="url(#edge-grad)" stroke-width="3"/>
+    <line x1="60" y1="220" x2="30" y2="440" stroke="url(#edge-grad)" stroke-width="3"/>
+    <line x1="180" y1="380" x2="120" y2="540" stroke="url(#edge-grad)" stroke-width="3"/>
+
+    <circle cx="140" cy="80" r="12" fill="#6366f1" filter="url(#node-glow)" opacity="0.8"/>
+    <circle cx="260" cy="200" r="10" fill="#818cf8" filter="url(#node-glow)" opacity="0.7"/>
+    <circle cx="60" cy="220" r="11" fill="#6366f1" filter="url(#node-glow)" opacity="0.7"/>
+    <circle cx="180" cy="380" r="10" fill="#818cf8" filter="url(#node-glow)" opacity="0.6"/>
+    <circle cx="30" cy="440" r="8" fill="#a5b4fc" filter="url(#node-glow)" opacity="0.5"/>
+    <circle cx="120" cy="540" r="9" fill="#a5b4fc" filter="url(#node-glow)" opacity="0.5"/>
+
+    <!-- Right cluster -->
+    <line x1="1140" y1="100" x2="1230" y2="240" stroke="url(#edge-grad)" stroke-width="3"/>
+    <line x1="1140" y1="100" x2="1040" y2="210" stroke="url(#edge-grad)" stroke-width="3"/>
+    <line x1="1230" y1="240" x2="1180" y2="400" stroke="url(#edge-grad)" stroke-width="3"/>
+    <line x1="1040" y1="210" x2="1100" y2="370" stroke="url(#edge-grad)" stroke-width="3"/>
+    <line x1="1180" y1="400" x2="1100" y2="370" stroke="url(#edge-grad)" stroke-width="3"/>
+    <line x1="1100" y1="370" x2="1150" y2="530" stroke="url(#edge-grad)" stroke-width="3"/>
+    <line x1="1180" y1="400" x2="1250" y2="520" stroke="url(#edge-grad)" stroke-width="3"/>
+
+    <circle cx="1140" cy="100" r="12" fill="#6366f1" filter="url(#node-glow)" opacity="0.8"/>
+    <circle cx="1230" cy="240" r="10" fill="#818cf8" filter="url(#node-glow)" opacity="0.7"/>
+    <circle cx="1040" cy="210" r="11" fill="#6366f1" filter="url(#node-glow)" opacity="0.7"/>
+    <circle cx="1180" cy="400" r="9" fill="#a5b4fc" filter="url(#node-glow)" opacity="0.6"/>
+    <circle cx="1100" cy="370" r="10" fill="#818cf8" filter="url(#node-glow)" opacity="0.6"/>
+    <circle cx="1150" cy="530" r="8" fill="#a5b4fc" filter="url(#node-glow)" opacity="0.5"/>
+    <circle cx="1250" cy="520" r="9" fill="#6366f1" filter="url(#node-glow)" opacity="0.5"/>
+  </g>
+
+  <!-- === Central content === -->
+
+  <!-- Title -->
+  <text x="640" y="260" font-family="'SF Mono', 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace" font-size="140" font-weight="800" fill="#ffffff" text-anchor="middle" filter="url(#title-glow)">
+    Beadloom
+  </text>
+
+  <!-- Accent underline -->
+  <rect x="340" y="285" width="600" height="4" rx="2" fill="url(#accent)" opacity="0.5"/>
+
+  <!-- Tagline line 1 -->
+  <text x="640" y="360" font-family="'SF Mono', 'JetBrains Mono', 'Fira Code', monospace" font-size="40" fill="#818cf8" text-anchor="middle" letter-spacing="4" font-weight="600">
+    Architecture as Code.
+  </text>
+
+  <!-- Tagline line 2 -->
+  <text x="640" y="430" font-family="'SF Mono', 'JetBrains Mono', 'Fira Code', monospace" font-size="40" fill="#818cf8" text-anchor="middle" letter-spacing="4" font-weight="600">
+    Context as a Service.
+  </text>
+
+  <!-- Key props -->
+  <text x="640" y="530" font-family="'SF Mono', monospace" font-size="24" fill="#6366f1" text-anchor="middle">
+    YAML Graph  |  CLI + MCP  |  &lt;20ms context
+  </text>
+
+  <!-- Bottom accent -->
+  <rect x="0" y="630" width="1280" height="10" fill="url(#accent)" opacity="0.4"/>
+</svg>

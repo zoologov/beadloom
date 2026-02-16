@@ -1,10 +1,10 @@
 # RFC: BDL-011 — Plug & Play Onboarding
 
 > **Epic:** BDL-011
-> **Status:** Draft → Pending Approval
+> **Status:** Implemented (v1.3.0)
 > **Author:** v.zoologov + Claude
 > **Date:** 2026-02-13
-> **Depends on:** PRD BDL-011 (approved)
+> **Depends on:** PRD BDL-011 (Complete)
 
 ---
 

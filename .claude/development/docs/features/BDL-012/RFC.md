@@ -1,5 +1,8 @@
 # BDL-012 RFC — Onboarding Quality Bug-fixes
 
+> **Status:** Implemented (v1.3.1)
+> **Epic:** BDL-012
+
 ## Overview
 
 10 fixes across 4 packages (`onboarding`, `infrastructure`, `context_oracle`, `services`). No new commands, no new tables. Every fix is backward-compatible.

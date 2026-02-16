@@ -1,8 +1,8 @@
 # RFC: BDL-008 — Eat Your Own Dogfood: DDD Code, Docs & Knowledge Graph
 
-> **Status:** Approved
+> **Status:** Implemented (v1.2.0)
 > **Epic:** BDL-008
-> **Depends on:** PRD (Approved)
+> **Depends on:** PRD (Complete)
 
 ---
 

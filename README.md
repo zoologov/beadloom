@@ -2,7 +2,9 @@
 
 > Read this in other languages: [Русский](README.ru.md)
 
-**Your architecture shouldn't live in one person's head.**
+**Architecture as Code. Context as a Service.**
+
+Beadloom turns Architecture as Code into Architectural Intelligence — structured, queryable knowledge about your system that humans and agents consume in <20ms.
 
 [![License: MIT](https://img.shields.io/github/license/zoologov/beadloom)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/zoologov/beadloom?include_prereleases&sort=semver)](https://github.com/zoologov/beadloom/releases)
@@ -15,100 +17,72 @@
 
 ---
 
-Beadloom is a knowledge management tool for codebases. It turns scattered architecture knowledge into an explicit, queryable graph that lives in your Git repository — accessible to both humans and AI agents.
-
-> IDE finds code. Beadloom tells you what that code means in the context of your system.
+> IDE finds code. Beadloom tells you what that code means in the context of your system — and enforces the boundaries.
 
 **Platforms:** macOS, Linux, Windows &nbsp;|&nbsp; **Python:** 3.10+
 
 ## Why Beadloom?
 
-Large codebases have a knowledge problem that code search alone doesn't solve:
+Large codebases lack **Architectural Intelligence** — structured, queryable knowledge about how the system is built and how its parts connect. Without it, your team makes decisions outside architectural boundaries — accumulating tech debt. Your agents hallucinate.
 
-- **"Only two people understand how this system works."** Architecture knowledge lives in heads, not in the repo. When those people leave, the knowledge goes with them.
-- **"The docs are lying."** Documentation goes stale within weeks. Nobody notices until an agent or a new hire builds on top of outdated specs.
-- **"AI agents reinvent context every session."** Each agent run starts from scratch — grepping, reading READMEs, guessing which files matter. Most of the context window burns on orientation, not on actual work.
+- **"Only two people understand how this works."** Architecture lives in heads, not in the repo. When they leave, the knowledge leaves with them.
+- **"The docs are lying."** Documentation goes stale. Nobody notices until a developer or agent starts building new functionality on top of outdated specs.
+- **"Agents burn context on orientation, not work."** Every session starts from scratch — grep, read, guess. The right 2K tokens matter more than a noisy 128K window.
 
-Beadloom solves this with two primitives:
+Beadloom turns Architecture as Code into three queryable primitives:
 
-1. **Context Oracle** — an architecture graph (YAML in Git) that maps your domains, features, services, and their relationships. Query any node and get a deterministic, compact context bundle in <20ms. Same query, same result, every time.
+1. **Context Oracle** — architecture graph in YAML, stored in Git. Query any node → deterministic context bundle in <20ms. Same query, same result, every time.
 
-2. **Doc Sync Engine** — tracks which docs correspond to which code. Detects stale documentation on every commit. No more "the spec says X but the code does Y".
+2. **Doc Sync Engine** — tracks code↔doc relationships. Catches stale documentation on every commit. No more "the spec says X but the code does Y".
+
+3. **Architecture Rules** — boundary constraints in YAML, validated with `beadloom lint`, enforced in CI. Boundaries are checked at build time — not hoped for at review time.
+
+For AI agents, `beadloom prime` assembles all three into a <2K-token payload — one command replaces the grep→read→guess loop.
 
 ### Deterministic context, not probabilistic guessing
 
-IDE indexers use semantic search — an LLM decides what's relevant. This works for "find similar code", but fails for "explain this feature in the context of the whole system".
-
-Beadloom uses **deterministic graph traversal**: your team defines the architecture graph, and BFS produces the same context bundle every time. The graph is YAML in Git — reviewable in PRs, auditable, version-controlled.
+IDE indexers use semantic search — an LLM decides what's relevant. Beadloom uses **deterministic graph traversal**: BFS over an explicit architecture graph produces the same context bundle every time. The graph is YAML in Git — reviewable, auditable, version-controlled.
 
 |  | Semantic search (IDE) | Beadloom |
 |---|---|---|
 | **Answers** | "Where is this class?" | "What is this feature and how does it fit?" |
-| **Method** | Embeddings + LLM ranking | Explicit graph + BFS traversal |
-| **Result** | Probabilistic file list | Deterministic context bundle |
-| **Docs** | Doesn't track freshness | Catches stale docs on every commit |
+| **Method** | Embeddings + LLM ranking | Explicit graph + BFS |
+| **Result** | Probabilistic | Deterministic |
+| **Docs** | Doesn't track freshness | Catches stale docs every commit |
+| **Architecture** | Doesn't validate | Enforces boundaries, blocks violations |
 | **Knowledge** | Dies with the session | Lives in Git, survives team changes |
 
-Beadloom doesn't replace your IDE. It gives your IDE — and your agents — the architectural context they can't infer from code alone.
+---
 
-## Install
+### Research and industry trends
 
-```bash
-uv tool install beadloom        # recommended
-pipx install beadloom            # alternative
-```
+- **[Lost in the Middle](https://arxiv.org/abs/2307.03172)** (Liu et al., 2023) — LLMs lose accuracy on information buried in long contexts. The right 2K tokens beat a noisy 128K window.
+- **[Context Engineering for Coding Agents](https://martinfowler.com/articles/exploring-gen-ai/context-engineering-coding-agents.html)** (Fowler, 2025) — structured context is a core capability for coding agents, not a nice-to-have.
+- **[From Scattered to Structured](https://arxiv.org/html/2601.19548v1)** (Keim & Kaplan, KIT, 2026) — architectural knowledge dispersed across artifacts causes "architectural erosion"; consolidating it into a structured knowledge base is the fix.
+- **[Why AI Coding Agents Aren't Production-Ready](https://venturebeat.com/ai/why-ai-coding-agents-arent-production-ready-brittle-context-windows-broken)** (Raja & Gemawat, VentureBeat, 2025) — practitioners at LinkedIn and Microsoft document how agents hallucinate without architectural context.
+- **[Context Quality vs Quantity](https://www.augmentcode.com/guides/context-quality-vs-quantity-5-ai-tools-that-nail-relevance)** (Augment Code, 2025) — relationship-aware context reduces hallucinations by ~40% compared to naive context stuffing.
+- **[State of Software Architecture 2025](https://icepanel.io/blog/2026-01-21-state-of-software-architecture-survey-2025)** (IcePanel, 2026) — keeping architecture docs current is the #1 challenge; teams lose trust in outdated documentation.
+- **[2026 Agentic Coding Trends](https://claude.com/blog/eight-trends-defining-how-software-gets-built-in-2026)** (Anthropic, 2026) — the industry shifts to agent-orchestration with structured context.
+- **[Architecture Reset](https://itbrief.news/story/ai-coding-tools-face-2026-reset-towards-architecture)** (ITBrief, 2026) — enterprises pivot from "vibe coding" to architecture-first development.
 
-## Quick start
-
-```bash
-# 1. Scan your codebase and generate an architecture graph
-beadloom init --bootstrap
-
-# 2. Review the generated graph (edit domains, rename nodes, add edges)
-vi .beadloom/_graph/services.yml
-
-# 3. Build the index and start using it
-beadloom reindex
-beadloom ctx AUTH-001              # get context for a feature
-beadloom sync-check                # check if docs are up to date
-```
-
-No documentation required to start — Beadloom bootstraps from code structure alone.
-
-### Connect AI agents via MCP
-
-```bash
-beadloom setup-mcp                 # creates .mcp.json automatically
-```
-
-Agents call `get_context("AUTH-001")` and receive a ready-made bundle — zero search tokens:
-
-```json
-{
-  "mcpServers": {
-    "beadloom": {
-      "command": "beadloom",
-      "args": ["mcp-serve"]
-    }
-  }
-}
-```
-
-Works with Claude Code, Cursor, and any MCP-compatible tool.
+---
 
 ## Who is it for?
 
-**Tech Lead / Architect** — You want architecture knowledge to be explicit, versionable, and survive team rotation. Beadloom makes the implicit explicit: domains, features, services, dependencies — all in YAML, all in Git.
+**Tech Lead / Architect** — You want architecture knowledge to be explicit, versionable, and survive team rotation. Beadloom makes the implicit explicit: domains, features, services, dependencies — all in YAML, all in Git. `beadloom lint` enforces boundaries in CI.
 
-**Platform / DevEx Engineer** — You build tooling for the team. Beadloom gives your agents structured context out of the box (via MCP), and your CI pipeline a doc freshness check that actually works.
+**Platform / DevEx Engineer** — You build tooling for the team. Beadloom gives your CI pipeline a doc freshness check and architecture boundary validation that actually work. Agents get structured context out of the box via MCP.
 
 **Individual Developer** — You're tired of spending the first hour on every task figuring out "how does this part of the system work?" `beadloom ctx FEATURE-ID` gives you the answer in seconds.
+
+**AI-Assisted / Agent-Native Developer** — You work with AI agents and need them to work within your architecture, not break it. `beadloom prime` + MCP gives your agent a compact, deterministic context payload at session start.
 
 ## Key features
 
 - **Context Oracle** — deterministic graph traversal, compact JSON bundle in <20ms
 - **Doc Sync Engine** — tracks code↔doc relationships, detects stale documentation, integrates with git hooks
 - **Architecture as Code** — define boundary rules in YAML, validate with `beadloom lint`, enforce in CI
+- **Agent Prime** — single entry point for AI agents: `beadloom prime` outputs <2K tokens of architecture context, `setup-rules` creates IDE adapters, `AGENTS.md` carries conventions and MCP tools
 - **Full-text search** — FTS5-powered search across nodes, docs, and code symbols
 - **Impact analysis** — `beadloom why` shows what depends on a node and what breaks if it changes
 - **Code-first onboarding** — bootstrap an architecture graph from code structure alone; no docs needed to start
@@ -124,7 +98,7 @@ The indexing pipeline merges three sources into a single SQLite database:
 
 1. **Graph YAML** — nodes and edges that describe the project architecture
 2. **Documentation** — Markdown files linked to graph nodes, split into searchable chunks
-3. **Code** — source files parsed with tree-sitter to extract symbols and `# beadloom:feature=AUTH-001` annotations
+3. **Code** — source files parsed with tree-sitter to extract symbols and `# beadloom:domain=context-oracle` annotations
 
 When you request context for a node, the Context Oracle runs a breadth-first traversal, collects the relevant subgraph, documentation, and code symbols, and returns a compact bundle.
 
@@ -151,6 +125,20 @@ rules:
       for: { kind: feature }
       has_edge_to: { kind: domain }
       edge_kind: part_of
+
+  - name: service-needs-parent
+    description: "Every service must be part_of the beadloom service"
+    require:
+      for: { kind: service }
+      has_edge_to: { ref_id: beadloom }
+      edge_kind: part_of
+
+  - name: no-domain-depends-on-service
+    description: "Domains must not have depends_on edges to services"
+    deny:
+      from: { kind: domain }
+      to: { kind: service }
+      unless_edge: [part_of]
 ```
 
 **Validate:**
@@ -164,6 +152,58 @@ beadloom lint --format json   # machine-readable output
 **Agent-aware constraints** — when an agent calls `get_context("why")`, the response includes active rules for that node. Agents respect architectural boundaries by design, not by accident.
 
 Supported languages for import analysis: **Python, TypeScript/JavaScript, Go, Rust, Kotlin, Java, Swift, C/C++, Objective-C**.
+
+## Install
+
+```bash
+uv tool install beadloom        # recommended
+pipx install beadloom            # alternative
+```
+
+## Quick start
+
+```bash
+# 1. Scan your codebase and generate an architecture graph
+beadloom init --bootstrap
+
+# 2. Review the generated graph (edit domains, rename nodes, add edges)
+vi .beadloom/_graph/services.yml
+
+# 3. Build the index and start using it
+beadloom reindex
+beadloom ctx search              # get context for a feature
+beadloom sync-check                # check if docs are up to date
+beadloom lint                      # check architecture rules
+
+# 4. Set up context injection for AI agents
+beadloom setup-rules               # create IDE adapter files
+beadloom prime                      # verify: see what your agent will see
+```
+
+No documentation required to start — Beadloom bootstraps from code structure alone.
+
+### Agent Prime — one command, full context
+
+Beadloom injects context into AI agents through a three-layer architecture:
+
+1. **IDE adapters** — `beadloom setup-rules` creates `.cursorrules`, `.windsurfrules`, `.clinerules` that point to `.beadloom/AGENTS.md`
+2. **AGENTS.md** — project conventions, architecture rules from `rules.yml`, MCP tool catalog — loaded automatically by the agent
+3. **`beadloom prime`** — dynamic context payload (<2K tokens): architecture summary, health metrics, active rules, domain map
+
+For programmatic access, connect via MCP:
+
+```json
+{
+  "mcpServers": {
+    "beadloom": {
+      "command": "beadloom",
+      "args": ["mcp-serve"]
+    }
+  }
+}
+```
+
+Works with Claude Code, Cursor, Windsurf, Cline, and any MCP-compatible tool.
 
 ## CLI commands
 
@@ -179,6 +219,8 @@ Supported languages for import analysis: **Python, TypeScript/JavaScript, Go, Ru
 | `doctor` | Validate the architecture graph |
 | `sync-check` | Check doc↔code synchronization status |
 | `sync-update REF_ID` | Review and update stale docs |
+| `docs generate` | Generate documentation skeletons from the architecture graph |
+| `docs polish` | Generate structured data for AI-driven documentation enrichment |
 | `lint` | Validate code against architecture boundary rules |
 | `why REF_ID` | Impact analysis — upstream deps and downstream dependents |
 | `diff` | Show graph changes since a git ref |
@@ -186,6 +228,8 @@ Supported languages for import analysis: **Python, TypeScript/JavaScript, Go, Ru
 | `ui` | Interactive terminal dashboard (requires `beadloom[tui]`) |
 | `watch` | Auto-reindex on file changes (requires `beadloom[watch]`) |
 | `install-hooks` | Install the beadloom pre-commit hook |
+| `prime` | Output compact project context for AI agent injection |
+| `setup-rules` | Create IDE adapter files (`.cursorrules`, `.windsurfrules`, `.clinerules`) |
 | `setup-mcp` | Configure MCP server for AI agents |
 | `mcp-serve` | Run the MCP server (stdio transport) |
 
@@ -193,6 +237,7 @@ Supported languages for import analysis: **Python, TypeScript/JavaScript, Go, Ru
 
 | Tool | Description |
 |------|-------------|
+| `prime` | Compact project context for AI agent session start |
 | `get_context` | Context bundle for a ref_id (graph + docs + code symbols + constraints) |
 | `get_graph` | Subgraph around a node (nodes and edges as JSON) |
 | `list_nodes` | List graph nodes, optionally filtered by kind |
@@ -201,6 +246,7 @@ Supported languages for import analysis: **Python, TypeScript/JavaScript, Go, Ru
 | `update_node` | Update a node's summary or metadata in YAML and SQLite |
 | `mark_synced` | Mark documentation as synchronized with code |
 | `search` | Full-text search across nodes, docs, and code symbols |
+| `generate_docs` | Generate structured documentation data for AI-driven enrichment |
 
 ## Configuration
 
@@ -208,14 +254,15 @@ All project data lives under `.beadloom/` in your repository root:
 
 - **`.beadloom/config.yml`** — scan paths, languages, sync engine settings
 - **`.beadloom/_graph/*.yml`** — architecture graph definition (YAML, version-controlled)
+- **`.beadloom/_graph/rules.yml`** — architecture boundary rules
+- **`.beadloom/AGENTS.md`** — project conventions and MCP tool catalog for AI agents
 - **`.beadloom/beadloom.db`** — SQLite index (auto-generated, add to `.gitignore`)
 
 Link code to graph nodes with annotations:
 
 ```python
-# beadloom:feature=AUTH-001
-# beadloom:service=user-service
-def authenticate(user_id: str) -> bool:
+# beadloom:domain=doc-sync
+def check_freshness(db: sqlite3.Connection, ref_id: str) -> SyncStatus:
     ...
 ```
 
@@ -342,12 +389,7 @@ uv run mypy                # type checking (strict mode)
 
 ## Known Issues
 
-See [UX Issues Log](.claude/development/BDL-UX-Issues.md) for the full list of known issues and limitations discovered during dogfooding.
-
-Key open items:
-- ~~`sync-check` tracks file-level hash changes but does not detect semantic drift (code changed, doc content didn't) — [#15, #18]~~ **Fixed in v1.5.1** — symbol-level drift detection now works end-to-end
-- `setup-rules` auto-detection doesn't work for Windsurf/Cline (marker file = rules file) — [#17]
-- `AGENTS.md` is not auto-generated during `beadloom init --bootstrap` — [#19]
+See [UX Issues Log](.claude/development/BDL-UX-Issues.md) for the full list of known issues.
 
 ## License
 

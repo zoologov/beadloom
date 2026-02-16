@@ -1,6 +1,6 @@
 # RFC: BDL-013 — Dogfood Beadloom + Agent Instructions + CI
 
-> **Status:** Draft
+> **Status:** Implemented (v1.3.1)
 > **Date:** 2026-02-14
 > **PRD:** BDL-013/PRD.md
 

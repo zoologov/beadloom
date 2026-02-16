@@ -8,11 +8,19 @@
 ## Review protocol
 
 ```bash
-# 1. Get information about the bead
+# 1. Get project context
+beadloom prime                    # compact architecture + health overview
+
+# 2. Get information about the bead
 bd show <bead-id>
 bd comments <bead-id>
 
-# 2. Read the context
+# 3. Understand the changed area via Beadloom
+beadloom ctx <ref-id>             # architecture context for the component
+beadloom why <ref-id>             # impact: what depends on this?
+beadloom search "<keyword>"       # find related code and docs
+
+# 4. Read epic context (if applicable)
 # - CONTEXT.md — architectural decisions
 # - RFC.md — technical specification
 ```
@@ -82,11 +90,13 @@ bd comments <bead-id>
 
 ## Beadloom Checklist
 
+- [ ] `beadloom prime` — reviewed project health (stale docs, lint violations)
+- [ ] `beadloom why <ref-id>` — impact analysis for changed components
 - [ ] `beadloom sync-check` — no stale doc-code pairs
 - [ ] `beadloom lint --strict` — no architecture violations
 - [ ] `beadloom doctor` — graph integrity ok
 - [ ] If graph YAML changed: edges are correct, no orphaned nodes
-- [ ] If new domain/feature added: has documentation in docs/
+- [ ] If new domain/feature added: has documentation in docs/ (`beadloom docs generate`)
 
 ---
 

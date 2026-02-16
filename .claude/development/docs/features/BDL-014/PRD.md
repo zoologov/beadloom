@@ -1,6 +1,6 @@
 # PRD: BDL-014 — Agent Prime (Cross-IDE Context Injection)
 
-> **Status:** Approved
+> **Status:** Complete (delivered in v1.4.0)
 > **Author:** Claude
 > **Date:** 2026-02-14
 

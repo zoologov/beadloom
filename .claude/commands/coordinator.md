@@ -91,6 +91,7 @@ uv run pytest
 # 2. Beadloom validation
 beadloom reindex
 beadloom sync-check
+beadloom lint --strict
 
 # 3. Add checkpoint with results
 bd comments add <bead-id> "$(cat <<'EOF'

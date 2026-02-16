@@ -3,7 +3,7 @@
 ## Final Status
 **Epic:** BDL-015 — Beadloom v1.5: Smart Bootstrap + Doc Sync v2 + Languages
 **Status:** CLOSED
-**Tests:** 1153 passed (all green)
+**Tests:** 1158 passed (all green) — 1153 in BDL-015 + 5 in BDL-016
 
 ## Session plan — ALL DONE
 - [x] Explore codebase (3 parallel agents: Phase 8, 8.5, 9)
@@ -51,4 +51,4 @@
 | BEAD-17 | Objective-C support | 27 |
 
 ## Test progression
-901 → 1015 → 1073 → 1153
+901 → 1015 → 1073 → 1153 → 1158 (BDL-016)

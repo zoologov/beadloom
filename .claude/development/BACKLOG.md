@@ -1,8 +1,8 @@
 # Beadloom: Backlog & Deferred Work
 
-> **Last updated:** 2026-02-15
-> **Current version:** 1.4.0
-> **Completed phases:** 1 (v0.3), 2 (v0.4), 3 (v0.5), 4 (v0.6), 5 (v0.7), 6 (v1.0), Agent Prime (v1.4)
+> **Last updated:** 2026-02-16
+> **Current version:** 1.5.0
+> **Completed phases:** 1 (v0.3), 2 (v0.4), 3 (v0.5), 4 (v0.6), 5 (v0.7), 6 (v1.0), Agent Prime (v1.4), 8+8.5+9 (v1.5)
 
 ---
 
@@ -88,7 +88,7 @@ Bugs found during self-testing on the beadloom repository. All fixed and pushed.
 | Rule tags / categories | S | **Deferred to STRATEGY-3** |
 | Autofix suggestions | M | **Not planned** — low ROI |
 | Re-export resolution | M | **Planned: Phase 14.3 (cross-cutting)** |
-| More languages (Java, Kotlin, Swift, C/C++) | M/lang | **Planned: Phase 9 (v1.5)** — elevated to P0 |
+| More languages (Java, Kotlin, Swift, C/C++) | M/lang | **DONE: Phase 9 (v1.5.0)** — Kotlin, Java, Swift, C/C++, Obj-C |
 | C# | M | **Deferred to STRATEGY-3** — no dogfood project |
 
 ### 6b. Scale & Federation
@@ -179,12 +179,16 @@ Bugs found during self-testing on the beadloom repository. All fixed and pushed.
 | 6 — AaC | v1.0 | Done | 653 | Lint, rules engine, import resolver, agent constraints |
 | Onboarding QA | v1.3.1 | Done | 811 | 10 bug-fixes from dogfooding |
 | Agent Prime | v1.4.0 | Done | 847 | Prime CLI/MCP, setup-rules, AGENTS.md v2, doc audit |
+| 8 — Smart Bootstrap | v1.5.0 | Done | 1153 | README ingestion, 18+ frameworks, entry points, import analysis, contextual summaries, AGENTS.md auto, service-needs-parent |
+| 8.5 — Doc Sync v2 | v1.5.0 | Done | 1153 | Symbol drift, doctor drift, symbol diff polish, reindex fix, setup-rules fix |
+| 9 — Languages | v1.5.0 | Done | 1153 | Kotlin, Java, Swift, C/C++, Objective-C |
+| BDL-016 bugfix | v1.5.0 | Done | 1158 | Symbol drift E2E fix (incremental reindex preserves baseline) |
 | 7 — Guides | planned | — | — | Use-case guides, demos |
 
-### Current Totals (v1.4.0)
+### Current Totals (v1.5.0)
 
 - **21 CLI commands**, **10 MCP tools**
-- **847 tests**, 0 TODO/FIXME in source
-- **35 modules** across 7 domain packages
-- **4 languages** in import resolver (Python, TS/JS, Go, Rust) — expanding to 9 in v1.5
+- **1158 tests**, 0 TODO/FIXME in source
+- **26 modules** across 7 domain packages
+- **9 languages** in import resolver (Python, TS/JS, Go, Rust, Kotlin, Java, Swift, C/C++, Objective-C)
 - Self-tested: beadloom lint on beadloom = 0 violations
