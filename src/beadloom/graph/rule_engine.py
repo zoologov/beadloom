@@ -21,7 +21,8 @@ VALID_NODE_KINDS: frozenset[str] = frozenset({"domain", "feature", "service", "e
 VALID_EDGE_KINDS: frozenset[str] = frozenset(
     {"part_of", "depends_on", "uses", "implements", "touches_entity", "touches_code"}
 )
-RULES_SCHEMA_VERSION = 1
+VALID_RULE_SEVERITIES: frozenset[str] = frozenset({"error", "warn"})
+SUPPORTED_SCHEMA_VERSIONS: frozenset[int] = frozenset({1, 2})
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -51,6 +52,7 @@ class DenyRule:
     from_matcher: NodeMatcher
     to_matcher: NodeMatcher
     unless_edge: tuple[str, ...]  # edge kinds that exempt the import
+    severity: str = "error"  # "error" | "warn"
 
 
 @dataclass(frozen=True)
@@ -62,6 +64,7 @@ class RequireRule:
     for_matcher: NodeMatcher
     has_edge_to: NodeMatcher
     edge_kind: str | None = None
+    severity: str = "error"  # "error" | "warn"
 
 
 Rule = DenyRule | RequireRule
@@ -74,6 +77,7 @@ class Violation:
     rule_name: str
     rule_description: str
     rule_type: str  # "deny" | "require"
+    severity: str  # "error" | "warn"
     file_path: str | None  # source file (for deny rules)
     line_number: int | None  # line number (for deny rules)
     from_ref_id: str | None  # source node
@@ -111,7 +115,9 @@ def _parse_node_matcher(
     return NodeMatcher(ref_id=ref_id_str, kind=kind_str)
 
 
-def _parse_deny_rule(name: str, description: str, deny_data: dict[str, object]) -> DenyRule:
+def _parse_deny_rule(
+    name: str, description: str, deny_data: dict[str, object], *, severity: str = "error"
+) -> DenyRule:
     """Parse the 'deny' block of a rule."""
     from_data = deny_data.get("from")
     to_data = deny_data.get("to")
@@ -146,11 +152,16 @@ def _parse_deny_rule(name: str, description: str, deny_data: dict[str, object]) 
         from_matcher=from_matcher,
         to_matcher=to_matcher,
         unless_edge=tuple(unless_edge_strs),
+        severity=severity,
     )
 
 
 def _parse_require_rule(
-    name: str, description: str, require_data: dict[str, object]
+    name: str,
+    description: str,
+    require_data: dict[str, object],
+    *,
+    severity: str = "error",
 ) -> RequireRule:
     """Parse the 'require' block of a rule."""
     for_data = require_data.get("for")
@@ -184,6 +195,7 @@ def _parse_require_rule(
         for_matcher=for_matcher,
         has_edge_to=has_edge_to,
         edge_kind=edge_kind,
+        severity=severity,
     )
 
 
@@ -204,8 +216,9 @@ def load_rules(rules_path: Path) -> list[Rule]:
     if version is None:
         msg = "rules.yml: missing required 'version' field"
         raise ValueError(msg)
-    if version != RULES_SCHEMA_VERSION:
-        msg = f"rules.yml: unsupported version {version}, expected {RULES_SCHEMA_VERSION}"
+    if version not in SUPPORTED_SCHEMA_VERSIONS:
+        expected = sorted(SUPPORTED_SCHEMA_VERSIONS)
+        msg = f"rules.yml: unsupported version {version}, expected one of {expected}"
         raise ValueError(msg)
 
     rules_data = data.get("rules", [])
@@ -234,6 +247,16 @@ def load_rules(rules_path: Path) -> list[Rule]:
 
         description = str(rule_data.get("description", ""))
 
+        # Parse severity (v2 feature, defaults to "error" for v1 backward compat)
+        severity_raw = rule_data.get("severity", "error")
+        severity = str(severity_raw)
+        if severity not in VALID_RULE_SEVERITIES:
+            msg = (
+                f"rules.yml: rule '{name}' has invalid severity '{severity}', "
+                f"must be one of {sorted(VALID_RULE_SEVERITIES)}"
+            )
+            raise ValueError(msg)
+
         has_deny = "deny" in rule_data
         has_require = "require" in rule_data
 
@@ -247,13 +270,15 @@ def load_rules(rules_path: Path) -> list[Rule]:
             if not isinstance(deny_data, dict):
                 msg = f"Rule '{name}': 'deny' must be a mapping"
                 raise ValueError(msg)
-            rules.append(_parse_deny_rule(name, description, deny_data))
+            rules.append(_parse_deny_rule(name, description, deny_data, severity=severity))
         else:
             require_data = rule_data["require"]
             if not isinstance(require_data, dict):
                 msg = f"Rule '{name}': 'require' must be a mapping"
                 raise ValueError(msg)
-            rules.append(_parse_require_rule(name, description, require_data))
+            rules.append(
+                _parse_require_rule(name, description, require_data, severity=severity)
+            )
 
     return rules
 
@@ -424,6 +449,7 @@ def evaluate_deny_rules(conn: sqlite3.Connection, rules: list[DenyRule]) -> list
                     rule_name=rule.name,
                     rule_description=rule.description,
                     rule_type="deny",
+                    severity=rule.severity,
                     file_path=file_path,
                     line_number=line_number,
                     from_ref_id=source_ref_id,
@@ -495,6 +521,7 @@ def evaluate_require_rules(conn: sqlite3.Connection, rules: list[RequireRule]) -
                         rule_name=rule.name,
                         rule_description=rule.description,
                         rule_type="require",
+                        severity=rule.severity,
                         file_path=None,
                         line_number=None,
                         from_ref_id=node_ref_id,

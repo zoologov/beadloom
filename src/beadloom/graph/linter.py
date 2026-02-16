@@ -39,6 +39,21 @@ class LintResult:
     imports_resolved: int = 0
     elapsed_ms: float = 0.0
 
+    @property
+    def error_count(self) -> int:
+        """Count of violations with severity 'error'."""
+        return sum(1 for v in self.violations if v.severity == "error")
+
+    @property
+    def warning_count(self) -> int:
+        """Count of violations with severity 'warn'."""
+        return sum(1 for v in self.violations if v.severity == "warn")
+
+    @property
+    def has_errors(self) -> bool:
+        """Return True if any violation has severity 'error'."""
+        return any(v.severity == "error" for v in self.violations)
+
 
 # ---------------------------------------------------------------------------
 # Main entry point
@@ -176,7 +191,8 @@ def format_rich(result: LintResult) -> str:
 
     if result.violations:
         for v in result.violations:
-            lines.append(f"\u2717 {v.rule_name}")
+            marker = "\u26d4 [ERROR]" if v.severity == "error" else "\u26a0\ufe0f  [WARN]"
+            lines.append(f"{marker} {v.rule_name}")
             lines.append(f"  {v.rule_description}")
             if v.file_path is not None:
                 loc = v.file_path
@@ -187,9 +203,9 @@ def format_rich(result: LintResult) -> str:
                 lines.append(f"  {v.message}")
             lines.append("")
 
-        count = len(result.violations)
         lines.append(
-            f"{count} violations found ({result.rules_evaluated} rules evaluated, {elapsed_str})"
+            f"Errors: {result.error_count}, Warnings: {result.warning_count} "
+            f"({result.rules_evaluated} rules evaluated, {elapsed_str})"
         )
     else:
         lines.append(
@@ -210,6 +226,7 @@ def format_json(result: LintResult) -> str:
             {
                 "rule_name": v.rule_name,
                 "rule_type": v.rule_type,
+                "severity": v.severity,
                 "file_path": v.file_path if v.file_path is not None else None,
                 "line_number": v.line_number if v.line_number is not None else None,
                 "from_ref_id": v.from_ref_id if v.from_ref_id is not None else None,
@@ -223,6 +240,8 @@ def format_json(result: LintResult) -> str:
         "summary": {
             "rules_evaluated": result.rules_evaluated,
             "violations_count": len(result.violations),
+            "error_count": result.error_count,
+            "warning_count": result.warning_count,
             "files_scanned": result.files_scanned,
             "imports_resolved": result.imports_resolved,
             "elapsed_ms": result.elapsed_ms,
@@ -249,6 +268,8 @@ def format_porcelain(result: LintResult) -> str:
         line_number = str(v.line_number) if v.line_number is not None else ""
         from_ref = v.from_ref_id if v.from_ref_id is not None else ""
         to_ref = v.to_ref_id if v.to_ref_id is not None else ""
-        lines.append(f"{v.rule_name}:{v.rule_type}:{file_path}:{line_number}:{from_ref}:{to_ref}")
+        lines.append(
+            f"{v.rule_name}:{v.rule_type}:{v.severity}:{file_path}:{line_number}:{from_ref}:{to_ref}"
+        )
 
     return "\n".join(lines)

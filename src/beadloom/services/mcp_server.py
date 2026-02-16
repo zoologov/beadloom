@@ -15,6 +15,7 @@ from beadloom import __version__
 from beadloom.context_oracle.builder import bfs_subgraph, build_context
 from beadloom.context_oracle.cache import ContextCache, SqliteCache, compute_etag
 from beadloom.doc_sync.engine import check_sync, mark_synced_by_ref
+from beadloom.graph.diff import compute_diff
 from beadloom.graph.loader import update_node_in_yaml
 from beadloom.infrastructure.db import get_meta, open_db
 from beadloom.infrastructure.reindex import incremental_reindex
@@ -242,6 +243,108 @@ def handle_search(
     return [{"ref_id": r["ref_id"], "kind": r["kind"], "summary": r["summary"]} for r in rows]
 
 
+# --- Impact analysis tool handler ---
+
+
+def handle_why(
+    conn: sqlite3.Connection,
+    *,
+    ref_id: str,
+    depth: int = 3,
+) -> dict[str, Any]:
+    """Impact analysis: upstream dependencies and downstream dependents.
+
+    Raises
+    ------
+    LookupError
+        If *ref_id* does not exist.
+    """
+    from beadloom.context_oracle.why import analyze_node, result_to_dict
+
+    result = analyze_node(conn, ref_id, depth=depth)
+    data = result_to_dict(result)
+
+    # Flatten tree nodes to simple lists for MCP consumers
+    def _flatten(tree_nodes: list[dict[str, object]]) -> list[dict[str, str]]:
+        flat: list[dict[str, str]] = []
+        for node in tree_nodes:
+            flat.append(
+                {
+                    "ref_id": str(node["ref_id"]),
+                    "kind": str(node["kind"]),
+                    "summary": str(node["summary"]),
+                    "edge_kind": str(node["edge_kind"]),
+                }
+            )
+            children = node.get("children")
+            if isinstance(children, list):
+                flat.extend(_flatten(children))
+        return flat
+
+    upstream_list = data.get("upstream")
+    downstream_list = data.get("downstream")
+    impact = data.get("impact", {})
+
+    return {
+        "ref_id": ref_id,
+        "upstream": _flatten(upstream_list if isinstance(upstream_list, list) else []),
+        "downstream": _flatten(downstream_list if isinstance(downstream_list, list) else []),
+        "impact_summary": impact if isinstance(impact, dict) else {},
+    }
+
+
+# --- Graph diff tool handler ---
+
+
+def handle_diff(
+    project_root: Path,
+    *,
+    since: str = "HEAD~1",
+) -> dict[str, Any]:
+    """Show graph changes since a git ref.
+
+    Raises
+    ------
+    ValueError
+        If the git ref is invalid.
+    """
+    diff = compute_diff(project_root, since=since)
+
+    added_nodes: list[dict[str, str]] = []
+    removed_nodes: list[dict[str, str]] = []
+    changed_nodes: list[dict[str, str | None]] = []
+
+    for node in diff.nodes:
+        entry: dict[str, str | None] = {"ref_id": node.ref_id, "kind": node.kind}
+        if node.change_type == "added":
+            added_nodes.append({"ref_id": node.ref_id, "kind": node.kind})
+        elif node.change_type == "removed":
+            removed_nodes.append({"ref_id": node.ref_id, "kind": node.kind})
+        elif node.change_type == "changed":
+            entry["old_summary"] = node.old_summary
+            entry["new_summary"] = node.new_summary
+            changed_nodes.append(entry)
+
+    added_edges: list[dict[str, str]] = []
+    removed_edges: list[dict[str, str]] = []
+
+    for edge in diff.edges:
+        edge_dict = {"src": edge.src, "dst": edge.dst, "kind": edge.kind}
+        if edge.change_type == "added":
+            added_edges.append(edge_dict)
+        elif edge.change_type == "removed":
+            removed_edges.append(edge_dict)
+
+    return {
+        "since": diff.since_ref,
+        "added_nodes": added_nodes,
+        "removed_nodes": removed_nodes,
+        "changed_nodes": changed_nodes,
+        "added_edges": added_edges,
+        "removed_edges": removed_edges,
+    }
+
+
 # --- MCP Server creation ---
 
 _TOOLS = [
@@ -427,6 +530,36 @@ _TOOLS = [
             "Call this at the beginning of every session."
         ),
         inputSchema={"type": "object", "properties": {}},
+    ),
+    mcp.Tool(
+        name="why",
+        description=(
+            "Impact analysis: show upstream dependencies and downstream "
+            "dependents for a node."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "ref_id": {
+                    "type": "string",
+                    "description": "Node reference ID",
+                },
+            },
+            "required": ["ref_id"],
+        },
+    ),
+    mcp.Tool(
+        name="diff",
+        description="Show graph changes since a git ref (commit, branch, tag).",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "since": {
+                    "type": "string",
+                    "description": "Git ref (default: HEAD~1)",
+                },
+            },
+        },
     ),
 ]
 
@@ -704,6 +837,16 @@ def _dispatch_tool(
         from beadloom.onboarding import prime_context
 
         return prime_context(project_root, fmt="json")
+
+    if name == "why":
+        return handle_why(conn, ref_id=args["ref_id"])
+
+    if name == "diff":
+        if project_root is None:
+            msg = "diff requires project_root"
+            raise ValueError(msg)
+        since = args.get("since", "HEAD~1")
+        return handle_diff(project_root, since=str(since))
 
     msg = f"Unknown tool: {name}"
     raise ValueError(msg)

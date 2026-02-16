@@ -13,6 +13,16 @@ from beadloom.infrastructure.db import get_meta
 if TYPE_CHECKING:
     import sqlite3
 
+
+def estimate_tokens(text: str) -> int:
+    """Estimate token count from text using a rough chars/4 heuristic.
+
+    This is a simple approximation: most LLM tokenizers average ~4 characters
+    per token for English prose.  Useful for ballpark context budget estimates.
+    """
+    return len(text) // 4
+
+
 # Edge kinds ordered by traversal priority (lower = higher priority).
 _EDGE_PRIORITY: dict[str, int] = {
     "part_of": 1,

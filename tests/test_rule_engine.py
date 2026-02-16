@@ -248,7 +248,7 @@ class TestLoadRulesValidationErrors:
     def test_wrong_version(self, tmp_path: Path) -> None:
         rules_path = tmp_path / "rules.yml"
         rules_path.write_text(
-            "version: 2\n"
+            "version: 99\n"
             "rules:\n"
             "  - name: test\n"
             '    description: "x"\n'
