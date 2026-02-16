@@ -5,6 +5,46 @@ All notable changes to Beadloom are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-02-17
+
+Deep Code Analysis, Honest Doc-Sync, and Agent Infrastructure. 1408 tests.
+
+### Added
+- **API route extraction** — tree-sitter + regex detection for 12 frameworks: FastAPI, Flask, Django, Express, NestJS, Spring Boot, Gin, Echo, Fiber, Actix, GraphQL (schema + code-first), gRPC (BDL-017 BEAD-01)
+- **Git history analysis** — `analyze_git_activity()` classifies modules as hot/warm/cold/dormant based on 6-month commit history (BDL-017 BEAD-02)
+- **Test mapping** — `map_tests()` detects test framework (pytest, jest, go test, JUnit, XCTest) and maps test files to source modules (BDL-017 BEAD-03)
+- **Rule severity levels** — rules support `severity: warn` vs `severity: error` (default); `beadloom lint` shows both, `--strict` fails only on errors; backward-compatible v1→v2 migration (BDL-017 BEAD-04)
+- **MCP tool `why`** — impact analysis via MCP: upstream dependencies + downstream dependents as structured JSON (BDL-017 BEAD-05)
+- **MCP tool `diff`** — graph changes since a git ref via MCP (BDL-017 BEAD-06)
+- **MCP tool `lint`** — architecture validation via MCP with severity in JSON output (BDL-017 BEAD-12)
+- **Deep config reading** — extracts scripts, workspaces, path aliases from pyproject.toml, package.json, tsconfig.json, Cargo.toml, build.gradle (BDL-017 BEAD-07)
+- **Context cost metrics** — `beadloom status` shows average/max bundle sizes in estimated tokens (BDL-017 BEAD-08)
+- **Smart `docs polish`** — enriched with routes, activity, tests, config data from deep analysis (BDL-017 BEAD-14)
+- **AGENTS.md v3** — now documents 13 MCP tools (was 10) (BDL-017 BEAD-15)
+- **3-layer staleness detection** — `check_sync()` now detects: `symbols_changed` (hash mismatch), `untracked_files` (files in source dir not tracked), `missing_modules` (doc doesn't mention module) (BDL-018)
+- **Source coverage check** — `check_source_coverage()` finds Python files in node source directories not tracked in sync_state or code_symbols (BDL-018 BEAD-02)
+- **Doc coverage check** — `check_doc_coverage()` verifies documentation mentions all modules in source directory (BDL-018 BEAD-03)
+- **Hierarchy-aware coverage** — `check_source_coverage()` queries `part_of` edges to recognize files annotated to child feature nodes as tracked under parent domain (BDL-020 BEAD-02)
+- **`/tech-writer` role** — new agent skill for systematic documentation updates using sync-check + ctx + sync-update workflow (BDL-019)
+- **`/task-init` skill** — unified task initialization for all types (epic, feature, bug, task, chore); replaces `/epic-init` (BDL-021)
+- **`BRIEF.md` template** — simplified doc format for bug/task/chore (one-approval flow)
+- **255 new tests** (1408 total)
+
+### Changed
+- **`sync-check` CLI output** — now shows reason (symbols_changed, untracked_files, missing_modules) and details per stale entry (BDL-018)
+- **`sync-check --json`** — structured JSON output with `reason` and `details` fields (BDL-018)
+- **Routes/activity/tests integrated into reindex** — stored as JSON in `nodes.extra` during full and incremental reindex (BDL-017 BEAD-09, BEAD-10, BEAD-11)
+- **Deep config integrated into bootstrap** — config data in root node `extra.config` (BDL-017 BEAD-13)
+- **13 domain/service docs refreshed** — all documentation updated to match current code (BDL-019)
+- **`.claude/commands/templates.md`** — stabilized: no numbered sections, strict status lifecycle (Draft/Approved/Done)
+- **`.claude/CLAUDE.md`** — added `/task-init`, `/tech-writer`; updated file memory to include BRIEF.md
+
+### Fixed
+- **Symbol drift detection E2E** — `incremental_reindex()` now preserves `symbols_hash` baseline across reindexes (BDL-016)
+- **`_compute_symbols_hash()` annotation query** — fixed to handle both `"ref_id"` and `["ref_id"]` JSON formats (BDL-018 BEAD-01)
+- **Sync baseline preservation** — `_snapshot_sync_baselines()` preserves symbol hashes during full reindex (BDL-018 BEAD-01)
+- **4 annotation mismatches** — `why.py` (was `impact-analysis`→`context-oracle`), `doctor.py` (was `doctor`→`infrastructure`), `watcher.py` (was `watcher`→`infrastructure`), `app.py` (was missing→`tui`) (BDL-020 BEAD-01)
+
 ## [1.5.0] - 2026-02-16
 
 Smart Bootstrap v2, Doc Sync v2, 5 new languages, and a full documentation overhaul. 1153 tests.
