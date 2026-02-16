@@ -152,7 +152,9 @@ def _is_within_days(date_str: str, days: int) -> bool:
     """Check if an ISO 8601 date is within the given number of days from now."""
     now = datetime.now(tz=timezone.utc)
     try:
-        commit_date = datetime.fromisoformat(date_str)
+        # Python 3.10 fromisoformat doesn't support "Z" suffix
+        normalized = date_str.replace("Z", "+00:00") if date_str.endswith("Z") else date_str
+        commit_date = datetime.fromisoformat(normalized)
     except ValueError:
         return False
 
@@ -243,7 +245,8 @@ def analyze_git_activity(
         last_date = node_last_date[ref_id]
         if last_date:
             try:
-                parsed = datetime.fromisoformat(last_date)
+                norm = last_date.replace("Z", "+00:00") if last_date.endswith("Z") else last_date
+                parsed = datetime.fromisoformat(norm)
                 last_date = parsed.date().isoformat()
             except ValueError:
                 pass

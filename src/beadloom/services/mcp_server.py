@@ -63,7 +63,8 @@ def _is_index_stale(project_root: Path, conn: sqlite3.Connection) -> bool:
     from datetime import datetime
 
     try:
-        last_ts = datetime.fromisoformat(last_reindex).timestamp()
+        _lr = last_reindex.replace("Z", "+00:00") if last_reindex.endswith("Z") else last_reindex
+        last_ts = datetime.fromisoformat(_lr).timestamp()
     except ValueError:
         return False
     graph_mt, docs_mt = _compute_mtimes(project_root)
