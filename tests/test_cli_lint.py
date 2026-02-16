@@ -173,11 +173,11 @@ class TestLintCommand:
             ["lint", "--project", str(project), "--no-reindex", "--format", "porcelain"],
         )
         assert result.exit_code == 0, result.output
-        # Porcelain lines are colon-separated with 6 fields.
+        # Porcelain lines are colon-separated with 7 fields (severity added in v1.6).
         lines = [line for line in result.output.strip().split("\n") if line]
         assert len(lines) >= 1
         parts = lines[0].split(":")
-        assert len(parts) == 6
+        assert len(parts) == 7
 
     def test_lint_format_rich(self, tmp_path: Path) -> None:
         """--format rich -> human-readable output with rule counts."""

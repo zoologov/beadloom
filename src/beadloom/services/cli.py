@@ -8,8 +8,12 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
+
+if TYPE_CHECKING:
+    import sqlite3
 
 from beadloom import __version__
 
@@ -406,6 +410,48 @@ def doctor(*, project: Path | None) -> None:
         click.echo(f"  {icon} {check.description}")
 
 
+def _compute_context_metrics(
+    conn: sqlite3.Connection,
+    nodes_count: int,
+    symbols_count: int,
+) -> dict[str, object]:
+    """Compute context bundle size metrics for the status display.
+
+    Iterates over all nodes, builds context bundles, and measures their
+    approximate token sizes using the chars/4 heuristic.
+    """
+    import sqlite3 as _sqlite3  # local import to satisfy TYPE_CHECKING usage
+
+    from beadloom.context_oracle.builder import build_context, estimate_tokens
+
+    ref_ids = [row[0] for row in conn.execute("SELECT ref_id FROM nodes").fetchall()]
+
+    bundle_sizes: list[tuple[str, int]] = []
+    for ref_id in ref_ids:
+        try:
+            bundle = build_context(conn, [ref_id], depth=1, max_nodes=10, max_chunks=5)
+            bundle_text = json.dumps(bundle, ensure_ascii=False)
+            tokens = estimate_tokens(bundle_text)
+            bundle_sizes.append((ref_id, tokens))
+        except (LookupError, _sqlite3.Error):
+            continue
+
+    if bundle_sizes:
+        avg_tokens = sum(t for _, t in bundle_sizes) // len(bundle_sizes)
+        largest_ref, largest_tokens = max(bundle_sizes, key=lambda x: x[1])
+    else:
+        avg_tokens = 0
+        largest_ref = ""
+        largest_tokens = 0
+
+    return {
+        "avg_bundle_tokens": avg_tokens,
+        "largest_bundle_tokens": largest_tokens,
+        "largest_bundle_ref_id": largest_ref,
+        "total_symbols": symbols_count,
+    }
+
+
 # beadloom:service=cli
 @main.command()
 @click.option(
@@ -478,6 +524,9 @@ def status(*, project: Path | None, output_json: bool) -> None:
     previous = snapshots[1] if len(snapshots) >= 2 else None
     trends = compute_trend(current, previous) if current and previous else {}
 
+    # Context metrics: measure bundle sizes per node.
+    context_metrics = _compute_context_metrics(conn, nodes_count, symbols_count)
+
     conn.close()
 
     coverage_pct = (covered / nodes_count * 100) if nodes_count > 0 else 0.0
@@ -498,6 +547,7 @@ def status(*, project: Path | None, output_json: bool) -> None:
             "empty_summaries": empty_summaries,
             "by_kind": {kr["kind"]: kr["cnt"] for kr in kind_rows},
             "trends": trends,
+            "context_metrics": context_metrics,
         }
         click.echo(json.dumps(data, ensure_ascii=False, indent=2))
         return
@@ -572,6 +622,23 @@ def status(*, project: Path | None, output_json: bool) -> None:
     health_table.add_row("Isolated nodes", str(isolated_count), iso_trend)
     health_table.add_row("Empty summaries", str(empty_summaries), "")
     console.print(health_table)
+    console.print()
+
+    # Context Metrics section.
+    ctx_table = Table(title="Context Metrics", show_header=False, box=None, padding=(0, 1))
+    ctx_table.add_column("metric", style="cyan")
+    ctx_table.add_column("value", justify="right")
+    avg_tokens = context_metrics["avg_bundle_tokens"]
+    largest_tokens = context_metrics["largest_bundle_tokens"]
+    largest_ref = context_metrics["largest_bundle_ref_id"]
+    total_syms = context_metrics["total_symbols"]
+    ctx_table.add_row("Avg bundle size", f"~{avg_tokens:,} tokens")
+    if largest_ref:
+        ctx_table.add_row("Largest bundle", f"{largest_ref} -- {largest_tokens:,} tokens")
+    else:
+        ctx_table.add_row("Largest bundle", f"~{largest_tokens:,} tokens")
+    ctx_table.add_row("Total indexed", f"{total_syms:,} symbols")
+    console.print(ctx_table)
 
 
 # beadloom:domain=doc-sync
@@ -1637,7 +1704,13 @@ def watch_cmd(*, debounce: int, project: Path | None) -> None:
     "--strict",
     is_flag=True,
     default=False,
-    help="Exit 1 if violations found.",
+    help="Exit 1 if error-level violations found (warnings OK).",
+)
+@click.option(
+    "--fail-on-warn",
+    is_flag=True,
+    default=False,
+    help="Exit 1 on any violation including warnings.",
 )
 @click.option(
     "--no-reindex",
@@ -1655,14 +1728,16 @@ def lint(
     *,
     fmt: str | None,
     strict: bool,
+    fail_on_warn: bool,
     no_reindex: bool,
     project: Path | None,
 ) -> None:
     """Run architecture lint rules against the project.
 
     Checks cross-boundary imports against rules defined in rules.yml.
-    Exit codes: 0 = clean or violations without --strict,
-    1 = violations with --strict, 2 = configuration error.
+    Exit codes: 0 = clean or violations below threshold,
+    1 = violations with --strict (errors only) or --fail-on-warn (any),
+    2 = configuration error.
     """
     from beadloom.graph.linter import LintError
     from beadloom.graph.linter import format_json as _format_json
@@ -1693,5 +1768,7 @@ def lint(
     elif not result.violations:
         click.echo(f"0 violations, {result.rules_evaluated} rules evaluated")
 
-    if strict and result.violations:
+    if fail_on_warn and result.violations:
+        sys.exit(1)
+    if strict and result.has_errors:
         sys.exit(1)

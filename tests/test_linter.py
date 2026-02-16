@@ -131,6 +131,7 @@ def _make_violations() -> list[Violation]:
             rule_name="billing-auth-boundary",
             rule_description="Billing must not import from auth directly",
             rule_type="deny",
+            severity="error",
             file_path="src/billing/invoice.py",
             line_number=12,
             from_ref_id="billing",
@@ -141,6 +142,7 @@ def _make_violations() -> list[Violation]:
             rule_name="all-services-need-domain",
             rule_description="Every service must be part of a domain",
             rule_type="require",
+            severity="error",
             file_path=None,
             line_number=None,
             from_ref_id="notifications",
@@ -361,7 +363,7 @@ class TestFormatRich:
 
         assert "billing-auth-boundary" in output
         assert "all-services-need-domain" in output
-        assert "2 violations found" in output
+        assert "Errors: 2" in output
         assert "3 rules evaluated" in output
 
     def test_format_no_violations(self) -> None:
@@ -443,8 +445,9 @@ class TestFormatPorcelain:
         lines = output.strip().split("\n")
 
         # deny violation — has file_path and line
+        # Format: rule_name:rule_type:severity:file_path:line:from_ref:to_ref
         parts = lines[0].split(":")
-        assert len(parts) == 6
+        assert len(parts) == 7
         assert parts[0] in ("billing-auth-boundary", "all-services-need-domain")
 
         # Find the require violation line (no file_path)
@@ -452,9 +455,10 @@ class TestFormatPorcelain:
         assert len(require_line) == 1
         rparts = require_line[0].split(":")
         assert rparts[1] == "require"
+        assert rparts[2] == "error"  # severity
         # file_path and line_number should be empty
-        assert rparts[2] == ""
         assert rparts[3] == ""
+        assert rparts[4] == ""
 
     def test_empty_result(self) -> None:
         """Empty violations produces empty string."""
@@ -469,6 +473,7 @@ class TestFormatPorcelain:
                 rule_name="svc-needs-domain",
                 rule_description="Service must be part of domain",
                 rule_type="require",
+                severity="error",
                 file_path=None,
                 line_number=None,
                 from_ref_id="notifications",
@@ -478,10 +483,12 @@ class TestFormatPorcelain:
         ]
         result = _make_result(violations=violations, rules_evaluated=1)
         output = format_porcelain(result)
+        # Format: rule_name:rule_type:severity:file_path:line:from_ref:to_ref
         parts = output.strip().split(":")
         assert parts[0] == "svc-needs-domain"
         assert parts[1] == "require"
-        assert parts[2] == ""  # file_path
-        assert parts[3] == ""  # line_number
-        assert parts[4] == "notifications"  # from_ref_id
-        assert parts[5] == ""  # to_ref_id
+        assert parts[2] == "error"  # severity
+        assert parts[3] == ""  # file_path
+        assert parts[4] == ""  # line_number
+        assert parts[5] == "notifications"  # from_ref_id
+        assert parts[6] == ""  # to_ref_id
