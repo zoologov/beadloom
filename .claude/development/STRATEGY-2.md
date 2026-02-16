@@ -1,8 +1,8 @@
 # Beadloom: Strategy 2 — Architecture Infrastructure for the AI Agent Era
 
-> **Status:** Active (Phases 8-9 complete, Phase 10+ planned)
-> **Date:** 2026-02-16 (revision 3)
-> **Current version:** 1.5.0
+> **Status:** Active (Phases 8-11 complete, Phase 12+ planned)
+> **Date:** 2026-02-17 (revision 4)
+> **Current version:** 1.6.0
 > **Predecessor:** STRATEGY.md (Phases 1-6, all completed)
 > **Sources:** STRATEGY.md, BACKLOG.md §2-§6, BDL-UX-Issues.md, competitive analysis February 2026
 
@@ -174,33 +174,53 @@ Beadloom is for engineers who build and maintain serious IT systems. YAML graph 
 | 9.4 | **C/C++** — `_load_c()`, `_load_cpp()`, `_extract_c_cpp_imports()` with 80+ system headers | feature | P1 | DONE |
 | 9.5 | **Objective-C** — `_load_objc()`, `_extract_objc_imports()` with 48 system frameworks | feature | P1 | DONE |
 
-### Phase 10: Deep Code Analysis (v1.6)
+### Phase 10: Deep Code Analysis (v1.6) — DONE
 
 **Goal:** Graph nodes become rich contextual objects: routes, activity, tests.
 
 **Metric:** `beadloom ctx AUTH` returns API routes, activity level, test coverage — enough for an agent to start working without reading a single file.
 
-| # | Task | Type | P | Effort |
-|---|------|------|---|--------|
-| 10.1 | **API surface extraction** — tree-sitter: `@app.route` (Python), `@Get` (TS/NestJS), `@GetMapping` (Java/Kotlin/Spring), `router.Handle` (Go), gRPC defs, GraphQL types; store as node metadata | feature | P0 | L |
-| 10.2 | **Git history analysis** — `git log --stat` → commits per module, last_modified, top contributors, churn; nodes get `activity: hot/warm/cold/dormant` + `last_active` | feature | P0 | M |
-| 10.3 | **Test mapping** — detect framework (pytest, jest, go test, JUnit, XCTest), map tests to modules by naming + imports; nodes get `test_files`, `coverage_estimate` | feature | P1 | M |
-| 10.4 | **Rule severity levels** — `warn` vs `error`; `beadloom lint --strict` fails only on errors; useful for gradual adoption | feature | P1 | S |
-| 10.5 | **Smart `docs polish`** — enrich `generate_polish_data()` with metadata from phases 8-10: routes, entry points, activity, tests, symbol diff | feature | P1 | M |
+**Delivered in:** BDL-017 (15 beads, 3 waves). Plus BDL-018 (honest detection, 4 beads, 43 tests) and BDL-020 (hierarchy fix, 3 beads, 4 tests).
 
-### Phase 11: Agent Infrastructure (v1.6)
+| # | Task | Type | P | Status |
+|---|------|------|---|--------|
+| 10.1 | **API surface extraction** — 12 frameworks: FastAPI, Flask, Django, Express, NestJS, Spring Boot, Gin, Echo, Fiber, Actix, GraphQL, gRPC | feature | P0 | DONE |
+| 10.2 | **Git history analysis** — hot/warm/cold/dormant classification, 6-month window | feature | P0 | DONE |
+| 10.3 | **Test mapping** — pytest, jest, go test, JUnit, XCTest; maps tests to modules | feature | P1 | DONE |
+| 10.4 | **Rule severity levels** — `error`/`warn`, backward-compatible v1→v2, `--strict` fails on errors only | feature | P1 | DONE |
+| 10.5 | **Smart `docs polish`** — enriched with routes, activity, tests, config, symbol diff | feature | P1 | DONE |
+
+### Phase 10.5: Doc-Sync Honest Detection (v1.6) — DONE
+
+**Goal:** Doc-Sync honestly catches ALL types of staleness, not just file-hash changes.
+
+**Metric:** After changing code in a domain, `sync-check` reports stale with specific reasons.
+
+**Delivered in:** BDL-018 (4 beads, 43 new tests) + BDL-019 (doc refresh) + BDL-020 (hierarchy fix).
+
+| # | Task | Type | P | Status |
+|---|------|------|---|--------|
+| 10.5.1 | **3-layer staleness** — `symbols_changed` + `untracked_files` + `missing_modules` | feature | P0 | DONE |
+| 10.5.2 | **Source coverage check** — detect untracked files in node source dirs | feature | P0 | DONE |
+| 10.5.3 | **Doc coverage check** — verify docs mention all source modules | feature | P0 | DONE |
+| 10.5.4 | **Hierarchy-aware coverage** — `part_of` edges count child node files as tracked | fix | P0 | DONE |
+| 10.5.5 | **Baseline fix** — `_compute_symbols_hash()` handles both JSON formats, snapshot preserves hashes | fix | P0 | DONE |
+
+### Phase 11: Agent Infrastructure (v1.6) — DONE
 
 **Goal:** Agents have full access to all validation and context tools via MCP and CLI.
 
 **Metric:** An agent can run lint via MCP, get impact analysis (`why`), see graph diff — not just `get_context`.
 
-| # | Task | Type | P | Effort |
+**Delivered in:** BDL-017 (15 beads, 3 waves).
+
+| # | Task | Type | P | Status |
 |---|------|------|---|--------|
-| 11.1 | **MCP tool `lint`** — run `beadloom lint` via MCP; return violations as JSON | feature | P0 | M |
-| 11.2 | **MCP tool `why`** — impact analysis via MCP; upstream deps + downstream dependents | feature | P1 | S |
-| 11.3 | **MCP tool `diff`** — graph changes since git ref via MCP | feature | P1 | S |
-| 11.4 | **Context cost metrics** — `beadloom status` shows "average context bundle size in tokens"; benchmark: Beadloom vs raw grep | feature | P2 | S |
-| 11.5 | **Deep config reading** — extract scripts, workspaces, path aliases from pyproject.toml/package.json/tsconfig.json/Cargo.toml/build.gradle/Podfile | feature | P2 | S |
+| 11.1 | **MCP tool `lint`** — architecture validation via MCP with severity in JSON | feature | P0 | DONE |
+| 11.2 | **MCP tool `why`** — impact analysis via MCP; upstream deps + downstream dependents | feature | P1 | DONE |
+| 11.3 | **MCP tool `diff`** — graph changes since git ref via MCP | feature | P1 | DONE |
+| 11.4 | **Context cost metrics** — `beadloom status` shows avg/max bundle sizes in tokens | feature | P2 | DONE |
+| 11.5 | **Deep config reading** — pyproject.toml, package.json, tsconfig.json, Cargo.toml, build.gradle | feature | P2 | DONE |
 
 ### Phase 12: Cross-System Foundation (v1.7)
 
@@ -447,21 +467,11 @@ v1.5 ── DONE ─────────────────────
 ├── Phase 8.5 (Doc Sync v2) ───── DONE (5/5 tasks)
 └── Phase 9 (Languages) ──────── DONE (5/5 tasks)
 
-v1.6 ──────────────────────────────────────────────────────
+v1.6 ── DONE ─────────────────────────────────────────────
 │
-├── Phase 10 (Deep Analysis) ── after Phases 8+9
-│   ├── 10.1 API surface ──────── depends on 8.2 (frameworks)
-│   ├── 10.2 Git history ──────── standalone
-│   ├── 10.3 Test mapping ─────── standalone
-│   ├── 10.4 Rule severity ────── standalone
-│   └── 10.5 Smart docs polish ── depends on 8.5 + 10.1-10.3
-│
-└── Phase 11 (Agent Infra) ───── after Phase 8.5
-    ├── 11.1 MCP lint ──────────── standalone
-    ├── 11.2 MCP why ───────────── standalone
-    ├── 11.3 MCP diff ──────────── standalone
-    ├── 11.4 Context cost metrics ─ standalone
-    └── 11.5 Deep config reading ── standalone
+├── Phase 10 (Deep Analysis) ──── DONE (5/5 tasks)
+├── Phase 10.5 (Honest Detection) DONE (5/5 tasks)
+└── Phase 11 (Agent Infra) ────── DONE (5/5 tasks)
 
 v1.7 ──────────────────────────────────────────────────────
 │
@@ -491,14 +501,14 @@ Cross-cutting ──────────────────────
 
 ## 7. Success Metrics
 
-| Metric | v1.4 | v1.5 (current) | v1.6 (target) | v1.7 (target) | v2.0 (target) |
-|--------|------|----------------|---------------|---------------|---------------|
-| **Node summaries** | "15 files" | **Framework + entry points** | + routes, activity | + cross-repo | + cross-repo |
-| **First graph edges** | `part_of` only | **`part_of` + `depends_on`** | + API contracts | + inter-repo | + federated |
-| **Doc drift detection** | file-hash only | **symbol-level (E2E)** | + symbol diff | + cross-repo | + cross-repo |
-| **Frameworks** | 4 patterns | **18+** | 18+ with routes | 18+ | + custom |
-| **Languages** | 4 | **9** (+Kt, Java, Swift, C/C++, ObjC) | 9 | 9 | 9+ |
-| **Tests** | 847 | **1158** | — | — | — |
+| Metric | v1.4 | v1.5 | v1.6 (current) | v1.7 (target) | v2.0 (target) |
+|--------|------|------|----------------|---------------|---------------|
+| **Node summaries** | "15 files" | Framework + entry points | **+ routes, activity, tests** | + cross-repo | + cross-repo |
+| **First graph edges** | `part_of` only | `part_of` + `depends_on` | + API contracts | + inter-repo | + federated |
+| **Doc drift detection** | file-hash only | symbol-level (E2E) | **3-layer: symbols + files + modules** | + cross-repo | + cross-repo |
+| **Frameworks** | 4 patterns | 18+ | **18+ with route extraction** | 18+ | + custom |
+| **Languages** | 4 | 9 | 9 | 9 | 9+ |
+| **Tests** | 847 | 1153 | **1408** | — | — |
 | **MCP tools** | 10 | 10 | **13** (+lint, why, diff) | 13 | 13+ |
 | **Multi-repo** | No | No | No | **refs** | **federation** |
 | **Search** | FTS5 | FTS5 | FTS5 | FTS5 | FTS5 + **semantic** |
@@ -512,8 +522,9 @@ Cross-cutting ──────────────────────
 | **8 — Smart Bootstrap** | v1.5 | 7 | **DONE** | Rich graph from first `init` |
 | **8.5 — Doc Sync v2** | v1.5 | 5 | **DONE** | Honest drift tracking (fix #15, #18, #21) |
 | **9 — Mobile Languages** | v1.5 | 5 | **DONE** | +Kotlin, Java, Swift, C/C++, Obj-C |
-| **10 — Deep Analysis** | v1.6 | 5 | Planned | Routes, activity, tests |
-| **11 — Agent Infra** | v1.6 | 5 | Planned | MCP lint/why/diff, metrics |
+| **10 — Deep Analysis** | v1.6 | 5 | **DONE** | Routes, activity, tests |
+| **10.5 — Honest Detection** | v1.6 | 5 | **DONE** | 3-layer staleness, hierarchy coverage |
+| **11 — Agent Infra** | v1.6 | 5 | **DONE** | MCP lint/why/diff, metrics |
 | **12 — Cross-System** | v1.7 | 4 | Planned | Multi-repo refs, export |
 | **13 — Full Cross + Semantic** | v2.0 | 7 | Planned | Federation, semantic search |
 | **14 — Quality** | cross-cutting | 5 | Planned | Atomic writes, migrations |
@@ -521,7 +532,9 @@ Cross-cutting ──────────────────────
 
 **v1.5 delivered:** Phases 8 + 8.5 + 9 in parallel. Three critical problems solved in one release (BDL-015, 17 beads, 306 new tests).
 
-**Next priority:** Phases 10 + 11 for v1.6.
+**v1.6 delivered:** Phases 10 + 10.5 + 11. Deep analysis + honest detection + agent infrastructure (BDL-017 15 beads + BDL-018 4 beads + BDL-020 3 beads, 255 new tests).
+
+**Next priority:** Phase 12 for v1.7.
 
 ---
 
@@ -571,12 +584,17 @@ Cross-cutting ──────────────────────
 | UX Issue | Where resolved | Status |
 |----------|---------------|--------|
 | #15 [HIGH] doctor 100% coverage misleading | Phase 8.5.1 + 8.5.2 + BDL-016 | **DONE** |
-| #16 [MEDIUM] beadloom's own docs outdated | Manual update (hygiene) | Open |
+| #16 [MEDIUM] beadloom's own docs outdated | BDL-019 (4 parallel tech-writer agents) | **DONE** |
 | #17 [LOW] setup-rules auto-detect for Windsurf/Cline | Phase 8.5.5 | **DONE** |
 | #18 [HIGH] sync-check "31/31 OK" despite drift | Phase 8.5.1 + BDL-016 | **DONE** |
 | #19 [MEDIUM] AGENTS.md not in bootstrap | Phase 8.6 | **DONE** |
 | #20 [LOW] .beadloom/README.md no auto-update | Low priority; manual | Open |
 | #21 [HIGH] incremental reindex Nodes: 0 | Phase 8.5.4 | **DONE** |
+| #26 [MEDIUM] test mapping 0 tests for domains | Future: aggregate by source path | Open |
+| #27 [LOW] docs polish missing deep data | BDL-017 BEAD-14 | **DONE** |
+| #29 [HIGH] route extraction false positives | Future: self-exclusion + scoping | Open |
+| #30 [MEDIUM] routes poor formatting | Future: improve rendering | Open |
+| #31 [LOW] bd dep remove bug | Beads CLI bug, not beadloom | Open (external) |
 
 ---
 
