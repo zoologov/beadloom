@@ -29,18 +29,26 @@ _GRADLE_DEP_RE = re.compile(
 
 def _read_toml(path: Path) -> dict[str, Any]:
     """Read and parse a TOML file, returning empty dict on failure."""
-    try:
+    import sys
+
+    _tomllib: Any = None
+    if sys.version_info >= (3, 11):
         import tomllib
-    except ImportError:
+
+        _tomllib = tomllib
+    else:
         try:
-            import tomli as tomllib  # type: ignore[no-redef]
+            import tomli  # type: ignore[import-not-found]  # optional on <3.11
+
+            _tomllib = tomli
         except ImportError:
             return {}
 
     try:
         content = path.read_bytes()
-        return tomllib.loads(content.decode("utf-8"))
-    except (OSError, tomllib.TOMLDecodeError, UnicodeDecodeError, ValueError):
+        result: dict[str, Any] = _tomllib.loads(content.decode("utf-8"))
+        return result
+    except (OSError, _tomllib.TOMLDecodeError, UnicodeDecodeError, ValueError):
         return {}
 
 
