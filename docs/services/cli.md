@@ -10,9 +10,9 @@ Beadloom CLI is built on Click and provides a set of commands for managing the k
 beadloom [--verbose|-v] [--quiet|-q] [--version] COMMAND
 ```
 
-- `--verbose` / `-v` — verbose output
-- `--quiet` / `-q` — errors only
-- `--version` — show version
+- `--verbose` / `-v` -- verbose output
+- `--quiet` / `-q` -- errors only
+- `--version` -- show version
 
 ### beadloom init
 
@@ -32,15 +32,15 @@ beadloom init [--project DIR]
 `--bootstrap` scans source directories (src, lib, app, services, packages), classifies subdirectories using architecture-aware preset rules, infers edges from directory nesting, and generates `.beadloom/_graph/services.yml` + `.beadloom/config.yml`.
 
 `--preset` selects an architecture preset:
-- `monolith` — top dirs are domains; subdirs map to features, entities, services
-- `microservices` — top dirs are services; shared code becomes domains
-- `monorepo` — packages/apps are services; manifest deps become edges
+- `monolith` -- top dirs are domains; subdirs map to features, entities, services
+- `microservices` -- top dirs are services; shared code becomes domains
+- `monorepo` -- packages/apps are services; manifest deps become edges
 
-When `--preset` is omitted, Beadloom auto-detects: `services/` or `cmd/` → microservices, `packages/` or `apps/` → monorepo, otherwise → monolith.
+When `--preset` is omitted, Beadloom auto-detects: `services/` or `cmd/` -> microservices, `packages/` or `apps/` -> monorepo, otherwise -> monolith.
 
 `--import` classifies .md files (ADR, feature, architecture, other) and generates `.beadloom/_graph/imported.yml`.
 
-Projects without a `docs/` directory work fine — Beadloom operates in zero-doc mode with code-only context (graph nodes, annotations, context oracle).
+Projects without a `docs/` directory work fine -- Beadloom operates in zero-doc mode with code-only context (graph nodes, annotations, context oracle).
 
 ### beadloom reindex
 
@@ -50,10 +50,14 @@ Full reindex: drops all tables and reloads from scratch.
 beadloom reindex [--full] [--docs-dir DIR] [--project DIR]
 ```
 
-- `--full` — force full rebuild (drop all tables and re-create)
-- `--docs-dir` — documentation directory (default: from config.yml or `docs/`)
+- `--full` -- force full rebuild (drop all tables and re-create)
+- `--docs-dir` -- documentation directory (default: from config.yml or `docs/`)
 
-Order: drop tables → create schema → load graph YAML → index docs → index code → resolve imports → load rules → build sync state → populate FTS5 → take health snapshot.
+Default mode is incremental (only changed files). Use `--full` to force complete rebuild.
+
+Order: drop tables -> create schema -> load graph YAML -> index docs -> index code -> resolve imports -> load rules -> build sync state -> populate FTS5 -> take health snapshot.
+
+When no changes are detected, displays current DB totals (nodes, edges, docs, symbols) instead of reindex counts. Warns about missing tree-sitter parsers when symbols == 0.
 
 ### beadloom ctx
 
@@ -85,9 +89,9 @@ Index statistics with health trends.
 beadloom status [--json] [--project DIR]
 ```
 
-Shows Rich-formatted dashboard with: node count (broken down by kind), edges, documents, symbols, per-kind documentation coverage, stale docs, isolated nodes, empty summaries. Includes trend indicators (▲/▼) comparing current reindex with previous snapshot.
+Shows Rich-formatted dashboard with: node count (broken down by kind), edges, documents, symbols, per-kind documentation coverage, stale docs, isolated nodes, empty summaries. Includes trend indicators comparing current reindex with previous snapshot. Also displays context metrics: average bundle token size, largest bundle (ref_id + tokens), total indexed symbols.
 
-`--json` — structured JSON output.
+`--json` -- structured JSON output.
 
 ### beadloom doctor
 
@@ -105,7 +109,7 @@ Checks:
 
 ### beadloom sync-check
 
-Check doc↔code synchronization.
+Check doc-code synchronization.
 
 ```bash
 beadloom sync-check [--porcelain] [--json] [--report] [--ref REF_ID] [--project DIR]
@@ -113,9 +117,15 @@ beadloom sync-check [--porcelain] [--json] [--report] [--ref REF_ID] [--project 
 
 Exit codes: 0 = all OK, 1 = error, 2 = stale pairs found.
 
-- `--porcelain` — TAB-separated output for scripts.
-- `--json` — structured JSON output with summary and pair details.
-- `--report` — ready-to-post Markdown report for CI (GitHub/GitLab).
+- `--porcelain` -- TAB-separated output for scripts. Format: `status\tref_id\tdoc_path\tcode_path\treason`.
+- `--json` -- structured JSON output with summary and pair details. Each pair includes `status`, `ref_id`, `doc_path`, `code_path`, `reason`, and optional `details`.
+- `--report` -- ready-to-post Markdown report for CI (GitHub/GitLab).
+- `--ref` -- filter results by ref_id.
+
+Human-readable output includes reason-aware formatting:
+- `untracked_files` reason: displays list of untracked files in `details`.
+- `missing_modules` reason: displays list of missing modules in `details`.
+- Other stale reasons (e.g. `symbols_changed`, `content_changed`): displays `reason` next to the code path.
 
 ### beadloom sync-update
 
@@ -182,7 +192,7 @@ Uses FTS5 full-text search when available, falls back to SQL LIKE. Run `beadloom
 
 ### beadloom why
 
-Show impact analysis for a node — upstream dependencies and downstream dependents.
+Show impact analysis for a node -- upstream dependencies and downstream dependents.
 
 ```bash
 beadloom why REF_ID [--depth N] [--json] [--project DIR]
@@ -193,10 +203,12 @@ beadloom why REF_ID [--depth N] [--json] [--project DIR]
 Run architecture lint rules against the project.
 
 ```bash
-beadloom lint [--format {rich,json,porcelain}] [--strict] [--no-reindex] [--project DIR]
+beadloom lint [--format {rich,json,porcelain}] [--strict] [--fail-on-warn] [--no-reindex] [--project DIR]
 ```
 
-Checks cross-boundary imports against rules defined in `rules.yml`. Exit codes: 0 = clean (or violations without `--strict`), 1 = violations with `--strict`, 2 = configuration error.
+Checks cross-boundary imports against rules defined in `rules.yml`. Format auto-detects: `rich` if TTY, `porcelain` if piped.
+
+Exit codes: 0 = clean (or violations without `--strict`/`--fail-on-warn`), 1 = violations with `--strict` (errors only) or `--fail-on-warn` (any violation), 2 = configuration error.
 
 ### beadloom ui
 
@@ -236,9 +248,9 @@ Generate structured data for AI-driven documentation enrichment.
 beadloom docs polish [--format {text,json}] [--ref-id REF_ID] [--project DIR]
 ```
 
-- `text` (default) — human-readable summary with enrichment instructions
-- `json` — structured JSON with nodes (symbols, dependencies, existing docs), Mermaid diagram, and AI prompt
-- `--ref-id` — filter to a single node
+- `text` (default) -- human-readable summary with enrichment instructions
+- `json` -- structured JSON with nodes (symbols, dependencies, existing docs), Mermaid diagram, and AI prompt
+- `--ref-id` -- filter to a single node
 
 ### beadloom prime
 
@@ -248,8 +260,8 @@ Output compact project context for AI agent injection.
 beadloom prime [--json] [--update] [--project DIR]
 ```
 
-- `--json` — structured JSON output
-- `--update` — regenerate `.beadloom/AGENTS.md` before outputting context
+- `--json` -- structured JSON output
+- `--update` -- regenerate `.beadloom/AGENTS.md` before outputting context
 
 Returns architecture summary, health status (stale docs, lint violations), architecture rules, domain list, and agent instructions.
 
@@ -276,9 +288,9 @@ beadloom setup-mcp [--tool {claude-code,cursor,windsurf}] [--project DIR]
 beadloom setup-mcp --remove [--tool {claude-code,cursor,windsurf}] [--project DIR]
 ```
 
-- `claude-code` (default) — `.mcp.json` in project root
-- `cursor` — `.cursor/mcp.json` in project root
-- `windsurf` — `~/.codeium/windsurf/mcp_config.json` (global)
+- `claude-code` (default) -- `.mcp.json` in project root
+- `cursor` -- `.cursor/mcp.json` in project root
+- `windsurf` -- `~/.codeium/windsurf/mcp_config.json` (global)
 
 ### beadloom mcp-serve
 
@@ -290,8 +302,33 @@ beadloom mcp-serve [--project DIR]
 
 ## API
 
+Module `src/beadloom/services/cli.py`:
+
+- `main` -- Click group: `beadloom [--verbose|-v] [--quiet|-q] [--version] COMMAND`
+- `reindex` -- rebuild SQLite index (incremental by default, `--full` for complete rebuild)
+- `ctx` -- get context bundle for ref_id(s)
+- `graph` -- show architecture graph (Mermaid or JSON)
+- `doctor` -- run validation checks
+- `status` -- show index statistics with health trends and context metrics
+- `sync_check` -- check doc-code sync with reason/details (reason-aware output for `untracked_files`, `missing_modules`, `symbols_changed`)
+- `sync_update` -- review and update stale docs interactively
+- `install_hooks` -- install/remove pre-commit hook
+- `link` -- manage external tracker links
+- `search` -- FTS5 search with LIKE fallback
+- `why` -- impact analysis (upstream + downstream)
+- `diff_cmd` -- graph changes since a git ref
+- `lint` -- architecture lint with `--strict`, `--fail-on-warn`, auto-format detection
+- `prime` -- compact project context for AI agents
+- `setup_mcp` -- configure MCP server for editor
+- `setup_rules` -- create IDE rules files
+- `mcp_serve` -- run MCP stdio server
+- `docs` -- Click group for doc commands (`generate`, `polish`)
+- `ui` -- launch TUI dashboard
+- `watch_cmd` -- watch files and auto-reindex
+- `init` -- project initialization (bootstrap, import, interactive)
+
 All commands accept `--project DIR` to specify the project root. The current directory is used by default.
 
 ## Testing
 
-CLI is tested via `click.testing.CliRunner`. Each command has a corresponding test file in `tests/test_cli_*.py`.
+CLI is tested via `click.testing.CliRunner`. Each command has a corresponding test file in `tests/test_cli_*.py`: `test_cli_reindex.py`, `test_cli_ctx.py`, `test_cli_graph.py`, `test_cli_status.py`, `test_cli_sync_check.py`, `test_cli_sync_update.py`, `test_cli_hooks.py`, `test_cli_link.py`, `test_cli_docs.py`, `test_cli_mcp.py`, `test_cli_watch.py`, `test_cli_diff.py`, `test_cli_why.py`, `test_cli_lint.py`, `test_cli_init.py`.

@@ -104,6 +104,10 @@ beadloom watch [--debounce MS] [--project DIR]
 | `--debounce` | `int` | `500` | Debounce interval in milliseconds |
 | `--project` | `Path` | `.` | Path to the project root |
 
+The CLI command (`watch_cmd` in `cli.py`) performs two pre-flight checks before invoking `watch()`:
+1. Verifies that `watchfiles` is importable; exits with error and install instructions if missing.
+2. Verifies that the `.beadloom/_graph/` directory exists; exits with error suggesting `beadloom init` if missing.
+
 ## API
 
 ### Public Functions
@@ -173,7 +177,8 @@ DEFAULT_DEBOUNCE_MS: int = 500
 
 ## Constraints
 
-- Requires the `watchfiles` optional dependency. It is not installed by default; install via `beadloom[watch]` extra. An `ImportError` will be raised at runtime if `watchfiles` is missing.
+- Requires the `watchfiles` optional dependency. It is not installed by default; install via `beadloom[watch]` extra (or `pip install beadloom[watch]`). The CLI command catches `ImportError` at two points (import and invocation) and provides install instructions.
+- The CLI command also requires `.beadloom/_graph/` to exist; it exits with an error suggesting `beadloom init` if the directory is missing.
 - `KeyboardInterrupt` is the only supported mechanism to stop the watch loop. There is no programmatic stop/cancel API.
 - The watcher does not recurse into hidden directories except `.beadloom`. Files in `.git/`, `.venv/`, or other dotdirs are never watched.
 - Watch paths are resolved once at startup. New directories created after the watcher starts (e.g., a new `lib/` directory) are not automatically picked up; the watcher must be restarted.
@@ -181,6 +186,8 @@ DEFAULT_DEBOUNCE_MS: int = 500
 - Console output uses Rich formatting. In non-TTY environments the formatting degrades gracefully but timestamps and messages are still emitted.
 
 ## Testing
+
+Test files: `tests/test_watcher.py`
 
 Tests should cover the following scenarios:
 

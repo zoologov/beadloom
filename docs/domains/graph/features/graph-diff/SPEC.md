@@ -78,10 +78,10 @@ All dataclasses are frozen (immutable).
 
 | Function                   | Git Command                                     | Purpose                                         |
 |----------------------------|--------------------------------------------------|-------------------------------------------------|
-| `_validate_git_ref`        | `git rev-parse --verify <ref>`                   | Verify the ref exists.                          |
+| `_validate_git_ref`        | `git rev-parse --verify <ref>`                   | Verify the ref exists. Returns `bool`.          |
 | `_read_yaml_at_ref`        | `git show <ref>:<path>`                          | Read file content at ref; returns `None` if absent. |
-| `_list_graph_files_at_ref` | `git ls-tree -r --name-only <ref> .beadloom/_graph/` | List `.yml` files at the ref.                   |
-| `_parse_yaml_content`      | (none)                                           | Parse YAML string into `(nodes_dict, edges_set)`. |
+| `_list_graph_files_at_ref` | `git ls-tree -r --name-only <ref> .beadloom/_graph/` | List `.yml` files at the ref. Returns `list[str]` of relative paths. |
+| `_parse_yaml_content`      | (none)                                           | Parse YAML string into `(nodes_dict, edges_set)` where `nodes_dict: dict[str, dict[str, str]]` and `edges_set: set[tuple[str, str, str]]`. |
 
 ### Rendering and Serialization
 
@@ -90,16 +90,17 @@ def render_diff(diff: GraphDiff, console: Console) -> None
 ```
 
 Renders a Rich-formatted diff to the console:
+- Header: `"Graph diff (since {ref}):"` (bold).
 - No-change case: prints `"No graph changes since {ref}."`.
-- Nodes section: `+` (green) for added, `~` (yellow) for changed, `-` (red) for removed. Changed nodes show old and new summaries.
+- Nodes section: `+` (green) for added, `~` (yellow) for changed, `-` (red) for removed. Each entry shows `ref_id (kind)`. Changed nodes show old summary (dim) and new summary (bold).
 - Edges section: `+` (green) for added, `-` (red) for removed, formatted as `src --[kind]--> dst`.
-- Summary line: count of added/changed/removed nodes and added/removed edges.
+- Summary line: `"{N} added, {N} changed, {N} removed nodes; {N} added, {N} removed edges"`.
 
 ```python
 def diff_to_dict(diff: GraphDiff) -> dict[str, object]
 ```
 
-Serializes a `GraphDiff` to a JSON-compatible dictionary via `dataclasses.asdict`. Includes the computed `has_changes` boolean.
+Serializes a `GraphDiff` to a JSON-compatible dictionary. Produces a dict with keys: `since_ref`, `has_changes`, `nodes` (list of `asdict(NodeChange)`), `edges` (list of `asdict(EdgeChange)`).
 
 ---
 
@@ -113,6 +114,8 @@ def render_diff(diff: GraphDiff, console: Console) -> None: ...
 def diff_to_dict(diff: GraphDiff) -> dict[str, object]: ...
 ```
 
+All functions are defined in `src/beadloom/graph/diff.py`. `Console` is from `rich.console`.
+
 ### Public Classes
 
 ```python
@@ -121,8 +124,8 @@ class NodeChange:
     ref_id: str
     kind: str
     change_type: str          # "added" | "removed" | "changed"
-    old_summary: str | None = None
-    new_summary: str | None = None
+    old_summary: str | None = None  # only for "changed"
+    new_summary: str | None = None  # only for "changed"
 
 @dataclass(frozen=True)
 class EdgeChange:
@@ -183,6 +186,8 @@ beadloom diff [--since REF] [--json]
 ---
 
 ## Testing
+
+Test files: `tests/test_diff.py`, `tests/test_cli_diff.py`, `tests/test_symbol_diff_polish.py`
 
 ### Unit Tests
 

@@ -139,7 +139,25 @@ Returns `False` if the table does not exist or is empty. Used by the CLI to deci
 beadloom search QUERY [--kind KIND] [--limit N] [--json] [--project DIR]
 ```
 
-The CLI command calls `search_fts5` when `has_fts5()` returns `True`. Otherwise, it falls back to a SQL `LIKE` query against `nodes.summary`.
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `QUERY` | `str` (argument) | required | Search query string |
+| `--kind` | `Choice: domain, feature, service, entity, adr` | `None` | Filter results by node kind |
+| `--limit` | `int` | `10` | Maximum results to return |
+| `--json` | flag | `False` | Output results as JSON array |
+| `--project` | `Path` | current directory | Project root |
+
+The CLI command calls `search_fts5` when `has_fts5()` returns `True`. Otherwise, it falls back to a SQL `LIKE` query against both `nodes.ref_id` and `nodes.summary`.
+
+LIKE fallback behavior:
+- Without `kind`: `WHERE ref_id LIKE ? OR summary LIKE ? LIMIT ?`
+- With `kind`: `WHERE kind = ? AND (ref_id LIKE ? OR summary LIKE ?) LIMIT ?`
+
+LIKE fallback results do not include `snippet` or `rank` fields.
+
+Output format (non-JSON):
+- Each result displays as `[kind] ref_id: summary`
+- If a snippet is available (FTS5 mode), it is displayed on the next line indented
 
 ### MCP Integration
 
