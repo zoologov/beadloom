@@ -114,7 +114,7 @@ uv tool install "beadloom[all]"
 
 ## Limits
 
-- Code indexer supports Python out of the box; TypeScript/JavaScript, Go, and Rust via `beadloom[languages]`
+- Code indexer supports Python, TypeScript/JavaScript, Go, Rust out of the box; Kotlin, Java, Swift, C/C++, Objective-C via `beadloom[languages]`
 - Documentation is indexed from the `docs/` directory (configurable via `config.yml`)
 - Graph is described in YAML (`.yml`) files under `.beadloom/_graph/`
 - Maximum documentation chunk size: 2000 characters

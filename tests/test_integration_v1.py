@@ -20,16 +20,16 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 class TestVersion:
-    """Verify version is 1.4.0."""
+    """Verify version is 1.5.0."""
 
     def test_version_string(self) -> None:
-        assert __version__ == "1.4.0"
+        assert __version__ == "1.5.0"
 
     def test_cli_version(self) -> None:
         runner = CliRunner()
         result = runner.invoke(main, ["--version"])
         assert result.exit_code == 0
-        assert "1.4.0" in result.output
+        assert "1.5.0" in result.output
 
 
 class TestGraphCompleteness:

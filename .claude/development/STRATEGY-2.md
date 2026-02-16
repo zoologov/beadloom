@@ -2,7 +2,7 @@
 
 > **Status:** Approved
 > **Date:** 2026-02-15 (revision 2)
-> **Current version:** 1.4.0
+> **Current version:** 1.5.0
 > **Predecessor:** STRATEGY.md (Phases 1-6, all completed)
 > **Sources:** STRATEGY.md, BACKLOG.md §2-§6, BDL-UX-Issues.md, competitive analysis February 2026
 

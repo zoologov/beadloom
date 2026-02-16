@@ -163,7 +163,7 @@ beadloom lint --format json   # machine-readable output
 
 **Agent-aware constraints** — when an agent calls `get_context("why")`, the response includes active rules for that node. Agents respect architectural boundaries by design, not by accident.
 
-Supported languages for import analysis: **Python, TypeScript/JavaScript, Go, Rust**.
+Supported languages for import analysis: **Python, TypeScript/JavaScript, Go, Rust, Kotlin, Java, Swift, C/C++, Objective-C**.
 
 ## CLI commands
 
