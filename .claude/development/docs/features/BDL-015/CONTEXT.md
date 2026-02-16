@@ -1,9 +1,10 @@
 # BDL-015: Beadloom v1.5 — Context
 
 ## Status
-- **Phase:** Planning
-- **Current bead:** —
+- **Phase:** Complete
+- **Current bead:** — (all 17 beads closed)
 - **Blockers:** none
+- **Released:** v1.5.0 (2026-02-16)
 
 ## Goal (immutable)
 Solve three critical problems in one release: shallow bootstrap, broken doc sync, and limited language support.
@@ -72,6 +73,6 @@ Solve three critical problems in one release: shallow bootstrap, broken doc sync
 - tree-sitter-python (core), tree-sitter-{typescript,go,rust} (optional)
 
 ## Last updated
-- **Date:** 2026-02-15
+- **Date:** 2026-02-16
 - **Agent:** Coordinator
-- **Changes:** Initial context creation
+- **Changes:** Status updated to Complete after v1.5.0 release + BDL-016 bugfix

@@ -1,7 +1,7 @@
 # BDL-012 CONTEXT — Onboarding Quality Bug-fixes
 
-> **Phase:** Planning → Development
-> **Last updated:** 2026-02-13
+> **Phase:** COMPLETE — 10 bug-fixes delivered in v1.3.1
+> **Last updated:** 2026-02-16
 
 ## Goal
 

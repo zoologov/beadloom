@@ -1,7 +1,7 @@
 # CONTEXT: BDL-014 — Agent Prime (Cross-IDE Context Injection)
 
-> **Phase:** Planning → Development
-> **Last updated:** 2026-02-14
+> **Phase:** COMPLETE — Agent Prime delivered in v1.4.0
+> **Last updated:** 2026-02-16
 
 ---
 

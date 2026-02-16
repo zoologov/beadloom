@@ -1,49 +1,19 @@
-# ACTIVE: BDL-011 — Plug & Play Onboarding
+# ACTIVE: BDL-011 — Plug & Play Onboarding — COMPLETE
 
-> **Current wave:** 2→3 (Doc gen done, CLI + MCP next)
-> **In progress:** —
-> **Blocked:** —
-
----
-
-## Wave 1 — Foundation (DONE)
-
-| Bead | ID | Status | Notes |
-|------|----|--------|-------|
-| BEAD-01: Root node + project name detection | `beadloom-dj9.1` | **done** | _detect_project_name + root node + part_of edges |
-| BEAD-02: Auto-rules generation | `beadloom-dj9.2` | **done** | generate_rules() — 3 rule types |
-| BEAD-03: Auto MCP config | `beadloom-dj9.3` | **done** | setup_mcp_auto + editor detection |
-
-## Wave 2 — Doc generation (DONE)
-
-| Bead | ID | Status | Notes |
-|------|----|--------|-------|
-| BEAD-04: Doc skeleton generation | `beadloom-dj9.4` | **done** | doc_generator.py, 4 doc types |
-| BEAD-05: Polish data generation | `beadloom-dj9.5` | ready | unblocked |
-
-## Wave 3 — CLI + MCP
-
-| Bead | ID | Status | Notes |
-|------|----|--------|-------|
-| BEAD-06: CLI docs generate + polish | `beadloom-dj9.6` | blocked by 05 | |
-| BEAD-07: MCP tool generate_docs | `beadloom-dj9.7` | blocked by 05 | |
-| BEAD-08: Enhanced init output | `beadloom-dj9.8` | ready | unblocked |
-
-## Wave 4 — Tests
-
-| Bead | ID | Status | Notes |
-|------|----|--------|-------|
-| BEAD-09: Integration tests | `beadloom-dj9.9` | blocked by 06-08 | |
-
-## Wave 5 — Dogfooding
-
-| Bead | ID | Status | Notes |
-|------|----|--------|-------|
-| BEAD-10: Self-apply on Beadloom | `beadloom-dj9.10` | blocked by 09 | UX validation |
-| BEAD-11: Graph + CHANGELOG + docs | `beadloom-dj9.11` | blocked by 10 | |
+> **Status:** COMPLETE
+> **Last updated:** 2026-02-16
+> **Delivered:** v1.3.0
 
 ---
 
-## Next Action
+All 11 beads closed. 5 waves completed.
 
-Claim BEAD-05 (`beadloom-dj9.5`) + BEAD-08 (`beadloom-dj9.8`) in parallel.
+## All Waves — DONE
+
+| Wave | Beads | Status |
+|------|-------|--------|
+| 1 — Foundation | BEAD-01 (root node), BEAD-02 (auto-rules), BEAD-03 (auto MCP) | **done** |
+| 2 — Doc generation | BEAD-04 (skeletons), BEAD-05 (polish data) | **done** |
+| 3 — CLI + MCP | BEAD-06 (CLI docs), BEAD-07 (MCP generate_docs), BEAD-08 (init output) | **done** |
+| 4 — Tests | BEAD-09 (integration tests) | **done** |
+| 5 — Dogfooding | BEAD-10 (self-apply), BEAD-11 (graph + CHANGELOG) | **done** |

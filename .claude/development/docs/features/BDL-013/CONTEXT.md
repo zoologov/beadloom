@@ -1,9 +1,9 @@
 # CONTEXT: BDL-013 — Dogfood Beadloom + Agent Instructions + CI
 
-> **Status:** Approved, ready for implementation
+> **Status:** COMPLETE — dogfooding + CI + agent instructions delivered
 > **Epic:** BDL-013
 > **Date:** 2026-02-14
-> **Last updated:** 2026-02-14
+> **Last updated:** 2026-02-16
 
 ---
 

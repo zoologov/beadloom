@@ -1,6 +1,6 @@
 # RFC: BDL-014 — Agent Prime (Cross-IDE Context Injection)
 
-> **Status:** Approved
+> **Status:** Implemented (v1.4.0)
 > **Date:** 2026-02-14
 
 ---

@@ -1,7 +1,7 @@
 # CONTEXT: BDL-011 — Plug & Play Onboarding
 
-> **Last updated:** 2026-02-13
-> **Phase:** Planning → Development
+> **Last updated:** 2026-02-16
+> **Phase:** COMPLETE — delivered in v1.3.0
 > **Epic:** BDL-011
 
 ---

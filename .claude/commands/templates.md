@@ -354,8 +354,10 @@ Beadloom has no external API dependencies. All operations are local and determin
 - Python 3.10+, SQLite, Click, Rich, PyYAML, tree-sitter
 
 ## Related files
-- `src/beadloom/core/context.py` — Context Oracle
-- `src/beadloom/storage/database.py` — SQLite
+(discover via `beadloom ctx <ref-id>` — never hardcode)
+- `src/beadloom/context_oracle/` — Context Oracle
+- `src/beadloom/infrastructure/` — SQLite, reindex
+- `src/beadloom/graph/` — YAML loader, rules, linter
 
 ## Last updated
 - **Date:** YYYY-MM-DD HH:MM

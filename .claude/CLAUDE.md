@@ -13,17 +13,24 @@
 ### BEFORE any work
 
 ```bash
-# 1. Check available tasks
+# 1. Get project context
+beadloom prime                    # compact architecture + health overview
+
+# 2. Check available tasks
 bd ready
 
-# 2. Claim task
+# 3. Claim task
 bd update <bead-id> --status in_progress --claim
 
-# 3. Read context
+# 4. Read context via Beadloom (never hardcode paths)
+beadloom ctx <ref-id>             # architecture context for the area you'll touch
+beadloom why <ref-id>             # impact: what depends on this?
+
+# 5. Read epic context (if applicable)
 # .claude/development/docs/features/{ISSUE-KEY}/CONTEXT.md
 # .claude/development/docs/features/{ISSUE-KEY}/ACTIVE.md
 
-# 4. Confirm understanding to user
+# 6. Confirm understanding to user
 ```
 
 ### DURING work
@@ -124,18 +131,31 @@ bd dep add <id> <depends-on-id>
 ## 2.1 Beadloom CLI — Essentials
 
 ```bash
+# Agent context (start of session)
+beadloom prime                   # compact context for AI agent injection (<2K tokens)
+
 # Project structure (use instead of hardcoded paths)
-beadloom status                  # overview: nodes, edges, docs, coverage
+beadloom status                  # overview: nodes, edges, docs, coverage, trends
 beadloom graph                   # Mermaid architecture diagram
 beadloom ctx <ref-id>            # full context: code, docs, constraints
 beadloom ctx <ref-id> --json     # structured JSON for parsing
 beadloom search "<query>"        # FTS5 search across nodes and docs
+beadloom why <ref-id>            # impact analysis: upstream deps + downstream dependents
 
 # Validation (run before committing)
 beadloom reindex                 # rebuild index after code/graph changes
 beadloom sync-check              # check doc-code freshness (exit 2 = stale)
 beadloom lint --strict           # architecture boundary check (exit 1 = violation)
 beadloom doctor                  # graph integrity validation
+
+# Documentation
+beadloom docs generate           # generate doc skeletons from graph
+beadloom docs polish             # structured data for AI doc enrichment
+
+# Setup (one-time)
+beadloom init                    # initialize beadloom in a project
+beadloom setup-rules             # create IDE rules files referencing AGENTS.md
+beadloom setup-mcp               # configure MCP server for IDE
 
 # After changing code
 # 1. beadloom reindex            — re-index changed files
@@ -145,7 +165,8 @@ beadloom doctor                  # graph integrity validation
 ```
 
 **IMPORTANT:**
-- NEVER hardcode file paths — use `beadloom ctx`/`graph` to discover structure
+- NEVER hardcode file paths — use `beadloom ctx`/`graph`/`search` to discover structure
+- ALWAYS start sessions with `beadloom prime` for project context
 - ALWAYS run `beadloom sync-check` before committing
 - If sync-check reports stale docs, update them before proceeding
 
@@ -261,9 +282,11 @@ Example:
 
 ### Session start
 ```bash
+beadloom prime                        # project context
 bd ready
 bd update <id> --status in_progress --claim
-# Read CONTEXT.md, ACTIVE.md
+beadloom ctx <ref-id>                 # architecture context for the area
+# Read CONTEXT.md, ACTIVE.md (if epic)
 # Confirm to user
 ```
 
@@ -297,9 +320,11 @@ bd ready  # what got unblocked?
 ## 9. Agent Checklist
 
 ### At start
+- [ ] `beadloom prime` -> project overview
 - [ ] `bd ready` -> selected a task
 - [ ] `bd update <id> --status in_progress --claim`
-- [ ] Read CONTEXT.md and ACTIVE.md
+- [ ] `beadloom ctx <ref-id>` -> architecture context
+- [ ] Read CONTEXT.md and ACTIVE.md (if epic)
 - [ ] Confirmed understanding to user
 
 ### During work

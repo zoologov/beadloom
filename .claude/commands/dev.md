@@ -8,13 +8,20 @@
 ## Work start protocol
 
 ```bash
-# 1. Check available tasks
+# 1. Get project context
+beadloom prime                    # compact architecture + health overview
+
+# 2. Check available tasks
 bd ready
 
-# 2. Claim a task
+# 3. Claim a task
 bd update <bead-id> --status in_progress --claim
 
-# 3. Read the context
+# 4. Understand the area you'll touch
+beadloom ctx <ref-id>             # architecture context: code, docs, constraints
+beadloom why <ref-id>             # impact: what depends on this?
+
+# 5. Read epic context (if applicable)
 # - .claude/development/docs/features/{ISSUE-KEY}/CONTEXT.md
 # - .claude/development/docs/features/{ISSUE-KEY}/ACTIVE.md
 ```
@@ -54,10 +61,13 @@ REPEAT   → Next test case
 ### Discover project structure (always use these, never hardcode paths)
 
 ```bash
+beadloom prime                   # compact project context for quick orientation
 beadloom graph                   # Mermaid diagram: domains, features, services, edges
 beadloom ctx <domain>            # full context for a domain: source files, symbols, docs
 beadloom ctx <feature>           # full context for a feature
-beadloom status                  # overview: node counts, doc coverage, health
+beadloom status                  # overview: node counts, doc coverage, health trends
+beadloom why <ref-id>            # impact analysis: what depends on / is depended by
+beadloom search "<query>"        # FTS5 search across nodes, docs, and code
 ```
 
 ### Layers (conceptual, verify with `beadloom graph`)

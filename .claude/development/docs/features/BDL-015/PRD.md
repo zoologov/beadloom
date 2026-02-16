@@ -2,7 +2,7 @@
 
 ## Metadata
 - **Created:** 2026-02-15
-- **Status:** Draft
+- **Status:** Complete (delivered in v1.5.0)
 - **Reference:** `.claude/development/STRATEGY-2.md` §4 (Phases 8, 8.5, 9)
 
 ## 1. Problem

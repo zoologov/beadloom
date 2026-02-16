@@ -161,15 +161,21 @@ CHECKPOINT: {ISSUE-KEY} | BEAD-XX | YYYY-MM-DD HH:MM
 If context was compressed:
 
 ```bash
-# 1. Read state from beads
+# 1. Get project context
+beadloom prime                    # compact architecture + health overview
+
+# 2. Read state from beads
 bd show <bead-id>
 bd comments <bead-id>
 
-# 2. Read files
+# 3. Understand the area
+beadloom ctx <ref-id>             # architecture context for the component
+
+# 4. Read epic files (if applicable)
 # - CONTEXT.md
 # - ACTIVE.md
 
-# 3. Continue from the last checkpoint
+# 5. Continue from the last checkpoint
 ```
 
 ---

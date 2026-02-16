@@ -1,6 +1,6 @@
 # PRD: BDL-008 — Eat Your Own Dogfood: DDD Code Structure, Documentation & Knowledge Graph
 
-> **Status:** Approved
+> **Status:** Complete (delivered in v1.2.0)
 > **Epic:** BDL-008
 
 ---

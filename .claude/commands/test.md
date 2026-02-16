@@ -7,11 +7,17 @@
 
 ## Test structure
 
-Tests are in `tests/` (flat layout, no subdirectories). Discover test files:
+Tests are in `tests/` (flat layout, no subdirectories). Discover test targets via Beadloom:
 
 ```bash
-ls tests/test_*.py               # all test files
-beadloom ctx <domain> --json     # see source files → derive test file names
+# 1. Understand the area under test
+beadloom prime                   # project health: stale docs, lint violations
+beadloom ctx <domain> --json     # source files, symbols, docs → derive test targets
+beadloom why <ref-id>            # impact: what else might break?
+beadloom search "<module>"       # find related code and existing tests
+
+# 2. List existing tests
+ls tests/test_*.py
 ```
 
 Naming conventions:
@@ -242,8 +248,20 @@ EOF
 
 ---
 
+## Beadloom validation (after tests pass)
+
+```bash
+beadloom reindex                 # re-index if code changed
+beadloom sync-check              # verify docs aren't stale after code changes
+beadloom lint --strict           # architecture boundaries still hold
+```
+
+---
+
 ## Tester checklist
 
+- [ ] `beadloom ctx <ref-id>` — understood the area under test
+- [ ] `beadloom why <ref-id>` — checked impact on dependents
 - [ ] Unit tests for all business logic
 - [ ] Integration tests for CLI and indexer
 - [ ] Edge cases covered (see checklist above)
@@ -253,3 +271,5 @@ EOF
 - [ ] Tests are readable (AAA pattern)
 - [ ] Fixtures in `conftest.py`, using `tmp_path`
 - [ ] No hardcoded paths (only `tmp_path` / `Path`)
+- [ ] `beadloom sync-check` — no stale docs after code changes
+- [ ] `beadloom lint --strict` — no architecture violations

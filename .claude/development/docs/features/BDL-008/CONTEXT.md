@@ -1,6 +1,6 @@
 # CONTEXT: BDL-008 — Eat Your Own Dogfood
 
-> **Status:** Active
+> **Status:** COMPLETE — DDD restructuring delivered in v1.2.0
 > **Epic:** BDL-008
 > **PRD:** Approved | **RFC:** Approved
 

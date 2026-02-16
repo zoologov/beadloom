@@ -1,7 +1,7 @@
 # PRD: BDL-011 — Plug & Play Onboarding
 
 > **Epic:** BDL-011
-> **Status:** Draft → Pending Approval
+> **Status:** Complete (delivered in v1.3.0)
 > **Author:** v.zoologov + Claude
 > **Date:** 2026-02-13
 

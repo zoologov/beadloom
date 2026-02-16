@@ -1,5 +1,8 @@
 # BDL-012 — Onboarding Quality: Bug-fixes from Dogfooding
 
+> **Status:** Complete (delivered in v1.3.1)
+> **Epic:** BDL-012
+
 ## Problem
 
 Beadloom v1.3.0 Plug & Play Onboarding (`beadloom init --bootstrap`) works end-to-end but produces low-quality results on real projects. Dogfooding on two projects revealed 10 open issues:
