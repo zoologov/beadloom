@@ -329,7 +329,7 @@ class TestIncrementalReindexPreservesSymbolDrift:
 
         # Doc file.
         (project / "docs").mkdir(exist_ok=True)
-        (project / "docs" / "spec.md").write_text("# F1 Spec\nInitial content.\n")
+        (project / "docs" / "spec.md").write_text("# F1 Spec\nInitial content for api module.\n")
 
         # Code file with one function.
         (project / "src").mkdir(exist_ok=True)
@@ -397,7 +397,7 @@ class TestIncrementalReindexPreservesSymbolDrift:
         }
         (graph_dir / "services.yml").write_text(yaml.dump(graph_data))
         (project / "docs").mkdir(exist_ok=True)
-        (project / "docs" / "spec.md").write_text("# F1 Spec\nContent.\n")
+        (project / "docs" / "spec.md").write_text("# F1 Spec\nContent about the api module.\n")
         (project / "src").mkdir(exist_ok=True)
         (project / "src" / "api.py").write_text(
             "# beadloom:feature=F1\ndef handler():\n    pass\n"
@@ -414,7 +414,9 @@ class TestIncrementalReindexPreservesSymbolDrift:
         incremental_reindex(project)
 
         # Now mark as synced (user updated the doc).
-        (project / "docs" / "spec.md").write_text("# F1 Spec\nUpdated: now includes new_helper.\n")
+        (project / "docs" / "spec.md").write_text(
+            "# F1 Spec\nUpdated api: now includes new_helper.\n"
+        )
         db_path = project / ".beadloom" / "beadloom.db"
         conn = open_db(db_path)
         mark_synced_by_ref(conn, "F1", project)

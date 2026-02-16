@@ -96,6 +96,22 @@ class ReindexResult:
     warnings: list[str] = field(default_factory=list)
 
 
+def _snapshot_sync_baselines(conn: sqlite3.Connection) -> dict[str, str]:
+    """Snapshot symbols_hash from sync_state before table drop.
+
+    Returns {ref_id: symbols_hash} for all entries with non-empty hash.
+    Returns empty dict if sync_state doesn't exist yet.
+    """
+    try:
+        rows = conn.execute(
+            "SELECT ref_id, symbols_hash FROM sync_state "
+            "WHERE symbols_hash IS NOT NULL AND symbols_hash != ''"
+        ).fetchall()
+        return {row[0]: row[1] for row in rows}
+    except Exception:  # Table doesn't exist on first run
+        return {}
+
+
 def _drop_all_tables(conn: sqlite3.Connection) -> None:
     """Drop all application tables to allow a clean re-create."""
     for table in _TABLES_TO_DROP:
@@ -551,6 +567,9 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
 
     conn = open_db(db_path)
 
+    # Snapshot sync baselines before drop.
+    preserved = _snapshot_sync_baselines(conn)
+
     # Drop + re-create.
     _drop_all_tables(conn)
     create_schema(conn)
@@ -625,7 +644,7 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
     _extract_and_store_routes(project_root, conn)
 
     # 4. Build initial sync state.
-    _build_initial_sync_state(conn)
+    _build_initial_sync_state(conn, preserved_symbols=preserved)
 
     # 5. Populate FTS5 search index.
     from beadloom.context_oracle.search import populate_search_index
@@ -1079,7 +1098,8 @@ def incremental_reindex(
 
     # Rebuild sync_state (cheap full rebuild) using preserved symbols_hash.
     conn.execute("DELETE FROM sync_state")
-    _build_initial_sync_state(conn, preserved_symbols=old_symbols or None)
+    preserved = old_symbols if old_symbols is not None else None
+    _build_initial_sync_state(conn, preserved_symbols=preserved)
 
     # Rebuild FTS5 search index.
     from beadloom.context_oracle.search import populate_search_index

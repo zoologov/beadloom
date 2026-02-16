@@ -740,6 +740,8 @@ def sync_check(
                     "ref_id": r["ref_id"],
                     "doc_path": r["doc_path"],
                     "code_path": r["code_path"],
+                    "reason": r.get("reason", "ok"),
+                    **({"details": r["details"]} if r.get("details") else {}),
                 }
                 for r in results
             ],
@@ -749,14 +751,41 @@ def sync_check(
         click.echo(_build_sync_report(results))
     elif porcelain:
         for r in results:
-            click.echo(f"{r['status']}\t{r['ref_id']}\t{r['doc_path']}\t{r['code_path']}")
+            reason = r.get("reason", "ok")
+            click.echo(
+                f"{r['status']}\t{r['ref_id']}\t{r['doc_path']}\t{r['code_path']}\t{reason}"
+            )
     else:
         if not results:
             click.echo("No sync pairs found.")
         else:
             for r in results:
                 marker = "[stale]" if r["status"] == "stale" else "[ok]"
-                click.echo(f"  {marker} {r['ref_id']}: {r['doc_path']} <-> {r['code_path']}")
+                reason = r.get("reason", "ok")
+                details = r.get("details", "")
+
+                if reason == "untracked_files" and details:
+                    click.echo(
+                        f"  {marker} {r['ref_id']}: {r['doc_path']} "
+                        f"(untracked: {details})"
+                    )
+                elif reason == "missing_modules" and details:
+                    click.echo(
+                        f"  {marker} {r['ref_id']}: {r['doc_path']} "
+                        f"(missing modules: {details})"
+                    )
+                elif r["status"] == "stale" and reason not in (
+                    "ok", "untracked_files", "missing_modules",
+                ):
+                    click.echo(
+                        f"  {marker} {r['ref_id']}: {r['doc_path']} "
+                        f"<-> {r['code_path']} ({reason})"
+                    )
+                else:
+                    click.echo(
+                        f"  {marker} {r['ref_id']}: {r['doc_path']} "
+                        f"<-> {r['code_path']}"
+                    )
 
     if has_stale:
         sys.exit(2)

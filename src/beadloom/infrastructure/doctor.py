@@ -173,6 +173,59 @@ def _check_stale_sync(conn: sqlite3.Connection) -> list[Check]:
     ]
 
 
+def _check_source_coverage(conn: sqlite3.Connection) -> list[Check]:
+    """Check for nodes with untracked source files.
+
+    Uses :func:`beadloom.doc_sync.engine.check_source_coverage` to detect
+    Python files in a node's source directory that are not tracked in
+    sync_state or code_symbols.
+    """
+    from pathlib import Path
+
+    from beadloom.doc_sync.engine import check_source_coverage
+
+    # Derive project_root from the database path.
+    try:
+        db_path = conn.execute("PRAGMA database_list").fetchone()[2]
+        project_root = Path(db_path).parent.parent
+    except Exception:
+        return [
+            Check(
+                "source_coverage",
+                Severity.OK,
+                "Could not determine project root — skipping source coverage check.",
+            )
+        ]
+
+    try:
+        gaps = check_source_coverage(conn, project_root)
+    except Exception:
+        return [
+            Check(
+                "source_coverage",
+                Severity.OK,
+                "Source coverage check failed — skipping.",
+            )
+        ]
+
+    if not gaps:
+        return [Check("source_coverage", Severity.OK, "All source files are tracked.")]
+
+    results: list[Check] = []
+    for gap in gaps:
+        ref_id: str = gap["ref_id"]
+        untracked: list[str] = gap["untracked_files"]
+        file_names = ", ".join(Path(f).name for f in untracked)
+        results.append(
+            Check(
+                "source_coverage",
+                Severity.WARNING,
+                f"Node '{ref_id}' has untracked source files: {file_names}",
+            )
+        )
+    return results
+
+
 def run_checks(conn: sqlite3.Connection) -> list[Check]:
     """Run all validation checks and return results."""
     results: list[Check] = []
@@ -182,4 +235,5 @@ def run_checks(conn: sqlite3.Connection) -> list[Check]:
     results.extend(_check_isolated_nodes(conn))
     results.extend(_check_symbol_drift(conn))
     results.extend(_check_stale_sync(conn))
+    results.extend(_check_source_coverage(conn))
     return results

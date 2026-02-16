@@ -85,7 +85,9 @@ def _create_mini_project(tmp_path: Path, *, with_git: bool = False) -> Path:
     docs_dir = project / "docs"
     docs_dir.mkdir()
     (docs_dir / "overview.md").write_text(
-        "## Overview\n\nThis is the project overview.\n\n## API\n\nPublic API description.\n",
+        "## Overview\n\nThis is the project overview.\n\n"
+        "## Core\n\nThe core module.\n\n"
+        "## API\n\nPublic API description.\n",
         encoding="utf-8",
     )
 
