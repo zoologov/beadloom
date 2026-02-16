@@ -417,7 +417,7 @@ def check_source_coverage(
 
         # 6. Also collect file_paths from code_symbols annotated with this ref_id
         #    OR any child ref_id
-        all_ref_ids = [ref_id] + child_ref_ids
+        all_ref_ids = [ref_id, *child_ref_ids]
         for rid in all_ref_ids:
             sym_rows = conn.execute(
                 "SELECT file_path FROM code_symbols WHERE annotations LIKE ?",
