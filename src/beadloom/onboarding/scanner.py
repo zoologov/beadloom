@@ -956,6 +956,9 @@ _AGENTS_MD_TEMPLATE_V2 = """\
 | `update_node` | Update node summary or source |
 | `mark_synced` | Mark doc-code pair as synchronized |
 | `generate_docs` | Enrichment data for AI doc polish |
+| `why` | Impact analysis — upstream and downstream deps |
+| `diff` | Graph changes since a git ref |
+| `lint` | Architecture boundary violations with severity |
 
 {rules_section}## Custom
 
