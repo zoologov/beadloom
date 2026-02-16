@@ -183,6 +183,9 @@ class TestGenerateAgentsMd:
         assert "generate_docs" in content
         assert "get_graph" in content
         assert "get_status" in content
+        assert "why" in content
+        assert "diff" in content
+        assert "lint" in content
 
     def test_contains_instructions(self, tmp_path: Path) -> None:
         generate_agents_md(tmp_path)

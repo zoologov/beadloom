@@ -68,7 +68,7 @@ nodes:
   # Service: MCP Server
   - ref_id: mcp-server
     kind: service
-    summary: "MCP stdio server with 10 tools for AI agents"
+    summary: "MCP stdio server with 13 tools for AI agents"
     source: src/beadloom/services/mcp_server.py
     docs:
       - docs/services/mcp.md

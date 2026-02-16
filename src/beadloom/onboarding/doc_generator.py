@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -272,6 +273,43 @@ def _load_symbols_by_source(project_root: Path) -> dict[str, list[dict[str, Any]
     except sqlite3.OperationalError:
         pass
     return symbols_by_source
+
+
+def _load_extra_from_sqlite(project_root: Path) -> dict[str, dict[str, Any]]:
+    """Load ``extra`` JSON blobs from the SQLite ``nodes`` table.
+
+    Returns a mapping of ``{ref_id: parsed_extra_dict}`` for every node
+    whose ``extra`` column contains a non-empty JSON string.
+
+    Returns an empty dict when the database does not exist or the
+    ``nodes`` table is missing (graceful degradation).
+    """
+    from pathlib import Path as _Path
+
+    db_path = _Path(project_root) / ".beadloom" / "beadloom.db"
+    if not db_path.exists():
+        return {}
+
+    import sqlite3
+
+    result: dict[str, dict[str, Any]] = {}
+    try:
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT ref_id, extra FROM nodes WHERE extra IS NOT NULL AND extra != ''"
+        ).fetchall()
+        for row in rows:
+            try:
+                parsed = json.loads(row["extra"])
+                if isinstance(parsed, dict):
+                    result[row["ref_id"]] = parsed
+            except (json.JSONDecodeError, TypeError):
+                continue
+        conn.close()
+    except sqlite3.OperationalError:
+        pass
+    return result
 
 
 def _symbols_for_node(
@@ -779,6 +817,17 @@ def generate_polish_data(
     # Enrich with real dependency edges from SQLite (post-reindex).
     _enrich_edges_from_sqlite(project_root, node_data_list)
 
+    # Enrich with routes, activity, and tests from nodes.extra.
+    extras = _load_extra_from_sqlite(project_root)
+    for nd in node_data_list:
+        extra = extras.get(nd["ref_id"], {})
+        if extra.get("routes"):
+            nd["routes"] = extra["routes"]
+        if extra.get("activity"):
+            nd["activity"] = extra["activity"]
+        if extra.get("tests"):
+            nd["tests"] = extra["tests"]
+
     # Build Mermaid diagram.
     mermaid_str = _generate_mermaid(nodes, edges)
 
@@ -857,6 +906,40 @@ def format_polish_text(data: dict[str, Any]) -> str:
         changes = node.get("symbol_changes")
         if changes and changes.get("has_drift"):
             lines.append(f"   \u26a0 Symbol drift: {changes.get('message', 'symbols changed')}")
+
+        # Routes (from nodes.extra).
+        routes: list[dict[str, Any]] = node.get("routes", [])
+        if routes:
+            lines.append("   Routes:")
+            for route in routes:
+                method: str = route.get("method", "?")
+                path: str = route.get("path", "?")
+                handler: str = route.get("handler", "?")
+                framework: str = route.get("framework", "")
+                fw_suffix = f" ({framework})" if framework else ""
+                lines.append(f"     {method:<5} {path:<20} -> {handler}{fw_suffix}")
+
+        # Activity (from nodes.extra).
+        activity: dict[str, Any] | None = node.get("activity")
+        if activity:
+            level: str = activity.get("level", "unknown")
+            commits_30d: int = activity.get("commits_30d", 0)
+            last_commit: str = activity.get("last_commit", "unknown")
+            lines.append(
+                f"   Activity: {level} ({commits_30d} commits/30d, last: {last_commit})"
+            )
+
+        # Tests (from nodes.extra).
+        tests: dict[str, Any] | None = node.get("tests")
+        if tests:
+            fw: str = tests.get("framework", "unknown")
+            test_count: int = tests.get("test_count", 0)
+            test_files: list[str] = tests.get("test_files", [])
+            coverage: str = tests.get("coverage_estimate", "none")
+            lines.append(
+                f"   Tests: {fw}, {test_count} tests in {len(test_files)} files, "
+                f"coverage: {coverage}"
+            )
 
         doc_display = doc_path if doc_path else "(none)"
         lines.append(f"   Doc: {doc_display} ({doc_status})")
