@@ -64,7 +64,7 @@ bd close <bead-id>
 - **Type checking:** mypy --strict
 - **Project documentation:** `.claude/development/STRATEGY-2.md`, `.claude/development/BACKLOG.md`, `.claude/development/BDL-UX-Issues.md`, `CHANGELOG.md`
 - **Architecture:** DDD packages — `infrastructure/`, `context_oracle/`, `doc_sync/`, `onboarding/`, `graph/` + `services/` (CLI, MCP) + `tui/`
-- **Current version:** 1.4.0 (Phases 1-6 done; STRATEGY-2 starts at Phase 8)
+- **Current version:** 1.5.0 (Phases 1-6 + 8, 8.5, 9 done)
 
 ---
 
