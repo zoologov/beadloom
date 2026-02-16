@@ -16,6 +16,7 @@ from beadloom.context_oracle.builder import bfs_subgraph, build_context
 from beadloom.context_oracle.cache import ContextCache, SqliteCache, compute_etag
 from beadloom.doc_sync.engine import check_sync, mark_synced_by_ref
 from beadloom.graph.diff import compute_diff
+from beadloom.graph.linter import LintResult, lint
 from beadloom.graph.loader import update_node_in_yaml
 from beadloom.infrastructure.db import get_meta, open_db
 from beadloom.infrastructure.reindex import incremental_reindex
@@ -345,6 +346,63 @@ def handle_diff(
     }
 
 
+# --- Lint tool handler ---
+
+
+def handle_lint(
+    project_root: Path,
+    *,
+    severity: str = "all",
+) -> dict[str, Any]:
+    """Run architecture lint and return violations as structured JSON.
+
+    Parameters
+    ----------
+    project_root:
+        Root of the project (where ``.beadloom/`` lives).
+    severity:
+        Filter violations by severity: ``"all"``, ``"error"``, or ``"warn"``.
+
+    Returns
+    -------
+    dict
+        ``{"violations": [...], "summary": {...}}``
+    """
+    result: LintResult = lint(project_root, reindex_before=False)
+
+    # Apply severity filter
+    filtered = result.violations
+    if severity in ("error", "warn"):
+        filtered = [v for v in filtered if v.severity == severity]
+
+    violations_list: list[dict[str, object]] = []
+    for v in filtered:
+        violations_list.append(
+            {
+                "rule": v.rule_name,
+                "severity": v.severity,
+                "rule_type": v.rule_type,
+                "file_path": v.file_path,
+                "line_number": v.line_number,
+                "from_ref_id": v.from_ref_id,
+                "to_ref_id": v.to_ref_id,
+                "message": v.message,
+            }
+        )
+
+    error_count = sum(1 for v in filtered if v.severity == "error")
+    warning_count = sum(1 for v in filtered if v.severity == "warn")
+
+    return {
+        "violations": violations_list,
+        "summary": {
+            "errors": error_count,
+            "warnings": warning_count,
+            "rules_evaluated": result.rules_evaluated,
+        },
+    }
+
+
 # --- MCP Server creation ---
 
 _TOOLS = [
@@ -534,8 +592,7 @@ _TOOLS = [
     mcp.Tool(
         name="why",
         description=(
-            "Impact analysis: show upstream dependencies and downstream "
-            "dependents for a node."
+            "Impact analysis: show upstream dependencies and downstream dependents for a node."
         ),
         inputSchema={
             "type": "object",
@@ -557,6 +614,20 @@ _TOOLS = [
                 "since": {
                     "type": "string",
                     "description": "Git ref (default: HEAD~1)",
+                },
+            },
+        },
+    ),
+    mcp.Tool(
+        name="lint",
+        description="Run architecture lint rules. Returns violations as JSON.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "severity": {
+                    "type": "string",
+                    "enum": ["all", "error", "warn"],
+                    "description": "Filter by severity (default: all)",
                 },
             },
         },
@@ -847,6 +918,13 @@ def _dispatch_tool(
             raise ValueError(msg)
         since = args.get("since", "HEAD~1")
         return handle_diff(project_root, since=str(since))
+
+    if name == "lint":
+        if project_root is None:
+            msg = "lint requires project_root"
+            raise ValueError(msg)
+        severity = str(args.get("severity", "all"))
+        return handle_lint(project_root, severity=severity)
 
     msg = f"Unknown tool: {name}"
     raise ValueError(msg)

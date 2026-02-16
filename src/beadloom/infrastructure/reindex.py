@@ -15,6 +15,7 @@ from beadloom.context_oracle.code_indexer import extract_symbols, supported_exte
 from beadloom.doc_sync.doc_indexer import chunk_markdown, index_docs
 from beadloom.graph.loader import load_graph
 from beadloom.infrastructure.db import SCHEMA_VERSION, create_schema, open_db, set_meta
+from beadloom.infrastructure.git_activity import analyze_git_activity
 from beadloom.infrastructure.health import take_snapshot
 
 if TYPE_CHECKING:
@@ -34,6 +35,22 @@ _TABLES_TO_DROP = [
     "nodes",
     "meta",
 ]
+
+# File extension -> language label for route extraction.
+_EXT_TO_LANG: dict[str, str] = {
+    ".py": "python",
+    ".ts": "typescript",
+    ".tsx": "typescript",
+    ".js": "javascript",
+    ".jsx": "javascript",
+    ".go": "go",
+    ".java": "java",
+    ".kt": "kotlin",
+    ".kts": "kotlin",
+    ".graphql": "graphql",
+    ".gql": "graphql",
+    ".proto": "protobuf",
+}
 
 # File extensions to scan for code symbols.
 _CODE_EXTENSIONS = frozenset(
@@ -339,6 +356,177 @@ def resolve_scan_paths(project_root: Path) -> list[str]:
     return list(_DEFAULT_SCAN_DIRS)
 
 
+def _store_test_mappings(
+    project_root: Path,
+    conn: sqlite3.Connection,
+) -> None:
+    """Run test mapper and merge results into ``nodes.extra["tests"]``.
+
+    Builds a ``source_dirs`` dict from nodes that have a non-null ``source``
+    field, calls :func:`~beadloom.context_oracle.test_mapper.map_tests`, and
+    updates each node's ``extra`` JSON blob with the test mapping data.
+    """
+    from beadloom.context_oracle.test_mapper import map_tests
+
+    # Build source_dirs: {ref_id: source_path} for nodes with a source field.
+    rows = conn.execute("SELECT ref_id, source FROM nodes WHERE source IS NOT NULL").fetchall()
+    source_dirs: dict[str, str] = {row["ref_id"]: row["source"] for row in rows}
+
+    if not source_dirs:
+        return
+
+    mappings = map_tests(project_root, source_dirs)
+
+    for ref_id, mapping in mappings.items():
+        # Read existing extra JSON.
+        row = conn.execute("SELECT extra FROM nodes WHERE ref_id = ?", (ref_id,)).fetchone()
+        if row is None:
+            continue
+
+        extra: dict[str, object] = json.loads(row["extra"]) if row["extra"] else {}
+        extra["tests"] = {
+            "framework": mapping.framework,
+            "test_files": mapping.test_files,
+            "test_count": mapping.test_count,
+            "coverage_estimate": mapping.coverage_estimate,
+        }
+        conn.execute(
+            "UPDATE nodes SET extra = ? WHERE ref_id = ?",
+            (json.dumps(extra, ensure_ascii=False), ref_id),
+        )
+
+    conn.commit()
+
+
+def _update_node_extra(
+    conn: sqlite3.Connection,
+    ref_id: str,
+    key: str,
+    value: object,
+) -> None:
+    """Merge a key/value into a node's ``extra`` JSON column.
+
+    Reads the current ``extra`` JSON, sets ``extra[key] = value``, and
+    writes it back.  Does nothing if *ref_id* does not exist.
+    """
+    row = conn.execute("SELECT extra FROM nodes WHERE ref_id = ?", (ref_id,)).fetchone()
+    if row is None:
+        return
+    current: dict[str, object] = json.loads(row["extra"]) if row["extra"] else {}
+    current[key] = value
+    conn.execute(
+        "UPDATE nodes SET extra = ? WHERE ref_id = ?",
+        (json.dumps(current, ensure_ascii=False), ref_id),
+    )
+
+
+def _extract_and_store_routes(
+    project_root: Path,
+    conn: sqlite3.Connection,
+) -> None:
+    """Scan source files for API routes and store them in ``nodes.extra``.
+
+    Iterates over all known scan directories, extracts routes via
+    :func:`~beadloom.context_oracle.route_extractor.extract_routes`, and
+    aggregates them.  When routes are found, stores them under the
+    ``"routes"`` key in each node's ``extra`` JSON column.
+
+    Files without routes are skipped (no empty arrays stored).
+    """
+    from beadloom.context_oracle.route_extractor import extract_routes
+
+    all_routes: list[dict[str, object]] = []
+
+    scan_dirs = [project_root / d for d in resolve_scan_paths(project_root)]
+    for scan_dir in scan_dirs:
+        if not scan_dir.is_dir():
+            continue
+        for file_path in sorted(scan_dir.rglob("*")):
+            if not file_path.is_file():
+                continue
+            lang = _EXT_TO_LANG.get(file_path.suffix)
+            if lang is None:
+                continue
+
+            routes = extract_routes(file_path, lang)
+            if not routes:
+                continue
+
+            rel_path = str(file_path.relative_to(project_root))
+            for route in routes:
+                all_routes.append(
+                    {
+                        "method": route.method,
+                        "path": route.path,
+                        "handler": route.handler,
+                        "file": rel_path,
+                        "line": route.line,
+                        "framework": route.framework,
+                    }
+                )
+
+    if not all_routes:
+        return
+
+    # Store aggregated routes in every node's extra (project-wide API surface).
+    ref_ids = [row[0] for row in conn.execute("SELECT ref_id FROM nodes").fetchall()]
+    for ref_id in ref_ids:
+        _update_node_extra(conn, ref_id, "routes", all_routes)
+    conn.commit()
+
+
+def _store_git_activity(
+    conn: sqlite3.Connection,
+    project_root: Path,
+) -> None:
+    """Analyze git activity and store results in ``nodes.extra["activity"]``.
+
+    Builds a ``source_dirs`` mapping from nodes that have a ``source`` field,
+    runs :func:`analyze_git_activity`, and merges activity data into the
+    existing ``extra`` JSON column for each matching node.
+
+    Gracefully does nothing when git is unavailable (``analyze_git_activity``
+    returns an empty dict in that case).
+    """
+    # Build ref_id -> source_path mapping from nodes with source field.
+    rows = conn.execute("SELECT ref_id, source FROM nodes WHERE source IS NOT NULL").fetchall()
+    source_dirs: dict[str, str] = {}
+    for row in rows:
+        src: str = row["source"]
+        if src.strip():
+            source_dirs[row["ref_id"]] = src
+
+    if not source_dirs:
+        return
+
+    activities = analyze_git_activity(project_root, source_dirs)
+
+    for ref_id, activity in activities.items():
+        # Read existing extra.
+        node_row = conn.execute("SELECT extra FROM nodes WHERE ref_id = ?", (ref_id,)).fetchone()
+        if node_row is None:
+            continue
+
+        extra_raw: str = node_row["extra"] if node_row["extra"] else "{}"
+        extra: dict[str, Any] = json.loads(extra_raw)
+
+        # Merge activity data.
+        extra["activity"] = {
+            "level": activity.activity_level,
+            "commits_30d": activity.commits_30d,
+            "commits_90d": activity.commits_90d,
+            "last_commit": activity.last_commit_date,
+            "top_contributors": activity.top_contributors,
+        }
+
+        conn.execute(
+            "UPDATE nodes SET extra = ? WHERE ref_id = ?",
+            (json.dumps(extra, ensure_ascii=False), ref_id),
+        )
+
+    conn.commit()
+
+
 def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResult:
     """Full reindex: drop all tables, re-create schema, reload everything.
 
@@ -379,6 +567,22 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
     # Collect known ref_ids for edge creation.
     seen_ref_ids = {row[0] for row in conn.execute("SELECT ref_id FROM nodes").fetchall()}
 
+    # 1b. Store deep config in root node's extra.
+    from beadloom.onboarding.config_reader import read_deep_config
+
+    deep_config = read_deep_config(project_root)
+    root_row = conn.execute(
+        "SELECT ref_id, extra FROM nodes WHERE source = '' OR source IS NULL"
+    ).fetchone()
+    if root_row is not None:
+        existing_extra: dict[str, Any] = json.loads(root_row["extra"] or "{}")
+        existing_extra["config"] = deep_config
+        conn.execute(
+            "UPDATE nodes SET extra = ? WHERE ref_id = ?",
+            (json.dumps(existing_extra, ensure_ascii=False), root_row["ref_id"]),
+        )
+        conn.commit()
+
     # 2. Index documents.
     if docs_dir is None:
         docs_dir = _resolve_docs_dir(project_root)
@@ -410,6 +614,15 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
     rules_path = project_root / ".beadloom" / "_graph" / "rules.yml"
     if rules_path.is_file():
         _load_rules_into_db(rules_path, conn, result)
+
+    # 3d. Map test files to source nodes and store in nodes.extra.
+    _store_test_mappings(project_root, conn)
+
+    # 3e. Analyze git activity and store in nodes.extra.
+    _store_git_activity(conn, project_root)
+
+    # 3f. Extract API routes and store in nodes.extra.
+    _extract_and_store_routes(project_root, conn)
 
     # 4. Build initial sync state.
     _build_initial_sync_state(conn)
@@ -860,6 +1073,9 @@ def incremental_reindex(
                 project_root,
                 seen_ref_ids,
             )
+
+    # Re-extract routes after code changes and update nodes.extra.
+    _extract_and_store_routes(project_root, conn)
 
     # Rebuild sync_state (cheap full rebuild) using preserved symbols_hash.
     conn.execute("DELETE FROM sync_state")
