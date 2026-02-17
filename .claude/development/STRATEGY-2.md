@@ -1,7 +1,7 @@
 # Beadloom: Strategy 2 — Architecture Infrastructure for the AI Agent Era
 
 > **Status:** Active (Phases 8-11 complete, Phase 12+ planned)
-> **Date:** 2026-02-17 (revision 4)
+> **Date:** 2026-02-17 (revision 5)
 > **Current version:** 1.6.0
 > **Predecessor:** STRATEGY.md (Phases 1-6, all completed)
 > **Sources:** STRATEGY.md, BACKLOG.md §2-§6, BDL-UX-Issues.md, competitive analysis February 2026
@@ -162,7 +162,7 @@ Beadloom is for engineers who build and maintain serious IT systems. YAML graph 
 
 ### Phase 9: Mobile and Server Languages (v1.5) — DONE
 
-**Goal:** Beadloom supports mobile, cross-platform, and server-side development languages. Critical for dogfood project (dreamteam: React Native + Expo + Valhalla C++ + Meshtastic).
+**Goal:** Beadloom supports mobile, cross-platform, and server-side development languages. Critical for dogfood project (React Native + Expo + C++ native modules).
 
 **Metric:** `beadloom reindex` on a project with `.kt`, `.swift`, `.cpp`, `.m` files extracts symbols, imports, and dependencies.
 
@@ -222,7 +222,50 @@ Beadloom is for engineers who build and maintain serious IT systems. YAML graph 
 | 11.4 | **Context cost metrics** — `beadloom status` shows avg/max bundle sizes in tokens | feature | P2 | DONE |
 | 11.5 | **Deep config reading** — pyproject.toml, package.json, tsconfig.json, Cargo.toml, build.gradle | feature | P2 | DONE |
 
-### Phase 12: Cross-System Foundation (v1.7)
+### Phase 12: AaC Rules v2 — Architecture Enforcement (v1.7)
+
+**Goal:** Transform rule engine from simple "node needs edge" checks to a full architecture enforcement system. Beadloom becomes the ArchUnit/Dependency-Cruiser equivalent — language-agnostic and graph-native.
+
+**Metric:** `beadloom lint --strict` catches forbidden cross-layer imports, dependency cycles, and oversized domains. A React Native project with `layers:` config in rules.yml gets boundary violations detected automatically.
+
+**Motivation:** Dogfooding (UX #32-37) revealed that the current rule engine is primitive (`require` + `has_edge_to` only). With 533 imports already indexed for a typical project, import-based boundary enforcement is within reach. AaC rules are Beadloom's key differentiator — "architecture enforcement, not just documentation."
+
+| # | Task | Type | P | Effort |
+|---|------|------|---|--------|
+| 12.1 | **Node tags/labels** — `tags: [ui-layer, presentation]` field in services.yml. Arbitrary strings for rule matching. Required prerequisite for layer/group rules | feature | P0 | S |
+| 12.2 | **Forbidden dependency rules** — `forbid` rule type: "nodes tagged X must NOT have `uses` edge to nodes tagged Y". Inverse of current `require` | feature | P0 | M |
+| 12.3 | **Layer enforcement rules** — `layers:` definition with ordered names + domain assignments. `enforce: top-down` prevents lower layers from depending on upper. `allow_skip: true` for non-strict layering | feature | P0 | M |
+| 12.4 | **Circular dependency detection** — `forbid_cycles` rule type on `uses`/`depends_on` edges. BFS cycle detection with path reporting | feature | P0 | M |
+| 12.5 | **Import-based boundary rules** — `forbid_import` rule type: "files in path A must not import from path B". Uses existing import index from `code_symbols` table | feature | P1 | L |
+| 12.6 | **Cardinality/complexity rules** — `check` rule type: `max_symbols`, `max_files`, `min_doc_coverage` per node. Architectural smell detection | feature | P2 | S |
+
+### Phase 12.5: Init Quality (v1.7)
+
+**Goal:** First-time `beadloom init` captures 80%+ of real project architecture, not 35%. Fix all dogfooding UX issues.
+
+**Metric:** `beadloom init` on a React Native project with native modules produces 15+ nodes (was 6), includes all code directories, generates doc skeletons, and `lint` passes without manual fixes.
+
+| # | Task | Type | P | Effort |
+|---|------|------|---|--------|
+| 12.5.1 | **Scan all code directories** — `detect_source_dirs()` scans all top-level dirs containing code files, not just manifest-adjacent ones (fix UX #32) | fix | P0 | M |
+| 12.5.2 | **Non-interactive init mode** — `--mode bootstrap`, `--yes`/`--non-interactive`, `--force` flags for CI and agent use (fix UX #33) | feature | P1 | S |
+| 12.5.3 | **Root service rule fix** — `_generate_default_rules()` excludes root service from `service-needs-parent` (fix UX #34) | fix | P1 | S |
+| 12.5.4 | **Docs generate in init** — offer doc skeleton generation as final init step, or auto-generate (fix UX #35) | feature | P1 | S |
+| 12.5.5 | **Doc auto-linking** — fuzzy matching of existing docs to graph nodes by path/content during init (fix UX #36) | feature | P2 | M |
+
+### Phase 12.6: Architecture Intelligence (v1.7)
+
+**Goal:** Proactive architecture insights — detect what changed, what's affected, and where risk concentrates. Makes architecture visible in CI/CD and refactoring workflows.
+
+**Metric:** `beadloom diff HEAD~5` shows added/removed/changed nodes and edges since 5 commits ago. `beadloom why <ref-id> --reverse` shows not just "what depends on X" but "what X depends on" with transitive closure. CI pipeline can fail on unexpected architecture drift.
+
+| # | Task | Type | P | Effort |
+|---|------|------|---|--------|
+| 12.6.1 | **`beadloom diff`** — compare architecture snapshots between commits/branches/tags. Shows added/removed/changed nodes, edges, symbols. Human-readable + `--json` for CI | feature | P2 | M |
+| 12.6.2 | **Enhanced impact analysis** — `beadloom why <ref-id> --reverse` (what X depends on) + `--depth N` (transitive closure depth) + `--format tree` (visual dependency tree) | feature | P2 | M |
+| 12.6.3 | **Architecture snapshot storage** — store graph snapshots in SQLite for historical comparison without git checkout. `beadloom snapshot save/list/compare` | feature | P2 | M |
+
+### Phase 13: Cross-System Foundation (v1.8)
 
 **Goal:** Beadloom works across repository boundaries. Beginning of the path to serving IT landscapes.
 
@@ -230,12 +273,12 @@ Beadloom is for engineers who build and maintain serious IT systems. YAML graph 
 
 | # | Task | Type | P | Effort |
 |---|------|------|---|--------|
-| 12.1 | **Multi-repo graph refs** — references to nodes from external repositories (`@org/other-repo:AUTH-001`); configuration in `config.yml` | feature | P0 | L |
-| 12.2 | **Polyglot API contract edges** — frontend↔backend links via OpenAPI, GraphQL, protobuf; cross-language `depends_on` | feature | P1 | L |
-| 12.3 | **`beadloom export`** — export graph to DOT, D2, Mermaid file, JSON for external consumption | feature | P1 | S |
-| 12.4 | **Monorepo workspace** — multiple `_graph/` roots in a single repository; isolated contexts per package | feature | P2 | M |
+| 13.1 | **Multi-repo graph refs** — references to nodes from external repositories (`@org/other-repo:AUTH-001`); configuration in `config.yml` | feature | P0 | L |
+| 13.2 | **Polyglot API contract edges** — frontend↔backend links via OpenAPI, GraphQL, protobuf; cross-language `depends_on` | feature | P1 | L |
+| 13.3 | **`beadloom export`** — export graph to DOT, D2, Mermaid file, JSON for external consumption | feature | P1 | S |
+| 13.4 | **Monorepo workspace** — multiple `_graph/` roots in a single repository; isolated contexts per package | feature | P2 | M |
 
-### Phase 13: Full Cross-System + Semantic Layer (v2.0)
+### Phase 14: Full Cross-System + Semantic Layer (v2.0)
 
 **Goal:** Beadloom serves IT landscapes of dozens of repositories. Semantic search works across a federated graph of 1000+ nodes.
 
@@ -245,25 +288,25 @@ Beadloom is for engineers who build and maintain serious IT systems. YAML graph 
 
 | # | Task | Type | P | Effort |
 |---|------|------|---|--------|
-| 13.1 | **Graph federation** — index synchronization protocol between repositories; shared node registry | feature | P0 | L |
-| 13.2 | **`beadloom[semantic]` extra** — `sqlite-vec>=0.1` + `fastembed>=0.4`; `uv tool install beadloom[semantic]` | feature | P0 | S |
-| 13.3 | **Embedding index** — on `reindex`, generate embeddings via BAAI/bge-small-en-v1.5 (77MB, CPU-only); `vec_nodes` table via sqlite-vec | feature | P0 | M |
-| 13.4 | **Semantic search** — `beadloom search --semantic "auth flow"`; fallback: semantic → FTS5 → LIKE | feature | P0 | M |
-| 13.5 | **Plugin system** — entry points for custom nodes, edges, indexers, rules | feature | P1 | L |
-| 13.6 | **Code similarity** — `beadloom similar REF_ID` finds similar nodes by embedding distance | feature | P2 | S |
-| 13.7 | **Embedding cache invalidation** — re-embed only changed nodes | feature | P2 | S |
+| 14.1 | **Graph federation** — index synchronization protocol between repositories; shared node registry | feature | P0 | L |
+| 14.2 | **`beadloom[semantic]` extra** — `sqlite-vec>=0.1` + `fastembed>=0.4`; `uv tool install beadloom[semantic]` | feature | P0 | S |
+| 14.3 | **Embedding index** — on `reindex`, generate embeddings via BAAI/bge-small-en-v1.5 (77MB, CPU-only); `vec_nodes` table via sqlite-vec | feature | P0 | M |
+| 14.4 | **Semantic search** — `beadloom search --semantic "auth flow"`; fallback: semantic → FTS5 → LIKE | feature | P0 | M |
+| 14.5 | **Plugin system** — entry points for custom nodes, edges, indexers, rules | feature | P1 | L |
+| 14.6 | **Code similarity** — `beadloom similar REF_ID` finds similar nodes by embedding distance | feature | P2 | S |
+| 14.7 | **Embedding cache invalidation** — re-embed only changed nodes | feature | P2 | S |
 
-### Phase 14: Quality and Robustness (cross-cutting)
+### Phase 15: Quality and Robustness (cross-cutting)
 
 **Goal:** Improve reliability and maintainability for production use.
 
 | # | Task | Type | P | Effort |
 |---|------|------|---|--------|
-| 14.1 | **Atomic YAML writes** — temp-file + rename for crash protection | fix | P1 | S |
-| 14.2 | **SQLite schema migrations** — versioned schema with forward migration | feature | P1 | M |
-| 14.3 | **Re-export/alias resolution** — `from X import Y` chains through re-exports | feature | P2 | M |
-| 14.4 | **Performance benchmarks** — automated benchmark suite | feature | P2 | M |
-| 14.5 | **Property-based testing** — Hypothesis for graph edge cases | feature | P2 | M |
+| 15.1 | **Atomic YAML writes** — temp-file + rename for crash protection | fix | P1 | S |
+| 15.2 | **SQLite schema migrations** — versioned schema with forward migration | feature | P1 | M |
+| 15.3 | **Re-export/alias resolution** — `from X import Y` chains through re-exports | feature | P2 | M |
+| 15.4 | **Performance benchmarks** — automated benchmark suite | feature | P2 | M |
+| 15.5 | **Property-based testing** — Hypothesis for graph edge cases | feature | P2 | M |
 
 ### Phase 7: Guides and Demos (parallel)
 
@@ -288,7 +331,7 @@ The following tasks have value but are not priorities for architecture infrastru
 | pre-commit hook | `beadloom install-hooks` already exists |
 | Architecture pattern detection (MVC/hex) | LLMs identify patterns from context better |
 | Dependency weight analysis | Low ROI for single repo; useful at multi-repo |
-| Rule tags / categories | Useful with many rules; premature |
+| ~~Rule tags / categories~~ | **Elevated to Phase 12.1 (v1.7)** — prerequisite for AaC rules |
 | "Did you mean?" | Levenshtein already exists in MCP; CLI can be added |
 | Symbol search (by signature) | tree-sitter already provides names; signatures are edge case |
 | C# (tree-sitter-c-sharp) | No dogfood project; on user request |
@@ -378,9 +421,9 @@ Reuses `extract_imports()` from `import_resolver.py`, maps to cluster names. Fas
 
 ### 5.4 Mobile Languages (Phase 9)
 
-**Dogfood project:** dreamteam — React Native + Expo + native modules:
-- Valhalla Routing Engine (C++)
-- Meshtastic (C++/embedded)
+**Dogfood project:** React Native + Expo mobile app with native modules:
+- C++ routing engine (iOS: Obj-C++ wrapper, Android: JNI)
+- C++/BLE embedded device integration
 - Potential iOS/Android native modules (Swift, Kotlin)
 
 **Approach:** Adding tree-sitter loaders to `_EXTENSION_LOADERS` following the existing pattern (Python, TS, Go, Rust):
@@ -422,7 +465,74 @@ def analyze_git_activity(project_root: Path, source_dirs: list[str]) -> dict[str
     # Tags: hot (>20 commits/month), warm (5-20), cold (<5), dormant (0 for 3 months)
 ```
 
-### 5.7 `beadloom[semantic]` — Technical Specification (Phase 13)
+### 5.7 AaC Rules v2 — Architecture Enforcement (Phase 12)
+
+**Problem:** Current rule engine has one type: `require` (check that a node has a specific edge). This covers ~5% of architecture enforcement needs. Real projects need forbidden dependencies, layer direction, cycle detection, and import-level boundaries.
+
+**Solution:** Extended rule YAML with 5 new rule types:
+
+```yaml
+# rules.yml v2
+version: 2
+
+# Node tags (prerequisite)
+tags:
+  ui-layer: [app-tabs, app-auth, app-meshtastic]
+  feature-layer: [map, calendar, profile, meshtastic-ui]
+  shared-layer: [hooks, theme, ui, navigation]
+  service-layer: [mapbox-service, valhalla-service]
+  native-layer: [valhalla-native, meshtastic-native]
+
+rules:
+  # 1. Existing: require (v1)
+  - name: domain-needs-parent
+    require:
+      for: { kind: domain }
+      edge_kind: part_of
+      has_edge_to: {}
+
+  # 2. NEW: forbid (inverse of require)
+  - name: ui-no-native
+    forbid:
+      from: { tag: ui-layer }
+      to: { tag: native-layer }
+      edge_kind: uses
+    message: "UI layer must not depend on native modules directly"
+
+  # 3. NEW: layers (ordered enforcement)
+  - name: layer-direction
+    layers:
+      - { name: presentation, tag: ui-layer }
+      - { name: features, tag: feature-layer }
+      - { name: shared, tag: shared-layer }
+      - { name: services, tag: service-layer }
+      - { name: native, tag: native-layer }
+    enforce: top-down
+    allow_skip: true
+
+  # 4. NEW: forbid_cycles
+  - name: no-circular-deps
+    forbid_cycles:
+      edge_kind: uses
+      max_depth: 10
+
+  # 5. NEW: forbid_import (file-level)
+  - name: no-cross-feature-imports
+    forbid_import:
+      from: "components/features/map/**"
+      to: "components/features/calendar/**"
+
+  # 6. NEW: check (cardinality)
+  - name: domain-size
+    check:
+      for: { kind: domain }
+      max_symbols: 200
+      max_files: 30
+```
+
+**Implementation approach:** Each rule type is a separate evaluator function. The engine dispatches by rule type. Import-based rules query `code_symbols` table directly. Cycle detection uses iterative DFS with path tracking.
+
+### 5.8 `beadloom[semantic]` — Technical Specification (Phase 14)
 
 **Model:** BAAI/bge-small-en-v1.5 — 77MB, 384-dimensional embeddings, CPU-only, 5-14K docs/sec.
 
@@ -475,25 +585,47 @@ v1.6 ── DONE ─────────────────────
 
 v1.7 ──────────────────────────────────────────────────────
 │
-└── Phase 12 (Cross-System) ──── after Phases 10+11
-    ├── 12.1 Multi-repo refs ───── standalone
-    ├── 12.2 API contract edges ── depends on 10.1
-    ├── 12.3 beadloom export ───── standalone
-    └── 12.4 Monorepo workspace ── standalone
+├── Phase 12 (AaC Rules v2) ──── core differentiator
+│   ├── 12.1 Node tags/labels ──── prerequisite for 12.2-12.3
+│   ├── 12.2 Forbidden deps ────── depends on 12.1
+│   ├── 12.3 Layer enforcement ─── depends on 12.1
+│   ├── 12.4 Cycle detection ───── standalone
+│   ├── 12.5 Import-based rules ── uses existing import index
+│   └── 12.6 Cardinality rules ─── standalone
+│
+├── Phase 12.5 (Init Quality) ── dogfooding fixes
+│   ├── 12.5.1 Scan all dirs ───── standalone (fix #32)
+│   ├── 12.5.2 Non-interactive ─── standalone (fix #33)
+│   ├── 12.5.3 Root rule fix ────── standalone (fix #34)
+│   ├── 12.5.4 Docs in init ─────── standalone (fix #35)
+│   └── 12.5.5 Doc auto-linking ─── standalone (fix #36)
+│
+└── Phase 12.6 (Architecture Intelligence) ── CI/CD + refactoring
+    ├── 12.6.1 beadloom diff ────── depends on snapshot storage (12.6.3)
+    ├── 12.6.2 Enhanced why ─────── standalone (extends Phase 11)
+    └── 12.6.3 Snapshot storage ─── standalone
+
+v1.8 ──────────────────────────────────────────────────────
+│
+└── Phase 13 (Cross-System) ──── after Phase 12
+    ├── 13.1 Multi-repo refs ───── standalone
+    ├── 13.2 API contract edges ── depends on 10.1
+    ├── 13.3 beadloom export ───── standalone
+    └── 13.4 Monorepo workspace ── standalone
 
 v2.0 ──────────────────────────────────────────────────────
 │
-└── Phase 13 (Full Cross-System + Semantic) ── after Phase 12
-    ├── 13.1 Graph federation ──── depends on 12.1
-    ├── 13.2 [semantic] extra ──── standalone
-    ├── 13.3 Embedding index ───── depends on 13.2
-    ├── 13.4 Semantic search ───── depends on 13.3
-    ├── 13.5 Plugin system ─────── standalone
-    ├── 13.6 Code similarity ───── depends on 13.3
-    └── 13.7 Embedding cache ───── depends on 13.3
+└── Phase 14 (Full Cross-System + Semantic) ── after Phase 13
+    ├── 14.1 Graph federation ──── depends on 13.1
+    ├── 14.2 [semantic] extra ──── standalone
+    ├── 14.3 Embedding index ───── depends on 14.2
+    ├── 14.4 Semantic search ───── depends on 14.3
+    ├── 14.5 Plugin system ─────── standalone
+    ├── 14.6 Code similarity ───── depends on 14.3
+    └── 14.7 Embedding cache ───── depends on 14.3
 
 Cross-cutting ─────────────────────────────────────────────
-├── Phase 14 (Quality) ─────── parallel with all
+├── Phase 15 (Quality) ─────── parallel with all
 └── Phase 7 (Guides) ──────── parallel with all
 ```
 
@@ -501,17 +633,20 @@ Cross-cutting ──────────────────────
 
 ## 7. Success Metrics
 
-| Metric | v1.4 | v1.5 | v1.6 (current) | v1.7 (target) | v2.0 (target) |
-|--------|------|------|----------------|---------------|---------------|
-| **Node summaries** | "15 files" | Framework + entry points | **+ routes, activity, tests** | + cross-repo | + cross-repo |
-| **First graph edges** | `part_of` only | `part_of` + `depends_on` | + API contracts | + inter-repo | + federated |
-| **Doc drift detection** | file-hash only | symbol-level (E2E) | **3-layer: symbols + files + modules** | + cross-repo | + cross-repo |
-| **Frameworks** | 4 patterns | 18+ | **18+ with route extraction** | 18+ | + custom |
-| **Languages** | 4 | 9 | 9 | 9 | 9+ |
-| **Tests** | 847 | 1153 | **1408** | — | — |
-| **MCP tools** | 10 | 10 | **13** (+lint, why, diff) | 13 | 13+ |
-| **Multi-repo** | No | No | No | **refs** | **federation** |
-| **Search** | FTS5 | FTS5 | FTS5 | FTS5 | FTS5 + **semantic** |
+| Metric | v1.4 | v1.5 | v1.6 (current) | v1.7 (target) | v1.8 (target) | v2.0 (target) |
+|--------|------|------|----------------|---------------|---------------|---------------|
+| **Node summaries** | "15 files" | Framework + entry points | **+ routes, activity, tests** | + tags/labels | + cross-repo | + cross-repo |
+| **First graph edges** | `part_of` only | `part_of` + `depends_on` | + API contracts | + import-based | + inter-repo | + federated |
+| **Doc drift detection** | file-hash only | symbol-level (E2E) | **3-layer: symbols + files + modules** | same | + cross-repo | + cross-repo |
+| **AaC Rules** | `require` only | same | + severity levels | **+ forbid, layers, cycles, imports** | same | + custom plugins |
+| **Init quality** | 6 nodes / 35% | improved | same | **80%+ coverage, non-interactive** | same | same |
+| **Frameworks** | 4 patterns | 18+ | **18+ with route extraction** | 18+ | 18+ | + custom |
+| **Languages** | 4 | 9 | 9 | 9 | 9 | 9+ |
+| **Tests** | 847 | 1153 | **1408** | — | — | — |
+| **Arch intelligence** | — | — | — | **diff + enhanced why + snapshots** | same | + cross-repo diff |
+| **MCP tools** | 10 | 10 | **13** (+lint, why, diff) | 14+ (+diff) | 14+ | 14+ |
+| **Multi-repo** | No | No | No | No | **refs** | **federation** |
+| **Search** | FTS5 | FTS5 | FTS5 | FTS5 | FTS5 | FTS5 + **semantic** |
 
 ---
 
@@ -525,16 +660,19 @@ Cross-cutting ──────────────────────
 | **10 — Deep Analysis** | v1.6 | 5 | **DONE** | Routes, activity, tests |
 | **10.5 — Honest Detection** | v1.6 | 5 | **DONE** | 3-layer staleness, hierarchy coverage |
 | **11 — Agent Infra** | v1.6 | 5 | **DONE** | MCP lint/why/diff, metrics |
-| **12 — Cross-System** | v1.7 | 4 | Planned | Multi-repo refs, export |
-| **13 — Full Cross + Semantic** | v2.0 | 7 | Planned | Federation, semantic search |
-| **14 — Quality** | cross-cutting | 5 | Planned | Atomic writes, migrations |
+| **12 — AaC Rules v2** | v1.7 | 6 | Planned | Forbid, layers, cycles, import-based rules |
+| **12.5 — Init Quality** | v1.7 | 5 | Planned | 80%+ bootstrap coverage (fix #32-36) |
+| **12.6 — Arch Intelligence** | v1.7 | 3 | Planned | beadloom diff, enhanced why, snapshots |
+| **13 — Cross-System** | v1.8 | 4 | Planned | Multi-repo refs, export |
+| **14 — Full Cross + Semantic** | v2.0 | 7 | Planned | Federation, semantic search |
+| **15 — Quality** | cross-cutting | 5 | Planned | Atomic writes, migrations |
 | **7 — Guides** | parallel | 5 | Planned | Guides, demos |
 
 **v1.5 delivered:** Phases 8 + 8.5 + 9 in parallel. Three critical problems solved in one release (BDL-015, 17 beads, 306 new tests).
 
 **v1.6 delivered:** Phases 10 + 10.5 + 11. Deep analysis + honest detection + agent infrastructure (BDL-017 15 beads + BDL-018 4 beads + BDL-020 3 beads, 255 new tests).
 
-**Next priority:** Phase 12 for v1.7.
+**Next priority:** Phase 12 (AaC Rules v2) + Phase 12.5 (Init Quality) + Phase 12.6 (Architecture Intelligence) for v1.7. AaC rules are the core differentiator — "architecture enforcement, not just documentation." Architecture Intelligence adds CI/CD visibility and refactoring support.
 
 ---
 
@@ -542,30 +680,30 @@ Cross-cutting ──────────────────────
 
 | BACKLOG item | Mapped to | Status |
 |--------------|-----------|--------|
-| sqlite-vec integration (§2) | Phase 13.3 | Planned (v2.0) |
-| vec_nodes table (§2) | Phase 13.3 | Planned (v2.0) |
-| Atomic YAML writes (§2) | Phase 14.1 | Planned (cross-cutting) |
-| Multi-repo federated graphs (§3) | Phase 12.1 + 13.1 | Planned (v1.7 + v2.0) |
-| Plugin system (§3) | Phase 13.5 | Planned (v2.0) |
+| sqlite-vec integration (§2) | Phase 14.3 | Planned (v2.0) |
+| vec_nodes table (§2) | Phase 14.3 | Planned (v2.0) |
+| Atomic YAML writes (§2) | Phase 15.1 | Planned (cross-cutting) |
+| Multi-repo federated graphs (§3) | Phase 13.1 + 14.1 | Planned (v1.8 + v2.0) |
+| Plugin system (§3) | Phase 14.5 | Planned (v2.0) |
 | Web dashboard (§3) | Deferred to STRATEGY-3 | — |
-| Rule severity levels (§3) | Phase 10.4 | Planned (v1.6) |
-| Re-export resolution (§3) | Phase 14.3 | Planned (cross-cutting) |
+| Rule severity levels (§3) | Phase 10.4 | **DONE (v1.6)** |
+| Rule tags/categories (§6a) | Phase 12.1 | **Elevated to v1.7** |
+| Re-export resolution (§3) | Phase 15.3 | Planned (cross-cutting) |
 | Phase 7 guides (§5) | Phase 7 | Planned (parallel) |
 | More languages — Java, Kotlin, Swift, C/C++ (§6a) | Phase 9 | **DONE (v1.5)** |
 | C# (§6a) | Deferred to STRATEGY-3 | — |
-| Rule tags/categories (§6a) | Deferred to STRATEGY-3 | — |
-| Monorepo workspace (§6b) | Phase 12.4 | Planned (v1.7) |
+| Monorepo workspace (§6b) | Phase 13.4 | Planned (v1.8) |
 | VS Code extension (§6c) | Deferred to STRATEGY-3 | — |
-| `beadloom export` (§6c) | Phase 12.3 | Planned (v1.7) |
+| `beadloom export` (§6c) | Phase 13.3 | Planned (v1.8) |
 | ASCII graph (§6c) | Deferred to STRATEGY-3 | — |
 | GH Actions marketplace (§6d) | Deferred to STRATEGY-3 | — |
 | pre-commit hook (§6d) | Deferred to STRATEGY-3 | — |
-| More MCP tools (§6d) | Phase 11.1-11.3 | **Elevated to v1.6** |
+| More MCP tools (§6d) | Phase 11.1-11.3 | **DONE (v1.6)** |
 | Symbol-level search (§6e) | Deferred to STRATEGY-3 | — |
 | "Did you mean?" (§6e) | Deferred to STRATEGY-3 | — |
-| Performance benchmarks (§6f) | Phase 14.4 | Planned (cross-cutting) |
-| Schema migrations (§6f) | Phase 14.2 | Planned (cross-cutting) |
-| Property-based testing (§6f) | Phase 14.5 | Planned (cross-cutting) |
+| Performance benchmarks (§6f) | Phase 15.4 | Planned (cross-cutting) |
+| Schema migrations (§6f) | Phase 15.2 | Planned (cross-cutting) |
+| Property-based testing (§6f) | Phase 15.5 | Planned (cross-cutting) |
 
 **Not carried over (consciously excluded):**
 
@@ -595,6 +733,12 @@ Cross-cutting ──────────────────────
 | #29 [HIGH] route extraction false positives | Future: self-exclusion + scoping | Open |
 | #30 [MEDIUM] routes poor formatting | Future: improve rendering | Open |
 | #31 [LOW] bd dep remove bug | Beads CLI bug, not beadloom | Open (external) |
+| #32 [HIGH] init scan_paths incomplete for RN | Phase 12.5.1 | Planned (v1.7) |
+| #33 [MEDIUM] init interactive-only | Phase 12.5.2 | Planned (v1.7) |
+| #34 [MEDIUM] rules.yml root service fails lint | Phase 12.5.3 | Planned (v1.7) |
+| #35 [MEDIUM] init no docs generate step | Phase 12.5.4 | Planned (v1.7) |
+| #36 [LOW] existing docs not auto-linked | Phase 12.5.5 | Planned (v1.7) |
+| #37 [INFO] init bootstrap quality = 35% | Phase 12.5 (tracking metric) | Planned (v1.7) |
 
 ---
 
@@ -605,11 +749,13 @@ Cross-cutting ──────────────────────
 | Question | Decision | Rationale |
 |----------|----------|-----------|
 | Semantics: when? | v2.0 (tied to multi-repo) | At 50-200 nodes FTS5 is sufficient; value at 1000+ nodes |
-| Languages: order? | Kotlin → Java → Swift → C/C++ → Obj-C | By dogfood project priority (dreamteam) |
+| Languages: order? | Kotlin → Java → Swift → C/C++ → Obj-C | By dogfood project priority (RN + native modules) |
 | Expo vs React Native? | Distinguish at preset level (already done) | Framework detection for nodes is overkill |
 | Route storage? | JSON in `nodes.extra` | Simplicity; no separate table needed |
 | Git analysis: depth? | 6 months (configurable) | Balance of speed and usefulness |
 | Framework detection: how? | File markers + import analysis side effect | Two levels: fast + accurate |
+| AaC Rules priority? | v1.7 (before Cross-System) | Core differentiator; dogfooding confirmed primitive engine is blocking value |
+| Init before Cross-System? | Yes, fix in v1.7 alongside AaC Rules | First impression = adoption; 35% bootstrap quality is unacceptable |
 
 ### Open
 
@@ -620,6 +766,8 @@ Cross-cutting ──────────────────────
 | 3 | **Plugin format?** | Entry points? Hook-based? Config-driven? |
 | 4 | **Embedding model for code?** | Start with bge-small (general-purpose), switch to code-specific if needed? |
 | 5 | **Versioning:** | SemVer strict? Affects schema migration story |
+| 6 | **Rules v2 YAML format?** | Tags inline in services.yml vs separate tags.yml? Layer definitions in rules.yml vs config.yml? |
+| 7 | **Import rules granularity?** | File-level globs (`components/features/map/**`) vs node-level (`from: map, to: calendar`)? |
 
 ---
 
@@ -631,7 +779,10 @@ Cross-cutting ──────────────────────
 > **Context windows solve the volume problem. Beadloom solves the structure problem.**
 > More ≠ better. 2K of the right tokens > 500K of raw tokens.
 
-> **Doc Sync is our killer feature. It must work honestly.**
+> **AaC Rules are our core differentiator. Architecture enforcement, not just documentation.**
+> Forbid, layers, cycles, import boundaries — what ArchUnit does for Java, Beadloom does for any stack.
+>
+> **Doc Sync is our second killer feature. It must work honestly.**
 > "5 stale" truth is better than "0 stale" lies.
 
 > **Beadloom is an engineering tool for IT landscapes.**

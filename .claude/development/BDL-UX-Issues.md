@@ -51,6 +51,25 @@
 
 ---
 
+## Dogfooding: External React Native + Expo Project
+
+> Discovered 2026-02-17 during `beadloom init` on a real-world React Native project
+> Stack: React Native, Expo 53, Gluestack UI v3, Mapbox GL, two C++/JNI native modules, BLE integration
+
+32. [2026-02-17] [HIGH] `beadloom init` scan_paths incomplete for React Native projects — Bootstrap only detected `app/` and `services/` (6 nodes), completely missing `components/` (ui, features, layout, navigation), `hooks/`, `contexts/`, `modules/` (two native modules), `types/`, `constants/`, `utils/`. Had to manually add 9 scan_paths and rebuild the graph to get 17 nodes with 380 symbols. Root cause: `detect_source_dirs()` in `onboarding/bootstrapper.py` uses manifest-based heuristics (package.json → standard dirs) but React Native/Expo projects use flat top-level structure with many domain dirs. **→ Fix: scan all top-level dirs with code files, not just manifest-adjacent ones**
+
+33. [2026-02-17] [MEDIUM] `beadloom init` is interactive-only — no CLI flags for automation — The `init` command requires 3 interactive prompts: overwrite confirmation, mode selection (bootstrap/import/both), graph confirmation (yes/edit/cancel). No `--mode bootstrap --yes --force` flags available. Makes it unusable in CI pipelines, scripts, and awkward for AI agents (had to pipe `printf` answers). **→ Fix: add `--mode`, `--yes`/`--non-interactive`, `--force` flags**
+
+34. [2026-02-17] [MEDIUM] Auto-generated `rules.yml` includes `service-needs-parent` that always fails on root — `beadloom init` generates `service-needs-parent` rule requiring every service node to have a `part_of` edge. Root service has no parent by definition → lint always fails. Had to manually remove the rule. Root cause: `_generate_default_rules()` doesn't account for root nodes. **→ Fix: either don't generate this rule, or add `exclude_root: true` option to rule engine**
+
+35. [2026-02-17] [MEDIUM] Init doesn't offer `docs generate` — doc coverage 0% after bootstrap — After `beadloom init`, doc coverage is 0/6 (0%). User must know to run `beadloom docs generate` + `beadloom reindex` as separate steps. The init flow could offer doc skeleton generation as a final step. **→ Fix: add "Generate doc skeletons? [yes/no]" step to init, or auto-generate**
+
+36. [2026-02-17] [LOW] Existing docs not auto-linked to graph nodes — Target project had 20 existing docs in `docs/` (architecture docs, native module docs, feature docs). All reported as "unlinked from graph" by `doctor`. No auto-discovery mechanism to match existing docs to nodes by path or content similarity. Manual linking requires editing `services.yml`. **→ Future: fuzzy doc-to-node matching during init or `doctor --fix`**
+
+37. [2026-02-17] [INFO] `beadloom init` bootstrap quality metrics — Before/after manual graph improvement: Nodes 6→17, Edges 8→49, Symbols 23→380, Doc Coverage 0%→94%. The auto-generated graph captured only 35% of the real architecture. One native module alone has 130+ symbols — correctly indexed after scan_paths fix. **→ Track: bootstrap quality ratio as a metric for future improvements**
+
+---
+
 ## Recently Fixed Issues (v1.6.0)
 
 16. ~~[2026-02-13] [MEDIUM] After BDL-012 bug-fixes, beadloom's own docs are outdated~~ **FIXED in v1.6.0 (BDL-019)** — All 13 domain/service docs refreshed by 4 parallel tech-writer agents. `symbols_changed` reduced from 35 to 0.
