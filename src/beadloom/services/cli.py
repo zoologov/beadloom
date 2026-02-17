@@ -828,6 +828,26 @@ def _build_sync_report(results: list[dict[str, str]]) -> str:
 _HOOK_TEMPLATE_WARN = """\
 #!/bin/sh
 # pre-commit hook managed by beadloom
+
+# --- Lint check (ruff) ---
+if command -v uv >/dev/null 2>&1; then
+  echo "Running ruff check..."
+  uv run ruff check src/ tests/ 2>/dev/null
+  if [ $? -ne 0 ]; then
+    echo "Warning: ruff lint violations detected"
+  fi
+fi
+
+# --- Type check (mypy) ---
+if command -v uv >/dev/null 2>&1; then
+  echo "Running mypy..."
+  uv run mypy 2>/dev/null
+  if [ $? -ne 0 ]; then
+    echo "Warning: mypy type errors detected"
+  fi
+fi
+
+# --- Doc sync check ---
 stale=$(beadloom sync-check --porcelain 2>/dev/null)
 exit_code=$?
 
@@ -846,6 +866,30 @@ fi
 _HOOK_TEMPLATE_BLOCK = """\
 #!/bin/sh
 # pre-commit hook managed by beadloom
+failed=0
+
+# --- Lint check (ruff) ---
+if command -v uv >/dev/null 2>&1; then
+  echo "Running ruff check..."
+  uv run ruff check src/ tests/ 2>/dev/null
+  if [ $? -ne 0 ]; then
+    echo "Error: ruff lint violations — commit blocked"
+    echo "Run: uv run ruff check --fix src/ tests/"
+    failed=1
+  fi
+fi
+
+# --- Type check (mypy) ---
+if command -v uv >/dev/null 2>&1; then
+  echo "Running mypy..."
+  uv run mypy 2>/dev/null
+  if [ $? -ne 0 ]; then
+    echo "Error: mypy type errors — commit blocked"
+    failed=1
+  fi
+fi
+
+# --- Doc sync check ---
 stale=$(beadloom sync-check --porcelain 2>/dev/null)
 exit_code=$?
 
@@ -854,11 +898,15 @@ if [ $exit_code -eq 2 ]; then
   echo "$stale"
   echo ""
   echo "Run: beadloom sync-update <ref_id> to update docs"
-  exit 1
+  failed=1
 fi
 
 if [ $exit_code -eq 1 ]; then
   echo "Warning: beadloom sync-check failed (index may be stale)"
+fi
+
+if [ $failed -ne 0 ]; then
+  exit 1
 fi
 """
 

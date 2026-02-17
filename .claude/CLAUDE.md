@@ -48,15 +48,19 @@ bd comments add <bead-id> "CHECKPOINT: [what was done]"
 # 1. Tests pass
 uv run pytest
 
-# 2. Beadloom validation
+# 2. Code quality (same checks as CI)
+uv run ruff check src/ tests/
+uv run mypy
+
+# 3. Beadloom validation
 beadloom reindex
 beadloom sync-check
 beadloom lint --strict
 
-# 3. Final checkpoint
+# 4. Final checkpoint
 bd comments add <bead-id> "COMPLETED: [results]"
 
-# 4. Close bead
+# 5. Close bead
 bd close <bead-id>
 ```
 
