@@ -188,11 +188,7 @@ def scan_project(project_root: Path) -> dict[str, Any]:
         dir_path = project_root / dir_name
         count = 0
         for f in dir_path.rglob("*"):
-            if (
-                f.is_file()
-                and f.suffix in _CODE_EXTENSIONS
-                and not _is_in_skip_dir(f, dir_path)
-            ):
+            if f.is_file() and f.suffix in _CODE_EXTENSIONS and not _is_in_skip_dir(f, dir_path):
                 count += 1
                 extensions.add(f.suffix)
         if count > 0:
@@ -2039,6 +2035,81 @@ def _format_review_table(
     return "\n".join(lines)
 
 
+def non_interactive_init(
+    project_root: Path,
+    *,
+    mode: str = "bootstrap",
+    force: bool = False,
+) -> dict[str, Any]:
+    """Run non-interactive initialization (no prompts).
+
+    Parameters
+    ----------
+    project_root:
+        Root of the project.
+    mode:
+        Init mode — ``"bootstrap"`` (default), ``"import"``, or ``"both"``.
+    force:
+        When *True*, delete existing ``.beadloom/`` directory before init.
+
+    Returns
+    -------
+    dict[str, Any]
+        Summary of what was done, including ``mode``, ``bootstrap``, ``import`` keys.
+    """
+    import shutil
+
+    beadloom_dir = project_root / ".beadloom"
+
+    result: dict[str, Any] = {"mode": mode}
+
+    # Handle existing .beadloom/ directory.
+    if beadloom_dir.exists():
+        if force:
+            shutil.rmtree(beadloom_dir)
+        else:
+            result["mode"] = "skipped"
+            result["reason"] = "exists"
+            return result
+
+    # Execute chosen mode.
+    if mode in ("bootstrap", "both"):
+        bs_result = bootstrap_project(project_root)
+        result["bootstrap"] = bs_result
+
+        # Generate doc skeletons.
+        from beadloom.onboarding.doc_generator import generate_skeletons
+
+        nodes = bs_result.get("nodes", [])
+        edges = bs_result.get("edges", [])
+        docs_result = generate_skeletons(project_root, nodes, edges)
+        result["docs_generated"] = docs_result
+
+        # Auto-reindex to populate import analysis and depends_on edges.
+        from beadloom.infrastructure.reindex import reindex as do_reindex
+
+        ri = do_reindex(project_root)
+        result["reindex"] = {
+            "symbols": ri.symbols_indexed,
+            "imports": ri.imports_indexed,
+            "edges": ri.edges_loaded,
+        }
+
+    if mode in ("import", "both"):
+        docs_dir = project_root / "docs"
+        if docs_dir.is_dir():
+            docs_imported = import_docs(project_root, docs_dir)
+            result["import"] = docs_imported
+        else:
+            result["import"] = []
+
+    # Generate AGENTS.md.
+    generate_agents_md(project_root)
+    result["agents_md_created"] = True
+
+    return result
+
+
 def interactive_init(project_root: Path) -> dict[str, Any]:
     """Run interactive initialization wizard.
 
@@ -2189,6 +2260,29 @@ def interactive_init(project_root: Path) -> dict[str, Any]:
         "imports": ri.imports_indexed,
         "edges": ri.edges_loaded,
     }
+
+    # Doc skeleton generation (only for bootstrap/both modes that have a graph).
+    if mode in ("bootstrap", "both"):
+        from rich.prompt import Confirm
+
+        from beadloom.onboarding.doc_generator import generate_skeletons
+
+        should_generate = Confirm.ask("Generate doc skeletons?", default=True)
+        if should_generate:
+            skel_result = generate_skeletons(project_root)
+            result["docs"] = skel_result
+            console.print(
+                f"  Docs: {skel_result['files_created']} skeletons created"
+                + (
+                    f", {skel_result['files_skipped']} skipped (pre-existing)"
+                    if skel_result["files_skipped"] > 0
+                    else ""
+                )
+            )
+            # Re-index to pick up newly created doc files.
+            if skel_result["files_created"] > 0:
+                ri2 = do_reindex(project_root)
+                console.print(f"  Re-indexed: {ri2.docs_indexed} docs")
 
     # Final instructions.
     console.print("\n[green bold]Initialization complete![/green bold]")

@@ -107,7 +107,51 @@ class ImportBoundaryRule:
     severity: str = "error"  # "error" | "warn"
 
 
-Rule = DenyRule | RequireRule | CycleRule | ImportBoundaryRule
+@dataclass(frozen=True)
+class ForbidEdgeRule:
+    """Forbid graph edges between matched nodes.
+
+    Unlike :class:`DenyRule` which checks ``code_imports``, this rule
+    operates on the ``edges`` table directly.  Useful for enforcing
+    architectural layering at the graph level.
+    """
+
+    name: str
+    description: str
+    from_matcher: NodeMatcher  # matches source node (by tag, kind, ref_id)
+    to_matcher: NodeMatcher  # matches target node
+    edge_kind: str | None = None  # optional: only check specific edge kind
+    severity: str = "error"  # "error" | "warn"
+
+
+@dataclass(frozen=True)
+class LayerDef:
+    """A single layer definition with a name and a tag for matching nodes."""
+
+    name: str
+    tag: str
+
+
+@dataclass(frozen=True)
+class LayerRule:
+    """Enforce dependency direction between ordered architecture layers.
+
+    Layers are ordered top (index 0) to bottom (index N).  For ``enforce:
+    top-down``, upper layers may depend on lower layers but **not** the
+    reverse.  When ``allow_skip`` is ``False``, a layer can only depend on
+    the immediately adjacent layer below it.
+    """
+
+    name: str
+    description: str
+    layers: tuple[LayerDef, ...]  # ordered top-to-bottom
+    enforce: str  # "top-down"
+    allow_skip: bool = True  # can skip layers (presentation -> service)
+    edge_kind: str = "uses"  # which edge kind to check
+    severity: str = "error"  # "error" | "warn"
+
+
+Rule = DenyRule | RequireRule | CycleRule | ImportBoundaryRule | ForbidEdgeRule | LayerRule
 
 
 @dataclass(frozen=True)
@@ -314,6 +358,125 @@ def _parse_forbid_import_rule(
     )
 
 
+def _parse_forbid_rule(
+    name: str,
+    description: str,
+    forbid_data: dict[str, object],
+    *,
+    severity: str = "error",
+) -> ForbidEdgeRule:
+    """Parse the 'forbid' block of a rule (graph-level forbidden edges)."""
+    from_data = forbid_data.get("from")
+    to_data = forbid_data.get("to")
+
+    if not isinstance(from_data, dict):
+        msg = f"Rule '{name}': forbid.from must be a mapping"
+        raise ValueError(msg)
+    if not isinstance(to_data, dict):
+        msg = f"Rule '{name}': forbid.to must be a mapping"
+        raise ValueError(msg)
+
+    from_matcher = _parse_node_matcher(from_data, f"Rule '{name}' forbid.from")
+    to_matcher = _parse_node_matcher(to_data, f"Rule '{name}' forbid.to")
+
+    edge_kind_raw = forbid_data.get("edge_kind")
+    edge_kind: str | None = str(edge_kind_raw) if edge_kind_raw is not None else None
+
+    if edge_kind is not None and edge_kind not in VALID_EDGE_KINDS:
+        msg = (
+            f"Rule '{name}': invalid edge_kind '{edge_kind}', "
+            f"must be one of {sorted(VALID_EDGE_KINDS)}"
+        )
+        raise ValueError(msg)
+
+    return ForbidEdgeRule(
+        name=name,
+        description=description,
+        from_matcher=from_matcher,
+        to_matcher=to_matcher,
+        edge_kind=edge_kind,
+        severity=severity,
+    )
+
+
+_VALID_LAYER_ENFORCEMENTS: frozenset[str] = frozenset({"top-down"})
+
+
+def _parse_layer_rule(
+    name: str,
+    description: str,
+    rule_data: dict[str, object],
+    *,
+    severity: str = "error",
+) -> LayerRule:
+    """Parse a layer rule from the top-level rule data.
+
+    The ``layers`` key contains a list of ``{name, tag}`` dicts, and
+    ``enforce`` specifies the direction policy (currently only ``top-down``).
+    """
+    layers_raw = rule_data.get("layers")
+    if not isinstance(layers_raw, list):
+        msg = f"Rule '{name}': 'layers' must be a list"
+        raise ValueError(msg)
+
+    if len(layers_raw) < 2:
+        msg = f"Rule '{name}': 'layers' must contain at least 2 layer definitions"
+        raise ValueError(msg)
+
+    layer_defs: list[LayerDef] = []
+    for idx, layer_data in enumerate(layers_raw):
+        if not isinstance(layer_data, dict):
+            msg = f"Rule '{name}': layer at index {idx} must be a mapping"
+            raise ValueError(msg)
+
+        layer_name = layer_data.get("name")
+        if layer_name is None or not isinstance(layer_name, str) or not layer_name.strip():
+            msg = f"Rule '{name}': layer at index {idx} missing required 'name' field"
+            raise ValueError(msg)
+
+        layer_tag = layer_data.get("tag")
+        if layer_tag is None or not isinstance(layer_tag, str) or not layer_tag.strip():
+            msg = f"Rule '{name}': layer at index {idx} missing required 'tag' field"
+            raise ValueError(msg)
+
+        layer_defs.append(LayerDef(name=str(layer_name), tag=str(layer_tag)))
+
+    enforce_raw = rule_data.get("enforce")
+    if enforce_raw is None:
+        msg = f"Rule '{name}': 'enforce' is required for layer rules"
+        raise ValueError(msg)
+
+    enforce = str(enforce_raw)
+    if enforce not in _VALID_LAYER_ENFORCEMENTS:
+        msg = (
+            f"Rule '{name}': invalid enforce value '{enforce}', "
+            f"must be one of {sorted(_VALID_LAYER_ENFORCEMENTS)}"
+        )
+        raise ValueError(msg)
+
+    allow_skip_raw = rule_data.get("allow_skip", True)
+    allow_skip = bool(allow_skip_raw)
+
+    edge_kind_raw = rule_data.get("edge_kind", "uses")
+    edge_kind = str(edge_kind_raw)
+    if edge_kind not in VALID_EDGE_KINDS:
+        msg = (
+            f"Rule '{name}': invalid edge_kind '{edge_kind}', "
+            f"must be one of {sorted(VALID_EDGE_KINDS)}"
+        )
+        raise ValueError(msg)
+
+    return LayerRule(
+        name=name,
+        description=description,
+        layers=tuple(layer_defs),
+        enforce=enforce,
+        allow_skip=allow_skip,
+        edge_kind=edge_kind,
+        severity=severity,
+    )
+
+
 def load_rules(rules_path: Path) -> list[Rule]:
     """Parse rules.yml and return validated Rule objects.
 
@@ -376,14 +539,16 @@ def load_rules(rules_path: Path) -> list[Rule]:
         has_require = "require" in rule_data
         has_forbid_cycles = "forbid_cycles" in rule_data
         has_forbid_import = "forbid_import" in rule_data
+        has_forbid = "forbid" in rule_data
+        has_layers = "layers" in rule_data
 
         rule_type_count = sum(
-            [has_deny, has_require, has_forbid_cycles, has_forbid_import]
+            [has_deny, has_require, has_forbid_cycles, has_forbid_import, has_forbid, has_layers]
         )
         if rule_type_count != 1:
             msg = (
                 f"rules.yml: rule '{name}' must have exactly one of "
-                f"'deny', 'require', 'forbid_cycles', or 'forbid_import'"
+                f"'deny', 'require', 'forbid_cycles', 'forbid_import', 'forbid', or 'layers'"
             )
             raise ValueError(msg)
 
@@ -410,6 +575,18 @@ def load_rules(rules_path: Path) -> list[Rule]:
                 _parse_forbid_import_rule(
                     name, description, forbid_import_data, severity=severity
                 )
+            )
+        elif has_forbid:
+            forbid_data = rule_data["forbid"]
+            if not isinstance(forbid_data, dict):
+                msg = f"Rule '{name}': 'forbid' must be a mapping"
+                raise ValueError(msg)
+            rules.append(
+                _parse_forbid_rule(name, description, forbid_data, severity=severity)
+            )
+        elif has_layers:
+            rules.append(
+                _parse_layer_rule(name, description, rule_data, severity=severity)
             )
         else:
             cycle_data = rule_data["forbid_cycles"]
@@ -483,6 +660,11 @@ def validate_rules(rules: list[Rule], conn: sqlite3.Connection) -> list[str]:
                 ref_ids.add(rule.for_matcher.ref_id)
             if rule.has_edge_to.ref_id is not None:
                 ref_ids.add(rule.has_edge_to.ref_id)
+        elif isinstance(rule, ForbidEdgeRule):
+            if rule.from_matcher.ref_id is not None:
+                ref_ids.add(rule.from_matcher.ref_id)
+            if rule.to_matcher.ref_id is not None:
+                ref_ids.add(rule.to_matcher.ref_id)
 
     # Check each against the database
     for ref_id in sorted(ref_ids):
@@ -935,16 +1117,244 @@ def evaluate_import_boundary_rules(
 
 
 # ---------------------------------------------------------------------------
+# Forbid edge rule evaluation
+# ---------------------------------------------------------------------------
+
+
+def evaluate_forbid_edge_rules(
+    conn: sqlite3.Connection, rules: list[ForbidEdgeRule]
+) -> list[Violation]:
+    """Evaluate forbid edge rules against the edges table.
+
+    For each edge, loads tags for the source and destination nodes (using
+    ``get_node_tags()``) and checks whether the source matches
+    ``from_matcher`` and the destination matches ``to_matcher``.  If
+    ``edge_kind`` is specified on the rule, only edges of that kind are
+    checked.  A match means the edge is forbidden and produces a violation.
+    """
+    if not rules:
+        return []
+
+    from beadloom.graph.loader import get_node_tags
+
+    violations: list[Violation] = []
+
+    # Cache for node tags to avoid repeated DB lookups
+    tags_cache: dict[str, set[str]] = {}
+
+    def _cached_tags(ref_id: str) -> set[str]:
+        if ref_id not in tags_cache:
+            tags_cache[ref_id] = get_node_tags(conn, ref_id)
+        return tags_cache[ref_id]
+
+    # Check whether any rule actually uses tag-based matching
+    any_tag_rule = any(
+        r.from_matcher.tag is not None or r.to_matcher.tag is not None for r in rules
+    )
+
+    # Fetch all edges once
+    all_edges = conn.execute(
+        "SELECT src_ref_id, dst_ref_id, kind FROM edges"
+    ).fetchall()
+
+    for edge_row in all_edges:
+        src_ref_id = str(edge_row[0])
+        dst_ref_id = str(edge_row[1])
+        edge_kind = str(edge_row[2])
+
+        # Look up node kinds for matching
+        src_node = _get_node(src_ref_id, conn)
+        dst_node = _get_node(dst_ref_id, conn)
+
+        if src_node is None or dst_node is None:
+            continue
+
+        src_id, src_kind = src_node
+        dst_id, dst_kind = dst_node
+
+        # Lazily load tags only when needed
+        src_tags: set[str] | None = None
+        dst_tags: set[str] | None = None
+        if any_tag_rule:
+            src_tags = _cached_tags(src_id)
+            dst_tags = _cached_tags(dst_id)
+
+        for rule in rules:
+            # Check edge_kind filter first (cheapest check)
+            if rule.edge_kind is not None and edge_kind != rule.edge_kind:
+                continue
+
+            if not rule.from_matcher.matches(src_id, src_kind, tags=src_tags):
+                continue
+            if not rule.to_matcher.matches(dst_id, dst_kind, tags=dst_tags):
+                continue
+
+            violations.append(
+                Violation(
+                    rule_name=rule.name,
+                    rule_description=rule.description,
+                    rule_type="forbid",
+                    severity=rule.severity,
+                    file_path=None,
+                    line_number=None,
+                    from_ref_id=src_ref_id,
+                    to_ref_id=dst_ref_id,
+                    message=(
+                        f"Edge '{src_ref_id}' -> '{dst_ref_id}' (kind={edge_kind}) "
+                        f"violates forbid rule '{rule.name}': {rule.description}"
+                    ),
+                )
+            )
+
+    return violations
+
+
+# ---------------------------------------------------------------------------
+# Layer rule evaluation
+# ---------------------------------------------------------------------------
+
+
+def evaluate_layer_rules(
+    conn: sqlite3.Connection, rules: list[LayerRule]
+) -> list[Violation]:
+    """Evaluate layer rules against the edges table.
+
+    For ``enforce: top-down``, layers are ordered from top (index 0) to
+    bottom (index N).  Dependencies flow downward: if a node in layer[i]
+    depends on a node in layer[j] where ``i > j`` (lower depends on upper),
+    that is a violation.
+
+    When ``allow_skip`` is ``False``, only edges to the immediately adjacent
+    lower layer (``j == i + 1``) are permitted; skipping layers produces a
+    violation.
+
+    Nodes that do not belong to any layer are silently skipped.
+    """
+    if not rules:
+        return []
+
+    from beadloom.graph.loader import get_node_tags
+
+    violations: list[Violation] = []
+
+    # Cache for node tags to avoid repeated DB lookups
+    tags_cache: dict[str, set[str]] = {}
+
+    def _cached_tags(ref_id: str) -> set[str]:
+        if ref_id not in tags_cache:
+            tags_cache[ref_id] = get_node_tags(conn, ref_id)
+        return tags_cache[ref_id]
+
+    for rule in rules:
+        # Build tag-to-layer-index mapping
+        tag_to_index: dict[str, int] = {}
+        for idx, layer_def in enumerate(rule.layers):
+            tag_to_index[layer_def.tag] = idx
+
+        # Fetch edges of the specified kind
+        all_edges = conn.execute(
+            "SELECT src_ref_id, dst_ref_id FROM edges WHERE kind = ?",
+            (rule.edge_kind,),
+        ).fetchall()
+
+        for edge_row in all_edges:
+            src_ref_id = str(edge_row[0])
+            dst_ref_id = str(edge_row[1])
+
+            # Determine which layer each node belongs to
+            src_tags = _cached_tags(src_ref_id)
+            dst_tags = _cached_tags(dst_ref_id)
+
+            src_layer_idx: int | None = None
+            dst_layer_idx: int | None = None
+
+            for tag in src_tags:
+                if tag in tag_to_index:
+                    src_layer_idx = tag_to_index[tag]
+                    break
+
+            for tag in dst_tags:
+                if tag in tag_to_index:
+                    dst_layer_idx = tag_to_index[tag]
+                    break
+
+            # Skip if either node is not in any layer
+            if src_layer_idx is None or dst_layer_idx is None:
+                continue
+
+            # Same layer — always OK
+            if src_layer_idx == dst_layer_idx:
+                continue
+
+            # Check direction violation: lower layer -> upper layer
+            # src_layer_idx > dst_layer_idx means src is lower, dst is upper
+            if rule.enforce == "top-down" and src_layer_idx > dst_layer_idx:
+                src_layer_name = rule.layers[src_layer_idx].name
+                dst_layer_name = rule.layers[dst_layer_idx].name
+                violations.append(
+                    Violation(
+                        rule_name=rule.name,
+                        rule_description=rule.description,
+                        rule_type="layer",
+                        severity=rule.severity,
+                        file_path=None,
+                        line_number=None,
+                        from_ref_id=src_ref_id,
+                        to_ref_id=dst_ref_id,
+                        message=(
+                            f"Layer violation: '{src_ref_id}' (layer '{src_layer_name}', "
+                            f"index {src_layer_idx}) depends on '{dst_ref_id}' "
+                            f"(layer '{dst_layer_name}', index {dst_layer_idx}). "
+                            f"Lower layers must not depend on upper layers "
+                            f"(rule '{rule.name}')."
+                        ),
+                    )
+                )
+                continue
+
+            # Check skip violation (only when allow_skip=False)
+            if not rule.allow_skip and (dst_layer_idx - src_layer_idx) > 1:
+                src_layer_name = rule.layers[src_layer_idx].name
+                dst_layer_name = rule.layers[dst_layer_idx].name
+                violations.append(
+                    Violation(
+                        rule_name=rule.name,
+                        rule_description=rule.description,
+                        rule_type="layer",
+                        severity=rule.severity,
+                        file_path=None,
+                        line_number=None,
+                        from_ref_id=src_ref_id,
+                        to_ref_id=dst_ref_id,
+                        message=(
+                            f"Layer skip violation: '{src_ref_id}' (layer '{src_layer_name}', "
+                            f"index {src_layer_idx}) depends on '{dst_ref_id}' "
+                            f"(layer '{dst_layer_name}', index {dst_layer_idx}). "
+                            f"Skipping layers is not allowed "
+                            f"(rule '{rule.name}')."
+                        ),
+                    )
+                )
+
+    return violations
+
+
+# ---------------------------------------------------------------------------
 # Combined evaluation
 # ---------------------------------------------------------------------------
 
 
 def evaluate_all(conn: sqlite3.Connection, rules: list[Rule]) -> list[Violation]:
-    """Evaluate all rules (deny + require + cycle + import boundary) and return sorted violations."""
+    """Evaluate all rules and return sorted violations.
+
+    Supports deny, require, cycle, import boundary, forbid edge, and layer rules.
+    """
     deny_rules: list[DenyRule] = []
     require_rules: list[RequireRule] = []
     cycle_rules: list[CycleRule] = []
     import_boundary_rules: list[ImportBoundaryRule] = []
+    forbid_edge_rules: list[ForbidEdgeRule] = []
+    layer_rules: list[LayerRule] = []
 
     for rule in rules:
         if isinstance(rule, DenyRule):
@@ -955,12 +1365,18 @@ def evaluate_all(conn: sqlite3.Connection, rules: list[Rule]) -> list[Violation]
             cycle_rules.append(rule)
         elif isinstance(rule, ImportBoundaryRule):
             import_boundary_rules.append(rule)
+        elif isinstance(rule, ForbidEdgeRule):
+            forbid_edge_rules.append(rule)
+        elif isinstance(rule, LayerRule):
+            layer_rules.append(rule)
 
     violations = (
         evaluate_deny_rules(conn, deny_rules)
         + evaluate_require_rules(conn, require_rules)
         + evaluate_cycle_rules(conn, cycle_rules)
         + evaluate_import_boundary_rules(conn, import_boundary_rules)
+        + evaluate_forbid_edge_rules(conn, forbid_edge_rules)
+        + evaluate_layer_rules(conn, layer_rules)
     )
 
     # Sort by rule_name, then file_path (None sorts first)

@@ -113,6 +113,16 @@ CREATE TABLE IF NOT EXISTS file_index (
     indexed_at TEXT NOT NULL
 );
 
+-- Architecture graph snapshots (point-in-time captures)
+CREATE TABLE IF NOT EXISTS graph_snapshots (
+    id              INTEGER PRIMARY KEY,
+    label           TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    nodes_json      TEXT NOT NULL,
+    edges_json      TEXT NOT NULL,
+    symbols_count   INTEGER NOT NULL DEFAULT 0
+);
+
 -- Bundle cache (L2 persistent, survives restarts)
 CREATE TABLE IF NOT EXISTS bundle_cache (
     cache_key   TEXT PRIMARY KEY,

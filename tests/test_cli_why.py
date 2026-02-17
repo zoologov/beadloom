@@ -104,3 +104,66 @@ class TestCliWhy:
         result = runner.invoke(main, ["why", "PROJ-1", "--project", str(project)])
         assert result.exit_code != 0
         assert "database not found" in result.output.lower() or "error" in result.output.lower()
+
+    def test_cli_why_reverse(self, tmp_path: Path) -> None:
+        """`beadloom why <ref> --reverse` runs without error."""
+        project = _setup_project(tmp_path)
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["why", "PROJ-1", "--reverse", "--project", str(project)]
+        )
+        assert result.exit_code == 0, result.output
+        assert "PROJ-1" in result.output
+
+    def test_cli_why_reverse_json(self, tmp_path: Path) -> None:
+        """`beadloom why <ref> --reverse --json` returns valid JSON."""
+        project = _setup_project(tmp_path)
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["why", "PROJ-1", "--reverse", "--json", "--project", str(project)]
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["node"]["ref_id"] == "PROJ-1"
+
+    def test_cli_why_format_tree(self, tmp_path: Path) -> None:
+        """`beadloom why <ref> --format tree` outputs plain-text tree."""
+        project = _setup_project(tmp_path)
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["why", "PROJ-1", "--format", "tree", "--project", str(project)]
+        )
+        assert result.exit_code == 0, result.output
+        assert "PROJ-1" in result.output
+        # Should not contain Rich markup
+        assert "[bold" not in result.output
+        assert "[dim" not in result.output
+
+    def test_cli_why_format_panel(self, tmp_path: Path) -> None:
+        """`beadloom why <ref> --format panel` uses Rich output (default behavior)."""
+        project = _setup_project(tmp_path)
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["why", "PROJ-1", "--format", "panel", "--project", str(project)]
+        )
+        assert result.exit_code == 0, result.output
+        assert "PROJ-1" in result.output
+
+    def test_cli_why_format_tree_with_reverse(self, tmp_path: Path) -> None:
+        """`beadloom why <ref> --reverse --format tree` combines both flags."""
+        project = _setup_project(tmp_path)
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["why", "PROJ-1", "--reverse", "--format", "tree", "--project", str(project)],
+        )
+        assert result.exit_code == 0, result.output
+        assert "PROJ-1" in result.output
+
+    def test_cli_why_default_unchanged(self, tmp_path: Path) -> None:
+        """Default behavior (no new flags) is unchanged — still works."""
+        project = _setup_project(tmp_path)
+        runner = CliRunner()
+        result = runner.invoke(main, ["why", "PROJ-1", "--project", str(project)])
+        assert result.exit_code == 0, result.output
+        assert "PROJ-1" in result.output

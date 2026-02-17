@@ -17,6 +17,7 @@ from beadloom.onboarding import (
     setup_mcp_auto,
     setup_rules_auto,
 )
+from beadloom.onboarding.scanner import non_interactive_init
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -799,6 +800,7 @@ class TestInitCli:
                 "rich.prompt.Prompt.ask",
                 side_effect=["bootstrap", "yes"],
             ),
+            patch("rich.prompt.Confirm.ask", return_value=False),
             patch("rich.console.Console"),
         ):
             runner = CliRunner()
@@ -829,6 +831,7 @@ class TestInteractiveInit:
                 "rich.prompt.Prompt.ask",
                 side_effect=["bootstrap", "yes"],
             ),
+            patch("rich.prompt.Confirm.ask", return_value=False),
             patch("rich.console.Console"),
         ):
             result = interactive_init(tmp_path)
@@ -877,6 +880,7 @@ class TestInteractiveInit:
                 "rich.prompt.Prompt.ask",
                 side_effect=["overwrite", "bootstrap", "yes"],
             ),
+            patch("rich.prompt.Confirm.ask", return_value=False),
             patch("rich.console.Console"),
         ):
             result = interactive_init(tmp_path)
@@ -895,7 +899,11 @@ class TestInteractiveInit:
         (svc / "app.py").write_text("pass\n")
 
         ask_mock = MagicMock(side_effect=["bootstrap", "yes"])
-        with patch("rich.prompt.Prompt.ask", ask_mock), patch("rich.console.Console"):
+        with (
+            patch("rich.prompt.Prompt.ask", ask_mock),
+            patch("rich.prompt.Confirm.ask", return_value=False),
+            patch("rich.console.Console"),
+        ):
             result = interactive_init(tmp_path)
 
         assert result["mode"] == "bootstrap"
@@ -961,6 +969,7 @@ class TestInteractiveInit:
                 "rich.prompt.Prompt.ask",
                 side_effect=["bootstrap", "yes"],
             ),
+            patch("rich.prompt.Confirm.ask", return_value=False),
             patch("rich.console.Console"),
         ):
             result = interactive_init(tmp_path)
@@ -2133,3 +2142,262 @@ class TestPrimeContextStaleAndViolations:
         stale = result["health"]["stale_docs"]
         assert len(stale) >= 1
         assert any(s["doc_path"] == "docs/stale.md" for s in stale)
+
+
+# ---------------------------------------------------------------------------
+# Non-interactive init
+# ---------------------------------------------------------------------------
+
+
+class TestNonInteractiveInit:
+    """Tests for non_interactive_init() function."""
+
+    def test_bootstrap_mode_creates_graph(self, tmp_path: Path) -> None:
+        """non_interactive_init with bootstrap creates .beadloom/_graph."""
+        src = tmp_path / "src"
+        src.mkdir()
+        svc = src / "api"
+        svc.mkdir()
+        (svc / "app.py").write_text("def main():\n    pass\n")
+
+        result = non_interactive_init(tmp_path, mode="bootstrap")
+
+        assert result["mode"] == "bootstrap"
+        assert (tmp_path / ".beadloom" / "_graph").is_dir()
+        assert (tmp_path / ".beadloom" / "config.yml").is_file()
+        assert (tmp_path / ".beadloom" / "AGENTS.md").is_file()
+
+    def test_import_mode_classifies_docs(self, tmp_path: Path) -> None:
+        """non_interactive_init with import classifies existing docs."""
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        (docs / "readme.md").write_text("# Hello\n\nWorld.\n")
+
+        result = non_interactive_init(tmp_path, mode="import")
+
+        assert result["mode"] == "import"
+        assert "import" in result
+
+    def test_both_mode_runs_bootstrap_and_import(self, tmp_path: Path) -> None:
+        """non_interactive_init with both runs bootstrap then import."""
+        src = tmp_path / "src"
+        src.mkdir()
+        svc = src / "api"
+        svc.mkdir()
+        (svc / "app.py").write_text("def main():\n    pass\n")
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        (docs / "readme.md").write_text("# Hello\n\nWorld.\n")
+
+        result = non_interactive_init(tmp_path, mode="both")
+
+        assert result["mode"] == "both"
+        assert "bootstrap" in result
+
+    def test_default_mode_is_bootstrap(self, tmp_path: Path) -> None:
+        """non_interactive_init defaults to bootstrap mode."""
+        src = tmp_path / "src"
+        src.mkdir()
+        svc = src / "api"
+        svc.mkdir()
+        (svc / "app.py").write_text("def main():\n    pass\n")
+
+        result = non_interactive_init(tmp_path)
+
+        assert result["mode"] == "bootstrap"
+
+    def test_force_overwrites_existing(self, tmp_path: Path) -> None:
+        """force=True removes existing .beadloom/ before init."""
+        beadloom_dir = tmp_path / ".beadloom"
+        beadloom_dir.mkdir()
+        marker = beadloom_dir / "old_marker.txt"
+        marker.write_text("old content")
+
+        src = tmp_path / "src"
+        src.mkdir()
+        svc = src / "api"
+        svc.mkdir()
+        (svc / "app.py").write_text("def main():\n    pass\n")
+
+        result = non_interactive_init(tmp_path, mode="bootstrap", force=True)
+
+        assert result["mode"] == "bootstrap"
+        # Old marker should be gone.
+        assert not marker.exists()
+        # New graph should exist.
+        assert (tmp_path / ".beadloom" / "_graph").is_dir()
+
+    def test_no_force_skips_existing(self, tmp_path: Path) -> None:
+        """Without force, existing .beadloom/ causes early return."""
+        beadloom_dir = tmp_path / ".beadloom"
+        beadloom_dir.mkdir()
+
+        result = non_interactive_init(tmp_path, mode="bootstrap", force=False)
+
+        assert result["mode"] == "skipped"
+        assert result["reason"] == "exists"
+
+    def test_no_prompts_used(self, tmp_path: Path) -> None:
+        """non_interactive_init must not use any Rich prompts."""
+        from unittest.mock import patch
+
+        src = tmp_path / "src"
+        src.mkdir()
+        svc = src / "api"
+        svc.mkdir()
+        (svc / "app.py").write_text("def main():\n    pass\n")
+
+        with patch("rich.prompt.Prompt.ask") as mock_ask:
+            non_interactive_init(tmp_path, mode="bootstrap")
+            mock_ask.assert_not_called()
+
+    def test_returns_result_dict(self, tmp_path: Path) -> None:
+        """Return dict contains expected keys."""
+        src = tmp_path / "src"
+        src.mkdir()
+        svc = src / "api"
+        svc.mkdir()
+        (svc / "app.py").write_text("def main():\n    pass\n")
+
+        result = non_interactive_init(tmp_path, mode="bootstrap")
+
+        assert isinstance(result, dict)
+        assert "mode" in result
+        assert "agents_md_created" in result
+
+
+class TestNonInteractiveInitCli:
+    """Tests for CLI --yes/-y and --mode and --force flags on init."""
+
+    def test_yes_flag_bootstrap(self, tmp_path: Path) -> None:
+        """beadloom init --yes --mode bootstrap works without prompts."""
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        src = tmp_path / "src"
+        src.mkdir()
+        svc = src / "api"
+        svc.mkdir()
+        (svc / "app.py").write_text("def main():\n    pass\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["init", "--yes", "--mode", "bootstrap", "--project", str(tmp_path)],
+        )
+        assert result.exit_code == 0, result.output
+        assert (tmp_path / ".beadloom" / "_graph").is_dir()
+
+    def test_y_short_flag(self, tmp_path: Path) -> None:
+        """beadloom init -y works as shorthand for --yes."""
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        src = tmp_path / "src"
+        src.mkdir()
+        svc = src / "api"
+        svc.mkdir()
+        (svc / "app.py").write_text("def main():\n    pass\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["init", "-y", "--mode", "bootstrap", "--project", str(tmp_path)],
+        )
+        assert result.exit_code == 0, result.output
+
+    def test_force_flag_overwrites(self, tmp_path: Path) -> None:
+        """beadloom init --yes --force overwrites existing .beadloom/."""
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        beadloom_dir = tmp_path / ".beadloom"
+        beadloom_dir.mkdir()
+        marker = beadloom_dir / "old_marker.txt"
+        marker.write_text("old content")
+
+        src = tmp_path / "src"
+        src.mkdir()
+        svc = src / "api"
+        svc.mkdir()
+        (svc / "app.py").write_text("def main():\n    pass\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "init",
+                "--yes",
+                "--force",
+                "--mode",
+                "bootstrap",
+                "--project",
+                str(tmp_path),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert not marker.exists()
+        assert (tmp_path / ".beadloom" / "_graph").is_dir()
+
+    def test_no_force_existing_skips(self, tmp_path: Path) -> None:
+        """beadloom init --yes without --force skips if .beadloom/ exists."""
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        (tmp_path / ".beadloom").mkdir()
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["init", "--yes", "--mode", "bootstrap", "--project", str(tmp_path)],
+        )
+        assert result.exit_code == 0, result.output
+        assert "already exists" in result.output
+
+    def test_default_mode_bootstrap(self, tmp_path: Path) -> None:
+        """beadloom init --yes without --mode defaults to bootstrap."""
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        src = tmp_path / "src"
+        src.mkdir()
+        svc = src / "api"
+        svc.mkdir()
+        (svc / "app.py").write_text("def main():\n    pass\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["init", "--yes", "--project", str(tmp_path)],
+        )
+        assert result.exit_code == 0, result.output
+        assert (tmp_path / ".beadloom" / "_graph").is_dir()
+
+    def test_no_flags_still_interactive(self, tmp_path: Path) -> None:
+        """init without --yes still calls interactive_init."""
+        from unittest.mock import patch
+
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "app.py").write_text("def main():\n    pass\n")
+
+        with (
+            patch(
+                "rich.prompt.Prompt.ask",
+                side_effect=["bootstrap", "yes"],
+            ),
+            patch("rich.prompt.Confirm.ask", return_value=False),
+            patch("rich.console.Console"),
+        ):
+            runner = CliRunner()
+            result = runner.invoke(main, ["init", "--project", str(tmp_path)])
+        assert result.exit_code == 0, result.output

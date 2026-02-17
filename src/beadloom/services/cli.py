@@ -765,27 +765,22 @@ def sync_check(
                 details = r.get("details", "")
 
                 if reason == "untracked_files" and details:
-                    click.echo(
-                        f"  {marker} {r['ref_id']}: {r['doc_path']} "
-                        f"(untracked: {details})"
-                    )
+                    click.echo(f"  {marker} {r['ref_id']}: {r['doc_path']} (untracked: {details})")
                 elif reason == "missing_modules" and details:
                     click.echo(
-                        f"  {marker} {r['ref_id']}: {r['doc_path']} "
-                        f"(missing modules: {details})"
+                        f"  {marker} {r['ref_id']}: {r['doc_path']} (missing modules: {details})"
                     )
                 elif r["status"] == "stale" and reason not in (
-                    "ok", "untracked_files", "missing_modules",
+                    "ok",
+                    "untracked_files",
+                    "missing_modules",
                 ):
                     click.echo(
                         f"  {marker} {r['ref_id']}: {r['doc_path']} "
                         f"<-> {r['code_path']} ({reason})"
                     )
                 else:
-                    click.echo(
-                        f"  {marker} {r['ref_id']}: {r['doc_path']} "
-                        f"<-> {r['code_path']}"
-                    )
+                    click.echo(f"  {marker} {r['ref_id']}: {r['doc_path']} <-> {r['code_path']}")
 
     if has_stale:
         sys.exit(2)
@@ -1493,6 +1488,25 @@ def docs_polish(
     help="Import: classify existing documentation from directory.",
 )
 @click.option(
+    "--mode",
+    "init_mode",
+    type=click.Choice(["bootstrap", "import", "both"]),
+    default=None,
+    help="Init mode for non-interactive usage.",
+)
+@click.option(
+    "--yes",
+    "-y",
+    "non_interactive",
+    is_flag=True,
+    help="Non-interactive mode: no prompts, use defaults.",
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Overwrite existing .beadloom/ directory.",
+)
+@click.option(
     "--project",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     default=None,
@@ -1503,12 +1517,41 @@ def init(
     bootstrap: bool,
     preset: str | None,
     import_path: Path | None,
+    init_mode: str | None,
+    non_interactive: bool,
+    force: bool,
     project: Path | None,
 ) -> None:
     """Initialize beadloom in a project."""
     from beadloom.onboarding import bootstrap_project, import_docs
 
     project_root = project or Path.cwd()
+
+    # Non-interactive mode: --yes / -y flag.
+    if non_interactive:
+        from beadloom.onboarding.scanner import non_interactive_init
+
+        mode = init_mode or "bootstrap"
+        result = non_interactive_init(project_root, mode=mode, force=force)
+
+        if result["mode"] == "skipped":
+            click.echo("Warning: .beadloom/ already exists. Use --force to overwrite.")
+            return
+
+        # Print summary for non-interactive mode.
+        click.echo(f"Initialized beadloom (mode: {result['mode']})")
+        if "bootstrap" in result:
+            bs = result["bootstrap"]
+            click.echo(
+                f"  Graph: {bs['nodes_generated']} nodes, "
+                f"{bs['edges_generated']} edges (preset: {bs['preset']})"
+            )
+        if result.get("reindex"):
+            ri = result["reindex"]
+            click.echo(f"  Index: {ri['symbols']} symbols, {ri['imports']} imports")
+        if result.get("import"):
+            click.echo(f"  Imported: {len(result['import'])} documents")
+        return
 
     if bootstrap:
         result = bootstrap_project(project_root, preset_name=preset)
@@ -1599,15 +1642,36 @@ def init(
 @click.argument("ref_id")
 @click.option("--depth", default=3, type=int, help="BFS traversal depth.")
 @click.option("--json", "as_json", is_flag=True, help="JSON output.")
+@click.option("--reverse", is_flag=True, help="Focus on what this node depends on.")
+@click.option(
+    "--format",
+    "fmt",
+    type=click.Choice(["panel", "tree"]),
+    default="panel",
+    help="Output format: panel (Rich, default) or tree (plain text for CI).",
+)
 @click.option(
     "--project",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     default=None,
     help="Project root (default: current directory).",
 )
-def why(ref_id: str, *, depth: int, as_json: bool, project: Path | None) -> None:
+def why(
+    ref_id: str,
+    *,
+    depth: int,
+    as_json: bool,
+    reverse: bool,
+    fmt: str,
+    project: Path | None,
+) -> None:
     """Show impact analysis for a node (upstream deps + downstream dependents)."""
-    from beadloom.context_oracle.why import analyze_node, render_why, result_to_dict
+    from beadloom.context_oracle.why import (
+        analyze_node,
+        render_why,
+        render_why_tree,
+        result_to_dict,
+    )
     from beadloom.infrastructure.db import open_db
 
     project_root = project or Path.cwd()
@@ -1619,7 +1683,7 @@ def why(ref_id: str, *, depth: int, as_json: bool, project: Path | None) -> None
 
     conn = open_db(db_path)
     try:
-        result = analyze_node(conn, ref_id, depth=depth)
+        result = analyze_node(conn, ref_id, depth=depth, reverse=reverse)
     except LookupError as exc:
         click.echo(f"Error: {exc}", err=True)
         conn.close()
@@ -1627,6 +1691,8 @@ def why(ref_id: str, *, depth: int, as_json: bool, project: Path | None) -> None
 
     if as_json:
         click.echo(json.dumps(result_to_dict(result), ensure_ascii=False, indent=2))
+    elif fmt == "tree":
+        click.echo(render_why_tree(result))
     else:
         from rich.console import Console
 
@@ -1842,3 +1908,174 @@ def lint(
         sys.exit(1)
     if strict and result.has_errors:
         sys.exit(1)
+
+
+# beadloom:domain=graph-snapshot
+@main.group()
+def snapshot() -> None:
+    """Architecture snapshot management."""
+
+
+@snapshot.command("save")
+@click.option("--label", default=None, help="Optional label for the snapshot (e.g. v1.6.0).")
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: current directory).",
+)
+def snapshot_save(*, label: str | None, project: Path | None) -> None:
+    """Save the current graph state as a snapshot."""
+    from beadloom.graph.snapshot import save_snapshot
+    from beadloom.infrastructure.db import open_db
+
+    project_root = project or Path.cwd()
+    db_path = project_root / ".beadloom" / "beadloom.db"
+
+    if not db_path.exists():
+        click.echo("Error: database not found. Run `beadloom reindex` first.", err=True)
+        sys.exit(1)
+
+    conn = open_db(db_path)
+    snap_id = save_snapshot(conn, label=label)
+    conn.close()
+
+    label_str = f" ({label})" if label else ""
+    click.echo(f"Snapshot #{snap_id} saved{label_str}.")
+
+
+@snapshot.command("list")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON.")
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: current directory).",
+)
+def snapshot_list(*, output_json: bool, project: Path | None) -> None:
+    """List all saved architecture snapshots."""
+    from beadloom.graph.snapshot import list_snapshots
+    from beadloom.infrastructure.db import open_db
+
+    project_root = project or Path.cwd()
+    db_path = project_root / ".beadloom" / "beadloom.db"
+
+    if not db_path.exists():
+        click.echo("Error: database not found. Run `beadloom reindex` first.", err=True)
+        sys.exit(1)
+
+    conn = open_db(db_path)
+    snapshots = list_snapshots(conn)
+    conn.close()
+
+    if not snapshots:
+        click.echo("No snapshots found.")
+        return
+
+    if output_json:
+        data = [
+            {
+                "id": s.id,
+                "label": s.label,
+                "created_at": s.created_at,
+                "node_count": s.node_count,
+                "edge_count": s.edge_count,
+                "symbols_count": s.symbols_count,
+            }
+            for s in snapshots
+        ]
+        click.echo(json.dumps(data, ensure_ascii=False, indent=2))
+    else:
+        for s in snapshots:
+            label_str = f" [{s.label}]" if s.label else ""
+            click.echo(
+                f"  #{s.id}{label_str}  {s.created_at}  "
+                f"nodes={s.node_count} edges={s.edge_count} symbols={s.symbols_count}"
+            )
+
+
+@snapshot.command("compare")
+@click.argument("old_id", type=int)
+@click.argument("new_id", type=int)
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON.")
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: current directory).",
+)
+def snapshot_compare(
+    old_id: int,
+    new_id: int,
+    *,
+    output_json: bool,
+    project: Path | None,
+) -> None:
+    """Compare two architecture snapshots."""
+    from beadloom.graph.snapshot import compare_snapshots
+    from beadloom.infrastructure.db import open_db
+
+    project_root = project or Path.cwd()
+    db_path = project_root / ".beadloom" / "beadloom.db"
+
+    if not db_path.exists():
+        click.echo("Error: database not found. Run `beadloom reindex` first.", err=True)
+        sys.exit(1)
+
+    conn = open_db(db_path)
+    try:
+        diff = compare_snapshots(conn, old_id, new_id)
+    except ValueError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        conn.close()
+        sys.exit(1)
+
+    conn.close()
+
+    if output_json:
+        data = {
+            "old_id": diff.old_id,
+            "new_id": diff.new_id,
+            "has_changes": diff.has_changes,
+            "added_nodes": diff.added_nodes,
+            "removed_nodes": diff.removed_nodes,
+            "changed_nodes": diff.changed_nodes,
+            "added_edges": diff.added_edges,
+            "removed_edges": diff.removed_edges,
+        }
+        click.echo(json.dumps(data, ensure_ascii=False, indent=2))
+        return
+
+    if not diff.has_changes:
+        click.echo(f"No changes between snapshot #{old_id} and #{new_id}.")
+        return
+
+    click.echo(f"Snapshot diff: #{old_id} -> #{new_id}")
+    click.echo()
+
+    if diff.added_nodes:
+        click.echo("Added nodes:")
+        for n in diff.added_nodes:
+            click.echo(f"  + {n['ref_id']} ({n.get('kind', '')}): {n.get('summary', '')}")
+
+    if diff.removed_nodes:
+        click.echo("Removed nodes:")
+        for n in diff.removed_nodes:
+            click.echo(f"  - {n['ref_id']} ({n.get('kind', '')}): {n.get('summary', '')}")
+
+    if diff.changed_nodes:
+        click.echo("Changed nodes:")
+        for n in diff.changed_nodes:
+            click.echo(f"  ~ {n['ref_id']} ({n.get('kind', '')})")
+            click.echo(f"    was: {n.get('old_summary', '')}")
+            click.echo(f"    now: {n.get('new_summary', '')}")
+
+    if diff.added_edges:
+        click.echo("Added edges:")
+        for e in diff.added_edges:
+            click.echo(f"  + {e['src_ref_id']} --[{e['kind']}]--> {e['dst_ref_id']}")
+
+    if diff.removed_edges:
+        click.echo("Removed edges:")
+        for e in diff.removed_edges:
+            click.echo(f"  - {e['src_ref_id']} --[{e['kind']}]--> {e['dst_ref_id']}")
