@@ -38,6 +38,9 @@
 | `update_node` | Update node summary or source |
 | `mark_synced` | Mark doc-code pair as synchronized |
 | `generate_docs` | Enrichment data for AI doc polish |
+| `why` | Impact analysis (upstream deps + downstream dependents) |
+| `diff` | Show graph changes since a git ref |
+| `lint` | Run architecture lint rules, return violations as JSON |
 
 ## Architecture Rules
 
@@ -45,6 +48,8 @@
 - **feature-needs-domain** (require): Every feature must be part_of a domain
 - **service-needs-parent** (require): Every service must be part_of the beadloom service
 - **no-domain-depends-on-service** (deny): Domains must not have depends_on edges to services
+
+**v1.7.0 rule types:** `require`, `deny`, `forbid_edge`, `layer`, `cycle_detection`, `import_boundary`, `cardinality`
 
 ## Custom
 
