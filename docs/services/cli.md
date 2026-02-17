@@ -25,6 +25,9 @@ beadloom init --bootstrap [--preset {monolith,microservices,monorepo}] [--projec
 # Import existing documentation
 beadloom init --import DOCS_DIR [--project DIR]
 
+# Non-interactive mode (for CI/scripting)
+beadloom init --yes [--mode {bootstrap,import,both}] [--force] [--project DIR]
+
 # Interactive mode (default when no flags given)
 beadloom init [--project DIR]
 ```
@@ -39,6 +42,13 @@ beadloom init [--project DIR]
 When `--preset` is omitted, Beadloom auto-detects: `services/` or `cmd/` -> microservices, `packages/` or `apps/` -> monorepo, otherwise -> monolith.
 
 `--import` classifies .md files (ADR, feature, architecture, other) and generates `.beadloom/_graph/imported.yml`.
+
+`--yes` / `-y` enables non-interactive mode: no prompts, uses defaults. Combined with `--mode` to select the initialization strategy:
+- `bootstrap` (default) -- generate graph from code
+- `import` -- classify existing docs
+- `both` -- bootstrap graph and import docs
+
+`--force` overwrites an existing `.beadloom/` directory. Without it, non-interactive init skips if `.beadloom/` already exists.
 
 Projects without a `docs/` directory work fine -- Beadloom operates in zero-doc mode with code-only context (graph nodes, annotations, context oracle).
 
@@ -180,6 +190,40 @@ beadloom diff [--since REF] [--json] [--project DIR]
 
 Compares current graph YAML with state at the given ref (default: HEAD). Exit code 0 = no changes, 1 = changes detected.
 
+### beadloom snapshot
+
+Architecture snapshot management. Snapshots capture the current graph state (nodes, edges, symbols) for later comparison.
+
+#### beadloom snapshot save
+
+Save the current graph state as a snapshot.
+
+```bash
+beadloom snapshot save [--label LABEL] [--project DIR]
+```
+
+- `--label` -- optional label for the snapshot (e.g. `v1.6.0`).
+
+#### beadloom snapshot list
+
+List all saved architecture snapshots.
+
+```bash
+beadloom snapshot list [--json] [--project DIR]
+```
+
+Shows snapshot ID, label, creation time, and counts (nodes, edges, symbols). `--json` for structured output.
+
+#### beadloom snapshot compare
+
+Compare two architecture snapshots to see what changed.
+
+```bash
+beadloom snapshot compare OLD_ID NEW_ID [--json] [--project DIR]
+```
+
+Displays added/removed/changed nodes and added/removed edges between the two snapshots. Both `OLD_ID` and `NEW_ID` are required integer snapshot IDs.
+
 ### beadloom search
 
 Search nodes and documentation by keyword.
@@ -195,8 +239,11 @@ Uses FTS5 full-text search when available, falls back to SQL LIKE. Run `beadloom
 Show impact analysis for a node -- upstream dependencies and downstream dependents.
 
 ```bash
-beadloom why REF_ID [--depth N] [--json] [--project DIR]
+beadloom why REF_ID [--depth N] [--json] [--reverse] [--format {panel,tree}] [--project DIR]
 ```
+
+- `--reverse` -- focus on what this node depends on (upstream only) instead of the default full analysis.
+- `--format` -- output format: `panel` (Rich panels, default) or `tree` (plain text for CI/scripting).
 
 ### beadloom lint
 
@@ -315,8 +362,12 @@ Module `src/beadloom/services/cli.py`:
 - `install_hooks` -- install/remove pre-commit hook
 - `link` -- manage external tracker links
 - `search` -- FTS5 search with LIKE fallback
-- `why` -- impact analysis (upstream + downstream)
+- `why` -- impact analysis (upstream + downstream) with `--reverse` and `--format {panel,tree}`
 - `diff_cmd` -- graph changes since a git ref
+- `snapshot` -- Click group for snapshot commands (`save`, `list`, `compare`)
+- `snapshot_save` -- save current graph state as a snapshot
+- `snapshot_list` -- list all saved snapshots
+- `snapshot_compare` -- compare two snapshots (added/removed/changed nodes and edges)
 - `lint` -- architecture lint with `--strict`, `--fail-on-warn`, auto-format detection
 - `prime` -- compact project context for AI agents
 - `setup_mcp` -- configure MCP server for editor
@@ -325,10 +376,10 @@ Module `src/beadloom/services/cli.py`:
 - `docs` -- Click group for doc commands (`generate`, `polish`)
 - `ui` -- launch TUI dashboard
 - `watch_cmd` -- watch files and auto-reindex
-- `init` -- project initialization (bootstrap, import, interactive)
+- `init` -- project initialization (bootstrap, import, interactive, non-interactive with `--yes`/`--mode`/`--force`)
 
 All commands accept `--project DIR` to specify the project root. The current directory is used by default.
 
 ## Testing
 
-CLI is tested via `click.testing.CliRunner`. Each command has a corresponding test file in `tests/test_cli_*.py`: `test_cli_reindex.py`, `test_cli_ctx.py`, `test_cli_graph.py`, `test_cli_status.py`, `test_cli_sync_check.py`, `test_cli_sync_update.py`, `test_cli_hooks.py`, `test_cli_link.py`, `test_cli_docs.py`, `test_cli_mcp.py`, `test_cli_watch.py`, `test_cli_diff.py`, `test_cli_why.py`, `test_cli_lint.py`, `test_cli_init.py`.
+CLI is tested via `click.testing.CliRunner`. Each command has a corresponding test file in `tests/test_cli_*.py`: `test_cli_reindex.py`, `test_cli_ctx.py`, `test_cli_graph.py`, `test_cli_status.py`, `test_cli_sync_check.py`, `test_cli_sync_update.py`, `test_cli_hooks.py`, `test_cli_link.py`, `test_cli_docs.py`, `test_cli_mcp.py`, `test_cli_watch.py`, `test_cli_diff.py`, `test_cli_why.py`, `test_cli_lint.py`, `test_cli_init.py`, `test_cli_snapshot.py`.

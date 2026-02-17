@@ -173,6 +173,8 @@ Both tiers use mtime-based invalidation (graph directory and docs directory mtim
 
 Bidirectional BFS from a target node, producing upstream dependency trees and downstream dependent trees. Returns an `ImpactSummary` with direct/transitive dependent counts, doc coverage percentage, and stale doc count for downstream nodes. Default depth: 3, max nodes per direction: 50.
 
+Supports a `reverse` mode that emphasizes upstream dependencies: when enabled, upstream traversal uses the full `depth` while downstream traversal is reduced to `max(depth // 2, 1)`. The `render_why_tree` function provides a plain-text tree rendering suitable for CI pipelines and piped output (no Rich markup).
+
 ## Invariants
 
 - BFS does not cycle (visited set)
@@ -434,16 +436,24 @@ def analyze_node(
     ref_id: str,
     depth: int = 3,
     max_nodes: int = 50,
+    *,
+    reverse: bool = False,
 ) -> WhyResult
 ```
 
-Perform impact analysis on a node. Raises `LookupError` if not found.
+Perform impact analysis on a node. When `reverse=True`, upstream traversal uses the full `depth` while downstream is reduced to `max(depth // 2, 1)`. Raises `LookupError` if not found.
 
 ```python
 def render_why(result: WhyResult, console: Console) -> None
 ```
 
 Render a WhyResult using Rich panels and trees.
+
+```python
+def render_why_tree(result: WhyResult) -> str
+```
+
+Render a WhyResult as a plain-text dependency tree with box-drawing characters. Suitable for CI/piping -- no Rich markup, no panels. Returns a multi-line string.
 
 ```python
 def result_to_dict(result: WhyResult) -> dict[str, object]
@@ -457,7 +467,7 @@ The context-oracle domain exposes functionality through several CLI commands in 
 
 - `beadloom ctx REF_IDS... [--json] [--markdown] [--depth N] [--max-nodes N] [--max-chunks N] [--project DIR]` -- Build and display context bundle
 - `beadloom search QUERY [--kind KIND] [--limit N] [--json] [--project DIR]` -- FTS5 search with LIKE fallback
-- `beadloom why REF_ID [--depth N] [--json] [--project DIR]` -- Impact analysis
+- `beadloom why REF_ID [--depth N] [--reverse] [--format panel|tree] [--json] [--project DIR]` -- Impact analysis
 - `beadloom graph [REF_IDS...] [--json] [--depth N] [--project DIR]` -- Architecture graph (Mermaid or JSON)
 - `beadloom lint [--strict] [--fail-on-warn] [--no-reindex] [--format rich|json|porcelain] [--project DIR]` -- Architecture lint rules
 
@@ -473,3 +483,5 @@ Tests are located in:
 | `tests/test_route_extractor.py` | `route_extractor.py` | Route extraction across frameworks, safety cap, edge cases |
 | `tests/test_test_mapper.py` | `test_mapper.py` | Framework detection, test file discovery, mapping strategies, coverage estimation |
 | `tests/test_search.py` | `search.py` | FTS5 search, kind filtering, limit, empty query, escaping, snippets, index rebuild |
+| `tests/test_why.py` | `why.py` | Impact analysis, upstream/downstream trees, reverse mode, render functions |
+| `tests/test_cli_why.py` | `cli.py` (why) | CLI why command, --reverse flag, --format tree, --json output |
