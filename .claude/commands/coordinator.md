@@ -62,20 +62,81 @@ Wave 3: Integration
 
 ---
 
-## Launching sub-agents
+## Context Overflow Protection
+
+> **CRITICAL:** Parallel agents overflow the parent context window.
+> Without protection, `/compact` fails and the session is lost.
+
+### Rule 1: Background agents (MANDATORY for waves)
+
+ALWAYS launch parallel agents with `run_in_background: true`:
+
+```python
+Task(
+    prompt="...",
+    subagent_type="general-purpose",
+    run_in_background=True,    # MANDATORY — results go to file, not context
+)
+```
+
+- Agent results go to an `output_file`, NOT into parent context
+- Parent checks progress via `bd list` + `bd comments <id>`
+- Parent reads `output_file` only if needed (tail last 20 lines)
+
+### Rule 2: Agent return contract
+
+Every agent prompt MUST include this instruction:
 
 ```
-Coordinator launches sub-agents in parallel:
+RETURN CONTRACT: When done, return ONLY a 2-3 line summary:
+"BEAD-XX done. N tests added. Files: list."
+Write ALL details to bead comments via `bd comments add`.
+Do NOT return file contents, diffs, or verbose test output.
+```
 
-Agent-1 (developer):
+### Rule 3: Compaction between waves
+
+After each wave completes:
+
+```bash
+# 1. Verify all beads in wave are closed
+bd list --status=in_progress
+
+# 2. Read ACTIVE.md (will survive compaction)
+# Update ACTIVE.md with wave results
+
+# 3. /compact — compress parent context
+
+# 4. After compaction: read ACTIVE.md to restore state
+# Then launch next wave
+```
+
+### Rule 4: One bead = one agent
+
+Do NOT batch multiple beads into one agent (e.g., "BEAD-02 + BEAD-08").
+Each bead gets its own agent. This keeps individual agent contexts smaller
+and makes failures isolated.
+
+---
+
+## Launching sub-agents
+
+**ALWAYS use `run_in_background: true` for parallel agents.**
+
+```
+Coordinator launches sub-agents in parallel (background):
+
+Agent-1 (developer, background):
 - Bead: BEAD-XX
 - Skill: /dev
 - Context: CONTEXT.md, ACTIVE.md
+- Return: 2-3 line summary only
 
-Agent-2 (developer):
+Agent-2 (developer, background):
 - Bead: BEAD-YY
 - Skill: /dev
 - Context: CONTEXT.md, ACTIVE.md
+- Return: 2-3 line summary only
 ```
 
 ---
@@ -93,7 +154,7 @@ beadloom reindex
 beadloom sync-check
 beadloom lint --strict
 
-# 3. Add checkpoint with results
+# 3. Add checkpoint with results (THIS is where details go)
 bd comments add <bead-id> "$(cat <<'EOF'
 COMPLETED:
 - What was done: [list]
@@ -107,7 +168,7 @@ EOF
 # 4. Close the bead
 bd close <bead-id>
 
-# 5. Notify the coordinator
+# 5. Return ONLY a 2-3 line summary (NOT full details)
 ```
 
 ---

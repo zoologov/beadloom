@@ -7,7 +7,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from beadloom.graph.loader import get_node_tags
 from beadloom.graph.rule_engine import (
+    SUPPORTED_SCHEMA_VERSIONS,
     DenyRule,
     NodeMatcher,
     RequireRule,
@@ -757,3 +759,389 @@ class TestEmptyMatcher:
         )
         with pytest.raises(ValueError, match=r"at least one"):
             load_rules(rules_path)
+
+
+# ---------------------------------------------------------------------------
+# TestNodeMatcherTags — tag matching in NodeMatcher
+# ---------------------------------------------------------------------------
+
+
+class TestNodeMatcherTags:
+    """Tests for NodeMatcher.matches() with tag support."""
+
+    def test_tag_match(self) -> None:
+        m = NodeMatcher(tag="ui-layer")
+        assert m.matches("app-tabs", "service", tags={"ui-layer", "presentation"}) is True
+
+    def test_tag_no_match(self) -> None:
+        m = NodeMatcher(tag="backend")
+        assert m.matches("app-tabs", "service", tags={"ui-layer", "presentation"}) is False
+
+    def test_tag_empty_tags_set(self) -> None:
+        m = NodeMatcher(tag="ui-layer")
+        assert m.matches("app-tabs", "service", tags=set()) is False
+
+    def test_tag_none_matches_any(self) -> None:
+        """NodeMatcher without tag matches regardless of node tags."""
+        m = NodeMatcher(ref_id="billing")
+        assert m.matches("billing", "domain", tags={"some-tag"}) is True
+        assert m.matches("billing", "domain", tags=set()) is True
+
+    def test_tag_combined_with_kind(self) -> None:
+        """Tag + kind are AND-combined: both must match."""
+        m = NodeMatcher(kind="service", tag="ui-layer")
+        assert m.matches("app-tabs", "service", tags={"ui-layer"}) is True
+        assert m.matches("app-tabs", "domain", tags={"ui-layer"}) is False
+        assert m.matches("app-tabs", "service", tags={"backend"}) is False
+
+    def test_tag_combined_with_ref_id_and_kind(self) -> None:
+        m = NodeMatcher(ref_id="app-tabs", kind="service", tag="ui-layer")
+        assert m.matches("app-tabs", "service", tags={"ui-layer"}) is True
+        assert m.matches("other", "service", tags={"ui-layer"}) is False
+
+    def test_backward_compat_no_tags_param(self) -> None:
+        """Calling matches() without tags kwarg still works for old code."""
+        m = NodeMatcher(ref_id="billing")
+        assert m.matches("billing", "domain") is True
+        assert m.matches("auth", "domain") is False
+
+    def test_empty_matcher_with_tags(self) -> None:
+        m = NodeMatcher()
+        assert m.matches("anything", "feature", tags={"x"}) is True
+
+
+# ---------------------------------------------------------------------------
+# TestGetNodeTags — helper in loader.py
+# ---------------------------------------------------------------------------
+
+
+class TestGetNodeTags:
+    """Tests for get_node_tags() — extract tags from node extra JSON."""
+
+    def test_node_with_tags(self, db_conn: sqlite3.Connection) -> None:
+        db_conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, extra) VALUES (?, ?, ?, ?)",
+            ("app-tabs", "service", "Tabs", json.dumps({"tags": ["ui-layer", "presentation"]})),
+        )
+        db_conn.commit()
+        tags = get_node_tags(db_conn, "app-tabs")
+        assert tags == {"ui-layer", "presentation"}
+
+    def test_node_without_tags(self, db_conn: sqlite3.Connection) -> None:
+        db_conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, extra) VALUES (?, ?, ?, ?)",
+            ("billing", "domain", "Billing", json.dumps({})),
+        )
+        db_conn.commit()
+        tags = get_node_tags(db_conn, "billing")
+        assert tags == set()
+
+    def test_node_not_found(self, db_conn: sqlite3.Connection) -> None:
+        tags = get_node_tags(db_conn, "nonexistent")
+        assert tags == set()
+
+    def test_node_null_extra(self, db_conn: sqlite3.Connection) -> None:
+        db_conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, extra) VALUES (?, ?, ?, ?)",
+            ("billing", "domain", "Billing", None),
+        )
+        db_conn.commit()
+        tags = get_node_tags(db_conn, "billing")
+        assert tags == set()
+
+
+# ---------------------------------------------------------------------------
+# TestSchemaV3 — schema version 3 support
+# ---------------------------------------------------------------------------
+
+
+class TestSchemaV3:
+    """Tests for schema v3 support in load_rules()."""
+
+    def test_version_3_supported(self) -> None:
+        assert 3 in SUPPORTED_SCHEMA_VERSIONS
+
+    def test_load_v3_rules(self, tmp_path: Path) -> None:
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\n"
+            "rules:\n"
+            "  - name: test-deny\n"
+            '    description: "Test deny"\n'
+            "    deny:\n"
+            "      from: { ref_id: billing }\n"
+            "      to: { ref_id: auth }\n"
+        )
+        rules = load_rules(rules_path)
+        assert len(rules) == 1
+
+    def test_v1_backward_compat(self, tmp_path: Path) -> None:
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 1\n"
+            "rules:\n"
+            "  - name: test\n"
+            '    description: "Test"\n'
+            "    deny:\n"
+            "      from: { ref_id: a }\n"
+            "      to: { ref_id: b }\n"
+        )
+        rules = load_rules(rules_path)
+        assert len(rules) == 1
+
+    def test_v2_backward_compat(self, tmp_path: Path) -> None:
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 2\n"
+            "rules:\n"
+            "  - name: test\n"
+            '    description: "Test"\n'
+            "    severity: warn\n"
+            "    deny:\n"
+            "      from: { ref_id: a }\n"
+            "      to: { ref_id: b }\n"
+        )
+        rules = load_rules(rules_path)
+        assert len(rules) == 1
+        assert rules[0].severity == "warn"
+
+    def test_v3_with_tag_in_matcher(self, tmp_path: Path) -> None:
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\n"
+            "rules:\n"
+            "  - name: ui-no-db\n"
+            '    description: "UI layer must not import DB layer"\n'
+            "    deny:\n"
+            "      from: { tag: ui-layer }\n"
+            "      to: { tag: db-layer }\n"
+        )
+        rules = load_rules(rules_path)
+        assert len(rules) == 1
+        rule = rules[0]
+        assert isinstance(rule, DenyRule)
+        assert rule.from_matcher.tag == "ui-layer"
+        assert rule.to_matcher.tag == "db-layer"
+
+    def test_v3_tag_in_require_rule(self, tmp_path: Path) -> None:
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\n"
+            "rules:\n"
+            "  - name: svc-needs-domain\n"
+            '    description: "Tagged services need domain edge"\n'
+            "    require:\n"
+            "      for: { tag: backend }\n"
+            "      has_edge_to: { kind: domain }\n"
+        )
+        rules = load_rules(rules_path)
+        assert len(rules) == 1
+        rule = rules[0]
+        assert isinstance(rule, RequireRule)
+        assert rule.for_matcher.tag == "backend"
+
+
+# ---------------------------------------------------------------------------
+# TestTagsBlock — top-level tags: block in rules.yml
+# ---------------------------------------------------------------------------
+
+
+class TestTagsBlock:
+    """Tests for top-level tags: block sugar in rules.yml v3."""
+
+    def test_tags_block_parsed(self, tmp_path: Path) -> None:
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\n"
+            "tags:\n"
+            "  ui-layer: [app-tabs, app-auth]\n"
+            "  feature-layer: [map, calendar]\n"
+            "rules:\n"
+            "  - name: test\n"
+            '    description: "Test"\n'
+            "    deny:\n"
+            "      from: { tag: ui-layer }\n"
+            "      to: { tag: feature-layer }\n"
+        )
+        rules = load_rules(rules_path)
+        assert len(rules) == 1
+
+    def test_tags_block_returns_tag_assignments(self, tmp_path: Path) -> None:
+        """load_rules_with_tags returns tag assignments when present."""
+        from beadloom.graph.rule_engine import load_rules_with_tags
+
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\n"
+            "tags:\n"
+            "  ui-layer: [app-tabs, app-auth]\n"
+            "  feature-layer: [map, calendar]\n"
+            "rules:\n"
+            "  - name: test\n"
+            '    description: "Test"\n'
+            "    deny:\n"
+            "      from: { tag: ui-layer }\n"
+            "      to: { tag: feature-layer }\n"
+        )
+        rules, tag_assignments = load_rules_with_tags(rules_path)
+        assert tag_assignments == {
+            "ui-layer": ["app-tabs", "app-auth"],
+            "feature-layer": ["map", "calendar"],
+        }
+
+    def test_no_tags_block(self, tmp_path: Path) -> None:
+        """Missing tags: block returns empty dict."""
+        from beadloom.graph.rule_engine import load_rules_with_tags
+
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\n"
+            "rules:\n"
+            "  - name: test\n"
+            '    description: "Test"\n'
+            "    deny:\n"
+            "      from: { ref_id: a }\n"
+            "      to: { ref_id: b }\n"
+        )
+        rules, tag_assignments = load_rules_with_tags(rules_path)
+        assert tag_assignments == {}
+        assert len(rules) == 1
+
+
+# ---------------------------------------------------------------------------
+# TestTagsInServicesYml — tags loaded from graph YAML into extra JSON
+# ---------------------------------------------------------------------------
+
+
+class TestTagsInServicesYml:
+    """Tests for tags in services.yml stored in extra JSON column."""
+
+    def test_tags_stored_in_extra(self, db_conn: sqlite3.Connection, tmp_path: Path) -> None:
+        from beadloom.graph.loader import load_graph
+
+        graph_dir = tmp_path / "graph"
+        graph_dir.mkdir()
+        (graph_dir / "services.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: app-tabs\n"
+            "    kind: service\n"
+            "    summary: Tabs\n"
+            "    tags: [ui-layer, presentation]\n"
+        )
+        result = load_graph(graph_dir, db_conn)
+        assert result.nodes_loaded == 1
+
+        tags = get_node_tags(db_conn, "app-tabs")
+        assert tags == {"ui-layer", "presentation"}
+
+    def test_node_without_tags_has_empty_set(
+        self, db_conn: sqlite3.Connection, tmp_path: Path
+    ) -> None:
+        from beadloom.graph.loader import load_graph
+
+        graph_dir = tmp_path / "graph"
+        graph_dir.mkdir()
+        (graph_dir / "services.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: billing\n"
+            "    kind: domain\n"
+            "    summary: Billing\n"
+        )
+        load_graph(graph_dir, db_conn)
+        tags = get_node_tags(db_conn, "billing")
+        assert tags == set()
+
+
+# ---------------------------------------------------------------------------
+# TestTagAwareDenyEvaluation — deny rules using tag matchers
+# ---------------------------------------------------------------------------
+
+
+class TestTagAwareDenyEvaluation:
+    """Tests for deny rule evaluation with tag-based matchers."""
+
+    def test_deny_by_tag(self, db_with_data: sqlite3.Connection) -> None:
+        """Deny rule using tag matcher detects violations."""
+        # Add tags to nodes via extra JSON
+        db_with_data.execute(
+            "UPDATE nodes SET extra = ? WHERE ref_id = ?",
+            (json.dumps({"tags": ["critical"]}), "billing"),
+        )
+        db_with_data.execute(
+            "UPDATE nodes SET extra = ? WHERE ref_id = ?",
+            (json.dumps({"tags": ["auth-layer"]}), "auth"),
+        )
+        db_with_data.commit()
+
+        rules = [
+            DenyRule(
+                name="critical-no-auth",
+                description="Critical nodes must not import auth layer",
+                from_matcher=NodeMatcher(tag="critical"),
+                to_matcher=NodeMatcher(tag="auth-layer"),
+                unless_edge=(),
+            ),
+        ]
+        violations = evaluate_deny_rules(db_with_data, rules)
+        assert len(violations) == 1
+        assert violations[0].from_ref_id == "billing"
+        assert violations[0].to_ref_id == "auth"
+
+    def test_deny_by_tag_no_match(self, db_with_data: sqlite3.Connection) -> None:
+        """No violation when tag doesn't match."""
+        db_with_data.execute(
+            "UPDATE nodes SET extra = ? WHERE ref_id = ?",
+            (json.dumps({"tags": ["other"]}), "billing"),
+        )
+        db_with_data.execute(
+            "UPDATE nodes SET extra = ? WHERE ref_id = ?",
+            (json.dumps({"tags": ["auth-layer"]}), "auth"),
+        )
+        db_with_data.commit()
+
+        rules = [
+            DenyRule(
+                name="critical-no-auth",
+                description="Critical nodes must not import auth layer",
+                from_matcher=NodeMatcher(tag="critical"),
+                to_matcher=NodeMatcher(tag="auth-layer"),
+                unless_edge=(),
+            ),
+        ]
+        violations = evaluate_deny_rules(db_with_data, rules)
+        assert len(violations) == 0
+
+
+# ---------------------------------------------------------------------------
+# TestTagAwareRequireEvaluation — require rules using tag matchers
+# ---------------------------------------------------------------------------
+
+
+class TestTagAwareRequireEvaluation:
+    """Tests for require rule evaluation with tag-based matchers."""
+
+    def test_require_by_tag(self, db_with_data: sqlite3.Connection) -> None:
+        """Require rule using tag matcher on for_matcher works."""
+        db_with_data.execute(
+            "UPDATE nodes SET extra = ? WHERE ref_id = ?",
+            (json.dumps({"tags": ["backend"]}), "payments-svc"),
+        )
+        db_with_data.execute(
+            "UPDATE nodes SET extra = ? WHERE ref_id = ?",
+            (json.dumps({"tags": ["backend"]}), "users-svc"),
+        )
+        db_with_data.commit()
+
+        rules = [
+            RequireRule(
+                name="backend-needs-domain",
+                description="Backend-tagged nodes need a domain edge",
+                for_matcher=NodeMatcher(tag="backend"),
+                has_edge_to=NodeMatcher(kind="domain"),
+                edge_kind="part_of",
+            ),
+        ]
+        violations = evaluate_require_rules(db_with_data, rules)
+        # payments-svc has part_of -> billing, users-svc doesn't
+        assert len(violations) == 1
+        assert violations[0].from_ref_id == "users-svc"

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -22,7 +23,7 @@ VALID_EDGE_KINDS: frozenset[str] = frozenset(
     {"part_of", "depends_on", "uses", "implements", "touches_entity", "touches_code"}
 )
 VALID_RULE_SEVERITIES: frozenset[str] = frozenset({"error", "warn"})
-SUPPORTED_SCHEMA_VERSIONS: frozenset[int] = frozenset({1, 2})
+SUPPORTED_SCHEMA_VERSIONS: frozenset[int] = frozenset({1, 2, 3})
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -31,16 +32,28 @@ SUPPORTED_SCHEMA_VERSIONS: frozenset[int] = frozenset({1, 2})
 
 @dataclass(frozen=True)
 class NodeMatcher:
-    """Matches graph nodes by ref_id and/or kind."""
+    """Matches graph nodes by ref_id, kind, and/or tag."""
 
     ref_id: str | None = None
     kind: str | None = None
+    tag: str | None = None
 
-    def matches(self, node_ref_id: str, node_kind: str) -> bool:
-        """Return True if this matcher matches the given node."""
+    def matches(
+        self, node_ref_id: str, node_kind: str, *, tags: set[str] | None = None
+    ) -> bool:
+        """Return True if this matcher matches the given node.
+
+        The *tags* parameter is optional for backward compatibility.
+        When *tags* is ``None`` and ``self.tag`` is set, the tag check
+        is skipped (i.e. old callers that do not pass tags are not broken).
+        """
         if self.ref_id is not None and self.ref_id != node_ref_id:
             return False
-        return not (self.kind is not None and self.kind != node_kind)
+        if self.kind is not None and self.kind != node_kind:
+            return False
+        if self.tag is not None and tags is not None and self.tag not in tags:
+            return False
+        return True
 
 
 @dataclass(frozen=True)
@@ -67,7 +80,34 @@ class RequireRule:
     severity: str = "error"  # "error" | "warn"
 
 
-Rule = DenyRule | RequireRule
+@dataclass(frozen=True)
+class CycleRule:
+    """Forbid circular dependencies along specified edge kinds."""
+
+    name: str
+    description: str
+    edge_kind: str | tuple[str, ...]  # which edge kinds to traverse
+    max_depth: int = 10  # limit search depth
+    severity: str = "error"  # "error" | "warn"
+
+
+@dataclass(frozen=True)
+class ImportBoundaryRule:
+    """Forbid imports between file paths matched by glob patterns.
+
+    Unlike DenyRule (which matches graph nodes via NodeMatcher), this rule
+    operates directly on file paths using ``fnmatch`` glob patterns against
+    the ``code_imports`` table.
+    """
+
+    name: str
+    description: str
+    from_glob: str  # source file path glob (e.g. "components/features/map/**")
+    to_glob: str  # target path glob (matched against import_path after dot-to-slash)
+    severity: str = "error"  # "error" | "warn"
+
+
+Rule = DenyRule | RequireRule | CycleRule | ImportBoundaryRule
 
 
 @dataclass(frozen=True)
@@ -96,23 +136,25 @@ def _parse_node_matcher(
     """Parse a node matcher dict into a NodeMatcher, validating fields.
 
     When *allow_empty* is True an empty dict ``{}`` is accepted and produces
-    a ``NodeMatcher(ref_id=None, kind=None)`` that matches **any** node.
+    a ``NodeMatcher(ref_id=None, kind=None, tag=None)`` that matches **any** node.
     """
     ref_id = data.get("ref_id")
     kind = data.get("kind")
+    tag = data.get("tag")
 
-    if ref_id is None and kind is None and not allow_empty:
-        msg = f"{context}: node matcher must have at least one of 'ref_id' or 'kind'"
+    if ref_id is None and kind is None and tag is None and not allow_empty:
+        msg = f"{context}: node matcher must have at least one of 'ref_id', 'kind', or 'tag'"
         raise ValueError(msg)
 
     ref_id_str: str | None = str(ref_id) if ref_id is not None else None
     kind_str: str | None = str(kind) if kind is not None else None
+    tag_str: str | None = str(tag) if tag is not None else None
 
     if kind_str is not None and kind_str not in VALID_NODE_KINDS:
         msg = f"{context}: invalid kind '{kind_str}', must be one of {sorted(VALID_NODE_KINDS)}"
         raise ValueError(msg)
 
-    return NodeMatcher(ref_id=ref_id_str, kind=kind_str)
+    return NodeMatcher(ref_id=ref_id_str, kind=kind_str, tag=tag_str)
 
 
 def _parse_deny_rule(
@@ -199,6 +241,79 @@ def _parse_require_rule(
     )
 
 
+def _parse_cycle_rule(
+    name: str,
+    description: str,
+    cycle_data: dict[str, object],
+    *,
+    severity: str = "error",
+) -> CycleRule:
+    """Parse the 'forbid_cycles' block of a rule."""
+    edge_kind_raw = cycle_data.get("edge_kind")
+    if edge_kind_raw is None:
+        msg = f"Rule '{name}': forbid_cycles.edge_kind is required"
+        raise ValueError(msg)
+
+    # edge_kind can be a string or a list of strings
+    edge_kind: str | tuple[str, ...]
+    if isinstance(edge_kind_raw, list):
+        edge_kind_strs: list[str] = [str(ek) for ek in edge_kind_raw]
+        for ek in edge_kind_strs:
+            if ek not in VALID_EDGE_KINDS:
+                msg = (
+                    f"Rule '{name}': invalid edge kind '{ek}' in forbid_cycles.edge_kind, "
+                    f"must be one of {sorted(VALID_EDGE_KINDS)}"
+                )
+                raise ValueError(msg)
+        edge_kind = tuple(edge_kind_strs)
+    else:
+        edge_kind = str(edge_kind_raw)
+        if edge_kind not in VALID_EDGE_KINDS:
+            msg = (
+                f"Rule '{name}': invalid edge kind '{edge_kind}' in forbid_cycles.edge_kind, "
+                f"must be one of {sorted(VALID_EDGE_KINDS)}"
+            )
+            raise ValueError(msg)
+
+    max_depth_raw = cycle_data.get("max_depth", 10)
+    max_depth = int(max_depth_raw)  # type: ignore[arg-type]
+
+    return CycleRule(
+        name=name,
+        description=description,
+        edge_kind=edge_kind,
+        max_depth=max_depth,
+        severity=severity,
+    )
+
+
+def _parse_forbid_import_rule(
+    name: str,
+    description: str,
+    forbid_data: dict[str, object],
+    *,
+    severity: str = "error",
+) -> ImportBoundaryRule:
+    """Parse the 'forbid_import' block of a rule."""
+    from_glob = forbid_data.get("from")
+    to_glob = forbid_data.get("to")
+
+    if from_glob is None or not isinstance(from_glob, str) or not from_glob.strip():
+        msg = f"Rule '{name}': forbid_import.from must be a non-empty string"
+        raise ValueError(msg)
+    if to_glob is None or not isinstance(to_glob, str) or not to_glob.strip():
+        msg = f"Rule '{name}': forbid_import.to must be a non-empty string"
+        raise ValueError(msg)
+
+    return ImportBoundaryRule(
+        name=name,
+        description=description,
+        from_glob=from_glob,
+        to_glob=to_glob,
+        severity=severity,
+    )
+
+
 def load_rules(rules_path: Path) -> list[Rule]:
     """Parse rules.yml and return validated Rule objects.
 
@@ -259,10 +374,17 @@ def load_rules(rules_path: Path) -> list[Rule]:
 
         has_deny = "deny" in rule_data
         has_require = "require" in rule_data
+        has_forbid_cycles = "forbid_cycles" in rule_data
+        has_forbid_import = "forbid_import" in rule_data
 
-        if has_deny == has_require:
-            # Both present or neither present
-            msg = f"rules.yml: rule '{name}' must have exactly one of 'deny' or 'require'"
+        rule_type_count = sum(
+            [has_deny, has_require, has_forbid_cycles, has_forbid_import]
+        )
+        if rule_type_count != 1:
+            msg = (
+                f"rules.yml: rule '{name}' must have exactly one of "
+                f"'deny', 'require', 'forbid_cycles', or 'forbid_import'"
+            )
             raise ValueError(msg)
 
         if has_deny:
@@ -271,7 +393,7 @@ def load_rules(rules_path: Path) -> list[Rule]:
                 msg = f"Rule '{name}': 'deny' must be a mapping"
                 raise ValueError(msg)
             rules.append(_parse_deny_rule(name, description, deny_data, severity=severity))
-        else:
+        elif has_require:
             require_data = rule_data["require"]
             if not isinstance(require_data, dict):
                 msg = f"Rule '{name}': 'require' must be a mapping"
@@ -279,8 +401,60 @@ def load_rules(rules_path: Path) -> list[Rule]:
             rules.append(
                 _parse_require_rule(name, description, require_data, severity=severity)
             )
+        elif has_forbid_import:
+            forbid_import_data = rule_data["forbid_import"]
+            if not isinstance(forbid_import_data, dict):
+                msg = f"Rule '{name}': 'forbid_import' must be a mapping"
+                raise ValueError(msg)
+            rules.append(
+                _parse_forbid_import_rule(
+                    name, description, forbid_import_data, severity=severity
+                )
+            )
+        else:
+            cycle_data = rule_data["forbid_cycles"]
+            if not isinstance(cycle_data, dict):
+                msg = f"Rule '{name}': 'forbid_cycles' must be a mapping"
+                raise ValueError(msg)
+            rules.append(
+                _parse_cycle_rule(name, description, cycle_data, severity=severity)
+            )
 
     return rules
+
+
+def load_rules_with_tags(
+    rules_path: Path,
+) -> tuple[list[Rule], dict[str, list[str]]]:
+    """Parse rules.yml returning both rules and tag assignments.
+
+    The optional top-level ``tags:`` block (schema v3) maps tag names to
+    lists of ref_ids for bulk tag assignment, e.g.::
+
+        tags:
+          ui-layer: [app-tabs, app-auth]
+          feature-layer: [map, calendar]
+
+    Returns a ``(rules, tag_assignments)`` tuple.  *tag_assignments* is
+    an empty dict when no ``tags:`` block is present.
+    """
+    with rules_path.open("r", encoding="utf-8") as fh:
+        data = yaml.safe_load(fh)
+
+    if not isinstance(data, dict):
+        msg = "rules.yml must be a YAML mapping"
+        raise ValueError(msg)
+
+    # Extract tag assignments before delegating to load_rules
+    tags_block = data.get("tags", {})
+    tag_assignments: dict[str, list[str]] = {}
+    if isinstance(tags_block, dict):
+        for tag_name, ref_ids in tags_block.items():
+            if isinstance(ref_ids, list):
+                tag_assignments[str(tag_name)] = [str(r) for r in ref_ids]
+
+    rules = load_rules(rules_path)
+    return rules, tag_assignments
 
 
 # ---------------------------------------------------------------------------
@@ -398,12 +572,28 @@ def evaluate_deny_rules(conn: sqlite3.Connection, rules: list[DenyRule]) -> list
 
     For each import with a resolved_ref_id, determines the source node from
     code_symbols annotations and checks whether the import violates any deny
-    rule.
+    rule.  Tag-based matchers are supported: tags are lazily loaded from the
+    node ``extra`` JSON column and cached per evaluation run.
     """
     if not rules:
         return []
 
+    from beadloom.graph.loader import get_node_tags
+
     violations: list[Violation] = []
+
+    # Cache for node tags to avoid repeated DB lookups
+    tags_cache: dict[str, set[str]] = {}
+
+    def _cached_tags(ref_id: str) -> set[str]:
+        if ref_id not in tags_cache:
+            tags_cache[ref_id] = get_node_tags(conn, ref_id)
+        return tags_cache[ref_id]
+
+    # Check whether any rule actually uses tag-based matching
+    any_tag_rule = any(
+        r.from_matcher.tag is not None or r.to_matcher.tag is not None for r in rules
+    )
 
     # Fetch all code_imports with resolved ref_ids
     imports = conn.execute(
@@ -432,10 +622,17 @@ def evaluate_deny_rules(conn: sqlite3.Connection, rules: list[DenyRule]) -> list
         source_id, source_kind = source_node
         target_id, target_kind = target_node
 
+        # Lazily load tags only when needed
+        source_tags: set[str] | None = None
+        target_tags: set[str] | None = None
+        if any_tag_rule:
+            source_tags = _cached_tags(source_id)
+            target_tags = _cached_tags(target_id)
+
         for rule in rules:
-            if not rule.from_matcher.matches(source_id, source_kind):
+            if not rule.from_matcher.matches(source_id, source_kind, tags=source_tags):
                 continue
-            if not rule.to_matcher.matches(target_id, target_kind):
+            if not rule.to_matcher.matches(target_id, target_kind, tags=target_tags):
                 continue
 
             # Check exemption via unless_edge
@@ -474,12 +671,27 @@ def evaluate_require_rules(conn: sqlite3.Connection, rules: list[RequireRule]) -
 
     For each node matching a rule's ``for_matcher``, verifies that at least
     one outgoing edge reaches a node matching ``has_edge_to`` (optionally
-    restricted by ``edge_kind``).
+    restricted by ``edge_kind``).  Tag-based matchers are supported.
     """
     if not rules:
         return []
 
+    from beadloom.graph.loader import get_node_tags
+
     violations: list[Violation] = []
+
+    # Cache for node tags to avoid repeated DB lookups
+    tags_cache: dict[str, set[str]] = {}
+
+    def _cached_tags(ref_id: str) -> set[str]:
+        if ref_id not in tags_cache:
+            tags_cache[ref_id] = get_node_tags(conn, ref_id)
+        return tags_cache[ref_id]
+
+    # Check whether any rule actually uses tag-based matching
+    any_tag_rule = any(
+        r.for_matcher.tag is not None or r.has_edge_to.tag is not None for r in rules
+    )
 
     # Fetch all nodes once
     all_nodes = conn.execute("SELECT ref_id, kind FROM nodes").fetchall()
@@ -488,7 +700,13 @@ def evaluate_require_rules(conn: sqlite3.Connection, rules: list[RequireRule]) -
         for node_row in all_nodes:
             node_ref_id = str(node_row[0])
             node_kind = str(node_row[1])
-            if not rule.for_matcher.matches(node_ref_id, node_kind):
+
+            # Load tags for for_matcher if needed
+            node_tags: set[str] | None = None
+            if any_tag_rule:
+                node_tags = _cached_tags(node_ref_id)
+
+            if not rule.for_matcher.matches(node_ref_id, node_kind, tags=node_tags):
                 continue
 
             # Check outgoing edges from this node
@@ -511,7 +729,13 @@ def evaluate_require_rules(conn: sqlite3.Connection, rules: list[RequireRule]) -
                     continue
 
                 target_id, target_kind = target
-                if rule.has_edge_to.matches(target_id, target_kind):
+
+                # Load tags for has_edge_to if needed
+                target_tags: set[str] | None = None
+                if any_tag_rule:
+                    target_tags = _cached_tags(target_id)
+
+                if rule.has_edge_to.matches(target_id, target_kind, tags=target_tags):
                     has_match = True
                     break
 
@@ -537,23 +761,206 @@ def evaluate_require_rules(conn: sqlite3.Connection, rules: list[RequireRule]) -
 
 
 # ---------------------------------------------------------------------------
+# Cycle rule evaluation
+# ---------------------------------------------------------------------------
+
+
+def _normalize_cycle(path: list[str]) -> tuple[str, ...]:
+    """Normalize a cycle path so that the smallest element is first.
+
+    This ensures that cycle A->B->C->A is the same as B->C->A->B.
+    The path should NOT include the repeated start node at the end.
+    """
+    if not path:
+        return ()
+    min_idx = path.index(min(path))
+    rotated = path[min_idx:] + path[:min_idx]
+    return tuple(rotated)
+
+
+def _build_adjacency(
+    conn: sqlite3.Connection,
+    edge_kinds: tuple[str, ...],
+) -> dict[str, list[str]]:
+    """Build an adjacency list from the edges table for given edge kinds."""
+    placeholders = ", ".join("?" for _ in edge_kinds)
+    query = (
+        f"SELECT src_ref_id, dst_ref_id FROM edges "  # noqa: S608
+        f"WHERE kind IN ({placeholders})"
+    )
+    rows = conn.execute(query, edge_kinds).fetchall()
+    adj: dict[str, list[str]] = {}
+    for row in rows:
+        src = str(row[0])
+        dst = str(row[1])
+        adj.setdefault(src, []).append(dst)
+    return adj
+
+
+def evaluate_cycle_rules(conn: sqlite3.Connection, rules: list[CycleRule]) -> list[Violation]:
+    """Evaluate cycle rules against the edges table using iterative DFS.
+
+    For each rule, walks outgoing edges of the specified kind(s) looking for
+    cycles.  Reports each unique cycle once with the full path in the message.
+    """
+    if not rules:
+        return []
+
+    violations: list[Violation] = []
+
+    for rule in rules:
+        # Normalize edge_kind to a tuple
+        if isinstance(rule.edge_kind, str):
+            edge_kinds: tuple[str, ...] = (rule.edge_kind,)
+        else:
+            edge_kinds = rule.edge_kind
+
+        # Build adjacency list once per rule
+        adj = _build_adjacency(conn, edge_kinds)
+
+        # Collect all nodes that participate in edges
+        all_nodes: set[str] = set(adj.keys())
+        for neighbors in adj.values():
+            all_nodes.update(neighbors)
+
+        # Track found cycles (normalized) to avoid duplicates
+        seen_cycles: set[tuple[str, ...]] = set()
+
+        # Iterative DFS from each node
+        for start_node in sorted(all_nodes):
+            # Stack entries: (current_node, path_from_start)
+            stack: list[tuple[str, list[str]]] = [(start_node, [start_node])]
+
+            while stack:
+                current, path = stack.pop()
+
+                neighbors = adj.get(current, [])
+                for neighbor in neighbors:
+                    if neighbor in path:
+                        # Found a cycle — extract the cycle portion
+                        cycle_start_idx = path.index(neighbor)
+                        cycle_path = path[cycle_start_idx:]
+
+                        normalized = _normalize_cycle(cycle_path)
+                        if normalized not in seen_cycles:
+                            seen_cycles.add(normalized)
+                            # Format: A -> B -> C -> A
+                            display_path = " \u2192 ".join(cycle_path + [neighbor])
+                            violations.append(
+                                Violation(
+                                    rule_name=rule.name,
+                                    rule_description=rule.description,
+                                    rule_type="cycle",
+                                    severity=rule.severity,
+                                    file_path=None,
+                                    line_number=None,
+                                    from_ref_id=cycle_path[0],
+                                    to_ref_id=cycle_path[-1],
+                                    message=(
+                                        f"Circular dependency detected: {display_path} "
+                                        f"(rule '{rule.name}')"
+                                    ),
+                                )
+                            )
+                    elif len(path) < rule.max_depth:
+                        stack.append((neighbor, [*path, neighbor]))
+
+    return violations
+
+
+# ---------------------------------------------------------------------------
+# Import boundary rule evaluation
+# ---------------------------------------------------------------------------
+
+
+def _import_path_to_file_path(import_path: str) -> str:
+    """Convert a dotted import path to a slash-separated file path for glob matching.
+
+    Example: ``components.features.calendar.events`` becomes
+    ``components/features/calendar/events``.
+    """
+    return import_path.replace(".", "/")
+
+
+def evaluate_import_boundary_rules(
+    conn: sqlite3.Connection, rules: list[ImportBoundaryRule]
+) -> list[Violation]:
+    """Evaluate import boundary rules against the code_imports table.
+
+    For each import, checks whether the source file matches ``from_glob``
+    and the import target (after dot-to-slash conversion) matches ``to_glob``
+    using ``fnmatch.fnmatch``.  If both match, a violation is produced.
+    """
+    if not rules:
+        return []
+
+    violations: list[Violation] = []
+
+    # Fetch all code_imports (check ALL imports, not just resolved ones)
+    imports = conn.execute(
+        "SELECT file_path, line_number, import_path FROM code_imports"
+    ).fetchall()
+
+    for imp in imports:
+        file_path = str(imp[0])
+        line_number = int(imp[1])
+        import_path = str(imp[2])
+        target_as_path = _import_path_to_file_path(import_path)
+
+        for rule in rules:
+            if not fnmatch.fnmatch(file_path, rule.from_glob):
+                continue
+            if not fnmatch.fnmatch(target_as_path, rule.to_glob):
+                continue
+
+            violations.append(
+                Violation(
+                    rule_name=rule.name,
+                    rule_description=rule.description,
+                    rule_type="forbid_import",
+                    severity=rule.severity,
+                    file_path=file_path,
+                    line_number=line_number,
+                    from_ref_id=None,
+                    to_ref_id=None,
+                    message=(
+                        f"File '{file_path}' imports '{import_path}' "
+                        f"which violates boundary rule '{rule.name}': "
+                        f"{rule.description}"
+                    ),
+                )
+            )
+
+    return violations
+
+
+# ---------------------------------------------------------------------------
 # Combined evaluation
 # ---------------------------------------------------------------------------
 
 
 def evaluate_all(conn: sqlite3.Connection, rules: list[Rule]) -> list[Violation]:
-    """Evaluate all rules (deny + require) and return sorted violations."""
+    """Evaluate all rules (deny + require + cycle + import boundary) and return sorted violations."""
     deny_rules: list[DenyRule] = []
     require_rules: list[RequireRule] = []
+    cycle_rules: list[CycleRule] = []
+    import_boundary_rules: list[ImportBoundaryRule] = []
 
     for rule in rules:
         if isinstance(rule, DenyRule):
             deny_rules.append(rule)
         elif isinstance(rule, RequireRule):
             require_rules.append(rule)
+        elif isinstance(rule, CycleRule):
+            cycle_rules.append(rule)
+        elif isinstance(rule, ImportBoundaryRule):
+            import_boundary_rules.append(rule)
 
-    violations = evaluate_deny_rules(conn, deny_rules) + evaluate_require_rules(
-        conn, require_rules
+    violations = (
+        evaluate_deny_rules(conn, deny_rules)
+        + evaluate_require_rules(conn, require_rules)
+        + evaluate_cycle_rules(conn, cycle_rules)
+        + evaluate_import_boundary_rules(conn, import_boundary_rules)
     )
 
     # Sort by rule_name, then file_path (None sorts first)
