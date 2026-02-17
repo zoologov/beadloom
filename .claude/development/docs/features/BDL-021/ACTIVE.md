@@ -1,13 +1,13 @@
 # ACTIVE: BDL-021 — v1.7.0: AaC Rules v2, Init Quality, Architecture Intelligence
 
 > **Last updated:** 2026-02-17
-> **Phase:** Development
+> **Phase:** Development — All 14 beads DONE
 
 ---
 
 ## Current Wave
 
-**Wave:** 2 — COMPLETED (5 of 6 beads done, 1 failed)
+**Wave:** 3 — COMPLETED (4/4 beads done)
 
 ## Wave 1 Results (5/5 done)
 
@@ -28,7 +28,16 @@
 | BEAD-08 | Non-interactive init | Done | 10+ |
 | BEAD-12 | Architecture snapshots | Done | 30 |
 | BEAD-14 | Enhanced why --reverse | Done | 12+ |
-| BEAD-10 | Docs generate in init | **FAILED (403)** | 0 |
+| BEAD-10 | Docs generate in init | Done (Wave 3) | 7 |
+
+## Wave 3 Results (4/4 done)
+
+| Bead | Goal | Status | Tests |
+|------|------|--------|-------|
+| BEAD-10 | Docs generate in init (retry) | Done (already implemented in Wave 2) | 7 |
+| BEAD-06 | CardinalityRule | Done | 13 |
+| BEAD-11 | Doc auto-linking | Done | 17 |
+| BEAD-13 | Enhanced diff + snapshot integration | Done | 24 |
 
 ## Progress
 
@@ -40,21 +49,17 @@
 - [x] 14 beads created with dependencies
 - [x] Wave 1 — Foundation (5 beads, 89 tests)
 - [x] Wave 2 — Dependent rules + init (5/6 beads, ~81 tests)
-- [ ] Wave 3 — BEAD-06, BEAD-10 (retry), BEAD-11, BEAD-13
-- [ ] Wave 4 — Validation + version bump
+- [x] Wave 3 — Final 4 beads (4/4 beads, 54 tests)
+- [ ] Wave 4 — Stale docs update, validation, version bump
 
-## Remaining Beads
+## Remaining Work
 
-| Bead | Status | Details |
-|------|--------|---------|
-| BEAD-06 | Open | Cardinality/complexity rules |
-| BEAD-10 | Open | Docs generate in init (retry needed) |
-| BEAD-11 | Open | Doc auto-linking |
-| BEAD-13 | Ready | Enhanced diff (BEAD-12 done, unblocked) |
+- Stale docs update: 4 domains (context-oracle, graph, onboarding, cli)
+- Version bump to 1.7.0
+- Total: 1657 tests passing, 0 lint violations
 
 ## Notes
 
 - Wave 2: 6 agents crashed iTerm (190GB RAM). Limit to 3-4 agents max.
-- 3 agents completed code but didn't close beads — manually verified and closed.
-- BEAD-10 hit 403 API error — no code written, needs retry.
-- Total: 1603 tests passing, 0 lint violations.
+- Wave 3: BEAD-06 and BEAD-13 agents hit permissions/rate-limit — implemented directly by coordinator.
+- BEAD-10 was already implemented in Wave 2 by BEAD-08 agent (interactive_init already had doc generation).

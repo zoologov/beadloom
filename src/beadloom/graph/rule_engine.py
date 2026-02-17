@@ -38,9 +38,7 @@ class NodeMatcher:
     kind: str | None = None
     tag: str | None = None
 
-    def matches(
-        self, node_ref_id: str, node_kind: str, *, tags: set[str] | None = None
-    ) -> bool:
+    def matches(self, node_ref_id: str, node_kind: str, *, tags: set[str] | None = None) -> bool:
         """Return True if this matcher matches the given node.
 
         The *tags* parameter is optional for backward compatibility.
@@ -151,7 +149,33 @@ class LayerRule:
     severity: str = "error"  # "error" | "warn"
 
 
-Rule = DenyRule | RequireRule | CycleRule | ImportBoundaryRule | ForbidEdgeRule | LayerRule
+@dataclass(frozen=True)
+class CardinalityRule:
+    """Detect architectural smells via node-level cardinality checks.
+
+    For each node matching ``for_matcher``, counts symbols, files, and/or
+    doc-coverage under the node's ``source`` prefix.  Produces a violation
+    when any threshold is exceeded.
+    """
+
+    name: str
+    description: str
+    for_matcher: NodeMatcher
+    max_symbols: int | None = None
+    max_files: int | None = None
+    min_doc_coverage: float | None = None
+    severity: str = "warn"
+
+
+Rule = (
+    DenyRule
+    | RequireRule
+    | CycleRule
+    | ImportBoundaryRule
+    | ForbidEdgeRule
+    | LayerRule
+    | CardinalityRule
+)
 
 
 @dataclass(frozen=True)
@@ -160,7 +184,7 @@ class Violation:
 
     rule_name: str
     rule_description: str
-    rule_type: str  # "deny" | "require"
+    rule_type: str  # "deny" | "require" | "cardinality" | ...
     severity: str  # "error" | "warn"
     file_path: str | None  # source file (for deny rules)
     line_number: int | None  # line number (for deny rules)
@@ -477,6 +501,74 @@ def _parse_layer_rule(
     )
 
 
+def _parse_check_rule(
+    name: str,
+    description: str,
+    check_data: dict[str, object],
+    *,
+    severity: str = "warn",
+) -> CardinalityRule:
+    """Parse the 'check' block of a rule into a :class:`CardinalityRule`.
+
+    YAML example::
+
+        - name: domain-size
+          check:
+            for: { kind: domain }
+            max_symbols: 200
+            max_files: 30
+            min_doc_coverage: 0.5
+          severity: warn
+    """
+    for_data = check_data.get("for")
+    if not isinstance(for_data, dict):
+        msg = f"Rule '{name}': check.for must be a mapping"
+        raise ValueError(msg)
+
+    for_matcher = _parse_node_matcher(for_data, f"Rule '{name}' check.for")
+
+    max_symbols_raw = check_data.get("max_symbols")
+    max_symbols: int | None = None
+    if max_symbols_raw is not None:
+        max_symbols = int(max_symbols_raw)  # type: ignore[arg-type]
+        if max_symbols < 0:
+            msg = f"Rule '{name}': check.max_symbols must be non-negative"
+            raise ValueError(msg)
+
+    max_files_raw = check_data.get("max_files")
+    max_files: int | None = None
+    if max_files_raw is not None:
+        max_files = int(max_files_raw)  # type: ignore[arg-type]
+        if max_files < 0:
+            msg = f"Rule '{name}': check.max_files must be non-negative"
+            raise ValueError(msg)
+
+    min_doc_coverage_raw = check_data.get("min_doc_coverage")
+    min_doc_coverage: float | None = None
+    if min_doc_coverage_raw is not None:
+        min_doc_coverage = float(min_doc_coverage_raw)  # type: ignore[arg-type]
+        if not (0.0 <= min_doc_coverage <= 1.0):
+            msg = f"Rule '{name}': check.min_doc_coverage must be between 0.0 and 1.0"
+            raise ValueError(msg)
+
+    if max_symbols is None and max_files is None and min_doc_coverage is None:
+        msg = (
+            f"Rule '{name}': check must specify at least one of "
+            f"'max_symbols', 'max_files', or 'min_doc_coverage'"
+        )
+        raise ValueError(msg)
+
+    return CardinalityRule(
+        name=name,
+        description=description,
+        for_matcher=for_matcher,
+        max_symbols=max_symbols,
+        max_files=max_files,
+        min_doc_coverage=min_doc_coverage,
+        severity=severity,
+    )
+
+
 def load_rules(rules_path: Path) -> list[Rule]:
     """Parse rules.yml and return validated Rule objects.
 
@@ -541,14 +633,24 @@ def load_rules(rules_path: Path) -> list[Rule]:
         has_forbid_import = "forbid_import" in rule_data
         has_forbid = "forbid" in rule_data
         has_layers = "layers" in rule_data
+        has_check = "check" in rule_data
 
         rule_type_count = sum(
-            [has_deny, has_require, has_forbid_cycles, has_forbid_import, has_forbid, has_layers]
+            [
+                has_deny,
+                has_require,
+                has_forbid_cycles,
+                has_forbid_import,
+                has_forbid,
+                has_layers,
+                has_check,
+            ]
         )
         if rule_type_count != 1:
             msg = (
                 f"rules.yml: rule '{name}' must have exactly one of "
-                f"'deny', 'require', 'forbid_cycles', 'forbid_import', 'forbid', or 'layers'"
+                f"'deny', 'require', 'forbid_cycles', 'forbid_import', "
+                f"'forbid', 'layers', or 'check'"
             )
             raise ValueError(msg)
 
@@ -563,39 +665,35 @@ def load_rules(rules_path: Path) -> list[Rule]:
             if not isinstance(require_data, dict):
                 msg = f"Rule '{name}': 'require' must be a mapping"
                 raise ValueError(msg)
-            rules.append(
-                _parse_require_rule(name, description, require_data, severity=severity)
-            )
+            rules.append(_parse_require_rule(name, description, require_data, severity=severity))
         elif has_forbid_import:
             forbid_import_data = rule_data["forbid_import"]
             if not isinstance(forbid_import_data, dict):
                 msg = f"Rule '{name}': 'forbid_import' must be a mapping"
                 raise ValueError(msg)
             rules.append(
-                _parse_forbid_import_rule(
-                    name, description, forbid_import_data, severity=severity
-                )
+                _parse_forbid_import_rule(name, description, forbid_import_data, severity=severity)
             )
         elif has_forbid:
             forbid_data = rule_data["forbid"]
             if not isinstance(forbid_data, dict):
                 msg = f"Rule '{name}': 'forbid' must be a mapping"
                 raise ValueError(msg)
-            rules.append(
-                _parse_forbid_rule(name, description, forbid_data, severity=severity)
-            )
+            rules.append(_parse_forbid_rule(name, description, forbid_data, severity=severity))
         elif has_layers:
-            rules.append(
-                _parse_layer_rule(name, description, rule_data, severity=severity)
-            )
+            rules.append(_parse_layer_rule(name, description, rule_data, severity=severity))
+        elif has_check:
+            check_data = rule_data["check"]
+            if not isinstance(check_data, dict):
+                msg = f"Rule '{name}': 'check' must be a mapping"
+                raise ValueError(msg)
+            rules.append(_parse_check_rule(name, description, check_data, severity=severity))
         else:
             cycle_data = rule_data["forbid_cycles"]
             if not isinstance(cycle_data, dict):
                 msg = f"Rule '{name}': 'forbid_cycles' must be a mapping"
                 raise ValueError(msg)
-            rules.append(
-                _parse_cycle_rule(name, description, cycle_data, severity=severity)
-            )
+            rules.append(_parse_cycle_rule(name, description, cycle_data, severity=severity))
 
     return rules
 
@@ -665,6 +763,9 @@ def validate_rules(rules: list[Rule], conn: sqlite3.Connection) -> list[str]:
                 ref_ids.add(rule.from_matcher.ref_id)
             if rule.to_matcher.ref_id is not None:
                 ref_ids.add(rule.to_matcher.ref_id)
+        elif isinstance(rule, CardinalityRule):
+            if rule.for_matcher.ref_id is not None:
+                ref_ids.add(rule.for_matcher.ref_id)
 
     # Check each against the database
     for ref_id in sorted(ref_ids):
@@ -1019,7 +1120,7 @@ def evaluate_cycle_rules(conn: sqlite3.Connection, rules: list[CycleRule]) -> li
                 neighbors = adj.get(current, [])
                 for neighbor in neighbors:
                     if neighbor in path:
-                        # Found a cycle — extract the cycle portion
+                        # Found a cycle -- extract the cycle portion
                         cycle_start_idx = path.index(neighbor)
                         cycle_path = path[cycle_start_idx:]
 
@@ -1153,9 +1254,7 @@ def evaluate_forbid_edge_rules(
     )
 
     # Fetch all edges once
-    all_edges = conn.execute(
-        "SELECT src_ref_id, dst_ref_id, kind FROM edges"
-    ).fetchall()
+    all_edges = conn.execute("SELECT src_ref_id, dst_ref_id, kind FROM edges").fetchall()
 
     for edge_row in all_edges:
         src_ref_id = str(edge_row[0])
@@ -1214,9 +1313,7 @@ def evaluate_forbid_edge_rules(
 # ---------------------------------------------------------------------------
 
 
-def evaluate_layer_rules(
-    conn: sqlite3.Connection, rules: list[LayerRule]
-) -> list[Violation]:
+def evaluate_layer_rules(conn: sqlite3.Connection, rules: list[LayerRule]) -> list[Violation]:
     """Evaluate layer rules against the edges table.
 
     For ``enforce: top-down``, layers are ordered from top (index 0) to
@@ -1282,7 +1379,7 @@ def evaluate_layer_rules(
             if src_layer_idx is None or dst_layer_idx is None:
                 continue
 
-            # Same layer — always OK
+            # Same layer -- always OK
             if src_layer_idx == dst_layer_idx:
                 continue
 
@@ -1340,6 +1437,159 @@ def evaluate_layer_rules(
 
 
 # ---------------------------------------------------------------------------
+# Cardinality rule evaluation
+# ---------------------------------------------------------------------------
+
+
+def evaluate_cardinality_rules(
+    conn: sqlite3.Connection, rules: list[CardinalityRule]
+) -> list[Violation]:
+    """Evaluate cardinality rules against nodes, code_symbols, file_index, and sync_state.
+
+    For each node matching a rule's ``for_matcher``, counts:
+    - **symbols**: rows in ``code_symbols`` whose ``file_path`` starts with the
+      node's ``source`` prefix.
+    - **files**: rows in ``file_index`` whose ``path`` starts with the node's
+      ``source`` prefix.
+    - **doc coverage**: ratio of ``sync_state`` rows with ``status = 'ok'``
+      to total ``sync_state`` rows for the node's ``ref_id``.
+
+    A violation is produced when any threshold is exceeded (or not met, for
+    ``min_doc_coverage``).
+    """
+    if not rules:
+        return []
+
+    from beadloom.graph.loader import get_node_tags
+
+    violations: list[Violation] = []
+
+    # Cache for node tags
+    tags_cache: dict[str, set[str]] = {}
+
+    def _cached_tags(ref_id: str) -> set[str]:
+        if ref_id not in tags_cache:
+            tags_cache[ref_id] = get_node_tags(conn, ref_id)
+        return tags_cache[ref_id]
+
+    # Check whether any rule uses tag-based matching
+    any_tag_rule = any(r.for_matcher.tag is not None for r in rules)
+
+    # Fetch all nodes once (ref_id, kind, source)
+    all_nodes = conn.execute("SELECT ref_id, kind, source FROM nodes").fetchall()
+
+    for rule in rules:
+        for node_row in all_nodes:
+            node_ref_id = str(node_row[0])
+            node_kind = str(node_row[1])
+            node_source: str | None = str(node_row[2]) if node_row[2] is not None else None
+
+            # Load tags if needed
+            node_tags: set[str] | None = None
+            if any_tag_rule:
+                node_tags = _cached_tags(node_ref_id)
+
+            if not rule.for_matcher.matches(node_ref_id, node_kind, tags=node_tags):
+                continue
+
+            # --- max_symbols check ---
+            if rule.max_symbols is not None and node_source is not None:
+                prefix = node_source.rstrip("/") + "/"
+                row = conn.execute(
+                    "SELECT COUNT(*) FROM code_symbols WHERE file_path LIKE ?",
+                    (prefix + "%",),
+                ).fetchone()
+                symbol_count = int(row[0]) if row is not None else 0
+
+                if symbol_count > rule.max_symbols:
+                    violations.append(
+                        Violation(
+                            rule_name=rule.name,
+                            rule_description=rule.description,
+                            rule_type="cardinality",
+                            severity=rule.severity,
+                            file_path=None,
+                            line_number=None,
+                            from_ref_id=node_ref_id,
+                            to_ref_id=None,
+                            message=(
+                                f"Node '{node_ref_id}' has {symbol_count} symbols "
+                                f"(max {rule.max_symbols}): "
+                                f"rule '{rule.name}'"
+                            ),
+                        )
+                    )
+
+            # --- max_files check ---
+            if rule.max_files is not None and node_source is not None:
+                prefix = node_source.rstrip("/") + "/"
+                row = conn.execute(
+                    "SELECT COUNT(*) FROM file_index WHERE path LIKE ?",
+                    (prefix + "%",),
+                ).fetchone()
+                file_count = int(row[0]) if row is not None else 0
+
+                if file_count > rule.max_files:
+                    violations.append(
+                        Violation(
+                            rule_name=rule.name,
+                            rule_description=rule.description,
+                            rule_type="cardinality",
+                            severity=rule.severity,
+                            file_path=None,
+                            line_number=None,
+                            from_ref_id=node_ref_id,
+                            to_ref_id=None,
+                            message=(
+                                f"Node '{node_ref_id}' has {file_count} files "
+                                f"(max {rule.max_files}): "
+                                f"rule '{rule.name}'"
+                            ),
+                        )
+                    )
+
+            # --- min_doc_coverage check ---
+            if rule.min_doc_coverage is not None:
+                total_row = conn.execute(
+                    "SELECT COUNT(*) FROM sync_state WHERE ref_id = ?",
+                    (node_ref_id,),
+                ).fetchone()
+                total = int(total_row[0]) if total_row is not None else 0
+
+                if total > 0:
+                    ok_row = conn.execute(
+                        "SELECT COUNT(*) FROM sync_state WHERE ref_id = ? AND status = 'ok'",
+                        (node_ref_id,),
+                    ).fetchone()
+                    ok_count = int(ok_row[0]) if ok_row is not None else 0
+                    coverage = ok_count / total
+                else:
+                    coverage = 0.0
+
+                if coverage < rule.min_doc_coverage:
+                    violations.append(
+                        Violation(
+                            rule_name=rule.name,
+                            rule_description=rule.description,
+                            rule_type="cardinality",
+                            severity=rule.severity,
+                            file_path=None,
+                            line_number=None,
+                            from_ref_id=node_ref_id,
+                            to_ref_id=None,
+                            message=(
+                                f"Node '{node_ref_id}' has doc coverage "
+                                f"{coverage:.0%} "
+                                f"(min {rule.min_doc_coverage:.0%}): "
+                                f"rule '{rule.name}'"
+                            ),
+                        )
+                    )
+
+    return violations
+
+
+# ---------------------------------------------------------------------------
 # Combined evaluation
 # ---------------------------------------------------------------------------
 
@@ -1347,7 +1597,8 @@ def evaluate_layer_rules(
 def evaluate_all(conn: sqlite3.Connection, rules: list[Rule]) -> list[Violation]:
     """Evaluate all rules and return sorted violations.
 
-    Supports deny, require, cycle, import boundary, forbid edge, and layer rules.
+    Supports deny, require, cycle, import boundary, forbid edge, layer,
+    and cardinality rules.
     """
     deny_rules: list[DenyRule] = []
     require_rules: list[RequireRule] = []
@@ -1355,6 +1606,7 @@ def evaluate_all(conn: sqlite3.Connection, rules: list[Rule]) -> list[Violation]
     import_boundary_rules: list[ImportBoundaryRule] = []
     forbid_edge_rules: list[ForbidEdgeRule] = []
     layer_rules: list[LayerRule] = []
+    cardinality_rules: list[CardinalityRule] = []
 
     for rule in rules:
         if isinstance(rule, DenyRule):
@@ -1369,6 +1621,8 @@ def evaluate_all(conn: sqlite3.Connection, rules: list[Rule]) -> list[Violation]
             forbid_edge_rules.append(rule)
         elif isinstance(rule, LayerRule):
             layer_rules.append(rule)
+        elif isinstance(rule, CardinalityRule):
+            cardinality_rules.append(rule)
 
     violations = (
         evaluate_deny_rules(conn, deny_rules)
@@ -1377,6 +1631,7 @@ def evaluate_all(conn: sqlite3.Connection, rules: list[Rule]) -> list[Violation]
         + evaluate_import_boundary_rules(conn, import_boundary_rules)
         + evaluate_forbid_edge_rules(conn, forbid_edge_rules)
         + evaluate_layer_rules(conn, layer_rules)
+        + evaluate_cardinality_rules(conn, cardinality_rules)
     )
 
     # Sort by rule_name, then file_path (None sorts first)

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING
@@ -11,6 +12,7 @@ from typing import TYPE_CHECKING
 import yaml
 
 if TYPE_CHECKING:
+    import sqlite3
     from pathlib import Path
 
     from rich.console import Console
@@ -25,6 +27,12 @@ class NodeChange:
     change_type: str  # "added" | "removed" | "changed"
     old_summary: str | None = None  # for "changed"
     new_summary: str | None = None  # for "changed"
+    old_source: str | None = None
+    new_source: str | None = None
+    old_tags: tuple[str, ...] = ()
+    new_tags: tuple[str, ...] = ()
+    symbols_added: int = 0
+    symbols_removed: int = 0
 
 
 @dataclass(frozen=True)
@@ -80,25 +88,29 @@ def _read_yaml_at_ref(project_root: Path, rel_path: str, ref: str) -> str | None
 
 def _parse_yaml_content(
     content: str,
-) -> tuple[dict[str, dict[str, str]], set[tuple[str, str, str]]]:
+) -> tuple[dict[str, dict[str, object]], set[tuple[str, str, str]]]:
     """Parse YAML content into nodes dict and edges set.
 
     Returns:
         A tuple of (nodes_dict, edges_set) where:
-        - nodes_dict maps ref_id -> {"kind": ..., "summary": ...}
+        - nodes_dict maps ref_id -> {"kind": ..., "summary": ..., "source": ..., "tags": ...}
         - edges_set contains (src, dst, kind) tuples
     """
     data = yaml.safe_load(content)
     if data is None:
         return {}, set()
 
-    nodes_dict: dict[str, dict[str, str]] = {}
+    nodes_dict: dict[str, dict[str, object]] = {}
     for node in data.get("nodes") or []:
         ref_id = node.get("ref_id", "")
         if ref_id:
+            raw_tags = node.get("tags", [])
+            tags = tuple(sorted(raw_tags)) if isinstance(raw_tags, list) else ()
             nodes_dict[ref_id] = {
                 "kind": node.get("kind", ""),
                 "summary": node.get("summary", ""),
+                "source": node.get("source", ""),
+                "tags": tags,
             }
 
     edges_set: set[tuple[str, str, str]] = set()
@@ -154,7 +166,7 @@ def compute_diff(project_root: Path, since: str = "HEAD") -> GraphDiff:
     graph_dir = project_root / ".beadloom" / "_graph"
 
     # --- Current state: read from disk ---
-    current_nodes: dict[str, dict[str, str]] = {}
+    current_nodes: dict[str, dict[str, object]] = {}
     current_edges: set[tuple[str, str, str]] = set()
 
     current_files: set[str] = set()
@@ -168,7 +180,7 @@ def compute_diff(project_root: Path, since: str = "HEAD") -> GraphDiff:
             current_edges.update(edges)
 
     # --- Previous state: read from git ref ---
-    prev_nodes: dict[str, dict[str, str]] = {}
+    prev_nodes: dict[str, dict[str, object]] = {}
     prev_edges: set[tuple[str, str, str]] = set()
 
     prev_files = _list_graph_files_at_ref(project_root, since)
@@ -206,14 +218,31 @@ def compute_diff(project_root: Path, since: str = "HEAD") -> GraphDiff:
         elif in_current and in_prev:
             curr = current_nodes[ref_id]
             prev = prev_nodes[ref_id]
-            if curr["kind"] != prev["kind"] or curr["summary"] != prev["summary"]:
+            curr_source = str(curr.get("source", ""))
+            prev_source = str(prev.get("source", ""))
+            curr_tags = curr.get("tags", ())
+            prev_tags = prev.get("tags", ())
+            if not isinstance(curr_tags, tuple):
+                curr_tags = ()
+            if not isinstance(prev_tags, tuple):
+                prev_tags = ()
+            if (
+                curr["kind"] != prev["kind"]
+                or curr["summary"] != prev["summary"]
+                or curr_source != prev_source
+                or curr_tags != prev_tags
+            ):
                 node_changes.append(
                     NodeChange(
                         ref_id=ref_id,
-                        kind=curr["kind"],
+                        kind=str(curr["kind"]),
                         change_type="changed",
-                        old_summary=prev["summary"],
-                        new_summary=curr["summary"],
+                        old_summary=str(prev["summary"]) if prev["summary"] else None,
+                        new_summary=str(curr["summary"]) if curr["summary"] else None,
+                        old_source=prev_source or None,
+                        new_source=curr_source or None,
+                        old_tags=prev_tags,
+                        new_tags=curr_tags,
                     )
                 )
 
@@ -250,6 +279,135 @@ def compute_diff(project_root: Path, since: str = "HEAD") -> GraphDiff:
     )
 
 
+def compute_diff_from_snapshot(
+    conn: sqlite3.Connection,
+    snapshot_id: int,
+) -> GraphDiff:
+    """Compare a saved snapshot with the current graph state in the database.
+
+    Unlike :func:`compute_diff` which reads YAML on disk vs a git ref, this
+    function compares a saved snapshot (from ``graph_snapshots`` table) with
+    the current live state in ``nodes`` and ``edges`` tables.
+
+    Args:
+        conn: Database connection.
+        snapshot_id: The snapshot ID to compare against.
+
+    Returns:
+        A :class:`GraphDiff` with all detected changes.
+
+    Raises:
+        ValueError: If the snapshot ID is not found.
+    """
+    from beadloom.graph.snapshot import _load_snapshot_data
+
+    snap_nodes, snap_edges = _load_snapshot_data(conn, snapshot_id)
+
+    # Build snapshot lookup: ref_id -> node dict
+    snap_nodes_map: dict[str, dict[str, object]] = {}
+    for n in snap_nodes:
+        ref_id = n.get("ref_id", "")
+        if ref_id:
+            extra_raw = n.get("extra")
+            extra = json.loads(extra_raw) if extra_raw else {}
+            tags = tuple(sorted(extra.get("tags", [])))
+            snap_nodes_map[ref_id] = {
+                "kind": n.get("kind", ""),
+                "summary": n.get("summary", ""),
+                "source": n.get("source", ""),
+                "tags": tags,
+            }
+
+    # Build current state from DB
+    current_nodes_map: dict[str, dict[str, object]] = {}
+    for row in conn.execute(
+        "SELECT ref_id, kind, summary, source, extra FROM nodes ORDER BY ref_id"
+    ).fetchall():
+        extra = json.loads(row["extra"]) if row["extra"] else {}
+        tags = tuple(sorted(extra.get("tags", [])))
+        current_nodes_map[row["ref_id"]] = {
+            "kind": row["kind"],
+            "summary": row["summary"] or "",
+            "source": row["source"] or "",
+            "tags": tags,
+        }
+
+    # Compare nodes
+    node_changes: list[NodeChange] = []
+    all_ref_ids = set(current_nodes_map.keys()) | set(snap_nodes_map.keys())
+    for ref_id in sorted(all_ref_ids):
+        in_current = ref_id in current_nodes_map
+        in_snap = ref_id in snap_nodes_map
+
+        if in_current and not in_snap:
+            node_changes.append(
+                NodeChange(
+                    ref_id=ref_id,
+                    kind=str(current_nodes_map[ref_id]["kind"]),
+                    change_type="added",
+                )
+            )
+        elif not in_current and in_snap:
+            node_changes.append(
+                NodeChange(
+                    ref_id=ref_id,
+                    kind=str(snap_nodes_map[ref_id]["kind"]),
+                    change_type="removed",
+                )
+            )
+        elif in_current and in_snap:
+            curr = current_nodes_map[ref_id]
+            snap = snap_nodes_map[ref_id]
+            curr_source = str(curr.get("source", ""))
+            snap_source = str(snap.get("source", ""))
+            curr_tags = curr.get("tags", ())
+            snap_tags = snap.get("tags", ())
+            if not isinstance(curr_tags, tuple):
+                curr_tags = ()
+            if not isinstance(snap_tags, tuple):
+                snap_tags = ()
+            if (
+                curr["kind"] != snap["kind"]
+                or curr["summary"] != snap["summary"]
+                or curr_source != snap_source
+                or curr_tags != snap_tags
+            ):
+                node_changes.append(
+                    NodeChange(
+                        ref_id=ref_id,
+                        kind=str(curr["kind"]),
+                        change_type="changed",
+                        old_summary=str(snap["summary"]) if snap["summary"] else None,
+                        new_summary=str(curr["summary"]) if curr["summary"] else None,
+                        old_source=snap_source or None,
+                        new_source=curr_source or None,
+                        old_tags=snap_tags,
+                        new_tags=curr_tags,
+                    )
+                )
+
+    # Compare edges
+    snap_edge_set: set[tuple[str, str, str]] = set()
+    for e in snap_edges:
+        snap_edge_set.add((e["src_ref_id"], e["dst_ref_id"], e["kind"]))
+
+    current_edge_set: set[tuple[str, str, str]] = set()
+    for row in conn.execute("SELECT src_ref_id, dst_ref_id, kind FROM edges").fetchall():
+        current_edge_set.add((row["src_ref_id"], row["dst_ref_id"], row["kind"]))
+
+    edge_changes: list[EdgeChange] = []
+    for src, dst, kind in sorted(current_edge_set - snap_edge_set):
+        edge_changes.append(EdgeChange(src=src, dst=dst, kind=kind, change_type="added"))
+    for src, dst, kind in sorted(snap_edge_set - current_edge_set):
+        edge_changes.append(EdgeChange(src=src, dst=dst, kind=kind, change_type="removed"))
+
+    return GraphDiff(
+        since_ref=f"snapshot:{snapshot_id}",
+        nodes=tuple(node_changes),
+        edges=tuple(edge_changes),
+    )
+
+
 def render_diff(diff: GraphDiff, console: Console) -> None:
     """Render a GraphDiff using Rich console output.
 
@@ -279,6 +437,15 @@ def render_diff(diff: GraphDiff, console: Console) -> None:
                 if node.old_summary != node.new_summary:
                     console.print(f"    [dim]{node.old_summary}[/dim]")
                     console.print(f"    [bold]{node.new_summary}[/bold]")
+                if node.old_source != node.new_source:
+                    console.print(
+                        f"    source: {node.old_source or '(none)'}"
+                        f" \u2192 {node.new_source or '(none)'}"
+                    )
+                if node.old_tags != node.new_tags:
+                    console.print(f"    tags: {list(node.old_tags)} \u2192 {list(node.new_tags)}")
+                if node.symbols_added or node.symbols_removed:
+                    console.print(f"    symbols: +{node.symbols_added} -{node.symbols_removed}")
         console.print()
 
     # --- Edges section ---

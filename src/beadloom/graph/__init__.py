@@ -7,6 +7,7 @@ from beadloom.graph.diff import (
     GraphDiff,
     NodeChange,
     compute_diff,
+    compute_diff_from_snapshot,
     diff_to_dict,
     render_diff,
 )
@@ -34,12 +35,14 @@ from beadloom.graph.loader import (
     update_node_in_yaml,
 )
 from beadloom.graph.rule_engine import (
+    CardinalityRule,
     DenyRule,
     NodeMatcher,
     RequireRule,
     Rule,
     Violation,
     evaluate_all,
+    evaluate_cardinality_rules,
     evaluate_deny_rules,
     evaluate_require_rules,
     load_rules,
@@ -55,6 +58,7 @@ from beadloom.graph.snapshot import (
 )
 
 __all__ = [
+    "CardinalityRule",
     "DenyRule",
     "EdgeChange",
     "GraphDiff",
@@ -72,9 +76,11 @@ __all__ = [
     "Violation",
     "compare_snapshots",
     "compute_diff",
+    "compute_diff_from_snapshot",
     "create_import_edges",
     "diff_to_dict",
     "evaluate_all",
+    "evaluate_cardinality_rules",
     "evaluate_deny_rules",
     "evaluate_require_rules",
     "extract_imports",
