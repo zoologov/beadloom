@@ -22,7 +22,6 @@ import pytest
 
 from beadloom.graph.rule_engine import (
     CycleRule,
-    Violation,
     evaluate_all,
     evaluate_cycle_rules,
     load_rules,

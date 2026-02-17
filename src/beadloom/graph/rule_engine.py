@@ -49,9 +49,7 @@ class NodeMatcher:
             return False
         if self.kind is not None and self.kind != node_kind:
             return False
-        if self.tag is not None and tags is not None and self.tag not in tags:
-            return False
-        return True
+        return not (self.tag is not None and tags is not None and self.tag not in tags)
 
 
 @dataclass(frozen=True)
@@ -1128,7 +1126,7 @@ def evaluate_cycle_rules(conn: sqlite3.Connection, rules: list[CycleRule]) -> li
                         if normalized not in seen_cycles:
                             seen_cycles.add(normalized)
                             # Format: A -> B -> C -> A
-                            display_path = " \u2192 ".join(cycle_path + [neighbor])
+                            display_path = " \u2192 ".join([*cycle_path, neighbor])
                             violations.append(
                                 Violation(
                                     rule_name=rule.name,

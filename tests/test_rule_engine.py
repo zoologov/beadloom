@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from typing import TYPE_CHECKING
 
 import pytest
@@ -27,8 +28,6 @@ from beadloom.graph.rule_engine import (
     validate_rules,
 )
 from beadloom.infrastructure.db import create_schema, open_db
-
-import sqlite3
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -991,7 +990,7 @@ class TestTagsBlock:
             "      from: { tag: ui-layer }\n"
             "      to: { tag: feature-layer }\n"
         )
-        rules, tag_assignments = load_rules_with_tags(rules_path)
+        _rules, tag_assignments = load_rules_with_tags(rules_path)
         assert tag_assignments == {
             "ui-layer": ["app-tabs", "app-auth"],
             "feature-layer": ["map", "calendar"],
@@ -1807,7 +1806,7 @@ class TestForbidEdgeRuleParsing:
             "      from: not-a-dict\n"
             "      to: { ref_id: b }\n"
         )
-        with pytest.raises(ValueError, match="forbid.from"):
+        with pytest.raises(ValueError, match=r"forbid\.from"):
             load_rules(rules_path)
 
     def test_parse_forbid_rule_bad_to(self, tmp_path: Path) -> None:
@@ -1822,7 +1821,7 @@ class TestForbidEdgeRuleParsing:
             "      from: { ref_id: a }\n"
             "      to: not-a-dict\n"
         )
-        with pytest.raises(ValueError, match="forbid.to"):
+        with pytest.raises(ValueError, match=r"forbid\.to"):
             load_rules(rules_path)
 
     def test_parse_forbid_rule_invalid_edge_kind(self, tmp_path: Path) -> None:
@@ -2142,16 +2141,19 @@ def cardinality_db() -> sqlite3.Connection:
     )
 
     # Symbols: auth has 5, billing has 2
+    sym_sql = (
+        "INSERT INTO code_symbols"
+        " (file_path, symbol_name, kind, line_start, line_end, file_hash)"
+        " VALUES (?, ?, ?, ?, ?, ?)"
+    )
     for i in range(5):
         conn.execute(
-            "INSERT INTO code_symbols (file_path, symbol_name, kind, line_start, line_end, file_hash) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            sym_sql,
             (f"src/auth/module{i}.py", f"func_{i}", "function", 1, 10, f"hash{i}"),
         )
     for i in range(2):
         conn.execute(
-            "INSERT INTO code_symbols (file_path, symbol_name, kind, line_start, line_end, file_hash) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            sym_sql,
             (f"src/billing/bill{i}.py", f"bill_{i}", "function", 1, 10, f"bhash{i}"),
         )
 

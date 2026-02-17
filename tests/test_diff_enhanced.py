@@ -6,7 +6,6 @@ import json
 import sqlite3
 import textwrap
 from io import StringIO
-from unittest.mock import patch
 
 import pytest
 
