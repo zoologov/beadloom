@@ -255,6 +255,8 @@ def analyze_node(
     ref_id: str,
     depth: int = 3,
     max_nodes: int = 50,
+    *,
+    reverse: bool = False,
 ) -> WhyResult:
     """Perform impact analysis on a node.
 
@@ -268,6 +270,11 @@ def analyze_node(
         Maximum BFS traversal depth (default 3).
     max_nodes:
         Maximum nodes per direction to prevent explosion (default 50).
+    reverse:
+        When True, emphasize upstream (what this node depends on) with
+        deeper traversal. Upstream gets ``depth`` and downstream gets
+        ``max(depth // 2, 1)``. Default behaviour shows both directions
+        with equal depth.
 
     Returns
     -------
@@ -293,11 +300,15 @@ def analyze_node(
 
     node = NodeInfo(ref_id=row["ref_id"], kind=row["kind"], summary=row["summary"])
 
+    # Compute asymmetric depths when reverse mode is active.
+    upstream_depth = depth
+    downstream_depth = max(depth // 2, 1) if reverse else depth
+
     # Build upstream tree (outgoing edges: what this node depends on)
-    upstream = _build_tree(conn, ref_id, "upstream", depth, max_nodes)
+    upstream = _build_tree(conn, ref_id, "upstream", upstream_depth, max_nodes)
 
     # Build downstream tree (incoming edges: what depends on this node)
-    downstream = _build_tree(conn, ref_id, "downstream", depth, max_nodes)
+    downstream = _build_tree(conn, ref_id, "downstream", downstream_depth, max_nodes)
 
     # Compute impact summary
     direct, transitive = _count_tree_nodes(downstream)
@@ -384,6 +395,73 @@ def render_why(result: WhyResult, console: Console) -> None:
             border_style="yellow",
         )
     )
+
+
+def _render_plain_tree(
+    tree_nodes: tuple[TreeNode, ...],
+    prefix: str = "",
+    is_last_group: bool = True,
+) -> list[str]:
+    """Recursively render TreeNode entries as plain-text tree lines.
+
+    Uses box-drawing characters for indentation.
+    """
+    lines: list[str] = []
+    for i, tnode in enumerate(tree_nodes):
+        is_last = i == len(tree_nodes) - 1
+        connector = "\u2514\u2500\u2500 " if is_last else "\u251c\u2500\u2500 "
+        label = f"{tnode.ref_id} ({tnode.kind}) [{tnode.edge_kind}]"
+        if tnode.summary:
+            label += f" {tnode.summary}"
+        lines.append(f"{prefix}{connector}{label}")
+        child_prefix = prefix + ("    " if is_last else "\u2502   ")
+        lines.extend(_render_plain_tree(tnode.children, child_prefix))
+    return lines
+
+
+def render_why_tree(result: WhyResult) -> str:
+    """Render a WhyResult as a plain-text dependency tree.
+
+    This format is suitable for CI/piping — no Rich markup, no panels,
+    just simple indented text with box-drawing characters.
+
+    Parameters
+    ----------
+    result:
+        The impact analysis result.
+
+    Returns
+    -------
+    str
+        Plain-text tree representation.
+    """
+    lines: list[str] = []
+    lines.append(f"{result.node.ref_id} ({result.node.kind})")
+    if result.node.summary:
+        lines.append(f"  {result.node.summary}")
+    lines.append("")
+
+    if result.upstream:
+        lines.append("Upstream (dependencies):")
+        lines.extend(_render_plain_tree(result.upstream))
+    else:
+        lines.append("No upstream dependencies.")
+    lines.append("")
+
+    if result.downstream:
+        lines.append("Downstream (dependents):")
+        lines.extend(_render_plain_tree(result.downstream))
+    else:
+        lines.append("No downstream dependents.")
+    lines.append("")
+
+    lines.append("Impact Summary:")
+    lines.append(f"  Direct dependents:     {result.impact.downstream_direct}")
+    lines.append(f"  Transitive dependents: {result.impact.downstream_transitive}")
+    lines.append(f"  Doc coverage:          {result.impact.doc_coverage:.0f}%")
+    lines.append(f"  Stale docs:            {result.impact.stale_count}")
+
+    return "\n".join(lines)
 
 
 def _tree_node_to_dict(tnode: TreeNode) -> dict[str, object]:

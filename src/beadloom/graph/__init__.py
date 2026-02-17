@@ -1,4 +1,4 @@
-"""Graph domain — YAML loader, diff, rule engine, import resolver, linter."""
+"""Graph domain — YAML loader, diff, rule engine, import resolver, linter, snapshots."""
 
 # beadloom:domain=graph
 
@@ -46,6 +46,13 @@ from beadloom.graph.rule_engine import (
     load_rules_with_tags,
     validate_rules,
 )
+from beadloom.graph.snapshot import (
+    SnapshotDiff,
+    SnapshotInfo,
+    compare_snapshots,
+    list_snapshots,
+    save_snapshot,
+)
 
 __all__ = [
     "DenyRule",
@@ -60,7 +67,10 @@ __all__ = [
     "ParsedFile",
     "RequireRule",
     "Rule",
+    "SnapshotDiff",
+    "SnapshotInfo",
     "Violation",
+    "compare_snapshots",
     "compute_diff",
     "create_import_edges",
     "diff_to_dict",
@@ -74,12 +84,14 @@ __all__ = [
     "get_node_tags",
     "index_imports",
     "lint",
+    "list_snapshots",
     "load_graph",
     "load_rules",
     "load_rules_with_tags",
     "parse_graph_file",
     "render_diff",
     "resolve_import_to_node",
+    "save_snapshot",
     "update_node_in_yaml",
     "validate_rules",
 ]

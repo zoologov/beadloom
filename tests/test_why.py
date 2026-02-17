@@ -11,6 +11,7 @@ from beadloom.context_oracle.why import (
     WhyResult,
     analyze_node,
     render_why,
+    render_why_tree,
     result_to_dict,
 )
 from beadloom.infrastructure.db import create_schema, open_db
@@ -420,6 +421,129 @@ class TestResultToDict:
         d = result_to_dict(result)
         assert d["upstream"] == []
         assert d["downstream"] == []
+
+
+# --- analyze_node: reverse mode ---
+
+
+class TestAnalyzeReverse:
+    def test_reverse_emphasizes_upstream(self, conn: sqlite3.Connection) -> None:
+        """With reverse=True, upstream gets full depth, downstream gets reduced depth."""
+        # Chain: A -> B -> C -> D (all outgoing from A = upstream)
+        # Also: E -> A (incoming to A = downstream)
+        _insert_node(conn, "A", "feature", "Node A")
+        _insert_node(conn, "B", "domain", "Node B")
+        _insert_node(conn, "C", "service", "Node C")
+        _insert_node(conn, "D", "entity", "Node D")
+        _insert_node(conn, "E", "feature", "Node E")
+        _insert_node(conn, "F", "domain", "Node F")
+        _insert_edge(conn, "A", "B", "depends_on")
+        _insert_edge(conn, "B", "C", "depends_on")
+        _insert_edge(conn, "C", "D", "depends_on")
+        _insert_edge(conn, "E", "A", "depends_on")
+        _insert_edge(conn, "F", "E", "depends_on")
+
+        # Without reverse: depth=3 for both directions
+        result_default = analyze_node(conn, "A", depth=3)
+        upstream_default = _collect_all_refs(result_default.upstream)
+        downstream_default = _collect_all_refs(result_default.downstream)
+        assert "B" in upstream_default
+        assert "C" in upstream_default
+        assert "D" in upstream_default
+        assert "E" in downstream_default
+
+        # With reverse=True, depth=3: upstream gets depth=3, downstream gets depth=1
+        result_reverse = analyze_node(conn, "A", depth=3, reverse=True)
+        upstream_reverse = _collect_all_refs(result_reverse.upstream)
+        downstream_reverse = _collect_all_refs(result_reverse.downstream)
+        # Upstream should still have all three levels
+        assert "B" in upstream_reverse
+        assert "C" in upstream_reverse
+        assert "D" in upstream_reverse
+        # Downstream should be limited (depth // 2 = 1, so only direct)
+        assert "E" in downstream_reverse
+        # F is at depth 2 from A downstream; with reduced depth=1 it should NOT appear
+        assert "F" not in downstream_reverse
+
+    def test_reverse_false_is_default(self, populated_db: sqlite3.Connection) -> None:
+        """reverse=False produces same result as default (no reverse param)."""
+        result_default = analyze_node(populated_db, "AUTH-svc", depth=3)
+        result_explicit = analyze_node(populated_db, "AUTH-svc", depth=3, reverse=False)
+        assert result_to_dict(result_default) == result_to_dict(result_explicit)
+
+    def test_reverse_depth_1_downstream_gets_1(self, conn: sqlite3.Connection) -> None:
+        """With reverse=True and depth=1, downstream depth is max(depth // 2, 1) = 1."""
+        _insert_node(conn, "X", "feature", "Node X")
+        _insert_node(conn, "Y", "domain", "Node Y")
+        _insert_edge(conn, "Y", "X", "depends_on")
+
+        result = analyze_node(conn, "X", depth=1, reverse=True)
+        downstream_refs = _collect_all_refs(result.downstream)
+        # Y is direct downstream at depth 1, should still appear
+        assert "Y" in downstream_refs
+
+
+# --- render_why_tree ---
+
+
+class TestRenderWhyTree:
+    def test_render_tree_basic(self, populated_db: sqlite3.Connection) -> None:
+        """render_why_tree produces plain-text tree output."""
+        result = analyze_node(populated_db, "AUTH-svc")
+        output = render_why_tree(result)
+        assert isinstance(output, str)
+        assert "AUTH-svc" in output
+
+    def test_render_tree_has_upstream_downstream_labels(
+        self, populated_db: sqlite3.Connection,
+    ) -> None:
+        """Tree output labels upstream and downstream sections."""
+        result = analyze_node(populated_db, "AUTH-svc")
+        output = render_why_tree(result)
+        assert "upstream" in output.lower() or "Upstream" in output
+        assert "downstream" in output.lower() or "Downstream" in output
+
+    def test_render_tree_contains_ref_ids(
+        self, populated_db: sqlite3.Connection,
+    ) -> None:
+        """Tree output shows ref_ids of connected nodes."""
+        result = analyze_node(populated_db, "AUTH-svc")
+        output = render_why_tree(result)
+        # AUTH-svc upstream: LIB-core, DB-ent
+        # AUTH-svc downstream: FEAT-1, FEAT-2
+        assert "FEAT-1" in output
+        assert "FEAT-2" in output
+
+    def test_render_tree_no_rich_markup(
+        self, populated_db: sqlite3.Connection,
+    ) -> None:
+        """Tree format should NOT contain Rich markup tags."""
+        result = analyze_node(populated_db, "AUTH-svc")
+        output = render_why_tree(result)
+        assert "[bold" not in output
+        assert "[dim" not in output
+        assert "[/]" not in output
+
+    def test_render_tree_empty(self, conn: sqlite3.Connection) -> None:
+        """Tree output for isolated node shows no connections."""
+        _insert_node(conn, "SOLO", "domain", "Solo node")
+        result = analyze_node(conn, "SOLO")
+        output = render_why_tree(result)
+        assert "SOLO" in output
+
+    def test_render_tree_nested(self, conn: sqlite3.Connection) -> None:
+        """Tree output shows nested dependencies with indentation."""
+        _insert_node(conn, "A", "feature", "Node A")
+        _insert_node(conn, "B", "domain", "Node B")
+        _insert_node(conn, "C", "service", "Node C")
+        _insert_edge(conn, "A", "B", "depends_on")
+        _insert_edge(conn, "B", "C", "depends_on")
+
+        result = analyze_node(conn, "A", depth=3)
+        output = render_why_tree(result)
+        assert "A" in output
+        assert "B" in output
+        assert "C" in output
 
 
 # --- Helpers ---
