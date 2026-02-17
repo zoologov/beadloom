@@ -11,6 +11,7 @@ from beadloom.onboarding.presets import (
     detect_preset,
 )
 from beadloom.onboarding.scanner import (
+    auto_link_docs,
     bootstrap_project,
     classify_doc,
     generate_agents_md,
@@ -31,6 +32,7 @@ __all__ = [
     "PRESETS",
     "Preset",
     "PresetRule",
+    "auto_link_docs",
     "bootstrap_project",
     "classify_doc",
     "detect_preset",

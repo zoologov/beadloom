@@ -10,6 +10,7 @@ import pytest
 from beadloom.graph.loader import get_node_tags
 from beadloom.graph.rule_engine import (
     SUPPORTED_SCHEMA_VERSIONS,
+    CardinalityRule,
     DenyRule,
     ForbidEdgeRule,
     LayerDef,
@@ -17,6 +18,7 @@ from beadloom.graph.rule_engine import (
     NodeMatcher,
     RequireRule,
     evaluate_all,
+    evaluate_cardinality_rules,
     evaluate_deny_rules,
     evaluate_forbid_edge_rules,
     evaluate_layer_rules,
@@ -26,8 +28,9 @@ from beadloom.graph.rule_engine import (
 )
 from beadloom.infrastructure.db import create_schema, open_db
 
+import sqlite3
+
 if TYPE_CHECKING:
-    import sqlite3
     from pathlib import Path
 
 
@@ -2109,3 +2112,264 @@ class TestForbidEdgeRuleInEvaluateAll:
         assert "deny" in rule_types
         assert "require" in rule_types
         assert "forbid" in rule_types
+
+
+# ---------------------------------------------------------------------------
+# CardinalityRule tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def cardinality_db() -> sqlite3.Connection:
+    """In-memory DB with nodes, symbols, files, and sync_state for cardinality tests."""
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys=ON")
+    create_schema(conn)
+
+    # Nodes
+    conn.execute(
+        "INSERT INTO nodes (ref_id, kind, summary, source, extra) VALUES (?, ?, ?, ?, ?)",
+        ("auth", "domain", "Authentication", "src/auth/", json.dumps({"tags": ["core"]})),
+    )
+    conn.execute(
+        "INSERT INTO nodes (ref_id, kind, summary, source, extra) VALUES (?, ?, ?, ?, ?)",
+        ("billing", "domain", "Billing system", "src/billing/", json.dumps({})),
+    )
+    conn.execute(
+        "INSERT INTO nodes (ref_id, kind, summary, source, extra) VALUES (?, ?, ?, ?, ?)",
+        ("api", "service", "API gateway", "src/api/", json.dumps({})),
+    )
+
+    # Symbols: auth has 5, billing has 2
+    for i in range(5):
+        conn.execute(
+            "INSERT INTO code_symbols (file_path, symbol_name, kind, line_start, line_end, file_hash) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (f"src/auth/module{i}.py", f"func_{i}", "function", 1, 10, f"hash{i}"),
+        )
+    for i in range(2):
+        conn.execute(
+            "INSERT INTO code_symbols (file_path, symbol_name, kind, line_start, line_end, file_hash) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (f"src/billing/bill{i}.py", f"bill_{i}", "function", 1, 10, f"bhash{i}"),
+        )
+
+    # Files: auth has 3, billing has 1
+    conn.execute(
+        "INSERT INTO file_index (path, hash, kind, indexed_at) VALUES (?, ?, ?, ?)",
+        ("src/auth/a.py", "h1", "code", "2026-01-01"),
+    )
+    conn.execute(
+        "INSERT INTO file_index (path, hash, kind, indexed_at) VALUES (?, ?, ?, ?)",
+        ("src/auth/b.py", "h2", "code", "2026-01-01"),
+    )
+    conn.execute(
+        "INSERT INTO file_index (path, hash, kind, indexed_at) VALUES (?, ?, ?, ?)",
+        ("src/auth/c.py", "h3", "code", "2026-01-01"),
+    )
+    conn.execute(
+        "INSERT INTO file_index (path, hash, kind, indexed_at) VALUES (?, ?, ?, ?)",
+        ("src/billing/x.py", "h4", "code", "2026-01-01"),
+    )
+
+    # Sync state: auth has 2 docs (1 ok, 1 stale), billing has 0
+    conn.execute(
+        "INSERT INTO sync_state (doc_path, code_path, ref_id, code_hash_at_sync, "
+        "doc_hash_at_sync, synced_at, status, symbols_hash) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        ("docs/auth/README.md", "src/auth/", "auth", "ch1", "dh1", "2026-01-01", "ok", "abc"),
+    )
+    conn.execute(
+        "INSERT INTO sync_state (doc_path, code_path, ref_id, code_hash_at_sync, "
+        "doc_hash_at_sync, synced_at, status, symbols_hash) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        ("docs/auth/API.md", "src/auth/api/", "auth", "ch2", "dh2", "2026-01-01", "stale", "def"),
+    )
+
+    conn.commit()
+    return conn
+
+
+class TestCardinalityRuleDataclass:
+    def test_create_with_defaults(self) -> None:
+        rule = CardinalityRule(
+            name="test",
+            description="test desc",
+            for_matcher=NodeMatcher(kind="domain"),
+        )
+        assert rule.max_symbols is None
+        assert rule.max_files is None
+        assert rule.min_doc_coverage is None
+        assert rule.severity == "warn"
+
+    def test_create_with_all_fields(self) -> None:
+        rule = CardinalityRule(
+            name="size-check",
+            description="Size limit",
+            for_matcher=NodeMatcher(kind="domain"),
+            max_symbols=200,
+            max_files=30,
+            min_doc_coverage=0.5,
+            severity="error",
+        )
+        assert rule.max_symbols == 200
+        assert rule.max_files == 30
+        assert rule.min_doc_coverage == 0.5
+        assert rule.severity == "error"
+
+
+class TestCardinalityRuleYamlParsing:
+    def test_parse_check_rule(self, tmp_path: Path) -> None:
+        rules_file = tmp_path / "rules.yml"
+        rules_file.write_text(
+            "version: 3\nrules:\n"
+            "  - name: domain-size\n"
+            "    description: Domain should not be too large\n"
+            "    check:\n"
+            "      for: { kind: domain }\n"
+            "      max_symbols: 200\n"
+            "      max_files: 30\n"
+            "    severity: warn\n"
+        )
+        rules = load_rules(rules_file)
+        assert len(rules) == 1
+        assert isinstance(rules[0], CardinalityRule)
+        assert rules[0].max_symbols == 200
+        assert rules[0].max_files == 30
+        assert rules[0].min_doc_coverage is None
+
+    def test_parse_doc_coverage_rule(self, tmp_path: Path) -> None:
+        rules_file = tmp_path / "rules.yml"
+        rules_file.write_text(
+            "version: 3\nrules:\n"
+            "  - name: doc-coverage\n"
+            "    description: Domains need docs\n"
+            "    check:\n"
+            "      for: { kind: domain }\n"
+            "      min_doc_coverage: 0.5\n"
+            "    severity: warn\n"
+        )
+        rules = load_rules(rules_file)
+        assert len(rules) == 1
+        assert isinstance(rules[0], CardinalityRule)
+        assert rules[0].min_doc_coverage == 0.5
+
+
+class TestEvaluateCardinalityRules:
+    def test_max_symbols_exceeded(self, cardinality_db: sqlite3.Connection) -> None:
+        rules = [
+            CardinalityRule(
+                name="sym-limit",
+                description="Max 3 symbols",
+                for_matcher=NodeMatcher(kind="domain"),
+                max_symbols=3,
+            )
+        ]
+        violations = evaluate_cardinality_rules(cardinality_db, rules)
+        # auth has 5 symbols > 3, billing has 2 <= 3
+        assert len(violations) == 1
+        assert violations[0].from_ref_id == "auth"
+        assert "5 symbols" in violations[0].message
+        assert violations[0].rule_type == "cardinality"
+
+    def test_max_symbols_not_exceeded(self, cardinality_db: sqlite3.Connection) -> None:
+        rules = [
+            CardinalityRule(
+                name="sym-limit",
+                description="Max 10 symbols",
+                for_matcher=NodeMatcher(kind="domain"),
+                max_symbols=10,
+            )
+        ]
+        violations = evaluate_cardinality_rules(cardinality_db, rules)
+        assert len(violations) == 0
+
+    def test_max_files_exceeded(self, cardinality_db: sqlite3.Connection) -> None:
+        rules = [
+            CardinalityRule(
+                name="file-limit",
+                description="Max 2 files",
+                for_matcher=NodeMatcher(kind="domain"),
+                max_files=2,
+            )
+        ]
+        violations = evaluate_cardinality_rules(cardinality_db, rules)
+        # auth has 3 files > 2, billing has 1 <= 2
+        assert len(violations) == 1
+        assert violations[0].from_ref_id == "auth"
+        assert "3 files" in violations[0].message
+
+    def test_min_doc_coverage_not_met(self, cardinality_db: sqlite3.Connection) -> None:
+        rules = [
+            CardinalityRule(
+                name="doc-cov",
+                description="Need 80% doc coverage",
+                for_matcher=NodeMatcher(kind="domain"),
+                min_doc_coverage=0.8,
+            )
+        ]
+        violations = evaluate_cardinality_rules(cardinality_db, rules)
+        # auth: 1 ok / 2 total = 50% < 80%
+        # billing: 0 total -> coverage 0% < 80%
+        assert len(violations) == 2
+
+    def test_all_passing(self, cardinality_db: sqlite3.Connection) -> None:
+        rules = [
+            CardinalityRule(
+                name="easy-check",
+                description="Very generous limits",
+                for_matcher=NodeMatcher(kind="domain"),
+                max_symbols=100,
+                max_files=100,
+                min_doc_coverage=0.0,
+            )
+        ]
+        violations = evaluate_cardinality_rules(cardinality_db, rules)
+        assert len(violations) == 0
+
+    def test_matcher_filters_by_kind(self, cardinality_db: sqlite3.Connection) -> None:
+        rules = [
+            CardinalityRule(
+                name="service-only",
+                description="Only check services",
+                for_matcher=NodeMatcher(kind="service"),
+                max_symbols=0,
+            )
+        ]
+        violations = evaluate_cardinality_rules(cardinality_db, rules)
+        # api service has no symbols under src/api/
+        assert len(violations) == 0
+
+    def test_matcher_filters_by_tag(self, cardinality_db: sqlite3.Connection) -> None:
+        rules = [
+            CardinalityRule(
+                name="core-only",
+                description="Only check core nodes",
+                for_matcher=NodeMatcher(tag="core"),
+                max_symbols=3,
+            )
+        ]
+        violations = evaluate_cardinality_rules(cardinality_db, rules)
+        # Only auth has "core" tag, has 5 symbols > 3
+        assert len(violations) == 1
+        assert violations[0].from_ref_id == "auth"
+
+    def test_empty_rules(self, cardinality_db: sqlite3.Connection) -> None:
+        violations = evaluate_cardinality_rules(cardinality_db, [])
+        assert violations == []
+
+    def test_integration_with_evaluate_all(self, cardinality_db: sqlite3.Connection) -> None:
+        from beadloom.graph.rule_engine import Rule as RuleType
+
+        rules: list[RuleType] = [
+            CardinalityRule(
+                name="sym-limit",
+                description="Max 3 symbols",
+                for_matcher=NodeMatcher(kind="domain"),
+                max_symbols=3,
+            )
+        ]
+        violations = evaluate_all(cardinality_db, rules)
+        assert len(violations) == 1
+        assert violations[0].rule_type == "cardinality"
