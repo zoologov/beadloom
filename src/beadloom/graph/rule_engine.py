@@ -342,7 +342,7 @@ def _parse_cycle_rule(
             raise ValueError(msg)
 
     max_depth_raw = cycle_data.get("max_depth", 10)
-    max_depth = int(max_depth_raw)  # type: ignore[arg-type]
+    max_depth = int(max_depth_raw)  # type: ignore[call-overload]
 
     return CycleRule(
         name=name,
@@ -528,7 +528,7 @@ def _parse_check_rule(
     max_symbols_raw = check_data.get("max_symbols")
     max_symbols: int | None = None
     if max_symbols_raw is not None:
-        max_symbols = int(max_symbols_raw)  # type: ignore[arg-type]
+        max_symbols = int(max_symbols_raw)  # type: ignore[call-overload]
         if max_symbols < 0:
             msg = f"Rule '{name}': check.max_symbols must be non-negative"
             raise ValueError(msg)
@@ -536,7 +536,7 @@ def _parse_check_rule(
     max_files_raw = check_data.get("max_files")
     max_files: int | None = None
     if max_files_raw is not None:
-        max_files = int(max_files_raw)  # type: ignore[arg-type]
+        max_files = int(max_files_raw)  # type: ignore[call-overload]
         if max_files < 0:
             msg = f"Rule '{name}': check.max_files must be non-negative"
             raise ValueError(msg)

@@ -203,7 +203,7 @@ def compute_diff(project_root: Path, since: str = "HEAD") -> GraphDiff:
             node_changes.append(
                 NodeChange(
                     ref_id=ref_id,
-                    kind=current_nodes[ref_id]["kind"],
+                    kind=str(current_nodes[ref_id]["kind"]),
                     change_type="added",
                 )
             )
@@ -211,7 +211,7 @@ def compute_diff(project_root: Path, since: str = "HEAD") -> GraphDiff:
             node_changes.append(
                 NodeChange(
                     ref_id=ref_id,
-                    kind=prev_nodes[ref_id]["kind"],
+                    kind=str(prev_nodes[ref_id]["kind"]),
                     change_type="removed",
                 )
             )
