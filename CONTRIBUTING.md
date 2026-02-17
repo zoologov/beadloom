@@ -38,15 +38,15 @@ uv tool install -e .
 ```
 beadloom/
 ├── src/beadloom/          # Main package
-│   ├── cli.py             # Click CLI commands
-│   ├── db.py              # SQLite schema and helpers
-│   ├── graph_loader.py    # YAML graph loader
-│   ├── doc_indexer.py     # Markdown documentation indexer
-│   ├── code_indexer.py    # tree-sitter code indexer
-│   ├── reindex.py         # Full reindex orchestrator
-│   ├── context_builder.py # BFS context bundle builder
-│   ├── sync_engine.py     # Doc-code sync engine
-│   └── mcp_server.py      # MCP server (stdio)
+│   ├── context_oracle/    # BFS traversal, code indexer, cache, search
+│   ├── doc_sync/          # Doc-code sync engine
+│   ├── graph/             # YAML loader, rule engine, import resolver, diff
+│   ├── infrastructure/    # SQLite DB, reindex, health snapshots
+│   ├── onboarding/        # Bootstrap, doc generation, presets
+│   ├── services/
+│   │   ├── cli.py         # Click CLI (22 commands)
+│   │   └── mcp_server.py  # MCP server (13 tools, stdio)
+│   └── tui/               # Interactive terminal dashboard
 ├── tests/                 # pytest test suite
 ├── docs/                  # Project documentation (indexed by beadloom)
 ├── .beadloom/             # Beadloom data directory
@@ -238,7 +238,7 @@ SELECT * FROM sync_state WHERE status = 'stale';
 
 ```bash
 # Run the MCP server for testing
-uv run beadloom mcp
+uv run beadloom mcp-serve
 ```
 
 ## License

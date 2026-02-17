@@ -26,6 +26,8 @@ cd your-project
 beadloom init --bootstrap
 ```
 
+Use `--yes` (or `--non-interactive`) to skip all prompts — useful for CI and automation.
+
 This will create:
 - `.beadloom/_graph/services.yml` — architecture graph (nodes + edges)
 - `.beadloom/_graph/rules.yml` — auto-generated architecture lint rules
@@ -65,8 +67,14 @@ beadloom lint
 # Context bundle for a node
 beadloom ctx my-service
 
+# Impact analysis: what depends on this?
+beadloom why my-service
+
 # Graph visualization (Mermaid)
 beadloom graph
+
+# Save architecture snapshot for later comparison
+beadloom snapshot save
 ```
 
 ### Step 4: Configure AI agents
@@ -96,10 +104,27 @@ beadloom install-hooks
 
 `sync-check` detects when code changes haven't been reflected in documentation. Exit code 2 means stale docs found.
 
+`install-hooks` sets up a git pre-commit hook that runs `sync-check`, `ruff` linting, and `mypy` type checking before each commit.
+
+### Step 6: Enforce architecture boundaries
+
+```bash
+# Validate architecture rules
+beadloom lint
+
+# In CI: fail on violations
+beadloom lint --strict
+
+# Compare architecture changes
+beadloom diff HEAD~5
+```
+
+Beadloom supports 7 rule types: `require`, `deny`, `forbid_edge`, `layer`, `cycle_detection`, `import_boundary`, and `cardinality`. Define rules in `.beadloom/_graph/rules.yml`.
+
 ## Optional Extras
 
 ```bash
-# Additional language parsers (TypeScript/JavaScript, Go, Rust)
+# Additional language parsers (TypeScript/JavaScript, Go, Rust, Kotlin, Java, Swift, C/C++, Objective-C)
 uv tool install "beadloom[languages]"
 
 # Interactive terminal dashboard

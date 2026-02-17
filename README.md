@@ -84,9 +84,10 @@ IDE indexers use semantic search — an LLM decides what's relevant. Beadloom us
 - **Architecture as Code** — define boundary rules in YAML, validate with `beadloom lint`, enforce in CI
 - **Agent Prime** — single entry point for AI agents: `beadloom prime` outputs <2K tokens of architecture context, `setup-rules` creates IDE adapters, `AGENTS.md` carries conventions and MCP tools
 - **Full-text search** — FTS5-powered search across nodes, docs, and code symbols
-- **Impact analysis** — `beadloom why` shows what depends on a node and what breaks if it changes
+- **Impact analysis** — `beadloom why` shows what depends on a node and what breaks if it changes (with `--reverse` and `--depth N` options)
 - **Code-first onboarding** — bootstrap an architecture graph from code structure alone; no docs needed to start
-- **MCP server** — 10 tools for AI agents, including write operations and search
+- **Architecture snapshots** — `beadloom snapshot` saves and compares architecture state over time
+- **MCP server** — 13 tools for AI agents, including write operations, search, impact analysis, diff, and linting
 - **Interactive TUI** — `beadloom ui` terminal dashboard for browsing the graph
 - **Local-first** — single CLI + single SQLite file, no Docker, no cloud dependencies
 
@@ -108,7 +109,7 @@ The Doc Sync Engine tracks which documentation files correspond to which code fi
 
 Beadloom doesn't just describe architecture — it enforces it. Define boundary rules in YAML, validate with `beadloom lint`, and block violations in CI.
 
-**Rules** (`.beadloom/_graph/rules.yml`) — real rules from this project:
+**Rules** (`.beadloom/_graph/rules.yml`) — rules from this project:
 
 ```yaml
 rules:
@@ -140,6 +141,45 @@ rules:
       to: { kind: service }
       unless_edge: [part_of]
 ```
+
+**v1.7.0 rule types** — forbid_edge, layer enforcement, cycle detection, and cardinality limits:
+
+```yaml
+rules:
+  # Forbid edges between tagged groups
+  - name: ui-no-native
+    severity: error
+    forbid_edge:
+      from: { tag: ui-layer }
+      to: { tag: native-layer }
+      edge_kind: uses
+
+  # Layer enforcement (top-down)
+  - name: layer-direction
+    severity: error
+    layer:
+      layers:
+        - { name: presentation, tag: ui-layer }
+        - { name: domain, tag: domain-layer }
+        - { name: infrastructure, tag: infra-layer }
+      enforce: top-down
+
+  # Cycle detection
+  - name: no-circular-deps
+    severity: error
+    cycle_detection:
+      edge_kind: [uses, depends_on]
+
+  # Cardinality limits
+  - name: domain-complexity
+    severity: warn
+    cardinality:
+      for: { kind: domain }
+      max_files: 50
+      max_symbols: 500
+```
+
+7 rule types available: `require`, `deny`, `forbid_edge`, `layer`, `cycle_detection`, `import_boundary`, `cardinality`. Nodes support `tags` for rule matching.
 
 **Validate:**
 
@@ -227,6 +267,7 @@ Works with Claude Code, Cursor, Windsurf, Cline, and any MCP-compatible tool.
 | `link REF_ID [URL]` | Manage external tracker links on graph nodes |
 | `ui` | Interactive terminal dashboard (requires `beadloom[tui]`) |
 | `watch` | Auto-reindex on file changes (requires `beadloom[watch]`) |
+| `snapshot` | Save and compare architecture snapshots |
 | `install-hooks` | Install the beadloom pre-commit hook |
 | `prime` | Output compact project context for AI agent injection |
 | `setup-rules` | Create IDE adapter files (`.cursorrules`, `.windsurfrules`, `.clinerules`) |
@@ -247,6 +288,9 @@ Works with Claude Code, Cursor, Windsurf, Cline, and any MCP-compatible tool.
 | `mark_synced` | Mark documentation as synchronized with code |
 | `search` | Full-text search across nodes, docs, and code symbols |
 | `generate_docs` | Generate structured documentation data for AI-driven enrichment |
+| `why` | Impact analysis — upstream and downstream dependencies in the graph |
+| `diff` | Graph changes relative to a git revision |
+| `lint` | Run architecture lint rules. Returns violations as JSON |
 
 ## Configuration
 
@@ -300,8 +344,8 @@ docs/
         reindex/SPEC.md
         watcher/SPEC.md
   services/
-    cli.md                                         # 21 CLI commands
-    mcp.md                                         # 10 MCP tools
+    cli.md                                         # 22 CLI commands
+    mcp.md                                         # 13 MCP tools
     tui.md                                         # TUI dashboard
 ```
 
@@ -381,8 +425,8 @@ uv run mypy                # type checking (strict mode)
 | &nbsp;&nbsp;[Reindex](docs/domains/infrastructure/features/reindex/SPEC.md) | Full and incremental reindex pipeline |
 | &nbsp;&nbsp;[Watcher](docs/domains/infrastructure/features/watcher/SPEC.md) | Auto-reindex on file changes |
 | **Services** | |
-| [CLI Reference](docs/services/cli.md) | All 21 CLI commands |
-| [MCP Server](docs/services/mcp.md) | All 10 MCP tools for AI agents |
+| [CLI Reference](docs/services/cli.md) | All 22 CLI commands |
+| [MCP Server](docs/services/mcp.md) | All 13 MCP tools for AI agents |
 | [TUI Dashboard](docs/services/tui.md) | Interactive terminal dashboard |
 | **Guides** | |
 | [CI Setup](docs/guides/ci-setup.md) | GitHub Actions / GitLab CI integration |

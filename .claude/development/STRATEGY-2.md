@@ -1,8 +1,8 @@
 # Beadloom: Strategy 2 — Architecture Infrastructure for the AI Agent Era
 
-> **Status:** Active (Phases 8-11 complete, Phase 12+ planned)
-> **Date:** 2026-02-17 (revision 5)
-> **Current version:** 1.6.0
+> **Status:** Active (Phases 8-12.6 complete, Phase 13+ planned)
+> **Date:** 2026-02-17 (revision 6)
+> **Current version:** 1.7.0
 > **Predecessor:** STRATEGY.md (Phases 1-6, all completed)
 > **Sources:** STRATEGY.md, BACKLOG.md §2-§6, BDL-UX-Issues.md, competitive analysis February 2026
 
@@ -222,7 +222,7 @@ Beadloom is for engineers who build and maintain serious IT systems. YAML graph 
 | 11.4 | **Context cost metrics** — `beadloom status` shows avg/max bundle sizes in tokens | feature | P2 | DONE |
 | 11.5 | **Deep config reading** — pyproject.toml, package.json, tsconfig.json, Cargo.toml, build.gradle | feature | P2 | DONE |
 
-### Phase 12: AaC Rules v2 — Architecture Enforcement (v1.7)
+### Phase 12: AaC Rules v2 — Architecture Enforcement (v1.7) — DONE
 
 **Goal:** Transform rule engine from simple "node needs edge" checks to a full architecture enforcement system. Beadloom becomes the ArchUnit/Dependency-Cruiser equivalent — language-agnostic and graph-native.
 
@@ -230,40 +230,46 @@ Beadloom is for engineers who build and maintain serious IT systems. YAML graph 
 
 **Motivation:** Dogfooding (UX #32-37) revealed that the current rule engine is primitive (`require` + `has_edge_to` only). With 533 imports already indexed for a typical project, import-based boundary enforcement is within reach. AaC rules are Beadloom's key differentiator — "architecture enforcement, not just documentation."
 
-| # | Task | Type | P | Effort |
-|---|------|------|---|--------|
-| 12.1 | **Node tags/labels** — `tags: [ui-layer, presentation]` field in services.yml. Arbitrary strings for rule matching. Required prerequisite for layer/group rules | feature | P0 | S |
-| 12.2 | **Forbidden dependency rules** — `forbid` rule type: "nodes tagged X must NOT have `uses` edge to nodes tagged Y". Inverse of current `require` | feature | P0 | M |
-| 12.3 | **Layer enforcement rules** — `layers:` definition with ordered names + domain assignments. `enforce: top-down` prevents lower layers from depending on upper. `allow_skip: true` for non-strict layering | feature | P0 | M |
-| 12.4 | **Circular dependency detection** — `forbid_cycles` rule type on `uses`/`depends_on` edges. BFS cycle detection with path reporting | feature | P0 | M |
-| 12.5 | **Import-based boundary rules** — `forbid_import` rule type: "files in path A must not import from path B". Uses existing import index from `code_symbols` table | feature | P1 | L |
-| 12.6 | **Cardinality/complexity rules** — `check` rule type: `max_symbols`, `max_files`, `min_doc_coverage` per node. Architectural smell detection | feature | P2 | S |
+**Delivered in:** BDL-021 (Wave 1-4). Released as v1.7.0.
 
-### Phase 12.5: Init Quality (v1.7)
+| # | Task | Type | P | Status |
+|---|------|------|---|--------|
+| 12.1 | **Node tags/labels** — `tags: [ui-layer, presentation]` field in services.yml. Arbitrary strings for rule matching. Required prerequisite for layer/group rules | feature | P0 | DONE |
+| 12.2 | **Forbidden dependency rules** — `forbid` rule type: "nodes tagged X must NOT have `uses` edge to nodes tagged Y". Inverse of current `require` | feature | P0 | DONE |
+| 12.3 | **Layer enforcement rules** — `layers:` definition with ordered names + domain assignments. `enforce: top-down` prevents lower layers from depending on upper. `allow_skip: true` for non-strict layering | feature | P0 | DONE |
+| 12.4 | **Circular dependency detection** — `forbid_cycles` rule type on `uses`/`depends_on` edges. BFS cycle detection with path reporting | feature | P0 | DONE |
+| 12.5 | **Import-based boundary rules** — `forbid_import` rule type: "files in path A must not import from path B". Uses existing import index from `code_symbols` table | feature | P1 | DONE |
+| 12.6 | **Cardinality/complexity rules** — `check` rule type: `max_symbols`, `max_files`, `min_doc_coverage` per node. Architectural smell detection | feature | P2 | DONE |
+
+### Phase 12.5: Init Quality (v1.7) — DONE
 
 **Goal:** First-time `beadloom init` captures 80%+ of real project architecture, not 35%. Fix all dogfooding UX issues.
 
 **Metric:** `beadloom init` on a React Native project with native modules produces 15+ nodes (was 6), includes all code directories, generates doc skeletons, and `lint` passes without manual fixes.
 
-| # | Task | Type | P | Effort |
-|---|------|------|---|--------|
-| 12.5.1 | **Scan all code directories** — `detect_source_dirs()` scans all top-level dirs containing code files, not just manifest-adjacent ones (fix UX #32) | fix | P0 | M |
-| 12.5.2 | **Non-interactive init mode** — `--mode bootstrap`, `--yes`/`--non-interactive`, `--force` flags for CI and agent use (fix UX #33) | feature | P1 | S |
-| 12.5.3 | **Root service rule fix** — `_generate_default_rules()` excludes root service from `service-needs-parent` (fix UX #34) | fix | P1 | S |
-| 12.5.4 | **Docs generate in init** — offer doc skeleton generation as final init step, or auto-generate (fix UX #35) | feature | P1 | S |
-| 12.5.5 | **Doc auto-linking** — fuzzy matching of existing docs to graph nodes by path/content during init (fix UX #36) | feature | P2 | M |
+**Delivered in:** BDL-021 (Wave 2-4).
 
-### Phase 12.6: Architecture Intelligence (v1.7)
+| # | Task | Type | P | Status |
+|---|------|------|---|--------|
+| 12.5.1 | **Scan all code directories** — `detect_source_dirs()` scans all top-level dirs containing code files, not just manifest-adjacent ones (fix UX #32) | fix | P0 | DONE |
+| 12.5.2 | **Non-interactive init mode** — `--mode bootstrap`, `--yes`/`--non-interactive`, `--force` flags for CI and agent use (fix UX #33) | feature | P1 | DONE |
+| 12.5.3 | **Root service rule fix** — `_generate_default_rules()` excludes root service from `service-needs-parent` (fix UX #34) | fix | P1 | DONE |
+| 12.5.4 | **Docs generate in init** — offer doc skeleton generation as final init step, or auto-generate (fix UX #35) | feature | P1 | DONE |
+| 12.5.5 | **Doc auto-linking** — fuzzy matching of existing docs to graph nodes by path/content during init (fix UX #36) | feature | P2 | DONE |
+
+### Phase 12.6: Architecture Intelligence (v1.7) — DONE
 
 **Goal:** Proactive architecture insights — detect what changed, what's affected, and where risk concentrates. Makes architecture visible in CI/CD and refactoring workflows.
 
 **Metric:** `beadloom diff HEAD~5` shows added/removed/changed nodes and edges since 5 commits ago. `beadloom why <ref-id> --reverse` shows not just "what depends on X" but "what X depends on" with transitive closure. CI pipeline can fail on unexpected architecture drift.
 
-| # | Task | Type | P | Effort |
+**Delivered in:** BDL-021 (Wave 2-3).
+
+| # | Task | Type | P | Status |
 |---|------|------|---|--------|
-| 12.6.1 | **`beadloom diff`** — compare architecture snapshots between commits/branches/tags. Shows added/removed/changed nodes, edges, symbols. Human-readable + `--json` for CI | feature | P2 | M |
-| 12.6.2 | **Enhanced impact analysis** — `beadloom why <ref-id> --reverse` (what X depends on) + `--depth N` (transitive closure depth) + `--format tree` (visual dependency tree) | feature | P2 | M |
-| 12.6.3 | **Architecture snapshot storage** — store graph snapshots in SQLite for historical comparison without git checkout. `beadloom snapshot save/list/compare` | feature | P2 | M |
+| 12.6.1 | **`beadloom diff`** — compare architecture snapshots between commits/branches/tags. Shows added/removed/changed nodes, edges, symbols. Human-readable + `--json` for CI | feature | P2 | DONE |
+| 12.6.2 | **Enhanced impact analysis** — `beadloom why <ref-id> --reverse` (what X depends on) + `--depth N` (transitive closure depth) + `--format tree` (visual dependency tree) | feature | P2 | DONE |
+| 12.6.3 | **Architecture snapshot storage** — store graph snapshots in SQLite for historical comparison without git checkout. `beadloom snapshot save/list/compare` | feature | P2 | DONE |
 
 ### Phase 13: Cross-System Foundation (v1.8)
 
@@ -583,27 +589,27 @@ v1.6 ── DONE ─────────────────────
 ├── Phase 10.5 (Honest Detection) DONE (5/5 tasks)
 └── Phase 11 (Agent Infra) ────── DONE (5/5 tasks)
 
-v1.7 ──────────────────────────────────────────────────────
+v1.7 ── DONE ─────────────────────────────────────────────
 │
-├── Phase 12 (AaC Rules v2) ──── core differentiator
-│   ├── 12.1 Node tags/labels ──── prerequisite for 12.2-12.3
-│   ├── 12.2 Forbidden deps ────── depends on 12.1
-│   ├── 12.3 Layer enforcement ─── depends on 12.1
-│   ├── 12.4 Cycle detection ───── standalone
-│   ├── 12.5 Import-based rules ── uses existing import index
-│   └── 12.6 Cardinality rules ─── standalone
+├── Phase 12 (AaC Rules v2) ──── DONE (6/6 tasks)
+│   ├── 12.1 Node tags/labels ──── DONE
+│   ├── 12.2 Forbidden deps ────── DONE
+│   ├── 12.3 Layer enforcement ─── DONE
+│   ├── 12.4 Cycle detection ───── DONE
+│   ├── 12.5 Import-based rules ── DONE
+│   └── 12.6 Cardinality rules ─── DONE
 │
-├── Phase 12.5 (Init Quality) ── dogfooding fixes
-│   ├── 12.5.1 Scan all dirs ───── standalone (fix #32)
-│   ├── 12.5.2 Non-interactive ─── standalone (fix #33)
-│   ├── 12.5.3 Root rule fix ────── standalone (fix #34)
-│   ├── 12.5.4 Docs in init ─────── standalone (fix #35)
-│   └── 12.5.5 Doc auto-linking ─── standalone (fix #36)
+├── Phase 12.5 (Init Quality) ── DONE (5/5 tasks)
+│   ├── 12.5.1 Scan all dirs ───── DONE
+│   ├── 12.5.2 Non-interactive ─── DONE
+│   ├── 12.5.3 Root rule fix ────── DONE
+│   ├── 12.5.4 Docs in init ─────── DONE
+│   └── 12.5.5 Doc auto-linking ─── DONE
 │
-└── Phase 12.6 (Architecture Intelligence) ── CI/CD + refactoring
-    ├── 12.6.1 beadloom diff ────── depends on snapshot storage (12.6.3)
-    ├── 12.6.2 Enhanced why ─────── standalone (extends Phase 11)
-    └── 12.6.3 Snapshot storage ─── standalone
+└── Phase 12.6 (Architecture Intelligence) ── DONE (3/3 tasks)
+    ├── 12.6.1 beadloom diff ────── DONE
+    ├── 12.6.2 Enhanced why ─────── DONE
+    └── 12.6.3 Snapshot storage ─── DONE
 
 v1.8 ──────────────────────────────────────────────────────
 │
@@ -633,18 +639,18 @@ Cross-cutting ──────────────────────
 
 ## 7. Success Metrics
 
-| Metric | v1.4 | v1.5 | v1.6 (current) | v1.7 (target) | v1.8 (target) | v2.0 (target) |
-|--------|------|------|----------------|---------------|---------------|---------------|
-| **Node summaries** | "15 files" | Framework + entry points | **+ routes, activity, tests** | + tags/labels | + cross-repo | + cross-repo |
-| **First graph edges** | `part_of` only | `part_of` + `depends_on` | + API contracts | + import-based | + inter-repo | + federated |
-| **Doc drift detection** | file-hash only | symbol-level (E2E) | **3-layer: symbols + files + modules** | same | + cross-repo | + cross-repo |
-| **AaC Rules** | `require` only | same | + severity levels | **+ forbid, layers, cycles, imports** | same | + custom plugins |
+| Metric | v1.4 | v1.5 | v1.6 | v1.7 (current) | v1.8 (target) | v2.0 (target) |
+|--------|------|------|------|----------------|---------------|---------------|
+| **Node summaries** | "15 files" | Framework + entry points | + routes, activity, tests | **+ tags/labels** | + cross-repo | + cross-repo |
+| **First graph edges** | `part_of` only | `part_of` + `depends_on` | + API contracts | **+ import-based** | + inter-repo | + federated |
+| **Doc drift detection** | file-hash only | symbol-level (E2E) | 3-layer: symbols + files + modules | same | + cross-repo | + cross-repo |
+| **AaC Rules** | `require` only | same | + severity levels | **+ forbid, layers, cycles, imports, cardinality (7 rule types)** | same | + custom plugins |
 | **Init quality** | 6 nodes / 35% | improved | same | **80%+ coverage, non-interactive** | same | same |
-| **Frameworks** | 4 patterns | 18+ | **18+ with route extraction** | 18+ | 18+ | + custom |
+| **Frameworks** | 4 patterns | 18+ | 18+ with route extraction | 18+ | 18+ | + custom |
 | **Languages** | 4 | 9 | 9 | 9 | 9 | 9+ |
-| **Tests** | 847 | 1153 | **1408** | — | — | — |
+| **Tests** | 847 | 1153 | 1408 | **1657** | — | — |
 | **Arch intelligence** | — | — | — | **diff + enhanced why + snapshots** | same | + cross-repo diff |
-| **MCP tools** | 10 | 10 | **13** (+lint, why, diff) | 14+ (+diff) | 14+ | 14+ |
+| **MCP tools** | 10 | 10 | 13 (+lint, why, diff) | **13** | 13+ | 13+ |
 | **Multi-repo** | No | No | No | No | **refs** | **federation** |
 | **Search** | FTS5 | FTS5 | FTS5 | FTS5 | FTS5 | FTS5 + **semantic** |
 
@@ -660,9 +666,9 @@ Cross-cutting ──────────────────────
 | **10 — Deep Analysis** | v1.6 | 5 | **DONE** | Routes, activity, tests |
 | **10.5 — Honest Detection** | v1.6 | 5 | **DONE** | 3-layer staleness, hierarchy coverage |
 | **11 — Agent Infra** | v1.6 | 5 | **DONE** | MCP lint/why/diff, metrics |
-| **12 — AaC Rules v2** | v1.7 | 6 | Planned | Forbid, layers, cycles, import-based rules |
-| **12.5 — Init Quality** | v1.7 | 5 | Planned | 80%+ bootstrap coverage (fix #32-36) |
-| **12.6 — Arch Intelligence** | v1.7 | 3 | Planned | beadloom diff, enhanced why, snapshots |
+| **12 — AaC Rules v2** | v1.7 | 6 | **DONE** | Forbid, layers, cycles, import-based rules |
+| **12.5 — Init Quality** | v1.7 | 5 | **DONE** | 80%+ bootstrap coverage (fix #32-36) |
+| **12.6 — Arch Intelligence** | v1.7 | 3 | **DONE** | beadloom diff, enhanced why, snapshots |
 | **13 — Cross-System** | v1.8 | 4 | Planned | Multi-repo refs, export |
 | **14 — Full Cross + Semantic** | v2.0 | 7 | Planned | Federation, semantic search |
 | **15 — Quality** | cross-cutting | 5 | Planned | Atomic writes, migrations |
@@ -672,7 +678,9 @@ Cross-cutting ──────────────────────
 
 **v1.6 delivered:** Phases 10 + 10.5 + 11. Deep analysis + honest detection + agent infrastructure (BDL-017 15 beads + BDL-018 4 beads + BDL-020 3 beads, 255 new tests).
 
-**Next priority:** Phase 12 (AaC Rules v2) + Phase 12.5 (Init Quality) + Phase 12.6 (Architecture Intelligence) for v1.7. AaC rules are the core differentiator — "architecture enforcement, not just documentation." Architecture Intelligence adds CI/CD visibility and refactoring support.
+**v1.7 delivered:** Phases 12 + 12.5 + 12.6. AaC Rules v2 + Init Quality + Architecture Intelligence (BDL-021, 4 waves, ~224 new tests).
+
+**Next priority:** Phase 13 (Cross-System Foundation) for v1.8. Multi-repo refs, API contract edges, export, and monorepo workspace support.
 
 ---
 
@@ -733,12 +741,12 @@ Cross-cutting ──────────────────────
 | #29 [HIGH] route extraction false positives | Future: self-exclusion + scoping | Open |
 | #30 [MEDIUM] routes poor formatting | Future: improve rendering | Open |
 | #31 [LOW] bd dep remove bug | Beads CLI bug, not beadloom | Open (external) |
-| #32 [HIGH] init scan_paths incomplete for RN | Phase 12.5.1 | Planned (v1.7) |
-| #33 [MEDIUM] init interactive-only | Phase 12.5.2 | Planned (v1.7) |
-| #34 [MEDIUM] rules.yml root service fails lint | Phase 12.5.3 | Planned (v1.7) |
-| #35 [MEDIUM] init no docs generate step | Phase 12.5.4 | Planned (v1.7) |
-| #36 [LOW] existing docs not auto-linked | Phase 12.5.5 | Planned (v1.7) |
-| #37 [INFO] init bootstrap quality = 35% | Phase 12.5 (tracking metric) | Planned (v1.7) |
+| #32 [HIGH] init scan_paths incomplete for RN | Phase 12.5.1 | **DONE** |
+| #33 [MEDIUM] init interactive-only | Phase 12.5.2 | **DONE** |
+| #34 [MEDIUM] rules.yml root service fails lint | Phase 12.5.3 | **DONE** |
+| #35 [MEDIUM] init no docs generate step | Phase 12.5.4 | **DONE** |
+| #36 [LOW] existing docs not auto-linked | Phase 12.5.5 | **DONE** |
+| #37 [INFO] init bootstrap quality = 35% | Phase 12.5 (tracking metric) | **DONE** |
 
 ---
 
@@ -766,8 +774,13 @@ Cross-cutting ──────────────────────
 | 3 | **Plugin format?** | Entry points? Hook-based? Config-driven? |
 | 4 | **Embedding model for code?** | Start with bge-small (general-purpose), switch to code-specific if needed? |
 | 5 | **Versioning:** | SemVer strict? Affects schema migration story |
-| 6 | **Rules v2 YAML format?** | Tags inline in services.yml vs separate tags.yml? Layer definitions in rules.yml vs config.yml? |
-| 7 | **Import rules granularity?** | File-level globs (`components/features/map/**`) vs node-level (`from: map, to: calendar`)? |
+
+### Recently Closed (v1.7)
+
+| Question | Decision | Rationale |
+|----------|----------|-----------|
+| Rules v2 YAML format? | Tags inline in services.yml via `tags` field. Layers defined in rules.yml. | Keep node metadata with nodes; keep rules together in rules.yml |
+| Import rules granularity? | File-level globs (from/to path patterns) | Simpler, works without graph resolution, matches developer mental model |
 
 ---
 

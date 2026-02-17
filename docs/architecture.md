@@ -15,7 +15,7 @@ The system is organized into five DDD domain packages and three service layers:
 
 **Services:**
 - **CLI** (`services/cli.py`) — Click-based CLI with 22 commands
-- **MCP Server** (`services/mcp_server.py`) — stdio server with 10 tools for AI agents
+- **MCP Server** (`services/mcp_server.py`) — stdio server with 13 tools for AI agents
 - **TUI** (`tui/`) — interactive terminal dashboard (Textual)
 
 ---
@@ -67,7 +67,7 @@ The database is stored in `.beadloom/beadloom.db` and uses WAL mode for concurre
 | `bundle_cache` | cache_key (PK), bundle_json, etag, graph_mtime, docs_mtime, created_at | L2 persistent context cache |
 | `search_index` | ref_id, kind, summary, content | FTS5 virtual table for full-text search |
 | `code_imports` | id (PK), file_path, line_number, import_path, resolved_ref_id, file_hash | Import relationships between files |
-| `rules` | id (PK), name (UNIQUE), description, rule_type (deny/require), rule_json, enabled | Architecture rules from rules.yml |
+| `rules` | id (PK), name (UNIQUE), description, rule_type (deny/require/forbid_edge/layer/cycle_detection/import_boundary/cardinality), rule_json, enabled | Architecture rules from rules.yml |
 
 ### BFS Algorithm
 
@@ -92,17 +92,27 @@ Default parameters:
 
 Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 1) and enforce boundaries between graph nodes.
 
-**Rule types:**
+**Rule types (v1.7.0):**
 
 | Type | Semantics | Example |
 |------|-----------|---------|
 | `deny` | Forbid imports between matched nodes | `domain:* → service:*` — domains must not depend on services |
 | `require` | Require edges from matched nodes to targets | Every `service:*` must have a `part_of` edge to a `domain:*` |
+| `forbid_edge` | Forbid specific edge patterns between tagged node groups | Nodes tagged `ui-layer` must not have `uses` edges to `native-layer` |
+| `layer` | Enforce layered architecture direction | Top-down: presentation → domain → infrastructure |
+| `cycle_detection` | Detect circular dependencies in the graph | No cycles on `uses`/`depends_on` edges |
+| `import_boundary` | Control file-level import boundaries | Files in `components/map/**` must not import from `components/calendar/**` |
+| `cardinality` | Enforce complexity limits per node | Max 500 symbols, max 50 files per domain |
 
 **Evaluation:**
 - Deny rules are checked against the `code_imports` table: resolved import ref_ids are matched against rule patterns
 - Require rules are checked against the `edges` table: nodes matching `from` pattern must have specified edge kind to nodes matching `to` pattern
 - `unless_edge` exemptions allow otherwise-forbidden imports when a specific edge kind exists between the nodes
+- ForbidEdge rules check edge patterns between nodes matching tag selectors
+- Layer rules verify dependency direction across ordered architectural layers
+- Cycle detection uses BFS/DFS to find circular dependency paths
+- Import boundary rules query the `code_imports` table for forbidden cross-boundary imports
+- Cardinality rules count symbols/files per node and check against limits
 
 **Output formats:**
 - **Rich** — human-readable with Unicode indicators (✓, ✗, ▲, ▼)
@@ -111,7 +121,21 @@ Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 1
 
 **CLI:** `beadloom lint [--strict] [--format rich|json|porcelain] [--no-reindex]`
 
-The `--strict` flag exits with code 1 on violations (for CI/CD).
+The `--strict` flag exits with code 1 on `error`-severity violations (for CI/CD). Rules support `error` and `warn` severity levels.
+
+### Node Tags
+
+Nodes can be assigned tags for use in rule matching:
+
+```yaml
+# In services.yml
+nodes:
+  - ref_id: my-feature
+    kind: feature
+    tags: [ui-layer, presentation]
+```
+
+Tags are arbitrary strings. Rules reference them via `{ tag: <tag-name> }` selectors in `forbid_edge` and `layer` rules.
 
 ### Cache Architecture
 
@@ -162,6 +186,17 @@ Each reindex captures a health snapshot:
 
 **Trends:** compared against the previous snapshot, displayed as `▲ +8%`, `▼ +2`, etc. Arrows are inverted for "bad increase" metrics (stale, isolated). Snapshots persist across reindexes.
 
+### Architecture Snapshots
+
+`beadloom snapshot` manages point-in-time captures of the architecture graph for historical comparison.
+
+**Commands:**
+- `beadloom snapshot save [--name NAME]` — save current graph state
+- `beadloom snapshot list` — list saved snapshots
+- `beadloom snapshot compare [SNAP_ID]` — compare current graph with a snapshot
+
+Snapshots are stored in SQLite and enable architecture drift detection across releases.
+
 ### Agent Prime
 
 `beadloom prime` outputs a compact project context (target: ≤2000 tokens) for AI agent session initialization.
@@ -200,6 +235,7 @@ Each reindex captures a health snapshot:
 - Source scan paths are configurable via `scan_paths` in `.beadloom/config.yml` (default: `src`, `lib`, `app`)
 - Graph is read only from `.beadloom/_graph/*.yml`
 - Rules are read from `.beadloom/_graph/rules.yml`
+- Rules support 7 types: deny, require, forbid_edge, layer, cycle_detection, import_boundary, cardinality
 - Maximum chunk size: 2000 characters
 - Levenshtein suggestions: maximum 5, distance threshold = max(len/2, 3)
 
