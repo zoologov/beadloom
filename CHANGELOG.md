@@ -5,6 +5,38 @@ All notable changes to Beadloom are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-02-17
+
+AaC Rules v2, Init Quality, and Architecture Intelligence. 1657 tests.
+
+### Added
+- **NodeMatcher** — tag/kind-based node matching for rule definitions; `matches(ref_id, kind, tags=)` method (BDL-021 BEAD-01)
+- **Node tags/labels** — tags stored in `extra` JSON column, bulk assignment via `tags:` block in rules.yml v3; `get_node_tags()` API (BDL-021 BEAD-01)
+- **ForbidEdgeRule** — deny rules evaluated against `edges` table (vs DenyRule which checks `code_imports`); supports tag-based matching (BDL-021 BEAD-02)
+- **LayerRule** — enforce layered architecture: define ordered layers with `allow_skip`, violation on reverse-direction edges (BDL-021 BEAD-03)
+- **CycleRule** — circular dependency detection via iterative DFS; configurable `edge_kind` (single or tuple) and `max_depth`; reports full cycle path (BDL-021 BEAD-04)
+- **ImportBoundaryRule** — file-level import restrictions using fnmatch glob patterns on `code_imports` file paths (BDL-021 BEAD-05)
+- **CardinalityRule** — architectural smell detection: `max_symbols`, `max_files`, `min_doc_coverage` thresholds per node (BDL-021 BEAD-06)
+- **Rules schema v3** — top-level `tags:` block for bulk tag assignments; backward compatible with v1/v2 (BDL-021 BEAD-01)
+- **`load_rules_with_tags()`** — returns both rules and tag assignments from rules.yml (BDL-021 BEAD-01)
+- **Architecture snapshots** — `beadloom snapshot save/list/compare`: save graph state to `graph_snapshots` table, list history, compare any two snapshots (BDL-021 BEAD-12)
+- **Enhanced diff** — `NodeChange` now tracks source path changes, tag changes, symbol counts; `compute_diff_from_snapshot()` for snapshot-based comparison (BDL-021 BEAD-13)
+- **Non-interactive init** — `beadloom init --mode bootstrap --yes --force` for CI/scripts; `non_interactive_init()` API (BDL-021 BEAD-08)
+- **Doc auto-linking** — `auto_link_docs()` fuzzy-matches existing docs to graph nodes by path/ref_id similarity during init (BDL-021 BEAD-11)
+- **Docs generate in init** — `beadloom init` offers doc skeleton generation as a final step (BDL-021 BEAD-10)
+- **Enhanced `why --reverse`** — `render_why_tree()` for reverse dependency view; `--reverse` and `--format` flags on CLI (BDL-021 BEAD-14)
+- **Scan all code directories** — bootstrap now scans all top-level dirs with code files, not just manifest-adjacent ones (BDL-021 BEAD-07)
+- **249 new tests** (1657 total)
+
+### Changed
+- **Rule engine** — `Rule` type union expanded: `DenyRule | RequireRule | CycleRule | ImportBoundaryRule | ForbidEdgeRule | LayerRule | CardinalityRule`
+- **`evaluate_all()`** — dispatches all 7 rule types (was 2)
+- **`render_diff()`** — shows source path changes, tag changes, symbol counts for changed nodes
+- **4 domain docs refreshed** — context-oracle, graph, onboarding, cli documentation updated
+
+### Fixed
+- **Root service rule** — `service-needs-parent` rule no longer fails on root node; root detection uses `part_of` edge presence (BDL-021 BEAD-09)
+
 ## [1.6.0] - 2026-02-17
 
 Deep Code Analysis, Honest Doc-Sync, and Agent Infrastructure. 1408 tests.
