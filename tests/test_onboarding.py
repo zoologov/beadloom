@@ -131,6 +131,123 @@ class TestScanProject:
         assert result["file_count"] >= 1
         assert ".vue" in result["languages"]
 
+    def test_react_native_discovers_all_code_dirs(self, tmp_path: Path) -> None:
+        """React Native project with src/ + components/, hooks/, modules/ detects all."""
+        # Known source dir
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "App.tsx").write_text("export default function App() {}\n")
+        # Non-standard code dirs (the bug: these were missed when src/ existed)
+        for dir_name in ("components", "hooks", "modules", "contexts"):
+            d = tmp_path / dir_name
+            d.mkdir()
+            (d / "index.tsx").write_text("export default {}\n")
+        # Manifest
+        (tmp_path / "package.json").write_text('{"name": "my-rn-app"}')
+
+        result = scan_project(tmp_path)
+        assert "src" in result["source_dirs"]
+        assert "components" in result["source_dirs"]
+        assert "hooks" in result["source_dirs"]
+        assert "modules" in result["source_dirs"]
+        assert "contexts" in result["source_dirs"]
+        # All files counted
+        assert result["file_count"] >= 5
+
+    def test_known_and_unknown_dirs_merged(self, tmp_path: Path) -> None:
+        """Both known (app/) and unknown (utils_custom/) dirs are discovered together."""
+        app = tmp_path / "app"
+        app.mkdir()
+        (app / "main.py").write_text("def main(): pass\n")
+        custom = tmp_path / "utils_custom"
+        custom.mkdir()
+        (custom / "helpers.py").write_text("def helper(): pass\n")
+
+        result = scan_project(tmp_path)
+        assert "app" in result["source_dirs"]
+        assert "utils_custom" in result["source_dirs"]
+        assert result["file_count"] >= 2
+
+    def test_no_duplicate_source_dirs(self, tmp_path: Path) -> None:
+        """Source dirs list has no duplicates after merge."""
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "main.py").write_text("pass\n")
+
+        result = scan_project(tmp_path)
+        assert len(result["source_dirs"]) == len(set(result["source_dirs"]))
+
+    def test_empty_unknown_dirs_not_included(self, tmp_path: Path) -> None:
+        """Dirs with no code files are not included even in pass 2."""
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "main.py").write_text("pass\n")
+        # Dir with no code files
+        empty_dir = tmp_path / "configs"
+        empty_dir.mkdir()
+        (empty_dir / "settings.yaml").write_text("key: value\n")
+
+        result = scan_project(tmp_path)
+        assert "src" in result["source_dirs"]
+        assert "configs" not in result["source_dirs"]
+
+    def test_pass2_skips_vendor_dirs(self, tmp_path: Path) -> None:
+        """Pass 2 still skips vendor/node_modules/etc even when Pass 1 found dirs."""
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "main.py").write_text("pass\n")
+        nm = tmp_path / "node_modules"
+        nm.mkdir()
+        (nm / "pkg.js").write_text("module.exports = {}")
+        vendor = tmp_path / "vendor"
+        vendor.mkdir()
+        (vendor / "lib.py").write_text("pass\n")
+
+        result = scan_project(tmp_path)
+        assert "node_modules" not in result["source_dirs"]
+        assert "vendor" not in result["source_dirs"]
+
+    def test_pass2_skips_hidden_dirs(self, tmp_path: Path) -> None:
+        """Pass 2 skips hidden directories (starting with dot)."""
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "main.py").write_text("pass\n")
+        hidden = tmp_path / ".hidden"
+        hidden.mkdir()
+        (hidden / "secret.py").write_text("pass\n")
+
+        result = scan_project(tmp_path)
+        assert ".hidden" not in result["source_dirs"]
+
+    def test_pass2_skips_test_and_doc_dirs(self, tmp_path: Path) -> None:
+        """Pass 2 skips test/ and docs/ directories."""
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "main.py").write_text("pass\n")
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "test_main.py").write_text("pass\n")
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        (docs / "build_doc.py").write_text("pass\n")
+
+        result = scan_project(tmp_path)
+        assert "tests" not in result["source_dirs"]
+        assert "docs" not in result["source_dirs"]
+
+    def test_file_count_no_double_counting(self, tmp_path: Path) -> None:
+        """Files in known source dirs are not double-counted after merge."""
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "a.py").write_text("pass\n")
+        (src / "b.py").write_text("pass\n")
+        custom = tmp_path / "custom"
+        custom.mkdir()
+        (custom / "c.py").write_text("pass\n")
+
+        result = scan_project(tmp_path)
+        assert result["file_count"] == 3
+
 
 # ---------------------------------------------------------------------------
 # classify_doc
@@ -1085,7 +1202,7 @@ class TestGenerateRules:
     """Tests for generate_rules() auto-rules generation."""
 
     def test_domains_only(self, tmp_path: Path) -> None:
-        """Nodes with domain + service kinds produce 2 rules."""
+        """Nodes with domain + service kinds produce 1 rule (no service-needs-parent)."""
         from beadloom.onboarding.scanner import generate_rules
 
         nodes = [
@@ -1105,22 +1222,22 @@ class TestGenerateRules:
         rules_path = tmp_path / "rules.yml"
         count = generate_rules(nodes, edges, "myproject", rules_path)
 
-        assert count == 2
+        assert count == 1
         assert rules_path.exists()
 
         data = yaml.safe_load(rules_path.read_text())
         assert data["version"] == 1
-        assert len(data["rules"]) == 2
+        assert len(data["rules"]) == 1
         domain_rule = next(r for r in data["rules"] if r["name"] == "domain-needs-parent")
         assert domain_rule["require"]["for"] == {"kind": "domain"}
         # Empty matcher: matches any node (no false positives on hierarchical graphs)
         assert domain_rule["require"]["has_edge_to"] == {}
         assert domain_rule["require"]["edge_kind"] == "part_of"
-        svc_rule = next(r for r in data["rules"] if r["name"] == "service-needs-parent")
-        assert svc_rule["require"]["for"] == {"kind": "service"}
+        rule_names = {r["name"] for r in data["rules"]}
+        assert "service-needs-parent" not in rule_names
 
     def test_domains_and_features(self, tmp_path: Path) -> None:
-        """Domain + feature + service nodes produce 3 rules."""
+        """Domain + feature + service nodes produce 2 rules (no service-needs-parent)."""
         from beadloom.onboarding.scanner import generate_rules
 
         nodes = [
@@ -1140,17 +1257,17 @@ class TestGenerateRules:
         rules_path = tmp_path / "rules.yml"
         count = generate_rules(nodes, edges, "myproj", rules_path)
 
-        assert count == 3
+        assert count == 2
         data = yaml.safe_load(rules_path.read_text())
         rule_names = {r["name"] for r in data["rules"]}
         assert "domain-needs-parent" in rule_names
         assert "feature-needs-domain" in rule_names
-        assert "service-needs-parent" in rule_names
+        assert "service-needs-parent" not in rule_names
 
     def test_all_three_kinds(self, tmp_path: Path) -> None:
-        """Root (service) + domain + feature + extra service node produce 3 rules.
+        """Root (service) + domain + feature + extra service produce 2 rules.
 
-        service-needs-parent validates every service has a part_of edge to a parent.
+        service-needs-parent was removed because the root service has no parent.
         """
         from beadloom.onboarding.scanner import generate_rules
 
@@ -1178,12 +1295,12 @@ class TestGenerateRules:
         rules_path = tmp_path / "rules.yml"
         count = generate_rules(nodes, edges, "myproj", rules_path)
 
-        assert count == 3
+        assert count == 2
         data = yaml.safe_load(rules_path.read_text())
         rule_names = {r["name"] for r in data["rules"]}
         assert "domain-needs-parent" in rule_names
         assert "feature-needs-domain" in rule_names
-        assert "service-needs-parent" in rule_names
+        assert "service-needs-parent" not in rule_names
 
     def test_empty_graph(self, tmp_path: Path) -> None:
         """Empty nodes list returns 0 and does not create the file."""
@@ -1196,7 +1313,7 @@ class TestGenerateRules:
         assert not rules_path.exists()
 
     def test_service_only_root(self, tmp_path: Path) -> None:
-        """Only a root service node generates 1 rule (service-needs-parent)."""
+        """Only a root service node generates 0 rules (service-needs-parent removed)."""
         from beadloom.onboarding.scanner import generate_rules
 
         nodes = [
@@ -1206,10 +1323,8 @@ class TestGenerateRules:
         rules_path = tmp_path / "rules.yml"
         count = generate_rules(nodes, edges, "myproj", rules_path)
 
-        assert count == 1
-        assert rules_path.exists()
-        data = yaml.safe_load(rules_path.read_text())
-        assert data["rules"][0]["name"] == "service-needs-parent"
+        assert count == 0
+        assert not rules_path.exists()
 
     def test_idempotent_skip_existing(self, tmp_path: Path) -> None:
         """generate_rules overwrites if called directly (idempotency is in bootstrap_project)."""
@@ -1227,12 +1342,12 @@ class TestGenerateRules:
         ]
         count = generate_rules(nodes, edges, "myproj", rules_path)
 
-        assert count == 2
+        assert count == 1
         data = yaml.safe_load(rules_path.read_text())
-        assert len(data["rules"]) == 2
+        assert len(data["rules"]) == 1
         rule_names = {r["name"] for r in data["rules"]}
         assert "domain-needs-parent" in rule_names
-        assert "service-needs-parent" in rule_names
+        assert "service-needs-parent" not in rule_names
 
     def test_root_detection_from_edges(self, tmp_path: Path) -> None:
         """Root is detected correctly; domain rule uses empty matcher."""
@@ -1278,8 +1393,8 @@ class TestGenerateRules:
         data = yaml.safe_load(rules_path.read_text())
         assert data["version"] == 1
         assert isinstance(data["rules"], list)
-        # domain-needs-parent + feature-needs-domain + service-needs-parent
-        assert len(data["rules"]) == 3
+        # domain-needs-parent + feature-needs-domain (no service-needs-parent)
+        assert len(data["rules"]) == 2
 
         for rule in data["rules"]:
             assert "name" in rule
@@ -1315,7 +1430,7 @@ class TestGenerateRules:
 
         # Must not raise — validates that has_edge_to: {} is accepted.
         rules = load_rules(rules_path)
-        assert len(rules) == 3
+        assert len(rules) == 2
         for rule in rules:
             assert isinstance(rule, RequireRule)
 
@@ -1379,12 +1494,8 @@ class TestGenerateRules:
         from beadloom.graph.rule_engine import load_rules
 
         loaded_rules = load_rules(rules_path)
-        # Only evaluate domain rules to verify hierarchical domains pass.
-        domain_rules = [
-            r
-            for r in loaded_rules
-            if isinstance(r, RequireRule) and r.name != "service-needs-parent"
-        ]
+        # Evaluate all rules (service-needs-parent no longer generated).
+        domain_rules = [r for r in loaded_rules if isinstance(r, RequireRule)]
 
         violations = evaluate_require_rules(conn, domain_rules)
         # auth -> myproj (part_of) and auth-sub -> auth (part_of) both satisfy
@@ -1392,8 +1503,8 @@ class TestGenerateRules:
         assert len(violations) == 0
         conn.close()
 
-    def test_service_needs_parent_generated(self, tmp_path: Path) -> None:
-        """service-needs-parent rule is generated when service nodes exist."""
+    def test_service_needs_parent_not_generated(self, tmp_path: Path) -> None:
+        """service-needs-parent rule is NOT generated even when service nodes exist."""
         from beadloom.onboarding.scanner import generate_rules
 
         nodes = [
@@ -1410,7 +1521,8 @@ class TestGenerateRules:
 
         data = yaml.safe_load(rules_path.read_text())
         rule_names = {r["name"] for r in data["rules"]}
-        assert "service-needs-parent" in rule_names
+        assert "service-needs-parent" not in rule_names
+        assert "domain-needs-parent" in rule_names
 
 
 # ---------------------------------------------------------------------------

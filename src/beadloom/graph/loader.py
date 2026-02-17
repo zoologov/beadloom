@@ -18,6 +18,22 @@ import yaml
 if TYPE_CHECKING:
     from pathlib import Path
 
+
+def get_node_tags(conn: sqlite3.Connection, ref_id: str) -> set[str]:
+    """Extract tags from a node's ``extra`` JSON column.
+
+    Returns an empty set when the node does not exist, has no ``extra``
+    data, or has no ``tags`` key in its extra JSON.
+    """
+    row = conn.execute("SELECT extra FROM nodes WHERE ref_id = ?", (ref_id,)).fetchone()
+    if not row:
+        return set()
+    raw = row[0] if isinstance(row, tuple) else row["extra"]
+    if raw is None:
+        return set()
+    extra: dict[str, Any] = json.loads(str(raw))
+    return set(extra.get("tags", []))
+
 # Fields mapped directly to SQLite columns (not stored in ``extra``).
 _NODE_DIRECT_FIELDS = frozenset({"ref_id", "kind", "summary", "source"})
 # ``docs`` is tracked but handled by the doc indexer (BEAD-04).

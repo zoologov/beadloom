@@ -28,6 +28,7 @@ from beadloom.graph.linter import (
 from beadloom.graph.loader import (
     GraphLoadResult,
     ParsedFile,
+    get_node_tags,
     load_graph,
     parse_graph_file,
     update_node_in_yaml,
@@ -42,6 +43,7 @@ from beadloom.graph.rule_engine import (
     evaluate_deny_rules,
     evaluate_require_rules,
     load_rules,
+    load_rules_with_tags,
     validate_rules,
 )
 
@@ -69,10 +71,12 @@ __all__ = [
     "format_json",
     "format_porcelain",
     "format_rich",
+    "get_node_tags",
     "index_imports",
     "lint",
     "load_graph",
     "load_rules",
+    "load_rules_with_tags",
     "parse_graph_file",
     "render_diff",
     "resolve_import_to_node",

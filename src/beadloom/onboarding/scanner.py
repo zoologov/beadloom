@@ -149,17 +149,19 @@ def scan_project(project_root: Path) -> dict[str, Any]:
 
     Returns dict with manifests, source_dirs, file_count, languages.
 
-    Discovery strategy:
-    1. Look for directories matching ``_SOURCE_DIRS`` (known names).
-    2. If none found, fall back to scanning all non-hidden, non-vendor
-       directories for code files.
+    Discovery strategy (both passes always run, results merged):
+    1. **Pass 1:** directories matching ``_SOURCE_DIRS`` (known names).
+    2. **Pass 2:** all non-hidden, non-vendor, non-test directories that
+       contain code files — catches ``components/``, ``hooks/``, etc.
     """
     manifests: list[str] = []
-    source_dirs: list[str] = []
     file_count = 0
     extensions: set[str] = set()
 
-    all_dirs: list[str] = []
+    # Pass 1: known source dirs.
+    known_dirs: list[str] = []
+    # Pass 2 candidates: non-hidden, non-skip, non-known dirs.
+    other_dirs: list[str] = []
 
     for item in sorted(project_root.iterdir()):
         if item.name.startswith("."):
@@ -168,7 +170,7 @@ def scan_project(project_root: Path) -> dict[str, Any]:
             manifests.append(item.name)
         if item.is_dir():
             if item.name in _SOURCE_DIRS:
-                source_dirs.append(item.name)
+                known_dirs.append(item.name)
                 for f in item.rglob("*"):
                     if (
                         f.is_file()
@@ -178,24 +180,27 @@ def scan_project(project_root: Path) -> dict[str, Any]:
                         file_count += 1
                         extensions.add(f.suffix)
             elif item.name not in _SKIP_DIRS:
-                all_dirs.append(item.name)
+                other_dirs.append(item.name)
 
-    # Fallback: no known source dirs found — scan all non-skipped dirs.
-    if not source_dirs:
-        for dir_name in all_dirs:
-            dir_path = project_root / dir_name
-            count = 0
-            for f in dir_path.rglob("*"):
-                if (
-                    f.is_file()
-                    and f.suffix in _CODE_EXTENSIONS
-                    and not _is_in_skip_dir(f, dir_path)
-                ):
-                    count += 1
-                    extensions.add(f.suffix)
-            if count > 0:
-                source_dirs.append(dir_name)
-                file_count += count
+    # Pass 2: always scan non-known dirs for code files (not just as fallback).
+    code_dirs: list[str] = []
+    for dir_name in other_dirs:
+        dir_path = project_root / dir_name
+        count = 0
+        for f in dir_path.rglob("*"):
+            if (
+                f.is_file()
+                and f.suffix in _CODE_EXTENSIONS
+                and not _is_in_skip_dir(f, dir_path)
+            ):
+                count += 1
+                extensions.add(f.suffix)
+        if count > 0:
+            code_dirs.append(dir_name)
+            file_count += count
+
+    # Merge + deduplicate (sorted for deterministic output).
+    source_dirs = sorted(set(known_dirs + code_dirs))
 
     return {
         "manifests": manifests,
@@ -746,19 +751,10 @@ def generate_rules(
             }
         )
 
-    # Rule 3: every service must have a part_of edge to a parent.
-    if "service" in kinds:
-        rules.append(
-            {
-                "name": "service-needs-parent",
-                "description": "Every service must have a part_of edge to a parent",
-                "require": {
-                    "for": {"kind": "service"},
-                    "has_edge_to": {},
-                    "edge_kind": "part_of",
-                },
-            }
-        )
+    # Note: service-needs-parent rule was intentionally removed.
+    # The root service node has no parent by definition, so the rule
+    # always fails on freshly bootstrapped projects. The domain-needs-parent
+    # and feature-needs-domain rules are sufficient for structural enforcement.
 
     if not rules:
         return 0

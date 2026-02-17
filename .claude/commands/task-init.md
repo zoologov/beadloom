@@ -98,6 +98,7 @@ Draft  →  Approved  →  Done
 3. Show both to user
 4. **WAIT for explicit approval**
 5. Update both to `Status: Approved`
+6. **Immediately proceed to Step 4** (no additional approval needed)
 
 ### Step 4: ACTIVE
 
