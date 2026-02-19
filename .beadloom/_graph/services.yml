@@ -68,7 +68,7 @@ nodes:
   # Service: MCP Server
   - ref_id: mcp-server
     kind: service
-    summary: "MCP stdio server with 13 tools for AI agents"
+    summary: "MCP stdio server with 14 tools for AI agents"
     source: src/beadloom/services/mcp_server.py
     docs:
       - docs/services/mcp.md
@@ -161,6 +161,14 @@ nodes:
     docs:
       - docs/domains/onboarding/features/agent-prime/SPEC.md
 
+  # Feature: Debt Report
+  - ref_id: debt-report
+    kind: feature
+    summary: "Architecture debt aggregation, scoring, trend tracking, and CI gating"
+    source: src/beadloom/infrastructure/debt_report.py
+    docs:
+      - docs/domains/infrastructure/features/debt-report/SPEC.md
+
   # Feature: Reindex
   - ref_id: reindex
     kind: feature
@@ -237,6 +245,9 @@ edges:
     kind: part_of
   - src: c4-diagrams
     dst: graph
+    kind: part_of
+  - src: debt-report
+    dst: infrastructure
     kind: part_of
   - src: reindex
     dst: infrastructure

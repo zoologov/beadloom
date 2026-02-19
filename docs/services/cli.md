@@ -121,6 +121,48 @@ Shows Rich-formatted dashboard with: node count (broken down by kind), edges, do
 
 `--json` -- structured JSON output.
 
+#### status --debt-report
+
+Architecture debt report mode. Aggregates health signals from lint, sync-check, doctor, git activity, and test mapper into a single 0-100 debt score with category breakdown and top offending nodes.
+
+```bash
+beadloom status --debt-report [--json] [--fail-if=EXPR] [--category=NAME] [--project DIR]
+```
+
+- `--debt-report` -- show architecture debt report instead of the standard status dashboard.
+- `--json` -- output the debt report as structured JSON (with `--debt-report`).
+- `--fail-if=EXPR` -- CI gate: exit 1 if condition is met. Requires `--debt-report`. Supported expressions:
+  - `score>N` -- fail if overall debt score exceeds N.
+  - `errors>N` -- fail if rule violation error count exceeds N.
+- `--category=NAME` -- filter the debt report to a single category. Accepted names: `rules`, `docs`, `complexity`, `tests` (short names) or `rule_violations`, `doc_gaps`, `test_gaps` (internal names).
+
+The debt score formula combines four categories:
+- **Rule Violations** -- weighted count of lint rule errors and warnings.
+- **Documentation Gaps** -- undocumented nodes, stale docs, untracked files.
+- **Complexity** -- oversized domains (by symbol count), high fan-out nodes, dormant domains.
+- **Test Gaps** -- untested domains/features.
+
+Severity classification: `clean` (0), `low` (1-10), `medium` (11-25), `high` (26-50), `critical` (51-100).
+
+Examples:
+
+```bash
+# Human-readable Rich output
+beadloom status --debt-report
+
+# Machine-readable JSON
+beadloom status --debt-report --json
+
+# CI gate: fail if score exceeds 30
+beadloom status --debt-report --fail-if=score>30
+
+# CI gate: fail if any lint errors
+beadloom status --debt-report --fail-if=errors>0
+
+# Filter to documentation gaps only
+beadloom status --debt-report --category=docs
+```
+
 ### beadloom doctor
 
 Architecture graph validation.
@@ -374,7 +416,7 @@ Module `src/beadloom/services/cli.py`:
 - `ctx` -- get context bundle for ref_id(s)
 - `graph` -- show architecture graph (Mermaid, C4-Mermaid, C4-PlantUML, or JSON) with `--format`, `--level`, `--scope` options
 - `doctor` -- run validation checks
-- `status` -- show index statistics with health trends and context metrics
+- `status` -- show index statistics with health trends and context metrics; `--debt-report` mode with `--fail-if`, `--category` flags
 - `sync_check` -- check doc-code sync with reason/details (reason-aware output for `untracked_files`, `missing_modules`, `symbols_changed`)
 - `sync_update` -- review and update stale docs interactively
 - `install_hooks` -- install/remove pre-commit hook
