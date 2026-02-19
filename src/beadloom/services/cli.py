@@ -368,6 +368,26 @@ def _format_mermaid(
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON.")
 @click.option("--depth", default=2, type=int, help="Graph traversal depth.")
 @click.option(
+    "--format",
+    "fmt",
+    type=click.Choice(["mermaid", "c4", "c4-plantuml"]),
+    default="mermaid",
+    help="Output format (default: mermaid).",
+)
+@click.option(
+    "--level",
+    "c4_level",
+    type=click.Choice(["context", "container", "component"]),
+    default="container",
+    help="C4 diagram level (default: container). Only used with --format=c4|c4-plantuml.",
+)
+@click.option(
+    "--scope",
+    "c4_scope",
+    default=None,
+    help="Scope ref_id for --level=component (show internals of one container).",
+)
+@click.option(
     "--project",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     default=None,
@@ -378,9 +398,12 @@ def graph(
     *,
     output_json: bool,
     depth: int,
+    fmt: str,
+    c4_level: str,
+    c4_scope: str | None,
     project: Path | None,
 ) -> None:
-    """Show architecture graph (Mermaid or JSON)."""
+    """Show architecture graph (Mermaid, C4-Mermaid, C4-PlantUML, or JSON)."""
     from beadloom.context_oracle.builder import bfs_subgraph
     from beadloom.infrastructure.db import open_db
 
@@ -393,6 +416,35 @@ def graph(
 
     conn = open_db(db_path)
 
+    # C4 formats use the C4 model pipeline
+    if fmt in ("c4", "c4-plantuml"):
+        from beadloom.graph.c4 import (
+            filter_c4_nodes,
+            map_to_c4,
+            render_c4_mermaid,
+            render_c4_plantuml,
+        )
+
+        c4_nodes, c4_rels = map_to_c4(conn)
+
+        # Apply level filtering
+        try:
+            c4_nodes, c4_rels = filter_c4_nodes(
+                c4_nodes, c4_rels, level=c4_level, scope=c4_scope
+            )
+        except ValueError as exc:
+            click.echo(f"Error: {exc}", err=True)
+            conn.close()
+            sys.exit(1)
+
+        if fmt == "c4-plantuml":
+            click.echo(render_c4_plantuml(c4_nodes, c4_rels))
+        else:
+            click.echo(render_c4_mermaid(c4_nodes, c4_rels))
+        conn.close()
+        return
+
+    # Default: mermaid or JSON
     if ref_ids:
         # BFS from specified focus nodes.
         nodes, edges = bfs_subgraph(conn, list(ref_ids), depth=depth)

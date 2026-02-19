@@ -1,6 +1,6 @@
 # PLAN: BDL-023 — C4 Architecture Diagrams
 
-> **Status:** Draft
+> **Status:** Approved
 > **Created:** 2026-02-19
 
 ---
