@@ -78,6 +78,40 @@ Services (CLI, MCP, TUI) → Domains (context-oracle, graph, doc-sync, onboardin
 
 Dependencies point inward. Services depend on domains. Reverse is forbidden.
 
+### DDD — Domain-Driven Design Rules
+
+Each top-level package is a **Bounded Context** with its own responsibility:
+
+| Domain | Responsibility |
+|--------|---------------|
+| `graph/` | Architecture graph: nodes, edges, indexing, rendering |
+| `context_oracle/` | Context assembly for AI agents |
+| `doc_sync/` | Doc-code freshness tracking |
+| `onboarding/` | Project initialization and setup |
+| `infrastructure/` | Shared utilities: DB, config, file I/O |
+| `services/` | Entry points: CLI (Click), MCP (stdio) |
+| `tui/` | Terminal UI (Rich) |
+
+**Dependency rules:**
+
+```
+✅ services/ → any domain        (services consume domains)
+✅ domain/   → infrastructure/    (domains use shared infra)
+❌ domain/   → domain/            (domains are isolated)
+❌ domain/   → services/          (no reverse dependency)
+❌ infrastructure/ → domain/      (infra is domain-agnostic)
+```
+
+**Where to place new code:**
+
+1. Business logic → domain package (`graph/`, `context_oracle/`, etc.)
+2. CLI commands, MCP handlers → `services/`
+3. DB access, file I/O, config → `infrastructure/`
+4. Cross-domain utility → `infrastructure/`
+5. Unsure? Run `beadloom why <ref-id>` and `beadloom ctx <domain>` to find the right home
+
+**Verification:** `beadloom lint --strict` enforces these boundaries. Fix violations before committing.
+
 ### Validation during development
 
 ```bash
