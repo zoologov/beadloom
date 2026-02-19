@@ -142,6 +142,8 @@ nodes:
     kind: feature
     summary: "C4 architecture model mapping with Mermaid and PlantUML renderers"
     source: src/beadloom/graph/c4.py
+    docs:
+      - docs/domains/graph/features/c4-diagrams/SPEC.md
 
   # Feature: Cache
   - ref_id: cache
