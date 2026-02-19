@@ -1,6 +1,6 @@
 # MCP Server
 
-Beadloom provides an MCP (Model Context Protocol) server with 13 tools for integration with AI agents.
+Beadloom provides an MCP (Model Context Protocol) server with 14 tools for integration with AI agents.
 
 ## Specification
 
@@ -231,6 +231,22 @@ Run architecture lint rules. Returns violations as JSON.
 
 `severity` filter: `all` (default), `error`, `warn`. Returns: `violations` list (each with `rule`, `severity`, `rule_type`, `file_path`, `line_number`, `from_ref_id`, `to_ref_id`, `message`) and `summary` (`errors`, `warnings`, `rules_evaluated`).
 
+#### get_debt_report
+
+Get architecture debt report with score, categories, and top offenders.
+
+```json
+{
+  "name": "get_debt_report",
+  "arguments": {
+    "trend": true,
+    "category": "rule_violations"
+  }
+}
+```
+
+`trend` (boolean, default false): include trend vs last snapshot. `category` (string, optional): filter to specific category -- accepts `rule_violations`, `doc_gaps`, `complexity`, `test_gaps` (or short names: `rules`, `docs`, `tests`). Returns: `debt_score` (0-100), `severity` (clean/low/medium/high/critical), `categories` list (each with `name`, `score`, `details`), `top_offenders` list (each with `ref_id`, `score`, `reasons`), and `trend` (null or object with `previous_snapshot`, `previous_score`, `delta`, `category_deltas`).
+
 ## API
 
 MCP server is implemented in `src/beadloom/services/mcp_server.py`:
@@ -252,6 +268,7 @@ Handler functions (sync, testable without MCP transport):
 - `handle_why(conn, *, ref_id, depth=3)` -- impact analysis with flattened upstream/downstream
 - `handle_diff(project_root, *, since="HEAD~1")` -- graph diff
 - `handle_lint(project_root, *, severity="all")` -- architecture lint
+- `handle_get_debt_report(conn, project_root, *, trend=False, category=None)` -- architecture debt report
 
 ## Testing
 

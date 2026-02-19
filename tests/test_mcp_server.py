@@ -808,3 +808,128 @@ class TestGenerateDocsTool:
 
         with pytest.raises(ValueError, match="generate_docs requires project_root"):
             _dispatch_tool(db_conn, "generate_docs", {})
+
+
+class TestGetDebtReportTool:
+    """Tests for the get_debt_report MCP tool (BEAD-05)."""
+
+    def test_tool_listed(self) -> None:
+        """get_debt_report appears in the _TOOLS list."""
+        from beadloom.services.mcp_server import _TOOLS
+
+        tool_names = [t.name for t in _TOOLS]
+        assert "get_debt_report" in tool_names
+
+    def test_tool_schema_has_trend_and_category(self) -> None:
+        """Tool input schema declares trend (bool) and category (str) properties."""
+        from beadloom.services.mcp_server import _TOOLS
+
+        tool = next(t for t in _TOOLS if t.name == "get_debt_report")
+        props = tool.inputSchema["properties"]
+        assert "trend" in props
+        assert props["trend"]["type"] == "boolean"
+        assert "category" in props
+        assert props["category"]["type"] == "string"
+
+    def test_dispatch_returns_valid_json(
+        self,
+        project: Path,
+        db_conn: sqlite3.Connection,
+    ) -> None:
+        """get_debt_report returns a JSON-serializable dict with expected keys."""
+        import json
+
+        from beadloom.services.mcp_server import _dispatch_tool
+
+        result = _dispatch_tool(
+            db_conn,
+            "get_debt_report",
+            {},
+            project_root=project,
+        )
+        # Result should be JSON-serializable
+        text = json.dumps(result, ensure_ascii=False, indent=2)
+        parsed = json.loads(text)
+        assert "debt_score" in parsed
+        assert "severity" in parsed
+        assert "categories" in parsed
+        assert "top_offenders" in parsed
+        assert isinstance(parsed["debt_score"], (int, float))
+        assert isinstance(parsed["categories"], list)
+
+    def test_dispatch_with_trend_false(
+        self,
+        project: Path,
+        db_conn: sqlite3.Connection,
+    ) -> None:
+        """With trend=False, trend key should be null."""
+        from beadloom.services.mcp_server import _dispatch_tool
+
+        result = _dispatch_tool(
+            db_conn,
+            "get_debt_report",
+            {"trend": False},
+            project_root=project,
+        )
+        assert "trend" in result
+        # No snapshots exist, so trend is None regardless
+        assert result["trend"] is None
+
+    def test_dispatch_with_trend_true_no_snapshots(
+        self,
+        project: Path,
+        db_conn: sqlite3.Connection,
+    ) -> None:
+        """With trend=True but no snapshots, trend should be null."""
+        from beadloom.services.mcp_server import _dispatch_tool
+
+        result = _dispatch_tool(
+            db_conn,
+            "get_debt_report",
+            {"trend": True},
+            project_root=project,
+        )
+        assert result["trend"] is None
+
+    def test_dispatch_with_category_filter(
+        self,
+        project: Path,
+        db_conn: sqlite3.Connection,
+    ) -> None:
+        """With category filter, only matching categories are returned."""
+        from beadloom.services.mcp_server import _dispatch_tool
+
+        result = _dispatch_tool(
+            db_conn,
+            "get_debt_report",
+            {"category": "rule_violations"},
+            project_root=project,
+        )
+        assert len(result["categories"]) == 1
+        assert result["categories"][0]["name"] == "rule_violations"
+
+    def test_dispatch_with_unknown_category(
+        self,
+        project: Path,
+        db_conn: sqlite3.Connection,
+    ) -> None:
+        """With an unknown category filter, no categories are returned."""
+        from beadloom.services.mcp_server import _dispatch_tool
+
+        result = _dispatch_tool(
+            db_conn,
+            "get_debt_report",
+            {"category": "nonexistent"},
+            project_root=project,
+        )
+        assert result["categories"] == []
+
+    def test_dispatch_requires_project_root(
+        self,
+        db_conn: sqlite3.Connection,
+    ) -> None:
+        """get_debt_report raises ValueError when project_root is None."""
+        from beadloom.services.mcp_server import _dispatch_tool
+
+        with pytest.raises(ValueError, match="get_debt_report requires project_root"):
+            _dispatch_tool(db_conn, "get_debt_report", {})
