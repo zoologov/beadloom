@@ -107,7 +107,7 @@ Every feature/epic MUST have this hierarchy:
 ```
 
 **Rules:**
-- Dev beads are created during `/task-init` Step 3 (PLAN), NOT before
+- Dev beads are created ONLY after PLAN is Approved (Step 3.6), NOT before
 - Test bead depends on ALL dev beads
 - Review bead depends on test bead
 - Tech-writer bead depends on review bead
