@@ -16,11 +16,16 @@ from beadloom.infrastructure.debt_report import (
     DebtTrend,
     DebtWeights,
     NodeDebt,
+    _compute_snapshot_debt,
     _severity_label,
+    _trend_arrow,
     collect_debt_data,
     compute_debt_score,
+    compute_debt_trend,
     compute_top_offenders,
+    format_debt_json,
     format_top_offenders_json,
+    format_trend_section,
     load_debt_weights,
 )
 
@@ -1695,3 +1700,963 @@ class TestCliCategoryFilter:
              "--project", str(project)],
         )
         assert result.exit_code != 0
+
+
+# ===========================================================================
+# 15. BEAD-07 — Edge case / coverage augmentation tests
+# ===========================================================================
+
+
+class TestLoadDebtWeightsEdgeCases:
+    """Edge cases for load_debt_weights: invalid YAML, non-dict data, etc."""
+
+    def test_invalid_yaml_returns_defaults(self, project_root: Path) -> None:
+        """Malformed YAML content falls back to defaults."""
+        config_path = project_root / "config.yml"
+        config_path.write_text(": : : invalid yaml [[[", encoding="utf-8")
+        weights = load_debt_weights(project_root)
+        assert weights == DebtWeights()
+
+    def test_yaml_with_non_dict_root_returns_defaults(
+        self, project_root: Path,
+    ) -> None:
+        """A YAML list at root level should return defaults."""
+        config_path = project_root / "config.yml"
+        config_path.write_text("- item1\n- item2\n", encoding="utf-8")
+        weights = load_debt_weights(project_root)
+        assert weights == DebtWeights()
+
+    def test_debt_section_is_string_returns_defaults(
+        self, project_root: Path,
+    ) -> None:
+        """debt_report set to a string (not dict) returns defaults."""
+        config = {"debt_report": "not_a_dict"}
+        config_path = project_root / "config.yml"
+        config_path.write_text(yaml.dump(config), encoding="utf-8")
+        weights = load_debt_weights(project_root)
+        assert weights == DebtWeights()
+
+    def test_weights_data_is_non_dict_returns_defaults(
+        self, project_root: Path,
+    ) -> None:
+        """debt_report.weights set to a string falls back to empty dict."""
+        config = {"debt_report": {"weights": "not_a_dict"}}
+        config_path = project_root / "config.yml"
+        config_path.write_text(yaml.dump(config), encoding="utf-8")
+        weights = load_debt_weights(project_root)
+        # All weights should be defaults since weights_data was invalid
+        assert weights.rule_error == 3.0
+        assert weights.rule_warning == 1.0
+
+    def test_thresholds_data_is_non_dict_returns_defaults(
+        self, project_root: Path,
+    ) -> None:
+        """debt_report.thresholds set to a list falls back to empty dict."""
+        config = {
+            "debt_report": {
+                "weights": {"rule_error": 5},
+                "thresholds": [1, 2, 3],
+            }
+        }
+        config_path = project_root / "config.yml"
+        config_path.write_text(yaml.dump(config), encoding="utf-8")
+        weights = load_debt_weights(project_root)
+        # Custom weight applied, thresholds are defaults
+        assert weights.rule_error == 5.0
+        assert weights.oversized_symbols == 200
+        assert weights.high_fan_out_threshold == 10
+        assert weights.dormant_months == 3
+
+    def test_empty_yaml_file_returns_defaults(
+        self, project_root: Path,
+    ) -> None:
+        """An empty config.yml (yaml.safe_load returns None) returns defaults."""
+        config_path = project_root / "config.yml"
+        config_path.write_text("", encoding="utf-8")
+        weights = load_debt_weights(project_root)
+        assert weights == DebtWeights()
+
+
+class TestSeverityLabelEdgeCases:
+    """Edge case boundary tests for _severity_label."""
+
+    def test_negative_score_is_clean(self) -> None:
+        """Negative scores (theoretically impossible) map to clean."""
+        assert _severity_label(-1.0) == "clean"
+
+    def test_score_0_5_is_low(self) -> None:
+        """Fractional scores in low range."""
+        assert _severity_label(0.5) == "low"
+
+    def test_score_10_5_is_medium(self) -> None:
+        """Score 10.5 is in the medium range (11-25)."""
+        assert _severity_label(10.5) == "medium"
+
+    def test_score_25_5_is_high(self) -> None:
+        """Score 25.5 is in the high range (26-50)."""
+        assert _severity_label(25.5) == "high"
+
+    def test_score_above_100_is_critical(self) -> None:
+        """Scores above 100 (should be capped, but still critical)."""
+        assert _severity_label(150.0) == "critical"
+
+
+class TestComputeTopOffendersEdgeCases:
+    """Edge cases for compute_top_offenders."""
+
+    @staticmethod
+    def _zero_data(**overrides: object) -> DebtData:
+        defaults: dict[str, object] = {
+            "error_count": 0,
+            "warning_count": 0,
+            "undocumented_count": 0,
+            "stale_count": 0,
+            "untracked_count": 0,
+            "oversized_count": 0,
+            "high_fan_out_count": 0,
+            "dormant_count": 0,
+            "untested_count": 0,
+            "node_issues": {},
+        }
+        defaults.update(overrides)
+        return DebtData(**defaults)  # type: ignore[arg-type]
+
+    def test_limit_zero_returns_empty(self) -> None:
+        """limit=0 returns empty list."""
+        data = self._zero_data(
+            node_issues={"a": ["undocumented"], "b": ["stale_doc"]}
+        )
+        result = compute_top_offenders(data, DebtWeights(), limit=0)
+        assert result == []
+
+    def test_node_with_many_reasons_accumulates_score(self) -> None:
+        """Node with all issue types gets cumulative score."""
+        all_reasons = [
+            "undocumented", "stale_doc", "oversized",
+            "high_fan_out", "dormant", "untested",
+            "violation:error:r1", "violation:warning:r2",
+        ]
+        data = self._zero_data(node_issues={"mega": all_reasons})
+        weights = DebtWeights()
+        result = compute_top_offenders(data, weights)
+        assert len(result) == 1
+        expected = (
+            weights.undocumented_node + weights.stale_doc
+            + weights.oversized_domain + weights.high_fan_out
+            + weights.dormant_domain + weights.untested_domain
+            + weights.rule_error + weights.rule_warning
+        )
+        assert result[0].score == expected
+
+
+class TestTrendArrow:
+    """Tests for _trend_arrow helper."""
+
+    def test_negative_delta_improved(self) -> None:
+        arrow, label = _trend_arrow(-5.0)
+        assert arrow == "\u2193"
+        assert label == "improved"
+
+    def test_positive_delta_regressed(self) -> None:
+        arrow, label = _trend_arrow(3.0)
+        assert arrow == "\u2191"
+        assert label == "regressed"
+
+    def test_zero_delta_unchanged(self) -> None:
+        arrow, label = _trend_arrow(0.0)
+        assert arrow == "="
+        assert label == "unchanged"
+
+    def test_very_small_positive_delta(self) -> None:
+        arrow, label = _trend_arrow(0.001)
+        assert arrow == "\u2191"
+        assert label == "regressed"
+
+    def test_very_small_negative_delta(self) -> None:
+        arrow, label = _trend_arrow(-0.001)
+        assert arrow == "\u2193"
+        assert label == "improved"
+
+
+class TestComputeSnapshotDebt:
+    """Tests for _compute_snapshot_debt (snapshot-based debt calculation)."""
+
+    def test_empty_snapshot_returns_zero(self) -> None:
+        """Empty snapshot (no nodes, no edges) -> zero score."""
+        total, cats = _compute_snapshot_debt([], [], 0, DebtWeights())
+        assert total == 0.0
+        assert cats["complexity"] == 0.0
+        assert cats["rule_violations"] == 0.0
+        assert cats["doc_gaps"] == 0.0
+        assert cats["test_gaps"] == 0.0
+
+    def test_high_fan_out_from_edges(self) -> None:
+        """Edges with high fan-out should contribute to complexity."""
+        nodes = [{"ref_id": "hub"}]
+        # 11 outgoing edges from hub -> exceeds default threshold of 10
+        edges = [
+            {"src_ref_id": "hub", "dst_ref_id": f"target-{i}"}
+            for i in range(11)
+        ]
+        weights = DebtWeights(high_fan_out_threshold=10, high_fan_out=2.0)
+        total, cats = _compute_snapshot_debt(nodes, edges, 0, weights)
+        assert cats["complexity"] == 2.0  # 1 hub exceeding threshold * 2.0
+        assert total == 2.0
+
+    def test_no_fan_out_exceeding_threshold(self) -> None:
+        """Edges below threshold should not contribute."""
+        nodes = [{"ref_id": "hub"}]
+        edges = [
+            {"src_ref_id": "hub", "dst_ref_id": f"target-{i}"}
+            for i in range(5)
+        ]
+        weights = DebtWeights(high_fan_out_threshold=10)
+        total, cats = _compute_snapshot_debt(nodes, edges, 0, weights)
+        assert cats["complexity"] == 0.0
+        assert total == 0.0
+
+    def test_multiple_high_fan_out_nodes(self) -> None:
+        """Two nodes exceeding threshold doubles score."""
+        nodes = [{"ref_id": "hub1"}, {"ref_id": "hub2"}]
+        edges = [
+            *[{"src_ref_id": "hub1", "dst_ref_id": f"t1-{i}"} for i in range(12)],
+            *[{"src_ref_id": "hub2", "dst_ref_id": f"t2-{i}"} for i in range(15)],
+        ]
+        weights = DebtWeights(high_fan_out_threshold=10, high_fan_out=1.0)
+        total, cats = _compute_snapshot_debt(nodes, edges, 0, weights)
+        assert cats["complexity"] == 2.0  # 2 nodes * 1.0
+        assert total == 2.0
+
+    def test_score_capped_at_100(self) -> None:
+        """Snapshot debt score should be capped at 100."""
+        nodes = [{"ref_id": f"hub-{i}"} for i in range(200)]
+        edges = []
+        for i in range(200):
+            for j in range(15):
+                edges.append({
+                    "src_ref_id": f"hub-{i}",
+                    "dst_ref_id": f"target-{i}-{j}",
+                })
+        weights = DebtWeights(high_fan_out_threshold=10, high_fan_out=5.0)
+        total, _ = _compute_snapshot_debt(nodes, edges, 0, weights)
+        assert total == 100.0
+
+    def test_empty_src_ref_id_ignored(self) -> None:
+        """Edges with empty src_ref_id are skipped."""
+        edges = [
+            {"src_ref_id": "", "dst_ref_id": "target"},
+            {"dst_ref_id": "target"},  # missing src_ref_id
+        ]
+        total, _cats = _compute_snapshot_debt([], edges, 0, DebtWeights())
+        assert total == 0.0
+
+
+class TestFormatTrendSection:
+    """Tests for format_trend_section (text rendering of trend data)."""
+
+    def test_none_trend_returns_no_baseline(self) -> None:
+        """When trend is None, return 'No baseline snapshot available'."""
+        result = format_trend_section(None)
+        assert "No baseline snapshot available" in result
+
+    def test_basic_trend_rendering(self) -> None:
+        """Trend with deltas renders correctly."""
+        trend = DebtTrend(
+            previous_snapshot="2026-02-15T10:00:00",
+            previous_score=20.0,
+            delta=-5.0,
+            category_deltas={
+                "rule_violations": -3.0,
+                "doc_gaps": -1.0,
+                "complexity": 0.0,
+                "test_gaps": -1.0,
+            },
+        )
+        result = format_trend_section(trend)
+        assert "Trend (vs 2026-02-15):" in result
+        assert "Overall:" in result
+        assert "20" in result  # previous score
+        assert "15" in result  # current = 20 + (-5) = 15
+        assert "\u2193" in result  # down arrow for improvement
+        assert "improved" in result
+
+    def test_trend_with_label_in_snapshot(self) -> None:
+        """Snapshot label in date string is stripped for display."""
+        trend = DebtTrend(
+            previous_snapshot="2026-02-15 [v1.6.0]",
+            previous_score=10.0,
+            delta=0.0,
+            category_deltas={
+                "rule_violations": 0.0,
+                "doc_gaps": 0.0,
+                "complexity": 0.0,
+                "test_gaps": 0.0,
+            },
+        )
+        result = format_trend_section(trend)
+        assert "2026-02-15" in result
+        assert "[v1.6.0]" not in result
+
+    def test_trend_regression_shows_up_arrow(self) -> None:
+        """Positive delta shows up arrow and 'regressed'."""
+        trend = DebtTrend(
+            previous_snapshot="2026-02-10",
+            previous_score=5.0,
+            delta=10.0,
+            category_deltas={
+                "rule_violations": 10.0,
+                "doc_gaps": 0.0,
+                "complexity": 0.0,
+                "test_gaps": 0.0,
+            },
+        )
+        result = format_trend_section(trend)
+        assert "\u2191" in result  # up arrow
+        assert "regressed" in result
+
+    def test_trend_unchanged_shows_equals(self) -> None:
+        """Zero delta shows = and 'unchanged'."""
+        trend = DebtTrend(
+            previous_snapshot="2026-02-10",
+            previous_score=10.0,
+            delta=0.0,
+            category_deltas={
+                "rule_violations": 0.0,
+                "doc_gaps": 0.0,
+                "complexity": 0.0,
+                "test_gaps": 0.0,
+            },
+        )
+        result = format_trend_section(trend)
+        assert "=" in result
+        assert "unchanged" in result
+
+    def test_all_category_names_present(self) -> None:
+        """All 4 category short names appear in output."""
+        trend = DebtTrend(
+            previous_snapshot="2026-02-10",
+            previous_score=10.0,
+            delta=-2.0,
+            category_deltas={
+                "rule_violations": -1.0,
+                "doc_gaps": 0.0,
+                "complexity": -1.0,
+                "test_gaps": 0.0,
+            },
+        )
+        result = format_trend_section(trend)
+        assert "Rules:" in result
+        assert "Docs:" in result
+        assert "Complexity:" in result
+        assert "Tests:" in result
+
+
+class TestComputeDebtTrend:
+    """Tests for compute_debt_trend with snapshot data."""
+
+    @pytest.fixture()
+    def conn_with_snapshot(
+        self, conn: sqlite3.Connection, project_root: Path,
+    ) -> sqlite3.Connection:
+        """Create a DB with a graph snapshot for trend testing."""
+        import json as _json
+
+        # Ensure graph_snapshots table exists
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS graph_snapshots ("
+            "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "  nodes_json TEXT NOT NULL,"
+            "  edges_json TEXT NOT NULL,"
+            "  symbols_count INTEGER NOT NULL DEFAULT 0,"
+            "  label TEXT,"
+            "  created_at TEXT NOT NULL"
+            ")"
+        )
+        nodes_json = _json.dumps([{"ref_id": "alpha"}, {"ref_id": "beta"}])
+        edges_json = _json.dumps([
+            {"src_ref_id": "alpha", "dst_ref_id": "beta"},
+        ])
+        conn.execute(
+            "INSERT INTO graph_snapshots "
+            "(nodes_json, edges_json, symbols_count, label, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (nodes_json, edges_json, 50, "v1.0", "2026-02-15T10:00:00"),
+        )
+        conn.commit()
+        return conn
+
+    def test_no_snapshots_returns_none(
+        self, conn: sqlite3.Connection, project_root: Path,
+    ) -> None:
+        """With no snapshots, trend should be None."""
+        report = compute_debt_score(
+            DebtData(
+                error_count=0, warning_count=0, undocumented_count=0,
+                stale_count=0, untracked_count=0, oversized_count=0,
+                high_fan_out_count=0, dormant_count=0, untested_count=0,
+                node_issues={},
+            )
+        )
+        # Ensure graph_snapshots table exists for the test
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS graph_snapshots ("
+            "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "  nodes_json TEXT NOT NULL,"
+            "  edges_json TEXT NOT NULL,"
+            "  symbols_count INTEGER NOT NULL DEFAULT 0,"
+            "  label TEXT,"
+            "  created_at TEXT NOT NULL"
+            ")"
+        )
+        conn.commit()
+        trend = compute_debt_trend(conn, report, project_root)
+        assert trend is None
+
+    def test_trend_with_snapshot_returns_debt_trend(
+        self,
+        conn_with_snapshot: sqlite3.Connection,
+        project_root: Path,
+    ) -> None:
+        """With a snapshot, trend should return a DebtTrend."""
+        report = DebtReport(
+            debt_score=10.0,
+            severity="low",
+            categories=[
+                CategoryScore(name="rule_violations", score=5.0, details={}),
+                CategoryScore(name="doc_gaps", score=2.0, details={}),
+                CategoryScore(name="complexity", score=2.0, details={}),
+                CategoryScore(name="test_gaps", score=1.0, details={}),
+            ],
+            top_offenders=[],
+            trend=None,
+        )
+        trend = compute_debt_trend(
+            conn_with_snapshot, report, project_root,
+        )
+        assert trend is not None
+        assert isinstance(trend, DebtTrend)
+        assert "2026-02-15" in trend.previous_snapshot
+        assert "v1.0" in trend.previous_snapshot
+        assert isinstance(trend.delta, float)
+        assert "rule_violations" in trend.category_deltas
+        assert "doc_gaps" in trend.category_deltas
+        assert "complexity" in trend.category_deltas
+        assert "test_gaps" in trend.category_deltas
+
+
+class TestFormatDebtJsonEdgeCases:
+    """Additional edge cases for format_debt_json."""
+
+    def test_category_filter_short_name_rules(self) -> None:
+        """Short name 'rules' maps to 'rule_violations'."""
+        report = DebtReport(
+            debt_score=5.0,
+            severity="low",
+            categories=[
+                CategoryScore(
+                    name="rule_violations", score=5.0,
+                    details={"errors": 1, "warnings": 2},
+                ),
+                CategoryScore(name="doc_gaps", score=0.0, details={}),
+            ],
+            top_offenders=[],
+            trend=None,
+        )
+        result = format_debt_json(report, category="rules")
+        assert len(result["categories"]) == 1
+        assert result["categories"][0]["name"] == "rule_violations"
+
+    def test_category_filter_short_name_tests(self) -> None:
+        """Short name 'tests' maps to 'test_gaps'."""
+        report = DebtReport(
+            debt_score=5.0,
+            severity="low",
+            categories=[
+                CategoryScore(name="rule_violations", score=3.0, details={}),
+                CategoryScore(name="test_gaps", score=2.0, details={"untested": 2}),
+            ],
+            top_offenders=[],
+            trend=None,
+        )
+        result = format_debt_json(report, category="tests")
+        assert len(result["categories"]) == 1
+        assert result["categories"][0]["name"] == "test_gaps"
+
+    def test_nonexistent_category_filter_returns_empty(self) -> None:
+        """Filtering by a name that matches nothing yields empty list."""
+        report = DebtReport(
+            debt_score=5.0,
+            severity="low",
+            categories=[
+                CategoryScore(name="rule_violations", score=5.0, details={}),
+            ],
+            top_offenders=[],
+            trend=None,
+        )
+        result = format_debt_json(report, category="nonexistent_xyz")
+        assert result["categories"] == []
+
+    def test_json_output_is_valid_json(self) -> None:
+        """Full round-trip: format_debt_json -> json.dumps -> json.loads."""
+        import json as _json
+
+        trend = DebtTrend(
+            previous_snapshot="2026-02-15",
+            previous_score=20.0,
+            delta=-5.0,
+            category_deltas={"rule_violations": -2.0, "doc_gaps": -3.0},
+        )
+        report = DebtReport(
+            debt_score=15.0,
+            severity="medium",
+            categories=[
+                CategoryScore(
+                    name="rule_violations", score=8.0,
+                    details={"errors": 2, "warnings": 2},
+                ),
+                CategoryScore(
+                    name="doc_gaps", score=4.0,
+                    details={"undocumented": 2, "stale": 0, "untracked": 0},
+                ),
+                CategoryScore(
+                    name="complexity", score=2.0,
+                    details={"oversized": 1, "high_fan_out": 0, "dormant": 0},
+                ),
+                CategoryScore(
+                    name="test_gaps", score=1.0,
+                    details={"untested": 1},
+                ),
+            ],
+            top_offenders=[
+                NodeDebt(ref_id="alpha", score=5.0, reasons=["undocumented"]),
+            ],
+            trend=trend,
+        )
+        result = format_debt_json(report)
+        serialized = _json.dumps(result)
+        parsed = _json.loads(serialized)
+        assert parsed["debt_score"] == 15.0
+        assert parsed["trend"]["delta"] == -5.0
+
+
+class TestCollectDebtDataEdgeCases:
+    """Additional edge cases for collect_debt_data and helper functions."""
+
+    def test_untracked_nodes_counted(
+        self, conn: sqlite3.Connection, project_root: Path,
+    ) -> None:
+        """Nodes with source but no sync_state entry are untracked."""
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("orphan", "domain", "Orphan domain", "src/orphan/"),
+        )
+        conn.commit()
+        data = collect_debt_data(conn, project_root)
+        assert data.untracked_count >= 1
+
+    def test_oversized_below_threshold_not_counted(
+        self, conn: sqlite3.Connection, project_root: Path,
+    ) -> None:
+        """Nodes with fewer symbols than threshold are not oversized."""
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("small-domain", "domain", "Small", "src/small/"),
+        )
+        # Insert 5 code symbols — well below threshold of 200
+        for i in range(5):
+            conn.execute(
+                "INSERT INTO code_symbols (file_path, symbol_name, kind, "
+                "line_start, line_end, annotations, file_hash) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (f"src/small/mod{i}.py", f"func_{i}", "function", 1, 10, "{}", "h"),
+            )
+        conn.commit()
+        data = collect_debt_data(conn, project_root)
+        assert data.oversized_count == 0
+
+    def test_high_fan_out_at_threshold_not_counted(
+        self, conn: sqlite3.Connection, project_root: Path,
+    ) -> None:
+        """Nodes with exactly threshold edges are NOT high fan-out (> not >=)."""
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary) VALUES (?, ?, ?)",
+            ("border-hub", "feature", "Border hub"),
+        )
+        # Exactly 10 edges (threshold is 10, need >10 to flag)
+        for i in range(10):
+            target = f"border-target-{i}"
+            conn.execute(
+                "INSERT INTO nodes (ref_id, kind, summary) VALUES (?, ?, ?)",
+                (target, "feature", f"Target {i}"),
+            )
+            conn.execute(
+                "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES (?, ?, ?)",
+                ("border-hub", target, "uses"),
+            )
+        conn.commit()
+        data = collect_debt_data(conn, project_root)
+        assert data.high_fan_out_count == 0
+
+    def test_multiple_stale_docs_for_same_ref_counted_once(
+        self, conn: sqlite3.Connection, project_root: Path,
+    ) -> None:
+        """Multiple stale entries for same ref_id count as 1 due to DISTINCT."""
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary) VALUES (?, ?, ?)",
+            ("multi-stale", "domain", "Multi"),
+        )
+        for i in range(3):
+            conn.execute(
+                "INSERT INTO sync_state (doc_path, code_path, ref_id, "
+                "code_hash_at_sync, doc_hash_at_sync, synced_at, status) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    f"multi-stale-{i}.md", f"src/multi-stale/f{i}.py",
+                    "multi-stale", "h1", "h2", "2026-01-01T00:00:00", "stale",
+                ),
+            )
+        conn.commit()
+        data = collect_debt_data(conn, project_root)
+        assert data.stale_count == 1  # DISTINCT ref_id
+
+    def test_collect_with_custom_weights(
+        self, conn: sqlite3.Connection, project_root: Path,
+    ) -> None:
+        """Custom weights change oversized threshold."""
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("custom-thresh", "domain", "Custom", "src/custom/"),
+        )
+        # Insert 50 symbols
+        for i in range(50):
+            conn.execute(
+                "INSERT INTO code_symbols (file_path, symbol_name, kind, "
+                "line_start, line_end, annotations, file_hash) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (f"src/custom/m{i}.py", f"fn_{i}", "function", 1, 10, "{}", "h"),
+            )
+        conn.commit()
+        # With threshold=30, 50 symbols should be oversized
+        low_weights = DebtWeights(oversized_symbols=30)
+        data = collect_debt_data(conn, project_root, weights=low_weights)
+        assert data.oversized_count == 1
+
+
+class TestComputeDebtScoreEdgeCases:
+    """More edge cases for compute_debt_score."""
+
+    def test_very_high_counts_cap_at_100(self) -> None:
+        """Extreme counts should still cap at 100."""
+        data = DebtData(
+            error_count=1000,
+            warning_count=1000,
+            undocumented_count=1000,
+            stale_count=1000,
+            untracked_count=1000,
+            oversized_count=1000,
+            high_fan_out_count=1000,
+            dormant_count=1000,
+            untested_count=1000,
+            node_issues={},
+        )
+        report = compute_debt_score(data)
+        assert report.debt_score == 100.0
+        assert report.severity == "critical"
+
+    def test_only_doc_gaps_category(self) -> None:
+        """Only doc-related counts produce doc_gaps category score."""
+        data = DebtData(
+            error_count=0, warning_count=0,
+            undocumented_count=5, stale_count=3, untracked_count=2,
+            oversized_count=0, high_fan_out_count=0, dormant_count=0,
+            untested_count=0, node_issues={},
+        )
+        report = compute_debt_score(data)
+        doc_cat = next(c for c in report.categories if c.name == "doc_gaps")
+        # 5 * 2.0 + 3 * 1.0 + 2 * 0.5 = 10 + 3 + 1 = 14
+        assert doc_cat.score == 14.0
+        assert doc_cat.details["undocumented"] == 5
+        assert doc_cat.details["stale"] == 3
+        assert doc_cat.details["untracked"] == 2
+
+    def test_only_complexity_category(self) -> None:
+        """Only complexity counts produce complexity category score."""
+        data = DebtData(
+            error_count=0, warning_count=0,
+            undocumented_count=0, stale_count=0, untracked_count=0,
+            oversized_count=2, high_fan_out_count=3, dormant_count=4,
+            untested_count=0, node_issues={},
+        )
+        report = compute_debt_score(data)
+        cplx_cat = next(c for c in report.categories if c.name == "complexity")
+        # 2 * 2.0 + 3 * 1.0 + 4 * 0.5 = 4 + 3 + 2 = 9
+        assert cplx_cat.score == 9.0
+
+    def test_only_test_gaps_category(self) -> None:
+        """Only untested count produces test_gaps score."""
+        data = DebtData(
+            error_count=0, warning_count=0,
+            undocumented_count=0, stale_count=0, untracked_count=0,
+            oversized_count=0, high_fan_out_count=0, dormant_count=0,
+            untested_count=7, node_issues={},
+        )
+        report = compute_debt_score(data)
+        test_cat = next(c for c in report.categories if c.name == "test_gaps")
+        # 7 * 1.0 = 7
+        assert test_cat.score == 7.0
+
+    def test_score_exactly_at_boundary_values(self) -> None:
+        """Score exactly at severity boundary thresholds."""
+        # Score = 10.0 -> low
+        data = DebtData(
+            error_count=0, warning_count=10,  # 10 * 1.0 = 10
+            undocumented_count=0, stale_count=0, untracked_count=0,
+            oversized_count=0, high_fan_out_count=0, dormant_count=0,
+            untested_count=0, node_issues={},
+        )
+        report = compute_debt_score(data)
+        assert report.debt_score == 10.0
+        assert report.severity == "low"
+
+    def test_report_trend_is_always_none_from_compute(self) -> None:
+        """compute_debt_score always sets trend to None."""
+        data = DebtData(
+            error_count=1, warning_count=0,
+            undocumented_count=0, stale_count=0, untracked_count=0,
+            oversized_count=0, high_fan_out_count=0, dormant_count=0,
+            untested_count=0, node_issues={},
+        )
+        report = compute_debt_score(data)
+        assert report.trend is None
+
+
+class TestFormatDebtReportEdgeCases:
+    """Additional edge cases for format_debt_report Rich rendering."""
+
+    def test_single_point_uses_pt_not_pts(self) -> None:
+        """Score of exactly 1.0 should use 'pt' singular label."""
+        from beadloom.infrastructure.debt_report import format_debt_report
+
+        report = DebtReport(
+            debt_score=1.0,
+            severity="low",
+            categories=[
+                CategoryScore(
+                    name="test_gaps", score=1.0,
+                    details={"untested": 1},
+                ),
+            ],
+            top_offenders=[
+                NodeDebt(ref_id="alpha", score=1.0, reasons=["untested"]),
+            ],
+            trend=None,
+        )
+        result = format_debt_report(report)
+        assert "1 pt" in result
+
+    def test_unknown_severity_uses_fallback(self) -> None:
+        """Unknown severity string uses fallback indicator."""
+        from beadloom.infrastructure.debt_report import format_debt_report
+
+        report = DebtReport(
+            debt_score=5.0,
+            severity="unknown_severity",
+            categories=[
+                CategoryScore(
+                    name="rule_violations", score=5.0,
+                    details={"errors": 1, "warnings": 2},
+                ),
+            ],
+            top_offenders=[],
+            trend=None,
+        )
+        # Should not crash, uses fallback "?" indicator
+        result = format_debt_report(report)
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+
+class TestCliFailIfEdgeCases:
+    """Edge cases for --fail-if behavior."""
+
+    def _setup_project_with_debt(self, tmp_path: Path) -> Path:
+        """Create a project with known debt (10 undocumented nodes)."""
+        import yaml as _yaml
+
+        project = tmp_path / "proj"
+        project.mkdir()
+
+        graph_dir = project / ".beadloom" / "_graph"
+        graph_dir.mkdir(parents=True)
+        (graph_dir / "graph.yml").write_text(
+            _yaml.dump(
+                {
+                    "nodes": [
+                        {"ref_id": f"node-{i}", "kind": "domain", "summary": f"Node {i}"}
+                        for i in range(10)
+                    ],
+                    "edges": [],
+                }
+            )
+        )
+
+        (project / "docs").mkdir()
+        (project / "src").mkdir()
+
+        from beadloom.infrastructure.reindex import reindex as do_reindex
+
+        do_reindex(project)
+        return project
+
+    def test_fail_if_score_exactly_at_threshold_passes(
+        self, tmp_path: Path,
+    ) -> None:
+        """--fail-if=score>N passes when score == N (strictly greater)."""
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        project = self._setup_project_with_debt(tmp_path)
+
+        # First get the actual score
+        import json as _json
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["status", "--debt-report", "--json", "--project", str(project)],
+        )
+        score = _json.loads(result.output)["debt_score"]
+
+        # Now test with threshold exactly at score
+        threshold = int(score)
+        result = runner.invoke(
+            main,
+            ["status", "--debt-report", f"--fail-if=score>{threshold}",
+             "--project", str(project)],
+        )
+        # score > threshold should fail if score is a float above threshold
+        # If score == threshold exactly, exit_code should be 0
+        if score > threshold:
+            assert result.exit_code == 1
+        else:
+            assert result.exit_code == 0
+
+    def test_fail_if_errors_zero_with_no_violations(
+        self, tmp_path: Path,
+    ) -> None:
+        """--fail-if=errors>0 passes when no rule violations exist."""
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        project = self._setup_project_with_debt(tmp_path)
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["status", "--debt-report", "--fail-if=errors>0",
+             "--project", str(project)],
+        )
+        # No rules.yml means no violations -> errors=0 -> 0 > 0 is false -> exit 0
+        assert result.exit_code == 0
+
+
+class TestMcpDebtReport:
+    """Tests for the MCP get_debt_report handler."""
+
+    def _setup_project(self, tmp_path: Path) -> Path:
+        """Create a minimal project for MCP testing."""
+        import yaml as _yaml
+
+        project = tmp_path / "proj"
+        project.mkdir()
+
+        graph_dir = project / ".beadloom" / "_graph"
+        graph_dir.mkdir(parents=True)
+        (graph_dir / "graph.yml").write_text(
+            _yaml.dump(
+                {
+                    "nodes": [
+                        {"ref_id": "alpha", "kind": "domain", "summary": "Alpha"},
+                    ],
+                    "edges": [],
+                }
+            )
+        )
+
+        (project / "docs").mkdir()
+        (project / "src").mkdir()
+
+        from beadloom.infrastructure.reindex import reindex as do_reindex
+
+        do_reindex(project)
+        return project
+
+    def test_mcp_get_debt_report_basic(self, tmp_path: Path) -> None:
+        """MCP handler returns valid debt report dict."""
+        from beadloom.infrastructure.db import open_db
+        from beadloom.services.mcp_server import handle_get_debt_report
+
+        project = self._setup_project(tmp_path)
+        db_path = project / ".beadloom" / "beadloom.db"
+        conn = open_db(db_path)
+
+        result = handle_get_debt_report(conn, project)
+        conn.close()
+
+        assert "debt_score" in result
+        assert "severity" in result
+        assert "categories" in result
+        assert "top_offenders" in result
+        assert "trend" in result
+        assert result["trend"] is None  # no snapshots
+
+    def test_mcp_get_debt_report_with_category_filter(
+        self, tmp_path: Path,
+    ) -> None:
+        """MCP handler with category filter returns filtered categories."""
+        from beadloom.infrastructure.db import open_db
+        from beadloom.services.mcp_server import handle_get_debt_report
+
+        project = self._setup_project(tmp_path)
+        db_path = project / ".beadloom" / "beadloom.db"
+        conn = open_db(db_path)
+
+        result = handle_get_debt_report(conn, project, category="docs")
+        conn.close()
+
+        cats = result["categories"]
+        assert len(cats) == 1
+        assert cats[0]["name"] == "doc_gaps"
+
+    def test_mcp_dispatch_get_debt_report(self, tmp_path: Path) -> None:
+        """_dispatch_tool routes get_debt_report correctly."""
+        from beadloom.infrastructure.db import open_db
+        from beadloom.services.mcp_server import _dispatch_tool
+
+        project = self._setup_project(tmp_path)
+        db_path = project / ".beadloom" / "beadloom.db"
+        conn = open_db(db_path)
+
+        result = _dispatch_tool(
+            conn, "get_debt_report", {}, project_root=project,
+        )
+        conn.close()
+
+        assert "debt_score" in result
+        assert "severity" in result
+
+    def test_mcp_dispatch_get_debt_report_requires_project_root(
+        self, tmp_path: Path,
+    ) -> None:
+        """get_debt_report without project_root raises ValueError."""
+        from beadloom.infrastructure.db import open_db
+        from beadloom.services.mcp_server import _dispatch_tool
+
+        project = self._setup_project(tmp_path)
+        db_path = project / ".beadloom" / "beadloom.db"
+        conn = open_db(db_path)
+
+        with pytest.raises(ValueError, match="get_debt_report requires project_root"):
+            _dispatch_tool(conn, "get_debt_report", {}, project_root=None)
+        conn.close()
