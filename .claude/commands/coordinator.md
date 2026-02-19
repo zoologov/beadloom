@@ -100,7 +100,7 @@ After each wave completes:
 
 ```bash
 # 1. Verify all beads in wave are closed
-bd list --status=in_progress
+bd list --status in_progress
 
 # 2. Read ACTIVE.md (will survive compaction)
 # Update ACTIVE.md with wave results

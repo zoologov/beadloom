@@ -1,7 +1,7 @@
 # Beadloom: Strategy 2 — Architecture Infrastructure for the AI Agent Era
 
-> **Status:** Active (Phases 8-12.6 complete, v1.8 planned: 12.8+12.9+12.10+12.11, Phase 13+ planned)
-> **Date:** 2026-02-19 (revision 10)
+> **Status:** Active (Phases 8-12.6 complete, v1.8 planned: 12.8+12.9+12.10+12.11+12.12, Phase 13+ planned)
+> **Date:** 2026-02-19 (revision 11)
 > **Current version:** 1.7.0
 > **Predecessor:** STRATEGY.md (Phases 1-6, all completed)
 > **Sources:** STRATEGY.md, BACKLOG.md §2-§6, BDL-UX-Issues.md, competitive analysis February 2026
@@ -350,6 +350,21 @@ Beadloom is for engineers who build and maintain serious IT systems. YAML graph 
 | 12.11.4 | **CI gate** — `beadloom docs audit --fail-if=stale>0` exits non-zero. Integrates into release workflows to block releases with outdated docs | feature | P1 | S |
 | 12.11.5 | **Tolerance system** — configurable per-fact tolerance: exact match for versions, ±5% for test counts, ±10% for growing metrics. Avoids false positives for naturally fluctuating numbers | feature | P1 | S |
 | 12.11.6 | **Debt report integration** — `docs audit` stale count feeds into debt score (Phase 12.9) as a "meta-doc staleness" category. Unified view of all documentation health | feature | P2 | S |
+
+### Phase 12.12: Agent Instructions Freshness (v1.8)
+
+**Goal:** Automatically detect and fix stale facts in agent instruction files (CLAUDE.md, AGENTS.md) — version numbers, CLI command lists, MCP tool counts, phase completion status, architecture package names. Prevents silent drift during active development.
+
+**Metric:** `beadloom doctor` reports stale facts in CLAUDE.md after a release. `beadloom setup-rules --refresh` auto-fixes dynamic sections while preserving hand-written policy (rules, workflows, anti-patterns). Zero manual audit needed for factual accuracy.
+
+**Motivation:** CLAUDE.md and AGENTS.md contain hardcoded facts that silently go stale with every release, phase completion, or command addition. Audit (this session) found 2 drift issues even in a well-maintained project. This problem scales with development velocity — the faster we ship, the faster instructions drift. Closely related to Phase 12.11 (docs audit for README/guides) but different scope: agent instructions vs project documentation.
+
+**Prerequisites:** Existing `doctor` infrastructure, existing `setup-rules` infrastructure, Click group introspection, MCP tool registry.
+
+| # | Task | Type | P | Effort |
+|---|------|------|---|--------|
+| 12.12.1 | **Agent instructions validation** — `beadloom doctor` check that verifies CLAUDE.md / AGENTS.md facts (version, command list, phase status, MCP tool count, architecture packages) against actual project state. Reports drift without auto-fixing. Start with approach B: detect-only | feature | P1 | M |
+| 12.12.2 | **Agent instructions refresh** — `beadloom setup-rules --refresh` regenerates dynamic sections of CLAUDE.md (version, commands, architecture summary, phase status) from project introspection while preserving hand-written policy sections (rules, workflows, anti-patterns). Expand to approach C: detect + auto-fix | feature | P2 | M |
 
 ### Phase 13: Cross-System Foundation (v1.9)
 
@@ -1287,6 +1302,89 @@ What is NOT in scope (future, based on feedback):
 - Automatic doc fixing (generating patches)
 - Semantic matching (requires embeddings, deferred to v2.0)
 
+### 5.13 Agent Instructions Freshness — Technical Specification (Phase 12.12)
+
+**Problem:** CLAUDE.md and AGENTS.md contain hardcoded facts (version, command lists, phase status, MCP tool counts, architecture package names) that silently drift during active development. Each release requires manual audit. Bootstrap paths (`.claude/development/STRATEGY-2.md`, etc.) are acceptable as a known entry point for agents.
+
+**Two-step approach:**
+
+**Step 1 (12.12.1): Detection — `beadloom doctor` check**
+
+Adds a new check to the existing `doctor` command that validates facts in CLAUDE.md and AGENTS.md against the actual project state:
+
+```python
+class AgentInstructionsCheck:
+    """Validates CLAUDE.md / AGENTS.md facts against project state."""
+
+    FACT_SOURCES = {
+        "version": lambda root: _version_from_manifest(root),
+        "cli_commands": lambda root: _introspect_click_group(root),
+        "mcp_tool_count": lambda root: _count_mcp_tools(root),
+        "architecture_packages": lambda root: _list_ddd_packages(root),
+        "phase_status": lambda root: _parse_strategy_phases(root),
+        "test_framework": lambda root: _detect_test_tools(root),
+    }
+
+    def check(self, project_root: Path) -> list[DriftWarning]:
+        """Compare CLAUDE.md facts with project state."""
+        # 1. Read CLAUDE.md / AGENTS.md
+        # 2. Extract factual claims (version, counts, lists)
+        # 3. Compare with actual project state
+        # 4. Return list of drift warnings
+```
+
+**Output example:**
+
+```
+$ beadloom doctor
+...
+Agent Instructions
+  ⚠ CLAUDE.md: version "1.7.0" → actual "1.8.0"
+  ⚠ CLAUDE.md: phases "1-6 + 8...12" → missing 12.5, 12.6
+  ⚠ AGENTS.md: MCP tools "13" → actual 14
+  ✓ CLAUDE.md: architecture packages match
+  ✓ CLAUDE.md: stack description matches
+```
+
+**Step 2 (12.12.2): Auto-fix — `beadloom setup-rules --refresh`**
+
+Extends existing `setup-rules` (which already generates AGENTS.md) to also refresh dynamic sections of CLAUDE.md. Uses section markers to distinguish policy (hand-written, preserved) from facts (auto-generated, replaceable):
+
+```markdown
+<!-- beadloom:auto-start project-info -->
+- **Current version:** 1.8.0 (Phases 1-6 + 8, 8.5, 9, 10, 10.5, 11, 12, 12.5, 12.6 done)
+- **Architecture:** DDD packages — `infrastructure/`, `context_oracle/`, ...
+<!-- beadloom:auto-end -->
+```
+
+**Content classification:**
+
+| Section type | Auto-generated? | Example |
+|-------------|----------------|---------|
+| **Policy** | No (preserved) | Rules, workflows, anti-patterns, agent roles, DAG priorities |
+| **Facts — project** | Yes | Version, phase list, architecture packages, stack |
+| **Facts — commands** | Yes | CLI command list, MCP tool count |
+| **Bootstrap paths** | No (preserved) | `.claude/development/STRATEGY-2.md`, feature doc paths |
+
+**CLI interface:**
+
+```bash
+# Detection only (step 1)
+beadloom doctor                        # includes agent instructions check
+
+# Auto-fix (step 2)
+beadloom setup-rules --refresh         # regenerates AGENTS.md + CLAUDE.md dynamic sections
+beadloom setup-rules --refresh --dry-run  # show what would change without modifying
+```
+
+**Implementation notes:**
+- Step 1 (12.12.1) reuses existing `doctor` infrastructure (list of checks, Rich output)
+- Step 2 (12.12.2) reuses existing `setup-rules` infrastructure (`_generate_agents_md()`)
+- CLI introspection via Click's `get_commands()` on the registered group
+- MCP tool count via import and inspection of `mcp_server.py` tool registry
+- Version from `importlib.metadata.version("beadloom")` or manifest parsing
+- Phase status parsing from STRATEGY-2.md section headers (`— DONE` suffix)
+
 ---
 
 ## 6. Dependency Map
@@ -1352,13 +1450,17 @@ v1.8 ── Planned ────────────────────
 │   ├── 12.10.6 Context inspector ── standalone (ctx data exists)
 │   └── 12.10.7 Keyboard actions ─── depends on 12.10.1
 │
-└── Phase 12.11 (Docs Audit) ⚗️ ── Planned (6 tasks), parallel with all
-    ├── 12.11.1 Fact registry ────── standalone (uses existing data)
-    ├── 12.11.2 Doc scanner ──────── standalone
-    ├── 12.11.3 docs audit CLI ───── depends on 12.11.1 + 12.11.2
-    ├── 12.11.4 CI gate ─────────── depends on 12.11.3
-    ├── 12.11.5 Tolerance system ─── depends on 12.11.3
-    └── 12.11.6 Debt integration ── depends on 12.11.3 + 12.9.1
+├── Phase 12.11 (Docs Audit) ⚗️ ── Planned (6 tasks), parallel with all
+│   ├── 12.11.1 Fact registry ────── standalone (uses existing data)
+│   ├── 12.11.2 Doc scanner ──────── standalone
+│   ├── 12.11.3 docs audit CLI ───── depends on 12.11.1 + 12.11.2
+│   ├── 12.11.4 CI gate ─────────── depends on 12.11.3
+│   ├── 12.11.5 Tolerance system ─── depends on 12.11.3
+│   └── 12.11.6 Debt integration ── depends on 12.11.3 + 12.9.1
+│
+└── Phase 12.12 (Agent Instructions Freshness) ── Planned (2 tasks), parallel with all
+    ├── 12.12.1 Doctor validation ── standalone (uses existing doctor)
+    └── 12.12.2 Setup-rules refresh ── depends on 12.12.1
 
 v1.9 ──────────────────────────────────────────────────────
 │
@@ -1425,6 +1527,7 @@ Cross-cutting ──────────────────────
 | **12.9 — Debt Report** | v1.8 | 6 | Planned | Debt score, trend, CI gate, MCP |
 | **12.10 — Interactive TUI** | v1.8 | 7 | Planned | Live dashboard, graph explorer, file watcher |
 | **12.11 — Docs Audit** ⚗️ | v1.8 | 6 | Planned | Meta-doc staleness, fact registry, CI gate |
+| **12.12 — Agent Instructions Freshness** | v1.8 | 2 | Planned | Doctor validation + setup-rules --refresh |
 | **13 — Cross-System** | v1.9 | 4 | Planned | Multi-repo refs, export |
 | **14 — Full Cross + Semantic** | v2.0 | 7 | Planned | Federation, semantic search |
 | **15 — Quality** | cross-cutting | 5 | Planned | Atomic writes, migrations |
@@ -1436,13 +1539,14 @@ Cross-cutting ──────────────────────
 
 **v1.7 delivered:** Phases 12 + 12.5 + 12.6. AaC Rules v2 + Init Quality + Architecture Intelligence (BDL-021, 4 waves, ~224 new tests).
 
-**Next priority:** v1.8 release — four workstreams:
+**Next priority:** v1.8 release — five workstreams:
 - Phase 12.8 (C4 Architecture Diagrams) — parallel, no deps
 - Phase 12.9 (Debt Report) — parallel, no deps
 - Phase 12.10 (Interactive TUI) — after 12.9 (needs debt data for dashboard)
 - Phase 12.11 (Docs Audit) ⚗️ — parallel with all, experimental
+- Phase 12.12 (Agent Instructions Freshness) — parallel with all, no deps
 
-All prerequisites already in v1.7. 12.8, 12.9, and 12.11 can start simultaneously; 12.10 starts after 12.9.1 (debt formula) is ready.
+All prerequisites already in v1.7. 12.8, 12.9, 12.11, and 12.12 can start simultaneously; 12.10 starts after 12.9.1 (debt formula) is ready.
 
 **After that:** Phase 13 (Cross-System Foundation) for v1.9. Multi-repo refs, API contract edges, export, and monorepo workspace support.
 
@@ -1573,6 +1677,15 @@ All prerequisites already in v1.7. 12.8, 12.9, and 12.11 can start simultaneousl
 | TUI: where in strategy? | Phase 12.10 (v1.8), after Phase 12.9 | Dashboard needs debt data from 12.9; graph explorer and other panels can use existing infra |
 | Versioning: v1.7.x → v1.8? | Yes. 12.8 + 12.9 + 12.10 = v1.8 release. Phase 13 moves to v1.9 | Three killer features (C4 + Debt + TUI) deserve a minor version bump, not a patch |
 | TUI: file watcher lib? | `watchfiles` (Rust-based) with `watchdog` fallback | Fast, cross-platform, minimal deps, works in containers |
+
+### Recently Closed (v1.8 — Agent Instructions Freshness)
+
+| Question | Decision | Rationale |
+|----------|----------|-----------|
+| CLAUDE.md freshness: approach? | Start with B (doctor detection), expand to C (doctor + setup-rules auto-fix) | Detection is a quick win (1-2 beads); auto-fix builds on it. Incremental delivery |
+| Bootstrap paths in CLAUDE.md? | Keep hardcoded bootstrap paths (`.claude/development/`, feature doc paths) | Agent needs a known entry point to start. Everything else discovered via `beadloom ctx`/`search` |
+| Where in strategy? | Phase 12.12 (v1.8), alongside 12.11 (Docs Audit) | Same problem class: stale facts in docs. 12.11 = project docs, 12.12 = agent instructions. Thematically linked, parallel workstreams |
+| CLAUDE.md content model? | Two types: Policy (hand-written, preserved) + Facts (auto-generated, replaceable) | Structural separation enables safe regeneration of dynamic sections without touching rules/workflows |
 
 ### Recently Closed (v1.8 — Docs Audit)
 

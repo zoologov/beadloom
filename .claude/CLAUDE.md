@@ -50,7 +50,7 @@ uv run pytest
 
 # 2. Code quality (same checks as CI)
 uv run ruff check src/ tests/
-uv run mypy
+uv run mypy src/
 
 # 3. Beadloom validation
 beadloom reindex
@@ -75,7 +75,7 @@ bd close <bead-id>
 - **Type checking:** mypy --strict
 - **Project documentation:** `.claude/development/STRATEGY-2.md`, `.claude/development/BACKLOG.md`, `.claude/development/BDL-UX-Issues.md`, `CHANGELOG.md`
 - **Architecture:** DDD packages — `infrastructure/`, `context_oracle/`, `doc_sync/`, `onboarding/`, `graph/` + `services/` (CLI, MCP) + `tui/`
-- **Current version:** 1.7.0 (Phases 1-6 + 8, 8.5, 9, 10, 10.5, 11, 12 done)
+- **Current version:** 1.7.0 (Phases 1-6 + 8, 8.5, 9, 10, 10.5, 11, 12, 12.5, 12.6 done)
 
 ---
 
