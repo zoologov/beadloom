@@ -92,15 +92,17 @@ Draft  →  Approved  →  Done
 1. Create `CONTEXT.md` from template with `Status: Draft`
    - Code standards: copy from CLAUDE.md §0.1 (do NOT survey the user)
 2. Create `PLAN.md` from template with `Status: Draft`
-   - Create parent bead: `bd create --type feature --title "[ISSUE-KEY] Name"`
-   - Create sub-beads with mandatory structure (see below): `bd create --type task --parent <parent-id>`
-   - Set up dependencies: `bd dep add`
+   - Describe beads, dependencies, waves — but do NOT create beads yet
 3. Show both to user
 4. **WAIT for explicit approval**
 5. Update both to `Status: Approved`
-6. **Immediately proceed to Step 4** (no additional approval needed)
+6. **Create beads in tracker** (ONLY after PLAN is Approved):
+   - Create parent bead: `bd create --type feature --title "[ISSUE-KEY] Name"`
+   - Create sub-beads with mandatory structure (see below): `bd create --type task --parent <parent-id>`
+   - Set up dependencies: `bd dep add`
+7. **Immediately proceed to Step 4** (no additional approval needed)
 
-**Process gate:** Do NOT create beads before this step. PRD and RFC must be Approved first.
+**Process gate:** Do NOT create beads before PLAN is Approved. If PLAN is rejected or modified, no stale beads to clean up.
 
 **Mandatory bead structure (full flow):**
 ```
@@ -190,14 +192,14 @@ All documents MUST use templates from `/templates`. No improvisation.
 - [ ] RFC.md created with `Status: Draft` (in English)
 - [ ] RFC.md → **user approved** → `Status: Approved`
 - [ ] CONTEXT.md created with `Status: Draft`
-- [ ] PLAN.md created with `Status: Draft`
+- [ ] PLAN.md created with `Status: Draft` (beads described, NOT created yet)
+- [ ] CONTEXT.md + PLAN.md → **user approved** → `Status: Approved`
 - [ ] Parent bead created: `bd create --type feature`
 - [ ] Dev sub-beads created: `bd create --type task --parent <parent-id>`
 - [ ] Test sub-bead created (depends on all dev beads)
 - [ ] Review sub-bead created (depends on test bead)
 - [ ] Tech-writer sub-bead created (depends on review bead)
 - [ ] Dependencies set: `bd dep add`
-- [ ] CONTEXT.md + PLAN.md → **user approved** → `Status: Approved`
 - [ ] ACTIVE.md created
 - [ ] User confirmed start of development
 
