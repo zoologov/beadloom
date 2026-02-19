@@ -5,6 +5,56 @@
 
 ---
 
+## Coordinator Activation Protocol (MANDATORY)
+
+**Before ANY work, the coordinator MUST:**
+
+1. Complete `/task-init` flow (PRD → RFC → CONTEXT+PLAN → approvals)
+2. Output activation status to user:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ COORDINATOR ACTIVATED: {ISSUE-KEY}                      │
+│                                                         │
+│ Role: Coordinator                                       │
+│ Protocol: /coordinator                                  │
+│ Task-init: [completed / in progress — current step]     │
+│ Beads: [count] (dev: N, test: N, review: N, docs: N)    │
+│ Agents: /dev, /test, /review, /tech-writer              │
+│ Waves: [count]                                          │
+│                                                         │
+│ Context sources: strategy specs + sub-agent summaries   │
+│ Raw code reading: PROHIBITED (delegated to sub-agents)  │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Coordinator Context Boundary (MANDATORY)
+
+The coordinator MUST NOT load source code, test files, or DB schemas
+into its own context. Technical exploration is ALWAYS delegated to
+sub-agents (Explore/dev) running in background.
+
+**Coordinator reads ONLY:**
+- CLAUDE.md, skill files (task-init, coordinator, templates)
+- STRATEGY-2.md (task tables and high-level specs, not full code examples)
+- Feature docs: PRD, RFC, CONTEXT, PLAN, ACTIVE
+- beads CLI output (`bd list`, `bd show`, `bd ready`)
+- Sub-agent summaries (2-3 lines)
+- `beadloom prime` output (compact project context)
+
+**Coordinator NEVER reads:**
+- `src/**/*.py` (source code)
+- `tests/**/*.py` (test files)
+- `.beadloom/_graph/*.yml` (use `beadloom` CLI instead)
+- Full sub-agent output (only tail last lines if needed)
+
+**When RFC needs technical context:** delegate to an Explore sub-agent
+in background, receive a 20-30 line summary. Never load raw code.
+
+---
+
 ## Principles of multi-agent work
 
 1. **One bead = one agent** at any given time
@@ -44,21 +94,78 @@ bd update <bead-id-2> --assignee "agent-2" --status in_progress
 
 ---
 
+## Mandatory bead structure
+
+Every feature/epic MUST have this hierarchy:
+
+```
+<parent-id> [feature/epic] — parent bead
+├── <parent-id>.N [task/dev]         — dev beads (one per logical unit, /dev agent)
+├── <parent-id>.N [task/test]        — test bead (/test agent)
+├── <parent-id>.N [task/review]      — review bead (/review agent)
+└── <parent-id>.N [task/tech-writer] — doc update bead (/tech-writer agent)
+```
+
+**Rules:**
+- Dev beads are created during `/task-init` Step 3 (PLAN), NOT before
+- Test bead depends on ALL dev beads
+- Review bead depends on test bead
+- Tech-writer bead depends on review bead
+- Parent feature is set to `in_progress` before Wave 1 starts
+
+---
+
 ## Wave-based execution
 
-```
-Wave 1: Independent beads (parallel)
-├── Agent-1: BEAD-01 (P0)
-└── Agent-2: BEAD-04 (P0, independent)
+Waves MUST include all three agent roles:
 
-Wave 2: After Wave 1 completion
-├── Agent-1: BEAD-02 (depended on BEAD-01)
-├── Agent-2: BEAD-03 (depended on BEAD-01)
-└── Agent-3: BEAD-06 (independent)
-
-Wave 3: Integration
-└── Agent-1: BEAD-05 (depended on 02, 03, 04)
 ```
+Dev waves: Independent dev beads (parallel)
+├── Agent-1: BEAD-01 (P0, /dev)
+└── Agent-2: BEAD-04 (P0, independent, /dev)
+
+Dev waves: After Wave 1 completion
+├── Agent-1: BEAD-02 (/dev)
+├── Agent-2: BEAD-03 (/dev)
+└── Agent-3: BEAD-06 (/dev)
+
+Test wave: After all dev beads complete
+└── Agent: BEAD-test (/test)
+
+Review wave: After test wave
+└── Agent: BEAD-review (/review)
+    ├── Review = OK → proceed to tech-writer
+    └── Review = ISSUES → coordinator restarts dev→test→review cycle
+
+Tech-writer wave: ONLY after review = OK
+└── Agent: BEAD-docs (/tech-writer)
+```
+
+---
+
+## Review feedback loop
+
+When the `/review` agent completes, it returns one of two outcomes:
+
+```
+Review = OK     → coordinator proceeds to tech-writer wave
+Review = ISSUES → coordinator handles fixes (see below)
+```
+
+**When review returns ISSUES:**
+
+1. Coordinator reads review comments via `bd comments <review-bead-id>`
+2. Coordinator creates new fix beads under the same parent:
+   ```bash
+   bd create --type task --title "[ISSUE-KEY] Fix: <review finding>" --parent <parent-id>
+   bd dep add <new-fix-bead> <review-bead>
+   ```
+3. Coordinator launches a new dev→test→review cycle for fix beads only
+4. Cycle repeats until review = OK
+5. Only then: tech-writer wave starts
+
+**IMPORTANT:** The tech-writer bead MUST NOT start until review is fully clean.
+The coordinator is responsible for gating this transition.
 
 ---
 

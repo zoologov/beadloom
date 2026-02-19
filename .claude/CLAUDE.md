@@ -179,6 +179,8 @@ beadloom setup-mcp               # configure MCP server for IDE
 
 ## 3. File Memory (protection against auto-compaction)
 
+**Document language:** ALL documents (PRD, RFC, CONTEXT, PLAN, ACTIVE, BRIEF) MUST be written in English.
+
 ```
 .claude/development/docs/features/{ISSUE-KEY}/
 ├── PRD.md       <- REQUIREMENTS: business goals (epic/feature only)
@@ -213,8 +215,12 @@ beadloom setup-mcp               # configure MCP server for IDE
 Use `/dev` for development, `/checkpoint` for saving progress.
 
 ### Multi-agent mode
-Coordinator uses `/coordinator` for distribution.
-Sub-agents use corresponding roles.
+Coordinator MUST be activated before multi-bead work:
+1. Invoke `/coordinator` skill
+2. Complete `/task-init` flow BEFORE creating any beads or writing code
+3. Coordinator gets technical context through filtered sources (strategy specs, sub-agent summaries), NEVER reads raw source code directly
+
+Sub-agents use corresponding roles (`/dev`, `/test`, `/review`, `/tech-writer`).
 
 ---
 
@@ -254,6 +260,8 @@ Example:
 - Starting without an agreed plan
 - Taking a bead with unresolved dependencies
 - Changing DAG without notifying the user
+- Creating beads before PLAN is approved (beads are created in Step 3 of /task-init)
+- Coordinator reading raw source code (use strategy specs + sub-agent summaries instead)
 
 ### Work
 - Starting without reading CONTEXT.md

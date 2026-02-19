@@ -92,13 +92,30 @@ Draft  →  Approved  →  Done
 1. Create `CONTEXT.md` from template with `Status: Draft`
    - Code standards: copy from CLAUDE.md §0.1 (do NOT survey the user)
 2. Create `PLAN.md` from template with `Status: Draft`
-   - Create epic in beads: `bd create --type epic`
-   - Create beads: `bd create --type task --parent <epic-id>`
+   - Create parent bead: `bd create --type feature --title "[ISSUE-KEY] Name"`
+   - Create sub-beads with mandatory structure (see below): `bd create --type task --parent <parent-id>`
    - Set up dependencies: `bd dep add`
 3. Show both to user
 4. **WAIT for explicit approval**
 5. Update both to `Status: Approved`
 6. **Immediately proceed to Step 4** (no additional approval needed)
+
+**Process gate:** Do NOT create beads before this step. PRD and RFC must be Approved first.
+
+**Mandatory bead structure (full flow):**
+```
+<parent-id> [feature/epic] — parent bead
+├── <parent-id>.N [task/dev]        — development sub-tasks (one per BEAD)
+├── <parent-id>.N [task/test]       — test agent sub-task
+├── <parent-id>.N [task/review]     — review agent sub-task
+└── <parent-id>.N [task/tech-writer]— doc update sub-task
+```
+
+Every feature/epic MUST include sub-tasks for all four agent roles:
+- `/dev` — implementation beads (one per logical unit of work)
+- `/test` — test verification bead (depends on all dev beads)
+- `/review` — code review bead (depends on test bead)
+- `/tech-writer` — documentation update bead (depends on review bead)
 
 ### Step 4: ACTIVE
 
@@ -138,7 +155,7 @@ graph LR
    ```bash
    bd create --type {type} --title "{ISSUE-KEY}: [Name]" --description "..."
    # If multiple subtasks:
-   bd create --type task --title "BEAD-01: [Name]" --parent <id>
+   bd create --type task --title "BEAD-01: [Name]" --parent <parent-id>
    ```
 4. Show to user
 5. **WAIT for explicit approval**
@@ -156,6 +173,7 @@ graph LR
 All documents MUST use templates from `/templates`. No improvisation.
 
 **Strict formatting rules:**
+- **Language:** ALL documents (PRD, RFC, CONTEXT, PLAN, ACTIVE, BRIEF) MUST be in English
 - No numbered sections (use `##` / `###` headings only)
 - Status: always `Draft` / `Approved` / `Done` (capitalized, no dates in status)
 - Date in separate `Created:` field
@@ -167,14 +185,18 @@ All documents MUST use templates from `/templates`. No improvisation.
 
 ### Full flow (epic | feature)
 - [ ] Created folder `.claude/development/docs/features/{ISSUE-KEY}/`
-- [ ] PRD.md created with `Status: Draft`
+- [ ] PRD.md created with `Status: Draft` (in English)
 - [ ] PRD.md → **user approved** → `Status: Approved`
-- [ ] RFC.md created with `Status: Draft`
+- [ ] RFC.md created with `Status: Draft` (in English)
 - [ ] RFC.md → **user approved** → `Status: Approved`
 - [ ] CONTEXT.md created with `Status: Draft`
 - [ ] PLAN.md created with `Status: Draft`
-- [ ] Epic created in beads: `bd create --type epic`
-- [ ] Beads created with priorities and dependencies
+- [ ] Parent bead created: `bd create --type feature`
+- [ ] Dev sub-beads created: `bd create --type task --parent <parent-id>`
+- [ ] Test sub-bead created (depends on all dev beads)
+- [ ] Review sub-bead created (depends on test bead)
+- [ ] Tech-writer sub-bead created (depends on review bead)
+- [ ] Dependencies set: `bd dep add`
 - [ ] CONTEXT.md + PLAN.md → **user approved** → `Status: Approved`
 - [ ] ACTIVE.md created
 - [ ] User confirmed start of development
