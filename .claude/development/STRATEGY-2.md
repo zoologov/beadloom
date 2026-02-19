@@ -1,7 +1,7 @@
 # Beadloom: Strategy 2 — Architecture Infrastructure for the AI Agent Era
 
-> **Status:** Active (Phases 8-12.6 complete, Phase 13+ planned)
-> **Date:** 2026-02-17 (revision 6)
+> **Status:** Active (Phases 8-12.6 complete, v1.8 planned: 12.8+12.9+12.10, Phase 13+ planned)
+> **Date:** 2026-02-19 (revision 9)
 > **Current version:** 1.7.0
 > **Predecessor:** STRATEGY.md (Phases 1-6, all completed)
 > **Sources:** STRATEGY.md, BACKLOG.md §2-§6, BDL-UX-Issues.md, competitive analysis February 2026
@@ -271,7 +271,66 @@ Beadloom is for engineers who build and maintain serious IT systems. YAML graph 
 | 12.6.2 | **Enhanced impact analysis** — `beadloom why <ref-id> --reverse` (what X depends on) + `--depth N` (transitive closure depth) + `--format tree` (visual dependency tree) | feature | P2 | DONE |
 | 12.6.3 | **Architecture snapshot storage** — store graph snapshots in SQLite for historical comparison without git checkout. `beadloom snapshot save/list/compare` | feature | P2 | DONE |
 
-### Phase 13: Cross-System Foundation (v1.8)
+### Phase 12.8: C4 Architecture Diagrams (v1.8)
+
+**Goal:** Auto-generate C4 model diagrams (Context, Container, Component) from the existing architecture graph. Beadloom already has all the data — tags, layers, `part_of` hierarchy, edges — C4 is a natural projection of this data into an industry-standard visualization format.
+
+**Metric:** `beadloom graph --format=c4` on a project with tags and layers produces a valid C4 Container diagram in Mermaid syntax that renders in GitHub markdown. `--format=c4-plantuml` produces equivalent PlantUML output. `--level=context|container|component` controls the abstraction level.
+
+**Motivation:** C4 (Simon Brown) is the de-facto standard for architecture visualization in enterprise and open-source. No existing tool auto-generates C4 from a code-derived architecture graph. This makes Beadloom the first **Architecture-as-Code tool that produces C4 diagrams from real code structure**, not hand-written descriptions.
+
+**Prerequisites (all in v1.7):** Node tags (12.1), layer definitions (12.3), `part_of` hierarchy, `uses`/`depends_on` edges, API surface data (10.1).
+
+| # | Task | Type | P | Effort |
+|---|------|------|---|--------|
+| 12.8.1 | **C4 level mapping** — map graph nodes to C4 levels (System, Container, Component) via configurable strategy: `c4_level` field in services.yml, fallback to `part_of` depth + tags heuristic. Root service = System, top-level domains = Containers, nested modules = Components | feature | P0 | M |
+| 12.8.2 | **C4-Mermaid output** — `beadloom graph --format=c4` generates Mermaid C4 syntax (`C4Context`, `C4Container`, `C4Component` diagram types). Reuses existing `graph` command infrastructure, adds C4 renderer | feature | P0 | S |
+| 12.8.3 | **C4-PlantUML output** — `beadloom graph --format=c4-plantuml` generates C4-PlantUML with standard macros (`System()`, `Container()`, `Component()`, `Rel()`). Full C4-PlantUML library compatibility | feature | P1 | S |
+| 12.8.4 | **C4 level selection** — `--level=context\|container\|component` for drill-down. Context shows system boundaries + external actors. Container shows top-level domains. Component shows internals of a specific container (`--scope=<ref-id>`) | feature | P1 | S |
+| 12.8.5 | **C4 external systems** — nodes with `external: true` tag render as `System_Ext`, `Container_Ext`, `ContainerDb_Ext` in C4. Database nodes (tagged `database` or `storage`) render as `ContainerDb` | feature | P2 | S |
+
+### Phase 12.9: Architecture Debt Report (v1.8)
+
+**Goal:** Single command that aggregates all architecture health signals into a quantified debt report. Transforms scattered diagnostics (`lint`, `sync-check`, `doctor`, `status`) into one actionable dashboard with a numeric debt score, category breakdown, and trend tracking.
+
+**Metric:** `beadloom status --debt-report` produces a structured report with debt score 0-100, broken down by categories (rule violations, doc gaps, complexity smells). `--json` output enables CI gate (`--fail-if=score>30`). Score delta vs last snapshot shows trend.
+
+**Motivation:** Architecture debt is invisible until it's too late. Teams say "we have tech debt" but can't quantify it. Beadloom already collects all the signals — lint violations, stale docs, missing coverage, complexity metrics, dormant domains — but they're scattered across 4 commands. One aggregated score makes debt visible, trackable, and actionable. This is what turns Beadloom from "a tool you run sometimes" into "a metric your team tracks every sprint".
+
+**Prerequisites (all in v1.7):** Architecture lint with severity (10.4, 12.1-12.6), doc sync with 3-layer staleness (10.5), git activity analysis (10.2), test mapping (10.3), cardinality checks (12.6), snapshots (12.6.3).
+
+| # | Task | Type | P | Effort |
+|---|------|------|---|--------|
+| 12.9.1 | **Debt score formula** — weighted aggregation: rule violations (errors×3 + warnings×1), doc gaps (undocumented×2 + stale×1), complexity smells (oversized×2 + high-fan-out×1 + dormant×0.5). Configurable weights in `config.yml`. Score 0 = clean, 100 = critical | feature | P0 | M |
+| 12.9.2 | **`status --debt-report`** — human-readable report with categories, counts, top offenders. Rich output via Rich tables/panels. Shows debt score with severity label (clean/low/medium/high/critical) | feature | P0 | S |
+| 12.9.3 | **JSON + CI output** — `--debt-report --json` for machine consumption. `--fail-if=score>N` exits non-zero for CI gates. `--fail-if=errors>0` for strict mode | feature | P1 | S |
+| 12.9.4 | **Trend tracking** — compare current debt score vs last snapshot. Shows delta per category: "Rule violations: 7 (+2)", "Doc gaps: 8 (-3)". Requires snapshots from Phase 12.6.3 | feature | P1 | S |
+| 12.9.5 | **MCP tool `get_debt_report`** — expose debt report via MCP so AI agents can prioritize architectural fixes autonomously. Returns structured JSON with score, categories, top offenders | feature | P2 | S |
+| 12.9.6 | **Top offenders list** — rank nodes by individual debt contribution. "SERVICES: 8 points (3 violations, 2 stale docs, oversized)". Helps teams know where to invest refactoring effort | feature | P2 | S |
+
+### Phase 12.10: Interactive Architecture TUI (v1.8)
+
+**Goal:** Transform the existing TUI from a static viewer into an interactive architecture workstation. One command — `beadloom tui` — gives a developer a live, navigable dashboard with graph exploration, debt monitoring, doc status, dependency tracing, and keyboard-driven actions. Works over SSH, in tmux, on any terminal.
+
+**Metric:** `beadloom tui` opens an interactive dashboard that updates live on file changes. Developer can explore the full graph, trace dependencies, inspect context bundles, and trigger actions (reindex, lint, generate docs) without leaving the TUI. Startup < 1s. No competitor has an equivalent.
+
+**Motivation:** CLI commands give snapshots — you run, read, forget. TUI gives a persistent workspace. For architecture work, the ability to explore and navigate interactively is a category-defining feature. No AaC competitor (Greptile, Augment, DeepDocs) has a terminal-native interactive interface. This works everywhere: SSH, tmux, CI debug sessions, containers, remote servers.
+
+**Technology:** Textual (by Textualize) — Python TUI framework built on Rich (already in Beadloom's stack). CSS-like styling, reactive widgets, async support, hot reload during development.
+
+**Prerequisites:** Phase 12.9 (debt report data for dashboard), all existing infrastructure (lint, sync-check, graph, ctx, why).
+
+| # | Task | Type | P | Effort |
+|---|------|------|---|--------|
+| 12.10.1 | **Architecture Dashboard** — main screen with debt score gauge, graph tree, lint violations panel, git activity sparklines. Layout via Textual CSS. Updates reactively when underlying data changes | feature | P0 | L |
+| 12.10.2 | **Interactive Graph Explorer** — tree widget with expand/collapse. Enter → node detail (symbols, edges, routes, tests). Keyboard nav: `d` downstream, `u` upstream, `c` context preview, `o` open in $EDITOR | feature | P0 | M |
+| 12.10.3 | **Live File Watcher** — `watchfiles` (or `watchdog`) monitors source dirs. On change: badge "reindex needed", press `r` to reindex, dashboard auto-refreshes. Debounced (500ms) to avoid spam | feature | P1 | M |
+| 12.10.4 | **Dependency Path Tracer** — interactive `why` panel. Select source → target, shows all paths. Highlights cycles in red. Reverse mode (who depends on me). Keyboard: arrow keys to navigate paths | feature | P1 | M |
+| 12.10.5 | **Doc Sync Status Panel** — all nodes with doc status (fresh/stale/missing) + staleness reason. Press `g` to generate skeleton, `p` to view polish data. Color-coded: green/yellow/red | feature | P1 | S |
+| 12.10.6 | **Context Bundle Inspector** — preview exactly what `beadloom ctx <ref-id>` returns. Shows token count, sections, dependencies. Helps developers understand what agents see | feature | P2 | S |
+| 12.10.7 | **Keyboard-driven Actions** — trigger reindex (`r`), lint (`l`), sync-check (`s`), generate docs (`g`), snapshot (`S`) directly from TUI. Action results shown in status bar / notification panel | feature | P2 | S |
+
+### Phase 13: Cross-System Foundation (v1.9)
 
 **Goal:** Beadloom works across repository boundaries. Beginning of the path to serving IT landscapes.
 
@@ -330,9 +389,9 @@ The following tasks have value but are not priorities for architecture infrastru
 
 | Task | Why deferred |
 |------|-------------|
-| Web dashboard (D3/Cytoscape) | High effort, non-core; TUI covers this |
+| Web dashboard (D3/Cytoscape) | High effort; Interactive TUI (Phase 12.10) covers this natively |
 | VS Code extension | High effort; MCP tools are sufficient |
-| ASCII graph in terminal | Low ROI; Mermaid covers this |
+| ASCII graph in terminal | Low ROI; Mermaid + C4 covers this |
 | GitHub Actions marketplace | Useful, but `beadloom lint --strict` in CI already works |
 | pre-commit hook | `beadloom install-hooks` already exists |
 | Architecture pattern detection (MVC/hex) | LLMs identify patterns from context better |
@@ -572,6 +631,426 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
 | 5 repos, 500 nodes | No | Yes |
 | 15 repos, 2000 nodes | No | Required |
 
+### 5.9 C4 Architecture Diagrams — Technical Specification (Phase 12.8)
+
+**C4 Model Mapping:**
+
+The C4 model defines 4 abstraction levels. Beadloom maps its graph hierarchy to C4 as follows:
+
+| C4 Level | Beadloom Source | Example |
+|----------|----------------|---------|
+| **System (C1)** | Root service node | "Beadloom" |
+| **Container (C2)** | Top-level domains (`part_of` depth=1) | `graph/`, `services/`, `doc_sync/` |
+| **Component (C3)** | Nested modules (`part_of` depth=2+) | `graph/builder`, `services/mcp` |
+| **Person/External** | Nodes tagged `external: true` | "CI Pipeline", "IDE via MCP" |
+
+**Level determination strategy (configurable):**
+
+```yaml
+# services.yml — explicit C4 level (highest priority)
+nodes:
+  - ref_id: GRAPH
+    name: Architecture Graph
+    c4_level: container          # explicit override
+    c4_technology: "Python, SQLite"
+    c4_description: "Stores and queries architecture graph"
+
+# Fallback: automatic mapping
+# 1. c4_level field in services.yml → use as-is
+# 2. part_of depth 0 (root) → System
+# 3. part_of depth 1 → Container
+# 4. part_of depth 2+ → Component
+# 5. tag "external" → System_Ext / Container_Ext
+# 6. tag "database" / "storage" → ContainerDb
+```
+
+**C4-Mermaid output example:**
+
+```
+C4Container
+    title Container diagram for Beadloom
+
+    Person(user, "Developer", "Uses CLI and MCP")
+    Person(agent, "AI Agent", "Claude Code, Cursor")
+
+    System_Boundary(beadloom, "Beadloom") {
+        Container(graph, "Architecture Graph", "Python, SQLite", "Stores nodes, edges, symbols")
+        Container(ctx_oracle, "Context Oracle", "Python, FTS5", "Bundles context for agents")
+        Container(doc_sync, "Doc Sync", "Python", "Tracks doc-code drift")
+        Container(services, "Services", "Click, MCP", "CLI and MCP interfaces")
+    }
+
+    Rel(user, services, "Uses", "CLI")
+    Rel(agent, services, "Uses", "MCP stdio")
+    Rel(services, graph, "Queries")
+    Rel(services, ctx_oracle, "Requests context")
+    Rel(ctx_oracle, graph, "Reads graph")
+    Rel(doc_sync, graph, "Reads symbols")
+```
+
+**C4-PlantUML output example:**
+
+```plantuml
+@startuml
+!include <C4/C4_Container>
+
+title Container diagram for Beadloom
+
+Person(user, "Developer", "Uses CLI and MCP")
+Person(agent, "AI Agent", "Claude Code, Cursor")
+
+System_Boundary(beadloom, "Beadloom") {
+    Container(graph, "Architecture Graph", "Python, SQLite", "Stores nodes, edges, symbols")
+    Container(ctx_oracle, "Context Oracle", "Python, FTS5", "Bundles context for agents")
+    Container(doc_sync, "Doc Sync", "Python", "Tracks doc-code drift")
+    Container(services, "Services", "Click, MCP", "CLI and MCP interfaces")
+}
+
+Rel(user, services, "Uses", "CLI")
+Rel(agent, services, "Uses", "MCP stdio")
+Rel(services, graph, "Queries")
+Rel(services, ctx_oracle, "Requests context")
+Rel(ctx_oracle, graph, "Reads graph")
+Rel(doc_sync, graph, "Reads symbols")
+
+@enduml
+```
+
+**CLI interface:**
+
+```bash
+# Default: C4 Container diagram in Mermaid (most useful level)
+beadloom graph --format=c4
+
+# PlantUML output
+beadloom graph --format=c4-plantuml
+
+# Specific C4 level
+beadloom graph --format=c4 --level=context      # C1: system + external actors
+beadloom graph --format=c4 --level=container     # C2: top-level domains (default)
+beadloom graph --format=c4 --level=component     # C3: internals of one container
+
+# Drill into a specific container
+beadloom graph --format=c4 --level=component --scope=GRAPH
+
+# Save to file
+beadloom graph --format=c4-plantuml --output=architecture.puml
+```
+
+**Data sources per C4 element:**
+
+| C4 Element | Data source |
+|-----------|-------------|
+| Name | `nodes.name` |
+| Technology | `nodes.extra.frameworks` + language from `code_symbols` |
+| Description | `nodes.summary` or `docs.content` excerpt |
+| Relationships | `edges` (uses, depends_on) → `Rel()` |
+| External flag | `tags` containing `external` |
+| Database flag | `tags` containing `database`, `storage` |
+| Boundary grouping | `part_of` edges → `System_Boundary` / `Container_Boundary` |
+
+### 5.10 Architecture Debt Report — Technical Specification (Phase 12.9)
+
+**Debt Score Formula:**
+
+```
+debt_score = min(100, Σ category_scores)
+
+category_scores:
+  rule_violations  = (error_count × 3) + (warning_count × 1)
+  doc_gaps         = (undocumented_nodes × 2) + (stale_docs × 1) + (untracked_files × 0.5)
+  complexity       = (oversized_domains × 2) + (high_fan_out × 1) + (dormant_domains × 0.5)
+  test_gaps        = (untested_domains × 1)
+
+severity:
+  0       = clean    ✓
+  1-10    = low      ●
+  11-25   = medium   ▲
+  26-50   = high     ◆
+  51-100  = critical ✖
+```
+
+Weights are configurable in `config.yml`:
+
+```yaml
+# config.yml
+debt_report:
+  weights:
+    rule_error: 3
+    rule_warning: 1
+    undocumented_node: 2
+    stale_doc: 1
+    untracked_file: 0.5
+    oversized_domain: 2
+    high_fan_out: 1
+    dormant_domain: 0.5
+    untested_domain: 1
+  thresholds:
+    oversized_symbols: 200    # max symbols per node
+    high_fan_out: 10          # max outgoing dependencies
+    dormant_months: 3         # months with 0 commits
+  fail_if:                    # CI defaults (overridable via CLI)
+    score: null               # --fail-if=score>30
+    errors: null              # --fail-if=errors>0
+```
+
+**Data aggregation (sources per category):**
+
+| Category | Data source | How collected |
+|----------|-------------|---------------|
+| Rule violations | `lint_engine.evaluate()` | Existing lint infrastructure (Phase 12) |
+| Doc gaps — undocumented | `nodes` without matching `docs` entry | Existing doc_sync (Phase 8.5) |
+| Doc gaps — stale | `sync_state` with symbol drift | Existing sync-check (Phase 10.5) |
+| Doc gaps — untracked | Files in source dirs not covered by nodes | Existing coverage check (Phase 10.5) |
+| Complexity — oversized | `code_symbols` count per node > threshold | Existing cardinality rules (Phase 12.6) |
+| Complexity — fan-out | `edges` (uses/depends_on) count per node | Existing graph edges |
+| Complexity — dormant | `git_activity` with 0 commits in N months | Existing git analysis (Phase 10.2) |
+| Test gaps | Nodes without test mapping | Existing test mapping (Phase 10.3) |
+
+**CLI interface:**
+
+```bash
+# Human-readable report (default)
+beadloom status --debt-report
+
+# JSON for scripting / CI
+beadloom status --debt-report --json
+
+# CI gate — fail if debt score exceeds threshold
+beadloom status --debt-report --fail-if=score>30
+
+# Strict CI — fail on any lint errors
+beadloom status --debt-report --fail-if=errors>0
+
+# Show trend vs last snapshot
+beadloom status --debt-report --trend
+
+# Filter by category
+beadloom status --debt-report --category=docs
+beadloom status --debt-report --category=rules,complexity
+```
+
+**Human-readable output example:**
+
+```
+Architecture Debt Report
+════════════════════════════════════════════════════
+
+  Debt Score: 23 / 100  ▲ medium
+
+Category Breakdown
+──────────────────────────────────────────────────
+  Rule Violations .................... 9 pts
+  ├── errors:   2  (ui→native forbid, cycle in services)
+  └── warnings: 3  (missing part_of, cardinality)
+
+  Documentation Gaps ................. 8 pts
+  ├── undocumented nodes:  3  (AUTH, BILLING, NOTIFICATIONS)
+  ├── stale docs:          4  (GRAPH, SERVICES, DOC_SYNC, CTX_ORACLE)
+  └── untracked files:     1  (services/new_handler.py)
+
+  Complexity Smells .................. 5 pts
+  ├── oversized (>200 sym): 2  (GRAPH: 247, SERVICES: 213)
+  ├── high fan-out (>10):   1  (SERVICES: 14 deps)
+  └── dormant (>3 months):  0
+
+  Test Gaps .......................... 1 pt
+  └── untested domains:     1  (NOTIFICATIONS)
+
+Top Offenders
+──────────────────────────────────────────────────
+  1. SERVICES .............. 8 pts  (2 violations, 2 stale, oversized, fan-out)
+  2. GRAPH ................. 4 pts  (1 stale, oversized)
+  3. AUTH .................. 3 pts  (undocumented, 1 violation)
+
+Trend (vs snapshot 2026-02-12)
+──────────────────────────────────────────────────
+  Score: 23 ← 26  ↓ 3 improved
+  Rules: 9  ← 11  ↓ 2
+  Docs:  8  ← 8   = 0
+  Complexity: 5  ← 5   = 0
+  Tests: 1  ← 2   ↓ 1
+```
+
+**JSON output schema:**
+
+```json
+{
+  "debt_score": 23,
+  "severity": "medium",
+  "categories": {
+    "rule_violations": {
+      "score": 9,
+      "errors": 2,
+      "warnings": 3,
+      "details": [
+        {"rule": "ui-no-native", "severity": "error", "node": "APP-TABS"},
+        {"rule": "no-circular-deps", "severity": "error", "path": ["SERVICES", "GRAPH", "SERVICES"]}
+      ]
+    },
+    "doc_gaps": {
+      "score": 8,
+      "undocumented": ["AUTH", "BILLING", "NOTIFICATIONS"],
+      "stale": ["GRAPH", "SERVICES", "DOC_SYNC", "CTX_ORACLE"],
+      "untracked_files": ["services/new_handler.py"]
+    },
+    "complexity": {
+      "score": 5,
+      "oversized": [{"node": "GRAPH", "symbols": 247}, {"node": "SERVICES", "symbols": 213}],
+      "high_fan_out": [{"node": "SERVICES", "deps": 14}],
+      "dormant": []
+    },
+    "test_gaps": {
+      "score": 1,
+      "untested": ["NOTIFICATIONS"]
+    }
+  },
+  "top_offenders": [
+    {"node": "SERVICES", "score": 8, "reasons": ["2 violations", "2 stale", "oversized", "fan-out"]},
+    {"node": "GRAPH", "score": 4, "reasons": ["1 stale", "oversized"]}
+  ],
+  "trend": {
+    "previous_snapshot": "2026-02-12",
+    "previous_score": 26,
+    "delta": -3
+  }
+}
+```
+
+### 5.11 Interactive Architecture TUI — Technical Specification (Phase 12.10)
+
+**Technology stack:**
+
+| Component | Choice | Rationale |
+|-----------|--------|-----------|
+| Framework | Textual >=0.80 | Built on Rich (already in stack), CSS-like layout, reactive, async-native |
+| File watching | `watchfiles` (Rust-based) | Fast, cross-platform, minimal deps. Fallback: `watchdog` |
+| Graph rendering | Textual `Tree` widget + custom | Built-in tree is efficient for 200+ nodes |
+| Charts/sparklines | `textual-plotext` or custom Rich | Git activity sparklines, debt gauge |
+
+**Architecture:**
+
+```
+beadloom tui
+│
+├── App (Textual Application)
+│   ├── DashboardScreen (main)
+│   │   ├── DebtGaugeWidget          ← reads from debt report (12.9)
+│   │   ├── GraphTreeWidget          ← reads from graph storage
+│   │   ├── LintViolationsWidget     ← reads from lint engine
+│   │   ├── ActivitySparklineWidget  ← reads from git_activity
+│   │   └── StatusBarWidget          ← file watcher status, last action
+│   │
+│   ├── ExplorerScreen (detail)
+│   │   ├── NodeDetailPanel          ← symbols, edges, routes, tests
+│   │   ├── DependencyPathPanel      ← interactive why/trace
+│   │   └── ContextPreviewPanel      ← ctx bundle preview
+│   │
+│   └── DocStatusScreen
+│       ├── DocHealthTable           ← sync-check results
+│       └── DocDiffPanel             ← symbol diff for stale docs
+│
+├── DataLayer (read-only access to existing infra)
+│   ├── GraphDataProvider            ← graph storage (SQLite)
+│   ├── LintDataProvider             ← lint_engine.evaluate()
+│   ├── SyncDataProvider             ← sync-check results
+│   ├── DebtDataProvider             ← debt score calculator (12.9)
+│   └── ActivityDataProvider         ← git_activity analysis
+│
+└── FileWatcher (background worker)
+    ├── watches source dirs from graph config
+    ├── debounce 500ms
+    └── emits "reindex_needed" event → UI badge
+```
+
+**Screen layout (Dashboard):**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  beadloom tui — ProjectName                    Debt: 23 ▲   │
+├────────────────────────┬────────────────────────────────────┤
+│  Graph                 │  Activity (7d)         Lint        │
+│  ─────                 │  ──────────            ────        │
+│  ▼ ROOT (service)      │  SVC  ████████░░ 14    ✖ 2 errors │
+│    ▼ graph/            │  GRP  █████░░░░░  6    ▲ 3 warns  │
+│      builder           │  DSY  ██░░░░░░░░  3               │
+│      storage    ●stale │  CTX  █░░░░░░░░░  1    Docs       │
+│    ▶ services/         │  TUI  ░░░░░░░░░░  0    ────       │
+│    ▶ doc_sync/  ●stale │                        73% covered │
+│    ▶ ctx_oracle/       │                        4 stale     │
+│    ▶ tui/              │                        3 missing   │
+├────────────────────────┴────────────────────────────────────┤
+│  GRAPH: Architecture Graph — Python, SQLite                  │
+│  247 sym | 12 files | 5 deps | ●stale (symbols changed)    │
+├─────────────────────────────────────────────────────────────┤
+│  [q]uit [r]eindex [l]int [d]ebt [/]search [?]help   ● live │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Keyboard bindings:**
+
+| Key | Context | Action |
+|-----|---------|--------|
+| `↑↓` | Graph tree | Navigate nodes |
+| `Enter` | Graph tree | Expand/collapse node or open detail |
+| `d` | Node selected | Show downstream dependents |
+| `u` | Node selected | Show upstream dependencies |
+| `c` | Node selected | Context bundle preview |
+| `o` | Node selected | Open primary source file in $EDITOR |
+| `r` | Global | Trigger reindex |
+| `l` | Global | Run lint |
+| `s` | Global | Run sync-check |
+| `g` | Doc panel / node | Generate doc skeleton |
+| `S` | Global | Save snapshot |
+| `/` | Global | FTS5 search across graph |
+| `Tab` | Global | Switch panel focus |
+| `1-3` | Global | Switch screen (dashboard/explorer/docs) |
+| `q` | Global | Quit |
+| `?` | Global | Help overlay |
+
+**Data flow (reactive):**
+
+```
+FileWatcher ──event──→ App.post_message("reindex_needed")
+                           │
+                           ▼
+                    StatusBar shows "● changes detected, press [r]"
+                           │
+                    User presses [r]
+                           │
+                           ▼
+                    BackgroundWorker runs reindex()
+                           │
+                           ▼
+                    DataProviders refresh() ──→ Widgets update()
+                           │
+                           ▼
+                    DebtGauge recalculates, GraphTree rebuilds,
+                    LintPanel refreshes, DocStatus updates
+```
+
+**Performance targets:**
+
+| Metric | Target | How |
+|--------|--------|-----|
+| Startup time | < 1s | Lazy-load data, render shell first |
+| Reindex + refresh | < 3s (50 nodes) | Background worker, incremental widget updates |
+| Memory | < 50MB | Textual is lightweight; data stays in SQLite |
+| Node limit | 500+ nodes smooth | Virtual tree (Textual handles this natively) |
+
+**Dependency on Textual:**
+
+```toml
+# pyproject.toml
+[project.optional-dependencies]
+tui = ["textual>=0.80", "watchfiles>=0.20"]
+
+# Install: uv tool install beadloom[tui]
+# Or: uv pip install beadloom[tui]
+```
+
+TUI is an optional extra — core Beadloom stays lightweight. `beadloom tui` without the extra installed shows a helpful message: "Install TUI support: uv tool install beadloom[tui]".
+
 ---
 
 ## 6. Dependency Map
@@ -611,7 +1090,33 @@ v1.7 ── DONE ─────────────────────
     ├── 12.6.2 Enhanced why ─────── DONE
     └── 12.6.3 Snapshot storage ─── DONE
 
-v1.8 ──────────────────────────────────────────────────────
+v1.8 ── Planned ───────────────────────────────────────────
+│
+├── Phase 12.8 (C4 Architecture Diagrams) ── Planned (5 tasks)
+│   ├── 12.8.1 C4 level mapping ──── depends on 12.1 (tags) ✓
+│   ├── 12.8.2 C4-Mermaid output ─── depends on 12.8.1
+│   ├── 12.8.3 C4-PlantUML output ── depends on 12.8.1
+│   ├── 12.8.4 C4 level selection ── depends on 12.8.1
+│   └── 12.8.5 C4 external systems ─ depends on 12.8.1
+│
+├── Phase 12.9 (Debt Report) ────── Planned (6 tasks), parallel with 12.8
+│   ├── 12.9.1 Debt score formula ── depends on 12.6 (cardinality) ✓
+│   ├── 12.9.2 status --debt-report ─ depends on 12.9.1
+│   ├── 12.9.3 JSON + CI output ──── depends on 12.9.2
+│   ├── 12.9.4 Trend tracking ────── depends on 12.6.3 (snapshots) ✓ + 12.9.1
+│   ├── 12.9.5 MCP get_debt_report ── depends on 12.9.2
+│   └── 12.9.6 Top offenders list ── depends on 12.9.1
+│
+└── Phase 12.10 (Interactive TUI) ── Planned (7 tasks), after 12.9
+    ├── 12.10.1 Dashboard ────────── depends on 12.9 (debt data)
+    ├── 12.10.2 Graph explorer ───── standalone (graph data exists)
+    ├── 12.10.3 Live file watcher ── standalone
+    ├── 12.10.4 Dependency tracer ── standalone (why data exists)
+    ├── 12.10.5 Doc status panel ─── standalone (sync-check exists)
+    ├── 12.10.6 Context inspector ── standalone (ctx data exists)
+    └── 12.10.7 Keyboard actions ─── depends on 12.10.1
+
+v1.9 ──────────────────────────────────────────────────────
 │
 └── Phase 13 (Cross-System) ──── after Phase 12
     ├── 13.1 Multi-repo refs ───── standalone
@@ -639,20 +1144,23 @@ Cross-cutting ──────────────────────
 
 ## 7. Success Metrics
 
-| Metric | v1.4 | v1.5 | v1.6 | v1.7 (current) | v1.8 (target) | v2.0 (target) |
-|--------|------|------|------|----------------|---------------|---------------|
-| **Node summaries** | "15 files" | Framework + entry points | + routes, activity, tests | **+ tags/labels** | + cross-repo | + cross-repo |
-| **First graph edges** | `part_of` only | `part_of` + `depends_on` | + API contracts | **+ import-based** | + inter-repo | + federated |
-| **Doc drift detection** | file-hash only | symbol-level (E2E) | 3-layer: symbols + files + modules | same | + cross-repo | + cross-repo |
-| **AaC Rules** | `require` only | same | + severity levels | **+ forbid, layers, cycles, imports, cardinality (7 rule types)** | same | + custom plugins |
-| **Init quality** | 6 nodes / 35% | improved | same | **80%+ coverage, non-interactive** | same | same |
-| **Frameworks** | 4 patterns | 18+ | 18+ with route extraction | 18+ | 18+ | + custom |
-| **Languages** | 4 | 9 | 9 | 9 | 9 | 9+ |
-| **Tests** | 847 | 1153 | 1408 | **1657** | — | — |
-| **Arch intelligence** | — | — | — | **diff + enhanced why + snapshots** | same | + cross-repo diff |
-| **MCP tools** | 10 | 10 | 13 (+lint, why, diff) | **13** | 13+ | 13+ |
-| **Multi-repo** | No | No | No | No | **refs** | **federation** |
-| **Search** | FTS5 | FTS5 | FTS5 | FTS5 | FTS5 | FTS5 + **semantic** |
+| Metric | v1.4 | v1.5 | v1.6 | v1.7 (current) | v1.8 (target) | v1.9 (target) | v2.0 (target) |
+|--------|------|------|------|----------------|---------------|---------------|---------------|
+| **Node summaries** | "15 files" | Framework + entry points | + routes, activity, tests | **+ tags/labels** | same | + cross-repo | + cross-repo |
+| **First graph edges** | `part_of` only | `part_of` + `depends_on` | + API contracts | **+ import-based** | same | + inter-repo | + federated |
+| **Doc drift detection** | file-hash only | symbol-level (E2E) | 3-layer: symbols + files + modules | same | same | + cross-repo | + cross-repo |
+| **AaC Rules** | `require` only | same | + severity levels | **+ forbid, layers, cycles, imports, cardinality (7 rule types)** | same | same | + custom plugins |
+| **Init quality** | 6 nodes / 35% | improved | same | **80%+ coverage, non-interactive** | same | same | same |
+| **Frameworks** | 4 patterns | 18+ | 18+ with route extraction | 18+ | 18+ | 18+ | + custom |
+| **Languages** | 4 | 9 | 9 | 9 | 9 | 9 | 9+ |
+| **Tests** | 847 | 1153 | 1408 | **1657** | — | — | — |
+| **Visualization** | Mermaid only | same | same | same | **+ C4-Mermaid, C4-PlantUML** | same | + cross-repo C4 |
+| **Debt tracking** | — | — | — | — | **debt score + trend + CI gate** | same | + cross-repo debt |
+| **TUI** | — | — | — | basic viewer | **interactive dashboard + live watcher** | + multi-repo view | + federated view |
+| **Arch intelligence** | — | — | — | **diff + enhanced why + snapshots** | same | same | + cross-repo diff |
+| **MCP tools** | 10 | 10 | 13 (+lint, why, diff) | **13** | **14** (+debt_report) | 14+ | 14+ |
+| **Multi-repo** | No | No | No | No | No | **refs** | **federation** |
+| **Search** | FTS5 | FTS5 | FTS5 | FTS5 | FTS5 | FTS5 | FTS5 + **semantic** |
 
 ---
 
@@ -669,7 +1177,10 @@ Cross-cutting ──────────────────────
 | **12 — AaC Rules v2** | v1.7 | 6 | **DONE** | Forbid, layers, cycles, import-based rules |
 | **12.5 — Init Quality** | v1.7 | 5 | **DONE** | 80%+ bootstrap coverage (fix #32-36) |
 | **12.6 — Arch Intelligence** | v1.7 | 3 | **DONE** | beadloom diff, enhanced why, snapshots |
-| **13 — Cross-System** | v1.8 | 4 | Planned | Multi-repo refs, export |
+| **12.8 — C4 Architecture Diagrams** | v1.8 | 5 | Planned | Auto-generated C4 (Mermaid + PlantUML) |
+| **12.9 — Debt Report** | v1.8 | 6 | Planned | Debt score, trend, CI gate, MCP |
+| **12.10 — Interactive TUI** | v1.8 | 7 | Planned | Live dashboard, graph explorer, file watcher |
+| **13 — Cross-System** | v1.9 | 4 | Planned | Multi-repo refs, export |
 | **14 — Full Cross + Semantic** | v2.0 | 7 | Planned | Federation, semantic search |
 | **15 — Quality** | cross-cutting | 5 | Planned | Atomic writes, migrations |
 | **7 — Guides** | parallel | 5 | Planned | Guides, demos |
@@ -680,7 +1191,14 @@ Cross-cutting ──────────────────────
 
 **v1.7 delivered:** Phases 12 + 12.5 + 12.6. AaC Rules v2 + Init Quality + Architecture Intelligence (BDL-021, 4 waves, ~224 new tests).
 
-**Next priority:** Phase 13 (Cross-System Foundation) for v1.8. Multi-repo refs, API contract edges, export, and monorepo workspace support.
+**Next priority:** v1.8 release — three parallel workstreams:
+- Phase 12.8 (C4 Architecture Diagrams) — parallel, no deps
+- Phase 12.9 (Debt Report) — parallel, no deps
+- Phase 12.10 (Interactive TUI) — after 12.9 (needs debt data for dashboard)
+
+All prerequisites already in v1.7. 12.8 and 12.9 can start simultaneously; 12.10 starts after 12.9.1 (debt formula) is ready.
+
+**After that:** Phase 13 (Cross-System Foundation) for v1.9. Multi-repo refs, API contract edges, export, and monorepo workspace support.
 
 ---
 
@@ -691,7 +1209,7 @@ Cross-cutting ──────────────────────
 | sqlite-vec integration (§2) | Phase 14.3 | Planned (v2.0) |
 | vec_nodes table (§2) | Phase 14.3 | Planned (v2.0) |
 | Atomic YAML writes (§2) | Phase 15.1 | Planned (cross-cutting) |
-| Multi-repo federated graphs (§3) | Phase 13.1 + 14.1 | Planned (v1.8 + v2.0) |
+| Multi-repo federated graphs (§3) | Phase 13.1 + 14.1 | Planned (v1.9 + v2.0) |
 | Plugin system (§3) | Phase 14.5 | Planned (v2.0) |
 | Web dashboard (§3) | Deferred to STRATEGY-3 | — |
 | Rule severity levels (§3) | Phase 10.4 | **DONE (v1.6)** |
@@ -700,9 +1218,9 @@ Cross-cutting ──────────────────────
 | Phase 7 guides (§5) | Phase 7 | Planned (parallel) |
 | More languages — Java, Kotlin, Swift, C/C++ (§6a) | Phase 9 | **DONE (v1.5)** |
 | C# (§6a) | Deferred to STRATEGY-3 | — |
-| Monorepo workspace (§6b) | Phase 13.4 | Planned (v1.8) |
+| Monorepo workspace (§6b) | Phase 13.4 | Planned (v1.9) |
 | VS Code extension (§6c) | Deferred to STRATEGY-3 | — |
-| `beadloom export` (§6c) | Phase 13.3 | Planned (v1.8) |
+| `beadloom export` (§6c) | Phase 13.3 | Planned (v1.9) |
 | ASCII graph (§6c) | Deferred to STRATEGY-3 | — |
 | GH Actions marketplace (§6d) | Deferred to STRATEGY-3 | — |
 | pre-commit hook (§6d) | Deferred to STRATEGY-3 | — |
@@ -782,6 +1300,34 @@ Cross-cutting ──────────────────────
 | Rules v2 YAML format? | Tags inline in services.yml via `tags` field. Layers defined in rules.yml. | Keep node metadata with nodes; keep rules together in rules.yml |
 | Import rules granularity? | File-level globs (from/to path patterns) | Simpler, works without graph resolution, matches developer mental model |
 
+### Recently Closed (v1.7.x — C4)
+
+| Question | Decision | Rationale |
+|----------|----------|-----------|
+| C4: Mermaid vs PlantUML? | Both. Mermaid C4 as default (`--format=c4`), PlantUML as option (`--format=c4-plantuml`) | Mermaid: zero deps, GitHub-native, consistent with existing `graph`. PlantUML: enterprise/Confluence users, richer C4 features |
+| C4: where in strategy? | Phase 12.8 (v1.8), alongside 12.9 + 12.10 | No dependencies on cross-system; all prerequisites (tags, layers, edges) already in v1.7. Part of v1.8 killer release |
+| C4: level mapping strategy? | Explicit `c4_level` field in services.yml, fallback to `part_of` depth + tags heuristic | Explicit > heuristic; but automatic fallback ensures zero-config value |
+| C4: extend `graph` or new command? | Extend `beadloom graph --format=c4` | Natural extension of existing command; consistent UX |
+
+### Recently Closed (v1.7.x — Debt Report)
+
+| Question | Decision | Rationale |
+|----------|----------|-----------|
+| Debt report: new command or flag? | `beadloom status --debt-report` — extends existing `status` | Natural extension: status already shows project overview; debt is a deeper view of the same data |
+| Debt report: where in strategy? | Phase 12.9 (v1.8), parallel with Phase 12.8 | No dependencies on C4 or cross-system; all data sources already exist in v1.7. Independent workstream |
+| Debt score: formula? | Weighted sum, configurable in config.yml, capped at 100 | Configurable weights let teams tune for their priorities; cap at 100 keeps the mental model simple |
+| Debt report: trend source? | Reuse snapshots from Phase 12.6.3 | No new storage needed; snapshots already capture full graph state |
+
+### Recently Closed (v1.8 — TUI)
+
+| Question | Decision | Rationale |
+|----------|----------|-----------|
+| TUI: framework? | Textual (by Textualize) | Built on Rich (already in stack), CSS-like layout, reactive widgets, async-native, actively maintained |
+| TUI: mandatory or optional? | Optional extra: `beadloom[tui]` | Keeps core lightweight; Textual + watchfiles are ~15MB; users who don't need TUI aren't penalized |
+| TUI: where in strategy? | Phase 12.10 (v1.8), after Phase 12.9 | Dashboard needs debt data from 12.9; graph explorer and other panels can use existing infra |
+| Versioning: v1.7.x → v1.8? | Yes. 12.8 + 12.9 + 12.10 = v1.8 release. Phase 13 moves to v1.9 | Three killer features (C4 + Debt + TUI) deserve a minor version bump, not a patch |
+| TUI: file watcher lib? | `watchfiles` (Rust-based) with `watchdog` fallback | Fast, cross-platform, minimal deps, works in containers |
+
 ---
 
 ## 12. Core Strategy Principles
@@ -797,6 +1343,15 @@ Cross-cutting ──────────────────────
 >
 > **Doc Sync is our second killer feature. It must work honestly.**
 > "5 stale" truth is better than "0 stale" lies.
+>
+> **C4 diagrams from code — our third killer feature.**
+> Auto-generated C4 from a real architecture graph. Not hand-drawn, not LLM-hallucinated — derived from indexed code structure.
+>
+> **Quantified architecture debt — our fourth killer feature.**
+> One number, one command, one CI gate. "Debt score: 23" is actionable. "We have tech debt" is not.
+>
+> **Interactive TUI — our fifth killer feature.**
+> `beadloom tui` = architecture workstation in any terminal. Live updates, graph exploration, dependency tracing. Works over SSH, in tmux, in containers. No competitor has this.
 
 > **Beadloom is an engineering tool for IT landscapes.**
 > Not another vibe-coding gadget, but architecture infrastructure for serious systems.
