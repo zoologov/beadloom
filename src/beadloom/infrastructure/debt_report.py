@@ -109,15 +109,6 @@ class DebtReport:
 # Severity mapping
 # ---------------------------------------------------------------------------
 
-_SEVERITY_THRESHOLDS: list[tuple[float, str]] = [
-    (0.0, "clean"),
-    (10.0, "low"),
-    (25.0, "medium"),
-    (50.0, "high"),
-    (100.0, "critical"),
-]
-
-
 def _severity_label(score: float) -> str:
     """Map a debt score to a severity string.
 
