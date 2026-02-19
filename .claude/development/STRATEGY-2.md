@@ -1,7 +1,7 @@
 # Beadloom: Strategy 2 — Architecture Infrastructure for the AI Agent Era
 
-> **Status:** Active (Phases 8-12.6 complete, v1.8 planned: 12.8+12.9+12.10, Phase 13+ planned)
-> **Date:** 2026-02-19 (revision 9)
+> **Status:** Active (Phases 8-12.6 complete, v1.8 planned: 12.8+12.9+12.10+12.11, Phase 13+ planned)
+> **Date:** 2026-02-19 (revision 10)
 > **Current version:** 1.7.0
 > **Predecessor:** STRATEGY.md (Phases 1-6, all completed)
 > **Sources:** STRATEGY.md, BACKLOG.md §2-§6, BDL-UX-Issues.md, competitive analysis February 2026
@@ -329,6 +329,27 @@ Beadloom is for engineers who build and maintain serious IT systems. YAML graph 
 | 12.10.5 | **Doc Sync Status Panel** — all nodes with doc status (fresh/stale/missing) + staleness reason. Press `g` to generate skeleton, `p` to view polish data. Color-coded: green/yellow/red | feature | P1 | S |
 | 12.10.6 | **Context Bundle Inspector** — preview exactly what `beadloom ctx <ref-id>` returns. Shows token count, sections, dependencies. Helps developers understand what agents see | feature | P2 | S |
 | 12.10.7 | **Keyboard-driven Actions** — trigger reindex (`r`), lint (`l`), sync-check (`s`), generate docs (`g`), snapshot (`S`) directly from TUI. Action results shown in status bar / notification panel | feature | P2 | S |
+
+### Phase 12.11: Documentation Audit — Meta-Doc Staleness Detection (v1.8) ⚗️ EXPERIMENTAL
+
+**Goal:** Automatically detect stale facts in project-level documentation (README, CONTRIBUTING, guides) that are not tied to specific graph nodes and therefore fall outside doc-sync scope. Zero-config: Beadloom computes ground truth from project state and scans markdown files for outdated mentions.
+
+**Metric:** `beadloom docs audit` on a project after a release detects stale version numbers, outdated counts (MCP tools, languages, commands), and changed feature lists — without any manual mapping configuration. False positive rate < 20% across diverse projects.
+
+**Motivation:** After every release, meta-documentation (README, guides, CONTRIBUTING, SECURITY) goes stale. Version numbers, feature counts, command lists, API endpoint counts — all silently become wrong. BDL-022 (v1.7.0 doc refresh) required 6 parallel agents and 10 file updates. This problem exists in every project with documentation. `sync-check` covers node-level docs; `docs audit` covers everything else.
+
+**Experimental status:** ⚗️ This feature ships as experimental in v1.8. The keyword-proximity matching algorithm needs real-world validation across diverse projects (different doc styles, languages, structures). User feedback will shape the matching heuristics, fact registry, and tolerance system. API may change in v1.9.
+
+**Prerequisites:** Manifest parsing (existing), code_symbols (existing), graph storage (existing). No dependency on other v1.8 phases.
+
+| # | Task | Type | P | Effort |
+|---|------|------|---|--------|
+| 12.11.1 | **Fact registry** — auto-compute project facts from existing data: version (from manifest), language_count, node_count, edge_count (from graph), test_count (from test mapping), framework_count (from detection). Extensible via `config.yml` for project-specific facts | feature | P0 | M |
+| 12.11.2 | **Doc scanner** — scan markdown files, extract numeric mentions + version strings. Keyword-proximity matching: associate numbers with nearby keywords (e.g., "9" near "languages" → `language_count`). Built-in keyword sets for standard facts, configurable for custom | feature | P0 | M |
+| 12.11.3 | **`beadloom docs audit`** — compare ground truth vs mentions. Human-readable report: stale/fresh/unmatched. Color-coded output via Rich. `--json` for scripting | feature | P0 | S |
+| 12.11.4 | **CI gate** — `beadloom docs audit --fail-if=stale>0` exits non-zero. Integrates into release workflows to block releases with outdated docs | feature | P1 | S |
+| 12.11.5 | **Tolerance system** — configurable per-fact tolerance: exact match for versions, ±5% for test counts, ±10% for growing metrics. Avoids false positives for naturally fluctuating numbers | feature | P1 | S |
+| 12.11.6 | **Debt report integration** — `docs audit` stale count feeds into debt score (Phase 12.9) as a "meta-doc staleness" category. Unified view of all documentation health | feature | P2 | S |
 
 ### Phase 13: Cross-System Foundation (v1.9)
 
@@ -1051,6 +1072,221 @@ tui = ["textual>=0.80", "watchfiles>=0.20"]
 
 TUI is an optional extra — core Beadloom stays lightweight. `beadloom tui` without the extra installed shows a helpful message: "Install TUI support: uv tool install beadloom[tui]".
 
+### 5.12 Documentation Audit — Technical Specification (Phase 12.11) ⚗️
+
+**Pass 1: Fact Registry (ground truth)**
+
+Zero-config facts computed from existing Beadloom infrastructure:
+
+```python
+class FactRegistry:
+    """Auto-computes project facts from existing data sources."""
+
+    def collect(self, project_root: Path, db: Connection) -> dict[str, Fact]:
+        return {
+            # From manifest (pyproject.toml / package.json / Cargo.toml / go.mod)
+            "version": self._version_from_manifest(project_root),
+
+            # From graph storage (SQLite)
+            "node_count": self._count(db, "SELECT COUNT(*) FROM nodes"),
+            "edge_count": self._count(db, "SELECT COUNT(*) FROM edges"),
+
+            # From code_symbols table
+            "language_count": self._distinct(db,
+                "SELECT COUNT(DISTINCT language) FROM code_symbols"),
+            "languages": self._list(db,
+                "SELECT DISTINCT language FROM code_symbols ORDER BY language"),
+
+            # From framework detection (nodes.extra)
+            "framework_count": self._count_frameworks(db),
+
+            # From test mapping
+            "test_count": self._count(db,
+                "SELECT COUNT(*) FROM code_symbols WHERE kind = 'test'"),
+
+            # From graph introspection (if available)
+            "mcp_tool_count": self._count_mcp_tools(project_root),
+            "cli_command_count": self._count_cli_commands(project_root),
+            "rule_type_count": self._count_rule_types(project_root),
+        }
+```
+
+Optional user-defined facts in `config.yml`:
+
+```yaml
+# config.yml (optional — zero-config works without this)
+docs_audit:
+  extra_facts:
+    api_endpoint_count:
+      command: "beadloom status --json | jq '.routes | length'"
+      keywords: ["endpoint", "route", "API"]
+      type: integer
+
+    coverage_percent:
+      command: "coverage report --format=total"
+      keywords: ["coverage", "covered"]
+      type: percentage
+      tolerance: 5%
+```
+
+**Pass 2: Doc Scanner (mention extraction)**
+
+```python
+class DocScanner:
+    """Scans markdown files for fact mentions using keyword proximity."""
+
+    # Built-in keyword associations (no config needed)
+    FACT_KEYWORDS: dict[str, list[str]] = {
+        "version":           [],  # special: regex r"v?\d+\.\d+\.\d+"
+        "language_count":    ["language", "lang", "programming language"],
+        "mcp_tool_count":    ["MCP", "tool", "server tool"],
+        "cli_command_count": ["command", "CLI", "subcommand"],
+        "rule_type_count":   ["rule type", "rule kind", "rule"],
+        "node_count":        ["node", "module", "domain", "component"],
+        "edge_count":        ["edge", "dependency", "connection"],
+        "test_count":        ["test", "spec", "assertion"],
+        "framework_count":   ["framework", "supported framework"],
+    }
+
+    PROXIMITY_WINDOW = 5  # words before/after the number
+
+    def scan(self, file_path: Path) -> list[Mention]:
+        """Extract fact mentions from a markdown file."""
+        mentions = []
+        for line_num, line in enumerate(file_path.read_text().splitlines(), 1):
+            # 1. Version strings (special regex)
+            mentions.extend(self._find_versions(line, line_num, file_path))
+
+            # 2. Numbers near keywords
+            mentions.extend(self._find_numeric_mentions(line, line_num, file_path))
+
+        return mentions
+
+    def _find_numeric_mentions(self, line: str, line_num: int, path: Path):
+        """Find numbers and match to facts via keyword proximity."""
+        # For each number in line:
+        #   1. Extract N words before and after
+        #   2. Check if any words match FACT_KEYWORDS
+        #   3. If match: create Mention(fact_type, value, file, line)
+        #
+        # Skips: dates, line numbers, issue IDs, hex colors, etc.
+        ...
+```
+
+**Matching algorithm details:**
+
+```
+Input:  "Beadloom supports **9** programming languages including Python"
+                          ↑
+                          number = 9
+
+Window: ["supports", "9", "programming", "languages", "including"]
+                                          ↑
+                                          keyword match: "languages" → language_count
+
+Result: Mention(fact="language_count", mentioned=9, file="README.md", line=15)
+
+Compare: actual language_count = 9 → ✓ FRESH
+```
+
+**False positive mitigation:**
+
+| Pattern | Skip rule |
+|---------|-----------|
+| Dates | `2026-02-19`, `Feb 2026` — regex exclude |
+| Issue IDs | `#123`, `BDL-021` — regex exclude |
+| Code blocks | Inside ``` fences — skip entirely |
+| Hex/colors | `#FF0000`, `0xFF` — regex exclude |
+| Version pinning | `>=0.80`, `^1.2.3` in dependency sections — regex exclude |
+| Changelog | Configurable ignore paths (default: `CHANGELOG.md`) |
+| Line numbers | `:15`, `line 42` — context-aware skip |
+
+**CLI interface:**
+
+```bash
+# Zero-config audit (scans *.md, docs/**/*.md)
+beadloom docs audit
+
+# JSON output for scripting
+beadloom docs audit --json
+
+# CI gate
+beadloom docs audit --fail-if=stale>0
+
+# Custom scan paths
+beadloom docs audit --path="*.md" --path="docs/**/*.md" --path="wiki/**/*.md"
+
+# Show only stale (skip fresh)
+beadloom docs audit --stale-only
+
+# Verbose: show all matched mentions including fresh
+beadloom docs audit --verbose
+```
+
+**Output example:**
+
+```
+$ beadloom docs audit
+
+Documentation Audit ⚗️ experimental
+══════════════════════════════════════════════════
+
+Ground Truth (from project state)
+  version: 1.8.0     languages: 9       MCP tools: 14
+  CLI commands: 23    rule types: 8      nodes: 32
+  tests: 1720         frameworks: 18
+
+Stale Mentions
+──────────────────────────────────────────────────
+  README.md:3          version        "1.7.0"  → 1.8.0
+  README.md:42         mcp_tools      "13"     → 14
+  README.md:58         cli_commands   "22"     → 23
+  README.ru.md:3       version        "1.7.0"  → 1.8.0
+  README.ru.md:44      mcp_tools      "13"     → 14
+  docs/architecture.md:12  rule_types "7"      → 8
+  .beadloom/AGENTS.md:5   mcp_tools  "13"     → 14
+
+  7 stale mentions across 5 files
+
+Fresh (verified)
+──────────────────────────────────────────────────
+  README.md:15         languages      "9"      ✓
+  README.md:20         frameworks     "18"     ✓
+  README.md:67         tests          "1657"   ✓ (tolerance: ±5%)
+
+  3 verified mentions
+
+Unmatched Numbers (ignored)
+──────────────────────────────────────────────────
+  README.md:8          "2026" — date (skipped)
+  README.md:30         "500K" — no keyword match (skipped)
+```
+
+**Universality across project types:**
+
+| Project type | Auto-detected facts | How |
+|-------------|--------------------|----|
+| Any project | version | Manifest: pyproject.toml, package.json, Cargo.toml, go.mod, build.gradle, *.gemspec |
+| Any with Beadloom | nodes, edges, languages, tests, frameworks | Graph DB |
+| Python (Click) | cli_command_count | Click group introspection via `--help` |
+| Node.js (commander/yargs) | cli_command_count | package.json bin entries |
+| Any with MCP | mcp_tool_count | MCP server tool list introspection |
+| API services | route_count | From nodes.extra.routes (Phase 10.1) |
+
+**Experimental boundaries:**
+
+What IS in scope for v1.8:
+- Numeric fact matching (counts, versions)
+- Built-in keyword sets for standard project facts
+- Basic false positive filtering
+- CI gate support
+
+What is NOT in scope (future, based on feedback):
+- List/enumeration matching (e.g., "supports Python, Go, Rust" — verifying list completeness)
+- Cross-language doc scanning (only markdown in v1.8)
+- Automatic doc fixing (generating patches)
+- Semantic matching (requires embeddings, deferred to v2.0)
+
 ---
 
 ## 6. Dependency Map
@@ -1107,14 +1343,22 @@ v1.8 ── Planned ────────────────────
 │   ├── 12.9.5 MCP get_debt_report ── depends on 12.9.2
 │   └── 12.9.6 Top offenders list ── depends on 12.9.1
 │
-└── Phase 12.10 (Interactive TUI) ── Planned (7 tasks), after 12.9
-    ├── 12.10.1 Dashboard ────────── depends on 12.9 (debt data)
-    ├── 12.10.2 Graph explorer ───── standalone (graph data exists)
-    ├── 12.10.3 Live file watcher ── standalone
-    ├── 12.10.4 Dependency tracer ── standalone (why data exists)
-    ├── 12.10.5 Doc status panel ─── standalone (sync-check exists)
-    ├── 12.10.6 Context inspector ── standalone (ctx data exists)
-    └── 12.10.7 Keyboard actions ─── depends on 12.10.1
+├── Phase 12.10 (Interactive TUI) ── Planned (7 tasks), after 12.9
+│   ├── 12.10.1 Dashboard ────────── depends on 12.9 (debt data)
+│   ├── 12.10.2 Graph explorer ───── standalone (graph data exists)
+│   ├── 12.10.3 Live file watcher ── standalone
+│   ├── 12.10.4 Dependency tracer ── standalone (why data exists)
+│   ├── 12.10.5 Doc status panel ─── standalone (sync-check exists)
+│   ├── 12.10.6 Context inspector ── standalone (ctx data exists)
+│   └── 12.10.7 Keyboard actions ─── depends on 12.10.1
+│
+└── Phase 12.11 (Docs Audit) ⚗️ ── Planned (6 tasks), parallel with all
+    ├── 12.11.1 Fact registry ────── standalone (uses existing data)
+    ├── 12.11.2 Doc scanner ──────── standalone
+    ├── 12.11.3 docs audit CLI ───── depends on 12.11.1 + 12.11.2
+    ├── 12.11.4 CI gate ─────────── depends on 12.11.3
+    ├── 12.11.5 Tolerance system ─── depends on 12.11.3
+    └── 12.11.6 Debt integration ── depends on 12.11.3 + 12.9.1
 
 v1.9 ──────────────────────────────────────────────────────
 │
@@ -1148,7 +1392,7 @@ Cross-cutting ──────────────────────
 |--------|------|------|------|----------------|---------------|---------------|---------------|
 | **Node summaries** | "15 files" | Framework + entry points | + routes, activity, tests | **+ tags/labels** | same | + cross-repo | + cross-repo |
 | **First graph edges** | `part_of` only | `part_of` + `depends_on` | + API contracts | **+ import-based** | same | + inter-repo | + federated |
-| **Doc drift detection** | file-hash only | symbol-level (E2E) | 3-layer: symbols + files + modules | same | same | + cross-repo | + cross-repo |
+| **Doc drift detection** | file-hash only | symbol-level (E2E) | 3-layer: symbols + files + modules | same | **+ meta-doc audit ⚗️** | + cross-repo | + cross-repo |
 | **AaC Rules** | `require` only | same | + severity levels | **+ forbid, layers, cycles, imports, cardinality (7 rule types)** | same | same | + custom plugins |
 | **Init quality** | 6 nodes / 35% | improved | same | **80%+ coverage, non-interactive** | same | same | same |
 | **Frameworks** | 4 patterns | 18+ | 18+ with route extraction | 18+ | 18+ | 18+ | + custom |
@@ -1180,6 +1424,7 @@ Cross-cutting ──────────────────────
 | **12.8 — C4 Architecture Diagrams** | v1.8 | 5 | Planned | Auto-generated C4 (Mermaid + PlantUML) |
 | **12.9 — Debt Report** | v1.8 | 6 | Planned | Debt score, trend, CI gate, MCP |
 | **12.10 — Interactive TUI** | v1.8 | 7 | Planned | Live dashboard, graph explorer, file watcher |
+| **12.11 — Docs Audit** ⚗️ | v1.8 | 6 | Planned | Meta-doc staleness, fact registry, CI gate |
 | **13 — Cross-System** | v1.9 | 4 | Planned | Multi-repo refs, export |
 | **14 — Full Cross + Semantic** | v2.0 | 7 | Planned | Federation, semantic search |
 | **15 — Quality** | cross-cutting | 5 | Planned | Atomic writes, migrations |
@@ -1191,12 +1436,13 @@ Cross-cutting ──────────────────────
 
 **v1.7 delivered:** Phases 12 + 12.5 + 12.6. AaC Rules v2 + Init Quality + Architecture Intelligence (BDL-021, 4 waves, ~224 new tests).
 
-**Next priority:** v1.8 release — three parallel workstreams:
+**Next priority:** v1.8 release — four workstreams:
 - Phase 12.8 (C4 Architecture Diagrams) — parallel, no deps
 - Phase 12.9 (Debt Report) — parallel, no deps
 - Phase 12.10 (Interactive TUI) — after 12.9 (needs debt data for dashboard)
+- Phase 12.11 (Docs Audit) ⚗️ — parallel with all, experimental
 
-All prerequisites already in v1.7. 12.8 and 12.9 can start simultaneously; 12.10 starts after 12.9.1 (debt formula) is ready.
+All prerequisites already in v1.7. 12.8, 12.9, and 12.11 can start simultaneously; 12.10 starts after 12.9.1 (debt formula) is ready.
 
 **After that:** Phase 13 (Cross-System Foundation) for v1.9. Multi-repo refs, API contract edges, export, and monorepo workspace support.
 
@@ -1327,6 +1573,16 @@ All prerequisites already in v1.7. 12.8 and 12.9 can start simultaneously; 12.10
 | TUI: where in strategy? | Phase 12.10 (v1.8), after Phase 12.9 | Dashboard needs debt data from 12.9; graph explorer and other panels can use existing infra |
 | Versioning: v1.7.x → v1.8? | Yes. 12.8 + 12.9 + 12.10 = v1.8 release. Phase 13 moves to v1.9 | Three killer features (C4 + Debt + TUI) deserve a minor version bump, not a patch |
 | TUI: file watcher lib? | `watchfiles` (Rust-based) with `watchdog` fallback | Fast, cross-platform, minimal deps, works in containers |
+
+### Recently Closed (v1.8 — Docs Audit)
+
+| Question | Decision | Rationale |
+|----------|----------|-----------|
+| Manual mapping vs auto-detection? | Auto-detection via keyword proximity. Zero-config default, optional `config.yml` for custom facts | Manual mapping creates maintenance burden and limits universality. Auto-detect covers 80% of cases |
+| Experimental or stable? | Experimental (⚗️) in v1.8 | Keyword-proximity matching needs real-world validation across diverse projects. API may evolve in v1.9 |
+| Scope: what docs to scan? | `*.md` + `docs/**/*.md` by default, configurable scan_paths | Covers standard project structure; power users can extend |
+| How to handle false positives? | Multi-layer filtering (dates, issue IDs, code blocks, hex) + configurable tolerance per fact type | Pragmatic: filter known noise patterns, let users tune tolerance for naturally fluctuating metrics |
+| Relationship to doc-sync? | Complementary. sync-check = node-level (code↔doc). docs audit = project-level (meta-docs↔project state) | Different scope, different data sources, unified in debt report |
 
 ---
 
