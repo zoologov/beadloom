@@ -47,6 +47,8 @@
 
 30. [2026-02-16] [MEDIUM] Routes displayed with poor formatting in polish text — Route handler names are truncated/misaligned. The `{method:<5} {path:<20}` format doesn't handle long paths well. Also `QUERY` and `MUTATION` as methods for GraphQL is confusing — should show as separate section or different format. **→ Future: improve route rendering format**
 
+38. [2026-02-19] [MEDIUM] `beadloom doctor` shows `[info]` not `[warn]` for nodes without docs — During BDL-023, the tech-writer agent updated domain README and CLI docs but did not create the required `SPEC.md` for the new `c4-diagrams` feature node. `beadloom doctor` reported `[info] Node 'c4-diagrams' has no doc linked.` which the agent treated as informational and ignored. If this were `[warn]` (or `[error]`), the agent would have acted on it. Convention: every feature node should have a `features/{name}/SPEC.md`. **→ Fix: promote "node has no doc" from `[info]` to `[warn]` in doctor, so agents and CI treat it as actionable**
+
 31. [2026-02-16] [LOW] `bd dep remove` says "✓ Removed" but dependency persists — Running `bd dep remove beadloom-3v0 beadloom-53o` reports success, but `bd show beadloom-3v0` still shows the dependency and `bd blocked` still lists it as blocked. Workaround: `bd update --status in_progress --claim` works regardless of blocks. **→ Beads CLI bug, not beadloom**
 
 ---
