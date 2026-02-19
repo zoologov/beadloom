@@ -1,6 +1,6 @@
-# Graph Format
+# Graph Domain
 
-YAML format for describing the project architecture graph, with loader, diff engine, rule engine, import resolver, linter, and snapshot storage.
+YAML format for describing the project architecture graph, with loader, diff engine, rule engine, import resolver, linter, snapshot storage, and C4 architecture model mapping.
 
 ## Specification
 
@@ -59,6 +59,7 @@ An array of paths to documents linked to the node. Paths are specified relative 
 - **import_resolver.py** -- Multi-language import analysis. Extracts imports via tree-sitter for Python, TypeScript/JavaScript, Go, Rust, Kotlin, Java, Swift, Objective-C, and C/C++. Resolves imports to graph node ref_ids. Generates `depends_on` edges from resolved imports.
 - **linter.py** -- Linter orchestrator. Loads rules, optionally runs incremental reindex, evaluates all rules, and returns structured `LintResult` with violations, counts, and timing. Provides Rich, JSON, and porcelain output formatters.
 - **snapshot.py** -- Architecture snapshot storage. Saves the current graph state (nodes, edges, symbol counts) to the `graph_snapshots` table, lists saved snapshots, and compares two snapshots to produce a `SnapshotDiff` with added, removed, and changed nodes and edges.
+- **c4.py** -- C4 architecture model mapping. Maps graph nodes and edges to the C4 model (System / Container / Component levels) using `part_of` depth heuristics or explicit `c4_level` in node extras. Renders diagrams in Mermaid C4 syntax and C4-PlantUML syntax. Supports level-based filtering (context, container, component) and scoped component views.
 
 ## Invariants
 
@@ -123,6 +124,13 @@ An array of paths to documents linked to the node. Paths are specified relative 
 - `list_snapshots(conn: sqlite3.Connection) -> list[SnapshotInfo]` -- List all saved snapshots, newest first. Returns a list of `SnapshotInfo` objects.
 - `compare_snapshots(conn: sqlite3.Connection, old_id: int, new_id: int) -> SnapshotDiff` -- Compare two snapshots and return a `SnapshotDiff` with added, removed, and changed nodes and edges. Raises `ValueError` if either snapshot ID is not found.
 
+### Module `src/beadloom/graph/c4.py`
+
+- `map_to_c4(conn: sqlite3.Connection) -> tuple[list[C4Node], list[C4Relationship]]` -- Map architecture graph to C4 model elements. Reads all nodes and edges from the database. Assigns C4 levels using explicit `c4_level` in node extras (priority) or `part_of` depth heuristic (depth 0=System, 1=Container, 2+=Component). Returns a tuple of C4 nodes and relationships.
+- `render_c4_mermaid(nodes: list[C4Node], relationships: list[C4Relationship]) -> str` -- Render C4 model as Mermaid C4 diagram syntax (`C4Container`). Produces `System()`, `Container()`, `Component()` elements with `_Ext`/`Db` variants for external/database nodes. Groups children in `System_Boundary()` blocks.
+- `render_c4_plantuml(nodes: list[C4Node], relationships: list[C4Relationship]) -> str` -- Render C4 model as C4-PlantUML syntax. Produces a complete `@startuml`/`@enduml` block with `!include` for the C4-PlantUML stdlib. Uses standard macros: `System()`, `Container()`, `Component()`, `Rel()` with `_Ext`/`Db` variants.
+- `filter_c4_nodes(nodes: list[C4Node], relationships: list[C4Relationship], *, level: str = "container", scope: str | None = None) -> tuple[list[C4Node], list[C4Relationship]]` -- Filter C4 nodes by diagram level. `"context"` keeps only System-level and external nodes. `"container"` keeps System and Container nodes. `"component"` requires `scope` and keeps children of the scoped container. Raises `ValueError` if `level="component"` without `scope`, or if `scope` ref_id is not found.
+
 ### Public Data Classes
 
 | Class | Module | Description |
@@ -147,6 +155,8 @@ An array of paths to documents linked to the node. Paths are specified relative 
 | `ImportInfo` | import_resolver | Frozen dataclass: `file_path`, `line_number`, `import_path`, `resolved_ref_id` |
 | `LintResult` | linter | Dataclass: `violations`, `rules_evaluated`, `files_scanned`, `imports_resolved`, `elapsed_ms`, properties `error_count`, `warning_count`, `has_errors` |
 | `LintError` | linter | Exception raised on invalid lint configuration |
+| `C4Node` | c4 | Frozen dataclass: `ref_id`, `label`, `c4_level` (`"System"` / `"Container"` / `"Component"`), `description`, `boundary` (parent ref_id or None), `is_external`, `is_database` |
+| `C4Relationship` | c4 | Frozen dataclass: `src`, `dst`, `label` (edge kind: `"uses"` / `"depends_on"`) |
 
 ## Constraints
 
@@ -156,4 +166,4 @@ An array of paths to documents linked to the node. Paths are specified relative 
 
 ## Testing
 
-Tests: `tests/test_graph_loader.py`, `tests/test_cli_graph.py`, `tests/test_diff.py`, `tests/test_cli_diff.py`, `tests/test_rule_engine.py`, `tests/test_rule_severity.py`, `tests/test_cycle_rule.py`, `tests/test_import_boundary_rule.py`, `tests/test_linter.py`, `tests/test_cli_lint.py`, `tests/test_import_resolver.py`, `tests/test_import_scan.py`, `tests/test_symbol_diff_polish.py`, `tests/test_snapshot.py`, `tests/test_cli_snapshot.py`
+Tests: `tests/test_graph_loader.py`, `tests/test_cli_graph.py`, `tests/test_diff.py`, `tests/test_cli_diff.py`, `tests/test_rule_engine.py`, `tests/test_rule_severity.py`, `tests/test_cycle_rule.py`, `tests/test_import_boundary_rule.py`, `tests/test_linter.py`, `tests/test_cli_lint.py`, `tests/test_import_resolver.py`, `tests/test_import_scan.py`, `tests/test_symbol_diff_polish.py`, `tests/test_snapshot.py`, `tests/test_cli_snapshot.py`, `tests/test_c4.py`

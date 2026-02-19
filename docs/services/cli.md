@@ -81,15 +81,33 @@ Outputs Markdown by default. `--json` for machine-readable format.
 
 ### beadloom graph
 
-Architecture graph visualization.
+Architecture graph visualization. Supports Mermaid, C4-Mermaid, and C4-PlantUML output formats.
 
 ```bash
-# Full graph in Mermaid format
+# Full graph in Mermaid format (default)
 beadloom graph [--project DIR]
 
 # Subgraph from specified nodes
 beadloom graph REF_ID [REF_ID...] [--depth N] [--json]
+
+# C4 architecture diagram (Mermaid C4 syntax)
+beadloom graph --format c4 [--level {context,container,component}] [--project DIR]
+
+# C4 architecture diagram (PlantUML C4 syntax)
+beadloom graph --format c4-plantuml [--level container] [--project DIR]
+
+# C4 component diagram scoped to a specific container
+beadloom graph --format c4 --level component --scope graph [--project DIR]
 ```
+
+- `--format` -- output format: `mermaid` (default), `c4` (Mermaid C4 syntax), or `c4-plantuml` (C4-PlantUML syntax).
+- `--level` -- C4 diagram level (only used with `--format=c4` or `--format=c4-plantuml`):
+  - `context` -- System-level nodes only (highest abstraction)
+  - `container` (default) -- System and Container nodes
+  - `component` -- Children of a specific container (requires `--scope`)
+- `--scope` -- ref_id of the container to zoom into when `--level=component`. Required for component-level diagrams.
+
+C4 level assignment uses `part_of` depth: root nodes become Systems, depth 1 becomes Containers, depth 2+ becomes Components. Nodes can override this by setting `c4_level` in their YAML `extra` field. Nodes tagged `external` render as `_Ext` variants; nodes tagged `database` or `storage` render as `Db` variants.
 
 ### beadloom status
 
@@ -354,7 +372,7 @@ Module `src/beadloom/services/cli.py`:
 - `main` -- Click group: `beadloom [--verbose|-v] [--quiet|-q] [--version] COMMAND`
 - `reindex` -- rebuild SQLite index (incremental by default, `--full` for complete rebuild)
 - `ctx` -- get context bundle for ref_id(s)
-- `graph` -- show architecture graph (Mermaid or JSON)
+- `graph` -- show architecture graph (Mermaid, C4-Mermaid, C4-PlantUML, or JSON) with `--format`, `--level`, `--scope` options
 - `doctor` -- run validation checks
 - `status` -- show index statistics with health trends and context metrics
 - `sync_check` -- check doc-code sync with reason/details (reason-aware output for `untracked_files`, `missing_modules`, `symbols_changed`)

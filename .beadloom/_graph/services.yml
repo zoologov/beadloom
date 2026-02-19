@@ -137,6 +137,12 @@ nodes:
     docs:
       - docs/domains/graph/features/import-resolver/SPEC.md
 
+  # Feature: C4 Architecture Diagrams
+  - ref_id: c4-diagrams
+    kind: feature
+    summary: "C4 architecture model mapping with Mermaid and PlantUML renderers"
+    source: src/beadloom/graph/c4.py
+
   # Feature: Cache
   - ref_id: cache
     kind: feature
@@ -225,6 +231,9 @@ edges:
     dst: graph
     kind: part_of
   - src: import-resolver
+    dst: graph
+    kind: part_of
+  - src: c4-diagrams
     dst: graph
     kind: part_of
   - src: reindex
