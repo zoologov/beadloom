@@ -326,7 +326,7 @@ Beadloom is for engineers who build and maintain serious IT systems. YAML graph 
 | 12.10.2 | **Interactive Graph Explorer** — tree widget with expand/collapse. Enter → node detail (symbols, edges, routes, tests). Keyboard nav: `d` downstream, `u` upstream, `c` context preview, `o` open in $EDITOR | feature | P0 | M |
 | 12.10.3 | **Live File Watcher** — `watchfiles` (or `watchdog`) monitors source dirs. On change: badge "reindex needed", press `r` to reindex, dashboard auto-refreshes. Debounced (500ms) to avoid spam | feature | P1 | M |
 | 12.10.4 | **Dependency Path Tracer** — interactive `why` panel. Select source → target, shows all paths. Highlights cycles in red. Reverse mode (who depends on me). Keyboard: arrow keys to navigate paths | feature | P1 | M |
-| 12.10.5 | **Doc Sync Status Panel** — all nodes with doc status (fresh/stale/missing) + staleness reason. Press `g` to generate skeleton, `p` to view polish data. Color-coded: green/yellow/red | feature | P1 | S |
+| 12.10.5 | **Doc Sync Status Panel** — all nodes with doc status (fresh/stale/missing) + staleness reason. Includes meta-doc audit section (Phase 12.11) showing stale facts in README/guides. Press `g` to generate skeleton, `p` to view polish data, `a` to run docs audit. Color-coded: green/yellow/red | feature | P1 | S |
 | 12.10.6 | **Context Bundle Inspector** — preview exactly what `beadloom ctx <ref-id>` returns. Shows token count, sections, dependencies. Helps developers understand what agents see | feature | P2 | S |
 | 12.10.7 | **Keyboard-driven Actions** — trigger reindex (`r`), lint (`l`), sync-check (`s`), generate docs (`g`), snapshot (`S`) directly from TUI. Action results shown in status bar / notification panel | feature | P2 | S |
 
