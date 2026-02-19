@@ -193,14 +193,14 @@ class TestE2EPipeline:
 
 
 class TestMCPToolsCount:
-    """Verify all 13 MCP tools are registered."""
+    """Verify all 14 MCP tools are registered."""
 
     def test_mcp_tools_count(self) -> None:
-        """MCP server should have exactly 13 tools registered."""
+        """MCP server should have exactly 14 tools registered."""
         from beadloom.services.mcp_server import _TOOLS
 
         tool_names = [t.name for t in _TOOLS]
-        assert len(tool_names) == 13, f"Expected 13 tools, found {len(tool_names)}: {tool_names}"
+        assert len(tool_names) == 14, f"Expected 14 tools, found {len(tool_names)}: {tool_names}"
 
     def test_mcp_tool_names(self) -> None:
         """All expected MCP tool names should be present."""

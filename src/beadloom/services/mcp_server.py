@@ -404,6 +404,65 @@ def handle_lint(
     }
 
 
+# --- Debt report tool handler ---
+
+
+def handle_get_debt_report(
+    conn: sqlite3.Connection,
+    project_root: Path,
+    *,
+    trend: bool = False,
+    category: str | None = None,
+) -> dict[str, Any]:
+    """Get architecture debt report as structured JSON.
+
+    Parameters
+    ----------
+    conn:
+        Database connection.
+    project_root:
+        Root of the project.
+    trend:
+        If ``True``, include trend vs last snapshot.
+    category:
+        Optional category filter (e.g. ``"rule_violations"`` or ``"docs"``).
+
+    Returns
+    -------
+    dict
+        JSON-safe dict with ``debt_score``, ``severity``, ``categories``,
+        ``top_offenders``, and ``trend``.
+    """
+    from beadloom.infrastructure.debt_report import (
+        collect_debt_data,
+        compute_debt_score,
+        compute_debt_trend,
+        format_debt_json,
+        load_debt_weights,
+    )
+
+    weights = load_debt_weights(project_root)
+    data = collect_debt_data(conn, project_root, weights)
+    report = compute_debt_score(data, weights)
+
+    # Attach trend if requested
+    if trend:
+        trend_result = compute_debt_trend(conn, report, project_root, weights)
+        if trend_result is not None:
+            # DebtReport is frozen; rebuild with trend attached
+            from beadloom.infrastructure.debt_report import DebtReport
+
+            report = DebtReport(
+                debt_score=report.debt_score,
+                severity=report.severity,
+                categories=report.categories,
+                top_offenders=report.top_offenders,
+                trend=trend_result,
+            )
+
+    return format_debt_json(report, category=category)
+
+
 # --- MCP Server creation ---
 
 _TOOLS = [
@@ -629,6 +688,31 @@ _TOOLS = [
                     "type": "string",
                     "enum": ["all", "error", "warn"],
                     "description": "Filter by severity (default: all)",
+                },
+            },
+        },
+    ),
+    mcp.Tool(
+        name="get_debt_report",
+        description=(
+            "Get architecture debt report with score, categories, and top offenders. "
+            "Returns a JSON object with debt_score (0-100), severity, category "
+            "breakdown, top offending nodes, and optional trend vs last snapshot."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "trend": {
+                    "type": "boolean",
+                    "description": "Include trend vs last snapshot",
+                    "default": False,
+                },
+                "category": {
+                    "type": "string",
+                    "description": (
+                        "Filter to specific category: rule_violations, doc_gaps, "
+                        "complexity, test_gaps (or short: rules, docs, tests)"
+                    ),
                 },
             },
         },
@@ -926,6 +1010,17 @@ def _dispatch_tool(
             raise ValueError(msg)
         severity = str(args.get("severity", "all"))
         return handle_lint(project_root, severity=severity)
+
+    if name == "get_debt_report":
+        if project_root is None:
+            msg = "get_debt_report requires project_root"
+            raise ValueError(msg)
+        return handle_get_debt_report(
+            conn,
+            project_root,
+            trend=bool(args.get("trend", False)),
+            category=args.get("category"),
+        )
 
     msg = f"Unknown tool: {name}"
     raise ValueError(msg)
