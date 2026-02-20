@@ -1,9 +1,70 @@
 /* Beadloom TUI — Explorer Screen Stylesheet */
 
-#explorer-placeholder {
+/* Explorer root container */
+#explorer-container {
+    layout: vertical;
     width: 100%;
     height: 100%;
-    content-align: center middle;
-    text-style: italic;
+}
+
+/* Explorer header */
+#explorer-header {
+    width: 100%;
+    height: 1;
+    background: $primary;
+    color: $text;
+    padding: 0 1;
+    text-style: bold;
+}
+
+/* Main content: left + right panels */
+#explorer-main {
+    layout: horizontal;
+    width: 100%;
+    height: 1fr;
+}
+
+/* Left panel: node detail (50%) */
+#explorer-left {
+    width: 1fr;
+    height: 100%;
+    border-right: solid $surface-lighten-2;
+    overflow-y: auto;
+}
+
+/* Right panel: dependency path / context preview (50%) */
+#explorer-right {
+    width: 1fr;
+    height: 100%;
+    overflow-y: auto;
+}
+
+/* Node detail panel */
+#node-detail-panel {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+}
+
+/* Dependency path widget */
+#dependency-path {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+}
+
+/* Context preview widget */
+#context-preview {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+}
+
+/* Explorer action bar */
+#explorer-action-bar {
+    width: 100%;
+    height: 1;
+    background: $surface;
     color: $text-muted;
+    padding: 0 1;
 }

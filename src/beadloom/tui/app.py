@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 
     from textual.worker import Worker
 
+    from beadloom.tui.widgets.graph_tree import NodeSelected
     from beadloom.tui.widgets.status_bar import StatusBarWidget
 
 logger = logging.getLogger(__name__)
@@ -82,6 +83,9 @@ class BeadloomApp(App[None]):
         self.activity_provider: ActivityDataProvider | None = None
         self.why_provider: WhyDataProvider | None = None
         self.context_provider: ContextDataProvider | None = None
+
+        # Track last selected node ref_id for explorer navigation
+        self._selected_ref_id: str = ""
 
     def _open_db(self) -> sqlite3.Connection:
         """Open read-only SQLite connection."""
@@ -191,10 +195,37 @@ class BeadloomApp(App[None]):
         SCREEN_DOC_STATUS,
     })
 
+    def on_node_selected(self, message: NodeSelected) -> None:
+        """Track the last selected node ref_id for explorer navigation."""
+        self._selected_ref_id = message.ref_id
+
+    def open_explorer(self, ref_id: str) -> None:
+        """Switch to Explorer screen and show the given node.
+
+        Called by dashboard when a node is activated (Enter key).
+        """
+        self._selected_ref_id = ref_id
+        explorer = self._installed_screens.get(SCREEN_EXPLORER)
+        if isinstance(explorer, ExplorerScreen):
+            self.switch_screen(SCREEN_EXPLORER)
+            explorer.set_ref_id(ref_id)
+        else:
+            self.switch_screen(SCREEN_EXPLORER)
+
     async def action_switch_screen(self, screen_name: str) -> None:
         """Switch to the named screen."""
-        if screen_name in self._VALID_SCREENS:
-            self.switch_screen(screen_name)
+        if screen_name not in self._VALID_SCREENS:
+            return
+
+        # When switching to explorer, update its ref_id
+        if screen_name == SCREEN_EXPLORER:
+            explorer = self._installed_screens.get(SCREEN_EXPLORER)
+            if isinstance(explorer, ExplorerScreen) and self._selected_ref_id:
+                self.switch_screen(screen_name)
+                explorer.set_ref_id(self._selected_ref_id)
+                return
+
+        self.switch_screen(screen_name)
 
     def action_help(self) -> None:
         """Show help overlay (placeholder for BEAD-07)."""

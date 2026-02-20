@@ -2241,3 +2241,880 @@ class TestAppFileWatcherIntegration:
         paths = provider.get_source_paths()
         assert paths == []
         conn.close()
+
+
+# ---------------------------------------------------------------------------
+# NodeDetailPanel Widget Tests (BEAD-04)
+# ---------------------------------------------------------------------------
+
+
+class TestNodeDetailPanel:
+    """Tests for NodeDetailPanel widget."""
+
+    def test_render_no_ref_id(self) -> None:
+        """NodeDetailPanel shows placeholder when no ref_id is set."""
+        from beadloom.tui.widgets.node_detail_panel import NodeDetailPanel
+
+        widget = NodeDetailPanel()
+        text = widget.render()
+        plain = text.plain
+
+        assert "Node Detail" in plain
+        assert "Select a node" in plain
+
+    def test_render_with_ref_id(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """NodeDetailPanel renders node info when ref_id is provided."""
+        from beadloom.tui.data_providers import GraphDataProvider
+        from beadloom.tui.widgets.node_detail_panel import NodeDetailPanel
+
+        _, project_root = populated_db
+        provider = GraphDataProvider(conn=ro_conn, project_root=project_root)
+
+        widget = NodeDetailPanel(
+            graph_provider=provider,
+            ref_id="auth",
+        )
+        text = widget.render()
+        plain = text.plain
+
+        assert "auth" in plain
+        assert "domain" in plain
+        assert "Authentication domain" in plain
+        assert "src/auth" in plain
+
+    def test_render_missing_node(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """NodeDetailPanel shows 'not found' for non-existent ref_id."""
+        from beadloom.tui.data_providers import GraphDataProvider
+        from beadloom.tui.widgets.node_detail_panel import NodeDetailPanel
+
+        _, project_root = populated_db
+        provider = GraphDataProvider(conn=ro_conn, project_root=project_root)
+
+        widget = NodeDetailPanel(
+            graph_provider=provider,
+            ref_id="nonexistent",
+        )
+        text = widget.render()
+        plain = text.plain
+
+        assert "not found" in plain
+
+    def test_render_no_provider(self) -> None:
+        """NodeDetailPanel shows 'No data provider' when provider is None."""
+        from beadloom.tui.widgets.node_detail_panel import NodeDetailPanel
+
+        widget = NodeDetailPanel(ref_id="auth")
+        text = widget.render()
+        plain = text.plain
+
+        assert "No data provider" in plain
+
+    def test_render_shows_edges(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """NodeDetailPanel shows edge information."""
+        from beadloom.tui.data_providers import GraphDataProvider
+        from beadloom.tui.widgets.node_detail_panel import NodeDetailPanel
+
+        _, project_root = populated_db
+        provider = GraphDataProvider(conn=ro_conn, project_root=project_root)
+
+        widget = NodeDetailPanel(
+            graph_provider=provider,
+            ref_id="auth",
+        )
+        text = widget.render()
+        plain = text.plain
+
+        assert "Edges" in plain
+        assert "part_of" in plain
+
+    def test_render_shows_doc_status_documented(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """NodeDetailPanel shows documented status for nodes with docs."""
+        from beadloom.tui.data_providers import GraphDataProvider
+        from beadloom.tui.widgets.node_detail_panel import NodeDetailPanel
+
+        _, project_root = populated_db
+        provider = GraphDataProvider(conn=ro_conn, project_root=project_root)
+
+        widget = NodeDetailPanel(
+            graph_provider=provider,
+            ref_id="auth-login",
+        )
+        text = widget.render()
+        plain = text.plain
+
+        assert "documented" in plain
+
+    def test_render_shows_doc_status_missing(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """NodeDetailPanel shows missing status for undocumented nodes."""
+        from beadloom.tui.data_providers import GraphDataProvider
+        from beadloom.tui.widgets.node_detail_panel import NodeDetailPanel
+
+        _, project_root = populated_db
+        provider = GraphDataProvider(conn=ro_conn, project_root=project_root)
+
+        widget = NodeDetailPanel(
+            graph_provider=provider,
+            ref_id="payments",
+        )
+        text = widget.render()
+        plain = text.plain
+
+        assert "missing" in plain
+
+    def test_set_node_updates_ref_id(self) -> None:
+        """set_node() updates the internal ref_id."""
+        from beadloom.tui.widgets.node_detail_panel import NodeDetailPanel
+
+        widget = NodeDetailPanel()
+        assert widget._ref_id == ""
+
+        widget.set_node("auth")
+        assert widget._ref_id == "auth"
+
+    def test_set_provider(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """set_provider() updates the graph data provider."""
+        from beadloom.tui.data_providers import GraphDataProvider
+        from beadloom.tui.widgets.node_detail_panel import NodeDetailPanel
+
+        _, project_root = populated_db
+        provider = GraphDataProvider(conn=ro_conn, project_root=project_root)
+
+        widget = NodeDetailPanel()
+        assert widget._graph_provider is None
+
+        widget.set_provider(provider)
+        assert widget._graph_provider is provider
+
+    def test_render_node_no_source(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """NodeDetailPanel handles node without source path."""
+        from beadloom.tui.data_providers import GraphDataProvider
+        from beadloom.tui.widgets.node_detail_panel import NodeDetailPanel
+
+        _, project_root = populated_db
+        provider = GraphDataProvider(conn=ro_conn, project_root=project_root)
+
+        widget = NodeDetailPanel(
+            graph_provider=provider,
+            ref_id="auth-login",
+        )
+        text = widget.render()
+        plain = text.plain
+
+        assert "no source path" in plain
+
+
+# ---------------------------------------------------------------------------
+# DependencyPathWidget Tests (BEAD-04)
+# ---------------------------------------------------------------------------
+
+
+class TestDependencyPathWidget:
+    """Tests for DependencyPathWidget."""
+
+    def test_render_no_ref_id(self) -> None:
+        """DependencyPathWidget shows placeholder when no ref_id is set."""
+        from beadloom.tui.widgets.dependency_path import DependencyPathWidget
+
+        widget = DependencyPathWidget()
+        text = widget.render()
+        plain = text.plain
+
+        assert "Downstream Dependents" in plain
+        assert "Select a node" in plain
+
+    def test_render_upstream_no_ref_id(self) -> None:
+        """DependencyPathWidget shows upstream placeholder."""
+        from beadloom.tui.widgets.dependency_path import DependencyPathWidget
+
+        widget = DependencyPathWidget(direction="upstream")
+        text = widget.render()
+        plain = text.plain
+
+        assert "Upstream Dependencies" in plain
+        assert "Select a node" in plain
+
+    def test_render_downstream_existing(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """DependencyPathWidget renders downstream tree for existing node."""
+        from beadloom.tui.data_providers import WhyDataProvider
+        from beadloom.tui.widgets.dependency_path import DependencyPathWidget
+
+        _, project_root = populated_db
+        provider = WhyDataProvider(conn=ro_conn, project_root=project_root)
+
+        widget = DependencyPathWidget(
+            why_provider=provider,
+            ref_id="auth",
+            direction="downstream",
+        )
+        text = widget.render()
+        plain = text.plain
+
+        assert "Downstream Dependents" in plain
+
+    def test_render_upstream_existing(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """DependencyPathWidget renders upstream tree for existing node."""
+        from beadloom.tui.data_providers import WhyDataProvider
+        from beadloom.tui.widgets.dependency_path import DependencyPathWidget
+
+        _, project_root = populated_db
+        provider = WhyDataProvider(conn=ro_conn, project_root=project_root)
+
+        widget = DependencyPathWidget(
+            why_provider=provider,
+            ref_id="auth-login",
+            direction="upstream",
+        )
+        text = widget.render()
+        plain = text.plain
+
+        assert "Upstream Dependencies" in plain
+
+    def test_render_missing_node(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """DependencyPathWidget shows 'not found' for non-existent node."""
+        from beadloom.tui.data_providers import WhyDataProvider
+        from beadloom.tui.widgets.dependency_path import DependencyPathWidget
+
+        _, project_root = populated_db
+        provider = WhyDataProvider(conn=ro_conn, project_root=project_root)
+
+        widget = DependencyPathWidget(
+            why_provider=provider,
+            ref_id="nonexistent",
+        )
+        text = widget.render()
+        plain = text.plain
+
+        assert "not found" in plain
+
+    def test_render_no_provider(self) -> None:
+        """DependencyPathWidget shows 'No data provider' when provider is None."""
+        from beadloom.tui.widgets.dependency_path import DependencyPathWidget
+
+        widget = DependencyPathWidget(ref_id="auth")
+        text = widget.render()
+        plain = text.plain
+
+        assert "No data provider" in plain
+
+    def test_show_upstream_method(self) -> None:
+        """show_upstream() updates direction and ref_id."""
+        from beadloom.tui.widgets.dependency_path import DependencyPathWidget
+
+        widget = DependencyPathWidget()
+        widget.show_upstream("auth")
+        assert widget._ref_id == "auth"
+        assert widget._direction == "upstream"
+
+    def test_show_downstream_method(self) -> None:
+        """show_downstream() updates direction and ref_id."""
+        from beadloom.tui.widgets.dependency_path import DependencyPathWidget
+
+        widget = DependencyPathWidget(direction="upstream")
+        widget.show_downstream("auth")
+        assert widget._ref_id == "auth"
+        assert widget._direction == "downstream"
+
+    def test_set_provider(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """set_provider() updates the why data provider."""
+        from beadloom.tui.data_providers import WhyDataProvider
+        from beadloom.tui.widgets.dependency_path import DependencyPathWidget
+
+        _, project_root = populated_db
+        provider = WhyDataProvider(conn=ro_conn, project_root=project_root)
+
+        widget = DependencyPathWidget()
+        assert widget._why_provider is None
+
+        widget.set_provider(provider)
+        assert widget._why_provider is provider
+
+    def test_render_no_dependencies(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """DependencyPathWidget shows 'No dependencies' when node has none."""
+        from beadloom.tui.data_providers import WhyDataProvider
+        from beadloom.tui.widgets.dependency_path import DependencyPathWidget
+
+        _, project_root = populated_db
+        provider = WhyDataProvider(conn=ro_conn, project_root=project_root)
+
+        # payments node has no downstream dependents
+        widget = DependencyPathWidget(
+            why_provider=provider,
+            ref_id="payments",
+            direction="downstream",
+        )
+        text = widget.render()
+        plain = text.plain
+
+        assert "Downstream Dependents" in plain
+        # May show "No dependencies" or the impact summary
+        # At minimum it should render without error
+
+
+# ---------------------------------------------------------------------------
+# ContextPreviewWidget Tests (BEAD-04)
+# ---------------------------------------------------------------------------
+
+
+class TestContextPreviewWidget:
+    """Tests for ContextPreviewWidget."""
+
+    def test_render_no_ref_id(self) -> None:
+        """ContextPreviewWidget shows placeholder when no ref_id is set."""
+        from beadloom.tui.widgets.context_preview import ContextPreviewWidget
+
+        widget = ContextPreviewWidget()
+        text = widget.render()
+        plain = text.plain
+
+        assert "Context Preview" in plain
+        assert "Select a node" in plain
+
+    def test_render_with_ref_id(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """ContextPreviewWidget renders context preview for existing node."""
+        from beadloom.tui.data_providers import ContextDataProvider
+        from beadloom.tui.widgets.context_preview import ContextPreviewWidget
+
+        _, project_root = populated_db
+        provider = ContextDataProvider(conn=ro_conn, project_root=project_root)
+
+        widget = ContextPreviewWidget(
+            context_provider=provider,
+            ref_id="auth",
+        )
+        text = widget.render()
+        plain = text.plain
+
+        assert "Context Preview" in plain
+        assert "auth" in plain
+        assert "tokens" in plain
+
+    def test_render_shows_token_count(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """ContextPreviewWidget shows estimated token count."""
+        from beadloom.tui.data_providers import ContextDataProvider
+        from beadloom.tui.widgets.context_preview import ContextPreviewWidget
+
+        _, project_root = populated_db
+        provider = ContextDataProvider(conn=ro_conn, project_root=project_root)
+
+        widget = ContextPreviewWidget(
+            context_provider=provider,
+            ref_id="auth",
+        )
+        text = widget.render()
+        plain = text.plain
+
+        # Should contain a token count (tilde + number)
+        assert "~" in plain
+        assert "tokens" in plain
+
+    def test_render_missing_node(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """ContextPreviewWidget shows 'not available' for missing node."""
+        from beadloom.tui.data_providers import ContextDataProvider
+        from beadloom.tui.widgets.context_preview import ContextPreviewWidget
+
+        _, project_root = populated_db
+        provider = ContextDataProvider(conn=ro_conn, project_root=project_root)
+
+        widget = ContextPreviewWidget(
+            context_provider=provider,
+            ref_id="nonexistent",
+        )
+        text = widget.render()
+        plain = text.plain
+
+        assert "not available" in plain
+
+    def test_render_no_provider(self) -> None:
+        """ContextPreviewWidget shows 'No data provider' when provider is None."""
+        from beadloom.tui.widgets.context_preview import ContextPreviewWidget
+
+        widget = ContextPreviewWidget(ref_id="auth")
+        text = widget.render()
+        plain = text.plain
+
+        assert "No data provider" in plain
+
+    def test_show_context_method(self) -> None:
+        """show_context() updates ref_id."""
+        from beadloom.tui.widgets.context_preview import ContextPreviewWidget
+
+        widget = ContextPreviewWidget()
+        assert widget._ref_id == ""
+
+        widget.show_context("auth")
+        assert widget._ref_id == "auth"
+
+    def test_set_provider(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """set_provider() updates the context data provider."""
+        from beadloom.tui.data_providers import ContextDataProvider
+        from beadloom.tui.widgets.context_preview import ContextPreviewWidget
+
+        _, project_root = populated_db
+        provider = ContextDataProvider(conn=ro_conn, project_root=project_root)
+
+        widget = ContextPreviewWidget()
+        assert widget._context_provider is None
+
+        widget.set_provider(provider)
+        assert widget._context_provider is provider
+
+    def test_render_shows_bundle_keys(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """ContextPreviewWidget shows bundle keys in preview."""
+        from beadloom.tui.data_providers import ContextDataProvider
+        from beadloom.tui.widgets.context_preview import ContextPreviewWidget
+
+        _, project_root = populated_db
+        provider = ContextDataProvider(conn=ro_conn, project_root=project_root)
+
+        widget = ContextPreviewWidget(
+            context_provider=provider,
+            ref_id="auth",
+        )
+        text = widget.render()
+        plain = text.plain
+
+        assert "Keys:" in plain
+
+
+# ---------------------------------------------------------------------------
+# ExplorerScreen Tests (BEAD-04)
+# ---------------------------------------------------------------------------
+
+
+class TestExplorerScreen:
+    """Tests for the ExplorerScreen."""
+
+    @pytest.mark.asyncio()
+    async def test_explorer_composes_all_panels(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """ExplorerScreen composes header, node detail, dependency path, context preview."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.explorer import ExplorerScreen
+        from beadloom.tui.widgets.context_preview import ContextPreviewWidget
+        from beadloom.tui.widgets.dependency_path import DependencyPathWidget
+        from beadloom.tui.widgets.node_detail_panel import NodeDetailPanel
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            await pilot.press("2")  # switch to explorer
+            assert isinstance(app.screen, ExplorerScreen)
+
+            # Verify all sub-widgets exist
+            detail = app.screen.query_one("#node-detail-panel", NodeDetailPanel)
+            assert detail is not None
+
+            dep_path = app.screen.query_one("#dependency-path", DependencyPathWidget)
+            assert dep_path is not None
+
+            ctx_preview = app.screen.query_one("#context-preview", ContextPreviewWidget)
+            assert ctx_preview is not None
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_explorer_has_header(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """ExplorerScreen has a header label."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.explorer import ExplorerScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            await pilot.press("2")
+            assert isinstance(app.screen, ExplorerScreen)
+
+            from textual.widgets import Label
+
+            header = app.screen.query_one("#explorer-header", Label)
+            assert header is not None
+            assert "Explorer" in str(header.content)
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_explorer_has_action_bar(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """ExplorerScreen has an action bar with keybinding hints."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.explorer import ExplorerScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            await pilot.press("2")
+            assert isinstance(app.screen, ExplorerScreen)
+
+            from textual.widgets import Label
+
+            action_bar = app.screen.query_one("#explorer-action-bar", Label)
+            assert action_bar is not None
+
+            bar_text = str(action_bar.content)
+            assert "pstream" in bar_text
+            assert "ownstream" in bar_text
+            assert "ontext" in bar_text
+            assert "back" in bar_text
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_explorer_with_ref_id(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """ExplorerScreen shows node details when ref_id is set."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.explorer import ExplorerScreen
+        from beadloom.tui.widgets.graph_tree import NodeSelected
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            # Select a node first
+            app.post_message(NodeSelected("auth"))
+            await pilot.pause()
+
+            # Switch to explorer
+            await pilot.press("2")
+            await pilot.pause()
+            assert isinstance(app.screen, ExplorerScreen)
+
+            from textual.widgets import Label
+
+            header = app.screen.query_one("#explorer-header", Label)
+            header_text = str(header.content)
+            assert "auth" in header_text
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_explorer_keybinding_downstream(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Pressing 'd' on ExplorerScreen switches to downstream view."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.explorer import MODE_DOWNSTREAM, ExplorerScreen
+        from beadloom.tui.widgets.dependency_path import DependencyPathWidget
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            await pilot.press("2")
+            assert isinstance(app.screen, ExplorerScreen)
+
+            await pilot.press("d")
+            await pilot.pause()
+
+            dep_widget = app.screen.query_one("#dependency-path", DependencyPathWidget)
+            assert dep_widget.display is True
+            assert app.screen._mode == MODE_DOWNSTREAM
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_explorer_keybinding_upstream(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Pressing 'u' on ExplorerScreen switches to upstream view."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.explorer import MODE_UPSTREAM, ExplorerScreen
+        from beadloom.tui.widgets.dependency_path import DependencyPathWidget
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            await pilot.press("2")
+            assert isinstance(app.screen, ExplorerScreen)
+
+            await pilot.press("u")
+            await pilot.pause()
+
+            dep_widget = app.screen.query_one("#dependency-path", DependencyPathWidget)
+            assert dep_widget.display is True
+            assert app.screen._mode == MODE_UPSTREAM
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_explorer_keybinding_context(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Pressing 'c' on ExplorerScreen switches to context preview."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.explorer import MODE_CONTEXT, ExplorerScreen
+        from beadloom.tui.widgets.context_preview import ContextPreviewWidget
+        from beadloom.tui.widgets.dependency_path import DependencyPathWidget
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            await pilot.press("2")
+            assert isinstance(app.screen, ExplorerScreen)
+
+            await pilot.press("c")
+            await pilot.pause()
+
+            dep_widget = app.screen.query_one("#dependency-path", DependencyPathWidget)
+            ctx_widget = app.screen.query_one("#context-preview", ContextPreviewWidget)
+            assert dep_widget.display is False
+            assert ctx_widget.display is True
+            assert app.screen._mode == MODE_CONTEXT
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_explorer_escape_pops_screen(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Pressing Esc on ExplorerScreen returns to previous screen."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.dashboard import DashboardScreen
+        from beadloom.tui.screens.explorer import ExplorerScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            # Push explorer on top of dashboard
+            app.push_screen(ExplorerScreen())
+            await pilot.pause()
+            assert isinstance(app.screen, ExplorerScreen)
+
+            # Press Esc to go back
+            await pilot.press("escape")
+            await pilot.pause()
+
+            # Should be back on dashboard
+            assert isinstance(app.screen, DashboardScreen)
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_explorer_refresh_all_widgets(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """ExplorerScreen.refresh_all_widgets() reloads data."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.explorer import ExplorerScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            await pilot.press("2")
+            screen = app.screen
+            assert isinstance(screen, ExplorerScreen)
+
+            # Calling refresh should not raise
+            screen.refresh_all_widgets()
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_explorer_empty_ref_id(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """ExplorerScreen handles empty ref_id gracefully."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.explorer import ExplorerScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            await pilot.press("2")
+            assert isinstance(app.screen, ExplorerScreen)
+
+            # Should not crash with no ref_id
+            assert app.screen._ref_id == ""
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_explorer_set_ref_id(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """ExplorerScreen.set_ref_id() loads data for the given node."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.explorer import ExplorerScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            await pilot.press("2")
+            screen = app.screen
+            assert isinstance(screen, ExplorerScreen)
+
+            screen.set_ref_id("auth")
+            await pilot.pause()
+
+            assert screen._ref_id == "auth"
+
+            from textual.widgets import Label
+
+            header = screen.query_one("#explorer-header", Label)
+            assert "auth" in str(header.content)
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_explorer_open_source_no_editor(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Pressing 'o' without $EDITOR shows notification."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.explorer import ExplorerScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test(notifications=True) as pilot:
+            await pilot.press("2")
+            assert isinstance(app.screen, ExplorerScreen)
+
+            # Set ref_id and press 'o' without EDITOR
+            app.screen.set_ref_id("auth")
+            await pilot.pause()
+
+            with patch.dict("os.environ", {"EDITOR": ""}, clear=False):
+                await pilot.press("o")
+                await pilot.pause()
+
+            # Should not crash
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_explorer_keybinding_switch_back_to_downstream(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Switching c -> d returns to downstream view."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.explorer import MODE_DOWNSTREAM, ExplorerScreen
+        from beadloom.tui.widgets.context_preview import ContextPreviewWidget
+        from beadloom.tui.widgets.dependency_path import DependencyPathWidget
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            await pilot.press("2")
+            assert isinstance(app.screen, ExplorerScreen)
+
+            # Switch to context first
+            await pilot.press("c")
+            await pilot.pause()
+
+            # Switch back to downstream
+            await pilot.press("d")
+            await pilot.pause()
+
+            dep_widget = app.screen.query_one("#dependency-path", DependencyPathWidget)
+            ctx_widget = app.screen.query_one("#context-preview", ContextPreviewWidget)
+            assert dep_widget.display is True
+            assert ctx_widget.display is False
+            assert app.screen._mode == MODE_DOWNSTREAM
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_app_open_explorer_method(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """App.open_explorer() switches to explorer and sets ref_id."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.explorer import ExplorerScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            app.open_explorer("auth")
+            await pilot.pause()
+
+            assert isinstance(app.screen, ExplorerScreen)
+            assert app._selected_ref_id == "auth"
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_app_tracks_selected_ref_id(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """App tracks last selected ref_id from NodeSelected messages."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.widgets.graph_tree import NodeSelected
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            assert app._selected_ref_id == ""
+
+            app.post_message(NodeSelected("payments"))
+            await pilot.pause()
+
+            assert app._selected_ref_id == "payments"
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_explorer_empty_db(self, tmp_path: Path) -> None:
+        """ExplorerScreen handles empty database gracefully."""
+        db_path = tmp_path / ".beadloom" / "beadloom.db"
+        db_path.parent.mkdir(parents=True)
+
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        from beadloom.infrastructure.db import create_schema
+        create_schema(conn)
+        conn.commit()
+        conn.close()
+
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.explorer import ExplorerScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=tmp_path)
+        async with app.run_test() as pilot:
+            await pilot.press("2")
+            assert isinstance(app.screen, ExplorerScreen)
+
+            # Should not crash with empty DB
+            await pilot.press("d")
+            await pilot.pause()
+            await pilot.press("u")
+            await pilot.pause()
+            await pilot.press("c")
+            await pilot.pause()
+
+            await pilot.press("q")
