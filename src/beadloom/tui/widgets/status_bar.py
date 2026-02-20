@@ -1,37 +1,98 @@
-"""Status bar widget showing health metrics."""
+# beadloom:service=tui
+"""Status bar widget showing health metrics, watcher status, and last action."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
+from rich.text import Text
 from textual.widgets import Static
 
-if TYPE_CHECKING:
-    import sqlite3
+# Watcher status indicators
+_WATCHER_ACTIVE = "\u25cf"  # filled circle
+_WATCHER_INACTIVE = "\u25cb"  # empty circle
 
 
-class StatusBar(Static):
-    """Bottom bar showing index health metrics."""
+class StatusBarWidget(Static):
+    """Bottom status bar showing node/edge/doc/stale counts, watcher status, and last action.
 
-    def load_stats(self, conn: sqlite3.Connection) -> None:
-        """Load and display health statistics."""
-        nodes_count: int = conn.execute("SELECT count(*) FROM nodes").fetchone()[0]
-        edges_count: int = conn.execute("SELECT count(*) FROM edges").fetchone()[0]
-        docs_count: int = conn.execute("SELECT count(*) FROM docs").fetchone()[0]
+    The watcher status is a placeholder (will be wired by BEAD-06).
+    The last action message auto-dismisses on next data refresh.
+    """
 
-        covered: int = conn.execute(
-            "SELECT count(DISTINCT n.ref_id) FROM nodes n JOIN docs d ON d.ref_id = n.ref_id"
-        ).fetchone()[0]
+    DEFAULT_CSS = """
+    StatusBarWidget {
+        width: 100%;
+        height: 1;
+        background: $surface;
+        color: $text;
+        padding: 0 1;
+        dock: bottom;
+    }
+    """
 
-        coverage_pct = (covered / nodes_count * 100) if nodes_count > 0 else 0.0
+    def __init__(self, *, widget_id: str | None = None) -> None:
+        super().__init__(id=widget_id)
+        self._node_count: int = 0
+        self._edge_count: int = 0
+        self._doc_count: int = 0
+        self._stale_count: int = 0
+        self._watcher_active: bool = False
+        self._last_action: str = ""
 
-        stale_count: int = conn.execute(
-            "SELECT count(*) FROM sync_state WHERE status = 'stale'"
-        ).fetchone()[0]
+    def render(self) -> Text:
+        """Render the status bar as Rich Text."""
+        text = Text()
 
-        text = (
-            f" {nodes_count} nodes, {edges_count} edges, {docs_count} docs | "
-            f"Coverage: {coverage_pct:.0f}% | "
-            f"Stale: {stale_count}"
-        )
-        self.update(text)
+        # Node/edge/doc counts
+        text.append(f" {self._node_count} nodes", style="bold")
+        text.append(f"  {self._edge_count} edges", style="bold")
+        text.append(f"  {self._doc_count} docs", style="bold")
+
+        # Stale count with color
+        if self._stale_count > 0:
+            text.append(f"  {self._stale_count} stale", style="bold red")
+        else:
+            text.append("  0 stale", style="green")
+
+        # Separator
+        text.append("  |  ")
+
+        # Watcher status (placeholder for BEAD-06)
+        if self._watcher_active:
+            text.append(f"{_WATCHER_ACTIVE} watching", style="green")
+        else:
+            text.append(f"{_WATCHER_INACTIVE} no watch", style="dim")
+
+        # Last action message
+        if self._last_action:
+            text.append(f"  |  {self._last_action}", style="italic")
+
+        return text
+
+    def refresh_data(
+        self,
+        *,
+        node_count: int = 0,
+        edge_count: int = 0,
+        doc_count: int = 0,
+        stale_count: int = 0,
+    ) -> None:
+        """Update count metrics and re-render.
+
+        Clears any previous last action message.
+        """
+        self._node_count = node_count
+        self._edge_count = edge_count
+        self._doc_count = doc_count
+        self._stale_count = stale_count
+        self._last_action = ""
+        self.refresh()
+
+    def set_watcher_active(self, active: bool) -> None:
+        """Update watcher status indicator (wired by BEAD-06)."""
+        self._watcher_active = active
+        self.refresh()
+
+    def set_last_action(self, message: str) -> None:
+        """Show a transient action message in the status bar."""
+        self._last_action = message
+        self.refresh()

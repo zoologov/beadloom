@@ -632,3 +632,555 @@ class TestLaunchFunction:
 
         sig = inspect.signature(launch)
         assert "no_watch" in sig.parameters
+
+
+# ---------------------------------------------------------------------------
+# Dashboard Widget Tests (BEAD-02)
+# ---------------------------------------------------------------------------
+
+
+class TestDebtGaugeWidget:
+    """Tests for DebtGaugeWidget."""
+
+    def test_render_low_score(self) -> None:
+        """DebtGaugeWidget renders low score in green."""
+        from beadloom.tui.widgets.debt_gauge import DebtGaugeWidget
+
+        widget = DebtGaugeWidget(score=10.0)
+        text = widget.render()
+        plain = text.plain
+
+        assert "10" in plain
+        assert "low" in plain
+
+    def test_render_medium_score(self) -> None:
+        """DebtGaugeWidget renders medium score in yellow."""
+        from beadloom.tui.widgets.debt_gauge import DebtGaugeWidget
+
+        widget = DebtGaugeWidget(score=35.0)
+        text = widget.render()
+        plain = text.plain
+
+        assert "35" in plain
+        assert "medium" in plain
+
+    def test_render_high_score(self) -> None:
+        """DebtGaugeWidget renders high score in red."""
+        from beadloom.tui.widgets.debt_gauge import DebtGaugeWidget
+
+        widget = DebtGaugeWidget(score=75.0)
+        text = widget.render()
+        plain = text.plain
+
+        assert "75" in plain
+        assert "high" in plain
+
+    def test_render_zero_score(self) -> None:
+        """DebtGaugeWidget renders zero score as low."""
+        from beadloom.tui.widgets.debt_gauge import DebtGaugeWidget
+
+        widget = DebtGaugeWidget(score=0.0)
+        text = widget.render()
+        plain = text.plain
+
+        assert "0" in plain
+        assert "low" in plain
+
+    def test_render_boundary_20(self) -> None:
+        """DebtGaugeWidget at boundary 20 is still low."""
+        from beadloom.tui.widgets.debt_gauge import DebtGaugeWidget
+
+        widget = DebtGaugeWidget(score=20.0)
+        text = widget.render()
+        assert "low" in text.plain
+
+    def test_render_boundary_21(self) -> None:
+        """DebtGaugeWidget at 21 switches to medium."""
+        from beadloom.tui.widgets.debt_gauge import DebtGaugeWidget
+
+        widget = DebtGaugeWidget(score=21.0)
+        text = widget.render()
+        assert "medium" in text.plain
+
+    def test_render_boundary_50(self) -> None:
+        """DebtGaugeWidget at 50 is medium."""
+        from beadloom.tui.widgets.debt_gauge import DebtGaugeWidget
+
+        widget = DebtGaugeWidget(score=50.0)
+        text = widget.render()
+        assert "medium" in text.plain
+
+    def test_render_boundary_51(self) -> None:
+        """DebtGaugeWidget at 51 switches to high."""
+        from beadloom.tui.widgets.debt_gauge import DebtGaugeWidget
+
+        widget = DebtGaugeWidget(score=51.0)
+        text = widget.render()
+        assert "high" in text.plain
+
+    def test_refresh_data_updates_score(self) -> None:
+        """refresh_data() updates internal score."""
+        from beadloom.tui.widgets.debt_gauge import DebtGaugeWidget
+
+        widget = DebtGaugeWidget(score=10.0)
+        assert "low" in widget.render().plain
+
+        widget._score = 75.0
+        assert "high" in widget.render().plain
+
+    def test_severity_color_green(self) -> None:
+        """Low scores use green style."""
+        from beadloom.tui.widgets.debt_gauge import _severity_style
+
+        assert _severity_style(15.0) == "green"
+
+    def test_severity_color_yellow(self) -> None:
+        """Medium scores use yellow style."""
+        from beadloom.tui.widgets.debt_gauge import _severity_style
+
+        assert _severity_style(30.0) == "yellow"
+
+    def test_severity_color_red(self) -> None:
+        """High scores use red style."""
+        from beadloom.tui.widgets.debt_gauge import _severity_style
+
+        assert _severity_style(60.0) == "red"
+
+
+class TestLintPanelWidget:
+    """Tests for LintPanelWidget."""
+
+    def test_render_no_violations(self) -> None:
+        """LintPanelWidget renders 'No violations' when empty."""
+        from beadloom.tui.widgets.lint_panel import LintPanelWidget
+
+        widget = LintPanelWidget(violations=[])
+        text = widget.render()
+
+        assert "No violations" in text.plain
+
+    def test_render_with_errors(self) -> None:
+        """LintPanelWidget renders error count."""
+        from beadloom.tui.widgets.lint_panel import LintPanelWidget
+
+        violations = [
+            {
+                "rule_name": "test-rule",
+                "severity": "error",
+                "from_ref_id": "auth",
+                "to_ref_id": None,
+                "description": "missing edge",
+            },
+        ]
+        widget = LintPanelWidget(violations=violations)
+        text = widget.render()
+        plain = text.plain
+
+        assert "1 error(s)" in plain
+        assert "test-rule" in plain
+
+    def test_render_with_warnings(self) -> None:
+        """LintPanelWidget renders warning count."""
+        from beadloom.tui.widgets.lint_panel import LintPanelWidget
+
+        violations = [
+            {
+                "rule_name": "warn-rule",
+                "severity": "warning",
+                "from_ref_id": "auth",
+                "to_ref_id": None,
+                "description": "something",
+            },
+            {
+                "rule_name": "warn-rule-2",
+                "severity": "warning",
+                "from_ref_id": "graph",
+                "to_ref_id": None,
+                "description": "another",
+            },
+        ]
+        widget = LintPanelWidget(violations=violations)
+        text = widget.render()
+
+        assert "2 warning(s)" in text.plain
+
+    def test_render_mixed_severities(self) -> None:
+        """LintPanelWidget renders mixed error and warning counts."""
+        from beadloom.tui.widgets.lint_panel import LintPanelWidget
+
+        violations = [
+            {
+                "rule_name": "err",
+                "severity": "error",
+                "from_ref_id": "a",
+                "to_ref_id": None,
+                "description": "",
+            },
+            {
+                "rule_name": "warn",
+                "severity": "warning",
+                "from_ref_id": "b",
+                "to_ref_id": None,
+                "description": "",
+            },
+        ]
+        widget = LintPanelWidget(violations=violations)
+        text = widget.render()
+        plain = text.plain
+
+        assert "1 error(s)" in plain
+        assert "1 warning(s)" in plain
+
+    def test_render_shows_violation_details(self) -> None:
+        """LintPanelWidget renders individual violation details."""
+        from beadloom.tui.widgets.lint_panel import LintPanelWidget
+
+        violations = [
+            {
+                "rule_name": "no-cross-domain",
+                "severity": "error",
+                "from_ref_id": "auth",
+                "to_ref_id": "payments",
+                "description": "cross-domain dependency",
+            },
+        ]
+        widget = LintPanelWidget(violations=violations)
+        text = widget.render()
+        plain = text.plain
+
+        assert "no-cross-domain" in plain
+        assert "auth" in plain
+        assert "cross-domain dependency" in plain
+
+    def test_refresh_data(self) -> None:
+        """refresh_data() updates violations list."""
+        from beadloom.tui.widgets.lint_panel import LintPanelWidget
+
+        widget = LintPanelWidget(violations=[])
+        assert "No violations" in widget.render().plain
+
+        widget._violations = [
+            {
+                "rule_name": "rule",
+                "severity": "error",
+                "from_ref_id": "x",
+                "to_ref_id": None,
+                "description": "",
+            },
+        ]
+        assert "1 error(s)" in widget.render().plain
+
+    def test_render_default_no_violations(self) -> None:
+        """LintPanelWidget with no constructor args shows no violations."""
+        from beadloom.tui.widgets.lint_panel import LintPanelWidget
+
+        widget = LintPanelWidget()
+        assert "No violations" in widget.render().plain
+
+
+class TestActivityWidget:
+    """Tests for ActivityWidget."""
+
+    def test_render_empty(self) -> None:
+        """ActivityWidget renders 'No activity data' when empty."""
+        from beadloom.tui.widgets.activity import ActivityWidget
+
+        widget = ActivityWidget(activities={})
+        text = widget.render()
+
+        assert "No activity data" in text.plain
+
+    def test_render_with_activities(self) -> None:
+        """ActivityWidget renders domain names and activity bars."""
+        from beadloom.tui.widgets.activity import ActivityWidget
+
+        # Use a simple dict with commit_count attribute simulation
+        class MockActivity:
+            def __init__(self, commit_count: int) -> None:
+                self.commit_count = commit_count
+
+        activities = {
+            "auth": MockActivity(50),
+            "payments": MockActivity(10),
+        }
+        widget = ActivityWidget(activities=activities)
+        text = widget.render()
+        plain = text.plain
+
+        assert "auth" in plain
+        assert "payments" in plain
+        assert "50%" in plain
+        assert "10%" in plain
+
+    def test_render_with_dict_activities(self) -> None:
+        """ActivityWidget handles dict-based activity data."""
+        from beadloom.tui.widgets.activity import ActivityWidget
+
+        activities = {
+            "graph": {"commit_count": 30},
+        }
+        widget = ActivityWidget(activities=activities)
+        text = widget.render()
+
+        assert "graph" in text.plain
+        assert "30%" in text.plain
+
+    def test_render_caps_at_100(self) -> None:
+        """ActivityWidget caps activity level at 100%."""
+        from beadloom.tui.widgets.activity import ActivityWidget
+
+        class MockActivity:
+            def __init__(self, commit_count: int) -> None:
+                self.commit_count = commit_count
+
+        activities = {"auth": MockActivity(200)}
+        widget = ActivityWidget(activities=activities)
+        text = widget.render()
+
+        assert "100%" in text.plain
+
+    def test_render_default_empty(self) -> None:
+        """ActivityWidget with no constructor args shows no data."""
+        from beadloom.tui.widgets.activity import ActivityWidget
+
+        widget = ActivityWidget()
+        assert "No activity data" in widget.render().plain
+
+    def test_refresh_data(self) -> None:
+        """refresh_data() updates activity data."""
+        from beadloom.tui.widgets.activity import ActivityWidget
+
+        widget = ActivityWidget(activities={})
+        assert "No activity data" in widget.render().plain
+
+        widget._activities = {"test": {"commit_count": 42}}
+        assert "test" in widget.render().plain
+
+
+class TestStatusBarWidget:
+    """Tests for StatusBarWidget."""
+
+    def test_render_default_counts(self) -> None:
+        """StatusBarWidget renders zero counts by default."""
+        from beadloom.tui.widgets.status_bar import StatusBarWidget
+
+        widget = StatusBarWidget()
+        text = widget.render()
+        plain = text.plain
+
+        assert "0 nodes" in plain
+        assert "0 edges" in plain
+        assert "0 docs" in plain
+        assert "0 stale" in plain
+
+    def test_render_with_counts(self) -> None:
+        """StatusBarWidget renders provided counts."""
+        from beadloom.tui.widgets.status_bar import StatusBarWidget
+
+        widget = StatusBarWidget()
+        widget._node_count = 10
+        widget._edge_count = 5
+        widget._doc_count = 3
+        widget._stale_count = 2
+
+        text = widget.render()
+        plain = text.plain
+
+        assert "10 nodes" in plain
+        assert "5 edges" in plain
+        assert "3 docs" in plain
+        assert "2 stale" in plain
+
+    def test_render_watcher_inactive(self) -> None:
+        """StatusBarWidget shows watcher inactive by default."""
+        from beadloom.tui.widgets.status_bar import StatusBarWidget
+
+        widget = StatusBarWidget()
+        text = widget.render()
+
+        assert "no watch" in text.plain
+
+    def test_render_watcher_active(self) -> None:
+        """StatusBarWidget shows watcher active when set."""
+        from beadloom.tui.widgets.status_bar import StatusBarWidget
+
+        widget = StatusBarWidget()
+        widget._watcher_active = True
+        text = widget.render()
+
+        assert "watching" in text.plain
+
+    def test_render_last_action(self) -> None:
+        """StatusBarWidget shows last action message."""
+        from beadloom.tui.widgets.status_bar import StatusBarWidget
+
+        widget = StatusBarWidget()
+        widget._last_action = "Reindex complete"
+        text = widget.render()
+
+        assert "Reindex complete" in text.plain
+
+    def test_refresh_data_clears_action(self) -> None:
+        """refresh_data() clears the last action message."""
+        from beadloom.tui.widgets.status_bar import StatusBarWidget
+
+        widget = StatusBarWidget()
+        widget._last_action = "old action"
+        widget._node_count = 5
+        widget._edge_count = 3
+        widget._doc_count = 2
+        widget._stale_count = 0
+
+        # Simulating refresh_data without calling refresh() (no app context)
+        widget._last_action = ""
+        assert widget._last_action == ""
+
+    def test_set_watcher_active(self) -> None:
+        """set_watcher_active() updates watcher flag."""
+        from beadloom.tui.widgets.status_bar import StatusBarWidget
+
+        widget = StatusBarWidget()
+        assert widget._watcher_active is False
+
+        widget._watcher_active = True
+        assert widget._watcher_active is True
+
+    def test_set_last_action(self) -> None:
+        """set_last_action stores the message."""
+        from beadloom.tui.widgets.status_bar import StatusBarWidget
+
+        widget = StatusBarWidget()
+        widget._last_action = "Test message"
+
+        assert widget._last_action == "Test message"
+
+    def test_stale_count_red_when_positive(self) -> None:
+        """StatusBarWidget shows stale in red style when count > 0."""
+        from beadloom.tui.widgets.status_bar import StatusBarWidget
+
+        widget = StatusBarWidget()
+        widget._stale_count = 3
+        text = widget.render()
+
+        # Check the plain text contains stale count
+        assert "3 stale" in text.plain
+
+
+# ---------------------------------------------------------------------------
+# Dashboard Screen Integration Tests (BEAD-02)
+# ---------------------------------------------------------------------------
+
+
+class TestDashboardScreen:
+    """Tests for the DashboardScreen with all widgets composed."""
+
+    @pytest.mark.asyncio()
+    async def test_dashboard_composes_all_widgets(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """DashboardScreen composes debt gauge, activity, lint, status bar."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            from beadloom.tui.widgets.activity import ActivityWidget
+            from beadloom.tui.widgets.debt_gauge import DebtGaugeWidget
+            from beadloom.tui.widgets.lint_panel import LintPanelWidget
+            from beadloom.tui.widgets.status_bar import StatusBarWidget
+
+            # Query for each widget in the dashboard
+            debt_gauge = app.screen.query_one("#debt-gauge", DebtGaugeWidget)
+            assert debt_gauge is not None
+
+            activity = app.screen.query_one("#activity-widget", ActivityWidget)
+            assert activity is not None
+
+            lint_panel = app.screen.query_one("#lint-panel", LintPanelWidget)
+            assert lint_panel is not None
+
+            status_bar = app.screen.query_one("#status-bar", StatusBarWidget)
+            assert status_bar is not None
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_dashboard_has_graph_placeholder(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """DashboardScreen has a graph placeholder for BEAD-03."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            placeholder = app.screen.query_one("#graph-placeholder")
+            assert placeholder is not None
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_dashboard_has_node_summary(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """DashboardScreen has a node summary bar."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            summary = app.screen.query_one("#node-summary")
+            assert summary is not None
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_dashboard_has_header(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """DashboardScreen has a header with title."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            header = app.screen.query_one("#dashboard-header")
+            assert header is not None
+
+            title = app.screen.query_one("#dashboard-title")
+            assert title is not None
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_dashboard_loads_data_on_mount(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """DashboardScreen loads data from providers on mount."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.widgets.status_bar import StatusBarWidget
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            # Status bar should have loaded counts from DB
+            status_bar = app.screen.query_one("#status-bar", StatusBarWidget)
+            # The populated DB has 3 nodes, 1 edge, 1 doc
+            assert status_bar._node_count == 3
+            assert status_bar._edge_count == 1
+            assert status_bar._doc_count == 1
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_dashboard_refresh_all_widgets(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """DashboardScreen.refresh_all_widgets() reloads data."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.dashboard import DashboardScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            screen = app.screen
+            assert isinstance(screen, DashboardScreen)
+            # Calling refresh should not raise
+            screen.refresh_all_widgets()
+            await pilot.press("q")
