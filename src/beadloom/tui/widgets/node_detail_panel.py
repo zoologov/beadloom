@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import TYPE_CHECKING
 
@@ -153,8 +154,8 @@ class NodeDetailPanel(Static):
         self._graph_provider = graph_provider
         self._ref_id = ref_id
 
-    def render(self) -> Text:
-        """Render the node detail panel."""
+    def _build_text(self) -> Text:
+        """Build the Rich Text for the current state."""
         if not self._ref_id:
             text = Text()
             text.append("Node Detail", style="bold underline")
@@ -162,6 +163,14 @@ class NodeDetailPanel(Static):
             return text
 
         return _render_node_detail(self._ref_id, self._graph_provider)
+
+    def _push_content(self) -> None:
+        """Push pre-built text into the widget via ``update()``.
+
+        Safe to call before the widget is mounted.
+        """
+        with contextlib.suppress(Exception):  # NoActiveAppError, etc.
+            self.update(self._build_text())
 
     def set_node(self, ref_id: str) -> None:
         """Update the displayed node and re-render.
@@ -172,7 +181,7 @@ class NodeDetailPanel(Static):
             The ref_id of the node to display.
         """
         self._ref_id = ref_id
-        self.refresh()
+        self._push_content()
 
     def set_provider(self, graph_provider: GraphDataProvider) -> None:
         """Set the graph data provider."""

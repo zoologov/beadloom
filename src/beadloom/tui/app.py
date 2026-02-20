@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.widgets import Footer, Header
+from textual.widgets import Header
 
 from beadloom.tui.data_providers import (
     ActivityDataProvider,
@@ -53,13 +53,13 @@ class BeadloomApp(App[None]):
         Binding("2", "switch_screen('explorer')", "Explorer", key_display="2"),
         Binding("3", "switch_screen('doc_status')", "Doc Status", key_display="3"),
         Binding("q", "quit", "Quit"),
-        Binding("question_mark", "help", "Help"),
-        Binding("slash", "search", "Search"),
+        Binding("question_mark", "help", "Help", key_display="?"),
+        Binding("slash", "search", "Search", key_display="/"),
         Binding("r", "reindex", "Reindex"),
         Binding("l", "lint", "Lint"),
         Binding("s", "sync_check", "Sync"),
         Binding("S", "save_snapshot", "Snapshot", key_display="S"),
-        Binding("tab", "focus_next", "Next panel"),
+        Binding("tab", "focus_next", "Next panel", show=False),
     ]
 
     def __init__(
@@ -75,6 +75,7 @@ class BeadloomApp(App[None]):
         self.no_watch = no_watch
         self._conn: sqlite3.Connection | None = None
         self._file_watcher_worker: Worker[None] | None = None
+        self._shutting_down: bool = False
 
         # Data providers (initialized on mount)
         self.graph_provider: GraphDataProvider | None = None
@@ -127,7 +128,6 @@ class BeadloomApp(App[None]):
     def compose(self) -> ComposeResult:
         """Compose the application layout."""
         yield Header()
-        yield Footer()
 
     def on_mount(self) -> None:
         """Open DB, initialize providers, install screens, push default, start watcher."""
@@ -187,7 +187,12 @@ class BeadloomApp(App[None]):
 
     def on_unmount(self) -> None:
         """Cancel watcher and close DB connection on unmount."""
+        self._shutting_down = True
         if self._file_watcher_worker is not None:
+            # Signal the watchfiles stop_event so the blocking watch() exits
+            stop_event = getattr(self._file_watcher_worker, "_stop_event", None)
+            if stop_event is not None:
+                stop_event.set()
             self._file_watcher_worker.cancel()
             self._file_watcher_worker = None
         if self._conn is not None:
@@ -227,14 +232,14 @@ class BeadloomApp(App[None]):
         """Switch to Explorer screen and show the given node.
 
         Called by dashboard when a node is activated (Enter key).
+        Uses ``call_later`` so the screen transition completes before
+        ``set_ref_id`` triggers widget updates (UX issue #60).
         """
         self._selected_ref_id = ref_id
+        self._safe_switch_screen(SCREEN_EXPLORER)
         explorer = self._installed_screens.get(SCREEN_EXPLORER)
         if isinstance(explorer, ExplorerScreen):
-            self._safe_switch_screen(SCREEN_EXPLORER)
-            explorer.set_ref_id(ref_id)
-        else:
-            self._safe_switch_screen(SCREEN_EXPLORER)
+            self.call_later(explorer.set_ref_id, ref_id)
 
     async def action_switch_screen(self, screen_name: str) -> None:
         """Switch to the named screen."""
@@ -246,15 +251,13 @@ class BeadloomApp(App[None]):
         if target is not None and self.screen is target:
             return
 
-        # When switching to explorer, update its ref_id
-        if screen_name == SCREEN_EXPLORER:
-            explorer = self._installed_screens.get(SCREEN_EXPLORER)
-            if isinstance(explorer, ExplorerScreen) and self._selected_ref_id:
-                self._safe_switch_screen(screen_name)
-                explorer.set_ref_id(self._selected_ref_id)
-                return
-
         self._safe_switch_screen(screen_name)
+
+        # When switching to explorer, update its ref_id after screen transition
+        if screen_name == SCREEN_EXPLORER and self._selected_ref_id:
+            explorer = self._installed_screens.get(SCREEN_EXPLORER)
+            if isinstance(explorer, ExplorerScreen):
+                self.call_later(explorer.set_ref_id, self._selected_ref_id)
 
     def action_help(self) -> None:
         """Show help overlay with all keyboard bindings."""

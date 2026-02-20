@@ -1,4 +1,4 @@
-"""Tests for Dashboard action bar — keybinding hints at the bottom of the screen."""
+"""Tests for Dashboard Footer — Textual Footer widget with keybinding hints."""
 
 from __future__ import annotations
 
@@ -38,45 +38,61 @@ def populated_db(tmp_path: Path) -> tuple[Path, Path]:
     return db_path, tmp_path
 
 
-class TestDashboardActionBar:
-    """Tests for the dashboard action bar widget."""
+class TestDashboardFooter:
+    """Tests for the dashboard Footer widget."""
 
     @pytest.mark.asyncio()
-    async def test_dashboard_has_action_bar(
+    async def test_dashboard_has_footer(
         self, populated_db: tuple[Path, Path]
     ) -> None:
-        """DashboardScreen has a Label with id='dashboard-action-bar'."""
+        """DashboardScreen has a Textual Footer widget."""
         db_path, project_root = populated_db
-        from textual.widgets import Label
+        from textual.widgets import Footer
 
         from beadloom.tui.app import BeadloomApp
 
         app = BeadloomApp(db_path=db_path, project_root=project_root)
         async with app.run_test() as pilot:
-            action_bar = app.screen.query_one("#dashboard-action-bar", Label)
-            assert action_bar is not None
+            footer = app.screen.query_one(Footer)
+            assert footer is not None
             await pilot.press("q")
 
     @pytest.mark.asyncio()
-    async def test_action_bar_contains_keybindings(
+    async def test_explorer_has_footer(
         self, populated_db: tuple[Path, Path]
     ) -> None:
-        """Action bar text contains expected keybinding hints."""
+        """ExplorerScreen has a Textual Footer widget."""
         db_path, project_root = populated_db
-        from textual.widgets import Label
+        from textual.widgets import Footer
 
         from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.explorer import ExplorerScreen
 
         app = BeadloomApp(db_path=db_path, project_root=project_root)
         async with app.run_test() as pilot:
-            action_bar = app.screen.query_one("#dashboard-action-bar", Label)
-            text = str(action_bar.content)
+            await pilot.press("2")
+            assert isinstance(app.screen, ExplorerScreen)
 
-            # Verify all expected keybinding hints are present
-            assert "[Enter]explore" in text
-            assert "[r]eindex" in text
-            assert "[l]int" in text
-            assert "[s]ync-check" in text
-            assert "[S]napshot" in text
-            assert "[?]help" in text
+            footer = app.screen.query_one(Footer)
+            assert footer is not None
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_doc_status_has_footer(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """DocStatusScreen has a Textual Footer widget."""
+        db_path, project_root = populated_db
+        from textual.widgets import Footer
+
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.doc_status import DocStatusScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            await pilot.press("3")
+            assert isinstance(app.screen, DocStatusScreen)
+
+            footer = app.screen.query_one(Footer)
+            assert footer is not None
             await pilot.press("q")

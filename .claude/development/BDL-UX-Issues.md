@@ -1,7 +1,7 @@
 # BDL UX Feedback Log
 
 > Collected during development and dogfooding.
-> Total: 57 issues | Open: 0 | Excluded: 5 | Closed: 52
+> Total: 60 issues | Open: 0 | Excluded: 5 | Closed: 55
 
 ---
 
@@ -9,7 +9,7 @@
 
 > Issues awaiting code fixes in Beadloom.
 
-_No open issues._
+_(none)_
 
 ---
 
@@ -35,6 +35,16 @@ _No open issues._
 ---
 
 ## Closed Issues
+
+### v1.8.0 — BDL-028 (TUI Bug Fixes)
+
+> Phase 12.13. TUI stabilization round 3 — threading, Explorer dependencies, screen state.
+
+58. ~~[2026-02-20] [MEDIUM] TUI: Threading error on quit~~ **FIXED (BDL-028 BEAD-01)** — Added `_shutting_down` flag + try-except in file watcher to prevent `RuntimeError: cannot schedule new futures after interpreter shutdown`.
+
+59. ~~[2026-02-20] [HIGH] TUI: Explorer downstream dependents always empty~~ **FIXED (BDL-028 BEAD-02)** — Pre-render and cache tree text in `DependencyPathWidget`. `show_*` methods build text eagerly, `render()` returns consistent cached snapshot.
+
+60. ~~[2026-02-20] [HIGH] TUI: Explorer broken after early empty visit~~ **FIXED (BDL-028 BEAD-03)** — Added `on_screen_resume` handler to `ExplorerScreen` to re-apply `ref_id` when screen becomes active after initial empty visit.
 
 ### v1.8.0 — BDL-025 (TUI), BDL-026 (Docs Audit), BDL-027 (UX Batch Fix)
 

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from typing import TYPE_CHECKING
@@ -102,8 +103,8 @@ class ContextPreviewWidget(Static):
         self._context_provider = context_provider
         self._ref_id = ref_id
 
-    def render(self) -> Text:
-        """Render the context preview widget."""
+    def _build_text(self) -> Text:
+        """Build the Rich Text for the current state."""
         if not self._ref_id:
             text = Text()
             text.append(_LABEL, style="bold underline")
@@ -111,6 +112,14 @@ class ContextPreviewWidget(Static):
             return text
 
         return _render_context_preview(self._ref_id, self._context_provider)
+
+    def _push_content(self) -> None:
+        """Push pre-built text into the widget via ``update()``.
+
+        Safe to call before the widget is mounted.
+        """
+        with contextlib.suppress(Exception):  # NoActiveAppError, etc.
+            self.update(self._build_text())
 
     def show_context(self, ref_id: str) -> None:
         """Show context preview for the given ref_id.
@@ -125,7 +134,7 @@ class ContextPreviewWidget(Static):
             The ref_id to build context for.
         """
         self._ref_id = ref_id
-        self.refresh()
+        self._push_content()
 
     def set_provider(self, context_provider: ContextDataProvider) -> None:
         """Set the context data provider."""

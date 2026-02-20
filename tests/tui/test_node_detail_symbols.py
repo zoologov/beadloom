@@ -288,20 +288,26 @@ class TestGetSymbols:
     def test_get_symbols_returns_symbols(
         self, populated_db: tuple[Path, Path]
     ) -> None:
-        """get_symbols() returns symbol data from extract_symbols."""
+        """get_symbols() returns symbol data from code_symbols table."""
         db_path, project_root = populated_db
-
-        # Create a Python file to index
-        src_dir = project_root / "src" / "api"
-        src_dir.mkdir(parents=True, exist_ok=True)
-        server_py = src_dir / "server.py"
-        server_py.write_text(
-            'def handle_request():\n    pass\n\nclass Server:\n    pass\n',
-            encoding="utf-8",
-        )
 
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row
+
+        # Insert symbols into code_symbols table
+        conn.execute(
+            "INSERT INTO code_symbols"
+            " (file_path, symbol_name, kind, line_start, line_end, file_hash)"
+            " VALUES (?, ?, ?, ?, ?, 'test')",
+            ("src/api/server.py", "handle_request", "function", 1, 2),
+        )
+        conn.execute(
+            "INSERT INTO code_symbols"
+            " (file_path, symbol_name, kind, line_start, line_end, file_hash)"
+            " VALUES (?, ?, ?, ?, ?, 'test')",
+            ("src/api/server.py", "Server", "class", 4, 5),
+        )
+        conn.commit()
 
         from beadloom.tui.data_providers import GraphDataProvider
 
@@ -347,45 +353,61 @@ class TestGetSymbols:
         symbols = provider.get_symbols("auth-login")
         assert symbols == []
 
-    def test_get_symbols_missing_file(
-        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
-    ) -> None:
-        """get_symbols() returns empty list when source file doesn't exist."""
-        from beadloom.tui.data_providers import GraphDataProvider
-
-        _, project_root = populated_db
-        provider = GraphDataProvider(conn=ro_conn, project_root=project_root)
-        # auth has source "src/auth" which is a directory, not a file
-        symbols = provider.get_symbols("auth")
-        assert symbols == []
-
-    def test_get_symbols_extract_error(
+    def test_get_symbols_directory_source(
         self, populated_db: tuple[Path, Path]
     ) -> None:
-        """get_symbols() returns empty list when extract_symbols raises."""
+        """get_symbols() returns symbols for nodes with directory source paths."""
         db_path, project_root = populated_db
-
-        # Create the file so path exists
-        src_dir = project_root / "src" / "api"
-        src_dir.mkdir(parents=True, exist_ok=True)
-        server_py = src_dir / "server.py"
-        server_py.write_text("def foo(): pass\n", encoding="utf-8")
 
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row
 
+        # auth node has source "src/auth" — insert symbols under that prefix
+        conn.execute(
+            "INSERT INTO code_symbols"
+            " (file_path, symbol_name, kind, line_start, line_end, file_hash)"
+            " VALUES (?, ?, ?, ?, ?, 'test')",
+            ("src/auth/login.py", "authenticate", "function", 1, 10),
+        )
+        conn.execute(
+            "INSERT INTO code_symbols"
+            " (file_path, symbol_name, kind, line_start, line_end, file_hash)"
+            " VALUES (?, ?, ?, ?, ?, 'test')",
+            ("src/auth/models.py", "User", "class", 5, 20),
+        )
+        conn.commit()
+
         from beadloom.tui.data_providers import GraphDataProvider
 
+        # auth source is "src/auth" (no trailing slash) — exact match, returns 0
         provider = GraphDataProvider(conn=conn, project_root=project_root)
-
-        with patch(
-            "beadloom.context_oracle.code_indexer.extract_symbols",
-            side_effect=OSError("disk error"),
-        ):
-            symbols = provider.get_symbols("api")
-
+        symbols = provider.get_symbols("auth")
         assert symbols == []
+
+        # Update source to "src/auth/" (trailing slash) — prefix match works
+        conn.execute(
+            "UPDATE nodes SET source = 'src/auth/' WHERE ref_id = 'auth'"
+        )
+        conn.commit()
+        symbols = provider.get_symbols("auth")
+        assert len(symbols) == 2
+        names = {str(s["symbol_name"]) for s in symbols}
+        assert "authenticate" in names
+        assert "User" in names
+
         conn.close()
+
+    def test_get_symbols_empty_code_symbols(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """get_symbols() returns empty list when no symbols in DB for the node."""
+        from beadloom.tui.data_providers import GraphDataProvider
+
+        _, project_root = populated_db
+        provider = GraphDataProvider(conn=ro_conn, project_root=project_root)
+        # api has source "src/api/server.py" but no code_symbols rows
+        symbols = provider.get_symbols("api")
+        assert symbols == []
 
 
 # ---------------------------------------------------------------------------

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Label
+from textual.widgets import Footer, Label
 
 from beadloom.tui.widgets.activity import ActivityWidget
 from beadloom.tui.widgets.debt_gauge import DebtGaugeWidget
@@ -71,11 +71,7 @@ class DashboardScreen(Screen[None]):
             # Status bar
             yield StatusBarWidget(widget_id="status-bar")
 
-            # Action bar (keybinding hints)
-            yield Label(
-                "[Enter]explore  [r]eindex  [l]int  [s]ync-check  [S]napshot  [?]help",
-                id="dashboard-action-bar",
-            )
+        yield Footer()
 
     def on_mount(self) -> None:
         """Load data from providers when the screen mounts."""

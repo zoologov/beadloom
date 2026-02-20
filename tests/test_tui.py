@@ -1686,9 +1686,11 @@ class TestDocStatusScreen:
             table = app.screen.query_one("#doc-health-table", DocHealthTable)
             assert table is not None
 
-            # Verify action bar exists
-            action_bar = app.screen.query_one("#doc-status-action-bar", Label)
-            assert action_bar is not None
+            # Verify Footer exists (keybinding hints)
+            from textual.widgets import Footer
+
+            footer = app.screen.query_one(Footer)
+            assert footer is not None
 
             await pilot.press("q")
 
@@ -2256,7 +2258,7 @@ class TestNodeDetailPanel:
         from beadloom.tui.widgets.node_detail_panel import NodeDetailPanel
 
         widget = NodeDetailPanel()
-        text = widget.render()
+        text = widget._build_text()
         plain = text.plain
 
         assert "Node Detail" in plain
@@ -2276,7 +2278,7 @@ class TestNodeDetailPanel:
             graph_provider=provider,
             ref_id="auth",
         )
-        text = widget.render()
+        text = widget._build_text()
         plain = text.plain
 
         assert "auth" in plain
@@ -2298,7 +2300,7 @@ class TestNodeDetailPanel:
             graph_provider=provider,
             ref_id="nonexistent",
         )
-        text = widget.render()
+        text = widget._build_text()
         plain = text.plain
 
         assert "not found" in plain
@@ -2308,7 +2310,7 @@ class TestNodeDetailPanel:
         from beadloom.tui.widgets.node_detail_panel import NodeDetailPanel
 
         widget = NodeDetailPanel(ref_id="auth")
-        text = widget.render()
+        text = widget._build_text()
         plain = text.plain
 
         assert "No data provider" in plain
@@ -2327,7 +2329,7 @@ class TestNodeDetailPanel:
             graph_provider=provider,
             ref_id="auth",
         )
-        text = widget.render()
+        text = widget._build_text()
         plain = text.plain
 
         assert "Connections" in plain
@@ -2347,7 +2349,7 @@ class TestNodeDetailPanel:
             graph_provider=provider,
             ref_id="auth-login",
         )
-        text = widget.render()
+        text = widget._build_text()
         plain = text.plain
 
         assert "documented" in plain
@@ -2366,7 +2368,7 @@ class TestNodeDetailPanel:
             graph_provider=provider,
             ref_id="payments",
         )
-        text = widget.render()
+        text = widget._build_text()
         plain = text.plain
 
         assert "missing" in plain
@@ -2411,7 +2413,7 @@ class TestNodeDetailPanel:
             graph_provider=provider,
             ref_id="auth-login",
         )
-        text = widget.render()
+        text = widget._build_text()
         plain = text.plain
 
         assert "no source path" in plain
@@ -2430,7 +2432,7 @@ class TestDependencyPathWidget:
         from beadloom.tui.widgets.dependency_path import DependencyPathWidget
 
         widget = DependencyPathWidget()
-        text = widget.render()
+        text = widget._build_text()
         plain = text.plain
 
         assert "Downstream Dependents" in plain
@@ -2441,7 +2443,7 @@ class TestDependencyPathWidget:
         from beadloom.tui.widgets.dependency_path import DependencyPathWidget
 
         widget = DependencyPathWidget(direction="upstream")
-        text = widget.render()
+        text = widget._build_text()
         plain = text.plain
 
         assert "Upstream Dependencies" in plain
@@ -2462,10 +2464,44 @@ class TestDependencyPathWidget:
             ref_id="auth",
             direction="downstream",
         )
-        text = widget.render()
+        text = widget._build_text()
         plain = text.plain
 
         assert "Downstream Dependents" in plain
+        # Verify actual dependent node appears (not just heading) — UX #59 regression
+        assert "auth-login" in plain
+
+    def test_show_downstream_renders_dependents_after_upstream(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """UX #59 regression: show_downstream() renders actual dependents.
+
+        Switching from upstream to downstream via show_downstream() must render
+        the downstream tree nodes, not 'No dependencies found'.
+        """
+        from beadloom.tui.data_providers import WhyDataProvider
+        from beadloom.tui.widgets.dependency_path import DependencyPathWidget
+
+        _, project_root = populated_db
+        provider = WhyDataProvider(conn=ro_conn, project_root=project_root)
+
+        # Start in upstream mode
+        widget = DependencyPathWidget(
+            why_provider=provider,
+            ref_id="auth",
+            direction="upstream",
+        )
+        text = widget._build_text()
+        assert "Upstream Dependencies" in text.plain
+
+        # Switch to downstream — auth has downstream dependent auth-login
+        widget.show_downstream("auth")
+        text = widget._build_text()
+        plain = text.plain
+
+        assert "Downstream Dependents" in plain
+        assert "auth-login" in plain
+        assert "No dependencies found" not in plain
 
     def test_render_upstream_existing(
         self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
@@ -2482,7 +2518,7 @@ class TestDependencyPathWidget:
             ref_id="auth-login",
             direction="upstream",
         )
-        text = widget.render()
+        text = widget._build_text()
         plain = text.plain
 
         assert "Upstream Dependencies" in plain
@@ -2501,7 +2537,7 @@ class TestDependencyPathWidget:
             why_provider=provider,
             ref_id="nonexistent",
         )
-        text = widget.render()
+        text = widget._build_text()
         plain = text.plain
 
         assert "not found" in plain
@@ -2511,7 +2547,7 @@ class TestDependencyPathWidget:
         from beadloom.tui.widgets.dependency_path import DependencyPathWidget
 
         widget = DependencyPathWidget(ref_id="auth")
-        text = widget.render()
+        text = widget._build_text()
         plain = text.plain
 
         assert "No data provider" in plain
@@ -2566,7 +2602,7 @@ class TestDependencyPathWidget:
             ref_id="payments",
             direction="downstream",
         )
-        text = widget.render()
+        text = widget._build_text()
         plain = text.plain
 
         assert "Downstream Dependents" in plain
@@ -2587,7 +2623,7 @@ class TestContextPreviewWidget:
         from beadloom.tui.widgets.context_preview import ContextPreviewWidget
 
         widget = ContextPreviewWidget()
-        text = widget.render()
+        text = widget._build_text()
         plain = text.plain
 
         assert "Context Preview" in plain
@@ -2607,7 +2643,7 @@ class TestContextPreviewWidget:
             context_provider=provider,
             ref_id="auth",
         )
-        text = widget.render()
+        text = widget._build_text()
         plain = text.plain
 
         assert "Context Preview" in plain
@@ -2628,7 +2664,7 @@ class TestContextPreviewWidget:
             context_provider=provider,
             ref_id="auth",
         )
-        text = widget.render()
+        text = widget._build_text()
         plain = text.plain
 
         # Should contain a token count (tilde + number)
@@ -2649,7 +2685,7 @@ class TestContextPreviewWidget:
             context_provider=provider,
             ref_id="nonexistent",
         )
-        text = widget.render()
+        text = widget._build_text()
         plain = text.plain
 
         assert "not available" in plain
@@ -2659,7 +2695,7 @@ class TestContextPreviewWidget:
         from beadloom.tui.widgets.context_preview import ContextPreviewWidget
 
         widget = ContextPreviewWidget(ref_id="auth")
-        text = widget.render()
+        text = widget._build_text()
         plain = text.plain
 
         assert "No data provider" in plain
@@ -2704,7 +2740,7 @@ class TestContextPreviewWidget:
             context_provider=provider,
             ref_id="auth",
         )
-        text = widget.render()
+        text = widget._build_text()
         plain = text.plain
 
         assert "Keys:" in plain
@@ -2783,16 +2819,10 @@ class TestExplorerScreen:
             await pilot.press("2")
             assert isinstance(app.screen, ExplorerScreen)
 
-            from textual.widgets import Label
+            from textual.widgets import Footer
 
-            action_bar = app.screen.query_one("#explorer-action-bar", Label)
-            assert action_bar is not None
-
-            bar_text = str(action_bar.content)
-            assert "pstream" in bar_text
-            assert "ownstream" in bar_text
-            assert "ontext" in bar_text
-            assert "back" in bar_text
+            footer = app.screen.query_one(Footer)
+            assert footer is not None
 
             await pilot.press("q")
 
@@ -2846,6 +2876,45 @@ class TestExplorerScreen:
             dep_widget = app.screen.query_one("#dependency-path", DependencyPathWidget)
             assert dep_widget.display is True
             assert app.screen._mode == MODE_DOWNSTREAM
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_explorer_downstream_renders_dependents(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """UX #59 regression: pressing 'd' renders actual downstream dependents.
+
+        After selecting 'auth' and pressing 'd', the widget must show
+        'auth-login' (not 'No dependencies found').
+        """
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.explorer import ExplorerScreen
+        from beadloom.tui.widgets.dependency_path import DependencyPathWidget
+        from beadloom.tui.widgets.graph_tree import NodeSelected
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            # Select node on dashboard, then switch to explorer
+            app.post_message(NodeSelected("auth"))
+            await pilot.pause()
+
+            await pilot.press("2")
+            await pilot.pause()
+            assert isinstance(app.screen, ExplorerScreen)
+
+            # Press 'd' for downstream
+            await pilot.press("d")
+            await pilot.pause()
+
+            dep_widget = app.screen.query_one("#dependency-path", DependencyPathWidget)
+            text = dep_widget.render()
+            plain = text.plain
+
+            assert "Downstream Dependents" in plain
+            assert "auth-login" in plain
+            assert "No dependencies found" not in plain
 
             await pilot.press("q")
 
@@ -4369,6 +4438,72 @@ class TestFullNavigationFlow:
 
             await pilot.press("q")
 
+    @pytest.mark.asyncio()
+    async def test_explorer_updates_after_early_empty_visit(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """UX #60: Explorer updates when visited empty first, then node selected.
+
+        Scenario:
+        1. Launch TUI -> Dashboard
+        2. Press "2" to visit Explorer (no node selected yet)
+        3. Press "1" to go back to Dashboard
+        4. Select a node on Dashboard (app._selected_ref_id set)
+        5. Press "2" to visit Explorer again
+        Expected: Explorer's NodeDetailPanel shows the selected node.
+        """
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.dashboard import DashboardScreen
+        from beadloom.tui.screens.explorer import ExplorerScreen
+        from beadloom.tui.widgets.node_detail_panel import NodeDetailPanel
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            # 1. Start on dashboard
+            assert isinstance(app.screen, DashboardScreen)
+
+            # 2. Visit explorer with no node selected (empty ref_id)
+            await pilot.press("2")
+            await pilot.pause()
+            assert isinstance(app.screen, ExplorerScreen)
+            detail = app.screen.query_one("#node-detail-panel", NodeDetailPanel)
+            assert detail._ref_id == ""  # No node yet
+
+            # 3. Go back to dashboard
+            await pilot.press("1")
+            await pilot.pause()
+            assert isinstance(app.screen, DashboardScreen)
+
+            # 4. Select a node (simulated via app._selected_ref_id)
+            from beadloom.tui.widgets.graph_tree import NodeSelected
+
+            app.post_message(NodeSelected("auth"))
+            await pilot.pause()
+            assert app._selected_ref_id == "auth"
+
+            # 5. Visit explorer again — should show selected node
+            await pilot.press("2")
+            await pilot.pause()
+            assert isinstance(app.screen, ExplorerScreen)
+
+            detail = app.screen.query_one("#node-detail-panel", NodeDetailPanel)
+            assert detail._ref_id == "auth"
+
+            # 6. Verify subsequent updates work too
+            await pilot.press("1")
+            await pilot.pause()
+            app.post_message(NodeSelected("payments"))
+            await pilot.pause()
+            assert app._selected_ref_id == "payments"
+
+            await pilot.press("2")
+            await pilot.pause()
+            detail = app.screen.query_one("#node-detail-panel", NodeDetailPanel)
+            assert detail._ref_id == "payments"
+
+            await pilot.press("q")
+
 
 # ---------------------------------------------------------------------------
 # BEAD-08: Screen Switching with No Data
@@ -5082,3 +5217,525 @@ class TestDocHealthSyncException:
             )
             # Should still return rows despite sync error
             assert len(rows) > 0
+
+
+# ---------------------------------------------------------------------------
+# UX-058: File watcher shutdown race — RuntimeError on quit
+# ---------------------------------------------------------------------------
+
+
+class TestFileWatcherShutdownFlag:
+    """Tests for the _shutting_down flag in file_watcher."""
+
+    def test_watch_loop_catches_runtime_error_on_post_message(
+        self, tmp_path: Path
+    ) -> None:
+        """_watch_loop catches RuntimeError from post_message during shutdown."""
+        import threading
+        from unittest.mock import MagicMock
+
+        from beadloom.tui.file_watcher import _watch_loop
+
+        app = MagicMock()
+        app.post_message.side_effect = RuntimeError(
+            "cannot schedule new futures after interpreter shutdown"
+        )
+
+        project_root = tmp_path
+        watch_dirs = [tmp_path]
+        stop_event = threading.Event()
+
+        # Create a fake batch that watch() would yield
+        fake_batch = {(1, str(tmp_path / "foo.py"))}
+        mock_watch = MagicMock(return_value=[fake_batch])
+
+        worker = MagicMock()
+        worker.is_cancelled = False
+        with (
+            patch.dict("sys.modules", {"watchfiles": MagicMock(watch=mock_watch)}),
+            patch(
+                "beadloom.tui.file_watcher.get_current_worker",
+                return_value=worker,
+            ),
+        ):
+            # Should NOT raise — error is caught during shutdown
+            _watch_loop(app, project_root, watch_dirs, 500, stop_event)
+
+    def test_watch_loop_skips_post_when_stop_event_set(
+        self, tmp_path: Path
+    ) -> None:
+        """_watch_loop exits without posting when stop_event is set."""
+        import threading
+        from unittest.mock import MagicMock
+
+        from beadloom.tui.file_watcher import _watch_loop
+
+        app = MagicMock()
+
+        project_root = tmp_path
+        watch_dirs = [tmp_path]
+        stop_event = threading.Event()
+        stop_event.set()  # Signal shutdown
+
+        fake_batch = {(1, str(tmp_path / "foo.py"))}
+        mock_watch = MagicMock(return_value=[fake_batch])
+
+        worker = MagicMock()
+        worker.is_cancelled = False
+        with (
+            patch.dict("sys.modules", {"watchfiles": MagicMock(watch=mock_watch)}),
+            patch(
+                "beadloom.tui.file_watcher.get_current_worker",
+                return_value=worker,
+            ),
+        ):
+            _watch_loop(app, project_root, watch_dirs, 500, stop_event)
+
+        # post_message should NOT have been called
+        app.post_message.assert_not_called()
+
+    def test_watch_loop_posts_when_not_shutting_down(
+        self, tmp_path: Path
+    ) -> None:
+        """_watch_loop posts messages normally when not shutting down."""
+        import threading
+        from unittest.mock import MagicMock
+
+        from beadloom.tui.file_watcher import _watch_loop
+
+        app = MagicMock()
+
+        project_root = tmp_path
+        watch_dirs = [tmp_path]
+        stop_event = threading.Event()
+
+        fake_batch = {(1, str(tmp_path / "foo.py"))}
+        mock_watch = MagicMock(return_value=[fake_batch])
+
+        worker = MagicMock()
+        worker.is_cancelled = False
+        with (
+            patch.dict("sys.modules", {"watchfiles": MagicMock(watch=mock_watch)}),
+            patch(
+                "beadloom.tui.file_watcher.get_current_worker",
+                return_value=worker,
+            ),
+        ):
+            _watch_loop(app, project_root, watch_dirs, 500, stop_event)
+
+        # post_message SHOULD have been called
+        app.post_message.assert_called_once()
+
+    def test_app_on_unmount_sets_shutting_down_flag(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """on_unmount() sets _shutting_down=True before cancelling watcher."""
+        from unittest.mock import MagicMock
+
+        from beadloom.tui.app import BeadloomApp
+
+        db_path, project_root = populated_db
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+
+        # Manually set up mock state
+        app._conn = sqlite3.connect(str(db_path))
+        mock_worker = MagicMock()
+        app._file_watcher_worker = mock_worker
+
+        assert app._shutting_down is False  # Initially False
+        app.on_unmount()
+        assert app._shutting_down is True  # Set during unmount
+        mock_worker.cancel.assert_called_once()
+
+    def test_app_has_shutting_down_flag_default_false(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """BeadloomApp._shutting_down defaults to False."""
+        from beadloom.tui.app import BeadloomApp
+
+        db_path, project_root = populated_db
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        assert app._shutting_down is False
+
+    def test_watch_loop_handles_worker_cancelled(self, tmp_path: Path) -> None:
+        """_watch_loop exits cleanly on WorkerCancelled exception."""
+        import threading
+        from unittest.mock import MagicMock
+
+        from textual.worker import WorkerCancelled
+
+        from beadloom.tui.file_watcher import _watch_loop
+
+        app = MagicMock()
+
+        project_root = tmp_path
+        watch_dirs = [tmp_path]
+        stop_event = threading.Event()
+
+        # Simulate watchfiles.watch raising WorkerCancelled
+        mock_watch = MagicMock(side_effect=WorkerCancelled())
+
+        worker = MagicMock()
+        worker.is_cancelled = False
+        with (
+            patch.dict("sys.modules", {"watchfiles": MagicMock(watch=mock_watch)}),
+            patch(
+                "beadloom.tui.file_watcher.get_current_worker",
+                return_value=worker,
+            ),
+        ):
+            # Should NOT raise — WorkerCancelled is caught
+            _watch_loop(app, project_root, watch_dirs, 500, stop_event)
+
+        # No message should be posted
+        app.post_message.assert_not_called()
+
+    def test_watch_loop_exits_when_worker_cancelled_flag(
+        self, tmp_path: Path
+    ) -> None:
+        """_watch_loop exits when worker.is_cancelled is True mid-batch."""
+        import threading
+        from unittest.mock import MagicMock
+
+        from beadloom.tui.file_watcher import _watch_loop
+
+        app = MagicMock()
+
+        project_root = tmp_path
+        watch_dirs = [tmp_path]
+        stop_event = threading.Event()
+
+        fake_batch = {(1, str(tmp_path / "foo.py"))}
+        mock_watch = MagicMock(return_value=[fake_batch])
+
+        worker = MagicMock()
+        worker.is_cancelled = True  # Already cancelled when batch arrives
+
+        with (
+            patch.dict("sys.modules", {"watchfiles": MagicMock(watch=mock_watch)}),
+            patch(
+                "beadloom.tui.file_watcher.get_current_worker",
+                return_value=worker,
+            ),
+        ):
+            _watch_loop(app, project_root, watch_dirs, 500, stop_event)
+
+        # Should exit before posting
+        app.post_message.assert_not_called()
+
+    def test_on_unmount_no_watcher_no_conn(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """on_unmount() handles None watcher and None conn gracefully."""
+        from beadloom.tui.app import BeadloomApp
+
+        db_path, project_root = populated_db
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+
+        # Both are None — should not raise
+        app._conn = None
+        app._file_watcher_worker = None
+
+        app.on_unmount()
+
+        assert app._shutting_down is True
+        assert app._conn is None
+        assert app._file_watcher_worker is None
+
+    def test_watch_loop_skips_empty_filtered_batch(self, tmp_path: Path) -> None:
+        """_watch_loop continues when _filter_paths returns empty list."""
+        import threading
+        from unittest.mock import MagicMock
+
+        from beadloom.tui.file_watcher import _watch_loop
+
+        app = MagicMock()
+
+        project_root = tmp_path
+        watch_dirs = [tmp_path]
+        stop_event = threading.Event()
+
+        # File with non-watched extension — will be filtered out
+        fake_batch = {(1, str(tmp_path / "foo.txt"))}
+        mock_watch = MagicMock(return_value=[fake_batch])
+
+        worker = MagicMock()
+        worker.is_cancelled = False
+        with (
+            patch.dict("sys.modules", {"watchfiles": MagicMock(watch=mock_watch)}),
+            patch(
+                "beadloom.tui.file_watcher.get_current_worker",
+                return_value=worker,
+            ),
+        ):
+            _watch_loop(app, project_root, watch_dirs, 500, stop_event)
+
+        # .txt is not in _WATCH_EXTENSIONS, so nothing should be posted
+        app.post_message.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# UX-059: Dependency path cache consistency edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestDependencyPathDirectionSwitching:
+    """Tests for direction switching in DependencyPathWidget (#59)."""
+
+    def test_show_upstream_after_downstream_renders_correctly(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """show_upstream() after show_downstream() renders upstream tree."""
+        from beadloom.tui.data_providers import WhyDataProvider
+        from beadloom.tui.widgets.dependency_path import DependencyPathWidget
+
+        _, project_root = populated_db
+        provider = WhyDataProvider(conn=ro_conn, project_root=project_root)
+
+        widget = DependencyPathWidget(
+            why_provider=provider,
+            ref_id="auth",
+            direction="downstream",
+        )
+
+        # First: downstream
+        widget.show_downstream("auth")
+        text_down = widget._build_text()
+        assert "Downstream Dependents" in text_down.plain
+
+        # Second: switch to upstream
+        widget.show_upstream("auth-login")
+        text_up = widget._build_text()
+        assert "Upstream Dependencies" in text_up.plain
+        assert "Downstream Dependents" not in text_up.plain
+
+    def test_show_downstream_updates_direction_and_ref(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """show_downstream() updates internal state for correct rendering."""
+        from beadloom.tui.data_providers import WhyDataProvider
+        from beadloom.tui.widgets.dependency_path import DependencyPathWidget
+
+        _, project_root = populated_db
+        provider = WhyDataProvider(conn=ro_conn, project_root=project_root)
+
+        widget = DependencyPathWidget(why_provider=provider)
+        widget.show_downstream("auth")
+
+        assert widget._direction == "downstream"
+        assert widget._ref_id == "auth"
+        text = widget._build_text()
+        assert "Downstream Dependents" in text.plain
+        assert "auth-login" in text.plain
+
+    def test_rapid_direction_switches_maintain_consistency(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Rapid show_upstream/show_downstream calls produce consistent state."""
+        from beadloom.tui.data_providers import WhyDataProvider
+        from beadloom.tui.widgets.dependency_path import DependencyPathWidget
+
+        _, project_root = populated_db
+        provider = WhyDataProvider(conn=ro_conn, project_root=project_root)
+
+        widget = DependencyPathWidget(why_provider=provider)
+
+        # Rapid switches
+        widget.show_downstream("auth")
+        widget.show_upstream("auth-login")
+        widget.show_downstream("auth")
+        widget.show_upstream("auth")
+        widget.show_downstream("payments")
+
+        # Final state: downstream for "payments"
+        text = widget._build_text()
+        plain = text.plain
+        assert "Downstream Dependents" in plain
+        assert widget._direction == "downstream"
+        assert widget._ref_id == "payments"
+
+    def test_show_downstream_empty_node_no_dependents(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """show_downstream() for node with no dependents renders correctly."""
+        from beadloom.tui.data_providers import WhyDataProvider
+        from beadloom.tui.widgets.dependency_path import DependencyPathWidget
+
+        _, project_root = populated_db
+        provider = WhyDataProvider(conn=ro_conn, project_root=project_root)
+
+        widget = DependencyPathWidget(why_provider=provider)
+        widget.show_downstream("payments")  # payments has no dependents
+
+        text = widget._build_text()
+        plain = text.plain
+        assert "Downstream Dependents" in plain
+        # Should show "No dependencies" rather than crash
+        assert "auth-login" not in plain
+
+    def test_build_text_consistent_across_calls(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Multiple _build_text() calls return consistent content."""
+        from beadloom.tui.data_providers import WhyDataProvider
+        from beadloom.tui.widgets.dependency_path import DependencyPathWidget
+
+        _, project_root = populated_db
+        provider = WhyDataProvider(conn=ro_conn, project_root=project_root)
+
+        widget = DependencyPathWidget(why_provider=provider)
+        widget.show_upstream("auth-login")
+
+        r1 = widget._build_text()
+        r2 = widget._build_text()
+        assert r1.plain == r2.plain
+
+
+# ---------------------------------------------------------------------------
+# UX-060: Explorer on_screen_resume edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestExplorerScreenResume:
+    """Tests for ExplorerScreen.on_screen_resume handler (#60)."""
+
+    @pytest.mark.asyncio()
+    async def test_screen_resume_noop_when_selected_ref_empty(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """on_screen_resume does nothing when app._selected_ref_id is empty."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.explorer import ExplorerScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            # Visit explorer with no selection
+            await pilot.press("2")
+            await pilot.pause()
+            assert isinstance(app.screen, ExplorerScreen)
+            assert app.screen._ref_id == ""
+
+            # Go back, don't select anything
+            await pilot.press("1")
+            await pilot.pause()
+
+            # Visit explorer again — still no selection
+            await pilot.press("2")
+            await pilot.pause()
+            assert isinstance(app.screen, ExplorerScreen)
+            assert app.screen._ref_id == ""  # Still empty, no update
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_screen_resume_noop_when_same_ref_id(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """on_screen_resume does nothing when ref_id hasn't changed."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.explorer import ExplorerScreen
+        from beadloom.tui.widgets.graph_tree import NodeSelected
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            # Select a node and visit explorer
+            app.post_message(NodeSelected("auth"))
+            await pilot.pause()
+            await pilot.press("2")
+            await pilot.pause()
+            assert isinstance(app.screen, ExplorerScreen)
+            assert app.screen._ref_id == "auth"
+
+            # Go back, same node still selected
+            await pilot.press("1")
+            await pilot.pause()
+
+            # Visit explorer again — same ref_id, should be a no-op
+            await pilot.press("2")
+            await pilot.pause()
+            assert isinstance(app.screen, ExplorerScreen)
+            assert app.screen._ref_id == "auth"  # No change
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_repeated_screen_switches_update_explorer(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Multiple dashboard<->explorer switches with different nodes."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.dashboard import DashboardScreen
+        from beadloom.tui.screens.explorer import ExplorerScreen
+        from beadloom.tui.widgets.graph_tree import NodeSelected
+        from beadloom.tui.widgets.node_detail_panel import NodeDetailPanel
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            # Round 1: select auth -> explorer
+            app.post_message(NodeSelected("auth"))
+            await pilot.pause()
+            await pilot.press("2")
+            await pilot.pause()
+            assert isinstance(app.screen, ExplorerScreen)
+            detail = app.screen.query_one("#node-detail-panel", NodeDetailPanel)
+            assert detail._ref_id == "auth"
+
+            # Round 2: back to dashboard, select payments -> explorer
+            await pilot.press("1")
+            await pilot.pause()
+            assert isinstance(app.screen, DashboardScreen)
+            app.post_message(NodeSelected("payments"))
+            await pilot.pause()
+            await pilot.press("2")
+            await pilot.pause()
+            assert isinstance(app.screen, ExplorerScreen)
+            detail = app.screen.query_one("#node-detail-panel", NodeDetailPanel)
+            assert detail._ref_id == "payments"
+
+            # Round 3: back to dashboard, select auth-login -> explorer
+            await pilot.press("1")
+            await pilot.pause()
+            app.post_message(NodeSelected("auth-login"))
+            await pilot.pause()
+            await pilot.press("2")
+            await pilot.pause()
+            assert isinstance(app.screen, ExplorerScreen)
+            detail = app.screen.query_one("#node-detail-panel", NodeDetailPanel)
+            assert detail._ref_id == "auth-login"
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_explorer_via_doc_status_and_back(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Explorer updates after visiting via doc_status screen too."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.doc_status import DocStatusScreen
+        from beadloom.tui.screens.explorer import ExplorerScreen
+        from beadloom.tui.widgets.graph_tree import NodeSelected
+        from beadloom.tui.widgets.node_detail_panel import NodeDetailPanel
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            # Select node on dashboard
+            app.post_message(NodeSelected("auth"))
+            await pilot.pause()
+
+            # Go to doc_status first
+            await pilot.press("3")
+            await pilot.pause()
+            assert isinstance(app.screen, DocStatusScreen)
+
+            # Then to explorer — should pick up the selected node
+            await pilot.press("2")
+            await pilot.pause()
+            assert isinstance(app.screen, ExplorerScreen)
+            detail = app.screen.query_one("#node-detail-panel", NodeDetailPanel)
+            assert detail._ref_id == "auth"
+
+            await pilot.press("q")

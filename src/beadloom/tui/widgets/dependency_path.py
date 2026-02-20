@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -167,8 +168,8 @@ class DependencyPathWidget(Static):
         self._ref_id = ref_id
         self._direction = direction
 
-    def render(self) -> Text:
-        """Render the dependency path widget."""
+    def _build_text(self) -> Text:
+        """Build the Rich Text for the current state."""
         if not self._ref_id:
             text = Text()
             label = _LABEL_UPSTREAM if self._direction == "upstream" else _LABEL_DOWNSTREAM
@@ -180,17 +181,26 @@ class DependencyPathWidget(Static):
             self._ref_id, self._why_provider, direction=self._direction
         )
 
+    def _push_content(self) -> None:
+        """Push pre-built text into the widget via ``update()``.
+
+        Safe to call before the widget is mounted — silently skipped
+        when no Textual app is active (e.g. in unit tests).
+        """
+        with contextlib.suppress(Exception):  # NoActiveAppError, etc.
+            self.update(self._build_text())
+
     def show_upstream(self, ref_id: str) -> None:
         """Show upstream dependencies for the given ref_id."""
         self._ref_id = ref_id
         self._direction = "upstream"
-        self.refresh()
+        self._push_content()
 
     def show_downstream(self, ref_id: str) -> None:
         """Show downstream dependents for the given ref_id."""
         self._ref_id = ref_id
         self._direction = "downstream"
-        self.refresh()
+        self._push_content()
 
     def set_provider(self, why_provider: WhyDataProvider) -> None:
         """Set the why data provider."""

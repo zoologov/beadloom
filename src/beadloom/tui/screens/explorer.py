@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, ClassVar
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import Screen
-from textual.widgets import Label
+from textual.widgets import Footer, Label
 
 from beadloom.tui.widgets.context_preview import ContextPreviewWidget
 from beadloom.tui.widgets.dependency_path import DependencyPathWidget
@@ -19,6 +19,7 @@ from beadloom.tui.widgets.node_detail_panel import NodeDetailPanel
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
+    from textual.events import ScreenResume
 
     from beadloom.tui.app import BeadloomApp
 
@@ -92,15 +93,27 @@ class ExplorerScreen(Screen[None]):
                             ref_id=self._ref_id,
                             widget_id="context-preview",
                         )
-            yield Label(
-                "[u]pstream  [d]ownstream  [c]ontext  [o]pen  [Esc]back",
-                id="explorer-action-bar",
-            )
+
+        yield Footer()
 
     def on_mount(self) -> None:
         """Load data from providers when the screen mounts."""
         self._load_data()
         self._update_right_panel_visibility()
+
+    def on_screen_resume(self, event: ScreenResume) -> None:
+        """Reload data when the screen becomes active again.
+
+        Handles the case where the user visits Explorer before selecting
+        any node, returns to Dashboard, selects a node, and comes back.
+        """
+        app = self._get_app()
+        if app is None:
+            return
+
+        pending = app._selected_ref_id
+        if pending and pending != self._ref_id:
+            self.set_ref_id(pending)
 
     def set_ref_id(self, ref_id: str) -> None:
         """Set the ref_id to explore and reload data.

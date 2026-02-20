@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import logging
+import threading
 from pathlib import Path as _Path
 from typing import TYPE_CHECKING
 
@@ -129,11 +130,12 @@ def _watch_loop(
     project_root: Path,
     watch_dirs: list[Path],
     debounce_ms: int,
+    stop_event: threading.Event,
 ) -> None:
     """Blocking watch loop executed inside a Textual Worker thread.
 
     Posts :class:`ReindexNeeded` to *app* whenever relevant files change.
-    Exits cleanly when the worker is cancelled.
+    Exits cleanly when *stop_event* is set or the worker is cancelled.
     """
     from watchfiles import watch
 
@@ -144,8 +146,9 @@ def _watch_loop(
             *watch_dirs,
             debounce=debounce_ms,
             step=100,
+            stop_event=stop_event,
         ):
-            if worker.is_cancelled:
+            if worker.is_cancelled or stop_event.is_set():
                 return
 
             # watchfiles returns set[tuple[Change, str]]; Change is an enum subclass
@@ -159,7 +162,13 @@ def _watch_loop(
                 len(changed),
                 ", ".join(changed[:5]),
             )
-            app.post_message(ReindexNeeded(changed))
+            try:
+                app.post_message(ReindexNeeded(changed))
+            except RuntimeError:
+                logger.debug(
+                    "File watcher: RuntimeError posting message (interpreter shutdown)"
+                )
+                return
     except WorkerCancelled:
         return
 
@@ -212,8 +221,10 @@ def start_file_watcher(
         ", ".join(str(d) for d in watch_dirs),
     )
 
+    stop_event = threading.Event()
+
     def _run() -> None:
-        _watch_loop(app, project_root, watch_dirs, debounce_ms)
+        _watch_loop(app, project_root, watch_dirs, debounce_ms, stop_event)
 
     worker: Worker[None] = app.run_worker(
         _run,
@@ -221,4 +232,6 @@ def start_file_watcher(
         exclusive=True,
         thread=True,
     )
+    # Attach stop_event to worker so app can signal clean shutdown
+    worker._stop_event = stop_event  # type: ignore[attr-defined]
     return worker

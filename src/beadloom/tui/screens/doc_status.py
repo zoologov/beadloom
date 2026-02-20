@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, ClassVar
 from textual.binding import Binding
 from textual.containers import Vertical
 from textual.screen import Screen
-from textual.widgets import Label
+from textual.widgets import Footer, Label
 
 from beadloom.tui.widgets.doc_health import (
     DocHealthTable,
@@ -58,10 +58,8 @@ class DocStatusScreen(Screen[None]):
                 classes="screen-desc",
             )
             yield DocHealthTable(widget_id="doc-health-table")
-            yield Label(
-                "[g]enerate  [p]olish  [Esc]back",
-                id="doc-status-action-bar",
-            )
+
+        yield Footer()
 
     def on_mount(self) -> None:
         """Load data from providers when the screen mounts."""
