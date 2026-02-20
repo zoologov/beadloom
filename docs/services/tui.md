@@ -1,16 +1,19 @@
 # TUI Dashboard
 
-Beadloom TUI is built on Textual and provides an interactive terminal dashboard for browsing the architecture graph.
+Beadloom TUI is built on Textual (>=0.80) and provides an interactive multi-screen terminal dashboard for browsing the architecture graph, monitoring debt, and checking documentation health.
 
 ## Specification
 
 ### Launch
 
 ```bash
-beadloom ui [--project DIR]
+beadloom tui [--project DIR] [--no-watch]
+beadloom ui [--project DIR] [--no-watch]    # alias for backward compatibility
 ```
 
 Requires optional dependency: `pip install beadloom[tui]` (installs `textual`).
+
+- `--no-watch` -- disable file watcher (for CI/testing)
 
 ### Application: BeadloomApp
 
@@ -18,66 +21,104 @@ Main app class in `app.py`:
 
 - Title: "Beadloom"
 - CSS: `styles/app.tcss`
-- Layout: Header + Horizontal(DomainList | NodeDetail) + StatusBar + Footer
+- Multi-screen architecture with 3 named screens: Dashboard, Explorer, Doc Status
 - Opens SQLite in read-only mode (`?mode=ro`)
+- Data providers initialized on mount
+- DB connection managed via lifecycle (open on mount, close on unmount)
 
-Keybindings:
+Global keybindings:
 
+- `1` -- Switch to Dashboard screen
+- `2` -- Switch to Explorer screen
+- `3` -- Switch to Doc Status screen
 - `q` -- Quit
-- `/` -- Focus search (focuses domain list for keyboard navigation)
-- `r` -- Reindex (triggers `incremental_reindex`, then refreshes all panels)
+- `?` -- Help overlay (placeholder)
+- `/` -- Search overlay (placeholder)
+- `r` -- Reindex (triggers `incremental_reindex`, refreshes providers)
+- `l` -- Run lint check
+- `s` -- Run sync-check
+- `Tab` -- Cycle focus between panels
 
-### Widgets
+### Screens
 
-#### DomainList
+#### DashboardScreen
 
-Left panel. Extends `OptionList`. Displays domains with doc coverage indicators (filled/open circle) and edge counts. Selecting or highlighting a domain loads its details into the right panel.
+Main overview screen. Placeholder for BEAD-02 (graph tree, debt gauge, lint panel, activity).
 
-- Events: `DomainSelected(ref_id)`, `NodeSelected(ref_id)`
-- `load_domains(conn)` -- loads domains from the `nodes` table, counts edges, checks doc coverage
-- Responds to both `on_option_list_option_selected` (click/Enter) and `on_option_list_option_highlighted` (arrow keys)
+#### ExplorerScreen
 
-#### NodeDetail
+Node deep-dive screen. Placeholder for BEAD-04 (node detail, dependency path, context preview).
 
-Right panel. Extends `Static`. Shows details for the selected node: `ref_id`, `kind`, `summary`, outgoing edges, incoming edges, docs (count + paths), sync status (stale docs).
+#### DocStatusScreen
 
-- `show_node(conn, ref_id)` -- loads full info: node metadata, outgoing/incoming edges, docs, stale sync pairs
-- `show_domain(conn, ref_id)` -- shows domain overview with child nodes (via `part_of` edges)
+Documentation health screen. Placeholder for BEAD-05 (doc health table).
 
-#### StatusBar
+### Data Providers
 
-Bottom bar. Extends `Static`. Shows aggregate statistics: node count, edge count, doc count, documentation coverage percentage, and stale doc count.
+Seven thin read-only wrappers over existing infrastructure APIs in `data_providers.py`:
 
-- `load_stats(conn)` -- loads counts from DB and computes coverage percentage
+- `GraphDataProvider` -- SQLite queries for nodes/edges: `get_nodes()`, `get_edges()`, `get_node(ref_id)`, `get_hierarchy()`
+- `LintDataProvider` -- wraps `rule_engine.load_rules()` + `evaluate_all()`: `get_violations()`, `get_violation_count()`
+- `SyncDataProvider` -- wraps `engine.check_sync()`: `get_sync_results()`, `get_stale_count()`, `get_coverage()`
+- `DebtDataProvider` -- wraps `debt_report.collect_debt_data()` + `compute_debt_score()`: `get_debt_report()`, `get_score()`
+- `ActivityDataProvider` -- wraps `git_activity.analyze_git_activity()`: `get_activity()`
+- `WhyDataProvider` -- wraps `why.analyze_node()`: `analyze(ref_id, reverse=False)`
+- `ContextDataProvider` -- wraps `builder.build_context()` + `estimate_tokens()`: `get_context(ref_id)`, `estimate_tokens(text)`
 
-### Data Flow
+Each provider takes `sqlite3.Connection` + `Path` (project_root) and supports `refresh()`.
 
-1. `on_mount`: `_refresh_data()` loads all panels from DB; auto-selects first domain to populate detail panel.
-2. Domain selection: triggers `on_domain_list_domain_selected` -> `NodeDetail.show_node()`.
-3. Domain highlight: also triggers `on_domain_list_domain_selected` -> `NodeDetail.show_node()`.
-4. Node selection: triggers `on_domain_list_node_selected` -> `NodeDetail.show_node()`.
-5. Reindex: `action_reindex` -> `incremental_reindex` -> `_refresh_data()`.
-6. Search: `action_focus_search` -> focuses `DomainList` widget for keyboard navigation.
+### Legacy Widgets
 
-### Constraints
+The following widgets from the previous single-screen architecture still exist but are no longer imported by the app:
 
-- Requires `textual` optional dependency (`beadloom[tui]`)
-- Read-only database access (except reindex action)
-- No network access -- fully local
-
-## API
-
-Module `src/beadloom/tui/app.py`:
-
-- `BeadloomApp(db_path, project_root)` -- main Textual App
-
-Source files in `src/beadloom/tui/`:
-
-- `app.py` -- application class, keybindings, layout
 - `widgets/domain_list.py` -- DomainList widget (extends OptionList)
 - `widgets/node_detail.py` -- NodeDetail widget (extends Static)
 - `widgets/status_bar.py` -- StatusBar widget (extends Static)
 
+These will be replaced by new screen-specific widgets in later beads.
+
+### Data Flow
+
+1. `on_mount`: Opens DB, initializes 7 data providers, installs 3 screens, pushes DashboardScreen.
+2. Screen switching: keys 1/2/3 call `action_switch_screen(name)` -> `switch_screen()`.
+3. Reindex: `action_reindex()` -> `incremental_reindex()` -> refresh all providers.
+4. Lint: `action_lint()` -> `lint_provider.refresh()` -> notify count.
+5. Sync: `action_sync_check()` -> `sync_provider.refresh()` -> notify stale count.
+
+### Constraints
+
+- Requires `textual>=0.80` optional dependency (`beadloom[tui]`)
+- Read-only database access (except reindex action)
+- No network access -- fully local
+- Data providers are read-only wrappers -- no new DB tables
+
+## API
+
+Module `src/beadloom/tui/__init__.py`:
+
+- `launch(db_path, project_root, *, no_watch=False)` -- entry point
+
+Module `src/beadloom/tui/app.py`:
+
+- `BeadloomApp(db_path, project_root, *, no_watch=False)` -- main Textual App
+
+Module `src/beadloom/tui/data_providers.py`:
+
+- `GraphDataProvider`, `LintDataProvider`, `SyncDataProvider`, `DebtDataProvider`, `ActivityDataProvider`, `WhyDataProvider`, `ContextDataProvider`
+
+Source files in `src/beadloom/tui/`:
+
+- `app.py` -- application class, keybindings, screen management
+- `data_providers.py` -- 7 data provider classes
+- `screens/dashboard.py` -- DashboardScreen (stub)
+- `screens/explorer.py` -- ExplorerScreen (stub)
+- `screens/doc_status.py` -- DocStatusScreen (stub)
+- `styles/app.tcss` -- app-level styles
+- `styles/dashboard.tcss` -- dashboard screen styles
+- `styles/explorer.tcss` -- explorer screen styles
+- `styles/doc_status.tcss` -- doc status screen styles
+- `widgets/` -- legacy widgets (domain_list, node_detail, status_bar)
+
 ## Testing
 
-TUI is tested via Textual's pilot testing framework in `tests/test_tui.py`.
+TUI is tested via Textual's pilot testing framework in `tests/test_tui.py`. Tests cover: all 7 data providers, app shell instantiation, screen switching (keys 1/2/3), CLI commands (`tui` and `ui`), launch function signature.

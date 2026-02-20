@@ -1,27 +1,11 @@
-/* Beadloom TUI Stylesheet */
+/* Beadloom TUI — App-level Stylesheet */
 
 Screen {
     layout: vertical;
 }
 
-#main-content {
-    height: 1fr;
-}
-
-#domain-list {
-    width: 1fr;
-    max-width: 40;
-    border: solid $primary;
-}
-
-#node-detail {
-    width: 3fr;
-    border: solid $secondary;
-    padding: 1 2;
-    overflow-y: auto;
-}
-
-#status-bar {
+/* Screen tab bar (future: persistent navigation) */
+#screen-tabs {
     height: 1;
     background: $surface;
     color: $text-muted;

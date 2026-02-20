@@ -1948,19 +1948,8 @@ def diff_cmd(*, since: str, as_json: bool, project: Path | None) -> None:
 
 
 # beadloom:domain=tui
-@main.command()
-@click.option(
-    "--project",
-    type=click.Path(exists=True, file_okay=False, path_type=Path),
-    default=None,
-    help="Project root (default: current directory).",
-)
-def ui(*, project: Path | None) -> None:
-    """Launch interactive terminal dashboard.
-
-    Browse domains, nodes, edges, and documentation coverage.
-    Requires textual: pip install beadloom[tui]
-    """
+def _launch_tui(*, project: Path | None, no_watch: bool) -> None:
+    """Shared implementation for tui/ui commands."""
     try:
         from beadloom.tui import launch
     except ImportError:
@@ -1978,13 +1967,58 @@ def ui(*, project: Path | None) -> None:
         sys.exit(1)
 
     try:
-        launch(db_path=db_path, project_root=project_root)
+        launch(db_path=db_path, project_root=project_root, no_watch=no_watch)
     except ImportError:
         click.echo(
             "Error: TUI requires 'textual'. Install with: pip install beadloom[tui]",
             err=True,
         )
         sys.exit(1)
+
+
+@main.command()
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: current directory).",
+)
+@click.option(
+    "--no-watch",
+    is_flag=True,
+    default=False,
+    help="Disable file watcher.",
+)
+def tui(*, project: Path | None, no_watch: bool) -> None:
+    """Launch interactive terminal dashboard.
+
+    Multi-screen architecture workstation with graph explorer,
+    debt gauge, lint panel, doc status, and keyboard actions.
+    Requires textual: pip install beadloom[tui]
+    """
+    _launch_tui(project=project, no_watch=no_watch)
+
+
+@main.command()
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: current directory).",
+)
+@click.option(
+    "--no-watch",
+    is_flag=True,
+    default=False,
+    help="Disable file watcher.",
+)
+def ui(*, project: Path | None, no_watch: bool) -> None:
+    """Launch interactive terminal dashboard (alias for 'tui').
+
+    Browse domains, nodes, edges, and documentation coverage.
+    Requires textual: pip install beadloom[tui]
+    """
+    _launch_tui(project=project, no_watch=no_watch)
 
 
 # beadloom:domain=watcher

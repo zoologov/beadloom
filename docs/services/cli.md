@@ -317,15 +317,27 @@ Checks cross-boundary imports against rules defined in `rules.yml`. Format auto-
 
 Exit codes: 0 = clean (or violations without `--strict`/`--fail-on-warn`), 1 = violations with `--strict` (errors only) or `--fail-on-warn` (any violation), 2 = configuration error.
 
-### beadloom ui
+### beadloom tui
 
-Launch interactive terminal dashboard.
+Launch interactive terminal dashboard (primary command).
 
 ```bash
-beadloom ui [--project DIR]
+beadloom tui [--project DIR] [--no-watch]
 ```
 
-Browse domains, nodes, edges, and documentation coverage. Requires: `pip install beadloom[tui]`.
+Multi-screen architecture workstation with graph explorer, debt gauge, lint panel, doc status, and keyboard actions. Requires: `pip install beadloom[tui]`.
+
+- `--no-watch` -- disable file watcher (for CI/testing)
+
+### beadloom ui
+
+Launch interactive terminal dashboard (alias for `tui`).
+
+```bash
+beadloom ui [--project DIR] [--no-watch]
+```
+
+Backward-compatible alias for `beadloom tui`. Requires: `pip install beadloom[tui]`.
 
 ### beadloom watch
 
@@ -434,7 +446,8 @@ Module `src/beadloom/services/cli.py`:
 - `setup_rules` -- create IDE rules files
 - `mcp_serve` -- run MCP stdio server
 - `docs` -- Click group for doc commands (`generate`, `polish`)
-- `ui` -- launch TUI dashboard
+- `tui` -- launch TUI dashboard (primary command, multi-screen with `--no-watch`)
+- `ui` -- launch TUI dashboard (alias for `tui`)
 - `watch_cmd` -- watch files and auto-reindex
 - `init` -- project initialization (bootstrap, import, interactive, non-interactive with `--yes`/`--mode`/`--force`)
 
