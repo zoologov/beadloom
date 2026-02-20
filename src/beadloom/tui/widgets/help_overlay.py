@@ -45,6 +45,7 @@ _DOC_STATUS_BINDINGS: list[tuple[str, str]] = [
 
 _DASHBOARD_BINDINGS: list[tuple[str, str]] = [
     ("Enter", "Expand/collapse or open detail"),
+    ("e", "Open node in Explorer"),
 ]
 
 

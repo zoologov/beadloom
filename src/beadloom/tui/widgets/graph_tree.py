@@ -71,13 +71,17 @@ def _build_node_label(
 ) -> str:
     """Build a display label for a tree node.
 
-    Format: ``<indicator> <ref_id> [<edge_count>]``
+    Format: ``<indicator> <ref_id> [<N> edge(s)]`` (omitted when *N* == 0).
     """
     indicator, _style = _doc_status_indicator(
         ref_id, doc_ref_ids=doc_ref_ids, stale_ref_ids=stale_ref_ids
     )
     count = edge_counts.get(ref_id, 0)
-    return f"{indicator} {ref_id} [{count}]"
+    if count == 0:
+        return f"{indicator} {ref_id}"
+    if count == 1:
+        return f"{indicator} {ref_id} [1 edge]"
+    return f"{indicator} {ref_id} [{count} edges]"
 
 
 class GraphTreeWidget(Tree[str]):
@@ -165,7 +169,7 @@ class GraphTreeWidget(Tree[str]):
                 stale_ref_ids=stale_ref_ids,
                 edge_counts=edge_counts,
             )
-            if ref_id in hierarchy:
+            if hierarchy.get(ref_id):
                 branch = root.add(label, data=ref_id)
                 self._add_child_nodes(
                     branch,
@@ -207,7 +211,7 @@ class GraphTreeWidget(Tree[str]):
                 stale_ref_ids=stale_ref_ids,
                 edge_counts=edge_counts,
             )
-            if child_ref_id in hierarchy:
+            if hierarchy.get(child_ref_id):
                 branch = parent_node.add(label, data=child_ref_id)
                 self._add_child_nodes(
                     branch,

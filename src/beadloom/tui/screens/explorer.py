@@ -281,8 +281,14 @@ class ExplorerScreen(Screen[None]):
             )
 
     def action_go_back(self) -> None:
-        """Return to the previous screen."""
-        self.app.pop_screen()
+        """Return to the dashboard screen."""
+        from beadloom.tui.app import SCREEN_DASHBOARD
+
+        app = self._get_app()
+        if app is not None:
+            app._safe_switch_screen(SCREEN_DASHBOARD)
+        else:
+            self.app.switch_screen(SCREEN_DASHBOARD)
 
     def refresh_all_widgets(self) -> None:
         """Refresh all explorer widgets with fresh data from providers."""

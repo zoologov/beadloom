@@ -1,7 +1,7 @@
 # BDL UX Feedback Log
 
 > Collected during development and dogfooding.
-> Total: 60 issues | Open: 0 | Excluded: 5 | Closed: 55
+> Total: 64 issues | Open: 0 | Excluded: 5 | Closed: 59
 
 ---
 
@@ -40,11 +40,23 @@ _(none)_
 
 > Phase 12.13. TUI stabilization round 3 — threading, Explorer dependencies, screen state.
 
-58. ~~[2026-02-20] [MEDIUM] TUI: Threading error on quit~~ **FIXED (BDL-028 BEAD-01)** — Added `_shutting_down` flag + try-except in file watcher to prevent `RuntimeError: cannot schedule new futures after interpreter shutdown`.
+58. ~~[2026-02-20] [MEDIUM] TUI: File watcher thread doesn't stop cleanly on exit~~ **FIXED (BDL-028 BEAD-01)** — Added `threading.Event` as `stop_event` passed to `watchfiles.watch(stop_event=...)`. On unmount, `stop_event.set()` is called, which makes `watchfiles.watch()` exit its blocking loop immediately.
 
-59. ~~[2026-02-20] [HIGH] TUI: Explorer downstream dependents always empty~~ **FIXED (BDL-028 BEAD-02)** — Pre-render and cache tree text in `DependencyPathWidget`. `show_*` methods build text eagerly, `render()` returns consistent cached snapshot.
+59. ~~[2026-02-20] [MEDIUM] TUI: Domain nodes in graph tree not navigable to Explorer~~ **RECLASSIFIED (BDL-028 BEAD-02)** — UX navigation issue, not a code bug. Domain nodes (nodes with children) only expand/collapse on Enter — no way to open them in Explorer. Recognized as a feature request, now tracked as BEAD-01 in BDL-029 (see #61).
 
-60. ~~[2026-02-20] [HIGH] TUI: Explorer broken after early empty visit~~ **FIXED (BDL-028 BEAD-03)** — Added `on_screen_resume` handler to `ExplorerScreen` to re-apply `ref_id` when screen becomes active after initial empty visit.
+60. ~~[2026-02-20] [HIGH] TUI: Static widgets not updating after screen switch~~ **FIXED (BDL-028 BEAD-03)** — Changed `_push_content()` in `ContextPreviewWidget`, `NodeDetailPanel`, and `DependencyPathWidget` to use `update(self._build_text())` instead of `refresh()`. `Static.refresh()` only triggers a re-render of existing content, while `update()` actually replaces the widget's content with new Rich Text.
+
+### v1.8.0 — BDL-029 (TUI UX Improvements)
+
+> Phase 12.14. TUI usability improvements — domain navigation, tree icons, edge labels, screen switching.
+
+61. ~~[2026-02-21] [MEDIUM] TUI: Explorer — no way to open domain nodes directly~~ **FIXED (BDL-029 BEAD-01)** — Domain nodes in graph tree only expand/collapse on Enter. Added `e` keybinding to Dashboard that opens Explorer for any highlighted node, including domain nodes with children.
+
+62. ~~[2026-02-21] [MEDIUM] TUI: Triangle icon shown for childless nodes at cold start~~ **FIXED (BDL-029 BEAD-02)** — Some nodes (e.g. "tui") show expandable triangle icon but have no children at cold start. Root cause: `_build_tree` checked `ref_id in hierarchy` but hierarchy dict could contain entries with empty children lists `{"tui": []}`. Changed condition to `hierarchy.get(ref_id)` which is falsy for empty lists.
+
+63. ~~[2026-02-21] [MEDIUM] TUI: Edge count `[N]` has no legend~~ **FIXED (BDL-029 BEAD-03)** — `[N]` numbers next to tree nodes have no explanation. Changed label format to `[N edges]` (plural), `[1 edge]` (singular), omit badge for 0.
+
+64. ~~[2026-02-21] [HIGH] TUI: Esc (Back) from Explorer crashes with ScreenStackError~~ **FIXED (BDL-029 BEAD-04)** — Pressing Esc from Explorer after navigating via `switch_screen` (keys 1/2/3) crashes with `ScreenStackError: Can't pop screen`. Root cause: `action_go_back()` called `pop_screen()` but `switch_screen` navigation keeps only 1 screen on the stack. Changed to `_safe_switch_screen("dashboard")` which always works regardless of stack depth.
 
 ### v1.8.0 — BDL-025 (TUI), BDL-026 (Docs Audit), BDL-027 (UX Batch Fix)
 
