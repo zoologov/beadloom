@@ -40,6 +40,8 @@ Global keybindings:
 - `s` -- Run sync-check
 - `Tab` -- Cycle focus between panels
 
+The app tracks the last selected node ref_id via `on_node_selected()` handler. When switching to Explorer via `2`, the screen is updated with the tracked ref_id. `open_explorer(ref_id)` provides programmatic navigation to the Explorer screen.
+
 ### Screens
 
 #### DashboardScreen
@@ -56,7 +58,24 @@ Data is loaded from providers on mount via `_load_data()`. Supports `refresh_all
 
 #### ExplorerScreen
 
-Node deep-dive screen. Placeholder for BEAD-04 (node detail, dependency path, context preview).
+Node deep-dive screen with detailed analysis of a selected architecture node. Layout:
+
+- Header: "Explorer: {ref_id}" showing the current node being explored
+- Left panel (50%): `NodeDetailPanel` showing ref_id, kind, summary, source path, edges, and doc status
+- Right panel (50%): switchable between `DependencyPathWidget` (upstream/downstream) and `ContextPreviewWidget` (context bundle with token count)
+- Action bar: keybinding hints
+
+Keybindings:
+
+- `d` -- show downstream dependents (default)
+- `u` -- show upstream dependencies
+- `c` -- show context bundle preview
+- `o` -- open primary source file in `$EDITOR`
+- `Esc` -- pop back to previous screen
+
+Navigation: pressing `2` switches to Explorer with the last selected node's ref_id. `BeadloomApp.open_explorer(ref_id)` provides programmatic navigation. Node selection is tracked via `NodeSelected` messages at the app level.
+
+Data loaded from providers on mount via `_load_data()`. Supports `refresh_all_widgets()` and `set_ref_id(ref_id)` for dynamic updates.
 
 #### DocStatusScreen
 
@@ -165,6 +184,43 @@ Seven thin read-only wrappers over existing infrastructure APIs in `data_provide
 
 Each provider takes `sqlite3.Connection` + `Path` (project_root) and supports `refresh()`.
 
+### Explorer Widgets
+
+#### NodeDetailPanel (`widgets/node_detail_panel.py`)
+
+Scrollable panel showing detailed information about a selected node:
+
+- ref_id, kind, summary
+- Source path (or "no source path" if absent)
+- Edges: outgoing and incoming edges with edge kinds
+- Documentation status: documented (green) or missing (red)
+- Uses `GraphDataProvider` for all data
+- `set_node(ref_id)` for updating displayed node
+- `set_provider(graph_provider)` for setting data source
+
+#### DependencyPathWidget (`widgets/dependency_path.py`)
+
+Widget showing upstream/downstream dependency trees using WhyDataProvider:
+
+- Renders tree structure with connectors: node -> dependents/dependencies with edge types
+- Shows impact summary: direct/transitive counts, stale doc count
+- `show_upstream(ref_id)` -- show upstream dependencies
+- `show_downstream(ref_id)` -- show downstream dependents
+- `set_provider(why_provider)` for setting data source
+- Shows "No dependencies found" when empty
+- Handles missing nodes gracefully
+
+#### ContextPreviewWidget (`widgets/context_preview.py`)
+
+Widget showing context bundle preview with token estimation:
+
+- Shows ref_id, estimated token count, character length
+- Lists bundle keys
+- Truncated preview of serialized context bundle (max 2000 chars)
+- Uses `ContextDataProvider` for context bundle building and token estimation
+- `show_context(ref_id)` for updating displayed context
+- `set_provider(context_provider)` for setting data source
+
 ### Legacy Widgets
 
 The following widgets from the previous single-screen architecture still exist but are no longer imported by the app:
@@ -178,7 +234,7 @@ These will be replaced by new screen-specific widgets in later beads.
 
 1. `on_mount`: Opens DB, initializes 7 data providers, installs 3 screens, pushes DashboardScreen, starts file watcher (if enabled).
 2. DashboardScreen `on_mount`: Loads debt score, activity, lint violations, and status bar counts from providers.
-3. Screen switching: keys 1/2/3 call `action_switch_screen(name)` -> `switch_screen()`.
+3. Screen switching: keys 1/2/3 call `action_switch_screen(name)` -> `switch_screen()`. Explorer screen receives tracked ref_id.
 4. File watcher: background Worker posts `ReindexNeeded` -> status bar shows "changes detected (N)" badge.
 5. Reindex: `action_reindex()` -> `incremental_reindex()` -> refresh all providers -> clear changes badge -> refresh screen widgets.
 6. Lint: `action_lint()` -> `lint_provider.refresh()` -> notify count.
@@ -213,6 +269,10 @@ Module `src/beadloom/tui/widgets/`:
 - `LintPanelWidget` -- lint violation counts and details
 - `ActivityWidget` -- per-domain git activity bars
 - `StatusBarWidget` -- health metrics, watcher status, last action
+- `NodeDetailPanel` -- node detail with ref_id, kind, summary, source, edges, doc status
+- `DependencyPathWidget` -- upstream/downstream dependency tree visualization
+- `ContextPreviewWidget` -- context bundle preview with token count
+- `DocHealthTable` -- documentation health table with per-node status
 
 Source files in `src/beadloom/tui/`:
 
@@ -220,7 +280,7 @@ Source files in `src/beadloom/tui/`:
 - `data_providers.py` -- 7 data provider classes
 - `file_watcher.py` -- FileWatcher Worker, ReindexNeeded message, watch helpers
 - `screens/dashboard.py` -- DashboardScreen with all dashboard widgets
-- `screens/explorer.py` -- ExplorerScreen (stub)
+- `screens/explorer.py` -- ExplorerScreen with node detail, dependency path, context preview
 - `screens/doc_status.py` -- DocStatusScreen (stub)
 - `styles/app.tcss` -- app-level styles
 - `styles/dashboard.tcss` -- dashboard screen styles (header, left/right panels, summary, status bar)
@@ -231,9 +291,13 @@ Source files in `src/beadloom/tui/`:
 - `widgets/graph_tree.py` -- GraphTreeWidget (architecture hierarchy tree) + NodeSelected message
 - `widgets/lint_panel.py` -- LintPanelWidget (violations display)
 - `widgets/status_bar.py` -- StatusBarWidget (health metrics bar)
+- `widgets/node_detail_panel.py` -- NodeDetailPanel (node detail display for explorer)
+- `widgets/dependency_path.py` -- DependencyPathWidget (upstream/downstream tree)
+- `widgets/context_preview.py` -- ContextPreviewWidget (context bundle preview)
+- `widgets/doc_health.py` -- DocHealthTable (documentation health table)
 - `widgets/domain_list.py` -- legacy DomainList widget
 - `widgets/node_detail.py` -- legacy NodeDetail widget
 
 ## Testing
 
-TUI is tested via Textual's pilot testing framework in `tests/test_tui.py`. Tests cover: all 7 data providers (including extended GraphDataProvider methods with `get_source_paths()`), app shell instantiation, screen switching (keys 1/2/3), CLI commands (`tui` and `ui`), launch function signature, all 5 dashboard widgets (GraphTreeWidget, DebtGaugeWidget, LintPanelWidget, ActivityWidget, StatusBarWidget), GraphTreeWidget hierarchy building, doc status indicators, NodeSelected message emission, empty graph handling, tree refresh, DashboardScreen composition and data loading, DocStatusScreen composition and data loading, file watcher (ReindexNeeded message, helper functions, start_file_watcher, watcher status states, app integration with no_watch flag, reindex clearing changes badge). Total: 140 tests.
+TUI is tested via Textual's pilot testing framework in `tests/test_tui.py`. Tests cover: all 7 data providers (including extended GraphDataProvider methods with `get_source_paths()`), app shell instantiation, screen switching (keys 1/2/3), CLI commands (`tui` and `ui`), launch function signature, all 5 dashboard widgets (GraphTreeWidget, DebtGaugeWidget, LintPanelWidget, ActivityWidget, StatusBarWidget), GraphTreeWidget hierarchy building, doc status indicators, NodeSelected message emission, empty graph handling, tree refresh, DashboardScreen composition and data loading, DocStatusScreen composition and data loading, file watcher (ReindexNeeded message, helper functions, start_file_watcher, watcher status states, app integration with no_watch flag, reindex clearing changes badge), ExplorerScreen (composition, header, action bar, keybindings d/u/c switching right panel, Esc pop, set_ref_id, empty ref_id, empty DB, open source action), NodeDetailPanel (render with/without ref_id, missing node, edges, doc status, set_node, set_provider), DependencyPathWidget (upstream/downstream rendering, missing node, no provider, show methods), ContextPreviewWidget (render with/without ref_id, token count, bundle keys, missing node, no provider), app-level NodeSelected tracking and open_explorer navigation. Total: 184 tests.
