@@ -52,6 +52,11 @@ class DocStatusScreen(Screen[None]):
                 "Documentation Health",
                 id="doc-status-header",
             )
+            yield Label(
+                "Documentation health: coverage, freshness, staleness reasons",
+                id="screen-description",
+                classes="screen-desc",
+            )
             yield DocHealthTable(widget_id="doc-health-table")
             yield Label(
                 "[g]enerate  [p]olish  [Esc]back",

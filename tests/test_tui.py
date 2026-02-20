@@ -2313,10 +2313,10 @@ class TestNodeDetailPanel:
 
         assert "No data provider" in plain
 
-    def test_render_shows_edges(
+    def test_render_shows_connections(
         self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
     ) -> None:
-        """NodeDetailPanel shows edge information."""
+        """NodeDetailPanel shows connections summary."""
         from beadloom.tui.data_providers import GraphDataProvider
         from beadloom.tui.widgets.node_detail_panel import NodeDetailPanel
 
@@ -2330,7 +2330,7 @@ class TestNodeDetailPanel:
         text = widget.render()
         plain = text.plain
 
-        assert "Edges" in plain
+        assert "Connections" in plain
         assert "part_of" in plain
 
     def test_render_shows_doc_status_documented(

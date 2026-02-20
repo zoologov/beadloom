@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 # Section separator
 _SEPARATOR = "\u2500" * 40  # horizontal line
 
+# Symbol kind -> display glyph mapping
+_KIND_GLYPHS: dict[str, str] = {"function": "\u0192", "class": "C", "type": "T"}
+
 
 def _render_node_detail(
     ref_id: str,
@@ -62,26 +65,54 @@ def _render_node_detail(
     else:
         text.append("  (no source path)", style="dim")
 
-    # Edges
+    # Connections (grouped summary of edges)
     text.append("\n\n")
     text.append(f"  {_SEPARATOR}\n", style="dim")
-    text.append("  Edges\n", style="bold underline")
+    text.append("  Connections\n", style="bold underline")
 
     edges = graph_provider.get_edges()
     outgoing = [e for e in edges if e["src"] == ref_id and e["dst"] != ref_id]
     incoming = [e for e in edges if e["dst"] == ref_id and e["src"] != ref_id]
 
     if not outgoing and not incoming:
-        text.append("  (no edges)", style="dim")
+        text.append("  (no connections)", style="dim")
     else:
-        for edge in outgoing:
-            text.append(f"  {ref_id} ", style="bold")
-            text.append(f"--{edge['kind']}--> ", style="yellow")
-            text.append(f"{edge['dst']}\n", style="cyan")
-        for edge in incoming:
-            text.append(f"  {edge['src']} ", style="cyan")
-            text.append(f"--{edge['kind']}--> ", style="yellow")
-            text.append(f"{ref_id}\n", style="bold")
+        if outgoing:
+            out_counts: dict[str, int] = {}
+            for e in outgoing:
+                edge_kind = e["kind"]
+                out_counts[edge_kind] = out_counts.get(edge_kind, 0) + 1
+            out_parts = ", ".join(f"{k}({v})" for k, v in out_counts.items())
+            text.append(
+                f"  \u2192 {len(outgoing)} outgoing: {out_parts}\n",
+                style="yellow",
+            )
+        if incoming:
+            in_counts: dict[str, int] = {}
+            for e in incoming:
+                edge_kind = e["kind"]
+                in_counts[edge_kind] = in_counts.get(edge_kind, 0) + 1
+            in_parts = ", ".join(f"{k}({v})" for k, v in in_counts.items())
+            text.append(
+                f"  \u2190 {len(incoming)} incoming: {in_parts}",
+                style="cyan",
+            )
+
+    # Symbols (top-level functions/classes from code indexer)
+    text.append("\n\n")
+    text.append(f"  {_SEPARATOR}\n", style="dim")
+
+    symbols = graph_provider.get_symbols(ref_id)
+    if symbols:
+        text.append(f"  Symbols ({len(symbols)})\n", style="bold underline")
+        for sym in symbols:
+            glyph = _KIND_GLYPHS.get(str(sym["kind"]), "?")
+            name = str(sym["symbol_name"])
+            line = str(sym["line_start"])
+            text.append(f"  {glyph} {name:<24} :{line}\n", style="")
+    else:
+        text.append("  Symbols\n", style="bold underline")
+        text.append("  (no symbols)", style="dim")
 
     # Doc status
     text.append("\n")

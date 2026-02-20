@@ -45,6 +45,12 @@ class DashboardScreen(Screen[None]):
                 yield Label("beadloom tui", id="dashboard-title")
                 yield DebtGaugeWidget(widget_id="debt-gauge")
 
+            yield Label(
+                "Architecture overview: graph structure, git activity, lint & debt health",
+                id="screen-description",
+                classes="screen-desc",
+            )
+
             # Main content: left + right panels
             with Horizontal(id="dashboard-main"):
                 # Left panel: graph tree
@@ -64,6 +70,12 @@ class DashboardScreen(Screen[None]):
 
             # Status bar
             yield StatusBarWidget(widget_id="status-bar")
+
+            # Action bar (keybinding hints)
+            yield Label(
+                "[Enter]explore  [r]eindex  [l]int  [s]ync-check  [S]napshot  [?]help",
+                id="dashboard-action-bar",
+            )
 
     def on_mount(self) -> None:
         """Load data from providers when the screen mounts."""

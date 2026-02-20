@@ -17,6 +17,14 @@
     border-bottom: solid $primary;
 }
 
+/* Screen description below header */
+.screen-desc {
+    height: 1;
+    color: $text-muted;
+    text-style: italic;
+    padding: 0 1;
+}
+
 /* Main doc health table */
 #doc-health-table {
     width: 100%;
