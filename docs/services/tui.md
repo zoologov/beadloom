@@ -25,6 +25,7 @@ Main app class in `app.py`:
 - Opens SQLite in read-only mode (`?mode=ro`)
 - Data providers initialized on mount
 - DB connection managed via lifecycle (open on mount, close on unmount)
+- File watcher started on mount when `no_watch=False`; cancelled on unmount
 
 Global keybindings:
 
@@ -112,16 +113,49 @@ Displays per-domain git activity as progress bars:
 Bottom status bar showing health metrics:
 
 - Node count, edge count, doc count, stale count
-- Watcher status indicator (placeholder for BEAD-06)
+- Watcher status indicator with three states:
+  - "watching" (green filled circle) -- watcher active, no pending changes
+  - "changes detected (N)" (yellow filled circle) -- watcher detected N changed files
+  - "watcher off" (dim empty circle) -- watcher disabled or watchfiles not installed
 - Last action message (auto-dismisses on next data refresh)
 - `refresh_data(node_count, edge_count, doc_count, stale_count)` for count updates
-- `set_watcher_active(active)` and `set_last_action(message)` for additional state
+- `set_watcher_active(active)` -- sets "watching" or "watcher off" state
+- `set_changes_detected(count)` -- sets "changes detected (N)" state
+- `clear_changes()` -- reverts from changes-detected to "watching" state
+- `set_last_action(message)` for transient action messages
+- State constants: `WATCHER_OFF`, `WATCHER_WATCHING`, `WATCHER_CHANGES`
+
+### File Watcher (`file_watcher.py`)
+
+Background file watcher using `watchfiles` (optional dependency) that monitors source directories discovered from the graph:
+
+- `FileWatcherWorker` implemented as a Textual Worker (threaded)
+- Monitors graph YAML dir (`.beadloom/_graph/`) and source dirs from `GraphDataProvider.get_source_paths()`
+- 500ms debounce to avoid event spam
+- Filters changes by watched extensions (`.py`, `.yml`, `.md`, `.ts`, etc.), skips temp/hidden files
+- Posts `ReindexNeeded(changed_paths)` custom message to the app when relevant changes detected
+- Graceful fallback when `watchfiles` is not installed (logs warning, watcher disabled)
+- Started on `on_mount()` when `no_watch=False` (default)
+- Clean shutdown via Worker cancellation on app unmount
+- App handles `ReindexNeeded`: updates StatusBar to "changes detected (N)" badge
+- Pressing `r` triggers reindex, refreshes all providers, clears the changes badge
+
+Key functions:
+
+- `start_file_watcher(app, project_root, source_paths)` -- returns `Worker` or `None`
+- `_has_watchfiles()` -- checks if watchfiles is available via `importlib.util.find_spec`
+- `_collect_watch_dirs(project_root, source_paths)` -- builds de-duplicated watch dir list
+- `_filter_paths(raw_changes, project_root)` -- filters by extension, skips hidden/temp
+
+Custom message:
+
+- `ReindexNeeded(changed_paths: list[str])` -- posted when source files change
 
 ### Data Providers
 
 Seven thin read-only wrappers over existing infrastructure APIs in `data_providers.py`:
 
-- `GraphDataProvider` -- SQLite queries for nodes/edges: `get_nodes()`, `get_edges()`, `get_node(ref_id)`, `get_node_with_source(ref_id)`, `get_hierarchy()`, `get_edge_counts()`, `get_doc_ref_ids()`
+- `GraphDataProvider` -- SQLite queries for nodes/edges: `get_nodes()`, `get_edges()`, `get_node(ref_id)`, `get_node_with_source(ref_id)`, `get_hierarchy()`, `get_edge_counts()`, `get_doc_ref_ids()`, `get_source_paths()`
 - `LintDataProvider` -- wraps `rule_engine.load_rules()` + `evaluate_all()`: `get_violations()`, `get_violation_count()`
 - `SyncDataProvider` -- wraps `engine.check_sync()`: `get_sync_results()`, `get_stale_count()`, `get_coverage()`
 - `DebtDataProvider` -- wraps `debt_report.collect_debt_data()` + `compute_debt_score()`: `get_debt_report()`, `get_score()`
@@ -142,12 +176,13 @@ These will be replaced by new screen-specific widgets in later beads.
 
 ### Data Flow
 
-1. `on_mount`: Opens DB, initializes 7 data providers, installs 3 screens, pushes DashboardScreen.
+1. `on_mount`: Opens DB, initializes 7 data providers, installs 3 screens, pushes DashboardScreen, starts file watcher (if enabled).
 2. DashboardScreen `on_mount`: Loads debt score, activity, lint violations, and status bar counts from providers.
 3. Screen switching: keys 1/2/3 call `action_switch_screen(name)` -> `switch_screen()`.
-4. Reindex: `action_reindex()` -> `incremental_reindex()` -> refresh all providers.
-5. Lint: `action_lint()` -> `lint_provider.refresh()` -> notify count.
-6. Sync: `action_sync_check()` -> `sync_provider.refresh()` -> notify stale count.
+4. File watcher: background Worker posts `ReindexNeeded` -> status bar shows "changes detected (N)" badge.
+5. Reindex: `action_reindex()` -> `incremental_reindex()` -> refresh all providers -> clear changes badge -> refresh screen widgets.
+6. Lint: `action_lint()` -> `lint_provider.refresh()` -> notify count.
+7. Sync: `action_sync_check()` -> `sync_provider.refresh()` -> notify stale count.
 
 ### Constraints
 
@@ -181,8 +216,9 @@ Module `src/beadloom/tui/widgets/`:
 
 Source files in `src/beadloom/tui/`:
 
-- `app.py` -- application class, keybindings, screen management
+- `app.py` -- application class, keybindings, screen management, file watcher integration
 - `data_providers.py` -- 7 data provider classes
+- `file_watcher.py` -- FileWatcher Worker, ReindexNeeded message, watch helpers
 - `screens/dashboard.py` -- DashboardScreen with all dashboard widgets
 - `screens/explorer.py` -- ExplorerScreen (stub)
 - `screens/doc_status.py` -- DocStatusScreen (stub)
@@ -200,4 +236,4 @@ Source files in `src/beadloom/tui/`:
 
 ## Testing
 
-TUI is tested via Textual's pilot testing framework in `tests/test_tui.py`. Tests cover: all 7 data providers (including extended GraphDataProvider methods), app shell instantiation, screen switching (keys 1/2/3), CLI commands (`tui` and `ui`), launch function signature, all 5 dashboard widgets (GraphTreeWidget, DebtGaugeWidget, LintPanelWidget, ActivityWidget, StatusBarWidget), GraphTreeWidget hierarchy building, doc status indicators, NodeSelected message emission, empty graph handling, tree refresh, DashboardScreen composition and data loading. Total: 94 tests.
+TUI is tested via Textual's pilot testing framework in `tests/test_tui.py`. Tests cover: all 7 data providers (including extended GraphDataProvider methods with `get_source_paths()`), app shell instantiation, screen switching (keys 1/2/3), CLI commands (`tui` and `ui`), launch function signature, all 5 dashboard widgets (GraphTreeWidget, DebtGaugeWidget, LintPanelWidget, ActivityWidget, StatusBarWidget), GraphTreeWidget hierarchy building, doc status indicators, NodeSelected message emission, empty graph handling, tree refresh, DashboardScreen composition and data loading, DocStatusScreen composition and data loading, file watcher (ReindexNeeded message, helper functions, start_file_watcher, watcher status states, app integration with no_watch flag, reindex clearing changes badge). Total: 140 tests.

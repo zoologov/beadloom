@@ -10,11 +10,20 @@ from textual.widgets import Static
 _WATCHER_ACTIVE = "\u25cf"  # filled circle
 _WATCHER_INACTIVE = "\u25cb"  # empty circle
 
+# Watcher state constants
+WATCHER_OFF = "off"
+WATCHER_WATCHING = "watching"
+WATCHER_CHANGES = "changes"
+
 
 class StatusBarWidget(Static):
     """Bottom status bar showing node/edge/doc/stale counts, watcher status, and last action.
 
-    The watcher status is a placeholder (will be wired by BEAD-06).
+    Watcher states:
+    - ``"watching"`` — watcher active, no pending changes (green).
+    - ``"changes"`` — watcher detected file changes (yellow + count).
+    - ``"off"`` — watcher disabled or watchfiles not installed (dim).
+
     The last action message auto-dismisses on next data refresh.
     """
 
@@ -36,6 +45,8 @@ class StatusBarWidget(Static):
         self._doc_count: int = 0
         self._stale_count: int = 0
         self._watcher_active: bool = False
+        self._watcher_state: str = WATCHER_OFF
+        self._change_count: int = 0
         self._last_action: str = ""
 
     def render(self) -> Text:
@@ -56,11 +67,14 @@ class StatusBarWidget(Static):
         # Separator
         text.append("  |  ")
 
-        # Watcher status (placeholder for BEAD-06)
-        if self._watcher_active:
+        # Watcher status — three states
+        if self._watcher_state == WATCHER_CHANGES:
+            label = f"{_WATCHER_ACTIVE} changes detected ({self._change_count})"
+            text.append(label, style="yellow")
+        elif self._watcher_state == WATCHER_WATCHING:
             text.append(f"{_WATCHER_ACTIVE} watching", style="green")
         else:
-            text.append(f"{_WATCHER_INACTIVE} no watch", style="dim")
+            text.append(f"{_WATCHER_INACTIVE} watcher off", style="dim")
 
         # Last action message
         if self._last_action:
@@ -88,8 +102,32 @@ class StatusBarWidget(Static):
         self.refresh()
 
     def set_watcher_active(self, active: bool) -> None:
-        """Update watcher status indicator (wired by BEAD-06)."""
+        """Update watcher status indicator.
+
+        Sets the watcher state to ``"watching"`` (active=True) or
+        ``"off"`` (active=False).  Also updates the legacy ``_watcher_active``
+        flag for backward compatibility.
+        """
         self._watcher_active = active
+        self._watcher_state = WATCHER_WATCHING if active else WATCHER_OFF
+        if not active:
+            self._change_count = 0
+        self.refresh()
+
+    def set_changes_detected(self, count: int) -> None:
+        """Signal that the watcher detected *count* changed files.
+
+        Switches the watcher badge to yellow ``"changes detected (N)"``.
+        """
+        self._watcher_state = WATCHER_CHANGES
+        self._change_count = count
+        self._watcher_active = True
+        self.refresh()
+
+    def clear_changes(self) -> None:
+        """Clear the changes badge and revert to ``"watching"`` state."""
+        self._watcher_state = WATCHER_WATCHING
+        self._change_count = 0
         self.refresh()
 
     def set_last_action(self, message: str) -> None:

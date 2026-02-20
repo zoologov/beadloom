@@ -998,14 +998,14 @@ class TestStatusBarWidget:
         widget = StatusBarWidget()
         text = widget.render()
 
-        assert "no watch" in text.plain
+        assert "watcher off" in text.plain
 
     def test_render_watcher_active(self) -> None:
         """StatusBarWidget shows watcher active when set."""
         from beadloom.tui.widgets.status_bar import StatusBarWidget
 
         widget = StatusBarWidget()
-        widget._watcher_active = True
+        widget.set_watcher_active(True)
         text = widget.render()
 
         assert "watching" in text.plain
@@ -1878,3 +1878,366 @@ class TestDocStatusScreen:
             screen.refresh_all_widgets()
 
             await pilot.press("q")
+
+
+# ---------------------------------------------------------------------------
+# File Watcher Tests (BEAD-06)
+# ---------------------------------------------------------------------------
+
+
+class TestReindexNeededMessage:
+    """Tests for the ReindexNeeded custom message."""
+
+    def test_message_stores_changed_paths(self) -> None:
+        """ReindexNeeded stores changed_paths list."""
+        from beadloom.tui.file_watcher import ReindexNeeded
+
+        paths = ["/src/foo.py", "/src/bar.py"]
+        msg = ReindexNeeded(paths)
+        assert msg.changed_paths == paths
+
+    def test_message_empty_paths(self) -> None:
+        """ReindexNeeded works with empty path list."""
+        from beadloom.tui.file_watcher import ReindexNeeded
+
+        msg = ReindexNeeded([])
+        assert msg.changed_paths == []
+
+
+class TestFileWatcherHelpers:
+    """Tests for file watcher helper functions."""
+
+    def test_has_watchfiles_returns_bool(self) -> None:
+        """_has_watchfiles returns True when watchfiles is installed."""
+        from beadloom.tui.file_watcher import _has_watchfiles
+
+        # watchfiles is in optional deps — should be True in test env
+        result = _has_watchfiles()
+        assert isinstance(result, bool)
+
+    def test_has_watchfiles_false_when_missing(self) -> None:
+        """_has_watchfiles returns False when watchfiles is not importable."""
+        from beadloom.tui.file_watcher import _has_watchfiles
+
+        with patch("importlib.util.find_spec", return_value=None):
+            result = _has_watchfiles()
+            assert result is False
+
+    def test_collect_watch_dirs_includes_graph_dir(self, tmp_path: Path) -> None:
+        """_collect_watch_dirs includes .beadloom/_graph if it exists."""
+        from beadloom.tui.file_watcher import _collect_watch_dirs
+
+        graph_dir = tmp_path / ".beadloom" / "_graph"
+        graph_dir.mkdir(parents=True)
+
+        dirs = _collect_watch_dirs(tmp_path, [])
+        assert graph_dir in dirs
+
+    def test_collect_watch_dirs_includes_source_dirs(self, tmp_path: Path) -> None:
+        """_collect_watch_dirs includes existing source directories."""
+        from beadloom.tui.file_watcher import _collect_watch_dirs
+
+        src_dir = tmp_path / "src" / "auth"
+        src_dir.mkdir(parents=True)
+
+        dirs = _collect_watch_dirs(tmp_path, ["src/auth"])
+        assert src_dir in dirs
+
+    def test_collect_watch_dirs_skips_nonexistent(self, tmp_path: Path) -> None:
+        """_collect_watch_dirs skips source paths that don't exist."""
+        from beadloom.tui.file_watcher import _collect_watch_dirs
+
+        dirs = _collect_watch_dirs(tmp_path, ["nonexistent/path"])
+        assert len(dirs) == 0
+
+    def test_collect_watch_dirs_deduplicates(self, tmp_path: Path) -> None:
+        """_collect_watch_dirs returns de-duplicated directories."""
+        from beadloom.tui.file_watcher import _collect_watch_dirs
+
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "app.py").touch()
+
+        dirs = _collect_watch_dirs(tmp_path, ["src", "src"])
+        # Should only have one entry for src
+        src_count = sum(1 for d in dirs if str(d) == str(src_dir))
+        assert src_count == 1
+
+    def test_filter_paths_keeps_watched_extensions(self, tmp_path: Path) -> None:
+        """_filter_paths keeps files with watched extensions."""
+        from beadloom.tui.file_watcher import _filter_paths
+
+        changes: set[tuple[object, str]] = {
+            (1, str(tmp_path / "src" / "app.py")),
+            (1, str(tmp_path / "docs" / "README.md")),
+        }
+        result = _filter_paths(changes, tmp_path)
+        assert len(result) == 2
+
+    def test_filter_paths_rejects_unwatched_extensions(self, tmp_path: Path) -> None:
+        """_filter_paths rejects files with unwatched extensions."""
+        from beadloom.tui.file_watcher import _filter_paths
+
+        changes: set[tuple[object, str]] = {
+            (1, str(tmp_path / "image.png")),
+            (1, str(tmp_path / "data.json")),
+        }
+        result = _filter_paths(changes, tmp_path)
+        assert len(result) == 0
+
+    def test_filter_paths_rejects_temp_files(self, tmp_path: Path) -> None:
+        """_filter_paths rejects temp files (~ prefix and .tmp suffix)."""
+        from beadloom.tui.file_watcher import _filter_paths
+
+        changes: set[tuple[object, str]] = {
+            (1, str(tmp_path / "~lock.py")),
+            (1, str(tmp_path / "backup.py.tmp")),
+        }
+        result = _filter_paths(changes, tmp_path)
+        assert len(result) == 0
+
+    def test_filter_paths_rejects_hidden_dirs(self, tmp_path: Path) -> None:
+        """_filter_paths rejects files in hidden dirs (except .beadloom)."""
+        from beadloom.tui.file_watcher import _filter_paths
+
+        changes: set[tuple[object, str]] = {
+            (1, str(tmp_path / ".git" / "hooks" / "pre-commit.py")),
+        }
+        result = _filter_paths(changes, tmp_path)
+        assert len(result) == 0
+
+    def test_filter_paths_allows_beadloom_dir(self, tmp_path: Path) -> None:
+        """_filter_paths allows files in .beadloom directory."""
+        from beadloom.tui.file_watcher import _filter_paths
+
+        changes: set[tuple[object, str]] = {
+            (1, str(tmp_path / ".beadloom" / "_graph" / "services.yml")),
+        }
+        result = _filter_paths(changes, tmp_path)
+        assert len(result) == 1
+
+
+class TestStartFileWatcher:
+    """Tests for start_file_watcher function."""
+
+    def test_returns_none_when_watchfiles_missing(self, tmp_path: Path) -> None:
+        """start_file_watcher returns None when watchfiles is not installed."""
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.file_watcher import start_file_watcher
+
+        db_path = tmp_path / ".beadloom" / "beadloom.db"
+        db_path.parent.mkdir(parents=True)
+        conn = sqlite3.connect(str(db_path))
+        from beadloom.infrastructure.db import create_schema
+        create_schema(conn)
+        conn.commit()
+        conn.close()
+
+        app = BeadloomApp(db_path=db_path, project_root=tmp_path, no_watch=True)
+
+        with patch("beadloom.tui.file_watcher._has_watchfiles", return_value=False):
+            result = start_file_watcher(app, tmp_path, [])
+            assert result is None
+
+    def test_returns_none_when_no_watch_dirs(self, tmp_path: Path) -> None:
+        """start_file_watcher returns None when no directories to watch."""
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.file_watcher import start_file_watcher
+
+        db_path = tmp_path / ".beadloom" / "beadloom.db"
+        db_path.parent.mkdir(parents=True)
+        conn = sqlite3.connect(str(db_path))
+        from beadloom.infrastructure.db import create_schema
+        create_schema(conn)
+        conn.commit()
+        conn.close()
+
+        app = BeadloomApp(db_path=db_path, project_root=tmp_path, no_watch=True)
+
+        # No source paths and no graph dir
+        result = start_file_watcher(app, tmp_path, [])
+        assert result is None
+
+
+class TestStatusBarWatcherStates:
+    """Tests for StatusBarWidget watcher state display (BEAD-06)."""
+
+    def test_watcher_off_state(self) -> None:
+        """StatusBarWidget shows 'watcher off' in dim when state is off."""
+        from beadloom.tui.widgets.status_bar import StatusBarWidget
+
+        widget = StatusBarWidget()
+        text = widget.render()
+        assert "watcher off" in text.plain
+
+    def test_watcher_watching_state(self) -> None:
+        """StatusBarWidget shows 'watching' in green after set_watcher_active(True)."""
+        from beadloom.tui.widgets.status_bar import WATCHER_WATCHING, StatusBarWidget
+
+        widget = StatusBarWidget()
+        widget.set_watcher_active(True)
+        assert widget._watcher_state == WATCHER_WATCHING
+        text = widget.render()
+        assert "watching" in text.plain
+        # Should NOT say "watcher off"
+        assert "watcher off" not in text.plain
+
+    def test_watcher_changes_detected_state(self) -> None:
+        """StatusBarWidget shows 'changes detected (N)' in yellow."""
+        from beadloom.tui.widgets.status_bar import WATCHER_CHANGES, StatusBarWidget
+
+        widget = StatusBarWidget()
+        widget.set_changes_detected(5)
+        assert widget._watcher_state == WATCHER_CHANGES
+        assert widget._change_count == 5
+        text = widget.render()
+        assert "changes detected" in text.plain
+        assert "(5)" in text.plain
+
+    def test_clear_changes_reverts_to_watching(self) -> None:
+        """clear_changes() reverts from changes-detected to watching state."""
+        from beadloom.tui.widgets.status_bar import WATCHER_WATCHING, StatusBarWidget
+
+        widget = StatusBarWidget()
+        widget.set_changes_detected(3)
+        widget.clear_changes()
+        assert widget._watcher_state == WATCHER_WATCHING
+        assert widget._change_count == 0
+        text = widget.render()
+        assert "watching" in text.plain
+        assert "changes detected" not in text.plain
+
+    def test_set_watcher_active_false_clears_changes(self) -> None:
+        """set_watcher_active(False) clears change count and sets state to off."""
+        from beadloom.tui.widgets.status_bar import WATCHER_OFF, StatusBarWidget
+
+        widget = StatusBarWidget()
+        widget.set_changes_detected(10)
+        widget.set_watcher_active(False)
+        assert widget._watcher_state == WATCHER_OFF
+        assert widget._change_count == 0
+        text = widget.render()
+        assert "watcher off" in text.plain
+
+    def test_watcher_state_constants_imported(self) -> None:
+        """Watcher state constants are importable."""
+        from beadloom.tui.widgets.status_bar import (
+            WATCHER_CHANGES,
+            WATCHER_OFF,
+            WATCHER_WATCHING,
+        )
+
+        assert WATCHER_OFF == "off"
+        assert WATCHER_WATCHING == "watching"
+        assert WATCHER_CHANGES == "changes"
+
+
+class TestAppFileWatcherIntegration:
+    """Tests for file watcher integration in BeadloomApp."""
+
+    def test_app_has_file_watcher_attribute(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """App has _file_watcher_worker attribute."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        assert app._file_watcher_worker is None
+
+    @pytest.mark.asyncio()
+    async def test_no_watch_prevents_watcher_start(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """App with no_watch=True does not start file watcher."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root, no_watch=True)
+        async with app.run_test() as pilot:
+            # With no_watch=True, file watcher worker should not be started
+            assert app._file_watcher_worker is None
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_reindex_needed_message_handling(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """App handles ReindexNeeded message by updating status bar."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.file_watcher import ReindexNeeded
+        from beadloom.tui.widgets.status_bar import StatusBarWidget
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root, no_watch=True)
+        async with app.run_test() as pilot:
+            # Post a ReindexNeeded message
+            app.post_message(ReindexNeeded(["/src/foo.py", "/src/bar.py"]))
+            await pilot.pause()
+
+            # Check status bar on dashboard shows changes detected
+            status_bar = app.screen.query_one("#status-bar", StatusBarWidget)
+            assert "changes detected" in status_bar.render().plain
+            assert "(2)" in status_bar.render().plain
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_reindex_clears_changes_badge(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Pressing 'r' clears the changes-detected badge after reindex."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.file_watcher import ReindexNeeded
+        from beadloom.tui.widgets.status_bar import StatusBarWidget
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root, no_watch=True)
+        async with app.run_test() as pilot:
+            # Simulate file changes
+            app.post_message(ReindexNeeded(["/src/foo.py"]))
+            await pilot.pause()
+
+            status_bar = app.screen.query_one("#status-bar", StatusBarWidget)
+            assert "changes detected" in status_bar.render().plain
+
+            # Press 'r' to reindex
+            await pilot.press("r")
+            await pilot.pause()
+
+            # Badge should be cleared
+            text = status_bar.render().plain
+            assert "changes detected" not in text
+
+            await pilot.press("q")
+
+    def test_graph_data_provider_get_source_paths(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """get_source_paths() returns source paths from nodes."""
+        from beadloom.tui.data_providers import GraphDataProvider
+
+        _, project_root = populated_db
+        provider = GraphDataProvider(conn=ro_conn, project_root=project_root)
+        paths = provider.get_source_paths()
+
+        # The populated DB has one node with source: "auth" has "src/auth"
+        assert "src/auth" in paths
+
+    def test_graph_data_provider_get_source_paths_empty(
+        self, tmp_path: Path
+    ) -> None:
+        """get_source_paths() returns empty list when no nodes have source."""
+        from beadloom.tui.data_providers import GraphDataProvider
+
+        db_path = tmp_path / "empty.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        from beadloom.infrastructure.db import create_schema
+        create_schema(conn)
+        conn.commit()
+
+        provider = GraphDataProvider(conn=conn, project_root=tmp_path)
+        paths = provider.get_source_paths()
+        assert paths == []
+        conn.close()

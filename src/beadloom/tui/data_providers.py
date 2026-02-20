@@ -111,6 +111,13 @@ class GraphDataProvider:
         ).fetchall()
         return {str(row["ref_id"]) for row in rows}
 
+    def get_source_paths(self) -> list[str]:
+        """Return list of non-empty source paths from all nodes."""
+        rows = self.conn.execute(
+            "SELECT source FROM nodes WHERE source IS NOT NULL AND source != ''"
+        ).fetchall()
+        return [str(row["source"]) for row in rows]
+
 
 @dataclass
 class LintDataProvider:

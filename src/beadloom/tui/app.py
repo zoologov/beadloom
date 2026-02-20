@@ -20,12 +20,18 @@ from beadloom.tui.data_providers import (
     SyncDataProvider,
     WhyDataProvider,
 )
+from beadloom.tui.file_watcher import ReindexNeeded, start_file_watcher
 from beadloom.tui.screens.dashboard import DashboardScreen
 from beadloom.tui.screens.doc_status import DocStatusScreen
 from beadloom.tui.screens.explorer import ExplorerScreen
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
+
+    from textual.worker import Worker
+
+    from beadloom.tui.widgets.status_bar import StatusBarWidget
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +72,7 @@ class BeadloomApp(App[None]):
         self.project_root = project_root
         self.no_watch = no_watch
         self._conn: sqlite3.Connection | None = None
+        self._file_watcher_worker: Worker[None] | None = None
 
         # Data providers (initialized on mount)
         self.graph_provider: GraphDataProvider | None = None
@@ -114,7 +121,7 @@ class BeadloomApp(App[None]):
         yield Footer()
 
     def on_mount(self) -> None:
-        """Open DB, initialize providers, install screens, push default."""
+        """Open DB, initialize providers, install screens, push default, start watcher."""
         self._conn = self._open_db()
         self._init_providers()
         # Install named screens for keyboard switching
@@ -123,8 +130,57 @@ class BeadloomApp(App[None]):
         self.install_screen(DocStatusScreen(), name=SCREEN_DOC_STATUS)
         self.push_screen(SCREEN_DASHBOARD)
 
+        # Start file watcher when enabled
+        if not self.no_watch:
+            self._start_file_watcher()
+
+    def _start_file_watcher(self) -> None:
+        """Start the file watcher Worker and update status bar."""
+        source_paths: list[str] = []
+        if self.graph_provider is not None:
+            source_paths = self.graph_provider.get_source_paths()
+
+        worker = start_file_watcher(
+            self,
+            self.project_root,
+            source_paths,
+        )
+        self._file_watcher_worker = worker
+
+        # Update status bar to show watcher state
+        self._for_each_status_bar(lambda bar: bar.set_watcher_active(worker is not None))
+
+    def _for_each_status_bar(self, action: Callable[[StatusBarWidget], None]) -> None:
+        """Apply *action* to every StatusBarWidget across installed screens.
+
+        Silently skips screens that are not yet composed or have no status bar.
+        """
+        from beadloom.tui.widgets.status_bar import StatusBarWidget as _StatusBar
+
+        for screen_name in self._VALID_SCREENS:
+            screen_obj = self._installed_screens.get(screen_name)
+            if screen_obj is None or not hasattr(screen_obj, "query_one"):
+                continue
+            try:
+                bar = screen_obj.query_one(_StatusBar)
+            except Exception:
+                logger.debug("StatusBar not found on screen %s", screen_name)
+                continue
+            action(bar)
+
+    def on_reindex_needed(self, message: ReindexNeeded) -> None:
+        """Handle file-change notification from the watcher."""
+        count = len(message.changed_paths)
+        logger.info("Reindex needed: %d file(s) changed", count)
+
+        # Update status bar to show "changes detected" badge
+        self._for_each_status_bar(lambda bar: bar.set_changes_detected(count))
+
     def on_unmount(self) -> None:
-        """Close DB connection on unmount."""
+        """Cancel watcher and close DB connection on unmount."""
+        if self._file_watcher_worker is not None:
+            self._file_watcher_worker.cancel()
+            self._file_watcher_worker = None
         if self._conn is not None:
             self._conn.close()
             self._conn = None
@@ -149,11 +205,18 @@ class BeadloomApp(App[None]):
         self.notify("Search overlay coming in BEAD-07")
 
     def action_reindex(self) -> None:
-        """Trigger reindex in background."""
+        """Trigger reindex in background, refresh providers, clear watcher badge."""
         from beadloom.infrastructure.reindex import incremental_reindex
 
         incremental_reindex(self.project_root)
         self._refresh_providers()
+
+        # Clear the "changes detected" badge on all screens
+        self._for_each_status_bar(lambda bar: bar.clear_changes())
+
+        # Refresh visible screen widgets
+        self._refresh_screen_widgets()
+
         self.notify("Reindex complete")
 
     def action_lint(self) -> None:
@@ -182,3 +245,9 @@ class BeadloomApp(App[None]):
             self.debt_provider.refresh()
         if self.activity_provider is not None:
             self.activity_provider.refresh()
+
+    def _refresh_screen_widgets(self) -> None:
+        """Refresh widgets on the currently active screen."""
+        screen = self.screen
+        if hasattr(screen, "refresh_all_widgets"):
+            screen.refresh_all_widgets()
