@@ -1,9 +1,36 @@
-/* Beadloom TUI — Doc Status Screen Stylesheet */
+/* Beadloom TUI -- Doc Status Screen Stylesheet */
 
-#doc-status-placeholder {
+#doc-status-container {
     width: 100%;
     height: 100%;
-    content-align: center middle;
-    text-style: italic;
+    layout: vertical;
+}
+
+/* Header with coverage stats */
+#doc-status-header {
+    width: 100%;
+    height: 3;
+    padding: 1 2;
+    background: $surface;
+    text-style: bold;
+    color: $text;
+    border-bottom: solid $primary;
+}
+
+/* Main doc health table */
+#doc-health-table {
+    width: 100%;
+    height: 1fr;
+}
+
+/* Action bar at bottom */
+#doc-status-action-bar {
+    width: 100%;
+    height: 1;
+    padding: 0 2;
+    background: $surface;
     color: $text-muted;
+    text-style: italic;
+    dock: bottom;
+    border-top: solid $primary;
 }
