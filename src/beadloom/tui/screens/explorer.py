@@ -60,7 +60,7 @@ class ExplorerScreen(Screen[None]):
     ) -> None:
         super().__init__(name=name, id=id, classes=classes)
         self._ref_id = ref_id
-        self._mode = MODE_DOWNSTREAM
+        self._mode = MODE_UPSTREAM
 
     def compose(self) -> ComposeResult:
         """Compose the explorer layout."""
@@ -78,7 +78,7 @@ class ExplorerScreen(Screen[None]):
                 with Vertical(id="explorer-right"):
                     yield DependencyPathWidget(
                         ref_id=self._ref_id,
-                        direction=MODE_DOWNSTREAM,
+                        direction=MODE_UPSTREAM,
                         widget_id="dependency-path",
                     )
                     yield ContextPreviewWidget(
@@ -104,7 +104,7 @@ class ExplorerScreen(Screen[None]):
             The node ref_id to display.
         """
         self._ref_id = ref_id
-        self._mode = MODE_DOWNSTREAM
+        self._mode = MODE_UPSTREAM
         self._load_data()
         self._update_right_panel_visibility()
 

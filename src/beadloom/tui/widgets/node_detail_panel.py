@@ -68,8 +68,8 @@ def _render_node_detail(
     text.append("  Edges\n", style="bold underline")
 
     edges = graph_provider.get_edges()
-    outgoing = [e for e in edges if e["src"] == ref_id]
-    incoming = [e for e in edges if e["dst"] == ref_id]
+    outgoing = [e for e in edges if e["src"] == ref_id and e["dst"] != ref_id]
+    incoming = [e for e in edges if e["dst"] == ref_id and e["src"] != ref_id]
 
     if not outgoing and not incoming:
         text.append("  (no edges)", style="dim")
