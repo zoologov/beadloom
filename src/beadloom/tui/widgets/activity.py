@@ -18,12 +18,12 @@ def _activity_level(activity: Any) -> int:
     """Extract a numeric activity level (0-100) from a GitActivity object or dict."""
     if activity is None:
         return 0
-    # GitActivity dataclass has commit_count and churn attributes
-    if hasattr(activity, "commit_count"):
-        # Normalize: cap at 100 commits for 100%
-        return min(int(activity.commit_count), 100)
+    # GitActivity dataclass has commits_30d and activity_level attributes
+    if hasattr(activity, "commits_30d"):
+        # Normalize: cap at 50 commits for 100%
+        return min(int(activity.commits_30d) * 2, 100)
     if isinstance(activity, dict):
-        return min(int(activity.get("commit_count", 0)), 100)
+        return min(int(activity.get("commits_30d", 0)) * 2, 100)
     return 0
 
 
