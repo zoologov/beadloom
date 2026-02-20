@@ -89,9 +89,13 @@ class BeadloomApp(App[None]):
         self._selected_ref_id: str = ""
 
     def _open_db(self) -> sqlite3.Connection:
-        """Open read-only SQLite connection."""
-        conn = sqlite3.connect(f"file:{self.db_path}?mode=ro", uri=True)
+        """Open SQLite connection (WAL mode — safe for concurrent access).
+
+        Read-write is needed because check_sync updates doc hashes.
+        """
+        conn = sqlite3.connect(str(self.db_path))
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
         return conn
 
     def _init_providers(self) -> None:
