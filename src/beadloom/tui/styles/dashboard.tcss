@@ -37,21 +37,23 @@
     height: 1fr;
 }
 
-/* Left panel: graph placeholder (40%) */
+/* Left panel: graph tree (40%) */
 #dashboard-left {
     width: 2fr;
     height: 100%;
     border-right: solid $surface-lighten-2;
-    padding: 0 1;
     overflow-y: auto;
 }
 
-#graph-placeholder {
+/* Graph tree widget */
+#graph-tree {
     width: 100%;
     height: 100%;
-    content-align: center middle;
-    color: $text-muted;
-    text-style: italic;
+    scrollbar-gutter: stable;
+}
+
+#graph-tree:focus {
+    border: tall $accent;
 }
 
 /* Right panel: activity + lint (60%) */
