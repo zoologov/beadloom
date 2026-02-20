@@ -1,7 +1,7 @@
 # ACTIVE: BDL-025 — Interactive Architecture TUI
 
 > **Last updated:** 2026-02-20
-> **Phase:** Wave 1 Complete — Ready for Wave 2
+> **Phase:** Wave 2+3 In Progress — BEAD-02, BEAD-03, BEAD-05, BEAD-06 parallel
 
 ---
 
