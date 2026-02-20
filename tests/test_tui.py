@@ -1186,6 +1186,68 @@ class TestDashboardScreen:
             screen.refresh_all_widgets()
             await pilot.press("q")
 
+    @pytest.mark.asyncio()
+    async def test_dashboard_e_key_opens_explorer(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Pressing 'e' on a tree node opens Explorer for that node."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.explorer import ExplorerScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            # Focus the graph tree and press 'e'
+            graph_tree = app.screen.query_one("#graph-tree")
+            graph_tree.focus()
+            await pilot.pause()
+
+            # Move cursor down to first real node (skip root)
+            await pilot.press("down")
+            await pilot.pause()
+
+            # Press 'e' to explore
+            await pilot.press("e")
+            await pilot.pause()
+
+            # Should now be on ExplorerScreen
+            assert isinstance(app.screen, ExplorerScreen)
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_dashboard_e_key_on_domain_node(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Pressing 'e' on a domain node (with children) opens Explorer."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.explorer import ExplorerScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            # The graph tree should have nodes with children (domain nodes)
+            # Press 'e' should open explorer even for parent nodes
+            graph_tree = app.screen.query_one("#graph-tree")
+            graph_tree.focus()
+            await pilot.pause()
+
+            # Navigate to first node
+            await pilot.press("down")
+            await pilot.pause()
+
+            await pilot.press("e")
+            await pilot.pause()
+
+            # Should be on Explorer regardless of whether node has children
+            assert isinstance(app.screen, ExplorerScreen)
+
+            await pilot.press("q")
+
 
 # ---------------------------------------------------------------------------
 # GraphTreeWidget Tests (BEAD-03)
@@ -1207,7 +1269,7 @@ class TestGraphTreeWidget:
         )
         assert "\u25cf" in label  # fresh indicator
         assert "auth" in label
-        assert "[3]" in label
+        assert "[3 edges]" in label
 
     def test_build_node_label_stale(self) -> None:
         """_build_node_label creates label with stale indicator."""
@@ -1220,6 +1282,7 @@ class TestGraphTreeWidget:
             edge_counts={"auth": 1},
         )
         assert "\u25b2" in label  # stale indicator
+        assert "[1 edge]" in label
 
     def test_build_node_label_missing(self) -> None:
         """_build_node_label creates label with missing indicator for undocumented node."""
@@ -1232,7 +1295,46 @@ class TestGraphTreeWidget:
             edge_counts={},
         )
         assert "\u2716" in label  # missing indicator
-        assert "[0]" in label  # zero edges
+        assert "[0]" not in label  # zero edges omitted
+        assert "edge" not in label  # no edge badge for zero
+
+    def test_build_node_label_zero_edges_no_badge(self) -> None:
+        """_build_node_label omits edge badge when count is 0."""
+        from beadloom.tui.widgets.graph_tree import _build_node_label
+
+        label = _build_node_label(
+            "auth",
+            doc_ref_ids=set(),
+            stale_ref_ids=set(),
+            edge_counts={},
+        )
+        assert "edge" not in label
+        assert "[0]" not in label
+        assert "auth" in label
+
+    def test_build_node_label_single_edge(self) -> None:
+        """_build_node_label uses singular 'edge' for count of 1."""
+        from beadloom.tui.widgets.graph_tree import _build_node_label
+
+        label = _build_node_label(
+            "auth",
+            doc_ref_ids={"auth"},
+            stale_ref_ids=set(),
+            edge_counts={"auth": 1},
+        )
+        assert "[1 edge]" in label
+
+    def test_build_node_label_multiple_edges(self) -> None:
+        """_build_node_label uses plural 'edges' for count > 1."""
+        from beadloom.tui.widgets.graph_tree import _build_node_label
+
+        label = _build_node_label(
+            "auth",
+            doc_ref_ids={"auth"},
+            stale_ref_ids=set(),
+            edge_counts={"auth": 5},
+        )
+        assert "[5 edges]" in label
 
     def test_doc_status_indicator_fresh(self) -> None:
         """_doc_status_indicator returns fresh for documented, non-stale nodes."""
@@ -1387,6 +1489,71 @@ class TestGraphTreeWidget:
 
             assert count_before == count_after
             assert count_before > 0
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_tree_empty_children_no_expand(
+        self, tmp_path: Path
+    ) -> None:
+        """Nodes in hierarchy with empty children list should be leaves, not branches."""
+        db_path = tmp_path / ".beadloom" / "beadloom.db"
+        db_path.parent.mkdir(parents=True)
+
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+
+        from beadloom.infrastructure.db import create_schema
+
+        create_schema(conn)
+
+        # Insert test nodes — "tui" will have empty children in hierarchy
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary) VALUES (?, ?, ?)",
+            ("tui", "service", "TUI service"),
+        )
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary) VALUES (?, ?, ?)",
+            ("auth", "domain", "Auth domain"),
+        )
+        # No part_of edges pointing TO tui — so tui has no children
+        # But we'll patch get_hierarchy to return {"tui": []} to simulate the bug
+        conn.commit()
+        conn.close()
+
+        from unittest.mock import patch
+
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.widgets.graph_tree import GraphTreeWidget
+
+        app = BeadloomApp(db_path=db_path, project_root=tmp_path)
+        async with app.run_test() as pilot:
+            tree = app.screen.query_one("#graph-tree", GraphTreeWidget)
+
+            # Patch get_hierarchy to return empty children for "tui"
+            original_provider = tree._graph_provider
+            assert original_provider is not None
+            with patch.object(
+                original_provider,
+                "get_hierarchy",
+                return_value={"tui": []},
+            ):
+                tree.refresh_data()
+
+            # Find the "tui" node in the tree
+            tui_nodes = [
+                child for child in tree.root.children
+                if child.data == "tui"
+            ]
+            assert len(tui_nodes) == 1, (
+                f"Expected exactly one 'tui' node, got {len(tui_nodes)}"
+            )
+            tui_node = tui_nodes[0]
+
+            # tui should be a leaf (not expandable) since its children list is empty
+            assert tui_node.allow_expand is False, (
+                "tui node should not be expandable with empty children list"
+            )
 
             await pilot.press("q")
 
@@ -3182,6 +3349,62 @@ class TestExplorerScreen:
             await pilot.press("u")
             await pilot.pause()
             await pilot.press("c")
+            await pilot.pause()
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_explorer_escape_via_switch_screen(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Esc from Explorer navigated via switch_screen returns to Dashboard."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.dashboard import DashboardScreen
+        from beadloom.tui.screens.explorer import ExplorerScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            # Navigate to Explorer via switch_screen (like pressing key "2")
+            await pilot.press("2")
+            await pilot.pause()
+            assert isinstance(app.screen, ExplorerScreen)
+
+            # Press Esc to go back — should NOT crash with ScreenStackError
+            await pilot.press("escape")
+            await pilot.pause()
+
+            # Should be on dashboard
+            assert isinstance(app.screen, DashboardScreen)
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_hotkeys_after_explorer_escape_no_crash(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Pressing 2/3 after Esc from Explorer does not crash."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.dashboard import DashboardScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            # Go to Explorer via switch
+            await pilot.press("2")
+            await pilot.pause()
+
+            # Esc back
+            await pilot.press("escape")
+            await pilot.pause()
+            assert isinstance(app.screen, DashboardScreen)
+
+            # Press 2 again — should not crash
+            await pilot.press("2")
+            await pilot.pause()
+
+            # Press 3 — should not crash
+            await pilot.press("3")
             await pilot.pause()
 
             await pilot.press("q")

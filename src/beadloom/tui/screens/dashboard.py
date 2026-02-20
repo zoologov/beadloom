@@ -4,8 +4,9 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import Footer, Label
@@ -36,6 +37,10 @@ class DashboardScreen(Screen[None]):
     """
 
     CSS_PATH = "../styles/dashboard.tcss"
+
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
+        Binding("e", "explore_node", "Explore", key_display="e"),
+    ]
 
     def compose(self) -> ComposeResult:
         """Compose the dashboard layout."""
@@ -111,6 +116,29 @@ class DashboardScreen(Screen[None]):
         hierarchy = app.graph_provider.get_hierarchy()
         if event.ref_id not in hierarchy:
             app.open_explorer(event.ref_id)
+
+    def action_explore_node(self) -> None:
+        """Open the currently highlighted tree node in Explorer."""
+        app = self._get_app()
+        if app is None:
+            return
+
+        try:
+            graph_tree = self.query_one("#graph-tree", GraphTreeWidget)
+        except Exception:
+            return
+
+        # Get the currently highlighted node
+        cursor_node = graph_tree.cursor_node
+        if cursor_node is None or cursor_node.data is None:
+            self.notify("No node selected", title="Explore")
+            return
+
+        ref_id = cursor_node.data
+        if ref_id == "No nodes found":
+            return
+
+        app.open_explorer(ref_id)
 
     def _load_data(self) -> None:
         """Load data from all providers and push to widgets."""
