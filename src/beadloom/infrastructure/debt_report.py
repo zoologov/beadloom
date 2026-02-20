@@ -43,6 +43,7 @@ class DebtWeights:
     high_fan_out: float = 1.0
     dormant_domain: float = 0.5
     untested_domain: float = 1.0
+    meta_doc_stale: float = 1.5
     # Thresholds
     oversized_symbols: int = 200
     high_fan_out_threshold: int = 10
@@ -64,6 +65,8 @@ class DebtData:
     untested_count: int
     # Per-node issue tracking for top offenders
     node_issues: dict[str, list[str]]
+    # Meta-doc staleness (stale fact mentions in project docs)
+    meta_doc_stale_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -174,7 +177,7 @@ def load_debt_weights(project_root: Path) -> DebtWeights:
     weight_fields = {
         "rule_error", "rule_warning", "undocumented_node", "stale_doc",
         "untracked_file", "oversized_domain", "high_fan_out",
-        "dormant_domain", "untested_domain",
+        "dormant_domain", "untested_domain", "meta_doc_stale",
     }
     for field_name in weight_fields:
         if field_name in weights_data:
@@ -623,6 +626,19 @@ def compute_debt_score(
     )
 
     categories = [rule_cat, doc_cat, complexity_cat, test_cat]
+
+    # Category: meta_doc_staleness (only when stale mentions exist)
+    if data.meta_doc_stale_count > 0:
+        meta_doc_score = data.meta_doc_stale_count * weights.meta_doc_stale
+        meta_doc_cat = CategoryScore(
+            name="meta_doc_staleness",
+            score=meta_doc_score,
+            details={
+                "meta_doc_stale": data.meta_doc_stale_count,
+            },
+        )
+        categories.append(meta_doc_cat)
+
     raw_score = sum(c.score for c in categories)
     debt_score = min(100.0, raw_score)
     severity = _severity_label(debt_score)
@@ -716,6 +732,7 @@ _CATEGORY_SHORT_MAP: dict[str, str] = {
     "docs": "doc_gaps",
     "complexity": "complexity",
     "tests": "test_gaps",
+    "meta_docs": "meta_doc_staleness",
 }
 
 
@@ -736,6 +753,7 @@ _CATEGORY_DISPLAY_NAMES: dict[str, str] = {
     "doc_gaps": "Documentation Gaps",
     "complexity": "Complexity Smells",
     "test_gaps": "Test Gaps",
+    "meta_doc_staleness": "Meta-Doc Staleness",
 }
 
 _CATEGORY_DETAIL_LABELS: dict[str, dict[str, str]] = {
@@ -743,6 +761,7 @@ _CATEGORY_DETAIL_LABELS: dict[str, dict[str, str]] = {
     "doc_gaps": {"undocumented": "undocumented", "stale": "stale", "untracked": "untracked"},
     "complexity": {"oversized": "oversized", "high_fan_out": "high fan-out", "dormant": "dormant"},
     "test_gaps": {"untested": "untested"},
+    "meta_doc_staleness": {"meta_doc_stale": "stale doc mentions"},
 }
 
 
@@ -840,6 +859,7 @@ _TREND_CATEGORY_NAMES: dict[str, str] = {
     "doc_gaps": "Docs",
     "complexity": "Complexity",
     "test_gaps": "Tests",
+    "meta_doc_staleness": "Meta-Docs",
 }
 
 
@@ -881,6 +901,7 @@ def _compute_snapshot_debt(
         "doc_gaps": 0.0,
         "complexity": complexity_score,
         "test_gaps": 0.0,
+        "meta_doc_staleness": 0.0,
     }
     total = sum(category_scores.values())
     return min(100.0, total), category_scores
@@ -953,7 +974,10 @@ def compute_debt_trend(
         cat.name: cat.score for cat in current_report.categories
     }
     category_deltas: dict[str, float] = {}
-    for cat_name in ("rule_violations", "doc_gaps", "complexity", "test_gaps"):
+    for cat_name in (
+        "rule_violations", "doc_gaps", "complexity", "test_gaps",
+        "meta_doc_staleness",
+    ):
         current_val = current_categories.get(cat_name, 0.0)
         prev_val = prev_categories.get(cat_name, 0.0)
         category_deltas[cat_name] = current_val - prev_val
@@ -1018,7 +1042,10 @@ def format_trend_section(trend: DebtTrend | None) -> str:
     )
 
     # Per-category lines
-    for cat_name in ("rule_violations", "doc_gaps", "complexity", "test_gaps"):
+    for cat_name in (
+        "rule_violations", "doc_gaps", "complexity", "test_gaps",
+        "meta_doc_staleness",
+    ):
         display = _TREND_CATEGORY_NAMES.get(cat_name, cat_name)
         cat_delta = trend.category_deltas.get(cat_name, 0.0)
         cat_arrow, cat_label = _trend_arrow(cat_delta)

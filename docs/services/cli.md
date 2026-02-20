@@ -359,6 +359,40 @@ beadloom docs generate [--project DIR]
 
 Creates `docs/` tree: `architecture.md`, domain READMEs, service pages, feature SPECs. Never overwrites existing files. All generated files include `<!-- enrich with: beadloom docs polish -->` markers.
 
+### beadloom docs audit
+
+Detect stale numeric facts in project documentation.
+
+```bash
+beadloom docs audit [--json] [--fail-if EXPR] [--stale-only] [--verbose] [--path GLOB]... [--project DIR]
+```
+
+Scans markdown documentation for numeric mentions (version strings, counts) and compares them against ground-truth facts collected from the project infrastructure (manifest files, graph DB, MCP tools, CLI commands).
+
+- `--json` -- structured JSON output with facts, findings, and unmatched mentions.
+- `--fail-if` -- CI gate expression. Supported format: `stale>N` or `stale>=N`. Exits with code 1 when condition is met.
+- `--stale-only` -- show only stale findings (omit fresh matches).
+- `--verbose` -- include extra detail (unmatched mentions, fact sources).
+- `--path` -- override default scan paths with custom glob patterns (can be specified multiple times).
+
+Exit codes: 0 = no issues (or below threshold), 1 = `--fail-if` condition met.
+
+Examples:
+
+```bash
+# Human-readable Rich output
+beadloom docs audit
+
+# CI gate: fail if any stale docs
+beadloom docs audit --fail-if=stale>0
+
+# JSON output for scripting
+beadloom docs audit --json --stale-only
+
+# Scan only specific paths
+beadloom docs audit --path "docs/**/*.md" --path "README.md"
+```
+
 ### beadloom docs polish
 
 Generate structured data for AI-driven documentation enrichment.
@@ -445,7 +479,7 @@ Module `src/beadloom/services/cli.py`:
 - `setup_mcp` -- configure MCP server for editor
 - `setup_rules` -- create IDE rules files
 - `mcp_serve` -- run MCP stdio server
-- `docs` -- Click group for doc commands (`generate`, `polish`)
+- `docs` -- Click group for doc commands (`generate`, `polish`, `audit`)
 - `tui` -- launch TUI dashboard (primary command, multi-screen with `--no-watch`)
 - `ui` -- launch TUI dashboard (alias for `tui`)
 - `watch_cmd` -- watch files and auto-reindex

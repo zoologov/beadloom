@@ -177,6 +177,14 @@ nodes:
     docs:
       - docs/domains/infrastructure/features/reindex/SPEC.md
 
+  # Feature: Docs Audit
+  - ref_id: docs-audit
+    kind: feature
+    summary: "Zero-config meta-doc staleness detection via keyword-proximity matching"
+    source: src/beadloom/doc_sync/audit.py
+    docs:
+      - docs/domains/doc-sync/features/docs-audit/SPEC.md
+
 edges:
   # Root service: self-referencing to satisfy service-needs-parent rule
   - src: beadloom
@@ -251,6 +259,9 @@ edges:
     kind: part_of
   - src: reindex
     dst: infrastructure
+    kind: part_of
+  - src: docs-audit
+    dst: doc-sync
     kind: part_of
 
   # Service → domain usage edges
