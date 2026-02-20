@@ -55,7 +55,7 @@ watch = [
     "watchfiles>=0.20",
 ]
 tui = [
-    "textual>=0.50",
+    "textual>=0.80",
 ]
 dev = [
     "pytest>=8.0",

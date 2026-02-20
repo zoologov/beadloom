@@ -1,4 +1,4 @@
-"""Tests for Beadloom TUI."""
+"""Tests for Beadloom TUI — data providers, app shell, screens, CLI."""
 
 from __future__ import annotations
 
@@ -15,13 +15,9 @@ if TYPE_CHECKING:
 textual = pytest.importorskip("textual")
 
 
-def _get_static_content(widget: object) -> str:
-    """Extract the raw content string from a Textual Static widget.
-
-    Uses the name-mangled ``_Static__content`` attribute which stores
-    the string passed to ``widget.update()``.
-    """
-    return str(getattr(widget, "_Static__content", ""))
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
 
 
 @pytest.fixture()
@@ -33,15 +29,14 @@ def populated_db(tmp_path: Path) -> tuple[Path, Path]:
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
 
-    # Create schema
     from beadloom.infrastructure.db import create_schema
 
     create_schema(conn)
 
-    # Insert test data
+    # Insert test nodes
     conn.execute(
-        "INSERT INTO nodes (ref_id, kind, summary) VALUES (?, ?, ?)",
-        ("auth", "domain", "Authentication domain"),
+        "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+        ("auth", "domain", "Authentication domain", "src/auth"),
     )
     conn.execute(
         "INSERT INTO nodes (ref_id, kind, summary) VALUES (?, ?, ?)",
@@ -51,10 +46,12 @@ def populated_db(tmp_path: Path) -> tuple[Path, Path]:
         "INSERT INTO nodes (ref_id, kind, summary) VALUES (?, ?, ?)",
         ("payments", "domain", "Payments domain"),
     )
+    # Insert edges
     conn.execute(
         "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES (?, ?, ?)",
         ("auth-login", "auth", "part_of"),
     )
+    # Insert docs
     conn.execute(
         "INSERT INTO docs (path, kind, ref_id, hash) VALUES (?, ?, ?, ?)",
         ("auth/login.md", "feature", "auth-login", "abc123"),
@@ -65,169 +62,573 @@ def populated_db(tmp_path: Path) -> tuple[Path, Path]:
     return db_path, tmp_path
 
 
-def test_app_launches(populated_db: tuple[Path, Path]) -> None:
-    """App can be instantiated without errors."""
-    db_path, project_root = populated_db
-    from beadloom.tui.app import BeadloomApp
-
-    app = BeadloomApp(db_path=db_path, project_root=project_root)
-    assert app.db_path == db_path
-    assert app.project_root == project_root
-    assert app.TITLE == "Beadloom"
-
-
-def test_domain_list_loads(populated_db: tuple[Path, Path]) -> None:
-    """DomainList.load_domains() populates options from the database."""
+@pytest.fixture()
+def ro_conn(populated_db: tuple[Path, Path]) -> sqlite3.Connection:
+    """Return a read-only connection to the populated test DB."""
     db_path, _project_root = populated_db
-    from beadloom.tui.widgets.domain_list import DomainList
-
-    conn = sqlite3.connect(str(db_path))
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
-
-    widget = DomainList()
-    widget.load_domains(conn)
-
-    # Should have 2 domains: auth and payments
-    assert widget.option_count == 2
-
-    conn.close()
+    return conn
 
 
-def test_node_detail_shows_domain(populated_db: tuple[Path, Path]) -> None:
-    """NodeDetail.show_domain() shows correct info for a domain."""
-    db_path, _project_root = populated_db
-    from beadloom.tui.widgets.node_detail import NodeDetail
-
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
-
-    widget = NodeDetail()
-    widget.show_domain(conn, "auth")
-
-    rendered = _get_static_content(widget)
-    assert "auth" in rendered
-    assert "domain" in rendered
-    assert "auth-login" in rendered
-
-    conn.close()
+# ---------------------------------------------------------------------------
+# Data Provider Tests
+# ---------------------------------------------------------------------------
 
 
-def test_node_detail_shows_domain_not_found(populated_db: tuple[Path, Path]) -> None:
-    """NodeDetail.show_domain() handles missing nodes."""
-    db_path, _project_root = populated_db
-    from beadloom.tui.widgets.node_detail import NodeDetail
+class TestGraphDataProvider:
+    """Tests for GraphDataProvider."""
 
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
+    def test_get_nodes(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """get_nodes() returns all nodes from the database."""
+        from beadloom.tui.data_providers import GraphDataProvider
 
-    widget = NodeDetail()
-    widget.show_domain(conn, "nonexistent")
+        _, project_root = populated_db
+        provider = GraphDataProvider(conn=ro_conn, project_root=project_root)
+        nodes = provider.get_nodes()
 
-    rendered = _get_static_content(widget)
-    assert "not found" in rendered
+        assert len(nodes) == 3
+        ref_ids = {n["ref_id"] for n in nodes}
+        assert ref_ids == {"auth", "auth-login", "payments"}
 
-    conn.close()
+    def test_get_edges(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """get_edges() returns all edges from the database."""
+        from beadloom.tui.data_providers import GraphDataProvider
 
+        _, project_root = populated_db
+        provider = GraphDataProvider(conn=ro_conn, project_root=project_root)
+        edges = provider.get_edges()
 
-def test_node_detail_shows_node(populated_db: tuple[Path, Path]) -> None:
-    """NodeDetail.show_node() shows edges and docs for a node."""
-    db_path, _project_root = populated_db
-    from beadloom.tui.widgets.node_detail import NodeDetail
+        assert len(edges) == 1
+        assert edges[0]["src"] == "auth-login"
+        assert edges[0]["dst"] == "auth"
+        assert edges[0]["kind"] == "part_of"
 
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
+    def test_get_node_existing(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """get_node() returns node data for an existing ref_id."""
+        from beadloom.tui.data_providers import GraphDataProvider
 
-    widget = NodeDetail()
-    widget.show_node(conn, "auth-login")
+        _, project_root = populated_db
+        provider = GraphDataProvider(conn=ro_conn, project_root=project_root)
+        node = provider.get_node("auth")
 
-    rendered = _get_static_content(widget)
-    assert "auth-login" in rendered
-    assert "feature" in rendered
-    # Should show outgoing edge to auth (part_of)
-    assert "auth" in rendered
-    assert "part_of" in rendered
-    # Should show docs
-    assert "auth/login.md" in rendered
+        assert node is not None
+        assert node["ref_id"] == "auth"
+        assert node["kind"] == "domain"
 
-    conn.close()
+    def test_get_node_missing(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """get_node() returns None for a missing ref_id."""
+        from beadloom.tui.data_providers import GraphDataProvider
 
+        _, project_root = populated_db
+        provider = GraphDataProvider(conn=ro_conn, project_root=project_root)
+        node = provider.get_node("nonexistent")
 
-def test_node_detail_shows_node_not_found(populated_db: tuple[Path, Path]) -> None:
-    """NodeDetail.show_node() handles missing nodes."""
-    db_path, _project_root = populated_db
-    from beadloom.tui.widgets.node_detail import NodeDetail
+        assert node is None
 
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
+    def test_get_hierarchy(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """get_hierarchy() returns parent-children mapping."""
+        from beadloom.tui.data_providers import GraphDataProvider
 
-    widget = NodeDetail()
-    widget.show_node(conn, "nonexistent")
+        _, project_root = populated_db
+        provider = GraphDataProvider(conn=ro_conn, project_root=project_root)
+        hierarchy = provider.get_hierarchy()
 
-    rendered = _get_static_content(widget)
-    assert "not found" in rendered
+        assert "auth" in hierarchy
+        assert "auth-login" in hierarchy["auth"]
 
-    conn.close()
+    def test_refresh_reloads_data(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """refresh() reloads cached nodes and edges."""
+        from beadloom.tui.data_providers import GraphDataProvider
 
+        _, project_root = populated_db
+        provider = GraphDataProvider(conn=ro_conn, project_root=project_root)
 
-def test_status_bar_loads(populated_db: tuple[Path, Path]) -> None:
-    """StatusBar.load_stats() shows metrics from the database."""
-    db_path, _project_root = populated_db
-    from beadloom.tui.widgets.status_bar import StatusBar
+        # First load
+        nodes_before = provider.get_nodes()
+        assert len(nodes_before) == 3
 
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
-
-    widget = StatusBar()
-    widget.load_stats(conn)
-
-    rendered = _get_static_content(widget)
-    # Should contain node, edge, doc counts
-    assert "3 nodes" in rendered
-    assert "1 edges" in rendered
-    assert "1 docs" in rendered
-    # Should show coverage percentage
-    assert "Coverage:" in rendered
-    # Should show stale count
-    assert "Stale:" in rendered
-
-    conn.close()
-
-
-@pytest.mark.asyncio()
-async def test_app_runs_headless(populated_db: tuple[Path, Path]) -> None:
-    """App runs via pilot (headless mode) and can be quit."""
-    db_path, project_root = populated_db
-    from beadloom.tui.app import BeadloomApp
-
-    app = BeadloomApp(db_path=db_path, project_root=project_root)
-    async with app.run_test() as pilot:
-        # App should be running
-        assert app.is_running
-        await pilot.press("q")
+        # Refresh and verify same data
+        provider.refresh()
+        nodes_after = provider.get_nodes()
+        assert len(nodes_after) == 3
 
 
-def test_cli_ui_missing_textual() -> None:
-    """CLI shows friendly error when textual not installed."""
-    from click.testing import CliRunner
+class TestLintDataProvider:
+    """Tests for LintDataProvider."""
 
-    from beadloom.services.cli import ui
+    def test_no_rules_file(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """get_violations() returns empty list when rules.yml is missing."""
+        from beadloom.tui.data_providers import LintDataProvider
 
-    runner = CliRunner()
+        _, project_root = populated_db
+        provider = LintDataProvider(conn=ro_conn, project_root=project_root)
+        provider.refresh()
 
-    # Simulate ImportError by setting module to None in sys.modules
-    with patch.dict("sys.modules", {"beadloom.tui": None}):
-        result = runner.invoke(ui, [])
-        # Should show error about missing textual
+        assert provider.get_violations() == []
+        assert provider.get_violation_count() == 0
+
+    def test_with_rules_file(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """get_violations() evaluates rules when rules.yml exists."""
+        from beadloom.tui.data_providers import LintDataProvider
+
+        db_path, project_root = populated_db
+        rules_dir = project_root / ".beadloom" / "_graph"
+        rules_dir.mkdir(parents=True, exist_ok=True)
+        rules_path = rules_dir / "rules.yml"
+        rules_path.write_text(
+            "version: 1\nrules:\n"
+            "  - name: test-rule\n"
+            "    type: require\n"
+            "    description: Every domain must be part_of something\n"
+            "    for: { kind: domain }\n"
+            "    has_edge_to: { kind: service }\n"
+            "    edge_kind: part_of\n",
+            encoding="utf-8",
+        )
+
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+
+        provider = LintDataProvider(conn=conn, project_root=project_root)
+        provider.refresh()
+
+        # We expect violations since domains don't have part_of -> service edges
+        violations = provider.get_violations()
+        assert provider.get_violation_count() == len(violations)
+        conn.close()
+
+
+class TestSyncDataProvider:
+    """Tests for SyncDataProvider."""
+
+    def test_get_sync_results(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """get_sync_results() returns list of sync pair results."""
+        from beadloom.tui.data_providers import SyncDataProvider
+
+        _, project_root = populated_db
+        provider = SyncDataProvider(conn=ro_conn, project_root=project_root)
+        provider.refresh()
+
+        results = provider.get_sync_results()
+        # Results depend on sync_state table content
+        assert isinstance(results, list)
+
+    def test_get_stale_count(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """get_stale_count() returns integer."""
+        from beadloom.tui.data_providers import SyncDataProvider
+
+        _, project_root = populated_db
+        provider = SyncDataProvider(conn=ro_conn, project_root=project_root)
+        provider.refresh()
+
+        count = provider.get_stale_count()
+        assert isinstance(count, int)
+        assert count >= 0
+
+    def test_get_coverage(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """get_coverage() returns float between 0 and 100."""
+        from beadloom.tui.data_providers import SyncDataProvider
+
+        _, project_root = populated_db
+        provider = SyncDataProvider(conn=ro_conn, project_root=project_root)
+        provider.refresh()
+
+        coverage = provider.get_coverage()
+        assert isinstance(coverage, float)
+        assert 0.0 <= coverage <= 100.0
+
+
+class TestDebtDataProvider:
+    """Tests for DebtDataProvider."""
+
+    def test_get_score(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """get_score() returns float score."""
+        from beadloom.tui.data_providers import DebtDataProvider
+
+        db_path, project_root = populated_db
+        # Use a read-write connection since debt collection may need it
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+
+        provider = DebtDataProvider(conn=conn, project_root=project_root)
+        provider.refresh()
+
+        score = provider.get_score()
+        assert isinstance(score, float)
+        assert score >= 0.0
+
+        conn.close()
+
+    def test_get_debt_report(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """get_debt_report() returns a DebtReport or None."""
+        from beadloom.tui.data_providers import DebtDataProvider
+
+        db_path, project_root = populated_db
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+
+        provider = DebtDataProvider(conn=conn, project_root=project_root)
+        provider.refresh()
+
+        report = provider.get_debt_report()
+        # Report may be None if collection fails, or a DebtReport
+        if report is not None:
+            assert hasattr(report, "debt_score")
+            assert hasattr(report, "severity")
+
+        conn.close()
+
+
+class TestActivityDataProvider:
+    """Tests for ActivityDataProvider."""
+
+    def test_get_activity(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """get_activity() returns dict mapping ref_ids to activity."""
+        from beadloom.tui.data_providers import ActivityDataProvider
+
+        _, project_root = populated_db
+        provider = ActivityDataProvider(conn=ro_conn, project_root=project_root)
+        provider.refresh()
+
+        activity = provider.get_activity()
+        assert isinstance(activity, dict)
+
+    def test_empty_source_dirs(self, tmp_path: Path) -> None:
+        """get_activity() returns empty dict when no nodes have source dirs."""
+        from beadloom.tui.data_providers import ActivityDataProvider
+
+        db_path = tmp_path / ".beadloom" / "beadloom.db"
+        db_path.parent.mkdir(parents=True)
+
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+
+        from beadloom.infrastructure.db import create_schema
+
+        create_schema(conn)
+
+        provider = ActivityDataProvider(conn=conn, project_root=tmp_path)
+        provider.refresh()
+
+        assert provider.get_activity() == {}
+        conn.close()
+
+
+class TestWhyDataProvider:
+    """Tests for WhyDataProvider."""
+
+    def test_analyze_existing_node(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """analyze() returns WhyResult for an existing node."""
+        from beadloom.tui.data_providers import WhyDataProvider
+
+        _, project_root = populated_db
+        provider = WhyDataProvider(conn=ro_conn, project_root=project_root)
+        result = provider.analyze("auth")
+
+        assert result is not None
+        assert result.node.ref_id == "auth"
+
+    def test_analyze_missing_node(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """analyze() returns None for a non-existent node."""
+        from beadloom.tui.data_providers import WhyDataProvider
+
+        _, project_root = populated_db
+        provider = WhyDataProvider(conn=ro_conn, project_root=project_root)
+        result = provider.analyze("nonexistent")
+
+        assert result is None
+
+    def test_refresh_is_noop(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """refresh() is a no-op for on-demand providers."""
+        from beadloom.tui.data_providers import WhyDataProvider
+
+        _, project_root = populated_db
+        provider = WhyDataProvider(conn=ro_conn, project_root=project_root)
+        # Should not raise
+        provider.refresh()
+
+
+class TestContextDataProvider:
+    """Tests for ContextDataProvider."""
+
+    def test_get_context_existing(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """get_context() returns a bundle dict for an existing node."""
+        from beadloom.tui.data_providers import ContextDataProvider
+
+        _, project_root = populated_db
+        provider = ContextDataProvider(conn=ro_conn, project_root=project_root)
+        ctx = provider.get_context("auth")
+
+        assert ctx is not None
+        assert isinstance(ctx, dict)
+        assert "focus" in ctx
+
+    def test_get_context_missing(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """get_context() returns None for a missing node."""
+        from beadloom.tui.data_providers import ContextDataProvider
+
+        _, project_root = populated_db
+        provider = ContextDataProvider(conn=ro_conn, project_root=project_root)
+        ctx = provider.get_context("nonexistent")
+
+        assert ctx is None
+
+    def test_estimate_tokens(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """estimate_tokens() returns an integer approximation."""
+        from beadloom.tui.data_providers import ContextDataProvider
+
+        _, project_root = populated_db
+        provider = ContextDataProvider(conn=ro_conn, project_root=project_root)
+        tokens = provider.estimate_tokens("Hello, this is a test string.")
+
+        assert isinstance(tokens, int)
+        assert tokens > 0
+
+
+# ---------------------------------------------------------------------------
+# App Shell Tests
+# ---------------------------------------------------------------------------
+
+
+class TestBeadloomApp:
+    """Tests for the BeadloomApp multi-screen shell."""
+
+    def test_app_instantiation(self, populated_db: tuple[Path, Path]) -> None:
+        """App can be instantiated with correct attributes."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        assert app.db_path == db_path
+        assert app.project_root == project_root
+        assert app.TITLE == "Beadloom"
+        assert app.no_watch is False
+
+    def test_app_no_watch_flag(self, populated_db: tuple[Path, Path]) -> None:
+        """App respects the no_watch flag."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root, no_watch=True)
+        assert app.no_watch is True
+
+    @pytest.mark.asyncio()
+    async def test_app_mounts_with_dashboard(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """App mounts and shows dashboard screen by default."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.dashboard import DashboardScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            assert app.is_running
+            # Current screen should be DashboardScreen
+            assert isinstance(app.screen, DashboardScreen)
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_providers_initialized_on_mount(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Data providers are initialized after app mounts."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            assert app.graph_provider is not None
+            assert app.lint_provider is not None
+            assert app.sync_provider is not None
+            assert app.debt_provider is not None
+            assert app.activity_provider is not None
+            assert app.why_provider is not None
+            assert app.context_provider is not None
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_screen_switch_to_explorer(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Pressing '2' switches to ExplorerScreen."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.explorer import ExplorerScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            await pilot.press("2")
+            assert isinstance(app.screen, ExplorerScreen)
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_screen_switch_to_doc_status(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Pressing '3' switches to DocStatusScreen."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.doc_status import DocStatusScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            await pilot.press("3")
+            assert isinstance(app.screen, DocStatusScreen)
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_screen_switch_back_to_dashboard(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Pressing '1' returns to DashboardScreen from another screen."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.dashboard import DashboardScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            await pilot.press("2")  # go to explorer
+            await pilot.press("1")  # back to dashboard
+            assert isinstance(app.screen, DashboardScreen)
+            await pilot.press("q")
+
+
+# ---------------------------------------------------------------------------
+# CLI Tests
+# ---------------------------------------------------------------------------
+
+
+class TestCLI:
+    """Tests for TUI CLI commands."""
+
+    def test_cli_tui_command_exists(self) -> None:
+        """The 'tui' command is registered on the main group."""
+        from beadloom.services.cli import main
+
+        assert "tui" in [cmd for cmd in main.commands]
+
+    def test_cli_ui_command_exists(self) -> None:
+        """The 'ui' command (alias) is registered on the main group."""
+        from beadloom.services.cli import main
+
+        assert "ui" in [cmd for cmd in main.commands]
+
+    def test_cli_tui_missing_db(self, tmp_path: Path) -> None:
+        """CLI shows error when database does not exist."""
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import tui
+
+        runner = CliRunner()
+        result = runner.invoke(tui, ["--project", str(tmp_path)])
         assert result.exit_code != 0
+        assert "database not found" in result.output or result.exit_code == 1
+
+    def test_cli_ui_missing_db(self, tmp_path: Path) -> None:
+        """CLI ui alias shows error when database does not exist."""
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import ui
+
+        runner = CliRunner()
+        result = runner.invoke(ui, ["--project", str(tmp_path)])
+        assert result.exit_code != 0
+        assert "database not found" in result.output or result.exit_code == 1
+
+    def test_cli_tui_missing_textual(self) -> None:
+        """CLI shows friendly error when textual not installed."""
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import tui
+
+        runner = CliRunner()
+
+        with patch.dict("sys.modules", {"beadloom.tui": None}):
+            result = runner.invoke(tui, [])
+            assert result.exit_code != 0
+
+    def test_cli_ui_missing_textual(self) -> None:
+        """CLI ui alias shows friendly error when textual not installed."""
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import ui
+
+        runner = CliRunner()
+
+        with patch.dict("sys.modules", {"beadloom.tui": None}):
+            result = runner.invoke(ui, [])
+            assert result.exit_code != 0
+
+    def test_cli_tui_has_no_watch_flag(self) -> None:
+        """The tui command has a --no-watch flag."""
+        from beadloom.services.cli import tui
+
+        param_names = [p.name for p in tui.params]
+        assert "no_watch" in param_names
+
+    def test_cli_ui_has_no_watch_flag(self) -> None:
+        """The ui command has a --no-watch flag."""
+        from beadloom.services.cli import ui
+
+        param_names = [p.name for p in ui.params]
+        assert "no_watch" in param_names
 
 
-def test_cli_ui_missing_db(tmp_path: Path) -> None:
-    """CLI shows error when database does not exist."""
-    from click.testing import CliRunner
+# ---------------------------------------------------------------------------
+# Launch function tests
+# ---------------------------------------------------------------------------
 
-    from beadloom.services.cli import ui
 
-    runner = CliRunner()
-    result = runner.invoke(ui, ["--project", str(tmp_path)])
-    assert result.exit_code != 0
-    assert "database not found" in result.output or result.exit_code == 1
+class TestLaunchFunction:
+    """Tests for the tui.__init__.launch() entry point."""
+
+    def test_launch_accepts_no_watch(self) -> None:
+        """launch() accepts no_watch keyword argument."""
+        import inspect
+
+        from beadloom.tui import launch
+
+        sig = inspect.signature(launch)
+        assert "no_watch" in sig.parameters
