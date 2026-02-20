@@ -132,8 +132,14 @@ class DocStatusScreen(Screen[None]):
             self.notify("Doc polish not implemented yet", title="Polish")
 
     def action_go_back(self) -> None:
-        """Return to the previous screen (dashboard)."""
-        self.app.pop_screen()
+        """Return to the dashboard screen."""
+        from beadloom.tui.app import SCREEN_DASHBOARD
+
+        app = self._get_app()
+        if app is not None:
+            app._safe_switch_screen(SCREEN_DASHBOARD)
+        else:
+            self.app.switch_screen(SCREEN_DASHBOARD)
 
     def refresh_all_widgets(self) -> None:
         """Refresh all doc status widgets with fresh data from providers."""

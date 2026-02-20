@@ -1961,6 +1961,31 @@ class TestDocStatusScreen:
             await pilot.press("q")
 
     @pytest.mark.asyncio()
+    async def test_doc_status_escape_via_switch_screen(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Esc from DocStatusScreen navigated via switch_screen returns to Dashboard."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.dashboard import DashboardScreen
+        from beadloom.tui.screens.doc_status import DocStatusScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            # Navigate via switch_screen (key "3")
+            await pilot.press("3")
+            await pilot.pause()
+            assert isinstance(app.screen, DocStatusScreen)
+
+            # Press Esc — should NOT crash with ScreenStackError
+            await pilot.press("escape")
+            await pilot.pause()
+
+            assert isinstance(app.screen, DashboardScreen)
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
     async def test_doc_status_generate_action(
         self, populated_db: tuple[Path, Path]
     ) -> None:
