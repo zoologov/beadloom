@@ -103,14 +103,14 @@ class TestShowContextUpdate:
         widget.show_context("new-node")
         assert widget._ref_id == "new-node"
 
-    def test_show_context_calls_refresh(self) -> None:
-        """show_context() calls self.refresh() to re-render."""
+    def test_show_context_calls_push_content(self) -> None:
+        """show_context() calls _push_content() to update the widget."""
         widget = ContextPreviewWidget()
 
-        with patch.object(widget, "refresh") as mock_refresh:
+        with patch.object(widget, "_push_content") as mock_push:
             widget.show_context("node-x")
 
-        mock_refresh.assert_called_once()
+        mock_push.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -178,9 +178,9 @@ class TestRenderContextPreviewEdgeCases:
         assert "not available" in plain
 
     def test_render_empty_ref_id_widget(self) -> None:
-        """Widget render returns placeholder text when no ref_id is set."""
+        """Widget _build_text returns placeholder text when no ref_id is set."""
         widget = ContextPreviewWidget()
-        text: Text = widget.render()
+        text: Text = widget._build_text()
         plain = text.plain
 
         assert "Select a node to see context preview" in plain
