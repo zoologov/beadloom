@@ -43,7 +43,15 @@ Global keybindings:
 
 #### DashboardScreen
 
-Main overview screen. Placeholder for BEAD-02 (graph tree, debt gauge, lint panel, activity).
+Main overview screen with architecture health dashboard. Layout:
+
+- Header bar: project title ("beadloom tui") + `DebtGaugeWidget` showing debt score with severity coloring
+- Left panel (40%): graph tree placeholder (will be replaced by `GraphTreeWidget` in BEAD-03)
+- Right panel (60%): `ActivityWidget` (per-domain git activity bars) + `LintPanelWidget` (violation counts and details)
+- Node summary bar: shows selected node info (wired when BEAD-03 adds selection)
+- Status bar: `StatusBarWidget` with node/edge/doc/stale counts, watcher status, last action
+
+Data is loaded from providers on mount via `_load_data()`. Supports `refresh_all_widgets()` for reactive updates.
 
 #### ExplorerScreen
 
@@ -52,6 +60,46 @@ Node deep-dive screen. Placeholder for BEAD-04 (node detail, dependency path, co
 #### DocStatusScreen
 
 Documentation health screen. Placeholder for BEAD-05 (doc health table).
+
+### Dashboard Widgets
+
+#### DebtGaugeWidget (`widgets/debt_gauge.py`)
+
+Displays architecture debt score with color-coded severity:
+
+- Green (0-20): low debt
+- Yellow (21-50): medium debt
+- Red (51+): high debt
+- Shows score number + severity label + direction arrow
+- `refresh_data(score)` for reactive updates
+
+#### LintPanelWidget (`widgets/lint_panel.py`)
+
+Displays lint violation count and individual violations:
+
+- Shows error/warning counts with icons
+- Lists individual violations with rule name, affected node, and description
+- Severity icons: error (heavy X), warning (warning sign), info (info sign)
+- `refresh_data(violations)` for reactive updates
+
+#### ActivityWidget (`widgets/activity.py`)
+
+Displays per-domain git activity as progress bars:
+
+- Shows domain name + activity level bar (filled/empty blocks)
+- Color coding: green (>=70%), yellow (>=30%), dim (<30%)
+- Activity level capped at 100% (based on commit count)
+- `refresh_data(activities)` for reactive updates
+
+#### StatusBarWidget (`widgets/status_bar.py`)
+
+Bottom status bar showing health metrics:
+
+- Node count, edge count, doc count, stale count
+- Watcher status indicator (placeholder for BEAD-06)
+- Last action message (auto-dismisses on next data refresh)
+- `refresh_data(node_count, edge_count, doc_count, stale_count)` for count updates
+- `set_watcher_active(active)` and `set_last_action(message)` for additional state
 
 ### Data Providers
 
@@ -73,17 +121,17 @@ The following widgets from the previous single-screen architecture still exist b
 
 - `widgets/domain_list.py` -- DomainList widget (extends OptionList)
 - `widgets/node_detail.py` -- NodeDetail widget (extends Static)
-- `widgets/status_bar.py` -- StatusBar widget (extends Static)
 
 These will be replaced by new screen-specific widgets in later beads.
 
 ### Data Flow
 
 1. `on_mount`: Opens DB, initializes 7 data providers, installs 3 screens, pushes DashboardScreen.
-2. Screen switching: keys 1/2/3 call `action_switch_screen(name)` -> `switch_screen()`.
-3. Reindex: `action_reindex()` -> `incremental_reindex()` -> refresh all providers.
-4. Lint: `action_lint()` -> `lint_provider.refresh()` -> notify count.
-5. Sync: `action_sync_check()` -> `sync_provider.refresh()` -> notify stale count.
+2. DashboardScreen `on_mount`: Loads debt score, activity, lint violations, and status bar counts from providers.
+3. Screen switching: keys 1/2/3 call `action_switch_screen(name)` -> `switch_screen()`.
+4. Reindex: `action_reindex()` -> `incremental_reindex()` -> refresh all providers.
+5. Lint: `action_lint()` -> `lint_provider.refresh()` -> notify count.
+6. Sync: `action_sync_check()` -> `sync_provider.refresh()` -> notify stale count.
 
 ### Constraints
 
@@ -106,19 +154,31 @@ Module `src/beadloom/tui/data_providers.py`:
 
 - `GraphDataProvider`, `LintDataProvider`, `SyncDataProvider`, `DebtDataProvider`, `ActivityDataProvider`, `WhyDataProvider`, `ContextDataProvider`
 
+Module `src/beadloom/tui/widgets/`:
+
+- `DebtGaugeWidget` -- debt score with severity coloring
+- `LintPanelWidget` -- lint violation counts and details
+- `ActivityWidget` -- per-domain git activity bars
+- `StatusBarWidget` -- health metrics, watcher status, last action
+
 Source files in `src/beadloom/tui/`:
 
 - `app.py` -- application class, keybindings, screen management
 - `data_providers.py` -- 7 data provider classes
-- `screens/dashboard.py` -- DashboardScreen (stub)
+- `screens/dashboard.py` -- DashboardScreen with all dashboard widgets
 - `screens/explorer.py` -- ExplorerScreen (stub)
 - `screens/doc_status.py` -- DocStatusScreen (stub)
 - `styles/app.tcss` -- app-level styles
-- `styles/dashboard.tcss` -- dashboard screen styles
+- `styles/dashboard.tcss` -- dashboard screen styles (header, left/right panels, summary, status bar)
 - `styles/explorer.tcss` -- explorer screen styles
 - `styles/doc_status.tcss` -- doc status screen styles
-- `widgets/` -- legacy widgets (domain_list, node_detail, status_bar)
+- `widgets/activity.py` -- ActivityWidget (per-domain git activity)
+- `widgets/debt_gauge.py` -- DebtGaugeWidget (debt score severity)
+- `widgets/lint_panel.py` -- LintPanelWidget (violations display)
+- `widgets/status_bar.py` -- StatusBarWidget (health metrics bar)
+- `widgets/domain_list.py` -- legacy DomainList widget
+- `widgets/node_detail.py` -- legacy NodeDetail widget
 
 ## Testing
 
-TUI is tested via Textual's pilot testing framework in `tests/test_tui.py`. Tests cover: all 7 data providers, app shell instantiation, screen switching (keys 1/2/3), CLI commands (`tui` and `ui`), launch function signature.
+TUI is tested via Textual's pilot testing framework in `tests/test_tui.py`. Tests cover: all 7 data providers, app shell instantiation, screen switching (keys 1/2/3), CLI commands (`tui` and `ui`), launch function signature, all 4 dashboard widgets (DebtGaugeWidget, LintPanelWidget, ActivityWidget, StatusBarWidget), DashboardScreen composition and data loading. Total: 77 tests.
