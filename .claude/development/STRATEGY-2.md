@@ -341,6 +341,8 @@ Beadloom is for engineers who build and maintain serious IT systems. YAML graph 
 
 **Experimental status:** ⚗️ This feature ships as experimental in v1.8. The keyword-proximity matching algorithm needs real-world validation across diverse projects (different doc styles, languages, structures). User feedback will shape the matching heuristics, fact registry, and tolerance system. API may change in v1.9.
 
+**Dogfooding results (v1.9.0):** Initial release had ~86% FP rate on beadloom itself (107 stale, ~15 genuine). BDL-027 fixes (skip numbers <10, standalone year filter, SPEC.md exclusion, full paths) reduced to 46 stale with ~60% FP rate. Remaining false positives are numbers used as **examples** in docs (e.g., "10 nodes as input") that are indistinguishable from **claims** (e.g., "project has 10 nodes") using regex-only proximity matching. Further FP reduction requires semantic analysis of mention context — planned for Phase 14 (`beadloom[semantic]`).
+
 **Prerequisites:** Manifest parsing (existing), code_symbols (existing), graph storage (existing). No dependency on other v1.8 phases.
 
 | # | Task | Type | P | Effort |
@@ -397,6 +399,7 @@ Beadloom is for engineers who build and maintain serious IT systems. YAML graph 
 | 14.5 | **Plugin system** — entry points for custom nodes, edges, indexers, rules | feature | P1 | L |
 | 14.6 | **Code similarity** — `beadloom similar REF_ID` finds similar nodes by embedding distance | feature | P2 | S |
 | 14.7 | **Embedding cache invalidation** — re-embed only changed nodes | feature | P2 | S |
+| 14.8 | **Semantic docs audit** — use embeddings to classify doc mentions as "claim about current state" vs "example/illustration/threshold". Reduces `docs audit` FP rate from ~60% to <20% by understanding mention context semantically, not just via keyword proximity | feature | P2 | M |
 
 ### Phase 15: Quality and Robustness (cross-cutting)
 
