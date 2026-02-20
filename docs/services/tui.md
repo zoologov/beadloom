@@ -30,7 +30,7 @@ The TUI opens the SQLite database in read-only mode and initializes 7 data provi
 
 ## Screens
 
-The TUI has three screens, accessible via the `1`, `2`, and `3` keys.
+The TUI has three screens, accessible via the `1`, `2`, and `3` keys. Each screen includes a description label below its header explaining the screen's purpose, and an action bar at the bottom with keybinding hints for available actions.
 
 ### Dashboard (key: 1)
 
@@ -39,6 +39,8 @@ Main overview showing architecture health at a glance.
 ```
 +------------------------------------------------------+
 |  beadloom tui -- ProjectName              Debt: 23 ^  |
++------------------------------------------------------+
+|  Architecture overview: graph structure, git ...      |
 +------------------------+-----------------------------+
 |  Graph Tree            |  Activity + Lint            |
 |  (left, 40%)           |  (right, 60%)               |
@@ -48,15 +50,19 @@ Main overview showing architecture health at a glance.
 +------------------------------------------------------+
 |  [1]dash [2]explore [3]docs  [r]eindex [q]uit  * ok   |
 +------------------------------------------------------+
+|  [Enter]explore [r]eindex [l]int [s]ync-check ...     |
++------------------------------------------------------+
 ```
 
 **Widgets:**
 
 - **DebtGaugeWidget** -- Debt score with severity coloring (green 0-20, yellow 21-50, red 51+) and direction arrow.
+- **Screen description** -- A label describing the screen purpose ("Architecture overview: graph structure, git activity, lint & debt health").
 - **GraphTreeWidget** -- Interactive tree built from `part_of` edges showing the architecture hierarchy. Each node label includes a doc status indicator (green circle = fresh, yellow triangle = stale, red X = missing) and an edge count badge. Nodes are sorted by kind (service > domain > feature) then alphabetically. Selecting a node emits a `NodeSelected` message that updates the summary bar.
 - **ActivityWidget** -- Per-domain git activity displayed as colored progress bars (green >=70%, yellow >=30%, dim <30%).
 - **LintPanelWidget** -- Violation counts with severity icons (error, warning, info) and individual violation details (rule name, affected node, description).
 - **StatusBarWidget** -- Node count, edge count, doc count, stale count, watcher status indicator, and last action message. Supports auto-dismissing notifications.
+- **Action bar** -- Keybinding hints at the bottom of the screen showing available actions: `[Enter]explore`, `[r]eindex`, `[l]int`, `[s]ync-check`, `[S]napshot`, `[?]help`.
 
 ### Explorer (key: 2)
 
@@ -65,10 +71,12 @@ Deep-dive into a selected architecture node.
 ```
 +------------------------------------------------------+
 |  Explorer: context-oracle                             |
++------------------------------------------------------+
+|  Node deep-dive: detail, dependencies, context bundle |
 +------------------------+-----------------------------+
 |  Node Detail           |  Dependencies / Context     |
-|  (symbols, edges,      |  (why tree or ctx preview)  |
-|   routes, tests)       |                             |
+|  (connections, symbols)|  (why tree or ctx preview)  |
+|                        |                             |
 +------------------------+-----------------------------+
 |  [u]pstream [d]ownstream [c]ontext [o]pen  [Esc]back  |
 +------------------------------------------------------+
@@ -78,9 +86,10 @@ The Explorer screen loads the node selected on the Dashboard (tracked via `NodeS
 
 **Widgets:**
 
-- **NodeDetailPanel** -- Shows ref_id, kind, summary, source path, outgoing/incoming edges with edge kinds, and documentation status (documented or missing).
+- **Screen description** -- A label describing the screen purpose ("Node deep-dive: detail, dependencies, context bundle").
+- **NodeDetailPanel** -- Shows ref_id, kind, summary, source path, a Connections summary (outgoing/incoming edge counts grouped by edge kind), a Symbols list (top-level functions and classes from the code indexer with kind glyphs and line numbers), and documentation status (documented or missing).
 - **DependencyPathWidget** -- Renders upstream or downstream dependency trees with connectors, edge types, and an impact summary (direct/transitive counts, stale doc count). Toggle between `u`pstream and `d`ownstream views.
-- **ContextPreviewWidget** -- Shows the context bundle for a node with estimated token count, character length, bundle keys, and a truncated preview (max 2000 chars).
+- **ContextPreviewWidget** -- Shows the context bundle for a node with estimated token count, character length, bundle keys, and the full bundle content. The widget supports vertical scrolling via `overflow-y: auto` for large context bundles.
 
 ### Doc Status (key: 3)
 
@@ -90,18 +99,22 @@ Documentation health overview with per-node status tracking.
 +------------------------------------------------------+
 |  Documentation Health -- 73% covered, 4 stale         |
 +------------------------------------------------------+
+|  Documentation health: coverage, freshness, ...       |
++------------------------------------------------------+
 |  Node              Status    Doc Path     Reason      |
 |  context-oracle    * fresh   README.md    --          |
 |  graph             ^ stale   README.md    symbols     |
 |  search            x missing --           --          |
 +------------------------------------------------------+
-|  [g]enerate [p]olish [Esc]back                        |
+|  [g]enerate  [p]olish  [Esc]back                      |
 +------------------------------------------------------+
 ```
 
-**Widget:**
+**Widgets:**
 
+- **Screen description** -- A label describing the screen purpose ("Documentation health: coverage, freshness, staleness reasons").
 - **DocHealthTable** -- DataTable with columns: Node, Status (indicator + label), Doc Path, Reason. Rows are sorted: stale first, then missing, then fresh. Color-coded by status. Supports row selection for generate/polish actions.
+- **Action bar** -- Keybinding hints at the bottom showing available actions: `[g]enerate`, `[p]olish`, `[Esc]back`.
 
 ## Keyboard Bindings
 
@@ -254,7 +267,7 @@ Module `src/beadloom/tui/app.py`:
 
 Module `src/beadloom/tui/data_providers.py`:
 
-- `GraphDataProvider` -- `get_nodes()`, `get_edges()`, `get_node(ref_id)`, `get_node_with_source(ref_id)`, `get_hierarchy()`, `get_edge_counts()`, `get_doc_ref_ids()`, `get_source_paths()`
+- `GraphDataProvider` -- `get_nodes()`, `get_edges()`, `get_node(ref_id)`, `get_node_with_source(ref_id)`, `get_hierarchy()`, `get_edge_counts()`, `get_doc_ref_ids()`, `get_source_paths()`, `get_symbols(ref_id)`
 - `LintDataProvider` -- `get_violations()`, `get_violation_count()`
 - `SyncDataProvider` -- `get_sync_results()`, `get_stale_count()`, `get_coverage()`
 - `DebtDataProvider` -- `get_debt_report()`, `get_score()`
@@ -275,4 +288,4 @@ TUI tests use Textual's headless pilot framework (`app.run_test()`).
 uv run pytest tests/test_tui.py -v
 ```
 
-Tests cover all 7 data providers, app shell instantiation, screen switching, CLI commands (`tui` and `ui`), all dashboard and explorer widgets, file watcher integration, overlays, keyboard actions, and status bar notifications. Total: 207 tests.
+Tests cover all 7 data providers, app shell instantiation, screen switching, CLI commands (`tui` and `ui`), all dashboard and explorer widgets, file watcher integration, overlays, keyboard actions, and status bar notifications. Total: 285 tests.

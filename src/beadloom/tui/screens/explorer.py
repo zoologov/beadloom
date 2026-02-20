@@ -69,6 +69,11 @@ class ExplorerScreen(Screen[None]):
                 self._header_text(),
                 id="explorer-header",
             )
+            yield Label(
+                "Node deep-dive: detail, dependencies, context bundle",
+                id="screen-description",
+                classes="screen-desc",
+            )
             with Horizontal(id="explorer-main"):
                 with Vertical(id="explorer-left"):
                     yield NodeDetailPanel(

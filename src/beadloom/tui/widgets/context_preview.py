@@ -15,9 +15,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Maximum preview characters to display
-_MAX_PREVIEW_CHARS = 2000
-
 # Label for the widget header
 _LABEL = "Context Preview"
 
@@ -69,17 +66,13 @@ def _render_context_preview(
     text.append("\n  Keys: ", style="bold underline")
     text.append(", ".join(sorted(bundle.keys())), style="dim")
 
-    # Truncated preview
+    # Full bundle content (scrollable via overflow-y: auto)
     text.append("\n\n")
     text.append("  \u2500" * 30, style="dim")
-    text.append("\n  Preview\n", style="bold underline")
-
-    preview = bundle_text[:_MAX_PREVIEW_CHARS]
-    if len(bundle_text) > _MAX_PREVIEW_CHARS:
-        preview += "\n  ... (truncated)"
+    text.append("\n  Content\n", style="bold underline")
 
     # Indent each line
-    for line in preview.split("\n"):
+    for line in bundle_text.split("\n"):
         text.append(f"  {line}\n", style="dim")
 
     return text
@@ -124,6 +117,9 @@ class ContextPreviewWidget(Static):
     def show_context(self, ref_id: str) -> None:
         """Show context preview for the given ref_id.
 
+        Resets scroll position to top so the user always starts reading
+        from the beginning of the new context bundle.
+
         Parameters
         ----------
         ref_id:
@@ -131,6 +127,8 @@ class ContextPreviewWidget(Static):
         """
         self._ref_id = ref_id
         self.refresh()
+        if self.is_mounted:
+            self.scroll_home(animate=False)
 
     def set_provider(self, context_provider: ContextDataProvider) -> None:
         """Set the context data provider."""

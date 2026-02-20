@@ -17,6 +17,14 @@
     text-style: bold;
 }
 
+/* Screen description below header */
+.screen-desc {
+    height: 1;
+    color: $text-muted;
+    text-style: italic;
+    padding: 0 1;
+}
+
 /* Main content: left + right panels */
 #explorer-main {
     layout: horizontal;
@@ -64,7 +72,10 @@
 #explorer-action-bar {
     width: 100%;
     height: 1;
+    padding: 0 2;
     background: $surface;
     color: $text-muted;
-    padding: 0 1;
+    text-style: italic;
+    dock: bottom;
+    border-top: solid $primary;
 }

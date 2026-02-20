@@ -119,6 +119,43 @@ class GraphDataProvider:
         ).fetchall()
         return [str(row["source"]) for row in rows]
 
+    def get_symbols(self, ref_id: str) -> list[dict[str, object]]:
+        """Return top-level symbols for a node's source file.
+
+        Uses tree-sitter via ``extract_symbols`` to parse the source file
+        associated with the given *ref_id*.  Returns a list of dicts with
+        keys ``symbol_name`` (str), ``kind`` (str), ``line_start`` (int).
+
+        Returns an empty list when the node has no source path, the file
+        does not exist, or symbol extraction fails.
+        """
+        node = self.get_node_with_source(ref_id)
+        if node is None:
+            return []
+        source = node.get("source")
+        if not source:
+            return []
+
+        source_path = self.project_root / str(source)
+        if not source_path.is_file():
+            return []
+
+        try:
+            from beadloom.context_oracle.code_indexer import extract_symbols
+
+            raw_symbols = extract_symbols(source_path)
+            return [
+                {
+                    "symbol_name": s["symbol_name"],
+                    "kind": s["kind"],
+                    "line_start": s["line_start"],
+                }
+                for s in raw_symbols
+            ]
+        except (OSError, ValueError, ImportError) as exc:
+            logger.warning("Symbol extraction failed for %s: %s", ref_id, exc)
+            return []
+
 
 @dataclass
 class LintDataProvider:
