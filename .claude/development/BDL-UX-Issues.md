@@ -73,6 +73,8 @@
 
 56. [2026-02-20] [LOW] `docs audit` Rich output lacks file path context — Stale mentions show bare filenames like `SPEC.md:44` without the full relative path. When multiple SPEC.md files exist across different feature directories, it's impossible to tell which file is referenced. **→ Fix: show relative path from project root (e.g., `docs/domains/graph/features/c4-diagrams/SPEC.md:44`)**
 
+57. [2026-02-20] [MEDIUM] `docs audit` version fact not collected for dynamic versioning — beadloom uses `dynamic = ["version"]` in pyproject.toml (Hatch dynamic versioning from `src/beadloom/__init__.py`). FactRegistry regex `^\s*version\s*=\s*"([^"]+)"` only matches static `version = "X.Y.Z"` lines — no match when version is dynamic. Many modern Python projects use hatchling/setuptools-scm/poetry dynamic versioning. Root cause: regex-only parsing can't handle `dynamic = [...]` indirection. **→ Fix: detect `dynamic = ["version"]` + `[tool.hatch.version] path = ...` and read version from that file; or fallback to `importlib.metadata.version(package_name)` for installed packages**
+
 31. [2026-02-16] [LOW] `bd dep remove` says "✓ Removed" but dependency persists — Running `bd dep remove beadloom-3v0 beadloom-53o` reports success, but `bd show beadloom-3v0` still shows the dependency and `bd blocked` still lists it as blocked. Workaround: `bd update --status in_progress --claim` works regardless of blocks. **→ Beads CLI bug, not beadloom**
 
 ---
