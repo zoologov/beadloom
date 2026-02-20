@@ -66,13 +66,15 @@ def _compute_depths(
     A root is any node that has no ``part_of`` parent.
     Returns a mapping of ref_id -> depth (0 for roots).
     """
-    # Children lookup: parent -> list of children
+    # Children lookup: parent -> list of children (skip self-referencing edges)
     children: dict[str, list[str]] = {}
     for child, par in parent_of.items():
-        children.setdefault(par, []).append(child)
+        if child != par:
+            children.setdefault(par, []).append(child)
 
-    # Roots are nodes not present as children in part_of
-    roots = all_ref_ids - set(parent_of.keys())
+    # Roots are nodes not present as children in part_of (excluding self-refs)
+    non_self_children = {child for child, par in parent_of.items() if child != par}
+    roots = all_ref_ids - non_self_children
 
     depths: dict[str, int] = {}
     queue: deque[tuple[str, int]] = deque()
@@ -163,6 +165,8 @@ def _load_edges(
         edge_kind: str = erow["kind"]
 
         if edge_kind == "part_of":
+            if src == dst:
+                continue  # skip self-referencing part_of
             parent_of[src] = dst
         elif edge_kind in _RELATIONSHIP_EDGE_KINDS:
             relationships.append(C4Relationship(src=src, dst=dst, label=edge_kind))
@@ -191,9 +195,12 @@ def _build_c4_node(
     else:
         c4_level = _depth_to_c4_level(depth)
 
+    # Label: title-case from ref_id (hyphen -> space)
+    label = ref_id.replace("-", " ").title()
+
     return C4Node(
         ref_id=ref_id,
-        label=summary if summary else ref_id,
+        label=label,
         c4_level=c4_level,
         description=summary,
         boundary=parent_of.get(ref_id),
@@ -312,9 +319,12 @@ def _mermaid_orphan_boundaries(
 ) -> list[str]:
     """Render boundary groups for parents that are not top-level nodes."""
     lines: list[str] = []
-    for parent_id, children in boundary_children.items():
-        if parent_id in rendered_ids:
-            continue
+    # Sort orphan boundaries alphabetically for deterministic output
+    sorted_parent_ids = sorted(
+        pid for pid in boundary_children if pid not in rendered_ids
+    )
+    for parent_id in sorted_parent_ids:
+        children = boundary_children[parent_id]
         parent = node_by_id.get(parent_id)
         parent_label = parent.label if parent else parent_id
         sid = _sanitize_id(parent_id)
@@ -460,9 +470,15 @@ def _filter_component(
 # PlantUML C4 renderer
 # ---------------------------------------------------------------------------
 
-_C4_PLANTUML_INCLUDE = (
-    "https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml"
+_C4_PLANTUML_BASE_URL = (
+    "https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master"
 )
+
+_C4_PLANTUML_INCLUDES: dict[str, str] = {
+    "context": f"{_C4_PLANTUML_BASE_URL}/C4_Context.puml",
+    "container": f"{_C4_PLANTUML_BASE_URL}/C4_Container.puml",
+    "component": f"{_C4_PLANTUML_BASE_URL}/C4_Component.puml",
+}
 
 
 def _sanitize_id(ref_id: str) -> str:
@@ -524,9 +540,12 @@ def _plantuml_orphan_boundaries(
 ) -> list[str]:
     """Render boundary groups for parents that are not top-level nodes."""
     lines: list[str] = []
-    for parent_id, children in boundary_children.items():
-        if parent_id in rendered_ids:
-            continue
+    # Sort orphan boundaries alphabetically for deterministic output
+    sorted_parent_ids = sorted(
+        pid for pid in boundary_children if pid not in rendered_ids
+    )
+    for parent_id in sorted_parent_ids:
+        children = boundary_children[parent_id]
         parent = node_by_id.get(parent_id)
         parent_label = parent.label if parent else parent_id
         sid = _sanitize_id(parent_id)
@@ -541,11 +560,13 @@ def _plantuml_orphan_boundaries(
 def render_c4_plantuml(
     nodes: list[C4Node],
     relationships: list[C4Relationship],
+    *,
+    level: str = "container",
 ) -> str:
     """Render C4 model elements as C4-PlantUML syntax.
 
     Produces a complete ``@startuml``/``@enduml`` block with:
-    - ``!include`` for the C4-PlantUML stdlib
+    - ``!include`` for the C4-PlantUML stdlib (selected by level)
     - ``System_Boundary()`` grouping for nodes sharing a boundary
     - Standard macros: ``System()``, ``Container()``, ``Component()``, ``Rel()``
     - ``_Ext`` / ``Db`` variants for external/database nodes
@@ -553,11 +574,14 @@ def render_c4_plantuml(
     Args:
         nodes: C4 nodes from ``map_to_c4()``.
         relationships: C4 relationships from ``map_to_c4()``.
+        level: C4 diagram level — ``"context"``, ``"container"`` (default),
+            or ``"component"``. Controls which ``!include`` is emitted.
 
     Returns:
         A string containing valid C4-PlantUML diagram source.
     """
-    lines: list[str] = ["@startuml", f"!include {_C4_PLANTUML_INCLUDE}", ""]
+    include_url = _C4_PLANTUML_INCLUDES.get(level, _C4_PLANTUML_INCLUDES["container"])
+    lines: list[str] = ["@startuml", f"!include {include_url}", ""]
     boundary_children: dict[str, list[C4Node]] = {}
     top_level_nodes: list[C4Node] = []
 

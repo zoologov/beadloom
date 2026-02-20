@@ -25,8 +25,8 @@ When an AI agent or developer requests context for a `ref_id`, Context Oracle:
 | `cache` | `cache.py` | L1 in-memory and L2 SQLite-backed context bundle caching |
 | `code_indexer` | `code_indexer.py` | Tree-sitter parsing and `beadloom:` annotation extraction for 12 languages |
 | `search` | `search.py` | FTS5 full-text search over architecture graph nodes and documentation |
-| `route_extractor` | `route_extractor.py` | API route extraction via tree-sitter AST + regex fallback for 12 frameworks |
-| `test_mapper` | `test_mapper.py` | Test framework detection and test file to source node mapping |
+| `route_extractor` | `route_extractor.py` | API route extraction via regex for 12 frameworks, with self-exclusion and display formatting |
+| `test_mapper` | `test_mapper.py` | Test framework detection, test file to source node mapping, and parent aggregation |
 | `why` | `why.py` | Impact analysis via bidirectional BFS (upstream deps + downstream dependents) |
 
 ### BFS Algorithm
@@ -129,7 +129,7 @@ Annotations are parsed from comments matching the pattern `# beadloom:<key>=<val
 
 ### Route Extractor
 
-Extracts API routes from source files using regex pattern matching across 12 frameworks:
+Extracts API routes from source files using regex pattern matching across 12 frameworks. Includes self-exclusion (skips files named `route_extractor` to avoid false positive matches from regex patterns in the extractor's own source code):
 
 | Language | Frameworks |
 |----------|-----------|
@@ -157,6 +157,8 @@ Mapping strategies (in priority order):
 1. Import analysis (pytest only) -- parse `from`/`import` statements
 2. Naming convention -- `test_auth.py` maps to `auth` node
 3. Directory proximity -- `tests/auth/test_login.py` maps to `auth` node
+
+Parent aggregation: `aggregate_parent_tests()` rolls up child node test counts to parent domain nodes, so domain-level context bundles show accurate test coverage instead of "0 tests".
 
 Coverage estimation: >3 test files = high, 1-3 = medium, 0 with framework detected = low, no framework = none.
 
@@ -354,7 +356,13 @@ class Route:
 def extract_routes(file_path: Path, language: str) -> list[Route]
 ```
 
-Extract API routes from a source file. The `language` parameter accepts: `"python"`, `"typescript"`, `"javascript"`, `"go"`, `"java"`, `"kotlin"`, `"graphql"`, `"protobuf"`. Returns routes capped at 100 per file.
+Extract API routes from a source file. The `language` parameter accepts: `"python"`, `"typescript"`, `"javascript"`, `"go"`, `"java"`, `"kotlin"`, `"graphql"`, `"protobuf"`. Returns routes capped at 100 per file. Files named `route_extractor` are skipped (self-exclusion to prevent false positives).
+
+```python
+def format_routes_for_display(routes_data: list[dict[str, str]]) -> str
+```
+
+Format route data for human-readable display. Separates HTTP routes from GraphQL routes (QUERY/MUTATION/SUBSCRIPTION), with wider path columns and distinct section formatting. Returns a formatted multi-line string.
 
 ### test_mapper.py -- Public Classes and Functions
 
@@ -375,6 +383,15 @@ def map_tests(
 ```
 
 Map test files to source nodes. `source_dirs` maps `ref_id -> source_path` (relative). Returns a `TestMapping` for each source node.
+
+```python
+def aggregate_parent_tests(
+    mappings: dict[str, TestMapping],
+    parent_children: dict[str, list[str]],
+) -> dict[str, TestMapping]
+```
+
+Aggregate child test counts up to parent nodes. For each parent in `parent_children` that has no direct test files, sums `test_count` and collects `test_files` from its children. Used by the reindex pipeline to show domain-level test coverage.
 
 ### search.py -- Public Functions
 

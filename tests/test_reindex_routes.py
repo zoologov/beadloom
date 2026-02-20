@@ -53,7 +53,11 @@ class TestReindexExtractsRoutes:
         # Arrange: graph node + source file with FastAPI routes.
         graph_dir = project / ".beadloom" / "_graph"
         (graph_dir / "services.yml").write_text(
-            'nodes:\n  - ref_id: api-svc\n    kind: service\n    summary: "API service"\n'
+            "nodes:\n"
+            "  - ref_id: api-svc\n"
+            "    kind: service\n"
+            '    summary: "API service"\n'
+            "    source: src\n"
         )
         src = project / "src"
         (src / "routes.py").write_text(
@@ -108,7 +112,11 @@ class TestReindexExtractsRoutes:
         """Routes persist across incremental reindex when code doesn't change."""
         graph_dir = project / ".beadloom" / "_graph"
         (graph_dir / "services.yml").write_text(
-            'nodes:\n  - ref_id: api-svc\n    kind: service\n    summary: "API service"\n'
+            "nodes:\n"
+            "  - ref_id: api-svc\n"
+            "    kind: service\n"
+            '    summary: "API service"\n'
+            "    source: src\n"
         )
         src = project / "src"
         (src / "api.py").write_text(
@@ -170,7 +178,11 @@ class TestReindexExtractsRoutes:
         """Routes from multiple source files are aggregated into nodes.extra."""
         graph_dir = project / ".beadloom" / "_graph"
         (graph_dir / "services.yml").write_text(
-            'nodes:\n  - ref_id: web-api\n    kind: service\n    summary: "Web API"\n'
+            "nodes:\n"
+            "  - ref_id: web-api\n"
+            "    kind: service\n"
+            '    summary: "Web API"\n'
+            "    source: src\n"
         )
         src = project / "src"
         (src / "auth.py").write_text(
@@ -220,7 +232,11 @@ class TestContextBundleRoutes:
 
         graph_dir = project / ".beadloom" / "_graph"
         (graph_dir / "services.yml").write_text(
-            'nodes:\n  - ref_id: api-svc\n    kind: service\n    summary: "API service"\n'
+            "nodes:\n"
+            "  - ref_id: api-svc\n"
+            "    kind: service\n"
+            '    summary: "API service"\n'
+            "    source: src\n"
         )
         src = project / "src"
         (src / "app.py").write_text(
@@ -255,7 +271,11 @@ class TestContextBundleRoutes:
 
         graph_dir = project / ".beadloom" / "_graph"
         (graph_dir / "services.yml").write_text(
-            'nodes:\n  - ref_id: api-svc\n    kind: service\n    summary: "API service"\n'
+            "nodes:\n"
+            "  - ref_id: api-svc\n"
+            "    kind: service\n"
+            '    summary: "API service"\n'
+            "    source: src\n"
         )
         src = project / "src"
         (src / "app.py").write_text(
@@ -274,7 +294,8 @@ class TestContextBundleRoutes:
 
         md = _format_markdown(bundle)
         assert "API Routes" in md
-        assert "POST /api/login" in md
+        assert "/api/login" in md
+        assert "POST" in md
         assert "login()" in md
 
     def test_no_routes_no_section_in_markdown(

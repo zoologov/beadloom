@@ -365,7 +365,7 @@ class TestCliDocsAudit:
         )
         (proj / "README.md").write_text(
             "# Demo\n\nDemo v2.0.0 is the current release.\n\n"
-            "We have 5 MCP tools available.\n",
+            "We have 15 MCP tools available.\n",
             encoding="utf-8",
         )
 
@@ -488,3 +488,576 @@ class TestCliDocsAudit:
             assert "fact" in item
             assert "mentioned" in item
             assert "actual" in item
+
+
+# ---------------------------------------------------------------------------
+# Issue #55 — test_count label shows "(symbols)" suffix
+# ---------------------------------------------------------------------------
+
+
+class TestFactLabelSuffix:
+    """test_count should be labeled with (symbols) suffix in Rich output."""
+
+    @staticmethod
+    def _setup_project_with_test_count(tmp_path: Path) -> Path:
+        """Create a project with test_count fact."""
+        proj = tmp_path / "proj"
+        proj.mkdir()
+        beadloom_dir = proj / ".beadloom"
+        beadloom_dir.mkdir()
+        (proj / "pyproject.toml").write_text(
+            '[project]\nname = "demo"\nversion = "1.0.0"\n',
+            encoding="utf-8",
+        )
+        (proj / "README.md").write_text(
+            "# Demo\n\nVersion 1.0.0 is current.\n",
+            encoding="utf-8",
+        )
+
+        from beadloom.infrastructure.db import create_schema, open_db
+
+        db_path = beadloom_dir / "beadloom.db"
+        conn = open_db(db_path)
+        create_schema(conn)
+        # Insert a node with test_count in extra
+        extra = json.dumps(
+            {"tests": {"test_count": 50, "framework": "pytest"}}
+        )
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, extra)"
+            " VALUES (?, ?, ?, ?)",
+            ("test-node", "feature", "test", extra),
+        )
+        conn.commit()
+        conn.close()
+        return proj
+
+    def test_test_count_label_has_symbols_suffix(self, tmp_path: Path) -> None:
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        proj = self._setup_project_with_test_count(tmp_path)
+        runner = CliRunner()
+        result = runner.invoke(main, ["docs", "audit", "--project", str(proj)])
+
+        assert result.exit_code == 0, result.output
+        # The label for test_count should include "(symbols)"
+        assert "test count (symbols)" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Issue #56 — Show relative path instead of basename
+# ---------------------------------------------------------------------------
+
+
+class TestRelativePath:
+    """Rich output should show relative path from project root, not basename."""
+
+    @staticmethod
+    def _setup_project_with_subdoc(tmp_path: Path) -> Path:
+        """Create a project with a doc in a subdirectory."""
+        proj = tmp_path / "proj"
+        proj.mkdir()
+        beadloom_dir = proj / ".beadloom"
+        beadloom_dir.mkdir()
+        (proj / "pyproject.toml").write_text(
+            '[project]\nname = "demo"\nversion = "3.0.0"\n',
+            encoding="utf-8",
+        )
+        docs_dir = proj / "docs"
+        docs_dir.mkdir()
+        (docs_dir / "guide.md").write_text(
+            "# Guide\n\nDemo v2.0.0 is the current release.\n",
+            encoding="utf-8",
+        )
+
+        from beadloom.infrastructure.db import create_schema, open_db
+
+        db_path = beadloom_dir / "beadloom.db"
+        conn = open_db(db_path)
+        create_schema(conn)
+        conn.close()
+        return proj
+
+    def test_rich_output_shows_relative_path(self, tmp_path: Path) -> None:
+        from click.testing import CliRunner
+
+        from beadloom.services.cli import main
+
+        proj = self._setup_project_with_subdoc(tmp_path)
+        runner = CliRunner()
+        result = runner.invoke(main, ["docs", "audit", "--project", str(proj)])
+
+        assert result.exit_code == 0, result.output
+        # Should show "docs/guide.md" not just "guide.md"
+        assert "docs/guide.md" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Issue #57 — Dynamic versioning detection
+# ---------------------------------------------------------------------------
+
+
+class TestDynamicVersioning:
+    """FactRegistry should detect dynamic versioning via Hatch and importlib.metadata."""
+
+    def test_hatch_dynamic_version(self, tmp_path: Path) -> None:
+        """When pyproject has dynamic=['version'] + [tool.hatch.version], read from source."""
+        from beadloom.doc_sync.audit import FactRegistry
+        from beadloom.infrastructure.db import create_schema, open_db
+
+        proj = tmp_path / "proj"
+        proj.mkdir()
+        (proj / ".beadloom").mkdir()
+        (proj / "pyproject.toml").write_text(
+            '[project]\nname = "demo"\ndynamic = ["version"]\n\n'
+            '[tool.hatch.version]\npath = "src/demo/__init__.py"\n',
+            encoding="utf-8",
+        )
+        src_dir = proj / "src" / "demo"
+        src_dir.mkdir(parents=True)
+        (src_dir / "__init__.py").write_text(
+            '__version__ = "4.2.0"\n', encoding="utf-8"
+        )
+
+        db_path = proj / ".beadloom" / "test.db"
+        conn = open_db(db_path)
+        create_schema(conn)
+
+        registry = FactRegistry()
+        facts: dict[str, object] = {}
+        registry._collect_version(proj, facts)  # type: ignore[arg-type]
+        conn.close()
+
+        assert "version" in facts
+        fact = facts["version"]
+        assert fact.value == "4.2.0"  # type: ignore[union-attr]
+
+    def test_importlib_metadata_fallback(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When dynamic versioning has no hatch config, fall back to importlib.metadata."""
+        from beadloom.doc_sync.audit import FactRegistry
+
+        proj = tmp_path / "proj"
+        proj.mkdir()
+        (proj / ".beadloom").mkdir()
+        (proj / "pyproject.toml").write_text(
+            '[project]\nname = "demo-pkg"\ndynamic = ["version"]\n',
+            encoding="utf-8",
+        )
+
+        # Mock importlib.metadata.version to return a known value
+        import importlib.metadata
+
+        monkeypatch.setattr(
+            importlib.metadata, "version", lambda name: "5.0.0" if name == "demo-pkg" else None
+        )
+
+        registry = FactRegistry()
+        facts: dict[str, object] = {}
+        registry._collect_version(proj, facts)  # type: ignore[arg-type]
+
+        assert "version" in facts
+        fact = facts["version"]
+        assert fact.value == "5.0.0"  # type: ignore[union-attr]
+
+    def test_static_version_still_works(self, tmp_path: Path) -> None:
+        """Static version in pyproject.toml should still be detected."""
+        from beadloom.doc_sync.audit import FactRegistry
+        from beadloom.infrastructure.db import create_schema, open_db
+
+        proj = tmp_path / "proj"
+        proj.mkdir()
+        (proj / ".beadloom").mkdir()
+        (proj / "pyproject.toml").write_text(
+            '[project]\nname = "demo"\nversion = "1.0.0"\n',
+            encoding="utf-8",
+        )
+
+        db_path = proj / ".beadloom" / "test.db"
+        conn = open_db(db_path)
+        create_schema(conn)
+
+        registry = FactRegistry()
+        facts: dict[str, object] = {}
+        registry._collect_version(proj, facts)  # type: ignore[arg-type]
+        conn.close()
+
+        assert "version" in facts
+        fact = facts["version"]
+        assert fact.value == "1.0.0"  # type: ignore[union-attr]
+
+
+# ---------------------------------------------------------------------------
+# parse_fail_condition edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestParseFailCondition:
+    """Tests for parse_fail_condition() to cover validation branches."""
+
+    def test_valid_stale_gt(self) -> None:
+        from beadloom.doc_sync.audit import parse_fail_condition
+
+        metric, op, threshold = parse_fail_condition("stale>0")
+        assert metric == "stale"
+        assert op == ">"
+        assert threshold == 0
+
+    def test_valid_stale_gte(self) -> None:
+        from beadloom.doc_sync.audit import parse_fail_condition
+
+        metric, op, threshold = parse_fail_condition("stale>=5")
+        assert metric == "stale"
+        assert op == ">="
+        assert threshold == 5
+
+    def test_invalid_syntax(self) -> None:
+        import click
+
+        from beadloom.doc_sync.audit import parse_fail_condition
+
+        with pytest.raises(click.BadParameter, match="Invalid"):
+            parse_fail_condition("not-valid")
+
+    def test_unsupported_metric(self) -> None:
+        import click
+
+        from beadloom.doc_sync.audit import parse_fail_condition
+
+        with pytest.raises(click.BadParameter, match="Unsupported metric"):
+            parse_fail_condition("unknown>0")
+
+
+# ---------------------------------------------------------------------------
+# _load_tolerances_from_config edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestLoadTolerancesFromConfig:
+    """Tests for _load_tolerances_from_config() config loading branches."""
+
+    def test_no_config_file(self, tmp_path: Path) -> None:
+        from beadloom.doc_sync.audit import _load_tolerances_from_config
+
+        result = _load_tolerances_from_config(tmp_path)
+        assert result is None
+
+    def test_valid_config(self, tmp_path: Path) -> None:
+        from beadloom.doc_sync.audit import _load_tolerances_from_config
+
+        config_dir = tmp_path / ".beadloom"
+        config_dir.mkdir()
+        (config_dir / "config.yml").write_text(
+            "docs_audit:\n  tolerances:\n    test_count: 0.10\n    node_count: 0.05\n",
+            encoding="utf-8",
+        )
+        result = _load_tolerances_from_config(tmp_path)
+        assert result is not None
+        assert result["test_count"] == 0.10
+        assert result["node_count"] == 0.05
+
+    def test_empty_tolerances(self, tmp_path: Path) -> None:
+        from beadloom.doc_sync.audit import _load_tolerances_from_config
+
+        config_dir = tmp_path / ".beadloom"
+        config_dir.mkdir()
+        (config_dir / "config.yml").write_text(
+            "docs_audit:\n  tolerances: {}\n",
+            encoding="utf-8",
+        )
+        result = _load_tolerances_from_config(tmp_path)
+        assert result is None  # empty dict returns None
+
+    def test_no_docs_audit_section(self, tmp_path: Path) -> None:
+        from beadloom.doc_sync.audit import _load_tolerances_from_config
+
+        config_dir = tmp_path / ".beadloom"
+        config_dir.mkdir()
+        (config_dir / "config.yml").write_text(
+            "other_section:\n  key: value\n",
+            encoding="utf-8",
+        )
+        result = _load_tolerances_from_config(tmp_path)
+        assert result is None
+
+    def test_non_numeric_tolerance_skipped(self, tmp_path: Path) -> None:
+        from beadloom.doc_sync.audit import _load_tolerances_from_config
+
+        config_dir = tmp_path / ".beadloom"
+        config_dir.mkdir()
+        (config_dir / "config.yml").write_text(
+            "docs_audit:\n  tolerances:\n    test_count: 'invalid'\n    node_count: 0.05\n",
+            encoding="utf-8",
+        )
+        result = _load_tolerances_from_config(tmp_path)
+        assert result is not None
+        assert "test_count" not in result
+        assert result["node_count"] == 0.05
+
+    def test_malformed_yaml(self, tmp_path: Path) -> None:
+        from beadloom.doc_sync.audit import _load_tolerances_from_config
+
+        config_dir = tmp_path / ".beadloom"
+        config_dir.mkdir()
+        (config_dir / "config.yml").write_text(
+            "not: [valid: yaml: {{{\n",
+            encoding="utf-8",
+        )
+        result = _load_tolerances_from_config(tmp_path)
+        assert result is None
+
+    def test_not_a_dict(self, tmp_path: Path) -> None:
+        from beadloom.doc_sync.audit import _load_tolerances_from_config
+
+        config_dir = tmp_path / ".beadloom"
+        config_dir.mkdir()
+        (config_dir / "config.yml").write_text(
+            "just a string\n",
+            encoding="utf-8",
+        )
+        result = _load_tolerances_from_config(tmp_path)
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# FactRegistry collector edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestFactRegistryCollectors:
+    """Edge cases for FactRegistry database collector methods."""
+
+    def test_collect_db_counts(self, tmp_path: Path) -> None:
+        """node_count and edge_count are collected from DB."""
+        from beadloom.doc_sync.audit import FactRegistry
+        from beadloom.infrastructure.db import create_schema, open_db
+
+        proj = tmp_path / "proj"
+        proj.mkdir()
+        (proj / ".beadloom").mkdir()
+        db_path = proj / ".beadloom" / "test.db"
+        conn = open_db(db_path)
+        create_schema(conn)
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary) VALUES (?, ?, ?)",
+            ("n1", "feature", "N1"),
+        )
+        conn.commit()
+
+        registry = FactRegistry()
+        facts: dict[str, object] = {}
+        registry._collect_db_counts(conn, facts)
+        conn.close()
+
+        assert "node_count" in facts
+        assert facts["node_count"].value == 1
+
+    def test_collect_language_count(self, tmp_path: Path) -> None:
+        """language_count is derived from code_symbols file extensions."""
+        from beadloom.doc_sync.audit import FactRegistry
+        from beadloom.infrastructure.db import create_schema, open_db
+
+        proj = tmp_path / "proj"
+        proj.mkdir()
+        (proj / ".beadloom").mkdir()
+        db_path = proj / ".beadloom" / "test.db"
+        conn = open_db(db_path)
+        create_schema(conn)
+        conn.execute(
+            "INSERT INTO code_symbols (file_path, symbol_name, kind, "
+            "line_start, line_end, annotations, file_hash) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("src/mod.py", "f", "function", 1, 1, "{}", "h"),
+        )
+        conn.execute(
+            "INSERT INTO code_symbols (file_path, symbol_name, kind, "
+            "line_start, line_end, annotations, file_hash) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("src/app.ts", "g", "function", 1, 1, "{}", "h2"),
+        )
+        conn.commit()
+
+        registry = FactRegistry()
+        facts: dict[str, Fact] = {}
+        registry._collect_language_count(conn, facts)
+        conn.close()
+
+        assert "language_count" in facts
+        assert facts["language_count"].value == 2  # Python + TypeScript
+
+    def test_collect_test_count(self, tmp_path: Path) -> None:
+        """test_count sums tests.test_count from nodes.extra JSON."""
+        from beadloom.doc_sync.audit import FactRegistry
+        from beadloom.infrastructure.db import create_schema, open_db
+
+        proj = tmp_path / "proj"
+        proj.mkdir()
+        (proj / ".beadloom").mkdir()
+        db_path = proj / ".beadloom" / "test.db"
+        conn = open_db(db_path)
+        create_schema(conn)
+        extra = json.dumps({"tests": {"test_count": 42, "framework": "pytest"}})
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, extra) VALUES (?, ?, ?, ?)",
+            ("n1", "feature", "N1", extra),
+        )
+        conn.commit()
+
+        registry = FactRegistry()
+        facts: dict[str, Fact] = {}
+        registry._collect_test_count(conn, facts)
+        conn.close()
+
+        assert "test_count" in facts
+        assert facts["test_count"].value == 42
+
+    def test_collect_framework_count(self, tmp_path: Path) -> None:
+        """framework_count counts nodes with non-empty framework in extra."""
+        from beadloom.doc_sync.audit import FactRegistry
+        from beadloom.infrastructure.db import create_schema, open_db
+
+        proj = tmp_path / "proj"
+        proj.mkdir()
+        (proj / ".beadloom").mkdir()
+        db_path = proj / ".beadloom" / "test.db"
+        conn = open_db(db_path)
+        create_schema(conn)
+        extra = json.dumps({"tests": {"test_count": 10, "framework": "pytest"}})
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, extra) VALUES (?, ?, ?, ?)",
+            ("n1", "feature", "N1", extra),
+        )
+        conn.commit()
+
+        registry = FactRegistry()
+        facts: dict[str, Fact] = {}
+        registry._collect_framework_count(conn, facts)
+        conn.close()
+
+        assert "framework_count" in facts
+        assert facts["framework_count"].value == 1
+
+    def test_collect_rule_type_count(self, tmp_path: Path) -> None:
+        """rule_type_count counts rules in the rules table."""
+        from beadloom.doc_sync.audit import FactRegistry
+        from beadloom.infrastructure.db import create_schema, open_db
+
+        proj = tmp_path / "proj"
+        proj.mkdir()
+        (proj / ".beadloom").mkdir()
+        db_path = proj / ".beadloom" / "test.db"
+        conn = open_db(db_path)
+        create_schema(conn)
+        conn.execute(
+            "INSERT INTO rules (name, rule_type, rule_json) VALUES (?, ?, ?)",
+            ("test-rule", "require", '{"pattern": "*.py"}'),
+        )
+        conn.commit()
+
+        registry = FactRegistry()
+        facts: dict[str, Fact] = {}
+        registry._collect_rule_type_count(conn, facts)
+        conn.close()
+
+        assert "rule_type_count" in facts
+        assert facts["rule_type_count"].value == 1
+
+    def test_collect_extra_facts_from_config(self, tmp_path: Path) -> None:
+        """Extra facts loaded from .beadloom/config.yml."""
+        from beadloom.doc_sync.audit import FactRegistry
+
+        proj = tmp_path / "proj"
+        proj.mkdir()
+        config_dir = proj / ".beadloom"
+        config_dir.mkdir()
+        (config_dir / "config.yml").write_text(
+            "docs_audit:\n"
+            "  extra_facts:\n"
+            "    custom_metric:\n"
+            "      value: 42\n"
+            "      source: manual\n",
+            encoding="utf-8",
+        )
+
+        registry = FactRegistry()
+        facts: dict[str, Fact] = {}
+        registry._collect_extra_facts(proj, facts)
+
+        assert "custom_metric" in facts
+        assert facts["custom_metric"].value == 42
+        assert facts["custom_metric"].source == "manual"
+
+    def test_collect_extra_facts_skips_malformed(self, tmp_path: Path) -> None:
+        """Malformed extra facts (no value, wrong type) are skipped."""
+        from beadloom.doc_sync.audit import FactRegistry
+
+        proj = tmp_path / "proj"
+        proj.mkdir()
+        config_dir = proj / ".beadloom"
+        config_dir.mkdir()
+        (config_dir / "config.yml").write_text(
+            "docs_audit:\n"
+            "  extra_facts:\n"
+            "    no_value:\n"
+            "      source: manual\n"
+            "    bad_type:\n"
+            "      value: [1, 2, 3]\n"
+            "      source: manual\n"
+            "    good_one:\n"
+            "      value: 99\n"
+            "      source: manual\n"
+            "    also_bad:\n"
+            "      not_a_dict_value: true\n",
+            encoding="utf-8",
+        )
+
+        registry = FactRegistry()
+        facts: dict[str, Fact] = {}
+        registry._collect_extra_facts(proj, facts)
+
+        # Only the good fact should be collected
+        assert "good_one" in facts
+        assert facts["good_one"].value == 99
+        assert "no_value" not in facts
+        assert "bad_type" not in facts
+
+    def test_version_from_package_json(self, tmp_path: Path) -> None:
+        """Version can be read from package.json."""
+        from beadloom.doc_sync.audit import FactRegistry
+
+        proj = tmp_path / "proj"
+        proj.mkdir()
+        (proj / ".beadloom").mkdir()
+        (proj / "package.json").write_text(
+            json.dumps({"name": "my-app", "version": "2.5.0"}),
+            encoding="utf-8",
+        )
+
+        registry = FactRegistry()
+        facts: dict[str, Fact] = {}
+        registry._collect_version(proj, facts)  # type: ignore[arg-type]
+
+        assert "version" in facts
+        assert facts["version"].value == "2.5.0"
+
+    def test_version_from_cargo_toml(self, tmp_path: Path) -> None:
+        """Version can be read from Cargo.toml."""
+        from beadloom.doc_sync.audit import FactRegistry
+
+        proj = tmp_path / "proj"
+        proj.mkdir()
+        (proj / ".beadloom").mkdir()
+        (proj / "Cargo.toml").write_text(
+            '[package]\nname = "my-crate"\nversion = "0.3.1"\n',
+            encoding="utf-8",
+        )
+
+        registry = FactRegistry()
+        facts: dict[str, Fact] = {}
+        registry._collect_version(proj, facts)  # type: ignore[arg-type]
+
+        assert "version" in facts
+        assert facts["version"].value == "0.3.1"

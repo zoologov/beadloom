@@ -12,6 +12,8 @@ from beadloom.graph.c4 import (
     C4Node,
     C4Relationship,
     _c4_element_name,
+    _compute_depths,
+    _load_edges,
     filter_c4_nodes,
     map_to_c4,
     render_c4_mermaid,
@@ -372,15 +374,17 @@ class TestRelationships:
 
 
 class TestLabel:
-    def test_label_from_summary(self, conn: sqlite3.Connection) -> None:
+    def test_label_from_ref_id(self, conn: sqlite3.Connection) -> None:
         _insert_node(conn, "my-service", kind="service", summary="My Great Service")
         nodes, _ = map_to_c4(conn)
-        assert nodes[0].label == "My Great Service"
+        # Label is derived from ref_id (title-cased, hyphen->space), not summary
+        assert nodes[0].label == "My Service"
+        assert nodes[0].description == "My Great Service"
 
-    def test_label_fallback_to_ref_id(self, conn: sqlite3.Connection) -> None:
+    def test_label_from_ref_id_when_no_summary(self, conn: sqlite3.Connection) -> None:
         _insert_node(conn, "my-service", kind="service", summary="")
         nodes, _ = map_to_c4(conn)
-        assert nodes[0].label == "my-service"
+        assert nodes[0].label == "My Service"
 
 
 # ===========================================================================
@@ -1623,7 +1627,8 @@ class TestMapToC4EdgeCases:
         db.execute(sql, ("nosummary", "domain"))
         db.commit()
         nodes, _ = map_to_c4(db)
-        assert nodes[0].label == "nosummary"
+        # Label is title-cased from ref_id, even when summary is NULL
+        assert nodes[0].label == "Nosummary"
         assert nodes[0].description == ""
         db.close()
 
@@ -2060,3 +2065,157 @@ class TestCLIC4Format:
         assert result.exit_code == 0, result.output
         assert "@startuml" in result.output
         assert "@enduml" in result.output
+
+
+# ===========================================================================
+# BDL-027 BEAD-01: C4 diagram bug fixes (#41-#45)
+# ===========================================================================
+
+
+class TestSelfRefDepths:
+    """#41: _compute_depths() — self-referencing part_of edge makes all nodes depth=0."""
+
+    def test_self_ref_filtered_from_roots(self) -> None:
+        """A self-referencing edge (beadloom -> beadloom) should be ignored.
+
+        Without the fix, beadloom appears in parent_of keys, so it is NOT a root,
+        and all children lose their depth chain (everything becomes depth=0).
+        """
+        parent_of = {"beadloom": "beadloom", "graph": "beadloom"}
+        all_ref_ids = {"beadloom", "graph"}
+        depths = _compute_depths(parent_of, all_ref_ids)
+        # beadloom should be root (depth=0), graph should be depth=1
+        assert depths["beadloom"] == 0
+        assert depths["graph"] == 1
+
+    def test_self_ref_via_db(self, conn: sqlite3.Connection) -> None:
+        """Integration: self-referencing edge in DB should not break depth."""
+        _insert_node(conn, "beadloom", kind="service", summary="Beadloom")
+        _insert_node(conn, "graph", kind="domain", summary="Graph domain")
+        _insert_edge(conn, "beadloom", "beadloom", "part_of")
+        _insert_edge(conn, "graph", "beadloom", "part_of")
+
+        nodes, _ = map_to_c4(conn)
+        by_id = {n.ref_id: n for n in nodes}
+        assert by_id["beadloom"].c4_level == "System"
+        assert by_id["graph"].c4_level == "Container"
+
+
+class TestLabelFromRefId:
+    """#42: _build_c4_node() — label should come from ref_id, not summary."""
+
+    def test_label_is_title_cased_ref_id(self, conn: sqlite3.Connection) -> None:
+        """Label should be title-cased ref_id (hyphen->space), not the full summary."""
+        _insert_node(
+            conn,
+            "context-oracle",
+            kind="domain",
+            summary="Context bundle building via BFS graph traversal",
+        )
+        nodes, _ = map_to_c4(conn)
+        assert nodes[0].label == "Context Oracle"
+        assert nodes[0].description == "Context bundle building via BFS graph traversal"
+
+    def test_label_single_word_ref_id(self, conn: sqlite3.Connection) -> None:
+        """Single-word ref_id should be title-cased."""
+        _insert_node(conn, "graph", kind="domain", summary="YAML graph stuff")
+        nodes, _ = map_to_c4(conn)
+        assert nodes[0].label == "Graph"
+        assert nodes[0].description == "YAML graph stuff"
+
+    def test_label_no_summary_still_uses_ref_id(self, conn: sqlite3.Connection) -> None:
+        """Even with empty summary, label comes from ref_id, description stays empty."""
+        _insert_node(conn, "my-service", kind="service", summary="")
+        nodes, _ = map_to_c4(conn)
+        assert nodes[0].label == "My Service"
+        assert nodes[0].description == ""
+
+
+class TestSelfRefLoadEdges:
+    """#43: _load_edges() — self-referencing part_of entries should be skipped."""
+
+    def test_self_ref_part_of_skipped(self, conn: sqlite3.Connection) -> None:
+        """Self-referencing part_of (beadloom -> beadloom) should not appear in parent_of."""
+        _insert_node(conn, "beadloom", kind="service", summary="Beadloom")
+        _insert_edge(conn, "beadloom", "beadloom", "part_of")
+
+        parent_of, _ = _load_edges(conn)
+        assert "beadloom" not in parent_of
+
+    def test_self_ref_does_not_set_boundary(self, conn: sqlite3.Connection) -> None:
+        """Node with self-ref part_of should have boundary=None (not itself)."""
+        _insert_node(conn, "beadloom", kind="service", summary="Beadloom")
+        _insert_edge(conn, "beadloom", "beadloom", "part_of")
+
+        nodes, _ = map_to_c4(conn)
+        assert nodes[0].boundary is None
+
+
+class TestBoundaryOrdering:
+    """#44: Orphan boundary ordering should be deterministic — root-first, then alphabetical."""
+
+    def test_orphan_boundaries_sorted(self) -> None:
+        """Orphan boundaries should render in deterministic order: depth=0 first, then alpha."""
+        # Create nodes where boundaries "z-parent" and "a-parent" are NOT top-level
+        nodes = [
+            C4Node(
+                ref_id="child-z", label="Child Z", c4_level="Container",
+                description="", boundary="z-parent",
+                is_external=False, is_database=False,
+            ),
+            C4Node(
+                ref_id="child-a", label="Child A", c4_level="Container",
+                description="", boundary="a-parent",
+                is_external=False, is_database=False,
+            ),
+        ]
+        result_mermaid = render_c4_mermaid(nodes, [])
+        # a-parent boundary should appear before z-parent boundary
+        a_pos = result_mermaid.index("a_parent_boundary")
+        z_pos = result_mermaid.index("z_parent_boundary")
+        assert a_pos < z_pos
+
+    def test_orphan_boundaries_sorted_plantuml(self) -> None:
+        """Same deterministic order in PlantUML renderer."""
+        nodes = [
+            C4Node(
+                ref_id="child-z", label="Child Z", c4_level="Container",
+                description="", boundary="z-parent",
+                is_external=False, is_database=False,
+            ),
+            C4Node(
+                ref_id="child-a", label="Child A", c4_level="Container",
+                description="", boundary="a-parent",
+                is_external=False, is_database=False,
+            ),
+        ]
+        result_puml = render_c4_plantuml(nodes, [])
+        a_pos = result_puml.index("a_parent_boundary")
+        z_pos = result_puml.index("z_parent_boundary")
+        assert a_pos < z_pos
+
+
+class TestPlantUMLIncludeByLevel:
+    """#45: PlantUML include should vary by C4 level."""
+
+    def test_default_is_container_include(self) -> None:
+        """Default (no level kwarg) should use C4_Container.puml."""
+        result = render_c4_plantuml([], [])
+        assert "C4_Container.puml" in result
+
+    def test_context_level_include(self) -> None:
+        """level='context' should use C4_Context.puml."""
+        result = render_c4_plantuml([], [], level="context")
+        assert "C4_Context.puml" in result
+        assert "C4_Container.puml" not in result
+
+    def test_container_level_include(self) -> None:
+        """level='container' should use C4_Container.puml."""
+        result = render_c4_plantuml([], [], level="container")
+        assert "C4_Container.puml" in result
+
+    def test_component_level_include(self) -> None:
+        """level='component' should use C4_Component.puml."""
+        result = render_c4_plantuml([], [], level="component")
+        assert "C4_Component.puml" in result
+        assert "C4_Container.puml" not in result

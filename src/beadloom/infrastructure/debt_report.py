@@ -233,24 +233,30 @@ def _count_stale(conn: sqlite3.Connection) -> tuple[int, list[str]]:
     return len(ref_ids), ref_ids
 
 
-def _count_untracked(conn: sqlite3.Connection) -> int:
+def _count_untracked(conn: sqlite3.Connection) -> tuple[int, list[str]]:
     """Count untracked source files (nodes with source but not tracked).
 
     This is a simplified check: nodes with a source directory
     that have no sync_state entries.
+
+    Returns (count, list_of_ref_ids).
     """
     rows = conn.execute(
         "SELECT n.ref_id FROM nodes n "
         "WHERE n.source IS NOT NULL "
         "AND n.ref_id NOT IN (SELECT DISTINCT ref_id FROM sync_state)"
     ).fetchall()
-    return len(rows)
+    ref_ids = [str(r[0]) for r in rows]
+    return len(ref_ids), ref_ids
 
 
 def _count_oversized(
     conn: sqlite3.Connection, threshold: int,
 ) -> tuple[int, list[str]]:
-    """Count nodes whose source directory has more symbols than threshold.
+    """Count nodes whose *own* source directory has more symbols than threshold.
+
+    For each node, child nodes' source prefixes are excluded so that only
+    symbols from files directly owned by the node are counted.
 
     Returns (count, list_of_ref_ids).
     """
@@ -258,16 +264,58 @@ def _count_oversized(
         "SELECT ref_id, source FROM nodes WHERE source IS NOT NULL"
     ).fetchall()
 
+    # Build a map of ref_id -> source prefix for all nodes
+    source_map: dict[str, str] = {}
+    for node in nodes:
+        source_map[str(node[0])] = str(node[1]).rstrip("/") + "/"
+
+    # Build child source prefixes per node via part_of edges
+    # A child C of parent P means: C --[part_of]--> P
+    child_prefixes: dict[str, list[str]] = {}
+    edges = conn.execute(
+        "SELECT src_ref_id, dst_ref_id FROM edges WHERE kind = 'part_of'"
+    ).fetchall()
+    for edge in edges:
+        child_ref = str(edge[0])
+        parent_ref = str(edge[1])
+        child_source = source_map.get(child_ref)
+        if child_source is not None:
+            child_prefixes.setdefault(parent_ref, []).append(child_source)
+
     oversized_refs: list[str] = []
     for node in nodes:
         ref_id = str(node[0])
-        source = str(node[1])
-        prefix = source.rstrip("/") + "/"
-        row = conn.execute(
-            "SELECT COUNT(*) FROM code_symbols WHERE file_path LIKE ?",
-            (prefix + "%",),
-        ).fetchone()
-        count = int(row[0]) if row else 0
+        prefix = source_map[ref_id]
+
+        # Get children's prefixes to exclude
+        excludes = child_prefixes.get(ref_id, [])
+
+        if not excludes:
+            # No children — count all symbols under this prefix
+            row = conn.execute(
+                "SELECT COUNT(*) FROM code_symbols WHERE file_path LIKE ?",
+                (prefix + "%",),
+            ).fetchone()
+            count = int(row[0]) if row else 0
+        else:
+            # Count all symbols under prefix, then subtract those under
+            # child prefixes
+            row = conn.execute(
+                "SELECT COUNT(*) FROM code_symbols WHERE file_path LIKE ?",
+                (prefix + "%",),
+            ).fetchone()
+            total = int(row[0]) if row else 0
+
+            child_count = 0
+            for child_prefix in excludes:
+                crow = conn.execute(
+                    "SELECT COUNT(*) FROM code_symbols WHERE file_path LIKE ?",
+                    (child_prefix + "%",),
+                ).fetchone()
+                child_count += int(crow[0]) if crow else 0
+
+            count = total - child_count
+
         if count > threshold:
             oversized_refs.append(ref_id)
 
@@ -443,7 +491,9 @@ def collect_debt_data(
         node_issues.setdefault(ref_id, []).append("stale_doc")
 
     # 4. Untracked files
-    untracked_count = _count_untracked(conn)
+    untracked_count, untracked_refs = _count_untracked(conn)
+    for ref_id in untracked_refs:
+        node_issues.setdefault(ref_id, []).append("untracked")
 
     # 5. Oversized domains
     oversized_count, oversized_refs = _count_oversized(

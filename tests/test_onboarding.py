@@ -155,6 +155,38 @@ class TestScanProject:
         # All files counted
         assert result["file_count"] >= 5
 
+    def test_source_dirs_includes_react_native_dirs(self) -> None:
+        """_SOURCE_DIRS must include standard React Native / Expo directories."""
+        from beadloom.onboarding.scanner import _SOURCE_DIRS
+
+        expected_rn_dirs = {
+            "components",
+            "hooks",
+            "contexts",
+            "modules",
+            "screens",
+            "navigation",
+            "store",
+            "providers",
+            "features",
+        }
+        missing = expected_rn_dirs - _SOURCE_DIRS
+        assert not missing, f"Missing from _SOURCE_DIRS: {missing}"
+
+    def test_react_native_dirs_recognized_as_known(self, tmp_path: Path) -> None:
+        """RN dirs in _SOURCE_DIRS are found via Pass 1 (known dirs), not fallback."""
+        # Create RN-style dirs with code files.
+        for dir_name in ("screens", "navigation", "store", "providers", "features"):
+            d = tmp_path / dir_name
+            d.mkdir()
+            (d / "index.tsx").write_text("export default {}\n")
+        (tmp_path / "package.json").write_text('{"name": "my-rn-app"}')
+
+        result = scan_project(tmp_path)
+        for d in ("screens", "navigation", "store", "providers", "features"):
+            assert d in result["source_dirs"], f"{d} not in source_dirs"
+        assert result["file_count"] >= 5
+
     def test_known_and_unknown_dirs_merged(self, tmp_path: Path) -> None:
         """Both known (app/) and unknown (utils_custom/) dirs are discovered together."""
         app = tmp_path / "app"

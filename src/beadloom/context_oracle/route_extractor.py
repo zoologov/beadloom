@@ -737,6 +737,12 @@ def extract_routes(file_path: Path, language: str) -> list[Route]:
     file_path = Path(file_path)
     file_path_str = str(file_path)
 
+    # Self-exclusion: skip files that belong to the route_extractor module
+    # itself, as they contain regex patterns / comment examples that produce
+    # false positive matches.
+    if "route_extractor" in file_path.name:
+        return []
+
     try:
         content = file_path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
@@ -778,3 +784,59 @@ def extract_routes(file_path: Path, language: str) -> list[Route]:
         routes = routes[:_MAX_ROUTES_PER_FILE]
 
     return routes
+
+
+# ---------------------------------------------------------------------------
+# Display formatting
+# ---------------------------------------------------------------------------
+
+_GRAPHQL_METHODS: frozenset[str] = frozenset({"QUERY", "MUTATION", "SUBSCRIPTION"})
+
+
+def format_routes_for_display(
+    routes_data: list[dict[str, str]],
+) -> str:
+    """Format route data for human-readable display.
+
+    Separates HTTP routes from GraphQL routes, with wider path columns
+    and better alignment.
+
+    Parameters
+    ----------
+    routes_data:
+        List of route dicts with keys: method, path, handler, framework.
+
+    Returns
+    -------
+    str
+        Formatted multi-line string ready for display.
+    """
+    if not routes_data:
+        return ""
+
+    http_routes = [r for r in routes_data if r.get("method", "") not in _GRAPHQL_METHODS]
+    gql_routes = [r for r in routes_data if r.get("method", "") in _GRAPHQL_METHODS]
+
+    lines: list[str] = []
+
+    if http_routes:
+        lines.append("   Routes:")
+        for route in http_routes:
+            method: str = route.get("method", "?")
+            path: str = route.get("path", "?")
+            handler: str = route.get("handler", "?")
+            framework: str = route.get("framework", "")
+            fw_suffix = f" ({framework})" if framework else ""
+            lines.append(f"     {method:<7} {path:<50} -> {handler}{fw_suffix}")
+
+    if gql_routes:
+        lines.append("   GraphQL:")
+        for route in gql_routes:
+            method = route.get("method", "?")
+            path = route.get("path", "?")
+            handler = route.get("handler", "?")
+            framework = route.get("framework", "")
+            fw_suffix = f" ({framework})" if framework else ""
+            lines.append(f"     {method:<14} {path:<40} -> {handler}{fw_suffix}")
+
+    return "\n".join(lines)
