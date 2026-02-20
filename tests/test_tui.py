@@ -1487,3 +1487,394 @@ class TestGraphDataProviderExtended:
 
         # The populated DB has one doc for auth-login
         assert "auth-login" in doc_ids
+
+
+# ---------------------------------------------------------------------------
+# DocHealthTable Widget Tests (BEAD-05)
+# ---------------------------------------------------------------------------
+
+
+class TestDocHealthTable:
+    """Tests for DocHealthTable widget."""
+
+    def test_compute_doc_rows_with_no_providers(self) -> None:
+        """compute_doc_rows returns empty list when graph_provider is None."""
+        from beadloom.tui.widgets.doc_health import compute_doc_rows
+
+        rows = compute_doc_rows(graph_provider=None, sync_provider=None)
+        assert rows == []
+
+    def test_compute_doc_rows_with_empty_nodes(
+        self, ro_conn: sqlite3.Connection, tmp_path: Path
+    ) -> None:
+        """compute_doc_rows returns empty list when no nodes in graph."""
+        from beadloom.tui.data_providers import GraphDataProvider
+        from beadloom.tui.widgets.doc_health import compute_doc_rows
+
+        # Create empty DB
+        db_path = tmp_path / "empty.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        from beadloom.infrastructure.db import create_schema
+        create_schema(conn)
+        conn.commit()
+
+        provider = GraphDataProvider(conn=conn, project_root=tmp_path)
+        rows = compute_doc_rows(graph_provider=provider, sync_provider=None)
+        assert rows == []
+        conn.close()
+
+    def test_compute_doc_rows_missing_status(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """compute_doc_rows marks nodes without docs as missing."""
+        from beadloom.tui.data_providers import GraphDataProvider
+        from beadloom.tui.widgets.doc_health import (
+            LABEL_MISSING,
+            STATUS_MISSING,
+            compute_doc_rows,
+        )
+
+        _, project_root = populated_db
+        provider = GraphDataProvider(conn=ro_conn, project_root=project_root)
+        rows = compute_doc_rows(graph_provider=provider, sync_provider=None)
+
+        # auth and payments have no docs — should be missing
+        missing_rows = [r for r in rows if r["status_label"] == LABEL_MISSING]
+        missing_ref_ids = {r["ref_id"] for r in missing_rows}
+        assert "auth" in missing_ref_ids
+        assert "payments" in missing_ref_ids
+
+        # Check indicator
+        for row in missing_rows:
+            assert row["status_indicator"] == STATUS_MISSING
+
+    def test_compute_doc_rows_fresh_status(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """compute_doc_rows marks documented nodes without sync issues as fresh."""
+        from beadloom.tui.data_providers import GraphDataProvider
+        from beadloom.tui.widgets.doc_health import (
+            LABEL_FRESH,
+            STATUS_FRESH,
+            compute_doc_rows,
+        )
+
+        _, project_root = populated_db
+        provider = GraphDataProvider(conn=ro_conn, project_root=project_root)
+        rows = compute_doc_rows(graph_provider=provider, sync_provider=None)
+
+        # auth-login has a doc in the DB
+        fresh_rows = [r for r in rows if r["status_label"] == LABEL_FRESH]
+        fresh_ref_ids = {r["ref_id"] for r in fresh_rows}
+        assert "auth-login" in fresh_ref_ids
+
+        for row in fresh_rows:
+            assert row["status_indicator"] == STATUS_FRESH
+
+    def test_compute_doc_rows_sort_order(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """compute_doc_rows sorts stale first, then missing, then fresh."""
+        from beadloom.tui.data_providers import GraphDataProvider
+        from beadloom.tui.widgets.doc_health import _STATUS_SORT_ORDER, compute_doc_rows
+
+        _, project_root = populated_db
+        provider = GraphDataProvider(conn=ro_conn, project_root=project_root)
+        rows = compute_doc_rows(graph_provider=provider, sync_provider=None)
+
+        # Verify sort order: each row's status should be <= next row's status
+        for i in range(len(rows) - 1):
+            cur_order = _STATUS_SORT_ORDER.get(rows[i]["status_label"], 99)
+            next_order = _STATUS_SORT_ORDER.get(rows[i + 1]["status_label"], 99)
+            assert cur_order <= next_order
+
+    def test_compute_coverage_stats_empty(self) -> None:
+        """compute_coverage_stats returns zeros for empty rows."""
+        from beadloom.tui.widgets.doc_health import compute_coverage_stats
+
+        coverage, stale, total = compute_coverage_stats([])
+        assert coverage == 0.0
+        assert stale == 0
+        assert total == 0
+
+    def test_compute_coverage_stats_all_fresh(self) -> None:
+        """compute_coverage_stats computes 100% for all fresh."""
+        from beadloom.tui.widgets.doc_health import LABEL_FRESH, compute_coverage_stats
+
+        row_a = {
+            "ref_id": "a", "status_label": LABEL_FRESH,
+            "status_indicator": "", "doc_path": "", "reason": "",
+        }
+        row_b = {
+            "ref_id": "b", "status_label": LABEL_FRESH,
+            "status_indicator": "", "doc_path": "", "reason": "",
+        }
+        coverage, stale, total = compute_coverage_stats([row_a, row_b])
+        assert coverage == 100.0
+        assert stale == 0
+        assert total == 2
+
+    def test_compute_coverage_stats_mixed(self) -> None:
+        """compute_coverage_stats computes correct percentage for mixed statuses."""
+        from beadloom.tui.widgets.doc_health import (
+            LABEL_FRESH,
+            LABEL_MISSING,
+            LABEL_STALE,
+            compute_coverage_stats,
+        )
+
+        empty = {"status_indicator": "", "doc_path": "", "reason": ""}
+        rows = [
+            {"ref_id": "a", "status_label": LABEL_FRESH, **empty},
+            {"ref_id": "b", "status_label": LABEL_STALE, **empty},
+            {"ref_id": "c", "status_label": LABEL_MISSING, **empty},
+            {"ref_id": "d", "status_label": LABEL_MISSING, **empty},
+        ]
+        coverage, stale, total = compute_coverage_stats(rows)
+        # 2 documented (1 fresh + 1 stale) out of 4 total = 50%
+        assert coverage == 50.0
+        assert stale == 1
+        assert total == 4
+
+    def test_get_selected_ref_id_returns_none_initially(self) -> None:
+        """get_selected_ref_id returns None when no rows loaded."""
+        from beadloom.tui.widgets.doc_health import DocHealthTable
+
+        table = DocHealthTable(widget_id="test-table")
+        assert table.get_selected_ref_id() is None
+
+    def test_get_rows_data_returns_copy(self) -> None:
+        """get_rows_data returns a copy of internal rows."""
+        from beadloom.tui.widgets.doc_health import DocHealthTable
+
+        table = DocHealthTable(widget_id="test-table")
+        rows = table.get_rows_data()
+        assert rows == []
+        assert rows is not table._rows
+
+
+# ---------------------------------------------------------------------------
+# DocStatusScreen Tests (BEAD-05)
+# ---------------------------------------------------------------------------
+
+
+class TestDocStatusScreen:
+    """Tests for the DocStatusScreen."""
+
+    @pytest.mark.asyncio()
+    async def test_doc_status_screen_composes(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """DocStatusScreen composes header, table, and action bar."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.doc_status import DocStatusScreen
+        from beadloom.tui.widgets.doc_health import DocHealthTable
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            await pilot.press("3")  # switch to doc status
+            assert isinstance(app.screen, DocStatusScreen)
+
+            # Verify header exists
+            from textual.widgets import Label
+            header = app.screen.query_one("#doc-status-header", Label)
+            assert header is not None
+
+            # Verify table exists
+            table = app.screen.query_one("#doc-health-table", DocHealthTable)
+            assert table is not None
+
+            # Verify action bar exists
+            action_bar = app.screen.query_one("#doc-status-action-bar", Label)
+            assert action_bar is not None
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_doc_status_header_shows_stats(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """DocStatusScreen header shows coverage %, stale count, total."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.doc_status import DocStatusScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            await pilot.press("3")
+            assert isinstance(app.screen, DocStatusScreen)
+
+            from textual.widgets import Label
+            header = app.screen.query_one("#doc-status-header", Label)
+            header_text = str(header.content)
+
+            # Should contain coverage stats
+            assert "Documentation Health" in header_text
+            assert "%" in header_text
+            assert "stale" in header_text
+            assert "total" in header_text
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_doc_status_table_has_columns(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """DocStatusScreen table has the 4 required columns."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.widgets.doc_health import DocHealthTable
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            await pilot.press("3")
+
+            table = app.screen.query_one("#doc-health-table", DocHealthTable)
+            col_labels = [str(col.label) for col in table.columns.values()]
+            assert "Node" in col_labels
+            assert "Status" in col_labels
+            assert "Doc Path" in col_labels
+            assert "Reason" in col_labels
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_doc_status_table_has_rows(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """DocStatusScreen table has rows from populated DB."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.widgets.doc_health import DocHealthTable
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            await pilot.press("3")
+
+            table = app.screen.query_one("#doc-health-table", DocHealthTable)
+            rows = table.get_rows_data()
+
+            # The populated DB has 3 nodes
+            assert len(rows) == 3
+
+            # Check ref_ids present
+            ref_ids = {r["ref_id"] for r in rows}
+            assert ref_ids == {"auth", "auth-login", "payments"}
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_doc_status_escape_goes_back(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Pressing Esc on DocStatusScreen returns to previous screen."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.dashboard import DashboardScreen
+        from beadloom.tui.screens.doc_status import DocStatusScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            # Push doc status on top of dashboard
+            app.push_screen(DocStatusScreen())
+            await pilot.pause()
+            assert isinstance(app.screen, DocStatusScreen)
+
+            # Press Esc to go back
+            await pilot.press("escape")
+            await pilot.pause()
+
+            # Should be back on dashboard
+            assert isinstance(app.screen, DashboardScreen)
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_doc_status_generate_action(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Pressing 'g' on DocStatusScreen shows generate notification."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.doc_status import DocStatusScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test(notifications=True) as pilot:
+            await pilot.press("3")
+            assert isinstance(app.screen, DocStatusScreen)
+
+            await pilot.press("g")
+            await pilot.pause()
+
+            # Should not crash — notification is shown
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_doc_status_polish_action(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Pressing 'p' on DocStatusScreen shows polish notification."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.doc_status import DocStatusScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test(notifications=True) as pilot:
+            await pilot.press("3")
+            assert isinstance(app.screen, DocStatusScreen)
+
+            await pilot.press("p")
+            await pilot.pause()
+
+            # Should not crash — notification is shown
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_doc_status_empty_db(self, tmp_path: Path) -> None:
+        """DocStatusScreen handles empty database gracefully."""
+        db_path = tmp_path / ".beadloom" / "beadloom.db"
+        db_path.parent.mkdir(parents=True)
+
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        from beadloom.infrastructure.db import create_schema
+        create_schema(conn)
+        conn.commit()
+        conn.close()
+
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.doc_status import DocStatusScreen
+        from beadloom.tui.widgets.doc_health import DocHealthTable
+
+        app = BeadloomApp(db_path=db_path, project_root=tmp_path)
+        async with app.run_test() as pilot:
+            await pilot.press("3")
+            assert isinstance(app.screen, DocStatusScreen)
+
+            table = app.screen.query_one("#doc-health-table", DocHealthTable)
+            rows = table.get_rows_data()
+            assert len(rows) == 0
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_doc_status_refresh_all_widgets(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """DocStatusScreen.refresh_all_widgets() reloads data."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.doc_status import DocStatusScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            await pilot.press("3")
+            screen = app.screen
+            assert isinstance(screen, DocStatusScreen)
+
+            # Calling refresh should not raise
+            screen.refresh_all_widgets()
+
+            await pilot.press("q")
