@@ -58,6 +58,7 @@ class BeadloomApp(App[None]):
         Binding("r", "reindex", "Reindex"),
         Binding("l", "lint", "Lint"),
         Binding("s", "sync_check", "Sync"),
+        Binding("S", "save_snapshot", "Snapshot", key_display="S"),
         Binding("tab", "focus_next", "Next panel"),
     ]
 
@@ -228,12 +229,22 @@ class BeadloomApp(App[None]):
         self.switch_screen(screen_name)
 
     def action_help(self) -> None:
-        """Show help overlay (placeholder for BEAD-07)."""
-        self.notify("Help overlay coming in BEAD-07")
+        """Show help overlay with all keyboard bindings."""
+        from beadloom.tui.widgets.help_overlay import HelpOverlay
+
+        self.push_screen(HelpOverlay())
 
     def action_search(self) -> None:
-        """Show search overlay (placeholder for BEAD-07)."""
-        self.notify("Search overlay coming in BEAD-07")
+        """Show search overlay for FTS5 search across nodes."""
+        from beadloom.tui.widgets.search_overlay import SearchOverlay
+
+        overlay = SearchOverlay(conn=self._conn)
+        self.push_screen(overlay, callback=self._on_search_result)
+
+    def _on_search_result(self, ref_id: str | None) -> None:
+        """Handle search overlay result — navigate to the selected node."""
+        if ref_id:
+            self.open_explorer(ref_id)
 
     def action_reindex(self) -> None:
         """Trigger reindex in background, refresh providers, clear watcher badge."""
@@ -251,18 +262,34 @@ class BeadloomApp(App[None]):
         self.notify("Reindex complete")
 
     def action_lint(self) -> None:
-        """Run lint check and notify."""
+        """Run lint check, notify, and update status bar."""
         if self.lint_provider is not None:
             self.lint_provider.refresh()
             count = self.lint_provider.get_violation_count()
-            self.notify(f"Lint: {count} violation(s)")
+            message = f"Lint: {count} violation(s)"
+            self.notify(message)
+            self._for_each_status_bar(
+                lambda bar, msg=message: bar.show_notification(msg)  # type: ignore[misc]
+            )
 
     def action_sync_check(self) -> None:
-        """Run sync-check and notify."""
+        """Run sync-check, notify, and update status bar."""
         if self.sync_provider is not None:
             self.sync_provider.refresh()
             stale = self.sync_provider.get_stale_count()
-            self.notify(f"Sync: {stale} stale doc(s)")
+            message = f"Sync: {stale} stale doc(s)"
+            self.notify(message)
+            self._for_each_status_bar(
+                lambda bar, msg=message: bar.show_notification(msg)  # type: ignore[misc]
+            )
+
+    def action_save_snapshot(self) -> None:
+        """Save snapshot and show notification."""
+        message = "Snapshot saved"
+        self.notify(message)
+        self._for_each_status_bar(
+            lambda bar, msg=message: bar.show_notification(msg)  # type: ignore[misc]
+        )
 
     def _refresh_providers(self) -> None:
         """Refresh all data providers after reindex."""

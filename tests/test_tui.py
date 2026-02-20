@@ -3118,3 +3118,451 @@ class TestExplorerScreen:
             await pilot.pause()
 
             await pilot.press("q")
+
+
+# ---------------------------------------------------------------------------
+# HelpOverlay Tests (BEAD-07)
+# ---------------------------------------------------------------------------
+
+
+class TestHelpOverlay:
+    """Tests for the HelpOverlay modal screen."""
+
+    def test_build_help_text_contains_sections(self) -> None:
+        """build_help_text() includes all keybinding sections."""
+        from beadloom.tui.widgets.help_overlay import build_help_text
+
+        text = build_help_text()
+        assert "Global" in text
+        assert "Dashboard" in text
+        assert "Explorer" in text
+        assert "Doc Status" in text
+
+    def test_build_help_text_contains_bindings(self) -> None:
+        """build_help_text() includes specific keybindings."""
+        from beadloom.tui.widgets.help_overlay import build_help_text
+
+        text = build_help_text()
+        assert "Quit" in text
+        assert "Search overlay" in text
+        assert "Trigger reindex" in text
+        assert "Downstream" in text
+        assert "Generate doc" in text
+
+    @pytest.mark.asyncio()
+    async def test_help_overlay_opens_on_question_mark(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Pressing '?' opens the HelpOverlay."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.widgets.help_overlay import HelpOverlay
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            await pilot.press("question_mark")
+            await pilot.pause()
+
+            # The top screen should be HelpOverlay
+            assert isinstance(app.screen, HelpOverlay)
+
+            await pilot.press("escape")
+            await pilot.pause()
+
+            # Should be back on previous screen
+            from beadloom.tui.screens.dashboard import DashboardScreen
+
+            assert isinstance(app.screen, DashboardScreen)
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_help_overlay_dismisses_on_esc(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Pressing Esc dismisses the HelpOverlay."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.widgets.help_overlay import HelpOverlay
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            app.push_screen(HelpOverlay())
+            await pilot.pause()
+            assert isinstance(app.screen, HelpOverlay)
+
+            await pilot.press("escape")
+            await pilot.pause()
+            assert not isinstance(app.screen, HelpOverlay)
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_help_overlay_has_content(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """HelpOverlay composes with title and content widgets."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.widgets.help_overlay import HelpOverlay
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            app.push_screen(HelpOverlay())
+            await pilot.pause()
+
+            from textual.widgets import Label, Static
+
+            title = app.screen.query_one("#help-title", Label)
+            assert title is not None
+            assert "Help" in str(title.content)
+
+            content = app.screen.query_one("#help-content", Static)
+            assert content is not None
+
+            await pilot.press("escape")
+            await pilot.press("q")
+
+
+# ---------------------------------------------------------------------------
+# SearchOverlay Tests (BEAD-07)
+# ---------------------------------------------------------------------------
+
+
+class TestSearchOverlay:
+    """Tests for the SearchOverlay modal screen."""
+
+    def test_search_nodes_like_fallback(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """_search_nodes uses SQL LIKE fallback when FTS5 is not populated."""
+        from beadloom.tui.widgets.search_overlay import _search_nodes
+
+        results = _search_nodes(ro_conn, "auth")
+        ref_ids = {r["ref_id"] for r in results}
+        assert "auth" in ref_ids
+
+    def test_search_nodes_empty_query(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """_search_nodes returns results for empty-ish query via LIKE fallback."""
+        from beadloom.tui.widgets.search_overlay import _search_nodes
+
+        # Empty string matches everything via LIKE
+        results = _search_nodes(ro_conn, "")
+        # LIKE '%%' matches all rows
+        assert isinstance(results, list)
+
+    def test_search_nodes_no_match(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """_search_nodes returns empty list for non-matching query."""
+        from beadloom.tui.widgets.search_overlay import _search_nodes
+
+        results = _search_nodes(ro_conn, "zzz_nonexistent_zzz")
+        assert results == []
+
+    def test_format_results_empty(self) -> None:
+        """_format_results returns 'No results found' for empty list."""
+        from beadloom.tui.widgets.search_overlay import _format_results
+
+        text = _format_results([])
+        assert "No results found" in text
+
+    def test_format_results_with_data(self) -> None:
+        """_format_results formats results with ref_id and kind."""
+        from beadloom.tui.widgets.search_overlay import _format_results
+
+        results = [
+            {"ref_id": "auth", "kind": "domain", "snippet": "Authentication domain"},
+        ]
+        text = _format_results(results)
+        assert "auth" in text
+        assert "domain" in text
+        assert "Authentication domain" in text
+
+    @pytest.mark.asyncio()
+    async def test_search_overlay_opens_on_slash(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Pressing '/' opens the SearchOverlay."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.widgets.search_overlay import SearchOverlay
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            await pilot.press("slash")
+            await pilot.pause()
+
+            assert isinstance(app.screen, SearchOverlay)
+
+            await pilot.press("escape")
+            await pilot.pause()
+            assert not isinstance(app.screen, SearchOverlay)
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_search_overlay_has_input(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """SearchOverlay composes with an Input widget."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.widgets.search_overlay import SearchOverlay
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            app.push_screen(SearchOverlay(conn=app._conn))
+            await pilot.pause()
+
+            from textual.widgets import Input
+
+            inp = app.screen.query_one("#search-input", Input)
+            assert inp is not None
+
+            await pilot.press("escape")
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_search_overlay_dismisses_on_esc(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Pressing Esc dismisses the SearchOverlay."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.widgets.search_overlay import SearchOverlay
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            app.push_screen(SearchOverlay(conn=app._conn))
+            await pilot.pause()
+            assert isinstance(app.screen, SearchOverlay)
+
+            await pilot.press("escape")
+            await pilot.pause()
+            assert not isinstance(app.screen, SearchOverlay)
+
+            await pilot.press("q")
+
+
+# ---------------------------------------------------------------------------
+# StatusBar Notification Tests (BEAD-07)
+# ---------------------------------------------------------------------------
+
+
+class TestStatusBarNotification:
+    """Tests for StatusBarWidget.show_notification auto-dismiss."""
+
+    def test_show_notification_sets_message(self) -> None:
+        """show_notification() sets _last_action to the message."""
+        from beadloom.tui.widgets.status_bar import StatusBarWidget
+
+        widget = StatusBarWidget()
+        # Cannot call set_timer without being mounted, so test the attribute directly
+        widget._last_action = "Test notification"
+        text = widget.render()
+        assert "Test notification" in text.plain
+
+    def test_clear_notification_clears_message(self) -> None:
+        """_clear_notification() clears the last action message."""
+        from beadloom.tui.widgets.status_bar import StatusBarWidget
+
+        widget = StatusBarWidget()
+        widget._last_action = "Old message"
+        widget._clear_notification()
+        assert widget._last_action == ""
+        text = widget.render()
+        assert "Old message" not in text.plain
+
+    @pytest.mark.asyncio()
+    async def test_show_notification_auto_dismisses(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """show_notification() auto-dismisses after duration via set_timer."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.widgets.status_bar import StatusBarWidget
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            status_bar = app.screen.query_one("#status-bar", StatusBarWidget)
+
+            # Show notification with short duration
+            status_bar.show_notification("Auto-dismiss test", duration=0.1)
+            assert status_bar._last_action == "Auto-dismiss test"
+
+            # Wait for auto-dismiss
+            import asyncio
+
+            await asyncio.sleep(0.3)
+            await pilot.pause()
+
+            # Should be cleared
+            assert status_bar._last_action == ""
+
+            await pilot.press("q")
+
+
+# ---------------------------------------------------------------------------
+# Keyboard Action Tests (BEAD-07)
+# ---------------------------------------------------------------------------
+
+
+class TestKeyboardActions:
+    """Tests for keyboard actions wired in BEAD-07."""
+
+    @pytest.mark.asyncio()
+    async def test_lint_key_triggers_notification(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Pressing 'l' triggers lint and shows notification."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test(notifications=True) as pilot:
+            await pilot.press("l")
+            await pilot.pause()
+
+            # Should not crash — notification is shown via app.notify
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_sync_check_key_triggers_notification(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Pressing 's' triggers sync-check and shows notification."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test(notifications=True) as pilot:
+            await pilot.press("s")
+            await pilot.pause()
+
+            # Should not crash
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_save_snapshot_key_shows_notification(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Pressing 'S' shows 'Snapshot saved' notification."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test(notifications=True) as pilot:
+            await pilot.press("S")
+            await pilot.pause()
+
+            # Should not crash — notification is shown
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_all_global_bindings_do_not_crash(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """All global keybindings execute without crashing."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test(notifications=True) as pilot:
+            # Screen switch keys
+            await pilot.press("1")
+            await pilot.pause()
+            await pilot.press("2")
+            await pilot.pause()
+            await pilot.press("3")
+            await pilot.pause()
+            await pilot.press("1")
+            await pilot.pause()
+
+            # Action keys
+            await pilot.press("l")
+            await pilot.pause()
+            await pilot.press("s")
+            await pilot.pause()
+            await pilot.press("S")
+            await pilot.pause()
+            await pilot.press("r")
+            await pilot.pause()
+            await pilot.press("tab")
+            await pilot.pause()
+
+            # Overlay keys — open and dismiss
+            await pilot.press("question_mark")
+            await pilot.pause()
+            await pilot.press("escape")
+            await pilot.pause()
+
+            await pilot.press("slash")
+            await pilot.pause()
+            await pilot.press("escape")
+            await pilot.pause()
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_explorer_bindings_do_not_crash(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """All Explorer screen keybindings execute without crashing."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.explorer import ExplorerScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test(notifications=True) as pilot:
+            await pilot.press("2")
+            await pilot.pause()
+            assert isinstance(app.screen, ExplorerScreen)
+
+            await pilot.press("d")
+            await pilot.pause()
+            await pilot.press("u")
+            await pilot.pause()
+            await pilot.press("c")
+            await pilot.pause()
+            await pilot.press("o")
+            await pilot.pause()
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_doc_status_bindings_do_not_crash(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """All Doc Status screen keybindings execute without crashing."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.doc_status import DocStatusScreen
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test(notifications=True) as pilot:
+            await pilot.press("3")
+            await pilot.pause()
+            assert isinstance(app.screen, DocStatusScreen)
+
+            await pilot.press("g")
+            await pilot.pause()
+            await pilot.press("p")
+            await pilot.pause()
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_app_has_save_snapshot_binding(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """BeadloomApp has a binding for 'S' (save snapshot)."""
+        from beadloom.tui.app import BeadloomApp
+
+        db_path, project_root = populated_db
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+
+        binding_keys = [b.key for b in app.BINDINGS if isinstance(b, tuple) is False]
+        assert "S" in binding_keys
