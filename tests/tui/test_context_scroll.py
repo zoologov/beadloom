@@ -119,34 +119,18 @@ class TestShowContextUpdate:
 
 
 class TestScrollHomeOnNodeChange:
-    """When showing a new node, scroll position resets to top."""
+    """When showing a new node, scroll position resets to top.
 
-    def test_scroll_home_called_when_mounted(self) -> None:
-        """scroll_home(animate=False) is called when widget is mounted."""
+    Scroll is managed by the VerticalScroll container in ExplorerScreen,
+    not by the widget itself.  ``show_context()`` only updates content.
+    """
+
+    def test_show_context_does_not_call_scroll_home(self) -> None:
+        """Widget delegates scrolling to the parent container."""
         widget = ContextPreviewWidget()
 
-        # Simulate a mounted widget
-        with (
-            patch.object(
-                type(widget), "is_mounted", new_callable=lambda: property(lambda self: True)
-            ),
-            patch.object(widget, "scroll_home") as mock_scroll,
-            patch.object(widget, "refresh"),
-        ):
-            widget.show_context("node-y")
-
-        mock_scroll.assert_called_once_with(animate=False)
-
-    def test_scroll_home_not_called_when_unmounted(self) -> None:
-        """scroll_home() is NOT called when widget is not mounted."""
-        widget = ContextPreviewWidget()
-
-        # Widget is not mounted by default
-        assert not widget.is_mounted
-
-        # Should not raise, and scroll_home should not be called
         with patch.object(widget, "scroll_home") as mock_scroll:
-            widget.show_context("node-z")
+            widget.show_context("node-y")
 
         mock_scroll.assert_not_called()
 
@@ -156,12 +140,16 @@ class TestScrollHomeOnNodeChange:
 # ---------------------------------------------------------------------------
 
 
-class TestOverflowCSS:
-    """Widget must have overflow-y: auto for native scrolling."""
+class TestWidgetCSS:
+    """Widget CSS should not set height or overflow — the scroll container handles it."""
 
-    def test_default_css_has_overflow_y_auto(self) -> None:
-        """DEFAULT_CSS includes 'overflow-y: auto'."""
-        assert "overflow-y: auto" in ContextPreviewWidget.DEFAULT_CSS
+    def test_default_css_no_fixed_height(self) -> None:
+        """DEFAULT_CSS must NOT set height: 100% (auto-size for scroll container)."""
+        assert "height: 100%" not in ContextPreviewWidget.DEFAULT_CSS
+
+    def test_default_css_has_padding(self) -> None:
+        """DEFAULT_CSS includes padding for readability."""
+        assert "padding" in ContextPreviewWidget.DEFAULT_CSS
 
 
 # ---------------------------------------------------------------------------

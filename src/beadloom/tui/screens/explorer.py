@@ -9,7 +9,7 @@ import subprocess
 from typing import TYPE_CHECKING, ClassVar
 
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Label
 
@@ -61,6 +61,7 @@ class ExplorerScreen(Screen[None]):
         super().__init__(name=name, id=id, classes=classes)
         self._ref_id = ref_id
         self._mode = MODE_UPSTREAM
+        self._prev_dep_mode = MODE_UPSTREAM
 
     def compose(self) -> ComposeResult:
         """Compose the explorer layout."""
@@ -75,7 +76,7 @@ class ExplorerScreen(Screen[None]):
                 classes="screen-desc",
             )
             with Horizontal(id="explorer-main"):
-                with Vertical(id="explorer-left"):
+                with VerticalScroll(id="explorer-left"):
                     yield NodeDetailPanel(
                         ref_id=self._ref_id,
                         widget_id="node-detail-panel",
@@ -86,10 +87,11 @@ class ExplorerScreen(Screen[None]):
                         direction=MODE_UPSTREAM,
                         widget_id="dependency-path",
                     )
-                    yield ContextPreviewWidget(
-                        ref_id=self._ref_id,
-                        widget_id="context-preview",
-                    )
+                    with VerticalScroll(id="context-scroll"):
+                        yield ContextPreviewWidget(
+                            ref_id=self._ref_id,
+                            widget_id="context-preview",
+                        )
             yield Label(
                 "[u]pstream  [d]ownstream  [c]ontext  [o]pen  [Esc]back",
                 id="explorer-action-bar",
@@ -159,21 +161,30 @@ class ExplorerScreen(Screen[None]):
             ctx_widget.show_context(self._ref_id)
         except Exception:
             logger.debug("Failed to update context preview", exc_info=True)
+        self._scroll_context_home()
 
     def _update_right_panel_visibility(self) -> None:
         """Show/hide right panel widgets based on current mode."""
         try:
             dep_widget = self.query_one("#dependency-path", DependencyPathWidget)
-            ctx_widget = self.query_one("#context-preview", ContextPreviewWidget)
+            ctx_scroll = self.query_one("#context-scroll", VerticalScroll)
 
             if self._mode == MODE_CONTEXT:
                 dep_widget.display = False
-                ctx_widget.display = True
+                ctx_scroll.display = True
             else:
                 dep_widget.display = True
-                ctx_widget.display = False
+                ctx_scroll.display = False
         except Exception:
             logger.debug("Failed to update panel visibility", exc_info=True)
+
+    def _scroll_context_home(self) -> None:
+        """Reset the context scroll container to the top."""
+        try:
+            ctx_scroll = self.query_one("#context-scroll", VerticalScroll)
+            ctx_scroll.scroll_home(animate=False)
+        except Exception:
+            logger.debug("Failed to reset context scroll", exc_info=True)
 
     def action_show_downstream(self) -> None:
         """Switch right panel to downstream dependents."""
@@ -196,7 +207,16 @@ class ExplorerScreen(Screen[None]):
             logger.debug("Failed to show upstream", exc_info=True)
 
     def action_show_context(self) -> None:
-        """Switch right panel to context bundle preview."""
+        """Toggle right panel between context preview and dependency view."""
+        if self._mode == MODE_CONTEXT:
+            # Return to previous dependency mode
+            if self._prev_dep_mode == MODE_DOWNSTREAM:
+                self.action_show_downstream()
+            else:
+                self.action_show_upstream()
+            return
+
+        self._prev_dep_mode = self._mode
         self._mode = MODE_CONTEXT
         self._update_right_panel_visibility()
         try:
@@ -204,6 +224,7 @@ class ExplorerScreen(Screen[None]):
             ctx_widget.show_context(self._ref_id)
         except Exception:
             logger.debug("Failed to show context", exc_info=True)
+        self._scroll_context_home()
 
     def action_open_source(self) -> None:
         """Open the node's primary source file in $EDITOR."""
