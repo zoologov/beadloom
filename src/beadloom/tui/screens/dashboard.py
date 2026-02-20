@@ -70,7 +70,10 @@ class DashboardScreen(Screen[None]):
         self._load_data()
 
     def on_node_selected(self, event: NodeSelected) -> None:
-        """Handle node selection from the graph tree — update summary bar."""
+        """Handle node selection from the graph tree — update summary bar.
+
+        On leaf nodes (features, services without children), also open Explorer.
+        """
         app = self._get_app()
         if app is None or app.graph_provider is None:
             return
@@ -95,6 +98,11 @@ class DashboardScreen(Screen[None]):
             label.update(summary_text)
         except Exception:
             logger.debug("Failed to update node summary", exc_info=True)
+
+        # Open Explorer for leaf nodes (no children in hierarchy)
+        hierarchy = app.graph_provider.get_hierarchy()
+        if event.ref_id not in hierarchy:
+            app.open_explorer(event.ref_id)
 
     def _load_data(self) -> None:
         """Load data from all providers and push to widgets."""
