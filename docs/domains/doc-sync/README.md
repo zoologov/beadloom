@@ -50,7 +50,13 @@ class SyncPair:
 
 - **engine.py** -- Core sync engine: sync state building, multi-phase sync checking, hash computation, coverage analysis
 - **doc_indexer.py** -- Markdown scanning, chunking by H2 headings, section classification, and SQLite population
+- **audit.py** -- Documentation audit: fact registry, comparator, and audit facade for detecting stale numeric facts
+- **scanner.py** -- Document scanner: keyword-proximity extraction of numeric fact mentions from markdown files
 - **cli.py** (in `services/cli.py`) -- `beadloom sync-check` CLI command with `--porcelain`, `--json`, `--report`, `--ref` options
+
+### Features
+
+- **[Docs Audit](features/docs-audit/SPEC.md)** -- Zero-config meta-doc staleness detection via keyword-proximity matching. CLI: `beadloom docs audit`.
 
 ### Git Hook Integration
 
