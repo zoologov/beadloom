@@ -9,11 +9,11 @@ All providers support refresh() for reactive updates after reindex.
 from __future__ import annotations
 
 import logging
+import sqlite3
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    import sqlite3
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -183,7 +183,7 @@ class SyncDataProvider:
 
         try:
             self._results = check_sync(self.conn, project_root=self.project_root)
-        except (OSError, ValueError) as exc:
+        except (OSError, ValueError, sqlite3.OperationalError) as exc:
             logger.warning("Sync check failed: %s", exc)
             self._results = []
 
