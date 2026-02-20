@@ -329,6 +329,7 @@ Beadloom is for engineers who build and maintain serious IT systems. YAML graph 
 | 12.10.5 | **Doc Sync Status Panel** — all nodes with doc status (fresh/stale/missing) + staleness reason. Includes meta-doc audit section (Phase 12.11) showing stale facts in README/guides. Press `g` to generate skeleton, `p` to view polish data, `a` to run docs audit. Color-coded: green/yellow/red | feature | P1 | S |
 | 12.10.6 | **Context Bundle Inspector** — preview exactly what `beadloom ctx <ref-id>` returns. Shows token count, sections, dependencies. Helps developers understand what agents see | feature | P2 | S |
 | 12.10.7 | **Keyboard-driven Actions** — trigger reindex (`r`), lint (`l`), sync-check (`s`), generate docs (`g`), snapshot (`S`) directly from TUI. Action results shown in status bar / notification panel | feature | P2 | S |
+| 12.10.8 | **TUI UX Polish** — (a) Explorer: replace raw Edges list with grouped summary + code symbols from `code_indexer` to eliminate duplication with upstream panel; (b) Screen descriptions: add brief purpose/explanation header to each screen (Dashboard, Explorer, Doc Status) so new users understand what Activity means and what screen 3 shows; (c) Contextual keybinding hints: visible per-screen footer showing available hotkeys (currently only Explorer/Doc Status have action bars, Dashboard has none); (d) **Bug fix:** Context Inspector (`c` key) has no scroll — content overflows without `overflow-y: auto`, making long context bundles unreadable | feature | P1 | M |
 
 ### Phase 12.11: Documentation Audit — Meta-Doc Staleness Detection (v1.8) ⚗️ EXPERIMENTAL
 
@@ -1448,7 +1449,8 @@ v1.8 ── Planned ────────────────────
 │   ├── 12.10.4 Dependency tracer ── standalone (why data exists)
 │   ├── 12.10.5 Doc status panel ─── standalone (sync-check exists)
 │   ├── 12.10.6 Context inspector ── standalone (ctx data exists)
-│   └── 12.10.7 Keyboard actions ─── depends on 12.10.1
+│   ├── 12.10.7 Keyboard actions ─── depends on 12.10.1
+│   └── 12.10.8 TUI UX polish ───── depends on 12.10.1-7 (post-release polish)
 │
 ├── Phase 12.11 (Docs Audit) ⚗️ ── Planned (6 tasks), parallel with all
 │   ├── 12.11.1 Fact registry ────── standalone (uses existing data)
@@ -1525,7 +1527,7 @@ Cross-cutting ──────────────────────
 | **12.6 — Arch Intelligence** | v1.7 | 3 | **DONE** | beadloom diff, enhanced why, snapshots |
 | **12.8 — C4 Architecture Diagrams** | v1.8 | 5 | Planned | Auto-generated C4 (Mermaid + PlantUML) |
 | **12.9 — Debt Report** | v1.8 | 6 | Planned | Debt score, trend, CI gate, MCP |
-| **12.10 — Interactive TUI** | v1.8 | 7 | Planned | Live dashboard, graph explorer, file watcher |
+| **12.10 — Interactive TUI** | v1.8 | 8 | Planned | Live dashboard, graph explorer, file watcher, UX polish |
 | **12.11 — Docs Audit** ⚗️ | v1.8 | 6 | Planned | Meta-doc staleness, fact registry, CI gate |
 | **12.12 — Agent Instructions Freshness** | v1.8 | 2 | Planned | Doctor validation + setup-rules --refresh |
 | **13 — Cross-System** | v1.9 | 4 | Planned | Multi-repo refs, export |

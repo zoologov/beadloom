@@ -86,6 +86,24 @@
 
 ---
 
+## Recently Fixed Issues (v1.8.0)
+
+> Discovered during TUI dogfooding (BDL-025 Phase 12.10)
+
+46. ~~[2026-02-20] [HIGH] TUI: Graph tree empty — only "Architecture" label visible~~ **FIXED in v1.8.0 (BDL-025)** — Self-referencing `part_of` edge (`beadloom → beadloom`) in `services.yml` caused `get_hierarchy()` to include `beadloom` as its own child. All nodes became children, leaving `root_level` empty. Fix: added `if child != parent` filter in `GraphDataProvider.get_hierarchy()`. Commit: `8e18fa8`.
+
+47. ~~[2026-02-20] [HIGH] TUI: Activity widget shows 0% for all domains~~ **FIXED in v1.8.0 (BDL-025)** — `ActivityWidget._activity_level()` checked for nonexistent `commit_count` attribute on `GitActivity` dataclass. The actual attribute is `commits_30d`. Fix: changed to `commits_30d` with normalization formula `min(commits_30d * 2, 100)` (50 commits = 100%). Commit: `8e18fa8`.
+
+48. ~~[2026-02-20] [MEDIUM] TUI: Enter on tree node only expands — doesn't navigate to Explorer~~ **FIXED in v1.8.0 (BDL-025)** — Textual Tree widget's Enter key only toggles expand/collapse. Leaf nodes (features, services without children) should open Explorer screen. Fix: added leaf-node detection in `DashboardScreen.on_node_selected()` — if `event.ref_id not in hierarchy`, calls `app.open_explorer(event.ref_id)`. Commit: `73b9306`.
+
+49. ~~[2026-02-20] [HIGH] TUI: Doc Status screen shows "–" for all Doc Path and Reason columns~~ **FIXED in v1.8.0 (BDL-025)** — DB opened with `mode=ro` (read-only), but `check_sync()` writes updated hashes. `SyncDataProvider.refresh()` threw `sqlite3.OperationalError` (not caught), leaving `sync_lookup` empty — all nodes fell through to `doc_ref_ids` path with empty `doc_path`. Fix: removed `mode=ro`, opened DB in WAL mode (read-write); added `sqlite3.OperationalError` to catch clause. Commit: `b07931b`.
+
+50. ~~[2026-02-20] [MEDIUM] TUI: Explorer shows self-referencing edges as duplicates~~ **FIXED in v1.8.0 (BDL-025)** — 15 self-referencing `touches_code` edges in DB (e.g. `search --touches_code--> search`). `NodeDetailPanel._render_node_detail()` matched them as both outgoing AND incoming, showing duplicates. Fix: added `e["dst"] != ref_id` / `e["src"] != ref_id` filter to edge lists. Commit: `88a2a1a`.
+
+51. ~~[2026-02-20] [MEDIUM] TUI: Explorer defaults to "Downstream Dependents" — empty for leaf nodes~~ **FIXED in v1.8.0 (BDL-025)** — Leaf/feature nodes have no downstream dependents, so the default right panel was always "No dependencies found". Fix: changed default mode from `MODE_DOWNSTREAM` to `MODE_UPSTREAM` — upstream dependencies are more useful for navigation. User can press `d` to switch to downstream. Commit: `88a2a1a`.
+
+---
+
 ## Recently Fixed Issues (v1.6.0)
 
 16. ~~[2026-02-13] [MEDIUM] After BDL-012 bug-fixes, beadloom's own docs are outdated~~ **FIXED in v1.6.0 (BDL-019)** — All 13 domain/service docs refreshed by 4 parallel tech-writer agents. `symbols_changed` reduced from 35 to 0.
