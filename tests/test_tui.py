@@ -1105,17 +1105,18 @@ class TestDashboardScreen:
             await pilot.press("q")
 
     @pytest.mark.asyncio()
-    async def test_dashboard_has_graph_placeholder(
+    async def test_dashboard_has_graph_tree(
         self, populated_db: tuple[Path, Path]
     ) -> None:
-        """DashboardScreen has a graph placeholder for BEAD-03."""
+        """DashboardScreen has a GraphTreeWidget."""
         db_path, project_root = populated_db
         from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.widgets.graph_tree import GraphTreeWidget
 
         app = BeadloomApp(db_path=db_path, project_root=project_root)
         async with app.run_test() as pilot:
-            placeholder = app.screen.query_one("#graph-placeholder")
-            assert placeholder is not None
+            graph_tree = app.screen.query_one("#graph-tree", GraphTreeWidget)
+            assert graph_tree is not None
             await pilot.press("q")
 
     @pytest.mark.asyncio()
@@ -1184,3 +1185,305 @@ class TestDashboardScreen:
             # Calling refresh should not raise
             screen.refresh_all_widgets()
             await pilot.press("q")
+
+
+# ---------------------------------------------------------------------------
+# GraphTreeWidget Tests (BEAD-03)
+# ---------------------------------------------------------------------------
+
+
+class TestGraphTreeWidget:
+    """Tests for GraphTreeWidget."""
+
+    def test_build_node_label_fresh(self) -> None:
+        """_build_node_label creates label with fresh indicator for documented node."""
+        from beadloom.tui.widgets.graph_tree import _build_node_label
+
+        label = _build_node_label(
+            "auth",
+            doc_ref_ids={"auth"},
+            stale_ref_ids=set(),
+            edge_counts={"auth": 3},
+        )
+        assert "\u25cf" in label  # fresh indicator
+        assert "auth" in label
+        assert "[3]" in label
+
+    def test_build_node_label_stale(self) -> None:
+        """_build_node_label creates label with stale indicator."""
+        from beadloom.tui.widgets.graph_tree import _build_node_label
+
+        label = _build_node_label(
+            "auth",
+            doc_ref_ids={"auth"},
+            stale_ref_ids={"auth"},
+            edge_counts={"auth": 1},
+        )
+        assert "\u25b2" in label  # stale indicator
+
+    def test_build_node_label_missing(self) -> None:
+        """_build_node_label creates label with missing indicator for undocumented node."""
+        from beadloom.tui.widgets.graph_tree import _build_node_label
+
+        label = _build_node_label(
+            "auth",
+            doc_ref_ids=set(),
+            stale_ref_ids=set(),
+            edge_counts={},
+        )
+        assert "\u2716" in label  # missing indicator
+        assert "[0]" in label  # zero edges
+
+    def test_doc_status_indicator_fresh(self) -> None:
+        """_doc_status_indicator returns fresh for documented, non-stale nodes."""
+        from beadloom.tui.widgets.graph_tree import _doc_status_indicator
+
+        indicator, style = _doc_status_indicator(
+            "auth", doc_ref_ids={"auth"}, stale_ref_ids=set()
+        )
+        assert indicator == "\u25cf"
+        assert style == "green"
+
+    def test_doc_status_indicator_stale(self) -> None:
+        """_doc_status_indicator returns stale for documented but stale nodes."""
+        from beadloom.tui.widgets.graph_tree import _doc_status_indicator
+
+        indicator, style = _doc_status_indicator(
+            "auth", doc_ref_ids={"auth"}, stale_ref_ids={"auth"}
+        )
+        assert indicator == "\u25b2"
+        assert style == "yellow"
+
+    def test_doc_status_indicator_missing(self) -> None:
+        """_doc_status_indicator returns missing for undocumented nodes."""
+        from beadloom.tui.widgets.graph_tree import _doc_status_indicator
+
+        indicator, style = _doc_status_indicator(
+            "auth", doc_ref_ids=set(), stale_ref_ids=set()
+        )
+        assert indicator == "\u2716"
+        assert style == "red"
+
+    def test_node_selected_message(self) -> None:
+        """NodeSelected message stores ref_id."""
+        from beadloom.tui.widgets.graph_tree import NodeSelected
+
+        msg = NodeSelected("auth")
+        assert msg.ref_id == "auth"
+
+    @pytest.mark.asyncio()
+    async def test_tree_builds_hierarchy(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """GraphTreeWidget builds tree from graph data with correct hierarchy."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.widgets.graph_tree import GraphTreeWidget
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            tree = app.screen.query_one("#graph-tree", GraphTreeWidget)
+            assert tree is not None
+
+            # Root should have children (the top-level nodes)
+            root = tree.root
+            assert len(root.children) > 0
+
+            # auth should be a branch with auth-login as child
+            # Collect all node labels from root children
+            root_labels = [str(child.label) for child in root.children]
+            auth_labels = [
+                lbl for lbl in root_labels
+                if "auth" in lbl and "auth-login" not in lbl
+            ]
+            assert len(auth_labels) == 1, (
+                f"Expected auth in root, got: {root_labels}"
+            )
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_tree_shows_doc_status_indicators(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """GraphTreeWidget shows doc status indicators in node labels."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.widgets.graph_tree import GraphTreeWidget
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            tree = app.screen.query_one("#graph-tree", GraphTreeWidget)
+
+            # Collect all labels recursively
+            all_labels: list[str] = []
+
+            def collect_labels(node: object) -> None:
+                all_labels.append(str(getattr(node, "label", "")))
+                for child in getattr(node, "children", []):
+                    collect_labels(child)
+
+            collect_labels(tree.root)
+
+            # At least one node should have a doc status indicator
+            has_indicator = any(
+                "\u25cf" in lbl or "\u25b2" in lbl or "\u2716" in lbl
+                for lbl in all_labels
+            )
+            assert has_indicator, f"No doc indicator found in labels: {all_labels}"
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_empty_graph_shows_placeholder(self, tmp_path: Path) -> None:
+        """GraphTreeWidget shows 'No nodes found' for empty graph."""
+        db_path = tmp_path / ".beadloom" / "beadloom.db"
+        db_path.parent.mkdir(parents=True)
+
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+
+        from beadloom.infrastructure.db import create_schema
+
+        create_schema(conn)
+        conn.commit()
+        conn.close()
+
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.widgets.graph_tree import GraphTreeWidget
+
+        app = BeadloomApp(db_path=db_path, project_root=tmp_path)
+        async with app.run_test() as pilot:
+            tree = app.screen.query_one("#graph-tree", GraphTreeWidget)
+            root = tree.root
+
+            # Should show "No nodes found" leaf
+            labels = [str(child.label) for child in root.children]
+            assert any("No nodes found" in lbl for lbl in labels), (
+                f"Expected 'No nodes found' in tree, got: {labels}"
+            )
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_tree_refresh_rebuilds(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """GraphTreeWidget.refresh_data() rebuilds tree from updated providers."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.widgets.graph_tree import GraphTreeWidget
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            tree = app.screen.query_one("#graph-tree", GraphTreeWidget)
+
+            # Count children before refresh
+            count_before = len(tree.root.children)
+
+            # Refresh should rebuild (same data, same count)
+            tree.refresh_data()
+            count_after = len(tree.root.children)
+
+            assert count_before == count_after
+            assert count_before > 0
+
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_dashboard_has_graph_tree(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """DashboardScreen has a GraphTreeWidget instead of placeholder."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.widgets.graph_tree import GraphTreeWidget
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            tree = app.screen.query_one("#graph-tree", GraphTreeWidget)
+            assert tree is not None
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_node_selected_updates_summary(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """NodeSelected message from graph tree updates the summary bar."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.widgets import NodeSelected
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        async with app.run_test() as pilot:
+            # Post a NodeSelected message manually
+            from textual.widgets import Label
+
+            app.screen.post_message(NodeSelected("auth"))
+            await pilot.pause()
+
+            summary = app.screen.query_one("#node-summary", Label)
+            # Label stores text via Static.content property (inherited)
+            summary_text = str(summary.content)
+            assert "auth" in summary_text
+            assert "domain" in summary_text
+
+            await pilot.press("q")
+
+
+class TestGraphDataProviderExtended:
+    """Tests for new GraphDataProvider methods added in BEAD-03."""
+
+    def test_get_node_with_source(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """get_node_with_source() returns node data including source path."""
+        from beadloom.tui.data_providers import GraphDataProvider
+
+        _, project_root = populated_db
+        provider = GraphDataProvider(conn=ro_conn, project_root=project_root)
+        node = provider.get_node_with_source("auth")
+
+        assert node is not None
+        assert node["ref_id"] == "auth"
+        assert node["kind"] == "domain"
+        assert node["source"] == "src/auth"
+
+    def test_get_node_with_source_missing(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """get_node_with_source() returns None for missing ref_id."""
+        from beadloom.tui.data_providers import GraphDataProvider
+
+        _, project_root = populated_db
+        provider = GraphDataProvider(conn=ro_conn, project_root=project_root)
+        node = provider.get_node_with_source("nonexistent")
+
+        assert node is None
+
+    def test_get_edge_counts(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """get_edge_counts() returns edge counts per ref_id."""
+        from beadloom.tui.data_providers import GraphDataProvider
+
+        _, project_root = populated_db
+        provider = GraphDataProvider(conn=ro_conn, project_root=project_root)
+        counts = provider.get_edge_counts()
+
+        # We have one edge: auth-login -> auth (part_of)
+        assert counts.get("auth", 0) >= 1
+        assert counts.get("auth-login", 0) >= 1
+
+    def test_get_doc_ref_ids(
+        self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
+    ) -> None:
+        """get_doc_ref_ids() returns set of ref_ids with docs."""
+        from beadloom.tui.data_providers import GraphDataProvider
+
+        _, project_root = populated_db
+        provider = GraphDataProvider(conn=ro_conn, project_root=project_root)
+        doc_ids = provider.get_doc_ref_ids()
+
+        # The populated DB has one doc for auth-login
+        assert "auth-login" in doc_ids

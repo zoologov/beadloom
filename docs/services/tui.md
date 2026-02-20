@@ -46,12 +46,12 @@ Global keybindings:
 Main overview screen with architecture health dashboard. Layout:
 
 - Header bar: project title ("beadloom tui") + `DebtGaugeWidget` showing debt score with severity coloring
-- Left panel (40%): graph tree placeholder (will be replaced by `GraphTreeWidget` in BEAD-03)
+- Left panel (40%): `GraphTreeWidget` showing architecture hierarchy with doc status indicators
 - Right panel (60%): `ActivityWidget` (per-domain git activity bars) + `LintPanelWidget` (violation counts and details)
-- Node summary bar: shows selected node info (wired when BEAD-03 adds selection)
+- Node summary bar: shows selected node info (ref_id, kind, summary, source path) -- updated via `NodeSelected` message from GraphTreeWidget
 - Status bar: `StatusBarWidget` with node/edge/doc/stale counts, watcher status, last action
 
-Data is loaded from providers on mount via `_load_data()`. Supports `refresh_all_widgets()` for reactive updates.
+Data is loaded from providers on mount via `_load_data()`. Supports `refresh_all_widgets()` for reactive updates. Handles `NodeSelected` messages from GraphTreeWidget to update the node summary bar with ref_id, kind, summary, and source path.
 
 #### ExplorerScreen
 
@@ -62,6 +62,22 @@ Node deep-dive screen. Placeholder for BEAD-04 (node detail, dependency path, co
 Documentation health screen. Placeholder for BEAD-05 (doc health table).
 
 ### Dashboard Widgets
+
+#### GraphTreeWidget (`widgets/graph_tree.py`)
+
+Interactive tree widget showing the architecture graph hierarchy:
+
+- Tree structure built from `part_of` edges: root -> domains -> features/services
+- Each node label includes a doc status indicator and edge count badge
+- Doc status indicators: fresh (green filled circle), stale (yellow triangle), missing (red X)
+- Emits `NodeSelected` message when a tree node is selected
+- `refresh_data(graph_provider, sync_provider)` for reactive updates
+- Handles empty graph gracefully (shows "No nodes found")
+- Nodes sorted by kind (service > domain > feature > other) then alphabetically
+
+Custom message:
+
+- `NodeSelected(ref_id: str)` -- emitted when a node is selected in the graph tree
 
 #### DebtGaugeWidget (`widgets/debt_gauge.py`)
 
@@ -105,7 +121,7 @@ Bottom status bar showing health metrics:
 
 Seven thin read-only wrappers over existing infrastructure APIs in `data_providers.py`:
 
-- `GraphDataProvider` -- SQLite queries for nodes/edges: `get_nodes()`, `get_edges()`, `get_node(ref_id)`, `get_hierarchy()`
+- `GraphDataProvider` -- SQLite queries for nodes/edges: `get_nodes()`, `get_edges()`, `get_node(ref_id)`, `get_node_with_source(ref_id)`, `get_hierarchy()`, `get_edge_counts()`, `get_doc_ref_ids()`
 - `LintDataProvider` -- wraps `rule_engine.load_rules()` + `evaluate_all()`: `get_violations()`, `get_violation_count()`
 - `SyncDataProvider` -- wraps `engine.check_sync()`: `get_sync_results()`, `get_stale_count()`, `get_coverage()`
 - `DebtDataProvider` -- wraps `debt_report.collect_debt_data()` + `compute_debt_score()`: `get_debt_report()`, `get_score()`
@@ -156,6 +172,8 @@ Module `src/beadloom/tui/data_providers.py`:
 
 Module `src/beadloom/tui/widgets/`:
 
+- `GraphTreeWidget` -- interactive architecture hierarchy tree with doc status indicators
+- `NodeSelected` -- custom message emitted on tree node selection
 - `DebtGaugeWidget` -- debt score with severity coloring
 - `LintPanelWidget` -- lint violation counts and details
 - `ActivityWidget` -- per-domain git activity bars
@@ -174,6 +192,7 @@ Source files in `src/beadloom/tui/`:
 - `styles/doc_status.tcss` -- doc status screen styles
 - `widgets/activity.py` -- ActivityWidget (per-domain git activity)
 - `widgets/debt_gauge.py` -- DebtGaugeWidget (debt score severity)
+- `widgets/graph_tree.py` -- GraphTreeWidget (architecture hierarchy tree) + NodeSelected message
 - `widgets/lint_panel.py` -- LintPanelWidget (violations display)
 - `widgets/status_bar.py` -- StatusBarWidget (health metrics bar)
 - `widgets/domain_list.py` -- legacy DomainList widget
@@ -181,4 +200,4 @@ Source files in `src/beadloom/tui/`:
 
 ## Testing
 
-TUI is tested via Textual's pilot testing framework in `tests/test_tui.py`. Tests cover: all 7 data providers, app shell instantiation, screen switching (keys 1/2/3), CLI commands (`tui` and `ui`), launch function signature, all 4 dashboard widgets (DebtGaugeWidget, LintPanelWidget, ActivityWidget, StatusBarWidget), DashboardScreen composition and data loading. Total: 77 tests.
+TUI is tested via Textual's pilot testing framework in `tests/test_tui.py`. Tests cover: all 7 data providers (including extended GraphDataProvider methods), app shell instantiation, screen switching (keys 1/2/3), CLI commands (`tui` and `ui`), launch function signature, all 5 dashboard widgets (GraphTreeWidget, DebtGaugeWidget, LintPanelWidget, ActivityWidget, StatusBarWidget), GraphTreeWidget hierarchy building, doc status indicators, NodeSelected message emission, empty graph handling, tree refresh, DashboardScreen composition and data loading. Total: 94 tests.

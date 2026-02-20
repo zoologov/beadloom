@@ -66,6 +66,21 @@ class GraphDataProvider:
             return None
         return {"ref_id": row["ref_id"], "kind": row["kind"], "summary": row["summary"]}
 
+    def get_node_with_source(self, ref_id: str) -> dict[str, str | None] | None:
+        """Return a node with source path by ref_id, or None if not found."""
+        row = self.conn.execute(
+            "SELECT ref_id, kind, summary, source FROM nodes WHERE ref_id = ?",
+            (ref_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "ref_id": row["ref_id"],
+            "kind": row["kind"],
+            "summary": row["summary"],
+            "source": row["source"],
+        }
+
     def get_hierarchy(self) -> dict[str, list[str]]:
         """Return parent->children mapping via part_of edges."""
         rows = self.conn.execute(
@@ -77,6 +92,24 @@ class GraphDataProvider:
             child = row["src_ref_id"]
             hierarchy.setdefault(parent, []).append(child)
         return hierarchy
+
+    def get_edge_counts(self) -> dict[str, int]:
+        """Return mapping of ref_id to total edge count (in + out)."""
+        edges = self.get_edges()
+        counts: dict[str, int] = {}
+        for edge in edges:
+            src = edge["src"]
+            dst = edge["dst"]
+            counts[src] = counts.get(src, 0) + 1
+            counts[dst] = counts.get(dst, 0) + 1
+        return counts
+
+    def get_doc_ref_ids(self) -> set[str]:
+        """Return set of ref_ids that have associated docs."""
+        rows = self.conn.execute(
+            "SELECT DISTINCT ref_id FROM docs WHERE ref_id IS NOT NULL"
+        ).fetchall()
+        return {str(row["ref_id"]) for row in rows}
 
 
 @dataclass

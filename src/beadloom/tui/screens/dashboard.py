@@ -1,5 +1,5 @@
 # beadloom:service=tui
-"""Dashboard screen -- main overview with graph placeholder, debt gauge, lint panel, activity."""
+"""Dashboard screen -- main overview with graph tree, debt gauge, lint panel, activity."""
 
 from __future__ import annotations
 
@@ -8,10 +8,11 @@ from typing import TYPE_CHECKING
 
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Label, Static
+from textual.widgets import Label
 
 from beadloom.tui.widgets.activity import ActivityWidget
 from beadloom.tui.widgets.debt_gauge import DebtGaugeWidget
+from beadloom.tui.widgets.graph_tree import GraphTreeWidget, NodeSelected
 from beadloom.tui.widgets.lint_panel import LintPanelWidget
 from beadloom.tui.widgets.status_bar import StatusBarWidget
 
@@ -28,7 +29,7 @@ class DashboardScreen(Screen[None]):
 
     Layout:
     - Header: project title + debt gauge
-    - Left panel (40%): graph placeholder (BEAD-03 will replace with GraphTreeWidget)
+    - Left panel (40%): graph tree widget
     - Right panel (60%): activity widget + lint panel
     - Node summary bar below main panels
     - Status bar at the bottom
@@ -46,12 +47,9 @@ class DashboardScreen(Screen[None]):
 
             # Main content: left + right panels
             with Horizontal(id="dashboard-main"):
-                # Left panel: graph tree placeholder
+                # Left panel: graph tree
                 with Vertical(id="dashboard-left"):
-                    yield Static(
-                        "Graph tree placeholder (BEAD-03)",
-                        id="graph-placeholder",
-                    )
+                    yield GraphTreeWidget(widget_id="graph-tree")
 
                 # Right panel: activity + lint
                 with Vertical(id="dashboard-right"):
@@ -71,11 +69,48 @@ class DashboardScreen(Screen[None]):
         """Load data from providers when the screen mounts."""
         self._load_data()
 
+    def on_node_selected(self, event: NodeSelected) -> None:
+        """Handle node selection from the graph tree — update summary bar."""
+        app = self._get_app()
+        if app is None or app.graph_provider is None:
+            return
+
+        node_data = app.graph_provider.get_node_with_source(event.ref_id)
+        if node_data is None:
+            return
+
+        ref_id = node_data.get("ref_id", "")
+        kind = node_data.get("kind", "")
+        summary = node_data.get("summary", "")
+        source = node_data.get("source") or ""
+
+        summary_text = f"{ref_id} ({kind})"
+        if summary:
+            summary_text += f" — {summary}"
+        if source:
+            summary_text += f"  [{source}]"
+
+        try:
+            label = self.query_one("#node-summary", Label)
+            label.update(summary_text)
+        except Exception:
+            logger.debug("Failed to update node summary", exc_info=True)
+
     def _load_data(self) -> None:
         """Load data from all providers and push to widgets."""
         app = self._get_app()
         if app is None:
             return
+
+        # Graph tree
+        try:
+            graph_tree = self.query_one("#graph-tree", GraphTreeWidget)
+            graph_tree.refresh_data(
+                graph_provider=app.graph_provider,
+                sync_provider=app.sync_provider,
+            )
+        except Exception:
+            logger.debug("Failed to load graph tree data", exc_info=True)
 
         # Debt gauge
         if app.debt_provider is not None:
