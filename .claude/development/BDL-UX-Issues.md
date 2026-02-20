@@ -63,6 +63,16 @@
 
 45. [2026-02-20] [LOW] C4 diagram: `!include` always uses `C4_Container.puml` — PlantUML renderer always includes `C4_Container.puml` regardless of the C4 level. When `--level=component` is used, should include `C4_Component.puml` instead. When `--level=context`, should include `C4_Context.puml`. **→ Fix: select include based on the `--level` flag passed to `filter_c4_nodes()`**
 
+52. [2026-02-20] [HIGH] `docs audit` high false positive rate (~86%) on real project — Dogfooding on beadloom: 107 "stale" mentions reported, but only ~15 are genuine (mcp_tool_count 13→14, cli_command_count 22→29, rule_type_count). Root causes: (1) small numbers (2, 3, 5) in SPEC.md examples match too aggressively against node_count/edge_count, (2) step numbers in CONTRIBUTING.md match test_count, (3) percentage "80" in "80% coverage" matches test_count keyword. PRD target was <20% FP rate. **→ Fix: increase minimum matchable number threshold (skip <10 for count facts), add "percentage" false positive filter, consider excluding SPEC.md/CONTRIBUTING.md by default**
+
+53. [2026-02-20] [MEDIUM] `docs audit` year "2026" matched as mcp_tool_count — Line `README.md:66` matches "2026" near "tool" keyword and reports it as stale mcp_tool_count. Root cause: date filter catches `YYYY-MM-DD` and month patterns but not standalone 4-digit years (2020-2030 range). **→ Fix: add standalone year regex `\b20[0-9]{2}\b` to false positive filters**
+
+54. [2026-02-20] [MEDIUM] `docs audit` SPEC.md files dominate false positives — 40+ of 107 stale mentions come from `.beadloom/_graph/features/*/SPEC.md` files which contain example numbers, thresholds, and architectural descriptions (e.g., "2 nodes", "5 edges", "100 nodes"). These are documentation about the system's behavior, not claims about current state. **→ Fix: exclude `_graph/features/*/SPEC.md` from default scan paths, or add a `docs_audit.exclude_paths` config option**
+
+55. [2020-02-20] [LOW] `docs audit` test_count ground truth seems inflated — Reports `test_count: 3039` which is the count of `kind='test'` symbols in code_symbols table. This likely includes parameterized test IDs and non-test symbols. Actual pytest count is 2389. **→ Fix: consider using `uv run pytest --collect-only -q | tail -1` for more accurate test count, or document that this counts test symbols not test cases**
+
+56. [2026-02-20] [LOW] `docs audit` Rich output lacks file path context — Stale mentions show bare filenames like `SPEC.md:44` without the full relative path. When multiple SPEC.md files exist across different feature directories, it's impossible to tell which file is referenced. **→ Fix: show relative path from project root (e.g., `docs/domains/graph/features/c4-diagrams/SPEC.md:44`)**
+
 31. [2026-02-16] [LOW] `bd dep remove` says "✓ Removed" but dependency persists — Running `bd dep remove beadloom-3v0 beadloom-53o` reports success, but `bd show beadloom-3v0` still shows the dependency and `bd blocked` still lists it as blocked. Workaround: `bd update --status in_progress --claim` works regardless of blocks. **→ Beads CLI bug, not beadloom**
 
 ---
