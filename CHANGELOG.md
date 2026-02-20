@@ -5,6 +5,32 @@ All notable changes to Beadloom are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-02-20
+
+Interactive Architecture TUI (Phase 12.10). 207 TUI tests.
+
+### Added
+- **Multi-screen TUI** -- 3-screen architecture workstation with Dashboard, Explorer, and Doc Status screens (`beadloom tui`)
+- **7 data providers** -- thin read-only wrappers over existing infrastructure APIs (Graph, Lint, Sync, Debt, Activity, Why, Context)
+- **GraphTreeWidget** -- interactive architecture hierarchy tree with doc status indicators (fresh/stale/missing) and edge count badges
+- **DebtGaugeWidget** -- debt score display with severity coloring (green/yellow/red)
+- **LintPanelWidget** -- violation counts with severity icons and individual violation details
+- **ActivityWidget** -- per-domain git activity progress bars with color coding
+- **StatusBarWidget** -- health metrics, watcher status indicator, auto-dismissing notifications
+- **NodeDetailPanel** -- node deep-dive with ref_id, kind, summary, source, edges, doc status
+- **DependencyPathWidget** -- upstream/downstream dependency tree visualization with impact summary
+- **ContextPreviewWidget** -- context bundle preview with token estimation
+- **DocHealthTable** -- per-node documentation health table with coverage tracking and row selection
+- **FileWatcherWorker** -- background file watcher with 500ms debounce, extension filtering, `ReindexNeeded` messages
+- **SearchOverlay** -- modal FTS5 search with LIKE fallback and result navigation
+- **HelpOverlay** -- modal keybinding reference organized by context
+- **17 keyboard bindings** -- screen switching (1/2/3), navigation, actions (r/l/s/S), overlays (?//)
+- `beadloom tui` command (primary), `beadloom ui` kept as alias
+- `--no-watch` flag to disable file watcher
+
+### Changed
+- Textual dependency upgraded from `>=0.50` to `>=0.80`
+
 ## [1.7.0] - 2026-02-17
 
 AaC Rules v2, Init Quality, and Architecture Intelligence. 1657 tests.

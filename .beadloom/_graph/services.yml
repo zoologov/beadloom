@@ -76,7 +76,7 @@ nodes:
   # Service: TUI
   - ref_id: tui
     kind: service
-    summary: "Interactive terminal dashboard (Textual)"
+    summary: "Interactive 3-screen architecture workstation with dashboard, explorer, doc status"
     source: src/beadloom/tui/
     docs:
       - docs/services/tui.md
