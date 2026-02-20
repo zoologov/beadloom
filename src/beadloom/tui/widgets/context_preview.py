@@ -87,9 +87,7 @@ class ContextPreviewWidget(Static):
     DEFAULT_CSS = """
     ContextPreviewWidget {
         width: 100%;
-        height: 100%;
         padding: 0 1;
-        overflow-y: auto;
     }
     """
 
@@ -117,8 +115,9 @@ class ContextPreviewWidget(Static):
     def show_context(self, ref_id: str) -> None:
         """Show context preview for the given ref_id.
 
-        Resets scroll position to top so the user always starts reading
-        from the beginning of the new context bundle.
+        The scroll container (``VerticalScroll`` in the Explorer layout)
+        is responsible for resetting scroll position — see
+        ``ExplorerScreen._scroll_context_home()``.
 
         Parameters
         ----------
@@ -127,8 +126,6 @@ class ContextPreviewWidget(Static):
         """
         self._ref_id = ref_id
         self.refresh()
-        if self.is_mounted:
-            self.scroll_home(animate=False)
 
     def set_provider(self, context_provider: ContextDataProvider) -> None:
         """Set the context data provider."""

@@ -2881,7 +2881,6 @@ class TestExplorerScreen:
         db_path, project_root = populated_db
         from beadloom.tui.app import BeadloomApp
         from beadloom.tui.screens.explorer import MODE_CONTEXT, ExplorerScreen
-        from beadloom.tui.widgets.context_preview import ContextPreviewWidget
         from beadloom.tui.widgets.dependency_path import DependencyPathWidget
 
         app = BeadloomApp(db_path=db_path, project_root=project_root)
@@ -2893,9 +2892,9 @@ class TestExplorerScreen:
             await pilot.pause()
 
             dep_widget = app.screen.query_one("#dependency-path", DependencyPathWidget)
-            ctx_widget = app.screen.query_one("#context-preview", ContextPreviewWidget)
+            ctx_scroll = app.screen.query_one("#context-scroll")
             assert dep_widget.display is False
-            assert ctx_widget.display is True
+            assert ctx_scroll.display is True
             assert app.screen._mode == MODE_CONTEXT
 
             await pilot.press("q")
@@ -3025,7 +3024,6 @@ class TestExplorerScreen:
         db_path, project_root = populated_db
         from beadloom.tui.app import BeadloomApp
         from beadloom.tui.screens.explorer import MODE_DOWNSTREAM, ExplorerScreen
-        from beadloom.tui.widgets.context_preview import ContextPreviewWidget
         from beadloom.tui.widgets.dependency_path import DependencyPathWidget
 
         app = BeadloomApp(db_path=db_path, project_root=project_root)
@@ -3042,9 +3040,9 @@ class TestExplorerScreen:
             await pilot.pause()
 
             dep_widget = app.screen.query_one("#dependency-path", DependencyPathWidget)
-            ctx_widget = app.screen.query_one("#context-preview", ContextPreviewWidget)
+            ctx_scroll = app.screen.query_one("#context-scroll")
             assert dep_widget.display is True
-            assert ctx_widget.display is False
+            assert ctx_scroll.display is False
             assert app.screen._mode == MODE_DOWNSTREAM
 
             await pilot.press("q")

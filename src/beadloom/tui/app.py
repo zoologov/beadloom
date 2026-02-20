@@ -204,6 +204,25 @@ class BeadloomApp(App[None]):
         """Track the last selected node ref_id for explorer navigation."""
         self._selected_ref_id = message.ref_id
 
+    def _safe_switch_screen(self, screen_name: str) -> None:
+        """Switch screen with guard against empty result-callback stack.
+
+        Textual's ``switch_screen`` pops the top screen and calls
+        ``_pop_result_callback`` on it.  The default ``Screen(id='_default')``
+        at the bottom of the stack has an empty ``_result_callbacks`` list, so
+        popping it raises ``IndexError``.  If the default screen is the only
+        one on the stack (e.g. during early startup) we fall back to
+        ``push_screen`` which is safe.
+        """
+        try:
+            self.switch_screen(screen_name)
+        except IndexError:
+            logger.debug(
+                "switch_screen(%s) hit empty callback stack — falling back to push_screen",
+                screen_name,
+            )
+            self.push_screen(screen_name)
+
     def open_explorer(self, ref_id: str) -> None:
         """Switch to Explorer screen and show the given node.
 
@@ -212,25 +231,30 @@ class BeadloomApp(App[None]):
         self._selected_ref_id = ref_id
         explorer = self._installed_screens.get(SCREEN_EXPLORER)
         if isinstance(explorer, ExplorerScreen):
-            self.switch_screen(SCREEN_EXPLORER)
+            self._safe_switch_screen(SCREEN_EXPLORER)
             explorer.set_ref_id(ref_id)
         else:
-            self.switch_screen(SCREEN_EXPLORER)
+            self._safe_switch_screen(SCREEN_EXPLORER)
 
     async def action_switch_screen(self, screen_name: str) -> None:
         """Switch to the named screen."""
         if screen_name not in self._VALID_SCREENS:
             return
 
+        # Guard: already on the target screen — nothing to do
+        target = self._installed_screens.get(screen_name)
+        if target is not None and self.screen is target:
+            return
+
         # When switching to explorer, update its ref_id
         if screen_name == SCREEN_EXPLORER:
             explorer = self._installed_screens.get(SCREEN_EXPLORER)
             if isinstance(explorer, ExplorerScreen) and self._selected_ref_id:
-                self.switch_screen(screen_name)
+                self._safe_switch_screen(screen_name)
                 explorer.set_ref_id(self._selected_ref_id)
                 return
 
-        self.switch_screen(screen_name)
+        self._safe_switch_screen(screen_name)
 
     def action_help(self) -> None:
         """Show help overlay with all keyboard bindings."""
