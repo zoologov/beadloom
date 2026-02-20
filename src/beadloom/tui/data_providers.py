@@ -90,7 +90,8 @@ class GraphDataProvider:
         for row in rows:
             parent = row["dst_ref_id"]
             child = row["src_ref_id"]
-            hierarchy.setdefault(parent, []).append(child)
+            if child != parent:  # skip self-referencing edges
+                hierarchy.setdefault(parent, []).append(child)
         return hierarchy
 
     def get_edge_counts(self) -> dict[str, int]:

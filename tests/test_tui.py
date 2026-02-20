@@ -894,14 +894,14 @@ class TestActivityWidget:
         """ActivityWidget renders domain names and activity bars."""
         from beadloom.tui.widgets.activity import ActivityWidget
 
-        # Use a simple dict with commit_count attribute simulation
+        # Use a simple dict with commits_30d attribute simulation
         class MockActivity:
-            def __init__(self, commit_count: int) -> None:
-                self.commit_count = commit_count
+            def __init__(self, commits_30d: int) -> None:
+                self.commits_30d = commits_30d
 
         activities = {
-            "auth": MockActivity(50),
-            "payments": MockActivity(10),
+            "auth": MockActivity(25),
+            "payments": MockActivity(5),
         }
         widget = ActivityWidget(activities=activities)
         text = widget.render()
@@ -917,7 +917,7 @@ class TestActivityWidget:
         from beadloom.tui.widgets.activity import ActivityWidget
 
         activities = {
-            "graph": {"commit_count": 30},
+            "graph": {"commits_30d": 15},
         }
         widget = ActivityWidget(activities=activities)
         text = widget.render()
@@ -930,8 +930,8 @@ class TestActivityWidget:
         from beadloom.tui.widgets.activity import ActivityWidget
 
         class MockActivity:
-            def __init__(self, commit_count: int) -> None:
-                self.commit_count = commit_count
+            def __init__(self, commits_30d: int) -> None:
+                self.commits_30d = commits_30d
 
         activities = {"auth": MockActivity(200)}
         widget = ActivityWidget(activities=activities)
@@ -953,7 +953,7 @@ class TestActivityWidget:
         widget = ActivityWidget(activities={})
         assert "No activity data" in widget.render().plain
 
-        widget._activities = {"test": {"commit_count": 42}}
+        widget._activities = {"test": {"commits_30d": 42}}
         assert "test" in widget.render().plain
 
 
@@ -3871,11 +3871,11 @@ class TestWidgetRenderingWithNoneData:
 
         assert _activity_level(None) == 0
 
-    def test_activity_widget_zero_commit_count(self) -> None:
+    def test_activity_widget_zero_commits_30d(self) -> None:
         """ActivityWidget._activity_level returns 0 for zero commits."""
         from beadloom.tui.widgets.activity import _activity_level
 
-        assert _activity_level({"commit_count": 0}) == 0
+        assert _activity_level({"commits_30d": 0}) == 0
 
     def test_activity_widget_unknown_type(self) -> None:
         """ActivityWidget._activity_level returns 0 for unknown types."""
