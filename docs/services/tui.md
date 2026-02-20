@@ -33,11 +33,12 @@ Global keybindings:
 - `2` -- Switch to Explorer screen
 - `3` -- Switch to Doc Status screen
 - `q` -- Quit
-- `?` -- Help overlay (placeholder)
-- `/` -- Search overlay (placeholder)
+- `?` -- Help overlay (shows all keybindings organized by context)
+- `/` -- Search overlay (FTS5 search across nodes, with LIKE fallback)
 - `r` -- Reindex (triggers `incremental_reindex`, refreshes providers)
-- `l` -- Run lint check
-- `s` -- Run sync-check
+- `l` -- Run lint check (shows notification with violation count)
+- `s` -- Run sync-check (shows notification with stale count)
+- `S` -- Save snapshot (shows "Snapshot saved" notification)
 - `Tab` -- Cycle focus between panels
 
 The app tracks the last selected node ref_id via `on_node_selected()` handler. When switching to Explorer via `2`, the screen is updated with the tracked ref_id. `open_explorer(ref_id)` provides programmatic navigation to the Explorer screen.
@@ -142,6 +143,7 @@ Bottom status bar showing health metrics:
 - `set_changes_detected(count)` -- sets "changes detected (N)" state
 - `clear_changes()` -- reverts from changes-detected to "watching" state
 - `set_last_action(message)` for transient action messages
+- `show_notification(message, duration=3.0)` -- shows a notification that auto-dismisses after `duration` seconds using `set_timer()`
 - State constants: `WATCHER_OFF`, `WATCHER_WATCHING`, `WATCHER_CHANGES`
 
 ### File Watcher (`file_watcher.py`)
@@ -221,6 +223,36 @@ Widget showing context bundle preview with token estimation:
 - `show_context(ref_id)` for updating displayed context
 - `set_provider(context_provider)` for setting data source
 
+### Overlay Widgets
+
+#### HelpOverlay (`widgets/help_overlay.py`)
+
+Modal screen showing all keybindings organized by context:
+
+- Sections: Global, Dashboard, Explorer, Doc Status
+- Each section lists key + description in formatted table
+- Activated by `?` key globally
+- Dismissed by `Esc` key
+- Uses `ModalScreen` for overlay behavior
+- `build_help_text()` generates the formatted help text
+
+#### SearchOverlay (`widgets/search_overlay.py`)
+
+Modal screen for FTS5 search across architecture nodes:
+
+- Text input field for search query
+- Uses FTS5 full-text search when `search_index` table is populated; falls back to SQL LIKE on nodes table
+- Shows results as numbered list with kind, ref_id, and snippet
+- Enter on query: executes search; Enter again: navigates to first result
+- Esc: dismisses overlay without navigation
+- Activated by `/` key globally
+- On result selection, calls `BeadloomApp.open_explorer(ref_id)` to navigate
+
+Key functions:
+
+- `_search_nodes(conn, query, limit=20)` -- search with FTS5 / LIKE fallback
+- `_format_results(results)` -- format search results for display
+
 ### Legacy Widgets
 
 The following widgets from the previous single-screen architecture still exist but are no longer imported by the app:
@@ -237,8 +269,11 @@ These will be replaced by new screen-specific widgets in later beads.
 3. Screen switching: keys 1/2/3 call `action_switch_screen(name)` -> `switch_screen()`. Explorer screen receives tracked ref_id.
 4. File watcher: background Worker posts `ReindexNeeded` -> status bar shows "changes detected (N)" badge.
 5. Reindex: `action_reindex()` -> `incremental_reindex()` -> refresh all providers -> clear changes badge -> refresh screen widgets.
-6. Lint: `action_lint()` -> `lint_provider.refresh()` -> notify count.
-7. Sync: `action_sync_check()` -> `sync_provider.refresh()` -> notify stale count.
+6. Lint: `action_lint()` -> `lint_provider.refresh()` -> notify count + status bar notification (auto-dismiss 3s).
+7. Sync: `action_sync_check()` -> `sync_provider.refresh()` -> notify stale count + status bar notification (auto-dismiss 3s).
+8. Snapshot: `action_save_snapshot()` -> "Snapshot saved" notification (placeholder) + status bar notification.
+9. Help: `action_help()` -> push `HelpOverlay` modal screen.
+10. Search: `action_search()` -> push `SearchOverlay` modal screen -> on result, navigate to Explorer.
 
 ### Constraints
 
@@ -273,6 +308,8 @@ Module `src/beadloom/tui/widgets/`:
 - `DependencyPathWidget` -- upstream/downstream dependency tree visualization
 - `ContextPreviewWidget` -- context bundle preview with token count
 - `DocHealthTable` -- documentation health table with per-node status
+- `HelpOverlay` -- modal help screen with all keybindings
+- `SearchOverlay` -- modal search screen with FTS5/LIKE search
 
 Source files in `src/beadloom/tui/`:
 
@@ -295,9 +332,11 @@ Source files in `src/beadloom/tui/`:
 - `widgets/dependency_path.py` -- DependencyPathWidget (upstream/downstream tree)
 - `widgets/context_preview.py` -- ContextPreviewWidget (context bundle preview)
 - `widgets/doc_health.py` -- DocHealthTable (documentation health table)
+- `widgets/help_overlay.py` -- HelpOverlay (modal keybinding reference)
+- `widgets/search_overlay.py` -- SearchOverlay (modal FTS5/LIKE search)
 - `widgets/domain_list.py` -- legacy DomainList widget
 - `widgets/node_detail.py` -- legacy NodeDetail widget
 
 ## Testing
 
-TUI is tested via Textual's pilot testing framework in `tests/test_tui.py`. Tests cover: all 7 data providers (including extended GraphDataProvider methods with `get_source_paths()`), app shell instantiation, screen switching (keys 1/2/3), CLI commands (`tui` and `ui`), launch function signature, all 5 dashboard widgets (GraphTreeWidget, DebtGaugeWidget, LintPanelWidget, ActivityWidget, StatusBarWidget), GraphTreeWidget hierarchy building, doc status indicators, NodeSelected message emission, empty graph handling, tree refresh, DashboardScreen composition and data loading, DocStatusScreen composition and data loading, file watcher (ReindexNeeded message, helper functions, start_file_watcher, watcher status states, app integration with no_watch flag, reindex clearing changes badge), ExplorerScreen (composition, header, action bar, keybindings d/u/c switching right panel, Esc pop, set_ref_id, empty ref_id, empty DB, open source action), NodeDetailPanel (render with/without ref_id, missing node, edges, doc status, set_node, set_provider), DependencyPathWidget (upstream/downstream rendering, missing node, no provider, show methods), ContextPreviewWidget (render with/without ref_id, token count, bundle keys, missing node, no provider), app-level NodeSelected tracking and open_explorer navigation. Total: 184 tests.
+TUI is tested via Textual's pilot testing framework in `tests/test_tui.py`. Tests cover: all 7 data providers (including extended GraphDataProvider methods with `get_source_paths()`), app shell instantiation, screen switching (keys 1/2/3), CLI commands (`tui` and `ui`), launch function signature, all 5 dashboard widgets (GraphTreeWidget, DebtGaugeWidget, LintPanelWidget, ActivityWidget, StatusBarWidget), GraphTreeWidget hierarchy building, doc status indicators, NodeSelected message emission, empty graph handling, tree refresh, DashboardScreen composition and data loading, DocStatusScreen composition and data loading, file watcher (ReindexNeeded message, helper functions, start_file_watcher, watcher status states, app integration with no_watch flag, reindex clearing changes badge), ExplorerScreen (composition, header, action bar, keybindings d/u/c switching right panel, Esc pop, set_ref_id, empty ref_id, empty DB, open source action), NodeDetailPanel (render with/without ref_id, missing node, edges, doc status, set_node, set_provider), DependencyPathWidget (upstream/downstream rendering, missing node, no provider, show methods), ContextPreviewWidget (render with/without ref_id, token count, bundle keys, missing node, no provider), app-level NodeSelected tracking and open_explorer navigation, HelpOverlay (build_help_text sections/bindings, open/dismiss via ?/Esc, content widgets), SearchOverlay (_search_nodes with LIKE fallback, _format_results, open/dismiss via //Esc, input widget), StatusBarWidget notification (show_notification, _clear_notification, auto-dismiss via set_timer), keyboard actions (lint/sync/snapshot key notifications, all global bindings, explorer bindings, doc status bindings, save snapshot binding). Total: 207 tests.

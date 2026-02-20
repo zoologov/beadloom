@@ -134,3 +134,22 @@ class StatusBarWidget(Static):
         """Show a transient action message in the status bar."""
         self._last_action = message
         self.refresh()
+
+    def show_notification(self, message: str, duration: float = 3.0) -> None:
+        """Show a notification message that auto-dismisses after *duration* seconds.
+
+        Parameters
+        ----------
+        message:
+            The notification text to display.
+        duration:
+            Seconds before the notification auto-clears (default 3.0).
+        """
+        self._last_action = message
+        self.refresh()
+        self.set_timer(duration, self._clear_notification)
+
+    def _clear_notification(self) -> None:
+        """Clear the current notification message."""
+        self._last_action = ""
+        self.refresh()
