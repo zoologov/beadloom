@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from beadloom.context_oracle.test_mapper import TestMapping, map_tests
+from beadloom.context_oracle.test_mapper import TestMapping, aggregate_parent_tests, map_tests
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -356,3 +356,134 @@ class TestEdgeCases:
         assert len(xctest_mappings) >= 1
         total_tests = sum(m.test_count for m in xctest_mappings)
         assert total_tests >= 2
+
+
+# ---------------------------------------------------------------------------
+# Parent Aggregation (Issue #26)
+# ---------------------------------------------------------------------------
+
+
+class TestParentAggregation:
+    """Test that parent (domain) nodes aggregate child test counts."""
+
+    def test_aggregate_sums_child_tests(self) -> None:
+        """Parent node with no direct tests gets sum of child test counts."""
+        mappings: dict[str, TestMapping] = {
+            "child-a": TestMapping(
+                framework="pytest",
+                test_files=["tests/test_a.py"],
+                test_count=3,
+                coverage_estimate="medium",
+            ),
+            "child-b": TestMapping(
+                framework="pytest",
+                test_files=["tests/test_b.py"],
+                test_count=5,
+                coverage_estimate="medium",
+            ),
+            "parent-domain": TestMapping(
+                framework="pytest",
+                test_files=[],
+                test_count=0,
+                coverage_estimate="low",
+            ),
+        }
+        # parent_children: parent -> [children]
+        parent_children: dict[str, list[str]] = {
+            "parent-domain": ["child-a", "child-b"],
+        }
+        result = aggregate_parent_tests(mappings, parent_children)
+        assert result["parent-domain"].test_count == 8
+        assert "tests/test_a.py" in result["parent-domain"].test_files
+        assert "tests/test_b.py" in result["parent-domain"].test_files
+        # Children unchanged
+        assert result["child-a"].test_count == 3
+        assert result["child-b"].test_count == 5
+
+    def test_aggregate_skips_parent_with_own_tests(self) -> None:
+        """Parent with its own direct test files keeps its own count."""
+        mappings: dict[str, TestMapping] = {
+            "child-a": TestMapping(
+                framework="pytest",
+                test_files=["tests/test_a.py"],
+                test_count=3,
+                coverage_estimate="medium",
+            ),
+            "parent-domain": TestMapping(
+                framework="pytest",
+                test_files=["tests/test_parent.py"],
+                test_count=2,
+                coverage_estimate="medium",
+            ),
+        }
+        parent_children: dict[str, list[str]] = {
+            "parent-domain": ["child-a"],
+        }
+        result = aggregate_parent_tests(mappings, parent_children)
+        # Parent already has tests, so not overridden
+        assert result["parent-domain"].test_count == 2
+        assert result["parent-domain"].test_files == ["tests/test_parent.py"]
+
+    def test_aggregate_no_children(self) -> None:
+        """Parent with no children stays unchanged."""
+        mappings: dict[str, TestMapping] = {
+            "lonely-node": TestMapping(
+                framework="pytest",
+                test_files=[],
+                test_count=0,
+                coverage_estimate="low",
+            ),
+        }
+        parent_children: dict[str, list[str]] = {}
+        result = aggregate_parent_tests(mappings, parent_children)
+        assert result["lonely-node"].test_count == 0
+
+    def test_aggregate_updates_coverage_estimate(self) -> None:
+        """Coverage estimate updates when aggregating: >3 files -> high."""
+        mappings: dict[str, TestMapping] = {
+            "child-a": TestMapping(
+                framework="pytest",
+                test_files=["tests/test_a1.py", "tests/test_a2.py"],
+                test_count=5,
+                coverage_estimate="medium",
+            ),
+            "child-b": TestMapping(
+                framework="pytest",
+                test_files=["tests/test_b1.py", "tests/test_b2.py"],
+                test_count=4,
+                coverage_estimate="medium",
+            ),
+            "parent-domain": TestMapping(
+                framework="pytest",
+                test_files=[],
+                test_count=0,
+                coverage_estimate="low",
+            ),
+        }
+        parent_children: dict[str, list[str]] = {
+            "parent-domain": ["child-a", "child-b"],
+        }
+        result = aggregate_parent_tests(mappings, parent_children)
+        assert result["parent-domain"].test_count == 9
+        assert result["parent-domain"].coverage_estimate == "high"  # 4 files > 3
+
+    def test_aggregate_empty_mappings(self) -> None:
+        """Empty mappings dict returns empty dict."""
+        result = aggregate_parent_tests({}, {})
+        assert result == {}
+
+    def test_aggregate_child_not_in_mappings(self) -> None:
+        """Children refs not in mappings are silently skipped."""
+        mappings: dict[str, TestMapping] = {
+            "parent-domain": TestMapping(
+                framework="pytest",
+                test_files=[],
+                test_count=0,
+                coverage_estimate="low",
+            ),
+        }
+        parent_children: dict[str, list[str]] = {
+            "parent-domain": ["missing-child"],
+        }
+        result = aggregate_parent_tests(mappings, parent_children)
+        assert result["parent-domain"].test_count == 0

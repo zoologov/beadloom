@@ -64,11 +64,20 @@ _LINE_REF_L_RE = re.compile(r"\bL\d+\b")
 # Semantic version: v1.2.3, 1.7.0
 _VERSION_RE = re.compile(r"\bv?\d+\.\d+\.\d+\b")
 
+# Standalone 4-digit year: 2000-2099
+_YEAR_STANDALONE_RE = re.compile(r"\b20[0-9]{2}\b")
+
 # Bare number (integer) in text
 _NUMBER_RE = re.compile(r"\b\d+\b")
 
 # Directories to always exclude from path resolution
 _EXCLUDE_DIRS = frozenset({"node_modules", ".git", "__pycache__", ".venv", "venv"})
+
+# Glob patterns for files to exclude by default
+_EXCLUDE_PATTERNS = (
+    "_graph/features/*/SPEC.md",
+    ".beadloom/_graph/features/*/SPEC.md",
+)
 
 
 class DocScanner:
@@ -208,6 +217,11 @@ class DocScanner:
                 if fact_name == "version":
                     continue  # handled separately
 
+                # Skip small numbers (<10) for count-type facts — too
+                # many false positives from examples in SPEC docs.
+                if number_val < 10 and fact_name.endswith("_count"):
+                    continue
+
                 for keyword in keywords:
                     kw_words = keyword.lower().split()
                     if self._keyword_in_window(kw_words, window_tokens):
@@ -289,12 +303,17 @@ class DocScanner:
         result = _LINE_REF_WORD_RE.sub(lambda m: " " * len(m.group()), result)
         result = _LINE_REF_L_RE.sub(lambda m: " " * len(m.group()), result)
 
+        # Mask standalone years: 2026, 2025, etc.
+        result = _YEAR_STANDALONE_RE.sub(lambda m: " " * len(m.group()), result)
+
         return result
 
     def resolve_paths(
         self,
         project_root: Path,
         scan_globs: list[str] | None = None,
+        *,
+        config_path: Path | None = None,
     ) -> list[Path]:
         """Resolve glob patterns to actual file paths.
 
@@ -305,6 +324,11 @@ class DocScanner:
         scan_globs:
             Optional list of glob patterns. Defaults to
             ``["*.md", "docs/**/*.md", ".beadloom/*.md"]``.
+        config_path:
+            Optional path to a config YAML file.  When ``None``, tries
+            ``<project_root>/.beadloom/config.yml``.  The config may
+            contain ``docs_audit.exclude_paths`` — a list of glob
+            patterns to exclude.
 
         Returns
         -------
@@ -313,6 +337,18 @@ class DocScanner:
         """
         default_globs = ["*.md", "docs/**/*.md", ".beadloom/*.md"]
         globs = scan_globs or default_globs
+
+        # Build set of excluded resolved paths from default + config patterns
+        excluded: set[Path] = set()
+        for pattern in _EXCLUDE_PATTERNS:
+            for p in project_root.glob(pattern):
+                excluded.add(p.resolve())
+
+        # Load additional exclude patterns from config
+        extra_excludes = self._load_exclude_paths(project_root, config_path)
+        for pattern in extra_excludes:
+            for p in project_root.glob(pattern):
+                excluded.add(p.resolve())
 
         seen: set[Path] = set()
         result: list[Path] = []
@@ -331,8 +367,53 @@ class DocScanner:
                     continue
 
                 resolved = path.resolve()
+
+                # Exclude default + config patterns
+                if resolved in excluded:
+                    continue
+
                 if resolved not in seen:
                     seen.add(resolved)
                     result.append(path)
 
         return result
+
+    @staticmethod
+    def _load_exclude_paths(
+        project_root: Path,
+        config_path: Path | None,
+    ) -> list[str]:
+        """Load ``docs_audit.exclude_paths`` from config YAML.
+
+        Returns an empty list when config is missing or has no relevant
+        section.
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        cfg = config_path or (project_root / ".beadloom" / "config.yml")
+        if not cfg.is_file():
+            return []
+
+        try:
+            import yaml
+
+            content = cfg.read_text(encoding="utf-8")
+            data = yaml.safe_load(content)
+        except Exception:
+            logger.warning("Failed to read %s for exclude paths", cfg)
+            return []
+
+        if not isinstance(data, dict):
+            return []
+
+        audit_section = data.get("docs_audit")
+        if not isinstance(audit_section, dict):
+            return []
+
+        raw = audit_section.get("exclude_paths")
+        if not isinstance(raw, list):
+            return []
+
+        return [str(p) for p in raw if isinstance(p, str)]

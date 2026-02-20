@@ -184,16 +184,35 @@ def _format_markdown(bundle: dict[str, object]) -> str:
     # API Routes.
     routes = cast("list[dict[str, Any]]", bundle.get("routes", []))
     if routes:
-        lines.append("## API Routes")
-        lines.append("")
-        for route in routes:
-            handler = route.get("handler", "<anonymous>")
-            file_ref = route.get("file", "")
-            line_num = route.get("line", 0)
-            lines.append(
-                f"- {route['method']} {route['path']} \u2192 {handler}() {file_ref}:{line_num}"
-            )
-        lines.append("")
+        _gql_methods = {"QUERY", "MUTATION", "SUBSCRIPTION"}
+        http_routes = [r for r in routes if r.get("method", "") not in _gql_methods]
+        gql_routes = [r for r in routes if r.get("method", "") in _gql_methods]
+
+        if http_routes:
+            lines.append("## API Routes")
+            lines.append("")
+            for route in http_routes:
+                handler = route.get("handler", "<anonymous>")
+                file_ref = route.get("file", "")
+                line_num = route.get("line", 0)
+                lines.append(
+                    f"- {route['method']:<7} {route['path']:<50} "
+                    f"\u2192 {handler}() {file_ref}:{line_num}"
+                )
+            lines.append("")
+
+        if gql_routes:
+            lines.append("## GraphQL")
+            lines.append("")
+            for route in gql_routes:
+                handler = route.get("handler", "<anonymous>")
+                file_ref = route.get("file", "")
+                line_num = route.get("line", 0)
+                lines.append(
+                    f"- {route['method']:<14} {route['path']:<40} "
+                    f"\u2192 {handler}() {file_ref}:{line_num}"
+                )
+            lines.append("")
 
     # Sync status.
     stale = sync_status.get("stale_docs", [])
@@ -439,7 +458,7 @@ def graph(
             sys.exit(1)
 
         if fmt == "c4-plantuml":
-            click.echo(render_c4_plantuml(c4_nodes, c4_rels))
+            click.echo(render_c4_plantuml(c4_nodes, c4_rels, level=c4_level))
         else:
             click.echo(render_c4_mermaid(c4_nodes, c4_rels))
         conn.close()
@@ -1739,7 +1758,11 @@ def docs_audit(
     if output_json:
         _docs_audit_json(result, stale, fresh, fail_condition=fail_condition)
     else:
-        _docs_audit_rich(result, stale, fresh, stale_only=stale_only, verbose=verbose_flag)
+        _docs_audit_rich(
+            result, stale, fresh,
+            stale_only=stale_only, verbose=verbose_flag,
+            project_root=project_root,
+        )
 
     # CI gate check (after output so user sees results)
     if fail_condition is not None:
@@ -1854,6 +1877,7 @@ def _docs_audit_rich(
     *,
     stale_only: bool,
     verbose: bool,
+    project_root: Path | None = None,
 ) -> None:
     """Emit docs audit results with Rich formatting."""
     from rich.console import Console
@@ -1861,6 +1885,15 @@ def _docs_audit_rich(
     from beadloom.doc_sync.audit import AuditFinding, AuditResult
 
     assert isinstance(result, AuditResult)
+
+    _root = (project_root or Path.cwd()).resolve()
+
+    def _rel_path(file_path: Path) -> str:
+        """Return path relative to project root, falling back to name."""
+        try:
+            return str(file_path.relative_to(_root))
+        except ValueError:
+            return str(file_path.name)
 
     console = Console()
 
@@ -1870,10 +1903,15 @@ def _docs_audit_rich(
     console.print("[bold]" + "=" * 50 + "[/bold]")
     console.print()
 
+    # Fact labels that need disambiguation suffixes
+    _fact_suffixes: dict[str, str] = {
+        "test_count": " (symbols)",
+    }
+
     # Ground Truth
     console.print("[bold]Ground Truth[/bold] (from project state)")
     for name, fact in sorted(result.facts.items()):
-        label = name.replace("_", " ")
+        label = name.replace("_", " ") + _fact_suffixes.get(name, "")
         console.print(f"  {label}: [cyan]{fact.value}[/cyan]")
     console.print()
 
@@ -1884,7 +1922,7 @@ def _docs_audit_rich(
         stale_files: set[str] = set()
         for finding in stale:
             assert isinstance(finding, AuditFinding)
-            fname = str(finding.mention.file.name)
+            fname = _rel_path(finding.mention.file)
             stale_files.add(fname)
             console.print(
                 f"  {fname}:{finding.mention.line:<12}"
@@ -1908,7 +1946,7 @@ def _docs_audit_rich(
         console.print("[dim]" + "-" * 50 + "[/dim]")
         for finding in fresh:
             assert isinstance(finding, AuditFinding)
-            fname = str(finding.mention.file.name)
+            fname = _rel_path(finding.mention.file)
             tol_label = _format_tolerance(finding.tolerance)
             console.print(
                 f"  {fname}:{finding.mention.line:<12}"
@@ -1925,7 +1963,7 @@ def _docs_audit_rich(
         console.print("[dim]Unmatched Numbers (ignored)[/dim]")
         console.print("[dim]" + "-" * 50 + "[/dim]")
         for mention in result.unmatched:
-            fname = str(mention.file.name)
+            fname = _rel_path(mention.file)
             console.print(
                 f"  [dim]{fname}:{mention.line:<12}"
                 f' "{mention.value}" -- no keyword match (skipped)[/dim]'

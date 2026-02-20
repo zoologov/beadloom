@@ -528,3 +528,66 @@ def map_tests(
             )
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Parent aggregation: roll up child test counts to domain-level parents
+# ---------------------------------------------------------------------------
+
+
+def aggregate_parent_tests(
+    mappings: dict[str, TestMapping],
+    parent_children: dict[str, list[str]],
+) -> dict[str, TestMapping]:
+    """Aggregate child test counts up to parent nodes.
+
+    For each parent in *parent_children* that has **no direct test files**,
+    sums ``test_count`` and collects ``test_files`` from its children.
+
+    Parameters
+    ----------
+    mappings:
+        Existing per-node TestMapping dict (from :func:`map_tests`).
+    parent_children:
+        Mapping of parent ref_id -> list of child ref_ids.
+        Typically built from ``part_of`` edges in the graph.
+
+    Returns
+    -------
+    dict[str, TestMapping]
+        Updated mappings with parent nodes having aggregated values.
+    """
+    if not mappings:
+        return {}
+
+    result = dict(mappings)
+
+    for parent_id, children in parent_children.items():
+        if parent_id not in result:
+            continue
+        parent_mapping = result[parent_id]
+        # Only aggregate if parent has no direct test files
+        if parent_mapping.test_files:
+            continue
+
+        total_count = 0
+        all_files: list[str] = []
+        for child_id in children:
+            child_mapping = result.get(child_id)
+            if child_mapping is None:
+                continue
+            total_count += child_mapping.test_count
+            for f in child_mapping.test_files:
+                if f not in all_files:
+                    all_files.append(f)
+
+        if total_count > 0 or all_files:
+            coverage = _estimate_coverage(len(all_files), True)
+            result[parent_id] = TestMapping(
+                framework=parent_mapping.framework,
+                test_files=sorted(all_files),
+                test_count=total_count,
+                coverage_estimate=coverage,
+            )
+
+    return result

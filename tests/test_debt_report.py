@@ -17,6 +17,8 @@ from beadloom.infrastructure.debt_report import (
     DebtWeights,
     NodeDebt,
     _compute_snapshot_debt,
+    _count_oversized,
+    _count_untracked,
     _severity_label,
     _trend_arrow,
     collect_debt_data,
@@ -2660,3 +2662,168 @@ class TestMcpDebtReport:
         with pytest.raises(ValueError, match="get_debt_report requires project_root"):
             _dispatch_tool(conn, "get_debt_report", {}, project_root=None)
         conn.close()
+
+
+# ===========================================================================
+# BDL-027 BEAD-03: Issue #39 — _count_untracked returns tuple
+# ===========================================================================
+
+
+class TestCountUntrackedReturnsTuple:
+    """#39: _count_untracked should return (count, list[str]) not just int."""
+
+    def test_returns_tuple_with_ref_ids(
+        self, conn: sqlite3.Connection,
+    ) -> None:
+        """Untracked nodes are returned as (count, [ref_ids])."""
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("orphan-a", "domain", "A", "src/a/"),
+        )
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("orphan-b", "feature", "B", "src/b/"),
+        )
+        conn.commit()
+        count, ref_ids = _count_untracked(conn)
+        assert count == 2
+        assert set(ref_ids) == {"orphan-a", "orphan-b"}
+
+    def test_empty_returns_zero_and_empty_list(
+        self, conn: sqlite3.Connection,
+    ) -> None:
+        """No untracked nodes -> (0, [])."""
+        count, ref_ids = _count_untracked(conn)
+        assert count == 0
+        assert ref_ids == []
+
+    def test_tracked_node_excluded(
+        self, conn: sqlite3.Connection,
+    ) -> None:
+        """Nodes with sync_state entries are not untracked."""
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("tracked", "domain", "Tracked", "src/tracked/"),
+        )
+        conn.execute(
+            "INSERT INTO sync_state (doc_path, code_path, ref_id, "
+            "code_hash_at_sync, doc_hash_at_sync, synced_at, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("tracked.md", "src/tracked/main.py", "tracked", "h1", "h2",
+             "2026-01-01T00:00:00", "ok"),
+        )
+        conn.commit()
+        count, ref_ids = _count_untracked(conn)
+        assert count == 0
+        assert ref_ids == []
+
+    def test_untracked_refs_in_collect_debt_data_node_issues(
+        self, conn: sqlite3.Connection, project_root: Path,
+    ) -> None:
+        """collect_debt_data records untracked refs in node_issues."""
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("untracked-x", "domain", "X", "src/x/"),
+        )
+        conn.commit()
+        data = collect_debt_data(conn, project_root)
+        assert "untracked" in data.node_issues.get("untracked-x", [])
+
+
+# ===========================================================================
+# BDL-027 BEAD-03: Issue #40 — _count_oversized excludes child node symbols
+# ===========================================================================
+
+
+class TestCountOversizedExcludesChildren:
+    """#40: _count_oversized should not count symbols owned by child nodes."""
+
+    def test_parent_excludes_child_symbols(
+        self, conn: sqlite3.Connection,
+    ) -> None:
+        """Parent node should not count symbols from child node's source prefix."""
+        # Parent: source=src/beadloom/
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("parent", "service", "Parent", "src/beadloom/"),
+        )
+        # Child: source=src/beadloom/graph/
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("child", "domain", "Child", "src/beadloom/graph/"),
+        )
+        # Edge: child part_of parent
+        conn.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES (?, ?, ?)",
+            ("child", "parent", "part_of"),
+        )
+        # 150 symbols in parent's own files (src/beadloom/*.py)
+        for i in range(150):
+            conn.execute(
+                "INSERT INTO code_symbols (file_path, symbol_name, kind, "
+                "line_start, line_end, annotations, file_hash) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (f"src/beadloom/mod{i}.py", f"func_{i}", "function", 1, 10, "{}", "h"),
+            )
+        # 100 symbols in child's files (src/beadloom/graph/*.py)
+        for i in range(100):
+            conn.execute(
+                "INSERT INTO code_symbols (file_path, symbol_name, kind, "
+                "line_start, line_end, annotations, file_hash) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (f"src/beadloom/graph/g{i}.py", f"gfunc_{i}", "function", 1, 10, "{}", "h"),
+            )
+        conn.commit()
+
+        # Threshold 200: parent has 150 own + 100 child = 250 total
+        # Without fix: parent counted as oversized (250 > 200)
+        # With fix: parent has only 150 own symbols, not oversized
+        _count, refs = _count_oversized(conn, threshold=200)
+        assert "parent" not in refs
+
+    def test_leaf_node_counts_all_its_symbols(
+        self, conn: sqlite3.Connection,
+    ) -> None:
+        """Leaf node (no children) counts all its symbols."""
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("leaf", "feature", "Leaf", "src/leaf/"),
+        )
+        for i in range(250):
+            conn.execute(
+                "INSERT INTO code_symbols (file_path, symbol_name, kind, "
+                "line_start, line_end, annotations, file_hash) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (f"src/leaf/f{i}.py", f"func_{i}", "function", 1, 10, "{}", "h"),
+            )
+        conn.commit()
+        _count, refs = _count_oversized(conn, threshold=200)
+        assert "leaf" in refs
+
+    def test_child_node_independently_oversized(
+        self, conn: sqlite3.Connection,
+    ) -> None:
+        """A child node with too many symbols is flagged independently."""
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("root", "service", "Root", "src/root/"),
+        )
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("big-child", "domain", "Big", "src/root/big/"),
+        )
+        conn.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES (?, ?, ?)",
+            ("big-child", "root", "part_of"),
+        )
+        for i in range(250):
+            conn.execute(
+                "INSERT INTO code_symbols (file_path, symbol_name, kind, "
+                "line_start, line_end, annotations, file_hash) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (f"src/root/big/m{i}.py", f"func_{i}", "function", 1, 10, "{}", "h"),
+            )
+        conn.commit()
+        _count, refs = _count_oversized(conn, threshold=200)
+        assert "big-child" in refs
+        assert "root" not in refs  # root has 0 own symbols

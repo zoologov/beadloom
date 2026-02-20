@@ -420,7 +420,11 @@ class FactRegistry:
         project_root: Path,
         facts: dict[str, Fact],
     ) -> None:
-        """Extract version from project manifests with priority fallback."""
+        """Extract version from project manifests with priority fallback.
+
+        Handles dynamic versioning (Hatch ``[tool.hatch.version]``) and
+        falls back to ``importlib.metadata`` for installed packages.
+        """
         extractors: list[tuple[str, str]] = [
             ("pyproject.toml", "pyproject.toml"),
             ("package.json", "package.json"),
@@ -433,7 +437,9 @@ class FactRegistry:
                 continue
 
             try:
-                version = self._parse_version(manifest, filename)
+                version = self._parse_version(
+                    manifest, filename, project_root=project_root,
+                )
             except Exception:
                 logger.warning("Failed to parse version from %s", filename)
                 continue
@@ -447,11 +453,22 @@ class FactRegistry:
                 return  # first match wins
 
     @staticmethod
-    def _parse_version(path: Path, filename: str) -> str | None:
+    def _parse_version(
+        path: Path,
+        filename: str,
+        *,
+        project_root: Path | None = None,
+    ) -> str | None:
         """Parse version string from a manifest file.
 
-        Uses regex to avoid heavy TOML/JSON parser dependencies for
-        a single-field extraction.
+        For ``pyproject.toml``, detects dynamic versioning:
+
+        1. If ``dynamic = ["version"]`` and ``[tool.hatch.version] path``
+           is set, reads ``__version__`` from that source file.
+        2. Falls back to ``importlib.metadata.version(package_name)``.
+        3. Otherwise, looks for a static ``version = "X.Y.Z"`` line.
+
+        Uses regex to avoid heavy TOML parser dependencies.
         """
         try:
             content = path.read_text(encoding="utf-8")
@@ -460,7 +477,52 @@ class FactRegistry:
             return None
 
         if filename == "pyproject.toml":
-            # Try [project] version = "X.Y.Z" or [tool.poetry] version = "X.Y.Z"
+            # Check for dynamic versioning
+            is_dynamic = bool(
+                re.search(r'^\s*dynamic\s*=\s*\[.*"version"', content, re.MULTILINE)
+            )
+
+            if is_dynamic:
+                # Try Hatch: [tool.hatch.version] path = "..."
+                hatch_match = re.search(
+                    r'^\[tool\.hatch\.version\]\s*\n\s*path\s*=\s*"([^"]+)"',
+                    content,
+                    re.MULTILINE,
+                )
+                if hatch_match and project_root is not None:
+                    version_file = project_root / hatch_match.group(1)
+                    if version_file.is_file():
+                        try:
+                            src_content = version_file.read_text(encoding="utf-8")
+                            ver_match = re.search(
+                                r'__version__\s*=\s*["\']([^"\']+)["\']',
+                                src_content,
+                            )
+                            if ver_match:
+                                return ver_match.group(1)
+                        except OSError:
+                            logger.warning("Cannot read %s", version_file)
+
+                # Fallback: importlib.metadata
+                name_match = re.search(
+                    r'^\s*name\s*=\s*"([^"]+)"',
+                    content,
+                    re.MULTILINE,
+                )
+                if name_match:
+                    pkg_name = name_match.group(1)
+                    try:
+                        import importlib.metadata
+
+                        return importlib.metadata.version(pkg_name)
+                    except Exception:
+                        logger.debug(
+                            "importlib.metadata.version(%r) failed", pkg_name,
+                        )
+
+                return None  # dynamic but couldn't resolve
+
+            # Static version
             match = re.search(
                 r'^\s*version\s*=\s*"([^"]+)"',
                 content,

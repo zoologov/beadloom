@@ -676,3 +676,121 @@ class TestEdgeCases:
         )
         routes = extract_routes(f, "protobuf")
         assert routes == []
+
+
+# ---------------------------------------------------------------------------
+# Self-exclusion (Issue #29 part 1)
+# ---------------------------------------------------------------------------
+
+
+class TestSelfExclusion:
+    """Route extractor should skip its own module files."""
+
+    def test_skip_route_extractor_file(self, tmp_path: Path) -> None:
+        """Files with 'route_extractor' in the path should return empty."""
+        # The actual route_extractor.py has comment examples like:
+        #   # Ariadne @query.field("name")
+        # which match the Ariadne regex and produce false positives
+        pkg = tmp_path / "context_oracle"
+        pkg.mkdir()
+        f = pkg / "route_extractor.py"
+        f.write_text(
+            "import re\n"
+            "\n"
+            '# Ariadne @query.field("name")\n'
+            "# These trigger GraphQL detection:\n"
+            "if 'QueryType' in content or 'MutationType' in content:\n"
+            "    pass\n"
+            "\n"
+            "def extract_routes(file_path, language):\n"
+            "    pass\n"
+        )
+        routes = extract_routes(f, "python")
+        assert routes == []
+
+    def test_non_route_extractor_file_not_skipped(self, tmp_path: Path) -> None:
+        """Normal files should still have routes extracted."""
+        f = tmp_path / "api.py"
+        f.write_text(
+            "from fastapi import FastAPI\n"
+            "app = FastAPI()\n"
+            "\n"
+            '@app.get("/health")\n'
+            "def health():\n"
+            "    pass\n"
+        )
+        routes = extract_routes(f, "python")
+        assert len(routes) >= 1
+
+
+# ---------------------------------------------------------------------------
+# Route formatting (Issue #30)
+# ---------------------------------------------------------------------------
+
+
+class TestRouteFormatting:
+    """Test route formatting helpers."""
+
+    def test_format_routes_separates_graphql(self) -> None:
+        """GraphQL routes should be in a separate section from HTTP routes."""
+        from beadloom.context_oracle.route_extractor import format_routes_for_display
+
+        routes_data = [
+            {
+                "method": "GET", "path": "/api/users",
+                "handler": "list_users", "framework": "fastapi",
+            },
+            {
+                "method": "POST", "path": "/api/users",
+                "handler": "create_user", "framework": "fastapi",
+            },
+            {
+                "method": "QUERY", "path": "users",
+                "handler": "users", "framework": "graphql_schema",
+            },
+            {
+                "method": "MUTATION", "path": "createUser",
+                "handler": "createUser", "framework": "graphql_schema",
+            },
+        ]
+        result = format_routes_for_display(routes_data)
+        # HTTP and GraphQL should be in separate sections
+        assert "HTTP" in result or "Routes" in result
+        assert "GraphQL" in result
+
+    def test_format_routes_empty(self) -> None:
+        """Empty routes list returns empty string."""
+        from beadloom.context_oracle.route_extractor import format_routes_for_display
+
+        result = format_routes_for_display([])
+        assert result == ""
+
+    def test_format_routes_only_graphql(self) -> None:
+        """Only GraphQL routes should show GraphQL section only."""
+        from beadloom.context_oracle.route_extractor import format_routes_for_display
+
+        routes_data = [
+            {
+                "method": "QUERY", "path": "users",
+                "handler": "users", "framework": "graphql_schema",
+            },
+        ]
+        result = format_routes_for_display(routes_data)
+        assert "GraphQL" in result
+        # Should not have an HTTP section header
+        assert "HTTP" not in result
+
+    def test_format_routes_wider_path_column(self) -> None:
+        """Long paths should not be truncated (wider column)."""
+        from beadloom.context_oracle.route_extractor import format_routes_for_display
+
+        routes_data = [
+            {
+                "method": "GET",
+                "path": "/api/v2/organizations/{org_id}/projects/{proj_id}/settings",
+                "handler": "get_settings",
+                "framework": "fastapi",
+            },
+        ]
+        result = format_routes_for_display(routes_data)
+        assert "/api/v2/organizations/{org_id}/projects/{proj_id}/settings" in result

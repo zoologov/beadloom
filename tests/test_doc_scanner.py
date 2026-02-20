@@ -69,12 +69,12 @@ class TestScanFindsNumbers:
     def test_scan_finds_number_near_keyword(
         self, scanner: DocScanner, tmp_path: Path
     ) -> None:
-        md = _write_md(tmp_path, "test.md", "Beadloom supports **9** programming languages.\n")
+        md = _write_md(tmp_path, "test.md", "Beadloom supports **12** programming languages.\n")
         result = scanner.scan_file(md)
         assert len(result) >= 1
         match = [m for m in result if m.fact_name == "language_count"]
         assert len(match) == 1
-        assert match[0].value == 9
+        assert match[0].value == 12
         assert match[0].line == 1
 
     def test_scan_finds_version_string(
@@ -100,7 +100,7 @@ class TestScanFindsNumbers:
     ) -> None:
         content = (
             "# Project\n\n"
-            "Supports 9 programming languages.\n\n"
+            "Supports 12 programming languages.\n\n"
             "Has 14 MCP tools available.\n\n"
             "Current version 1.7.0.\n"
         )
@@ -121,11 +121,11 @@ class TestScanFindsNumbers:
     def test_case_insensitive_keywords(
         self, scanner: DocScanner, tmp_path: Path
     ) -> None:
-        md = _write_md(tmp_path, "test.md", "There are 5 LANGUAGES supported.\n")
+        md = _write_md(tmp_path, "test.md", "There are 15 LANGUAGES supported.\n")
         result = scanner.scan_file(md)
         matches = [m for m in result if m.fact_name == "language_count"]
         assert len(matches) == 1
-        assert matches[0].value == 5
+        assert matches[0].value == 15
 
 
 # ===========================================================================
@@ -141,7 +141,7 @@ class TestProximityWindow:
         md = _write_md(
             tmp_path,
             "test.md",
-            "There are 9 different interesting and very cool things but language is here.\n",
+            "There are 12 different interesting and very cool things but language is here.\n",
         )
         result = scanner.scan_file(md)
         lang_matches = [m for m in result if m.fact_name == "language_count"]
@@ -154,7 +154,7 @@ class TestProximityWindow:
         md = _write_md(
             tmp_path,
             "test.md",
-            "There are 9 supported programming languages here.\n",
+            "There are 12 supported programming languages here.\n",
         )
         result = scanner.scan_file(md)
         lang_matches = [m for m in result if m.fact_name == "language_count"]
@@ -173,7 +173,7 @@ class TestFalsePositiveFilters:
         content = (
             "Some text.\n\n"
             "```python\n"
-            "x = 9  # 9 languages\n"
+            "x = 12  # 12 languages\n"
             "```\n\n"
             "More text.\n"
         )
@@ -309,7 +309,7 @@ class TestScanMultipleFiles:
     def test_scan_multiple_files(
         self, scanner: DocScanner, tmp_path: Path
     ) -> None:
-        _write_md(tmp_path, "a.md", "Has 9 languages supported.\n")
+        _write_md(tmp_path, "a.md", "Has 12 languages supported.\n")
         _write_md(tmp_path, "b.md", "Version is 2.0.0.\n")
         paths = [tmp_path / "a.md", tmp_path / "b.md"]
         result = scanner.scan(paths)
@@ -340,7 +340,7 @@ class TestEdgeCases:
         """Markdown with non-ASCII content is scanned without errors."""
         content = (
             "# Projet\n\n"
-            "Prend en charge 9 langages de programmation (fran\u00e7ais).\n\n"
+            "Prend en charge 12 langages de programmation (fran\u00e7ais).\n\n"
             "\u65e5\u672c\u8a9e\u306e\u30c6\u30b9\u30c8: version 1.7.0.\n"
         )
         md = _write_md(tmp_path, "unicode.md", content)
@@ -351,7 +351,7 @@ class TestEdgeCases:
         assert versions[0].value == "1.7.0"
         lang_matches = [m for m in result if m.fact_name == "language_count"]
         assert len(lang_matches) == 1
-        assert lang_matches[0].value == 9
+        assert lang_matches[0].value == 12
 
     def test_multiple_version_strings_in_same_file(
         self, scanner: DocScanner, tmp_path: Path
@@ -382,3 +382,160 @@ class TestEdgeCases:
         """scan() with an empty path list returns empty list."""
         result = scanner.scan([])
         assert result == []
+
+
+# ===========================================================================
+# Issue #52 — Small numbers (<10) should be skipped for count facts
+# ===========================================================================
+
+
+class TestSmallNumberSkip:
+    """Numbers < 10 should not match count-type facts (node_count, edge_count, etc.).
+
+    Small numbers like 2, 3, 5 in SPEC.md examples match too aggressively.
+    Version facts are unaffected — only count facts are filtered.
+    """
+
+    def test_small_number_skipped_for_node_count(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """Number 5 near 'node' keyword should NOT match node_count."""
+        md = _write_md(tmp_path, "spec.md", "The graph has 5 nodes in the example.\n")
+        result = scanner.scan_file(md)
+        node_matches = [m for m in result if m.fact_name == "node_count"]
+        assert len(node_matches) == 0
+
+    def test_small_number_skipped_for_edge_count(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """Number 3 near 'edge' keyword should NOT match edge_count."""
+        md = _write_md(tmp_path, "spec.md", "Connected by 3 edges in this example.\n")
+        result = scanner.scan_file(md)
+        edge_matches = [m for m in result if m.fact_name == "edge_count"]
+        assert len(edge_matches) == 0
+
+    def test_number_10_still_matches_count_fact(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """Number 10 (boundary) should still match count facts."""
+        md = _write_md(tmp_path, "test.md", "Project has 10 nodes total.\n")
+        result = scanner.scan_file(md)
+        node_matches = [m for m in result if m.fact_name == "node_count"]
+        assert len(node_matches) == 1
+        assert node_matches[0].value == 10
+
+    def test_large_number_still_matches_count_fact(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """Large numbers should still match count facts normally."""
+        md = _write_md(tmp_path, "test.md", "Architecture has 489 nodes.\n")
+        result = scanner.scan_file(md)
+        node_matches = [m for m in result if m.fact_name == "node_count"]
+        assert len(node_matches) == 1
+        assert node_matches[0].value == 489
+
+    def test_small_number_2_skipped_for_mcp_tool_count(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """Number 2 near 'tool' keyword should NOT match mcp_tool_count."""
+        md = _write_md(tmp_path, "spec.md", "Uses 2 tools in the pipeline.\n")
+        result = scanner.scan_file(md)
+        tool_matches = [m for m in result if m.fact_name == "mcp_tool_count"]
+        assert len(tool_matches) == 0
+
+
+# ===========================================================================
+# Issue #53 — Standalone year should be masked as false positive
+# ===========================================================================
+
+
+class TestStandaloneYearFilter:
+    """Standalone 4-digit years like '2026' should not match count facts."""
+
+    def test_standalone_year_not_matched(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """Standalone year 2026 near 'tool' should NOT match mcp_tool_count."""
+        md = _write_md(
+            tmp_path, "test.md", "Released in 2026, the tool is stable.\n"
+        )
+        result = scanner.scan_file(md)
+        tool_matches = [m for m in result if m.fact_name == "mcp_tool_count"]
+        assert len(tool_matches) == 0
+
+    def test_standalone_year_2025_not_matched(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """Year 2025 should also be filtered."""
+        md = _write_md(
+            tmp_path, "test.md", "Since 2025 the tool count has grown.\n"
+        )
+        result = scanner.scan_file(md)
+        tool_matches = [m for m in result if m.fact_name == "mcp_tool_count"]
+        assert len(tool_matches) == 0
+
+    def test_year_in_iso_date_still_filtered(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """ISO date (existing filter) should still work."""
+        md = _write_md(tmp_path, "test.md", "Updated 2026-02-20 with new tools.\n")
+        result = scanner.scan_file(md)
+        assert len(result) == 0
+
+
+# ===========================================================================
+# Issue #54 — SPEC.md files excluded by default
+# ===========================================================================
+
+
+class TestSpecMdExclude:
+    """SPEC.md files under _graph/features/ should be excluded by default."""
+
+    def test_spec_md_excluded_from_graph_features(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """_graph/features/*/SPEC.md should be excluded."""
+        spec_dir = tmp_path / "_graph" / "features" / "docs-audit"
+        spec_dir.mkdir(parents=True)
+        _write_md(spec_dir, "SPEC.md", "Has 5 nodes in the example.\n")
+        # Also create a normal md file to ensure it IS included
+        _write_md(tmp_path, "README.md", "# Project\n")
+        paths = scanner.resolve_paths(tmp_path)
+        spec_paths = [p for p in paths if "SPEC.md" in str(p)]
+        assert len(spec_paths) == 0
+
+    def test_spec_md_excluded_from_beadloom_graph_features(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """.beadloom/_graph/features/*/SPEC.md should be excluded."""
+        spec_dir = tmp_path / ".beadloom" / "_graph" / "features" / "docs-audit"
+        spec_dir.mkdir(parents=True)
+        _write_md(spec_dir, "SPEC.md", "Has 3 edges.\n")
+        _write_md(tmp_path, "README.md", "# Project\n")
+        paths = scanner.resolve_paths(tmp_path)
+        spec_paths = [p for p in paths if "SPEC.md" in str(p)]
+        assert len(spec_paths) == 0
+
+    def test_config_exclude_paths(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """docs_audit.exclude_paths from config.yml should exclude matching files."""
+        # Create config with exclude pattern
+        beadloom_dir = tmp_path / ".beadloom"
+        beadloom_dir.mkdir()
+        config = beadloom_dir / "config.yml"
+        config.write_text(
+            "docs_audit:\n  exclude_paths:\n    - 'custom/**/*.md'\n",
+            encoding="utf-8",
+        )
+        # Create files
+        custom_dir = tmp_path / "custom"
+        custom_dir.mkdir()
+        _write_md(custom_dir, "notes.md", "# Notes\n")
+        _write_md(tmp_path, "README.md", "# Project\n")
+        paths = scanner.resolve_paths(
+            tmp_path, config_path=config
+        )
+        custom_files = [p for p in paths if "custom" in str(p)]
+        assert len(custom_files) == 0
+        assert any(p.name == "README.md" for p in paths)

@@ -382,7 +382,7 @@ def _store_test_mappings(
     field, calls :func:`~beadloom.context_oracle.test_mapper.map_tests`, and
     updates each node's ``extra`` JSON blob with the test mapping data.
     """
-    from beadloom.context_oracle.test_mapper import map_tests
+    from beadloom.context_oracle.test_mapper import aggregate_parent_tests, map_tests
 
     # Build source_dirs: {ref_id: source_path} for nodes with a source field.
     rows = conn.execute("SELECT ref_id, source FROM nodes WHERE source IS NOT NULL").fetchall()
@@ -392,6 +392,21 @@ def _store_test_mappings(
         return
 
     mappings = map_tests(project_root, source_dirs)
+
+    # Build parent->children hierarchy from part_of edges for aggregation.
+    parent_children: dict[str, list[str]] = {}
+    edge_rows = conn.execute(
+        "SELECT src_ref_id, dst_ref_id FROM edges WHERE kind = 'part_of'"
+    ).fetchall()
+    for edge_row in edge_rows:
+        child_id = edge_row["src_ref_id"]
+        parent_id = edge_row["dst_ref_id"]
+        if parent_id not in parent_children:
+            parent_children[parent_id] = []
+        parent_children[parent_id].append(child_id)
+
+    # Aggregate child test counts up to parent (domain) nodes.
+    mappings = aggregate_parent_tests(mappings, parent_children)
 
     for ref_id, mapping in mappings.items():
         # Read existing extra JSON.
@@ -484,10 +499,25 @@ def _extract_and_store_routes(
     if not all_routes:
         return
 
-    # Store aggregated routes in every node's extra (project-wide API surface).
-    ref_ids = [row[0] for row in conn.execute("SELECT ref_id FROM nodes").fetchall()]
-    for ref_id in ref_ids:
-        _update_node_extra(conn, ref_id, "routes", all_routes)
+    # Scope routes to nodes whose source path covers the route's file.
+    # Build node source paths mapping.
+    node_rows = conn.execute("SELECT ref_id, source FROM nodes").fetchall()
+    for node_row in node_rows:
+        ref_id: str = node_row["ref_id"]
+        source: str | None = node_row["source"]
+        if source is None:
+            continue
+
+        # Normalise source to a directory prefix for matching.
+        # e.g. "src/beadloom/context_oracle" matches "src/beadloom/context_oracle/builder.py"
+        source_prefix = source.rstrip("/")
+
+        node_routes = [
+            r for r in all_routes
+            if str(r.get("file", "")).startswith(source_prefix)
+        ]
+        if node_routes:
+            _update_node_extra(conn, ref_id, "routes", node_routes)
     conn.commit()
 
 

@@ -44,6 +44,16 @@ _SOURCE_DIRS = frozenset(
         "api",
         "web",
         "mobile",
+        # React Native / Expo common directories.
+        "components",
+        "hooks",
+        "contexts",
+        "modules",
+        "screens",
+        "navigation",
+        "store",
+        "providers",
+        "features",
     }
 )
 

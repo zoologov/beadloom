@@ -72,7 +72,7 @@ def _check_nodes_without_docs(conn: sqlite3.Connection) -> list[Check]:
     return [
         Check(
             "nodes_without_docs",
-            Severity.INFO,
+            Severity.WARNING,
             f"Node '{r['ref_id']}' has no doc linked.",
         )
         for r in rows

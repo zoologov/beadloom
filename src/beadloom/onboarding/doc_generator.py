@@ -910,14 +910,11 @@ def format_polish_text(data: dict[str, Any]) -> str:
         # Routes (from nodes.extra).
         routes: list[dict[str, Any]] = node.get("routes", [])
         if routes:
-            lines.append("   Routes:")
-            for route in routes:
-                method: str = route.get("method", "?")
-                path: str = route.get("path", "?")
-                handler: str = route.get("handler", "?")
-                framework: str = route.get("framework", "")
-                fw_suffix = f" ({framework})" if framework else ""
-                lines.append(f"     {method:<5} {path:<20} -> {handler}{fw_suffix}")
+            from beadloom.context_oracle.route_extractor import format_routes_for_display
+
+            formatted = format_routes_for_display(routes)
+            if formatted:
+                lines.append(formatted)
 
         # Activity (from nodes.extra).
         activity: dict[str, Any] | None = node.get("activity")

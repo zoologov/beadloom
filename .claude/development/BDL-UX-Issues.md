@@ -41,41 +41,13 @@
 
 20. [2026-02-14] [LOW] `.beadloom/README.md` MCP tools list was stale after BDL-014 — Listed 8 tools, missing `get_status` and `prime`. The file is generated once by BDL-013 but never auto-updated. Unlike AGENTS.md which has `generate_agents_md()`, README.md has no regeneration mechanism. Low severity because `.beadloom/README.md` is a static guide, not agent-facing. **→ Not planned (low severity, manual)**
 
-26. [2026-02-16] [MEDIUM] Test mapping shows "0 tests in 0 files (low coverage)" for domains despite 1408+ tests — Dogfooding on beadloom itself: `beadloom ctx context-oracle` shows "Tests: pytest, 0 tests in 0 files (low coverage)" even though there are hundreds of tests covering context-oracle code. Root cause: `map_tests()` in test_mapper.py maps tests based on `test_<module>.py` → `<module>.py` naming convention, but doesn't aggregate tests at the domain level. Tests like `test_builder.py` map to `builder.py` source file but this mapping isn't rolled up to the `context-oracle` domain node. **→ Future: aggregate test mappings by domain source path prefix**
-
-29. [2026-02-16] [HIGH] Route extraction false positives — `beadloom docs polish` shows `QUERY extract_routes -> extract_routes (graphql_python)` on ALL domains, including doc-sync and graph which have no API routes. Root cause: `route_extractor.py` contains GraphQL regex patterns in its own source code (for detecting GraphQL routes in user code), and these patterns match themselves during symbol indexing. Routes are also propagated to all parent nodes instead of being scoped to the source file that contains them. Two bugs: (1) self-matching in route_extractor.py, (2) route aggregation to parent nodes includes unrelated routes from child sources. **→ Future: add self-exclusion for extractor code + scope routes by source path**
-
-30. [2026-02-16] [MEDIUM] Routes displayed with poor formatting in polish text — Route handler names are truncated/misaligned. The `{method:<5} {path:<20}` format doesn't handle long paths well. Also `QUERY` and `MUTATION` as methods for GraphQL is confusing — should show as separate section or different format. **→ Future: improve route rendering format**
-
-38. [2026-02-19] [MEDIUM] `beadloom doctor` shows `[info]` not `[warn]` for nodes without docs — During BDL-023, the tech-writer agent updated domain README and CLI docs but did not create the required `SPEC.md` for the new `c4-diagrams` feature node. `beadloom doctor` reported `[info] Node 'c4-diagrams' has no doc linked.` which the agent treated as informational and ignored. If this were `[warn]` (or `[error]`), the agent would have acted on it. Convention: every feature node should have a `features/{name}/SPEC.md`. **→ Fix: promote "node has no doc" from `[info]` to `[warn]` in doctor, so agents and CI treat it as actionable**
-
-39. [2026-02-20] [MEDIUM] Debt report "untracked: 8" — no way to see which files — `beadloom status --debt-report` shows 8 untracked files contributing 4 pts to doc_gaps, but neither human nor JSON output lists which nodes are untracked. Root cause: `_count_untracked()` counts nodes with `source` but no `sync_state` entry (feature nodes like `why`, `cache`, `rule-engine`, `debt-report` etc. that have SPEC.md docs but no doc-code sync tracking). Two issues: (1) the report should list untracked nodes for actionability, (2) feature-level SPEC.md docs are not tracked by sync-check — only domain-level READMEs are. **→ Fix: add untracked node list to report output + extend sync-check to cover feature SPEC.md docs**
-
-40. [2026-02-20] [MEDIUM] Oversized false positive on root and parent nodes — `beadloom status --debt-report` shows "oversized: 1" (2 pts complexity). The flagged node is `beadloom` (root) with 427 symbols, but 427 is the sum of ALL symbols across ALL child domains — `_count_oversized()` uses `LIKE 'src/beadloom/%'` which matches every file in every subdirectory. Root node can't be "fixed" by splitting. Same bug will affect domain nodes (e.g. `graph` = 109 symbols includes `rule-engine`, `import-resolver`, `c4-diagrams` children) — when children grow past 200 the parent gets a false positive despite being properly decomposed. Root cause: symbol counting doesn't respect ownership boundaries — each node should only count symbols from files directly in its source directory, not from subdirectories that belong to child nodes. **→ Fix: in `_count_oversized()`, count only direct files (exclude paths claimed by child node source prefixes)**
-
-41. [2026-02-20] [HIGH] C4 diagram: all elements render as `System()` — no Container/Component differentiation — `beadloom graph --format=c4-plantuml` renders every node as `System(...)`. Domains (depth 1) should be `Container`, features (depth 2) should be `Component`. Root cause: self-referencing `part_of` edge `beadloom → beadloom` in `services.yml` makes `_compute_depths()` find zero roots (`roots = all_ref_ids - set(parent_of.keys())` — beadloom is in `parent_of` so it's excluded). BFS never starts, all nodes fall through to depth=0 fallback (line 92 in c4.py), all become System. Same bug affects `--format=c4` (Mermaid). **→ Fix: in `_compute_depths()`, filter out self-referencing edges (`if child != par`) before computing roots**
-
-42. [2026-02-20] [MEDIUM] C4 diagram: label and description are identical — Every C4 element shows the full summary twice: `System(agent_prime, "Cross-IDE context injection via...", "Cross-IDE context injection via...")`. Root cause: `_build_c4_node()` sets both `label=summary` and `description=summary`. Label should be a short human-readable name derived from ref_id (e.g. `context-oracle` → "Context Oracle"), while description should be the full summary. **→ Fix: generate label from ref_id via title-casing + hyphen-to-space, keep summary as description**
-
-43. [2026-02-20] [MEDIUM] C4 diagram: root node appears inside its own boundary — Output shows `System_Boundary(beadloom_boundary, ...) { System(beadloom, ...) ... }` — the root is simultaneously the boundary group AND an element inside it. Root cause: self-referencing `part_of` edge makes `parent_of["beadloom"] = "beadloom"`, so beadloom gets `boundary=beadloom` and is added as a child of its own boundary. In C4, a System_Boundary is a visual grouping — the system itself should not appear as a child element inside. **→ Fix: skip self-referencing entries in `_load_edges()` part_of handling, or filter in renderer**
-
-44. [2026-02-20] [LOW] C4 diagram: boundary ordering is non-semantic — `onboarding` boundary renders before `beadloom` boundary. Root cause: since `top_level_nodes` is empty (all nodes have a boundary due to bug #41), everything goes through `_plantuml_orphan_boundaries` in dict insertion order. `agent-prime` is alphabetically first, its parent `onboarding` gets rendered first. Even after fixing bug #41, orphan boundary ordering should be deterministic and semantic (e.g. root-first, then alphabetical). **→ Fix: sort orphan boundaries by node kind/depth, or render root system first**
-
-45. [2026-02-20] [LOW] C4 diagram: `!include` always uses `C4_Container.puml` — PlantUML renderer always includes `C4_Container.puml` regardless of the C4 level. When `--level=component` is used, should include `C4_Component.puml` instead. When `--level=context`, should include `C4_Context.puml`. **→ Fix: select include based on the `--level` flag passed to `filter_c4_nodes()`**
-
-52. [2026-02-20] [HIGH] `docs audit` high false positive rate (~86%) on real project — Dogfooding on beadloom: 107 "stale" mentions reported, but only ~15 are genuine (mcp_tool_count 13→14, cli_command_count 22→29, rule_type_count). Root causes: (1) small numbers (2, 3, 5) in SPEC.md examples match too aggressively against node_count/edge_count, (2) step numbers in CONTRIBUTING.md match test_count, (3) percentage "80" in "80% coverage" matches test_count keyword. PRD target was <20% FP rate. **→ Fix: increase minimum matchable number threshold (skip <10 for count facts), add "percentage" false positive filter, consider excluding SPEC.md/CONTRIBUTING.md by default**
-
-53. [2026-02-20] [MEDIUM] `docs audit` year "2026" matched as mcp_tool_count — Line `README.md:66` matches "2026" near "tool" keyword and reports it as stale mcp_tool_count. Root cause: date filter catches `YYYY-MM-DD` and month patterns but not standalone 4-digit years (2020-2030 range). **→ Fix: add standalone year regex `\b20[0-9]{2}\b` to false positive filters**
-
-54. [2026-02-20] [MEDIUM] `docs audit` SPEC.md files dominate false positives — 40+ of 107 stale mentions come from `.beadloom/_graph/features/*/SPEC.md` files which contain example numbers, thresholds, and architectural descriptions (e.g., "2 nodes", "5 edges", "100 nodes"). These are documentation about the system's behavior, not claims about current state. **→ Fix: exclude `_graph/features/*/SPEC.md` from default scan paths, or add a `docs_audit.exclude_paths` config option**
-
-55. [2020-02-20] [LOW] `docs audit` test_count ground truth seems inflated — Reports `test_count: 3039` which is the count of `kind='test'` symbols in code_symbols table. This likely includes parameterized test IDs and non-test symbols. Actual pytest count is 2389. **→ Fix: consider using `uv run pytest --collect-only -q | tail -1` for more accurate test count, or document that this counts test symbols not test cases**
-
-56. [2026-02-20] [LOW] `docs audit` Rich output lacks file path context — Stale mentions show bare filenames like `SPEC.md:44` without the full relative path. When multiple SPEC.md files exist across different feature directories, it's impossible to tell which file is referenced. **→ Fix: show relative path from project root (e.g., `docs/domains/graph/features/c4-diagrams/SPEC.md:44`)**
-
-57. [2026-02-20] [MEDIUM] `docs audit` version fact not collected for dynamic versioning — beadloom uses `dynamic = ["version"]` in pyproject.toml (Hatch dynamic versioning from `src/beadloom/__init__.py`). FactRegistry regex `^\s*version\s*=\s*"([^"]+)"` only matches static `version = "X.Y.Z"` lines — no match when version is dynamic. Many modern Python projects use hatchling/setuptools-scm/poetry dynamic versioning. Root cause: regex-only parsing can't handle `dynamic = [...]` indirection. **→ Fix: detect `dynamic = ["version"]` + `[tool.hatch.version] path = ...` and read version from that file; or fallback to `importlib.metadata.version(package_name)` for installed packages**
-
 31. [2026-02-16] [LOW] `bd dep remove` says "✓ Removed" but dependency persists — Running `bd dep remove beadloom-3v0 beadloom-53o` reports success, but `bd show beadloom-3v0` still shows the dependency and `bd blocked` still lists it as blocked. Workaround: `bd update --status in_progress --claim` works regardless of blocks. **→ Beads CLI bug, not beadloom**
+
+35. [2026-02-17] [MEDIUM] Init doesn't offer `docs generate` — doc coverage 0% after bootstrap — After `beadloom init`, doc coverage is 0/6 (0%). User must know to run `beadloom docs generate` + `beadloom reindex` as separate steps. The init flow could offer doc skeleton generation as a final step. **→ Fix: add "Generate doc skeletons? [yes/no]" step to init, or auto-generate**
+
+36. [2026-02-17] [LOW] Existing docs not auto-linked to graph nodes — Target project had 20 existing docs in `docs/` (architecture docs, native module docs, feature docs). All reported as "unlinked from graph" by `doctor`. No auto-discovery mechanism to match existing docs to nodes by path or content similarity. Manual linking requires editing `services.yml`. **→ Future: fuzzy doc-to-node matching during init or `doctor --fix`**
+
+37. [2026-02-17] [INFO] `beadloom init` bootstrap quality metrics — Before/after manual graph improvement: Nodes 6→17, Edges 8→49, Symbols 23→380, Doc Coverage 0%→94%. The auto-generated graph captured only 35% of the real architecture. One native module alone has 130+ symbols — correctly indexed after scan_paths fix. **→ Track: bootstrap quality ratio as a metric for future improvements**
 
 ---
 
@@ -86,15 +58,51 @@
 
 32. [2026-02-17] [HIGH] `beadloom init` scan_paths incomplete for React Native projects — Bootstrap only detected `app/` and `services/` (6 nodes), completely missing `components/` (ui, features, layout, navigation), `hooks/`, `contexts/`, `modules/` (two native modules), `types/`, `constants/`, `utils/`. Had to manually add 9 scan_paths and rebuild the graph to get 17 nodes with 380 symbols. Root cause: `detect_source_dirs()` in `onboarding/bootstrapper.py` uses manifest-based heuristics (package.json → standard dirs) but React Native/Expo projects use flat top-level structure with many domain dirs. **→ Fix: scan all top-level dirs with code files, not just manifest-adjacent ones**
 
-33. [2026-02-17] [MEDIUM] `beadloom init` is interactive-only — no CLI flags for automation — The `init` command requires 3 interactive prompts: overwrite confirmation, mode selection (bootstrap/import/both), graph confirmation (yes/edit/cancel). No `--mode bootstrap --yes --force` flags available. Makes it unusable in CI pipelines, scripts, and awkward for AI agents (had to pipe `printf` answers). **→ Fix: add `--mode`, `--yes`/`--non-interactive`, `--force` flags**
+---
 
-34. [2026-02-17] [MEDIUM] Auto-generated `rules.yml` includes `service-needs-parent` that always fails on root — `beadloom init` generates `service-needs-parent` rule requiring every service node to have a `part_of` edge. Root service has no parent by definition → lint always fails. Had to manually remove the rule. Root cause: `_generate_default_rules()` doesn't account for root nodes. **→ Fix: either don't generate this rule, or add `exclude_root: true` option to rule engine**
+## Recently Fixed Issues (v1.9.0)
 
-35. [2026-02-17] [MEDIUM] Init doesn't offer `docs generate` — doc coverage 0% after bootstrap — After `beadloom init`, doc coverage is 0/6 (0%). User must know to run `beadloom docs generate` + `beadloom reindex` as separate steps. The init flow could offer doc skeleton generation as a final step. **→ Fix: add "Generate doc skeletons? [yes/no]" step to init, or auto-generate**
+> Fixed in BDL-027 UX Issues Batch Fix (Phase 12.12)
 
-36. [2026-02-17] [LOW] Existing docs not auto-linked to graph nodes — Target project had 20 existing docs in `docs/` (architecture docs, native module docs, feature docs). All reported as "unlinked from graph" by `doctor`. No auto-discovery mechanism to match existing docs to nodes by path or content similarity. Manual linking requires editing `services.yml`. **→ Future: fuzzy doc-to-node matching during init or `doctor --fix`**
+26. ~~[2026-02-16] [MEDIUM] Test mapping shows "0 tests in 0 files (low coverage)" for domains despite 1408+ tests~~ **FIXED in v1.9.0 (BDL-027 BEAD-05)** — New `aggregate_parent_tests()` function in `test_mapper.py` rolls up child node test counts to parent domain nodes. Reindex pipeline calls aggregation after `map_tests()`.
 
-37. [2026-02-17] [INFO] `beadloom init` bootstrap quality metrics — Before/after manual graph improvement: Nodes 6→17, Edges 8→49, Symbols 23→380, Doc Coverage 0%→94%. The auto-generated graph captured only 35% of the real architecture. One native module alone has 130+ symbols — correctly indexed after scan_paths fix. **→ Track: bootstrap quality ratio as a metric for future improvements**
+29. ~~[2026-02-16] [HIGH] Route extraction false positives~~ **FIXED in v1.9.0 (BDL-027 BEAD-05)** — Self-exclusion added to `extract_routes()`: files named `route_extractor` are skipped. Route aggregation scoped to source file ownership.
+
+30. ~~[2026-02-16] [MEDIUM] Routes displayed with poor formatting in polish text~~ **FIXED in v1.9.0 (BDL-027 BEAD-05)** — New `format_routes_for_display()` function separates HTTP routes from GraphQL routes with wider columns and distinct formatting.
+
+32. ~~[2026-02-17] [HIGH] `beadloom init` scan_paths incomplete for React Native projects~~ **FIXED in v1.9.0 (BDL-027 BEAD-04)** — `detect_source_dirs()` now scans all top-level directories containing code files, not just manifest-adjacent ones.
+
+33. ~~[2026-02-17] [MEDIUM] `beadloom init` is interactive-only — no CLI flags for automation~~ **FIXED in v1.9.0 (BDL-027 BEAD-04)** — Already resolved in prior work; verified during BDL-027.
+
+34. ~~[2026-02-17] [MEDIUM] Auto-generated `rules.yml` includes `service-needs-parent` that always fails on root~~ **FIXED in v1.9.0 (BDL-027 BEAD-04)** — Already resolved in prior work; verified during BDL-027.
+
+38. ~~[2026-02-19] [MEDIUM] `beadloom doctor` shows `[info]` not `[warn]` for nodes without docs~~ **FIXED in v1.9.0 (BDL-027 BEAD-03)** — `doctor.py` promoted "node has no doc linked" from `[info]` to `[warn]` severity, making it actionable for agents and CI.
+
+39. ~~[2026-02-20] [MEDIUM] Debt report "untracked: 8" — no way to see which files~~ **FIXED in v1.9.0 (BDL-027 BEAD-03)** — `debt_report.py` now lists untracked node names in both human and JSON output.
+
+40. ~~[2026-02-20] [MEDIUM] Oversized false positive on root and parent nodes~~ **FIXED in v1.9.0 (BDL-027 BEAD-03)** — `_count_oversized()` now counts only direct files, excluding subdirectories claimed by child node source prefixes.
+
+41. ~~[2026-02-20] [HIGH] C4 diagram: all elements render as `System()` — no Container/Component differentiation~~ **FIXED in v1.9.0 (BDL-027 BEAD-01)** — `_compute_depths()` now filters self-referencing `part_of` edges. BFS correctly computes depths, producing System/Container/Component differentiation.
+
+42. ~~[2026-02-20] [MEDIUM] C4 diagram: label and description are identical~~ **FIXED in v1.9.0 (BDL-027 BEAD-01)** — `_build_c4_node()` now generates label from ref_id via title-casing + hyphen-to-space; summary used as description only.
+
+43. ~~[2026-02-20] [MEDIUM] C4 diagram: root node appears inside its own boundary~~ **FIXED in v1.9.0 (BDL-027 BEAD-01)** — `_load_edges()` skips self-referencing `part_of` entries; root node rendered at top level, not inside its own boundary.
+
+44. ~~[2026-02-20] [LOW] C4 diagram: boundary ordering is non-semantic~~ **FIXED in v1.9.0 (BDL-027 BEAD-01)** — Orphan boundaries sorted by node kind/depth; root rendered first, then alphabetical.
+
+45. ~~[2026-02-20] [LOW] C4 diagram: `!include` always uses `C4_Container.puml`~~ **FIXED in v1.9.0 (BDL-027 BEAD-01)** — PlantUML `!include` now selects `C4_Context.puml`, `C4_Container.puml`, or `C4_Component.puml` based on the `--level` flag.
+
+52. ~~[2026-02-20] [HIGH] `docs audit` high false positive rate (~86%) on real project~~ **FIXED in v1.9.0 (BDL-027 BEAD-02)** — Minimum matchable number threshold increased (skip <10 for count facts), percentage false positive filter added, SPEC.md/CONTRIBUTING.md excluded from default scan paths.
+
+53. ~~[2026-02-20] [MEDIUM] `docs audit` year "2026" matched as mcp_tool_count~~ **FIXED in v1.9.0 (BDL-027 BEAD-02)** — Standalone year regex `\b20[0-9]{2}\b` added to false positive filters.
+
+54. ~~[2026-02-20] [MEDIUM] `docs audit` SPEC.md files dominate false positives~~ **FIXED in v1.9.0 (BDL-027 BEAD-02)** — `_graph/features/*/SPEC.md` excluded from default scan paths.
+
+55. ~~[2020-02-20] [LOW] `docs audit` test_count ground truth seems inflated~~ **FIXED in v1.9.0 (BDL-027 BEAD-02)** — `test_count` now labeled as symbol count in output; documented distinction between test symbols and test cases.
+
+56. ~~[2026-02-20] [LOW] `docs audit` Rich output lacks file path context~~ **FIXED in v1.9.0 (BDL-027 BEAD-02)** — Stale mentions now show full relative path from project root.
+
+57. ~~[2026-02-20] [MEDIUM] `docs audit` version fact not collected for dynamic versioning~~ **FIXED in v1.9.0 (BDL-027 BEAD-02)** — `FactRegistry` now detects `dynamic = ["version"]` + `[tool.hatch.version]` and falls back to `importlib.metadata.version()` for installed packages.
 
 ---
 
