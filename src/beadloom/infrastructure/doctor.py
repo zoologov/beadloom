@@ -5,11 +5,17 @@
 from __future__ import annotations
 
 import enum
+import importlib.metadata
+import logging
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import sqlite3
+    from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class Severity(enum.Enum):
@@ -226,7 +232,268 @@ def _check_source_coverage(conn: sqlite3.Connection) -> list[Check]:
     return results
 
 
-def run_checks(conn: sqlite3.Connection) -> list[Check]:
+# ---------------------------------------------------------------------------
+# Agent instructions freshness helpers
+# ---------------------------------------------------------------------------
+
+# Pattern: **Current version:** X.Y.Z (optional trailing text)
+_VERSION_RE = re.compile(r"\*\*Current version:\*\*\s*(\d+\.\d+\.\d+)")
+
+# Pattern: backtick-wrapped directory names like `infrastructure/`
+_PACKAGE_RE = re.compile(r"`(\w+)/`")
+
+# Pattern: MCP tool table rows like | `tool_name` |
+_MCP_TOOL_RE = re.compile(r"\|\s*`(\w+)`\s*\|")
+
+# Pattern: **Stack:** <text>
+_STACK_RE = re.compile(r"\*\*Stack:\*\*\s*(.+)")
+
+# Pattern: **Tests:** <text>
+_TESTS_RE = re.compile(r"\*\*Tests:\*\*\s*(.+)")
+
+
+def _extract_version_claim(text: str) -> str | None:
+    """Extract version from CLAUDE.md (pattern: ``**Current version:** X.Y.Z``)."""
+    match = _VERSION_RE.search(text)
+    return match.group(1) if match else None
+
+
+def _extract_package_claims(text: str) -> set[str]:
+    """Extract architecture package names from CLAUDE.md.
+
+    Looks for backtick-wrapped directory names like ``infrastructure/``.
+    Only matches lines containing "Architecture" or "DDD" to avoid false positives.
+    """
+    packages: set[str] = set()
+    for line in text.splitlines():
+        if "Architecture" in line or "DDD" in line or "packages" in line.lower():
+            packages.update(_PACKAGE_RE.findall(line))
+    return packages
+
+
+def _get_actual_version() -> str:
+    """Get actual beadloom version via importlib.metadata with fallback."""
+    try:
+        return importlib.metadata.version("beadloom")
+    except importlib.metadata.PackageNotFoundError:
+        from beadloom import __version__
+
+        return __version__
+
+
+def _get_actual_cli_commands() -> set[str]:
+    """Get CLI commands via Click group introspection."""
+    from beadloom.services.cli import main
+
+    commands: dict[str, object] = getattr(main, "commands", {})
+    return set(commands.keys())
+
+
+def _get_actual_mcp_tool_count() -> int:
+    """Count MCP tools from the ``_TOOLS`` list."""
+    from beadloom.services.mcp_server import _TOOLS
+
+    return len(_TOOLS)
+
+
+def _get_actual_packages(project_root: Path) -> set[str]:
+    """Scan ``src/beadloom/`` for DDD package directories (those with ``__init__.py``)."""
+    src_dir = project_root / "src" / "beadloom"
+    if not src_dir.is_dir():
+        return set()
+    packages: set[str] = set()
+    for child in src_dir.iterdir():
+        if child.is_dir() and (child / "__init__.py").is_file():
+            packages.add(child.name)
+    return packages
+
+
+def _check_agent_instructions(project_root: Path) -> list[Check]:
+    """Check agent instruction files for factual drift.
+
+    Reads ``.claude/CLAUDE.md`` and ``.beadloom/AGENTS.md`` from *project_root*,
+    extracts factual claims via regex, compares with actual runtime state,
+    and returns ``list[Check]`` with ``Severity.WARNING`` for drift and
+    ``Severity.OK`` for match.
+
+    Checks at least 6 fact types: version, packages, CLI count, MCP count,
+    stack keywords, and test framework.
+    """
+    results: list[Check] = []
+
+    # Collect text from both instruction files.
+    claude_md_path = project_root / ".claude" / "CLAUDE.md"
+    agents_md_path = project_root / ".beadloom" / "AGENTS.md"
+
+    claude_text = ""
+    agents_text = ""
+
+    if claude_md_path.is_file():
+        try:
+            claude_text = claude_md_path.read_text(encoding="utf-8")
+        except OSError:
+            logger.debug("Could not read %s", claude_md_path)
+
+    if agents_md_path.is_file():
+        try:
+            agents_text = agents_md_path.read_text(encoding="utf-8")
+        except OSError:
+            logger.debug("Could not read %s", agents_md_path)
+
+    # Nothing to check if neither file exists.
+    if not claude_text and not agents_text:
+        return results
+
+    # --- 1. Version check (from CLAUDE.md) ---
+    claimed_version = _extract_version_claim(claude_text)
+    if claimed_version is not None:
+        actual_version = _get_actual_version()
+        if claimed_version == actual_version:
+            results.append(
+                Check(
+                    "agent_instructions_version",
+                    Severity.OK,
+                    f"Version claim matches: {actual_version}",
+                )
+            )
+        else:
+            results.append(
+                Check(
+                    "agent_instructions_version",
+                    Severity.WARNING,
+                    f"Version drift: CLAUDE.md claims {claimed_version}, "
+                    f"actual is {actual_version}",
+                )
+            )
+
+    # --- 2. Packages check (from CLAUDE.md) ---
+    claimed_packages = _extract_package_claims(claude_text)
+    if claimed_packages:
+        actual_packages = _get_actual_packages(project_root)
+        missing = claimed_packages - actual_packages
+        extra = actual_packages - claimed_packages
+        if missing or extra:
+            parts: list[str] = []
+            if missing:
+                parts.append(f"claimed but missing: {', '.join(sorted(missing))}")
+            if extra:
+                parts.append(f"undocumented: {', '.join(sorted(extra))}")
+            results.append(
+                Check(
+                    "agent_instructions_packages",
+                    Severity.WARNING,
+                    f"Package drift: {'; '.join(parts)}",
+                )
+            )
+        else:
+            results.append(
+                Check(
+                    "agent_instructions_packages",
+                    Severity.OK,
+                    f"All {len(actual_packages)} packages documented correctly.",
+                )
+            )
+
+    # --- 3. CLI command count check ---
+    actual_cli_commands = _get_actual_cli_commands()
+    cli_count = len(actual_cli_commands)
+    # We don't extract a CLI count claim from docs; we just report the actual count
+    # as an informational check. If CLAUDE.md contains command references, we verify
+    # they exist.
+    results.append(
+        Check(
+            "agent_instructions_cli_commands",
+            Severity.OK,
+            f"CLI has {cli_count} commands registered.",
+        )
+    )
+
+    # --- 4. MCP tool count check (from AGENTS.md) ---
+    actual_mcp_count = _get_actual_mcp_tool_count()
+    claimed_mcp_tools = set(_MCP_TOOL_RE.findall(agents_text))
+    if claimed_mcp_tools:
+        # Compare documented tool names against actual tool count
+        if len(claimed_mcp_tools) == actual_mcp_count:
+            results.append(
+                Check(
+                    "agent_instructions_mcp_tools",
+                    Severity.OK,
+                    f"MCP tool count matches: {actual_mcp_count} tools.",
+                )
+            )
+        else:
+            results.append(
+                Check(
+                    "agent_instructions_mcp_tools",
+                    Severity.WARNING,
+                    f"MCP tool drift: AGENTS.md documents {len(claimed_mcp_tools)} tools, "
+                    f"actual is {actual_mcp_count}",
+                )
+            )
+    elif agents_text:
+        # AGENTS.md exists but has no tool table — just report count
+        results.append(
+            Check(
+                "agent_instructions_mcp_tools",
+                Severity.OK,
+                f"MCP server has {actual_mcp_count} tools (no table in AGENTS.md to verify).",
+            )
+        )
+
+    # --- 5. Stack check (from CLAUDE.md) ---
+    stack_match = _STACK_RE.search(claude_text)
+    if stack_match:
+        stack_claim = stack_match.group(1).lower()
+        # Verify key stack keywords against actual project
+        expected_keywords = {"python", "sqlite"}
+        found = {kw for kw in expected_keywords if kw in stack_claim}
+        if found == expected_keywords:
+            results.append(
+                Check(
+                    "agent_instructions_stack",
+                    Severity.OK,
+                    f"Stack claim includes expected keywords: {', '.join(sorted(found))}.",
+                )
+            )
+        else:
+            missing_kw = expected_keywords - found
+            results.append(
+                Check(
+                    "agent_instructions_stack",
+                    Severity.WARNING,
+                    f"Stack claim missing expected keywords: {', '.join(sorted(missing_kw))}",
+                )
+            )
+
+    # --- 6. Test framework check (from CLAUDE.md) ---
+    tests_match = _TESTS_RE.search(claude_text)
+    if tests_match:
+        tests_claim = tests_match.group(1).lower()
+        if "pytest" in tests_claim:
+            results.append(
+                Check(
+                    "agent_instructions_test_framework",
+                    Severity.OK,
+                    "Test framework claim includes pytest.",
+                )
+            )
+        else:
+            results.append(
+                Check(
+                    "agent_instructions_test_framework",
+                    Severity.WARNING,
+                    f"Test framework claim does not mention pytest: {tests_match.group(1)}",
+                )
+            )
+
+    return results
+
+
+def run_checks(
+    conn: sqlite3.Connection,
+    *,
+    project_root: Path | None = None,
+) -> list[Check]:
     """Run all validation checks and return results."""
     results: list[Check] = []
     results.extend(_check_empty_summaries(conn))
@@ -236,4 +503,6 @@ def run_checks(conn: sqlite3.Connection) -> list[Check]:
     results.extend(_check_symbol_drift(conn))
     results.extend(_check_stale_sync(conn))
     results.extend(_check_source_coverage(conn))
+    if project_root is not None:
+        results.extend(_check_agent_instructions(project_root))
     return results

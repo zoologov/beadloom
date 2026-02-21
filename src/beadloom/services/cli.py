@@ -449,9 +449,7 @@ def graph(
 
         # Apply level filtering
         try:
-            c4_nodes, c4_rels = filter_c4_nodes(
-                c4_nodes, c4_rels, level=c4_level, scope=c4_scope
-            )
+            c4_nodes, c4_rels = filter_c4_nodes(c4_nodes, c4_rels, level=c4_level, scope=c4_scope)
         except ValueError as exc:
             click.echo(f"Error: {exc}", err=True)
             conn.close()
@@ -508,7 +506,7 @@ def doctor(*, project: Path | None) -> None:
         sys.exit(1)
 
     conn = open_db(db_path)
-    checks = run_checks(conn)
+    checks = run_checks(conn, project_root=project_root)
     conn.close()
 
     icons = {
@@ -623,8 +621,7 @@ def status(
         if category is not None and category not in valid_categories:
             conn.close()
             click.echo(
-                f"Error: invalid category '{category}'. "
-                f"Valid: rules, docs, complexity, tests",
+                f"Error: invalid category '{category}'. Valid: rules, docs, complexity, tests",
                 err=True,
             )
             sys.exit(1)
@@ -652,11 +649,13 @@ def status(
         conn.close()
 
         if output_json:
-            click.echo(json.dumps(
-                format_debt_json(report, category=category),
-                ensure_ascii=False,
-                indent=2,
-            ))
+            click.echo(
+                json.dumps(
+                    format_debt_json(report, category=category),
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
         else:
             # For human output with category filter, rebuild report with filtered categories
             if category is not None:
@@ -1329,19 +1328,64 @@ def setup_mcp(*, remove: bool, tool_name: str, project: Path | None) -> None:
     default=None,
     help="Project root (default: current directory).",
 )
-def setup_rules(*, tool_name: str | None, project: Path | None) -> None:
+@click.option(
+    "--refresh",
+    is_flag=True,
+    default=False,
+    help="Refresh auto-managed sections in .claude/CLAUDE.md and regenerate AGENTS.md.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Show what --refresh would change without modifying files.",
+)
+def setup_rules(
+    *,
+    tool_name: str | None,
+    project: Path | None,
+    refresh: bool,
+    dry_run: bool,
+) -> None:
     """Create IDE rules files that reference .beadloom/AGENTS.md.
 
     Auto-detects installed IDEs (Cursor, Windsurf, Cline) by marker
     files and creates thin adapter files. Does not overwrite existing files.
+
+    With --refresh, also refreshes auto-managed sections in .claude/CLAUDE.md
+    and regenerates .beadloom/AGENTS.md.  Use --dry-run with --refresh to
+    preview changes without writing.
     """
     from beadloom.onboarding.scanner import (
         _RULES_ADAPTER_TEMPLATE,
         _RULES_CONFIGS,
+        generate_agents_md,
+        refresh_claude_md,
         setup_rules_auto,
     )
 
     project_root = project or Path.cwd()
+
+    if dry_run and not refresh:
+        click.echo("Error: --dry-run requires --refresh.", err=True)
+        raise SystemExit(1)
+
+    if refresh:
+        # Refresh CLAUDE.md auto-managed sections.
+        changed = refresh_claude_md(project_root, dry_run=dry_run)
+        if changed:
+            verb = "Would update" if dry_run else "Updated"
+            click.echo(f"{verb} .claude/CLAUDE.md sections: {', '.join(changed)}")
+        else:
+            click.echo(".claude/CLAUDE.md: no changes needed.")
+
+        # Regenerate AGENTS.md (unless dry-run).
+        if not dry_run:
+            agents_path = generate_agents_md(project_root)
+            click.echo(f"Regenerated {agents_path.relative_to(project_root)}")
+        else:
+            click.echo("Would regenerate .beadloom/AGENTS.md")
+        return
 
     if tool_name:
         # Explicit IDE specified — create without marker detection.
@@ -1759,8 +1803,11 @@ def docs_audit(
         _docs_audit_json(result, stale, fresh, fail_condition=fail_condition)
     else:
         _docs_audit_rich(
-            result, stale, fresh,
-            stale_only=stale_only, verbose=verbose_flag,
+            result,
+            stale,
+            fresh,
+            stale_only=stale_only,
+            verbose=verbose_flag,
             project_root=project_root,
         )
 
@@ -1769,9 +1816,8 @@ def docs_audit(
         metric, op, threshold = fail_condition
         if metric == "stale":
             stale_count = len(stale)
-            should_fail = (
-                (op == ">" and stale_count > threshold)
-                or (op == ">=" and stale_count >= threshold)
+            should_fail = (op == ">" and stale_count > threshold) or (
+                op == ">=" and stale_count >= threshold
             )
             if should_fail:
                 click.echo(
@@ -1801,33 +1847,39 @@ def _docs_audit_json(
     stale_out: list[dict[str, str | int]] = []
     for finding in stale:
         assert isinstance(finding, AuditFinding)
-        stale_out.append({
-            "file": str(finding.mention.file.name),
-            "line": finding.mention.line,
-            "fact": finding.mention.fact_name,
-            "mentioned": str(finding.mention.value),
-            "actual": str(finding.fact.value),
-        })
+        stale_out.append(
+            {
+                "file": str(finding.mention.file.name),
+                "line": finding.mention.line,
+                "fact": finding.mention.fact_name,
+                "mentioned": str(finding.mention.value),
+                "actual": str(finding.fact.value),
+            }
+        )
 
     fresh_out: list[dict[str, str | int | float]] = []
     for finding in fresh:
         assert isinstance(finding, AuditFinding)
-        fresh_out.append({
-            "file": str(finding.mention.file.name),
-            "line": finding.mention.line,
-            "fact": finding.mention.fact_name,
-            "mentioned": str(finding.mention.value),
-            "tolerance": finding.tolerance,
-        })
+        fresh_out.append(
+            {
+                "file": str(finding.mention.file.name),
+                "line": finding.mention.line,
+                "fact": finding.mention.fact_name,
+                "mentioned": str(finding.mention.value),
+                "tolerance": finding.tolerance,
+            }
+        )
 
     unmatched_out: list[dict[str, str | int]] = []
     for mention in result.unmatched:
-        unmatched_out.append({
-            "file": str(mention.file.name),
-            "line": mention.line,
-            "value": str(mention.value),
-            "context": mention.context,
-        })
+        unmatched_out.append(
+            {
+                "file": str(mention.file.name),
+                "line": mention.line,
+                "value": str(mention.value),
+                "context": mention.context,
+            }
+        )
 
     data: dict[str, object] = {
         "facts": facts_out,
@@ -1844,9 +1896,8 @@ def _docs_audit_json(
     if fail_condition is not None:
         metric, op, threshold = fail_condition
         stale_count = len(stale_out)
-        triggered = (
-            (op == ">" and stale_count > threshold)
-            or (op == ">=" and stale_count >= threshold)
+        triggered = (op == ">" and stale_count > threshold) or (
+            op == ">=" and stale_count >= threshold
         )
         data["ci_gate"] = {
             "expression": f"{metric}{op}{threshold}",
