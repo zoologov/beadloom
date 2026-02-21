@@ -25,7 +25,7 @@ htmlcov/
 # ruff
 .ruff_cache/
 
-# Beadloom (auto-generated)
-.beadloom/beadloom.db
-.beadloom/beadloom.db-shm
-.beadloom/beadloom.db-wal
+# Beadloom (auto-generated SQLite databases + WAL files)
+.beadloom/**/*.db
+.beadloom/**/*.db-shm
+.beadloom/**/*.db-wal
