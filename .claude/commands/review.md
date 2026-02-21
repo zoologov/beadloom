@@ -98,6 +98,16 @@ beadloom search "<keyword>"       # find related code and docs
 - [ ] If graph YAML changed: edges are correct, no orphaned nodes
 - [ ] If new domain/feature added: has documentation in docs/ (`beadloom docs generate`)
 
+## Documentation Freshness Check
+
+> **IMPORTANT:** `sync-check` can show `[ok]` even when docs are stale — if the /dev agent ran `beadloom reindex`, the sync baseline is reset but doc content may not be updated.
+
+- [ ] Check bead comments for `API CHANGE` notes from /dev agents
+- [ ] If public API changed (new fields, parameters, classes, YAML schema): search `docs/` for mentions of changed APIs
+- [ ] Verify `docs/domains/<domain>/README.md` reflects new/changed symbols
+- [ ] Verify `docs/domains/<domain>/features/<feature>/SPEC.md` reflects new/changed APIs
+- [ ] If stale docs found: add to review findings (Major severity)
+
 ---
 
 ## Review result

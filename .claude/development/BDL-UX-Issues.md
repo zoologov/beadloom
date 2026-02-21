@@ -1,7 +1,7 @@
 # BDL UX Feedback Log
 
 > Collected during development and dogfooding.
-> Total: 69 issues | Open: 3 | Improvements: 2 | Excluded: 5 | Closed: 59
+> Total: 70 issues | Open: 3 | Improvements: 3 | Excluded: 5 | Closed: 59
 > Last reviewed: BDL-032 (Enhanced Architecture Rules)
 
 ---
@@ -41,6 +41,14 @@
     > 2. **`beadloom snapshots diff <label-a> <label-b>`** — compute and display added/removed/changed nodes and edges between two snapshots. Output as Rich table + optional `--json` for automation.
     > 3. **`beadloom snapshots save --label "v1.8.0"`** — explicit named snapshot creation (currently snapshots are auto-created during reindex).
     > Stays within existing SQLite + Python stack. No external dependencies (Dolt, etc.) needed — the current `graph_snapshots` schema already contains all necessary data for diffing.
+
+70. [2026-02-21] [MEDIUM] `sync-check` resets baseline on `reindex`, masking stale doc content — When `/dev` agent runs `beadloom reindex` after code changes, the sync baseline (hashes in `sync_state` table) is updated. Subsequent `sync-check` reports `[ok]` even though the doc **content** was never updated to reflect the code changes. This causes `/tech-writer` to miss stale docs because its primary signal (`sync-check`) is already "consumed" by the dev agent.
+    > **Root cause:** `sync-check` tracks "you acknowledged the code change" (baseline freshness), not "you updated the doc content to match" (semantic freshness).
+    > **Recommended approach:**
+    > 1. **Two-phase sync state** — separate `code_hash_at_reindex` (set by reindex) from `doc_hash_at_last_edit` (set when doc file changes). sync-check compares both: if code changed since last doc edit, report stale even if reindex ran.
+    > 2. **Symbol-level diff in sync output** — when sync-check detects code changes, show which symbols were added/removed/changed (already available via `symbols_hash`). This gives tech-writers actionable info.
+    > 3. **`--since-last-doc-edit` flag** — opt-in mode that ignores reindex baseline and compares against last doc file modification time.
+    > High complexity — requires schema migration (`sync_state` table) and changes to reindex + sync-check logic. Workaround: agent skill instructions now include explicit API CHANGE logging and docs/ grep steps.
 
 ---
 

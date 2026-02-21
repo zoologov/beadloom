@@ -91,7 +91,7 @@ Default parameters:
 
 ### Rules Engine
 
-Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 1) and enforce boundaries between graph nodes.
+Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3) and enforce boundaries between graph nodes.
 
 **Rule types (v1.8.0):**
 
