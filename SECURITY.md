@@ -31,7 +31,7 @@ Beadloom stores index data locally in:
 
 - The MCP server runs over **stdio** transport only (no network exposure)
 - It provides both read and write access to the architecture graph:
-  - **Read operations** (11 tools): `get_context`, `get_graph`, `list_nodes`, `sync_check`, `get_status`, `search`, `generate_docs`, `prime`, `why`, `diff`, `lint`
+  - **Read operations** (12 tools): `get_context`, `get_graph`, `list_nodes`, `sync_check`, `get_status`, `search`, `generate_docs`, `prime`, `why`, `diff`, `lint`, `docs_audit`
   - **Write operations** (2 tools): `update_node` (modifies node summary/source in YAML and SQLite), `mark_synced` (updates sync state)
 - Write operations modify local files only (YAML graph + SQLite index)
 - The server opens the SQLite database in WAL mode

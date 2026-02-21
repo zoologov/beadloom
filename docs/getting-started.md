@@ -98,11 +98,16 @@ beadloom prime --update
 # Check doc↔code synchronization
 beadloom sync-check
 
+# Audit docs for stale cross-references and mention freshness
+beadloom docs audit
+
 # Install git pre-commit hook
 beadloom install-hooks
 ```
 
 `sync-check` detects when code changes haven't been reflected in documentation. Exit code 2 means stale docs found.
+
+`docs audit` scans documentation for cross-references to code symbols and reports which mentions are fresh or stale. Use `--stale-only` to filter, `--json` for structured output, or `--fail-on` for CI gates.
 
 `install-hooks` sets up a git pre-commit hook that runs `sync-check`, `ruff` linting, and `mypy` type checking before each commit.
 
@@ -127,7 +132,7 @@ Beadloom supports 7 rule types: `require`, `deny`, `forbid_edge`, `layer`, `cycl
 # Additional language parsers (TypeScript/JavaScript, Go, Rust, Kotlin, Java, Swift, C/C++, Objective-C)
 uv tool install "beadloom[languages]"
 
-# Interactive terminal dashboard
+# Interactive terminal dashboard (launch with: beadloom tui)
 uv tool install "beadloom[tui]"
 
 # File watcher for auto-reindex

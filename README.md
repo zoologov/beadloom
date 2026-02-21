@@ -87,8 +87,11 @@ IDE indexers use semantic search — an LLM decides what's relevant. Beadloom us
 - **Impact analysis** — `beadloom why` shows what depends on a node and what breaks if it changes (with `--reverse` and `--depth N` options)
 - **Code-first onboarding** — bootstrap an architecture graph from code structure alone; no docs needed to start
 - **Architecture snapshots** — `beadloom snapshot` saves and compares architecture state over time
-- **MCP server** — 13 tools for AI agents, including write operations, search, impact analysis, diff, and linting
-- **Interactive TUI** — `beadloom ui` terminal dashboard for browsing the graph
+- **MCP server** — 14 tools for AI agents, including write operations, search, impact analysis, diff, and linting
+- **Interactive TUI** — `beadloom tui` terminal dashboard for browsing the graph (alias: `ui`)
+- **Documentation Audit** — detect stale facts in project-level docs (README, guides, CONTRIBUTING) with zero configuration. CI gate via `--fail-if=stale>0`
+- **Architecture Debt Report** — `beadloom status --debt-report` aggregates lint, sync, complexity into a single score 0-100 with CI gate
+- **C4 Architecture Diagrams** — auto-generate C4 Context/Container/Component diagrams in Mermaid and PlantUML formats
 - **Local-first** — single CLI + single SQLite file, no Docker, no cloud dependencies
 
 ## How it works
@@ -265,7 +268,8 @@ Works with Claude Code, Cursor, Windsurf, Cline, and any MCP-compatible tool.
 | `why REF_ID` | Impact analysis — upstream deps and downstream dependents |
 | `diff` | Show graph changes since a git ref |
 | `link REF_ID [URL]` | Manage external tracker links on graph nodes |
-| `ui` | Interactive terminal dashboard (requires `beadloom[tui]`) |
+| `tui` | Interactive terminal dashboard (alias: `ui`; requires `beadloom[tui]`) |
+| `docs audit` | Detect stale facts in project-level documentation (README, guides) |
 | `watch` | Auto-reindex on file changes (requires `beadloom[watch]`) |
 | `snapshot` | Save and compare architecture snapshots |
 | `install-hooks` | Install the beadloom pre-commit hook |
@@ -291,6 +295,7 @@ Works with Claude Code, Cursor, Windsurf, Cline, and any MCP-compatible tool.
 | `why` | Impact analysis — upstream and downstream dependencies in the graph |
 | `diff` | Graph changes relative to a git revision |
 | `lint` | Run architecture lint rules. Returns violations as JSON |
+| `docs_audit` | Run documentation audit — detect stale facts in project-level docs |
 
 ## Configuration
 
@@ -344,8 +349,8 @@ docs/
         reindex/SPEC.md
         watcher/SPEC.md
   services/
-    cli.md                                         # 22 CLI commands
-    mcp.md                                         # 13 MCP tools
+    cli.md                                         # 29 CLI commands
+    mcp.md                                         # 14 MCP tools
     tui.md                                         # TUI dashboard
 ```
 
@@ -383,7 +388,7 @@ Each domain gets a `README.md` (overview, invariants, API). Each feature gets a 
 }
 ```
 
-BFS depth=2 from `why` traverses: `why` → `context-oracle` (parent domain) → sibling features (`search`, `cache`), services (`cli`, `mcp-server`), cross-domain deps (`infrastructure`, `graph`) — 10 nodes, 12 edges total.
+BFS depth=2 from `why` traverses: `why` → `context-oracle` (parent domain) → sibling features (`search`, `cache`), services (`cli`, `mcp-server`), cross-domain deps (`infrastructure`, `graph`) — 23 nodes, 63 edges total.
 
 ## Beads integration
 
@@ -425,8 +430,8 @@ uv run mypy                # type checking (strict mode)
 | &nbsp;&nbsp;[Reindex](docs/domains/infrastructure/features/reindex/SPEC.md) | Full and incremental reindex pipeline |
 | &nbsp;&nbsp;[Watcher](docs/domains/infrastructure/features/watcher/SPEC.md) | Auto-reindex on file changes |
 | **Services** | |
-| [CLI Reference](docs/services/cli.md) | All 22 CLI commands |
-| [MCP Server](docs/services/mcp.md) | All 13 MCP tools for AI agents |
+| [CLI Reference](docs/services/cli.md) | All 29 CLI commands |
+| [MCP Server](docs/services/mcp.md) | All 14 MCP tools for AI agents |
 | [TUI Dashboard](docs/services/tui.md) | Interactive terminal dashboard |
 | **Guides** | |
 | [CI Setup](docs/guides/ci-setup.md) | GitHub Actions / GitLab CI integration |

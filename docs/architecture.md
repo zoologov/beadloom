@@ -8,14 +8,14 @@ The system is organized into five DDD domain packages and three service layers:
 
 **Domains:**
 1. **Context Oracle** (`context_oracle/`) — BFS graph traversal, context bundle assembly, code indexing, two-tier caching, FTS5 search
-2. **Doc Sync** (`doc_sync/`) — doc↔code synchronization tracking, stale detection, symbol-level hashing
+2. **Doc Sync** (`doc_sync/`) — doc↔code synchronization tracking, stale detection, symbol-level hashing, docs audit
 3. **Graph** (`graph/`) — YAML graph loader, diff engine, rule engine, import resolver (9 languages), architecture linter
 4. **Onboarding** (`onboarding/`) — project bootstrap, doc generation/polishing, architecture-aware presets, Agent Prime, AGENTS.md generation
 5. **Infrastructure** (`infrastructure/`) — SQLite database layer, incremental reindex, health snapshots with trends, doctor, file watcher
 
 **Services:**
-- **CLI** (`services/cli.py`) — Click-based CLI with 22 commands
-- **MCP Server** (`services/mcp_server.py`) — stdio server with 13 tools for AI agents
+- **CLI** (`services/cli.py`) — Click-based CLI with 29 commands
+- **MCP Server** (`services/mcp_server.py`) — stdio server with 14 tools for AI agents
 - **TUI** (`tui/`) — interactive terminal dashboard (Textual)
 
 ---
@@ -58,7 +58,7 @@ The database is stored in `.beadloom/beadloom.db` and uses WAL mode for concurre
 | `sync_state` | id (PK), doc_path, code_path, ref_id (FK→nodes), code_hash_at_sync, doc_hash_at_sync, synced_at, status, symbols_hash | Doc↔code sync state (ok, stale) |
 | `meta` | key (PK), value | Index metadata (key-value) |
 
-**Infrastructure tables (6):**
+**Infrastructure tables (7):**
 
 | Table | Key columns | Description |
 |-------|-------------|-------------|
@@ -68,6 +68,7 @@ The database is stored in `.beadloom/beadloom.db` and uses WAL mode for concurre
 | `search_index` | ref_id, kind, summary, content | FTS5 virtual table for full-text search |
 | `code_imports` | id (PK), file_path, line_number, import_path, resolved_ref_id, file_hash | Import relationships between files |
 | `rules` | id (PK), name (UNIQUE), description, rule_type (deny/require/forbid_edge/layer/cycle_detection/import_boundary/cardinality), rule_json, enabled | Architecture rules from rules.yml |
+| `graph_snapshots` | id (PK), label, created_at, nodes_json, edges_json | Point-in-time architecture graph captures for drift detection |
 
 ### BFS Algorithm
 
@@ -92,7 +93,7 @@ Default parameters:
 
 Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 1) and enforce boundaries between graph nodes.
 
-**Rule types (v1.7.0):**
+**Rule types (v1.8.0):**
 
 | Type | Semantics | Example |
 |------|-----------|---------|

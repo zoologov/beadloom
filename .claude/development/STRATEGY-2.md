@@ -1,8 +1,8 @@
 # Beadloom: Strategy 2 — Architecture Infrastructure for the AI Agent Era
 
-> **Status:** Active (Phases 8-12.6 complete, v1.8 planned: 12.8+12.9+12.10+12.11+12.12, Phase 13+ planned)
-> **Date:** 2026-02-19 (revision 11)
-> **Current version:** 1.7.0
+> **Status:** Active (Phases 8-12.12 complete, v1.8.0 released, Phase 13+ planned)
+> **Date:** 2026-02-21 (revision 12)
+> **Current version:** 1.8.0
 > **Predecessor:** STRATEGY.md (Phases 1-6, all completed)
 > **Sources:** STRATEGY.md, BACKLOG.md §2-§6, BDL-UX-Issues.md, competitive analysis February 2026
 
@@ -271,7 +271,7 @@ Beadloom is for engineers who build and maintain serious IT systems. YAML graph 
 | 12.6.2 | **Enhanced impact analysis** — `beadloom why <ref-id> --reverse` (what X depends on) + `--depth N` (transitive closure depth) + `--format tree` (visual dependency tree) | feature | P2 | DONE |
 | 12.6.3 | **Architecture snapshot storage** — store graph snapshots in SQLite for historical comparison without git checkout. `beadloom snapshot save/list/compare` | feature | P2 | DONE |
 
-### Phase 12.8: C4 Architecture Diagrams (v1.8)
+### Phase 12.8: C4 Architecture Diagrams (v1.8) — DONE
 
 **Goal:** Auto-generate C4 model diagrams (Context, Container, Component) from the existing architecture graph. Beadloom already has all the data — tags, layers, `part_of` hierarchy, edges — C4 is a natural projection of this data into an industry-standard visualization format.
 
@@ -281,15 +281,17 @@ Beadloom is for engineers who build and maintain serious IT systems. YAML graph 
 
 **Prerequisites (all in v1.7):** Node tags (12.1), layer definitions (12.3), `part_of` hierarchy, `uses`/`depends_on` edges, API surface data (10.1).
 
-| # | Task | Type | P | Effort |
-|---|------|------|---|--------|
-| 12.8.1 | **C4 level mapping** — map graph nodes to C4 levels (System, Container, Component) via configurable strategy: `c4_level` field in services.yml, fallback to `part_of` depth + tags heuristic. Root service = System, top-level domains = Containers, nested modules = Components | feature | P0 | M |
-| 12.8.2 | **C4-Mermaid output** — `beadloom graph --format=c4` generates Mermaid C4 syntax (`C4Context`, `C4Container`, `C4Component` diagram types). Reuses existing `graph` command infrastructure, adds C4 renderer | feature | P0 | S |
-| 12.8.3 | **C4-PlantUML output** — `beadloom graph --format=c4-plantuml` generates C4-PlantUML with standard macros (`System()`, `Container()`, `Component()`, `Rel()`). Full C4-PlantUML library compatibility | feature | P1 | S |
-| 12.8.4 | **C4 level selection** — `--level=context\|container\|component` for drill-down. Context shows system boundaries + external actors. Container shows top-level domains. Component shows internals of a specific container (`--scope=<ref-id>`) | feature | P1 | S |
-| 12.8.5 | **C4 external systems** — nodes with `external: true` tag render as `System_Ext`, `Container_Ext`, `ContainerDb_Ext` in C4. Database nodes (tagged `database` or `storage`) render as `ContainerDb` | feature | P2 | S |
+**Delivered in:** BDL-023 (5 beads). Part of v1.8.0.
 
-### Phase 12.9: Architecture Debt Report (v1.8)
+| # | Task | Type | P | Effort | Status |
+|---|------|------|---|--------|--------|
+| 12.8.1 | **C4 level mapping** — map graph nodes to C4 levels (System, Container, Component) via configurable strategy: `c4_level` field in services.yml, fallback to `part_of` depth + tags heuristic. Root service = System, top-level domains = Containers, nested modules = Components | feature | P0 | M | DONE |
+| 12.8.2 | **C4-Mermaid output** — `beadloom graph --format=c4` generates Mermaid C4 syntax (`C4Context`, `C4Container`, `C4Component` diagram types). Reuses existing `graph` command infrastructure, adds C4 renderer | feature | P0 | S | DONE |
+| 12.8.3 | **C4-PlantUML output** — `beadloom graph --format=c4-plantuml` generates C4-PlantUML with standard macros (`System()`, `Container()`, `Component()`, `Rel()`). Full C4-PlantUML library compatibility | feature | P1 | S | DONE |
+| 12.8.4 | **C4 level selection** — `--level=context\|container\|component` for drill-down. Context shows system boundaries + external actors. Container shows top-level domains. Component shows internals of a specific container (`--scope=<ref-id>`) | feature | P1 | S | DONE |
+| 12.8.5 | **C4 external systems** — nodes with `external: true` tag render as `System_Ext`, `Container_Ext`, `ContainerDb_Ext` in C4. Database nodes (tagged `database` or `storage`) render as `ContainerDb` | feature | P2 | S | DONE |
+
+### Phase 12.9: Architecture Debt Report (v1.8) — DONE
 
 **Goal:** Single command that aggregates all architecture health signals into a quantified debt report. Transforms scattered diagnostics (`lint`, `sync-check`, `doctor`, `status`) into one actionable dashboard with a numeric debt score, category breakdown, and trend tracking.
 
@@ -299,16 +301,18 @@ Beadloom is for engineers who build and maintain serious IT systems. YAML graph 
 
 **Prerequisites (all in v1.7):** Architecture lint with severity (10.4, 12.1-12.6), doc sync with 3-layer staleness (10.5), git activity analysis (10.2), test mapping (10.3), cardinality checks (12.6), snapshots (12.6.3).
 
-| # | Task | Type | P | Effort |
-|---|------|------|---|--------|
-| 12.9.1 | **Debt score formula** — weighted aggregation: rule violations (errors×3 + warnings×1), doc gaps (undocumented×2 + stale×1), complexity smells (oversized×2 + high-fan-out×1 + dormant×0.5). Configurable weights in `config.yml`. Score 0 = clean, 100 = critical | feature | P0 | M |
-| 12.9.2 | **`status --debt-report`** — human-readable report with categories, counts, top offenders. Rich output via Rich tables/panels. Shows debt score with severity label (clean/low/medium/high/critical) | feature | P0 | S |
-| 12.9.3 | **JSON + CI output** — `--debt-report --json` for machine consumption. `--fail-if=score>N` exits non-zero for CI gates. `--fail-if=errors>0` for strict mode | feature | P1 | S |
-| 12.9.4 | **Trend tracking** — compare current debt score vs last snapshot. Shows delta per category: "Rule violations: 7 (+2)", "Doc gaps: 8 (-3)". Requires snapshots from Phase 12.6.3 | feature | P1 | S |
-| 12.9.5 | **MCP tool `get_debt_report`** — expose debt report via MCP so AI agents can prioritize architectural fixes autonomously. Returns structured JSON with score, categories, top offenders | feature | P2 | S |
-| 12.9.6 | **Top offenders list** — rank nodes by individual debt contribution. "SERVICES: 8 points (3 violations, 2 stale docs, oversized)". Helps teams know where to invest refactoring effort | feature | P2 | S |
+**Delivered in:** BDL-024 (9 beads, 158 tests, 91% coverage). Part of v1.8.0.
 
-### Phase 12.10: Interactive Architecture TUI (v1.8)
+| # | Task | Type | P | Effort | Status |
+|---|------|------|---|--------|--------|
+| 12.9.1 | **Debt score formula** — weighted aggregation: rule violations (errors×3 + warnings×1), doc gaps (undocumented×2 + stale×1), complexity smells (oversized×2 + high-fan-out×1 + dormant×0.5). Configurable weights in `config.yml`. Score 0 = clean, 100 = critical | feature | P0 | M | DONE |
+| 12.9.2 | **`status --debt-report`** — human-readable report with categories, counts, top offenders. Rich output via Rich tables/panels. Shows debt score with severity label (clean/low/medium/high/critical) | feature | P0 | S | DONE |
+| 12.9.3 | **JSON + CI output** — `--debt-report --json` for machine consumption. `--fail-if=score>N` exits non-zero for CI gates. `--fail-if=errors>0` for strict mode | feature | P1 | S | DONE |
+| 12.9.4 | **Trend tracking** — compare current debt score vs last snapshot. Shows delta per category: "Rule violations: 7 (+2)", "Doc gaps: 8 (-3)". Requires snapshots from Phase 12.6.3 | feature | P1 | S | DONE |
+| 12.9.5 | **MCP tool `get_debt_report`** — expose debt report via MCP so AI agents can prioritize architectural fixes autonomously. Returns structured JSON with score, categories, top offenders | feature | P2 | S | DONE |
+| 12.9.6 | **Top offenders list** — rank nodes by individual debt contribution. "SERVICES: 8 points (3 violations, 2 stale docs, oversized)". Helps teams know where to invest refactoring effort | feature | P2 | S | DONE |
+
+### Phase 12.10: Interactive Architecture TUI (v1.8) — DONE
 
 **Goal:** Transform the existing TUI from a static viewer into an interactive architecture workstation. One command — `beadloom tui` — gives a developer a live, navigable dashboard with graph exploration, debt monitoring, doc status, dependency tracing, and keyboard-driven actions. Works over SSH, in tmux, on any terminal.
 
@@ -320,18 +324,20 @@ Beadloom is for engineers who build and maintain serious IT systems. YAML graph 
 
 **Prerequisites:** Phase 12.9 (debt report data for dashboard), all existing infrastructure (lint, sync-check, graph, ctx, why).
 
-| # | Task | Type | P | Effort |
-|---|------|------|---|--------|
-| 12.10.1 | **Architecture Dashboard** — main screen with debt score gauge, graph tree, lint violations panel, git activity sparklines. Layout via Textual CSS. Updates reactively when underlying data changes | feature | P0 | L |
-| 12.10.2 | **Interactive Graph Explorer** — tree widget with expand/collapse. Enter → node detail (symbols, edges, routes, tests). Keyboard nav: `d` downstream, `u` upstream, `c` context preview, `o` open in $EDITOR | feature | P0 | M |
-| 12.10.3 | **Live File Watcher** — `watchfiles` (or `watchdog`) monitors source dirs. On change: badge "reindex needed", press `r` to reindex, dashboard auto-refreshes. Debounced (500ms) to avoid spam | feature | P1 | M |
-| 12.10.4 | **Dependency Path Tracer** — interactive `why` panel. Select source → target, shows all paths. Highlights cycles in red. Reverse mode (who depends on me). Keyboard: arrow keys to navigate paths | feature | P1 | M |
-| 12.10.5 | **Doc Sync Status Panel** — all nodes with doc status (fresh/stale/missing) + staleness reason. Includes meta-doc audit section (Phase 12.11) showing stale facts in README/guides. Press `g` to generate skeleton, `p` to view polish data, `a` to run docs audit. Color-coded: green/yellow/red | feature | P1 | S |
-| 12.10.6 | **Context Bundle Inspector** — preview exactly what `beadloom ctx <ref-id>` returns. Shows token count, sections, dependencies. Helps developers understand what agents see | feature | P2 | S |
-| 12.10.7 | **Keyboard-driven Actions** — trigger reindex (`r`), lint (`l`), sync-check (`s`), generate docs (`g`), snapshot (`S`) directly from TUI. Action results shown in status bar / notification panel | feature | P2 | S |
-| 12.10.8 | **TUI UX Polish** — (a) Explorer: replace raw Edges list with grouped summary + code symbols from `code_indexer` to eliminate duplication with upstream panel; (b) Screen descriptions: add brief purpose/explanation header to each screen (Dashboard, Explorer, Doc Status) so new users understand what Activity means and what screen 3 shows; (c) Contextual keybinding hints: visible per-screen footer showing available hotkeys (currently only Explorer/Doc Status have action bars, Dashboard has none); (d) **Bug fix:** Context Inspector (`c` key) has no scroll — content overflows without `overflow-y: auto`, making long context bundles unreadable | feature | P1 | M |
+**Delivered in:** BDL-025 (10 beads, 207 TUI tests) + BDL-028 (bug fixes) + BDL-029 (UX improvements). Part of v1.8.0.
 
-### Phase 12.11: Documentation Audit — Meta-Doc Staleness Detection (v1.8) ⚗️ EXPERIMENTAL
+| # | Task | Type | P | Effort | Status |
+|---|------|------|---|--------|--------|
+| 12.10.1 | **Architecture Dashboard** — main screen with debt score gauge, graph tree, lint violations panel, git activity sparklines. Layout via Textual CSS. Updates reactively when underlying data changes | feature | P0 | L | DONE |
+| 12.10.2 | **Interactive Graph Explorer** — tree widget with expand/collapse. Enter → node detail (symbols, edges, routes, tests). Keyboard nav: `d` downstream, `u` upstream, `c` context preview, `o` open in $EDITOR | feature | P0 | M | DONE |
+| 12.10.3 | **Live File Watcher** — `watchfiles` (or `watchdog`) monitors source dirs. On change: badge "reindex needed", press `r` to reindex, dashboard auto-refreshes. Debounced (500ms) to avoid spam | feature | P1 | M | DONE |
+| 12.10.4 | **Dependency Path Tracer** — interactive `why` panel. Select source → target, shows all paths. Highlights cycles in red. Reverse mode (who depends on me). Keyboard: arrow keys to navigate paths | feature | P1 | M | DONE |
+| 12.10.5 | **Doc Sync Status Panel** — all nodes with doc status (fresh/stale/missing) + staleness reason. Includes meta-doc audit section (Phase 12.11) showing stale facts in README/guides. Press `g` to generate skeleton, `p` to view polish data, `a` to run docs audit. Color-coded: green/yellow/red | feature | P1 | S | DONE |
+| 12.10.6 | **Context Bundle Inspector** — preview exactly what `beadloom ctx <ref-id>` returns. Shows token count, sections, dependencies. Helps developers understand what agents see | feature | P2 | S | DONE |
+| 12.10.7 | **Keyboard-driven Actions** — trigger reindex (`r`), lint (`l`), sync-check (`s`), generate docs (`g`), snapshot (`S`) directly from TUI. Action results shown in status bar / notification panel | feature | P2 | S | DONE |
+| 12.10.8 | **TUI UX Polish** — (a) Explorer: replace raw Edges list with grouped summary + code symbols from `code_indexer` to eliminate duplication with upstream panel; (b) Screen descriptions: add brief purpose/explanation header to each screen (Dashboard, Explorer, Doc Status) so new users understand what Activity means and what screen 3 shows; (c) Contextual keybinding hints: visible per-screen footer showing available hotkeys (currently only Explorer/Doc Status have action bars, Dashboard has none); (d) **Bug fix:** Context Inspector (`c` key) has no scroll — content overflows without `overflow-y: auto`, making long context bundles unreadable | feature | P1 | M | DONE |
+
+### Phase 12.11: Documentation Audit — Meta-Doc Staleness Detection (v1.8) ⚗️ EXPERIMENTAL — DONE
 
 **Goal:** Automatically detect stale facts in project-level documentation (README, CONTRIBUTING, guides) that are not tied to specific graph nodes and therefore fall outside doc-sync scope. Zero-config: Beadloom computes ground truth from project state and scans markdown files for outdated mentions.
 
@@ -345,16 +351,18 @@ Beadloom is for engineers who build and maintain serious IT systems. YAML graph 
 
 **Prerequisites:** Manifest parsing (existing), code_symbols (existing), graph storage (existing). No dependency on other v1.8 phases.
 
-| # | Task | Type | P | Effort |
-|---|------|------|---|--------|
-| 12.11.1 | **Fact registry** — auto-compute project facts from existing data: version (from manifest), language_count, node_count, edge_count (from graph), test_count (from test mapping), framework_count (from detection). Extensible via `config.yml` for project-specific facts | feature | P0 | M |
-| 12.11.2 | **Doc scanner** — scan markdown files, extract numeric mentions + version strings. Keyword-proximity matching: associate numbers with nearby keywords (e.g., "9" near "languages" → `language_count`). Built-in keyword sets for standard facts, configurable for custom | feature | P0 | M |
-| 12.11.3 | **`beadloom docs audit`** — compare ground truth vs mentions. Human-readable report: stale/fresh/unmatched. Color-coded output via Rich. `--json` for scripting | feature | P0 | S |
-| 12.11.4 | **CI gate** — `beadloom docs audit --fail-if=stale>0` exits non-zero. Integrates into release workflows to block releases with outdated docs | feature | P1 | S |
-| 12.11.5 | **Tolerance system** — configurable per-fact tolerance: exact match for versions, ±5% for test counts, ±10% for growing metrics. Avoids false positives for naturally fluctuating numbers | feature | P1 | S |
-| 12.11.6 | **Debt report integration** — `docs audit` stale count feeds into debt score (Phase 12.9) as a "meta-doc staleness" category. Unified view of all documentation health | feature | P2 | S |
+**Delivered in:** BDL-026 (initial) + BDL-027 BEAD-02 (FP reduction). Part of v1.8.0.
 
-### Phase 12.12: Agent Instructions Freshness (v1.8)
+| # | Task | Type | P | Effort | Status |
+|---|------|------|---|--------|--------|
+| 12.11.1 | **Fact registry** — auto-compute project facts from existing data: version (from manifest), language_count, node_count, edge_count (from graph), test_count (from test mapping), framework_count (from detection). Extensible via `config.yml` for project-specific facts | feature | P0 | M | DONE |
+| 12.11.2 | **Doc scanner** — scan markdown files, extract numeric mentions + version strings. Keyword-proximity matching: associate numbers with nearby keywords (e.g., "9" near "languages" → `language_count`). Built-in keyword sets for standard facts, configurable for custom | feature | P0 | M | DONE |
+| 12.11.3 | **`beadloom docs audit`** — compare ground truth vs mentions. Human-readable report: stale/fresh/unmatched. Color-coded output via Rich. `--json` for scripting | feature | P0 | S | DONE |
+| 12.11.4 | **CI gate** — `beadloom docs audit --fail-if=stale>0` exits non-zero. Integrates into release workflows to block releases with outdated docs | feature | P1 | S | DONE |
+| 12.11.5 | **Tolerance system** — configurable per-fact tolerance: exact match for versions, ±5% for test counts, ±10% for growing metrics. Avoids false positives for naturally fluctuating numbers | feature | P1 | S | DONE |
+| 12.11.6 | **Debt report integration** — `docs audit` stale count feeds into debt score (Phase 12.9) as a "meta-doc staleness" category. Unified view of all documentation health | feature | P2 | S | DONE |
+
+### Phase 12.12: Agent Instructions Freshness (v1.8) — DONE
 
 **Goal:** Automatically detect and fix stale facts in agent instruction files (CLAUDE.md, AGENTS.md) — version numbers, CLI command lists, MCP tool counts, phase completion status, architecture package names. Prevents silent drift during active development.
 
@@ -364,10 +372,12 @@ Beadloom is for engineers who build and maintain serious IT systems. YAML graph 
 
 **Prerequisites:** Existing `doctor` infrastructure, existing `setup-rules` infrastructure, Click group introspection, MCP tool registry.
 
-| # | Task | Type | P | Effort |
-|---|------|------|---|--------|
-| 12.12.1 | **Agent instructions validation** — `beadloom doctor` check that verifies CLAUDE.md / AGENTS.md facts (version, command list, phase status, MCP tool count, architecture packages) against actual project state. Reports drift without auto-fixing. Start with approach B: detect-only | feature | P1 | M |
-| 12.12.2 | **Agent instructions refresh** — `beadloom setup-rules --refresh` regenerates dynamic sections of CLAUDE.md (version, commands, architecture summary, phase status) from project introspection while preserving hand-written policy sections (rules, workflows, anti-patterns). Expand to approach C: detect + auto-fix | feature | P2 | M |
+**Delivered in:** BDL-030 (5 beads, 31 new tests). Part of v1.8.0.
+
+| # | Task | Type | P | Effort | Status |
+|---|------|------|---|--------|--------|
+| 12.12.1 | **Agent instructions validation** — `beadloom doctor` check that verifies CLAUDE.md / AGENTS.md facts (version, command list, phase status, MCP tool count, architecture packages) against actual project state. Reports drift without auto-fixing. Start with approach B: detect-only | feature | P1 | M | DONE |
+| 12.12.2 | **Agent instructions refresh** — `beadloom setup-rules --refresh` regenerates dynamic sections of CLAUDE.md (version, commands, architecture summary, phase status) from project introspection while preserving hand-written policy sections (rules, workflows, anti-patterns). Expand to approach C: detect + auto-fix | feature | P2 | M | DONE |
 
 ### Phase 13: Cross-System Foundation (v1.9)
 
