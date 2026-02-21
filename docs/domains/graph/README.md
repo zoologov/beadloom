@@ -140,7 +140,7 @@ An array of paths to documents linked to the node. Paths are specified relative 
 | `NodeChange` | diff | Frozen dataclass: `ref_id`, `kind`, `change_type`, `old_summary`, `new_summary`, `old_source`, `new_source`, `old_tags`, `new_tags`, `symbols_added`, `symbols_removed` |
 | `EdgeChange` | diff | Frozen dataclass: `src`, `dst`, `kind`, `change_type` |
 | `GraphDiff` | diff | Frozen dataclass: `since_ref`, `nodes`, `edges`, property `has_changes` |
-| `NodeMatcher` | rule_engine | Frozen dataclass: `ref_id`, `kind`, `tag`, method `matches(node_ref_id, node_kind, *, tags=None)` |
+| `NodeMatcher` | rule_engine | Frozen dataclass: `ref_id`, `kind`, `tag`, `exclude`, method `matches(node_ref_id, node_kind, *, tags=None)` |
 | `DenyRule` | rule_engine | Frozen dataclass: `name`, `description`, `from_matcher`, `to_matcher`, `unless_edge`, `severity` |
 | `RequireRule` | rule_engine | Frozen dataclass: `name`, `description`, `for_matcher`, `has_edge_to`, `edge_kind`, `severity` |
 | `CycleRule` | rule_engine | Frozen dataclass: `name`, `description`, `edge_kind` (str or tuple), `max_depth` (default 10), `severity` |

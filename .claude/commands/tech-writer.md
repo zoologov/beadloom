@@ -10,17 +10,24 @@
 ## Work start protocol
 
 ```bash
-# 1. Identify stale docs
+# 1. Identify stale docs (TWO sources — don't rely on sync-check alone!)
 beadloom sync-check --json          # full list with reasons
 
-# 2. Group by ref_id (one doc per domain/feature)
+# 2. Check bead comments for API CHANGE notes from /dev agents
+bd comments <bead-id>               # look for "API CHANGE: ..." entries
+# If API CHANGE found: grep docs/ for mentions of changed APIs
+# sync-check may show [ok] even when docs are stale (reindex resets baseline)
+
+# 3. Group by ref_id (one doc per domain/feature)
 # Each ref_id = one independent unit of work
 
-# 3. For assigned ref_id, gather context
+# 4. For assigned ref_id, gather context
 beadloom ctx <ref-id>               # graph, symbols, deps, activity
 beadloom sync-update --check <ref-id>  # which files are stale
 beadloom docs polish                # enrichment data (symbol drift, deps)
 ```
+
+> **WARNING:** `sync-check` can show `[ok]` even when doc content is stale. This happens when the /dev agent ran `beadloom reindex` after code changes — the sync baseline is reset, but the doc prose was never updated. Always cross-check with bead comments and grep for changed API names in `docs/`.
 
 ---
 

@@ -254,12 +254,17 @@ beadloom reindex
 beadloom sync-check
 beadloom lint --strict
 
-# 4. Add final checkpoint
+# 4. If public API changed, log it for /review and /tech-writer
+# bd comments add <bead-id> "API CHANGE: <what changed>. Docs to check: <list>"
+# Example: "API CHANGE: NodeMatcher gained exclude field. Docs to check: docs/domains/graph/README.md, rule-engine/SPEC.md"
+
+# 5. Add final checkpoint
 bd comments add <bead-id> "$(cat <<'EOF'
 COMPLETED:
 - What was done: [list]
 - Decisions: [if any]
 - Tests: [result]
+- API changes: [if any — new fields, parameters, classes, YAML schema]
 - TODO: [if any]
 EOF
 )"
@@ -329,6 +334,7 @@ logger.info("Reindex completed", extra={"nodes": count, "duration_ms": elapsed})
 - [ ] `beadloom reindex` — index is fresh
 - [ ] `beadloom sync-check` — no stale docs
 - [ ] `beadloom lint --strict` — no architecture violations
+- [ ] **API CHANGE check** — if you changed public APIs (new fields, parameters, classes, YAML schema), log it in bead comments so /review and /tech-writer know which docs to check
 - [ ] Final checkpoint in beads
 - [ ] `bd close <bead-id>`
 - [ ] ACTIVE.md cleared for the next bead
