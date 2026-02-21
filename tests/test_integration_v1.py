@@ -63,21 +63,21 @@ class TestGraphCompleteness:
         rules_path = _PROJECT_ROOT / ".beadloom" / "_graph" / "rules.yml"
         assert rules_path.is_file()
         data = yaml.safe_load(rules_path.read_text(encoding="utf-8"))
-        assert data["version"] == 1
-        assert len(data["rules"]) >= 1
+        assert data["version"] == 3
+        assert len(data["rules"]) >= 7
 
 
 class TestSelfLint:
     """Run beadloom lint on its own codebase."""
 
     def test_self_lint_clean(self) -> None:
-        """Self-lint should produce 0 violations."""
+        """Self-lint should produce 0 errors (warnings are acceptable)."""
         runner = CliRunner()
         result = runner.invoke(main, ["lint", "--project", str(_PROJECT_ROOT), "--format", "json"])
         assert result.exit_code == 0, result.output
         parsed = json.loads(result.output)
-        assert parsed["summary"]["violations_count"] == 0
-        assert parsed["summary"]["rules_evaluated"] >= 1
+        assert parsed["summary"]["error_count"] == 0
+        assert parsed["summary"]["rules_evaluated"] >= 7
 
     def test_self_lint_strict(self) -> None:
         """Self-lint with --strict should also exit 0 (no violations)."""

@@ -818,6 +818,121 @@ class TestNodeMatcherTags:
 
 
 # ---------------------------------------------------------------------------
+# TestNodeMatcherExclude — exclude filter on NodeMatcher
+# ---------------------------------------------------------------------------
+
+
+class TestNodeMatcherExclude:
+    """Tests for NodeMatcher.matches() with exclude filter."""
+
+    def test_exclude_single_ref_id(self) -> None:
+        """Exclude a single ref_id: matches() returns False for that ref_id."""
+        m = NodeMatcher(kind="service", exclude=("beadloom",))
+        assert m.matches("beadloom", "service") is False
+
+    def test_exclude_list_of_ref_ids(self) -> None:
+        """Exclude multiple ref_ids: matches() returns False for all excluded."""
+        m = NodeMatcher(kind="domain", exclude=("billing", "auth"))
+        assert m.matches("billing", "domain") is False
+        assert m.matches("auth", "domain") is False
+
+    def test_exclude_none_backward_compatible(self) -> None:
+        """Exclude=None (default): matches() behaves unchanged."""
+        m = NodeMatcher(kind="service")
+        assert m.exclude is None
+        assert m.matches("beadloom", "service") is True
+        assert m.matches("payments-svc", "service") is True
+
+    def test_exclude_non_matching_ref_id(self) -> None:
+        """Exclude with non-matching ref_id: matches() still returns True for other nodes."""
+        m = NodeMatcher(kind="service", exclude=("billing",))
+        assert m.matches("payments-svc", "service") is True
+        assert m.matches("users-svc", "service") is True
+
+    def test_exclude_with_ref_id_and_kind(self) -> None:
+        """Exclude combined with ref_id and kind filters."""
+        m = NodeMatcher(kind="domain", exclude=("billing",))
+        # kind matches but excluded
+        assert m.matches("billing", "domain") is False
+        # kind matches and not excluded
+        assert m.matches("auth", "domain") is True
+        # kind does not match
+        assert m.matches("billing", "service") is False
+
+    def test_exclude_with_tags(self) -> None:
+        """Exclude works alongside tag-based matching."""
+        m = NodeMatcher(tag="ui-layer", exclude=("beadloom",))
+        assert m.matches("beadloom", "service", tags={"ui-layer"}) is False
+        assert m.matches("app-tabs", "service", tags={"ui-layer"}) is True
+
+    def test_exclude_empty_tuple(self) -> None:
+        """Empty exclude tuple does not exclude anything."""
+        m = NodeMatcher(kind="service", exclude=())
+        assert m.matches("beadloom", "service") is True
+
+    def test_exclude_yaml_parsing_string(self, tmp_path: Path) -> None:
+        """YAML parsing: exclude as a single string normalizes to tuple."""
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 1\n"
+            "rules:\n"
+            "  - name: svc-needs-parent\n"
+            '    description: "Services need parent"\n'
+            "    require:\n"
+            "      for:\n"
+            "        kind: service\n"
+            "        exclude: beadloom\n"
+            "      has_edge_to: { kind: domain }\n"
+            "      edge_kind: part_of\n"
+        )
+        rules = load_rules(rules_path)
+        assert len(rules) == 1
+        rule = rules[0]
+        assert isinstance(rule, RequireRule)
+        assert rule.for_matcher.exclude == ("beadloom",)
+
+    def test_exclude_yaml_parsing_list(self, tmp_path: Path) -> None:
+        """YAML parsing: exclude as a list normalizes to tuple."""
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 1\n"
+            "rules:\n"
+            "  - name: svc-needs-parent\n"
+            '    description: "Services need parent"\n'
+            "    require:\n"
+            "      for:\n"
+            "        kind: service\n"
+            "        exclude: [beadloom, infrastructure]\n"
+            "      has_edge_to: { kind: domain }\n"
+            "      edge_kind: part_of\n"
+        )
+        rules = load_rules(rules_path)
+        assert len(rules) == 1
+        rule = rules[0]
+        assert isinstance(rule, RequireRule)
+        assert rule.for_matcher.exclude == ("beadloom", "infrastructure")
+
+    def test_exclude_yaml_not_present(self, tmp_path: Path) -> None:
+        """YAML parsing: no exclude field gives exclude=None."""
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 1\n"
+            "rules:\n"
+            "  - name: svc-needs-parent\n"
+            '    description: "Services need parent"\n'
+            "    require:\n"
+            "      for: { kind: service }\n"
+            "      has_edge_to: { kind: domain }\n"
+            "      edge_kind: part_of\n"
+        )
+        rules = load_rules(rules_path)
+        assert len(rules) == 1
+        rule = rules[0]
+        assert isinstance(rule, RequireRule)
+        assert rule.for_matcher.exclude is None
+
+
+# ---------------------------------------------------------------------------
 # TestGetNodeTags — helper in loader.py
 # ---------------------------------------------------------------------------
 

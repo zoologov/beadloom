@@ -37,6 +37,7 @@ class NodeMatcher:
     ref_id: str | None = None
     kind: str | None = None
     tag: str | None = None
+    exclude: tuple[str, ...] | None = None
 
     def matches(self, node_ref_id: str, node_kind: str, *, tags: set[str] | None = None) -> bool:
         """Return True if this matcher matches the given node.
@@ -44,7 +45,12 @@ class NodeMatcher:
         The *tags* parameter is optional for backward compatibility.
         When *tags* is ``None`` and ``self.tag`` is set, the tag check
         is skipped (i.e. old callers that do not pass tags are not broken).
+
+        The *exclude* field, when set, causes ``matches()`` to return
+        ``False`` for any ``node_ref_id`` listed in the tuple.
         """
+        if self.exclude and node_ref_id in self.exclude:
+            return False
         if self.ref_id is not None and self.ref_id != node_ref_id:
             return False
         if self.kind is not None and self.kind != node_kind:
@@ -203,6 +209,9 @@ def _parse_node_matcher(
 
     When *allow_empty* is True an empty dict ``{}`` is accepted and produces
     a ``NodeMatcher(ref_id=None, kind=None, tag=None)`` that matches **any** node.
+
+    The optional ``exclude`` field accepts a string or list of strings and
+    is normalized to a tuple of ref_ids to exclude from matching.
     """
     ref_id = data.get("ref_id")
     kind = data.get("kind")
@@ -220,7 +229,16 @@ def _parse_node_matcher(
         msg = f"{context}: invalid kind '{kind_str}', must be one of {sorted(VALID_NODE_KINDS)}"
         raise ValueError(msg)
 
-    return NodeMatcher(ref_id=ref_id_str, kind=kind_str, tag=tag_str)
+    # Parse optional exclude field (string or list -> tuple)
+    exclude_raw = data.get("exclude")
+    exclude: tuple[str, ...] | None = None
+    if exclude_raw is not None:
+        if isinstance(exclude_raw, list):
+            exclude = tuple(str(item) for item in exclude_raw)
+        else:
+            exclude = (str(exclude_raw),)
+
+    return NodeMatcher(ref_id=ref_id_str, kind=kind_str, tag=tag_str, exclude=exclude)
 
 
 def _parse_deny_rule(

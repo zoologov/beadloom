@@ -42,16 +42,18 @@
 | `why` | Impact analysis — upstream and downstream deps |
 | `diff` | Graph changes since a git ref |
 | `lint` | Architecture boundary violations with severity |
-| `get_debt_report` | Architecture debt report with score and top offenders |
 
 ## Architecture Rules
 
 - **domain-needs-parent** (require): Every domain must be part_of the beadloom service
 - **feature-needs-domain** (require): Every feature must be part_of a domain
-- **service-needs-parent** (require): Every service must be part_of the beadloom service
+- **service-needs-parent** (require): Every service (except root) must be part_of the beadloom service
 - **no-domain-depends-on-service** (deny): Domains must not have depends_on edges to services
-
-**v1.7.0 rule types:** `require`, `deny`, `forbid_edge`, `layer`, `cycle_detection`, `import_boundary`, `cardinality`
+- **no-dependency-cycles** (deny): No circular depends_on chains
+- **architecture-layers** (deny): Services use domains, domains use infrastructure — not reverse
+- **domain-size-limit** (deny): Domains should not have too many symbols
+- **tui-no-direct-infra** (deny): TUI must not import infrastructure directly
+- **onboarding-no-direct-infra** (deny): Onboarding must not import infrastructure directly
 
 ## Custom
 

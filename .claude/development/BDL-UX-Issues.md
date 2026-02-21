@@ -1,8 +1,8 @@
 # BDL UX Feedback Log
 
 > Collected during development and dogfooding.
-> Total: 64 issues | Open: 0 | Improvements: 1 | Excluded: 5 | Closed: 59
-> Last reviewed: BDL-030 (Agent Instructions Freshness)
+> Total: 69 issues | Open: 3 | Improvements: 2 | Excluded: 5 | Closed: 59
+> Last reviewed: BDL-032 (Enhanced Architecture Rules)
 
 ---
 
@@ -10,7 +10,17 @@
 
 > Issues awaiting code fixes in Beadloom.
 
-_(none)_
+67. [2026-02-21] [MEDIUM] `_load_rules_into_db` silently drops v3 rule types — `reindex.py:_load_rules_into_db()` only handles `DenyRule` and `RequireRule` instances (line 327: `else: continue`). The 5 new v3 rule types (`ForbidCyclesRule`, `LayerRule`, `CardinalityRule`, `ForbidImportRule`, `ForbidEdgeRule`) are silently skipped. The `rules` DB table stays at 4 rows instead of 9. This makes `docs audit` report `rule_type_count: 4` instead of `9`, and any tool querying the `rules` table gets stale data.
+    > **Impact:** `docs audit` ground truth is wrong. Any MCP tool or TUI widget querying the `rules` table sees only 4 rules.
+    > **Fix:** Add `isinstance` branches for all 7 rule types in `_load_rules_into_db`, or use a generic serialization approach (e.g., `rule.to_dict()` method on the base `Rule` class).
+
+68. [2026-02-21] [LOW] `_build_rules_section` and `_read_rules_data` use simplistic rule type detection — Both functions in `scanner.py` (lines 985, 1042) use `"require" if "require" in rule else "deny"` to determine rule type from YAML. This maps `forbid_cycles`, `layers`, `check` (cardinality), and `forbid_import` rules all to type "deny". The type label in AGENTS.md and `beadloom prime` output is inaccurate for 5 of 9 rules.
+    > **Impact:** Cosmetic. The rule descriptions are correct, only the type label in parentheses is wrong.
+    > **Fix:** Check for all YAML keys: `require`, `deny`, `forbid_cycles`, `layers`, `check`, `forbid_import`, `forbid_edge`.
+
+69. [2026-02-21] [LOW] `generate_agents_md` Custom section preservation corrupts file on regeneration — When the old AGENTS.md has content after `## Custom` that itself contains a `## Custom` marker (e.g., from a prior duplication), the preservation logic at `scanner.py:1006-1011` captures everything after the first `## Custom` marker and appends it again, causing content duplication. In BDL-032, regeneration duplicated the entire file body because old content (from a prior manual edit) was stored below `## Custom`.
+    > **Impact:** Regenerated AGENTS.md is garbled until manually cleaned.
+    > **Fix:** Use a more robust marker, e.g., `<!-- beadloom:custom-start -->`, or only preserve content after the *last* `## Custom` marker.
 
 ---
 
@@ -24,6 +34,13 @@ _(none)_
     > 2. **Proximity scoring** — weight match by distance to fact-type keyword (e.g., number `13` near `MCP` = likely mcp_tool_count; `80` near `coverage` + `%` = threshold, not test_count).
     > 3. **File-type heuristics** — lower confidence for SPEC.md, CONTRIBUTING.md, examples/; higher for README.md, AGENTS.md, CLAUDE.md.
     > Pure semantic (LLM-based) analysis is overkill for a CLI tool. Pattern + proximity + file heuristics should achieve ~90% precision without architectural changes.
+
+66. [2026-02-21] [LOW] `graph_snapshots` lacks diff/compare capability — table stores immutable point-in-time graph captures (nodes_json, edges_json, symbols_count, label), but there's no CLI command to compare two snapshots. Users can only view individual snapshots, not see what changed between them (added/removed/changed nodes and edges).
+    > **Recommended approach:**
+    > 1. **`beadloom snapshots list`** — show all saved snapshots with labels, dates, node/edge counts.
+    > 2. **`beadloom snapshots diff <label-a> <label-b>`** — compute and display added/removed/changed nodes and edges between two snapshots. Output as Rich table + optional `--json` for automation.
+    > 3. **`beadloom snapshots save --label "v1.8.0"`** — explicit named snapshot creation (currently snapshots are auto-created during reindex).
+    > Stays within existing SQLite + Python stack. No external dependencies (Dolt, etc.) needed — the current `graph_snapshots` schema already contains all necessary data for diffing.
 
 ---
 

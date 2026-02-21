@@ -14,6 +14,7 @@ nodes:
     kind: domain
     summary: "Context bundle building via BFS graph traversal, code indexing, caching, search"
     source: src/beadloom/context_oracle/
+    tags: [layer-domain]
     docs:
       - docs/domains/context-oracle/README.md
 
@@ -22,6 +23,7 @@ nodes:
     kind: domain
     summary: "Doc-code synchronization tracking and stale detection"
     source: src/beadloom/doc_sync/
+    tags: [layer-domain]
     docs:
       - docs/domains/doc-sync/README.md
 
@@ -30,6 +32,7 @@ nodes:
     kind: domain
     summary: "YAML graph format, loader, diff, rule engine, import resolver, linter"
     source: src/beadloom/graph/
+    tags: [layer-domain]
     docs:
       - docs/domains/graph/README.md
 
@@ -38,6 +41,7 @@ nodes:
     kind: domain
     summary: "Project bootstrap, doc import, architecture-aware presets, doc generation"
     source: src/beadloom/onboarding/
+    tags: [layer-domain]
     docs:
       - docs/domains/onboarding/README.md
 
@@ -54,6 +58,7 @@ nodes:
     kind: domain
     summary: "SQLite database layer, health metrics, reindex orchestrator"
     source: src/beadloom/infrastructure/
+    tags: [layer-infra]
     docs:
       - docs/domains/infrastructure/README.md
 
@@ -62,6 +67,7 @@ nodes:
     kind: service
     summary: "Click-based CLI with 21 commands"
     source: src/beadloom/services/cli.py
+    tags: [layer-service]
     docs:
       - docs/services/cli.md
 
@@ -70,6 +76,7 @@ nodes:
     kind: service
     summary: "MCP stdio server with 14 tools for AI agents"
     source: src/beadloom/services/mcp_server.py
+    tags: [layer-service]
     docs:
       - docs/services/mcp.md
 
@@ -78,6 +85,7 @@ nodes:
     kind: service
     summary: "Interactive 3-screen architecture workstation with dashboard, explorer, doc status"
     source: src/beadloom/tui/
+    tags: [layer-service]
     docs:
       - docs/services/tui.md
 
