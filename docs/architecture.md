@@ -108,6 +108,7 @@ Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3
 **Evaluation:**
 - Deny rules are checked against the `code_imports` table: resolved import ref_ids are matched against rule patterns
 - Require rules are checked against the `edges` table: nodes matching `from` pattern must have specified edge kind to nodes matching `to` pattern
+- Node matchers support an optional `exclude` field (list of ref_ids) to exempt specific nodes from rule matching
 - `unless_edge` exemptions allow otherwise-forbidden imports when a specific edge kind exists between the nodes
 - ForbidEdge rules check edge patterns between nodes matching tag selectors
 - Layer rules verify dependency direction across ordered architectural layers

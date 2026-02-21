@@ -31,7 +31,7 @@ Beadloom stores index data locally in:
 
 - The MCP server runs over **stdio** transport only (no network exposure)
 - It provides both read and write access to the architecture graph:
-  - **Read operations** (12 tools): `get_context`, `get_graph`, `list_nodes`, `sync_check`, `get_status`, `search`, `generate_docs`, `prime`, `why`, `diff`, `lint`, `docs_audit`
+  - **Read operations** (12 tools): `get_context`, `get_graph`, `list_nodes`, `sync_check`, `get_status`, `search`, `generate_docs`, `prime`, `why`, `diff`, `lint`, `get_debt_report`
   - **Write operations** (2 tools): `update_node` (modifies node summary/source in YAML and SQLite), `mark_synced` (updates sync state)
 - Write operations modify local files only (YAML graph + SQLite index)
 - The server opens the SQLite database in WAL mode
@@ -61,10 +61,8 @@ All dependencies are pinned in `pyproject.toml` and regularly updated.
 
 | Version | Supported          |
 | ------- | ------------------ |
-| main    | :white_check_mark: |
+| 1.x     | :white_check_mark: |
 | < 1.0   | :x:                |
-
-Once version 1.0 is released, we will support the latest major version and one previous major version.
 
 ## Best Practices
 

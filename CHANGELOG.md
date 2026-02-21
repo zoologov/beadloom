@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.8.0] - 2026-02-21
 
-C4 diagrams, debt reporting, interactive TUI, docs audit, agent instructions freshness, and 60+ UX fixes. 2527 tests.
+C4 diagrams, debt reporting, interactive TUI, docs audit, agent instructions freshness, enhanced architecture rules, and 60+ UX fixes. 2537 tests.
 
 ### Added
 - **C4 architecture diagrams** -- `beadloom graph --format=c4` (Mermaid C4 syntax) and `--format=c4-plantuml` (PlantUML with standard macros) (BDL-023)
@@ -44,6 +44,11 @@ C4 diagrams, debt reporting, interactive TUI, docs audit, agent instructions fre
 - **6 fact extraction helpers** -- version, packages, CLI commands, MCP tools, stack, test framework (BDL-030)
 - **`beadloom setup-rules --refresh`** -- auto-update CLAUDE.md dynamic sections with `--dry-run` preview (BDL-030)
 - **`<!-- beadloom:auto-start/auto-end -->` markers** -- safe section regeneration for agent instruction files (BDL-030)
+- **NodeMatcher `exclude` filter** -- `exclude` field on NodeMatcher dataclass filters specific nodes from rule evaluation; used in `service-needs-parent` to skip root node (BDL-032)
+- **`forbid_import` rules** -- 2 new rules: `tui-no-direct-infra` and `onboarding-no-direct-infra` enforce import boundaries via `code_imports` table (BDL-032)
+- **Rules schema v3 tags** -- bulk tag assignments in `rules.yml` v3; `layer-service`, `layer-domain`, `layer-infra` tags for architecture layer enforcement (BDL-032)
+- **5 new architecture rules** -- `no-dependency-cycles`, `architecture-layers`, `domain-size-limit`, `tui-no-direct-infra`, `onboarding-no-direct-infra` (9 rules total, 6/7 types exercised) (BDL-032)
+- **API CHANGE tracking in agent skills** -- `/dev`, `/review`, `/tech-writer` skills updated with explicit API change handoff protocol to prevent doc staleness (BDL-032)
 
 ### Changed
 - Textual dependency upgraded from `>=0.50` to `>=0.80` (BDL-025)
@@ -53,6 +58,9 @@ C4 diagrams, debt reporting, interactive TUI, docs audit, agent instructions fre
 - Doctor promoted undocumented nodes to WARNING severity (BDL-027)
 - Untracked file details included in debt report output (BDL-027)
 - Init now scans all code directories for React Native projects (BDL-027)
+- Rules schema version upgraded from v1 to v3 with backward compatibility (BDL-032)
+- `service-needs-parent` rule uses `exclude: [beadloom]` to skip root service node (BDL-032)
+- Architecture lint: 9 rules evaluated (was 4), covering 6 of 7 rule types (BDL-032)
 
 ### Fixed
 - **C4 depth computation** -- correct boundary nesting for deeply nested nodes (BDL-027)

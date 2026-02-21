@@ -115,6 +115,13 @@ Beadloom doesn't just describe architecture — it enforces it. Define boundary 
 **Rules** (`.beadloom/_graph/rules.yml`) — rules from this project:
 
 ```yaml
+version: 3
+
+tags:
+  layer-service: [cli, mcp-server, tui]
+  layer-domain: [context-oracle, doc-sync, graph, onboarding]
+  layer-infra: [infrastructure]
+
 rules:
   - name: domain-needs-parent
     description: "Every domain must be part_of the beadloom service"
@@ -131,9 +138,9 @@ rules:
       edge_kind: part_of
 
   - name: service-needs-parent
-    description: "Every service must be part_of the beadloom service"
+    description: "Every service (except root) must be part_of the beadloom service"
     require:
-      for: { kind: service }
+      for: { kind: service, exclude: [beadloom] }
       has_edge_to: { ref_id: beadloom }
       edge_kind: part_of
 
@@ -145,44 +152,50 @@ rules:
       unless_edge: [part_of]
 ```
 
-**v1.7.0 rule types** — forbid_edge, layer enforcement, cycle detection, and cardinality limits:
+**v1.8.0 rule types** — forbid edges, layer enforcement, cycle detection, import boundaries, and cardinality limits:
 
 ```yaml
 rules:
   # Forbid edges between tagged groups
   - name: ui-no-native
     severity: error
-    forbid_edge:
+    forbid:
       from: { tag: ui-layer }
       to: { tag: native-layer }
       edge_kind: uses
 
   # Layer enforcement (top-down)
-  - name: layer-direction
-    severity: error
-    layer:
-      layers:
-        - { name: presentation, tag: ui-layer }
-        - { name: domain, tag: domain-layer }
-        - { name: infrastructure, tag: infra-layer }
-      enforce: top-down
+  - name: architecture-layers
+    severity: warn
+    layers:
+      - { name: services, tag: layer-service }
+      - { name: domains, tag: layer-domain }
+      - { name: infrastructure, tag: layer-infra }
+    enforce: top-down
+    allow_skip: true
+    edge_kind: depends_on
 
   # Cycle detection
-  - name: no-circular-deps
-    severity: error
-    cycle_detection:
-      edge_kind: [uses, depends_on]
+  - name: no-dependency-cycles
+    severity: warn
+    forbid_cycles:
+      edge_kind: depends_on
+
+  # Import boundary
+  - name: tui-no-direct-infra
+    forbid_import:
+      from: "src/beadloom/tui/**"
+      to: "src/beadloom/infrastructure/**"
 
   # Cardinality limits
-  - name: domain-complexity
+  - name: domain-size-limit
     severity: warn
-    cardinality:
+    check:
       for: { kind: domain }
-      max_files: 50
-      max_symbols: 500
+      max_symbols: 200
 ```
 
-7 rule types available: `require`, `deny`, `forbid_edge`, `layer`, `cycle_detection`, `import_boundary`, `cardinality`. Nodes support `tags` for rule matching.
+7 rule types available: `require`, `deny`, `forbid`, `layers`, `forbid_cycles`, `forbid_import`, `check`. NodeMatcher supports `tags` and `exclude` for flexible rule targeting.
 
 **Validate:**
 
@@ -295,7 +308,7 @@ Works with Claude Code, Cursor, Windsurf, Cline, and any MCP-compatible tool.
 | `why` | Impact analysis — upstream and downstream dependencies in the graph |
 | `diff` | Graph changes relative to a git revision |
 | `lint` | Run architecture lint rules. Returns violations as JSON |
-| `docs_audit` | Run documentation audit — detect stale facts in project-level docs |
+| `get_debt_report` | Architecture debt report — aggregated score with categories and top offenders |
 
 ## Configuration
 
