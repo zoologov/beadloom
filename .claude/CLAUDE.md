@@ -68,6 +68,7 @@ bd close <bead-id>
 
 ## 0.1 Project: Beadloom
 
+<!-- beadloom:auto-start project-info -->
 - **Stack:** Python 3.10+, SQLite (WAL), Click + Rich (CLI), tree-sitter, MCP (stdio)
 - **Distribution:** PyPI (`uv tool install beadloom`)
 - **Tests:** pytest + pytest-cov (>=80% coverage)
@@ -76,6 +77,7 @@ bd close <bead-id>
 - **Project documentation:** `.claude/development/STRATEGY-2.md`, `.claude/development/BACKLOG.md`, `.claude/development/BDL-UX-Issues.md`, `CHANGELOG.md`
 - **Architecture:** DDD packages — `infrastructure/`, `context_oracle/`, `doc_sync/`, `onboarding/`, `graph/` + `services/` (CLI, MCP) + `tui/`
 - **Current version:** 1.7.0 (Phases 1-6 + 8, 8.5, 9, 10, 10.5, 11, 12, 12.5, 12.6 done)
+<!-- beadloom:auto-end -->
 
 ---
 

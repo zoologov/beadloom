@@ -2,6 +2,7 @@
 
 > Collected during development and dogfooding.
 > Total: 64 issues | Open: 0 | Excluded: 5 | Closed: 59
+> Last reviewed: BDL-030 (Agent Instructions Freshness) — no new UX issues discovered
 
 ---
 
