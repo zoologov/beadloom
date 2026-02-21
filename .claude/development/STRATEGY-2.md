@@ -1,6 +1,6 @@
 # Beadloom: Strategy 2 — Architecture Infrastructure for the AI Agent Era
 
-> **Status:** Active (Phases 8-12.12 complete, v1.8.0 released, Phase 13+ planned)
+> **Status:** Active (Phases 8-12.13 complete, v1.8.0 released, Phase 13+ planned)
 > **Date:** 2026-02-21 (revision 12)
 > **Current version:** 1.8.0
 > **Predecessor:** STRATEGY.md (Phases 1-6, all completed)
@@ -378,6 +378,25 @@ Beadloom is for engineers who build and maintain serious IT systems. YAML graph 
 |---|------|------|---|--------|--------|
 | 12.12.1 | **Agent instructions validation** — `beadloom doctor` check that verifies CLAUDE.md / AGENTS.md facts (version, command list, phase status, MCP tool count, architecture packages) against actual project state. Reports drift without auto-fixing. Start with approach B: detect-only | feature | P1 | M | DONE |
 | 12.12.2 | **Agent instructions refresh** — `beadloom setup-rules --refresh` regenerates dynamic sections of CLAUDE.md (version, commands, architecture summary, phase status) from project introspection while preserving hand-written policy sections (rules, workflows, anti-patterns). Expand to approach C: detect + auto-fix | feature | P2 | M | DONE |
+
+### Phase 12.13: Enhanced Architecture Rules — Dogfooding (v1.8) — DONE
+
+**Goal:** Exercise all 7 rule types in Beadloom's own architecture graph. Upgrade from 4 rules (2 types) to comprehensive boundary enforcement using the rule engine built in Phase 12.
+
+**Metric:** `beadloom lint` evaluates 9 rules covering 6/7 rule types. NodeMatcher supports `exclude` filter for edge cases like root service node. `forbid_import` rules verify actual Python import boundaries.
+
+**Motivation:** BDL-032 dogfooding revealed that beadloom's own `rules.yml` only used `require` and `deny` — 2 of 7 available types. The 5 new rule types (forbid_edge, layer, cycle_detection, import_boundary, cardinality) from Phase 12 were untested on the project that built them. Additionally, `service-needs-parent` was broken for the root node because NodeMatcher had no exclusion mechanism.
+
+**Prerequisites:** Phase 12 rule engine (all 7 types), Phase 12.5 init quality, import index.
+
+**Delivered in:** BDL-032 (7 beads, 10 new tests). Part of v1.8.0.
+
+| # | Task | Type | P | Effort | Status |
+|---|------|------|---|--------|--------|
+| 12.13.1 | **NodeMatcher `exclude` filter** — `exclude` field on frozen dataclass; `matches()` returns False if node ref_id is in exclude list; YAML parsing for string and list formats | feature | P0 | S | DONE |
+| 12.13.2 | **Rules schema v3 upgrade** — top-level `tags:` block for bulk tag assignments; `service-needs-parent` fixed with `exclude: [beadloom]`; 5 new rules added (9 total) | feature | P0 | M | DONE |
+| 12.13.3 | **`forbid_import` verification** — 2 import boundary rules (`tui-no-direct-infra`, `onboarding-no-direct-infra`) verify actual Python imports via `code_imports` table | feature | P1 | S | DONE |
+| 12.13.4 | **Skill instruction updates** — `/dev` API CHANGE logging, `/review` doc freshness check, `/tech-writer` sync-check limitation warning | docs | P1 | S | DONE |
 
 ### Phase 13: Cross-System Foundation (v1.9)
 

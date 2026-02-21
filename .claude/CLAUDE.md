@@ -74,7 +74,7 @@ bd close <bead-id>
 - **Linter/formatter:** ruff (lint + format)
 - **Type checking:** mypy --strict
 - **Architecture:** DDD packages -- `context_oracle/`, `doc_sync/`, `graph/`, `infrastructure/`, `onboarding/`, `services/`, `tui/`
-- **Current version:** 1.7.0
+- **Current version:** 1.8.0
 <!-- beadloom:auto-end -->
 
 ---

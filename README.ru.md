@@ -115,6 +115,13 @@ Beadloom не просто описывает архитектуру — он е
 **Правила** (`.beadloom/_graph/rules.yml`) — правила этого проекта:
 
 ```yaml
+version: 3
+
+tags:
+  layer-service: [cli, mcp-server, tui]
+  layer-domain: [context-oracle, doc-sync, graph, onboarding]
+  layer-infra: [infrastructure]
+
 rules:
   - name: domain-needs-parent
     description: "Every domain must be part_of the beadloom service"
@@ -131,9 +138,9 @@ rules:
       edge_kind: part_of
 
   - name: service-needs-parent
-    description: "Every service must be part_of the beadloom service"
+    description: "Every service (except root) must be part_of the beadloom service"
     require:
-      for: { kind: service }
+      for: { kind: service, exclude: [beadloom] }
       has_edge_to: { ref_id: beadloom }
       edge_kind: part_of
 
@@ -145,44 +152,50 @@ rules:
       unless_edge: [part_of]
 ```
 
-**Типы правил v1.7.0** — forbid_edge, контроль слоёв, обнаружение циклов и ограничения кардинальности:
+**Типы правил v1.8.0** — запрет рёбер, контроль слоёв, обнаружение циклов, границы импортов и лимиты кардинальности:
 
 ```yaml
 rules:
   # Запрет рёбер между тегированными группами
   - name: ui-no-native
     severity: error
-    forbid_edge:
+    forbid:
       from: { tag: ui-layer }
       to: { tag: native-layer }
       edge_kind: uses
 
   # Контроль слоёв (сверху вниз)
-  - name: layer-direction
-    severity: error
-    layer:
-      layers:
-        - { name: presentation, tag: ui-layer }
-        - { name: domain, tag: domain-layer }
-        - { name: infrastructure, tag: infra-layer }
-      enforce: top-down
+  - name: architecture-layers
+    severity: warn
+    layers:
+      - { name: services, tag: layer-service }
+      - { name: domains, tag: layer-domain }
+      - { name: infrastructure, tag: layer-infra }
+    enforce: top-down
+    allow_skip: true
+    edge_kind: depends_on
 
   # Обнаружение циклов
-  - name: no-circular-deps
-    severity: error
-    cycle_detection:
-      edge_kind: [uses, depends_on]
+  - name: no-dependency-cycles
+    severity: warn
+    forbid_cycles:
+      edge_kind: depends_on
+
+  # Границы импортов
+  - name: tui-no-direct-infra
+    forbid_import:
+      from: "src/beadloom/tui/**"
+      to: "src/beadloom/infrastructure/**"
 
   # Ограничения кардинальности
-  - name: domain-complexity
+  - name: domain-size-limit
     severity: warn
-    cardinality:
+    check:
       for: { kind: domain }
-      max_files: 50
-      max_symbols: 500
+      max_symbols: 200
 ```
 
-Доступно 7 типов правил: `require`, `deny`, `forbid_edge`, `layer`, `cycle_detection`, `import_boundary`, `cardinality`. Узлы поддерживают `tags` для сопоставления в правилах.
+Доступно 7 типов правил: `require`, `deny`, `forbid`, `layers`, `forbid_cycles`, `forbid_import`, `check`. NodeMatcher поддерживает `tags` и `exclude` для гибкого таргетинга правил.
 
 **Валидация:**
 
@@ -295,7 +308,7 @@ Beadloom внедряет контекст в AI-агентов через тр�
 | `why` | Анализ влияния: зависимости вверх и вниз по графу |
 | `diff` | Изменения графа относительно git-ревизии |
 | `lint` | Запуск архитектурных правил линтинга. Возвращает нарушения в JSON |
-| `docs_audit` | Аудит документации — обнаружение устаревших фактов в документации проекта |
+| `get_debt_report` | Отчёт по архитектурному долгу — агрегированная оценка с категориями и основными нарушителями |
 
 ## Конфигурация
 
