@@ -1001,14 +1001,22 @@ def generate_agents_md(project_root: Path) -> Path:
     beadloom_dir.mkdir(parents=True, exist_ok=True)
     agents_path = beadloom_dir / "AGENTS.md"
 
-    # Preserve user content below ## Custom
+    # Preserve user content below ## Custom.
+    # Two markers: the HTML comment (preferred) and the heading (fallback).
     custom_content = ""
     if agents_path.exists():
         text = agents_path.read_text(encoding="utf-8")
-        marker = "## Custom"
-        idx = text.find(marker)
-        if idx != -1:
-            custom_content = text[idx + len(marker) :]
+        comment_marker = "<!-- Add project-specific instructions below this line -->"
+        heading_marker = "## Custom"
+        cidx = text.find(comment_marker)
+        if cidx != -1:
+            # Take everything after the HTML comment (user content only).
+            custom_content = text[cidx + len(comment_marker) :]
+        else:
+            # Comment was removed — fall back to heading.
+            hidx = text.find(heading_marker)
+            if hidx != -1:
+                custom_content = text[hidx + len(heading_marker) :]
 
     # Build rules section from rules.yml
     rules_section = _build_rules_section(project_root)
@@ -1016,9 +1024,10 @@ def generate_agents_md(project_root: Path) -> Path:
     # Render template
     content = _AGENTS_MD_TEMPLATE_V2.format(rules_section=rules_section)
 
-    # Append preserved custom content
-    if custom_content:
-        content = content.rstrip() + "\n" + custom_content
+    # Append preserved custom content (strip to avoid trailing growth)
+    stripped_custom = custom_content.strip()
+    if stripped_custom:
+        content = content.rstrip() + "\n" + stripped_custom + "\n"
 
     agents_path.write_text(content, encoding="utf-8")
     return agents_path
