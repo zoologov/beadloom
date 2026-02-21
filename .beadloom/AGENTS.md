@@ -7,7 +7,8 @@
 
 - Call MCP tool `prime` to get current project context
 - Or run `beadloom prime` in terminal
-- For specific feature/domain: `get_context(ref_id)`
+- For specific feature/domain: `beadloom ctx <ref-id>` or MCP `get_context(ref_id)`
+- Search the codebase: `beadloom search "<query>"`
 - If no ref_id is given: `list_nodes()` to discover the graph
 
 ## After changing code
@@ -38,9 +39,10 @@
 | `update_node` | Update node summary or source |
 | `mark_synced` | Mark doc-code pair as synchronized |
 | `generate_docs` | Enrichment data for AI doc polish |
-| `why` | Impact analysis (upstream deps + downstream dependents) |
-| `diff` | Show graph changes since a git ref |
-| `lint` | Run architecture lint rules, return violations as JSON |
+| `why` | Impact analysis — upstream and downstream deps |
+| `diff` | Graph changes since a git ref |
+| `lint` | Architecture boundary violations with severity |
+| `get_debt_report` | Architecture debt report with score and top offenders |
 
 ## Architecture Rules
 

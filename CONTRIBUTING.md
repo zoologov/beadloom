@@ -44,8 +44,8 @@ beadloom/
 │   ├── infrastructure/    # SQLite DB, reindex, health snapshots
 │   ├── onboarding/        # Bootstrap, doc generation, presets
 │   ├── services/
-│   │   ├── cli.py         # Click CLI (22 commands)
-│   │   └── mcp_server.py  # MCP server (13 tools, stdio)
+│   │   ├── cli.py         # Click CLI (29 commands)
+│   │   └── mcp_server.py  # MCP server (14 tools, stdio)
 │   └── tui/               # Interactive terminal dashboard
 ├── tests/                 # pytest test suite
 ├── docs/                  # Project documentation (indexed by beadloom)

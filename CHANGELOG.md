@@ -5,31 +5,73 @@ All notable changes to Beadloom are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.8.0] - 2026-02-20
+## [1.8.0] - 2026-02-21
 
-Interactive Architecture TUI (Phase 12.10). 207 TUI tests.
+C4 diagrams, debt reporting, interactive TUI, docs audit, agent instructions freshness, and 60+ UX fixes. 2527 tests.
 
 ### Added
-- **Multi-screen TUI** -- 3-screen architecture workstation with Dashboard, Explorer, and Doc Status screens (`beadloom tui`)
-- **7 data providers** -- thin read-only wrappers over existing infrastructure APIs (Graph, Lint, Sync, Debt, Activity, Why, Context)
-- **GraphTreeWidget** -- interactive architecture hierarchy tree with doc status indicators (fresh/stale/missing) and edge count badges
-- **DebtGaugeWidget** -- debt score display with severity coloring (green/yellow/red)
-- **LintPanelWidget** -- violation counts with severity icons and individual violation details
-- **ActivityWidget** -- per-domain git activity progress bars with color coding
-- **StatusBarWidget** -- health metrics, watcher status indicator, auto-dismissing notifications
-- **NodeDetailPanel** -- node deep-dive with ref_id, kind, summary, source, edges, doc status
-- **DependencyPathWidget** -- upstream/downstream dependency tree visualization with impact summary
-- **ContextPreviewWidget** -- context bundle preview with token estimation
-- **DocHealthTable** -- per-node documentation health table with coverage tracking and row selection
-- **FileWatcherWorker** -- background file watcher with 500ms debounce, extension filtering, `ReindexNeeded` messages
-- **SearchOverlay** -- modal FTS5 search with LIKE fallback and result navigation
-- **HelpOverlay** -- modal keybinding reference organized by context
-- **17 keyboard bindings** -- screen switching (1/2/3), navigation, actions (r/l/s/S), overlays (?//)
-- `beadloom tui` command (primary), `beadloom ui` kept as alias
-- `--no-watch` flag to disable file watcher
+- **C4 architecture diagrams** -- `beadloom graph --format=c4` (Mermaid C4 syntax) and `--format=c4-plantuml` (PlantUML with standard macros) (BDL-023)
+- **C4 drill-down levels** -- `--level=context|container|component` for multi-resolution views; `--scope=<ref-id>` for component-level diagrams (BDL-023)
+- **C4 external systems** -- `external: true` tag renders as `System_Ext`; database/storage tags render as `ContainerDb` (BDL-023)
+- **C4 level mapping** -- automatic level inference from `part_of` depth + kind heuristics (BDL-023)
+- **Architecture debt report** -- `beadloom status --debt-report` with aggregated score 0-100 and severity labels (BDL-024)
+- **Debt scoring formula** -- weighted: rule violations (errors x3 + warnings x1), doc gaps (undocumented x2 + stale x1), complexity smells (BDL-024)
+- **Debt CI gates** -- `--debt-report --json` for CI consumption; `--fail-if=score>N` and `--fail-if=errors>0` (BDL-024)
+- **Debt trend tracking** -- delta per category vs last snapshot; top offenders list ranked by debt contribution (BDL-024)
+- **MCP tool `get_debt_report`** -- debt report for AI agents (BDL-024)
+- **Multi-screen TUI** -- 3-screen architecture workstation with Dashboard, Explorer, and Doc Status screens (`beadloom tui`) (BDL-025)
+- **7 data providers** -- thin read-only wrappers over existing infrastructure APIs (Graph, Lint, Sync, Debt, Activity, Why, Context) (BDL-025)
+- **GraphTreeWidget** -- interactive architecture hierarchy tree with doc status indicators (fresh/stale/missing) and edge count badges (BDL-025)
+- **DebtGaugeWidget** -- debt score display with severity coloring (green/yellow/red) (BDL-025)
+- **LintPanelWidget** -- violation counts with severity icons and individual violation details (BDL-025)
+- **ActivityWidget** -- per-domain git activity progress bars with color coding (BDL-025)
+- **StatusBarWidget** -- health metrics, watcher status indicator, auto-dismissing notifications (BDL-025)
+- **NodeDetailPanel** -- node deep-dive with ref_id, kind, summary, source, edges, doc status (BDL-025)
+- **DependencyPathWidget** -- upstream/downstream dependency tree visualization with impact summary (BDL-025)
+- **ContextPreviewWidget** -- context bundle preview with token estimation (BDL-025)
+- **DocHealthTable** -- per-node documentation health table with coverage tracking and row selection (BDL-025)
+- **FileWatcherWorker** -- background file watcher with 500ms debounce, extension filtering, `ReindexNeeded` messages (BDL-025)
+- **SearchOverlay** -- modal FTS5 search with LIKE fallback and result navigation (BDL-025)
+- **HelpOverlay** -- modal keybinding reference organized by context (BDL-025)
+- **17 keyboard bindings** -- screen switching (1/2/3), navigation, actions (r/l/s/S), overlays (?//) (BDL-025)
+- `beadloom tui` command (primary), `beadloom ui` kept as alias (BDL-025)
+- `--no-watch` flag to disable file watcher (BDL-025)
+- **Docs audit** -- `beadloom docs audit` zero-config meta-doc staleness detection with fact registry (BDL-026, experimental)
+- **Fact registry** -- auto-compute version, node/edge/test counts, CLI commands, MCP tools (BDL-026)
+- **Doc scanner** -- keyword-proximity matching for fact verification; Rich color-coded output (stale/fresh/unmatched) (BDL-026)
+- **Docs audit CI gates** -- `--json` output, `--fail-if=stale>0` (BDL-026)
+- **Agent instructions freshness** -- `beadloom doctor` now checks CLAUDE.md and AGENTS.md for stale facts (BDL-030)
+- **6 fact extraction helpers** -- version, packages, CLI commands, MCP tools, stack, test framework (BDL-030)
+- **`beadloom setup-rules --refresh`** -- auto-update CLAUDE.md dynamic sections with `--dry-run` preview (BDL-030)
+- **`<!-- beadloom:auto-start/auto-end -->` markers** -- safe section regeneration for agent instruction files (BDL-030)
 
 ### Changed
-- Textual dependency upgraded from `>=0.50` to `>=0.80`
+- Textual dependency upgraded from `>=0.50` to `>=0.80` (BDL-025)
+- Explorer `e` keybinding opens any node including domain nodes (BDL-029)
+- Edge count legend uses `[N edges]` format instead of raw `[N]` (BDL-029)
+- Tree icons: fixed triangle display for childless nodes at cold start (BDL-029)
+- Doctor promoted undocumented nodes to WARNING severity (BDL-027)
+- Untracked file details included in debt report output (BDL-027)
+- Init now scans all code directories for React Native projects (BDL-027)
+
+### Fixed
+- **C4 depth computation** -- correct boundary nesting for deeply nested nodes (BDL-027)
+- **C4 label/description separation** -- labels no longer include description text (BDL-027)
+- **C4 self-referencing edges** -- filtered out to prevent diagram errors (BDL-027)
+- **C4 boundary ordering** -- stable ordering for deterministic diagram output (BDL-027)
+- **PlantUML level selection** -- correct C4 level passed to PlantUML output (BDL-027)
+- **Debt report oversized false positive** -- parent nodes no longer flagged incorrectly (BDL-027)
+- **Docs audit number filter** -- skip numbers <10 to avoid false matches (BDL-027)
+- **Docs audit year filter** -- year values excluded from staleness checks (BDL-027)
+- **Docs audit SPEC.md exclusion** -- specification files excluded from audit scope (BDL-027)
+- **Docs audit dynamic versioning** -- correct version detection for hatch-vcs projects (BDL-027)
+- **Docs audit full path display** -- show complete file paths in audit output (BDL-027)
+- **TUI aggregate parent test counts** -- parent nodes show sum of child test counts (BDL-027)
+- **TUI route extraction self-exclusion** -- node's own routes excluded from dependency view (BDL-027)
+- **TUI route formatting** -- consistent route display across widgets (BDL-027)
+- **File watcher thread shutdown** -- clean shutdown via `threading.Event` instead of daemon thread (BDL-028)
+- **Static widgets not updating** -- `update()` instead of `refresh()` after screen switch (BDL-028)
+- **Esc (Back) crash** -- `ScreenStackError` on `switch_screen` navigation fixed (BDL-029)
 
 ## [1.7.0] - 2026-02-17
 

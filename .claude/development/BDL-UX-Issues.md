@@ -1,8 +1,8 @@
 # BDL UX Feedback Log
 
 > Collected during development and dogfooding.
-> Total: 64 issues | Open: 0 | Excluded: 5 | Closed: 59
-> Last reviewed: BDL-030 (Agent Instructions Freshness) — no new UX issues discovered
+> Total: 64 issues | Open: 0 | Improvements: 1 | Excluded: 5 | Closed: 59
+> Last reviewed: BDL-030 (Agent Instructions Freshness)
 
 ---
 
@@ -11,6 +11,19 @@
 > Issues awaiting code fixes in Beadloom.
 
 _(none)_
+
+---
+
+## Improvements
+
+> Enhancement proposals for existing features. Not bugs — current behavior works but can be better.
+
+65. [2026-02-21] [MEDIUM] `docs audit` still has ~60% false positive rate on beadloom itself — 47 stale mentions reported, but most are false positives: threshold numbers (`>= 80%`), capability descriptions (`supports 12 languages`), example values in SPEC.md files, and years (`2026`). BDL-027 BEAD-02 fixed the worst cases (SPEC.md exclusion, year filter, skip numbers <10), but the matcher still lacks context awareness.
+    > **Recommended approach (3 layers):**
+    > 1. **Blocklist modifiers** — skip matches near `>=`, `up to`, `supports`, `limit`, `%`, `maximum`. Fastest win, cuts ~40% of FPs.
+    > 2. **Proximity scoring** — weight match by distance to fact-type keyword (e.g., number `13` near `MCP` = likely mcp_tool_count; `80` near `coverage` + `%` = threshold, not test_count).
+    > 3. **File-type heuristics** — lower confidence for SPEC.md, CONTRIBUTING.md, examples/; higher for README.md, AGENTS.md, CLAUDE.md.
+    > Pure semantic (LLM-based) analysis is overkill for a CLI tool. Pattern + proximity + file heuristics should achieve ~90% precision without architectural changes.
 
 ---
 
