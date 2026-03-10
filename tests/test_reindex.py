@@ -864,7 +864,7 @@ class TestSnapshotSyncBaselines:
     """Tests for _snapshot_sync_baselines helper."""
 
     def test_returns_correct_data(self, project: Path) -> None:
-        """Snapshot returns {ref_id: symbols_hash} from sync_state."""
+        """Snapshot returns (symbols_by_ref, pair_snapshots) from sync_state."""
         db_path = project / ".beadloom" / "beadloom.db"
         conn = open_db(db_path)
         create_schema(conn)
@@ -883,21 +883,24 @@ class TestSnapshotSyncBaselines:
         )
         conn.commit()
 
-        result = _snapshot_sync_baselines(conn)
-        assert result == {"F1": "abc123"}
+        symbols, pairs = _snapshot_sync_baselines(conn)
+        assert symbols == {"F1": "abc123"}
+        # No doc_hash_at_last_edit set, so pair_snapshots should be empty.
+        assert pairs == {}
         conn.close()
 
-    def test_returns_empty_dict_when_no_table(self, tmp_path: Path) -> None:
-        """Returns empty dict when sync_state table does not exist."""
+    def test_returns_empty_when_no_table(self, tmp_path: Path) -> None:
+        """Returns empty dicts when sync_state table does not exist."""
         db_path = tmp_path / "empty.db"
         conn = open_db(db_path)
         # Do NOT create schema — table doesn't exist.
-        result = _snapshot_sync_baselines(conn)
-        assert result == {}
+        symbols, pairs = _snapshot_sync_baselines(conn)
+        assert symbols == {}
+        assert pairs == {}
         conn.close()
 
     def test_skips_empty_hash(self, project: Path) -> None:
-        """Entries with empty symbols_hash are excluded."""
+        """Entries with empty symbols_hash are excluded from symbols dict."""
         db_path = project / ".beadloom" / "beadloom.db"
         conn = open_db(db_path)
         create_schema(conn)
@@ -915,8 +918,36 @@ class TestSnapshotSyncBaselines:
         )
         conn.commit()
 
-        result = _snapshot_sync_baselines(conn)
-        assert result == {}
+        symbols, pairs = _snapshot_sync_baselines(conn)
+        assert symbols == {}
+        assert pairs == {}
+        conn.close()
+
+    def test_preserves_two_phase_data(self, project: Path) -> None:
+        """Snapshot preserves doc_hash_at_last_edit and code_hash_at_sync."""
+        db_path = project / ".beadloom" / "beadloom.db"
+        conn = open_db(db_path)
+        create_schema(conn)
+
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary) VALUES (?, ?, ?)",
+            ("F1", "feature", "Feature 1"),
+        )
+        conn.execute(
+            "INSERT INTO sync_state "
+            "(doc_path, code_path, ref_id, code_hash_at_sync, doc_hash_at_sync, "
+            "synced_at, status, symbols_hash, doc_hash_at_last_edit) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("spec.md", "src/api.py", "F1", "ch1", "dh1", "2025-01-01", "ok", "sym1", "edit1"),
+        )
+        conn.commit()
+
+        symbols, pairs = _snapshot_sync_baselines(conn)
+        assert symbols == {"F1": "sym1"}
+        assert ("spec.md", "src/api.py") in pairs
+        pair = pairs[("spec.md", "src/api.py")]
+        assert pair.doc_hash_at_last_edit == "edit1"
+        assert pair.code_hash_at_sync == "ch1"
         conn.close()
 
 
@@ -1043,4 +1074,155 @@ class TestOldSymbolsEmptyDict:
         assert row["symbols_hash"] == baseline_hash, (
             "Incremental reindex should preserve baseline hash"
         )
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Bug #67: _load_rules_into_db must serialize ALL v3 rule types
+# ---------------------------------------------------------------------------
+
+_V3_RULES_YML = """\
+version: 3
+
+tags:
+  layer-service: [cli]
+  layer-domain: [routing]
+  layer-infra: [infra]
+
+rules:
+  - name: r-require
+    description: "Require rule"
+    require:
+      for: { kind: domain }
+      has_edge_to: { ref_id: root }
+      edge_kind: part_of
+
+  - name: r-deny
+    description: "Deny rule"
+    deny:
+      from: { kind: domain }
+      to: { kind: service }
+
+  - name: r-forbid-cycles
+    description: "Cycle rule"
+    severity: warn
+    forbid_cycles:
+      edge_kind: depends_on
+
+  - name: r-layers
+    description: "Layer rule"
+    severity: warn
+    layers:
+      - name: services
+        tag: layer-service
+      - name: domains
+        tag: layer-domain
+      - name: infrastructure
+        tag: layer-infra
+    enforce: top-down
+    allow_skip: true
+    edge_kind: depends_on
+
+  - name: r-cardinality
+    description: "Cardinality rule"
+    severity: warn
+    check:
+      for: { kind: domain }
+      max_symbols: 200
+
+  - name: r-forbid-import
+    description: "Import boundary rule"
+    forbid_import:
+      from: "src/tui/**"
+      to: "src/infra/**"
+
+  - name: r-forbid-edge
+    description: "Forbid edge rule"
+    forbid:
+      from: { kind: domain }
+      to: { kind: service }
+"""
+
+
+class TestLoadAllV3RuleTypes:
+    """Bug #67: _load_rules_into_db must not silently skip v3 rule types."""
+
+    def test_all_seven_rule_types_loaded_into_db(
+        self, project: Path, db_path: Path
+    ) -> None:
+        """After reindex with 7 v3 rules, all 7 should be in the DB."""
+        graph_dir = project / ".beadloom" / "_graph"
+        (graph_dir / "rules.yml").write_text(_V3_RULES_YML)
+        result = reindex(project)
+
+        assert result.rules_loaded == 7, (
+            f"Expected 7 rules loaded, got {result.rules_loaded}"
+        )
+
+        conn = open_db(db_path)
+        count = conn.execute("SELECT COUNT(*) FROM rules").fetchone()[0]
+        assert count == 7, f"Expected 7 rules in DB, got {count}"
+
+        # Verify each rule type is present
+        rows = conn.execute("SELECT name, rule_type FROM rules ORDER BY name").fetchall()
+        type_map = {row["name"]: row["rule_type"] for row in rows}
+        assert type_map["r-require"] == "require"
+        assert type_map["r-deny"] == "deny"
+        assert type_map["r-forbid-cycles"] == "forbid_cycles"
+        assert type_map["r-layers"] == "layers"
+        assert type_map["r-cardinality"] == "cardinality"
+        assert type_map["r-forbid-import"] == "forbid_import"
+        assert type_map["r-forbid-edge"] == "forbid_edge"
+        conn.close()
+
+    def test_rule_json_contains_expected_keys(
+        self, project: Path, db_path: Path
+    ) -> None:
+        """Each rule type should have meaningful JSON serialization."""
+        graph_dir = project / ".beadloom" / "_graph"
+        (graph_dir / "rules.yml").write_text(_V3_RULES_YML)
+        reindex(project)
+
+        conn = open_db(db_path)
+        import json as _json
+
+        # Check cycle rule JSON
+        row = conn.execute(
+            "SELECT rule_json FROM rules WHERE name = ?", ("r-forbid-cycles",)
+        ).fetchone()
+        data = _json.loads(row["rule_json"])
+        assert "edge_kind" in data
+
+        # Check layer rule JSON
+        row = conn.execute(
+            "SELECT rule_json FROM rules WHERE name = ?", ("r-layers",)
+        ).fetchone()
+        data = _json.loads(row["rule_json"])
+        assert "layers" in data
+        assert "enforce" in data
+
+        # Check cardinality rule JSON
+        row = conn.execute(
+            "SELECT rule_json FROM rules WHERE name = ?", ("r-cardinality",)
+        ).fetchone()
+        data = _json.loads(row["rule_json"])
+        assert "for" in data
+        assert "max_symbols" in data
+
+        # Check forbid_import rule JSON
+        row = conn.execute(
+            "SELECT rule_json FROM rules WHERE name = ?", ("r-forbid-import",)
+        ).fetchone()
+        data = _json.loads(row["rule_json"])
+        assert "from_glob" in data
+        assert "to_glob" in data
+
+        # Check forbid_edge rule JSON
+        row = conn.execute(
+            "SELECT rule_json FROM rules WHERE name = ?", ("r-forbid-edge",)
+        ).fetchone()
+        data = _json.loads(row["rule_json"])
+        assert "from" in data
+        assert "to" in data
+
         conn.close()

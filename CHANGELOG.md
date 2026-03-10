@@ -5,6 +5,22 @@ All notable changes to Beadloom are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-03-10
+
+Data accuracy, docs audit precision, and sync-check reliability. 6 UX issues resolved, 43 new tests. 2580 tests total.
+
+### Fixed
+- **Rules DB completeness** -- `_load_rules_into_db()` now handles all 9 v3 rule types (`ForbidCyclesRule`, `LayerRule`, `CardinalityRule`, `ForbidImportRule`, `ForbidEdgeRule`) instead of silently dropping 5 of 9 (BDL-034, UX #67)
+- **Rule type labels** -- `_build_rules_section()` and `_read_rules_data()` detect all 7 YAML rule keys (`require`, `deny`, `forbid_cycles`, `layers`, `check`, `forbid_import`, `forbid_edge`) instead of binary require/deny classification (BDL-034, UX #68)
+- **AGENTS.md regeneration** -- replaced `## Custom` marker with `<!-- beadloom:custom-start/end -->` HTML comment markers to prevent content duplication on `setup-rules --refresh` (BDL-034, UX #69)
+
+### Changed
+- **Docs audit false positive rate** -- reduced from ~60% to ~11% via three-layer filtering: blocklist modifiers (`>=`, `%`, `up to`), proximity scoring (keyword-distance weighting), and file-type heuristics (lower confidence for SPEC.md, CONTRIBUTING.md) (BDL-034, UX #65)
+- **Two-phase sync-check** -- added `doc_hash_at_last_edit` column to `sync_state` table; `sync-check` now detects code changes since last doc edit, preventing `reindex` from masking stale documentation (BDL-034, UX #70)
+
+### Verified
+- **Snapshot diffing** -- confirmed `beadloom snapshot save/list/compare` CLI commands and `compare_snapshots()` diff logic already fully functional (BDL-034, UX #66 — closed as already resolved)
+
 ## [1.8.0] - 2026-02-21
 
 C4 diagrams, debt reporting, interactive TUI, docs audit, agent instructions freshness, enhanced architecture rules, and 60+ UX fixes. 2537 tests.

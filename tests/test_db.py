@@ -313,3 +313,88 @@ class TestMeta:
         set_meta(conn, "k", "v1")
         set_meta(conn, "k", "v2")
         assert get_meta(conn, "k") == "v2"
+
+
+class TestTwoPhaseSyncMigration:
+    """Tests for doc_hash_at_last_edit column migration (#70)."""
+
+    def test_column_exists_after_fresh_schema(self, tmp_path: Path) -> None:
+        """Fresh schema creation should include doc_hash_at_last_edit column."""
+        db_path = tmp_path / "test.db"
+        c = open_db(db_path)
+        create_schema(c)
+        columns = {row[1] for row in c.execute("PRAGMA table_info(sync_state)").fetchall()}
+        assert "doc_hash_at_last_edit" in columns
+        c.close()
+
+    def test_column_exists_after_migration(self, tmp_path: Path) -> None:
+        """Existing DB without doc_hash_at_last_edit should gain it via migration."""
+        db_path = tmp_path / "test.db"
+        c = open_db(db_path)
+        # Create a minimal sync_state without the new column.
+        c.executescript(
+            "CREATE TABLE IF NOT EXISTS nodes ("
+            "  ref_id TEXT PRIMARY KEY,"
+            "  kind TEXT NOT NULL,"
+            "  summary TEXT DEFAULT ''"
+            ");"
+            "CREATE TABLE IF NOT EXISTS sync_state ("
+            "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "  doc_path TEXT NOT NULL,"
+            "  code_path TEXT NOT NULL,"
+            "  ref_id TEXT NOT NULL,"
+            "  code_hash_at_sync TEXT NOT NULL,"
+            "  doc_hash_at_sync TEXT NOT NULL,"
+            "  synced_at TEXT NOT NULL,"
+            "  status TEXT NOT NULL DEFAULT 'ok',"
+            "  symbols_hash TEXT DEFAULT '',"
+            "  UNIQUE(doc_path, code_path)"
+            ");"
+        )
+        # Verify column is NOT there yet.
+        columns_before = {
+            row[1] for row in c.execute("PRAGMA table_info(sync_state)").fetchall()
+        }
+        assert "doc_hash_at_last_edit" not in columns_before
+
+        # Run migration.
+        from beadloom.infrastructure.db import ensure_schema_migrations
+
+        ensure_schema_migrations(c)
+
+        columns_after = {
+            row[1] for row in c.execute("PRAGMA table_info(sync_state)").fetchall()
+        }
+        assert "doc_hash_at_last_edit" in columns_after
+        c.close()
+
+    def test_migration_idempotent(self, tmp_path: Path) -> None:
+        """Running migration twice should not raise an error."""
+        db_path = tmp_path / "test.db"
+        c = open_db(db_path)
+        create_schema(c)
+        # Second call should be safe.
+        from beadloom.infrastructure.db import ensure_schema_migrations
+
+        ensure_schema_migrations(c)
+        columns = {row[1] for row in c.execute("PRAGMA table_info(sync_state)").fetchall()}
+        assert "doc_hash_at_last_edit" in columns
+        c.close()
+
+    def test_default_value_is_empty_string(self, tmp_path: Path) -> None:
+        """New column should default to empty string for backward compatibility."""
+        db_path = tmp_path / "test.db"
+        c = open_db(db_path)
+        create_schema(c)
+        c.execute(
+            "INSERT INTO nodes (ref_id, kind, summary) VALUES ('N1', 'feature', 'test')"
+        )
+        c.execute(
+            "INSERT INTO sync_state (doc_path, code_path, ref_id, "
+            "code_hash_at_sync, doc_hash_at_sync, synced_at) "
+            "VALUES ('d.md', 'c.py', 'N1', 'ch', 'dh', '2026-01-01')"
+        )
+        c.commit()
+        row = c.execute("SELECT doc_hash_at_last_edit FROM sync_state").fetchone()
+        assert row[0] == ""
+        c.close()

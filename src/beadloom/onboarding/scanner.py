@@ -964,8 +964,37 @@ _AGENTS_MD_TEMPLATE_V2 = """\
 
 {rules_section}## Custom
 
+<!-- beadloom:custom-start -->
 <!-- Add project-specific instructions below this line -->
+<!-- beadloom:custom-end -->
 """
+
+
+def _detect_rule_type(rule: dict[str, object]) -> str:
+    """Detect the rule type from a rules.yml rule entry.
+
+    Maps YAML keys to canonical type strings used in DB and display:
+    - ``require`` -> ``"require"``
+    - ``deny`` -> ``"deny"``
+    - ``forbid_cycles`` -> ``"forbid_cycles"``
+    - ``layers`` -> ``"layers"``
+    - ``check`` -> ``"cardinality"``
+    - ``forbid_import`` -> ``"forbid_import"``
+    - ``forbid`` -> ``"forbid_edge"``
+    """
+    yaml_key_to_type: dict[str, str] = {
+        "require": "require",
+        "deny": "deny",
+        "forbid_cycles": "forbid_cycles",
+        "layers": "layers",
+        "check": "cardinality",
+        "forbid_import": "forbid_import",
+        "forbid": "forbid_edge",
+    }
+    for key, rule_type in yaml_key_to_type.items():
+        if key in rule:
+            return rule_type
+    return "unknown"
 
 
 def _build_rules_section(project_root: Path) -> str:
@@ -982,7 +1011,7 @@ def _build_rules_section(project_root: Path) -> str:
     for rule in data["rules"]:
         name = rule.get("name", "unnamed")
         description = rule.get("description", "")
-        rule_type = "require" if "require" in rule else "deny"
+        rule_type = _detect_rule_type(rule)
         if description:
             lines.append(f"- **{name}** ({rule_type}): {description}")
         else:
@@ -994,40 +1023,62 @@ def _build_rules_section(project_root: Path) -> str:
 def generate_agents_md(project_root: Path) -> Path:
     """Generate .beadloom/AGENTS.md with agent instructions.
 
-    Preserves user content below '## Custom' marker on regeneration.
+    Preserves user content between ``<!-- beadloom:custom-start -->`` and
+    ``<!-- beadloom:custom-end -->`` markers on regeneration.  Old-format
+    files using only ``## Custom`` / the legacy HTML comment are migrated
+    automatically.
+
     Returns the path to the generated file.
     """
     beadloom_dir = project_root / ".beadloom"
     beadloom_dir.mkdir(parents=True, exist_ok=True)
     agents_path = beadloom_dir / "AGENTS.md"
 
-    # Preserve user content below ## Custom.
-    # Two markers: the HTML comment (preferred) and the heading (fallback).
+    custom_start = "<!-- beadloom:custom-start -->"
+    custom_end = "<!-- beadloom:custom-end -->"
+    legacy_comment = "<!-- Add project-specific instructions below this line -->"
+
+    # ------------------------------------------------------------------
+    # Extract user content from existing file (if any).
+    # ------------------------------------------------------------------
     custom_content = ""
     if agents_path.exists():
         text = agents_path.read_text(encoding="utf-8")
-        comment_marker = "<!-- Add project-specific instructions below this line -->"
-        heading_marker = "## Custom"
-        cidx = text.find(comment_marker)
-        if cidx != -1:
-            # Take everything after the HTML comment (user content only).
-            custom_content = text[cidx + len(comment_marker) :]
+
+        sidx = text.find(custom_start)
+        eidx = text.find(custom_end)
+        if sidx != -1 and eidx != -1 and eidx > sidx:
+            # New-format: extract between the two markers (exclusive).
+            custom_content = text[sidx + len(custom_start) : eidx]
         else:
-            # Comment was removed — fall back to heading.
-            hidx = text.find(heading_marker)
-            if hidx != -1:
-                custom_content = text[hidx + len(heading_marker) :]
+            # Legacy fallback: look for old HTML comment, then ## Custom.
+            cidx = text.find(legacy_comment)
+            if cidx != -1:
+                custom_content = text[cidx + len(legacy_comment) :]
+            else:
+                hidx = text.find("## Custom")
+                if hidx != -1:
+                    custom_content = text[hidx + len("## Custom") :]
 
-    # Build rules section from rules.yml
+    # Strip the legacy comment from preserved content so it is not
+    # duplicated inside the new markers (template already includes it).
+    custom_content = custom_content.replace(legacy_comment, "").strip()
+
+    # ------------------------------------------------------------------
+    # Render fresh template.
+    # ------------------------------------------------------------------
     rules_section = _build_rules_section(project_root)
-
-    # Render template
     content = _AGENTS_MD_TEMPLATE_V2.format(rules_section=rules_section)
 
-    # Append preserved custom content (strip to avoid trailing growth)
-    stripped_custom = custom_content.strip()
-    if stripped_custom:
-        content = content.rstrip() + "\n" + stripped_custom + "\n"
+    # ------------------------------------------------------------------
+    # Inject preserved custom content between the markers.
+    # ------------------------------------------------------------------
+    if custom_content:
+        placeholder = f"{custom_start}\n{legacy_comment}\n{custom_end}"
+        replacement = (
+            f"{custom_start}\n{custom_content}\n{custom_end}"
+        )
+        content = content.replace(placeholder, replacement)
 
     agents_path.write_text(content, encoding="utf-8")
     return agents_path
@@ -1048,7 +1099,7 @@ def _read_rules_data(project_root: Path) -> list[dict[str, str]]:
         return []
     result: list[dict[str, str]] = []
     for rule in data["rules"]:
-        rule_type = "require" if "require" in rule else "deny"
+        rule_type = _detect_rule_type(rule)
         result.append(
             {
                 "name": rule.get("name", "unnamed"),

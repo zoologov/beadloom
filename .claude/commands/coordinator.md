@@ -370,3 +370,23 @@ Output for the user:
 │ Next wave: BEAD-05 (waiting on 02, 03)                  │
 └─────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Beadloom UX Feedback (Dogfooding)
+
+> **MANDATORY:** We use Beadloom as our project management tool. Collect UX feedback to improve it.
+
+**File:** `.claude/development/BDL-UX-Issues.md`
+
+**When to log:**
+- Any Beadloom command that fails unexpectedly or gives confusing output
+- Friction points in the workflow (e.g., too many steps, unclear error messages)
+- Missing features that would help the current task
+- Surprising behavior or inconsistencies
+
+**Who logs:**
+- **Coordinator** — logs issues encountered during orchestration (prime, graph, lint, sync-check)
+- **Sub-agents** — report Beadloom issues in bead comments; coordinator transfers to UX file
+
+**Format:** Follow the template in `BDL-UX-Issues.md`

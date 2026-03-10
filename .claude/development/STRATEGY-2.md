@@ -1,8 +1,8 @@
 # Beadloom: Strategy 2 — Architecture Infrastructure for the AI Agent Era
 
-> **Status:** Active (Phases 8-12.13 complete, v1.8.0 released, Phase 13+ planned)
-> **Date:** 2026-02-21 (revision 12)
-> **Current version:** 1.8.0
+> **Status:** Active (Phases 8-12.13 complete, v1.9.0 released, Phase 13+ planned)
+> **Date:** 2026-03-10 (revision 13)
+> **Current version:** 1.9.0
 > **Predecessor:** STRATEGY.md (Phases 1-6, all completed)
 > **Sources:** STRATEGY.md, BACKLOG.md §2-§6, BDL-UX-Issues.md, competitive analysis February 2026
 

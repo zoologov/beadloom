@@ -96,20 +96,50 @@ class ReindexResult:
     warnings: list[str] = field(default_factory=list)
 
 
-def _snapshot_sync_baselines(conn: sqlite3.Connection) -> dict[str, str]:
-    """Snapshot symbols_hash from sync_state before table drop.
+@dataclass
+class _SyncPairSnapshot:
+    """Preserved per-pair sync data across reindex for two-phase detection."""
 
-    Returns {ref_id: symbols_hash} for all entries with non-empty hash.
-    Returns empty dict if sync_state doesn't exist yet.
+    doc_hash_at_last_edit: str
+    code_hash_at_sync: str
+
+
+def _snapshot_sync_baselines(
+    conn: sqlite3.Connection,
+) -> tuple[dict[str, str], dict[tuple[str, str], _SyncPairSnapshot]]:
+    """Snapshot sync_state data before table drop.
+
+    Returns
+    -------
+    tuple[dict[str, str], dict[tuple[str, str], _SyncPairSnapshot]]
+        ``(symbols_by_ref, pair_snapshots)`` where:
+        - *symbols_by_ref* maps ``ref_id -> symbols_hash`` for symbol drift detection
+        - *pair_snapshots* maps ``(doc_path, code_path) -> _SyncPairSnapshot``
+          preserving two-phase sync data across reindex
     """
     try:
         rows = conn.execute(
-            "SELECT ref_id, symbols_hash FROM sync_state "
-            "WHERE symbols_hash IS NOT NULL AND symbols_hash != ''"
+            "SELECT ref_id, symbols_hash, doc_path, code_path, "
+            "doc_hash_at_last_edit, code_hash_at_sync FROM sync_state"
         ).fetchall()
-        return {row[0]: row[1] for row in rows}
     except Exception:  # Table doesn't exist on first run
-        return {}
+        return {}, {}
+
+    symbols: dict[str, str] = {}
+    pairs: dict[tuple[str, str], _SyncPairSnapshot] = {}
+    for row in rows:
+        sym_hash: str = row["symbols_hash"] or ""
+        if sym_hash:
+            symbols[row["ref_id"]] = sym_hash
+        # sqlite3.Row `in` checks values not keys; use .keys()
+        has_edit_col = "doc_hash_at_last_edit" in row.keys()  # noqa: SIM118
+        edit_hash: str = row["doc_hash_at_last_edit"] if has_edit_col else ""
+        if edit_hash:
+            pairs[(row["doc_path"], row["code_path"])] = _SyncPairSnapshot(
+                doc_hash_at_last_edit=edit_hash,
+                code_hash_at_sync=row["code_hash_at_sync"],
+            )
+    return symbols, pairs
 
 
 def _drop_all_tables(conn: sqlite3.Connection) -> None:
@@ -233,6 +263,7 @@ def _build_initial_sync_state(
     conn: sqlite3.Connection,
     *,
     preserved_symbols: dict[str, str] | None = None,
+    preserved_pairs: dict[tuple[str, str], _SyncPairSnapshot] | None = None,
 ) -> None:
     """Populate sync_state table from docs and code_symbols with shared ref_ids.
 
@@ -245,28 +276,163 @@ def _build_initial_sync_state(
         (new/removed public symbols since the last time docs were marked
         synced).  When *None* (default), a fresh hash is computed — used on
         first full reindex to establish a baseline.
+    preserved_pairs:
+        Optional mapping of ``(doc_path, code_path) → _SyncPairSnapshot``
+        from a previous sync state.  When provided, ``doc_hash_at_last_edit``
+        is preserved across reindex so that two-phase sync detection can
+        identify docs that haven't been updated since code changed.
+        If the doc hasn't been edited since the last known edit, the old
+        ``code_hash_at_sync`` baseline is also preserved (not reset to
+        current) so that :func:`~beadloom.doc_sync.engine.check_sync` can
+        detect code drift relative to the last doc edit.
     """
     from beadloom.doc_sync.engine import _compute_symbols_hash, build_sync_state
 
     now = datetime.now(tz=timezone.utc).isoformat()
     pairs = build_sync_state(conn)
     for pair in pairs:
+        pair_key = (pair.doc_path, pair.code_path)
+        snapshot = (preserved_pairs or {}).get(pair_key)
+
+        # Two-phase sync: if doc_hash_at_last_edit is set and doc hasn't
+        # been edited since, preserve the old code_hash_at_sync baseline
+        # so check_sync can detect code drift since last doc edit.
+        if (
+            snapshot is not None
+            and snapshot.doc_hash_at_last_edit
+            and snapshot.doc_hash_at_last_edit == pair.doc_hash
+        ):
+            # Doc unchanged since last edit — keep old code baseline.
+            effective_code_hash = snapshot.code_hash_at_sync
+        else:
+            effective_code_hash = pair.code_hash
+
         conn.execute(
             "INSERT OR IGNORE INTO sync_state "
             "(doc_path, code_path, ref_id, code_hash_at_sync, doc_hash_at_sync, "
             "synced_at, status) VALUES (?, ?, ?, ?, ?, ?, 'ok')",
-            (pair.doc_path, pair.code_path, pair.ref_id, pair.code_hash, pair.doc_hash, now),
+            (pair.doc_path, pair.code_path, pair.ref_id, effective_code_hash, pair.doc_hash, now),
         )
         # Preserve old symbols hash to detect drift, or compute fresh baseline.
         if preserved_symbols is not None and pair.ref_id in preserved_symbols:
             symbols_hash = preserved_symbols[pair.ref_id]
         else:
             symbols_hash = _compute_symbols_hash(conn, pair.ref_id)
+
+        # Preserve doc_hash_at_last_edit from previous state.
+        doc_hash_at_last_edit = snapshot.doc_hash_at_last_edit if snapshot else ""
+
         conn.execute(
-            "UPDATE sync_state SET symbols_hash = ? WHERE doc_path = ? AND code_path = ?",
-            (symbols_hash, pair.doc_path, pair.code_path),
+            "UPDATE sync_state SET symbols_hash = ?, doc_hash_at_last_edit = ? "
+            "WHERE doc_path = ? AND code_path = ?",
+            (symbols_hash, doc_hash_at_last_edit, pair.doc_path, pair.code_path),
         )
     conn.commit()
+
+
+def _serialize_node_matcher(matcher: object) -> dict[str, object]:
+    """Serialize a NodeMatcher to a JSON-safe dict (non-None fields only)."""
+    from beadloom.graph.rule_engine import NodeMatcher
+
+    assert isinstance(matcher, NodeMatcher)
+    result: dict[str, object] = {}
+    if matcher.ref_id is not None:
+        result["ref_id"] = matcher.ref_id
+    if matcher.kind is not None:
+        result["kind"] = matcher.kind
+    if matcher.tag is not None:
+        result["tag"] = matcher.tag
+    if matcher.exclude is not None:
+        result["exclude"] = list(matcher.exclude)
+    return result
+
+
+def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
+    """Serialize a parsed Rule object to (rule_type, rule_json_dict).
+
+    Supports all 7 v3 rule types: DenyRule, RequireRule, CycleRule,
+    ImportBoundaryRule, ForbidEdgeRule, LayerRule, CardinalityRule.
+    """
+    from beadloom.graph.rule_engine import (
+        CardinalityRule,
+        CycleRule,
+        DenyRule,
+        ForbidEdgeRule,
+        ImportBoundaryRule,
+        LayerRule,
+        RequireRule,
+    )
+
+    rule_def: dict[str, object]
+
+    if isinstance(rule, DenyRule):
+        rule_def = {
+            "from": _serialize_node_matcher(rule.from_matcher),
+            "to": _serialize_node_matcher(rule.to_matcher),
+        }
+        if rule.unless_edge:
+            rule_def["unless_edge"] = list(rule.unless_edge)
+        return ("deny", rule_def)
+
+    if isinstance(rule, RequireRule):
+        rule_def = {
+            "for": _serialize_node_matcher(rule.for_matcher),
+            "has_edge_to": _serialize_node_matcher(rule.has_edge_to),
+        }
+        if rule.edge_kind is not None:
+            rule_def["edge_kind"] = rule.edge_kind
+        return ("require", rule_def)
+
+    if isinstance(rule, CycleRule):
+        edge_kind: str | list[str] = (
+            list(rule.edge_kind) if isinstance(rule.edge_kind, tuple) else rule.edge_kind
+        )
+        rule_def = {
+            "edge_kind": edge_kind,
+            "max_depth": rule.max_depth,
+        }
+        return ("forbid_cycles", rule_def)
+
+    if isinstance(rule, LayerRule):
+        rule_def = {
+            "layers": [{"name": ld.name, "tag": ld.tag} for ld in rule.layers],
+            "enforce": rule.enforce,
+            "allow_skip": rule.allow_skip,
+            "edge_kind": rule.edge_kind,
+        }
+        return ("layers", rule_def)
+
+    if isinstance(rule, CardinalityRule):
+        rule_def = {
+            "for": _serialize_node_matcher(rule.for_matcher),
+        }
+        if rule.max_symbols is not None:
+            rule_def["max_symbols"] = rule.max_symbols
+        if rule.max_files is not None:
+            rule_def["max_files"] = rule.max_files
+        if rule.min_doc_coverage is not None:
+            rule_def["min_doc_coverage"] = rule.min_doc_coverage
+        return ("cardinality", rule_def)
+
+    if isinstance(rule, ImportBoundaryRule):
+        rule_def = {
+            "from_glob": rule.from_glob,
+            "to_glob": rule.to_glob,
+        }
+        return ("forbid_import", rule_def)
+
+    if isinstance(rule, ForbidEdgeRule):
+        rule_def = {
+            "from": _serialize_node_matcher(rule.from_matcher),
+            "to": _serialize_node_matcher(rule.to_matcher),
+        }
+        if rule.edge_kind is not None:
+            rule_def["edge_kind"] = rule.edge_kind
+        return ("forbid_edge", rule_def)
+
+    # Should never happen with known Rule types, but guard against future additions.
+    msg = f"Unknown rule type: {type(rule).__name__}"
+    raise TypeError(msg)
 
 
 def _load_rules_into_db(
@@ -275,7 +441,7 @@ def _load_rules_into_db(
     result: ReindexResult,
 ) -> None:
     """Load architecture rules from rules.yml into the rules table."""
-    from beadloom.graph.rule_engine import DenyRule, RequireRule, load_rules
+    from beadloom.graph.rule_engine import load_rules
 
     try:
         rules = load_rules(rules_path)
@@ -284,48 +450,7 @@ def _load_rules_into_db(
         return
 
     for rule in rules:
-        if isinstance(rule, DenyRule):
-            rule_type = "deny"
-            rule_def: dict[str, object] = {
-                "from": {},
-                "to": {},
-            }
-            from_dict = rule_def["from"]
-            assert isinstance(from_dict, dict)
-            to_dict = rule_def["to"]
-            assert isinstance(to_dict, dict)
-            if rule.from_matcher.ref_id is not None:
-                from_dict["ref_id"] = rule.from_matcher.ref_id
-            if rule.from_matcher.kind is not None:
-                from_dict["kind"] = rule.from_matcher.kind
-            if rule.to_matcher.ref_id is not None:
-                to_dict["ref_id"] = rule.to_matcher.ref_id
-            if rule.to_matcher.kind is not None:
-                to_dict["kind"] = rule.to_matcher.kind
-            if rule.unless_edge:
-                rule_def["unless_edge"] = list(rule.unless_edge)
-        elif isinstance(rule, RequireRule):
-            rule_type = "require"
-            rule_def = {
-                "for": {},
-                "has_edge_to": {},
-            }
-            for_dict = rule_def["for"]
-            assert isinstance(for_dict, dict)
-            has_edge_dict = rule_def["has_edge_to"]
-            assert isinstance(has_edge_dict, dict)
-            if rule.for_matcher.ref_id is not None:
-                for_dict["ref_id"] = rule.for_matcher.ref_id
-            if rule.for_matcher.kind is not None:
-                for_dict["kind"] = rule.for_matcher.kind
-            if rule.has_edge_to.ref_id is not None:
-                has_edge_dict["ref_id"] = rule.has_edge_to.ref_id
-            if rule.has_edge_to.kind is not None:
-                has_edge_dict["kind"] = rule.has_edge_to.kind
-            if rule.edge_kind is not None:
-                rule_def["edge_kind"] = rule.edge_kind
-        else:
-            continue  # pragma: no cover
+        rule_type, rule_def = _serialize_rule(rule)
 
         conn.execute(
             "INSERT INTO rules (name, description, rule_type, rule_json, enabled) "
@@ -598,7 +723,7 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
     conn = open_db(db_path)
 
     # Snapshot sync baselines before drop.
-    preserved = _snapshot_sync_baselines(conn)
+    preserved_symbols, preserved_pairs = _snapshot_sync_baselines(conn)
 
     # Drop + re-create.
     _drop_all_tables(conn)
@@ -674,7 +799,11 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
     _extract_and_store_routes(project_root, conn)
 
     # 4. Build initial sync state.
-    _build_initial_sync_state(conn, preserved_symbols=preserved)
+    _build_initial_sync_state(
+        conn,
+        preserved_symbols=preserved_symbols,
+        preserved_pairs=preserved_pairs,
+    )
 
     # 5. Populate FTS5 search index.
     from beadloom.context_oracle.search import populate_search_index
@@ -1048,12 +1177,21 @@ def incremental_reindex(
     else:
         ref_map = {}
 
-    # Snapshot symbols_hash BEFORE deleting/re-indexing files so we can
-    # preserve the baseline for symbol drift detection.
+    # Snapshot symbols_hash and two-phase data BEFORE deleting/re-indexing
+    # files so we can preserve baselines for drift detection.
     old_symbols: dict[str, str] = {}
-    for row in conn.execute("SELECT ref_id, symbols_hash FROM sync_state").fetchall():
-        if row[1]:  # symbols_hash is non-empty
-            old_symbols[row[0]] = row[1]
+    old_pairs: dict[tuple[str, str], _SyncPairSnapshot] = {}
+    for row in conn.execute("SELECT * FROM sync_state").fetchall():
+        if row["symbols_hash"]:
+            old_symbols[row["ref_id"]] = row["symbols_hash"]
+        # sqlite3.Row `in` checks values not keys; use .keys()
+        has_edit_col = "doc_hash_at_last_edit" in row.keys()  # noqa: SIM118
+        edit_hash: str = row["doc_hash_at_last_edit"] if has_edit_col else ""
+        if edit_hash:
+            old_pairs[(row["doc_path"], row["code_path"])] = _SyncPairSnapshot(
+                doc_hash_at_last_edit=edit_hash,
+                code_hash_at_sync=row["code_hash_at_sync"],
+            )
 
     # Process deleted files.
     for path in deleted:
@@ -1126,10 +1264,13 @@ def incremental_reindex(
     # Re-extract routes after code changes and update nodes.extra.
     _extract_and_store_routes(project_root, conn)
 
-    # Rebuild sync_state (cheap full rebuild) using preserved symbols_hash.
+    # Rebuild sync_state (cheap full rebuild) using preserved baselines.
     conn.execute("DELETE FROM sync_state")
-    preserved = old_symbols if old_symbols is not None else None
-    _build_initial_sync_state(conn, preserved_symbols=preserved)
+    _build_initial_sync_state(
+        conn,
+        preserved_symbols=old_symbols or None,
+        preserved_pairs=old_pairs or None,
+    )
 
     # Rebuild FTS5 search index.
     from beadloom.context_oracle.search import populate_search_index

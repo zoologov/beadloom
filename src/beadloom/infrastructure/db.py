@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS sync_state (
     synced_at       TEXT NOT NULL,
     status          TEXT NOT NULL DEFAULT 'ok' CHECK(status IN ('ok','stale')),
     symbols_hash    TEXT DEFAULT '',
+    doc_hash_at_last_edit TEXT DEFAULT '',
     UNIQUE(doc_path, code_path)
 );
 
@@ -158,7 +159,10 @@ CREATE TABLE IF NOT EXISTS rules (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     name        TEXT NOT NULL UNIQUE,
     description TEXT NOT NULL DEFAULT '',
-    rule_type   TEXT NOT NULL CHECK(rule_type IN ('deny', 'require')),
+    rule_type   TEXT NOT NULL CHECK(rule_type IN (
+        'deny', 'require', 'forbid_cycles', 'layers',
+        'cardinality', 'forbid_import', 'forbid_edge'
+    )),
     rule_json   TEXT NOT NULL,
     enabled     INTEGER NOT NULL DEFAULT 1
 );
@@ -197,11 +201,15 @@ def ensure_schema_migrations(conn: sqlite3.Connection) -> None:
     """Apply incremental schema migrations for new columns.
 
     Handles the case where tables already exist but lack newer columns
-    (e.g. ``symbols_hash`` added in BEAD-08).  Safe to call multiple times.
+    (e.g. ``symbols_hash`` added in BEAD-08, ``doc_hash_at_last_edit``
+    added for two-phase sync in BDL-034 #70).  Safe to call multiple times.
     """
     columns = {row[1] for row in conn.execute("PRAGMA table_info(sync_state)").fetchall()}
     if "symbols_hash" not in columns:
         conn.execute("ALTER TABLE sync_state ADD COLUMN symbols_hash TEXT DEFAULT ''")
+        conn.commit()
+    if "doc_hash_at_last_edit" not in columns:
+        conn.execute("ALTER TABLE sync_state ADD COLUMN doc_hash_at_last_edit TEXT DEFAULT ''")
         conn.commit()
 
 

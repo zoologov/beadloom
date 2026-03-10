@@ -70,6 +70,58 @@ _YEAR_STANDALONE_RE = re.compile(r"\b20[0-9]{2}\b")
 # Bare number (integer) in text
 _NUMBER_RE = re.compile(r"\b\d+\b")
 
+# Backtick-enclosed inline code: `mcp-server`, `depth=2`
+_BACKTICK_RE = re.compile(r"`[^`]+`")
+
+# Numeric range pattern: 0-100, 1-10, etc.
+_RANGE_RE = re.compile(r"\b\d+-\d+\b")
+
+# ---------------------------------------------------------------------------
+# Layer 1: Blocklist modifier words — numbers near these are NOT factual claims
+# ---------------------------------------------------------------------------
+
+# Single-word modifiers: if any appears within ±3 tokens of the number, skip.
+_FP_MODIFIER_WORDS: frozenset[str] = frozenset({
+    "default", "defaults",
+    "max", "maximum", "min", "minimum",
+    "limit", "limits", "limited",
+    "cap", "capped", "caps",
+    "target", "targets", "targeting",
+    "threshold", "thresholds",
+    "about", "approximately",
+    "per",
+    "depth",
+    "days", "day", "hours", "hour", "minutes", "seconds",
+})
+
+# Multi-word modifier phrases (checked as consecutive tokens).
+_FP_MODIFIER_PHRASES: tuple[list[str], ...] = (
+    ["up", "to"],
+    ["at", "least"],
+    ["at", "most"],
+    ["no", "more", "than"],
+    ["capped", "at"],
+)
+
+# Regex-based modifier: % sign immediately after or near the number
+_FP_PERCENT_RE = re.compile(r"\b\d+\s*%")
+
+# Plus modifier: 20+, 100+  (approximate count, not exact)
+_FP_PLUS_RE = re.compile(r"\b\d+\+")
+
+# Assignment-style modifiers: limit=10, depth=2, max_nodes=20
+_FP_ASSIGN_RE = re.compile(r"\w+=\d+")
+
+# ---------------------------------------------------------------------------
+# Layer 3: File-type heuristics — paths with lower/higher FP risk
+# ---------------------------------------------------------------------------
+
+# Files matching these name patterns suppress count-type facts (not versions).
+_LOW_CONFIDENCE_FILENAMES: frozenset[str] = frozenset({
+    "SPEC.md",
+    "CONTRIBUTING.md",
+})
+
 # Directories to always exclude from path resolution
 _EXCLUDE_DIRS = frozenset({"node_modules", ".git", "__pycache__", ".venv", "venv"})
 
@@ -77,6 +129,8 @@ _EXCLUDE_DIRS = frozenset({"node_modules", ".git", "__pycache__", ".venv", "venv
 _EXCLUDE_PATTERNS = (
     "_graph/features/*/SPEC.md",
     ".beadloom/_graph/features/*/SPEC.md",
+    "docs/**/features/*/SPEC.md",
+    "docs/**/features/**/SPEC.md",
 )
 
 
@@ -166,8 +220,18 @@ class DocScanner:
         results: list[Mention] = []
         cleaned = self._mask_false_positives(line)
 
+        # Layer 3: suppress count facts for low-confidence file types
+        is_low_confidence_file = file_path.name in _LOW_CONFIDENCE_FILENAMES
+
         # Strip markdown bold/italic markers for word extraction
         text_for_words = re.sub(r"\*{1,3}|_{1,3}", "", cleaned)
+
+        # Mask backtick-enclosed code references — keywords inside inline
+        # code (e.g. `mcp-server`, `node_count`) are identifiers, not
+        # natural-language claims about facts.
+        text_for_words = _BACKTICK_RE.sub(
+            lambda m: " " * len(m.group()), text_for_words,
+        )
 
         for match in _NUMBER_RE.finditer(text_for_words):
             number_str = match.group()
@@ -190,6 +254,28 @@ class DocScanner:
                 if is_in_version:
                     continue
 
+            # Layer 1a: skip if number has a % modifier (threshold, not count)
+            if _FP_PERCENT_RE.search(text_for_words):
+                # Check if THIS number is the one with %
+                end_pos = match.end()
+                rest = text_for_words[end_pos:end_pos + 3]
+                if re.match(r"\s*%", rest):
+                    continue
+
+            # Layer 1a2: skip if number has a + modifier (approximate, e.g. 20+)
+            if _FP_PLUS_RE.search(text_for_words):
+                end_pos = match.end()
+                if end_pos < len(text_for_words) and text_for_words[end_pos] == "+":
+                    continue
+
+            # Layer 1b: skip if number is part of an assignment pattern
+            # (e.g. limit=10, depth=2, max_nodes=20)
+            if _FP_ASSIGN_RE.search(text_for_words):
+                # Check if this specific number is the RHS of an assignment
+                start_pos = match.start()
+                if start_pos > 0 and text_for_words[start_pos - 1] == "=":
+                    continue
+
             # Find position of the number in the raw text to locate nearby words
             word_positions = list(re.finditer(r"[a-zA-Z]+|\d+", text_for_words))
 
@@ -203,16 +289,31 @@ class DocScanner:
             if num_idx == -1:
                 continue
 
-            # Collect words within PROXIMITY_WINDOW positions
-            window_start = max(0, num_idx - self.PROXIMITY_WINDOW)
-            window_end = min(len(word_positions), num_idx + self.PROXIMITY_WINDOW + 1)
-            window_tokens = [
+            # Layer 1c: skip if modifier word is within ±3 tokens of number
+            modifier_window_start = max(0, num_idx - 3)
+            modifier_window_end = min(
+                len(word_positions), num_idx + 3 + 1
+            )
+            modifier_tokens = [
                 wp.group().lower()
-                for wp in word_positions[window_start:window_end]
+                for wp in word_positions[modifier_window_start:modifier_window_end]
                 if re.match(r"[a-zA-Z]", wp.group())
             ]
 
-            # Check each fact type for keyword matches
+            if self._has_modifier(modifier_tokens):
+                continue
+
+            # Layer 3: suppress count facts for low-confidence files
+            if is_low_confidence_file:
+                continue
+
+            # Layer 2: find the closest matching fact type keyword
+            # (disambiguates when multiple fact keywords appear nearby)
+            # Score is (distance, is_before_number) — lower distance wins;
+            # on ties, keywords AFTER the number (is_before=0) beat BEFORE (1).
+            best_fact: str | None = None
+            best_score: tuple[int, int] = (self.PROXIMITY_WINDOW + 1, 1)
+
             for fact_name, keywords in self.FACT_KEYWORDS.items():
                 if fact_name == "version":
                     continue  # handled separately
@@ -224,22 +325,98 @@ class DocScanner:
 
                 for keyword in keywords:
                     kw_words = keyword.lower().split()
-                    if self._keyword_in_window(kw_words, window_tokens):
-                        results.append(
-                            Mention(
-                                fact_name=fact_name,
-                                value=number_val,
-                                file=file_path,
-                                line=line_num,
-                                context=line.strip(),
-                            )
-                        )
-                        break
-                else:
-                    continue
-                break  # one fact match per number
+                    score = self._keyword_distance(
+                        kw_words, word_positions, num_idx,
+                    )
+                    if score is not None and score < best_score:
+                        best_score = score
+                        best_fact = fact_name
+
+            if best_fact is not None:
+                results.append(
+                    Mention(
+                        fact_name=best_fact,
+                        value=number_val,
+                        file=file_path,
+                        line=line_num,
+                        context=line.strip(),
+                    )
+                )
 
         return results
+
+    @staticmethod
+    def _has_modifier(tokens: list[str]) -> bool:
+        """Check if any modifier word or phrase appears in the token window.
+
+        Layer 1 of false-positive reduction: numbers near modifiers like
+        'default', 'max', 'limit', 'per', 'about', etc. are configuration
+        parameters or thresholds, not factual claims.
+        """
+        # Single-word modifiers
+        if any(tok in _FP_MODIFIER_WORDS for tok in tokens):
+            return True
+
+        # Multi-word modifier phrases
+        for phrase in _FP_MODIFIER_PHRASES:
+            phrase_len = len(phrase)
+            for i in range(len(tokens) - phrase_len + 1):
+                if all(tokens[i + j] == phrase[j] for j in range(phrase_len)):
+                    return True
+
+        return False
+
+    @classmethod
+    def _keyword_distance(
+        cls,
+        kw_words: list[str],
+        word_positions: list[re.Match[str]],
+        num_idx: int,
+    ) -> tuple[int, int] | None:
+        """Return (distance, before_flag) from a number to a keyword match.
+
+        Layer 2 of false-positive reduction: when multiple fact keywords
+        appear near a number, the closest one wins.  On ties, keywords
+        appearing *after* the number are preferred (``before_flag=0``)
+        over those before it (``before_flag=1``), because natural English
+        typically writes "63 edges" (number then noun).
+
+        Returns ``None`` if the keyword is not found within the proximity
+        window.
+        """
+        window_size = cls.PROXIMITY_WINDOW
+        start = max(0, num_idx - window_size)
+        end = min(len(word_positions), num_idx + window_size + 1)
+
+        best: tuple[int, int] | None = None
+
+        if len(kw_words) == 1:
+            kw = kw_words[0]
+            for i in range(start, end):
+                w = word_positions[i].group().lower()
+                if re.match(r"[a-zA-Z]", w) and (w == kw or w.startswith(kw)):
+                    dist = abs(i - num_idx)
+                    before_flag = 1 if i < num_idx else 0
+                    score = (dist, before_flag)
+                    if best is None or score < best:
+                        best = score
+            return best
+
+        # Multi-word keyword: find consecutive matches
+        kw_len = len(kw_words)
+        for i in range(start, min(end, len(word_positions) - kw_len + 1)):
+            words_at = [word_positions[i + j].group().lower() for j in range(kw_len)]
+            if all(
+                re.match(r"[a-zA-Z]", words_at[j])
+                and (words_at[j] == kw_words[j] or words_at[j].startswith(kw_words[j]))
+                for j in range(kw_len)
+            ):
+                dist = abs(i - num_idx)
+                before_flag = 1 if i < num_idx else 0
+                score = (dist, before_flag)
+                if best is None or score < best:
+                    best = score
+        return best
 
     @staticmethod
     def _word_matches_keyword(word: str, kw: str) -> bool:
@@ -305,6 +482,9 @@ class DocScanner:
 
         # Mask standalone years: 2026, 2025, etc.
         result = _YEAR_STANDALONE_RE.sub(lambda m: " " * len(m.group()), result)
+
+        # Mask numeric ranges: 0-100, 1-10 (Layer 2 — not factual counts)
+        result = _RANGE_RE.sub(lambda m: " " * len(m.group()), result)
 
         return result
 
