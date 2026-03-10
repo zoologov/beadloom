@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
@@ -152,11 +153,13 @@ class TestActivityLevels:
 
     def test_hot_activity(self, tmp_path: Path) -> None:
         """More than 20 commits in 30 days -> hot."""
-        # Generate 25 commit entries for src/auth/ in last 30 days
+        # Generate 25 commit entries for src/auth/ within last 15 days
+        now = datetime.now()
         lines: list[str] = []
         for i in range(25):
-            day = 15 - (i % 15)
-            lines.append(f"hash{i} 2026-02-{day:02d}T10:00:00+00:00 Alice")
+            dt = now - timedelta(days=(i % 15))
+            date_str = dt.strftime("%Y-%m-%dT10:00:00+00:00")
+            lines.append(f"hash{i} {date_str} Alice")
             lines.append("")
             lines.append("src/auth/login.py")
             lines.append("")
@@ -173,10 +176,12 @@ class TestActivityLevels:
 
     def test_warm_activity(self, tmp_path: Path) -> None:
         """5-20 commits in 30 days -> warm."""
+        now = datetime.now()
         lines: list[str] = []
         for i in range(10):
-            day = 15 - (i % 15)
-            lines.append(f"hash{i} 2026-02-{day:02d}T10:00:00+00:00 Bob")
+            dt = now - timedelta(days=(i % 15))
+            date_str = dt.strftime("%Y-%m-%dT10:00:00+00:00")
+            lines.append(f"hash{i} {date_str} Bob")
             lines.append("")
             lines.append("src/api/routes.py")
             lines.append("")
@@ -193,9 +198,12 @@ class TestActivityLevels:
 
     def test_cold_activity(self, tmp_path: Path) -> None:
         """1-4 commits in 30 days -> cold."""
+        now = datetime.now()
         lines: list[str] = []
         for i in range(2):
-            lines.append(f"hash{i} 2026-02-10T10:00:00+00:00 Charlie")
+            dt = now - timedelta(days=5 + i)
+            date_str = dt.strftime("%Y-%m-%dT10:00:00+00:00")
+            lines.append(f"hash{i} {date_str} Charlie")
             lines.append("")
             lines.append("src/db/models.py")
             lines.append("")
