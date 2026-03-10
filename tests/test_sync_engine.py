@@ -442,6 +442,183 @@ class TestCheckSyncIntegration:
         assert stale[0].get("reason") == "hash_changed"
 
 
+class TestTwoPhaseSyncCheck:
+    """Tests for two-phase sync: doc_hash_at_last_edit prevents reindex masking."""
+
+    def test_stale_after_reindex_when_code_changed(
+        self, conn: sqlite3.Connection, project: Path
+    ) -> None:
+        """Code changed since doc last edited -> stale even after reindex.
+
+        The two-phase sync mechanism preserves the old code_hash_at_sync
+        baseline during reindex when doc_hash_at_last_edit indicates the
+        doc hasn't been re-edited. This allows check_sync to detect that
+        code drifted since the last doc edit.
+        """
+        from beadloom.infrastructure.reindex import _build_initial_sync_state, _SyncPairSnapshot
+
+        doc_content = "# Spec\nFeature spec.\n"
+        code_content = "# beadloom:feature=F1\ndef handler():\n    pass\n"
+        _setup_linked_data(conn, project, doc_content=doc_content, code_content=code_content)
+
+        doc_hash = _file_hash(doc_content)
+        code_hash = _file_hash(code_content)
+
+        # Step 1: Initial sync state — doc and code are in sync.
+        conn.execute(
+            "INSERT INTO sync_state "
+            "(doc_path, code_path, ref_id, code_hash_at_sync, doc_hash_at_sync, "
+            "synced_at, status, doc_hash_at_last_edit) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("spec.md", "src/api.py", "F1", code_hash, doc_hash, "2025-01-01", "ok", doc_hash),
+        )
+        conn.commit()
+
+        # Step 2: Code changes on disk (but doc stays the same).
+        new_code = "# beadloom:feature=F1\ndef handler():\n    return 42\n"
+        (project / "src" / "api.py").write_text(new_code)
+
+        # Update code_symbols to reflect new file hash (as reindex would).
+        new_code_hash = _file_hash(new_code)
+        conn.execute(
+            "UPDATE code_symbols SET file_hash = ? WHERE file_path = ?",
+            (new_code_hash, "src/api.py"),
+        )
+        conn.commit()
+
+        # Step 3: Simulate reindex using _build_initial_sync_state with
+        # preserved pair snapshots (as the real reindex flow does).
+        preserved_pairs = {
+            ("spec.md", "src/api.py"): _SyncPairSnapshot(
+                doc_hash_at_last_edit=doc_hash,
+                code_hash_at_sync=code_hash,  # original code hash when doc was synced
+            ),
+        }
+        conn.execute("DELETE FROM sync_state")
+        conn.commit()
+        _build_initial_sync_state(conn, preserved_pairs=preserved_pairs)
+
+        # Step 4: check_sync should detect stale because the preserved
+        # code_hash_at_sync (original) != current code hash on disk.
+        results = check_sync(conn, project_root=project)
+        f1_results = [r for r in results if r["ref_id"] == "F1"]
+        assert len(f1_results) >= 1
+        stale = [r for r in f1_results if r["status"] == "stale"]
+        assert len(stale) >= 1, (
+            f"Expected stale after code change + reindex, got: {f1_results}"
+        )
+
+    def test_ok_after_doc_edited(
+        self, conn: sqlite3.Connection, project: Path
+    ) -> None:
+        """After doc is edited to match code changes, sync-check should report ok."""
+        doc_content = "# Spec\nFeature spec.\n"
+        code_content = "# beadloom:feature=F1\ndef handler():\n    pass\n"
+        _setup_linked_data(conn, project, doc_content=doc_content, code_content=code_content)
+
+        code_hash = _file_hash(code_content)
+        doc_hash = _file_hash(doc_content)
+
+        conn.execute(
+            "INSERT INTO sync_state "
+            "(doc_path, code_path, ref_id, code_hash_at_sync, doc_hash_at_sync, "
+            "synced_at, status, doc_hash_at_last_edit) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("spec.md", "src/api.py", "F1", code_hash, doc_hash, "2025-01-01", "ok", doc_hash),
+        )
+        conn.commit()
+
+        # Code and doc on disk match stored hashes -> ok.
+        results = check_sync(conn, project_root=project)
+        f1_results = [r for r in results if r["ref_id"] == "F1"]
+        assert all(r["status"] == "ok" for r in f1_results)
+
+    def test_legacy_empty_doc_hash_at_last_edit(
+        self, conn: sqlite3.Connection, project: Path
+    ) -> None:
+        """Empty doc_hash_at_last_edit (legacy) falls back to current behavior."""
+        doc_content = "# Spec\nFeature spec.\n"
+        code_content = "# beadloom:feature=F1\ndef handler():\n    pass\n"
+        _setup_linked_data(conn, project, doc_content=doc_content, code_content=code_content)
+
+        code_hash = _file_hash(code_content)
+        doc_hash = _file_hash(doc_content)
+
+        # Insert with empty doc_hash_at_last_edit (legacy row).
+        conn.execute(
+            "INSERT INTO sync_state "
+            "(doc_path, code_path, ref_id, code_hash_at_sync, doc_hash_at_sync, "
+            "synced_at, status, doc_hash_at_last_edit) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("spec.md", "src/api.py", "F1", code_hash, doc_hash, "2025-01-01", "ok", ""),
+        )
+        conn.commit()
+
+        # Hashes match -> should be ok (legacy behavior).
+        results = check_sync(conn, project_root=project)
+        f1_results = [r for r in results if r["ref_id"] == "F1"]
+        assert all(r["status"] == "ok" for r in f1_results)
+
+    def test_mark_synced_updates_doc_hash_at_last_edit(
+        self, conn: sqlite3.Connection, project: Path
+    ) -> None:
+        """mark_synced should update doc_hash_at_last_edit to current doc hash."""
+        (project / "docs" / "spec.md").write_text("# Updated Spec\n\nNew content.\n")
+        (project / "src" / "api.py").write_text("def handler():\n    pass\n")
+
+        conn.execute("INSERT INTO nodes (ref_id, kind, summary) VALUES ('F1', 'feature', 'test')")
+        conn.execute(
+            "INSERT INTO sync_state (doc_path, code_path, ref_id, "
+            "code_hash_at_sync, doc_hash_at_sync, synced_at, status, doc_hash_at_last_edit) "
+            "VALUES ('spec.md', 'src/api.py', 'F1', 'old_hash', 'old_hash', "
+            "'2025-01-01', 'stale', 'old_edit_hash')"
+        )
+        conn.commit()
+
+        mark_synced(conn, "spec.md", "src/api.py", project)
+
+        row = conn.execute("SELECT * FROM sync_state WHERE doc_path = 'spec.md'").fetchone()
+        assert row["status"] == "ok"
+        # doc_hash_at_last_edit should now match doc_hash_at_sync (doc was marked synced).
+        assert row["doc_hash_at_last_edit"] == row["doc_hash_at_sync"]
+        assert row["doc_hash_at_last_edit"] != "old_edit_hash"
+
+    def test_check_sync_updates_doc_hash_at_last_edit_on_doc_change(
+        self, conn: sqlite3.Connection, project: Path
+    ) -> None:
+        """When doc changes, check_sync should update doc_hash_at_last_edit."""
+        doc_content = "# Spec\nOld content.\n"
+        code_content = "# beadloom:feature=F1\ndef handler():\n    pass\n"
+        _setup_linked_data(conn, project, doc_content=doc_content, code_content=code_content)
+
+        doc_hash = _file_hash(doc_content)
+        code_hash = _file_hash(code_content)
+
+        conn.execute(
+            "INSERT INTO sync_state "
+            "(doc_path, code_path, ref_id, code_hash_at_sync, doc_hash_at_sync, "
+            "synced_at, status, doc_hash_at_last_edit) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("spec.md", "src/api.py", "F1", code_hash, doc_hash, "2025-01-01", "ok", doc_hash),
+        )
+        conn.commit()
+
+        # Edit the doc on disk.
+        new_doc = "# Spec\nUpdated content.\n"
+        (project / "docs" / "spec.md").write_text(new_doc)
+        new_doc_hash = _file_hash(new_doc)
+
+        check_sync(conn, project_root=project)
+
+        row = conn.execute(
+            "SELECT doc_hash_at_last_edit FROM sync_state "
+            "WHERE doc_path = ? AND code_path = ?",
+            ("spec.md", "src/api.py"),
+        ).fetchone()
+        # doc was edited, so doc_hash_at_last_edit should be updated to new hash.
+        assert row[0] == new_doc_hash
+
+
 def _setup_code_symbol(
     conn: sqlite3.Connection,
     file_path: str,

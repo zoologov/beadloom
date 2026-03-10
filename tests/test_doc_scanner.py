@@ -539,3 +539,333 @@ class TestSpecMdExclude:
         custom_files = [p for p in paths if "custom" in str(p)]
         assert len(custom_files) == 0
         assert any(p.name == "README.md" for p in paths)
+
+
+# ===========================================================================
+# Issue #65 — Layer 1: Blocklist modifiers suppress false positives
+# ===========================================================================
+
+
+class TestBlocklistModifiers:
+    """Numbers near modifier words (%, default, max, limit, target, etc.)
+    should NOT be flagged as fact mentions."""
+
+    def test_percentage_modifier_suppresses_match(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """'80%' near 'test' should NOT match test_count."""
+        md = _write_md(
+            tmp_path, "test.md", "Maintain test coverage target: 80%+\n"
+        )
+        result = scanner.scan_file(md)
+        test_matches = [m for m in result if m.fact_name == "test_count"]
+        assert len(test_matches) == 0
+
+    def test_default_modifier_suppresses_match(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """'default 20' should NOT match node_count."""
+        md = _write_md(
+            tmp_path, "test.md", "max_nodes (node limit, default 20).\n"
+        )
+        result = scanner.scan_file(md)
+        node_matches = [m for m in result if m.fact_name == "node_count"]
+        assert len(node_matches) == 0
+
+    def test_max_modifier_suppresses_match(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """'Max 500 symbols, max 50 files' should NOT match node_count."""
+        md = _write_md(
+            tmp_path, "test.md",
+            "Max 500 symbols, max 50 files per domain node\n",
+        )
+        result = scanner.scan_file(md)
+        node_matches = [m for m in result if m.fact_name == "node_count"]
+        assert len(node_matches) == 0
+
+    def test_limit_modifier_suppresses_match(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """'limit=10' near 'node' should NOT match node_count."""
+        md = _write_md(
+            tmp_path, "test.md",
+            "compute_top_offenders(data, weights, limit=10) -> list[NodeDebt]\n",
+        )
+        result = scanner.scan_file(md)
+        node_matches = [m for m in result if m.fact_name == "node_count"]
+        assert len(node_matches) == 0
+
+    def test_capped_at_modifier_suppresses_match(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """'capped at 100' near 'route' should NOT match framework_count."""
+        md = _write_md(
+            tmp_path, "test.md",
+            "Routes are capped at 100 per file.\n",
+        )
+        result = scanner.scan_file(md)
+        assert len(result) == 0
+
+    def test_up_to_modifier_suppresses_match(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """'up to 50' near 'node' should NOT match node_count."""
+        md = _write_md(
+            tmp_path, "test.md",
+            "Impact analysis max nodes per direction: up to 50.\n",
+        )
+        result = scanner.scan_file(md)
+        node_matches = [m for m in result if m.fact_name == "node_count"]
+        assert len(node_matches) == 0
+
+    def test_per_modifier_suppresses_match(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """'100 per file' should NOT match any count fact."""
+        md = _write_md(
+            tmp_path, "test.md",
+            "Route extraction is capped at 100 per file.\n",
+        )
+        result = scanner.scan_file(md)
+        assert len(result) == 0
+
+    def test_range_modifier_suppresses_match(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """'0-100' score range should NOT match test_count."""
+        md = _write_md(
+            tmp_path, "test.md",
+            "debt_score (0-100) indicates severity of test issues.\n",
+        )
+        result = scanner.scan_file(md)
+        test_matches = [m for m in result if m.fact_name == "test_count"]
+        assert len(test_matches) == 0
+
+    def test_about_tilde_modifier_suppresses_match(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """'~50 nodes' or 'about 50 nodes' should NOT match node_count."""
+        md = _write_md(
+            tmp_path, "test.md",
+            "Traverses about 50 nodes in typical usage.\n",
+        )
+        result = scanner.scan_file(md)
+        node_matches = [m for m in result if m.fact_name == "node_count"]
+        assert len(node_matches) == 0
+
+    def test_at_least_modifier_suppresses_match(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """'at least 10 tests' should NOT match test_count."""
+        md = _write_md(
+            tmp_path, "test.md",
+            "Each module should have at least 10 tests.\n",
+        )
+        result = scanner.scan_file(md)
+        test_matches = [m for m in result if m.fact_name == "test_count"]
+        assert len(test_matches) == 0
+
+    def test_real_count_still_matched(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """Actual factual claims without modifiers should still be matched."""
+        md = _write_md(
+            tmp_path, "test.md",
+            "Beadloom supports 14 MCP tools.\n",
+        )
+        result = scanner.scan_file(md)
+        tool_matches = [m for m in result if m.fact_name == "mcp_tool_count"]
+        assert len(tool_matches) == 1
+        assert tool_matches[0].value == 14
+
+    def test_days_period_modifier_suppresses_match(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """'90 days' near a keyword should NOT match count facts."""
+        md = _write_md(
+            tmp_path, "test.md",
+            "Parses git log for 90 days, maps files to nodes.\n",
+        )
+        result = scanner.scan_file(md)
+        node_matches = [m for m in result if m.fact_name == "node_count"]
+        assert len(node_matches) == 0
+
+    def test_depth_modifier_suppresses_match(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """'depth=2' or 'depth: 3' should NOT match count facts."""
+        md = _write_md(
+            tmp_path, "test.md",
+            "BFS depth=2 traverses nodes across the graph.\n",
+        )
+        result = scanner.scan_file(md)
+        node_matches = [m for m in result if m.fact_name == "node_count"]
+        assert len(node_matches) == 0
+
+    def test_plus_modifier_suppresses_match(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """'20+' (approximate) should NOT match framework_count."""
+        md = _write_md(
+            tmp_path, "test.md",
+            "Detects 20+ framework patterns in the project.\n",
+        )
+        result = scanner.scan_file(md)
+        fw_matches = [m for m in result if m.fact_name == "framework_count"]
+        assert len(fw_matches) == 0
+
+    def test_backtick_code_ref_not_treated_as_keyword(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """Keywords inside backtick code refs should NOT trigger matches.
+
+        `mcp-server` in a node reference should not cause numbers
+        nearby to match mcp_tool_count.
+        """
+        md = _write_md(
+            tmp_path, "test.md",
+            "Traverses `mcp-server`, `cli` — 23 items, 63 items.\n",
+        )
+        result = scanner.scan_file(md)
+        mcp_matches = [m for m in result if m.fact_name == "mcp_tool_count"]
+        assert len(mcp_matches) == 0
+
+
+# ===========================================================================
+# Issue #65 — Layer 2: Confidence scoring by keyword distance
+# ===========================================================================
+
+
+class TestConfidenceScoring:
+    """Matches with low confidence (number far from best keyword, or
+    generic context) should be suppressed."""
+
+    def test_total_near_number_keeps_match(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """'23 nodes total' should be kept (direct factual claim)."""
+        md = _write_md(
+            tmp_path, "test.md",
+            "Architecture has 23 nodes total.\n",
+        )
+        result = scanner.scan_file(md)
+        node_matches = [m for m in result if m.fact_name == "node_count"]
+        assert len(node_matches) == 1
+
+    def test_parenthetical_context_suppresses_match(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """Numbers inside parenthetical config context should be suppressed.
+
+        '(node limit, default 20)' is a parameter spec, not a fact.
+        """
+        md = _write_md(
+            tmp_path, "test.md",
+            "Parameters: max_nodes (node limit, default 20).\n",
+        )
+        result = scanner.scan_file(md)
+        node_matches = [m for m in result if m.fact_name == "node_count"]
+        assert len(node_matches) == 0
+
+    def test_closest_keyword_wins_disambiguation(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """When '63' is near both 'nodes' and 'edges', 'edges' (closer) should win.
+
+        '23 nodes, 63 edges total' — 63 should be edge_count, not node_count.
+        """
+        md = _write_md(
+            tmp_path, "test.md",
+            "Architecture has 23 nodes, 63 edges total.\n",
+        )
+        result = scanner.scan_file(md)
+        # 23 should match node_count
+        node_matches = [m for m in result if m.fact_name == "node_count"]
+        assert len(node_matches) == 1
+        assert node_matches[0].value == 23
+        # 63 should match edge_count (closer keyword), NOT node_count
+        edge_matches = [m for m in result if m.fact_name == "edge_count"]
+        assert len(edge_matches) == 1
+        assert edge_matches[0].value == 63
+        # 63 should NOT appear as node_count
+        wrong_matches = [
+            m for m in result
+            if m.fact_name == "node_count" and m.value == 63
+        ]
+        assert len(wrong_matches) == 0
+
+
+# ===========================================================================
+# Issue #65 — Layer 3: File-type heuristics
+# ===========================================================================
+
+
+class TestFileTypeHeuristics:
+    """Matches in certain file types should have adjusted confidence."""
+
+    def test_spec_md_in_docs_excluded(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """SPEC.md files under docs/ should be excluded from scanning."""
+        spec_dir = tmp_path / "docs" / "domains" / "doc-sync" / "features" / "audit"
+        spec_dir.mkdir(parents=True)
+        md = _write_md(
+            spec_dir, "SPEC.md",
+            "The graph has 10 nodes and 10 edges in the example.\n",
+        )
+        result = scanner.scan_file(md)
+        # SPEC.md mentions should be suppressed
+        node_matches = [m for m in result if m.fact_name == "node_count"]
+        assert len(node_matches) == 0
+
+    def test_contributing_md_suppresses_threshold_counts(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """CONTRIBUTING.md threshold mentions should be suppressed."""
+        md = _write_md(
+            tmp_path, "CONTRIBUTING.md",
+            "Maintain or improve test coverage (target: 80%+)\n",
+        )
+        result = scanner.scan_file(md)
+        test_matches = [m for m in result if m.fact_name == "test_count"]
+        assert len(test_matches) == 0
+
+    def test_readme_real_claims_still_matched(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """README.md with actual factual claims should still match."""
+        md = _write_md(
+            tmp_path, "README.md",
+            "Beadloom provides 14 MCP tools for your IDE.\n",
+        )
+        result = scanner.scan_file(md)
+        tool_matches = [m for m in result if m.fact_name == "mcp_tool_count"]
+        assert len(tool_matches) == 1
+        assert tool_matches[0].value == 14
+
+    def test_spec_md_versions_still_matched(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """Version strings in SPEC.md should still be detected."""
+        spec_dir = tmp_path / "docs" / "features" / "foo"
+        spec_dir.mkdir(parents=True)
+        md = _write_md(
+            spec_dir, "SPEC.md",
+            "This feature was added in version 1.7.0.\n",
+        )
+        result = scanner.scan_file(md)
+        versions = [m for m in result if m.fact_name == "version"]
+        assert len(versions) == 1
+
+    def test_resolve_paths_excludes_spec_in_docs(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """SPEC.md under docs/**/features/ should be excluded by resolve_paths."""
+        spec_dir = tmp_path / "docs" / "domains" / "infra" / "features" / "debt"
+        spec_dir.mkdir(parents=True)
+        _write_md(spec_dir, "SPEC.md", "Has 100 nodes.\n")
+        _write_md(tmp_path, "README.md", "# Project\n")
+        paths = scanner.resolve_paths(tmp_path)
+        spec_in_docs = [p for p in paths if "SPEC.md" in str(p)]
+        assert len(spec_in_docs) == 0

@@ -36,7 +36,32 @@ The audit pipeline has three stages:
 
 ### False-Positive Filtering
 
-The DocScanner masks the following patterns before number extraction to prevent false matches:
+The DocScanner applies a 3-layer false-positive reduction pipeline that reduces FP rate from ~60% to ~11%:
+
+#### Layer 1: Blocklist Modifiers
+
+Numbers near modifier words or phrases are skipped as configuration parameters or thresholds, not factual claims. Checked within a +/-3 token window around the number.
+
+**Single-word modifiers:** `default`, `max`, `minimum`, `limit`, `cap`, `target`, `threshold`, `about`, `approximately`, `per`, `depth`, `days`, `hours`, `minutes`, `seconds`.
+
+**Multi-word phrases:** `up to`, `at least`, `at most`, `no more than`, `capped at`.
+
+**Regex-based modifiers:** percentage patterns (`N%`), plus-sign approximations (`N+`), assignment-style patterns (`key=N`).
+
+#### Layer 2: Proximity Scoring
+
+When multiple fact keywords appear near a number, the closest keyword wins. On ties, keywords appearing *after* the number are preferred (e.g., "63 edges") over those before it. Uses the same `PROXIMITY_WINDOW = 5` but with distance-based ranking via `_keyword_distance()`.
+
+#### Layer 3: File-Type Heuristics
+
+Files with lower-confidence names suppress count-type fact matching (versions still matched):
+
+- **Low-confidence filenames:** `SPEC.md`, `CONTRIBUTING.md`
+- **Excluded glob patterns:** `_graph/features/*/SPEC.md`, `docs/**/features/*/SPEC.md`, `docs/**/features/**/SPEC.md`
+
+#### Pattern Masking
+
+The DocScanner also masks the following patterns before number extraction to prevent false matches:
 
 | Pattern | Example | Regex |
 |---------|---------|-------|

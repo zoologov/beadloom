@@ -368,6 +368,8 @@ class TestGenerateAgentsMd:
         content = (tmp_path / ".beadloom" / "AGENTS.md").read_text()
         assert "## Custom" in content
         assert "preserved on regeneration" in content
+        assert "<!-- beadloom:custom-start -->" in content
+        assert "<!-- beadloom:custom-end -->" in content
 
     def test_preserves_custom_content(self, tmp_path: Path) -> None:
         # First generation
@@ -424,6 +426,146 @@ class TestGenerateAgentsMd:
         # But the rest should be there
         assert "## Before starting work" in content
         assert "## Custom" in content
+
+    # --- Bug #69: custom section preservation must not duplicate ---
+
+    def test_no_duplication_on_regeneration(self, tmp_path: Path) -> None:
+        """Bug #69: regenerating AGENTS.md must not duplicate ## Custom."""
+        generate_agents_md(tmp_path)
+        agents_path = tmp_path / ".beadloom" / "AGENTS.md"
+
+        # Add custom content after the custom markers
+        text = agents_path.read_text(encoding="utf-8")
+        custom_start = "<!-- beadloom:custom-start -->"
+        idx = text.find(custom_start)
+        assert idx != -1, "Template must contain custom-start marker"
+        # Insert user content between start and end markers
+        end_marker = "<!-- beadloom:custom-end -->"
+        eidx = text.find(end_marker)
+        assert eidx != -1, "Template must contain custom-end marker"
+        modified = (
+            text[: idx + len(custom_start)]
+            + "\n\nMy project-specific rules.\n\n"
+            + text[eidx:]
+        )
+        agents_path.write_text(modified, encoding="utf-8")
+
+        # Regenerate twice
+        generate_agents_md(tmp_path)
+        generate_agents_md(tmp_path)
+        content = agents_path.read_text(encoding="utf-8")
+
+        # ## Custom heading (at line start) must appear exactly once
+        # (the template description also mentions it inline, so count lines)
+        heading_count = sum(
+            1 for line in content.splitlines() if line.strip() == "## Custom"
+        )
+        assert heading_count == 1
+        # Markers must appear exactly once each
+        assert content.count("<!-- beadloom:custom-start -->") == 1
+        assert content.count("<!-- beadloom:custom-end -->") == 1
+        # User content preserved
+        assert "My project-specific rules." in content
+
+    def test_idempotent_output(self, tmp_path: Path) -> None:
+        """Running generate_agents_md twice produces identical output."""
+        generate_agents_md(tmp_path)
+        agents_path = tmp_path / ".beadloom" / "AGENTS.md"
+
+        # Add custom content
+        text = agents_path.read_text(encoding="utf-8")
+        custom_start = "<!-- beadloom:custom-start -->"
+        end_marker = "<!-- beadloom:custom-end -->"
+        idx = text.find(custom_start)
+        eidx = text.find(end_marker)
+        modified = (
+            text[: idx + len(custom_start)]
+            + "\nUser stuff here.\n"
+            + text[eidx:]
+        )
+        agents_path.write_text(modified, encoding="utf-8")
+
+        generate_agents_md(tmp_path)
+        first_output = agents_path.read_text(encoding="utf-8")
+
+        generate_agents_md(tmp_path)
+        second_output = agents_path.read_text(encoding="utf-8")
+
+        assert first_output == second_output
+
+    def test_migrates_old_custom_format(self, tmp_path: Path) -> None:
+        """Old files with ## Custom but no HTML markers are migrated."""
+        beadloom_dir = tmp_path / ".beadloom"
+        beadloom_dir.mkdir(parents=True, exist_ok=True)
+        agents_path = beadloom_dir / "AGENTS.md"
+
+        # Simulate old-format file (heading only, no HTML markers)
+        old_content = (
+            "# Beadloom — Agent Instructions\n\n"
+            "## Before starting work\n\nSome stuff.\n\n"
+            "## Custom\n\n"
+            "<!-- Add project-specific instructions below this line -->\n"
+            "\nOld user content here.\n"
+        )
+        agents_path.write_text(old_content, encoding="utf-8")
+
+        generate_agents_md(tmp_path)
+        content = agents_path.read_text(encoding="utf-8")
+
+        # Must have migrated to new markers
+        assert "<!-- beadloom:custom-start -->" in content
+        assert "<!-- beadloom:custom-end -->" in content
+        # Old user content preserved
+        assert "Old user content here." in content
+        # No duplication — count heading lines only
+        heading_count = sum(
+            1 for line in content.splitlines() if line.strip() == "## Custom"
+        )
+        assert heading_count == 1
+
+    def test_no_custom_content_clean(self, tmp_path: Path) -> None:
+        """Files with no custom content regenerate cleanly."""
+        generate_agents_md(tmp_path)
+        agents_path = tmp_path / ".beadloom" / "AGENTS.md"
+        first = agents_path.read_text(encoding="utf-8")
+
+        generate_agents_md(tmp_path)
+        second = agents_path.read_text(encoding="utf-8")
+
+        assert first == second
+        assert "## Custom" in second
+        assert "<!-- beadloom:custom-start -->" in second
+        assert "<!-- beadloom:custom-end -->" in second
+
+    def test_custom_content_with_markdown_headings(self, tmp_path: Path) -> None:
+        """Custom content containing ## headings must not confuse parser."""
+        generate_agents_md(tmp_path)
+        agents_path = tmp_path / ".beadloom" / "AGENTS.md"
+
+        text = agents_path.read_text(encoding="utf-8")
+        custom_start = "<!-- beadloom:custom-start -->"
+        end_marker = "<!-- beadloom:custom-end -->"
+        idx = text.find(custom_start)
+        eidx = text.find(end_marker)
+        user_content = "\n## My Custom Heading\n\nSome instructions.\n\n"
+        modified = (
+            text[: idx + len(custom_start)]
+            + user_content
+            + text[eidx:]
+        )
+        agents_path.write_text(modified, encoding="utf-8")
+
+        # Regenerate multiple times
+        for _ in range(3):
+            generate_agents_md(tmp_path)
+
+        content = agents_path.read_text(encoding="utf-8")
+        heading_count = sum(
+            1 for line in content.splitlines() if line.strip() == "## Custom"
+        )
+        assert heading_count == 1
+        assert content.count("## My Custom Heading") == 1
+        assert "Some instructions." in content
 
 
 # ---------------------------------------------------------------------------
@@ -2433,3 +2575,152 @@ class TestNonInteractiveInitCli:
             runner = CliRunner()
             result = runner.invoke(main, ["init", "--project", str(tmp_path)])
         assert result.exit_code == 0, result.output
+
+
+# ---------------------------------------------------------------------------
+# Bug #68: _build_rules_section and _read_rules_data must detect all rule types
+# ---------------------------------------------------------------------------
+
+_V3_RULES_ALL_TYPES = {
+    "version": 3,
+    "tags": {
+        "layer-service": ["cli"],
+        "layer-domain": ["routing"],
+        "layer-infra": ["infra"],
+    },
+    "rules": [
+        {
+            "name": "r-require",
+            "description": "Require rule",
+            "require": {
+                "for": {"kind": "domain"},
+                "has_edge_to": {"ref_id": "root"},
+                "edge_kind": "part_of",
+            },
+        },
+        {
+            "name": "r-deny",
+            "description": "Deny rule",
+            "deny": {"from": {"kind": "domain"}, "to": {"kind": "service"}},
+        },
+        {
+            "name": "r-forbid-cycles",
+            "description": "Cycle rule",
+            "severity": "warn",
+            "forbid_cycles": {"edge_kind": "depends_on"},
+        },
+        {
+            "name": "r-layers",
+            "description": "Layer rule",
+            "severity": "warn",
+            "layers": [
+                {"name": "services", "tag": "layer-service"},
+                {"name": "domains", "tag": "layer-domain"},
+                {"name": "infra", "tag": "layer-infra"},
+            ],
+            "enforce": "top-down",
+            "allow_skip": True,
+            "edge_kind": "depends_on",
+        },
+        {
+            "name": "r-cardinality",
+            "description": "Cardinality rule",
+            "severity": "warn",
+            "check": {"for": {"kind": "domain"}, "max_symbols": 200},
+        },
+        {
+            "name": "r-forbid-import",
+            "description": "Import boundary rule",
+            "forbid_import": {"from": "src/tui/**", "to": "src/infra/**"},
+        },
+        {
+            "name": "r-forbid-edge",
+            "description": "Forbid edge rule",
+            "forbid": {"from": {"kind": "domain"}, "to": {"kind": "service"}},
+        },
+    ],
+}
+
+
+class TestDetectRuleType:
+    """Bug #68: _build_rules_section and _read_rules_data must classify all v3 types."""
+
+    def test_build_rules_section_all_types(self, tmp_path: Path) -> None:
+        """_build_rules_section should show correct type for all 7 rule types."""
+        from beadloom.onboarding.scanner import _build_rules_section
+
+        graph_dir = tmp_path / ".beadloom" / "_graph"
+        graph_dir.mkdir(parents=True)
+        (graph_dir / "rules.yml").write_text(
+            yaml.dump(_V3_RULES_ALL_TYPES), encoding="utf-8"
+        )
+
+        section = _build_rules_section(tmp_path)
+
+        assert "r-require" in section
+        assert "(require)" in section
+        assert "r-deny" in section
+        assert "(deny)" in section
+        assert "r-forbid-cycles" in section
+        assert "(forbid_cycles)" in section
+        assert "r-layers" in section
+        assert "(layers)" in section
+        assert "r-cardinality" in section
+        assert "(cardinality)" in section
+        assert "r-forbid-import" in section
+        assert "(forbid_import)" in section
+        assert "r-forbid-edge" in section
+        assert "(forbid_edge)" in section
+
+    def test_read_rules_data_all_types(self, tmp_path: Path) -> None:
+        """_read_rules_data should return correct type string for all 7 types."""
+        from beadloom.onboarding.scanner import _read_rules_data
+
+        graph_dir = tmp_path / ".beadloom" / "_graph"
+        graph_dir.mkdir(parents=True)
+        (graph_dir / "rules.yml").write_text(
+            yaml.dump(_V3_RULES_ALL_TYPES), encoding="utf-8"
+        )
+
+        rules = _read_rules_data(tmp_path)
+        assert len(rules) == 7
+
+        type_map = {r["name"]: r["type"] for r in rules}
+        assert type_map["r-require"] == "require"
+        assert type_map["r-deny"] == "deny"
+        assert type_map["r-forbid-cycles"] == "forbid_cycles"
+        assert type_map["r-layers"] == "layers"
+        assert type_map["r-cardinality"] == "cardinality"
+        assert type_map["r-forbid-import"] == "forbid_import"
+        assert type_map["r-forbid-edge"] == "forbid_edge"
+
+    def test_detect_rule_type_helper(self) -> None:
+        """_detect_rule_type returns correct string for each YAML key."""
+        from beadloom.onboarding.scanner import _detect_rule_type
+
+        assert _detect_rule_type({"require": {}}) == "require"
+        assert _detect_rule_type({"deny": {}}) == "deny"
+        assert _detect_rule_type({"forbid_cycles": {}}) == "forbid_cycles"
+        assert _detect_rule_type({"layers": []}) == "layers"
+        assert _detect_rule_type({"check": {}}) == "cardinality"
+        assert _detect_rule_type({"forbid_import": {}}) == "forbid_import"
+        assert _detect_rule_type({"forbid": {}}) == "forbid_edge"
+        # Unknown falls back to "unknown"
+        assert _detect_rule_type({"name": "x"}) == "unknown"
+
+    def test_agents_md_shows_all_rule_types(self, tmp_path: Path) -> None:
+        """generate_agents_md should show correct types for all v3 rules."""
+        graph_dir = tmp_path / ".beadloom" / "_graph"
+        graph_dir.mkdir(parents=True)
+        (graph_dir / "rules.yml").write_text(
+            yaml.dump(_V3_RULES_ALL_TYPES), encoding="utf-8"
+        )
+
+        generate_agents_md(tmp_path)
+        content = (tmp_path / ".beadloom" / "AGENTS.md").read_text()
+
+        assert "(forbid_cycles)" in content
+        assert "(layers)" in content
+        assert "(cardinality)" in content
+        assert "(forbid_import)" in content
+        assert "(forbid_edge)" in content

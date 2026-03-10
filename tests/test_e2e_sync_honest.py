@@ -90,12 +90,15 @@ class TestSyncHonestDetection:
         conn = open_db(db_path)
         results = check_sync(conn, project_root=project)
 
-        # 4. At least one entry should be stale (symbols changed).
+        # 4. At least one entry should be stale (code changed).
+        # With two-phase sync, the old code_hash_at_sync baseline is preserved
+        # across reindex when doc hasn't been edited, so hash_changed is detected
+        # directly. Previously, only symbols_changed would catch this.
         stale = [r for r in results if r["status"] == "stale"]
         assert len(stale) >= 1, f"Expected stale entries, got: {results}"
         assert any(
-            r.get("reason") == "symbols_changed" for r in stale
-        ), f"Expected symbols_changed reason, got: {stale}"
+            r.get("reason") in ("hash_changed", "symbols_changed") for r in stale
+        ), f"Expected hash_changed or symbols_changed reason, got: {stale}"
 
         conn.close()
 

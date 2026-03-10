@@ -135,6 +135,11 @@ def check_sync(
         ref_id = row["ref_id"]
         stored_code_hash = row["code_hash_at_sync"]
         stored_doc_hash = row["doc_hash_at_sync"]
+        doc_hash_at_last_edit: str = (
+            row["doc_hash_at_last_edit"]
+            if "doc_hash_at_last_edit" in row.keys()  # noqa: SIM118 - sqlite3.Row `in` checks values, not keys
+            else ""
+        )
 
         # Hash actual files on disk.
         current_doc_hash = _file_hash(project_root / "docs" / doc_path)
@@ -142,12 +147,47 @@ def check_sync(
 
         status = "ok"
         reason = "ok"
+
+        # --- Two-phase sync detection ---
+        # When doc_hash_at_last_edit is set, use it to detect code drift
+        # that survives reindex (which resets code_hash_at_sync).
+        doc_edited = (
+            bool(current_doc_hash)
+            and bool(doc_hash_at_last_edit)
+            and current_doc_hash != doc_hash_at_last_edit
+        )
+
         if current_code_hash and current_code_hash != stored_code_hash:
             status = "stale"
             reason = "hash_changed"
         if current_doc_hash and current_doc_hash != stored_doc_hash:
             status = "stale"
             reason = "hash_changed"
+
+        # Update doc_hash_at_last_edit when doc changes.
+        if doc_edited and current_doc_hash:
+            # Doc was edited: record new doc hash and reset code
+            # baseline so future checks measure drift from here.
+            conn.execute(
+                "UPDATE sync_state "
+                "SET doc_hash_at_last_edit = ?, "
+                "code_hash_at_sync = ? "
+                "WHERE doc_path = ? AND code_path = ?",
+                (
+                    current_doc_hash,
+                    current_code_hash or stored_code_hash,
+                    doc_path,
+                    code_path,
+                ),
+            )
+        elif not doc_hash_at_last_edit and current_doc_hash:
+            # Legacy/first run: initialize doc_hash_at_last_edit.
+            conn.execute(
+                "UPDATE sync_state "
+                "SET doc_hash_at_last_edit = ? "
+                "WHERE doc_path = ? AND code_path = ?",
+                (current_doc_hash, doc_path, code_path),
+            )
 
         # Symbol-level drift detection.
         stored_symbols_hash = row["symbols_hash"] if "symbols_hash" in row.keys() else ""  # noqa: SIM118 - sqlite3.Row `in` checks values, not keys
@@ -281,9 +321,10 @@ def mark_synced(
     now = datetime.now(tz=timezone.utc).isoformat()
     conn.execute(
         "UPDATE sync_state SET doc_hash_at_sync = ?, code_hash_at_sync = ?, "
-        "symbols_hash = ?, synced_at = ?, status = 'ok' "
+        "symbols_hash = ?, synced_at = ?, status = 'ok', "
+        "doc_hash_at_last_edit = ? "
         "WHERE doc_path = ? AND code_path = ?",
-        (doc_hash, code_hash, symbols_hash, now, doc_path, code_path),
+        (doc_hash, code_hash, symbols_hash, now, doc_hash, doc_path, code_path),
     )
     conn.commit()
 
@@ -315,9 +356,10 @@ def mark_synced_by_ref(
         code_hash = _file_hash(project_root / row["code_path"])
         conn.execute(
             "UPDATE sync_state SET doc_hash_at_sync = ?, code_hash_at_sync = ?, "
-            "symbols_hash = ?, synced_at = ?, status = 'ok' "
+            "symbols_hash = ?, synced_at = ?, status = 'ok', "
+            "doc_hash_at_last_edit = ? "
             "WHERE doc_path = ? AND code_path = ?",
-            (doc_hash, code_hash, symbols_hash, now, row["doc_path"], row["code_path"]),
+            (doc_hash, code_hash, symbols_hash, now, doc_hash, row["doc_path"], row["code_path"]),
         )
         count += 1
 

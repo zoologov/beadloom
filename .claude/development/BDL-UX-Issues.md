@@ -1,8 +1,29 @@
 # BDL UX Feedback Log
 
 > Collected during development and dogfooding.
-> Total: 70 issues | Open: 3 | Improvements: 3 | Excluded: 5 | Closed: 59
-> Last reviewed: BDL-032 (Enhanced Architecture Rules)
+> Total: 70 issues | Open: 0 | Improvements: 0 | Excluded: 5 | Closed: 65
+> Last reviewed: BDL-034 (UX Issues & Improvements Batch Fix)
+
+# Beadloom UX Issues
+
+> Dogfooding feedback: issues, friction points, and improvement ideas collected while using Beadloom in the Bob project.
+>
+> **How to use:** Add entries during development. Each entry should include date, context, and severity.
+
+---
+
+## Template
+
+```markdown
+### [YYYY-MM-DD] Short description
+
+**Severity:** low | medium | high | critical
+**Command:** `beadloom <command>`
+**Context:** What were you trying to do?
+**Issue:** What went wrong or felt awkward?
+**Expected:** What would be better?
+**Workaround:** How did you work around it? (if applicable)
+```
 
 ---
 
@@ -10,17 +31,7 @@
 
 > Issues awaiting code fixes in Beadloom.
 
-67. [2026-02-21] [MEDIUM] `_load_rules_into_db` silently drops v3 rule types — `reindex.py:_load_rules_into_db()` only handles `DenyRule` and `RequireRule` instances (line 327: `else: continue`). The 5 new v3 rule types (`ForbidCyclesRule`, `LayerRule`, `CardinalityRule`, `ForbidImportRule`, `ForbidEdgeRule`) are silently skipped. The `rules` DB table stays at 4 rows instead of 9. This makes `docs audit` report `rule_type_count: 4` instead of `9`, and any tool querying the `rules` table gets stale data.
-    > **Impact:** `docs audit` ground truth is wrong. Any MCP tool or TUI widget querying the `rules` table sees only 4 rules.
-    > **Fix:** Add `isinstance` branches for all 7 rule types in `_load_rules_into_db`, or use a generic serialization approach (e.g., `rule.to_dict()` method on the base `Rule` class).
-
-68. [2026-02-21] [LOW] `_build_rules_section` and `_read_rules_data` use simplistic rule type detection — Both functions in `scanner.py` (lines 985, 1042) use `"require" if "require" in rule else "deny"` to determine rule type from YAML. This maps `forbid_cycles`, `layers`, `check` (cardinality), and `forbid_import` rules all to type "deny". The type label in AGENTS.md and `beadloom prime` output is inaccurate for 5 of 9 rules.
-    > **Impact:** Cosmetic. The rule descriptions are correct, only the type label in parentheses is wrong.
-    > **Fix:** Check for all YAML keys: `require`, `deny`, `forbid_cycles`, `layers`, `check`, `forbid_import`, `forbid_edge`.
-
-69. [2026-02-21] [LOW] `generate_agents_md` Custom section preservation corrupts file on regeneration — When the old AGENTS.md has content after `## Custom` that itself contains a `## Custom` marker (e.g., from a prior duplication), the preservation logic at `scanner.py:1006-1011` captures everything after the first `## Custom` marker and appends it again, causing content duplication. In BDL-032, regeneration duplicated the entire file body because old content (from a prior manual edit) was stored below `## Custom`.
-    > **Impact:** Regenerated AGENTS.md is garbled until manually cleaned.
-    > **Fix:** Use a more robust marker, e.g., `<!-- beadloom:custom-start -->`, or only preserve content after the *last* `## Custom` marker.
+(none)
 
 ---
 
@@ -28,27 +39,7 @@
 
 > Enhancement proposals for existing features. Not bugs — current behavior works but can be better.
 
-65. [2026-02-21] [MEDIUM] `docs audit` still has ~60% false positive rate on beadloom itself — 47 stale mentions reported, but most are false positives: threshold numbers (`>= 80%`), capability descriptions (`supports 12 languages`), example values in SPEC.md files, and years (`2026`). BDL-027 BEAD-02 fixed the worst cases (SPEC.md exclusion, year filter, skip numbers <10), but the matcher still lacks context awareness.
-    > **Recommended approach (3 layers):**
-    > 1. **Blocklist modifiers** — skip matches near `>=`, `up to`, `supports`, `limit`, `%`, `maximum`. Fastest win, cuts ~40% of FPs.
-    > 2. **Proximity scoring** — weight match by distance to fact-type keyword (e.g., number `13` near `MCP` = likely mcp_tool_count; `80` near `coverage` + `%` = threshold, not test_count).
-    > 3. **File-type heuristics** — lower confidence for SPEC.md, CONTRIBUTING.md, examples/; higher for README.md, AGENTS.md, CLAUDE.md.
-    > Pure semantic (LLM-based) analysis is overkill for a CLI tool. Pattern + proximity + file heuristics should achieve ~90% precision without architectural changes.
-
-66. [2026-02-21] [LOW] `graph_snapshots` lacks diff/compare capability — table stores immutable point-in-time graph captures (nodes_json, edges_json, symbols_count, label), but there's no CLI command to compare two snapshots. Users can only view individual snapshots, not see what changed between them (added/removed/changed nodes and edges).
-    > **Recommended approach:**
-    > 1. **`beadloom snapshots list`** — show all saved snapshots with labels, dates, node/edge counts.
-    > 2. **`beadloom snapshots diff <label-a> <label-b>`** — compute and display added/removed/changed nodes and edges between two snapshots. Output as Rich table + optional `--json` for automation.
-    > 3. **`beadloom snapshots save --label "v1.8.0"`** — explicit named snapshot creation (currently snapshots are auto-created during reindex).
-    > Stays within existing SQLite + Python stack. No external dependencies (Dolt, etc.) needed — the current `graph_snapshots` schema already contains all necessary data for diffing.
-
-70. [2026-02-21] [MEDIUM] `sync-check` resets baseline on `reindex`, masking stale doc content — When `/dev` agent runs `beadloom reindex` after code changes, the sync baseline (hashes in `sync_state` table) is updated. Subsequent `sync-check` reports `[ok]` even though the doc **content** was never updated to reflect the code changes. This causes `/tech-writer` to miss stale docs because its primary signal (`sync-check`) is already "consumed" by the dev agent.
-    > **Root cause:** `sync-check` tracks "you acknowledged the code change" (baseline freshness), not "you updated the doc content to match" (semantic freshness).
-    > **Recommended approach:**
-    > 1. **Two-phase sync state** — separate `code_hash_at_reindex` (set by reindex) from `doc_hash_at_last_edit` (set when doc file changes). sync-check compares both: if code changed since last doc edit, report stale even if reindex ran.
-    > 2. **Symbol-level diff in sync output** — when sync-check detects code changes, show which symbols were added/removed/changed (already available via `symbols_hash`). This gives tech-writers actionable info.
-    > 3. **`--since-last-doc-edit` flag** — opt-in mode that ignores reindex baseline and compares against last doc file modification time.
-    > High complexity — requires schema migration (`sync_state` table) and changes to reindex + sync-check logic. Workaround: agent skill instructions now include explicit API CHANGE logging and docs/ grep steps.
+(none)
 
 ---
 
@@ -74,6 +65,22 @@
 ---
 
 ## Closed Issues
+
+### v1.9.0 — BDL-034 (UX Batch Fix)
+
+> Phase 13. UX issues and improvements batch fix — rules DB, AGENTS.md regen, docs audit FP, two-phase sync.
+
+65. ~~[2026-02-21] [MEDIUM] `docs audit` still has ~60% false positive rate on beadloom itself~~ **FIXED (BDL-034)** — 3-layer FP reduction pipeline: blocklist modifiers (skip numbers near `max`, `limit`, `%`, etc.), proximity scoring (closest keyword wins with distance ranking), file-type heuristics (SPEC.md/CONTRIBUTING.md suppressed). FP rate reduced from ~60% to ~11%.
+
+66. ~~[2026-02-21] [LOW] `graph_snapshots` lacks diff/compare capability~~ **ALREADY RESOLVED** — Snapshot diffing was already implemented (`beadloom snapshot save`, `snapshot list`, `snapshot compare`) in prior work. No code changes needed.
+
+67. ~~[2026-02-21] [MEDIUM] `_load_rules_into_db` silently drops v3 rule types~~ **FIXED (BDL-034)** — Added `_serialize_rule()` with generic isinstance branches for all 7 v3 rule types (DenyRule, RequireRule, CycleRule, LayerRule, CardinalityRule, ImportBoundaryRule, ForbidEdgeRule). Rules DB table now correctly stores all 9 rules.
+
+68. ~~[2026-02-21] [LOW] `_build_rules_section` and `_read_rules_data` use simplistic rule type detection~~ **FIXED (BDL-034)** — New `_detect_rule_type()` function checks all 7 YAML keys (`require`, `deny`, `forbid_cycles`, `layers`, `check`, `forbid_import`, `forbid`) for accurate type labels in AGENTS.md and `beadloom prime`.
+
+69. ~~[2026-02-21] [LOW] `generate_agents_md` Custom section preservation corrupts file on regeneration~~ **FIXED (BDL-034)** — Switched to HTML comment markers (`<!-- beadloom:custom-start -->` / `<!-- beadloom:custom-end -->`). Old `## Custom` format auto-migrated. No more duplication on regeneration.
+
+70. ~~[2026-02-21] [MEDIUM] `sync-check` resets baseline on `reindex`, masking stale doc content~~ **FIXED (BDL-034)** — Two-phase sync via additive `doc_hash_at_last_edit` column in `sync_state`. Tracks doc content independently from reindex baseline. sync-check detects code drift that survives reindex.
 
 ### v1.8.0 — BDL-028 (TUI Bug Fixes)
 
