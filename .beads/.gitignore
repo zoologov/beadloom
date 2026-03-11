@@ -20,6 +20,15 @@ last-touched
 db.sqlite
 bd.db
 
+# Embedded Dolt store (bd 1.0.x local DB engine) + its auto-backup.
+# Machine-specific working stores; source of truth for git is issues.jsonl.
+embeddeddolt/
+backup/
+export-state.json
+
+# Manual pre-migration backups
+backup-pre-migrate-*/
+
 # Worktree redirect file (contains relative path to main repo's .beads/)
 # Must not be committed as paths would be wrong in other clones
 redirect
