@@ -1,8 +1,9 @@
 # BDL UX Feedback Log
 
 > Collected during development and dogfooding.
-> Total: 90 issues | Open: 5 | Improvements: 15 | Excluded: 5 | Closed: 65
+> Total: 96 issues | Open: 10 | Improvements: 16 | Excluded: 5 | Closed: 65
 > Last reviewed: BDL-034 (UX Issues & Improvements Batch Fix)
+> 2026-05-28: added #91–#96 from the comprehensive architecture/code review (see `.claude/development/REVIEW.md`); refined #88 root cause.
 
 # Beadloom UX Issues
 
@@ -67,6 +68,7 @@
     **Root cause hypothesis:** Incremental reindex likely detects that many files changed (18 doc files + potentially cached state) and incorrectly drops the entire index instead of updating it. The SQLite cache may have become inconsistent after bulk doc writes by parallel agents.
     **Expected:** Incremental reindex should never return 0 nodes when `services.yml` is valid. If the incremental path detects inconsistency, it should auto-fallback to `--full` reindex rather than returning an empty result. At minimum, print a warning: `"Incremental reindex returned 0 nodes — possible cache inconsistency. Retry with --full."`.
     **Workaround:** Always use `beadloom reindex --full` after bulk changes. Do not rely on incremental reindex after modifying many files simultaneously.
+    **Root cause (confirmed 2026-05-28 code review):** NOT cache inconsistency. `incremental_reindex` (`infrastructure/reindex.py:1088-1296`) never assigns `result.nodes_loaded`/`edges_loaded` on the docs/code-only path — they keep their `ReindexResult` default of `0`, and the CLI prints them verbatim (`services/cli.py:288-289`). The index is intact; this is a **display bug**, not data loss. Trivial fix: query live DB totals (as the `nothing_changed` branch already does at `cli.py:274-279`). Note this is a recurrence — the same symptom (#21) was "fixed" in v1.5.0.
 
 86. [2026-03-10] [HIGH] YAML flow-style edges silently produce 0 nodes on reindex
 
@@ -76,6 +78,53 @@
     **Issue:** After saving `services.yml` with flow-style edges, `beadloom reindex` returned `Nodes: 0, Edges: 0` — a complete silent failure. No error, no warning. The YAML parser appears to not handle inline mapping syntax for edge entries. Rewriting all edges in block format (`- src: X\n  dst: Y\n  kind: Z`) fixed the issue immediately (18 nodes returned).
     **Expected:** Either (a) the YAML parser should correctly handle flow-style mappings (they are valid YAML), or (b) if the parser has limitations, it should detect the issue and emit a clear error: `"Error: edges at line N use unsupported inline format. Use block format instead."` Silent 0-node results are the worst possible failure mode — the user thinks the graph is empty.
     **Workaround:** Always use YAML block format for edges. Never use `- { key: value }` inline format in `services.yml`.
+
+91. [2026-05-28] [CRITICAL] Beadloom violates its own architecture rules; `lint --strict` is configured to pass anyway
+
+    **Severity:** critical
+    **Command:** `beadloom lint --strict` (exits 0) vs. actual graph state
+    **Context:** Self-audit during the comprehensive architecture/code review (2026-05-28). The product's core value proposition is enforcing architecture boundaries and catching dependency cycles.
+    **Issue:** `beadloom lint --strict` exits **0** on Beadloom itself despite **12 real violations** (verified live). Two compounding problems:
+    - (1) **The coupling is real.** `infrastructure` is a god-package: `infrastructure/reindex.py` (~1296 LOC) orchestrates every domain and imports them at module level (`infrastructure/reindex.py:14-16` → `context_oracle`, `doc_sync`, `graph`). Meanwhile `graph/linter.py:98` and `graph/import_resolver.py:820,882` import back into `infrastructure.reindex`, creating cycles. The cycle is openly acknowledged in a code comment (`graph/linter.py:95-96`: *"Lazy import to avoid circular dependency…"*) and worked around with function-local lazy imports instead of being fixed. Per the layer rule, `infrastructure` sits BELOW domains yet imports all of them.
+    - (2) **The alarm is silenced.** In `.beadloom/_graph/rules.yml`, `no-dependency-cycles` (line 39) and `architecture-layers` (line 45) are set `severity: warn`. `--strict` only fails on `error`-severity, so a graph full of cycles passes green.
+    **Expected:** A tool that sells architecture enforcement must pass its own enforcement. (a) Break the `infrastructure` god-package — extract reindex orchestration into a `services`-layer module, or invert the dependency so `infrastructure` stops importing domains; (b) restore `no-dependency-cycles`/`architecture-layers` to `severity: error`. Until then this is a credibility hole reproducible by any skeptic in two commands.
+    **Workaround:** None — structural issue, not a usage issue.
+
+92. [2026-05-28] [HIGH] `doctor` reports false "Version drift" on Beadloom itself (reads stale `importlib.metadata`, not `__version__`)
+
+    **Severity:** high
+    **Command:** `beadloom doctor`
+    **Context:** Self-audit (2026-05-28). Distinct from #73 (which is about doctor reading the user-authored `.claude/CLAUDE.md` on an *external* project). This is about doctor's notion of the "actual" version being wrong even on Beadloom's own repo.
+    **Issue:** `doctor` reports *"Version drift: CLAUDE.md claims 1.9.0, actual is 1.7.0"* while `src/beadloom/__init__.py:3` is `__version__ = "1.9.0"` and `status` shows 1.9.0. Root cause: `_get_actual_version()` (`infrastructure/doctor.py:274-281`) returns `importlib.metadata.version("beadloom")` first — stale editable-install metadata — and only falls back to source `__version__` on `PackageNotFoundError`. A diagnostic that confidently emits a wrong diagnosis erodes trust in all of doctor's output.
+    **Expected:** Treat the in-tree `__version__` as the source of truth for "actual version" (or compare directly against it). Installed-package metadata must not override the source version.
+    **Workaround:** Reinstall the package to refresh metadata; ignore the warning.
+
+93. [2026-05-28] [LOW] `AGENTS.md` MCP tool list is stale (documents 13 tools, actual is 14)
+
+    **Severity:** low
+    **Command:** `beadloom doctor`
+    **Context:** Self-audit (2026-05-28). doctor reports *"MCP tool drift: AGENTS.md documents 13 tools, actual is 14"*.
+    **Issue:** The generated `AGENTS.md` lists 13 MCP tools but 14 are registered. Unlike the won't-fix README case (#20), `AGENTS.md` IS agent-facing and HAS a `generate_agents_md()` regeneration path — so this is a real regeneration/sync gap that should never drift.
+    **Expected:** `generate_agents_md()` should enumerate MCP tools from the live registry so the count can't drift; `setup-rules --refresh` (or a doctor `--fix`) should bring it back in sync.
+    **Workaround:** Regenerate `AGENTS.md`.
+
+94. [2026-05-28] [MEDIUM] Over-broad `except Exception` for "table missing" can swallow real errors silently
+
+    **Severity:** medium
+    **Command:** internal (reindex / metadata reads)
+    **Context:** Self-audit (2026-05-28). Same silent-failure class as #86 / #88.
+    **Issue:** `infrastructure/reindex.py:125`, `:863`, `:926` use bare `except Exception` to mean "table doesn't exist on first run" and then return `{}` / skip. As written they also swallow genuine `sqlite3` corruption, IO errors, and programming errors — silently returning empty and masking real failures behind a "first run" assumption.
+    **Expected:** Catch the specific `sqlite3.OperationalError` (and verify it's a missing-table case, e.g. via `PRAGMA table_info`) so only the intended condition is handled; let all other exceptions propagate.
+    **Workaround:** None.
+
+95. [2026-05-28] [MEDIUM] Per-bundle full table scan of `code_symbols` won't scale; L2 `bundle_cache` is not on the build path
+
+    **Severity:** medium
+    **Command:** `beadloom prime` / `beadloom ctx <id>`
+    **Context:** Self-audit (2026-05-28). Invisible on this repo (506 symbols); a latent scale problem for the large monorepos a "context oracle" targets.
+    **Issue:** `build_context` (`context_oracle/builder.py:377`) calls `_collect_code_symbols` (`:256`), which runs `SELECT * FROM code_symbols` (`:267`) and `json.loads(row["annotations"])` per row (`:268`) on EVERY bundle build, then filters to the subgraph in Python — O(total symbols in repo) per `prime`/`ctx` call. A SQLite L2 cache exists (`context_oracle/cache.py` → `bundle_cache` table) but `build_context` does not consult it on the hot path.
+    **Expected:** Filter symbols in SQL by the subgraph's ref_ids (indexed join), avoid per-row JSON parsing of non-matching rows (e.g. a `symbol_annotations(ref_id, symbol_id)` table or an indexed `ref_id` column), and/or wire `build_context` through the existing `bundle_cache`.
+    **Workaround:** None needed at small scale.
 
 ---
 
@@ -448,6 +497,13 @@
     | TypeScript | Express | Microservices |
     | TypeScript | React Native/Expo | Mobile app |
     | Multi-language | — | Monorepo |
+
+96. [2026-05-28] [MEDIUM] Test suite is volume-heavy but brittle: implementation-coupled and rarely parametrized
+
+    **Severity:** medium
+    **Context:** Self-audit (2026-05-28). Test:source ratio ≈1.9:1 (~48K test LOC / ~25K src LOC), 2576 test functions.
+    **Issue:** The volume reflects breadth, not depth: only ~4 uses of `@pytest.mark.parametrize` (test bodies are copy-pasted instead of data-driven), and ~193 accesses to private attributes (`._foo`) in tests — assertions welded to current internals that will break on refactor. `test_tui.py` alone is ~5989 LOC for a low-value surface. This brittleness will make the #91 architecture refactor far more painful than necessary.
+    **Expected:** Before the #91 refactor: (a) convert copy-pasted test groups to `parametrize`; (b) replace private-attribute assertions with behavior / public-API assertions; (c) reassess whether the TUI warrants ~6K LOC of tests. Treat coverage as a means, not the `fail_under=80` number as the goal.
 
 ---
 
