@@ -1,7 +1,7 @@
 # BDL UX Feedback Log
 
 > Collected during development and dogfooding.
-> Total: 70 issues | Open: 0 | Improvements: 0 | Excluded: 5 | Closed: 65
+> Total: 90 issues | Open: 5 | Improvements: 15 | Excluded: 5 | Closed: 65
 > Last reviewed: BDL-034 (UX Issues & Improvements Batch Fix)
 
 # Beadloom UX Issues
@@ -31,7 +31,51 @@
 
 > Issues awaiting code fixes in Beadloom.
 
-(none)
+71. [2026-03-10] [MEDIUM] `beadloom init --bootstrap` generates rules that immediately produce lint violations
+
+    **Severity:** medium
+    **Command:** `beadloom init --bootstrap -y` → `beadloom lint --strict`
+    **Context:** Bootstrapping Beadloom on a production FastAPI monolith project provided for field-testing. The project has a clean architecture with domain packages containing `graphql/` sub-packages.
+    **Issue:** The auto-generated `rules.yml` includes a `feature-needs-domain` rule that requires every feature to be `part_of` a domain. However, the bootstrap classifier creates features inside services too (e.g., `core-rest` feature → `part_of` core service; `tasks-graphql` feature → `part_of` tasks service). Running `beadloom lint --strict` immediately after init exits with 2 violations — a "broken out of the box" experience.
+    **Expected:** Either (a) the default rule should accept features inside both domains and services (`has_edge_to: {}`), or (b) the bootstrap classifier should only classify nodes as `feature` when they are inside a `domain`-kind parent (not `service`-kind). Zero violations should be the norm after a clean bootstrap.
+    **Workaround:** Manually edit `.beadloom/_graph/rules.yml`: change `has_edge_to: { kind: domain }` to `has_edge_to: {}` and rename the rule to `feature-needs-parent`.
+
+72. [2026-03-10] [LOW] `beadloom setup-rules` doesn't detect IDE when marker directory is gitignored
+
+    **Severity:** low
+    **Command:** `beadloom setup-rules`
+    **Context:** The project has `.cursor/` listed in `.gitignore`, so the directory doesn't exist on a fresh clone, but does exist in the working tree.
+    **Issue:** `setup-rules` outputs `No IDE markers detected` and creates no files. The `.cursor/` directory was present in the filesystem but gitignored. Auto-detection apparently checks for marker files but the detection logic may miss directories that exist but are in `.gitignore`.
+    **Expected:** If marker directories exist on disk (regardless of gitignore), they should be detected. Alternatively, if no markers are found, print a helpful hint: `"No IDE markers detected. Use --tool cursor|windsurf|cline to specify."` so the user doesn't have to run `--help` to discover the flag.
+    **Workaround:** Explicitly pass `--tool cursor`.
+
+73. [2026-03-10] [LOW] `beadloom doctor` reports "Version drift" and "Package drift" by checking `.claude/CLAUDE.md`
+
+    **Severity:** low
+    **Command:** `beadloom doctor`
+    **Context:** After bootstrapping on an external project, the existing `.claude/CLAUDE.md` contained content from a previous project (Beadloom itself) with `Version: 1.9.0` and DDD package references (`context_oracle/`, `doc_sync/`, etc.).
+    **Issue:** `doctor` checks `.claude/CLAUDE.md` for version and package claims, finding `CLAUDE.md claims 1.9.0, actual is 1.7.0` and `Package drift: claimed but missing: context_oracle, doc_sync, graph, infrastructure, onboarding, services, tui`. These are false positives — CLAUDE.md is a user-maintained file that may describe the project in custom terms, not necessarily matching Beadloom's internal structure.
+    **Expected:** `doctor` should validate `.beadloom/AGENTS.md` (which Beadloom generates and controls) rather than `.claude/CLAUDE.md` (which is user-authored and project-specific). If CLAUDE.md is checked at all, it should be limited to `<!-- beadloom:auto-start -->` / `<!-- beadloom:auto-end -->` sections.
+    **Workaround:** Ignore the warnings; they're false positives caused by stale CLAUDE.md content from another project.
+
+88. [2026-03-11] [HIGH] Incremental `beadloom reindex` returns 0 nodes after doc enrichment
+
+    **Severity:** high
+    **Command:** `beadloom reindex`
+    **Context:** After enriching 18 documentation files (replacing skeleton content with detailed descriptions), an incremental `beadloom reindex` was run to update the index.
+    **Issue:** Incremental reindex returned `Nodes: 0, Edges: 0, Symbols: 0, Imports: 0` — completely empty index. The `services.yml` was verified to be intact (18 nodes, 34 edges, correct YAML block format). Running `beadloom reindex --full` immediately after returned `Nodes: 18, Edges: 34, Symbols: 272` — completely normal.
+    **Root cause hypothesis:** Incremental reindex likely detects that many files changed (18 doc files + potentially cached state) and incorrectly drops the entire index instead of updating it. The SQLite cache may have become inconsistent after bulk doc writes by parallel agents.
+    **Expected:** Incremental reindex should never return 0 nodes when `services.yml` is valid. If the incremental path detects inconsistency, it should auto-fallback to `--full` reindex rather than returning an empty result. At minimum, print a warning: `"Incremental reindex returned 0 nodes — possible cache inconsistency. Retry with --full."`.
+    **Workaround:** Always use `beadloom reindex --full` after bulk changes. Do not rely on incremental reindex after modifying many files simultaneously.
+
+86. [2026-03-10] [HIGH] YAML flow-style edges silently produce 0 nodes on reindex
+
+    **Severity:** high
+    **Command:** `beadloom reindex`
+    **Context:** During manual graph editing of `services.yml`, edges were written in YAML inline/flow format: `- { src: houses, dst: core-external-inspection-system, kind: depends_on }`. This is perfectly valid YAML per the spec. Nodes were written in block format.
+    **Issue:** After saving `services.yml` with flow-style edges, `beadloom reindex` returned `Nodes: 0, Edges: 0` — a complete silent failure. No error, no warning. The YAML parser appears to not handle inline mapping syntax for edge entries. Rewriting all edges in block format (`- src: X\n  dst: Y\n  kind: Z`) fixed the issue immediately (18 nodes returned).
+    **Expected:** Either (a) the YAML parser should correctly handle flow-style mappings (they are valid YAML), or (b) if the parser has limitations, it should detect the issue and emit a clear error: `"Error: edges at line N use unsupported inline format. Use block format instead."` Silent 0-node results are the worst possible failure mode — the user thinks the graph is empty.
+    **Workaround:** Always use YAML block format for edges. Never use `- { key: value }` inline format in `services.yml`.
 
 ---
 
@@ -39,7 +83,371 @@
 
 > Enhancement proposals for existing features. Not bugs — current behavior works but can be better.
 
-(none)
+74. [2026-03-10] [MEDIUM] Bootstrap classifies test directories as domains — clutters graph and prime output
+
+    **Severity:** medium
+    **Command:** `beadloom init --bootstrap`
+    **Context:** Field-testing on a production project with `app/tests/` containing subdirectories per domain (`tests/houses/`, `tests/pdf/`, `tests/plans/`, `tests/users/`, `tests/integrations/`).
+    **Issue:** Bootstrap creates 7 test-related nodes (`tests`, `tests-houses`, `tests-pdf`, `tests-plans`, `tests-users`, `tests-integrations`, `tests-core`) classified as domains. These nodes:
+    - Clutter `beadloom prime` output (7 of 17 "domains" are actually test suites)
+    - Inflate the graph (30 nodes → ~23 without tests)
+    - Add noise to `beadloom graph` Mermaid diagram
+    - Create spurious `depends_on` edges (tests naturally import everything)
+    **Expected:** Option to exclude test directories from the architecture graph: `beadloom init --bootstrap --exclude-tests` or a `config.yml` setting like `exclude_paths: [app/tests/]`. Alternatively, classify test directories as a separate `kind: test-suite` that can be filtered in `prime`/`graph` output.
+
+75. [2026-03-10] [MEDIUM] Auto-generated node summaries are mechanical and don't convey purpose
+
+    **Severity:** medium
+    **Command:** `beadloom init --bootstrap`
+    **Context:** Project has README.md with a clear description of each domain's purpose, plus `__init__.py` files with module docstrings.
+    **Issue:** Generated summaries are purely structural: `"Domain: configs — 1 class, 2 fns"`, `"Domain: houses — 2 classes, 6 fns"`. These tell an AI agent nothing about what the domain does. The information needed is available in:
+    - Project README.md (describes each domain conceptually)
+    - `__init__.py` module docstrings
+    - Existing documentation in `doc/` directory
+    **Expected:** During bootstrap, attempt to extract meaningful summaries from:
+    1. `__init__.py` docstring of the package (highest priority)
+    2. README.md sections that mention the domain name
+    3. Existing docs in the project's `doc/` or `docs/` directory
+    Fall back to the mechanical format only if no semantic source is available.
+
+76. [2026-03-10] [LOW] `beadloom init` doesn't support combined bootstrap + import mode in one step
+
+    **Severity:** low
+    **Command:** `beadloom init --bootstrap --import doc/`
+    **Context:** The project has both source code in `app/` and existing documentation in `doc/` (API specs, integration guides). The user wants to bootstrap from code AND import existing docs.
+    **Issue:** `--bootstrap` and `--import` are mutually exclusive on the CLI. The user must run two commands: `beadloom init --bootstrap -y` then `beadloom init --import doc/`. The `--mode both` flag exists in help but it's unclear how it interacts with `--import DIRECTORY`.
+    **Expected:** `beadloom init --bootstrap --import doc/ -y` should work in a single invocation: bootstrap the graph from code, then import and classify docs from the specified directory.
+
+77. [2026-03-10] [MEDIUM] No automated CLAUDE.md adaptation for target project stack
+
+    **Severity:** medium
+    **Command:** `beadloom setup-rules --refresh`
+    **Context:** After bootstrapping on a new project, the `.claude/CLAUDE.md` file contained a generic template (from a previous project) with wrong stack references (Python 3.10 instead of 3.13, `mypy` instead of `ty`, `src/beadloom/` paths instead of `app/`, etc.). Manual adaptation required ~30 minutes of an AI agent's time to:
+    - Analyze the project stack (pyproject.toml, CI config, pre-commit)
+    - Rewrite the Project Info section
+    - Rewrite the Architecture section
+    - Update all quality gate commands
+    - Update all `.claude/commands/*.md` files (dev, review, test, templates, coordinator, checkpoint)
+    **Issue:** Beadloom bootstraps the architecture graph automatically but doesn't help with adapting the AI agent instruction files. The `setup-rules --refresh` only updates `<!-- beadloom:auto-start -->` sections, which cover a small fraction of CLAUDE.md.
+    **Expected:** A new command or flag like `beadloom setup-rules --adapt-claude` that:
+    1. Reads `pyproject.toml`, CI configs, pre-commit config to detect the project's stack
+    2. Updates `CLAUDE.md` section `0.1 Project` with detected stack, tooling, architecture
+    3. Updates quality gate commands (test runner, linter, type checker) throughout CLAUDE.md
+    4. Optionally adapts `.claude/commands/dev.md` code patterns section with project-appropriate examples
+    This would make Beadloom initialization a truly one-command experience for AI-assisted projects.
+
+78. [2026-03-10] [LOW] Bootstrap should auto-validate generated rules and warn on immediate violations — see also #71
+
+    **Severity:** low
+    **Command:** `beadloom init --bootstrap -y`
+    **Context:** After bootstrap, user expects a clean state but `beadloom lint --strict` fails (see issue #71).
+    **Issue:** Bootstrap generates `rules.yml` and `services.yml` independently. It doesn't validate that the generated rules are satisfied by the generated graph. The user discovers violations only when they manually run `lint`.
+    **Expected:** At the end of bootstrap, automatically run `lint` internally. If violations are found, either:
+    - (a) Auto-fix the rules to match the generated graph (preferred), or
+    - (b) Print a warning: `"⚠ 2 lint violations detected in the generated graph. Run 'beadloom lint' to see details and fix .beadloom/_graph/rules.yml"`
+
+79. [2026-03-10] [INFO] Field-testing metrics: Beadloom bootstrap on a production FastAPI monolith
+
+    **Severity:** info
+    **Command:** `beadloom init --bootstrap -y`
+    **Context:** Field-testing on a production Python 3.13 FastAPI + Strawberry GraphQL monolith with 6 business domains, ~50 Python source files, ~30 test files, Docker + k8s deployment, GitLab CI.
+    **Results:**
+    - **Bootstrap time:** ~3 seconds
+    - **Auto-detected:** preset=monolith, language=.py, scan_paths=[app]
+    - **Generated graph:** 30 nodes, 47 raw edges (95 after reindex with import analysis), 272 symbols
+    - **Classification accuracy:** ~80% — correctly identified 6 business domains, 6 features (graphql sub-packages), root service. Misclassified: test dirs as domains (7 nodes), some service/domain kind swaps.
+    - **Lint violations:** 2 out of the box (rules-vs-graph mismatch, see #71)
+    - **Doc coverage:** 97% (29/30 nodes had auto-generated docs)
+    - **beadloom prime:** correct and useful output after rules fix — 0 stale docs, 0 lint violations
+    - **Total time to fully operational state (bootstrap + rules fix + .claude adaptation + .gitignore + verify):** ~15 minutes with AI agent assistance
+    - **Improvement vs. previous field test (#37):** Bootstrap quality improved from ~35% to ~80% architecture capture. The main remaining gap is test-directory noise and dry summaries.
+
+80. [2026-03-10] [HIGH] Bootstrap graph accuracy: comprehensive improvement plan for all supported languages
+
+    **Severity:** high
+    **Command:** `beadloom init --bootstrap`
+    **Context:** Field-testing on a production project revealed that the bootstrapped graph is ~80% accurate but has systematic misclassifications. These are NOT project-specific — they stem from heuristics that apply across all 12 supported languages. This issue consolidates the root causes and proposes a phased improvement plan.
+
+    **Root causes identified:**
+
+    **A. Test directories inside scan_paths are not excluded.**
+    `_SKIP_DIRS` in `scanner.py` includes `"test", "tests"` but only for top-level directory detection in `detect_source_dirs()`. Once a scan_path is chosen (e.g., `app/`), subdirectories like `app/tests/`, `app/__tests__/`, `app/spec/` are scanned and classified as domains. This affects:
+    - Python: `app/tests/`, `tests/` inside packages
+    - TypeScript/JavaScript: `__tests__/`, `*.test.ts` collocated files
+    - Go: `*_test.go` files (collocated by convention)
+    - Java/Kotlin: `src/test/` mirroring `src/main/`
+    - Swift: `*Tests/` directories
+    - Rust: `tests/` directory, inline `#[cfg(test)]` modules
+
+    **B. `_SERVICE_DIRS` regex over-matches internal domain layers.**
+    The regex `^(services?|core|engine|workers?|jobs?|tasks?|processors?)$` matches both:
+    - Top-level packages that ARE architectural services (correct: `services/`, `core/`)
+    - Sub-packages within a domain that are internal layers (incorrect: `app/pdf/services/`, `app/pdf/tasks/`)
+    The classifier doesn't distinguish depth — a `services/` directory 2 levels deep inside a domain should NOT create a standalone service node.
+
+    **C. No composition root detection.**
+    Files that import from ALL or most domains (e.g., `schema.py`, `urls.py`, `routes/index.ts`, `main.go`) are not recognized as composition roots. This creates inverted dependency edges: the composition root's parent gets `depends_on` edges pointing toward every domain, when architecturally the domains are independent and the root just wires them together. Affected patterns across languages:
+    - Python: `schema.py` (GraphQL), `urls.py` (Django), `main.py` (FastAPI)
+    - TypeScript: `routes/index.ts`, `app.module.ts` (NestJS)
+    - Go: `cmd/server/main.go`, `wire.go`
+    - Java/Kotlin: `@Configuration` classes, `Application.java`
+    - Rust: `main.rs`, `lib.rs`
+
+    **D. Framework-detected metadata is not used for classification tuning.**
+    `_detect_framework()` in `scanner.py` correctly identifies 11+ frameworks (FastAPI, Django, NestJS, Spring Boot, Express, etc.) but the result is only stored as metadata on the root node. It is NOT used to:
+    - Adjust which directories become features vs. domains (e.g., Django `apps.py` = domain, FastAPI `graphql/` = transport layer within domain)
+    - Set framework-specific layer rules
+    - Choose appropriate `rules.yml` templates
+
+    **Proposed solution — phased approach:**
+
+    **Phase 1: Test exclusion (LOW effort, HIGH impact)**
+    - Add `exclude_paths` to `config.yml` schema (list of glob patterns)
+    - Auto-populate with detected test directories during bootstrap using existing `test_mapper.py` patterns:
+      - Python: `**/tests/`, `**/test/`, `**/__tests__/`
+      - JS/TS: `**/__tests__/`, `**/*.test.*`, `**/*.spec.*`
+      - Go: skip `*_test.go` from node creation (they're collocated)
+      - Java/Kotlin: `**/src/test/`
+      - Swift: `**/*Tests/`
+      - Rust: `**/tests/` (integration tests dir)
+    - Bootstrap output: `"Excluded 7 test directories (override in config.yml)"`
+    - Estimated impact: removes 20-30% of graph noise across all languages.
+
+    **Phase 2: Depth-aware kind classification (MEDIUM effort, HIGH impact)**
+    - Change `_SERVICE_DIRS` / `_FEATURE_DIRS` matching to consider directory depth relative to scan_path root.
+    - Rule: directories matching `_SERVICE_DIRS` or `_FEATURE_DIRS` at depth ≥ 2 inside an already-classified domain should be **absorbed into the parent** (not create separate nodes), unless they have 5+ files of their own.
+    - Examples:
+      - `app/pdf/services/` (depth 2 inside `app/`) → part of `pdf` domain, NOT a separate `pdf-services` service node
+      - `app/core/redis/` (depth 2 inside `app/`) → sub-domain of `core`, keep as-is (has its own distinct responsibility)
+      - `services/` at top level (depth 0) → standalone service node (correct)
+    - This fixes: `pdf-services`, `pdf-tasks`, `users-services`, `tests-core` misclassifications.
+    - Language-specific depth thresholds may be needed:
+      - Python: depth 2+ = internal
+      - Java/Kotlin: depth 3+ (due to `src/main/java/com/...` convention)
+      - Go: depth 1+ (flat package convention)
+
+    **Phase 3: Composition root detection (MEDIUM effort, MEDIUM impact)**
+    - After import-graph construction, identify files with fan-out ≥ 70% of all domains:
+      ```
+      composition_root = file where (imported_domains / total_domains) >= 0.7
+      ```
+    - For composition root files:
+      - Do NOT create `depends_on` edges from the root's parent to imported domains
+      - Instead, mark the file with `# composition-root` annotation in graph metadata
+      - Optionally create `wires` edges (a new edge kind) for documentation purposes
+    - Language-specific patterns to aid detection:
+      - Python: file imports `strawberry.Schema`, `urlpatterns`, `FastAPI()` + imports from 3+ domains
+      - TypeScript: file contains `@Module({ imports: [...] })` (NestJS) or `createApp()` (Vue)
+      - Go: `main.go` in `cmd/` importing 3+ internal packages
+      - Java: class annotated `@SpringBootApplication` or `@Configuration`
+      - Rust: `main.rs` or `lib.rs` with `mod` declarations for 3+ modules
+
+    **Phase 4: Framework-specific classification rules (MEDIUM effort, HIGH impact)**
+    - Use detected framework to apply classification overrides:
+
+    | Framework | Rule |
+    |-----------|------|
+    | **FastAPI** | `graphql/`, `api/`, `routers/` inside domain → transport layer (feature), not separate domain |
+    | **Django** | Directory with `apps.py` → domain; `urls.py` → composition root; `admin.py` → skip |
+    | **NestJS** | `*.module.ts` → domain boundary; `*.controller.ts` → transport; `*.service.ts` → absorbed |
+    | **Spring Boot** | `@Controller`/`@RestController` → transport; `@Service` → absorbed; `@Repository` → adapter |
+    | **Express** | `routes/` → transport; `middleware/` → infrastructure; `controllers/` → absorbed |
+    | **Go (stdlib)** | `cmd/` → entry points; `internal/` → domains; `pkg/` → shared |
+    | **Rust (Actix)** | `handlers/` → transport; `models/` → entities; `services/` → domains |
+    | **React/Vue** | `components/` → features; `hooks/`/`composables/` → shared; `pages/`/`views/` → transport |
+
+    - Store active framework in `config.yml`:
+      ```yaml
+      framework: fastapi   # auto-detected, user can override
+      ```
+
+    **Phase 5: Docstring/README mining for summaries (LOW effort, MEDIUM impact)**
+    - During bootstrap, for each classified node:
+      1. Read entry-point file's module docstring (language-specific):
+         - Python: `__init__.py` or `module.py` top-level docstring
+         - Go: package comment in first `.go` file
+         - Rust: `//!` doc comments in `lib.rs` / `mod.rs`
+         - Java/Kotlin: Javadoc on main class
+         - TypeScript: JSDoc on default export or `/** @module */`
+      2. Search project README.md for sections mentioning the directory name
+      3. Search `doc/` or `docs/` for files named after the domain
+      4. Fallback: current mechanical format `"Domain: X — N classes, M fns"`
+
+    **Phase 6: AI-assisted graph refinement via MCP (HIGH effort, HIGHEST impact)**
+    - New command: `beadloom refine` (or `beadloom init --bootstrap --refine`)
+    - After mechanical bootstrap, invoke an AI agent (via MCP or direct prompt) with:
+      - Generated graph (nodes + edges as JSON)
+      - README.md content
+      - Import-graph summary (top-10 highest fan-out files)
+      - Detected framework + entry points
+    - Agent reviews and returns corrections:
+      - kind reclassification
+      - edge direction fixes
+      - summary enrichment
+      - nodes to merge or exclude
+    - Agent output written as `services.yml` patch → user confirms → apply
+    - Requires: MCP write tools (`update_node`) already exist; need a "review prompt" template
+
+    **Priority and impact matrix:**
+
+    | Phase | Effort | Impact | Fixes |
+    |-------|--------|--------|-------|
+    | 1. Test exclusion | Low | High | #74, ~25% noise reduction |
+    | 2. Depth-aware kinds | Medium | High | service/domain misclassification |
+    | 3. Composition roots | Medium | Medium | inverted dependencies |
+    | 4. Framework rules | Medium | High | language-specific accuracy |
+    | 5. Summary mining | Low | Medium | #75, useless summaries |
+    | 6. AI refinement | High | Highest | remaining ~10% gap |
+
+    Phases 1-3 are language-agnostic and fix structural issues. Phase 4 is the largest effort but delivers per-language accuracy. Phase 5 is a quick win. Phase 6 is the endgame for "perfect out of the box" but depends on LLM availability.
+
+81. [2026-03-10] [HIGH] Import-graph based dependency direction validation
+
+    **Severity:** high
+    **Command:** `beadloom init --bootstrap` → `beadloom reindex`
+    **Context:** After reindex, import analysis produces 305 import edges. These are used for `forbid_import` rules but NOT for validating bootstrap-generated `depends_on` edge directions.
+    **Issue:** Bootstrap generates `depends_on` edges based on import analysis, but doesn't distinguish between:
+    - **Real architectural dependency**: domain A's business logic imports from domain B's public API
+    - **Composition wiring**: a top-level file (schema.py, urls.py, main.go) imports from all domains to wire them together
+    - **Test imports**: test files import from production code (not a real architectural dependency)
+    The result: `core` appears to depend on `houses`, `pdf`, `plans`, `tasks`, `users` — when the real dependency is the reverse.
+    **Expected:** After import-graph construction:
+    1. Identify composition-root files (fan-out ≥ 70% of domains) and exclude their imports from `depends_on` edge generation
+    2. Identify test files and exclude their imports from `depends_on` edge generation
+    3. For remaining imports, determine dependency direction by counting: if A imports B more than B imports A, then A depends_on B
+    4. Flag bidirectional dependencies for user review (potential circular dependency or misclassification)
+
+82. [2026-03-10] [MEDIUM] Bootstrap `config.yml` should support `exclude_paths` for user-controlled noise reduction
+
+    **Severity:** medium
+    **Command:** `beadloom init --bootstrap` → `beadloom reindex`
+    **Context:** After bootstrap, the user wants to exclude test directories, migration directories, or generated code from the architecture graph without manually editing `services.yml`.
+    **Issue:** `config.yml` only supports `scan_paths` (what to include) but not `exclude_paths` (what to skip within scan_paths). The user must manually delete nodes from `services.yml` and re-run `reindex` — fragile and lost on next bootstrap.
+    **Expected:** Add `exclude_paths` to `config.yml`:
+    ```yaml
+    scan_paths:
+    - app
+    exclude_paths:
+    - "app/tests/"
+    - "app/migrations/"
+    - "**/generated/"
+    ```
+    The exclude list should support glob patterns and be respected by both `init --bootstrap` and `reindex`. Auto-populated during bootstrap with detected test directories (per-language patterns from `test_mapper.py`).
+
+83. [2026-03-10] [MEDIUM] Two-phase bootstrap: draft → review → commit
+
+    **Severity:** medium
+    **Command:** `beadloom init --bootstrap`
+    **Context:** Bootstrap generates a final graph in one step. The user discovers issues only after running `lint`, `doctor`, or manually inspecting `services.yml`. By then, they're editing YAML by hand — defeating the purpose of automation.
+    **Issue:** No review step between graph generation and commit. The user can't validate or correct the graph before it's written to disk. This is especially problematic for large projects where manual YAML editing is tedious.
+    **Expected:** Two-phase bootstrap:
+    ```bash
+    # Phase 1: Generate draft graph (write to .beadloom/_graph/services.draft.yml)
+    beadloom init --bootstrap --draft
+
+    # Phase 2: Interactive review (or AI-assisted)
+    beadloom review-graph              # shows draft, asks questions, accepts corrections
+    beadloom review-graph --auto-fix   # auto-fix known issues (test exclusion, depth-aware kinds)
+
+    # Phase 3: Apply (rename draft to final)
+    beadloom apply-graph
+    ```
+    In non-interactive mode (`-y`), Phase 2 applies `--auto-fix` automatically. In interactive mode, it presents a summary and asks for confirmation.
+    For AI agents via MCP: expose a `review_bootstrap_graph` tool that returns the draft graph + suggested fixes as JSON, and an `apply_bootstrap_fixes` tool that applies corrections.
+
+84. [2026-03-10] [MEDIUM] Framework-specific preset rules: use detected framework to tune classification
+
+    **Severity:** medium
+    **Command:** `beadloom init --bootstrap`
+    **Context:** `_detect_framework()` in `scanner.py` correctly identifies 11+ frameworks (FastAPI, Django, NestJS, Spring Boot, Express, Vue, React, Actix, Flask, Next.js, Gatsby). The detected framework is stored as metadata on the root node's `extra.tech_stack` — but NOT used to adjust classification heuristics.
+    **Issue:** Framework detection is "fire and forget" — the information exists but doesn't influence how nodes are classified. Each framework has known conventions:
+    - Django: directory with `apps.py` = domain boundary, `urls.py` = composition root
+    - NestJS: `*.module.ts` = domain boundary, `*.controller.ts` = transport layer
+    - Spring Boot: `@Service` annotated classes = domain services (not standalone service nodes)
+    - FastAPI: `graphql/`, `routers/` inside domain = transport layer, not separate domains
+    - Go: `cmd/` = entry points, `internal/` = domains, `pkg/` = shared library
+    **Expected:** After framework detection, apply framework-specific classification overrides:
+    1. Store detected framework in `config.yml` (user-overridable): `framework: fastapi`
+    2. Load framework-specific rules from a built-in registry (e.g., `src/beadloom/onboarding/frameworks/`)
+    3. Rules override default `_SERVICE_DIRS` / `_FEATURE_DIRS` / `_ENTITY_DIRS` regex patterns
+    4. Rules define composition root patterns, test directory patterns, and layer conventions
+    5. Users can extend with custom rules in `config.yml`:
+       ```yaml
+       framework: fastapi
+       classification_overrides:
+         - pattern: "*/graphql/"
+           kind: feature
+           absorb_into_parent: true
+       ```
+
+87. [2026-03-10] [LOW] No automated cleanup of orphaned docs after node deletion from graph
+
+    **Severity:** low
+    **Command:** `beadloom doctor`
+    **Context:** During manual graph refinement, 12 nodes were deleted from `services.yml` (test directories, internal layers). After `beadloom reindex`, the auto-generated doc skeletons for those deleted nodes remained on disk.
+    **Issue:** `beadloom doctor` correctly reports orphaned docs as "unlinked from graph" — but the user must manually `rm` each file. For 12 deleted nodes, this means 12 manual deletions across the `docs/` tree. There is no `beadloom docs cleanup` or `beadloom docs prune` command.
+    **Expected:** Either:
+    - (a) `beadloom docs prune` command that deletes doc files not linked to any graph node (with `--dry-run` preview)
+    - (b) `beadloom reindex --prune-docs` flag that auto-cleans orphaned docs during reindex
+    - (c) `beadloom doctor --fix` that offers to delete orphaned docs interactively
+    For AI agents via MCP: a `prune_orphaned_docs` tool that returns the list of files to delete and accepts confirmation.
+    **Workaround:** Manually delete each orphaned doc file reported by `beadloom doctor`.
+
+89. [2026-03-11] [MEDIUM] `sync-check` reports `untracked_files` for annotated and documented files
+
+    **Severity:** medium
+    **Command:** `beadloom sync-check`
+    **Context:** After adding `# beadloom:domain=` / `# beadloom:feature=` annotations to ALL 55 source files AND enriching all 18 docs with detailed content mentioning every module, `sync-check` still reports 19 of 48 pairs as stale with reason `untracked_files`.
+    **Issue:** Files like `app/core/broker.py` have both:
+    - Code annotation: `# beadloom:domain=core`
+    - Doc mention: `docs/services/core.md` describes `broker.py` in detail
+    - Doc marker: `<!-- beadloom:track=app/core/broker.py -->`
+    Yet sync-check reports: `core: untracked_files - broker.py` and marks ALL other pairs in the same node as stale (6 stale entries for one untracked file).
+    **Pattern:** The affected files are always the ones listed in `beadloom doctor` as "untracked source files". These are files inside the node's `source` directory that exist on disk but apparently aren't indexed as individual tracked items. The multiplier effect (1 untracked file → N stale pairs) inflates the stale count significantly.
+    **Expected:** If a file has a `# beadloom:domain=X` annotation AND the doc mentions it (or has a `beadloom:track` marker), sync-check should mark it as OK, not `untracked_files`. The annotation is an explicit signal that the file belongs to node X and should be tracked.
+    **Impact:** On the field-tested project, this prevents reaching 100% sync-check OK even with comprehensive annotations and documentation. Max achievable: 60% (29/48).
+    **Workaround:** None. Accept the stale warnings as false positives.
+
+90. [2026-03-11] [MEDIUM] `<!-- beadloom:track=... -->` HTML comments in docs have no effect on sync-check
+
+    **Severity:** medium
+    **Command:** `beadloom sync-check`
+    **Context:** During documentation enrichment, `<!-- beadloom:track=app/core/broker.py -->` HTML comments were added to docs following the convention observed in the `beadloom prime` output hint: `"New features: add # beadloom:feature=REF_ID annotations"`. AI agents naturally extend this to docs with `<!-- beadloom:track=... -->`.
+    **Issue:** These HTML comments have no effect on the sync engine. Adding `<!-- beadloom:track=app/core/external-inspection-system/constants.py -->` before a section describing `constants.py` does NOT make sync-check recognize the file as tracked. The comments are inert — they don't participate in staleness detection, freshness tracking, or coverage calculation.
+    **Expected:** Either:
+    - (a) Recognize `<!-- beadloom:track=<path> -->` in docs as an explicit file-to-doc binding. When present, sync-check should create a tracked pair and monitor both the doc section and the source file for changes.
+    - (b) If this convention is not supported, document it clearly in `beadloom prime` / `AGENTS.md` / `docs generate` output so AI agents don't waste effort adding markers that do nothing.
+    Option (a) would be a powerful feature: it creates a lightweight, explicit doc-code binding without requiring the full annotation + reindex workflow. AI agents writing docs could simply add `<!-- beadloom:track=... -->` and sync-check would start monitoring.
+    **Workaround:** Do not use `<!-- beadloom:track=... -->` comments. They have no functional effect.
+
+85. [2026-03-10] [INFO] Bootstrap accuracy target: 95%+ across all supported languages
+
+    **Severity:** info
+    **Context:** Consolidation of all bootstrap accuracy improvements (#74, #75, #77, #78, #80, #81, #82, #83, #84) into a measurable quality target.
+    **Current state (measured on 2 field tests):**
+    - Field test #37 (React Native / Expo): ~35% accuracy → improved to ~94% after manual refinement
+    - Field test #79 (Python / FastAPI): ~80% accuracy → improved to ~95% after rules fix + manual refinement
+    **Target:** Bootstrap should produce a graph that is ≥95% accurate (measured as: nodes with correct `kind` + edges with correct direction / total nodes + edges) WITHOUT manual intervention, for projects using any of the 12 supported languages.
+    **Measurement plan:**
+    - Create a test suite of reference projects (1 per supported language/framework combination)
+    - Each reference project has a manually curated `services.golden.yml` (ground truth)
+    - CI job: `beadloom init --bootstrap -y` → compare generated graph vs golden → report accuracy %
+    - Track accuracy over time as heuristics improve
+    **Reference projects needed:**
+    | Language | Framework | Project type |
+    |----------|-----------|-------------|
+    | Python | FastAPI | Monolith API |
+    | Python | Django | Monolith web app |
+    | TypeScript | NestJS | Monolith API |
+    | TypeScript | React + Next.js | Frontend monolith |
+    | Go | stdlib net/http | Microservice |
+    | Rust | Actix | Microservice |
+    | Java | Spring Boot | Monolith API |
+    | Kotlin | Spring Boot | Monolith API |
+    | Swift | Vapor or SwiftUI | iOS app |
+    | TypeScript | Express | Microservices |
+    | TypeScript | React Native/Expo | Mobile app |
+    | Multi-language | — | Monorepo |
 
 ---
 
