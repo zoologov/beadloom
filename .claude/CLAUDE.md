@@ -1,14 +1,22 @@
 # CLAUDE.md — Multi-Agent Development Core
 
 > **Version:** 3.0 (Optimized)
-> **Integration:** steveyegge/beads CLI
+> **Integration:** steveyegge/beads CLI (1.0.4, embedded Dolt)
 > **Skills:** `/task-init`, `/dev`, `/review`, `/test`, `/coordinator`, `/templates`, `/checkpoint`, `/tech-writer`
+> **Subagents:** `.claude/agents/{dev,test,review,tech-writer}.md` (canonical roles; the `/dev` etc. skills are interactive wrappers)
 
 ---
 
 ## 0. CRITICAL RULES
 
 > **READ FIRST. ALWAYS FOLLOW.**
+
+### Setup (one-time, per clone)
+
+```bash
+git config beads.role maintainer   # or "contributor" — required by bd 1.0.4 (silences GH#2950 warning)
+beadloom install-hooks             # pre-commit hook: lint + sync-check enforcement
+```
 
 ### BEFORE any work
 
@@ -60,8 +68,9 @@ beadloom lint --strict
 # 4. Final checkpoint
 bd comments add <bead-id> "COMPLETED: [results]"
 
-# 5. Close bead
-bd close <bead-id>
+# 5. Close bead (shows newly unblocked work)
+bd close <bead-id> --suggest-next
+# (append --session "$CLAUDE_SESSION_ID" only if that env var is set)
 ```
 
 ---
@@ -101,6 +110,7 @@ bd close <bead-id>
 ```bash
 # Available tasks (no blockers)
 bd ready
+bd ready --claim                  # atomically claim the next ready bead (1.0.4)
 
 # All tasks
 bd list
@@ -115,8 +125,8 @@ bd update <id> --status in_progress --claim
 # Add checkpoint (does NOT overwrite description)
 bd comments add <id> "checkpoint text"
 
-# Close task
-bd close <id>
+# Close task (--suggest-next shows newly unblocked beads; 1.0.4)
+bd close <id> --suggest-next
 
 # Dependency graph
 bd graph --all
@@ -125,11 +135,17 @@ bd graph --all
 bd dep add <id> <depends-on-id>
 ```
 
+**Multi-agent coordination (new in 1.0.4) — used by `/coordinator`:**
+- `bd swarm` — epic → DAG → waves (`create` / `validate` / `status`)
+- `bd gate` — async wait conditions (review→tech-writer; CI via `gh:run` / `gh:pr`)
+- `bd merge-slot` — serialize parallel merges (one agent merges at a time)
+
 **IMPORTANT:**
 - `bd comments add` — for checkpoints (preserves history)
 - `bd update --append-notes` — for notes
 - NEVER work on a task without `--claim`
-- ALWAYS close via `bd close`
+- ALWAYS close via `bd close`; `--suggest-next` lists *candidate* unblocked beads — **confirm with `bd ready`** (it may list still-blocked beads; verified bd 1.0.4 quirk, see BDL-UX-Issues #97)
+- `--session "$CLAUDE_SESSION_ID"` on close is optional (audit trail; only if the env var is set)
 
 ---
 
@@ -153,6 +169,11 @@ beadloom sync-check              # check doc-code freshness (exit 2 = stale)
 beadloom lint --strict           # architecture boundary check (exit 1 = violation)
 beadloom doctor                  # graph integrity validation
 
+# Change tracking & visualization
+beadloom diff --since <git-ref>  # graph changes vs a git ref (exit 1 = changes) — use in /review
+beadloom snapshot save           # snapshot architecture state; `snapshot compare <a> <b>` to diff
+beadloom link <ref-id> <url>     # link a graph node to an external tracker issue (GitHub/Jira)
+
 # Documentation
 beadloom docs generate           # generate doc skeletons from graph
 beadloom docs polish             # structured data for AI doc enrichment
@@ -161,6 +182,7 @@ beadloom docs polish             # structured data for AI doc enrichment
 beadloom init                    # initialize beadloom in a project
 beadloom setup-rules             # create IDE rules files referencing AGENTS.md
 beadloom setup-mcp               # configure MCP server for IDE
+beadloom install-hooks           # pre-commit hook: lint + sync-check enforcement
 
 # After changing code
 # 1. beadloom reindex            — re-index changed files
@@ -219,8 +241,9 @@ Coordinator MUST be activated before multi-bead work:
 1. Invoke `/coordinator` skill
 2. Complete `/task-init` flow BEFORE creating any beads or writing code
 3. Coordinator gets technical context through filtered sources (strategy specs, sub-agent summaries), NEVER reads raw source code directly
+4. Coordinator launches roles as first-class subagents via the `Agent` tool (`subagent_type: dev|test|review|tech-writer`), tracked through `bd swarm` / `gate` / `merge-slot`
 
-Sub-agents use corresponding roles (`/dev`, `/test`, `/review`, `/tech-writer`).
+Roles are defined canonically in `.claude/agents/{dev,test,review,tech-writer}.md`; the `/dev` `/test` `/review` `/tech-writer` skills are interactive wrappers over the same definitions.
 
 ---
 
@@ -316,8 +339,7 @@ bd comments add <id> "CHECKPOINT: ..."
 ```bash
 uv run pytest
 bd comments add <id> "COMPLETED: ..."
-bd close <id>
-bd ready  # what got unblocked?
+bd close <id> --suggest-next          # shows newly unblocked beads
 ```
 
 ### New work item

@@ -77,8 +77,9 @@ FILES:
 EOF
 )"
 
-# Then close
-bd close <bead-id>
+# Then close (--suggest-next lists candidate unblocked beads — confirm with `bd ready`)
+bd close <bead-id> --suggest-next
+# (append --session "$CLAUDE_SESSION_ID" only if that env var is set)
 ```
 
 ---
