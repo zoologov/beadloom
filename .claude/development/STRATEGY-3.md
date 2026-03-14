@@ -163,3 +163,5 @@ This is a **platform-scale** ambition (federation × BE/FE/DevOps/Infra + polygl
 ## 9. Next Step
 
 Run `/task-init` to turn **Phase 0 (Foundation/Honesty Gate)** into the next epic — it is the prerequisite for everything else and is mostly cheap, high-credibility fixes. Federation phases (F1+) become subsequent epics, each proven on a thin live slice before broadening.
+
+> **Process note:** the multi-agent dev process was modernized for Beads 1.0.4 + Claude Code in **BDL-035** (`.claude/agents/*` role subagents, `bd swarm`/`gate`/`merge-slot`, `Agent` tool). Phase 0 (Epic 2) is the first epic executed *through* that modernized process — its real dogfood.

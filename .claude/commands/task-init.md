@@ -98,7 +98,7 @@ Draft  →  Approved  →  Done
 5. Update both to `Status: Approved`
 6. **Create beads in tracker** (ONLY after PLAN is Approved):
    - One-time per clone: ensure `git config beads.role maintainer` is set (see CLAUDE.md §0 Setup).
-   - Create parent bead: `bd create --type feature --title "[ISSUE-KEY] Name"`
+   - Create parent bead: `bd create --type feature --title "[ISSUE-KEY] Name"` (use `--type epic` if you want `bd swarm` orchestration — swarm requires an epic-type parent; feature parents still work via bead dependencies)
    - Create sub-beads with mandatory structure (see below): `bd create --type task --parent <parent-id>`
    - Set up dependencies: `bd dep add <blocked> <blocker>`
    - **Faster alternative (1.0.4):** create the whole bead DAG in one shot from a JSON plan — `bd create --graph <plan.json>` (define nodes + dependencies in the file).

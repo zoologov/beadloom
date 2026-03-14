@@ -1,28 +1,28 @@
 # /coordinator — Multi-agent Work Coordinator
 
-> **When to invoke:** during parallel work with multiple agents
-> **Focus:** task distribution, synchronization, quality control
+> **When to invoke:** during parallel work with multiple agents (an epic with independent beads)
+> **Focus:** task distribution, synchronization, quality gating
+> **Backbone:** bead dependencies + `bd ready` (waves, always) · `bd merge-slot` (serialized merges) · `bd gate` (CI/external waits) · `bd swarm` (optional convenience for epic-type parents: validate/status)
 
 ---
 
 ## Coordinator Activation Protocol (MANDATORY)
 
-**Before ANY work, the coordinator MUST:**
+Before ANY work, the coordinator MUST:
 
-1. Complete `/task-init` flow (PRD → RFC → CONTEXT+PLAN → approvals)
-2. Output activation status to user:
+1. Complete `/task-init` flow (PRD → RFC → CONTEXT+PLAN → approvals; beads created after PLAN approval).
+2. Confirm the DAG is sound before launching: `bd dep tree <parent-id>` (and, **if the parent is `type: epic`**, `bd swarm create <epic-id>` + `bd swarm validate <epic-id>` for structured orchestration + status). **`bd swarm` requires an epic-type parent** — `feature`-type parents drive waves directly from bead dependencies + `bd ready` (see Wave-based execution). Both work; swarm is an optional convenience layer.
+3. Output activation status:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │ COORDINATOR ACTIVATED: {ISSUE-KEY}                      │
 │                                                         │
 │ Role: Coordinator                                       │
-│ Protocol: /coordinator                                  │
-│ Task-init: [completed / in progress — current step]     │
+│ DAG: validated ✓ (swarm if epic-parent, else bead-deps) │
 │ Beads: [count] (dev: N, test: N, review: N, docs: N)    │
-│ Agents: /dev, /test, /review, /tech-writer              │
+│ Subagents: dev / test / review / tech-writer            │
 │ Waves: [count]                                          │
-│                                                         │
 │ Context sources: strategy specs + sub-agent summaries   │
 │ Raw code reading: PROHIBITED (delegated to sub-agents)  │
 └─────────────────────────────────────────────────────────┘
@@ -32,272 +32,177 @@
 
 ## Coordinator Context Boundary (MANDATORY)
 
-The coordinator MUST NOT load source code, test files, or DB schemas
-into its own context. Technical exploration is ALWAYS delegated to
-sub-agents (Explore/dev) running in background.
+The coordinator MUST NOT load source code, test files, or DB schemas into its own context. Technical exploration is ALWAYS delegated to sub-agents (Explore/dev) running in the background.
 
-**Coordinator reads ONLY:**
-- CLAUDE.md, skill files (task-init, coordinator, templates)
-- STRATEGY-2.md (task tables and high-level specs, not full code examples)
-- Feature docs: PRD, RFC, CONTEXT, PLAN, ACTIVE
-- beads CLI output (`bd list`, `bd show`, `bd ready`)
-- Sub-agent summaries (2-3 lines)
-- `beadloom prime` output (compact project context)
+**Coordinator reads ONLY:** CLAUDE.md, skill/agent files; strategy specs (task tables, not full code); feature docs (PRD/RFC/CONTEXT/PLAN/ACTIVE); `bd` output (`bd ready`, `bd show`, `bd swarm status`); sub-agent 2-3 line summaries; `beadloom prime` output.
 
-**Coordinator NEVER reads:**
-- `src/**/*.py` (source code)
-- `tests/**/*.py` (test files)
-- `.beadloom/_graph/*.yml` (use `beadloom` CLI instead)
-- Full sub-agent output (only tail last lines if needed)
+**Coordinator NEVER reads:** `src/**`, `tests/**`, `.beadloom/_graph/*.yml` (use `beadloom` CLI instead), full sub-agent output (tail last lines only if needed).
 
-**When RFC needs technical context:** delegate to an Explore sub-agent
-in background, receive a 20-30 line summary. Never load raw code.
+When the RFC needs technical context: delegate to an Explore sub-agent in the background; receive a 20-30 line summary. Never load raw code.
 
 ---
 
-## Principles of multi-agent work
+## Principles
 
-1. **One bead = one agent** at any given time
-2. **Synchronization through files**, not through chat
-3. **CONTEXT.md is the source of truth**
-4. **Only independent beads run in parallel** (no shared dependencies)
-
----
-
-## Agent roles
-
-| Role | Skill | Tasks |
-|------|-------|-------|
-| Developer | `/dev` | Implementing beads, TDD |
-| Reviewer | `/review` | Code review, quality |
-| Tester | `/test` | Tests, coverage |
-| Coordinator | `/coordinator` | Distribution, synchronization |
+1. **One bead = one agent** at a time. Do NOT batch multiple beads into one agent (keeps contexts small, failures isolated).
+2. **Synchronization through files + beads**, not chat. CONTEXT.md is the source of truth.
+3. **Only independent beads run in parallel** (no shared dependencies). `bd ready` (universal) / `bd dep tree` is authoritative for what is launchable — NOT `bd close --suggest-next` (which can list still-blocked beads; see BDL-UX-Issues #97).
+4. **Serialize landings** with `bd merge-slot` so parallel agents never race on commits/merges.
 
 ---
 
-## Task distribution protocol
+## Agent roles = first-class subagents
 
-```bash
-# 1. View available beads
-bd ready
+Roles are defined canonically in `.claude/agents/{dev,test,review,tech-writer}.md` (each carries its own protocol + tools). The coordinator launches them via the **`Agent` tool** — it does NOT re-inject the role protocol.
 
-# 2. Check the DAG
-bd graph --all
-
-# 3. Select independent beads for parallel work
-# Example: BEAD-02 and BEAD-04 do not depend on each other
-
-# 4. Assign to agents
-bd update <bead-id-1> --assignee "agent-1" --status in_progress
-bd update <bead-id-2> --assignee "agent-2" --status in_progress
-```
+| Role | `subagent_type` | Tasks |
+|------|-----------------|-------|
+| Developer | `dev` | Implementing beads, TDD |
+| Tester | `test` | Tests, coverage |
+| Reviewer | `review` | Code review, quality (read-only) |
+| Tech Writer | `tech-writer` | Doc updates |
 
 ---
 
 ## Mandatory bead structure
 
-Every feature/epic MUST have this hierarchy:
-
 ```
-<parent-id> [feature/epic] — parent bead
-├── <parent-id>.N [task/dev]         — dev beads (one per logical unit, /dev agent)
-├── <parent-id>.N [task/test]        — test bead (/test agent)
-├── <parent-id>.N [task/review]      — review bead (/review agent)
-└── <parent-id>.N [task/tech-writer] — doc update bead (/tech-writer agent)
+<parent-id> [feature/epic]
+├── <parent-id>.N [task] — dev beads (one per logical unit, subagent_type: dev)
+├── <parent-id>.N [task] — test bead   (depends on ALL dev beads)
+├── <parent-id>.N [task] — review bead (depends on test bead)
+└── <parent-id>.N [task] — docs bead   (depends on review bead)
 ```
 
-**Rules:**
-- Dev beads are created ONLY after PLAN is Approved (Step 3.6), NOT before
-- Test bead depends on ALL dev beads
-- Review bead depends on test bead
-- Tech-writer bead depends on review bead
-- Parent feature is set to `in_progress` before Wave 1 starts
+Dependencies ARE the gates: a downstream bead never appears in `bd ready` until its blockers close. Dev beads created only after PLAN is Approved (task-init Step 3.6).
 
 ---
 
 ## Wave-based execution
 
-Waves MUST include all three agent roles:
+Launch each wave from `bd ready` (filtered to this epic); `bd swarm status` adds a grouped view for `epic`-type parents:
 
 ```
-Dev waves: Independent dev beads (parallel)
-├── Agent-1: BEAD-01 (P0, /dev)
-└── Agent-2: BEAD-04 (P0, independent, /dev)
-
-Dev waves: After Wave 1 completion
-├── Agent-1: BEAD-02 (/dev)
-├── Agent-2: BEAD-03 (/dev)
-└── Agent-3: BEAD-06 (/dev)
-
-Test wave: After all dev beads complete
-└── Agent: BEAD-test (/test)
-
-Review wave: After test wave
-└── Agent: BEAD-review (/review)
-    ├── Review = OK → proceed to tech-writer
-    └── Review = ISSUES → coordinator restarts dev→test→review cycle
-
-Tech-writer wave: ONLY after review = OK
-└── Agent: BEAD-docs (/tech-writer)
+Wave 1 (dev): independent dev beads in parallel (one subagent each)
+Wave 2 (dev): beads unblocked by Wave 1
+Test wave:    after ALL dev beads close
+Review wave:  after test
+  ├── OK     → docs wave
+  └── ISSUES → coordinator opens fix beads, re-runs dev→test→review
+Docs wave:    ONLY after review = OK
 ```
 
----
+### Launching sub-agents (Agent tool, background)
 
-## Review feedback loop
-
-When the `/review` agent completes, it returns one of two outcomes:
+ALWAYS launch parallel agents with `run_in_background: true` so results go to files/bead-comments, not the parent context. The subagent already knows its role — the prompt only needs the bead id, context pointers, and the return contract:
 
 ```
-Review = OK     → coordinator proceeds to tech-writer wave
-Review = ISSUES → coordinator handles fixes (see below)
-```
-
-**When review returns ISSUES:**
-
-1. Coordinator reads review comments via `bd comments <review-bead-id>`
-2. Coordinator creates new fix beads under the same parent:
-   ```bash
-   bd create --type task --title "[ISSUE-KEY] Fix: <review finding>" --parent <parent-id>
-   bd dep add <new-fix-bead> <review-bead>
-   ```
-3. Coordinator launches a new dev→test→review cycle for fix beads only
-4. Cycle repeats until review = OK
-5. Only then: tech-writer wave starts
-
-**IMPORTANT:** The tech-writer bead MUST NOT start until review is fully clean.
-The coordinator is responsible for gating this transition.
-
----
-
-## Context Overflow Protection
-
-> **CRITICAL:** Parallel agents overflow the parent context window.
-> Without protection, `/compact` fails and the session is lost.
-
-### Rule 1: Background agents (MANDATORY for waves)
-
-ALWAYS launch parallel agents with `run_in_background: true`:
-
-```python
-Task(
-    prompt="...",
-    subagent_type="general-purpose",
-    run_in_background=True,    # MANDATORY — results go to file, not context
+Agent(
+  description="BEAD-XX dev",
+  subagent_type="dev",            # dev | test | review | tech-writer
+  run_in_background=True,
+  prompt="Implement bead <bead-id>. Epic context: CONTEXT.md + ACTIVE.md at "
+         ".claude/development/docs/features/{ISSUE-KEY}/. "
+         "Follow your role protocol. RETURN CONTRACT: 2-3 line summary only; "
+         "write all detail to bead comments via `bd comments add`.",
 )
 ```
 
-- Agent results go to an `output_file`, NOT into parent context
-- Parent checks progress via `bd list` + `bd comments <id>`
-- Parent reads `output_file` only if needed (tail last 20 lines)
+Monitor progress via `bd ready` / `bd dep tree <parent-id>` (always) or `bd swarm status <epic-id>` (epic parents) + `bd comments <id>` — not by reading agent output.
 
-### Rule 2: Agent return contract
+### Merge serialization (bd merge-slot)
 
-Every agent prompt MUST include this instruction:
-
-```
-RETURN CONTRACT: When done, return ONLY a 2-3 line summary:
-"BEAD-XX done. N tests added. Files: list."
-Write ALL details to bead comments via `bd comments add`.
-Do NOT return file contents, diffs, or verbose test output.
-```
-
-### Rule 3: Compaction between waves
-
-After each wave completes:
+When parallel agents land changes, serialize merges so they don't cascade conflicts:
 
 ```bash
-# 1. Verify all beads in wave are closed
-bd list --status in_progress
-
-# 2. Read ACTIVE.md (will survive compaction)
-# Update ACTIVE.md with wave results
-
-# 3. /compact — compress parent context
-
-# 4. After compaction: read ACTIVE.md to restore state
-# Then launch next wave
-```
-
-### Rule 4: One bead = one agent
-
-Do NOT batch multiple beads into one agent (e.g., "BEAD-02 + BEAD-08").
-Each bead gets its own agent. This keeps individual agent contexts smaller
-and makes failures isolated.
-
----
-
-## Launching sub-agents
-
-**ALWAYS use `run_in_background: true` for parallel agents.**
-
-```
-Coordinator launches sub-agents in parallel (background):
-
-Agent-1 (developer, background):
-- Bead: BEAD-XX
-- Skill: /dev
-- Context: CONTEXT.md, ACTIVE.md
-- Return: 2-3 line summary only
-
-Agent-2 (developer, background):
-- Bead: BEAD-YY
-- Skill: /dev
-- Context: CONTEXT.md, ACTIVE.md
-- Return: 2-3 line summary only
+bd merge-slot create                 # once per repo
+# each agent (or coordinator on its behalf), before committing/merging:
+bd merge-slot acquire --wait         # blocks/queues until the slot is free
+# ... commit/merge ...
+bd merge-slot release
 ```
 
 ---
 
-## Requirements for sub-agent upon completion
+## Gating transitions
 
-**MANDATORY for each sub-agent:**
+- **review → docs** and all intra-epic ordering: handled by **bead dependencies** (downstream bead stays out of `bd ready` until blockers close). No extra command needed.
+- **External / CI waits:** use `bd gate`:
+  ```bash
+  bd gate create --type gh:run --blocks <bead-id>   # block a bead until a GitHub workflow finishes
+  bd gate discover                                   # resolve await_id for gh:run gates
+  bd gate check                                      # evaluate + auto-close resolved gates
+  bd gate resolve <gate-id>                          # manual/human gate
+  ```
+  (Gate types: `human`, `timer --timeout`, `gh:run`, `gh:pr`.) Use this to bridge to the STRATEGY-3 CI gate.
+
+### Review feedback loop
+
+When `/review` returns:
+- **OK** → coordinator proceeds to the docs wave.
+- **ISSUES** → coordinator: read findings (`bd comments <review-bead>`), create fix beads under the parent (`bd create --type task --parent <parent-id>`; `bd dep add <fix-bead> <review-bead>`), re-run dev→test→review until OK. Docs bead MUST NOT start until review is clean.
+
+---
+
+## Context management between waves
+
+> Modern Claude Code **auto-compacts** context, and background agents write results to files/bead-comments (not the parent). You do NOT need to manually `/compact` between waves.
+
+The durable protection is **file memory**: keep `ACTIVE.md` current and put all work detail in bead comments, so any compaction is lossless. After each wave, before launching the next:
 
 ```bash
-# 1. All tests pass
-uv run pytest
-
-# 2. Beadloom validation
-beadloom reindex
-beadloom sync-check
-beadloom lint --strict
-
-# 3. Add checkpoint with results (THIS is where details go)
-bd comments add <bead-id> "$(cat <<'EOF'
-COMPLETED:
-- What was done: [list]
-- Decisions: [if any]
-- Tests: [result]
-- Files: [changed files]
-- TODO: [if any]
-EOF
-)"
-
-# 4. Close the bead
-bd close <bead-id>
-
-# 5. Return ONLY a 2-3 line summary (NOT full details)
+bd ready / bd dep tree <parent-id>   # confirm wave beads are closed (bd swarm status if epic)
+# update ACTIVE.md with wave results
+beadloom snapshot compare <pre-wave> <post-wave>   # architecture evolution this wave
 ```
 
 ---
 
-## Coordinator checklist before wave commit
+## Per-wave commit checklist
 
 ```
 BEFORE WAVE COMMIT:
+□ All wave beads closed (`bd ready` / `bd dep tree`; `bd swarm status` if epic)
+□ bd comments show checkpoints for every wave bead
+□ CONTEXT.md current (phase, new files, last-updated); ACTIVE.md reflects results
+□ uv run pytest — all pass
+□ beadloom reindex && sync-check && lint --strict && doctor — clean
+□ beadloom snapshot save <label>  (per-wave architecture record)
+□ Merges serialized via bd merge-slot (no concurrent landings)
+```
 
-□ All sub-agents have completed their beads
-□ bd comments shows checkpoints for ALL beads in the wave
-□ CONTEXT.md is up to date:
-  - Phase matches reality
-  - "Related files" includes new modules
-  - "Last updated" is filled in
-□ ACTIVE.md reflects completed work
-□ All tests pass (uv run pytest)
-□ beadloom reindex — index is fresh
-□ beadloom sync-check — no stale docs
-□ beadloom lint --strict — no architecture violations
-□ beadloom doctor — graph integrity ok
-□ All beads are closed (bd close)
+---
+
+## Conflict resolution
+
+On a discrepancy: (1) stop all sub-agents, (2) report to the user, (3) wait for a decision, (4) update files, (5) restart sub-agents.
+
+## Changing the DAG mid-process
+
+```bash
+bd dep add <bead-id> <depends-on-id>
+bd dep tree <parent-id>            # re-confirm the DAG (or `bd swarm validate <epic-id>` if epic)
+```
+Then notify the user (do not change the DAG silently):
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ DAG CHANGE: {ISSUE-KEY}                                 │
+│ BEAD-XX now depends on BEAD-YY                          │
+│ Reason: [description] · Critical path impact: [yes/no]  │
+│ Confirm?                                                │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Wave status (to user)
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ WAVE 2 STATUS: {ISSUE-KEY}                             │
+│ [✓] BEAD-02 — Done    [⏳] BEAD-03 — In Progress       │
+│ [✓] BEAD-06 — Done                                      │
+│ Remaining: 1 · Next wave: BEAD-05 (waits on 02,03)      │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -308,85 +213,17 @@ BEFORE WAVE COMMIT:
 |------|-------------|------|
 | CONTEXT.md | Coordinator | After wave, architectural decisions |
 | ACTIVE.md | Sub-agent | During work |
-| beads (comments) | Sub-agent | Checkpoints, completion |
-| PLAN.md | Coordinator | When DAG changes |
-
----
-
-## Conflict resolution
-
-If a discrepancy is found:
-
-1. **Stop all sub-agents**
-2. Report the discrepancy to the user
-3. Wait for a decision
-4. Update files according to the decision
-5. Restart sub-agents
-
----
-
-## Changing the DAG mid-process
-
-```bash
-# 1. Stop work
-# 2. Add dependency
-bd dep add <bead-id> <depends-on-id>
-
-# 3. Check the graph
-bd graph --all
-
-# 4. Notify the user
-```
-
-```
-┌─────────────────────────────────────────────────────────┐
-│ DAG CHANGE: {ISSUE-KEY}                                 │
-│                                                         │
-│ New dependency discovered:                              │
-│ BEAD-XX now depends on BEAD-YY                          │
-│                                                         │
-│ Reason: [description]                                   │
-│ Impact on critical path: [yes/no]                       │
-│                                                         │
-│ Do you confirm the change?                              │
-└─────────────────────────────────────────────────────────┘
-```
-
----
-
-## Wave status
-
-Output for the user:
-
-```
-┌─────────────────────────────────────────────────────────┐
-│ WAVE 2 STATUS: {ISSUE-KEY}                             │
-│                                                         │
-│ [✓] BEAD-02 — Agent-1 — Done                           │
-│ [⏳] BEAD-03 — Agent-2 — In Progress (75%)             │
-│ [✓] BEAD-06 — Agent-3 — Done                           │
-│                                                         │
-│ Remaining: 1 bead                                       │
-│ Next wave: BEAD-05 (waiting on 02, 03)                  │
-└─────────────────────────────────────────────────────────┘
-```
+| bead comments | Sub-agent | Checkpoints, completion |
+| PLAN.md | Coordinator | When the DAG changes |
 
 ---
 
 ## Beadloom UX Feedback (Dogfooding)
 
-> **MANDATORY:** We use Beadloom as our project management tool. Collect UX feedback to improve it.
+> **MANDATORY:** We use Beadloom (and bd) as our own tooling. Collect UX feedback to improve it.
 
 **File:** `.claude/development/BDL-UX-Issues.md`
 
-**When to log:**
-- Any Beadloom command that fails unexpectedly or gives confusing output
-- Friction points in the workflow (e.g., too many steps, unclear error messages)
-- Missing features that would help the current task
-- Surprising behavior or inconsistencies
+**Log when:** a command fails/confuses, friction points, missing features, surprising behavior, or **false signals** (e.g. #97). Beadloom issues = our backlog; `bd` (steveyegge/beads) issues = log as **External**.
 
-**Who logs:**
-- **Coordinator** — logs issues encountered during orchestration (prime, graph, lint, sync-check)
-- **Sub-agents** — report Beadloom issues in bead comments; coordinator transfers to UX file
-
-**Format:** Follow the template in `BDL-UX-Issues.md`
+**Who:** Coordinator logs orchestration issues (prime/graph/lint/sync-check/swarm/gate); sub-agents report in bead comments → coordinator transfers to the UX file. Follow the template in `BDL-UX-Issues.md`.
