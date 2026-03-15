@@ -442,3 +442,149 @@ class TestSourceCoverageHierarchy:
 
         results = check_source_coverage(conn, project)
         assert results == []
+
+
+class TestSourceCoverageFileAnnotation:
+    """#89: file-level beadloom annotation tracks symbol-less files.
+
+    A file with a module-level ``# beadloom:domain=X`` comment but NO
+    extractable top-level symbol (e.g. a pure constants/config module)
+    produces zero ``code_symbols`` rows and would otherwise be reported as
+    untracked. The annotation is the explicit ownership signal and must
+    count as tracked.
+    """
+
+    def test_symbolless_annotated_file_is_tracked(
+        self, conn: sqlite3.Connection, project: Path
+    ) -> None:
+        _insert_node(conn, "mymod", "src/mymodule/")
+        _insert_doc(conn, "mymodule.md", "mymod")
+
+        # Pure-constants file: annotated, but tree-sitter extracts no symbol,
+        # so it never lands in code_symbols.
+        (project / "src" / "mymodule" / "constants.py").write_text(
+            "# beadloom:domain=mymod\n\nMAX_SIZE = 100\nNAME = 'broker'\n"
+        )
+
+        results = check_source_coverage(conn, project)
+        assert results == [], (
+            f"Annotated symbol-less file should be tracked, got: {results}"
+        )
+
+    def test_feature_annotation_also_tracks(
+        self, conn: sqlite3.Connection, project: Path
+    ) -> None:
+        """A ``# beadloom:feature=X`` annotation also counts as tracking."""
+        _insert_node(conn, "mymod", "src/mymodule/")
+        _insert_doc(conn, "mymodule.md", "mymod")
+
+        (project / "src" / "mymodule" / "config.py").write_text(
+            "# beadloom:feature=mymod\nSETTINGS = {}\n"
+        )
+
+        results = check_source_coverage(conn, project)
+        assert results == []
+
+    def test_annotation_to_other_node_still_untracked(
+        self, conn: sqlite3.Connection, project: Path
+    ) -> None:
+        """A file annotated to a DIFFERENT node is still untracked here."""
+        _insert_node(conn, "mymod", "src/mymodule/")
+        _insert_doc(conn, "mymodule.md", "mymod")
+
+        (project / "src" / "mymodule" / "constants.py").write_text(
+            "# beadloom:domain=somewhere-else\nVALUE = 1\n"
+        )
+
+        results = check_source_coverage(conn, project)
+        assert len(results) == 1
+        assert "src/mymodule/constants.py" in results[0]["untracked_files"]
+
+    def test_unannotated_symbolless_file_still_untracked(
+        self, conn: sqlite3.Connection, project: Path
+    ) -> None:
+        """A symbol-less file with NO annotation remains untracked (honest)."""
+        _insert_node(conn, "mymod", "src/mymodule/")
+        _insert_doc(conn, "mymodule.md", "mymod")
+
+        (project / "src" / "mymodule" / "data.py").write_text("X = 1\nY = 2\n")
+
+        results = check_source_coverage(conn, project)
+        assert len(results) == 1
+        assert "src/mymodule/data.py" in results[0]["untracked_files"]
+
+    def test_annotation_to_child_feature_tracks(
+        self, conn: sqlite3.Connection, project: Path
+    ) -> None:
+        """File annotated to a child feature (part_of parent) is tracked."""
+        _insert_node(conn, "infrastructure", "src/mymodule/", kind="domain")
+        _insert_doc(conn, "infrastructure.md", "infrastructure")
+        _insert_node(conn, "doctor", None, kind="feature")
+        _insert_edge(conn, "doctor", "infrastructure", "part_of")
+
+        # Symbol-less file annotated to the child feature.
+        (project / "src" / "mymodule" / "doctor_constants.py").write_text(
+            "# beadloom:feature=doctor\nDEFAULT = 5\n"
+        )
+
+        results = check_source_coverage(conn, project)
+        assert results == []
+
+
+class TestSourceCoverageTrackMarker:
+    """#90: ``<!-- beadloom:track=path -->`` doc markers bind files to docs."""
+
+    def test_track_marker_makes_file_tracked(
+        self, conn: sqlite3.Connection, project: Path
+    ) -> None:
+        _insert_node(conn, "mymod", "src/mymodule/")
+        _insert_doc(conn, "mymodule.md", "mymod")
+
+        # Symbol-less, UNannotated file on disk.
+        (project / "src" / "mymodule" / "constants.py").write_text("X = 1\n")
+
+        # Doc on disk explicitly binds the file via a track marker.
+        (project / "docs" / "mymodule.md").write_text(
+            "# My Module\n\n"
+            "<!-- beadloom:track=src/mymodule/constants.py -->\n"
+            "Describes constants.\n"
+        )
+
+        results = check_source_coverage(conn, project)
+        assert results == [], (
+            f"File bound via track marker should be tracked, got: {results}"
+        )
+
+    def test_track_marker_only_covers_listed_files(
+        self, conn: sqlite3.Connection, project: Path
+    ) -> None:
+        _insert_node(conn, "mymod", "src/mymodule/")
+        _insert_doc(conn, "mymodule.md", "mymod")
+
+        (project / "src" / "mymodule" / "constants.py").write_text("X = 1\n")
+        (project / "src" / "mymodule" / "other.py").write_text("Y = 2\n")
+
+        (project / "docs" / "mymodule.md").write_text(
+            "# My Module\n\n"
+            "<!-- beadloom:track=src/mymodule/constants.py -->\n"
+        )
+
+        results = check_source_coverage(conn, project)
+        assert len(results) == 1
+        untracked = results[0]["untracked_files"]
+        assert "src/mymodule/other.py" in untracked
+        assert "src/mymodule/constants.py" not in untracked
+
+    def test_no_marker_no_doc_file_unchanged(
+        self, conn: sqlite3.Connection, project: Path
+    ) -> None:
+        """Missing doc file on disk must not crash; behaves as before."""
+        _insert_node(conn, "mymod", "src/mymodule/")
+        _insert_doc(conn, "mymodule.md", "mymod")
+
+        (project / "src" / "mymodule" / "constants.py").write_text("X = 1\n")
+        # No doc file written on disk.
+
+        results = check_source_coverage(conn, project)
+        assert len(results) == 1
+        assert "src/mymodule/constants.py" in results[0]["untracked_files"]

@@ -272,13 +272,20 @@ def _extract_package_claims(text: str) -> set[str]:
 
 
 def _get_actual_version() -> str:
-    """Get actual beadloom version via importlib.metadata with fallback."""
+    """Get actual beadloom version from the in-tree ``__version__``.
+
+    The in-tree ``beadloom.__version__`` is the source of truth. Installed
+    package metadata (``importlib.metadata``) is deliberately *not* consulted
+    first: editable installs frequently carry stale metadata, which produced
+    false "version drift" diagnoses (BDL-UX-Issues #92). Falls back to package
+    metadata only if the source version is somehow unavailable.
+    """
     try:
-        return importlib.metadata.version("beadloom")
-    except importlib.metadata.PackageNotFoundError:
         from beadloom import __version__
 
         return __version__
+    except ImportError:  # pragma: no cover - defensive fallback
+        return importlib.metadata.version("beadloom")
 
 
 def _get_actual_cli_commands() -> set[str]:

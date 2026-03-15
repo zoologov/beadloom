@@ -1,7 +1,8 @@
 # BDL UX Feedback Log
 
 > Collected during development and dogfooding.
-> Total: 97 issues | Open: 10 | Improvements: 16 | Excluded: 6 | Closed: 65
+> Total: 98 issues | Open: 11 | Improvements: 16 | Excluded: 6 | Closed: 65
+> Note: BDL-036 (Phase 0) is resolving #91/#88/#92/#93/#94/#86/#89/#90/#71 (+#98); counts updated at epic close.
 > Last reviewed: BDL-034 (UX Issues & Improvements Batch Fix)
 > 2026-05-28: added #91–#96 from the comprehensive architecture/code review (see `.claude/development/REVIEW.md`); refined #88 root cause.
 
@@ -528,6 +529,9 @@
 
 97. [2026-05-29] [LOW] `bd close --suggest-next` reports still-blocked beads as "Newly unblocked" — During BDL-035, closing `beadloom-ji9.4` printed `Newly unblocked: beadloom-ji9.6`, but `bd ready` / `bd dep tree` show ji9.6 is still BLOCKED by ji9.2/.3/.5. `--suggest-next` appears to list beads where the closed issue was *a* blocker without checking whether *other* blockers remain — a false "ready" signal. Workaround: treat `--suggest-next` as candidates only; `bd ready` is authoritative.
     > **External.** Bug in `steveyegge/beads` CLI (1.0.4), not in beadloom. Captured during dogfooding; report upstream if desired.
+
+98. [2026-05-30] [LOW] `test_git_activity.py` date-relative flake + internally inconsistent assertions — `_SAMPLE_GIT_LOG` hardcodes Feb-2026 commit dates, so `test_maps_files_to_correct_nodes` fails once "today" is >30 days later (`commits_30d` 3→0). Same class as the `test_hot_activity` flake fixed in commit a4c88fa. While investigating, the test also looks internally inconsistent (comment references "mno345 from Jan 10" absent from the sample; `core.commits_90d==3` with only 2 core-touching commits) — needs the 30d/90d semantics clarified, not a blind date swap. Found during BDL-036 Wave 1 assembly; pre-existing, unrelated to the wave's changes. Tracked as BDL-036 BEAD-10.
+    > **Internal.** Beadloom test debt. Scoped as a follow-up bead within BDL-036 (blocks the test/exit-criterion bead).
 
 ---
 

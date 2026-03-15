@@ -370,6 +370,60 @@ def mark_synced_by_ref(
 # Excluded filenames — boilerplate, not doc-worthy
 _COVERAGE_EXCLUDE = frozenset({"__init__.py", "conftest.py", "__main__.py"})
 
+# File-level beadloom annotation in a source comment, e.g.
+#   # beadloom:domain=core   or   # beadloom:feature=docs-audit
+# Captures the ref_id value regardless of the key (domain/feature/...).
+_FILE_ANNOTATION_RE = re.compile(
+    r"beadloom:(?:domain|feature|service|entity)=([\w.\-]+)"
+)
+
+# Doc-side binding marker, e.g. <!-- beadloom:track=src/app/constants.py -->
+_TRACK_MARKER_RE = re.compile(r"beadloom:track=([^\s>]+)")
+
+
+def _file_annotation_ref_ids(path: Path) -> set[str]:
+    """Return ref_ids declared by file-level beadloom annotations in *path*.
+
+    Scans the head of the file for ``# beadloom:domain=X`` /
+    ``# beadloom:feature=X`` style comments.  These declare node ownership
+    even when the file contains no extractable top-level symbol (e.g. a pure
+    constants module), so the file is still considered *tracked* (#89).
+    """
+    if not path.is_file():
+        return set()
+    try:
+        content = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return set()
+    return set(_FILE_ANNOTATION_RE.findall(content))
+
+
+def _tracked_paths_from_doc(doc_file: Path, project_root: Path) -> set[str]:
+    """Return code paths bound to a doc via ``beadloom:track`` markers (#90).
+
+    Parses ``<!-- beadloom:track=<path> -->`` comments in *doc_file* and
+    normalizes each path relative to *project_root* so it can be compared
+    against the on-disk file set.
+    """
+    if not doc_file.is_file():
+        return set()
+    try:
+        content = doc_file.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return set()
+
+    tracked: set[str] = set()
+    for raw in _TRACK_MARKER_RE.findall(content):
+        candidate = Path(raw)
+        if candidate.is_absolute():
+            try:
+                tracked.add(str(candidate.relative_to(project_root)))
+            except ValueError:
+                continue
+        else:
+            tracked.add(str(candidate))
+    return tracked
+
 
 def check_source_coverage(
     conn: sqlite3.Connection,
@@ -467,6 +521,22 @@ def check_source_coverage(
             ).fetchall()
             for row in sym_rows:
                 tracked.add(row["file_path"])
+
+        # 6b. (#90) Honor explicit `beadloom:track=path` markers in the doc.
+        owned_ref_ids = set(all_ref_ids)
+        tracked |= _tracked_paths_from_doc(
+            project_root / "docs" / doc_path, project_root
+        )
+
+        # 6c. (#89) Honor file-level `# beadloom:domain/feature=` annotations.
+        #     Symbol-less files (e.g. pure constants modules) produce no
+        #     code_symbols rows, so the annotation is the only ownership
+        #     signal — count the file as tracked when it declares this node.
+        for disk_file in disk_files:
+            if disk_file in tracked:
+                continue
+            if _file_annotation_ref_ids(project_root / disk_file) & owned_ref_ids:
+                tracked.add(disk_file)
 
         # 7. Find untracked files
         untracked = sorted(disk_files - tracked)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from beadloom.infrastructure.doctor import (
     Check,
@@ -15,6 +16,9 @@ from beadloom.infrastructure.doctor import (
     _get_actual_packages,
     _get_actual_version,
 )
+
+if TYPE_CHECKING:
+    import pytest
 
 # ---------------------------------------------------------------------------
 # _extract_version_claim
@@ -111,6 +115,43 @@ class TestGetActualVersion:
         # Should look like a semver
         parts = result.split(".")
         assert len(parts) >= 2
+
+    def test_uses_in_tree_version_as_source_of_truth(self) -> None:
+        """In-tree ``__version__`` is the source of truth (BDL-UX #92).
+
+        Editable installs carry stale ``importlib.metadata`` versions, which
+        previously produced false "version drift". The source ``__version__``
+        must win over installed-package metadata.
+        """
+        # Arrange
+        from beadloom import __version__
+
+        # Act
+        result = _get_actual_version()
+
+        # Assert
+        assert result == __version__
+
+    def test_ignores_stale_installed_metadata(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Stale ``importlib.metadata`` version must not override source."""
+        # Arrange
+        import importlib.metadata
+
+        from beadloom import __version__
+
+        def _stale(_name: str) -> str:
+            return "0.0.0-stale"
+
+        monkeypatch.setattr(importlib.metadata, "version", _stale)
+
+        # Act
+        result = _get_actual_version()
+
+        # Assert
+        assert result == __version__
+        assert result != "0.0.0-stale"
 
 
 # ---------------------------------------------------------------------------

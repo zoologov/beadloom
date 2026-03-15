@@ -337,6 +337,38 @@ class TestGenerateAgentsMd:
         assert "diff" in content
         assert "lint" in content
 
+    def test_contains_all_registry_mcp_tools(self, tmp_path: Path) -> None:
+        """AGENTS.md must list every registered MCP tool (BDL-UX #93).
+
+        This guards against the documented tool count drifting from the live
+        registry (e.g. the previously-missing ``get_debt_report``).
+        """
+        from beadloom.infrastructure.mcp_tools import mcp_tool_names
+
+        generate_agents_md(tmp_path)
+        content = (tmp_path / ".beadloom" / "AGENTS.md").read_text()
+        for name in mcp_tool_names():
+            assert f"`{name}`" in content, f"AGENTS.md missing MCP tool: {name}"
+
+    def test_mcp_tool_count_matches_registry(self, tmp_path: Path) -> None:
+        """The number of tool rows in AGENTS.md equals the catalog count."""
+        from beadloom.infrastructure.mcp_tools import MCP_TOOL_CATALOG
+
+        generate_agents_md(tmp_path)
+        content = (tmp_path / ".beadloom" / "AGENTS.md").read_text()
+        for entry in MCP_TOOL_CATALOG:
+            assert f"`{entry.name}`" in content
+        # Every catalog tool name should appear; count must match exactly.
+        rows = [
+            line
+            for line in content.splitlines()
+            if line.strip().startswith("| `") and "|" in line
+        ]
+        tool_rows = [
+            line for line in rows if any(f"`{e.name}`" in line for e in MCP_TOOL_CATALOG)
+        ]
+        assert len(tool_rows) == len(MCP_TOOL_CATALOG)
+
     def test_contains_instructions(self, tmp_path: Path) -> None:
         generate_agents_md(tmp_path)
         content = (tmp_path / ".beadloom" / "AGENTS.md").read_text()

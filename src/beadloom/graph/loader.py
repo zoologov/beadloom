@@ -40,6 +40,15 @@ _NODE_DIRECT_FIELDS = frozenset({"ref_id", "kind", "summary", "source"})
 _NODE_SKIP_FIELDS = frozenset({"docs"})
 
 
+class GraphParseError(Exception):
+    """Raised when a graph YAML file cannot be parsed.
+
+    Carries the offending file path and, when available, the source line so
+    malformed YAML surfaces as a clear, actionable error instead of a silent
+    empty result (see BDL-UX-Issues #86).
+    """
+
+
 @dataclass
 class ParsedFile:
     """Result of parsing a single YAML graph file."""
@@ -58,15 +67,51 @@ class GraphLoadResult:
     warnings: list[str] = field(default_factory=list)
 
 
+def _format_yaml_error(path: Path, exc: yaml.YAMLError) -> str:
+    """Build a clear, line-referenced message from a PyYAML error."""
+    mark = getattr(exc, "problem_mark", None)
+    if mark is not None:
+        # ``mark.line`` is 0-based; report 1-based for human readability.
+        return (
+            f"Failed to parse graph file '{path.name}': invalid YAML at "
+            f"line {mark.line + 1}, column {mark.column + 1}. "
+            f"Check indentation (use spaces, not tabs) and mapping syntax."
+        )
+    return f"Failed to parse graph file '{path.name}': invalid YAML ({exc})."
+
+
 def parse_graph_file(path: Path) -> ParsedFile:
-    """Parse a single YAML graph file into nodes and edges."""
+    """Parse a single YAML graph file into nodes and edges.
+
+    Block-style and flow-style (inline ``{ key: value }``) mappings are both
+    valid YAML and parse identically. Any YAML syntax error is raised as a
+    :class:`GraphParseError` naming the file and line -- never swallowed into
+    a silent empty result (see BDL-UX-Issues #86).
+    """
     text = path.read_text(encoding="utf-8")
-    data = yaml.safe_load(text)
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        raise GraphParseError(_format_yaml_error(path, exc)) from exc
+
     if data is None:
         return ParsedFile()
+    if not isinstance(data, dict):
+        raise GraphParseError(
+            f"Failed to parse graph file '{path.name}': top-level YAML must be a "
+            f"mapping with 'nodes'/'edges' keys, got {type(data).__name__}."
+        )
 
-    nodes: list[dict[str, Any]] = data.get("nodes") or []
-    edges: list[dict[str, Any]] = data.get("edges") or []
+    nodes = data.get("nodes") or []
+    edges = data.get("edges") or []
+    if not isinstance(nodes, list):
+        raise GraphParseError(
+            f"Graph file '{path.name}': 'nodes' must be a list, got {type(nodes).__name__}."
+        )
+    if not isinstance(edges, list):
+        raise GraphParseError(
+            f"Graph file '{path.name}': 'edges' must be a list, got {type(edges).__name__}."
+        )
     return ParsedFile(nodes=nodes, edges=edges)
 
 
@@ -139,7 +184,12 @@ def load_graph(graph_dir: Path, conn: sqlite3.Connection) -> GraphLoadResult:
     all_nodes: list[dict[str, Any]] = []
     all_edges: list[dict[str, Any]] = []
     for yml_path in sorted(graph_dir.glob("*.yml")):
-        parsed = parse_graph_file(yml_path)
+        try:
+            parsed = parse_graph_file(yml_path)
+        except GraphParseError as exc:
+            # Record the error loudly; do NOT silently yield an empty graph.
+            result.errors.append(str(exc))
+            continue
         all_nodes.extend(parsed.nodes)
         all_edges.extend(parsed.edges)
 

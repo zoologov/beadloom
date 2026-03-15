@@ -256,3 +256,70 @@ class TestAcceptanceCriteria:
         assert len(stale_refs) >= 6, (
             f"Expected >= 6 stale refs, got {len(stale_refs)}: {stale_refs}"
         )
+
+
+class TestSyncReaches100PercentOnAnnotatedSample:
+    """#89/#90: a fully-annotated + documented project reaches genuine 100%.
+
+    Reproduces the field-test scenario: a node whose source directory
+    contains a symbol-less constants module (annotated) plus a normal
+    module. Before the fix, the constants module was reported as an
+    untracked file and flipped every pair of the node to stale, capping
+    achievable sync below 100%.
+    """
+
+    def test_symbolless_constants_module_does_not_block_100(
+        self, tmp_path: Path
+    ) -> None:
+        from beadloom.doc_sync.engine import check_sync
+
+        graph_dir = tmp_path / ".beadloom" / "_graph"
+        graph_dir.mkdir(parents=True)
+        docs_dir = tmp_path / "docs" / "domains" / "core"
+        docs_dir.mkdir(parents=True)
+        src_dir = tmp_path / "src" / "core"
+        src_dir.mkdir(parents=True)
+
+        (graph_dir / "domains.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: core\n"
+            "    kind: domain\n"
+            '    summary: "Core domain"\n'
+            "    source: src/core/\n"
+            "    docs:\n"
+            "      - docs/domains/core/README.md\n"
+        )
+
+        # Doc mentions every module by name (passes doc coverage) and
+        # explicitly binds an extra file via a track marker.
+        (docs_dir / "README.md").write_text(
+            "# Core\n\n"
+            "The broker module orchestrates work. The constants module "
+            "holds tuning knobs. The settings module holds runtime config.\n\n"
+            "<!-- beadloom:track=src/core/settings.py -->\n"
+        )
+
+        (src_dir / "__init__.py").write_text("")
+        # Normal module with a symbol + annotation.
+        (src_dir / "broker.py").write_text(
+            "# beadloom:domain=core\ndef dispatch():\n    return True\n"
+        )
+        # Symbol-less constants module — annotated (#89 path).
+        (src_dir / "constants.py").write_text(
+            "# beadloom:domain=core\n\nMAX_SIZE = 100\nNAME = 'broker'\n"
+        )
+        # Symbol-less settings module — UNannotated but bound via #90 marker.
+        (src_dir / "settings.py").write_text("TIMEOUT = 30\nRETRIES = 3\n")
+
+        reindex(tmp_path)
+        conn = open_db(tmp_path / ".beadloom" / "beadloom.db")
+        results = check_sync(conn, project_root=tmp_path)
+        conn.close()
+
+        stale = [r for r in results if r["status"] == "stale"]
+        assert stale == [], (
+            f"Expected genuine 100% (no stale), got stale: {stale}"
+        )
+        assert any(r["status"] == "ok" for r in results), (
+            f"Expected at least one ok pair, got: {results}"
+        )

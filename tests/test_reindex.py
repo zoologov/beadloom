@@ -8,6 +8,8 @@ import pytest
 
 from beadloom.infrastructure.db import create_schema, get_meta, open_db
 from beadloom.infrastructure.reindex import (
+    _get_stored_file_index,
+    _get_stored_parser_fingerprint,
     _snapshot_sync_baselines,
     incremental_reindex,
     reindex,
@@ -1224,5 +1226,118 @@ class TestLoadAllV3RuleTypes:
         data = _json.loads(row["rule_json"])
         assert "from" in data
         assert "to" in data
+
+
+class TestIncrementalReindexTotals:
+    """#88 — incremental docs/code-only path reports true DB totals."""
+
+    def test_changed_doc_reports_true_node_and_edge_totals(
+        self,
+        project: Path,
+        db_path: Path,
+    ) -> None:
+        """After a doc-only incremental reindex, nodes_loaded/edges_loaded
+        reflect the live DB totals, not the ReindexResult default of 0."""
+        graph_dir = project / ".beadloom" / "_graph"
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: N1\n    kind: domain\n    summary: N1\n"
+            "  - ref_id: N2\n    kind: domain\n    summary: N2\n"
+            "edges:\n"
+            "  - src: N1\n    dst: N2\n    kind: depends_on\n"
+        )
+        doc = project / "docs" / "spec.md"
+        doc.write_text("## Spec\n\nOriginal.\n")
+
+        incremental_reindex(project)
+
+        # Trigger the docs-only incremental path (no graph change).
+        doc.write_text("## Spec\n\nUpdated content.\n")
+        result = incremental_reindex(project)
+
+        assert not result.nothing_changed
+
+        conn = open_db(db_path)
+        expected_nodes = conn.execute("SELECT count(*) FROM nodes").fetchone()[0]
+        expected_edges = conn.execute("SELECT count(*) FROM edges").fetchone()[0]
+        conn.close()
+
+        assert expected_nodes >= 2
+        assert result.nodes_loaded == expected_nodes
+        assert result.edges_loaded == expected_edges
+
+    def test_added_code_file_reports_true_node_totals(
+        self,
+        project: Path,
+        db_path: Path,
+    ) -> None:
+        """Code-only incremental path also reports real node/edge totals."""
+        graph_dir = project / ".beadloom" / "_graph"
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n  - ref_id: N1\n    kind: domain\n    summary: N1\n"
+        )
+        incremental_reindex(project)
+
+        (project / "src" / "new.py").write_text("def new_func():\n    pass\n")
+        result = incremental_reindex(project)
+
+        conn = open_db(db_path)
+        expected_nodes = conn.execute("SELECT count(*) FROM nodes").fetchone()[0]
+        conn.close()
+
+        assert expected_nodes >= 1
+        assert result.nodes_loaded == expected_nodes
+
+
+class TestStoredIndexHelpersNarrowExcepts:
+    """#94 — missing-table read returns {}; other sqlite errors propagate."""
+
+    def test_file_index_returns_empty_when_table_missing(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Missing file_index table → empty dict (first-run case)."""
+        conn = open_db(tmp_path / "empty.db")
+        # No schema created → table does not exist.
+        assert _get_stored_file_index(conn) == {}
+        conn.close()
+
+    def test_parser_fingerprint_returns_none_when_table_missing(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Missing file_index table → None fingerprint (first-run case)."""
+        conn = open_db(tmp_path / "empty.db")
+        assert _get_stored_parser_fingerprint(conn) is None
+        conn.close()
+
+    def test_file_index_propagates_non_missing_table_errors(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A genuine SQL error (not a missing table) must propagate, not be
+        swallowed into an empty result."""
+        import sqlite3
+
+        conn = open_db(tmp_path / "empty.db")
+        create_schema(conn)
+        # Closing the connection makes any further execute raise
+        # sqlite3.ProgrammingError, which must NOT be masked as "first run".
+        conn.close()
+        with pytest.raises(sqlite3.ProgrammingError):
+            _get_stored_file_index(conn)
+
+    def test_snapshot_baselines_propagates_non_missing_table_errors(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """_snapshot_sync_baselines must not swallow non-missing-table errors."""
+        import sqlite3
+
+        conn = open_db(tmp_path / "empty.db")
+        create_schema(conn)
+        conn.close()
+        with pytest.raises(sqlite3.ProgrammingError):
+            _snapshot_sync_baselines(conn)
 
         conn.close()

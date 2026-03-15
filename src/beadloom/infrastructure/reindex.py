@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
@@ -19,7 +20,6 @@ from beadloom.infrastructure.git_activity import analyze_git_activity
 from beadloom.infrastructure.health import take_snapshot
 
 if TYPE_CHECKING:
-    import sqlite3
     from pathlib import Path
 
 # Tables to drop on reindex (order matters for FK constraints).
@@ -104,6 +104,15 @@ class _SyncPairSnapshot:
     code_hash_at_sync: str
 
 
+def _is_missing_table_error(exc: sqlite3.OperationalError) -> bool:
+    """Return True only when *exc* is SQLite's "no such table" error.
+
+    Used to handle the first-run case (a table not yet created) without
+    swallowing other operational errors (corruption, locking, etc.).
+    """
+    return "no such table" in str(exc).lower()
+
+
 def _snapshot_sync_baselines(
     conn: sqlite3.Connection,
 ) -> tuple[dict[str, str], dict[tuple[str, str], _SyncPairSnapshot]]:
@@ -122,8 +131,10 @@ def _snapshot_sync_baselines(
             "SELECT ref_id, symbols_hash, doc_path, code_path, "
             "doc_hash_at_last_edit, code_hash_at_sync FROM sync_state"
         ).fetchall()
-    except Exception:  # Table doesn't exist on first run
-        return {}, {}
+    except sqlite3.OperationalError as exc:  # sync_state may not exist on first run
+        if _is_missing_table_error(exc):
+            return {}, {}
+        raise
 
     symbols: dict[str, str] = {}
     pairs: dict[tuple[str, str], _SyncPairSnapshot] = {}
@@ -860,8 +871,10 @@ def _get_stored_parser_fingerprint(conn: sqlite3.Connection) -> str | None:
         row = conn.execute(
             "SELECT hash FROM file_index WHERE path = '__parser_fingerprint__'"
         ).fetchone()
-    except Exception:
-        return None
+    except sqlite3.OperationalError as exc:  # file_index may not exist on first run
+        if _is_missing_table_error(exc):
+            return None
+        raise
     return row["hash"] if row else None
 
 
@@ -923,8 +936,10 @@ def _get_stored_file_index(
     """Read file_index from DB. Returns ``{path: (hash, kind)}``."""
     try:
         rows = conn.execute("SELECT path, hash, kind FROM file_index").fetchall()
-    except Exception:  # table may not exist on first run
-        return {}
+    except sqlite3.OperationalError as exc:  # file_index may not exist on first run
+        if _is_missing_table_error(exc):
+            return {}
+        raise
     return {
         row["path"]: (row["hash"], row["kind"]) for row in rows if not row["path"].startswith("__")
     }
@@ -1291,6 +1306,13 @@ def incremental_reindex(
 
     # Health snapshot.
     take_snapshot(conn)
+
+    # #88: the incremental path never touches the graph (nodes/edges), so the
+    # ReindexResult defaults of 0 would make the CLI print "Nodes: 0" on an
+    # intact index. Populate the true live-DB totals (mirroring the
+    # nothing_changed branch handled in services/cli.py).
+    result.nodes_loaded = conn.execute("SELECT count(*) FROM nodes").fetchone()[0]
+    result.edges_loaded = conn.execute("SELECT count(*) FROM edges").fetchone()[0]
 
     conn.close()
     return result

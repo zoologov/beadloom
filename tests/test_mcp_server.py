@@ -139,6 +139,22 @@ class TestMcpToolHandlers:
         assert server is not None
 
 
+class TestMcpToolCatalogConsistency:
+    """The shared catalog must stay in sync with the live registry (#93)."""
+
+    def test_catalog_names_match_registry(self) -> None:
+        """``MCP_TOOL_CATALOG`` names equal the registered ``_TOOLS`` names.
+
+        If a tool is added to ``_TOOLS`` but not the catalog (or vice versa),
+        this fails — preventing the documented count from silently drifting.
+        """
+        from beadloom.infrastructure.mcp_tools import mcp_tool_names
+        from beadloom.services.mcp_server import _TOOLS
+
+        registry_names = tuple(tool.name for tool in _TOOLS)
+        assert mcp_tool_names() == registry_names
+
+
 class TestDispatchTool:
     """Test _dispatch_tool routing to correct handlers."""
 

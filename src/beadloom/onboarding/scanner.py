@@ -946,22 +946,7 @@ _AGENTS_MD_TEMPLATE_V2 = """\
 
 ## Available MCP Tools
 
-| Tool | Description |
-|------|-------------|
-| `prime` | Compact project context for session start |
-| `get_context` | Full context bundle (graph + docs + code) |
-| `get_graph` | Subgraph around a node |
-| `list_nodes` | List nodes, optionally by kind |
-| `sync_check` | Check doc-code freshness |
-| `get_status` | Index statistics and coverage |
-| `search` | Full-text search across nodes and docs |
-| `update_node` | Update node summary or source |
-| `mark_synced` | Mark doc-code pair as synchronized |
-| `generate_docs` | Enrichment data for AI doc polish |
-| `why` | Impact analysis — upstream and downstream deps |
-| `diff` | Graph changes since a git ref |
-| `lint` | Architecture boundary violations with severity |
-
+{mcp_tools_section}
 {rules_section}## Custom
 
 <!-- beadloom:custom-start -->
@@ -995,6 +980,21 @@ def _detect_rule_type(rule: dict[str, object]) -> str:
         if key in rule:
             return rule_type
     return "unknown"
+
+
+def _build_mcp_tools_section() -> str:
+    """Build the MCP tools table from the canonical catalog.
+
+    Enumerates the single-source-of-truth ``MCP_TOOL_CATALOG`` so the
+    documented tool count can never drift from the live registry
+    (BDL-UX-Issues #93).
+    """
+    from beadloom.infrastructure.mcp_tools import MCP_TOOL_CATALOG
+
+    lines = ["| Tool | Description |", "|------|-------------|"]
+    for entry in MCP_TOOL_CATALOG:
+        lines.append(f"| `{entry.name}` | {entry.summary} |")
+    return "\n".join(lines)
 
 
 def _build_rules_section(project_root: Path) -> str:
@@ -1068,7 +1068,11 @@ def generate_agents_md(project_root: Path) -> Path:
     # Render fresh template.
     # ------------------------------------------------------------------
     rules_section = _build_rules_section(project_root)
-    content = _AGENTS_MD_TEMPLATE_V2.format(rules_section=rules_section)
+    mcp_tools_section = _build_mcp_tools_section()
+    content = _AGENTS_MD_TEMPLATE_V2.format(
+        rules_section=rules_section,
+        mcp_tools_section=mcp_tools_section,
+    )
 
     # ------------------------------------------------------------------
     # Inject preserved custom content between the markers.

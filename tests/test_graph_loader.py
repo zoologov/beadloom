@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.graph.loader import load_graph, parse_graph_file
+from beadloom.graph.loader import GraphParseError, load_graph, parse_graph_file
 from beadloom.infrastructure.db import create_schema, open_db
 
 if TYPE_CHECKING:
@@ -104,6 +104,53 @@ class TestParseGraphFile:
         result = parse_graph_file(yml)
         assert len(result.nodes) == 1
         assert result.edges == []
+
+    def test_parse_flow_style_edges(self, graph_dir: Path) -> None:
+        """Flow-style (inline) mapping edges are valid YAML; parse identically (#86)."""
+        yml = graph_dir / "services.yml"
+        yml.write_text(
+            "nodes:\n"
+            "  - ref_id: houses\n"
+            "    kind: service\n"
+            '    summary: "Houses"\n'
+            "  - ref_id: core\n"
+            "    kind: service\n"
+            '    summary: "Core"\n'
+            "edges:\n"
+            "  - { src: houses, dst: core, kind: depends_on }\n"
+        )
+        result = parse_graph_file(yml)
+        assert len(result.nodes) == 2
+        assert len(result.edges) == 1
+        assert result.edges[0]["src"] == "houses"
+        assert result.edges[0]["dst"] == "core"
+        assert result.edges[0]["kind"] == "depends_on"
+
+    def test_parse_flow_style_nodes(self, graph_dir: Path) -> None:
+        """Flow-style mapping nodes are valid YAML; parse identically (#86)."""
+        yml = graph_dir / "services.yml"
+        yml.write_text(
+            "nodes:\n"
+            "  - { ref_id: houses, kind: service, summary: Houses }\n"
+            "  - { ref_id: core, kind: service, summary: Core }\n"
+        )
+        result = parse_graph_file(yml)
+        assert len(result.nodes) == 2
+        assert result.nodes[0]["ref_id"] == "houses"
+        assert result.nodes[1]["ref_id"] == "core"
+
+    def test_tab_indented_yaml_raises_clear_error(self, graph_dir: Path) -> None:
+        """Tab characters are invalid YAML indentation; raise a clear, line-referenced
+        error instead of silently returning 0 nodes (#86)."""
+        yml = graph_dir / "services.yml"
+        # Tabs after the list dash are a common manual-editing footgun that makes
+        # PyYAML raise -- which previously bubbled up as a silent reindex failure.
+        yml.write_text("nodes:\n\t- ref_id: houses\n\t  kind: service\n")
+        with pytest.raises(GraphParseError) as exc_info:
+            parse_graph_file(yml)
+        msg = str(exc_info.value)
+        assert "services.yml" in msg
+        assert "line" in msg.lower()
 
 
 # --- load_graph ---
@@ -235,6 +282,22 @@ class TestLoadGraph:
         # docs field is stored in extra, actual doc indexing is BEAD-04
         docs_count = db.execute("SELECT count(*) FROM docs").fetchone()[0]
         assert docs_count == 0
+
+    def test_flow_style_edges_loaded(self, db: sqlite3.Connection, graph_dir: Path) -> None:
+        """Flow-style edges load into the DB identically to block style (#86)."""
+        (graph_dir / "services.yml").write_text(
+            "nodes:\n"
+            "  - { ref_id: houses, kind: service, summary: Houses }\n"
+            "  - { ref_id: core, kind: service, summary: Core }\n"
+            "edges:\n"
+            "  - { src: houses, dst: core, kind: depends_on }\n"
+        )
+        result = load_graph(graph_dir, db)
+        assert result.nodes_loaded == 2
+        assert result.edges_loaded == 1
+        row = db.execute("SELECT * FROM edges").fetchone()
+        assert row["src_ref_id"] == "houses"
+        assert row["dst_ref_id"] == "core"
 
     def test_edges_across_files(self, db: sqlite3.Connection, graph_dir: Path) -> None:
         (graph_dir / "domains.yml").write_text(

@@ -29,32 +29,34 @@
 
 | Tool | Description |
 |------|-------------|
-| `prime` | Compact project context for session start |
 | `get_context` | Full context bundle (graph + docs + code) |
 | `get_graph` | Subgraph around a node |
 | `list_nodes` | List nodes, optionally by kind |
 | `sync_check` | Check doc-code freshness |
 | `get_status` | Index statistics and coverage |
-| `search` | Full-text search across nodes and docs |
 | `update_node` | Update node summary or source |
 | `mark_synced` | Mark doc-code pair as synchronized |
+| `search` | Full-text search across nodes and docs |
 | `generate_docs` | Enrichment data for AI doc polish |
+| `prime` | Compact project context for session start |
 | `why` | Impact analysis — upstream and downstream deps |
 | `diff` | Graph changes since a git ref |
 | `lint` | Architecture boundary violations with severity |
-
+| `get_debt_report` | Architecture debt report with score and offenders |
 ## Architecture Rules
 
 - **domain-needs-parent** (require): Every domain must be part_of the beadloom service
 - **feature-needs-domain** (require): Every feature must be part_of a domain
 - **service-needs-parent** (require): Every service (except root) must be part_of the beadloom service
 - **no-domain-depends-on-service** (deny): Domains must not have depends_on edges to services
-- **no-dependency-cycles** (deny): No circular depends_on chains
-- **architecture-layers** (deny): Services use domains, domains use infrastructure — not reverse
-- **domain-size-limit** (deny): Domains should not have too many symbols
-- **tui-no-direct-infra** (deny): TUI must not import infrastructure directly
-- **onboarding-no-direct-infra** (deny): Onboarding must not import infrastructure directly
+- **no-dependency-cycles** (forbid_cycles): No circular depends_on chains
+- **architecture-layers** (layers): Services use domains, domains use infrastructure — not reverse
+- **domain-size-limit** (cardinality): Domains should not have too many symbols
+- **tui-no-direct-infra** (forbid_import): TUI must not import infrastructure directly
+- **onboarding-no-direct-infra** (forbid_import): Onboarding must not import infrastructure directly
 
 ## Custom
 
+<!-- beadloom:custom-start -->
 <!-- Add project-specific instructions below this line -->
+<!-- beadloom:custom-end -->
