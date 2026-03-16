@@ -23,10 +23,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Default debounce window (milliseconds) — matches infrastructure watcher.
+# Default debounce window (milliseconds) — matches application watcher.
 DEFAULT_DEBOUNCE_MS: int = 500
 
-# Extensions we care about (reused from infrastructure.watcher concept).
+# Extensions we care about (reused from application.watcher concept).
 _WATCH_EXTENSIONS: frozenset[str] = frozenset(
     {
         ".yml",

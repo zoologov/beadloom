@@ -252,7 +252,7 @@ class DebtDataProvider:
 
     def refresh(self) -> None:
         """Recompute debt report and cache it."""
-        from beadloom.infrastructure.debt_report import (
+        from beadloom.application.debt_report import (
             collect_debt_data,
             compute_debt_score,
             load_debt_weights,

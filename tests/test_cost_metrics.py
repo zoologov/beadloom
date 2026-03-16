@@ -90,7 +90,7 @@ def _setup_project(tmp_path: Path) -> Path:
     src_dir.mkdir()
     (src_dir / "auth.py").write_text("# beadloom:domain=AUTH\ndef login():\n    pass\n")
 
-    from beadloom.infrastructure.reindex import reindex
+    from beadloom.application.reindex import reindex
 
     reindex(project)
     return project

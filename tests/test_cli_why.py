@@ -50,7 +50,7 @@ def _setup_project(tmp_path: Path) -> Path:
     (src_dir / "api.py").write_text("# beadloom:feature=PROJ-1\ndef list_tracks():\n    pass\n")
 
     # Reindex to populate DB.
-    from beadloom.infrastructure.reindex import reindex
+    from beadloom.application.reindex import reindex
 
     reindex(project)
     return project

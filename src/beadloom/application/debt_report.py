@@ -5,7 +5,7 @@ test_mapper into a single 0-100 debt score with category breakdown and
 per-node issue tracking.
 """
 
-# beadloom:domain=infrastructure
+# beadloom:domain=application
 
 from __future__ import annotations
 

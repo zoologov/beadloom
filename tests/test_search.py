@@ -205,7 +205,7 @@ class TestSearchCLI:
         docs_dir.mkdir()
         (docs_dir / "auth.md").write_text("## Auth\n\nLogin with OAuth2.\n")
 
-        from beadloom.infrastructure.reindex import reindex
+        from beadloom.application.reindex import reindex
 
         reindex(proj)
         return proj

@@ -21,8 +21,8 @@ class TestCliWatchNoWatchfiles:
 
         runner = CliRunner()
 
-        # Simulate ImportError when CLI tries to import beadloom.infrastructure.watcher
-        with patch.dict("sys.modules", {"beadloom.infrastructure.watcher": None}):
+        # Simulate ImportError when CLI tries to import beadloom.application.watcher
+        with patch.dict("sys.modules", {"beadloom.application.watcher": None}):
             result = runner.invoke(main, ["watch", "--project", str(tmp_path)])
             assert result.exit_code != 0
             assert "watchfiles" in result.output or "Error" in result.output

@@ -244,8 +244,8 @@ class TestBuildInitialSyncStateSymbolsHash:
 
     def test_symbols_hash_stored(self, conn: sqlite3.Connection) -> None:
         """_build_initial_sync_state should populate symbols_hash."""
+        from beadloom.application.reindex import _build_initial_sync_state
         from beadloom.doc_sync.engine import _compute_symbols_hash
-        from beadloom.infrastructure.reindex import _build_initial_sync_state
 
         _insert_node(conn)
         _insert_doc(conn, doc_hash="dochash1")
@@ -262,8 +262,8 @@ class TestBuildInitialSyncStateSymbolsHash:
 
     def test_preserved_symbols_hash(self, conn: sqlite3.Connection) -> None:
         """When preserved_symbols is provided, old hash is kept."""
+        from beadloom.application.reindex import _build_initial_sync_state
         from beadloom.doc_sync.engine import _compute_symbols_hash
-        from beadloom.infrastructure.reindex import _build_initial_sync_state
 
         _insert_node(conn)
         _insert_doc(conn, doc_hash="dochash1")
@@ -302,10 +302,10 @@ class TestIncrementalReindexPreservesSymbolDrift:
         """After adding a function and reindexing, sync-check should detect stale."""
         import yaml
 
+        from beadloom.application.reindex import incremental_reindex
+        from beadloom.application.reindex import reindex as full_reindex
         from beadloom.doc_sync.engine import check_sync
         from beadloom.infrastructure.db import open_db
-        from beadloom.infrastructure.reindex import incremental_reindex
-        from beadloom.infrastructure.reindex import reindex as full_reindex
 
         # Set up minimal project structure.
         graph_dir = project / ".beadloom" / "_graph"
@@ -373,10 +373,10 @@ class TestIncrementalReindexPreservesSymbolDrift:
         """After mark_synced_by_ref, symbol drift is no longer detected."""
         import yaml
 
+        from beadloom.application.reindex import incremental_reindex
+        from beadloom.application.reindex import reindex as full_reindex
         from beadloom.doc_sync.engine import check_sync, mark_synced_by_ref
         from beadloom.infrastructure.db import open_db
-        from beadloom.infrastructure.reindex import incremental_reindex
-        from beadloom.infrastructure.reindex import reindex as full_reindex
 
         # Set up project.
         graph_dir = project / ".beadloom" / "_graph"

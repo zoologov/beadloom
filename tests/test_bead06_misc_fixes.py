@@ -207,8 +207,8 @@ class TestParserFingerprint:
 
     def test_parser_fingerprint_stored_after_full_reindex(self, tmp_path: Path) -> None:
         """Full reindex stores parser fingerprint in file_index."""
+        from beadloom.application.reindex import reindex
         from beadloom.infrastructure.db import open_db
-        from beadloom.infrastructure.reindex import reindex
 
         # Setup minimal project
         graph_dir = tmp_path / ".beadloom" / "_graph"
@@ -229,7 +229,7 @@ class TestParserFingerprint:
 
     def test_changed_fingerprint_triggers_full_reindex(self, tmp_path: Path) -> None:
         """When supported_extensions() changes, incremental_reindex does full reindex."""
-        from beadloom.infrastructure.reindex import (
+        from beadloom.application.reindex import (
             _compute_parser_fingerprint,
             incremental_reindex,
         )
@@ -251,7 +251,7 @@ class TestParserFingerprint:
         original_fp = _compute_parser_fingerprint()
 
         with patch(
-            "beadloom.infrastructure.reindex.supported_extensions",
+            "beadloom.application.reindex.supported_extensions",
             return_value=frozenset({".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".java"}),
         ):
             new_fp = _compute_parser_fingerprint()
@@ -265,7 +265,7 @@ class TestParserFingerprint:
 
     def test_same_fingerprint_does_not_trigger_full_reindex(self, tmp_path: Path) -> None:
         """When parsers haven't changed, incremental reindex stays incremental."""
-        from beadloom.infrastructure.reindex import incremental_reindex
+        from beadloom.application.reindex import incremental_reindex
 
         # Setup minimal project
         graph_dir = tmp_path / ".beadloom" / "_graph"

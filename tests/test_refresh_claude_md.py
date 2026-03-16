@@ -137,7 +137,7 @@ class TestRenderProjectInfoSection:
         src_dir.mkdir(parents=True)
         (src_dir / "__init__.py").write_text("")
 
-        with patch("beadloom.infrastructure.doctor._get_actual_version", return_value="1.0.0"):
+        with patch("beadloom.application.doctor._get_actual_version", return_value="1.0.0"):
             result = _render_project_info_section(tmp_path)
 
         assert isinstance(result, str)
@@ -156,7 +156,7 @@ class TestRenderProjectInfoSection:
         pkg.mkdir()
         (pkg / "__init__.py").write_text("")
 
-        with patch("beadloom.infrastructure.doctor._get_actual_version", return_value="1.0.0"):
+        with patch("beadloom.application.doctor._get_actual_version", return_value="1.0.0"):
             result = _render_project_info_section(tmp_path)
 
         # Should mention the package name
@@ -178,7 +178,7 @@ class TestRefreshClaudeMd:
 
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"\nversion = "2.0.0"\n')
 
-        with patch("beadloom.infrastructure.doctor._get_actual_version", return_value="2.0.0"):
+        with patch("beadloom.application.doctor._get_actual_version", return_value="2.0.0"):
             changed = refresh_claude_md(tmp_path)
 
         assert "project-info" in changed
@@ -200,7 +200,7 @@ class TestRefreshClaudeMd:
 
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"\nversion = "9.9.9"\n')
 
-        with patch("beadloom.infrastructure.doctor._get_actual_version", return_value="9.9.9"):
+        with patch("beadloom.application.doctor._get_actual_version", return_value="9.9.9"):
             changed = refresh_claude_md(tmp_path, dry_run=True)
 
         assert "project-info" in changed
@@ -216,7 +216,7 @@ class TestRefreshClaudeMd:
 
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"\nversion = "3.0.0"\n')
 
-        with patch("beadloom.infrastructure.doctor._get_actual_version", return_value="3.0.0"):
+        with patch("beadloom.application.doctor._get_actual_version", return_value="3.0.0"):
             changed = refresh_claude_md(tmp_path)
 
         updated = claude_md.read_text()
@@ -235,7 +235,7 @@ class TestRefreshClaudeMd:
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"\nversion = "1.0.0"\n')
 
         # Pre-render the section content so it matches
-        with patch("beadloom.infrastructure.doctor._get_actual_version", return_value="1.0.0"):
+        with patch("beadloom.application.doctor._get_actual_version", return_value="1.0.0"):
             rendered = _render_project_info_section(tmp_path)
 
         content = (
@@ -245,7 +245,7 @@ class TestRefreshClaudeMd:
         )
         claude_md.write_text(content)
 
-        with patch("beadloom.infrastructure.doctor._get_actual_version", return_value="1.0.0"):
+        with patch("beadloom.application.doctor._get_actual_version", return_value="1.0.0"):
             changed = refresh_claude_md(tmp_path)
 
         assert changed == []
@@ -272,7 +272,7 @@ class TestRefreshClaudeMd:
 
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"\nversion = "1.0.0"\n')
 
-        with patch("beadloom.infrastructure.doctor._get_actual_version", return_value="1.0.0"):
+        with patch("beadloom.application.doctor._get_actual_version", return_value="1.0.0"):
             refresh_claude_md(tmp_path)
 
         updated = claude_md.read_text()

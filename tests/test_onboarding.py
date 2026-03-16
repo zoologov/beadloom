@@ -2007,7 +2007,7 @@ class TestPrimeContext:
         """Basic markdown output with bootstrapped project."""
         _make_src_tree(tmp_path)
         bootstrap_project(tmp_path)
-        from beadloom.infrastructure.reindex import reindex as do_reindex
+        from beadloom.application.reindex import reindex as do_reindex
 
         do_reindex(tmp_path)
 
@@ -2022,7 +2022,7 @@ class TestPrimeContext:
         """JSON output returns dict with expected keys."""
         _make_src_tree(tmp_path)
         bootstrap_project(tmp_path)
-        from beadloom.infrastructure.reindex import reindex as do_reindex
+        from beadloom.application.reindex import reindex as do_reindex
 
         do_reindex(tmp_path)
 
@@ -2051,7 +2051,7 @@ class TestPrimeContext:
         """Prime includes rules from rules.yml."""
         _make_src_tree(tmp_path)
         bootstrap_project(tmp_path)
-        from beadloom.infrastructure.reindex import reindex as do_reindex
+        from beadloom.application.reindex import reindex as do_reindex
 
         do_reindex(tmp_path)
 
@@ -2063,7 +2063,7 @@ class TestPrimeContext:
         """Markdown output has sections in correct order."""
         _make_src_tree(tmp_path)
         bootstrap_project(tmp_path)
-        from beadloom.infrastructure.reindex import reindex as do_reindex
+        from beadloom.application.reindex import reindex as do_reindex
 
         do_reindex(tmp_path)
 
@@ -2082,7 +2082,7 @@ class TestPrimeContext:
         """JSON architecture section has expected numeric keys."""
         _make_src_tree(tmp_path)
         bootstrap_project(tmp_path)
-        from beadloom.infrastructure.reindex import reindex as do_reindex
+        from beadloom.application.reindex import reindex as do_reindex
 
         do_reindex(tmp_path)
 
@@ -2099,7 +2099,7 @@ class TestPrimeContext:
         """JSON health section has expected keys."""
         _make_src_tree(tmp_path)
         bootstrap_project(tmp_path)
-        from beadloom.infrastructure.reindex import reindex as do_reindex
+        from beadloom.application.reindex import reindex as do_reindex
 
         do_reindex(tmp_path)
 
@@ -2298,7 +2298,7 @@ class TestPrimeContextStaleAndViolations:
 
         _make_src_tree(tmp_path)
         bootstrap_project(tmp_path)
-        from beadloom.infrastructure.reindex import reindex as do_reindex
+        from beadloom.application.reindex import reindex as do_reindex
 
         do_reindex(tmp_path)
 
@@ -2326,7 +2326,7 @@ class TestPrimeContextStaleAndViolations:
 
         _make_src_tree(tmp_path)
         bootstrap_project(tmp_path)
-        from beadloom.infrastructure.reindex import reindex as do_reindex
+        from beadloom.application.reindex import reindex as do_reindex
 
         do_reindex(tmp_path)
 

@@ -1,6 +1,6 @@
 """File watcher: auto-reindex on file changes."""
 
-# beadloom:domain=infrastructure
+# beadloom:domain=application
 
 from __future__ import annotations
 
@@ -148,12 +148,12 @@ def watch(
             graph_changed = any(_is_graph_file(path_str, project_root) for _, path_str in relevant)
 
             if graph_changed:
-                from beadloom.infrastructure.reindex import reindex as do_reindex
+                from beadloom.application.reindex import reindex as do_reindex
 
                 do_reindex(project_root)
                 reindex_type = "full"
             else:
-                from beadloom.infrastructure.reindex import incremental_reindex
+                from beadloom.application.reindex import incremental_reindex
 
                 incremental_reindex(project_root)
                 reindex_type = "incremental"

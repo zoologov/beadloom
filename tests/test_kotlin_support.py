@@ -205,7 +205,7 @@ class TestKotlinImports:
 
 class TestKotlinRegistration:
     def test_kt_in_code_extensions(self) -> None:
-        from beadloom.infrastructure.reindex import _CODE_EXTENSIONS
+        from beadloom.application.reindex import _CODE_EXTENSIONS
 
         assert ".kt" in _CODE_EXTENSIONS
         assert ".kts" in _CODE_EXTENSIONS

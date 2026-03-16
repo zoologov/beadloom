@@ -2,6 +2,7 @@ version: 3
 
 tags:
   layer-service: [cli, mcp-server, tui]
+  layer-application: [application]
   layer-domain: [context-oracle, doc-sync, graph, onboarding]
   layer-infra: [infrastructure]
 
@@ -36,16 +37,18 @@ rules:
 
   - name: no-dependency-cycles
     description: "No circular depends_on chains"
-    severity: warn
+    severity: error
     forbid_cycles:
       edge_kind: depends_on
 
   - name: architecture-layers
-    description: "Services use domains, domains use infrastructure — not reverse"
-    severity: warn
+    description: "Services → application → domains → infrastructure — not reverse"
+    severity: error
     layers:
       - name: services
         tag: layer-service
+      - name: application
+        tag: layer-application
       - name: domains
         tag: layer-domain
       - name: infrastructure

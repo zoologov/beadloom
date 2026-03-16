@@ -7,9 +7,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from beadloom.application.reindex import reindex
 from beadloom.context_oracle.builder import build_context
 from beadloom.infrastructure.db import create_schema, open_db
-from beadloom.infrastructure.reindex import reindex
 
 if TYPE_CHECKING:
     import sqlite3

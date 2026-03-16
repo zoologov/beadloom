@@ -199,7 +199,7 @@ class TestLintCommand:
         # Monkeypatch incremental_reindex to track if it's called.
         reindex_called = False
 
-        import beadloom.infrastructure.reindex as reindex_mod
+        import beadloom.application.reindex as reindex_mod
 
         original_fn = reindex_mod.incremental_reindex
 

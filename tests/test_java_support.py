@@ -248,7 +248,7 @@ class TestJavaImports:
 
 class TestJavaRegistration:
     def test_java_in_code_extensions(self) -> None:
-        from beadloom.infrastructure.reindex import _CODE_EXTENSIONS
+        from beadloom.application.reindex import _CODE_EXTENSIONS
 
         assert ".java" in _CODE_EXTENSIONS
 

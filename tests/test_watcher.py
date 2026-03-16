@@ -1,11 +1,11 @@
-"""Tests for beadloom.infrastructure.watcher module (unit tests for helpers)."""
+"""Tests for beadloom.application.watcher module (unit tests for helpers)."""
 
 from __future__ import annotations
 
 import re
 from typing import TYPE_CHECKING
 
-from beadloom.infrastructure.watcher import (
+from beadloom.application.watcher import (
     DEFAULT_DEBOUNCE_MS,
     WatchEvent,
     _filter_relevant,

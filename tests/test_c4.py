@@ -1925,7 +1925,7 @@ def _setup_c4_project(tmp_path: Path) -> Path:
     src_dir = project / "src"
     src_dir.mkdir()
 
-    from beadloom.infrastructure.reindex import reindex
+    from beadloom.application.reindex import reindex
 
     reindex(project)
     return project

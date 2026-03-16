@@ -13,8 +13,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from beadloom.application.reindex import reindex
 from beadloom.infrastructure.db import open_db
-from beadloom.infrastructure.reindex import reindex
 
 if TYPE_CHECKING:
     from pathlib import Path

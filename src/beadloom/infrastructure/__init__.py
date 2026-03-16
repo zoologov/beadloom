@@ -1,10 +1,9 @@
-"""Infrastructure domain — database layer, health metrics, and reindex orchestrator.
+"""Infrastructure layer — domain-agnostic database, health metrics, and git activity.
 
-Note: ``beadloom.infrastructure.reindex`` is intentionally NOT re-exported here because
-it is an orchestrator with cross-domain dependencies (graph, context, sync) and
-eagerly importing it would create circular imports.  Import it directly::
-
-    from beadloom.infrastructure.reindex import reindex, incremental_reindex
+This layer is the lowest in the architecture and depends on nothing else in the
+project.  The cross-domain orchestrators (``reindex``, ``doctor``, ``debt_report``,
+``watcher``) live in :mod:`beadloom.application`, not here, so that infrastructure
+never imports a domain (the DDD Dependency Rule).
 """
 
 from beadloom.infrastructure.db import (

@@ -267,7 +267,7 @@ class TestLint:
         # First do a real reindex so the DB exists
         lint(lint_project, reindex_before=True)
 
-        import beadloom.infrastructure.reindex as reindex_mod
+        import beadloom.application.reindex as reindex_mod
 
         original_incremental = reindex_mod.incremental_reindex
 

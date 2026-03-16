@@ -255,11 +255,11 @@ def reindex(*, project: Path | None, docs_dir: Path | None, full: bool) -> None:
     project_root = project or Path.cwd()
 
     if full:
-        from beadloom.infrastructure.reindex import reindex as do_reindex
+        from beadloom.application.reindex import reindex as do_reindex
 
         result = do_reindex(project_root, docs_dir=docs_dir)
     else:
-        from beadloom.infrastructure.reindex import incremental_reindex
+        from beadloom.application.reindex import incremental_reindex
 
         result = incremental_reindex(project_root, docs_dir=docs_dir)
 
@@ -495,8 +495,8 @@ def graph(
 )
 def doctor(*, project: Path | None) -> None:
     """Run validation checks on the architecture graph."""
+    from beadloom.application.doctor import Severity, run_checks
     from beadloom.infrastructure.db import open_db
-    from beadloom.infrastructure.doctor import Severity, run_checks
 
     project_root = project or Path.cwd()
     db_path = project_root / ".beadloom" / "beadloom.db"
@@ -607,7 +607,7 @@ def status(
 
     # --- Debt report mode ---
     if debt_report:
-        from beadloom.infrastructure.debt_report import (
+        from beadloom.application.debt_report import (
             _CATEGORY_SHORT_MAP,
             collect_debt_data,
             compute_debt_score,
@@ -659,7 +659,7 @@ def status(
         else:
             # For human output with category filter, rebuild report with filtered categories
             if category is not None:
-                from beadloom.infrastructure.debt_report import DebtReport
+                from beadloom.application.debt_report import DebtReport
 
                 internal = _CATEGORY_SHORT_MAP.get(category, category)
                 filtered_cats = [c for c in report.categories if c.name == internal]
@@ -2113,7 +2113,7 @@ def init(
         docs_result = generate_skeletons(project_root, result["nodes"], result["edges"])
 
         # Auto-reindex to populate import analysis and depends_on edges.
-        from beadloom.infrastructure.reindex import reindex as do_reindex
+        from beadloom.application.reindex import reindex as do_reindex
 
         ri = do_reindex(project_root)
 
@@ -2387,7 +2387,7 @@ def watch_cmd(*, debounce: int, project: Path | None) -> None:
     Requires watchfiles: pip install beadloom[watch]
     """
     try:
-        from beadloom.infrastructure.watcher import watch
+        from beadloom.application.watcher import watch
     except ImportError:
         click.echo(
             "Error: watch requires 'watchfiles'. Install with: pip install beadloom[watch]",

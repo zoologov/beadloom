@@ -8,8 +8,8 @@ from unittest.mock import patch
 
 import pytest
 
+from beadloom.application.reindex import reindex
 from beadloom.infrastructure.db import open_db
-from beadloom.infrastructure.reindex import reindex
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -55,7 +55,7 @@ class TestReindexGitActivityIntegration:
         """After reindex with git activity, nodes.extra contains activity data."""
         _setup_graph_with_source(project)
 
-        with patch("beadloom.infrastructure.reindex.analyze_git_activity") as mock_activity:
+        with patch("beadloom.application.reindex.analyze_git_activity") as mock_activity:
             from beadloom.infrastructure.git_activity import GitActivity
 
             mock_activity.return_value = {
@@ -116,7 +116,7 @@ class TestReindexGitActivityIntegration:
             '        url: "https://example.com"\n'
         )
 
-        with patch("beadloom.infrastructure.reindex.analyze_git_activity") as mock_activity:
+        with patch("beadloom.application.reindex.analyze_git_activity") as mock_activity:
             from beadloom.infrastructure.git_activity import GitActivity
 
             mock_activity.return_value = {
@@ -148,7 +148,7 @@ class TestReindexGitActivityIntegration:
             'nodes:\n  - ref_id: abstract\n    kind: domain\n    summary: "Abstract domain"\n'
         )
 
-        with patch("beadloom.infrastructure.reindex.analyze_git_activity") as mock_activity:
+        with patch("beadloom.application.reindex.analyze_git_activity") as mock_activity:
             mock_activity.return_value = {}
             reindex(project)
 
@@ -167,7 +167,7 @@ class TestReindexGitActivityGracefulDegradation:
         """When git is unavailable, reindex completes without errors."""
         _setup_graph_with_source(project)
 
-        with patch("beadloom.infrastructure.reindex.analyze_git_activity") as mock_activity:
+        with patch("beadloom.application.reindex.analyze_git_activity") as mock_activity:
             mock_activity.return_value = {}
             result = reindex(project)
 
@@ -189,7 +189,7 @@ class TestContextBundleActivity:
         """build_context returns activity in the focus dict."""
         _setup_graph_with_source(project)
 
-        with patch("beadloom.infrastructure.reindex.analyze_git_activity") as mock_activity:
+        with patch("beadloom.application.reindex.analyze_git_activity") as mock_activity:
             from beadloom.infrastructure.git_activity import GitActivity
 
             mock_activity.return_value = {
@@ -226,7 +226,7 @@ class TestContextBundleActivity:
         """_format_markdown renders activity as a human-readable line."""
         _setup_graph_with_source(project)
 
-        with patch("beadloom.infrastructure.reindex.analyze_git_activity") as mock_activity:
+        with patch("beadloom.application.reindex.analyze_git_activity") as mock_activity:
             from beadloom.infrastructure.git_activity import GitActivity
 
             mock_activity.return_value = {
@@ -256,7 +256,7 @@ class TestContextBundleActivity:
         """Dormant activity renders with ice emoji."""
         _setup_graph_with_source(project)
 
-        with patch("beadloom.infrastructure.reindex.analyze_git_activity") as mock_activity:
+        with patch("beadloom.application.reindex.analyze_git_activity") as mock_activity:
             from beadloom.infrastructure.git_activity import GitActivity
 
             mock_activity.return_value = {
@@ -285,7 +285,7 @@ class TestContextBundleActivity:
         """JSON output includes the full activity object."""
         _setup_graph_with_source(project)
 
-        with patch("beadloom.infrastructure.reindex.analyze_git_activity") as mock_activity:
+        with patch("beadloom.application.reindex.analyze_git_activity") as mock_activity:
             from beadloom.infrastructure.git_activity import GitActivity
 
             mock_activity.return_value = {
@@ -321,7 +321,7 @@ class TestContextBundleActivity:
             'nodes:\n  - ref_id: plain\n    kind: domain\n    summary: "Plain domain"\n'
         )
 
-        with patch("beadloom.infrastructure.reindex.analyze_git_activity") as mock_activity:
+        with patch("beadloom.application.reindex.analyze_git_activity") as mock_activity:
             mock_activity.return_value = {}
             reindex(project)
 

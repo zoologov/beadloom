@@ -88,7 +88,7 @@ class TestE2EPipeline:
         """Reindex stores routes/activity/tests in nodes.extra."""
         _bootstrap_project(tmp_path)
 
-        from beadloom.infrastructure.reindex import incremental_reindex
+        from beadloom.application.reindex import incremental_reindex
 
         result = incremental_reindex(tmp_path)
         assert result.nodes_loaded > 0
@@ -117,7 +117,7 @@ class TestE2EPipeline:
         """Context bundle shows activity/tests after reindex."""
         _bootstrap_project(tmp_path)
 
-        from beadloom.infrastructure.reindex import incremental_reindex
+        from beadloom.application.reindex import incremental_reindex
 
         incremental_reindex(tmp_path)
 
@@ -143,7 +143,7 @@ class TestE2EPipeline:
         """Lint runs and respects severity levels."""
         _bootstrap_project(tmp_path)
 
-        from beadloom.infrastructure.reindex import incremental_reindex
+        from beadloom.application.reindex import incremental_reindex
 
         incremental_reindex(tmp_path)
 
@@ -157,7 +157,7 @@ class TestE2EPipeline:
         """Polish data includes routes/activity/tests from nodes.extra."""
         _bootstrap_project(tmp_path)
 
-        from beadloom.infrastructure.reindex import incremental_reindex
+        from beadloom.application.reindex import incremental_reindex
 
         incremental_reindex(tmp_path)
 
@@ -175,7 +175,7 @@ class TestE2EPipeline:
         """Polish text output is well-formatted."""
         _bootstrap_project(tmp_path)
 
-        from beadloom.infrastructure.reindex import incremental_reindex
+        from beadloom.application.reindex import incremental_reindex
 
         incremental_reindex(tmp_path)
 

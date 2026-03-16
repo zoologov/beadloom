@@ -12,6 +12,7 @@ from mcp.server import Server
 from mcp.types import TextContent
 
 from beadloom import __version__
+from beadloom.application.reindex import incremental_reindex
 from beadloom.context_oracle.builder import bfs_subgraph, build_context
 from beadloom.context_oracle.cache import ContextCache, SqliteCache, compute_etag
 from beadloom.doc_sync.engine import check_sync, mark_synced_by_ref
@@ -19,7 +20,6 @@ from beadloom.graph.diff import compute_diff
 from beadloom.graph.linter import LintResult, lint
 from beadloom.graph.loader import update_node_in_yaml
 from beadloom.infrastructure.db import get_meta, open_db
-from beadloom.infrastructure.reindex import incremental_reindex
 
 if TYPE_CHECKING:
     import sqlite3
@@ -433,7 +433,7 @@ def handle_get_debt_report(
         JSON-safe dict with ``debt_score``, ``severity``, ``categories``,
         ``top_offenders``, and ``trend``.
     """
-    from beadloom.infrastructure.debt_report import (
+    from beadloom.application.debt_report import (
         collect_debt_data,
         compute_debt_score,
         compute_debt_trend,
@@ -450,7 +450,7 @@ def handle_get_debt_report(
         trend_result = compute_debt_trend(conn, report, project_root, weights)
         if trend_result is not None:
             # DebtReport is frozen; rebuild with trend attached
-            from beadloom.infrastructure.debt_report import DebtReport
+            from beadloom.application.debt_report import DebtReport
 
             report = DebtReport(
                 debt_score=report.debt_score,

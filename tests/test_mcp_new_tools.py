@@ -72,7 +72,7 @@ def project_with_graph(tmp_path: Path) -> Path:
     src_dir.mkdir()
     (src_dir / "api.py").write_text("# beadloom:feature=FEAT-1\ndef list_tracks():\n    pass\n")
 
-    from beadloom.infrastructure.reindex import reindex
+    from beadloom.application.reindex import reindex
 
     reindex(proj)
     return proj

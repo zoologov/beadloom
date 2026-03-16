@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from beadloom.application.reindex import incremental_reindex, reindex
 from beadloom.infrastructure.db import open_db
-from beadloom.infrastructure.reindex import incremental_reindex, reindex
 
 if TYPE_CHECKING:
     from pathlib import Path

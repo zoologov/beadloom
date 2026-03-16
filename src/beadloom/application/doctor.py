@@ -1,6 +1,6 @@
 """Doctor: validation checks for graph and data integrity."""
 
-# beadloom:domain=infrastructure
+# beadloom:domain=application
 
 from __future__ import annotations
 

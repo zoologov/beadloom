@@ -268,12 +268,12 @@ class TestObjcImports:
 
 class TestObjcRegistration:
     def test_m_in_code_extensions(self) -> None:
-        from beadloom.infrastructure.reindex import _CODE_EXTENSIONS
+        from beadloom.application.reindex import _CODE_EXTENSIONS
 
         assert ".m" in _CODE_EXTENSIONS
 
     def test_mm_in_code_extensions(self) -> None:
-        from beadloom.infrastructure.reindex import _CODE_EXTENSIONS
+        from beadloom.application.reindex import _CODE_EXTENSIONS
 
         assert ".mm" in _CODE_EXTENSIONS
 

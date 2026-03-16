@@ -95,7 +95,7 @@ def lint(
     # Lazy import to avoid circular dependency:
     # graph/__init__ → linter → infra.reindex → graph.loader → graph/__init__
     if reindex_before:
-        from beadloom.infrastructure.reindex import incremental_reindex
+        from beadloom.application.reindex import incremental_reindex
 
         incremental_reindex(project_root)
 

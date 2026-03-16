@@ -56,11 +56,20 @@ nodes:
   # Domain: Infrastructure
   - ref_id: infrastructure
     kind: domain
-    summary: "SQLite database layer, health metrics, reindex orchestrator"
+    summary: "Domain-agnostic SQLite database layer, health metrics, git activity"
     source: src/beadloom/infrastructure/
     tags: [layer-infra]
     docs:
       - docs/domains/infrastructure/README.md
+
+  # Application: use-case orchestration layer
+  - ref_id: application
+    kind: domain
+    summary: "Use-case orchestration: reindex, doctor, debt report, file watcher"
+    source: src/beadloom/application/
+    tags: [layer-application]
+    docs:
+      - docs/domains/application/README.md
 
   # Service: CLI
   - ref_id: cli
@@ -93,7 +102,7 @@ nodes:
   - ref_id: doctor
     kind: feature
     summary: "Validation checks for graph and data integrity"
-    source: src/beadloom/infrastructure/doctor.py
+    source: src/beadloom/application/doctor.py
     docs:
       - docs/domains/infrastructure/features/doctor/SPEC.md
 
@@ -109,7 +118,7 @@ nodes:
   - ref_id: watcher
     kind: feature
     summary: "File watcher for auto-reindex on changes"
-    source: src/beadloom/infrastructure/watcher.py
+    source: src/beadloom/application/watcher.py
     docs:
       - docs/domains/infrastructure/features/watcher/SPEC.md
 
@@ -173,7 +182,7 @@ nodes:
   - ref_id: debt-report
     kind: feature
     summary: "Architecture debt aggregation, scoring, trend tracking, and CI gating"
-    source: src/beadloom/infrastructure/debt_report.py
+    source: src/beadloom/application/debt_report.py
     docs:
       - docs/domains/infrastructure/features/debt-report/SPEC.md
 
@@ -181,7 +190,7 @@ nodes:
   - ref_id: reindex
     kind: feature
     summary: "Full reindex pipeline — drop, recreate, reload graph/docs/code/sync"
-    source: src/beadloom/infrastructure/reindex.py
+    source: src/beadloom/application/reindex.py
     docs:
       - docs/domains/infrastructure/features/reindex/SPEC.md
 
@@ -215,6 +224,9 @@ edges:
   - src: infrastructure
     dst: beadloom
     kind: part_of
+  - src: application
+    dst: beadloom
+    kind: part_of
 
   # Services are part_of beadloom
   - src: cli
@@ -227,10 +239,10 @@ edges:
     dst: beadloom
     kind: part_of
   - src: doctor
-    dst: infrastructure
+    dst: application
     kind: part_of
   - src: watcher
-    dst: infrastructure
+    dst: application
     kind: part_of
 
   - src: doc-generator
@@ -263,10 +275,10 @@ edges:
     dst: graph
     kind: part_of
   - src: debt-report
-    dst: infrastructure
+    dst: application
     kind: part_of
   - src: reindex
-    dst: infrastructure
+    dst: application
     kind: part_of
   - src: docs-audit
     dst: doc-sync
@@ -287,6 +299,12 @@ edges:
     kind: uses
   - src: cli
     dst: infrastructure
+    kind: uses
+  - src: cli
+    dst: application
+    kind: uses
+  - src: mcp-server
+    dst: application
     kind: uses
   - src: mcp-server
     dst: context-oracle
@@ -322,4 +340,21 @@ edges:
     kind: uses
   - src: reindex
     dst: graph
+    kind: uses
+
+  # Application → domain / infrastructure usage edges
+  - src: application
+    dst: context-oracle
+    kind: uses
+  - src: application
+    dst: doc-sync
+    kind: uses
+  - src: application
+    dst: graph
+    kind: uses
+  - src: application
+    dst: onboarding
+    kind: uses
+  - src: application
+    dst: infrastructure
     kind: uses

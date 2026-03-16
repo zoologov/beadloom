@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from beadloom.infrastructure.doctor import (
+from beadloom.application.doctor import (
     Check,
     Severity,
     _check_agent_instructions,

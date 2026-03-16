@@ -45,7 +45,7 @@ def _setup_project_with_sync(tmp_path: Path) -> Path:
     src_dir.mkdir()
     (src_dir / "api.py").write_text("# beadloom:feature=F1\ndef handler():\n    pass\n")
 
-    from beadloom.infrastructure.reindex import reindex
+    from beadloom.application.reindex import reindex
 
     reindex(project)
 

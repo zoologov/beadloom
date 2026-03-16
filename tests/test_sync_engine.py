@@ -455,7 +455,7 @@ class TestTwoPhaseSyncCheck:
         doc hasn't been re-edited. This allows check_sync to detect that
         code drifted since the last doc edit.
         """
-        from beadloom.infrastructure.reindex import _build_initial_sync_state, _SyncPairSnapshot
+        from beadloom.application.reindex import _build_initial_sync_state, _SyncPairSnapshot
 
         doc_content = "# Spec\nFeature spec.\n"
         code_content = "# beadloom:feature=F1\ndef handler():\n    pass\n"

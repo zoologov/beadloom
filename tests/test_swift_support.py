@@ -204,7 +204,7 @@ class TestSwiftImports:
 
 class TestSwiftRegistration:
     def test_swift_in_code_extensions(self) -> None:
-        from beadloom.infrastructure.reindex import _CODE_EXTENSIONS
+        from beadloom.application.reindex import _CODE_EXTENSIONS
 
         assert ".swift" in _CODE_EXTENSIONS
 

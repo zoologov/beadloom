@@ -7,13 +7,13 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.infrastructure.db import create_schema, open_db
-from beadloom.infrastructure.doctor import (
+from beadloom.application.doctor import (
     Severity,
     _check_stale_sync,
     _check_symbol_drift,
     run_checks,
 )
+from beadloom.infrastructure.db import create_schema, open_db
 
 if TYPE_CHECKING:
     import sqlite3

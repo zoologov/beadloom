@@ -1,6 +1,6 @@
 """Reindex orchestrator: full rebuild and incremental reindex."""
 
-# beadloom:domain=infrastructure
+# beadloom:domain=application
 
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-from beadloom import __version__
 from beadloom.context_oracle.code_indexer import extract_symbols, supported_extensions
 from beadloom.doc_sync.doc_indexer import chunk_markdown, index_docs
 from beadloom.graph.loader import load_graph
@@ -21,6 +20,20 @@ from beadloom.infrastructure.health import take_snapshot
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+def _beadloom_version() -> str:
+    """Return the in-tree package version.
+
+    Imported lazily (function-local) so this application-layer module does not
+    take a module-level dependency on the root ``beadloom`` package namespace,
+    which would create a spurious ``application -> beadloom`` graph edge.  The
+    version is only a string constant, not an architectural dependency.
+    """
+    from beadloom import __version__
+
+    return __version__
+
 
 # Tables to drop on reindex (order matters for FK constraints).
 _TABLES_TO_DROP = [
@@ -828,7 +841,7 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
     # 6. Set meta.
     now = datetime.now(tz=timezone.utc).isoformat()
     set_meta(conn, "last_reindex_at", now)
-    set_meta(conn, "beadloom_version", __version__)
+    set_meta(conn, "beadloom_version", _beadloom_version())
     set_meta(conn, "schema_version", SCHEMA_VERSION)
 
     # 7. Take health snapshot for trend tracking.
@@ -1302,7 +1315,7 @@ def incremental_reindex(
     # Update meta.
     now = datetime.now(tz=timezone.utc).isoformat()
     set_meta(conn, "last_reindex_at", now)
-    set_meta(conn, "beadloom_version", __version__)
+    set_meta(conn, "beadloom_version", _beadloom_version())
 
     # Health snapshot.
     take_snapshot(conn)

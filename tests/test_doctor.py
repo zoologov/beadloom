@@ -1,4 +1,4 @@
-"""Tests for beadloom.infrastructure.doctor — graph and data validation checks."""
+"""Tests for beadloom.application.doctor — graph and data validation checks."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from beadloom.application.doctor import Check, Severity, run_checks
 from beadloom.infrastructure.db import create_schema, open_db
-from beadloom.infrastructure.doctor import Check, Severity, run_checks
 
 if TYPE_CHECKING:
     import sqlite3
@@ -303,7 +303,7 @@ class TestSourceCoverage:
                 annotations TEXT DEFAULT '{}', file_hash TEXT
             );
         """)
-        from beadloom.infrastructure.doctor import _check_source_coverage
+        from beadloom.application.doctor import _check_source_coverage
         results = _check_source_coverage(c)
         # Should gracefully return OK (can't determine project root from :memory:)
         assert len(results) >= 1
@@ -314,7 +314,7 @@ class TestDoctorCli:
     def test_doctor_command(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
 
-        from beadloom.infrastructure.reindex import reindex
+        from beadloom.application.reindex import reindex
         from beadloom.services.cli import main
 
         project = tmp_path / "proj"

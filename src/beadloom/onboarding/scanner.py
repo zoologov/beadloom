@@ -2277,7 +2277,7 @@ def non_interactive_init(
         result["docs_generated"] = docs_result
 
         # Auto-reindex to populate import analysis and depends_on edges.
-        from beadloom.infrastructure.reindex import reindex as do_reindex
+        from beadloom.application.reindex import reindex as do_reindex
 
         ri = do_reindex(project_root)
         result["reindex"] = {
@@ -2448,7 +2448,7 @@ def interactive_init(project_root: Path) -> dict[str, Any]:
 
     # Auto-reindex: populate DB with imports, edges, FTS.
     console.print("\n[bold]Running reindex...[/bold]")
-    from beadloom.infrastructure.reindex import reindex as do_reindex
+    from beadloom.application.reindex import reindex as do_reindex
 
     ri = do_reindex(project_root)
     console.print(f"  Indexed {ri.symbols_indexed} symbols, {ri.imports_indexed} imports")
@@ -2605,7 +2605,7 @@ def _render_project_info_section(project_root: Path) -> str:
     The returned string does NOT include the marker comments — only
     the bullet-list content that goes between markers.
     """
-    from beadloom.infrastructure.doctor import _get_actual_packages, _get_actual_version
+    from beadloom.application.doctor import _get_actual_packages, _get_actual_version
 
     version = _get_actual_version()
 

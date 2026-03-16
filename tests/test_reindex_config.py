@@ -71,7 +71,7 @@ class TestReindexDeepConfig:
         )
 
         # Act
-        from beadloom.infrastructure.reindex import reindex
+        from beadloom.application.reindex import reindex
 
         reindex(project)
 
@@ -114,7 +114,7 @@ class TestReindexDeepConfig:
             )
         )
 
-        from beadloom.infrastructure.reindex import reindex
+        from beadloom.application.reindex import reindex
 
         reindex(project)
 
@@ -144,7 +144,7 @@ class TestReindexDeepConfig:
             "    source: ''\n"
         )
 
-        from beadloom.infrastructure.reindex import reindex
+        from beadloom.application.reindex import reindex
 
         reindex(project)
 
@@ -174,7 +174,7 @@ class TestReindexDeepConfig:
             "[project]\nname = 'test'\n[project.scripts]\ntest = 'test:main'\n"
         )
 
-        from beadloom.infrastructure.reindex import reindex
+        from beadloom.application.reindex import reindex
 
         # Should not raise.
         result = reindex(project)

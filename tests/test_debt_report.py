@@ -1,4 +1,4 @@
-"""Tests for beadloom.infrastructure.debt_report — debt score formula + data collection."""
+"""Tests for beadloom.application.debt_report — debt score formula + data collection."""
 
 from __future__ import annotations
 
@@ -8,8 +8,7 @@ from typing import TYPE_CHECKING
 import pytest
 import yaml
 
-from beadloom.infrastructure.db import create_schema, open_db
-from beadloom.infrastructure.debt_report import (
+from beadloom.application.debt_report import (
     CategoryScore,
     DebtData,
     DebtReport,
@@ -30,6 +29,7 @@ from beadloom.infrastructure.debt_report import (
     format_trend_section,
     load_debt_weights,
 )
+from beadloom.infrastructure.db import create_schema, open_db
 
 # Note: format_debt_report is imported locally in test methods to avoid
 # circular import issues with Rich, and to test that the public API is
@@ -899,7 +899,7 @@ class TestFormatDebtReport:
         )
 
     def test_returns_non_empty_string(self) -> None:
-        from beadloom.infrastructure.debt_report import format_debt_report
+        from beadloom.application.debt_report import format_debt_report
 
         report = self._make_report()
         result = format_debt_report(report)
@@ -907,14 +907,14 @@ class TestFormatDebtReport:
         assert len(result) > 0
 
     def test_contains_header(self) -> None:
-        from beadloom.infrastructure.debt_report import format_debt_report
+        from beadloom.application.debt_report import format_debt_report
 
         report = self._make_report()
         result = format_debt_report(report)
         assert "Architecture Debt Report" in result
 
     def test_contains_score(self) -> None:
-        from beadloom.infrastructure.debt_report import format_debt_report
+        from beadloom.application.debt_report import format_debt_report
 
         report = self._make_report(debt_score=23.0)
         result = format_debt_report(report)
@@ -922,7 +922,7 @@ class TestFormatDebtReport:
         assert "100" in result
 
     def test_contains_severity_indicator_medium(self) -> None:
-        from beadloom.infrastructure.debt_report import format_debt_report
+        from beadloom.application.debt_report import format_debt_report
 
         report = self._make_report(severity="medium")
         result = format_debt_report(report)
@@ -950,7 +950,7 @@ class TestFormatDebtReport:
         ]
 
     def test_contains_severity_indicator_clean(self) -> None:
-        from beadloom.infrastructure.debt_report import format_debt_report
+        from beadloom.application.debt_report import format_debt_report
 
         report = self._make_report(
             debt_score=0.0, severity="clean",
@@ -960,14 +960,14 @@ class TestFormatDebtReport:
         assert "\u2713" in result
 
     def test_contains_severity_indicator_critical(self) -> None:
-        from beadloom.infrastructure.debt_report import format_debt_report
+        from beadloom.application.debt_report import format_debt_report
 
         report = self._make_report(debt_score=80.0, severity="critical")
         result = format_debt_report(report)
         assert "\u2716" in result
 
     def test_contains_category_names(self) -> None:
-        from beadloom.infrastructure.debt_report import format_debt_report
+        from beadloom.application.debt_report import format_debt_report
 
         report = self._make_report()
         result = format_debt_report(report)
@@ -977,7 +977,7 @@ class TestFormatDebtReport:
         assert "Test Gaps" in result
 
     def test_contains_category_scores(self) -> None:
-        from beadloom.infrastructure.debt_report import format_debt_report
+        from beadloom.application.debt_report import format_debt_report
 
         report = self._make_report()
         result = format_debt_report(report)
@@ -985,7 +985,7 @@ class TestFormatDebtReport:
         assert "8" in result
 
     def test_contains_top_offenders(self) -> None:
-        from beadloom.infrastructure.debt_report import format_debt_report
+        from beadloom.application.debt_report import format_debt_report
 
         report = self._make_report()
         result = format_debt_report(report)
@@ -993,7 +993,7 @@ class TestFormatDebtReport:
         assert "GRAPH" in result
 
     def test_no_top_offenders_section_when_empty(self) -> None:
-        from beadloom.infrastructure.debt_report import format_debt_report
+        from beadloom.application.debt_report import format_debt_report
 
         report = self._make_report(
             debt_score=0.0, severity="clean",
@@ -1003,21 +1003,21 @@ class TestFormatDebtReport:
         assert "Top Offenders" not in result
 
     def test_category_item_counts_shown(self) -> None:
-        from beadloom.infrastructure.debt_report import format_debt_report
+        from beadloom.application.debt_report import format_debt_report
 
         report = self._make_report()
         result = format_debt_report(report)
         assert "errors" in result.lower() or "2" in result
 
     def test_severity_low_indicator(self) -> None:
-        from beadloom.infrastructure.debt_report import format_debt_report
+        from beadloom.application.debt_report import format_debt_report
 
         report = self._make_report(debt_score=5.0, severity="low")
         result = format_debt_report(report)
         assert "\u25cf" in result
 
     def test_severity_high_indicator(self) -> None:
-        from beadloom.infrastructure.debt_report import format_debt_report
+        from beadloom.application.debt_report import format_debt_report
 
         report = self._make_report(debt_score=30.0, severity="high")
         result = format_debt_report(report)
@@ -1070,7 +1070,7 @@ class TestCliDebtReport:
         src_dir = project / "src"
         src_dir.mkdir()
 
-        from beadloom.infrastructure.reindex import reindex
+        from beadloom.application.reindex import reindex
 
         reindex(project)
         return project
@@ -1220,14 +1220,14 @@ class TestFormatDebtJson:
         )
 
     def test_returns_dict(self) -> None:
-        from beadloom.infrastructure.debt_report import format_debt_json
+        from beadloom.application.debt_report import format_debt_json
 
         report = self._make_report()
         result = format_debt_json(report)
         assert isinstance(result, dict)
 
     def test_top_level_keys(self) -> None:
-        from beadloom.infrastructure.debt_report import format_debt_json
+        from beadloom.application.debt_report import format_debt_json
 
         report = self._make_report()
         result = format_debt_json(report)
@@ -1236,7 +1236,7 @@ class TestFormatDebtJson:
         }
 
     def test_debt_score_and_severity(self) -> None:
-        from beadloom.infrastructure.debt_report import format_debt_json
+        from beadloom.application.debt_report import format_debt_json
 
         report = self._make_report(debt_score=25.0, severity="medium")
         result = format_debt_json(report)
@@ -1244,7 +1244,7 @@ class TestFormatDebtJson:
         assert result["severity"] == "medium"
 
     def test_categories_structure(self) -> None:
-        from beadloom.infrastructure.debt_report import format_debt_json
+        from beadloom.application.debt_report import format_debt_json
 
         report = self._make_report()
         result = format_debt_json(report)
@@ -1257,7 +1257,7 @@ class TestFormatDebtJson:
             assert "details" in cat
 
     def test_categories_match_report(self) -> None:
-        from beadloom.infrastructure.debt_report import format_debt_json
+        from beadloom.application.debt_report import format_debt_json
 
         report = self._make_report()
         result = format_debt_json(report)
@@ -1265,7 +1265,7 @@ class TestFormatDebtJson:
         assert cat_names == ["rule_violations", "doc_gaps", "complexity", "test_gaps"]
 
     def test_top_offenders_structure(self) -> None:
-        from beadloom.infrastructure.debt_report import format_debt_json
+        from beadloom.application.debt_report import format_debt_json
 
         report = self._make_report()
         result = format_debt_json(report)
@@ -1278,14 +1278,14 @@ class TestFormatDebtJson:
             assert "reasons" in o
 
     def test_trend_none_when_absent(self) -> None:
-        from beadloom.infrastructure.debt_report import format_debt_json
+        from beadloom.application.debt_report import format_debt_json
 
         report = self._make_report(trend=None)
         result = format_debt_json(report)
         assert result["trend"] is None
 
     def test_trend_present(self) -> None:
-        from beadloom.infrastructure.debt_report import format_debt_json
+        from beadloom.application.debt_report import format_debt_json
 
         trend = DebtTrend(
             previous_snapshot="2026-02-15",
@@ -1310,7 +1310,7 @@ class TestFormatDebtJson:
         """Result must be fully JSON-serializable."""
         import json as _json
 
-        from beadloom.infrastructure.debt_report import format_debt_json
+        from beadloom.application.debt_report import format_debt_json
 
         trend = DebtTrend(
             previous_snapshot="2026-02-15",
@@ -1325,7 +1325,7 @@ class TestFormatDebtJson:
 
     def test_empty_report(self) -> None:
         """A clean report with no issues serializes correctly."""
-        from beadloom.infrastructure.debt_report import format_debt_json
+        from beadloom.application.debt_report import format_debt_json
 
         report = self._make_report(
             debt_score=0.0,
@@ -1345,7 +1345,7 @@ class TestFormatDebtJson:
 
     def test_category_filter(self) -> None:
         """format_debt_json with category filter returns only matching category."""
-        from beadloom.infrastructure.debt_report import format_debt_json
+        from beadloom.application.debt_report import format_debt_json
 
         report = self._make_report()
         result = format_debt_json(report, category="doc_gaps")
@@ -1355,7 +1355,7 @@ class TestFormatDebtJson:
 
     def test_category_filter_none_returns_all(self) -> None:
         """format_debt_json with category=None returns all categories."""
-        from beadloom.infrastructure.debt_report import format_debt_json
+        from beadloom.application.debt_report import format_debt_json
 
         report = self._make_report()
         result = format_debt_json(report)
@@ -1408,7 +1408,7 @@ class TestCliDebtReportJson:
         src_dir = project / "src"
         src_dir.mkdir()
 
-        from beadloom.infrastructure.reindex import reindex
+        from beadloom.application.reindex import reindex
 
         reindex(project)
         return project
@@ -1514,7 +1514,7 @@ class TestCliFailIf:
         src_dir = project / "src"
         src_dir.mkdir()
 
-        from beadloom.infrastructure.reindex import reindex
+        from beadloom.application.reindex import reindex
 
         reindex(project)
         return project
@@ -1647,7 +1647,7 @@ class TestCliCategoryFilter:
         src_dir = project / "src"
         src_dir.mkdir()
 
-        from beadloom.infrastructure.reindex import reindex
+        from beadloom.application.reindex import reindex
 
         reindex(project)
         return project
@@ -2437,7 +2437,7 @@ class TestFormatDebtReportEdgeCases:
 
     def test_single_point_uses_pt_not_pts(self) -> None:
         """Score of exactly 1.0 should use 'pt' singular label."""
-        from beadloom.infrastructure.debt_report import format_debt_report
+        from beadloom.application.debt_report import format_debt_report
 
         report = DebtReport(
             debt_score=1.0,
@@ -2458,7 +2458,7 @@ class TestFormatDebtReportEdgeCases:
 
     def test_unknown_severity_uses_fallback(self) -> None:
         """Unknown severity string uses fallback indicator."""
-        from beadloom.infrastructure.debt_report import format_debt_report
+        from beadloom.application.debt_report import format_debt_report
 
         report = DebtReport(
             debt_score=5.0,
@@ -2505,7 +2505,7 @@ class TestCliFailIfEdgeCases:
         (project / "docs").mkdir()
         (project / "src").mkdir()
 
-        from beadloom.infrastructure.reindex import reindex as do_reindex
+        from beadloom.application.reindex import reindex as do_reindex
 
         do_reindex(project)
         return project
@@ -2589,7 +2589,7 @@ class TestMcpDebtReport:
         (project / "docs").mkdir()
         (project / "src").mkdir()
 
-        from beadloom.infrastructure.reindex import reindex as do_reindex
+        from beadloom.application.reindex import reindex as do_reindex
 
         do_reindex(project)
         return project

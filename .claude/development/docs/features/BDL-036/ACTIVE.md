@@ -26,19 +26,20 @@
 
 ## Current Bead
 
-**Bead:** BEAD-02 (`beadloom-5ge.2`) — #88 reindex true totals + #94 narrow excepts (start here: blocks #91)
-**Goal:** incremental reindex prints true DB totals; narrow `except Exception` → `sqlite3.OperationalError`.
+**Bead:** BEAD-03 (`beadloom-5ge.3`) — 🎯 #91 split `application` layer + rules→error (Wave 2, solo + merge-slot)
+**Goal:** move reindex/doctor/debt_report → `src/beadloom/application/`; add application layer to graph; restore cycles/layers to error; lint --strict genuinely clean.
 
 ## Progress
 
-### Wave 1 (parallel dev — independent honesty fixes)
-- [ ] BEAD-01 (.1) — #92 doctor version + #93 MCP count
+### Wave 1 (parallel dev — independent honesty fixes) ✅ COMMITTED 960f325
+- [x] BEAD-01 (.1) — #92 doctor version + #93 MCP count
 - [x] BEAD-02 (.2) — #88 reindex totals + #94 excepts
-- [ ] BEAD-04 (.4) — #86 flow-style YAML
-- [ ] BEAD-06 (.5) — #89/#90 sync-check
+- [x] BEAD-04 (.4) — #86 flow-style YAML → GraphParseError
+- [x] BEAD-06 (.5) — #89/#90 sync-check → genuine 100% (E2E proven)
+- [+] BEAD-10 (.10) — #98 git_activity date-flake (NEW, found in assembly; blocks BEAD-05)
 
 ### Wave 2 (dev) — 🎯 #91
-- [ ] BEAD-03 (.3) — split `application` layer + rules→error (solo, merge-slot)
+- [x] BEAD-03 (.3) — split `application` layer + rules→error. Moved reindex/doctor/debt_report/watcher → `src/beadloom/application/`; added `application` node (tag `layer-application`) + layer order services→application→domains→infrastructure; restored cycles+layers to `error`. lint --strict: 0 violations (exit 0). doctor exit 0. Resolved phantom `application↔beadloom` cycle by making reindex's `__version__` read function-local (edge-free, mirrors doctor.py). pytest 2604 pass / 1 pre-existing #98 date-flake (BEAD-10, untouched git_activity). ruff+mypy clean.
 
 ### Wave 3-6
 - [ ] BEAD-07 (.6) — #71 clean bootstrap (after rules=error)
@@ -52,7 +53,7 @@
 |------|--------|---------|
 | beadloom-5ge.1 | Pending | — |
 | beadloom-5ge.2 | Done | #88 true totals on incremental path; #94 narrowed to sqlite3.OperationalError (missing-table only). 4 tests added. |
-| beadloom-5ge.3 | Pending | — |
+| beadloom-5ge.3 | Done | #91 split: 4 orchestrators → application/; rules→error; lint --strict 0 violations; doctor clean; 2604 tests pass (1 pre-existing #98 flake). |
 | beadloom-5ge.4 | Pending | — |
 | beadloom-5ge.5 | Pending | — |
 | beadloom-5ge.6 | Pending | — |

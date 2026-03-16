@@ -44,7 +44,7 @@ def _setup_project(tmp_path: Path) -> Path:
     src_dir.mkdir()
     (src_dir / "api.py").write_text("# beadloom:feature=F1\ndef handler():\n    pass\n")
 
-    from beadloom.infrastructure.reindex import reindex
+    from beadloom.application.reindex import reindex
 
     reindex(project)
     return project
@@ -81,7 +81,7 @@ class TestStatusCommand:
         (project / "docs").mkdir()
         (project / "src").mkdir()
 
-        from beadloom.infrastructure.reindex import reindex
+        from beadloom.application.reindex import reindex
 
         reindex(project)
         runner = CliRunner()

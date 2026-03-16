@@ -279,7 +279,7 @@ class BeadloomApp(App[None]):
 
     def action_reindex(self) -> None:
         """Trigger reindex in background, refresh providers, clear watcher badge."""
-        from beadloom.infrastructure.reindex import incremental_reindex
+        from beadloom.application.reindex import incremental_reindex
 
         incremental_reindex(self.project_root)
         self._refresh_providers()

@@ -338,13 +338,13 @@ class TestCppImports:
 
 class TestCCppRegistration:
     def test_c_in_code_extensions(self) -> None:
-        from beadloom.infrastructure.reindex import _CODE_EXTENSIONS
+        from beadloom.application.reindex import _CODE_EXTENSIONS
 
         assert ".c" in _CODE_EXTENSIONS
         assert ".h" in _CODE_EXTENSIONS
 
     def test_cpp_in_code_extensions(self) -> None:
-        from beadloom.infrastructure.reindex import _CODE_EXTENSIONS
+        from beadloom.application.reindex import _CODE_EXTENSIONS
 
         assert ".cpp" in _CODE_EXTENSIONS
         assert ".hpp" in _CODE_EXTENSIONS

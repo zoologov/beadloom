@@ -4050,7 +4050,7 @@ class TestDebtDataProviderErrors:
         provider = DebtDataProvider(conn=conn, project_root=project_root)
 
         with patch(
-            "beadloom.infrastructure.debt_report.load_debt_weights",
+            "beadloom.application.debt_report.load_debt_weights",
             side_effect=OSError("missing weights"),
         ):
             provider.refresh()

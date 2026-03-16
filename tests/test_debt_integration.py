@@ -7,7 +7,7 @@ and total score contribution.
 
 from __future__ import annotations
 
-from beadloom.infrastructure.debt_report import (
+from beadloom.application.debt_report import (
     DebtData,
     DebtWeights,
     compute_debt_score,
