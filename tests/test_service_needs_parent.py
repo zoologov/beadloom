@@ -2,7 +2,7 @@
 
 The rule was removed because the root service node (created during bootstrap)
 has no parent by definition, causing lint to always fail on fresh projects.
-The domain-needs-parent and feature-needs-domain rules are sufficient.
+The domain-needs-parent and feature-needs-parent rules are sufficient.
 """
 
 from __future__ import annotations
@@ -73,11 +73,12 @@ class TestServiceNeedsParentNotGenerated:
         data = yaml.safe_load(rules_path.read_text(encoding="utf-8"))
         rule_names = [r["name"] for r in data["rules"]]
         assert "domain-needs-parent" in rule_names
-        assert "feature-needs-domain" in rule_names
+        assert "feature-needs-parent" in rule_names
+        assert "feature-needs-domain" not in rule_names
         assert "service-needs-parent" not in rule_names
 
     def test_domain_and_feature_rules_still_generated(self, tmp_path: Path) -> None:
-        """domain-needs-parent and feature-needs-domain remain intact."""
+        """domain-needs-parent and feature-needs-parent remain intact."""
         nodes = [
             {"ref_id": "myproj", "kind": "service", "summary": "Root"},
             {"ref_id": "auth", "kind": "domain", "summary": "Auth domain"},
@@ -99,7 +100,7 @@ class TestServiceNeedsParentNotGenerated:
         assert domain_rule["require"]["has_edge_to"] == {}
         assert domain_rule["require"]["edge_kind"] == "part_of"
 
-        feature_rule = next(r for r in data["rules"] if r["name"] == "feature-needs-domain")
+        feature_rule = next(r for r in data["rules"] if r["name"] == "feature-needs-parent")
         assert feature_rule["require"]["for"] == {"kind": "feature"}
-        assert feature_rule["require"]["has_edge_to"] == {"kind": "domain"}
+        assert feature_rule["require"]["has_edge_to"] == {}
         assert feature_rule["require"]["edge_kind"] == "part_of"

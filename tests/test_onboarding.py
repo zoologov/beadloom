@@ -1476,7 +1476,7 @@ class TestGenerateRules:
         data = yaml.safe_load(rules_path.read_text())
         rule_names = {r["name"] for r in data["rules"]}
         assert "domain-needs-parent" in rule_names
-        assert "feature-needs-domain" in rule_names
+        assert "feature-needs-parent" in rule_names
         assert "service-needs-parent" not in rule_names
 
     def test_all_three_kinds(self, tmp_path: Path) -> None:
@@ -1514,7 +1514,7 @@ class TestGenerateRules:
         data = yaml.safe_load(rules_path.read_text())
         rule_names = {r["name"] for r in data["rules"]}
         assert "domain-needs-parent" in rule_names
-        assert "feature-needs-domain" in rule_names
+        assert "feature-needs-parent" in rule_names
         assert "service-needs-parent" not in rule_names
 
     def test_empty_graph(self, tmp_path: Path) -> None:
@@ -1608,7 +1608,7 @@ class TestGenerateRules:
         data = yaml.safe_load(rules_path.read_text())
         assert data["version"] == 1
         assert isinstance(data["rules"], list)
-        # domain-needs-parent + feature-needs-domain (no service-needs-parent)
+        # domain-needs-parent + feature-needs-parent (no service-needs-parent)
         assert len(data["rules"]) == 2
 
         for rule in data["rules"]:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import subprocess
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
@@ -78,26 +78,49 @@ def _make_commit(
 # Sample git log output for mocking
 # ---------------------------------------------------------------------------
 
-_SAMPLE_GIT_LOG = """\
-abc123 2026-02-15T10:00:00+00:00 Alice
+def _rel_date(days_ago: int) -> str:
+    """ISO 8601 timestamp ``days_ago`` days before now (UTC).
+
+    Used to build deterministic git-log samples whose 30d/90d windows
+    are stable regardless of the run date (see BDL-036 / issue #98).
+    """
+    dt = datetime.now(tz=timezone.utc) - timedelta(days=days_ago)
+    return dt.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+
+
+# Sample git-log output with RELATIVE dates so window classification is
+# deterministic. Four commits land inside the 30-day window; one (mno345)
+# lands in the 30-90 day window. The mock bypasses git's ``--since``, so
+# every commit below is also within the 90-day bucket.
+#
+# Commit -> touched nodes -> windows:
+#   abc123 (Alice):   src/auth -> auth        | 30d + 90d
+#   def456 (Bob):     src/auth -> auth        | 30d + 90d
+#   ghi789 (Alice):   src/core -> core        | 30d + 90d
+#   jkl012 (Charlie): src/auth, src/core      | 30d + 90d
+#   mno345 (Alice):   src/core -> core        | 90d only (45 days ago)
+#
+# Resulting counts: auth 30d=3 / 90d=3 ; core 30d=2 / 90d=3.
+_SAMPLE_GIT_LOG = f"""\
+abc123 {_rel_date(2)} Alice
 
 src/auth/login.py
 src/auth/utils.py
 
-def456 2026-02-14T09:00:00+00:00 Bob
+def456 {_rel_date(3)} Bob
 
 src/auth/login.py
 
-ghi789 2026-02-13T08:00:00+00:00 Alice
+ghi789 {_rel_date(4)} Alice
 
 src/core/engine.py
 
-jkl012 2026-02-12T07:00:00+00:00 Charlie
+jkl012 {_rel_date(5)} Charlie
 
 src/auth/utils.py
 src/core/engine.py
 
-mno345 2026-01-10T06:00:00+00:00 Alice
+mno345 {_rel_date(45)} Alice
 
 src/core/engine.py
 """
@@ -306,14 +329,15 @@ class TestMultipleSourceDirs:
         assert "auth" in activities
         assert "core" in activities
 
-        # auth: 3 commits in 30d (abc123 touches 2 files but is 1 commit,
-        # def456 1 commit, jkl012 1 commit)
+        # auth: 3 commits, all within 30d (abc123 touches 2 files but is 1
+        # commit, def456 1 commit, jkl012 1 commit) -> 30d=3, 90d=3.
         auth = activities["auth"]
         assert auth.commits_30d == 3
         assert auth.commits_90d == 3
         assert auth.activity_level == "cold"
 
-        # core: 3 commits in 30d, 1 older (mno345 is from Jan 10)
+        # core: 3 commits total (ghi789, jkl012, mno345). Two are within 30d
+        # (ghi789, jkl012); mno345 is 45 days ago -> 90d only.
         core = activities["core"]
         assert core.commits_30d == 2
         assert core.commits_90d == 3
@@ -336,11 +360,10 @@ class TestMultipleSourceDirs:
             )
 
         auth = activities["auth"]
-        # Alice: 2 commits (abc123, jkl012 touches utils), Bob: 1, Charlie: 1
-        # But wait — abc123 has login.py+utils.py, def456 has login.py, jkl012 has utils.py
-        # Commits touching auth: abc123 (Alice), def456 (Bob), jkl012 (Charlie) = 3 commits
-        # Alice: abc123; Bob: def456; Charlie: jkl012 — each has 1 commit
+        # Commits touching src/auth: abc123 (Alice), def456 (Bob),
+        # jkl012 (Charlie) — each author has exactly 1 auth commit.
         assert len(auth.top_contributors) <= 3
+        assert set(auth.top_contributors) == {"Alice", "Bob", "Charlie"}
 
     def test_empty_source_dirs(self, tmp_path: Path) -> None:
         """Empty source_dirs returns empty dict without calling git."""

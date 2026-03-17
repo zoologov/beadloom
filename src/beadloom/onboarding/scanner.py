@@ -743,15 +743,21 @@ def generate_rules(
             }
         )
 
-    # Rule 2: every feature must be part_of a domain.
+    # Rule 2: every feature must have a part_of edge (to any node).
+    # Using an empty matcher so features placed under a service parent
+    # (e.g. `core-rest` part_of the `core` service) are not flagged as
+    # violations.  The bootstrap classifier legitimately nests feature
+    # dirs (api/rest/graphql) inside service dirs (core/tasks/workers);
+    # requiring a `domain` parent makes a clean bootstrap fail its own
+    # `lint --strict` gate out of the box (BDL-UX-Issues #71).
     if "feature" in kinds:
         rules.append(
             {
-                "name": "feature-needs-domain",
-                "description": "Every feature must be part_of a domain",
+                "name": "feature-needs-parent",
+                "description": "Every feature must have a part_of edge",
                 "require": {
                     "for": {"kind": "feature"},
-                    "has_edge_to": {"kind": "domain"},
+                    "has_edge_to": {},
                     "edge_kind": "part_of",
                 },
             }
@@ -760,7 +766,7 @@ def generate_rules(
     # Note: service-needs-parent rule was intentionally removed.
     # The root service node has no parent by definition, so the rule
     # always fails on freshly bootstrapped projects. The domain-needs-parent
-    # and feature-needs-domain rules are sufficient for structural enforcement.
+    # and feature-needs-parent rules are sufficient for structural enforcement.
 
     if not rules:
         return 0
