@@ -26,8 +26,17 @@
 
 ## Current Bead
 
-**Bead:** BEAD-03 (`beadloom-5ge.3`) — 🎯 #91 split `application` layer + rules→error (Wave 2, solo + merge-slot)
-**Goal:** move reindex/doctor/debt_report → `src/beadloom/application/`; add application layer to graph; restore cycles/layers to error; lint --strict genuinely clean.
+**Bead:** BEAD-05 (`beadloom-5ge.7`) — test: full suite + exit-criterion verification (NEXT — resume here)
+**Goal:** confirm exit criterion end-to-end: `beadloom doctor && lint --strict && sync-check` honestly green on Beadloom. De-brittle (#96) any tests broken by #91 move (already mostly handled — move was mechanical).
+**Note on resume:** `sync-check` is NOT yet green — the new `application` layer is undocumented (doctor warns `undocumented: application`), so BEAD-09 (tech-writer) must add application-layer docs for sync-check to reach green. So BEAD-05 may confirm doctor+lint green now, but the FULL exit-criterion (incl. sync-check) completes only after BEAD-09. Sequencing options on resume: run BEAD-09 (docs) before BEAD-05's final sync-check check, OR let BEAD-05 verify doctor/lint and defer the sync-check assertion to post-BEAD-09.
+
+## ⏸ PAUSED 2026-05-30 (after Wave 3) — resume point
+
+- **Done:** Wave 1 (960f325), Wave 2 #91 (9c480d2), Wave 3 (this commit). 7/10 beads closed.
+- **State:** `lint --strict` exit 0 (rules at ERROR, 0 violations); `doctor` exit 0 (1 warn: application undocumented); ruff+mypy clean (62 files); 2608 tests pass, 0 failures.
+- **Remaining:** BEAD-05 (.7 test), BEAD-08 (.8 review), BEAD-09 (.9 tech-writer — application docs + close UX issues + CHANGELOG).
+- **Unpushed:** 8 commits on main (incl. earlier migration/review/BDL-035). Not pushed yet.
+- **Resume:** `bd ready` → BEAD-05; or run BEAD-09 docs first so sync-check can go green.
 
 ## Progress
 
