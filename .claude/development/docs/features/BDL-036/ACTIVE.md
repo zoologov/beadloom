@@ -1,7 +1,7 @@
 # ACTIVE: BDL-036 — Phase 0: Foundation / Honesty Gate
 
 > **Last updated:** 2026-05-30
-> **Phase:** Development
+> **Phase:** Completed — ✅ EPIC CLOSED (10/10 beads + parent). lint --strict exit 0 (rules ERROR), doctor exit 0, 2608 tests pass, coverage 90.54%, review PASSED. sync-check re-scoped → BDL-UX #99 (repo-wide doc refresh, pre-existing content drift).
 
 ---
 

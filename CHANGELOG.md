@@ -5,6 +5,26 @@ All notable changes to Beadloom are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Phase 0 "Foundation / Honesty Gate" (BDL-036): Beadloom now passes its own checks honestly.
+
+### Changed
+- **New `application` layer** — orchestrators (`reindex`, `doctor`, `debt_report`, `watcher`) moved from `infrastructure/` to a new `src/beadloom/application/` DDD layer. `infrastructure/` is now domain-agnostic (zero domain imports); layer order is `services → application → domains → infrastructure`. Module import paths changed `beadloom.infrastructure.{reindex,doctor,debt_report,watcher}` → `beadloom.application.*` (BDL-036 #91)
+- **Architecture rules enforced** — `no-dependency-cycles` and `architecture-layers` restored to `severity: error`; `beadloom lint --strict` now fails on real cycle/layer violations and is genuinely clean on Beadloom itself (BDL-036 #91)
+- **Generated bootstrap rule** is now `feature-needs-parent` (`has_edge_to: {}`) so a fresh `beadloom init --bootstrap` passes `lint --strict` out-of-the-box (BDL-036 #71)
+
+### Fixed
+- **doctor version drift** — reads in-tree `__version__` instead of stale `importlib.metadata` (BDL-036 #92)
+- **AGENTS.md MCP tool count** — driven by a single-source catalog pinned to the live MCP registry; no longer drifts (13→14) (BDL-036 #93)
+- **Incremental reindex "Nodes: 0"** — reports true live-DB node/edge totals on the docs/code-only path (BDL-036 #88)
+- **Silent YAML failure** — graph loader raises `GraphParseError` with file+line on malformed YAML instead of silently producing 0 nodes (BDL-036 #86)
+- **sync-check false `untracked_files`** — file-level `# beadloom:domain=` annotations on symbol-less modules and `<!-- beadloom:track= -->` doc markers now count as tracking signals (BDL-036 #89/#90)
+- **Over-broad exception handling** in reindex narrowed to `sqlite3.OperationalError` for missing-table cases (BDL-036 #94)
+
+### Known
+- `beadloom sync-check` still reports pre-existing documentation drift across several domains (accumulated content staleness, not a mechanism bug); a dedicated repo-wide doc-refresh is tracked as BDL-UX #99.
+
 ## [1.9.0] - 2026-03-10
 
 Data accuracy, docs audit precision, and sync-check reliability. 6 UX issues resolved, 43 new tests. 2580 tests total.

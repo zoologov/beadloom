@@ -2,7 +2,7 @@
 
 Graph validation checks for data integrity and completeness.
 
-Source: `src/beadloom/infrastructure/doctor.py`
+Source: `src/beadloom/application/doctor.py`
 
 ## Specification
 

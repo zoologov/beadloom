@@ -2,7 +2,7 @@
 
 Full and incremental reindex pipeline for rebuilding the architecture graph database.
 
-Source: `src/beadloom/infrastructure/reindex.py`
+Source: `src/beadloom/application/reindex.py`
 
 ## Specification
 

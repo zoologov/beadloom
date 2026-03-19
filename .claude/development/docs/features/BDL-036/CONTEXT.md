@@ -15,6 +15,7 @@ Make Beadloom pass its own `doctor` / `lint --strict` / `sync-check` honestly (t
 - **Verify before fixing; `honest ≠ complete`** — if an issue (esp. #89/#90/#86) proves deeper than Phase 0 warrants, re-scope transparently in the docs with evidence; never fake green or silently drop.
 - **Mechanical move for #91** — preserve module APIs; update import paths; run full pytest after. Serialize the landing with `bd merge-slot`.
 - **Exit criterion is the acceptance test:** `beadloom doctor && beadloom lint --strict && beadloom sync-check` honestly green on Beadloom itself + clean fresh bootstrap.
+- **RE-SCOPE (2026-05-30, honest≠complete):** `doctor` + `lint --strict` are honestly green and a fresh bootstrap lints clean. `sync-check` *mechanism* is now honest (#89/#90 fixed), BUT ~30 pre-existing stale doc pairs (accumulated content drift across graph/tui/onboarding/…, largely NOT from Phase 0) remain. Driving sync-check to zero = a repo-wide doc refresh = its own epic (BDL-UX #99). Phase 0 closes with lint+doctor green + sync-check mechanism honest + Phase-0-touched docs updated; full sync-check green deferred to #99. Faking green via baseline-reset was explicitly rejected (it is the exact dishonesty this epic exists to remove).
 - First real-code dogfood of the BDL-035 process (agents/* subagents, swarm/gate/merge-slot).
 
 ## Code Standards

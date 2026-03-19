@@ -13,7 +13,7 @@ Domain-agnostic SQLite database layer, health metrics, and git activity analysis
 - **db.py** — `open_db()` opens a SQLite connection with WAL mode and foreign keys enabled, returning a connection with `sqlite3.Row` row factory. `create_schema()` creates all tables and applies incremental migrations via `ensure_schema_migrations()`. `get_meta()`/`set_meta()` for key-value metadata. Exports `SCHEMA_VERSION` constant (currently `"2"`). The `rules` table CHECK constraint covers all 7 rule types: `deny`, `require`, `forbid_cycles`, `layers`, `cardinality`, `forbid_import`, `forbid_edge`.
 - **health.py** — `take_snapshot()` captures current index statistics (node/edge/doc counts, coverage percentage, stale docs, isolated nodes) and persists them to the `health_snapshots` table. `get_latest_snapshots()` retrieves history for trend comparison. `compute_trend()` computes trend indicators (arrows and deltas) between two snapshots.
 - **git_activity.py** — `GitActivity` frozen dataclass holds per-node metrics: `commits_30d`, `commits_90d`, `last_commit_date`, `top_contributors`, `activity_level`. `analyze_git_activity()` runs `git log --since=90 days ago`, parses output, maps changed files to nodes via longest source-prefix match, and classifies activity (hot: >20 commits/30d, warm: 5-20, cold: 1-4, dormant: 0 commits/90d).
-- **mcp_tools.py** — `MCP_TOOL_CATALOG` static catalog of MCP tool metadata used by AGENTS.md generation.
+- **mcp_tools.py** — single-source catalog of MCP tool metadata used by AGENTS.md generation. `McpToolDoc` describes one tool; `mcp_tool_names()` returns the canonical tool-name list (pinned to the live MCP `_TOOLS` registry by a drift-guard test) so the documented tool count cannot drift.
 
 ### Database Schema
 

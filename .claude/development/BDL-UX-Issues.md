@@ -1,9 +1,9 @@
 # BDL UX Feedback Log
 
 > Collected during development and dogfooding.
-> Total: 98 issues | Open: 11 | Improvements: 16 | Excluded: 6 | Closed: 65
-> Note: BDL-036 (Phase 0) is resolving #91/#88/#92/#93/#94/#86/#89/#90/#71 (+#98); counts updated at epic close.
+> Total: 99 issues | Improvements: 16 | Excluded: 6 | Closed: 75
 > Last reviewed: BDL-034 (UX Issues & Improvements Batch Fix)
+> 2026-05-30 (BDL-036 Phase 0): CLOSED #91 #88 #92 #93 #94 #86 #89 #90 #71 #98 (honesty gate — see Closed §BDL-036). Opened #99 (repo-wide doc refresh — sync-check has ~30 pre-existing stale doc pairs unrelated to Phase 0; the sync-check *mechanism* is now honest, the doc *content* needs a dedicated pass). Still open: #72, #73, #95, #97 (external), #99. Exact category recount folded into #99.
 > 2026-05-28: added #91–#96 from the comprehensive architecture/code review (see `.claude/development/REVIEW.md`); refined #88 root cause.
 
 # Beadloom UX Issues
@@ -536,6 +536,30 @@
 ---
 
 ## Closed Issues
+
+### BDL-036 — Phase 0: Foundation / Honesty Gate (2026-05-30)
+
+> The product now passes its own checks honestly. `lint --strict` exit 0 (rules at ERROR, 0 violations), `doctor` exit 0, 2608 tests pass, coverage 90.54%. Adversarial review (BEAD-08) = PASSED, no faked green.
+
+- 91. ~~[CRITICAL] Beadloom violates its own architecture rules; lint --strict passes anyway~~ **FIXED (BEAD-03, 9c480d2)** — extracted orchestrators (reindex/doctor/debt_report/watcher) into a new `application/` DDD layer; `infrastructure/` is now domain-agnostic (zero domain imports); restored `no-dependency-cycles` + `architecture-layers` to `severity: error`; `lint --strict` genuinely clean.
+- 88. ~~[HIGH] Incremental reindex returns 0 nodes~~ **FIXED (BEAD-02, 960f325)** — incremental path now reports true live-DB totals (was a display bug).
+- 92. ~~[HIGH] doctor false version drift~~ **FIXED (BEAD-01, 960f325)** — reads in-tree `__version__`, not stale `importlib.metadata`.
+- 93. ~~[LOW] AGENTS.md MCP tool count drift (13 vs 14)~~ **FIXED (BEAD-01, 960f325)** — single-source `mcp_tools` catalog pinned to live registry by a drift-guard test.
+- 94. ~~[MEDIUM] Over-broad except Exception~~ **FIXED (BEAD-02, 960f325)** — narrowed to `sqlite3.OperationalError` (missing-table only).
+- 86. ~~[HIGH] YAML edges silently produce 0 nodes~~ **FIXED (BEAD-04, 960f325)** — loader raises `GraphParseError` with file+line on malformed YAML; flow-style edges parse correctly.
+- 89. ~~[MEDIUM] sync-check false untracked_files~~ **FIXED (BEAD-06, 960f325)** — file-level annotations on symbol-less modules now count as tracking signals; genuine 100% reachable (E2E test).
+- 90. ~~[MEDIUM] beadloom:track markers inert~~ **FIXED (BEAD-06, 960f325)** — track markers now count as a doc→file binding signal.
+- 71. ~~[MEDIUM] bootstrap generates rules that fail lint out-of-the-box~~ **FIXED (BEAD-07, b4d5e62)** — generated rule is `feature-needs-parent` (`has_edge_to: {}`); fresh bootstrap lints clean; regression test added.
+- 98. ~~[LOW] test_git_activity date-relative flake~~ **FIXED (BEAD-10, b4d5e62)** — `_SAMPLE_GIT_LOG` uses relative dates; deterministic windows.
+
+99. [2026-05-30] [MEDIUM] Repo-wide documentation drift — sync-check has ~30 pre-existing stale doc pairs
+
+    **Severity:** medium
+    **Command:** `beadloom sync-check`
+    **Context:** Surfaced honestly during BDL-036 Phase 0. After fixing the sync-check *mechanism* (#89/#90) and restoring honest checks, `sync-check` still reports ~30-32 stale doc-code pairs (graph, tui, onboarding, doc-sync, etc.). Investigation showed the bulk is **accumulated content drift from prior releases**, largely unrelated to Phase 0 changes (e.g. `tui` docs, untouched by Phase 0 code).
+    **Issue:** Beadloom's own docs have not kept pace with code; the doc *content* is stale even though the sync-check engine is now honest. Driving sync-check to zero is a repo-wide doc refresh, out of scope for the Phase 0 honesty gate.
+    **Expected:** A dedicated doc-refresh epic: update each stale ref's prose to match current symbols, reach genuine `sync-check` exit 0, then keep it green via the BEAD-09 / CI tech-writer loop (ties to STRATEGY-3 F4). Also do the exact UX-log category recount here.
+    > **Open — new epic.** The honest re-scope of BDL-036's exit criterion (lint + doctor green now; full sync-check green deferred to this epic).
 
 ### v1.9.0 — BDL-034 (UX Batch Fix)
 

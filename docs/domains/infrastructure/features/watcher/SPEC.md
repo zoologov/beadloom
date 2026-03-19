@@ -2,7 +2,7 @@
 
 File watcher for automatic reindex on file system changes.
 
-Source: `src/beadloom/infrastructure/watcher.py`
+Source: `src/beadloom/application/watcher.py`
 
 ## Specification
 

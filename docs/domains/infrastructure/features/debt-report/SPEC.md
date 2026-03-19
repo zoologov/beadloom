@@ -2,7 +2,7 @@
 
 Architecture debt aggregation, scoring, and trend tracking.
 
-Source: `src/beadloom/infrastructure/debt_report.py`
+Source: `src/beadloom/application/debt_report.py`
 
 ## Specification
 
@@ -134,11 +134,11 @@ Raw counts aggregated from all data sources.
 | Category | Source | Module |
 |----------|--------|--------|
 | Rule violations | `evaluate_all(conn, rules)` | `graph/rule_engine.py` |
-| Doc gaps -- undocumented | Nodes without docs (LEFT JOIN) | `infrastructure/debt_report.py` |
-| Doc gaps -- stale | `sync_state` entries with `status='stale'` | `infrastructure/debt_report.py` |
-| Doc gaps -- untracked | Nodes with source but no sync_state | `infrastructure/debt_report.py` |
-| Complexity -- oversized | Symbol count per node vs threshold | `infrastructure/debt_report.py` |
-| Complexity -- fan-out | Edge count per node vs threshold | `infrastructure/debt_report.py` |
+| Doc gaps -- undocumented | Nodes without docs (LEFT JOIN) | `application/debt_report.py` |
+| Doc gaps -- stale | `sync_state` entries with `status='stale'` | `application/debt_report.py` |
+| Doc gaps -- untracked | Nodes with source but no sync_state | `application/debt_report.py` |
+| Complexity -- oversized | Symbol count per node vs threshold | `application/debt_report.py` |
+| Complexity -- fan-out | Edge count per node vs threshold | `application/debt_report.py` |
 | Complexity -- dormant | `analyze_git_activity()` with dormant level | `infrastructure/git_activity.py` |
 | Test gaps | `map_tests()` with coverage_estimate=none | `context_oracle/test_mapper.py` |
 
