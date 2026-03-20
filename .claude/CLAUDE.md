@@ -1,9 +1,37 @@
 # CLAUDE.md — Multi-Agent Development Core
 
-> **Version:** 3.0 (Optimized)
+> **Version:** 3.1 (agents/ + commands/ split)
 > **Integration:** steveyegge/beads CLI (1.0.4, embedded Dolt)
-> **Skills:** `/task-init`, `/dev`, `/review`, `/test`, `/coordinator`, `/templates`, `/checkpoint`, `/tech-writer`
-> **Subagents:** `.claude/agents/{dev,test,review,tech-writer}.md` (canonical roles; the `/dev` etc. skills are interactive wrappers)
+> **Process skills (`.claude/commands/`, slash, run in main loop):** `/task-init`, `/coordinator`, `/checkpoint`, `/templates`
+> **Role subagents (`.claude/agents/`, launched via the `Agent` tool):** `dev`, `test`, `review`, `tech-writer`
+> **See §0.0 Process Architecture for how these fit together.**
+
+---
+
+## 0.0 Process Architecture (entry point → roles)
+
+One entry point, two kinds of unit. This is the whole map:
+
+```
+CLAUDE.md  ← entry point: critical rules, setup, bd/beadloom essentials, this map
+│
+├─ .claude/commands/  — SLASH SKILLS, injected into the MAIN-LOOP session (you, now)
+│    /task-init    scaffold any work item (PRD/RFC/CONTEXT/PLAN/ACTIVE or BRIEF) + create beads
+│    /coordinator  orchestrate multi-agent work (waves, gates, merge-slot) — MAIN-LOOP only
+│    /checkpoint   bd-comment + ACTIVE.md progress saves
+│    /templates    document templates used by /task-init
+│
+└─ .claude/agents/    — ROLE SUBAGENTS, launched via the `Agent` tool (isolated context)
+     dev · test · review · tech-writer   (canonical role definitions; scoped tools; model: opus)
+```
+
+**Why coordinator is a command, not an agent:** the coordinator IS the main-loop process that *spawns* subagents via the `Agent` tool. A subagent cannot spawn subagents, so orchestration must live in the main loop. `/coordinator` is a skill injected into that loop.
+
+**Two ways a role runs:**
+- **Multi-agent (default for epics/features):** `/coordinator` launches roles as subagents — `Agent(subagent_type="dev"|"test"|"review"|"tech-writer", run_in_background=True)`. The role's full protocol lives in `.claude/agents/<role>.md` (single source of truth) and is NOT re-injected by the coordinator.
+- **Single-agent (one small bead, no orchestration):** the main loop adopts the role inline by reading and following `.claude/agents/<role>.md` directly. (There are no `/dev` `/test` `/review` `/tech-writer` slash commands — roles are subagents, not skills.)
+
+**Flow:** `/task-init` (docs + beads) → `/coordinator` (waves: dev → test → review → tech-writer, gated by bead dependencies) → commit per wave. Durable state lives in files (`CONTEXT.md`/`ACTIVE.md`) + bead comments, never chat.
 
 ---
 
@@ -90,18 +118,18 @@ bd close <bead-id> --suggest-next
 
 ## 1. Skills — Dynamic Loading
 
+**Slash skills (main loop):**
+
 | Situation | Command | Description |
 |-----------|---------|-------------|
 | New work item | `/task-init` | Setup any type: epic, feature, bug, task, chore |
-| Code development | `/dev` | TDD, patterns, workflow |
-| Code review | `/review` | Quality checklists |
-| Writing tests | `/test` | AAA pattern, coverage |
-| Parallel work | `/coordinator` | Distribution, synchronization |
-| Doc updates | `/tech-writer` | Systematic doc refresh, sync-check fixes |
+| Parallel work | `/coordinator` | Orchestrate multi-agent waves (spawns role subagents) |
 | Need templates | `/templates` | PRD, RFC, CONTEXT, PLAN, ACTIVE, BRIEF |
 | Create checkpoint | `/checkpoint` | Format, rules |
 
-**Rule:** Invoke a skill when you need detailed instructions.
+**Role subagents (via the `Agent` tool — see §0.0):** `dev` (TDD implementation), `test` (pytest, coverage), `review` (quality, read-only), `tech-writer` (doc refresh). Defined in `.claude/agents/<role>.md`. For a single small bead without orchestration, the main loop adopts a role inline by following its `.claude/agents/<role>.md`.
+
+**Rule:** Invoke a slash skill when you need detailed instructions; launch a role subagent (or follow its agent file inline) to do role work.
 
 ---
 
@@ -170,7 +198,7 @@ beadloom lint --strict           # architecture boundary check (exit 1 = violati
 beadloom doctor                  # graph integrity validation
 
 # Change tracking & visualization
-beadloom diff --since <git-ref>  # graph changes vs a git ref (exit 1 = changes) — use in /review
+beadloom diff --since <git-ref>  # graph changes vs a git ref (exit 1 = changes) — use in the review role
 beadloom snapshot save           # snapshot architecture state; `snapshot compare <a> <b>` to diff
 beadloom link <ref-id> <url>     # link a graph node to an external tracker issue (GitHub/Jira)
 
@@ -225,25 +253,25 @@ beadloom install-hooks           # pre-commit hook: lint + sync-check enforcemen
 
 ## 4. Agent Roles
 
-| Role | Skill | When to use |
-|------|-------|-------------|
-| **Developer** | `/dev` | Implementing beads |
-| **Reviewer** | `/review` | Quality verification |
-| **Tester** | `/test` | Writing tests |
-| **Tech Writer** | `/tech-writer` | Documentation updates |
-| **Coordinator** | `/coordinator` | Multi-agent work |
+| Role | How it runs | When to use |
+|------|-------------|-------------|
+| **Developer** | `agents/dev.md` (`subagent_type: dev`) | Implementing beads (TDD) |
+| **Reviewer** | `agents/review.md` (`subagent_type: review`) | Quality verification (read-only) |
+| **Tester** | `agents/test.md` (`subagent_type: test`) | Writing tests |
+| **Tech Writer** | `agents/tech-writer.md` (`subagent_type: tech-writer`) | Documentation updates |
+| **Coordinator** | `/coordinator` skill (main loop) | Multi-agent orchestration |
 
-### Single agent
-Use `/dev` for development, `/checkpoint` for saving progress.
+### Single agent (one small bead, no orchestration)
+The main loop adopts the role inline by following `.claude/agents/<role>.md` directly; use `/checkpoint` for saving progress.
 
-### Multi-agent mode
+### Multi-agent mode (default for epics/features)
 Coordinator MUST be activated before multi-bead work:
-1. Invoke `/coordinator` skill
-2. Complete `/task-init` flow BEFORE creating any beads or writing code
-3. Coordinator gets technical context through filtered sources (strategy specs, sub-agent summaries), NEVER reads raw source code directly
-4. Coordinator launches roles as first-class subagents via the `Agent` tool (`subagent_type: dev|test|review|tech-writer`), tracked through `bd swarm` / `gate` / `merge-slot`
+1. Invoke `/coordinator` skill (main-loop only — see §0.0).
+2. Complete `/task-init` flow BEFORE creating any beads or writing code.
+3. Coordinator gets technical context through filtered sources (strategy specs, sub-agent summaries), NEVER reads raw source code directly.
+4. Coordinator launches roles as first-class subagents via the `Agent` tool (`subagent_type: dev|test|review|tech-writer`), tracked through `bd swarm` / `gate` / `merge-slot`.
 
-Roles are defined canonically in `.claude/agents/{dev,test,review,tech-writer}.md`; the `/dev` `/test` `/review` `/tech-writer` skills are interactive wrappers over the same definitions.
+Roles are defined canonically in `.claude/agents/{dev,test,review,tech-writer}.md` (single source of truth; no slash-command wrappers).
 
 ---
 
@@ -377,5 +405,5 @@ bd close <id> --suggest-next          # shows newly unblocked beads
 
 ---
 
-> **Need detailed instructions?** Invoke the corresponding skill:
-> `/task-init` | `/dev` | `/review` | `/test` | `/coordinator` | `/tech-writer` | `/templates` | `/checkpoint`
+> **Need detailed instructions?** Slash skills: `/task-init` | `/coordinator` | `/templates` | `/checkpoint`.
+> Role subagents (`Agent` tool / follow the agent file inline): `dev` | `test` | `review` | `tech-writer` — see §0.0.

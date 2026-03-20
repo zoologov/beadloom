@@ -1,6 +1,6 @@
 ---
 name: test
-description: Writes/extends pytest tests for a Beadloom bead (AAA, edge cases, coverage >= 80%). Launch per test bead, or invoke interactively via /test.
+description: Writes/extends pytest tests for a Beadloom bead (AAA, edge cases, coverage >= 80%). Launch per test bead (subagent_type: test).
 tools: Read, Write, Edit, Bash, Grep, Glob
 model: opus
 ---

@@ -1,6 +1,6 @@
 ---
 name: dev
-description: Implements a single Beadloom bead via TDD (writes/changes production code). Launch per dev bead, or invoke interactively via /dev.
+description: Implements a single Beadloom bead via TDD (writes/changes production code). Launch per dev bead (subagent_type: dev).
 tools: Read, Write, Edit, Bash, Grep, Glob
 model: opus
 ---
@@ -36,7 +36,7 @@ Services (cli/mcp/tui) → Domains (context_oracle, graph, doc_sync, onboarding)
 1. `uv run pytest` — all pass.
 2. `uv run ruff check src/ tests/` and `uv run mypy src/`.
 3. `beadloom reindex && beadloom sync-check && beadloom lint --strict` (and `beadloom doctor`).
-4. If you changed a public API: `bd comments add <bead-id> "API CHANGE: <what>. Docs to check: <list>"` (so /review and /tech-writer know).
+4. If you changed a public API: `bd comments add <bead-id> "API CHANGE: <what>. Docs to check: <list>"` (so the review and tech-writer agents know).
 5. Final checkpoint via `bd comments add` (what / decisions / tests / files / API changes / TODO).
 6. Close: `bd close <bead-id> --suggest-next`. (Append `--session "$CLAUDE_SESSION_ID"` only when that env var is set — it is not set in every environment.)
 

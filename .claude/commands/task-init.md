@@ -116,10 +116,10 @@ Draft  →  Approved  →  Done
 ```
 
 Every feature/epic MUST include sub-tasks for all four agent roles:
-- `/dev` — implementation beads (one per logical unit of work)
-- `/test` — test verification bead (depends on all dev beads)
-- `/review` — code review bead (depends on test bead)
-- `/tech-writer` — documentation update bead (depends on review bead)
+- `dev` — implementation beads (one per logical unit of work)
+- `test` — test verification bead (depends on all dev beads)
+- `review` — code review bead (depends on test bead)
+- `tech-writer` — documentation update bead (depends on review bead)
 
 ### Step 4: ACTIVE
 

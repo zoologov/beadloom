@@ -3,6 +3,7 @@
 > **When to invoke:** during parallel work with multiple agents (an epic with independent beads)
 > **Focus:** task distribution, synchronization, quality gating
 > **Backbone:** bead dependencies + `bd ready` (waves, always) · `bd merge-slot` (serialized merges) · `bd gate` (CI/external waits) · `bd swarm` (optional convenience for epic-type parents: validate/status)
+> **The coordinator is the MAIN-LOOP process, not a subagent** — it spawns role subagents via the `Agent` tool, and a subagent cannot spawn subagents. That is why it lives in `.claude/commands/` (skill injected into the main loop), not `.claude/agents/`.
 
 ---
 
@@ -110,6 +111,12 @@ Agent(
 
 Monitor progress via `bd ready` / `bd dep tree <parent-id>` (always) or `bd swarm status <epic-id>` (epic parents) + `bd comments <id>` — not by reading agent output.
 
+### Subagent write-blocked fallback (observed BDL-036)
+
+A background subagent may report that file-writing tools (`Edit`/`Write`, and sometimes `grep`/`python3` piping) are denied in its environment, so it cannot do its work. (In BDL-036 the background `tech-writer` subagent hit this while parallel `dev` subagents in the same run wrote files fine — cause unconfirmed, likely transient/sandbox; treat it as possible, not guaranteed.)
+
+**Fallback:** if a subagent returns "blocked — could not edit files", the coordinator (main loop) does NOT silently drop the bead. Either (a) re-launch the subagent, or (b) **complete the bead inline in the main loop** using the subagent's analysis (it should still return its findings), then checkpoint + close the bead normally. For write-heavy beads (docs/finalization), inline execution by the main loop is an acceptable first choice when a prior subagent was write-blocked. Record the fallback honestly in the bead comment.
+
 ### Merge serialization (bd merge-slot)
 
 When parallel agents land changes, serialize merges so they don't cascade conflicts:
@@ -138,7 +145,7 @@ bd merge-slot release
 
 ### Review feedback loop
 
-When `/review` returns:
+When the review subagent returns:
 - **OK** → coordinator proceeds to the docs wave.
 - **ISSUES** → coordinator: read findings (`bd comments <review-bead>`), create fix beads under the parent (`bd create --type task --parent <parent-id>`; `bd dep add <fix-bead> <review-bead>`), re-run dev→test→review until OK. Docs bead MUST NOT start until review is clean.
 
