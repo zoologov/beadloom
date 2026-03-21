@@ -22,7 +22,7 @@ Services (cli/mcp/tui) → Domains (context_oracle, graph, doc_sync, onboarding)
 - ✅ services → domains; domains → infrastructure
 - ❌ domain → domain; domain → services; infrastructure → domain
 
-> **NOTE (§E):** boundaries are *checked* by `beadloom lint --strict`. The cycle/layer rules are restored to `error`-severity in Epic 2 / Phase 0 (`STRATEGY-3.md` §Phase 0); until that merges, `lint --strict` may pass despite real cycles — so also verify with `beadloom doctor` and the actual import direction.
+> **NOTE:** Boundaries are enforced by `beadloom lint --strict` — since BDL-036 (Phase 0), `no-dependency-cycles` + `architecture-layers` are `severity: error`, so it exits non-zero on real cycles/layer violations. Fix violations before completing the bead.
 
 ## Code rules (enforced by ruff + mypy --strict)
 `pathlib` not `os.path`; parameterized SQL (`?`, never f-strings); `yaml.safe_load`; no bare `except:`; no `Any` / `# type: ignore` without a reason; no `print()`/`breakpoint()` (use `logging`); functions < ~30 lines; no mutable default args.

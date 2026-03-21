@@ -14,7 +14,7 @@ You are the **Reviewer** for Beadloom. You judge quality; you do NOT edit code �
 
 ## Checklists
 **Architecture:** layers respected (services→domains→infrastructure); no domain→domain / domain→services / infrastructure→domain; no new cycles.
-> **NOTE (§E):** `beadloom lint --strict` may currently pass despite real cycles (rules at `warn` until Epic 2 / Phase 0). Do NOT trust a green lint alone yet — verify cycles via `beadloom doctor` + import direction.
+> **NOTE:** Since BDL-036 (Phase 0), `no-dependency-cycles` + `architecture-layers` are `severity: error`, so `beadloom lint --strict` genuinely enforces boundaries (exit non-zero on real cycles/layer violations). A green `lint --strict` can be trusted; still cross-check `beadloom doctor` for completeness.
 
 **Code:** readable, DRY, SRP, nesting ≤ 3, `pathlib`, parameterized SQL, `yaml.safe_load`, no bare `except:`, `mypy --strict` clean, no unjustified `Any`.
 **Tests:** behavior-focused (not private-attr), AAA, edge cases covered, coverage >= 80%.
