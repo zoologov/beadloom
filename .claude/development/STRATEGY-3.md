@@ -40,6 +40,11 @@
 5. **Hub-and-spoke.** Autonomous per-repo Beadloom instances own their slice; a central aggregator pulls and composes the landscape. Repos remain the source of truth for their own nodes.
 6. **Ship + dogfood on the real landscape.** Prove each capability on the maintainer's actual microservices via the thinnest end-to-end thread before broadening.
 7. **Tool-agnostic via canonical source → generated thin adapters.** One source (graph + generated AGENTS.md/rules) → thin, *generated* per-tool adapters (`.cursor/rules`, `CLAUDE.md`, MCP). Never hand-maintain adapters (that is how AGENTS.md drifted, #93). **CI is the only true enforcement point** where all tools and manual devs converge; local rules files are *hints*.
+8. **Lifecycle-aware accuracy (real codebases are messy).** Real repos carry dead, deprecated, planned, and stale-named code that misleads naive inference (validated on the F1 landscape: stale `MYSQL_*` env names while the DB is PostgreSQL; a BIM-viewer adapter present-but-unused; a core↔file-service event bridge declared-but-unbuilt; SMTP/feature-flags real-but-unmapped). Three mandates:
+   - **(a) Lifecycle status on every node AND edge:** `active | planned | deprecated | dead`.
+   - **(b) Three-valued intent-vs-reality** (extends principle 4): `active`+present = OK; `active`+absent = **DRIFT**; `planned`+absent = expected; `deprecated`+present = **cleanup candidate**; **undeclared**+present = **UNDECLARED** (code uses it, graph doesn't — catches the "missed SMTP/feature-flags" class).
+   - **(c) Draft-then-review bootstrap, never blind auto-trust.** Code-inferred nodes/edges start `unverified`; a human/agent confirms status. Conflicts (e.g. PostgreSQL-vs-MySQL naming) are **flagged for review, not silently decided.**
+   This is the answer to "messy/legacy code must not degrade Beadloom's accuracy." See `F1-landscape-analysis.md` §4bis.
 
 ---
 
@@ -66,11 +71,12 @@ The narrow subset of `BDL-UX-Issues.md` that MUST close before federation work. 
 - **Stable cross-repo node identity** (`@org/repo:NODE`) and a shared node registry.
 - **Hub-and-spoke wiring:** central aggregator pulls per-repo graphs; a per-repo Beadloom remains usable standalone.
 - **Temporal consistency model:** how stale is repo-B's view from repo-A? ("repo-B graph is N commits behind") — this is doc-sync at the federation level.
-- **Dogfood:** central hub + 2 of the maintainer's real services + 1 cross-service edge. This surfaces the real hard problems on a live system, not on paper.
+- **Dogfood (confirmed slice):** central hub + **core-monolith + integration-service** + their **RabbitMQ contract edge** (`start_plan_version_upload`/`ensure_plans_folder_path` ↔ `*_completed`) — the one contract confirmed on both sides. Surfaces the real hard problems on a live system, not on paper. (file-service↔core is the planned-edge follow-up; see `F1-landscape-analysis.md` §7.)
 
 ### Phase F2 — Cross-Service Contract Graph  🌟 (the differentiated killer feature)
-- **Polyglot contract edges:** OpenAPI, GraphQL schema, protobuf/gRPC, async/event contracts.
-- **Intent vs Reality at system level:** declared integration contract vs actual calls → detect drift, breaking changes, orphaned consumers, and "the contract does not match on both sides."
+- **Contract-source priority (from F1 analysis):** **AMQP/event message types first** (the dominant internal fabric on the real landscape; declared sources already exist in `*/openspec/specs/*rabbitmq*`), then **GraphQL SDL** (the monolith's `schema.graphql` + Hive), then **REST/OpenAPI** (runtime-generated, no static files — lowest priority).
+- **Lifecycle-tagged contract edges** (principle 8): each cross-service edge carries `active | planned | deprecated | dead` + protocol + contract-file + a "confirmed both-sides?" flag.
+- **Three-valued Intent vs Reality at system level:** declared contract vs both-sides reality → `active`+present = OK; `active`+absent = **DRIFT** / "contract doesn't match on both sides"; `planned`+absent = expected (e.g. the core↔file-service bridge); `deprecated`+present = cleanup candidate; **undeclared**+present = orphaned/UNDECLARED consumer. Detects drift, breaking changes, orphaned consumers.
 - This is the moat for a microservices org — bigger than any per-repo internal graph.
 
 ### Phase F3 — Tool-Agnostic Enforcement Everywhere
@@ -153,10 +159,16 @@ This is a **platform-scale** ambition (federation × BE/FE/DevOps/Infra + polygl
 
 ## 8. Open Questions
 
-1. **Monorepo workspaces** alongside multi-repo? (Maintainer confirmed multi-repo microservices; confirm whether any monorepo packages also need isolated graphs — Strategy 2 task 13.4.)
-2. **Who maintains the per-repo graph** as the team + agents generate code fast? (Determines how urgent "intent vs reality" auto-drift is — likely F2-critical.)
-3. **Contract source priority** for F2: OpenAPI first? GraphQL? gRPC/protobuf? events? (Drive by which integrations dominate the maintainer's landscape.)
-4. **Hub ownership:** is the central Beadloom repo a separate repo the team owns, and who triggers aggregation (CI cron? on per-repo push?).
+**Resolved during F1 discovery (2026-05-31, owner-confirmed — see `F1-landscape-analysis.md` §8):**
+- ✅ **Contract source priority (was Q3):** **AMQP/event message types first**, then GraphQL SDL, then REST.
+- ✅ **Hub ownership (was Q4):** a **new dedicated repo**; aggregation **via CI/CD, pull-based** (satellites publish commit-SHA-tagged `beadloom export` artifacts to GitLab Package Registry / MinIO; hub CI pulls + composes + validates + publishes). On-push from satellites + nightly cron.
+- ✅ **F1 first slice:** **core-monolith ↔ integration-service** (RabbitMQ, the one both-sides-confirmed contract).
+
+**Still open:**
+1. **Monorepo workspaces** alongside multi-repo? (Confirmed multi-repo microservices; no monorepo packages identified among the 4 repos so far — revisit if one appears. Strategy 2 task 13.4.)
+2. **Who maintains the per-repo graph** as the team + agents generate code fast? (Drives how urgent the principle-8 lifecycle/draft-review tooling is — likely F1/F2-critical.)
+3. **Hub artifact schema & CI cadence detail:** exact `beadloom export` federation format + trigger wiring — an F1 design task.
+4. **UNDECLARED sweep:** complete the landscape (SMTP, feature-flags already found unmapped; verify error-tracking / video / secrets-manager / directory / Redis-pubsub; BIM-viewer adapter = `deprecated`) so nothing is missed — the owner's explicit "don't miss anything" requirement.
 
 ---
 
