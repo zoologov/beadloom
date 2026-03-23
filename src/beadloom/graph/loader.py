@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from beadloom.graph.federation import FederationRefError, parse_ref
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -35,9 +37,32 @@ def get_node_tags(conn: sqlite3.Connection, ref_id: str) -> set[str]:
     return set(extra.get("tags", []))
 
 # Fields mapped directly to SQLite columns (not stored in ``extra``).
-_NODE_DIRECT_FIELDS = frozenset({"ref_id", "kind", "summary", "source"})
+_NODE_DIRECT_FIELDS = frozenset({"ref_id", "kind", "summary", "source", "lifecycle"})
 # ``docs`` is tracked but handled by the doc indexer (BEAD-04).
 _NODE_SKIP_FIELDS = frozenset({"docs"})
+
+# Valid lifecycle states (BDL-037 Principle 8). Default is ``active``; absent
+# or unknown values fall back to ``active`` so existing graphs are unchanged.
+VALID_LIFECYCLES = frozenset({"active", "planned", "deprecated", "dead"})
+_DEFAULT_LIFECYCLE = "active"
+
+
+def _normalize_lifecycle(raw: object, context: str, result: GraphLoadResult) -> str:
+    """Validate a ``lifecycle`` value, recording unknown values as errors.
+
+    Returns the validated lifecycle, or ``active`` when *raw* is absent or
+    invalid (the invalid case is recorded loudly — never silently dropped).
+    """
+    if raw is None:
+        return _DEFAULT_LIFECYCLE
+    value = str(raw)
+    if value not in VALID_LIFECYCLES:
+        result.errors.append(
+            f"{context}: invalid lifecycle '{value}', "
+            f"must be one of {sorted(VALID_LIFECYCLES)}; defaulting to 'active'"
+        )
+        return _DEFAULT_LIFECYCLE
+    return value
 
 
 class GraphParseError(Exception):
@@ -57,6 +82,19 @@ class ParsedFile:
     edges: list[dict[str, Any]] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class ForeignEdge:
+    """An edge whose src or dst points at another repo (``@repo:ref_id``).
+
+    Recorded (not inserted, not a dangling error) at single-repo load time;
+    it resolves against the federated union at the hub (BDL-037).
+    """
+
+    src: str
+    dst: str
+    kind: str
+
+
 @dataclass
 class GraphLoadResult:
     """Summary of a full graph load operation."""
@@ -65,6 +103,7 @@ class GraphLoadResult:
     edges_loaded: int = 0
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    foreign_edges: list[ForeignEdge] = field(default_factory=list)
 
 
 def _format_yaml_error(path: Path, exc: yaml.YAMLError) -> str:
@@ -209,6 +248,7 @@ def load_graph(graph_dir: Path, conn: sqlite3.Connection) -> GraphLoadResult:
         kind: str = node.get("kind", "")
         summary: str = node.get("summary", "")
         source: str | None = node.get("source")
+        lifecycle = _normalize_lifecycle(node.get("lifecycle"), f"Node '{ref_id}'", result)
 
         # Everything not in direct/skip fields goes to ``extra``.
         extra: dict[str, Any] = {}
@@ -218,8 +258,16 @@ def load_graph(graph_dir: Path, conn: sqlite3.Connection) -> GraphLoadResult:
 
         try:
             conn.execute(
-                "INSERT INTO nodes (ref_id, kind, summary, source, extra) VALUES (?, ?, ?, ?, ?)",
-                (ref_id, kind, summary, source, json.dumps(extra, ensure_ascii=False)),
+                "INSERT INTO nodes (ref_id, kind, summary, source, extra, lifecycle) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    ref_id,
+                    kind,
+                    summary,
+                    source,
+                    json.dumps(extra, ensure_ascii=False),
+                    lifecycle,
+                ),
             )
             result.nodes_loaded += 1
         except sqlite3.IntegrityError as exc:
@@ -229,31 +277,72 @@ def load_graph(graph_dir: Path, conn: sqlite3.Connection) -> GraphLoadResult:
 
     # --- Pass 2: insert edges ---
     for edge in all_edges:
-        src: str = edge.get("src", "")
-        dst: str = edge.get("dst", "")
-        edge_kind: str = edge.get("kind", "")
-
-        if src not in seen_ref_ids:
-            result.warnings.append(f"Edge src '{src}' not found in graph, skipped")
-            continue
-        if dst not in seen_ref_ids:
-            result.warnings.append(f"Edge dst '{dst}' not found in graph, skipped")
-            continue
-
-        edge_extra: dict[str, Any] = {}
-        for k, v in edge.items():
-            if k not in {"src", "dst", "kind"}:
-                edge_extra[k] = v
-
-        try:
-            conn.execute(
-                "INSERT INTO edges (src_ref_id, dst_ref_id, kind, extra) VALUES (?, ?, ?, ?)",
-                (src, dst, edge_kind, json.dumps(edge_extra, ensure_ascii=False)),
-            )
-            result.edges_loaded += 1
-        except sqlite3.IntegrityError as exc:
-            result.warnings.append(f"Failed to insert edge '{src}→{dst}': {exc}")
+        _process_edge(edge, conn, seen_ref_ids, result)
 
     conn.commit()
 
     return result
+
+
+def _classify_endpoint(raw: str, result: GraphLoadResult) -> bool | None:
+    """Classify one edge endpoint ref.
+
+    Returns ``True`` if the ref is a foreign (``@repo:id``) reference, ``False``
+    if it is local, or ``None`` if it is a malformed ``@...`` (the malformed
+    case is recorded in ``result.errors`` here — never silently dropped).
+    """
+    try:
+        ref = parse_ref(raw)
+    except FederationRefError as exc:
+        result.errors.append(str(exc))
+        return None
+    return ref.is_foreign
+
+
+def _process_edge(
+    edge: dict[str, Any],
+    conn: sqlite3.Connection,
+    seen_ref_ids: set[str],
+    result: GraphLoadResult,
+) -> None:
+    """Classify and load a single edge (local insert vs foreign vs malformed)."""
+    src: str = edge.get("src", "")
+    dst: str = edge.get("dst", "")
+    edge_kind: str = edge.get("kind", "")
+
+    src_foreign = _classify_endpoint(src, result)
+    dst_foreign = _classify_endpoint(dst, result)
+    if src_foreign is None or dst_foreign is None:
+        return  # malformed @... — already recorded as an error
+
+    # A foreign endpoint makes this a cross-repo edge: record it (resolves at
+    # the hub), do NOT insert it locally or flag it as a dangling node.
+    if src_foreign or dst_foreign:
+        result.foreign_edges.append(ForeignEdge(src=src, dst=dst, kind=edge_kind))
+        return
+
+    # Both endpoints local — original behavior, unchanged.
+    if src not in seen_ref_ids:
+        result.warnings.append(f"Edge src '{src}' not found in graph, skipped")
+        return
+    if dst not in seen_ref_ids:
+        result.warnings.append(f"Edge dst '{dst}' not found in graph, skipped")
+        return
+
+    lifecycle = _normalize_lifecycle(
+        edge.get("lifecycle"), f"Edge '{src}→{dst}'", result
+    )
+    edge_extra: dict[str, Any] = {}
+    for k, v in edge.items():
+        if k not in {"src", "dst", "kind", "lifecycle"}:
+            edge_extra[k] = v
+
+    try:
+        conn.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind, extra, lifecycle) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (src, dst, edge_kind, json.dumps(edge_extra, ensure_ascii=False), lifecycle),
+        )
+        result.edges_loaded += 1
+    except sqlite3.IntegrityError as exc:
+        result.warnings.append(f"Failed to insert edge '{src}→{dst}': {exc}")

@@ -20,7 +20,9 @@ CREATE TABLE IF NOT EXISTS nodes (
     kind    TEXT NOT NULL CHECK(kind IN ('domain','feature','service','entity','adr')),
     summary TEXT NOT NULL DEFAULT '',
     source  TEXT,
-    extra   TEXT DEFAULT '{}'
+    extra   TEXT DEFAULT '{}',
+    lifecycle TEXT NOT NULL DEFAULT 'active'
+        CHECK(lifecycle IN ('active','planned','deprecated','dead'))
 );
 
 -- Graph edges
@@ -32,6 +34,8 @@ CREATE TABLE IF NOT EXISTS edges (
         'touches_entity','touches_code'
     )),
     extra      TEXT DEFAULT '{}',
+    lifecycle  TEXT NOT NULL DEFAULT 'active'
+        CHECK(lifecycle IN ('active','planned','deprecated','dead')),
     PRIMARY KEY (src_ref_id, dst_ref_id, kind)
 );
 
@@ -210,6 +214,23 @@ def ensure_schema_migrations(conn: sqlite3.Connection) -> None:
         conn.commit()
     if "doc_hash_at_last_edit" not in columns:
         conn.execute("ALTER TABLE sync_state ADD COLUMN doc_hash_at_last_edit TEXT DEFAULT ''")
+        conn.commit()
+
+    # lifecycle column on nodes/edges (BDL-037 Principle 8). Additive: existing
+    # DBs upgrade cleanly and existing rows default to 'active' (no regression).
+    node_columns = {row[1] for row in conn.execute("PRAGMA table_info(nodes)").fetchall()}
+    if node_columns and "lifecycle" not in node_columns:
+        conn.execute(
+            "ALTER TABLE nodes ADD COLUMN lifecycle TEXT NOT NULL DEFAULT 'active' "
+            "CHECK(lifecycle IN ('active','planned','deprecated','dead'))"
+        )
+        conn.commit()
+    edge_columns = {row[1] for row in conn.execute("PRAGMA table_info(edges)").fetchall()}
+    if edge_columns and "lifecycle" not in edge_columns:
+        conn.execute(
+            "ALTER TABLE edges ADD COLUMN lifecycle TEXT NOT NULL DEFAULT 'active' "
+            "CHECK(lifecycle IN ('active','planned','deprecated','dead'))"
+        )
         conn.commit()
 
 

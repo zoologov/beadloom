@@ -25,6 +25,12 @@ VALID_EDGE_KINDS: frozenset[str] = frozenset(
 VALID_RULE_SEVERITIES: frozenset[str] = frozenset({"error", "warn"})
 SUPPORTED_SCHEMA_VERSIONS: frozenset[int] = frozenset({1, 2, 3})
 
+# Edge lifecycles that count as live reality for structural checks (BDL-037
+# Principle 8). Only ``active`` edges are live: ``planned`` (intent, not yet
+# built), ``deprecated`` (on the way out), and ``dead`` edges are not counted
+# as live ``no-dependency-cycles`` / ``architecture-layers`` violations.
+LIVE_EDGE_LIFECYCLES: frozenset[str] = frozenset({"active"})
+
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
@@ -1077,17 +1083,45 @@ def _normalize_cycle(path: list[str]) -> tuple[str, ...]:
     return tuple(rotated)
 
 
+def _has_lifecycle_column(conn: sqlite3.Connection) -> bool:
+    """Return True if the ``edges`` table has a ``lifecycle`` column.
+
+    Guards against pre-migration databases so structural checks degrade
+    gracefully (treating every edge as live) rather than raising.
+    """
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(edges)").fetchall()}
+    return "lifecycle" in columns
+
+
+def _live_lifecycle_clause(conn: sqlite3.Connection) -> tuple[str, tuple[str, ...]]:
+    """Build a SQL filter restricting edges to live (``active``) lifecycles.
+
+    Returns an ``(sql_fragment, params)`` pair. When the column is absent
+    (old DB), returns an empty fragment so all edges are treated as live.
+    """
+    if not _has_lifecycle_column(conn):
+        return "", ()
+    live = tuple(sorted(LIVE_EDGE_LIFECYCLES))
+    placeholders = ", ".join("?" for _ in live)
+    return f" AND lifecycle IN ({placeholders})", live
+
+
 def _build_adjacency(
     conn: sqlite3.Connection,
     edge_kinds: tuple[str, ...],
 ) -> dict[str, list[str]]:
-    """Build an adjacency list from the edges table for given edge kinds."""
+    """Build an adjacency list from the edges table for given edge kinds.
+
+    Only live (``active``) edges are included: ``planned``/``deprecated``/
+    ``dead`` edges represent intent or history, not a live cycle (BDL-037).
+    """
     placeholders = ", ".join("?" for _ in edge_kinds)
+    life_clause, life_params = _live_lifecycle_clause(conn)
     query = (
         f"SELECT src_ref_id, dst_ref_id FROM edges "  # noqa: S608
-        f"WHERE kind IN ({placeholders})"
+        f"WHERE kind IN ({placeholders}){life_clause}"
     )
-    rows = conn.execute(query, edge_kinds).fetchall()
+    rows = conn.execute(query, (*edge_kinds, *life_params)).fetchall()
     adj: dict[str, list[str]] = {}
     for row in rows:
         src = str(row[0])
@@ -1364,10 +1398,12 @@ def evaluate_layer_rules(conn: sqlite3.Connection, rules: list[LayerRule]) -> li
         for idx, layer_def in enumerate(rule.layers):
             tag_to_index[layer_def.tag] = idx
 
-        # Fetch edges of the specified kind
+        # Fetch live edges of the specified kind (planned/deprecated/dead
+        # edges are intent or history, not live layering violations).
+        life_clause, life_params = _live_lifecycle_clause(conn)
         all_edges = conn.execute(
-            "SELECT src_ref_id, dst_ref_id FROM edges WHERE kind = ?",
-            (rule.edge_kind,),
+            f"SELECT src_ref_id, dst_ref_id FROM edges WHERE kind = ?{life_clause}",  # noqa: S608
+            (rule.edge_kind, *life_params),
         ).fetchall()
 
         for edge_row in all_edges:

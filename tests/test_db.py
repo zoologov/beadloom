@@ -398,3 +398,96 @@ class TestTwoPhaseSyncMigration:
         row = c.execute("SELECT doc_hash_at_last_edit FROM sync_state").fetchone()
         assert row[0] == ""
         c.close()
+
+
+class TestLifecycleColumnMigration:
+    """Tests for the additive ``lifecycle`` column on nodes and edges (BEAD-02)."""
+
+    def test_columns_exist_after_fresh_schema(self, tmp_path: Path) -> None:
+        """Fresh schema creation should include lifecycle on nodes and edges."""
+        db_path = tmp_path / "test.db"
+        c = open_db(db_path)
+        create_schema(c)
+        node_cols = {row[1] for row in c.execute("PRAGMA table_info(nodes)").fetchall()}
+        edge_cols = {row[1] for row in c.execute("PRAGMA table_info(edges)").fetchall()}
+        assert "lifecycle" in node_cols
+        assert "lifecycle" in edge_cols
+        c.close()
+
+    def test_columns_added_via_migration(self, tmp_path: Path) -> None:
+        """An existing DB without lifecycle columns should gain them via migration."""
+        db_path = tmp_path / "test.db"
+        c = open_db(db_path)
+        # Old-style schema: nodes/edges without a lifecycle column.
+        c.executescript(
+            "CREATE TABLE IF NOT EXISTS nodes ("
+            "  ref_id TEXT PRIMARY KEY,"
+            "  kind TEXT NOT NULL,"
+            "  summary TEXT NOT NULL DEFAULT '',"
+            "  source TEXT,"
+            "  extra TEXT DEFAULT '{}'"
+            ");"
+            "CREATE TABLE IF NOT EXISTS edges ("
+            "  src_ref_id TEXT NOT NULL,"
+            "  dst_ref_id TEXT NOT NULL,"
+            "  kind TEXT NOT NULL,"
+            "  extra TEXT DEFAULT '{}',"
+            "  PRIMARY KEY (src_ref_id, dst_ref_id, kind)"
+            ");"
+            "CREATE TABLE IF NOT EXISTS sync_state ("
+            "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "  doc_path TEXT NOT NULL,"
+            "  code_path TEXT NOT NULL,"
+            "  ref_id TEXT NOT NULL,"
+            "  code_hash_at_sync TEXT NOT NULL,"
+            "  doc_hash_at_sync TEXT NOT NULL,"
+            "  synced_at TEXT NOT NULL,"
+            "  status TEXT NOT NULL DEFAULT 'ok',"
+            "  UNIQUE(doc_path, code_path)"
+            ");"
+        )
+        assert "lifecycle" not in {
+            row[1] for row in c.execute("PRAGMA table_info(nodes)").fetchall()
+        }
+
+        from beadloom.infrastructure.db import ensure_schema_migrations
+
+        ensure_schema_migrations(c)
+
+        assert "lifecycle" in {
+            row[1] for row in c.execute("PRAGMA table_info(nodes)").fetchall()
+        }
+        assert "lifecycle" in {
+            row[1] for row in c.execute("PRAGMA table_info(edges)").fetchall()
+        }
+        c.close()
+
+    def test_migration_idempotent(self, tmp_path: Path) -> None:
+        """Running the migration twice must not raise (additive, idempotent)."""
+        db_path = tmp_path / "test.db"
+        c = open_db(db_path)
+        create_schema(c)
+        from beadloom.infrastructure.db import ensure_schema_migrations
+
+        ensure_schema_migrations(c)
+        assert "lifecycle" in {
+            row[1] for row in c.execute("PRAGMA table_info(nodes)").fetchall()
+        }
+        c.close()
+
+    def test_default_lifecycle_is_active(self, tmp_path: Path) -> None:
+        """Rows inserted without an explicit lifecycle default to 'active'."""
+        db_path = tmp_path / "test.db"
+        c = open_db(db_path)
+        create_schema(c)
+        c.execute("INSERT INTO nodes (ref_id, kind, summary) VALUES ('N1', 'feature', 't')")
+        c.execute("INSERT INTO nodes (ref_id, kind, summary) VALUES ('N2', 'feature', 't')")
+        c.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES ('N1', 'N2', 'depends_on')"
+        )
+        c.commit()
+        node_row = c.execute("SELECT lifecycle FROM nodes WHERE ref_id = 'N1'").fetchone()
+        edge_row = c.execute("SELECT lifecycle FROM edges").fetchone()
+        assert node_row[0] == "active"
+        assert edge_row[0] == "active"
+        c.close()

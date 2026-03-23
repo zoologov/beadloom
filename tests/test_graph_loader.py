@@ -317,3 +317,231 @@ class TestLoadGraph:
         assert result.nodes_loaded == 2
         assert result.edges_loaded == 1
         assert result.warnings == []
+
+
+class TestLoadGraphFederation:
+    """Cross-repo node identity (@repo:ref_id) at load time (BDL-037 BEAD-01)."""
+
+    def test_foreign_dst_recorded_not_dangling(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        """A foreign target (@repo:id) is a foreign edge, NOT a dangling warning."""
+        (graph_dir / "f.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: plans\n"
+            "    kind: feature\n"
+            '    summary: "Plans"\n'
+            "edges:\n"
+            "  - src: plans\n"
+            "    dst: '@integration-service:queue'\n"
+            "    kind: depends_on\n"
+        )
+        result = load_graph(graph_dir, db)
+        # Not a dangling/broken-edge warning.
+        assert not any("queue" in w for w in result.warnings)
+        # Surfaced as a foreign edge instead.
+        assert len(result.foreign_edges) == 1
+        fe = result.foreign_edges[0]
+        assert fe.src == "plans"
+        assert fe.dst == "@integration-service:queue"
+        assert fe.kind == "depends_on"
+        # Foreign edges are not inserted into the local edges table.
+        assert result.edges_loaded == 0
+        assert db.execute("SELECT count(*) FROM edges").fetchone()[0] == 0
+
+    def test_foreign_src_recorded(self, db: sqlite3.Connection, graph_dir: Path) -> None:
+        (graph_dir / "f.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: plans\n"
+            "    kind: feature\n"
+            '    summary: "Plans"\n'
+            "edges:\n"
+            "  - src: '@core-monolith:orders'\n"
+            "    dst: plans\n"
+            "    kind: depends_on\n"
+        )
+        result = load_graph(graph_dir, db)
+        assert len(result.foreign_edges) == 1
+        assert result.foreign_edges[0].src == "@core-monolith:orders"
+        assert result.edges_loaded == 0
+
+    def test_malformed_foreign_src_is_error(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        (graph_dir / "f.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: plans\n"
+            "    kind: feature\n"
+            '    summary: "Plans"\n'
+            "edges:\n"
+            "  - src: '@:x'\n"
+            "    dst: plans\n"
+            "    kind: depends_on\n"
+        )
+        result = load_graph(graph_dir, db)
+        assert any("@:x" in e for e in result.errors)
+        assert result.edges_loaded == 0
+        assert result.foreign_edges == []
+
+    def test_malformed_foreign_dst_is_error(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        (graph_dir / "f.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: plans\n"
+            "    kind: feature\n"
+            '    summary: "Plans"\n'
+            "edges:\n"
+            "  - src: plans\n"
+            "    dst: '@repo:'\n"
+            "    kind: depends_on\n"
+        )
+        result = load_graph(graph_dir, db)
+        assert any("@repo:" in e for e in result.errors)
+        assert result.edges_loaded == 0
+
+    def test_local_edges_unchanged_no_foreign(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        """No regression: a purely local graph yields zero foreign edges."""
+        (graph_dir / "all.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: svc\n"
+            "    kind: service\n"
+            '    summary: "S"\n'
+            "  - ref_id: dom\n"
+            "    kind: domain\n"
+            '    summary: "D"\n'
+            "edges:\n"
+            "  - src: svc\n"
+            "    dst: dom\n"
+            "    kind: part_of\n"
+        )
+        result = load_graph(graph_dir, db)
+        assert result.edges_loaded == 1
+        assert result.foreign_edges == []
+        assert result.warnings == []
+
+
+# --- lifecycle field (BEAD-02) ---
+
+
+class TestNodeLifecycle:
+    def test_node_lifecycle_loaded(self, db: sqlite3.Connection, graph_dir: Path) -> None:
+        (graph_dir / "n.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: legacy\n"
+            "    kind: domain\n"
+            '    summary: "Old domain"\n'
+            "    lifecycle: deprecated\n"
+        )
+        result = load_graph(graph_dir, db)
+        assert result.nodes_loaded == 1
+        row = db.execute("SELECT lifecycle FROM nodes WHERE ref_id = 'legacy'").fetchone()
+        assert row[0] == "deprecated"
+
+    def test_node_lifecycle_defaults_active(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        """No regression: a node without lifecycle defaults to 'active'."""
+        (graph_dir / "n.yml").write_text(
+            "nodes:\n  - ref_id: routing\n    kind: domain\n    summary: \"R\"\n"
+        )
+        load_graph(graph_dir, db)
+        row = db.execute("SELECT lifecycle FROM nodes WHERE ref_id = 'routing'").fetchone()
+        assert row[0] == "active"
+
+    def test_node_lifecycle_not_in_extra(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        """lifecycle is a first-class column, not dumped into extra JSON."""
+        import json
+
+        (graph_dir / "n.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: routing\n"
+            "    kind: domain\n"
+            '    summary: "R"\n'
+            "    lifecycle: planned\n"
+        )
+        load_graph(graph_dir, db)
+        row = db.execute("SELECT extra FROM nodes WHERE ref_id = 'routing'").fetchone()
+        extra = json.loads(row[0])
+        assert "lifecycle" not in extra
+
+    def test_invalid_node_lifecycle_recorded(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        (graph_dir / "n.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: routing\n"
+            "    kind: domain\n"
+            '    summary: "R"\n'
+            "    lifecycle: bogus\n"
+        )
+        result = load_graph(graph_dir, db)
+        assert any("bogus" in e for e in result.errors)
+        # Node still loaded with safe default.
+        row = db.execute("SELECT lifecycle FROM nodes WHERE ref_id = 'routing'").fetchone()
+        assert row[0] == "active"
+
+
+class TestEdgeLifecycle:
+    def test_edge_lifecycle_loaded(self, db: sqlite3.Connection, graph_dir: Path) -> None:
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: a\n    kind: domain\n    summary: A\n"
+            "  - ref_id: b\n    kind: domain\n    summary: B\n"
+            "edges:\n"
+            "  - src: a\n    dst: b\n    kind: depends_on\n    lifecycle: planned\n"
+        )
+        result = load_graph(graph_dir, db)
+        assert result.edges_loaded == 1
+        row = db.execute("SELECT lifecycle FROM edges WHERE src_ref_id = 'a'").fetchone()
+        assert row[0] == "planned"
+
+    def test_edge_lifecycle_defaults_active(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: a\n    kind: domain\n    summary: A\n"
+            "  - ref_id: b\n    kind: domain\n    summary: B\n"
+            "edges:\n"
+            "  - src: a\n    dst: b\n    kind: depends_on\n"
+        )
+        load_graph(graph_dir, db)
+        row = db.execute("SELECT lifecycle FROM edges WHERE src_ref_id = 'a'").fetchone()
+        assert row[0] == "active"
+
+    def test_edge_lifecycle_not_in_extra(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        import json
+
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: a\n    kind: domain\n    summary: A\n"
+            "  - ref_id: b\n    kind: domain\n    summary: B\n"
+            "edges:\n"
+            "  - src: a\n    dst: b\n    kind: depends_on\n    lifecycle: deprecated\n"
+        )
+        load_graph(graph_dir, db)
+        row = db.execute("SELECT extra FROM edges WHERE src_ref_id = 'a'").fetchone()
+        extra = json.loads(row[0])
+        assert "lifecycle" not in extra
+
+    def test_invalid_edge_lifecycle_recorded(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: a\n    kind: domain\n    summary: A\n"
+            "  - ref_id: b\n    kind: domain\n    summary: B\n"
+            "edges:\n"
+            "  - src: a\n    dst: b\n    kind: depends_on\n    lifecycle: nope\n"
+        )
+        result = load_graph(graph_dir, db)
+        assert any("nope" in m for m in result.warnings + result.errors)
+        row = db.execute("SELECT lifecycle FROM edges WHERE src_ref_id = 'a'").fetchone()
+        assert row[0] == "active"
