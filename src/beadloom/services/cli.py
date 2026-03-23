@@ -485,6 +485,58 @@ def graph(
     conn.close()
 
 
+# beadloom:domain=graph
+@main.command()
+@click.option(
+    "--out",
+    "out",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Write the export to FILE instead of stdout.",
+)
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: current directory).",
+)
+def export(*, out: Path | None, project: Path | None) -> None:
+    """Export the indexed graph as a deterministic federation artifact (JSON)."""
+    from datetime import datetime, timezone
+
+    from beadloom.graph.federation import (
+        build_export,
+        current_commit_sha,
+        resolve_repo_name,
+        serialize_export,
+    )
+    from beadloom.infrastructure.db import open_db
+
+    project_root = project or Path.cwd()
+    db_path = project_root / ".beadloom" / "beadloom.db"
+
+    if not db_path.exists():
+        click.echo("Error: database not found. Run `beadloom reindex` first.", err=True)
+        sys.exit(1)
+
+    conn = open_db(db_path)
+    artifact = build_export(
+        conn,
+        repo=resolve_repo_name(project_root),
+        commit_sha=current_commit_sha(project_root),
+        exported_at=datetime.now(tz=timezone.utc).isoformat(),
+        generator=f"beadloom {__version__}",
+    )
+    conn.close()
+
+    rendered = serialize_export(artifact)
+    if out is not None:
+        out.write_text(rendered + "\n", encoding="utf-8")
+        click.echo(f"Wrote export to {out}")
+    else:
+        click.echo(rendered)
+
+
 # beadloom:domain=doctor
 @main.command()
 @click.option(
