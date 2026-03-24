@@ -537,6 +537,81 @@ def export(*, out: Path | None, project: Path | None) -> None:
         click.echo(rendered)
 
 
+# beadloom:domain=graph
+@main.command()
+@click.argument(
+    "exports",
+    nargs=-1,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Hub project root (default: current directory).",
+)
+def federate(*, exports: tuple[Path, ...], project: Path | None) -> None:
+    """Aggregate >=2 satellite export artifacts into one federated graph.
+
+    Composes the namespaced node/edge union, resolves ``@repo:node`` foreign
+    refs, computes three-valued intent-vs-reality verdicts, reconciles AMQP
+    contracts (both-sides vs one-sided), and reports per-satellite staleness.
+    Writes ``.beadloom/federated.json`` + ``.beadloom/federated.txt`` in the hub.
+    """
+    from datetime import datetime, timezone
+
+    from beadloom.graph.federation import (
+        aggregate_exports,
+        render_federation_report,
+        serialize_federation,
+    )
+
+    minimum_satellites = 2  # a hub needs >=2 satellites to federate
+    if len(exports) < minimum_satellites:
+        click.echo("Error: federate needs at least two export artifacts.", err=True)
+        sys.exit(1)
+
+    artifacts = _load_export_artifacts(exports)
+    if artifacts is None:
+        sys.exit(1)
+
+    fed = aggregate_exports(artifacts, now=datetime.now(tz=timezone.utc).isoformat())
+
+    project_root = project or Path.cwd()
+    out_dir = project_root / ".beadloom"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    json_path = out_dir / "federated.json"
+    report_path = out_dir / "federated.txt"
+    report = render_federation_report(fed)
+    json_path.write_text(serialize_federation(fed) + "\n", encoding="utf-8")
+    report_path.write_text(report, encoding="utf-8")
+
+    click.echo(report, nl=False)
+    click.echo(f"Wrote federated graph to {json_path}")
+
+
+def _load_export_artifacts(
+    paths: tuple[Path, ...],
+) -> list[dict[str, object]] | None:
+    """Load + minimally validate satellite export JSON files.
+
+    Returns ``None`` (after printing an error) if any file is not a JSON object,
+    so the caller can exit non-zero rather than silently aggregate garbage.
+    """
+    artifacts: list[dict[str, object]] = []
+    for path in paths:
+        try:
+            parsed = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            click.echo(f"Error: cannot read export {path}: {exc}", err=True)
+            return None
+        if not isinstance(parsed, dict):
+            click.echo(f"Error: export {path} is not a JSON object.", err=True)
+            return None
+        artifacts.append(parsed)
+    return artifacts
+
+
 # beadloom:domain=doctor
 @main.command()
 @click.option(

@@ -19,9 +19,11 @@ and ``exported_at`` so the hub can report staleness it cannot otherwise verify.
 
 from __future__ import annotations
 
+import enum
 import json
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -253,3 +255,386 @@ def current_commit_sha(project_root: Path) -> str | None:
     if result.returncode != 0:
         return None
     return result.stdout.strip() or None
+
+
+# --- Hub aggregation (BEAD-04) ----------------------------------------------
+
+# Federated graph artifact schema version (independent of the satellite export
+# schema; bumped on breaking shape changes to ``federated.json``).
+FEDERATION_SCHEMA_VERSION = 1
+
+
+class EdgeVerdict(enum.Enum):
+    """Three-valued (and then some) intent-vs-reality verdict for an edge.
+
+    Computed at the hub by reconciling an edge's declared ``lifecycle`` with
+    whether its target resolves in the federated union:
+
+    - :attr:`OK`                 — declared ``active`` and target present.
+    - :attr:`DRIFT`              — declared ``active`` but target absent
+      (a real, broken cross-repo dependency — the killer signal).
+    - :attr:`EXPECTED`           — declared ``planned`` and target absent
+      (intentional: the target is not built yet).
+    - :attr:`CLEANUP_CANDIDATE`  — declared ``deprecated`` but target still
+      present (the dependency outlived its declared death).
+    - :attr:`UNDECLARED`         — a present contract producer with no peer
+      declaring the matching consume (emitting into the void).
+    - :attr:`DEAD`               — declared ``dead``; not treated as live.
+    """
+
+    OK = "ok"
+    DRIFT = "drift"
+    EXPECTED = "expected"
+    CLEANUP_CANDIDATE = "cleanup_candidate"
+    UNDECLARED = "undeclared"
+    DEAD = "dead"
+
+
+@dataclass
+class FederatedGraph:
+    """The composed result of aggregating >=2 satellite exports.
+
+    - ``nodes`` / ``edges``: the namespaced union (``@repo:ref_id`` identity).
+    - ``repos``: per-satellite provenance + staleness (commit_sha, exported_at,
+      age_seconds) — reported, never faked (Q4 honesty).
+    - ``unresolved_refs``: foreign refs that did not resolve in the union
+      (reported, not silently dropped).
+    - ``contracts``: AMQP contract reconciliation (confirmed both-sides vs
+      one-sided).
+    """
+
+    nodes: list[dict[str, object]] = field(default_factory=list)
+    edges: list[dict[str, object]] = field(default_factory=list)
+    repos: list[dict[str, object]] = field(default_factory=list)
+    unresolved_refs: list[str] = field(default_factory=list)
+    contracts: list[dict[str, object]] = field(default_factory=list)
+
+
+def _namespace(repo: str, ref_id: str) -> str:
+    """Qualify a local ``ref_id`` into the federated ``@repo:ref_id`` form."""
+    return f"{_FOREIGN_MARKER}{repo}:{ref_id}"
+
+
+def _resolve_endpoint(repo: str, raw: str) -> str:
+    """Resolve an edge endpoint to its canonical federated id.
+
+    A foreign endpoint (``@other:ref``) keeps its own namespace; a local
+    endpoint is namespaced under the edge's own ``repo``. Malformed foreign
+    refs fall back to the raw string (surfaced later via ``unresolved_refs``).
+    """
+    try:
+        ref = parse_ref(raw)
+    except FederationRefError:
+        return raw
+    if ref.is_foreign:
+        return ref.qualified
+    return _namespace(repo, ref.ref_id)
+
+
+def _parse_age_seconds(exported_at: str, now: datetime) -> int | None:
+    """Return the satellite export age in whole seconds, or ``None`` if unknown.
+
+    The hub cannot know a satellite's live HEAD; "freshness" is how recently it
+    was exported. An unparseable timestamp yields ``None`` (honest unknown).
+    """
+    try:
+        exported = datetime.fromisoformat(exported_at)
+    except (ValueError, TypeError):
+        return None
+    if exported.tzinfo is None:
+        exported = exported.replace(tzinfo=now.tzinfo)
+    return int((now - exported).total_seconds())
+
+
+def _repo_provenance(export: dict[str, object], now: datetime) -> dict[str, object]:
+    """Build the per-satellite provenance + staleness record."""
+    exported_at = export.get("exported_at")
+    age = (
+        _parse_age_seconds(exported_at, now)
+        if isinstance(exported_at, str)
+        else None
+    )
+    return {
+        "repo": export.get("repo"),
+        "commit_sha": export.get("commit_sha"),
+        "exported_at": exported_at,
+        "schema_version": export.get("schema_version"),
+        "age_seconds": age,
+    }
+
+
+def _verdict_for(lifecycle: str, *, target_present: bool) -> EdgeVerdict:
+    """Reconcile a non-contract edge's declared lifecycle against reality."""
+    if lifecycle == "planned":
+        return EdgeVerdict.EXPECTED
+    if lifecycle == "dead":
+        return EdgeVerdict.DEAD
+    if lifecycle == "deprecated":
+        return (
+            EdgeVerdict.CLEANUP_CANDIDATE if target_present else EdgeVerdict.EXPECTED
+        )
+    # active (default)
+    return EdgeVerdict.OK if target_present else EdgeVerdict.DRIFT
+
+
+def _edge_contract_payload(edge: dict[str, object]) -> dict[str, object] | None:
+    """Return the edge's contract dict if it carries one."""
+    contract = edge.get("contract")
+    return contract if isinstance(contract, dict) else None
+
+
+def aggregate_exports(
+    exports: list[dict[str, object]],
+    *,
+    now: str | None = None,
+) -> FederatedGraph:
+    """Compose one federated graph from >=2 satellite export artifacts.
+
+    Namespaces every node/edge endpoint as ``@repo:ref_id``, resolves foreign
+    refs against the union (unresolved ones recorded, never dropped), assigns a
+    three-valued intent-vs-reality :class:`EdgeVerdict` to every edge, reconciles
+    AMQP contracts into confirmed-both-sides / one-sided, and records each
+    satellite's staleness. ``now`` (ISO-8601) is injected for deterministic age
+    in tests; the CLI passes wall-clock UTC.
+    """
+    now_dt = _resolve_now(now)
+    fed = FederatedGraph()
+    present_ids: set[str] = set()
+
+    for export in exports:
+        repo = str(export.get("repo", ""))
+        fed.repos.append(_repo_provenance(export, now_dt))
+        for node in _export_nodes(export):
+            ns_id = _namespace(repo, str(node.get("ref_id", "")))
+            present_ids.add(ns_id)
+            fed.nodes.append({**node, "ref_id": ns_id, "repo": repo})
+
+    for export in exports:
+        repo = str(export.get("repo", ""))
+        for edge in _export_edges(export):
+            fed.edges.append(_resolve_edge(repo, edge))
+
+    _assign_verdicts(fed, present_ids)
+    fed.contracts.extend(_reconcile_contracts(fed.edges))
+    _mark_undeclared(fed)
+    fed.nodes.sort(key=lambda n: str(n["ref_id"]))
+    fed.edges.sort(key=lambda e: (str(e["src"]), str(e["dst"]), str(e["kind"])))
+    fed.repos.sort(key=lambda r: str(r["repo"]))
+    fed.unresolved_refs = sorted(set(fed.unresolved_refs))
+    return fed
+
+
+def _resolve_now(now: str | None) -> datetime:
+    """Return a tz-aware reference time (injected ISO string or wall-clock UTC)."""
+    from datetime import timezone
+
+    if now is None:
+        return datetime.now(tz=timezone.utc)
+    parsed = datetime.fromisoformat(now)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _export_nodes(export: dict[str, object]) -> list[dict[str, object]]:
+    raw = export.get("nodes")
+    return [n for n in raw if isinstance(n, dict)] if isinstance(raw, list) else []
+
+
+def _export_edges(export: dict[str, object]) -> list[dict[str, object]]:
+    raw = export.get("edges")
+    return [e for e in raw if isinstance(e, dict)] if isinstance(raw, list) else []
+
+
+def _resolve_edge(repo: str, edge: dict[str, object]) -> dict[str, object]:
+    """Namespace + foreign-resolve an edge's endpoints into a federated edge."""
+    src = _resolve_endpoint(repo, str(edge.get("src", "")))
+    dst = _resolve_endpoint(repo, str(edge.get("dst", "")))
+    resolved: dict[str, object] = {
+        "src": src,
+        "dst": dst,
+        "kind": edge.get("kind"),
+        "lifecycle": edge.get("lifecycle", "active"),
+        "repo": repo,
+    }
+    contract = _edge_contract_payload(edge)
+    if contract is not None:
+        resolved["contract"] = contract
+    return resolved
+
+
+def _assign_verdicts(fed: FederatedGraph, present_ids: set[str]) -> None:
+    """Assign an :class:`EdgeVerdict` to each edge; record unresolved targets."""
+    for edge in fed.edges:
+        dst = str(edge["dst"])
+        target_present = dst in present_ids
+        lifecycle = str(edge.get("lifecycle", "active"))
+        verdict = _verdict_for(lifecycle, target_present=target_present)
+        edge["verdict"] = verdict.value
+        if (
+            not target_present
+            and is_foreign_ref(dst)
+            and verdict in (EdgeVerdict.DRIFT, EdgeVerdict.EXPECTED)
+        ):
+            fed.unresolved_refs.append(dst)
+
+
+def _reconcile_contracts(
+    edges: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Group AMQP contract edges by message_type; flag confirmed both-sides.
+
+    A contract is confirmed when BOTH a ``produces`` and a ``consumes`` direction
+    exist for the same message type across the union; otherwise it is one-sided.
+    """
+    by_message: dict[str, dict[str, object]] = {}
+    for edge in edges:
+        contract = _edge_contract_payload(edge)
+        if contract is None or contract.get("protocol") != "amqp":
+            continue
+        message_type = str(contract.get("message_type", ""))
+        direction = str(contract.get("direction", ""))
+        entry = by_message.setdefault(
+            message_type,
+            {"message_type": message_type, "_dirs": set(), "_repos": set()},
+        )
+        dirs = entry["_dirs"]
+        repos = entry["_repos"]
+        if isinstance(dirs, set):
+            dirs.add(direction)
+        if isinstance(repos, set):
+            repos.add(str(edge.get("repo", "")))
+    return [_finalize_contract(e) for e in by_message.values()]
+
+
+def _contract_directions(contract: dict[str, object]) -> list[str]:
+    """Return a contract's ``directions`` as a list of strings (typed accessor)."""
+    directions = contract.get("directions")
+    if isinstance(directions, list):
+        return [str(d) for d in directions]
+    return []
+
+
+def _finalize_contract(entry: dict[str, object]) -> dict[str, object]:
+    """Turn an internal contract accumulator into a serializable verdict."""
+    dirs = entry["_dirs"]
+    repos = entry["_repos"]
+    directions = sorted(dirs) if isinstance(dirs, set) else []
+    confirmed = "produces" in directions and "consumes" in directions
+    return {
+        "message_type": entry["message_type"],
+        "directions": directions,
+        "repos": sorted(repos) if isinstance(repos, set) else [],
+        "confirmed": confirmed,
+    }
+
+
+def _mark_undeclared(fed: FederatedGraph) -> None:
+    """Flag present producer contract edges whose message has no consumer.
+
+    A satellite producing to a queue/contract that no peer declares consuming is
+    emitting into the void — :attr:`EdgeVerdict.UNDECLARED`.
+    """
+    consumed = {
+        c["message_type"]
+        for c in fed.contracts
+        if "consumes" in _contract_directions(c)
+    }
+    for edge in fed.edges:
+        contract = _edge_contract_payload(edge)
+        if contract is None or contract.get("protocol") != "amqp":
+            continue
+        if contract.get("direction") != "produces":
+            continue
+        if str(contract.get("message_type", "")) not in consumed:
+            edge["verdict"] = EdgeVerdict.UNDECLARED.value
+
+
+def serialize_federation(fed: FederatedGraph) -> str:
+    """Serialize a :class:`FederatedGraph` to deterministic JSON (sorted keys)."""
+    payload = {
+        "schema_version": FEDERATION_SCHEMA_VERSION,
+        "repos": fed.repos,
+        "nodes": fed.nodes,
+        "edges": fed.edges,
+        "contracts": fed.contracts,
+        "unresolved_refs": fed.unresolved_refs,
+    }
+    return json.dumps(payload, sort_keys=True, indent=2, ensure_ascii=False)
+
+
+def _format_age(age_seconds: int | None) -> str:
+    """Human-readable age string ('unknown' when the hub can't verify)."""
+    if age_seconds is None:
+        return "unknown age"
+    days, rem = divmod(age_seconds, 86400)
+    hours = rem // 3600
+    if days:
+        return f"{days}d {hours}h ago"
+    minutes = (rem % 3600) // 60
+    if hours:
+        return f"{hours}h {minutes}m ago"
+    return f"{minutes}m ago"
+
+
+def render_federation_report(fed: FederatedGraph) -> str:
+    """Render a human-readable text report of the federated graph + verdicts."""
+    lines: list[str] = ["# Beadloom Federation Report", ""]
+    lines.extend(_report_repos(fed))
+    lines.extend(_report_verdicts(fed))
+    lines.extend(_report_contracts(fed))
+    lines.extend(_report_unresolved(fed))
+    return "\n".join(lines) + "\n"
+
+
+def _report_repos(fed: FederatedGraph) -> list[str]:
+    lines = [f"## Satellites ({len(fed.repos)})", ""]
+    for repo in fed.repos:
+        sha = repo.get("commit_sha") or "unknown HEAD"
+        age = _format_age(_as_age(repo.get("age_seconds")))
+        lines.append(f"- {repo.get('repo')}: {sha} — exported {age}")
+    lines.append("")
+    return lines
+
+
+def _as_age(value: object) -> int | None:
+    return value if isinstance(value, int) else None
+
+
+def _report_verdicts(fed: FederatedGraph) -> list[str]:
+    counts: dict[str, int] = {}
+    for edge in fed.edges:
+        verdict = str(edge.get("verdict", ""))
+        counts[verdict] = counts.get(verdict, 0) + 1
+    lines = [f"## Edges ({len(fed.edges)})", ""]
+    for verdict in sorted(counts):
+        lines.append(f"- {verdict.upper()}: {counts[verdict]}")
+    lines.append("")
+    drifts = [e for e in fed.edges if e.get("verdict") == EdgeVerdict.DRIFT.value]
+    if drifts:
+        lines.append("### DRIFT (declared active, target missing)")
+        for edge in drifts:
+            lines.append(f"- {edge['src']} --[{edge['kind']}]--> {edge['dst']}")
+        lines.append("")
+    return lines
+
+
+def _report_contracts(fed: FederatedGraph) -> list[str]:
+    if not fed.contracts:
+        return []
+    lines = ["## AMQP Contracts", ""]
+    for contract in fed.contracts:
+        status = "confirmed both-sides" if contract["confirmed"] else "ONE-SIDED"
+        dirs = ", ".join(_contract_directions(contract))
+        lines.append(f"- {contract['message_type']}: {status} ({dirs})")
+    lines.append("")
+    return lines
+
+
+def _report_unresolved(fed: FederatedGraph) -> list[str]:
+    if not fed.unresolved_refs:
+        return []
+    lines = ["## Unresolved foreign refs", ""]
+    lines.extend(f"- {ref}" for ref in fed.unresolved_refs)
+    lines.append("")
+    return lines
