@@ -25,12 +25,27 @@
 
 ## Progress
 
-### Wave 1 (parallel dev — foundations)
-- [ ] BEAD-01 (.1) — @repo:ref_id identity (owns loader.py + FederatedRef)
-- [ ] BEAD-02 (.2) — lifecycle field (owns Node/Edge dataclass + db migration + rule_engine)
+### Wave 1 (parallel dev — foundations) ✅ COMMITTED
+- [x] BEAD-01 (.1) — @repo:ref_id identity ✅ (federation.py + loader; 21 tests)
+- [x] BEAD-02 (.2) — lifecycle field ✅ (db migration + rule_engine; 28 tests)
 
-### Wave 2-7
-- [ ] BEAD-03 (.3) export · BEAD-04 (.4) federate · BEAD-05 (.5) dogfood · BEAD-06 (.6) test · BEAD-07 (.7) review · BEAD-08 (.8) tech-writer
+### Wave 2-4
+- [x] BEAD-03 (.3) export ✅ · BEAD-04 (.4) federate ✅ · BEAD-05 (.5) dogfood ✅
+
+### Wave 5-7
+- [ ] BEAD-06 (.6) test · BEAD-07 (.7) review · BEAD-08 (.8) tech-writer
+
+### BEAD-05 dogfood result (2026-06-01)
+- Proved F1 end-to-end on the REAL core-monolith ↔ integration-service RabbitMQ contract.
+- Scratch slices under `.scratch-federation/` (gitignored). `beadloom export` ×2 → `beadloom federate`.
+- ALL 4 message types **confirmed both-sides**: start_plan_version_upload + ensure_plans_folder_path
+  (core produces → integration consumes); plan_version_upload_completed +
+  ensure_plans_folder_path_completed (integration produces → core consumes, the reverse).
+  16 edges all verdict OK, unresolved_refs [], staleness reported per satellite.
+- Regression: `tests/test_federate_dogfood_amqp.py` (4 tests) captures both-sides as a durable fixture.
+- Findings → BDL-UX-Issues #100–#104: (#100 HIGH export drops `@repo:` cross-repo edges;
+  #101 HIGH edge-kind CHECK rejects produces/consumes; #102 MED UNIQUE(src,dst,kind) collapses
+  multi-contract; #103 LOW commit_sha leaks host repo HEAD for nested dir; #104 SUCCESS note).
 
 ## Results
 

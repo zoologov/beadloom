@@ -29,3 +29,6 @@ htmlcov/
 .beadloom/**/*.db
 .beadloom/**/*.db-shm
 .beadloom/**/*.db-wal
+
+# BDL-037 F1 dogfood scratch (hand-curated satellite slices + hub; never committed)
+.scratch-federation/
