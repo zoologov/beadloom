@@ -1,7 +1,7 @@
 # BDL UX Feedback Log
 
 > Collected during development and dogfooding.
-> Total: 99 issues | Improvements: 16 | Excluded: 6 | Closed: 75
+> Total: 104 issues | Open: 15 | Improvements: 16 | Excluded: 7 | Closed: 66
 > Last reviewed: BDL-034 (UX Issues & Improvements Batch Fix)
 > 2026-05-30 (BDL-036 Phase 0): CLOSED #91 #88 #92 #93 #94 #86 #89 #90 #71 #98 (honesty gate — see Closed §BDL-036). Opened #99 (repo-wide doc refresh — sync-check has ~30 pre-existing stale doc pairs unrelated to Phase 0; the sync-check *mechanism* is now honest, the doc *content* needs a dedicated pass). Still open: #72, #73, #95, #97 (external), #99. Exact category recount folded into #99.
 > 2026-05-28: added #91–#96 from the comprehensive architecture/code review (see `.claude/development/REVIEW.md`); refined #88 root cause.
