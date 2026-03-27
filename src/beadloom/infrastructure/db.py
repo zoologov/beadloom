@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 # Schema version — increment on breaking changes
-SCHEMA_VERSION = "2"
+SCHEMA_VERSION = "3"
 
 _SCHEMA_SQL = """\
 -- Graph nodes
@@ -26,17 +26,38 @@ CREATE TABLE IF NOT EXISTS nodes (
 );
 
 -- Graph edges
+-- ``contract_key`` discriminates multiple contracts on the same (src,dst,kind)
+-- node pair (BDL-037 #102): defaults to '' for plain edges (so their identity
+-- stays effectively (src,dst,kind)), and carries the contract message_type for
+-- AMQP contract edges so N message types on one pair don't collapse.
 CREATE TABLE IF NOT EXISTS edges (
     src_ref_id TEXT NOT NULL REFERENCES nodes(ref_id) ON DELETE CASCADE,
     dst_ref_id TEXT NOT NULL REFERENCES nodes(ref_id) ON DELETE CASCADE,
     kind       TEXT NOT NULL CHECK(kind IN (
         'part_of','depends_on','uses','implements',
-        'touches_entity','touches_code'
+        'touches_entity','touches_code','produces','consumes'
     )),
     extra      TEXT DEFAULT '{}',
     lifecycle  TEXT NOT NULL DEFAULT 'active'
         CHECK(lifecycle IN ('active','planned','deprecated','dead')),
-    PRIMARY KEY (src_ref_id, dst_ref_id, kind)
+    contract_key TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (src_ref_id, dst_ref_id, kind, contract_key)
+);
+
+-- Cross-repo (foreign) edges: at least one endpoint is a ``@repo:ref_id``
+-- reference to a node in another repo (BDL-037 #100). Kept in a separate table
+-- because a foreign endpoint cannot satisfy the ``edges`` FK to local nodes;
+-- ``beadloom export`` unions these into the artifact so declared cross-repo
+-- links survive to the hub.
+CREATE TABLE IF NOT EXISTS foreign_edges (
+    src_ref_id TEXT NOT NULL,
+    dst_ref_id TEXT NOT NULL,
+    kind       TEXT NOT NULL,
+    extra      TEXT DEFAULT '{}',
+    lifecycle  TEXT NOT NULL DEFAULT 'active'
+        CHECK(lifecycle IN ('active','planned','deprecated','dead')),
+    contract_key TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (src_ref_id, dst_ref_id, kind, contract_key)
 );
 
 -- Documents (Markdown file index)
@@ -201,37 +222,117 @@ def open_db(db_path: Path) -> sqlite3.Connection:
     return conn
 
 
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    """Return the column names of *table* (empty set if it does not exist)."""
+    return {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
+def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    """True when *table* exists in the database."""
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+    ).fetchone()
+    return row is not None
+
+
 def ensure_schema_migrations(conn: sqlite3.Connection) -> None:
-    """Apply incremental schema migrations for new columns.
+    """Apply incremental schema migrations for new columns and tables.
 
     Handles the case where tables already exist but lack newer columns
     (e.g. ``symbols_hash`` added in BEAD-08, ``doc_hash_at_last_edit``
-    added for two-phase sync in BDL-034 #70).  Safe to call multiple times.
+    added for two-phase sync in BDL-034 #70, the ``lifecycle`` column and the
+    BDL-037 federation migrations).  Safe to call multiple times and on a
+    partially-created schema (each step guards on the table/column existing).
     """
-    columns = {row[1] for row in conn.execute("PRAGMA table_info(sync_state)").fetchall()}
-    if "symbols_hash" not in columns:
-        conn.execute("ALTER TABLE sync_state ADD COLUMN symbols_hash TEXT DEFAULT ''")
-        conn.commit()
-    if "doc_hash_at_last_edit" not in columns:
-        conn.execute("ALTER TABLE sync_state ADD COLUMN doc_hash_at_last_edit TEXT DEFAULT ''")
-        conn.commit()
+    sync_columns = _table_columns(conn, "sync_state")
+    if sync_columns:
+        if "symbols_hash" not in sync_columns:
+            conn.execute("ALTER TABLE sync_state ADD COLUMN symbols_hash TEXT DEFAULT ''")
+            conn.commit()
+        if "doc_hash_at_last_edit" not in sync_columns:
+            conn.execute(
+                "ALTER TABLE sync_state ADD COLUMN doc_hash_at_last_edit TEXT DEFAULT ''"
+            )
+            conn.commit()
 
     # lifecycle column on nodes/edges (BDL-037 Principle 8). Additive: existing
     # DBs upgrade cleanly and existing rows default to 'active' (no regression).
-    node_columns = {row[1] for row in conn.execute("PRAGMA table_info(nodes)").fetchall()}
+    node_columns = _table_columns(conn, "nodes")
     if node_columns and "lifecycle" not in node_columns:
         conn.execute(
             "ALTER TABLE nodes ADD COLUMN lifecycle TEXT NOT NULL DEFAULT 'active' "
             "CHECK(lifecycle IN ('active','planned','deprecated','dead'))"
         )
         conn.commit()
-    edge_columns = {row[1] for row in conn.execute("PRAGMA table_info(edges)").fetchall()}
+    edge_columns = _table_columns(conn, "edges")
     if edge_columns and "lifecycle" not in edge_columns:
         conn.execute(
             "ALTER TABLE edges ADD COLUMN lifecycle TEXT NOT NULL DEFAULT 'active' "
             "CHECK(lifecycle IN ('active','planned','deprecated','dead'))"
         )
         conn.commit()
+
+    _migrate_edges_contract_kinds(conn)
+    _ensure_foreign_edges_table(conn)
+
+
+def _migrate_edges_contract_kinds(conn: sqlite3.Connection) -> None:
+    """Rebuild the ``edges`` table to add contract kinds + ``contract_key`` (#101/#102).
+
+    SQLite cannot ALTER a CHECK constraint or a PRIMARY KEY, so a table that
+    predates the federation changes must be rebuilt. The migration is additive:
+    every existing row is copied with ``contract_key=''`` (preserving its
+    ``(src,dst,kind)`` identity), and the new schema then also allows
+    ``produces``/``consumes`` kinds and multiple contracts per node pair.
+    """
+    edge_columns = _table_columns(conn, "edges")
+    if not edge_columns or "contract_key" in edge_columns:
+        return
+    conn.executescript(
+        """
+        PRAGMA foreign_keys=OFF;
+        ALTER TABLE edges RENAME TO edges_old;
+        CREATE TABLE edges (
+            src_ref_id TEXT NOT NULL REFERENCES nodes(ref_id) ON DELETE CASCADE,
+            dst_ref_id TEXT NOT NULL REFERENCES nodes(ref_id) ON DELETE CASCADE,
+            kind       TEXT NOT NULL CHECK(kind IN (
+                'part_of','depends_on','uses','implements',
+                'touches_entity','touches_code','produces','consumes'
+            )),
+            extra      TEXT DEFAULT '{}',
+            lifecycle  TEXT NOT NULL DEFAULT 'active'
+                CHECK(lifecycle IN ('active','planned','deprecated','dead')),
+            contract_key TEXT NOT NULL DEFAULT '',
+            PRIMARY KEY (src_ref_id, dst_ref_id, kind, contract_key)
+        );
+        INSERT INTO edges (src_ref_id, dst_ref_id, kind, extra, lifecycle)
+            SELECT src_ref_id, dst_ref_id, kind, extra, lifecycle FROM edges_old;
+        DROP TABLE edges_old;
+        CREATE INDEX IF NOT EXISTS idx_edges_src ON edges(src_ref_id);
+        CREATE INDEX IF NOT EXISTS idx_edges_dst ON edges(dst_ref_id);
+        PRAGMA foreign_keys=ON;
+        """
+    )
+    conn.commit()
+
+
+def _ensure_foreign_edges_table(conn: sqlite3.Connection) -> None:
+    """Create the ``foreign_edges`` table on older DBs that predate it (#100)."""
+    if _table_exists(conn, "foreign_edges"):
+        return
+    conn.execute(
+        "CREATE TABLE foreign_edges ("
+        "  src_ref_id TEXT NOT NULL,"
+        "  dst_ref_id TEXT NOT NULL,"
+        "  kind TEXT NOT NULL,"
+        "  extra TEXT DEFAULT '{}',"
+        "  lifecycle TEXT NOT NULL DEFAULT 'active'"
+        "    CHECK(lifecycle IN ('active','planned','deprecated','dead')),"
+        "  contract_key TEXT NOT NULL DEFAULT '',"
+        "  PRIMARY KEY (src_ref_id, dst_ref_id, kind, contract_key)"
+        ")"
+    )
+    conn.commit()
 
 
 def create_schema(conn: sqlite3.Connection) -> None:

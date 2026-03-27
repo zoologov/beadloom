@@ -24,11 +24,11 @@ import json
 import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import sqlite3
-    from pathlib import Path
 
 # Marker that introduces a foreign (cross-repo) reference.
 _FOREIGN_MARKER = "@"
@@ -172,10 +172,8 @@ def build_export(
     node_rows = conn.execute(
         "SELECT ref_id, kind, summary, source, lifecycle FROM nodes ORDER BY ref_id"
     ).fetchall()
-    edge_rows = conn.execute(
-        "SELECT src_ref_id, dst_ref_id, kind, extra, lifecycle FROM edges "
-        "ORDER BY src_ref_id, dst_ref_id, kind"
-    ).fetchall()
+    edges = [_export_edge(r) for r in _edge_rows(conn)]
+    edges.sort(key=lambda e: (str(e["src"]), str(e["dst"]), str(e["kind"])))
     return {
         "schema_version": EXPORT_SCHEMA_VERSION,
         "repo": repo,
@@ -183,8 +181,38 @@ def build_export(
         "exported_at": exported_at,
         "generator": generator,
         "nodes": [_export_node(r) for r in node_rows],
-        "edges": [_export_edge(r) for r in edge_rows],
+        "edges": edges,
     }
+
+
+def _edge_rows(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Union local ``edges`` with cross-repo ``foreign_edges`` (#100).
+
+    Declared ``@repo:`` edges live in ``foreign_edges`` (their endpoint cannot
+    satisfy the local FK) and would otherwise never reach the artifact, so the
+    hub could not see intent-declared cross-repo links. Both tables expose the
+    same columns; sorting happens in :func:`build_export`.
+    """
+    rows = list(
+        conn.execute(
+            "SELECT src_ref_id, dst_ref_id, kind, extra, lifecycle FROM edges"
+        ).fetchall()
+    )
+    if _has_foreign_edges_table(conn):
+        rows.extend(
+            conn.execute(
+                "SELECT src_ref_id, dst_ref_id, kind, extra, lifecycle FROM foreign_edges"
+            ).fetchall()
+        )
+    return rows
+
+
+def _has_foreign_edges_table(conn: sqlite3.Connection) -> bool:
+    """True when the ``foreign_edges`` table exists (older DBs may lack it)."""
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='foreign_edges'"
+    ).fetchone()
+    return row is not None
 
 
 def serialize_export(export: dict[str, object]) -> str:
@@ -242,11 +270,36 @@ def _repo_from_git_remote(project_root: Path) -> str | None:
 
 
 def current_commit_sha(project_root: Path) -> str | None:
-    """Return the current git HEAD sha, or ``None`` outside a git repo (Q4)."""
+    """Return the current git HEAD sha, or ``None`` outside a git repo (Q4).
+
+    Returns ``None`` when *project_root* is not itself the git toplevel (#103):
+    ``git`` walks UP to the enclosing repo for a nested non-repo dir, which
+    would otherwise leak an unrelated (host) repo's HEAD into the export. An
+    honest "unknown HEAD" beats a misleading provenance sha.
+    """
+    if not _is_git_toplevel(project_root):
+        return None
+    sha = _run_git(project_root, "rev-parse", "HEAD")
+    return sha or None
+
+
+def _is_git_toplevel(project_root: Path) -> bool:
+    """True when *project_root* is the toplevel of its own git repository."""
+    toplevel = _run_git(project_root, "rev-parse", "--show-toplevel")
+    if toplevel is None:
+        return False
     try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],  # noqa: S607
-            cwd=project_root,
+        return Path(toplevel).resolve() == project_root.resolve()
+    except OSError:
+        return False
+
+
+def _run_git(cwd: Path, *args: str) -> str | None:
+    """Run ``git <args>`` in *cwd*; return stripped stdout, or ``None`` on failure."""
+    try:
+        result = subprocess.run(  # noqa: S603
+            ["git", *args],  # noqa: S607
+            cwd=cwd,
             capture_output=True,
             text=True,
         )
@@ -254,7 +307,7 @@ def current_commit_sha(project_root: Path) -> str | None:
         return None
     if result.returncode != 0:
         return None
-    return result.stdout.strip() or None
+    return result.stdout.strip()
 
 
 # --- Hub aggregation (BEAD-04) ----------------------------------------------

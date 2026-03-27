@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 import pytest
@@ -421,6 +422,117 @@ class TestLoadGraphFederation:
         assert result.edges_loaded == 1
         assert result.foreign_edges == []
         assert result.warnings == []
+
+    def test_foreign_edge_persisted_to_foreign_edges_table(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        """A declared @repo: edge is persisted so export can surface it (#100)."""
+        (graph_dir / "f.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: plans\n"
+            "    kind: feature\n"
+            '    summary: "Plans"\n'
+            "edges:\n"
+            "  - src: plans\n"
+            "    dst: '@integration-service:queue'\n"
+            "    kind: depends_on\n"
+            "    lifecycle: planned\n"
+        )
+        load_graph(graph_dir, db)
+        rows = db.execute(
+            "SELECT src_ref_id, dst_ref_id, kind, lifecycle FROM foreign_edges"
+        ).fetchall()
+        assert len(rows) == 1
+        assert rows[0]["src_ref_id"] == "plans"
+        assert rows[0]["dst_ref_id"] == "@integration-service:queue"
+        assert rows[0]["kind"] == "depends_on"
+        assert rows[0]["lifecycle"] == "planned"
+
+    def test_foreign_edge_carries_contract_extra(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        """A cross-repo contract edge keeps its contract payload in extra."""
+        (graph_dir / "f.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: producer\n"
+            "    kind: service\n"
+            '    summary: "P"\n'
+            "edges:\n"
+            "  - src: producer\n"
+            "    dst: '@other:queue'\n"
+            "    kind: produces\n"
+            "    contract:\n"
+            "      protocol: amqp\n"
+            "      message_type: m1\n"
+            "      direction: produces\n"
+        )
+        load_graph(graph_dir, db)
+        row = db.execute("SELECT extra, kind FROM foreign_edges").fetchone()
+        assert row["kind"] == "produces"
+        extra = json.loads(row["extra"])
+        assert extra["contract"]["message_type"] == "m1"
+
+
+class TestLoadGraphContractEdges:
+    """Contract edges with produces/consumes kinds + per-message identity."""
+
+    def test_produces_edge_loaded_into_db(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        """A local produces edge persists through the real DB path (#101)."""
+        (graph_dir / "c.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: svc\n"
+            "    kind: service\n"
+            '    summary: "S"\n'
+            "  - ref_id: q\n"
+            "    kind: feature\n"
+            '    summary: "Q"\n'
+            "edges:\n"
+            "  - src: svc\n"
+            "    dst: q\n"
+            "    kind: produces\n"
+        )
+        result = load_graph(graph_dir, db)
+        assert result.edges_loaded == 1
+        assert result.warnings == []
+        row = db.execute("SELECT kind FROM edges").fetchone()
+        assert row["kind"] == "produces"
+
+    def test_two_contracts_same_pair_both_loaded(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        """Two AMQP contracts on one node pair both survive (#102)."""
+        (graph_dir / "c.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: svc\n"
+            "    kind: service\n"
+            '    summary: "S"\n'
+            "  - ref_id: q\n"
+            "    kind: feature\n"
+            '    summary: "Q"\n'
+            "edges:\n"
+            "  - src: svc\n"
+            "    dst: q\n"
+            "    kind: produces\n"
+            "    contract:\n"
+            "      protocol: amqp\n"
+            "      message_type: msg_a\n"
+            "  - src: svc\n"
+            "    dst: q\n"
+            "    kind: produces\n"
+            "    contract:\n"
+            "      protocol: amqp\n"
+            "      message_type: msg_b\n"
+        )
+        result = load_graph(graph_dir, db)
+        assert result.edges_loaded == 2
+        assert result.warnings == []
+        keys = {
+            r["contract_key"]
+            for r in db.execute("SELECT contract_key FROM edges").fetchall()
+        }
+        assert keys == {"msg_a", "msg_b"}
 
 
 # --- lifecycle field (BEAD-02) ---

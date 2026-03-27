@@ -13,12 +13,14 @@ never wall-clock (per bead constraint).
 from __future__ import annotations
 
 import json
+import subprocess
 from typing import TYPE_CHECKING
 
 from click.testing import CliRunner
 
 from beadloom.graph.federation import (
     build_export,
+    current_commit_sha,
     resolve_repo_name,
     serialize_export,
 )
@@ -149,6 +151,75 @@ class TestBuildExport:
         }
 
 
+class TestExportForeignEdges:
+    """Cross-repo @repo: edges survive into the export artifact (#100)."""
+
+    def _make_db_with_foreign(self, tmp_path: Path) -> Path:
+        project = tmp_path / "proj"
+        (project / ".beadloom").mkdir(parents=True)
+        conn = open_db(project / ".beadloom" / "beadloom.db")
+        create_schema(conn)
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, lifecycle) "
+            "VALUES ('plans', 'feature', 'Plans', 'active')"
+        )
+        conn.execute(
+            "INSERT INTO foreign_edges "
+            "(src_ref_id, dst_ref_id, kind, extra, lifecycle) "
+            "VALUES ('plans', '@integration-service:queue', 'depends_on', '{}', 'planned')"
+        )
+        conn.commit()
+        conn.close()
+        return project
+
+    def test_foreign_edge_present_in_export(self, tmp_path: Path) -> None:
+        project = self._make_db_with_foreign(tmp_path)
+        conn = open_db(project / ".beadloom" / "beadloom.db")
+        export = build_export(
+            conn,
+            repo="core-monolith",
+            commit_sha=_FIXED_SHA,
+            exported_at=_FIXED_TIME,
+            generator="g",
+        )
+        conn.close()
+        edges = export["edges"]
+        foreign = [e for e in edges if e["dst"] == "@integration-service:queue"]
+        assert len(foreign) == 1
+        assert foreign[0]["src"] == "plans"
+        assert foreign[0]["kind"] == "depends_on"
+        assert foreign[0]["lifecycle"] == "planned"
+
+    def test_foreign_edge_contract_surfaced(self, tmp_path: Path) -> None:
+        project = tmp_path / "proj2"
+        (project / ".beadloom").mkdir(parents=True)
+        conn = open_db(project / ".beadloom" / "beadloom.db")
+        create_schema(conn)
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, lifecycle) "
+            "VALUES ('producer', 'service', 'P', 'active')"
+        )
+        contract = {
+            "contract": {"protocol": "amqp", "message_type": "m1", "direction": "produces"}
+        }
+        conn.execute(
+            "INSERT INTO foreign_edges "
+            "(src_ref_id, dst_ref_id, kind, extra, lifecycle) "
+            "VALUES ('producer', '@other:q', 'produces', ?, 'active')",
+            (json.dumps(contract),),
+        )
+        conn.commit()
+        conn.close()
+        conn = open_db(project / ".beadloom" / "beadloom.db")
+        export = build_export(
+            conn, repo="r", commit_sha=_FIXED_SHA, exported_at=_FIXED_TIME, generator="g"
+        )
+        conn.close()
+        foreign = [e for e in export["edges"] if e["dst"] == "@other:q"]
+        assert len(foreign) == 1
+        assert foreign[0]["contract"]["message_type"] == "m1"
+
+
 class TestSerializeExport:
     def test_deterministic_byte_identical(self, tmp_path: Path) -> None:
         project = _make_db(tmp_path)
@@ -182,6 +253,48 @@ class TestResolveRepoName:
         (project / ".beadloom").mkdir(parents=True)
         # No config repo key, no git remote → directory basename.
         assert resolve_repo_name(project) == "fallback-dir"
+
+
+class TestCurrentCommitSha:
+    """``commit_sha`` reflects the target project's repo, not an enclosing one (#103)."""
+
+    def _git(self, cwd: Path, *args: str) -> None:
+        subprocess.run(  # noqa: S603
+            ["git", *args],  # noqa: S607
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    def _init_repo(self, root: Path) -> None:
+        root.mkdir(parents=True, exist_ok=True)
+        self._git(root, "init")
+        self._git(root, "config", "user.email", "t@example.com")
+        self._git(root, "config", "user.name", "t")
+        (root / "f.txt").write_text("x", encoding="utf-8")
+        self._git(root, "add", ".")
+        self._git(root, "commit", "-m", "init")
+
+    def test_returns_head_for_repo_root(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        self._init_repo(repo)
+        sha = current_commit_sha(repo)
+        assert sha is not None
+        assert len(sha) == 40
+
+    def test_returns_none_for_nested_non_repo_dir(self, tmp_path: Path) -> None:
+        """A nested dir inside a git tree must NOT leak the host repo's HEAD."""
+        repo = tmp_path / "host"
+        self._init_repo(repo)
+        nested = repo / "sub" / "project"
+        nested.mkdir(parents=True)
+        assert current_commit_sha(nested) is None
+
+    def test_returns_none_outside_any_repo(self, tmp_path: Path) -> None:
+        plain = tmp_path / "plain"
+        plain.mkdir()
+        assert current_commit_sha(plain) is None
 
 
 class TestExportCli:

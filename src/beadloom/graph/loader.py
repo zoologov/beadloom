@@ -315,10 +315,19 @@ def _process_edge(
     if src_foreign is None or dst_foreign is None:
         return  # malformed @... — already recorded as an error
 
-    # A foreign endpoint makes this a cross-repo edge: record it (resolves at
-    # the hub), do NOT insert it locally or flag it as a dangling node.
+    lifecycle = _normalize_lifecycle(
+        edge.get("lifecycle"), f"Edge '{src}→{dst}'", result
+    )
+    edge_extra = _edge_extra(edge)
+    contract_key = _contract_key(edge_extra)
+
+    # A foreign endpoint makes this a cross-repo edge: persist it into the
+    # ``foreign_edges`` table (resolves at the hub, surfaced by ``export``).
+    # It is NOT inserted into ``edges`` (the FK cannot bind a @repo: endpoint)
+    # nor flagged as a dangling node.
     if src_foreign or dst_foreign:
         result.foreign_edges.append(ForeignEdge(src=src, dst=dst, kind=edge_kind))
+        _insert_foreign_edge(conn, src, dst, edge_kind, edge_extra, lifecycle, contract_key)
         return
 
     # Both endpoints local — original behavior, unchanged.
@@ -329,20 +338,57 @@ def _process_edge(
         result.warnings.append(f"Edge dst '{dst}' not found in graph, skipped")
         return
 
-    lifecycle = _normalize_lifecycle(
-        edge.get("lifecycle"), f"Edge '{src}→{dst}'", result
-    )
-    edge_extra: dict[str, Any] = {}
-    for k, v in edge.items():
-        if k not in {"src", "dst", "kind", "lifecycle"}:
-            edge_extra[k] = v
-
     try:
         conn.execute(
-            "INSERT INTO edges (src_ref_id, dst_ref_id, kind, extra, lifecycle) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (src, dst, edge_kind, json.dumps(edge_extra, ensure_ascii=False), lifecycle),
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind, extra, lifecycle, contract_key) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                src,
+                dst,
+                edge_kind,
+                json.dumps(edge_extra, ensure_ascii=False),
+                lifecycle,
+                contract_key,
+            ),
         )
         result.edges_loaded += 1
     except sqlite3.IntegrityError as exc:
         result.warnings.append(f"Failed to insert edge '{src}→{dst}': {exc}")
+
+
+def _edge_extra(edge: dict[str, Any]) -> dict[str, Any]:
+    """Collect an edge's non-direct fields (everything but src/dst/kind/lifecycle)."""
+    return {k: v for k, v in edge.items() if k not in {"src", "dst", "kind", "lifecycle"}}
+
+
+def _contract_key(edge_extra: dict[str, Any]) -> str:
+    """Derive the contract discriminator from an edge's contract payload (#102).
+
+    Returns the contract ``message_type`` (so N message types on one node pair
+    stay distinct), or ``''`` for plain edges (their identity stays
+    ``(src,dst,kind)``).
+    """
+    contract = edge_extra.get("contract")
+    if isinstance(contract, dict):
+        message_type = contract.get("message_type")
+        if isinstance(message_type, str) and message_type:
+            return message_type
+    return ""
+
+
+def _insert_foreign_edge(
+    conn: sqlite3.Connection,
+    src: str,
+    dst: str,
+    kind: str,
+    extra: dict[str, Any],
+    lifecycle: str,
+    contract_key: str,
+) -> None:
+    """Persist a cross-repo edge into ``foreign_edges`` (idempotent on its key)."""
+    conn.execute(
+        "INSERT OR REPLACE INTO foreign_edges "
+        "(src_ref_id, dst_ref_id, kind, extra, lifecycle, contract_key) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (src, dst, kind, json.dumps(extra, ensure_ascii=False), lifecycle, contract_key),
+    )

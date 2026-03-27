@@ -491,3 +491,191 @@ class TestLifecycleColumnMigration:
         assert node_row[0] == "active"
         assert edge_row[0] == "active"
         c.close()
+
+
+class TestContractEdgeKinds:
+    """Edge ``kind`` CHECK accepts contract kinds produces/consumes (#101)."""
+
+    def _two_nodes(self, c: sqlite3.Connection) -> None:
+        c.execute("INSERT INTO nodes (ref_id, kind, summary) VALUES ('a', 'service', 'A')")
+        c.execute("INSERT INTO nodes (ref_id, kind, summary) VALUES ('b', 'feature', 'B')")
+        c.commit()
+
+    def test_produces_kind_accepted(self, tmp_path: Path) -> None:
+        c = open_db(tmp_path / "t.db")
+        create_schema(c)
+        self._two_nodes(c)
+        c.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES ('a', 'b', 'produces')"
+        )
+        c.commit()
+        row = c.execute("SELECT kind FROM edges").fetchone()
+        assert row[0] == "produces"
+        c.close()
+
+    def test_consumes_kind_accepted(self, tmp_path: Path) -> None:
+        c = open_db(tmp_path / "t.db")
+        create_schema(c)
+        self._two_nodes(c)
+        c.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES ('a', 'b', 'consumes')"
+        )
+        c.commit()
+        row = c.execute("SELECT kind FROM edges").fetchone()
+        assert row[0] == "consumes"
+        c.close()
+
+    def test_bad_kind_still_rejected(self, tmp_path: Path) -> None:
+        c = open_db(tmp_path / "t.db")
+        create_schema(c)
+        self._two_nodes(c)
+        with pytest.raises(sqlite3.IntegrityError):
+            c.execute(
+                "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES ('a', 'b', 'nope')"
+            )
+        c.close()
+
+    def test_old_db_migrates_to_allow_produces(self, tmp_path: Path) -> None:
+        """An existing DB with the old kind CHECK gains produces/consumes."""
+        c = open_db(tmp_path / "t.db")
+        c.executescript(
+            "CREATE TABLE nodes ("
+            "  ref_id TEXT PRIMARY KEY, kind TEXT NOT NULL, summary TEXT NOT NULL DEFAULT '',"
+            "  source TEXT, extra TEXT DEFAULT '{}',"
+            "  lifecycle TEXT NOT NULL DEFAULT 'active'"
+            ");"
+            "CREATE TABLE edges ("
+            "  src_ref_id TEXT NOT NULL REFERENCES nodes(ref_id) ON DELETE CASCADE,"
+            "  dst_ref_id TEXT NOT NULL REFERENCES nodes(ref_id) ON DELETE CASCADE,"
+            "  kind TEXT NOT NULL CHECK(kind IN "
+            "    ('part_of','depends_on','uses','implements','touches_entity','touches_code')),"
+            "  extra TEXT DEFAULT '{}',"
+            "  lifecycle TEXT NOT NULL DEFAULT 'active',"
+            "  PRIMARY KEY (src_ref_id, dst_ref_id, kind)"
+            ");"
+        )
+        c.execute("INSERT INTO nodes (ref_id, kind, summary) VALUES ('a', 'service', 'A')")
+        c.execute("INSERT INTO nodes (ref_id, kind, summary) VALUES ('b', 'feature', 'B')")
+        c.execute("INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES ('a', 'b', 'uses')")
+        c.commit()
+
+        from beadloom.infrastructure.db import ensure_schema_migrations
+
+        ensure_schema_migrations(c)
+
+        # Pre-existing rows preserved.
+        assert c.execute("SELECT COUNT(*) FROM edges").fetchone()[0] == 1
+        # produces now accepted.
+        c.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES ('a', 'b', 'produces')"
+        )
+        c.commit()
+        kinds = {r[0] for r in c.execute("SELECT kind FROM edges").fetchall()}
+        assert kinds == {"uses", "produces"}
+        c.close()
+
+
+class TestContractEdgeDiscriminator:
+    """Multiple contracts on one (src,dst,kind) survive (#102)."""
+
+    def _two_nodes(self, c: sqlite3.Connection) -> None:
+        c.execute("INSERT INTO nodes (ref_id, kind, summary) VALUES ('p', 'service', 'P')")
+        c.execute("INSERT INTO nodes (ref_id, kind, summary) VALUES ('q', 'feature', 'Q')")
+        c.commit()
+
+    def test_contract_key_column_exists(self, tmp_path: Path) -> None:
+        c = open_db(tmp_path / "t.db")
+        create_schema(c)
+        cols = {row[1] for row in c.execute("PRAGMA table_info(edges)").fetchall()}
+        assert "contract_key" in cols
+        c.close()
+
+    def test_two_contracts_same_pair_both_survive(self, tmp_path: Path) -> None:
+        c = open_db(tmp_path / "t.db")
+        create_schema(c)
+        self._two_nodes(c)
+        c.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind, contract_key) "
+            "VALUES ('p', 'q', 'produces', 'msg-a')"
+        )
+        c.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind, contract_key) "
+            "VALUES ('p', 'q', 'produces', 'msg-b')"
+        )
+        c.commit()
+        assert c.execute("SELECT COUNT(*) FROM edges").fetchone()[0] == 2
+        c.close()
+
+    def test_duplicate_full_key_still_rejected(self, tmp_path: Path) -> None:
+        c = open_db(tmp_path / "t.db")
+        create_schema(c)
+        self._two_nodes(c)
+        c.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind, contract_key) "
+            "VALUES ('p', 'q', 'produces', 'msg-a')"
+        )
+        c.commit()
+        with pytest.raises(sqlite3.IntegrityError):
+            c.execute(
+                "INSERT INTO edges (src_ref_id, dst_ref_id, kind, contract_key) "
+                "VALUES ('p', 'q', 'produces', 'msg-a')"
+            )
+        c.close()
+
+    def test_contract_key_defaults_empty(self, tmp_path: Path) -> None:
+        c = open_db(tmp_path / "t.db")
+        create_schema(c)
+        self._two_nodes(c)
+        c.execute("INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES ('p', 'q', 'uses')")
+        c.commit()
+        row = c.execute("SELECT contract_key FROM edges").fetchone()
+        assert row[0] == ""
+        c.close()
+
+
+class TestForeignEdgesTable:
+    """The ``foreign_edges`` table persists cross-repo @repo: edges (#100)."""
+
+    def test_table_exists(self, tmp_path: Path) -> None:
+        c = open_db(tmp_path / "t.db")
+        create_schema(c)
+        names = {
+            row[0]
+            for row in c.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        assert "foreign_edges" in names
+        c.close()
+
+    def test_accepts_foreign_dst(self, tmp_path: Path) -> None:
+        c = open_db(tmp_path / "t.db")
+        create_schema(c)
+        c.execute("INSERT INTO nodes (ref_id, kind, summary) VALUES ('local', 'service', 'L')")
+        c.commit()
+        c.execute(
+            "INSERT INTO foreign_edges (src_ref_id, dst_ref_id, kind, extra, lifecycle) "
+            "VALUES ('local', '@other:x', 'depends_on', '{}', 'active')"
+        )
+        c.commit()
+        row = c.execute("SELECT dst_ref_id FROM foreign_edges").fetchone()
+        assert row[0] == "@other:x"
+        c.close()
+
+    def test_old_db_gains_foreign_edges_via_migration(self, tmp_path: Path) -> None:
+        c = open_db(tmp_path / "t.db")
+        c.executescript(
+            "CREATE TABLE nodes (ref_id TEXT PRIMARY KEY, kind TEXT NOT NULL,"
+            "  summary TEXT NOT NULL DEFAULT '');"
+        )
+        from beadloom.infrastructure.db import ensure_schema_migrations
+
+        ensure_schema_migrations(c)
+        names = {
+            row[0]
+            for row in c.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        assert "foreign_edges" in names
+        c.close()
