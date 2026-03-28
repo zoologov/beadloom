@@ -1,6 +1,6 @@
 # Graph Domain
 
-YAML format for describing the project architecture graph, with loader, diff engine, rule engine, import resolver, linter, snapshot storage, and C4 architecture model mapping.
+YAML format for describing the project architecture graph, with loader, diff engine, rule engine, import resolver, linter, snapshot storage, C4 architecture model mapping, and cross-repo federation.
 
 ## Specification
 
@@ -16,6 +16,7 @@ nodes:
     kind: service              # Node type (required)
     summary: "Description"     # Brief description (required)
     source: src/my_service/    # Path to source code (optional)
+    lifecycle: active          # active|planned|deprecated|dead (optional, default active)
     docs:                      # Linked documents (optional)
       - docs/my-service.md
     # Any additional fields go into extra (JSON)
@@ -24,6 +25,8 @@ edges:
   - src: my-service            # Source ref_id (required)
     dst: core                  # Destination ref_id (required)
     kind: part_of              # Edge type (required)
+    lifecycle: active          # active|planned|deprecated|dead (optional, default active)
+  # A cross-repo edge endpoint uses @<repo>:<ref_id>, e.g. dst: @integration-service:plans
 ```
 
 ### Node Types (node kind)
@@ -51,6 +54,14 @@ edges:
 
 An array of paths to documents linked to the node. Paths are specified relative to the project root (e.g., `docs/spec.md`). During reindex, a doc_path -> ref_id mapping is built to link chunks to graph nodes.
 
+### The lifecycle Field (federation)
+
+An optional `lifecycle` status on each node and edge — one of `active` (default), `planned`, `deprecated`, or `dead`. It is a first-class SQLite column (not stored in `extra`), so it is type-checked, SQL-queryable, and visible to the rule engine: only `active` edges count as "live" for the `no-dependency-cycles` and `architecture-layers` rules. The federation hub reconciles each edge's `lifecycle` against reality to produce a three-valued intent-vs-reality verdict. Absent → `active`; an invalid value is recorded in `GraphLoadResult.errors` and falls back to `active`. See the [federation SPEC](features/federation/SPEC.md).
+
+### Cross-repo references (federation)
+
+A graph ref may name a node in another repository as `@<repo>:<ref_id>` (e.g. `@integration-service:plans`). A plain ref (no leading `@`) stays local exactly as before. Cross-repo edges are persisted in a dedicated `foreign_edges` table and resolve at a federation hub via `beadloom export` / `beadloom federate`. See the [federation SPEC](features/federation/SPEC.md).
+
 ### Modules
 
 - **loader.py** -- YAML graph parser and SQLite loader. Parses `.beadloom/_graph/*.yml` files and populates `nodes` and `edges` tables. Validates ref_id uniqueness and edge integrity. Supports in-place YAML node updates.
@@ -60,6 +71,7 @@ An array of paths to documents linked to the node. Paths are specified relative 
 - **linter.py** -- Linter orchestrator. Loads rules, optionally runs incremental reindex, evaluates all rules, and returns structured `LintResult` with violations, counts, and timing. Provides Rich, JSON, and porcelain output formatters.
 - **snapshot.py** -- Architecture snapshot storage. Saves the current graph state (nodes, edges, symbol counts) to the `graph_snapshots` table, lists saved snapshots, and compares two snapshots to produce a `SnapshotDiff` with added, removed, and changed nodes and edges.
 - **c4.py** -- C4 architecture model mapping. Maps graph nodes and edges to the C4 model (System / Container / Component levels) using `part_of` depth heuristics or explicit `c4_level` in node extras. Renders diagrams in Mermaid C4 syntax and C4-PlantUML syntax. Supports level-based filtering (context, container, component) and scoped component views.
+- **federation.py** -- Cross-repo federation (BDL-037 / F1). Owns the `FederatedRef` value type and `parse_ref` parser for `@<repo>:<ref_id>` cross-repo node identity; the deterministic satellite **export** (`build_export` / `serialize_export`, schema v1) with repo/commit_sha/exported_at provenance; and the hub **aggregation** (`aggregate_exports` → `FederatedGraph`) that composes ≥2 satellite exports into one namespaced graph with three-valued intent-vs-reality `EdgeVerdict`s, both-sides AMQP contract reconciliation, and per-satellite staleness. See [federation SPEC](features/federation/SPEC.md).
 
 ## Invariants
 
@@ -131,6 +143,22 @@ An array of paths to documents linked to the node. Paths are specified relative 
 - `render_c4_plantuml(nodes: list[C4Node], relationships: list[C4Relationship]) -> str` -- Render C4 model as C4-PlantUML syntax. Produces a complete `@startuml`/`@enduml` block with `!include` for the C4-PlantUML stdlib. Uses standard macros: `System()`, `Container()`, `Component()`, `Rel()` with `_Ext`/`Db` variants.
 - `filter_c4_nodes(nodes: list[C4Node], relationships: list[C4Relationship], *, level: str = "container", scope: str | None = None) -> tuple[list[C4Node], list[C4Relationship]]` -- Filter C4 nodes by diagram level. `"context"` keeps only System-level and external nodes. `"container"` keeps System and Container nodes. `"component"` requires `scope` and keeps children of the scoped container. Raises `ValueError` if `level="component"` without `scope`, or if `scope` ref_id is not found.
 
+### Module `src/beadloom/graph/federation.py`
+
+Cross-repo identity, satellite export, and hub aggregation. See the [federation SPEC](features/federation/SPEC.md) for full detail.
+
+- `parse_ref(raw: str) -> FederatedRef` -- Parse a graph ref: plain → local `FederatedRef(None, raw)`; `@repo:id` → foreign `FederatedRef("repo", "id")`; malformed `@...` → `FederationRefError`. Only the first `:` after `@` splits repo from ref_id.
+- `is_foreign_ref(raw: str) -> bool` -- Cheap leading-`@` check (does not validate shape).
+- `build_export(conn, *, repo, commit_sha, exported_at, generator) -> dict` -- Build the deterministic satellite export artifact (schema v1) from the indexed graph; unions the `edges` and `foreign_edges` tables; nodes sorted by `ref_id`, edges by `(src, dst, kind)`.
+- `serialize_export(export: dict) -> str` -- Serialize an export dict to deterministic JSON (sorted keys, 2-space indent).
+- `resolve_repo_name(project_root: Path) -> str` -- Resolve the repo name: `.beadloom/config.yml` `repo:` > git `origin` remote basename > directory name.
+- `current_commit_sha(project_root: Path) -> str | None` -- git HEAD sha, or `None` when `project_root` is not the git toplevel (honest "unknown HEAD").
+- `aggregate_exports(exports: list[dict], *, now: str | None = None) -> FederatedGraph` -- Compose ≥2 satellite exports into one namespaced federated graph: resolve `@repo:` endpoints, assign an `EdgeVerdict` per edge, reconcile AMQP contracts (both-sides vs one-sided), record per-satellite staleness. `now` injectable for deterministic age.
+- `serialize_federation(fed: FederatedGraph) -> str` -- Serialize a `FederatedGraph` to deterministic JSON: `{ schema_version, repos, nodes, edges, contracts, unresolved_refs }`.
+- `render_federation_report(fed: FederatedGraph) -> str` -- Human-readable text report (satellites + sha/age, edge-verdict counts, DRIFT list, AMQP contracts, unresolved refs).
+
+Constants: `EXPORT_SCHEMA_VERSION = 1`, `FEDERATION_SCHEMA_VERSION = 1` (independent).
+
 ### Public Data Classes
 
 | Class | Module | Description |
@@ -157,6 +185,10 @@ An array of paths to documents linked to the node. Paths are specified relative 
 | `LintError` | linter | Exception raised on invalid lint configuration |
 | `C4Node` | c4 | Frozen dataclass: `ref_id`, `label`, `c4_level` (`"System"` / `"Container"` / `"Component"`), `description`, `boundary` (parent ref_id or None), `is_external`, `is_database` |
 | `C4Relationship` | c4 | Frozen dataclass: `src`, `dst`, `label` (edge kind: `"uses"` / `"depends_on"`) |
+| `FederatedRef` | federation | Frozen dataclass: `repo` (`str \| None`), `ref_id`; properties `is_foreign`, `qualified` (`@repo:ref_id` or `ref_id`) |
+| `FederationRefError` | federation | `ValueError` raised on a malformed `@...` foreign ref |
+| `EdgeVerdict` | federation | Enum: `OK` / `DRIFT` / `EXPECTED` / `CLEANUP_CANDIDATE` / `UNDECLARED` / `DEAD` (three-valued intent-vs-reality verdict) |
+| `FederatedGraph` | federation | Dataclass: `nodes`, `edges`, `repos`, `unresolved_refs`, `contracts` — the composed result of aggregating ≥2 satellite exports |
 
 ## Constraints
 
@@ -166,4 +198,4 @@ An array of paths to documents linked to the node. Paths are specified relative 
 
 ## Testing
 
-Tests: `tests/test_graph_loader.py`, `tests/test_cli_graph.py`, `tests/test_diff.py`, `tests/test_cli_diff.py`, `tests/test_rule_engine.py`, `tests/test_rule_severity.py`, `tests/test_cycle_rule.py`, `tests/test_import_boundary_rule.py`, `tests/test_linter.py`, `tests/test_cli_lint.py`, `tests/test_import_resolver.py`, `tests/test_import_scan.py`, `tests/test_symbol_diff_polish.py`, `tests/test_snapshot.py`, `tests/test_cli_snapshot.py`, `tests/test_c4.py`
+Tests: `tests/test_graph_loader.py`, `tests/test_cli_graph.py`, `tests/test_diff.py`, `tests/test_cli_diff.py`, `tests/test_rule_engine.py`, `tests/test_rule_severity.py`, `tests/test_cycle_rule.py`, `tests/test_import_boundary_rule.py`, `tests/test_linter.py`, `tests/test_cli_lint.py`, `tests/test_import_resolver.py`, `tests/test_import_scan.py`, `tests/test_symbol_diff_polish.py`, `tests/test_snapshot.py`, `tests/test_cli_snapshot.py`, `tests/test_c4.py`, `tests/test_graph_federation.py`, `tests/test_lifecycle_rules.py`, `tests/test_export.py`, `tests/test_federate.py`, `tests/test_federate_roundtrip_db.py`

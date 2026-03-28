@@ -250,6 +250,26 @@ beadloom diff [--since REF] [--json] [--project DIR]
 
 Compares current graph YAML with state at the given ref (default: HEAD). Exit code 0 = no changes, 1 = changes detected.
 
+### beadloom export
+
+Export the indexed graph as a deterministic cross-repo federation artifact (JSON).
+
+```bash
+beadloom export [--out FILE] [--project DIR]
+```
+
+Reads the indexed graph from SQLite (read-only) and emits a self-describing JSON artifact (schema v1): `repo`, `commit_sha`, `exported_at`, `generator`, and the `nodes` / `edges` arrays (each carrying `lifecycle`; edges may carry AMQP `contract` meta). The `edges` array unions the local `edges` table and the cross-repo `foreign_edges` table so declared `@repo:` links survive. Output is byte-deterministic (sorted nodes/edges + sorted keys). `--out` writes to a file; otherwise prints to stdout. Exits 1 if the database is missing (run `beadloom reindex` first). See the [federation SPEC](../domains/graph/features/federation/SPEC.md).
+
+### beadloom federate
+
+Aggregate ≥2 satellite export artifacts into one federated graph (hub).
+
+```bash
+beadloom federate EXPORT1.json EXPORT2.json [...] [--project DIR]
+```
+
+Composes the namespaced node/edge union (`@repo:ref_id` identity), resolves `@repo:` foreign refs, assigns a three-valued intent-vs-reality verdict per edge (`OK` / `DRIFT` / `EXPECTED` / `CLEANUP_CANDIDATE` / `UNDECLARED` / `DEAD`), reconciles AMQP contracts (confirmed both-sides vs one-sided), and reports per-satellite staleness (commit_sha + age). Writes `.beadloom/federated.json` + `.beadloom/federated.txt` in the hub project root and echoes the report (with any DRIFT) to stdout. Requires at least two artifacts; exits 1 otherwise or if a file is not a JSON object. See the [federation SPEC](../domains/graph/features/federation/SPEC.md).
+
 ### beadloom snapshot
 
 Architecture snapshot management. Snapshots capture the current graph state (nodes, edges, symbols) for later comparison.

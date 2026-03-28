@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 Phase 0 "Foundation / Honesty Gate" (BDL-036): Beadloom now passes its own checks honestly.
+Phase F1 "Federation Foundation" (BDL-037): cross-repo federation thin slice — `@repo:ref_id` identity, the `lifecycle` field, `beadloom export`, and `beadloom federate`, dogfooded on the real core-monolith ↔ integration-service RabbitMQ contract.
+
+### Added
+- **Cross-repo node identity** — a graph ref may name a node in another repo as `@<repo>:<ref_id>` (`FederatedRef` / `parse_ref` in `graph/federation.py`); plain refs stay local. Malformed `@...` refs are surfaced as errors, never silently accepted. Cross-repo edges persist in a new `foreign_edges` table (BDL-037 F1)
+- **`lifecycle` field** on every node and edge — `active` (default) | `planned` | `deprecated` | `dead`, as a first-class SQLite column (not `extra`). Only `active` edges count as live for `no-dependency-cycles` / `architecture-layers`; the federation hub reconciles `lifecycle` against reality into a three-valued intent-vs-reality verdict (BDL-037 F1)
+- **`beadloom export`** — emit the indexed graph as a deterministic, self-describing federation artifact (schema v1: `repo`, `commit_sha`, `exported_at`, `generator`, `nodes`[lifecycle], `edges`[lifecycle + optional AMQP `contract` meta]). Byte-stable diffs (sorted nodes/edges + sorted keys); `commit_sha` is `null` when it cannot be honestly verified (BDL-037 F1)
+- **`beadloom federate`** — hub aggregation of ≥2 satellite exports into one namespaced federated graph: resolve `@repo:` refs, assign an `EdgeVerdict` per edge (`OK` / `DRIFT` / `EXPECTED` / `CLEANUP_CANDIDATE` / `UNDECLARED` / `DEAD`), reconcile AMQP contracts (confirmed both-sides vs one-sided), report per-satellite staleness. Writes `.beadloom/federated.json` + `.beadloom/federated.txt` (BDL-037 F1)
+- **Dogfood proof** — F1 verified end-to-end on the real core-monolith ↔ integration-service RabbitMQ contract: all 4 message types confirmed both-sides, 16 edges OK, no unresolved refs (BDL-037, UX #104)
+
+### Migration
+- **SQLite schema 2 → 3** — additive, idempotent: `lifecycle` columns on `nodes`/`edges`, a `foreign_edges` table, `produces`/`consumes` added to the `edges.kind` CHECK, and `contract_key` added to the edges primary key so multiple AMQP contracts on one node pair survive. Existing DBs upgrade cleanly (BDL-037)
 
 ### Changed
 - **New `application` layer** — orchestrators (`reindex`, `doctor`, `debt_report`, `watcher`) moved from `infrastructure/` to a new `src/beadloom/application/` DDD layer. `infrastructure/` is now domain-agnostic (zero domain imports); layer order is `services → application → domains → infrastructure`. Module import paths changed `beadloom.infrastructure.{reindex,doctor,debt_report,watcher}` → `beadloom.application.*` (BDL-036 #91)
@@ -21,6 +32,10 @@ Phase 0 "Foundation / Honesty Gate" (BDL-036): Beadloom now passes its own check
 - **Silent YAML failure** — graph loader raises `GraphParseError` with file+line on malformed YAML instead of silently producing 0 nodes (BDL-036 #86)
 - **sync-check false `untracked_files`** — file-level `# beadloom:domain=` annotations on symbol-less modules and `<!-- beadloom:track= -->` doc markers now count as tracking signals (BDL-036 #89/#90)
 - **Over-broad exception handling** in reindex narrowed to `sqlite3.OperationalError` for missing-table cases (BDL-036 #94)
+- **`export` dropped declared cross-repo edges** — `@repo:` edges now persist in a `foreign_edges` table and union into the export artifact, so a satellite's intent-declared cross-repo links reach the hub (BDL-037 #100)
+- **`produces`/`consumes` edge kinds rejected** — added to the `edges.kind` CHECK (the edges table is rebuilt, since SQLite cannot `ALTER` a CHECK) so contract edges persist through the real reindex → export path (BDL-037 #101)
+- **Multiple contracts on one node pair collapsed** — `contract_key` (derived from `contract.message_type`) is part of the edges primary key, so a producer publishing N message types to one target survives instead of hitting `UNIQUE constraint failed` (BDL-037 #102)
+- **`export` `commit_sha` leaked the host repo's HEAD** — `current_commit_sha` returns `null` when the project root is not the git toplevel, instead of an enclosing repo's sha (BDL-037 #103)
 
 ### Known
 - `beadloom sync-check` still reports pre-existing documentation drift across several domains (accumulated content staleness, not a mechanism bug); a dedicated repo-wide doc-refresh is tracked as BDL-UX #99.

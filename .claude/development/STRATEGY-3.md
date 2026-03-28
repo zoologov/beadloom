@@ -67,7 +67,10 @@ The narrow subset of `BDL-UX-Issues.md` that MUST close before federation work. 
 
 **Explicitly NOT gated (iterate live during federation):** bootstrap-accuracy program (#74/75/77/78/80/81/82/83/84/85), #95 (perf — only when dogfooding hits it), ergonomics (#72/76/87). INFO/metrics entries (#79/#85/#37) are observations, not closable bugs.
 
-### Phase F1 — Federation Foundation (thinnest real slice)
+### Phase F1 — Federation Foundation (thinnest real slice)  ✅ DELIVERED (thin slice, BDL-037, 2026-06-01)
+
+> **Status: delivered (thin slice).** Shipped `@repo:ref_id` cross-repo identity, the `lifecycle` field (active|planned|deprecated|dead), `beadloom export` (deterministic artifact schema v1), and `beadloom federate` (hub aggregation with three-valued intent-vs-reality `EdgeVerdict`s, both-sides AMQP contract reconciliation, per-satellite staleness). Dogfooded end-to-end on the real core-monolith ↔ integration-service RabbitMQ contract — all 4 message types confirmed both-sides (UX #104). Thin-slice scope held: AMQP only, manual aggregation (no CI wiring / SaaS hub), no VitePress. Follow-ups → F2 (contract graph), F3 (CI/tool-agnostic), F4 (visual landscape). See `docs/domains/graph/features/federation/SPEC.md`.
+
 - **Stable cross-repo node identity** (`@org/repo:NODE`) and a shared node registry.
 - **Hub-and-spoke wiring:** central aggregator pulls per-repo graphs; a per-repo Beadloom remains usable standalone.
 - **Temporal consistency model:** how stale is repo-B's view from repo-A? ("repo-B graph is N commits behind") — this is doc-sync at the federation level.

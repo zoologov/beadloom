@@ -1,8 +1,9 @@
 # BDL UX Feedback Log
 
 > Collected during development and dogfooding.
-> Total: 104 issues | Open: 15 | Improvements: 16 | Excluded: 7 | Closed: 66
-> Last reviewed: BDL-034 (UX Issues & Improvements Batch Fix)
+> Total: 104 issues | Open: 10 | Improvements: 16 | Excluded: 7 | Closed: 71
+> Last reviewed: BDL-037 (F1: Federation Foundation)
+> 2026-06-01 (BDL-037 F1): CLOSED #100 #101 #102 #103 (federation dogfood findings — FIXED in BEAD-09, commit d48bfeb) and #104 (federation dogfood SUCCESS — VERIFIED, BEAD-05). See Closed §BDL-037. Open 15→10, Closed 66→71.
 > 2026-05-30 (BDL-036 Phase 0): CLOSED #91 #88 #92 #93 #94 #86 #89 #90 #71 #98 (honesty gate — see Closed §BDL-036). Opened #99 (repo-wide doc refresh — sync-check has ~30 pre-existing stale doc pairs unrelated to Phase 0; the sync-check *mechanism* is now honest, the doc *content* needs a dedicated pass). Still open: #72, #73, #95, #97 (external), #99. Exact category recount folded into #99.
 > 2026-05-28: added #91–#96 from the comprehensive architecture/code review (see `.claude/development/REVIEW.md`); refined #88 root cause.
 
@@ -32,49 +33,6 @@
 ## Open Issues
 
 > Issues awaiting code fixes in Beadloom.
-
-100. [2026-06-01] [HIGH] `beadloom export` silently drops cross-repo `@repo:` edges (federation dogfood, BDL-037 BEAD-05)
-
-     **Severity:** high
-     **Command:** `beadloom reindex` → `beadloom export` → `beadloom federate`
-     **Context:** Dogfooding F1 federation on the real `core-monolith ↔ integration-service` RabbitMQ contract. Hand-curated two scratch satellite slices, each declaring an explicit cross-repo topology edge (`core-monolith --depends_on--> @integration-service:integration-service` and the reverse).
-     **Issue:** Those `@repo:` edges never reach the federated graph. The loader classifies a foreign-endpoint edge as a `ForeignEdge` (loader.py `_process_edge`) and does NOT insert it into the `edges` table; `build_export` reads ONLY the `edges` table, so the declared cross-repo edge is dropped from the export artifact entirely. Result: `federated.json` had zero `depends_on` cross-repo edges and `unresolved_refs: []` — not because everything resolved, but because the explicit cross-repo edges were never exported. The hub's foreign-ref resolution machinery (`_resolve_endpoint`, `unresolved_refs`) effectively has nothing real to resolve. Cross-repo `@repo:` identity is demonstrated ONLY via namespacing of *local* edge endpoints, never via a declared cross-repo edge.
-     **Expected:** `beadloom export` should serialize `ForeignEdge`s too (e.g. from `GraphLoadResult.foreign_edges`, or persist them in a `foreign_edges` table) so a satellite's declared cross-repo dependencies survive into the artifact and resolve/drift at the hub. This is arguably the central value of F1 — without it, the hub can't see intent-declared cross-repo links, only inferred-from-namespacing ones.
-     **Workaround:** None for declared edges. The contract reconciliation (AMQP both-sides) still works because it keys off the `contract.message_type` payload carried on *local* `uses` edges, not on cross-repo edges — so the dogfood goal (both-sides confirmation) was met despite this gap.
-
-101. [2026-06-01] [HIGH] Edge `kind` CHECK constraint rejects `produces`/`consumes` — federation tests use kinds the DB forbids (BDL-037 BEAD-05)
-
-     **Severity:** high
-     **Command:** `beadloom reindex` on a graph with `kind: produces` / `kind: consumes` edges
-     **Context:** The federation reconciliation tests (`tests/test_federate.py`) build synthetic edge dicts with `kind="produces"` / `kind="consumes"`. Modeling the real AMQP contract the same way in YAML.
-     **Issue:** The `edges` table has `CHECK(kind IN ('part_of','depends_on','uses','implements','touches_entity','touches_code'))` (infrastructure/db.py). Reindex emits `[warn] Failed to insert edge ...: CHECK constraint failed` and DROPS every `produces`/`consumes` edge. So the contract edges that the federation feature is built around cannot be persisted via the real YAML→reindex→export path; the tests pass only because they bypass the DB and call `aggregate_exports()` on hand-built dicts. There is a gap between the tested model and the shippable pipeline.
-     **Expected:** Either add `produces`/`consumes` to the allowed edge kinds (they ARE first-class contract edges per the F1 landscape), OR document that contract edges must use an allowed kind (`uses`) and carry direction only in `contract.direction`. Pick one and make the docs + examples consistent.
-     **Workaround:** Modeled contract edges as `kind: uses` and put producer/consumer role in `contract.direction`. The hub reconciler keys on `contract.direction` (not edge kind), so both-sides confirmation works. But this is non-obvious and undocumented.
-
-102. [2026-06-01] [MEDIUM] UNIQUE `(src,dst,kind)` collapses multiple contracts on one node pair (BDL-037 BEAD-05)
-
-     **Severity:** medium
-     **Command:** `beadloom reindex` with two contract edges sharing `(src,dst,kind)`
-     **Context:** First attempt modeled both produced message_types as `producer-node --uses--> producer-node` (self-loop), differing only in `contract.message_type`.
-     **Issue:** `edges` has UNIQUE `(src_ref_id, dst_ref_id, kind)`. Two AMQP contracts between the same node pair with the same kind collapse — the second is dropped with `UNIQUE constraint failed`, silently losing a contract. Contract identity (message_type) is NOT part of edge identity, so a single producer publishing N message types cannot be modeled as N edges to the same target.
-     **Expected:** Either include a contract discriminator in edge identity, or document that each contract needs a distinct target node (one channel/queue node per message_type).
-     **Workaround:** Created one queue/channel node per message_type (`q-start-plan-version-upload`, etc.) so each contract edge has a distinct `dst`. This is also more faithful to "queue = contract channel" — but the constraint forced the modeling decision rather than the domain.
-
-103. [2026-06-01] [LOW] `beadloom export` `commit_sha` leaks the HOST repo's HEAD for a nested project dir (BDL-037 BEAD-05)
-
-     **Severity:** low
-     **Command:** `beadloom export --project <subdir>`
-     **Context:** Scratch satellites lived under `beadloom/.scratch-federation/<repo>/` (inside the beadloom git tree, by necessity — additionalDirectories are read-only).
-     **Issue:** `current_commit_sha` runs `git rev-parse HEAD` with `cwd=project_root`; for a non-repo subdir, git walks UP to the enclosing repo and returns the host repo's HEAD. Both satellite exports reported the SAME (beadloom) sha. The `repo` name was correctly overridden via `config.yml` (Q3 works), but the staleness/provenance sha was misleading.
-     **Expected:** Detect when `project_root` is not the git toplevel (`git rev-parse --show-toplevel` != project_root) and report `commit_sha: null` (honest "unknown HEAD") rather than an unrelated repo's sha.
-     **Workaround:** Cosmetic for the dogfood (sha only feeds staleness display). Real satellites are their own git roots, so this only bites nested/scratch setups.
-
-104. [2026-06-01] [INFO] Federation dogfood SUCCESS — both-sides confirmed on the real AMQP contract (BDL-037 BEAD-05)
-
-     **Severity:** info (positive)
-     **Command:** `beadloom federate hub/core-monolith.json hub/integration-service.json`
-     **Context:** End-to-end proof of F1 on the real `core-monolith ↔ integration-service` RabbitMQ contract (message types verified read-only from `/Users/v.zoologov/web-product` `message_queue/payload.py` + `integration_inbound.py` and `/Users/v.zoologov/basis` `outbox_payloads.py` + `openspec/specs/plan-version-upload-*`).
-     **Result:** All 4 message types confirmed both-sides: `start_plan_version_upload` + `ensure_plans_folder_path` (core produces → integration consumes) and `plan_version_upload_completed` + `ensure_plans_folder_path_completed` (integration produces → core consumes, the reverse). 16 edges all verdict OK, `unresolved_refs: []`, staleness reported per satellite. The reconciliation model (match by `message_type`, confirmed = produces ∧ consumes) maps cleanly onto the real contract. Findings #100–#103 are the friction; the core feature works.
 
 71. [2026-03-10] [MEDIUM] `beadloom init --bootstrap` generates rules that immediately produce lint violations
 
@@ -579,6 +537,16 @@
 ---
 
 ## Closed Issues
+
+### BDL-037 — F1: Federation Foundation (2026-06-01)
+
+> Cross-repo federation thin slice dogfooded on the real core-monolith ↔ integration-service RabbitMQ contract. The 4 findings below were raised during the dogfood (BEAD-05) and fixed in BEAD-09; #104 records the dogfood success.
+
+- 100. ~~[HIGH] `beadloom export` silently drops cross-repo `@repo:` edges~~ **FIXED (BEAD-09, d48bfeb)** — new `foreign_edges` table (no FK) persists declared cross-repo edges; the loader writes them and `build_export` unions `edges` + `foreign_edges`, so intent-declared `@repo:` links reach the hub.
+- 101. ~~[HIGH] Edge `kind` CHECK rejects `produces`/`consumes`~~ **FIXED (BEAD-09, d48bfeb)** — `produces`/`consumes` added to the `edges.kind` CHECK; the edges table is rebuilt (SQLite cannot `ALTER` a CHECK), additive and idempotent.
+- 102. ~~[MEDIUM] UNIQUE `(src,dst,kind)` collapses multiple contracts on one node pair~~ **FIXED (BEAD-09, d48bfeb)** — `contract_key` (derived from `contract.message_type`) is now part of the edges primary key, so N contracts between one node pair survive instead of colliding.
+- 103. ~~[LOW] `export` `commit_sha` leaks the host repo's HEAD for a nested project dir~~ **FIXED (BEAD-09, d48bfeb)** — `current_commit_sha` verifies `git --show-toplevel == project_root` and returns `null` (honest "unknown HEAD") for nested non-repo dirs.
+- 104. ~~[INFO] Federation dogfood SUCCESS — both-sides confirmed on the real AMQP contract~~ **VERIFIED (BEAD-05, f2eaa94)** — end-to-end proof of F1: all 4 message types confirmed both-sides (`start_plan_version_upload` + `ensure_plans_folder_path` core→integration; `*_completed` integration→core), 16 edges all OK, `unresolved_refs: []`, per-satellite staleness reported. The reconciliation model (match by `message_type`; confirmed = produces ∧ consumes) maps cleanly onto the real contract.
 
 ### BDL-036 — Phase 0: Foundation / Honesty Gate (2026-05-30)
 

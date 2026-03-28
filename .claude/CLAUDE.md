@@ -202,6 +202,10 @@ beadloom diff --since <git-ref>  # graph changes vs a git ref (exit 1 = changes)
 beadloom snapshot save           # snapshot architecture state; `snapshot compare <a> <b>` to diff
 beadloom link <ref-id> <url>     # link a graph node to an external tracker issue (GitHub/Jira)
 
+# Cross-repo federation (F1 / BDL-037)
+beadloom export [--out FILE]     # deterministic federation artifact (schema v1: graph + lifecycle + AMQP contract meta)
+beadloom federate <exports...>   # hub: aggregate >=2 satellite exports -> federated graph (drift verdicts + staleness)
+
 # Documentation
 beadloom docs generate           # generate doc skeletons from graph
 beadloom docs polish             # structured data for AI doc enrichment
