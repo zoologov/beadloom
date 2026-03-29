@@ -1,7 +1,7 @@
 # ACTIVE: BDL-037 — F1: Federation Foundation
 
 > **Last updated:** 2026-06-01
-> **Phase:** Development
+> **Phase:** Completed — ✅ F1 EPIC CLOSED (9/9 beads + parent). export/federate work; real AMQP both-sides confirmed; 4 dogfood bugs (#100-103) fixed; lint/doctor 0; 2707 tests / 90.5% cov. Subagent-blocked fallback used twice (BEAD-07 review session-limit, done inline).
 
 ---
 
