@@ -45,6 +45,15 @@
    - **(b) Three-valued intent-vs-reality** (extends principle 4): `active`+present = OK; `active`+absent = **DRIFT**; `planned`+absent = expected; `deprecated`+present = **cleanup candidate**; **undeclared**+present = **UNDECLARED** (code uses it, graph doesn't — catches the "missed SMTP/feature-flags" class).
    - **(c) Draft-then-review bootstrap, never blind auto-trust.** Code-inferred nodes/edges start `unverified`; a human/agent confirms status. Conflicts (e.g. PostgreSQL-vs-MySQL naming) are **flagged for review, not silently decided.**
    This is the answer to "messy/legacy code must not degrade Beadloom's accuracy." See `F1-landscape-analysis.md` §4bis.
+9. **Universal across paradigms, products, and languages (the federation must not assume one ontology).** Beadloom federates repos that do **not** share an architectural style, a product boundary, or a language. **Two landscape scopes, both first-class:**
+   - **Product-landscape** — one standalone product, federated across its own back / front / infra / integrations (this is the F1 core-monolith case).
+   - **Company-landscape** — an organization with **several products**, *some integrated with each other (cross-product contracts), some fully standalone islands*. The company view composes multiple product-landscapes; cross-product edges exist only where products actually integrate, and standalone products coexist without forced linkage.
+
+   Validated on a real second product — **Product-B** (anonymized; a separate **private** product in its own repo): mobile app (React Native/Expo, **FSD** layers `page/feature/entity/shared` + Clean Architecture), a microservice backend, a broker, GraphQL, DB, integrations, and a possible future web client. It is a *standalone* product-landscape today — not a satellite of the core-monolith one — and a candidate member of a future company-landscape. Three mandates:
+   - **(a) Paradigm-agnostic kind/rule model.** The graph + rule engine must carry **arbitrary `kind`/`edge_kind`** (DDD `domain/service` *and* FSD `page/feature/entity/repository`) and rule forms beyond ours (`deny from→to` filtered by `domain` not just `kind`, `unless_edge` exceptions, `require has_edge_to`). `export`/`federate` MUST round-trip unknown kinds without loss or rejection (cf. F1 dogfood #101, where a `CHECK` wrongly forbade `produces/consumes`).
+   - **(b) Nested landscape model, not one global hub.** A hub aggregates a single product-landscape *or* composes several into a company-landscape. Products/satellites that share **no** contract MUST NOT produce mutual `UNDECLARED` noise; cross-product contract edges appear only where integration is real. Federation supports N independent landscapes and their company-level rollup.
+   - **(c) Language-neutral contract identity.** Cross-paradigm contracts (a TS client consuming a backend's GraphQL/AMQP) resolve on the **contract name** (GraphQL operation/type, AMQP message type) — never a language-specific code symbol. `FederatedRef` + `contract_key` must be language-neutral by design.
+   Product-B's own (anonymized) refactoring strategy is the source for the FSD/Clean-Architecture details this principle is validated against. (Third-party/personal projects used to dogfood Beadloom are **always anonymized** in committed artifacts — see the anonymization rule in memory.)
 
 ---
 
@@ -82,10 +91,18 @@ The narrow subset of `BDL-UX-Issues.md` that MUST close before federation work. 
 - **Three-valued Intent vs Reality at system level:** declared contract vs both-sides reality → `active`+present = OK; `active`+absent = **DRIFT** / "contract doesn't match on both sides"; `planned`+absent = expected (e.g. the core↔file-service bridge); `deprecated`+present = cleanup candidate; **undeclared**+present = orphaned/UNDECLARED consumer. Detects drift, breaking changes, orphaned consumers.
 - This is the moat for a microservices org — bigger than any per-repo internal graph.
 
+**Universality requirements (from the Product-B second landscape — principle 9; design these into the F2 schema *before* building the contract graph on top):**
+- **U1 — Paradigm-agnostic round-trip.** `export`/`federate` carry arbitrary `kind`/`edge_kind` (FSD `page/feature/entity/repository` alongside DDD `domain/service`) with **zero loss or rejection**. Acceptance: a freshly bootstrapped FSD repo's nodes survive `export → federate` intact. Run this as a **preventive dogfood on Product-B's mobile graph** early in F2.
+- **U2 — GraphQL SDL contract with client-as-consumer.** Beyond AMQP: a frontend/mobile client declares `consumes @backend:GraphQLSchema`, the backend `produces schema.graphql`; both-sides reconciliation + breaking-change/orphaned-consumer detection. First appearance of UI clients as contract consumers (F1 had Python-on-both-sides only).
+- **U3 — Language-neutral `contract_key`/`FederatedRef`.** Contracts resolve on the contract name (GraphQL op/type, AMQP message type), never a code symbol — so a TS↔backend edge resolves across the language boundary.
+- **U4 — `external`/`unmapped` lifecycle for non-indexed nodes.** Native bridges (Swift/Kotlin/ObjC++/C++ in Product-B's `modules/`, not scanned) and other present-but-unmapped nodes are tagged `external`/`unmapped`, **not** dropped into DRIFT/UNDECLARED. Extends principle 8.
+- **U5 — Nested landscapes (product + company scope).** Product-B is a **separate product-landscape/hub**, not a satellite of the core-monolith landscape. `federate` supports both a single product-landscape and a company-landscape that composes several products (cross-product edges only where integration is real); contract-less products/satellites never cross-pollute verdicts.
+
 ### Phase F3 — Tool-Agnostic Enforcement Everywhere
 - **CI gate** as the universal enforcement point: per-repo gate + aggregated landscape gate.
 - **Canonical source → generated thin adapters** for Cursor / Claude Code / MCP (never hand-edited).
 - **Agent-actionable violation output:** not "cycle detected" but "edge X→Y violates boundary B; here are the files; here is how to decouple" — fed to the agent in its native channel.
+- **AgentConfigAsCode — extend sync-check to the agent instructions, not just docs.** Product-B's "config-parity / zero-drift rule" (from its refactoring strategy) treats stale `CLAUDE.md`/`AGENTS.md`/`commands` as a *process bug* — agents read drifted instructions and write code in the wrong place. Make `sync-check` track **agent-config ↔ code/graph drift** (paths, layer names, role protocols), the same way it tracks doc↔code drift. Natural extension of principle 7 (the generated-adapter discipline that #93 was about): the adapters become *verified-fresh*, not just generated. Federated CI then asserts each satellite's instructions match its own graph.
 
 ### Phase F4 — Living Knowledge Base + Visual Landscape (DocAsCode + VitePress)
 
@@ -167,11 +184,15 @@ This is a **platform-scale** ambition (federation × BE/FE/DevOps/Infra + polygl
 - ✅ **Hub ownership (was Q4):** a **new dedicated repo**; aggregation **via CI/CD, pull-based** (satellites publish commit-SHA-tagged `beadloom export` artifacts to GitLab Package Registry / MinIO; hub CI pulls + composes + validates + publishes). On-push from satellites + nightly cron.
 - ✅ **F1 first slice:** **core-monolith ↔ integration-service** (RabbitMQ, the one both-sides-confirmed contract).
 
+**Resolved 2026-06-01 (owner-confirmed):**
+- ✅ **Multiple products + two landscape scopes (was the implicit single-landscape assumption):** Beadloom must be **universal** across (1) a **product-landscape** — one standalone product across its back/front/infra/integrations, and (2) a **company-landscape** — several products, some integrated via cross-product contracts, some standalone islands. Confirmed second product: **Product-B** (anonymized; a separate private product — mobile RN/Expo FSD + microservice backend + broker + GraphQL + DB + integrations + possible future web). It is **not** a satellite of the core-monolith landscape; it is a standalone product-landscape and a future company-landscape member. → encoded as **principle 9** + F2 requirements **U1–U5**. Product-B becomes the **second dogfood landscape** for F2 (proves paradigm-agnosticism on a real FSD repo, not just on paper).
+
 **Still open:**
 1. **Monorepo workspaces** alongside multi-repo? (Confirmed multi-repo microservices; no monorepo packages identified among the 4 repos so far — revisit if one appears. Strategy 2 task 13.4.)
 2. **Who maintains the per-repo graph** as the team + agents generate code fast? (Drives how urgent the principle-8 lifecycle/draft-review tooling is — likely F1/F2-critical.)
 3. **Hub artifact schema & CI cadence detail:** exact `beadloom export` federation format + trigger wiring — an F1 design task.
 4. **UNDECLARED sweep:** complete the landscape (SMTP, feature-flags already found unmapped; verify error-tracking / video / secrets-manager / directory / Redis-pubsub; BIM-viewer adapter = `deprecated`) so nothing is missed — the owner's explicit "don't miss anything" requirement.
+5. **Actualize Product-B's own refactoring strategy** to the modernized process (it still references the retired `commands/dev|review|test|tech-writer.md` slash-role model; Beadloom now uses `agents/*` subagents + `swarm`/`gate`). When Beadloom is initialized there (its Phase 7), install the **new** process, not the old one. Separate task (owner-flagged).
 
 ---
 
