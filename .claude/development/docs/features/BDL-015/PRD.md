@@ -17,7 +17,7 @@ Beadloom v1.4 is a working Architecture-as-Code platform but has three critical 
 ### 1.2 Why this matters
 - Agents relying on `doctor` and `status` will work with stale specs thinking they're current
 - Bootstrap graph has no real dependencies until after `reindex`, defeating the "instant context" promise
-- Dogfood project (secondary-system: React Native + Expo + routing C++ + messaging) can't be fully indexed
+- Dogfood project (secondary-system: React Native + Expo + a routing-engine C++ module + a messaging protocol) can't be fully indexed
 
 ### 1.3 Who is affected
 - AI agents using beadloom as context infrastructure
