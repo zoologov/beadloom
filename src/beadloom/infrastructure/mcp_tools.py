@@ -11,6 +11,8 @@ both the ``services`` and ``onboarding`` layers may depend on it without
 violating the architecture layering rules.
 """
 
+# beadloom:domain=infrastructure
+
 from __future__ import annotations
 
 from typing import NamedTuple

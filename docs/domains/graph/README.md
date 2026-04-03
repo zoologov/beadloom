@@ -64,7 +64,7 @@ A graph ref may name a node in another repository as `@<repo>:<ref_id>` (e.g. `@
 
 ### Modules
 
-- **loader.py** -- YAML graph parser and SQLite loader. Parses `.beadloom/_graph/*.yml` files and populates `nodes` and `edges` tables. Validates ref_id uniqueness and edge integrity. Supports in-place YAML node updates.
+- **loader.py** -- YAML graph parser and SQLite loader. Parses `.beadloom/_graph/*.yml` files and populates `nodes` and `edges` tables. Validates ref_id uniqueness and edge integrity. Supports in-place YAML node updates. Cross-repo edge endpoints (`@<repo>:<ref_id>`) are recorded as `ForeignEdge`s into a dedicated `foreign_edges` table (surfaced on `GraphLoadResult.foreign_edges`) for hub resolution rather than treated as dangling-edge errors (F1).
 - **diff.py** -- Graph delta engine. Compares current on-disk graph YAML against state at a given git ref, or compares a saved snapshot against the current DB state. Detects added, removed, and changed nodes and edges, including source path changes, tag changes, and symbol count deltas. Provides Rich rendering and JSON serialization. See [graph-diff SPEC](features/graph-diff/SPEC.md).
 - **rule_engine.py** -- Architecture rule engine. Parses `rules.yml` (schema v1/v2/v3), validates rules against the graph DB, and evaluates deny, require, cycle, import-boundary, forbid-edge, layer, and cardinality rules against code imports, edges, file paths, and node metrics. Supports severity levels (`error`, `warn`), tag-based node matching via `NodeMatcher`, and bulk tag assignments (v3).
 - **import_resolver.py** -- Multi-language import analysis. Extracts imports via tree-sitter for Python, TypeScript/JavaScript, Go, Rust, Kotlin, Java, Swift, Objective-C, and C/C++. Resolves imports to graph node ref_ids. Generates `depends_on` edges from resolved imports.
@@ -164,7 +164,9 @@ Constants: `EXPORT_SCHEMA_VERSION = 1`, `FEDERATION_SCHEMA_VERSION = 1` (indepen
 | Class | Module | Description |
 |-------|--------|----------|
 | `ParsedFile` | loader | Result of parsing a single YAML file: `nodes`, `edges` |
-| `GraphLoadResult` | loader | Summary: `nodes_loaded`, `edges_loaded`, `errors`, `warnings` |
+| `GraphLoadResult` | loader | Summary: `nodes_loaded`, `edges_loaded`, `errors`, `warnings`, `foreign_edges` (list of `ForeignEdge`) |
+| `ForeignEdge` | loader | Frozen dataclass: `src`, `dst`, `kind`. A cross-repo edge endpoint (`@repo:ref_id`) recorded at single-repo load time (not inserted, not a dangling error) for hub resolution (F1) |
+| `GraphParseError` | loader | Exception raised when a graph YAML file cannot be parsed; carries the offending path and (when available) source line |
 | `NodeChange` | diff | Frozen dataclass: `ref_id`, `kind`, `change_type`, `old_summary`, `new_summary`, `old_source`, `new_source`, `old_tags`, `new_tags`, `symbols_added`, `symbols_removed` |
 | `EdgeChange` | diff | Frozen dataclass: `src`, `dst`, `kind`, `change_type` |
 | `GraphDiff` | diff | Frozen dataclass: `since_ref`, `nodes`, `edges`, property `has_changes` |

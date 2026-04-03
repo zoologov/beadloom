@@ -10,7 +10,7 @@ Domain-agnostic SQLite database layer, health metrics, and git activity analysis
 
 ### Modules
 
-- **db.py** — `open_db()` opens a SQLite connection with WAL mode and foreign keys enabled, returning a connection with `sqlite3.Row` row factory. `create_schema()` creates all tables and applies incremental migrations via `ensure_schema_migrations()`. `get_meta()`/`set_meta()` for key-value metadata. Exports `SCHEMA_VERSION` constant (currently `"2"`). The `rules` table CHECK constraint covers all 7 rule types: `deny`, `require`, `forbid_cycles`, `layers`, `cardinality`, `forbid_import`, `forbid_edge`.
+- **db.py** — `open_db()` opens a SQLite connection with WAL mode and foreign keys enabled, returning a connection with `sqlite3.Row` row factory. `create_schema()` creates all tables and applies incremental migrations via `ensure_schema_migrations()`. `get_meta()`/`set_meta()` for key-value metadata. Exports `SCHEMA_VERSION` constant (currently `"3"`). The `rules` table CHECK constraint covers all 7 rule types: `deny`, `require`, `forbid_cycles`, `layers`, `cardinality`, `forbid_import`, `forbid_edge`.
 - **health.py** — `take_snapshot()` captures current index statistics (node/edge/doc counts, coverage percentage, stale docs, isolated nodes) and persists them to the `health_snapshots` table. `get_latest_snapshots()` retrieves history for trend comparison. `compute_trend()` computes trend indicators (arrows and deltas) between two snapshots.
 - **git_activity.py** — `GitActivity` frozen dataclass holds per-node metrics: `commits_30d`, `commits_90d`, `last_commit_date`, `top_contributors`, `activity_level`. `analyze_git_activity()` runs `git log --since=90 days ago`, parses output, maps changed files to nodes via longest source-prefix match, and classifies activity (hot: >20 commits/30d, warm: 5-20, cold: 1-4, dormant: 0 commits/90d).
 - **mcp_tools.py** — single-source catalog of MCP tool metadata used by AGENTS.md generation. `McpToolDoc` describes one tool; `mcp_tool_names()` returns the canonical tool-name list (pinned to the live MCP `_TOOLS` registry by a drift-guard test) so the documented tool count cannot drift.
@@ -18,7 +18,8 @@ Domain-agnostic SQLite database layer, health metrics, and git activity analysis
 ### Database Schema
 
 Stored in `.beadloom/beadloom.db` (WAL mode):
-- `nodes`, `edges` — architecture graph
+- `nodes`, `edges` — architecture graph. Both carry a `lifecycle` column (`active`/`planned`/`deprecated`/`dead`, default `active`; BDL-037). `edges` also carries a `contract_key` column (default `''`) that is part of its primary key, so multiple AMQP contracts (`produces`/`consumes`) on the same `(src,dst,kind)` pair do not collapse (BDL-037 #102)
+- `foreign_edges` — cross-repo edges whose at least one endpoint is a `@repo:ref_id` reference to a node in another repo; kept separate because a foreign endpoint cannot satisfy the `edges` FK to local nodes (BDL-037 #100)
 - `docs`, `chunks` — document index
 - `code_symbols` — code symbol index (includes `annotations` JSON and `file_hash`)
 - `code_imports` — resolved import relationships
@@ -38,9 +39,9 @@ Stored in `.beadloom/beadloom.db` (WAL mode):
 ## API
 
 Module `src/beadloom/infrastructure/db.py`:
-- `SCHEMA_VERSION` — schema version constant (currently `"2"`)
+- `SCHEMA_VERSION` — schema version constant (currently `"3"`)
 - `open_db(db_path: Path)` -> `sqlite3.Connection` — opens DB with WAL mode, foreign keys, and `Row` factory
-- `ensure_schema_migrations(conn)` — applies incremental schema migrations (e.g. `symbols_hash` column, `doc_hash_at_last_edit` column for two-phase sync)
+- `ensure_schema_migrations(conn)` — applies incremental schema migrations (e.g. `symbols_hash` column, `doc_hash_at_last_edit` column for two-phase sync, the `lifecycle` column on `nodes`/`edges`, the `edges.contract_key` rebuild, and the `foreign_edges` table for BDL-037 federation)
 - `create_schema(conn)` — creates all tables and indexes, calls `ensure_schema_migrations()`
 - `get_meta(conn, key, default=None)` -> `str | None`
 - `set_meta(conn, key, value)` — upserts a key in the `meta` table

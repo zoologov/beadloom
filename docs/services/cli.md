@@ -481,6 +481,8 @@ Module `src/beadloom/services/cli.py`:
 - `reindex` -- rebuild SQLite index (incremental by default, `--full` for complete rebuild)
 - `ctx` -- get context bundle for ref_id(s)
 - `graph` -- show architecture graph (Mermaid, C4-Mermaid, C4-PlantUML, or JSON) with `--format`, `--level`, `--scope` options
+- `export` -- export the indexed graph as a deterministic federation artifact (JSON, schema v1) with `--out`
+- `federate` -- aggregate >=2 satellite export artifacts into one federated graph (drift verdicts + staleness)
 - `doctor` -- run validation checks
 - `status` -- show index statistics with health trends and context metrics; `--debt-report` mode with `--fail-if`, `--category` flags
 - `sync_check` -- check doc-code sync with reason/details (reason-aware output for `untracked_files`, `missing_modules`, `symbols_changed`)
