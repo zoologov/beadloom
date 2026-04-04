@@ -1,7 +1,7 @@
 # ACTIVE: BDL-UX#99 — Repo-wide Doc Refresh
 
 > **Last updated:** 2026-06-01
-> **Phase:** In progress — edit wave (4 tech-writer batches, parallel) → verify wave (main loop)
+> **Phase:** ✅ COMPLETED — sync-check honest 0; lint 0; doctor clean; gate green WITHOUT --no-verify; 5 beads + parent closed (`288e5eb`).
 
 ---
 
@@ -27,8 +27,14 @@
 
 ## Progress
 
-- [ ] BEAD-01 graph · [ ] BEAD-02 infra · [ ] BEAD-03 app+svc · [ ] BEAD-04 independent
-- [ ] BEAD-05 verify (sync-check 0, gate green without --no-verify)
+- [x] BEAD-01 graph (README edited) · [x] BEAD-02 infra (README edited) · [x] BEAD-03 app+svc (cli.md edited) · [x] BEAD-04 independent (re-attest only)
+- [x] BEAD-05 verify — sync-check honest 0, lint 0, doctor clean, 288 tests, gate green without --no-verify
+
+### Result
+- 3 docs edited + 1 annotation fix (mcp_tools.py untracked gap); 12 docs re-attest-only.
+- 60+4 pairs attested via `mark_synced_by_ref` after content review.
+- Committed `288e5eb` WITHOUT `--no-verify` — gate restored.
+- F4.1-loop friction note: `untracked_files` only surfaces once hash/symbols staleness clears (masked beneath higher-priority reasons) — the future `docs ai-refresh` must re-run sync-check after attest to catch second-order gaps.
 
 ## Notes
 
