@@ -120,9 +120,12 @@ The loop:
 1. beadloom reindex (incremental)
 2. beadloom sync-check --json              → drifted nodes = scope
 3. per node: docs polish <node> --json → prompt → model → docs/<node>.md
-4. beadloom reindex && sync-check && lint --strict   → verify drift closed (honest ≠ complete guardrail)
-5. open PR with the doc diff → team/human review → merge → VitePress builds
+4. attest baseline (mark_synced) for reviewed pairs
+5. beadloom reindex && sync-check && lint --strict   → verify drift closed (honest ≠ complete guardrail)
+6. open PR with the doc diff → team/human review → merge → VitePress builds
 ```
+
+> **Loop invariant (learned in the BDL-UX#99 dogfood, 2026-06-01): sync-check must be re-run *after* attest, not before.** Staleness reasons have priority: `hash_changed`/`symbols_changed` mask `untracked_files` (source-coverage gaps) on the same pair. Clearing the high-priority reasons (via `mark_synced`) **surfaces second-order gaps** that were invisible in the initial scan — e.g. a sibling source file missing its `# beadloom:domain=` annotation. The loop is therefore not single-pass: iterate steps 4–5 until sync-check is *stably* 0, treating each newly surfaced reason as fresh scope. `docs ai-refresh` must encode this re-check-to-fixpoint, or it will report a false "0" after the first pass.
 
 - **Orchestration:** prefer a thin script shipped as `beadloom docs ai-refresh` (the `docs polish` hook already exists); Aider as an alternative driver. Avoid heavy agent frameworks (LangChain/CrewAI) in CI — latency + nondeterminism for a structured-in→structured-out task.
 - **Model tiers:** (1) **hosted small** (Haiku / mini / DeepSeek / Flash) — best runner-resource efficiency, no GPU, $/token bounded by drift-scope; (2) **self-hosted open-weight** (Qwen-Coder / Llama / Mistral 7–14B) via **vLLM / Ollama as a long-lived inference service** (never load weights per job) — fully OSS, private; (3) **hybrid** — local for bulk, escalate to hosted only when the post-check still flags drift.
