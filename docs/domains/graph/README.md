@@ -71,7 +71,8 @@ A graph ref may name a node in another repository as `@<repo>:<ref_id>` (e.g. `@
 - **linter.py** -- Linter orchestrator. Loads rules, optionally runs incremental reindex, evaluates all rules, and returns structured `LintResult` with violations, counts, and timing. Provides Rich, JSON, and porcelain output formatters.
 - **snapshot.py** -- Architecture snapshot storage. Saves the current graph state (nodes, edges, symbol counts) to the `graph_snapshots` table, lists saved snapshots, and compares two snapshots to produce a `SnapshotDiff` with added, removed, and changed nodes and edges.
 - **c4.py** -- C4 architecture model mapping. Maps graph nodes and edges to the C4 model (System / Container / Component levels) using `part_of` depth heuristics or explicit `c4_level` in node extras. Renders diagrams in Mermaid C4 syntax and C4-PlantUML syntax. Supports level-based filtering (context, container, component) and scoped component views.
-- **federation.py** -- Cross-repo federation (BDL-037 / F1). Owns the `FederatedRef` value type and `parse_ref` parser for `@<repo>:<ref_id>` cross-repo node identity; the deterministic satellite **export** (`build_export` / `serialize_export`, schema v1) with repo/commit_sha/exported_at provenance; and the hub **aggregation** (`aggregate_exports` → `FederatedGraph`) that composes ≥2 satellite exports into one namespaced graph with three-valued intent-vs-reality `EdgeVerdict`s, both-sides AMQP contract reconciliation, and per-satellite staleness. See [federation SPEC](features/federation/SPEC.md).
+- **federation.py** -- Cross-repo federation (BDL-037 / F1). Owns the `FederatedRef` value type and `parse_ref` parser for `@<repo>:<ref_id>` cross-repo node identity; the deterministic satellite **export** (`build_export` / `serialize_export`, schema v1) with repo/commit_sha/exported_at provenance; and the hub **aggregation** (`aggregate_exports` → `FederatedGraph`) that composes ≥2 satellite exports into one namespaced graph with three-valued intent-vs-reality `EdgeVerdict`s, both-sides AMQP contract reconciliation, and per-satellite staleness. Contract reconciliation is delegated to **contracts.py**. See [federation SPEC](features/federation/SPEC.md).
+- **contracts.py** -- First-class cross-service contract model (BDL-038 / F2). Owns the `Contract` / `ContractEndpoint` model, the protocol-prefixed language-neutral `contract_key` derivation (AMQP `amqp:<exchange>/<routing>:<message_type>`, GraphQL `graphql:<schema>`), the `ContractVerdict` enum (contract-level intent-vs-reality), and `reconcile_contracts` (groups contract-bearing edges into first-class `Contract`s; `federation.py` delegates here and projects back to the F1 flat shape via `Contract.to_report_dict`). See [federation SPEC](features/federation/SPEC.md).
 
 ## Invariants
 
@@ -159,6 +160,13 @@ Cross-repo identity, satellite export, and hub aggregation. See the [federation 
 
 Constants: `EXPORT_SCHEMA_VERSION = 1`, `FEDERATION_SCHEMA_VERSION = 1` (independent).
 
+### Module `src/beadloom/graph/contracts.py`
+
+First-class cross-service contract model (F2). `federation.py` delegates contract reconciliation here. See the [federation SPEC](features/federation/SPEC.md).
+
+- `contract_key(payload: dict) -> str` -- Derive a protocol-prefixed, language-neutral contract identity: AMQP → `amqp:<exchange>/<routing_key>:<message_type>` (missing exchange/routing fall back to `*`, so a v1 message-type-only payload yields `amqp:*/*:<message_type>` and still reconciles); GraphQL → `graphql:<schema>`; other → `<protocol>:<message_type-or-name>`.
+- `reconcile_contracts(edges: list[dict]) -> list[Contract]` -- Group contract-bearing edges by `contract_key` into first-class `Contract`s (AMQP only in BEAD-01; insertion order preserved for F1 byte-identical output).
+
 ### Public Data Classes
 
 | Class | Module | Description |
@@ -191,6 +199,9 @@ Constants: `EXPORT_SCHEMA_VERSION = 1`, `FEDERATION_SCHEMA_VERSION = 1` (indepen
 | `FederationRefError` | federation | `ValueError` raised on a malformed `@...` foreign ref |
 | `EdgeVerdict` | federation | Enum: `OK` / `DRIFT` / `EXPECTED` / `CLEANUP_CANDIDATE` / `UNDECLARED` / `DEAD` (three-valued intent-vs-reality verdict) |
 | `FederatedGraph` | federation | Dataclass: `nodes`, `edges`, `repos`, `unresolved_refs`, `contracts` — the composed result of aggregating ≥2 satellite exports |
+| `ContractEndpoint` | contracts | Frozen dataclass: `repo`, `ref_id`, `direction`, `source_file` — one side of a contract (F2) |
+| `Contract` | contracts | Dataclass: `contract_key`, `protocol`, `name`, `endpoints`, `lifecycle`, `verdict`; properties `producers` / `consumers`; `to_report_dict()` projects to F1's flat `{message_type, directions, repos, confirmed}` shape |
+| `ContractVerdict` | contracts | Enum: `CONFIRMED` / `DRIFT` / `ORPHANED_CONSUMER` / `UNDECLARED_PRODUCER` / `BREAKING` / `EXPECTED` / `EXTERNAL` / `DEAD` (contract-level intent-vs-reality; classify logic lands in BEAD-04) |
 
 ## Constraints
 
@@ -200,4 +211,4 @@ Constants: `EXPORT_SCHEMA_VERSION = 1`, `FEDERATION_SCHEMA_VERSION = 1` (indepen
 
 ## Testing
 
-Tests: `tests/test_graph_loader.py`, `tests/test_cli_graph.py`, `tests/test_diff.py`, `tests/test_cli_diff.py`, `tests/test_rule_engine.py`, `tests/test_rule_severity.py`, `tests/test_cycle_rule.py`, `tests/test_import_boundary_rule.py`, `tests/test_linter.py`, `tests/test_cli_lint.py`, `tests/test_import_resolver.py`, `tests/test_import_scan.py`, `tests/test_symbol_diff_polish.py`, `tests/test_snapshot.py`, `tests/test_cli_snapshot.py`, `tests/test_c4.py`, `tests/test_graph_federation.py`, `tests/test_lifecycle_rules.py`, `tests/test_export.py`, `tests/test_federate.py`, `tests/test_federate_roundtrip_db.py`
+Tests: `tests/test_graph_loader.py`, `tests/test_cli_graph.py`, `tests/test_diff.py`, `tests/test_cli_diff.py`, `tests/test_rule_engine.py`, `tests/test_rule_severity.py`, `tests/test_cycle_rule.py`, `tests/test_import_boundary_rule.py`, `tests/test_linter.py`, `tests/test_cli_lint.py`, `tests/test_import_resolver.py`, `tests/test_import_scan.py`, `tests/test_symbol_diff_polish.py`, `tests/test_snapshot.py`, `tests/test_cli_snapshot.py`, `tests/test_c4.py`, `tests/test_graph_federation.py`, `tests/test_lifecycle_rules.py`, `tests/test_export.py`, `tests/test_federate.py`, `tests/test_federate_roundtrip_db.py`, `tests/test_graph_contracts.py`

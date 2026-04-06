@@ -40,3 +40,5 @@
 {"id":"int-0fd74b2e","kind":"field_change","created_at":"2026-06-01T15:07:30.146509Z","actor":"v.zoologov","issue_id":"beadloom-mbb.4","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
 {"id":"int-556122bb","kind":"field_change","created_at":"2026-06-01T15:07:30.824394Z","actor":"v.zoologov","issue_id":"beadloom-mbb.5","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"Closed"}}
 {"id":"int-e4d6115c","kind":"field_change","created_at":"2026-06-01T15:07:31.495154Z","actor":"v.zoologov","issue_id":"beadloom-mbb","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
+{"id":"int-13a6ccf8","kind":"field_change","created_at":"2026-06-01T16:18:07.288375Z","actor":"v.zoologov","issue_id":"beadloom-merge-slot","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"Closed"}}
+{"id":"int-8f661500","kind":"field_change","created_at":"2026-06-01T16:19:01.48406Z","actor":"v.zoologov","issue_id":"beadloom-9xk.1","extra":{"field":"status","new_value":"in_progress","old_value":"open"}}

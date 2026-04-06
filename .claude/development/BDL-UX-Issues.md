@@ -1,7 +1,8 @@
 # BDL UX Feedback Log
 
 > Collected during development and dogfooding.
-> Total: 104 issues | Open: 10 | Improvements: 16 | Excluded: 7 | Closed: 71
+> Total: 106 issues | Open: 12 | Improvements: 16 | Excluded: 7 | Closed: 71
+> 2026-06-01 (BDL-038 F2 BEAD-01): Opened #105 (domain doc re-stales against all member files when one file is added) + #106 (no non-interactive `mark_synced` CLI). Open 10→12.
 > Last reviewed: BDL-037 (F1: Federation Foundation)
 > 2026-06-01 (BDL-037 F1): CLOSED #100 #101 #102 #103 (federation dogfood findings — FIXED in BEAD-09, commit d48bfeb) and #104 (federation dogfood SUCCESS — VERIFIED, BEAD-05). See Closed §BDL-037. Open 15→10, Closed 66→71.
 > 2026-05-30 (BDL-036 Phase 0): CLOSED #91 #88 #92 #93 #94 #86 #89 #90 #71 #98 (honesty gate — see Closed §BDL-036). Opened #99 (repo-wide doc refresh — sync-check has ~30 pre-existing stale doc pairs unrelated to Phase 0; the sync-check *mechanism* is now honest, the doc *content* needs a dedicated pass). Still open: #72, #73, #95, #97 (external), #99. Exact category recount folded into #99.
@@ -33,6 +34,23 @@
 ## Open Issues
 
 > Issues awaiting code fixes in Beadloom.
+
+105. [2026-06-01] [MEDIUM] Adding a new source file to a domain re-stales the domain doc against ALL its member files
+
+    **Severity:** medium
+    **Command:** `beadloom reindex && beadloom sync-check`
+    **Context:** BDL-038 BEAD-01 added one new module (`src/beadloom/graph/contracts.py`) to the `graph` domain and edited one sibling (`federation.py`). Before the change `sync-check` was honest 0; after, it reported **8 stale pairs** for `domains/graph/README.md` — including files I never touched (`diff.py`, `snapshot.py`, `linter.py`, `rule_engine.py`, `import_resolver.py`, `cli.py`), all with reason `symbols_changed`. Verified by stashing the change: at HEAD the same pairs are clean.
+    **Issue:** The domain doc's symbol-drift baseline appears to be keyed on the domain's **aggregate** symbol set, so adding any symbol anywhere in the domain invalidates the `symbols_hash` for **every** doc↔file pair in that node — not just the pair whose code actually changed. One new file → N false `symbols_changed` pairs.
+    **Expected:** `symbols_changed` should fire only for the pair(s) whose own code symbols changed. A genuinely-new module should surface as a single `untracked_files` signal on the doc, not re-stale every unrelated sibling pair. (Compare #89: per-file granularity was the fix there too.)
+    **Workaround:** Document the new module in the domain README, then `mark_synced_by_ref(conn, '<domain>', root)` to re-baseline all pairs, then re-run to fixpoint (see #106).
+
+106. [2026-06-01] [LOW] No non-interactive CLI to attest sync baseline (`mark_synced`) — only the interactive `sync-update`
+
+    **Severity:** low
+    **Command:** `beadloom sync-update <ref>` (interactive: `click.confirm` + `click.edit`)
+    **Context:** After a doc refresh, re-baselining the sync state requires `mark_synced` / `mark_synced_by_ref` (`doc_sync.engine`). The only CLI surface is `sync-update`, which opens an editor and prompts — unusable in an agent/CI flow. BEAD-01 had to call the engine directly via `uv run python -c "...mark_synced_by_ref..."`.
+    **Issue:** There is no `beadloom sync-update <ref> --mark-synced` (or `beadloom sync-mark <ref>`) for non-interactive attestation. Agents must reach past the CLI into the engine.
+    **Expected:** A non-interactive attest flag/command, e.g. `beadloom sync-update <ref> --mark-synced` or `beadloom sync-mark [--ref R | --all]`, that recomputes hashes + `symbols_hash` and sets `status='ok'` without an editor. Pairs with the F4.1 AI-tech-writer loop (STRATEGY-3) which must attest non-interactively. Re-running `reindex && sync-check` after attest to a stable 0 is mandatory (F4.1 loop invariant — clearing `symbols_changed` surfaces masked `untracked_files`, as it did for `contracts.py` here).
 
 71. [2026-03-10] [MEDIUM] `beadloom init --bootstrap` generates rules that immediately produce lint violations
 

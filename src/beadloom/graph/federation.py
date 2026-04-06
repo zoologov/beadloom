@@ -27,6 +27,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from beadloom.graph.contracts import reconcile_contracts
+
 if TYPE_CHECKING:
     import sqlite3
 
@@ -535,29 +537,14 @@ def _assign_verdicts(fed: FederatedGraph, present_ids: set[str]) -> None:
 def _reconcile_contracts(
     edges: list[dict[str, object]],
 ) -> list[dict[str, object]]:
-    """Group AMQP contract edges by message_type; flag confirmed both-sides.
+    """Reconcile AMQP contract edges into confirmed-both-sides / one-sided.
 
-    A contract is confirmed when BOTH a ``produces`` and a ``consumes`` direction
-    exist for the same message type across the union; otherwise it is one-sided.
+    Delegates to the first-class :mod:`beadloom.graph.contracts` model (F2,
+    BDL-038) and projects each :class:`~beadloom.graph.contracts.Contract` back
+    to F1's flat ``{message_type, directions, repos, confirmed}`` shape, so the
+    federated output is byte-identical to F1.
     """
-    by_message: dict[str, dict[str, object]] = {}
-    for edge in edges:
-        contract = _edge_contract_payload(edge)
-        if contract is None or contract.get("protocol") != "amqp":
-            continue
-        message_type = str(contract.get("message_type", ""))
-        direction = str(contract.get("direction", ""))
-        entry = by_message.setdefault(
-            message_type,
-            {"message_type": message_type, "_dirs": set(), "_repos": set()},
-        )
-        dirs = entry["_dirs"]
-        repos = entry["_repos"]
-        if isinstance(dirs, set):
-            dirs.add(direction)
-        if isinstance(repos, set):
-            repos.add(str(edge.get("repo", "")))
-    return [_finalize_contract(e) for e in by_message.values()]
+    return [c.to_report_dict() for c in reconcile_contracts(edges)]
 
 
 def _contract_directions(contract: dict[str, object]) -> list[str]:
@@ -566,20 +553,6 @@ def _contract_directions(contract: dict[str, object]) -> list[str]:
     if isinstance(directions, list):
         return [str(d) for d in directions]
     return []
-
-
-def _finalize_contract(entry: dict[str, object]) -> dict[str, object]:
-    """Turn an internal contract accumulator into a serializable verdict."""
-    dirs = entry["_dirs"]
-    repos = entry["_repos"]
-    directions = sorted(dirs) if isinstance(dirs, set) else []
-    confirmed = "produces" in directions and "consumes" in directions
-    return {
-        "message_type": entry["message_type"],
-        "directions": directions,
-        "repos": sorted(repos) if isinstance(repos, set) else [],
-        "confirmed": confirmed,
-    }
 
 
 def _mark_undeclared(fed: FederatedGraph) -> None:
