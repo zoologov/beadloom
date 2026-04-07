@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from beadloom.graph.contracts import contract_key
 from beadloom.graph.federation import FederationRefError, parse_ref
 
 if TYPE_CHECKING:
@@ -364,15 +365,16 @@ def _edge_extra(edge: dict[str, Any]) -> dict[str, Any]:
 def _contract_key(edge_extra: dict[str, Any]) -> str:
     """Derive the contract discriminator from an edge's contract payload (#102).
 
-    Returns the contract ``message_type`` (so N message types on one node pair
-    stay distinct), or ``''`` for plain edges (their identity stays
-    ``(src,dst,kind)``).
+    Delegates to :func:`beadloom.graph.contracts.contract_key`, so the persisted
+    ``contract_key`` carries the full protocol-prefixed identity
+    (``amqp:<exchange>/<routing>:<message_type>``, ``graphql:<schema>``). This
+    distinguishes same-name / different-exchange contracts on one node pair
+    (BDL-038 BEAD-02, G4). Plain (non-contract) edges keep ``''`` so their
+    identity stays ``(src,dst,kind)``.
     """
     contract = edge_extra.get("contract")
     if isinstance(contract, dict):
-        message_type = contract.get("message_type")
-        if isinstance(message_type, str) and message_type:
-            return message_type
+        return contract_key(contract)
     return ""
 
 

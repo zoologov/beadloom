@@ -150,6 +150,51 @@ class TestBuildExport:
             "message_type": "PlanCreated",
         }
 
+    def test_exchange_and_routing_survive_export(self, tmp_path: Path) -> None:
+        """BEAD-02 (G4): exchange/routing_key ride inside the edge contract payload.
+
+        ``build_export`` passes the whole ``extra.contract`` blob through, so the
+        enriched AMQP fields reach the artifact unchanged (the hub keys on them).
+        """
+        project = tmp_path / "exch"
+        (project / ".beadloom").mkdir(parents=True)
+        conn = open_db(project / ".beadloom" / "beadloom.db")
+        create_schema(conn)
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, lifecycle) "
+            "VALUES ('svc', 'service', 'S', 'active')"
+        )
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, lifecycle) "
+            "VALUES ('q', 'feature', 'Q', 'active')"
+        )
+        contract = {
+            "contract": {
+                "protocol": "amqp",
+                "message_type": "PlanCreated",
+                "direction": "produces",
+                "exchange": "plans",
+                "routing_key": "upload",
+            }
+        }
+        conn.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind, extra, lifecycle) "
+            "VALUES ('svc', 'q', 'produces', ?, 'active')",
+            (json.dumps(contract),),
+        )
+        conn.commit()
+        export = build_export(
+            conn,
+            repo="r",
+            commit_sha=_FIXED_SHA,
+            exported_at=_FIXED_TIME,
+            generator="g",
+        )
+        conn.close()
+        edge = next(e for e in export["edges"] if e["kind"] == "produces")
+        assert edge["contract"]["exchange"] == "plans"
+        assert edge["contract"]["routing_key"] == "upload"
+
 
 class TestExportForeignEdges:
     """Cross-repo @repo: edges survive into the export artifact (#100)."""

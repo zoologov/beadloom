@@ -92,7 +92,7 @@ A graph ref may name a node in another repository as `@<repo>:<ref_id>` (e.g. `@
 ### Module `src/beadloom/graph/loader.py`
 
 - `parse_graph_file(path: Path) -> ParsedFile` -- Parse a single YAML graph file into nodes and edges.
-- `load_graph(graph_dir: Path, conn: sqlite3.Connection) -> GraphLoadResult` -- Load all `*.yml` files from a directory into SQLite (two-pass: nodes then edges). Returns `GraphLoadResult` with `nodes_loaded`, `edges_loaded`, `errors`, `warnings`.
+- `load_graph(graph_dir: Path, conn: sqlite3.Connection) -> GraphLoadResult` -- Load all `*.yml` files from a directory into SQLite (two-pass: nodes then edges). Returns `GraphLoadResult` with `nodes_loaded`, `edges_loaded`, `errors`, `warnings`. A contract-bearing edge's persisted `contract_key` is the full protocol-prefixed identity from `contracts.contract_key` (e.g. `amqp:<exchange>/<routing>:<message_type>`), so same-name / different-exchange contracts on one node pair stay distinct (BDL-038 / G4); plain edges keep `''` (identity `(src,dst,kind)`).
 - `update_node_in_yaml(graph_dir: Path, conn: sqlite3.Connection, ref_id: str, *, summary: str | None = None, source: str | None = None) -> bool` -- Update a node's fields in YAML source and SQLite. Returns `True` if node was found and updated.
 - `get_node_tags(conn: sqlite3.Connection, ref_id: str) -> set[str]` -- Extract tags from a node's `extra` JSON column. Returns an empty set when the node does not exist or has no `tags` key in its extra data.
 

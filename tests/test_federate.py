@@ -287,6 +287,76 @@ class TestBothSidesContract:
         assert len(lonely) == 1
         assert lonely[0]["confirmed"] is False
 
+    def test_same_message_type_different_exchange_not_confirmed(self) -> None:
+        """G4: producer and consumer agree on message_type but use different
+        exchanges -> distinct contract_key -> NOT a confirmed both-sides match.
+
+        This is the false-confirm bug F2/BEAD-02 closes: before exchange folded
+        into the key, these collapsed into one confirmed contract.
+        """
+        produces = {
+            "protocol": "amqp",
+            "direction": "produces",
+            "message_type": "PlanCreated",
+            "exchange": "plans-v1",
+        }
+        consumes = {
+            "protocol": "amqp",
+            "direction": "consumes",
+            "message_type": "PlanCreated",
+            "exchange": "plans-v2",
+        }
+        exports = [
+            _export(
+                "core",
+                nodes=[_node("orders"), _node("q", kind="queue")],
+                edges=[_edge("orders", "q", kind="produces", contract=produces)],
+            ),
+            _export(
+                "integration",
+                nodes=[_node("plans"), _node("q", kind="queue")],
+                edges=[_edge("plans", "q", kind="consumes", contract=consumes)],
+            ),
+        ]
+        fed = aggregate_exports(exports)
+        plan = [c for c in fed.contracts if c["message_type"] == "PlanCreated"]
+        # Two separate contracts (one per exchange), neither confirmed both-sides.
+        assert len(plan) == 2
+        assert all(c["confirmed"] is False for c in plan)
+
+    def test_same_exchange_still_confirmed(self) -> None:
+        """No regression: identical exchange/routing on both sides still confirms."""
+        produces = {
+            "protocol": "amqp",
+            "direction": "produces",
+            "message_type": "PlanCreated",
+            "exchange": "plans",
+            "routing_key": "upload",
+        }
+        consumes = {
+            "protocol": "amqp",
+            "direction": "consumes",
+            "message_type": "PlanCreated",
+            "exchange": "plans",
+            "routing_key": "upload",
+        }
+        exports = [
+            _export(
+                "core",
+                nodes=[_node("orders"), _node("q", kind="queue")],
+                edges=[_edge("orders", "q", kind="produces", contract=produces)],
+            ),
+            _export(
+                "integration",
+                nodes=[_node("plans"), _node("q", kind="queue")],
+                edges=[_edge("plans", "q", kind="consumes", contract=consumes)],
+            ),
+        ]
+        fed = aggregate_exports(exports)
+        confirmed = [c for c in fed.contracts if c["confirmed"]]
+        assert len(confirmed) == 1
+        assert confirmed[0]["message_type"] == "PlanCreated"
+
 
 class TestStaleness:
     def test_age_reported_per_satellite(self) -> None:

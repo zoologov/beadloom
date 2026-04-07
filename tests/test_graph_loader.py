@@ -532,7 +532,74 @@ class TestLoadGraphContractEdges:
             r["contract_key"]
             for r in db.execute("SELECT contract_key FROM edges").fetchall()
         }
-        assert keys == {"msg_a", "msg_b"}
+        # BEAD-02: the loader discriminator is now the full protocol-prefixed key
+        # (delegates to contracts.contract_key); message-type-only AMQP edges fold
+        # into the wildcard exchange/routing form.
+        assert keys == {"amqp:*/*:msg_a", "amqp:*/*:msg_b"}
+
+    def test_same_message_type_different_exchange_distinct_keys(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        """G4: same message_type on different exchanges -> distinct contract_key.
+
+        Two AMQP edges on one node pair sharing a message_type but declaring
+        different exchanges must NOT collapse to one identity (the false-confirm
+        bug F2/BEAD-02 closes).
+        """
+        (graph_dir / "c.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: svc\n"
+            "    kind: service\n"
+            '    summary: "S"\n'
+            "  - ref_id: q\n"
+            "    kind: feature\n"
+            '    summary: "Q"\n'
+            "edges:\n"
+            "  - src: svc\n"
+            "    dst: q\n"
+            "    kind: produces\n"
+            "    contract:\n"
+            "      protocol: amqp\n"
+            "      message_type: evt\n"
+            "      exchange: e1\n"
+            "  - src: svc\n"
+            "    dst: q\n"
+            "    kind: produces\n"
+            "    contract:\n"
+            "      protocol: amqp\n"
+            "      message_type: evt\n"
+            "      exchange: e2\n"
+        )
+        result = load_graph(graph_dir, db)
+        assert result.edges_loaded == 2
+        assert result.warnings == []
+        keys = {
+            r["contract_key"]
+            for r in db.execute("SELECT contract_key FROM edges").fetchall()
+        }
+        assert keys == {"amqp:e1/*:evt", "amqp:e2/*:evt"}
+
+    def test_plain_edge_keeps_empty_contract_key(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        """A plain (non-contract) edge keeps the '' discriminator (identity = src,dst,kind)."""
+        (graph_dir / "c.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: svc\n"
+            "    kind: service\n"
+            '    summary: "S"\n'
+            "  - ref_id: q\n"
+            "    kind: feature\n"
+            '    summary: "Q"\n'
+            "edges:\n"
+            "  - src: svc\n"
+            "    dst: q\n"
+            "    kind: depends_on\n"
+        )
+        result = load_graph(graph_dir, db)
+        assert result.edges_loaded == 1
+        row = db.execute("SELECT contract_key FROM edges").fetchone()
+        assert row["contract_key"] == ""
 
 
 # --- lifecycle field (BEAD-02) ---
