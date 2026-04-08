@@ -37,7 +37,13 @@ _FOREIGN_MARKER = "@"
 
 # Export artifact schema version (bumped on breaking shape changes; the hub
 # tolerates/reports mismatches).
-EXPORT_SCHEMA_VERSION = 1
+#
+# v2 (BDL-038 BEAD-03): adds the ``protocol: graphql`` contract wire — a producer
+# edge carries ``contract.exposed`` (parsed SDL surface) and a consumer edge
+# carries ``contract.references``. The change is purely additive: v1 exports
+# (AMQP-only / no GraphQL fields) still read without error — ``aggregate_exports``
+# never requires the new fields (missing -> empty surface).
+EXPORT_SCHEMA_VERSION = 2
 
 
 class FederationRefError(ValueError):

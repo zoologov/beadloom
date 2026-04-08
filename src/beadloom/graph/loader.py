@@ -17,6 +17,7 @@ import yaml
 
 from beadloom.graph.contracts import contract_key
 from beadloom.graph.federation import FederationRefError, parse_ref
+from beadloom.graph.sdl import extract_surface
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -46,6 +47,9 @@ _NODE_SKIP_FIELDS = frozenset({"docs"})
 # or unknown values fall back to ``active`` so existing graphs are unchanged.
 VALID_LIFECYCLES = frozenset({"active", "planned", "deprecated", "dead"})
 _DEFAULT_LIFECYCLE = "active"
+
+# Protocol whose producers carry a parsed SDL surface (BDL-038 BEAD-03).
+_GRAPHQL = "graphql"
 
 
 def _normalize_lifecycle(raw: object, context: str, result: GraphLoadResult) -> str:
@@ -209,15 +213,26 @@ def update_node_in_yaml(
     return False
 
 
-def load_graph(graph_dir: Path, conn: sqlite3.Connection) -> GraphLoadResult:
+def load_graph(
+    graph_dir: Path,
+    conn: sqlite3.Connection,
+    *,
+    project_root: Path | None = None,
+) -> GraphLoadResult:
     """Load all ``*.yml`` files from *graph_dir* into SQLite.
 
     Two-pass approach:
     1. Parse all files and insert nodes (collecting ref_ids).
     2. Insert edges, skipping those that reference missing nodes.
 
+    *project_root* anchors relative GraphQL ``source_file`` paths declared on
+    ``produces`` contracts (BDL-038 BEAD-03); it defaults to ``graph_dir``'s
+    grandparent (``<root>/.beadloom/_graph`` -> ``<root>``).
+
     Returns a :class:`GraphLoadResult` with counts and diagnostics.
     """
+    if project_root is None:
+        project_root = graph_dir.parent.parent
     result = GraphLoadResult()
 
     # Collect parsed data from all YAML files.
@@ -278,7 +293,7 @@ def load_graph(graph_dir: Path, conn: sqlite3.Connection) -> GraphLoadResult:
 
     # --- Pass 2: insert edges ---
     for edge in all_edges:
-        _process_edge(edge, conn, seen_ref_ids, result)
+        _process_edge(edge, conn, seen_ref_ids, result, project_root)
 
     conn.commit()
 
@@ -305,6 +320,7 @@ def _process_edge(
     conn: sqlite3.Connection,
     seen_ref_ids: set[str],
     result: GraphLoadResult,
+    project_root: Path,
 ) -> None:
     """Classify and load a single edge (local insert vs foreign vs malformed)."""
     src: str = edge.get("src", "")
@@ -320,6 +336,7 @@ def _process_edge(
         edge.get("lifecycle"), f"Edge '{src}→{dst}'", result
     )
     edge_extra = _edge_extra(edge)
+    _fold_graphql_surface(edge_extra, edge_kind, project_root, src, dst, result)
     contract_key = _contract_key(edge_extra)
 
     # A foreign endpoint makes this a cross-repo edge: persist it into the
@@ -360,6 +377,46 @@ def _process_edge(
 def _edge_extra(edge: dict[str, Any]) -> dict[str, Any]:
     """Collect an edge's non-direct fields (everything but src/dst/kind/lifecycle)."""
     return {k: v for k, v in edge.items() if k not in {"src", "dst", "kind", "lifecycle"}}
+
+
+def _fold_graphql_surface(
+    edge_extra: dict[str, Any],
+    edge_kind: str,
+    project_root: Path,
+    src: str,
+    dst: str,
+    result: GraphLoadResult,
+) -> None:
+    """Fold a GraphQL producer's exposed SDL surface into its contract payload.
+
+    For a ``produces`` edge declaring ``contract.protocol == graphql`` with a
+    ``source_file``, parse the referenced SDL (relative to *project_root*) and
+    store the sorted exposed names under ``contract.exposed`` (BDL-038 BEAD-03,
+    G2). A missing/unreadable file records ``exposed: []`` plus a warning — an
+    honest empty surface, never a faked confirmation. Consumer ``references``
+    are carried through verbatim by ``_edge_extra`` (no folding needed). AMQP and
+    plain edges are untouched.
+    """
+    contract = edge_extra.get("contract")
+    if not isinstance(contract, dict) or contract.get("protocol") != _GRAPHQL:
+        return
+    if edge_kind != "produces" and contract.get("direction") != "produces":
+        return
+    source_file = contract.get("source_file")
+    if not isinstance(source_file, str) or not source_file:
+        contract["exposed"] = []
+        return
+    sdl_path = project_root / source_file
+    try:
+        sdl_text = sdl_path.read_text(encoding="utf-8")
+    except OSError:
+        result.warnings.append(
+            f"Edge '{src}→{dst}': GraphQL source_file '{source_file}' "
+            f"unreadable; recording exposed: []"
+        )
+        contract["exposed"] = []
+        return
+    contract["exposed"] = sorted(extract_surface(sdl_text))
 
 
 def _contract_key(edge_extra: dict[str, Any]) -> str:

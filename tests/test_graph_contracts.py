@@ -138,7 +138,7 @@ class TestReconcileContracts:
         assert len(contracts) == 1
         assert contracts[0].to_report_dict()["confirmed"] is True
 
-    def test_ignores_non_amqp_and_plain_edges(self) -> None:
+    def test_ignores_plain_edges_but_groups_graphql(self) -> None:
         edges = [
             {"repo": "r", "src": "a", "dst": "b", "kind": "depends_on"},
             {
@@ -151,9 +151,9 @@ class TestReconcileContracts:
             _amqp_edge("repo-a", "svc", "produces", "m"),
         ]
         contracts = reconcile_contracts(edges)
-        # GraphQL grouping is BEAD-03; BEAD-01 reconciles AMQP only.
-        assert [c.protocol for c in contracts] == ["amqp"]
-        assert contracts[0].name == "m"
+        # BEAD-03: AMQP + GraphQL both reconcile; plain edge ignored.
+        protocols = {c.protocol for c in contracts}
+        assert protocols == {"amqp", "graphql"}
 
     def test_distinct_message_types_stay_separate(self) -> None:
         edges = [
@@ -175,6 +175,92 @@ class TestReconcileContracts:
     def test_one_sided_producer_not_confirmed(self) -> None:
         contracts = reconcile_contracts([_amqp_edge("repo-a", "svc", "produces", "m")])
         assert contracts[0].to_report_dict()["confirmed"] is False
+
+
+def _graphql_edge(
+    repo: str,
+    src: str,
+    direction: str,
+    schema: str,
+    **contract_extra: object,
+) -> dict[str, object]:
+    return {
+        "repo": repo,
+        "src": src,
+        "dst": "@backend:Schema",
+        "kind": direction,
+        "contract": {
+            "protocol": "graphql",
+            "schema": schema,
+            "direction": direction,
+            **contract_extra,
+        },
+    }
+
+
+class TestReconcileGraphQL:
+    """BEAD-03 / G3: GraphQL contracts resolve across the language boundary by name."""
+
+    def test_producer_and_consumer_group_by_schema_name(self) -> None:
+        edges = [
+            _graphql_edge("backend", "schema", "produces", "PublicAPI",
+                          exposed=["Plan", "plan", "plans"]),
+            _graphql_edge("ui", "client", "consumes", "PublicAPI",
+                          references=["plan", "plans"]),
+        ]
+        contracts = reconcile_contracts(edges)
+        assert len(contracts) == 1
+        contract = contracts[0]
+        assert contract.protocol == "graphql"
+        assert contract.contract_key == "graphql:PublicAPI"
+        assert contract.name == "PublicAPI"
+        # Cross-language resolve: a producer and a consumer, by NAME not symbol.
+        assert len(contract.producers) == 1
+        assert len(contract.consumers) == 1
+
+    def test_exposed_and_references_attached_sorted(self) -> None:
+        edges = [
+            _graphql_edge("backend", "schema", "produces", "PublicAPI",
+                          exposed=["plans", "Plan", "plan"]),
+            _graphql_edge("ui", "client", "consumes", "PublicAPI",
+                          references=["plans", "plan"]),
+        ]
+        contract = reconcile_contracts(edges)[0]
+        assert contract.exposed == ["Plan", "plan", "plans"]
+        assert contract.references == ["plan", "plans"]
+
+    def test_different_schemas_stay_separate(self) -> None:
+        edges = [
+            _graphql_edge("backend", "s", "produces", "ApiA"),
+            _graphql_edge("backend", "s", "produces", "ApiB"),
+        ]
+        contracts = reconcile_contracts(edges)
+        assert {c.name for c in contracts} == {"ApiA", "ApiB"}
+
+    def test_amqp_and_graphql_both_reconciled(self) -> None:
+        edges = [
+            _amqp_edge("repo-a", "svc", "produces", "m"),
+            _graphql_edge("backend", "schema", "produces", "PublicAPI"),
+        ]
+        contracts = reconcile_contracts(edges)
+        assert {c.protocol for c in contracts} == {"amqp", "graphql"}
+
+    def test_graphql_to_report_dict_is_generic_flat_shape(self) -> None:
+        """GraphQL Contract still renders the F1 flat shape (name=schema)."""
+        edges = [
+            _graphql_edge("backend", "schema", "produces", "PublicAPI"),
+            _graphql_edge("ui", "client", "consumes", "PublicAPI"),
+        ]
+        report = reconcile_contracts(edges)[0].to_report_dict()
+        assert report["message_type"] == "PublicAPI"
+        assert report["directions"] == ["consumes", "produces"]
+        assert report["confirmed"] is True
+
+    def test_amqp_contract_has_empty_exposed_and_references(self) -> None:
+        """No regression: AMQP contracts default exposed/references to empty."""
+        contract = reconcile_contracts([_amqp_edge("r", "svc", "produces", "m")])[0]
+        assert contract.exposed == []
+        assert contract.references == []
 
 
 class TestContractVerdictSkeleton:

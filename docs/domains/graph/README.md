@@ -62,9 +62,13 @@ An optional `lifecycle` status on each node and edge — one of `active` (defaul
 
 A graph ref may name a node in another repository as `@<repo>:<ref_id>` (e.g. `@integration-service:plans`). A plain ref (no leading `@`) stays local exactly as before. Cross-repo edges are persisted in a dedicated `foreign_edges` table and resolve at a federation hub via `beadloom export` / `beadloom federate`. See the [federation SPEC](features/federation/SPEC.md).
 
+### GraphQL contracts (federation)
+
+A cross-service contract may declare `protocol: graphql` (alongside `amqp`). The **producer** edge (`kind: produces`) carries `contract: {protocol: graphql, schema: <Name>, source_file: <path-to-schema.graphql>}`; at load time the loader parses the referenced SDL (relative to the project root) with the dependency-free `sdl.extract_surface` extractor and folds the **exposed surface** — top-level `Query`/`Mutation`/`Subscription` field names plus `type`/`input`/`enum`/`interface` type names — into the stored contract payload as `exposed: [...sorted...]`. A missing/unreadable file records `exposed: []` plus a `GraphLoadResult.warnings` entry (honest, never faked). The **consumer** edge (`kind: consumes`, often `@backend:<Schema>`) declares `contract: {protocol: graphql, schema: <Name>, references: [op/type names]}`, carried through verbatim. Both sides reconcile by `contract_key` = `graphql:<schema>` (a name, not a code symbol), so a TS/FSD client and a backend resolve across the language boundary (G3). See the [federation SPEC](features/federation/SPEC.md).
+
 ### Modules
 
-- **loader.py** -- YAML graph parser and SQLite loader. Parses `.beadloom/_graph/*.yml` files and populates `nodes` and `edges` tables. Validates ref_id uniqueness and edge integrity. Supports in-place YAML node updates. Cross-repo edge endpoints (`@<repo>:<ref_id>`) are recorded as `ForeignEdge`s into a dedicated `foreign_edges` table (surfaced on `GraphLoadResult.foreign_edges`) for hub resolution rather than treated as dangling-edge errors (F1).
+- **loader.py** -- YAML graph parser and SQLite loader. Parses `.beadloom/_graph/*.yml` files and populates `nodes` and `edges` tables. Validates ref_id uniqueness and edge integrity. Supports in-place YAML node updates. Cross-repo edge endpoints (`@<repo>:<ref_id>`) are recorded as `ForeignEdge`s into a dedicated `foreign_edges` table (surfaced on `GraphLoadResult.foreign_edges`) for hub resolution rather than treated as dangling-edge errors (F1). For a GraphQL `produces` contract with a `source_file`, the loader folds the parsed SDL `exposed` surface into the stored contract payload (F2 / BDL-038); a missing file records `exposed: []` + a warning.
 - **diff.py** -- Graph delta engine. Compares current on-disk graph YAML against state at a given git ref, or compares a saved snapshot against the current DB state. Detects added, removed, and changed nodes and edges, including source path changes, tag changes, and symbol count deltas. Provides Rich rendering and JSON serialization. See [graph-diff SPEC](features/graph-diff/SPEC.md).
 - **rule_engine.py** -- Architecture rule engine. Parses `rules.yml` (schema v1/v2/v3), validates rules against the graph DB, and evaluates deny, require, cycle, import-boundary, forbid-edge, layer, and cardinality rules against code imports, edges, file paths, and node metrics. Supports severity levels (`error`, `warn`), tag-based node matching via `NodeMatcher`, and bulk tag assignments (v3).
 - **import_resolver.py** -- Multi-language import analysis. Extracts imports via tree-sitter for Python, TypeScript/JavaScript, Go, Rust, Kotlin, Java, Swift, Objective-C, and C/C++. Resolves imports to graph node ref_ids. Generates `depends_on` edges from resolved imports.
@@ -72,7 +76,8 @@ A graph ref may name a node in another repository as `@<repo>:<ref_id>` (e.g. `@
 - **snapshot.py** -- Architecture snapshot storage. Saves the current graph state (nodes, edges, symbol counts) to the `graph_snapshots` table, lists saved snapshots, and compares two snapshots to produce a `SnapshotDiff` with added, removed, and changed nodes and edges.
 - **c4.py** -- C4 architecture model mapping. Maps graph nodes and edges to the C4 model (System / Container / Component levels) using `part_of` depth heuristics or explicit `c4_level` in node extras. Renders diagrams in Mermaid C4 syntax and C4-PlantUML syntax. Supports level-based filtering (context, container, component) and scoped component views.
 - **federation.py** -- Cross-repo federation (BDL-037 / F1). Owns the `FederatedRef` value type and `parse_ref` parser for `@<repo>:<ref_id>` cross-repo node identity; the deterministic satellite **export** (`build_export` / `serialize_export`, schema v1) with repo/commit_sha/exported_at provenance; and the hub **aggregation** (`aggregate_exports` → `FederatedGraph`) that composes ≥2 satellite exports into one namespaced graph with three-valued intent-vs-reality `EdgeVerdict`s, both-sides AMQP contract reconciliation, and per-satellite staleness. Contract reconciliation is delegated to **contracts.py**. See [federation SPEC](features/federation/SPEC.md).
-- **contracts.py** -- First-class cross-service contract model (BDL-038 / F2). Owns the `Contract` / `ContractEndpoint` model, the protocol-prefixed language-neutral `contract_key` derivation (AMQP `amqp:<exchange>/<routing>:<message_type>`, GraphQL `graphql:<schema>`), the `ContractVerdict` enum (contract-level intent-vs-reality), and `reconcile_contracts` (groups contract-bearing edges into first-class `Contract`s; `federation.py` delegates here and projects back to the F1 flat shape via `Contract.to_report_dict`). See [federation SPEC](features/federation/SPEC.md).
+- **contracts.py** -- First-class cross-service contract model (BDL-038 / F2). Owns the `Contract` / `ContractEndpoint` model, the protocol-prefixed language-neutral `contract_key` derivation (AMQP `amqp:<exchange>/<routing>:<message_type>`, GraphQL `graphql:<schema>`), the `ContractVerdict` enum (contract-level intent-vs-reality), and `reconcile_contracts` (groups **AMQP and GraphQL** contract-bearing edges into first-class `Contract`s by key; attaches the producer `exposed` surface and consumer `references` onto the `Contract`; `federation.py` delegates here and projects back to the F1 flat shape via `Contract.to_report_dict`). See [federation SPEC](features/federation/SPEC.md).
+- **sdl.py** -- Minimal, dependency-free GraphQL SDL **surface extractor** (BDL-038 / F2). `extract_surface(sdl_text)` returns the producer's exposed names — top-level `Query`/`Mutation`/`Subscription` field names plus `type`/`input`/`enum`/`interface` type names — as a `set[str]`. Name-presence only (no schema validation); malformed/empty SDL yields `set()` (recorded honestly as `exposed: []`). `graphql-core` is the documented upgrade path if field-type/argument-level diffing is ever needed (F3+).
 
 ## Invariants
 
@@ -92,7 +97,7 @@ A graph ref may name a node in another repository as `@<repo>:<ref_id>` (e.g. `@
 ### Module `src/beadloom/graph/loader.py`
 
 - `parse_graph_file(path: Path) -> ParsedFile` -- Parse a single YAML graph file into nodes and edges.
-- `load_graph(graph_dir: Path, conn: sqlite3.Connection) -> GraphLoadResult` -- Load all `*.yml` files from a directory into SQLite (two-pass: nodes then edges). Returns `GraphLoadResult` with `nodes_loaded`, `edges_loaded`, `errors`, `warnings`. A contract-bearing edge's persisted `contract_key` is the full protocol-prefixed identity from `contracts.contract_key` (e.g. `amqp:<exchange>/<routing>:<message_type>`), so same-name / different-exchange contracts on one node pair stay distinct (BDL-038 / G4); plain edges keep `''` (identity `(src,dst,kind)`).
+- `load_graph(graph_dir: Path, conn: sqlite3.Connection, *, project_root: Path | None = None) -> GraphLoadResult` -- Load all `*.yml` files from a directory into SQLite (two-pass: nodes then edges). Returns `GraphLoadResult` with `nodes_loaded`, `edges_loaded`, `errors`, `warnings`. A contract-bearing edge's persisted `contract_key` is the full protocol-prefixed identity from `contracts.contract_key` (e.g. `amqp:<exchange>/<routing>:<message_type>`), so same-name / different-exchange contracts on one node pair stay distinct (BDL-038 / G4); plain edges keep `''` (identity `(src,dst,kind)`). `project_root` (default: `graph_dir`'s grandparent) anchors a GraphQL `produces` contract's relative `source_file`, whose parsed SDL `exposed` surface is folded into the edge's contract payload.
 - `update_node_in_yaml(graph_dir: Path, conn: sqlite3.Connection, ref_id: str, *, summary: str | None = None, source: str | None = None) -> bool` -- Update a node's fields in YAML source and SQLite. Returns `True` if node was found and updated.
 - `get_node_tags(conn: sqlite3.Connection, ref_id: str) -> set[str]` -- Extract tags from a node's `extra` JSON column. Returns an empty set when the node does not exist or has no `tags` key in its extra data.
 
@@ -158,14 +163,20 @@ Cross-repo identity, satellite export, and hub aggregation. See the [federation 
 - `serialize_federation(fed: FederatedGraph) -> str` -- Serialize a `FederatedGraph` to deterministic JSON: `{ schema_version, repos, nodes, edges, contracts, unresolved_refs }`.
 - `render_federation_report(fed: FederatedGraph) -> str` -- Human-readable text report (satellites + sha/age, edge-verdict counts, DRIFT list, AMQP contracts, unresolved refs).
 
-Constants: `EXPORT_SCHEMA_VERSION = 1`, `FEDERATION_SCHEMA_VERSION = 1` (independent).
+Constants: `EXPORT_SCHEMA_VERSION = 2`, `FEDERATION_SCHEMA_VERSION = 1` (independent). Export schema v2 (BDL-038 / F2) adds the `protocol: graphql` contract wire — a producer edge carries `contract.exposed` (parsed SDL surface), a consumer edge carries `contract.references`. The bump is purely additive: `aggregate_exports` / `federate` still read v1 exports (missing GraphQL fields default to empty).
 
 ### Module `src/beadloom/graph/contracts.py`
 
 First-class cross-service contract model (F2). `federation.py` delegates contract reconciliation here. See the [federation SPEC](features/federation/SPEC.md).
 
 - `contract_key(payload: dict) -> str` -- Derive a protocol-prefixed, language-neutral contract identity: AMQP → `amqp:<exchange>/<routing_key>:<message_type>` (missing exchange/routing fall back to `*`, so a v1 message-type-only payload yields `amqp:*/*:<message_type>` and still reconciles); GraphQL → `graphql:<schema>`; other → `<protocol>:<message_type-or-name>`.
-- `reconcile_contracts(edges: list[dict]) -> list[Contract]` -- Group contract-bearing edges by `contract_key` into first-class `Contract`s (AMQP only in BEAD-01; insertion order preserved for F1 byte-identical output).
+- `reconcile_contracts(edges: list[dict]) -> list[Contract]` -- Group AMQP **and** GraphQL contract-bearing edges by `contract_key` into first-class `Contract`s; accumulates the producer `exposed` surface and consumer `references` (sorted + deduped) onto each `Contract`. Insertion order preserved for F1 byte-identical output.
+
+### Module `src/beadloom/graph/sdl.py`
+
+Minimal, dependency-free GraphQL SDL surface extractor (F2). See the [federation SPEC](features/federation/SPEC.md).
+
+- `extract_surface(sdl_text: str) -> set[str]` -- Return the producer's exposed names: top-level `Query`/`Mutation`/`Subscription` field names plus `type`/`input`/`enum`/`interface` type names. Name-presence only (no schema validation); empty/whitespace-only/malformed SDL yields an empty set (callers sort it for determinism and record it honestly as `exposed: []`).
 
 ### Public Data Classes
 
@@ -200,7 +211,7 @@ First-class cross-service contract model (F2). `federation.py` delegates contrac
 | `EdgeVerdict` | federation | Enum: `OK` / `DRIFT` / `EXPECTED` / `CLEANUP_CANDIDATE` / `UNDECLARED` / `DEAD` (three-valued intent-vs-reality verdict) |
 | `FederatedGraph` | federation | Dataclass: `nodes`, `edges`, `repos`, `unresolved_refs`, `contracts` — the composed result of aggregating ≥2 satellite exports |
 | `ContractEndpoint` | contracts | Frozen dataclass: `repo`, `ref_id`, `direction`, `source_file` — one side of a contract (F2) |
-| `Contract` | contracts | Dataclass: `contract_key`, `protocol`, `name`, `endpoints`, `lifecycle`, `verdict`; properties `producers` / `consumers`; `to_report_dict()` projects to F1's flat `{message_type, directions, repos, confirmed}` shape |
+| `Contract` | contracts | Dataclass: `contract_key`, `protocol`, `name`, `endpoints`, `lifecycle`, `verdict`, `exposed` (producer SDL surface), `references` (consumer-referenced names); properties `producers` / `consumers`; `to_report_dict()` projects to F1's flat `{message_type, directions, repos, confirmed}` shape (name = schema for GraphQL) |
 | `ContractVerdict` | contracts | Enum: `CONFIRMED` / `DRIFT` / `ORPHANED_CONSUMER` / `UNDECLARED_PRODUCER` / `BREAKING` / `EXPECTED` / `EXTERNAL` / `DEAD` (contract-level intent-vs-reality; classify logic lands in BEAD-04) |
 
 ## Constraints

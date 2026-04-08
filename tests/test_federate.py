@@ -358,6 +358,99 @@ class TestBothSidesContract:
         assert confirmed[0]["message_type"] == "PlanCreated"
 
 
+class TestGraphQLContractFederation:
+    """BEAD-03 / G3: GraphQL contracts reconcile cross-language at the hub."""
+
+    def _v2_export(self, repo: str, **kw: object) -> dict[str, object]:
+        """A schema_version=2 export (the GraphQL wire). aggregate ignores version."""
+        export = _export(repo, **kw)  # type: ignore[arg-type]
+        export["schema_version"] = 2
+        return export
+
+    def test_graphql_producer_consumer_confirmed_by_schema_name(self) -> None:
+        produces = {
+            "protocol": "graphql",
+            "schema": "PublicAPI",
+            "direction": "produces",
+            "exposed": ["Plan", "plan", "plans"],
+        }
+        consumes = {
+            "protocol": "graphql",
+            "schema": "PublicAPI",
+            "direction": "consumes",
+            "references": ["plan", "plans"],
+        }
+        exports = [
+            self._v2_export(
+                "backend",
+                nodes=[_node("api", kind="schema")],
+                edges=[_edge("api", "api", kind="produces", contract=produces)],
+            ),
+            self._v2_export(
+                "ui",
+                nodes=[_node("client", kind="page")],
+                edges=[_edge("client", "client", kind="consumes", contract=consumes)],
+            ),
+        ]
+        fed = aggregate_exports(exports)
+        gql = [c for c in fed.contracts if c["message_type"] == "PublicAPI"]
+        assert len(gql) == 1
+        # Cross-language resolve by NAME: producer (backend) + consumer (ui).
+        assert gql[0]["confirmed"] is True
+        assert sorted(gql[0]["directions"]) == ["consumes", "produces"]
+
+    def test_v1_export_still_federates(self) -> None:
+        """Back-compat: a v1 (AMQP-only, no GraphQL fields) export reconciles."""
+        produces = {
+            "protocol": "amqp",
+            "direction": "produces",
+            "message_type": "PlanCreated",
+        }
+        consumes = {
+            "protocol": "amqp",
+            "direction": "consumes",
+            "message_type": "PlanCreated",
+        }
+        # _export defaults schema_version=1 — explicitly the old wire.
+        exports = [
+            _export(
+                "core",
+                nodes=[_node("orders"), _node("q", kind="queue")],
+                edges=[_edge("orders", "q", kind="produces", contract=produces)],
+            ),
+            _export(
+                "integration",
+                nodes=[_node("plans"), _node("q", kind="queue")],
+                edges=[_edge("plans", "q", kind="consumes", contract=consumes)],
+            ),
+        ]
+        assert all(e["schema_version"] == 1 for e in exports)
+        fed = aggregate_exports(exports)
+        confirmed = [c for c in fed.contracts if c["confirmed"]]
+        assert len(confirmed) == 1
+        assert confirmed[0]["message_type"] == "PlanCreated"
+
+    def test_mixed_v1_amqp_and_v2_graphql_coexist(self) -> None:
+        """A v1 AMQP satellite and a v2 GraphQL satellite federate together."""
+        amqp = {"protocol": "amqp", "direction": "produces", "message_type": "Evt"}
+        gql = {"protocol": "graphql", "schema": "Api", "direction": "produces"}
+        exports = [
+            _export(
+                "core",
+                nodes=[_node("svc"), _node("q", kind="queue")],
+                edges=[_edge("svc", "q", kind="produces", contract=amqp)],
+            ),
+            self._v2_export(
+                "backend",
+                nodes=[_node("api", kind="schema")],
+                edges=[_edge("api", "api", kind="produces", contract=gql)],
+            ),
+        ]
+        fed = aggregate_exports(exports)
+        names = {c["message_type"] for c in fed.contracts}
+        assert {"Evt", "Api"} <= names
+
+
 class TestStaleness:
     def test_age_reported_per_satellite(self) -> None:
         exports = [

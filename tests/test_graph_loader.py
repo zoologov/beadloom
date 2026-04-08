@@ -724,3 +724,137 @@ class TestEdgeLifecycle:
         assert any("nope" in m for m in result.warnings + result.errors)
         row = db.execute("SELECT lifecycle FROM edges WHERE src_ref_id = 'a'").fetchone()
         assert row[0] == "active"
+
+
+# --- GraphQL SDL surface folding (BDL-038 BEAD-03) ---
+
+
+class TestGraphQLSDLFolding:
+    """Producer 'exposed' surface folded satellite-side; consumer 'references' carried."""
+
+    def test_producer_exposed_folded_from_sdl(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        """A produces graphql contract folds the parsed SDL surface into extra."""
+        sdl = (
+            "type Query {\n"
+            "  plan(id: ID!): Plan\n"
+            "  plans: [Plan!]!\n"
+            "}\n"
+            "type Plan {\n  id: ID!\n}\n"
+        )
+        (graph_dir.parent.parent / "schema.graphql").write_text(sdl, encoding="utf-8")
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: backend\n    kind: service\n    summary: B\n"
+            "  - ref_id: api\n    kind: feature\n    summary: A\n"
+            "edges:\n"
+            "  - src: backend\n"
+            "    dst: api\n"
+            "    kind: produces\n"
+            "    contract:\n"
+            "      protocol: graphql\n"
+            "      schema: PublicAPI\n"
+            "      source_file: schema.graphql\n"
+        )
+        result = load_graph(graph_dir, db)
+        assert result.edges_loaded == 1
+        row = db.execute("SELECT extra FROM edges WHERE src_ref_id = 'backend'").fetchone()
+        contract = json.loads(row["extra"])["contract"]
+        # Sorted, deterministic exposed surface.
+        assert contract["exposed"] == ["Plan", "Query", "plan", "plans"]
+
+    def test_missing_sdl_file_yields_empty_exposed_and_warning(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: backend\n    kind: service\n    summary: B\n"
+            "  - ref_id: api\n    kind: feature\n    summary: A\n"
+            "edges:\n"
+            "  - src: backend\n"
+            "    dst: api\n"
+            "    kind: produces\n"
+            "    contract:\n"
+            "      protocol: graphql\n"
+            "      schema: PublicAPI\n"
+            "      source_file: nope.graphql\n"
+        )
+        result = load_graph(graph_dir, db)
+        row = db.execute("SELECT extra FROM edges WHERE src_ref_id = 'backend'").fetchone()
+        contract = json.loads(row["extra"])["contract"]
+        # Honest empty surface, never faked.
+        assert contract["exposed"] == []
+        assert any("nope.graphql" in w for w in result.warnings)
+
+    def test_consumer_references_carried_verbatim(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: client\n    kind: feature\n    summary: C\n"
+            "  - ref_id: schema\n    kind: feature\n    summary: S\n"
+            "edges:\n"
+            "  - src: client\n"
+            "    dst: schema\n"
+            "    kind: consumes\n"
+            "    contract:\n"
+            "      protocol: graphql\n"
+            "      schema: PublicAPI\n"
+            "      references:\n"
+            "        - plan\n"
+            "        - plans\n"
+        )
+        result = load_graph(graph_dir, db)
+        assert result.edges_loaded == 1
+        row = db.execute("SELECT extra FROM edges WHERE src_ref_id = 'client'").fetchone()
+        contract = json.loads(row["extra"])["contract"]
+        assert contract["references"] == ["plan", "plans"]
+        # A consumer is never given an exposed surface.
+        assert "exposed" not in contract
+
+    def test_graphql_key_persisted(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        (graph_dir.parent.parent / "s.graphql").write_text(
+            "type Query {\n  ping: String\n}\n", encoding="utf-8"
+        )
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: backend\n    kind: service\n    summary: B\n"
+            "  - ref_id: api\n    kind: feature\n    summary: A\n"
+            "edges:\n"
+            "  - src: backend\n"
+            "    dst: api\n"
+            "    kind: produces\n"
+            "    contract:\n"
+            "      protocol: graphql\n"
+            "      schema: PublicAPI\n"
+            "      source_file: s.graphql\n"
+        )
+        load_graph(graph_dir, db)
+        row = db.execute("SELECT contract_key FROM edges WHERE src_ref_id = 'backend'").fetchone()
+        assert row["contract_key"] == "graphql:PublicAPI"
+
+    def test_amqp_edge_gets_no_exposed_field(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        """No regression: an AMQP contract edge is never given an exposed surface."""
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: svc\n    kind: service\n    summary: S\n"
+            "  - ref_id: q\n    kind: feature\n    summary: Q\n"
+            "edges:\n"
+            "  - src: svc\n"
+            "    dst: q\n"
+            "    kind: produces\n"
+            "    contract:\n"
+            "      protocol: amqp\n"
+            "      message_type: m1\n"
+            "      direction: produces\n"
+        )
+        load_graph(graph_dir, db)
+        row = db.execute("SELECT extra FROM edges WHERE src_ref_id = 'svc'").fetchone()
+        contract = json.loads(row["extra"])["contract"]
+        assert "exposed" not in contract
+        assert contract["message_type"] == "m1"

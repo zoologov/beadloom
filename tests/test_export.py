@@ -97,7 +97,7 @@ class TestBuildExport:
             generator="beadloom 1.9.0",
         )
         conn.close()
-        assert export["schema_version"] == 1
+        assert export["schema_version"] == 2
         assert export["repo"] == "core-monolith"
         assert export["commit_sha"] == _FIXED_SHA
         assert export["exported_at"] == _FIXED_TIME
@@ -194,6 +194,48 @@ class TestBuildExport:
         edge = next(e for e in export["edges"] if e["kind"] == "produces")
         assert edge["contract"]["exchange"] == "plans"
         assert edge["contract"]["routing_key"] == "upload"
+
+
+    def test_graphql_exposed_surface_survives_export(self, tmp_path: Path) -> None:
+        """BEAD-03 (G2): a graphql producer's folded ``exposed`` rides the export.
+
+        The loader folds the parsed SDL surface into ``extra.contract.exposed``;
+        ``build_export`` passes the whole contract blob through, so the artifact
+        is self-contained (the hub needs no satellite files — RFC principle 4).
+        """
+        project = tmp_path / "gql"
+        (project / ".beadloom").mkdir(parents=True)
+        conn = open_db(project / ".beadloom" / "beadloom.db")
+        create_schema(conn)
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, lifecycle) "
+            "VALUES ('backend', 'service', 'B', 'active')"
+        )
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, lifecycle) "
+            "VALUES ('api', 'feature', 'A', 'active')"
+        )
+        contract = {
+            "contract": {
+                "protocol": "graphql",
+                "schema": "PublicAPI",
+                "direction": "produces",
+                "exposed": ["Plan", "plan", "plans"],
+            }
+        }
+        conn.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind, extra, lifecycle) "
+            "VALUES ('backend', 'api', 'produces', ?, 'active')",
+            (json.dumps(contract),),
+        )
+        conn.commit()
+        export = build_export(
+            conn, repo="r", commit_sha=_FIXED_SHA, exported_at=_FIXED_TIME, generator="g"
+        )
+        conn.close()
+        edge = next(e for e in export["edges"] if e["kind"] == "produces")
+        assert edge["contract"]["protocol"] == "graphql"
+        assert edge["contract"]["exposed"] == ["Plan", "plan", "plans"]
 
 
 class TestExportForeignEdges:
@@ -349,7 +391,7 @@ class TestExportCli:
         result = runner.invoke(main, ["export", "--project", str(project)])
         assert result.exit_code == 0, result.output
         parsed = json.loads(result.output)
-        assert parsed["schema_version"] == 1
+        assert parsed["schema_version"] == 2
         assert len(parsed["nodes"]) == 2
         assert len(parsed["edges"]) == 2
 

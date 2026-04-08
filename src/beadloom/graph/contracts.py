@@ -80,6 +80,12 @@ class Contract:
     endpoints: list[ContractEndpoint] = field(default_factory=list)
     lifecycle: str = "active"
     verdict: ContractVerdict | None = None
+    # GraphQL surface (BEAD-03, G2). ``exposed`` is the producer's declared SDL
+    # surface; ``references`` is the union of consumer-referenced names. Both are
+    # sorted + deduped. Empty for AMQP (and for GraphQL with no surface) — the
+    # presence-based ``BREAKING`` check that consumes them lands in BEAD-04.
+    exposed: list[str] = field(default_factory=list)
+    references: list[str] = field(default_factory=list)
 
     @property
     def producers(self) -> list[ContractEndpoint]:
@@ -135,10 +141,19 @@ def contract_key(payload: dict[str, object]) -> str:
     return f"{protocol}:{discriminator}"
 
 
+_RECONCILED_PROTOCOLS = frozenset({_AMQP, _GRAPHQL})
+
+
 def reconcile_contracts(edges: list[dict[str, object]]) -> list[Contract]:
     """Group contract-bearing edges by :func:`contract_key` into Contracts.
 
-    BEAD-01: AMQP only (matching F1); GraphQL grouping arrives in BEAD-03.
+    BEAD-03: AMQP **and** GraphQL (grouping by the protocol-prefixed key, so a
+    ``graphql:<schema>`` producer and consumer resolve across the language
+    boundary by name — G3). The producer's ``exposed`` SDL surface and the
+    consumers' ``references`` accumulate onto the :class:`Contract` (sorted +
+    deduped) for BEAD-04's presence-based ``BREAKING`` check. AMQP behavior is
+    byte-identical to BEAD-02 (empty exposed/references).
+
     Insertion order is preserved (a key first appears in the order its edges are
     traversed) — this keeps F1's contract ordering byte-identical, since F1
     reconciled over the unsorted edge union. Deterministic key-sorting is a
@@ -147,15 +162,18 @@ def reconcile_contracts(edges: list[dict[str, object]]) -> list[Contract]:
     by_key: dict[str, Contract] = {}
     for edge in edges:
         payload = _edge_contract(edge)
-        if payload is None or payload.get("protocol") != _AMQP:
+        if payload is None:
+            continue
+        protocol = str(payload.get("protocol", ""))
+        if protocol not in _RECONCILED_PROTOCOLS:
             continue
         key = contract_key(payload)
         contract = by_key.get(key)
         if contract is None:
             contract = Contract(
                 contract_key=key,
-                protocol=_AMQP,
-                name=str(payload.get("message_type", "")),
+                protocol=protocol,
+                name=_contract_name(protocol, payload),
             )
             by_key[key] = contract
         contract.endpoints.append(
@@ -165,7 +183,37 @@ def reconcile_contracts(edges: list[dict[str, object]]) -> list[Contract]:
                 direction=str(payload.get("direction", "")),
             )
         )
+        _accumulate_surface(contract, payload)
     return list(by_key.values())
+
+
+def _contract_name(protocol: str, payload: dict[str, object]) -> str:
+    """Human label for a contract: schema name for GraphQL, message_type for AMQP."""
+    if protocol == _GRAPHQL:
+        return str(payload.get("schema") or payload.get("name") or "")
+    return str(payload.get("message_type", ""))
+
+
+def _accumulate_surface(contract: Contract, payload: dict[str, object]) -> None:
+    """Fold a GraphQL edge's ``exposed`` / ``references`` into the Contract.
+
+    Both are kept sorted + deduped so identical input serializes byte-identically
+    (the F2 determinism invariant). AMQP payloads carry neither, so this is a
+    no-op for them.
+    """
+    exposed = _str_list(payload.get("exposed"))
+    if exposed:
+        contract.exposed = sorted(set(contract.exposed) | set(exposed))
+    references = _str_list(payload.get("references"))
+    if references:
+        contract.references = sorted(set(contract.references) | set(references))
+
+
+def _str_list(raw: object) -> list[str]:
+    """Coerce a payload value into a list of strings (empty for anything else)."""
+    if not isinstance(raw, list):
+        return []
+    return [str(item) for item in raw]
 
 
 def _edge_contract(edge: dict[str, object]) -> dict[str, object] | None:
