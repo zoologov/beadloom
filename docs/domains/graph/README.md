@@ -82,9 +82,9 @@ A cross-service contract may declare `protocol: graphql` (alongside `amqp`). The
 ## Invariants
 
 - `ref_id` must be unique across all YAML files
-- `kind` for nodes is restricted to: domain, feature, service, entity, adr
-- `kind` for edges is restricted to: part_of, depends_on, uses, implements, touches_entity, touches_code
-- Edges referencing non-existent nodes are skipped with a warning
+- **`kind` (nodes and edges) is a free-form string — Beadloom is paradigm-agnostic, not DDD-only (BDL-038 / U1).** The loader and the SQLite schema accept *any* `kind` verbatim (no enum, no CHECK), so an FSD project can use `page` / `widget` / `entity` / `repository` (and FSD-style edge kinds) and they survive `export → federate` with zero loss or coercion, exactly like DDD `domain` / `service`. The federation + contract path (`federation.py`, `contracts.py`) is fully kind-agnostic and never branches on a DDD kind.
+  - The *conventional* DDD preset kinds — nodes `domain` / `feature` / `service` / `entity` / `adr`; edges `part_of` / `depends_on` / `uses` / `implements` / `touches_entity` / `touches_code` (plus the contract kinds `produces` / `consumes`) — are the vocabulary the rule engine recognizes in `rules.yml` matchers (`rule_engine.VALID_NODE_KINDS` / `VALID_EDGE_KINDS`): a *rule* that matches on `kind` must name one of these (else a rules-load error). This is a constraint on the **rule preset's vocabulary**, *not* on the graph: a graph node/edge with a non-preset `kind` is stored, exported, and federated faithfully — it is never rejected, and `beadloom lint` does not flag it (only a rule referencing an unknown kind is an error).
+- Edges referencing non-existent local nodes are skipped with a warning
 - Duplicate ref_id values are skipped with an error
 - Rules file supports schema versions 1, 2, and 3
 - Schema v3 adds optional top-level `tags:` block for bulk tag assignments and tag-based matching in `NodeMatcher`

@@ -75,17 +75,26 @@ class TestCreateSchema:
         expected = {"nodes", "edges", "docs", "chunks", "code_symbols", "sync_state", "meta"}
         assert expected.issubset(tables)
 
-    def test_nodes_check_kind(self, conn: sqlite3.Connection) -> None:
+    def test_nodes_kind_is_free_form(self, conn: sqlite3.Connection) -> None:
+        """Node ``kind`` is paradigm-agnostic (BDL-038 U1): no DDD-only CHECK.
+
+        An arbitrary FSD kind (``page``) is accepted; conventional vocabularies
+        live in the lint preset, not the DB.
+        """
         conn.execute(
             "INSERT INTO nodes (ref_id, kind, summary) VALUES (?, ?, ?)",
             ("test-node", "domain", "Test"),
         )
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary) VALUES (?, ?, ?)",
+            ("fsd-node", "page", "Home"),
+        )
         conn.commit()
-        with pytest.raises(sqlite3.IntegrityError):
-            conn.execute(
-                "INSERT INTO nodes (ref_id, kind, summary) VALUES (?, ?, ?)",
-                ("bad-node", "invalid_kind", "Test"),
-            )
+        kinds = {
+            r["ref_id"]: r["kind"]
+            for r in conn.execute("SELECT ref_id, kind FROM nodes")
+        }
+        assert kinds == {"test-node": "domain", "fsd-node": "page"}
 
     def test_nodes_ref_id_unique(self, conn: sqlite3.Connection) -> None:
         conn.execute(
@@ -99,7 +108,12 @@ class TestCreateSchema:
                 ("dup", "feature", "Second"),
             )
 
-    def test_edges_check_kind(self, conn: sqlite3.Connection) -> None:
+    def test_edges_kind_is_free_form(self, conn: sqlite3.Connection) -> None:
+        """Edge ``kind`` is paradigm-agnostic (BDL-038 U1): no DDD-only CHECK.
+
+        An arbitrary FSD-style edge kind (``renders``) is accepted; the
+        (src,dst,kind,contract_key) identity + FK are still enforced.
+        """
         conn.execute(
             "INSERT INTO nodes (ref_id, kind, summary) VALUES (?, ?, ?)",
             ("a", "domain", "A"),
@@ -111,14 +125,11 @@ class TestCreateSchema:
         conn.commit()
         conn.execute(
             "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES (?, ?, ?)",
-            ("b", "a", "part_of"),
+            ("b", "a", "renders"),
         )
         conn.commit()
-        with pytest.raises(sqlite3.IntegrityError):
-            conn.execute(
-                "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES (?, ?, ?)",
-                ("b", "a", "bad_kind"),
-            )
+        kinds = [r["kind"] for r in conn.execute("SELECT kind FROM edges")]
+        assert kinds == ["renders"]
 
     def test_edges_cascade_on_node_delete(self, conn: sqlite3.Connection) -> None:
         conn.execute(
@@ -381,6 +392,99 @@ class TestTwoPhaseSyncMigration:
         assert "doc_hash_at_last_edit" in columns
         c.close()
 
+
+class TestKindCheckDropMigration:
+    """BDL-038 U1: legacy DDD-only ``kind`` CHECK is dropped on existing DBs."""
+
+    def _legacy_db(self, tmp_path: Path) -> sqlite3.Connection:
+        """Build a DB with the OLD restrictive ``kind`` CHECK + one DDD row each."""
+        c = open_db(tmp_path / "legacy.db")
+        c.executescript(
+            "CREATE TABLE nodes ("
+            "  ref_id TEXT PRIMARY KEY,"
+            "  kind TEXT NOT NULL CHECK(kind IN "
+            "    ('domain','feature','service','entity','adr')),"
+            "  summary TEXT NOT NULL DEFAULT '',"
+            "  source TEXT,"
+            "  extra TEXT DEFAULT '{}',"
+            "  lifecycle TEXT NOT NULL DEFAULT 'active'"
+            ");"
+            "CREATE TABLE edges ("
+            "  src_ref_id TEXT NOT NULL REFERENCES nodes(ref_id) ON DELETE CASCADE,"
+            "  dst_ref_id TEXT NOT NULL REFERENCES nodes(ref_id) ON DELETE CASCADE,"
+            "  kind TEXT NOT NULL CHECK(kind IN "
+            "    ('part_of','depends_on','uses','implements',"
+            "     'touches_entity','touches_code','produces','consumes')),"
+            "  extra TEXT DEFAULT '{}',"
+            "  lifecycle TEXT NOT NULL DEFAULT 'active',"
+            "  contract_key TEXT NOT NULL DEFAULT '',"
+            "  PRIMARY KEY (src_ref_id, dst_ref_id, kind, contract_key)"
+            ");"
+        )
+        c.execute(
+            "INSERT INTO nodes (ref_id, kind, summary) VALUES ('a', 'domain', 'A')"
+        )
+        c.execute(
+            "INSERT INTO nodes (ref_id, kind, summary) VALUES ('b', 'service', 'B')"
+        )
+        c.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES ('b','a','part_of')"
+        )
+        c.commit()
+        return c
+
+    def test_legacy_check_rejects_fsd_kind_before_migration(
+        self, tmp_path: Path
+    ) -> None:
+        c = self._legacy_db(tmp_path)
+        with pytest.raises(sqlite3.IntegrityError):
+            c.execute(
+                "INSERT INTO nodes (ref_id, kind, summary) VALUES ('p','page','P')"
+            )
+        c.close()
+
+    def test_migration_drops_check_and_preserves_rows(self, tmp_path: Path) -> None:
+        from beadloom.infrastructure.db import ensure_schema_migrations
+
+        c = self._legacy_db(tmp_path)
+        ensure_schema_migrations(c)
+        # Existing DDD rows survive verbatim.
+        nodes = {
+            r["ref_id"]: r["kind"]
+            for r in c.execute("SELECT ref_id, kind FROM nodes")
+        }
+        assert nodes == {"a": "domain", "b": "service"}
+        edges = [r["kind"] for r in c.execute("SELECT kind FROM edges")]
+        assert edges == ["part_of"]
+        # And FSD kinds are now accepted.
+        c.execute("INSERT INTO nodes (ref_id, kind, summary) VALUES ('p','page','P')")
+        c.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES ('b','a','renders')"
+        )
+        c.commit()
+        c.close()
+
+    def test_migration_idempotent(self, tmp_path: Path) -> None:
+        from beadloom.infrastructure.db import ensure_schema_migrations
+
+        c = self._legacy_db(tmp_path)
+        ensure_schema_migrations(c)
+        ensure_schema_migrations(c)  # second run is a no-op
+        c.execute("INSERT INTO nodes (ref_id, kind, summary) VALUES ('p','page','P')")
+        c.commit()
+        c.close()
+
+    def test_fresh_schema_has_no_kind_check(self, tmp_path: Path) -> None:
+        c = open_db(tmp_path / "fresh.db")
+        create_schema(c)
+        for table in ("nodes", "edges"):
+            row = c.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+                (table,),
+            ).fetchone()
+            assert "CHECK(kindIN" not in "".join(str(row[0]).split())
+        c.close()
+
     def test_default_value_is_empty_string(self, tmp_path: Path) -> None:
         """New column should default to empty string for backward compatibility."""
         db_path = tmp_path / "test.db"
@@ -525,14 +629,17 @@ class TestContractEdgeKinds:
         assert row[0] == "consumes"
         c.close()
 
-    def test_bad_kind_still_rejected(self, tmp_path: Path) -> None:
+    def test_arbitrary_kind_accepted(self, tmp_path: Path) -> None:
+        """Edge ``kind`` is free-form (BDL-038 U1): a non-preset kind is kept."""
         c = open_db(tmp_path / "t.db")
         create_schema(c)
         self._two_nodes(c)
-        with pytest.raises(sqlite3.IntegrityError):
-            c.execute(
-                "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES ('a', 'b', 'nope')"
-            )
+        c.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES ('a', 'b', 'renders')"
+        )
+        c.commit()
+        row = c.execute("SELECT kind FROM edges").fetchone()
+        assert row[0] == "renders"
         c.close()
 
     def test_old_db_migrates_to_allow_produces(self, tmp_path: Path) -> None:

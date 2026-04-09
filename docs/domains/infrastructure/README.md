@@ -18,7 +18,7 @@ Domain-agnostic SQLite database layer, health metrics, and git activity analysis
 ### Database Schema
 
 Stored in `.beadloom/beadloom.db` (WAL mode):
-- `nodes`, `edges` — architecture graph. Both carry a `lifecycle` column (`active`/`planned`/`deprecated`/`dead`, default `active`; BDL-037). `edges` also carries a `contract_key` column (default `''`) that is part of its primary key, so multiple AMQP contracts (`produces`/`consumes`) on the same `(src,dst,kind)` pair do not collapse (BDL-037 #102)
+- `nodes`, `edges` — architecture graph. Their `kind` columns are **free-form `TEXT` (no CHECK)** so any paradigm's vocabulary (DDD `domain`/`service`, FSD `page`/`widget`/`repository`, …) is stored and federated faithfully — Beadloom is paradigm-agnostic, not DDD-only (BDL-038 / U1). Both carry a `lifecycle` column (`active`/`planned`/`deprecated`/`dead`, default `active`; BDL-037). `edges` also carries a `contract_key` column (default `''`) that is part of its primary key, so multiple AMQP contracts (`produces`/`consumes`) on the same `(src,dst,kind)` pair do not collapse (BDL-037 #102)
 - `foreign_edges` — cross-repo edges whose at least one endpoint is a `@repo:ref_id` reference to a node in another repo; kept separate because a foreign endpoint cannot satisfy the `edges` FK to local nodes (BDL-037 #100)
 - `docs`, `chunks` — document index
 - `code_symbols` — code symbol index (includes `annotations` JSON and `file_hash`)
@@ -41,7 +41,7 @@ Stored in `.beadloom/beadloom.db` (WAL mode):
 Module `src/beadloom/infrastructure/db.py`:
 - `SCHEMA_VERSION` — schema version constant (currently `"3"`)
 - `open_db(db_path: Path)` -> `sqlite3.Connection` — opens DB with WAL mode, foreign keys, and `Row` factory
-- `ensure_schema_migrations(conn)` — applies incremental schema migrations (e.g. `symbols_hash` column, `doc_hash_at_last_edit` column for two-phase sync, the `lifecycle` column on `nodes`/`edges`, the `edges.contract_key` rebuild, and the `foreign_edges` table for BDL-037 federation)
+- `ensure_schema_migrations(conn)` — applies incremental schema migrations (e.g. `symbols_hash` column, `doc_hash_at_last_edit` column for two-phase sync, the `lifecycle` column on `nodes`/`edges`, the `edges.contract_key` rebuild, the `foreign_edges` table for BDL-037 federation, and the BDL-038 rebuild that drops the legacy DDD-only `kind` CHECK on `nodes`/`edges` so `kind` is free-form — all additive + idempotent, guarded on the stored DDL/columns)
 - `create_schema(conn)` — creates all tables and indexes, calls `ensure_schema_migrations()`
 - `get_meta(conn, key, default=None)` -> `str | None`
 - `set_meta(conn, key, value)` — upserts a key in the `meta` table

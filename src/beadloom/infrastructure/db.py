@@ -15,9 +15,13 @@ SCHEMA_VERSION = "3"
 
 _SCHEMA_SQL = """\
 -- Graph nodes
+-- ``kind`` is a free-form string (paradigm-agnostic, BDL-038 U1): the DDD preset
+-- uses domain/feature/service/entity/adr, but an FSD project may use
+-- page/widget/entity/repository etc. The DB never restricts the vocabulary —
+-- conventional kinds live in the local lint preset (graph.rule_engine), not here.
 CREATE TABLE IF NOT EXISTS nodes (
     ref_id  TEXT PRIMARY KEY,
-    kind    TEXT NOT NULL CHECK(kind IN ('domain','feature','service','entity','adr')),
+    kind    TEXT NOT NULL,
     summary TEXT NOT NULL DEFAULT '',
     source  TEXT,
     extra   TEXT DEFAULT '{}',
@@ -26,6 +30,7 @@ CREATE TABLE IF NOT EXISTS nodes (
 );
 
 -- Graph edges
+-- ``kind`` is a free-form string (paradigm-agnostic, BDL-038 U1) — see ``nodes``.
 -- ``contract_key`` discriminates multiple contracts on the same (src,dst,kind)
 -- node pair (BDL-037 #102): defaults to '' for plain edges (so their identity
 -- stays effectively (src,dst,kind)), and carries the contract message_type for
@@ -33,10 +38,7 @@ CREATE TABLE IF NOT EXISTS nodes (
 CREATE TABLE IF NOT EXISTS edges (
     src_ref_id TEXT NOT NULL REFERENCES nodes(ref_id) ON DELETE CASCADE,
     dst_ref_id TEXT NOT NULL REFERENCES nodes(ref_id) ON DELETE CASCADE,
-    kind       TEXT NOT NULL CHECK(kind IN (
-        'part_of','depends_on','uses','implements',
-        'touches_entity','touches_code','produces','consumes'
-    )),
+    kind       TEXT NOT NULL,
     extra      TEXT DEFAULT '{}',
     lifecycle  TEXT NOT NULL DEFAULT 'active'
         CHECK(lifecycle IN ('active','planned','deprecated','dead')),
@@ -274,6 +276,7 @@ def ensure_schema_migrations(conn: sqlite3.Connection) -> None:
 
     _migrate_edges_contract_kinds(conn)
     _ensure_foreign_edges_table(conn)
+    _migrate_drop_kind_checks(conn)
 
 
 def _migrate_edges_contract_kinds(conn: sqlite3.Connection) -> None:
@@ -313,6 +316,101 @@ def _migrate_edges_contract_kinds(conn: sqlite3.Connection) -> None:
         PRAGMA foreign_keys=ON;
         """
     )
+    conn.commit()
+
+
+def _migrate_drop_kind_checks(conn: sqlite3.Connection) -> None:
+    """Drop the DDD-only ``kind`` CHECK on ``nodes`` / ``edges`` (BDL-038 U1).
+
+    The original schema restricted ``kind`` to DDD-preset values, which silently
+    rejected paradigm-agnostic graphs (e.g. FSD ``page`` / ``repository`` nodes)
+    at load time. ``kind`` is now free-form; conventional vocabularies live in
+    the lint preset, not the DB. SQLite cannot drop a CHECK in place, so a table
+    that still carries one is rebuilt. The migration is additive + idempotent:
+    it only fires when the stored DDL still mentions ``CHECK(kind IN`` (probed
+    via ``sqlite_master.sql``), copies every row verbatim, and is a no-op once
+    applied (so it does not need a ``SCHEMA_VERSION`` gate).
+    """
+    if _table_exists(conn, "nodes") and _kind_has_check(conn, "nodes"):
+        _rebuild_table_without_kind_check(conn, "nodes")
+    if _table_exists(conn, "edges") and _kind_has_check(conn, "edges"):
+        _rebuild_table_without_kind_check(conn, "edges")
+
+
+def _kind_has_check(conn: sqlite3.Connection, table: str) -> bool:
+    """True when *table*'s stored DDL still restricts ``kind`` with a CHECK."""
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)
+    ).fetchone()
+    if row is None or row[0] is None:
+        return False
+    return "CHECK(kindIN" in "".join(str(row[0]).split())
+
+
+_REBUILD_DDL: dict[str, str] = {
+    "nodes": (
+        "CREATE TABLE nodes ("
+        "  ref_id  TEXT PRIMARY KEY,"
+        "  kind    TEXT NOT NULL,"
+        "  summary TEXT NOT NULL DEFAULT '',"
+        "  source  TEXT,"
+        "  extra   TEXT DEFAULT '{}',"
+        "  lifecycle TEXT NOT NULL DEFAULT 'active'"
+        "    CHECK(lifecycle IN ('active','planned','deprecated','dead'))"
+        ")"
+    ),
+    "edges": (
+        "CREATE TABLE edges ("
+        "  src_ref_id TEXT NOT NULL REFERENCES nodes(ref_id) ON DELETE CASCADE,"
+        "  dst_ref_id TEXT NOT NULL REFERENCES nodes(ref_id) ON DELETE CASCADE,"
+        "  kind       TEXT NOT NULL,"
+        "  extra      TEXT DEFAULT '{}',"
+        "  lifecycle  TEXT NOT NULL DEFAULT 'active'"
+        "    CHECK(lifecycle IN ('active','planned','deprecated','dead')),"
+        "  contract_key TEXT NOT NULL DEFAULT '',"
+        "  PRIMARY KEY (src_ref_id, dst_ref_id, kind, contract_key)"
+        ")"
+    ),
+}
+
+_REBUILD_COLUMNS: dict[str, str] = {
+    "nodes": "ref_id, kind, summary, source, extra, lifecycle",
+    "edges": "src_ref_id, dst_ref_id, kind, extra, lifecycle, contract_key",
+}
+
+# Indexes to recreate after rebuilding each table (the rebuild drops them).
+_REBUILD_INDEXES: dict[str, str] = {
+    "nodes": "CREATE INDEX IF NOT EXISTS idx_nodes_kind ON nodes(kind);",
+    "edges": (
+        "CREATE INDEX IF NOT EXISTS idx_edges_src ON edges(src_ref_id);"
+        "CREATE INDEX IF NOT EXISTS idx_edges_dst ON edges(dst_ref_id);"
+    ),
+}
+
+
+def _rebuild_table_without_kind_check(conn: sqlite3.Connection, table: str) -> None:
+    """Rebuild *table* with a free-form ``kind`` column, copying every row.
+
+    Only the rebuilt table's own indexes are recreated, so the migration works
+    on partial schemas (e.g. a DB that has ``nodes`` but no ``edges`` yet).
+    """
+    cols = _REBUILD_COLUMNS[table]
+    # Every interpolated value (table, cols, DDL, indexes) is a constant from a
+    # module-level dict literal keyed by the hardcoded callers ('nodes'/'edges')
+    # — no user input reaches this string, so the S608 SQL-injection finding is
+    # a false positive here.
+    old = f"{table}_kindmig_old"
+    copy = f"INSERT INTO {table} ({cols}) SELECT {cols} FROM {old};"  # noqa: S608
+    script = (
+        "PRAGMA foreign_keys=OFF;"
+        + f"ALTER TABLE {table} RENAME TO {old};"
+        + f"{_REBUILD_DDL[table]};"
+        + copy
+        + f"DROP TABLE {old};"
+        + f"{_REBUILD_INDEXES[table]}"
+        + "PRAGMA foreign_keys=ON;"
+    )
+    conn.executescript(script)
     conn.commit()
 
 
