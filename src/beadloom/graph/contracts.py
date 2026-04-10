@@ -25,6 +25,19 @@ _AMQP = "amqp"
 _GRAPHQL = "graphql"
 _WILDCARD = "*"
 
+# Lifecycle significance for folding several contract edges into one declared
+# intent: a louder (more terminal) declaration on any endpoint wins. ``dead`` >
+# ``deprecated`` > ``planned`` > ``active``. ``external`` ranks above all so a
+# single external endpoint marks the whole contract external (BEAD-05 wires its
+# trigger; ``classify`` already honours it defensively). Unknown values rank 0.
+_LIFECYCLE_SIGNIFICANCE: dict[str, int] = {
+    "active": 1,
+    "planned": 2,
+    "deprecated": 3,
+    "dead": 4,
+    "external": 5,
+}
+
 
 class ContractVerdict(enum.Enum):
     """Contract-level intent-vs-reality verdict (skeleton; classify in BEAD-04).
@@ -95,22 +108,80 @@ class Contract:
     def consumers(self) -> list[ContractEndpoint]:
         return [e for e in self.endpoints if e.direction == "consumes"]
 
-    def to_report_dict(self) -> dict[str, object]:
-        """Project to F1's flat contract shape (byte-identical back-compat).
+    @property
+    def missing_references(self) -> list[str]:
+        """Consumer-referenced surface absent from the producer's ``exposed`` (G5).
 
-        F1 surfaced AMQP contracts as ``{message_type, directions (sorted),
-        repos (sorted), confirmed}``. Preserved verbatim so ``_mark_undeclared``
-        and the report/JSON rendering are unchanged in BEAD-01.
+        The presence-based ``BREAKING`` signal: a non-empty result means a
+        consumer relies on a name the producer's current SDL no longer offers.
+        Sorted + deduped (determinism). Always empty for AMQP (no surface).
+        """
+        if self.protocol != _GRAPHQL or not self.references:
+            return []
+        return sorted(set(self.references) - set(self.exposed))
+
+    def to_report_dict(self) -> dict[str, object]:
+        """Project to a verdict-enriched contract dict (BEAD-04, G5).
+
+        Keeps F1's flat keys verbatim (``message_type``/``directions``/``repos``/
+        ``confirmed``) so nothing downstream (``_mark_undeclared``, the report,
+        existing tests) breaks, and adds the F2 enrichment: ``verdict``,
+        ``protocol``, ``contract_key``, and — for GraphQL — ``exposed`` /
+        ``references`` / the ``missing`` names that triggered ``BREAKING``.
         """
         directions = sorted({e.direction for e in self.endpoints})
         repos = sorted({e.repo for e in self.endpoints})
         confirmed = "produces" in directions and "consumes" in directions
-        return {
+        verdict = self.verdict if self.verdict is not None else classify(self)
+        report: dict[str, object] = {
             "message_type": self.name,
             "directions": directions,
             "repos": repos,
             "confirmed": confirmed,
+            "verdict": verdict.value,
+            "protocol": self.protocol,
+            "contract_key": self.contract_key,
+            "lifecycle": self.lifecycle,
         }
+        if self.protocol == _GRAPHQL:
+            report["exposed"] = list(self.exposed)
+            report["references"] = list(self.references)
+            report["missing"] = self.missing_references
+        return report
+
+
+def classify(contract: Contract) -> ContractVerdict:
+    """Assign a :class:`ContractVerdict` to a reconciled contract (RFC §5, G5).
+
+    The truth table, in precedence order (lifecycle intent dominates the
+    presence/shape check — a ``dead`` contract is ``DEAD`` even if its shape is
+    broken):
+
+    1. lifecycle ``external`` -> ``EXTERNAL`` (defensive; trigger wired in BEAD-05).
+    2. lifecycle ``dead``     -> ``DEAD``.
+    3. lifecycle ``planned``  -> ``EXPECTED`` (intentional, not built yet).
+    4. lifecycle ``deprecated`` -> ``EXPECTED`` (intentional retirement).
+    5. GraphQL with producers ∧ consumers and ``references ⊄ exposed`` -> ``BREAKING``.
+    6. producers ∧ consumers (compatible) -> ``CONFIRMED``.
+    7. consumers, no producers -> ``ORPHANED_CONSUMER``.
+    8. producers, no consumers -> ``UNDECLARED_PRODUCER``.
+    9. otherwise (no endpoints) -> ``UNDECLARED_PRODUCER`` (degenerate, never live).
+    """
+    if contract.lifecycle == "external":
+        return ContractVerdict.EXTERNAL
+    if contract.lifecycle == "dead":
+        return ContractVerdict.DEAD
+    if contract.lifecycle in ("planned", "deprecated"):
+        return ContractVerdict.EXPECTED
+    has_producers = bool(contract.producers)
+    has_consumers = bool(contract.consumers)
+    if has_producers and has_consumers:
+        if contract.protocol == _GRAPHQL and contract.missing_references:
+            return ContractVerdict.BREAKING
+        return ContractVerdict.CONFIRMED
+    if has_consumers:
+        return ContractVerdict.ORPHANED_CONSUMER
+    return ContractVerdict.UNDECLARED_PRODUCER
 
 
 def contract_key(payload: dict[str, object]) -> str:
@@ -184,7 +255,28 @@ def reconcile_contracts(edges: list[dict[str, object]]) -> list[Contract]:
             )
         )
         _accumulate_surface(contract, payload)
-    return list(by_key.values())
+        contract.lifecycle = _more_significant(
+            contract.lifecycle, str(edge.get("lifecycle", "active"))
+        )
+    contracts = list(by_key.values())
+    for contract in contracts:
+        contract.verdict = classify(contract)
+    return contracts
+
+
+def _more_significant(current: str, candidate: str) -> str:
+    """Return the louder (more terminal) of two lifecycle declarations.
+
+    Folds several contract-edge lifecycles into one declared intent for the
+    Contract: ``external`` > ``dead`` > ``deprecated`` > ``planned`` > ``active``
+    (see :data:`_LIFECYCLE_SIGNIFICANCE`). Unknown values rank below ``active``
+    so a typo never silently masks a real declaration.
+    """
+    if _LIFECYCLE_SIGNIFICANCE.get(candidate, 0) > _LIFECYCLE_SIGNIFICANCE.get(
+        current, 0
+    ):
+        return candidate
+    return current
 
 
 def _contract_name(protocol: str, payload: dict[str, object]) -> str:

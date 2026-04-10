@@ -451,6 +451,115 @@ class TestGraphQLContractFederation:
         assert {"Evt", "Api"} <= names
 
 
+class TestContractVerdicts:
+    """BEAD-04 / G5: contract-level intent-vs-reality verdicts at the hub."""
+
+    def test_confirmed_carries_verdict(self) -> None:
+        produces = {"protocol": "amqp", "direction": "produces", "message_type": "M"}
+        consumes = {"protocol": "amqp", "direction": "consumes", "message_type": "M"}
+        exports = [
+            _export("a", nodes=[_node("svc"), _node("q", kind="queue")],
+                    edges=[_edge("svc", "q", kind="produces", contract=produces)]),
+            _export("b", nodes=[_node("w"), _node("q", kind="queue")],
+                    edges=[_edge("w", "q", kind="consumes", contract=consumes)]),
+        ]
+        fed = aggregate_exports(exports)
+        m = next(c for c in fed.contracts if c["message_type"] == "M")
+        assert m["verdict"] == "confirmed"
+
+    def test_producer_only_is_undeclared_producer(self) -> None:
+        produces = {"protocol": "amqp", "direction": "produces", "message_type": "Lonely"}
+        exports = [
+            _export("a", nodes=[_node("svc"), _node("q", kind="queue")],
+                    edges=[_edge("svc", "q", kind="produces", contract=produces)]),
+            _export("b", nodes=[_node("w")]),
+        ]
+        fed = aggregate_exports(exports)
+        m = next(c for c in fed.contracts if c["message_type"] == "Lonely")
+        assert m["verdict"] == "undeclared_producer"
+
+    def test_consumer_only_is_orphaned_consumer(self) -> None:
+        consumes = {"protocol": "amqp", "direction": "consumes", "message_type": "Ghost"}
+        exports = [
+            _export("a", nodes=[_node("w"), _node("q", kind="queue")],
+                    edges=[_edge("w", "q", kind="consumes", contract=consumes)]),
+            _export("b", nodes=[_node("svc")]),
+        ]
+        fed = aggregate_exports(exports)
+        m = next(c for c in fed.contracts if c["message_type"] == "Ghost")
+        assert m["verdict"] == "orphaned_consumer"
+
+    def test_graphql_breaking_references_not_subset(self) -> None:
+        produces = {
+            "protocol": "graphql", "schema": "PublicAPI", "direction": "produces",
+            "exposed": ["plan"],
+        }
+        consumes = {
+            "protocol": "graphql", "schema": "PublicAPI", "direction": "consumes",
+            "references": ["plan", "removedField"],
+        }
+        exports = [
+            _export("backend", nodes=[_node("api", kind="schema")],
+                    edges=[_edge("api", "api", kind="produces", contract=produces)]),
+            _export("ui", nodes=[_node("client", kind="page")],
+                    edges=[_edge("client", "client", kind="consumes", contract=consumes)]),
+        ]
+        fed = aggregate_exports(exports)
+        m = next(c for c in fed.contracts if c["message_type"] == "PublicAPI")
+        assert m["verdict"] == "breaking"
+        assert m["missing"] == ["removedField"]
+
+    def test_planned_lifecycle_is_expected(self) -> None:
+        produces = {"protocol": "amqp", "direction": "produces", "message_type": "Future"}
+        exports = [
+            _export("a", nodes=[_node("svc"), _node("q", kind="queue")],
+                    edges=[_edge("svc", "q", kind="produces", lifecycle="planned",
+                                 contract=produces)]),
+            _export("b", nodes=[_node("w")]),
+        ]
+        fed = aggregate_exports(exports)
+        m = next(c for c in fed.contracts if c["message_type"] == "Future")
+        assert m["verdict"] == "expected"
+
+    def test_contracts_sorted_by_contract_key(self) -> None:
+        z = {"protocol": "amqp", "direction": "produces", "message_type": "zeta"}
+        a = {"protocol": "amqp", "direction": "produces", "message_type": "alpha"}
+        exports = [
+            _export("a", nodes=[_node("svc"), _node("q", kind="queue")],
+                    edges=[_edge("svc", "q", kind="produces", contract=z),
+                           _edge("svc", "q", kind="produces", contract=a)]),
+            _export("b", nodes=[_node("w")]),
+        ]
+        fed = aggregate_exports(exports)
+        keys = [c["contract_key"] for c in fed.contracts]
+        assert keys == sorted(keys)
+
+    def test_report_lists_breaking_and_actionable_verdicts(self) -> None:
+        produces = {
+            "protocol": "graphql", "schema": "PublicAPI", "direction": "produces",
+            "exposed": ["plan"],
+        }
+        consumes = {
+            "protocol": "graphql", "schema": "PublicAPI", "direction": "consumes",
+            "references": ["plan", "removedField"],
+        }
+        exports = [
+            _export("backend", nodes=[_node("api", kind="schema")],
+                    edges=[_edge("api", "api", kind="produces", contract=produces)]),
+            _export("ui", nodes=[_node("client", kind="page")],
+                    edges=[_edge("client", "client", kind="consumes", contract=consumes)]),
+        ]
+        fed = aggregate_exports(exports)
+        report = render_federation_report(fed)
+        assert "BREAKING" in report
+        assert "removedField" in report
+
+    def test_federation_schema_version_is_2(self) -> None:
+        fed = aggregate_exports([_export("a"), _export("b")], now=_T0)
+        parsed = json.loads(serialize_federation(fed))
+        assert parsed["schema_version"] == 2
+
+
 class TestStaleness:
     def test_age_reported_per_satellite(self) -> None:
         exports = [
@@ -492,7 +601,7 @@ class TestSerializeAndReport:
         b = serialize_federation(fed)
         assert a == b
         parsed = json.loads(a)
-        assert parsed["schema_version"] == 1
+        assert parsed["schema_version"] == 2
         assert "nodes" in parsed and "edges" in parsed and "repos" in parsed
 
     def test_report_mentions_drift_and_repos(self) -> None:

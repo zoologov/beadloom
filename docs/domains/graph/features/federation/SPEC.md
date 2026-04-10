@@ -152,7 +152,19 @@ Aggregation (`aggregate_exports`):
   | `dead`      | (either)       | `DEAD`              | Declared dead; not treated as live.                |
   | —           | —              | `UNDECLARED`        | A present AMQP producer whose `message_type` has no matching consumer across the union (emitting into the void). |
 
-- **Both-sides AMQP contract reconciliation** (`_reconcile_contracts`). AMQP contract edges (`contract.protocol == "amqp"`) are grouped by `message_type` across the union. A contract is **confirmed** when both a `produces` and a `consumes` direction exist for that message type; otherwise it is **one-sided**. Surfaced in `FederatedGraph.contracts`.
+- **First-class contract reconciliation + verdicts** (`_reconcile_contracts` → `contracts.reconcile_contracts` + `classify`; BDL-038 / F2). AMQP **and** GraphQL contract edges are grouped by protocol-prefixed `contract_key` across the union into first-class `Contract`s, each assigned a **contract-level** `ContractVerdict` (intent-vs-reality — the F2 moat). The most-significant declared edge `lifecycle` (`external` > `dead` > `deprecated` > `planned` > `active`) folds onto the contract; lifecycle intent dominates the shape check. Surfaced in `FederatedGraph.contracts` (sorted by `contract_key` for deterministic diffs; F1's flat `{message_type, directions, repos, confirmed}` keys kept as a subset).
+
+  | Condition | `ContractVerdict` | Meaning |
+  |-----------|-------------------|---------|
+  | lifecycle `external` | `EXTERNAL` | Target declared present-but-not-ours (defensive; trigger wired in BEAD-05). |
+  | lifecycle `dead` | `DEAD` | Declared dead; not live. |
+  | lifecycle `planned` / `deprecated` | `EXPECTED` | Intentional — not built yet / retiring. Not drift. |
+  | producers ∧ consumers; GraphQL `references ⊄ exposed` | `BREAKING` | A consumer relies on a name the producer's current SDL no longer exposes — caught before it ships (presence-based, not version-diff). |
+  | producers ∧ consumers (compatible) | `CONFIRMED` | Both sides present and compatible (F1's "confirmed both-sides"). |
+  | consumers, no producers | `ORPHANED_CONSUMER` | Consumes a contract nobody produces (F1 "one-sided", consumer side). |
+  | producers, no consumers | `UNDECLARED_PRODUCER` | Produces a contract nobody consumes (F1 "one-sided", producer side). |
+
+  The contract-level `UNDECLARED_PRODUCER` is **complementary** to F1's edge-level `EdgeVerdict.UNDECLARED` (an additional projection over the same fact, not a replacement); both stay intact and never contradict. For GraphQL, a contract dict also carries `exposed` / `references` / `missing` (the names that triggered `BREAKING`).
 - **Per-satellite staleness** (`_repo_provenance`). For each satellite: `repo`, `commit_sha`, `exported_at`, `schema_version`, and `age_seconds` = `now − exported_at` in whole seconds. An unparseable/missing timestamp yields `None` (honest unknown); a missing `commit_sha` is reported, never faked. `now` is injectable for deterministic tests; the CLI passes wall-clock UTC.
 
 #### `FederatedGraph`
@@ -163,16 +175,16 @@ Aggregation (`aggregate_exports`):
 | `edges`           | `list[dict]`               | Edge union with resolved endpoints + `verdict`.          |
 | `repos`           | `list[dict]`               | Per-satellite provenance + staleness.                    |
 | `unresolved_refs` | `list[str]`                | Foreign targets that did not resolve (sorted, deduped).  |
-| `contracts`       | `list[dict]`               | AMQP reconciliation (confirmed both-sides vs one-sided). |
+| `contracts`       | `list[dict]`               | First-class AMQP + GraphQL contracts with a contract-level `ContractVerdict` (sorted by `contract_key`). |
 
 #### `EdgeVerdict` (enum)
 
-`OK` · `DRIFT` · `EXPECTED` · `CLEANUP_CANDIDATE` · `UNDECLARED` · `DEAD` (serialized as the lowercase value).
+`OK` · `DRIFT` · `EXPECTED` · `CLEANUP_CANDIDATE` · `UNDECLARED` · `DEAD` (serialized as the lowercase value). Edge-level; complementary to the contract-level `ContractVerdict` (see `contracts.py`).
 
 #### Public API (`graph/federation.py`)
 
 ```python
-FEDERATION_SCHEMA_VERSION: int  # = 1
+FEDERATION_SCHEMA_VERSION: int  # = 2  (independent of EXPORT_SCHEMA_VERSION = 2)
 
 class EdgeVerdict(enum.Enum): ...
 @dataclass
@@ -183,7 +195,9 @@ def serialize_federation(fed: FederatedGraph) -> str        # deterministic JSON
 def render_federation_report(fed: FederatedGraph) -> str    # human-readable text
 ```
 
-The federated JSON envelope: `{ schema_version, repos, nodes, edges, contracts, unresolved_refs }` (sorted keys). The text report lists the satellites (with sha + age), the edge-verdict counts, an explicit DRIFT list, the AMQP contracts (confirmed/one-sided), and any unresolved foreign refs.
+The federated JSON envelope: `{ schema_version, repos, nodes, edges, contracts, unresolved_refs }` (sorted keys). The text report lists the satellites (with sha + age), the edge-verdict counts, an explicit DRIFT list, the contract-verdict counts plus explicit `BREAKING` / `DRIFT` / `ORPHANED_CONSUMER` / `UNDECLARED_PRODUCER` call-outs (with the missing GraphQL names), and any unresolved foreign refs.
+
+**Schema v2 (BDL-038 / BEAD-04):** each `contracts` entry gains a contract-level `verdict` (`ContractVerdict`) plus `protocol` / `contract_key` / `lifecycle` and, for GraphQL, `exposed` / `references` / `missing`. F1's flat keys are kept as a subset. The bump is on the hub OUTPUT only — `federate` still ingests v1 AND v2 satellite *exports* (`FEDERATION_SCHEMA_VERSION` and `EXPORT_SCHEMA_VERSION` are independent).
 
 ---
 

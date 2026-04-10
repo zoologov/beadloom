@@ -322,7 +322,16 @@ def _run_git(cwd: Path, *args: str) -> str | None:
 
 # Federated graph artifact schema version (independent of the satellite export
 # schema; bumped on breaking shape changes to ``federated.json``).
-FEDERATION_SCHEMA_VERSION = 1
+#
+# v2 (BDL-038 BEAD-04): each ``contracts`` entry now carries a contract-level
+# ``ContractVerdict`` (``verdict``) plus ``protocol`` / ``contract_key`` /
+# ``lifecycle`` and, for GraphQL, ``exposed`` / ``references`` / the ``missing``
+# names that triggered ``BREAKING``. F1's flat keys (``message_type`` /
+# ``directions`` / ``repos`` / ``confirmed``) are KEPT as a subset, so older
+# readers still work. ``contracts`` is now sorted by ``contract_key`` for
+# deterministic, reviewable diffs. The bump is on the hub OUTPUT only — ``federate``
+# still ingests v1 AND v2 satellite *exports* (the two versions are independent).
+FEDERATION_SCHEMA_VERSION = 2
 
 
 class EdgeVerdict(enum.Enum):
@@ -478,6 +487,7 @@ def aggregate_exports(
     _assign_verdicts(fed, present_ids)
     fed.contracts.extend(_reconcile_contracts(fed.edges))
     _mark_undeclared(fed)
+    fed.contracts.sort(key=lambda c: str(c.get("contract_key", "")))
     fed.nodes.sort(key=lambda n: str(n["ref_id"]))
     fed.edges.sort(key=lambda e: (str(e["src"]), str(e["dst"]), str(e["kind"])))
     fed.repos.sort(key=lambda r: str(r["repo"]))
@@ -651,16 +661,58 @@ def _report_verdicts(fed: FederatedGraph) -> list[str]:
     return lines
 
 
+# Contract verdicts that are actionable signals (worth an explicit call-out in
+# the report, beyond the per-verdict counts). Ordered most-urgent-first.
+_ACTIONABLE_VERDICTS = (
+    "breaking",
+    "drift",
+    "orphaned_consumer",
+    "undeclared_producer",
+)
+
+
 def _report_contracts(fed: FederatedGraph) -> list[str]:
+    """Report contract-level verdicts: counts + explicit actionable lists (G5)."""
     if not fed.contracts:
         return []
-    lines = ["## AMQP Contracts", ""]
+    lines = [f"## Contracts ({len(fed.contracts)})", ""]
+    lines.extend(_contract_verdict_counts(fed))
+    lines.extend(_contract_actionable(fed))
+    return lines
+
+
+def _contract_verdict_counts(fed: FederatedGraph) -> list[str]:
+    counts: dict[str, int] = {}
     for contract in fed.contracts:
-        status = "confirmed both-sides" if contract["confirmed"] else "ONE-SIDED"
-        dirs = ", ".join(_contract_directions(contract))
-        lines.append(f"- {contract['message_type']}: {status} ({dirs})")
+        verdict = str(contract.get("verdict", ""))
+        counts[verdict] = counts.get(verdict, 0) + 1
+    lines = [f"- {verdict.upper()}: {counts[verdict]}" for verdict in sorted(counts)]
     lines.append("")
     return lines
+
+
+def _contract_actionable(fed: FederatedGraph) -> list[str]:
+    """Explicit, name-level call-outs for the verdicts a human must act on."""
+    lines: list[str] = []
+    for verdict in _ACTIONABLE_VERDICTS:
+        matches = [c for c in fed.contracts if c.get("verdict") == verdict]
+        if not matches:
+            continue
+        lines.append(f"### {verdict.upper()}")
+        lines.extend(_contract_line(c) for c in matches)
+        lines.append("")
+    return lines
+
+
+def _contract_line(contract: dict[str, object]) -> str:
+    """One actionable contract line; appends the BREAKING ``missing`` names."""
+    key = contract.get("contract_key", contract.get("message_type", ""))
+    dirs = ", ".join(_contract_directions(contract))
+    line = f"- {key} ({dirs})"
+    missing = contract.get("missing")
+    if isinstance(missing, list) and missing:
+        line += f" — missing: {', '.join(str(m) for m in missing)}"
+    return line
 
 
 def _report_unresolved(fed: FederatedGraph) -> list[str]:

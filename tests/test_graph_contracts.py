@@ -12,6 +12,7 @@ from beadloom.graph.contracts import (
     Contract,
     ContractEndpoint,
     ContractVerdict,
+    classify,
     contract_key,
     reconcile_contracts,
 )
@@ -86,12 +87,11 @@ class TestContractProjection:
             ],
         )
         report = contract.to_report_dict()
-        assert report == {
-            "message_type": "m",
-            "directions": ["consumes", "produces"],
-            "repos": ["repo-a", "repo-b"],
-            "confirmed": True,
-        }
+        # F1 flat keys preserved as a subset (BEAD-04 adds verdict/protocol/...).
+        assert report["message_type"] == "m"
+        assert report["directions"] == ["consumes", "produces"]
+        assert report["repos"] == ["repo-a", "repo-b"]
+        assert report["confirmed"] is True
 
     def test_to_report_dict_one_sided_not_confirmed(self) -> None:
         contract = Contract(
@@ -276,3 +276,173 @@ class TestContractVerdictSkeleton:
             "external",
             "dead",
         }
+
+
+def _amqp_contract(
+    *,
+    producers: int = 0,
+    consumers: int = 0,
+    lifecycle: str = "active",
+) -> Contract:
+    endpoints = [
+        ContractEndpoint(f"prod-{i}", "svc", "produces") for i in range(producers)
+    ] + [ContractEndpoint(f"cons-{i}", "worker", "consumes") for i in range(consumers)]
+    return Contract(
+        contract_key="amqp:*/*:m",
+        protocol="amqp",
+        name="m",
+        endpoints=endpoints,
+        lifecycle=lifecycle,
+    )
+
+
+def _graphql_contract(
+    *,
+    producers: int = 1,
+    consumers: int = 1,
+    exposed: list[str] | None = None,
+    references: list[str] | None = None,
+    lifecycle: str = "active",
+) -> Contract:
+    endpoints = [
+        ContractEndpoint(f"prod-{i}", "schema", "produces") for i in range(producers)
+    ] + [ContractEndpoint(f"cons-{i}", "client", "consumes") for i in range(consumers)]
+    return Contract(
+        contract_key="graphql:PublicAPI",
+        protocol="graphql",
+        name="PublicAPI",
+        endpoints=endpoints,
+        lifecycle=lifecycle,
+        exposed=sorted(exposed or []),
+        references=sorted(references or []),
+    )
+
+
+class TestClassify:
+    """RFC §5 truth table — one assertion per verdict (the moat)."""
+
+    def test_dead_lifecycle_is_dead(self) -> None:
+        contract = _amqp_contract(producers=1, consumers=1, lifecycle="dead")
+        assert classify(contract) is ContractVerdict.DEAD
+
+    def test_planned_lifecycle_is_expected(self) -> None:
+        contract = _amqp_contract(producers=1, lifecycle="planned")
+        assert classify(contract) is ContractVerdict.EXPECTED
+
+    def test_deprecated_lifecycle_is_expected(self) -> None:
+        contract = _amqp_contract(producers=1, consumers=1, lifecycle="deprecated")
+        assert classify(contract) is ContractVerdict.EXPECTED
+
+    def test_external_lifecycle_is_external(self) -> None:
+        # Defensive branch; the `external` lifecycle trigger is wired in BEAD-05.
+        contract = _amqp_contract(producers=1, lifecycle="external")
+        assert classify(contract) is ContractVerdict.EXTERNAL
+
+    def test_amqp_both_sides_is_confirmed(self) -> None:
+        contract = _amqp_contract(producers=1, consumers=1)
+        assert classify(contract) is ContractVerdict.CONFIRMED
+
+    def test_consumers_only_is_orphaned_consumer(self) -> None:
+        contract = _amqp_contract(consumers=1)
+        assert classify(contract) is ContractVerdict.ORPHANED_CONSUMER
+
+    def test_producers_only_is_undeclared_producer(self) -> None:
+        contract = _amqp_contract(producers=1)
+        assert classify(contract) is ContractVerdict.UNDECLARED_PRODUCER
+
+    def test_graphql_both_sides_compatible_is_confirmed(self) -> None:
+        contract = _graphql_contract(
+            exposed=["Plan", "plan", "plans"], references=["plan", "plans"]
+        )
+        assert classify(contract) is ContractVerdict.CONFIRMED
+
+    def test_graphql_references_not_subset_is_breaking(self) -> None:
+        # Consumer references `removedField` the producer no longer exposes.
+        contract = _graphql_contract(
+            exposed=["Plan", "plan"], references=["plan", "removedField"]
+        )
+        assert classify(contract) is ContractVerdict.BREAKING
+
+    def test_graphql_no_exposed_with_references_is_breaking(self) -> None:
+        # Unparseable SDL -> exposed [] -> any reference breaks (honest, not confirmed).
+        contract = _graphql_contract(exposed=[], references=["plan"])
+        assert classify(contract) is ContractVerdict.BREAKING
+
+    def test_graphql_producer_only_is_undeclared_producer(self) -> None:
+        contract = _graphql_contract(producers=1, consumers=0, exposed=["plan"])
+        assert classify(contract) is ContractVerdict.UNDECLARED_PRODUCER
+
+    def test_graphql_consumer_only_is_orphaned_consumer(self) -> None:
+        contract = _graphql_contract(producers=0, consumers=1, references=["plan"])
+        assert classify(contract) is ContractVerdict.ORPHANED_CONSUMER
+
+    def test_dead_outranks_breaking(self) -> None:
+        # Lifecycle intent dominates the shape check.
+        contract = _graphql_contract(
+            exposed=[], references=["plan"], lifecycle="dead"
+        )
+        assert classify(contract) is ContractVerdict.DEAD
+
+
+class TestContractLifecycleSignificance:
+    """`reconcile_contracts` folds the most-significant edge lifecycle onto the Contract."""
+
+    def test_dead_outranks_active(self) -> None:
+        edges = [
+            _amqp_edge("a", "svc", "produces", "m"),
+            {**_amqp_edge("b", "worker", "consumes", "m"), "lifecycle": "dead"},
+        ]
+        edges[0]["lifecycle"] = "active"
+        contract = reconcile_contracts(edges)[0]
+        assert contract.lifecycle == "dead"
+
+    def test_deprecated_outranks_planned(self) -> None:
+        edges = [
+            {**_amqp_edge("a", "svc", "produces", "m"), "lifecycle": "planned"},
+            {**_amqp_edge("b", "worker", "consumes", "m"), "lifecycle": "deprecated"},
+        ]
+        contract = reconcile_contracts(edges)[0]
+        assert contract.lifecycle == "deprecated"
+
+    def test_default_lifecycle_is_active(self) -> None:
+        contract = reconcile_contracts([_amqp_edge("a", "svc", "produces", "m")])[0]
+        assert contract.lifecycle == "active"
+
+
+class TestVerdictWiredIntoReconcile:
+    def test_reconcile_assigns_verdict(self) -> None:
+        edges = [
+            _amqp_edge("a", "svc", "produces", "m"),
+            _amqp_edge("b", "worker", "consumes", "m"),
+        ]
+        contract = reconcile_contracts(edges)[0]
+        assert contract.verdict is ContractVerdict.CONFIRMED
+
+    def test_report_dict_keeps_f1_keys_and_adds_verdict(self) -> None:
+        edges = [
+            _amqp_edge("a", "svc", "produces", "m"),
+            _amqp_edge("b", "worker", "consumes", "m"),
+        ]
+        report = reconcile_contracts(edges)[0].to_report_dict()
+        # F1 flat keys preserved (nothing downstream breaks).
+        assert report["message_type"] == "m"
+        assert report["directions"] == ["consumes", "produces"]
+        assert report["repos"] == ["a", "b"]
+        assert report["confirmed"] is True
+        # F2 enrichment.
+        assert report["verdict"] == "confirmed"
+        assert report["protocol"] == "amqp"
+        assert report["contract_key"] == "amqp:*/*:m"
+
+    def test_report_dict_graphql_includes_missing_references(self) -> None:
+        edges = [
+            _graphql_edge("backend", "schema", "produces", "PublicAPI",
+                          exposed=["plan"]),
+            _graphql_edge("ui", "client", "consumes", "PublicAPI",
+                          references=["plan", "removedField"]),
+        ]
+        report = reconcile_contracts(edges)[0].to_report_dict()
+        assert report["verdict"] == "breaking"
+        assert report["exposed"] == ["plan"]
+        assert report["references"] == ["plan", "removedField"]
+        assert report["missing"] == ["removedField"]
