@@ -41,9 +41,15 @@ def _export(
     edges: list[dict[str, object]] | None = None,
     commit_sha: str | None = "abc1234",
     exported_at: str = _T0,
+    landscape: str | None = None,
 ) -> dict[str, object]:
-    """Build a minimal synthetic satellite export artifact."""
-    return {
+    """Build a minimal synthetic satellite export artifact.
+
+    ``landscape`` is omitted from the artifact when ``None`` (a v1/v2 export
+    that never declared one) — the hub then treats the whole run as one
+    landscape (F1 back-compat). A declared landscape scopes implicit matching.
+    """
+    export: dict[str, object] = {
         "schema_version": 1,
         "repo": repo,
         "commit_sha": commit_sha,
@@ -52,6 +58,9 @@ def _export(
         "nodes": nodes or [],
         "edges": edges or [],
     }
+    if landscape is not None:
+        export["landscape"] = landscape
+    return export
 
 
 def _node(ref_id: str, *, kind: str = "service", lifecycle: str = "active") -> dict[str, object]:
@@ -683,3 +692,154 @@ class TestFederateCli:
         )
         assert result.exit_code == 0, result.output
         assert "DRIFT" in result.output
+
+
+def _amqp_contract(direction: str, message_type: str) -> dict[str, object]:
+    return {"protocol": "amqp", "direction": direction, "message_type": message_type}
+
+
+class TestNestedLandscapes:
+    """BEAD-06 / U5 / G8: product-landscape vs company-landscape composition.
+
+    Two contract-less products that happen to share a message_type/schema name
+    produce ZERO mutual DRIFT/UNDECLARED (they reconcile in separate
+    ``(landscape, key)`` groups). A genuine cross-product contract declared via
+    an explicit ``@productB:`` consumer edge still resolves with a both-sides
+    verdict across landscapes. A single-product run (no landscape, or all the
+    same) is byte-identical to the pre-BEAD-06 F1/F2 behavior.
+    """
+
+    def _two_products_same_name(self) -> list[dict[str, object]]:
+        # Product A: producer of "OrderPlaced" into its own queue.
+        # Product B: consumer of a coincidentally-named "OrderPlaced".
+        # No @repo: ref between them -> they are unrelated.
+        return [
+            _export(
+                "product-a-svc",
+                landscape="product-a",
+                nodes=[_node("orders"), _node("q", kind="queue")],
+                edges=[
+                    _edge("orders", "q", kind="produces",
+                          contract=_amqp_contract("produces", "OrderPlaced")),
+                ],
+            ),
+            _export(
+                "product-b-svc",
+                landscape="product-b",
+                nodes=[_node("worker"), _node("q", kind="queue")],
+                edges=[
+                    _edge("worker", "q", kind="consumes",
+                          contract=_amqp_contract("consumes", "OrderPlaced")),
+                ],
+            ),
+        ]
+
+    def test_unrelated_products_no_mutual_confirm(self) -> None:
+        fed = aggregate_exports(self._two_products_same_name(), now=_T0)
+        order = [c for c in fed.contracts if c["message_type"] == "OrderPlaced"]
+        # Two SEPARATE contracts (one per landscape), neither confirmed both-sides.
+        assert len(order) == 2
+        assert all(c["confirmed"] is False for c in order)
+
+    def test_unrelated_products_zero_mutual_drift_or_undeclared(self) -> None:
+        fed = aggregate_exports(self._two_products_same_name(), now=_T0)
+        verdicts = {str(e.get("verdict")) for e in fed.edges}
+        # Local queue edges only -> no cross-product DRIFT; UNDECLARED only fires
+        # when a producer's message has no consumer ANYWHERE — but each product
+        # reconciles in isolation, so the producer is genuinely undeclared within
+        # its own landscape (honest), NOT a false cross-product signal.
+        assert EdgeVerdict.DRIFT.value not in verdicts
+
+    def test_undeclared_scoped_per_landscape_not_silenced(self) -> None:
+        # product-a's producer is UNDECLARED *within product-a* (honest) — it is
+        # NOT silenced by product-b's coincidental consumer (no cross-pollution).
+        fed = aggregate_exports(self._two_products_same_name(), now=_T0)
+        producer = next(e for e in fed.edges if e["repo"] == "product-a-svc")
+        assert producer["verdict"] == EdgeVerdict.UNDECLARED.value
+
+    def test_explicit_cross_product_contract_resolves(self) -> None:
+        # A real cross-product contract: product-a's UI consumes product-b's
+        # GraphQL schema via an explicit @product-b-backend: ref.
+        produce = {
+            "protocol": "graphql",
+            "schema": "PublicAPI",
+            "direction": "produces",
+        }
+        consume = {
+            "protocol": "graphql",
+            "schema": "PublicAPI",
+            "direction": "consumes",
+        }
+        exports = [
+            _export(
+                "product-b-backend",
+                landscape="product-b",
+                nodes=[_node("schema", kind="schema")],
+                edges=[_edge("schema", "schema", kind="produces", contract=produce)],
+            ),
+            _export(
+                "product-a-ui",
+                landscape="product-a",
+                nodes=[_node("client")],
+                edges=[
+                    _edge("client", "@product-b-backend:schema",
+                          kind="consumes", contract=consume),
+                ],
+            ),
+        ]
+        fed = aggregate_exports(exports, now=_T0)
+        api = [c for c in fed.contracts if c["message_type"] == "PublicAPI"]
+        assert len(api) == 1
+        assert api[0]["confirmed"] is True
+        assert sorted(api[0]["directions"]) == ["consumes", "produces"]
+
+    def test_single_product_no_landscape_byte_identical_to_f1(self) -> None:
+        # No landscape declared anywhere -> whole run is one landscape -> the
+        # F1 cross-repo implicit confirm path is unchanged byte-for-byte.
+        produces = _amqp_contract("produces", "PlanCreated")
+        consumes = _amqp_contract("consumes", "PlanCreated")
+        exports = [
+            _export(
+                "core",
+                nodes=[_node("orders"), _node("q", kind="queue")],
+                edges=[_edge("orders", "q", kind="produces", contract=produces)],
+            ),
+            _export(
+                "integration",
+                nodes=[_node("plans"), _node("q", kind="queue")],
+                edges=[_edge("plans", "q", kind="consumes", contract=consumes)],
+            ),
+        ]
+        fed = aggregate_exports(exports, now=_T0)
+        confirmed = [c for c in fed.contracts if c["confirmed"]]
+        assert len(confirmed) == 1
+        assert confirmed[0]["message_type"] == "PlanCreated"
+
+    def test_same_landscape_microservices_confirm(self) -> None:
+        # Several repos that ARE one product (shared landscape) still confirm.
+        produces = _amqp_contract("produces", "PlanCreated")
+        consumes = _amqp_contract("consumes", "PlanCreated")
+        exports = [
+            _export(
+                "core",
+                landscape="acme",
+                nodes=[_node("orders"), _node("q", kind="queue")],
+                edges=[_edge("orders", "q", kind="produces", contract=produces)],
+            ),
+            _export(
+                "integration",
+                landscape="acme",
+                nodes=[_node("plans"), _node("q", kind="queue")],
+                edges=[_edge("plans", "q", kind="consumes", contract=consumes)],
+            ),
+        ]
+        fed = aggregate_exports(exports, now=_T0)
+        confirmed = [c for c in fed.contracts if c["confirmed"]]
+        assert len(confirmed) == 1
+
+    def test_report_labels_landscape_grouping(self) -> None:
+        fed = aggregate_exports(self._two_products_same_name(), now=_T0)
+        report = render_federation_report(fed)
+        # The landscape grouping is visible in the report.
+        assert "product-a" in report
+        assert "product-b" in report

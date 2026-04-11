@@ -507,6 +507,7 @@ def export(*, out: Path | None, project: Path | None) -> None:
     from beadloom.graph.federation import (
         build_export,
         current_commit_sha,
+        resolve_landscape,
         resolve_repo_name,
         serialize_export,
     )
@@ -519,10 +520,15 @@ def export(*, out: Path | None, project: Path | None) -> None:
         click.echo("Error: database not found. Run `beadloom reindex` first.", err=True)
         sys.exit(1)
 
+    repo = resolve_repo_name(project_root)
+    landscape = resolve_landscape(project_root)
     conn = open_db(db_path)
     artifact = build_export(
         conn,
-        repo=resolve_repo_name(project_root),
+        repo=repo,
+        # Emit landscape only when explicitly configured (≠ the repo default),
+        # so an undeclared-landscape export keeps the F1 wire shape (U5).
+        landscape=landscape if landscape != repo else None,
         commit_sha=current_commit_sha(project_root),
         exported_at=datetime.now(tz=timezone.utc).isoformat(),
         generator=f"beadloom {__version__}",

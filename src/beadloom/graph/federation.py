@@ -27,7 +27,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from beadloom.graph.contracts import reconcile_contracts
+from beadloom.graph.contracts import (
+    cross_landscape_keys,
+    edge_group_key,
+    reconcile_contracts,
+)
 
 if TYPE_CHECKING:
     import sqlite3
@@ -169,6 +173,7 @@ def build_export(
     commit_sha: str | None,
     exported_at: str,
     generator: str,
+    landscape: str | None = None,
 ) -> dict[str, object]:
     """Build the satellite export artifact from the indexed graph.
 
@@ -176,13 +181,20 @@ def build_export(
     injected so the output is deterministic (tests pass fixed values; the CLI
     passes wall-clock UTC + git HEAD). Nodes are sorted by ``ref_id`` and edges
     by ``(src, dst, kind)`` so identical graphs serialize byte-identically.
+
+    ``landscape`` (BEAD-06, U5) names the *product* a satellite belongs to. It
+    is emitted ONLY when explicitly resolved (config ``landscape:`` key); a
+    landscape-less export is the F1 back-compat shape — the hub then treats the
+    whole ``federate`` run as one landscape, so single-product reconciliation is
+    byte-identical to F1. A genuine cross-product link is still expressed with an
+    explicit ``@repo:`` ref, which resolves regardless of landscape.
     """
     node_rows = conn.execute(
         "SELECT ref_id, kind, summary, source, lifecycle FROM nodes ORDER BY ref_id"
     ).fetchall()
     edges = [_export_edge(r) for r in _edge_rows(conn)]
     edges.sort(key=lambda e: (str(e["src"]), str(e["dst"]), str(e["kind"])))
-    return {
+    export: dict[str, object] = {
         "schema_version": EXPORT_SCHEMA_VERSION,
         "repo": repo,
         "commit_sha": commit_sha,
@@ -191,6 +203,9 @@ def build_export(
         "nodes": [_export_node(r) for r in node_rows],
         "edges": edges,
     }
+    if landscape is not None:
+        export["landscape"] = landscape
+    return export
 
 
 def _edge_rows(conn: sqlite3.Connection) -> list[sqlite3.Row]:
@@ -241,6 +256,35 @@ def resolve_repo_name(project_root: Path) -> str:
     if from_git:
         return from_git
     return project_root.resolve().name
+
+
+def resolve_landscape(project_root: Path) -> str:
+    """Resolve the landscape (product) name for an export (BEAD-06, U5).
+
+    Precedence: ``.beadloom/config.yml`` ``landscape:`` key > the resolved repo
+    name. A satellite that does not declare a landscape belongs to a product
+    named after its repo — so a single-product run (every satellite its own
+    landscape, or none declared) reconciles exactly as F1. Distinct declared
+    landscapes scope implicit contract matching, so unrelated products in a
+    company-landscape never cross-pollute (the CLI omits the value from the
+    export when it equals the repo default, preserving the F1 wire shape).
+    """
+    from_config = _landscape_from_config(project_root)
+    if from_config:
+        return from_config
+    return resolve_repo_name(project_root)
+
+
+def _landscape_from_config(project_root: Path) -> str | None:
+    """Read the ``landscape:`` key from ``.beadloom/config.yml`` if present."""
+    config_path = project_root / ".beadloom" / "config.yml"
+    if not config_path.exists():
+        return None
+    import yaml
+
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    landscape = config.get("landscape")
+    return landscape if isinstance(landscape, str) and landscape else None
 
 
 def _repo_from_config(project_root: Path) -> str | None:
@@ -424,8 +468,13 @@ def _repo_provenance(export: dict[str, object], now: datetime) -> dict[str, obje
         if isinstance(exported_at, str)
         else None
     )
+    landscape = _export_landscape(export)
     return {
         "repo": export.get("repo"),
+        # Provenance default (BEAD-06, U5): a satellite with no declared landscape
+        # belongs to a product named after its repo — reported honestly here even
+        # though reconciliation treats undeclared landscapes as one shared group.
+        "landscape": landscape if landscape is not None else export.get("repo"),
         "commit_sha": export.get("commit_sha"),
         "exported_at": exported_at,
         "schema_version": export.get("schema_version"),
@@ -481,8 +530,9 @@ def aggregate_exports(
 
     for export in exports:
         repo = str(export.get("repo", ""))
+        landscape = _export_landscape(export)
         for edge in _export_edges(export):
-            fed.edges.append(_resolve_edge(repo, edge))
+            fed.edges.append(_resolve_edge(repo, edge, landscape))
 
     _assign_verdicts(fed, present_ids)
     fed.contracts.extend(_reconcile_contracts(fed.edges))
@@ -517,8 +567,25 @@ def _export_edges(export: dict[str, object]) -> list[dict[str, object]]:
     return [e for e in raw if isinstance(e, dict)] if isinstance(raw, list) else []
 
 
-def _resolve_edge(repo: str, edge: dict[str, object]) -> dict[str, object]:
-    """Namespace + foreign-resolve an edge's endpoints into a federated edge."""
+def _export_landscape(export: dict[str, object]) -> str | None:
+    """Return an export's declared landscape, or ``None`` (F1 back-compat).
+
+    A landscape-less export belongs to the shared run-level default group, so a
+    single-product / no-landscape ``federate`` run reconciles exactly as F1.
+    """
+    landscape = export.get("landscape")
+    return landscape if isinstance(landscape, str) and landscape else None
+
+
+def _resolve_edge(
+    repo: str, edge: dict[str, object], landscape: str | None
+) -> dict[str, object]:
+    """Namespace + foreign-resolve an edge's endpoints into a federated edge.
+
+    Tags the federated edge with its satellite's ``landscape`` (BEAD-06, U5) so
+    the hub can scope implicit contract matching by ``(landscape, contract_key)``
+    — ``None`` means the export declared no landscape (one shared default group).
+    """
     src = _resolve_endpoint(repo, str(edge.get("src", "")))
     dst = _resolve_endpoint(repo, str(edge.get("dst", "")))
     resolved: dict[str, object] = {
@@ -528,6 +595,8 @@ def _resolve_edge(repo: str, edge: dict[str, object]) -> dict[str, object]:
         "lifecycle": edge.get("lifecycle", "active"),
         "repo": repo,
     }
+    if landscape is not None:
+        resolved["landscape"] = landscape
     contract = _edge_contract_payload(edge)
     if contract is not None:
         resolved["contract"] = contract
@@ -572,23 +641,32 @@ def _contract_directions(contract: dict[str, object]) -> list[str]:
 
 
 def _mark_undeclared(fed: FederatedGraph) -> None:
-    """Flag present producer contract edges whose message has no consumer.
+    """Flag present producer contract edges whose contract has no consumer.
 
-    A satellite producing to a queue/contract that no peer declares consuming is
-    emitting into the void — :attr:`EdgeVerdict.UNDECLARED`.
+    A satellite producing into a contract that no peer declares consuming is
+    emitting into the void — :attr:`EdgeVerdict.UNDECLARED`. Scoped by
+    ``(landscape, contract_key)`` (BEAD-06, U5) so two unrelated products that
+    share a coincidental message_type never silence each other's honest
+    UNDECLARED — and an explicit cross-product key (collapsed to a shared group)
+    confirms across landscapes.
     """
-    consumed = {
-        c["message_type"]
-        for c in fed.contracts
-        if "consumes" in _contract_directions(c)
-    }
+    xkeys = cross_landscape_keys(fed.edges)
+    consumed_groups: set[tuple[str | None, str]] = set()
+    for edge in fed.edges:
+        group = edge_group_key(edge, xkeys)
+        if group is None:
+            continue
+        contract = _edge_contract_payload(edge)
+        if contract is not None and contract.get("direction") == "consumes":
+            consumed_groups.add(group)
     for edge in fed.edges:
         contract = _edge_contract_payload(edge)
         if contract is None or contract.get("protocol") != "amqp":
             continue
         if contract.get("direction") != "produces":
             continue
-        if str(contract.get("message_type", "")) not in consumed:
+        group = edge_group_key(edge, xkeys)
+        if group is not None and group not in consumed_groups:
             edge["verdict"] = EdgeVerdict.UNDECLARED.value
 
 
@@ -630,12 +708,21 @@ def render_federation_report(fed: FederatedGraph) -> str:
 
 
 def _report_repos(fed: FederatedGraph) -> list[str]:
-    lines = [f"## Satellites ({len(fed.repos)})", ""]
+    """Satellites grouped by landscape (BEAD-06, U5) — makes the product vs
+    company-landscape composition visible, then the per-satellite provenance."""
+    by_landscape: dict[str, list[dict[str, object]]] = {}
     for repo in fed.repos:
-        sha = repo.get("commit_sha") or "unknown HEAD"
-        age = _format_age(_as_age(repo.get("age_seconds")))
-        lines.append(f"- {repo.get('repo')}: {sha} — exported {age}")
-    lines.append("")
+        landscape = str(repo.get("landscape") or repo.get("repo") or "")
+        by_landscape.setdefault(landscape, []).append(repo)
+    scope = "product" if len(by_landscape) == 1 else "company"
+    lines = [f"## Satellites ({len(fed.repos)}) — {scope}-landscape", ""]
+    for landscape in sorted(by_landscape):
+        lines.append(f"### landscape: {landscape}")
+        for repo in by_landscape[landscape]:
+            sha = repo.get("commit_sha") or "unknown HEAD"
+            age = _format_age(_as_age(repo.get("age_seconds")))
+            lines.append(f"- {repo.get('repo')}: {sha} — exported {age}")
+        lines.append("")
     return lines
 
 

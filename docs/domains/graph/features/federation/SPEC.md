@@ -113,6 +113,7 @@ The hub cannot know a satellite's live HEAD, so the export records its own prove
 - `repo` — resolved by `resolve_repo_name()`: `.beadloom/config.yml` `repo:` key > git `origin` remote basename > project directory name.
 - `commit_sha` — resolved by `current_commit_sha()`: the git HEAD sha, or `null` when the project root is **not** itself the git toplevel (an honest "unknown HEAD" beats leaking an enclosing repo's sha).
 - `exported_at` — ISO-8601 UTC timestamp (injected as a parameter for deterministic tests; the CLI passes wall-clock UTC).
+- `landscape` (optional, BDL-038 / U5) — resolved by `resolve_landscape()`: `.beadloom/config.yml` `landscape:` key > the resolved repo name. The CLI emits it **only when explicitly configured** (≠ the repo default), so an undeclared-landscape export keeps the F1 wire shape (no `landscape` key). Names the *product* the satellite belongs to; the hub scopes implicit contract matching by `(landscape, contract_key)`.
 
 The CLI exits `1` with an error if the database is not found (`beadloom reindex` first).
 
@@ -165,6 +166,7 @@ Aggregation (`aggregate_exports`):
   | producers, no consumers | `UNDECLARED_PRODUCER` | Produces a contract nobody consumes (F1 "one-sided", producer side). |
 
   The contract-level `UNDECLARED_PRODUCER` is **complementary** to F1's edge-level `EdgeVerdict.UNDECLARED` (an additional projection over the same fact, not a replacement); both stay intact and never contradict. For GraphQL, a contract dict also carries `exposed` / `references` / `missing` (the names that triggered `BREAKING`).
+- **Landscape scoping — product vs company (BDL-038 / U5).** An optional `landscape` provenance (resolved like `repo`: config `landscape:` key > repo name) names the *product* a satellite belongs to. `reconcile_contracts` groups by `(landscape, contract_key)`, so **implicit** same-key matching is scoped *within* a landscape: two unrelated products that happen to share a coincidental `message_type` / schema name reconcile in separate groups → **zero** mutual DRIFT / UNDECLARED / false-CONFIRMED. A **genuine** cross-product contract is declared with an explicit `@otherrepo:<ref>` consumer edge — its `contract_key` is promoted *cross-landscape* (one shared, landscape-agnostic group via `cross_landscape_keys` / `edge_group_key`) and resolves with a both-sides verdict regardless of landscape. An export with no declared landscape (or one equal to its repo) shares a single default group, so a single-product run is byte-identical to F1. The hub's edge-level UNDECLARED sweep (`_mark_undeclared`) uses the same `(landscape, contract_key)` group scope, so a producer is UNDECLARED only when *its own* landscape has no consumer (honest per-product signal, never silenced by an unrelated product's coincidental consumer). `federate` composes either one product-landscape (all satellites share/omit a landscape) or a company-landscape (several); the text report groups satellites by landscape with a `product`/`company`-landscape label.
 - **Per-satellite staleness** (`_repo_provenance`). For each satellite: `repo`, `commit_sha`, `exported_at`, `schema_version`, and `age_seconds` = `now − exported_at` in whole seconds. An unparseable/missing timestamp yields `None` (honest unknown); a missing `commit_sha` is reported, never faked. `now` is injectable for deterministic tests; the CLI passes wall-clock UTC.
 
 #### `FederatedGraph`
@@ -173,7 +175,7 @@ Aggregation (`aggregate_exports`):
 |-------------------|----------------------------|----------------------------------------------------------|
 | `nodes`           | `list[dict]`               | Namespaced node union (each carries `ref_id` + `repo`).  |
 | `edges`           | `list[dict]`               | Edge union with resolved endpoints + `verdict`.          |
-| `repos`           | `list[dict]`               | Per-satellite provenance + staleness.                    |
+| `repos`           | `list[dict]`               | Per-satellite provenance + staleness + `landscape` (defaults to `repo` when undeclared). |
 | `unresolved_refs` | `list[str]`                | Foreign targets that did not resolve (sorted, deduped).  |
 | `contracts`       | `list[dict]`               | First-class AMQP + GraphQL contracts with a contract-level `ContractVerdict` (sorted by `contract_key`). |
 

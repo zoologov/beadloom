@@ -48,6 +48,8 @@ Turn F1's edge-buried AMQP contract into a **first-class, protocol-agnostic, lan
 | 2026-06-01 | `BREAKING` = `references ⊄ exposed` (presence-based), not version-diff | tractable; the real "breaks before ship" signal; version-diff is F3+ |
 | 2026-06-01 | `external` added to `VALID_LIFECYCLES`; `unmapped` is a hub verdict | U4: native bridges suppress DRIFT, honest unknowns |
 | 2026-06-01 | `landscape` provenance field; implicit matching scoped by `(landscape, contract_key)`; cross-product only via explicit `@repo:` | U5: contract-less products produce zero mutual noise |
+| 2026-06-01 (BEAD-06) | `build_export` emits `landscape` **only when explicitly configured** (omitted otherwise); "falls back to repo" applies at the hub (provenance display + grouping default), NOT in the wire shape | keeps F1 cross-repo implicit confirm byte-identical: a no-landscape run = one shared group. Emitting `landscape=repo` would split existing two-repo confirm fixtures, breaking the byte-identical regression. `resolve_landscape` still returns config-or-repo; CLI omits when ==repo |
+| 2026-06-01 (BEAD-06) | Explicit cross-product key detection = edge whose namespaced `dst` repo ≠ its own `repo`; such keys promoted to a single landscape-agnostic group (`cross_landscape_keys` / `edge_group_key`); `_mark_undeclared` reuses the same `(landscape, key)` scope | a real `@otherrepo:` contract resolves cross-landscape; per-product UNDECLARED stays honest (not silenced by an unrelated product's coincidental consumer). No EXPORT/FEDERATION/DB version bump (landscape is additive within export v2) |
 | 2026-06-01 | DB CHECK rebuilt (not ALTERed) to add `external` lifecycle | SQLite cannot ALTER a CHECK in place; table-rebuild, additive, idempotent |
 
 ## Related Files

@@ -21,6 +21,7 @@ from click.testing import CliRunner
 from beadloom.graph.federation import (
     build_export,
     current_commit_sha,
+    resolve_landscape,
     resolve_repo_name,
     serialize_export,
 )
@@ -340,6 +341,63 @@ class TestResolveRepoName:
         (project / ".beadloom").mkdir(parents=True)
         # No config repo key, no git remote → directory basename.
         assert resolve_repo_name(project) == "fallback-dir"
+
+
+class TestResolveLandscape:
+    """BEAD-06 / U5: optional ``landscape:`` provenance (config > repo fallback)."""
+
+    def test_config_landscape_key_wins(self, tmp_path: Path) -> None:
+        project = tmp_path / "svc"
+        (project / ".beadloom").mkdir(parents=True)
+        (project / ".beadloom" / "config.yml").write_text(
+            "landscape: acme-product\n", encoding="utf-8"
+        )
+        assert resolve_landscape(project) == "acme-product"
+
+    def test_falls_back_to_repo_name(self, tmp_path: Path) -> None:
+        # No landscape key -> falls back to the resolved repo name (one product).
+        project = tmp_path / "lonely-svc"
+        (project / ".beadloom").mkdir(parents=True)
+        assert resolve_landscape(project) == resolve_repo_name(project)
+
+    def test_config_repo_used_as_landscape_fallback(self, tmp_path: Path) -> None:
+        project = tmp_path / "dir"
+        (project / ".beadloom").mkdir(parents=True)
+        (project / ".beadloom" / "config.yml").write_text(
+            "repo: chosen\n", encoding="utf-8"
+        )
+        assert resolve_landscape(project) == "chosen"
+
+
+class TestBuildExportLandscape:
+    def test_landscape_emitted_when_provided(self, tmp_path: Path) -> None:
+        project = _make_db(tmp_path)
+        conn = open_db(project / ".beadloom" / "beadloom.db")
+        export = build_export(
+            conn,
+            repo="core",
+            landscape="acme",
+            commit_sha=_FIXED_SHA,
+            exported_at=_FIXED_TIME,
+            generator="g",
+        )
+        conn.close()
+        assert export["landscape"] == "acme"
+
+    def test_landscape_omitted_when_none(self, tmp_path: Path) -> None:
+        # Back-compat: a v1/v2 export with no landscape declared has no key
+        # (the hub then treats the whole run as one landscape = F1).
+        project = _make_db(tmp_path)
+        conn = open_db(project / ".beadloom" / "beadloom.db")
+        export = build_export(
+            conn,
+            repo="core",
+            commit_sha=_FIXED_SHA,
+            exported_at=_FIXED_TIME,
+            generator="g",
+        )
+        conn.close()
+        assert "landscape" not in export
 
 
 class TestCurrentCommitSha:

@@ -177,6 +177,82 @@ class TestReconcileContracts:
         assert contracts[0].to_report_dict()["confirmed"] is False
 
 
+class TestLandscapeScopedReconciliation:
+    """BEAD-06 / U5: implicit same-key matching is scoped *within* a landscape.
+
+    A v1/v2 edge with no ``landscape`` shares the run-level default group, so
+    F1 behavior (cross-repo implicit confirm) is byte-identical. Distinct
+    declared landscapes split the group, so unrelated products do not cross-
+    pollute. An explicit ``@repo:`` target always resolves cross-landscape.
+    """
+
+    def test_no_landscape_implicit_match_still_confirms(self) -> None:
+        # Back-compat: neither edge declares a landscape -> one shared group.
+        edges = [
+            _amqp_edge("repo-a", "svc", "produces", "m"),
+            _amqp_edge("repo-b", "worker", "consumes", "m"),
+        ]
+        contracts = reconcile_contracts(edges)
+        assert len(contracts) == 1
+        assert contracts[0].to_report_dict()["confirmed"] is True
+
+    def test_same_landscape_implicit_match_confirms(self) -> None:
+        edges = [
+            _amqp_edge("repo-a", "svc", "produces", "m", landscape="prod"),
+            _amqp_edge("repo-b", "worker", "consumes", "m", landscape="prod"),
+        ]
+        # Reconciliation reads landscape off the EDGE, not the contract payload.
+        for edge in edges:
+            edge["landscape"] = edge["contract"].pop("landscape")  # type: ignore[union-attr,index]
+        contracts = reconcile_contracts(edges)
+        assert len(contracts) == 1
+        assert contracts[0].to_report_dict()["confirmed"] is True
+
+    def test_distinct_landscapes_do_not_cross_pollute(self) -> None:
+        # Two unrelated products sharing a coincidental message_type -> two
+        # SEPARATE one-sided contracts, neither auto-confirmed.
+        edges = [
+            {**_amqp_edge("prod-a-svc", "svc", "produces", "Event"),
+             "landscape": "product-a"},
+            {**_amqp_edge("prod-b-svc", "worker", "consumes", "Event"),
+             "landscape": "product-b"},
+        ]
+        contracts = reconcile_contracts(edges)
+        assert len(contracts) == 2
+        assert all(c.to_report_dict()["confirmed"] is False for c in contracts)
+
+    def test_explicit_foreign_target_resolves_cross_landscape(self) -> None:
+        # A real cross-product contract: the consumer declares @product-b:Schema.
+        # It MUST reconcile with product-b's producer despite distinct landscapes.
+        produce = {
+            "repo": "product-b-backend",
+            "src": "schema",
+            "dst": "Schema",
+            "kind": "produces",
+            "landscape": "product-b",
+            "contract": {
+                "protocol": "graphql",
+                "schema": "PublicAPI",
+                "direction": "produces",
+            },
+        }
+        consume = {
+            "repo": "product-a-ui",
+            "src": "client",
+            "dst": "@product-b-backend:Schema",
+            "kind": "consumes",
+            "landscape": "product-a",
+            "contract": {
+                "protocol": "graphql",
+                "schema": "PublicAPI",
+                "direction": "consumes",
+            },
+        }
+        contracts = reconcile_contracts([produce, consume])
+        assert len(contracts) == 1
+        assert contracts[0].to_report_dict()["confirmed"] is True
+
+
 def _graphql_edge(
     repo: str,
     src: str,

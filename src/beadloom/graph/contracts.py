@@ -24,6 +24,9 @@ from dataclasses import dataclass, field
 _AMQP = "amqp"
 _GRAPHQL = "graphql"
 _WILDCARD = "*"
+# Marker that introduces a foreign (cross-repo) reference in a namespaced
+# federated id (``@<repo>:<ref>``) — mirrors federation._FOREIGN_MARKER.
+_FOREIGN_MARKER = "@"
 
 # Lifecycle significance for folding several contract edges into one declared
 # intent: a louder (more terminal) declaration on any endpoint wins. ``dead`` >
@@ -216,21 +219,33 @@ _RECONCILED_PROTOCOLS = frozenset({_AMQP, _GRAPHQL})
 
 
 def reconcile_contracts(edges: list[dict[str, object]]) -> list[Contract]:
-    """Group contract-bearing edges by :func:`contract_key` into Contracts.
+    """Group contract-bearing edges into Contracts, scoped by landscape (U5).
 
     BEAD-03: AMQP **and** GraphQL (grouping by the protocol-prefixed key, so a
     ``graphql:<schema>`` producer and consumer resolve across the language
     boundary by name — G3). The producer's ``exposed`` SDL surface and the
     consumers' ``references`` accumulate onto the :class:`Contract` (sorted +
-    deduped) for BEAD-04's presence-based ``BREAKING`` check. AMQP behavior is
-    byte-identical to BEAD-02 (empty exposed/references).
+    deduped) for BEAD-04's presence-based ``BREAKING`` check.
+
+    BEAD-06 (U5, nested landscapes): the group key is ``(landscape,
+    contract_key)``. **Implicit** same-key matching is scoped *within* a
+    landscape — two unrelated products that share a coincidental message_type /
+    schema name reconcile in separate groups and never auto-confirm or
+    auto-DRIFT. An edge that declares an **explicit** cross-repo target
+    (``@otherrepo:<ref>`` — its ``dst`` repo differs from its own ``repo``)
+    promotes its ``contract_key`` to *cross-landscape*: every edge sharing that
+    key collapses into one landscape-agnostic group, so a genuine declared
+    cross-product contract resolves with a both-sides verdict regardless of
+    landscape. Edges with no declared landscape (``None``) share one default
+    group, keeping the F1 single-product path byte-identical.
 
     Insertion order is preserved (a key first appears in the order its edges are
     traversed) — this keeps F1's contract ordering byte-identical, since F1
     reconciled over the unsorted edge union. Deterministic key-sorting is a
     deliberate BEAD-04 output change (FEDERATION_SCHEMA_VERSION 1 -> 2).
     """
-    by_key: dict[str, Contract] = {}
+    cross_landscape_keys = _cross_landscape_keys(edges)
+    by_group: dict[tuple[str | None, str], Contract] = {}
     for edge in edges:
         payload = _edge_contract(edge)
         if payload is None:
@@ -239,14 +254,15 @@ def reconcile_contracts(edges: list[dict[str, object]]) -> list[Contract]:
         if protocol not in _RECONCILED_PROTOCOLS:
             continue
         key = contract_key(payload)
-        contract = by_key.get(key)
+        group = _group_key(edge, key, cross_landscape_keys)
+        contract = by_group.get(group)
         if contract is None:
             contract = Contract(
                 contract_key=key,
                 protocol=protocol,
                 name=_contract_name(protocol, payload),
             )
-            by_key[key] = contract
+            by_group[group] = contract
         contract.endpoints.append(
             ContractEndpoint(
                 repo=str(edge.get("repo", "")),
@@ -258,10 +274,80 @@ def reconcile_contracts(edges: list[dict[str, object]]) -> list[Contract]:
         contract.lifecycle = _more_significant(
             contract.lifecycle, str(edge.get("lifecycle", "active"))
         )
-    contracts = list(by_key.values())
+    contracts = list(by_group.values())
     for contract in contracts:
         contract.verdict = classify(contract)
     return contracts
+
+
+def edge_group_key(
+    edge: dict[str, object], cross_landscape_keys: set[str]
+) -> tuple[str | None, str] | None:
+    """Reconciliation group of a contract-bearing edge (BEAD-06, U5), or ``None``.
+
+    ``None`` when the edge carries no reconciled contract. Mirrors
+    :func:`reconcile_contracts` grouping so callers (e.g. the hub's UNDECLARED
+    sweep) can scope by landscape consistently. Pass the shared
+    :func:`cross_landscape_keys` so an explicit cross-product key collapses to a
+    landscape-agnostic group.
+    """
+    payload = _edge_contract(edge)
+    if payload is None:
+        return None
+    if str(payload.get("protocol", "")) not in _RECONCILED_PROTOCOLS:
+        return None
+    return _group_key(edge, contract_key(payload), cross_landscape_keys)
+
+
+def cross_landscape_keys(edges: list[dict[str, object]]) -> set[str]:
+    """Public alias for the set of explicitly-declared cross-product keys (U5)."""
+    return _cross_landscape_keys(edges)
+
+
+def _cross_landscape_keys(edges: list[dict[str, object]]) -> set[str]:
+    """Contract keys that an explicit cross-repo edge declares (U5).
+
+    A contract whose key is declared by *any* explicit ``@otherrepo:`` edge is a
+    genuine cross-product contract and must reconcile across landscapes — so its
+    key is excluded from landscape scoping (one shared group for the key).
+    """
+    keys: set[str] = set()
+    for edge in edges:
+        payload = _edge_contract(edge)
+        if payload is None:
+            continue
+        if str(payload.get("protocol", "")) not in _RECONCILED_PROTOCOLS:
+            continue
+        if _is_explicit_cross_repo(edge):
+            keys.add(contract_key(payload))
+    return keys
+
+
+def _is_explicit_cross_repo(edge: dict[str, object]) -> bool:
+    """True when the edge's resolved ``dst`` names a repo other than its own.
+
+    The edge ``dst`` is the hub-namespaced ``@<repo>:<ref>`` form: a foreign dst
+    whose repo differs from the edge's own ``repo`` is an *explicitly declared*
+    cross-repo contract (the consumer wrote ``@otherrepo:ref``). A local dst (no
+    ``@``) or a same-repo namespaced dst is implicit.
+    """
+    dst = str(edge.get("dst", ""))
+    if not dst.startswith(_FOREIGN_MARKER):
+        return False
+    dst_repo = dst[len(_FOREIGN_MARKER) :].partition(":")[0]
+    return bool(dst_repo) and dst_repo != str(edge.get("repo", ""))
+
+
+def _group_key(
+    edge: dict[str, object], key: str, cross_landscape_keys: set[str]
+) -> tuple[str | None, str]:
+    """Reconciliation group: ``(None, key)`` for cross-product keys, else
+    ``(landscape, key)`` so implicit same-key matching is landscape-scoped."""
+    if key in cross_landscape_keys:
+        return (None, key)
+    landscape = edge.get("landscape")
+    scoped = landscape if isinstance(landscape, str) and landscape else None
+    return (scoped, key)
 
 
 def _more_significant(current: str, candidate: str) -> str:
