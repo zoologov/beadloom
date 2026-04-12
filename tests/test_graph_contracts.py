@@ -176,6 +176,16 @@ class TestReconcileContracts:
         contracts = reconcile_contracts([_amqp_edge("repo-a", "svc", "produces", "m")])
         assert contracts[0].to_report_dict()["confirmed"] is False
 
+    def test_external_edge_lifecycle_folds_to_external_verdict(self) -> None:
+        """BDL-038 G7: an edge declaring ``lifecycle: external`` folds the external
+        lifecycle onto the Contract → ``EXTERNAL`` verdict (never DRIFT). This is
+        the end-to-end trigger for the classify branch wired defensively in BEAD-04."""
+        edge = _amqp_edge("repo-a", "svc", "produces", "m")
+        edge["lifecycle"] = "external"
+        contract = reconcile_contracts([edge])[0]
+        assert contract.lifecycle == "external"
+        assert contract.verdict is ContractVerdict.EXTERNAL
+
 
 class TestLandscapeScopedReconciliation:
     """BEAD-06 / U5: implicit same-key matching is scoped *within* a landscape.

@@ -64,6 +64,7 @@ Every node and edge carries a `lifecycle` status. It is a first-class SQLite col
 | `planned`    | Declared intent; not built yet.                              |
 | `deprecated` | On its way out; still present.                               |
 | `dead`       | Declared dead; not treated as live.                          |
+| `external`   | Present-but-not-ours (e.g. a native bridge); dependents suppress DRIFT (BDL-038 G7). |
 
 Loading rules (`graph/loader.py`):
 
@@ -73,7 +74,7 @@ Loading rules (`graph/loader.py`):
 
 Rule-engine awareness (`graph/rule_engine.py`): only `active` edges are counted as "live" for the `no-dependency-cycles` and `architecture-layers` rules. `planned` / `deprecated` / `dead` edges are not counted as live cycle/layer violations. If the `lifecycle` column is absent (an older DB), the engine degrades gracefully and treats all edges as live.
 
-Migration (`infrastructure/db.py`): the `lifecycle TEXT NOT NULL DEFAULT 'active' CHECK(...)` column is added to both `nodes` and `edges`, in the fresh schema and via an idempotent `ALTER TABLE ADD COLUMN` migration. Existing rows default to `active` (no regression).
+Migration (`infrastructure/db.py`): the `lifecycle TEXT NOT NULL DEFAULT 'active' CHECK(...)` column is added to both `nodes` and `edges`, in the fresh schema and via an idempotent `ALTER TABLE ADD COLUMN` migration. Existing rows default to `active` (no regression). BDL-038 G7 adds `external` to the CHECK on `nodes` / `edges` / `foreign_edges`; since SQLite cannot ALTER a CHECK in place, the migration **rebuilds** each table (table-rebuild pattern, `DB SCHEMA_VERSION` 3 → 4 — additive, idempotent, no data loss, composes with the dropped DDD-only `kind` CHECK).
 
 ### 3. `beadloom export` — satellite export artifact
 
@@ -151,13 +152,20 @@ Aggregation (`aggregate_exports`):
   | `deprecated`| yes            | `CLEANUP_CANDIDATE` | The dependency outlived its declared death.        |
   | `deprecated`| no             | `EXPECTED`          | Deprecated and already gone.                       |
   | `dead`      | (either)       | `DEAD`              | Declared dead; not treated as live.                |
+  | `external`  | (either)       | `EXTERNAL`          | The edge **or its target node** is declared `external` (present-but-not-ours, e.g. a native bridge) — never DRIFT (BDL-038 G7). |
+  | `active`    | yes, undescribed | `UNMAPPED`        | The target **resolves** in the union but is present-without-a-usable-surface (empty summary) — reported honestly, never DRIFT (BDL-038 U4). |
   | —           | —              | `UNDECLARED`        | A present AMQP producer whose `message_type` has no matching consumer across the union (emitting into the void). |
+
+  **`external` vs `unmapped` vs `unresolved_refs` (BDL-038 G7/U4) — three honest categories, never conflated:**
+  - `external` — the author *declares* a node present-but-not-ours (`lifecycle: external`, e.g. a native Swift/Kotlin/ObjC++/C++ bridge). The dependent → `EdgeVerdict.EXTERNAL` / `ContractVerdict.EXTERNAL`. Suppresses DRIFT.
+  - `unmapped` — a foreign ref that **resolves** to a node present in the union but exported **without a usable surface** (undescribed — empty summary; also covers a present node no satellite describes). The dependent → `EdgeVerdict.UNMAPPED`. Reported, never DRIFT, and **not** an unresolved ref (it resolved).
+  - `unresolved_refs` — a genuinely-**absent** foreign target (resolved to nothing). Still `DRIFT` (active) and recorded in `unresolved_refs`. Distinct from `unmapped` (present).
 
 - **First-class contract reconciliation + verdicts** (`_reconcile_contracts` → `contracts.reconcile_contracts` + `classify`; BDL-038 / F2). AMQP **and** GraphQL contract edges are grouped by protocol-prefixed `contract_key` across the union into first-class `Contract`s, each assigned a **contract-level** `ContractVerdict` (intent-vs-reality — the F2 moat). The most-significant declared edge `lifecycle` (`external` > `dead` > `deprecated` > `planned` > `active`) folds onto the contract; lifecycle intent dominates the shape check. Surfaced in `FederatedGraph.contracts` (sorted by `contract_key` for deterministic diffs; F1's flat `{message_type, directions, repos, confirmed}` keys kept as a subset).
 
   | Condition | `ContractVerdict` | Meaning |
   |-----------|-------------------|---------|
-  | lifecycle `external` | `EXTERNAL` | Target declared present-but-not-ours (defensive; trigger wired in BEAD-05). |
+  | lifecycle `external` | `EXTERNAL` | Target declared present-but-not-ours (a native bridge); the `external` edge `lifecycle` folds onto the contract (`external` is the most-significant lifecycle) → `EXTERNAL`, never DRIFT (BDL-038 G7). |
   | lifecycle `dead` | `DEAD` | Declared dead; not live. |
   | lifecycle `planned` / `deprecated` | `EXPECTED` | Intentional — not built yet / retiring. Not drift. |
   | producers ∧ consumers; GraphQL `references ⊄ exposed` | `BREAKING` | A consumer relies on a name the producer's current SDL no longer exposes — caught before it ships (presence-based, not version-diff). |
@@ -181,7 +189,7 @@ Aggregation (`aggregate_exports`):
 
 #### `EdgeVerdict` (enum)
 
-`OK` · `DRIFT` · `EXPECTED` · `CLEANUP_CANDIDATE` · `UNDECLARED` · `DEAD` (serialized as the lowercase value). Edge-level; complementary to the contract-level `ContractVerdict` (see `contracts.py`).
+`OK` · `DRIFT` · `EXPECTED` · `CLEANUP_CANDIDATE` · `UNDECLARED` · `DEAD` · `EXTERNAL` · `UNMAPPED` (serialized as the lowercase value). Edge-level; complementary to the contract-level `ContractVerdict` (see `contracts.py`). `EXTERNAL` / `UNMAPPED` (BDL-038 G7/U4) both suppress DRIFT.
 
 #### Public API (`graph/federation.py`)
 
@@ -209,6 +217,7 @@ The federated JSON envelope: `{ schema_version, repos, nodes, edges, contracts, 
 - A malformed `@...` ref is always surfaced (parse error / `GraphLoadResult.errors`), never silently accepted.
 - Export and federated artifacts are deterministic: sorted node/edge arrays + sorted JSON keys → byte-identical output for identical input (injected `exported_at` / `now`).
 - A foreign ref that does not resolve at the hub is recorded in `unresolved_refs`, not dropped.
+- An `external` target (declared) and an `unmapped` target (present-but-undescribed) never DRIFT, and `unmapped` is kept distinct from `unresolved_refs` (present vs absent) — honest unknowns, never faked (BDL-038 G7/U4).
 - `commit_sha` is reported honestly: `null` when it cannot be verified, never an unrelated repo's HEAD.
 - `EXPORT_SCHEMA_VERSION` and `FEDERATION_SCHEMA_VERSION` are independent; each is bumped only on a breaking shape change.
 

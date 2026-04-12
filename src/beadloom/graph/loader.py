@@ -43,9 +43,12 @@ _NODE_DIRECT_FIELDS = frozenset({"ref_id", "kind", "summary", "source", "lifecyc
 # ``docs`` is tracked but handled by the doc indexer (BEAD-04).
 _NODE_SKIP_FIELDS = frozenset({"docs"})
 
-# Valid lifecycle states (BDL-037 Principle 8). Default is ``active``; absent
-# or unknown values fall back to ``active`` so existing graphs are unchanged.
-VALID_LIFECYCLES = frozenset({"active", "planned", "deprecated", "dead"})
+# Valid lifecycle states (BDL-037 Principle 8; BDL-038 G7 adds ``external``).
+# Default is ``active``; absent or unknown values fall back to ``active`` so
+# existing graphs are unchanged. ``external`` marks a present-but-not-ours node
+# (e.g. a native Swift/Kotlin/ObjC++/C++ bridge) so its dependents suppress DRIFT
+# at the hub (the contract/edge target resolves to ``EXTERNAL``, never DRIFT).
+VALID_LIFECYCLES = frozenset({"active", "planned", "deprecated", "dead", "external"})
 _DEFAULT_LIFECYCLE = "active"
 
 # Protocol whose producers carry a parsed SDL surface (BDL-038 BEAD-03).

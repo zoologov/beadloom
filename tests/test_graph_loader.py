@@ -664,6 +664,26 @@ class TestNodeLifecycle:
         row = db.execute("SELECT lifecycle FROM nodes WHERE ref_id = 'routing'").fetchone()
         assert row[0] == "active"
 
+    def test_node_lifecycle_external_loaded(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        """BDL-038 G7/U4: a node may declare ``lifecycle: external`` (a present-
+        but-not-ours node, e.g. a native bridge) — loaded, not rejected."""
+        (graph_dir / "n.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: native-bridge\n"
+            "    kind: module\n"
+            '    summary: "Swift bridge"\n'
+            "    lifecycle: external\n"
+        )
+        result = load_graph(graph_dir, db)
+        assert result.nodes_loaded == 1
+        assert not any("external" in e for e in result.errors)
+        row = db.execute(
+            "SELECT lifecycle FROM nodes WHERE ref_id = 'native-bridge'"
+        ).fetchone()
+        assert row[0] == "external"
+
 
 class TestEdgeLifecycle:
     def test_edge_lifecycle_loaded(self, db: sqlite3.Connection, graph_dir: Path) -> None:
@@ -724,6 +744,23 @@ class TestEdgeLifecycle:
         assert any("nope" in m for m in result.warnings + result.errors)
         row = db.execute("SELECT lifecycle FROM edges WHERE src_ref_id = 'a'").fetchone()
         assert row[0] == "active"
+
+    def test_edge_lifecycle_external_loaded(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        """BDL-038 G7: an edge may target an ``external`` node via ``lifecycle: external``."""
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: a\n    kind: domain\n    summary: A\n"
+            "  - ref_id: b\n    kind: module\n    summary: B\n"
+            "edges:\n"
+            "  - src: a\n    dst: b\n    kind: depends_on\n    lifecycle: external\n"
+        )
+        result = load_graph(graph_dir, db)
+        assert result.edges_loaded == 1
+        assert not any("external" in m for m in result.warnings + result.errors)
+        row = db.execute("SELECT lifecycle FROM edges WHERE src_ref_id = 'a'").fetchone()
+        assert row[0] == "external"
 
 
 # --- GraphQL SDL surface folding (BDL-038 BEAD-03) ---

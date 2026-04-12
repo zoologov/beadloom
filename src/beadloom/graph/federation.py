@@ -394,6 +394,12 @@ class EdgeVerdict(enum.Enum):
     - :attr:`UNDECLARED`         — a present contract producer with no peer
       declaring the matching consume (emitting into the void).
     - :attr:`DEAD`               — declared ``dead``; not treated as live.
+    - :attr:`EXTERNAL`           — the edge (or its target node) is declared
+      ``external`` (a present-but-not-ours node, e.g. a native bridge); never
+      DRIFT (BDL-038 G7).
+    - :attr:`UNMAPPED`           — the target resolves in the union but is
+      present-without-a-usable-surface (undescribed — empty summary); reported
+      honestly, never DRIFT (BDL-038 U4).
     """
 
     OK = "ok"
@@ -402,6 +408,8 @@ class EdgeVerdict(enum.Enum):
     CLEANUP_CANDIDATE = "cleanup_candidate"
     UNDECLARED = "undeclared"
     DEAD = "dead"
+    EXTERNAL = "external"
+    UNMAPPED = "unmapped"
 
 
 @dataclass
@@ -604,12 +612,22 @@ def _resolve_edge(
 
 
 def _assign_verdicts(fed: FederatedGraph, present_ids: set[str]) -> None:
-    """Assign an :class:`EdgeVerdict` to each edge; record unresolved targets."""
+    """Assign an :class:`EdgeVerdict` to each edge; record unresolved targets.
+
+    External targets (the edge or its target node declares ``external``) resolve
+    to :attr:`EdgeVerdict.EXTERNAL` and a present-but-undescribed target resolves
+    to :attr:`EdgeVerdict.UNMAPPED` — both suppress DRIFT (BDL-038 G7/U4). Only a
+    genuinely-absent active foreign target is recorded as an unresolved ref, so
+    the unresolved-ref set (absent) stays distinct from ``unmapped`` (present).
+    """
+    nodes_by_id = {str(node["ref_id"]): node for node in fed.nodes}
     for edge in fed.edges:
         dst = str(edge["dst"])
         target_present = dst in present_ids
         lifecycle = str(edge.get("lifecycle", "active"))
-        verdict = _verdict_for(lifecycle, target_present=target_present)
+        verdict = _edge_verdict(
+            lifecycle, target_present=target_present, target=nodes_by_id.get(dst)
+        )
         edge["verdict"] = verdict.value
         if (
             not target_present
@@ -617,6 +635,32 @@ def _assign_verdicts(fed: FederatedGraph, present_ids: set[str]) -> None:
             and verdict in (EdgeVerdict.DRIFT, EdgeVerdict.EXPECTED)
         ):
             fed.unresolved_refs.append(dst)
+
+
+def _edge_verdict(
+    lifecycle: str, *, target_present: bool, target: dict[str, object] | None
+) -> EdgeVerdict:
+    """Reconcile an edge's lifecycle + its target node against the union (G7/U4).
+
+    Precedence: an ``external`` edge **or** an ``external`` target node suppresses
+    DRIFT (``EXTERNAL``); a present-but-undescribed target (empty summary) is
+    ``UNMAPPED``; otherwise the F1 three-valued lifecycle reconciliation applies.
+    """
+    if lifecycle == "external" or _is_external(target):
+        return EdgeVerdict.EXTERNAL
+    if target_present and lifecycle == "active" and _is_undescribed(target):
+        return EdgeVerdict.UNMAPPED
+    return _verdict_for(lifecycle, target_present=target_present)
+
+
+def _is_external(target: dict[str, object] | None) -> bool:
+    """True when the resolved target node declares ``lifecycle: external``."""
+    return target is not None and str(target.get("lifecycle", "")) == "external"
+
+
+def _is_undescribed(target: dict[str, object] | None) -> bool:
+    """True when a present target node has no usable surface (empty summary, U4)."""
+    return target is not None and not str(target.get("summary", "")).strip()
 
 
 def _reconcile_contracts(

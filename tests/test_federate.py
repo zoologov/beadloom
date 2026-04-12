@@ -214,6 +214,94 @@ class TestThreeValuedDrift:
         assert fed.edges[0]["verdict"] == EdgeVerdict.CLEANUP_CANDIDATE.value
 
 
+class TestExternalAndUnmapped:
+    """BDL-038 G7/U4: external targets and present-but-undescribed nodes never DRIFT."""
+
+    def test_external_target_present_is_external_not_drift(self) -> None:
+        """An edge whose target node is ``lifecycle: external`` → EXTERNAL."""
+        exports = [
+            _export(
+                "core",
+                nodes=[_node("client")],
+                edges=[_edge("client", "@mobile:native-bridge", lifecycle="active")],
+            ),
+            _export(
+                "mobile",
+                nodes=[_node("native-bridge", kind="module", lifecycle="external")],
+            ),
+        ]
+        fed = aggregate_exports(exports)
+        assert fed.edges[0]["verdict"] == EdgeVerdict.EXTERNAL.value
+
+    def test_external_edge_lifecycle_is_external(self) -> None:
+        """An edge that itself declares ``lifecycle: external`` → EXTERNAL even when
+        the target is absent (a declared bridge to something not in the union)."""
+        exports = [
+            _export(
+                "core",
+                nodes=[_node("client")],
+                edges=[_edge("client", "@mobile:native", lifecycle="external")],
+            ),
+            _export("mobile", nodes=[_node("other")]),
+        ]
+        fed = aggregate_exports(exports)
+        assert fed.edges[0]["verdict"] == EdgeVerdict.EXTERNAL.value
+        # External is not a broken dependency, so it is NOT an unresolved ref.
+        assert "@mobile:native" not in fed.unresolved_refs
+
+    def test_resolved_but_undescribed_target_is_unmapped(self) -> None:
+        """A foreign ref that resolves to a present node with no usable surface
+        (empty summary) → UNMAPPED, never DRIFT (U4)."""
+        exports = [
+            _export(
+                "core",
+                nodes=[_node("orders")],
+                edges=[_edge("orders", "@integration:opaque", lifecycle="active")],
+            ),
+            _export(
+                "integration",
+                nodes=[{"ref_id": "opaque", "kind": "service", "summary": "",
+                        "lifecycle": "active", "source": None}],
+            ),
+        ]
+        fed = aggregate_exports(exports)
+        assert fed.edges[0]["verdict"] == EdgeVerdict.UNMAPPED.value
+
+    def test_genuinely_absent_active_target_still_drifts(self) -> None:
+        """No regression: an active edge to an absent target is still DRIFT, and
+        the absent foreign ref is still reported as unresolved (distinct from
+        unmapped)."""
+        exports = [
+            _export(
+                "core",
+                nodes=[_node("orders")],
+                edges=[_edge("orders", "@integration:ghost", lifecycle="active")],
+            ),
+            _export("integration", nodes=[_node("plans")]),
+        ]
+        fed = aggregate_exports(exports)
+        assert fed.edges[0]["verdict"] == EdgeVerdict.DRIFT.value
+        assert "@integration:ghost" in fed.unresolved_refs
+
+    def test_unmapped_target_not_in_unresolved_refs(self) -> None:
+        """An UNMAPPED (present-but-undescribed) target resolved, so it is NOT an
+        unresolved ref — the two honest categories stay distinct."""
+        exports = [
+            _export(
+                "core",
+                nodes=[_node("orders")],
+                edges=[_edge("orders", "@integration:opaque", lifecycle="active")],
+            ),
+            _export(
+                "integration",
+                nodes=[{"ref_id": "opaque", "kind": "service", "summary": "",
+                        "lifecycle": "active", "source": None}],
+            ),
+        ]
+        fed = aggregate_exports(exports)
+        assert "@integration:opaque" not in fed.unresolved_refs
+
+
 class TestUndeclared:
     def test_produces_without_consumer_is_undeclared(self) -> None:
         # core produces a message; integration declares no matching consume.

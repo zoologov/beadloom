@@ -504,6 +504,141 @@ class TestKindCheckDropMigration:
         c.close()
 
 
+class TestLifecycleExternalMigration:
+    """BDL-038 G7/U4: the ``lifecycle`` CHECK is rebuilt to allow ``external``.
+
+    SQLite cannot ALTER a CHECK in place, so the migration rebuilds ``nodes`` /
+    ``edges``. The rebuild is additive (rows default ``active``, no loss),
+    idempotent, and must NOT resurrect the dropped DDD-only ``kind`` CHECK
+    (composes with ``_migrate_drop_kind_checks``).
+    """
+
+    def _v3_db(self, tmp_path: Path) -> sqlite3.Connection:
+        """A SCHEMA_VERSION-3 DB: no kind CHECK, lifecycle CHECK without external."""
+        c = open_db(tmp_path / "v3.db")
+        c.executescript(
+            "CREATE TABLE nodes ("
+            "  ref_id TEXT PRIMARY KEY,"
+            "  kind TEXT NOT NULL,"
+            "  summary TEXT NOT NULL DEFAULT '',"
+            "  source TEXT,"
+            "  extra TEXT DEFAULT '{}',"
+            "  lifecycle TEXT NOT NULL DEFAULT 'active'"
+            "    CHECK(lifecycle IN ('active','planned','deprecated','dead'))"
+            ");"
+            "CREATE TABLE edges ("
+            "  src_ref_id TEXT NOT NULL REFERENCES nodes(ref_id) ON DELETE CASCADE,"
+            "  dst_ref_id TEXT NOT NULL REFERENCES nodes(ref_id) ON DELETE CASCADE,"
+            "  kind TEXT NOT NULL,"
+            "  extra TEXT DEFAULT '{}',"
+            "  lifecycle TEXT NOT NULL DEFAULT 'active'"
+            "    CHECK(lifecycle IN ('active','planned','deprecated','dead')),"
+            "  contract_key TEXT NOT NULL DEFAULT '',"
+            "  PRIMARY KEY (src_ref_id, dst_ref_id, kind, contract_key)"
+            ");"
+        )
+        c.execute("INSERT INTO nodes (ref_id, kind, summary) VALUES ('a','domain','A')")
+        c.execute("INSERT INTO nodes (ref_id, kind, summary) VALUES ('b','service','B')")
+        c.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES ('b','a','part_of')"
+        )
+        c.commit()
+        return c
+
+    def test_fresh_schema_lifecycle_allows_external(self, tmp_path: Path) -> None:
+        c = open_db(tmp_path / "fresh.db")
+        create_schema(c)
+        for table, ddl in (
+            ("nodes", "SELECT sql FROM sqlite_master WHERE name='nodes'"),
+            ("edges", "SELECT sql FROM sqlite_master WHERE name='edges'"),
+            ("foreign_edges", "SELECT sql FROM sqlite_master WHERE name='foreign_edges'"),
+        ):
+            sql = "".join(str(c.execute(ddl).fetchone()[0]).split())
+            assert "'external'" in sql, f"{table} lifecycle CHECK missing external"
+        # And an external row is actually accepted.
+        c.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, lifecycle) "
+            "VALUES ('bridge','module','B','external')"
+        )
+        c.commit()
+        c.close()
+
+    def test_v3_db_legacy_check_rejects_external(self, tmp_path: Path) -> None:
+        c = self._v3_db(tmp_path)
+        with pytest.raises(sqlite3.IntegrityError):
+            c.execute(
+                "INSERT INTO nodes (ref_id, kind, summary, lifecycle) "
+                "VALUES ('x','module','X','external')"
+            )
+        c.close()
+
+    def test_migration_adds_external_and_preserves_rows(self, tmp_path: Path) -> None:
+        from beadloom.infrastructure.db import ensure_schema_migrations
+
+        c = self._v3_db(tmp_path)
+        ensure_schema_migrations(c)
+        # No data loss; rows default active.
+        nodes = {
+            r["ref_id"]: r["lifecycle"]
+            for r in c.execute("SELECT ref_id, lifecycle FROM nodes")
+        }
+        assert nodes == {"a": "active", "b": "active"}
+        edges = [r["lifecycle"] for r in c.execute("SELECT lifecycle FROM edges")]
+        assert edges == ["active"]
+        # external now accepted on both tables.
+        c.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, lifecycle) "
+            "VALUES ('bridge','module','B','external')"
+        )
+        c.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind, lifecycle) "
+            "VALUES ('a','bridge','depends_on','external')"
+        )
+        c.commit()
+        c.close()
+
+    def test_migration_keeps_kind_unconstrained(self, tmp_path: Path) -> None:
+        """The lifecycle rebuild must NOT resurrect the dropped kind CHECK (BEAD-07)."""
+        from beadloom.infrastructure.db import ensure_schema_migrations
+
+        c = self._v3_db(tmp_path)
+        ensure_schema_migrations(c)
+        for table in ("nodes", "edges"):
+            sql = "".join(
+                str(
+                    c.execute(
+                        "SELECT sql FROM sqlite_master WHERE name=?", (table,)
+                    ).fetchone()[0]
+                ).split()
+            )
+            assert "CHECK(kindIN" not in sql
+        # An arbitrary FSD kind is still accepted post-migration.
+        c.execute("INSERT INTO nodes (ref_id, kind, summary) VALUES ('p','page','P')")
+        c.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES ('a','p','renders')"
+        )
+        c.commit()
+        c.close()
+
+    def test_migration_idempotent(self, tmp_path: Path) -> None:
+        from beadloom.infrastructure.db import ensure_schema_migrations
+
+        c = self._v3_db(tmp_path)
+        ensure_schema_migrations(c)
+        ensure_schema_migrations(c)  # second run is a no-op
+        c.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, lifecycle) "
+            "VALUES ('bridge','module','B','external')"
+        )
+        c.commit()
+        c.close()
+
+    def test_schema_version_is_4(self) -> None:
+        from beadloom.infrastructure.db import SCHEMA_VERSION
+
+        assert SCHEMA_VERSION == "4"
+
+
 class TestLifecycleColumnMigration:
     """Tests for the additive ``lifecycle`` column on nodes and edges (BEAD-02)."""
 
