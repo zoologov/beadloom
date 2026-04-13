@@ -1,7 +1,8 @@
 # BDL UX Feedback Log
 
 > Collected during development and dogfooding.
-> Total: 106 issues | Open: 12 | Improvements: 16 | Excluded: 7 | Closed: 71
+> Total: 108 issues | Open: 12 | Improvements: 16 | Excluded: 7 | Closed: 73
+> 2026-06-01 (BDL-038 F2 BEAD-08): VERIFIED #107 (live GraphQL contract mismatch caught before ship — the F2 success criterion) + #108 (paradigm-agnostic FSD round-trip + external native modules + nested company-landscape). See Closed §BDL-038. Closed 71→73.
 > 2026-06-01 (BDL-038 F2 BEAD-01): Opened #105 (domain doc re-stales against all member files when one file is added) + #106 (no non-interactive `mark_synced` CLI). Open 10→12.
 > Last reviewed: BDL-037 (F1: Federation Foundation)
 > 2026-06-01 (BDL-037 F1): CLOSED #100 #101 #102 #103 (federation dogfood findings — FIXED in BEAD-09, commit d48bfeb) and #104 (federation dogfood SUCCESS — VERIFIED, BEAD-05). See Closed §BDL-037. Open 15→10, Closed 66→71.
@@ -555,6 +556,13 @@
 ---
 
 ## Closed Issues
+
+### BDL-038 — F2: Cross-Service Contract Graph (2026-06-01)
+
+> F2 dogfooded (BEAD-08) on the real landscape via hand-curated, anonymized scratch slices (real repos NOT mutated; slices gitignored). Two parts: (A) live GraphQL contract between the web monolith and its web client; (B) a target-FSD round-trip for a second, separate mobile product. All names anonymized in this log; the real SDL was read read-only.
+
+- 107. ~~[INFO] F2 dogfood SUCCESS — real GraphQL contract mismatch caught BEFORE it ships~~ **VERIFIED (BEAD-08)** — the F2 "what done looks like" criterion. `extract_surface` parsed the monolith's **real 3465-line `schema.graphql` → 266 surface names** (parser robust on production SDL). Modeled the monolith as the `graphql:WebAPI` **producer** (exposed = 266) and its web client as the **consumer** (references = a real subset). `federate` verdict = **CONFIRMED** while references ⊆ exposed. Then injected a realistic drift — the client still calls an operation the newer schema dropped — and `federate` flagged **`BREAKING: graphql:WebAPI — missing: <op>`**, naming the exact missing operation. Cross-language by NAME (TS client ↔ Python backend, no shared code symbol — G3). The 4 F1 AMQP contracts stayed **CONFIRMED** (no regression).
+- 108. ~~[INFO] F2 dogfood SUCCESS — paradigm-agnostic FSD round-trip + external native modules + nested landscapes~~ **VERIFIED (BEAD-08)** — a second product (separate landscape) modeled on its **target FSD architecture** (`app→features→entities→shared`, kinds `page`/`feature`/`entity`/`repository`/`service`) round-tripped `export → federate` with **zero kind loss/rejection** (U1 — proves the BEAD-07 DB kind-CHECK drop on a real FSD shape). Its three **native bridge modules** (`lifecycle: external`, outside FSD) resolved to **EXTERNAL**, never DRIFT (U4). As a contract-less product in a **company-landscape** federate run alongside the web product, it produced **zero** mutual DRIFT/UNDECLARED (U5) — the report grouped satellites by landscape. Final company-landscape run: 5 contracts (4 AMQP + 1 GraphQL) CONFIRMED, 3 EXTERNAL edges, 37 OK, 0 false signals.
 
 ### BDL-037 — F1: Federation Foundation (2026-06-01)
 
