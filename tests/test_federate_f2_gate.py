@@ -35,8 +35,6 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-import pytest
-
 from beadloom.graph.contracts import (
     Contract,
     ContractEndpoint,
@@ -362,20 +360,11 @@ class TestDeterminismAcrossFreshRuns:
             b.contracts, sort_keys=True
         )
 
-    @pytest.mark.xfail(
-        reason="BUG (flagged to coordinator, BEAD-09): edges[].contract.exposed / "
-        ".references are carried verbatim from the satellite export onto the "
-        "federated edge WITHOUT sorting, so serialize_federation is NOT "
-        "byte-identical when a producer's SDL surface (or a consumer's "
-        "references) is emitted in a different order. The reconciled contracts[] "
-        "section IS sorted (see the passing test above); only the per-edge "
-        "contract payload mirror is order-sensitive. Fix: sort exposed/references "
-        "in federation._resolve_edge (or _export_edge) — NOT done in the test "
-        "role. Determinism invariant otherwise holds (sorted keys + sorted "
-        "nodes/edges/repos/contracts).",
-        strict=True,
-    )
     def test_graphql_edge_payload_surface_order_independent(self) -> None:
+        # BEAD-12: federation._resolve_edge now sorts+dedupes the per-edge
+        # contract mirror's exposed/references, so the FULL federated JSON is
+        # byte-identical regardless of the satellite's SDL surface ordering
+        # (the reconciled contracts[] section was already deterministic).
         # Arrange / Act: the FULL federated JSON over two surface orderings.
         a = serialize_federation(
             aggregate_exports(self._gql_exports(["b", "a", "c"], ["c", "a"]), now=_T0)
@@ -383,7 +372,7 @@ class TestDeterminismAcrossFreshRuns:
         b = serialize_federation(
             aggregate_exports(self._gql_exports(["c", "b", "a"], ["a", "c"]), now=_T0)
         )
-        # Assert (currently FAILS — documents the unsorted edge-payload surface).
+        # Assert: edge-payload surface is order-independent.
         assert a == b
 
     def test_build_export_byte_identical_across_two_runs(self, tmp_path: Path) -> None:

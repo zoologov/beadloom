@@ -607,8 +607,28 @@ def _resolve_edge(
         resolved["landscape"] = landscape
     contract = _edge_contract_payload(edge)
     if contract is not None:
-        resolved["contract"] = contract
+        resolved["contract"] = _normalize_contract_surface(contract)
     return resolved
+
+
+def _normalize_contract_surface(contract: dict[str, object]) -> dict[str, object]:
+    """Return a copy of *contract* with its GraphQL surface lists made canonical.
+
+    ``exposed`` / ``references`` are carried verbatim from the satellite export,
+    so a producer (or consumer) emitting an equivalent surface in a different
+    order would otherwise serialize differently in the per-edge ``contract``
+    mirror — breaking the byte-identical determinism invariant that the
+    reconciled ``contracts[]`` section already upholds. Sort + dedupe those
+    lists (matching :mod:`beadloom.graph.contracts`); leave every other field
+    (and AMQP contracts, which carry neither list) untouched. Shallow-copies so
+    the input edge/contract dict is never mutated.
+    """
+    normalized = dict(contract)
+    for key in ("exposed", "references"):
+        value = normalized.get(key)
+        if isinstance(value, list):
+            normalized[key] = sorted({str(item) for item in value})
+    return normalized
 
 
 def _assign_verdicts(fed: FederatedGraph, present_ids: set[str]) -> None:
