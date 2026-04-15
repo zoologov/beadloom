@@ -1,10 +1,17 @@
 # Federation
 
-Cross-repo architecture federation: stable cross-repo node identity, a `lifecycle` field on nodes and edges, a deterministic satellite **export** artifact, and a hub **federate** aggregation that composes the per-repo graphs into one federated graph with three-valued intent-vs-reality drift detection and per-satellite staleness.
+Cross-repo architecture federation: stable cross-repo node identity, a `lifecycle` field on nodes and edges, a deterministic satellite **export** artifact, a hub **federate** aggregation that composes the per-repo graphs into one federated graph, and — the F2 moat — a **first-class cross-service contract graph** with contract-level intent-vs-reality verdicts (drift, breaking-change, orphaned-consumer detection) across a multi-paradigm, multi-language, product- and company-scoped microservices landscape.
 
-**Source:** `src/beadloom/graph/federation.py` (identity + export + hub aggregation), `src/beadloom/graph/loader.py` (foreign-ref parsing, `lifecycle` load, `foreign_edges`), `src/beadloom/infrastructure/db.py` (`lifecycle` columns, `foreign_edges` table), `src/beadloom/services/cli.py` (`export` / `federate` commands).
+**Source:** `src/beadloom/graph/federation.py` (identity + export + hub aggregation), `src/beadloom/graph/contracts.py` (first-class `Contract` model, language-neutral `contract_key`, `classify`/`reconcile_contracts`), `src/beadloom/graph/sdl.py` (GraphQL SDL surface extraction), `src/beadloom/graph/loader.py` (foreign-ref parsing, `lifecycle` load, `foreign_edges`, contract-key unification), `src/beadloom/infrastructure/db.py` (`lifecycle` columns, `foreign_edges` table, paradigm-agnostic kinds), `src/beadloom/services/cli.py` (`export` / `federate` commands).
 
-This is the F1 (Federation Foundation) thin slice (BDL-037). It is purely additive — single-repo behavior is unchanged: refs without `@` stay local, nodes/edges without `lifecycle` default to `active`.
+This SPEC covers two delivered slices:
+
+- **F1 — Federation Foundation (BDL-037):** `@repo:` identity, the `lifecycle` field, deterministic `export` (schema v1), and `federate` with three-valued edge-level `EdgeVerdict`s + both-sides AMQP reconciliation. Purely additive.
+- **F2 — Cross-Service Contract Graph (BDL-038):** a first-class `Contract` model with a protocol-prefixed, language-neutral `contract_key` (AMQP exchange identity + GraphQL SDL); contract-level `ContractVerdict`s (CONFIRMED / DRIFT / ORPHANED_CONSUMER / UNDECLARED_PRODUCER / BREAKING / EXTERNAL / DEAD / EXPECTED); the `external` / `unmapped` lifecycle (U4); nested product-vs-company landscapes (U5); and paradigm-agnostic node/edge kinds (U1, DDD *and* FSD). Three version bumps — EXPORT `1 → 2`, FEDERATION `1 → 2`, DB SCHEMA `3 → 4` — all backward-compatible: a v1 export still federates, an older DB migrates idempotently.
+
+It remains purely additive — single-repo behavior is unchanged: refs without `@` stay local, nodes/edges without `lifecycle` default to `active`, and an undeclared-landscape single-product run is byte-identical to F1.
+
+> **Contract-level DRIFT note (BEAD-10 review):** contract-level `DRIFT` is intentionally **subsumed** by `ORPHANED_CONSUMER` / `UNDECLARED_PRODUCER` — a missing producer or missing consumer is the precise contract-level signal. `DRIFT` remains the edge-level `EdgeVerdict` (an `active` edge whose target does not resolve).
 
 ---
 
@@ -84,7 +91,7 @@ beadloom export [--out FILE] [--project DIR]
 
 Reads the indexed graph from SQLite (read-only) and emits a deterministic, self-describing JSON artifact that a hub aggregates. With `--out` it writes to a file; otherwise it prints to stdout.
 
-#### Artifact schema (`schema_version: 1`)
+#### Artifact schema (`schema_version: 2`)
 
 ```json
 {
@@ -105,7 +112,7 @@ Reads the indexed graph from SQLite (read-only) and emits a deterministic, self-
 
 - Nodes are sorted by `ref_id`; edges by `(src, dst, kind)`; JSON keys are sorted (`sort_keys=True`, 2-space indent) — so identical graphs serialize **byte-identically** (reviewable diffs).
 - The `edges` array unions the local `edges` table **and** the `foreign_edges` table, so declared cross-repo `@repo:` links reach the artifact.
-- An edge's optional AMQP `contract` metadata (carried under the `contract` key of the edge's `extra` JSON) is surfaced as a top-level `contract` field; edges without it omit the key entirely.
+- An edge's optional `contract` metadata (carried under the `contract` key of the edge's `extra` JSON) is surfaced as a top-level `contract` field; edges without it omit the key entirely. Two protocols are carried: AMQP (`protocol: amqp` + `exchange` / `routing_key` / `message_type` / `direction`) and GraphQL (`protocol: graphql` + `schema` + the producer's `exposed` SDL surface / a consumer's `references`). The protocol-prefixed `contract_key` is derived at the hub.
 
 #### Provenance fields (`commit_sha`, `exported_at`)
 
@@ -121,7 +128,7 @@ The CLI exits `1` with an error if the database is not found (`beadloom reindex`
 #### Public API (`graph/federation.py`)
 
 ```python
-EXPORT_SCHEMA_VERSION: int  # = 1
+EXPORT_SCHEMA_VERSION: int  # = 2  (GraphQL SDL `contract` meta on edges; v1 still ingested by federate)
 
 def build_export(conn, *, repo: str, commit_sha: str | None,
                  exported_at: str, generator: str) -> dict[str, object]
@@ -219,22 +226,33 @@ The federated JSON envelope: `{ schema_version, repos, nodes, edges, contracts, 
 - A foreign ref that does not resolve at the hub is recorded in `unresolved_refs`, not dropped.
 - An `external` target (declared) and an `unmapped` target (present-but-undescribed) never DRIFT, and `unmapped` is kept distinct from `unresolved_refs` (present vs absent) — honest unknowns, never faked (BDL-038 G7/U4).
 - `commit_sha` is reported honestly: `null` when it cannot be verified, never an unrelated repo's HEAD.
-- `EXPORT_SCHEMA_VERSION` and `FEDERATION_SCHEMA_VERSION` are independent; each is bumped only on a breaking shape change.
+- `EXPORT_SCHEMA_VERSION` and `FEDERATION_SCHEMA_VERSION` are independent; each is bumped only on a breaking shape change. F2 bumps EXPORT `1 → 2`, FEDERATION `1 → 2`, DB SCHEMA `3 → 4` — all backward-compatible: `federate` ingests v1 **and** v2 exports, and an older DB migrates idempotently (no data loss).
+- `contract_key` is language-neutral: contracts resolve on the contract name (AMQP exchange/routing/message_type, GraphQL schema), never a code symbol — so a cross-language edge (TS client ↔ backend) reconciles across the boundary.
+- Contract-level `DRIFT` is subsumed by `ORPHANED_CONSUMER` / `UNDECLARED_PRODUCER`; `DRIFT` is the edge-level `EdgeVerdict` only.
 
 ---
 
-## Constraints & non-goals (F1 thin slice)
+## Constraints & non-goals (F2 delivered)
 
-- **AMQP contracts only.** Contract reconciliation matches purely on `message_type` (queue/exchange identity matching deferred to F2).
-- **Manual aggregation.** `federate` is run by hand on collected export files; no CI wiring, no SaaS hub, no satellite auto-bootstrap.
-- No VitePress / visual landscape map (F4), no semantic layer.
+**Delivered in F2 (BDL-038):**
+
+- **AMQP + GraphQL contracts.** AMQP reconciles on full exchange identity (`amqp:<exchange>/<routing>:<mt>`, not just `message_type`); GraphQL reconciles on `graphql:<schema>` with a **presence-based** `BREAKING` check (consumer `references ⊄` producer `exposed` SDL surface — caught before it ships, not a version diff).
+- **Paradigm-agnostic.** Arbitrary node/edge `kind` round-trips through `export`/`federate` without loss or rejection (DDD `domain/service` *and* FSD `page/feature/entity/repository`; the DDD-only DB CHECK was dropped, U1).
+- **Nested landscapes.** A single product-landscape *or* a company-landscape composing several products; contract-less products never cross-pollute verdicts (U5).
+- **`external` / `unmapped` lifecycle.** Present-but-not-ours (native bridges) and present-but-undescribed nodes are honest categories, never silent DRIFT (U4).
+
+**Still non-goals (deferred):**
+
+- **REST / OpenAPI and gRPC contracts** (lowest priority — runtime-generated, no static source files; future F-phase).
+- **CI gating** — `federate` is run by hand on collected export files; no per-repo/landscape CI gate, no SaaS hub, no satellite auto-bootstrap (F3).
+- **No VitePress / visual landscape map** (F4), no semantic layer.
 - Hub needs **≥ 2** satellite exports.
 
 ---
 
 ## Testing
 
-Test files: `tests/test_graph_federation.py` (`FederatedRef` + `parse_ref` local/foreign/malformed), `tests/test_graph_loader.py` (foreign-edge recording, `lifecycle` load/default/invalid), `tests/test_lifecycle_rules.py` (cycle/layer rule lifecycle-awareness), `tests/test_db.py` (`lifecycle` column + `foreign_edges` migrations, additive + idempotent), `tests/test_export.py` (envelope fields, sorting, lifecycle + contract carry, deterministic byte-identical output, `resolve_repo_name` precedence, CLI stdout/`--out`/no-db error), `tests/test_federate.py` (namespacing, foreign-ref resolution + unresolved reporting, every `EdgeVerdict`, both-sides confirmed vs one-sided, staleness incl. unknown sha / unparseable date, serialization determinism, report content, CLI ≥2 requirement + DRIFT in stdout), `tests/test_federate_roundtrip_db.py` (real YAML → reindex → export → federate path through the DB).
+Test files: `tests/test_graph_federation.py` (`FederatedRef` + `parse_ref` local/foreign/malformed), `tests/test_graph_contracts.py` (first-class `Contract`, protocol-prefixed `contract_key`, `classify` truth table incl. GraphQL `BREAKING`, lifecycle folding, landscape-scoped `reconcile_contracts`), `tests/test_graph_sdl.py` (GraphQL SDL surface extraction — `exposed` / `references`), `tests/test_graph_loader.py` (foreign-edge recording, `lifecycle` load/default/invalid, contract-key unification), `tests/test_lifecycle_rules.py` (cycle/layer rule lifecycle-awareness), `tests/test_db.py` (`lifecycle` column + `foreign_edges` migrations + paradigm-agnostic kinds + schema 3→4 rebuild, additive + idempotent), `tests/test_export.py` (envelope fields, sorting, lifecycle + AMQP/GraphQL contract carry, deterministic byte-identical output, `resolve_repo_name` precedence, CLI stdout/`--out`/no-db error), `tests/test_federate.py` (namespacing, foreign-ref resolution + unresolved reporting, every `EdgeVerdict`, both-sides confirmed vs one-sided, contract-level verdicts, staleness incl. unknown sha / unparseable date, serialization determinism, report content, CLI ≥2 requirement + DRIFT in stdout), `tests/test_federate_f2_gate.py` (contract-level verdicts + nested-landscape scoping + `external`/`unmapped` integration), `tests/test_federate_dogfood_amqp.py` + `tests/test_federate_roundtrip_db.py` (real YAML → reindex → export → federate path through the DB).
 
 ### Key cases
 

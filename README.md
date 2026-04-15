@@ -2,9 +2,9 @@
 
 > Read this in other languages: [Русский](README.ru.md)
 
-**Architecture as Code. Context as a Service.**
+**Federated architecture infrastructure with intent-vs-reality enforcement.**
 
-Beadloom turns Architecture as Code into Architectural Intelligence — structured, queryable knowledge about your system that humans and agents consume in <20ms.
+Beadloom is the cross-service contract graph for a microservices landscape — it detects drift, breaking changes, and orphaned consumers between your services *before they ship*, across paradigms, languages, and product boundaries. Per-repo Architecture-as-Code (a deterministic context graph, doc-sync, boundary lint) is the foundation; the federated landscape is the product.
 
 [![License: MIT](https://img.shields.io/github/license/zoologov/beadloom)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/zoologov/beadloom?include_prereleases&sort=semver)](https://github.com/zoologov/beadloom/releases)
@@ -17,19 +17,51 @@ Beadloom turns Architecture as Code into Architectural Intelligence — structur
 
 ---
 
-> IDE finds code. Beadloom tells you what that code means in the context of your system — and enforces the boundaries.
+> An IDE indexes one repo's code. Beadloom maps the contracts *between* your services — and tells you which ones are broken.
 
 **Platforms:** macOS, Linux, Windows &nbsp;|&nbsp; **Python:** 3.10+
 
+## Federation: the cross-service contract graph
+
+In a microservices landscape, the dangerous bugs live *between* services: a consumer relies on a GraphQL field the producer just removed; a queue has a publisher but no subscriber; a declared cross-repo dependency points at a service that was never built. None of that is visible inside a single repo. Beadloom federates the per-repo graphs into one landscape graph and reconciles **declared intent against measured reality** — the moat that a self-indexing agent cannot reproduce, because agents can read your code but cannot invent your *intended* architecture and contracts.
+
+```bash
+# In each service repo — emit a deterministic, signed-by-commit artifact:
+beadloom export --out service-a.json
+
+# At the hub — compose the landscape and reconcile contracts:
+beadloom federate service-a.json service-b.json service-c.json
+```
+
+- **Cross-repo identity** — a graph edge names a node in another service as `@<repo>:<ref_id>` (e.g. `consumes @backend:WebAPI`). Plain refs stay local; malformed refs are surfaced, never silently dropped.
+- **The contract graph (AMQP + GraphQL)** — contracts are first-class and identified by a **language-neutral** `contract_key`: AMQP as `amqp:<exchange>/<routing>:<message_type>`, GraphQL as `graphql:<schema>`. A TypeScript client consuming a backend's GraphQL schema reconciles across the language boundary, by contract *name*, never by code symbol.
+- **Contract-level intent-vs-reality verdicts:**
+
+  | Verdict | Meaning |
+  |---------|---------|
+  | `CONFIRMED` | Producer and consumer both present and compatible. |
+  | `BREAKING` | A consumer references a name the producer's current GraphQL SDL no longer exposes — caught *before* it ships (presence-based, not a version diff). |
+  | `ORPHANED_CONSUMER` | Consumes a contract nobody produces. |
+  | `UNDECLARED_PRODUCER` | Produces a contract nobody consumes. |
+  | `EXTERNAL` | Declared present-but-not-ours (e.g. a native bridge) — never false drift. |
+  | `DRIFT` | Edge-level: a declared `active` cross-repo dependency whose target does not resolve. |
+
+- **Lifecycle-aware** — every node and edge carries `active` / `planned` / `deprecated` / `dead` / `external`, so a *planned-but-unbuilt* contract reads as `EXPECTED`, not a false alarm, and a `deprecated` one still present is a cleanup candidate.
+- **Nested landscapes — product *and* company scope** — `federate` composes a single product (its back / front / infra / integrations) or a whole company of several products. Standalone products that share no contract never produce mutual noise; cross-product contracts appear only where integration is real.
+- **Per-satellite staleness** — each artifact carries its commit SHA + timestamp, so the hub reports how stale each service's view is (and honestly says "unknown" rather than faking a SHA).
+
+> **Status — honest scope.** Shipped today: AMQP + GraphQL contracts with the presence-based breaking-change check, paradigm- and product-agnostic federation. Dogfooded end-to-end on a real landscape — a real GraphQL `BREAKING` mismatch caught before ship, and a separate FSD-architecture product round-tripped through `export`/`federate` with zero kind loss. **Not yet:** REST/OpenAPI + gRPC contracts, CI-gated landscape enforcement, and the visual landscape map — all on the roadmap, none over-promised here. `federate` is run manually on collected artifacts today.
+
 ## Why Beadloom?
 
-Large codebases lack **Architectural Intelligence** — structured, queryable knowledge about how the system is built and how its parts connect. Without it, your team makes decisions outside architectural boundaries — accumulating tech debt. Your agents hallucinate.
+As AI agents generate code geometrically, the architecture that holds a landscape together erodes faster than any team can track by hand. Agents can self-index *reality* (what the code does); they cannot invent your *intent* (the architecture, boundaries, and contracts you decided on). The durable value is the **diff between intent and reality** — especially across service boundaries.
 
+- **"A consumer broke when the producer changed."** Cross-service contracts (queues, GraphQL schemas) drift silently — the failure shows up in production, in a different repo than the change.
 - **"Only two people understand how this works."** Architecture lives in heads, not in the repo. When they leave, the knowledge leaves with them.
-- **"The docs are lying."** Documentation goes stale. Nobody notices until a developer or agent starts building new functionality on top of outdated specs.
-- **"Agents burn context on orientation, not work."** Every session starts from scratch — grep, read, guess. The right 2K tokens matter more than a noisy 128K window.
+- **"The docs are lying."** Documentation goes stale. Nobody notices until a developer or agent builds on top of outdated specs.
+- **"Agents burn context on orientation, not work."** Every session starts from scratch — grep, read, guess. The right 2K tokens beat a noisy 128K window.
 
-Beadloom turns Architecture as Code into three queryable primitives:
+The federation contract graph above is the headline. Underneath it, each repo runs the Architecture-as-Code foundation — three queryable primitives that make the per-repo graph honest enough to federate:
 
 1. **Context Oracle** — architecture graph in YAML, stored in Git. Query any node → deterministic context bundle in <20ms. Same query, same result, every time.
 
@@ -79,6 +111,7 @@ IDE indexers use semantic search — an LLM decides what's relevant. Beadloom us
 
 ## Key features
 
+- **Cross-service contract graph (federation)** — `beadloom export` emits a deterministic per-repo artifact; `beadloom federate` aggregates ≥2 services into one landscape graph via `@repo:ref_id` edges and assigns **contract-level** intent-vs-reality verdicts (`CONFIRMED` / `BREAKING` / `ORPHANED_CONSUMER` / `UNDECLARED_PRODUCER` / `EXTERNAL`) over AMQP and GraphQL contracts, plus edge-level drift and per-satellite staleness. Nodes and edges carry a `lifecycle` field (`active` / `planned` / `deprecated` / `dead` / `external`); nested product- and company-landscape scoping
 - **Context Oracle** — deterministic graph traversal, compact JSON bundle in <20ms
 - **Doc Sync Engine** — tracks code↔doc relationships, detects stale documentation, integrates with git hooks
 - **Architecture as Code** — define boundary rules in YAML, validate with `beadloom lint`, enforce in CI
@@ -87,7 +120,6 @@ IDE indexers use semantic search — an LLM decides what's relevant. Beadloom us
 - **Impact analysis** — `beadloom why` shows what depends on a node and what breaks if it changes (with `--reverse` and `--depth N` options)
 - **Code-first onboarding** — bootstrap an architecture graph from code structure alone; no docs needed to start
 - **Architecture snapshots** — `beadloom snapshot` saves and compares architecture state over time
-- **Cross-repo federation** *(experimental, thin slice)* — `beadloom export` produces a deterministic per-repo artifact; `beadloom federate` aggregates ≥2 repos into one graph via `@repo:ref_id` edges, with intent-vs-reality drift verdicts and per-satellite staleness. Nodes and edges carry a `lifecycle` field (`active`/`planned`/`deprecated`/`dead`)
 - **MCP server** — 14 tools for AI agents, including write operations, search, impact analysis, diff, and linting
 - **Interactive TUI** — `beadloom tui` terminal dashboard for browsing the graph (alias: `ui`)
 - **Documentation Audit** — detect stale facts in project-level docs (README, guides, CONTRIBUTING) with zero configuration. CI gate via `--fail-if=stale>0`
