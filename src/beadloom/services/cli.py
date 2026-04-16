@@ -16,6 +16,8 @@ if TYPE_CHECKING:
     import sqlite3
     from collections.abc import Sequence
 
+    from beadloom.graph.federation import GateFailure
+
 from beadloom import __version__
 
 
@@ -556,18 +558,39 @@ def export(*, out: Path | None, project: Path | None) -> None:
     default=None,
     help="Hub project root (default: current directory).",
 )
-def federate(*, exports: tuple[Path, ...], project: Path | None) -> None:
+@click.option(
+    "--fail-on",
+    "fail_on",
+    is_flag=False,
+    flag_value="default",
+    default=None,
+    help=(
+        "Exit 1 if any edge/contract verdict is in this comma-separated set "
+        "(case-insensitive). A bare --fail-on or 'default' uses the safe set "
+        "breaking,drift,orphaned_consumer,undeclared_producer. Safe verdicts "
+        "(external/expected/dead/unmapped/confirmed/ok/cleanup_candidate) are "
+        "rejected. The artifact is always written first."
+    ),
+)
+def federate(
+    *, exports: tuple[Path, ...], project: Path | None, fail_on: str | None
+) -> None:
     """Aggregate >=2 satellite export artifacts into one federated graph.
 
     Composes the namespaced node/edge union, resolves ``@repo:node`` foreign
     refs, computes three-valued intent-vs-reality verdicts, reconciles AMQP
     contracts (both-sides vs one-sided), and reports per-satellite staleness.
     Writes ``.beadloom/federated.json`` + ``.beadloom/federated.txt`` in the hub.
+
+    With ``--fail-on`` the run also acts as a landscape gate: it still writes the
+    artifact and prints the report, THEN exits 1 if any edge/contract carries a
+    verdict in the fail-set (so CI always has the artifact to upload).
     """
     from datetime import datetime, timezone
 
     from beadloom.graph.federation import (
         aggregate_exports,
+        gate_failures,
         render_federation_report,
         serialize_federation,
     )
@@ -576,6 +599,8 @@ def federate(*, exports: tuple[Path, ...], project: Path | None) -> None:
     if len(exports) < minimum_satellites:
         click.echo("Error: federate needs at least two export artifacts.", err=True)
         sys.exit(1)
+
+    fail_set = _parse_fail_on(fail_on) if fail_on is not None else None
 
     artifacts = _load_export_artifacts(exports)
     if artifacts is None:
@@ -592,8 +617,57 @@ def federate(*, exports: tuple[Path, ...], project: Path | None) -> None:
     json_path.write_text(serialize_federation(fed) + "\n", encoding="utf-8")
     report_path.write_text(report, encoding="utf-8")
 
+    # Print the report + artifact location FIRST, so the artifact is always
+    # available even when the gate then fails the build.
     click.echo(report, nl=False)
     click.echo(f"Wrote federated graph to {json_path}")
+
+    if fail_set is not None:
+        failures = gate_failures(fed, fail_set)
+        if failures:
+            _report_gate_failures(failures)
+            sys.exit(1)
+
+
+def _parse_fail_on(raw: str) -> set[str]:
+    """Parse the ``--fail-on`` CSV into a fail-set, rejecting safe verdicts.
+
+    ``default`` (or a bare ``--fail-on``) expands to the safe-default set. Any
+    explicit token in :data:`NEVER_FAIL_VERDICTS` is refused with a clear,
+    non-zero error (principle 3 — a user cannot arm a false gate). Matching is
+    case-insensitive; whitespace/empty tokens are ignored.
+    """
+    from beadloom.graph.federation import NEVER_FAIL_VERDICTS, SAFE_DEFAULT_FAIL_ON
+
+    tokens = {t.strip().lower() for t in raw.split(",") if t.strip()}
+    if not tokens or tokens == {"default"}:
+        return set(SAFE_DEFAULT_FAIL_ON)
+    rejected = sorted(tokens & NEVER_FAIL_VERDICTS)
+    if rejected:
+        click.echo(
+            "Error: --fail-on rejects no-false-gate verdicts "
+            f"({', '.join(rejected)}); these are intentional/healthy states, "
+            "never a gate failure.",
+            err=True,
+        )
+        sys.exit(2)
+    tokens.discard("default")
+    return tokens
+
+
+def _report_gate_failures(
+    failures: list[GateFailure],
+) -> None:
+    """Print each gate failure (identity + verdict + BREAKING names) to stderr."""
+    click.echo(
+        f"Landscape gate FAILED: {len(failures)} verdict(s) in the fail-set.",
+        err=True,
+    )
+    for failure in failures:
+        line = f"  [{failure.kind}] {failure.identity}: {failure.verdict.upper()}"
+        if failure.missing:
+            line += f" — missing: {', '.join(failure.missing)}"
+        click.echo(line, err=True)
 
 
 def _load_export_artifacts(

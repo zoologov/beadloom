@@ -140,10 +140,14 @@ def current_commit_sha(project_root: Path) -> str | None
 ### 4. `beadloom federate` — hub aggregation
 
 ```
-beadloom federate <export1.json> <export2.json> [...] [--project DIR]
+beadloom federate <export1.json> <export2.json> [...] [--project DIR] [--fail-on <csv>]
 ```
 
 Ingests **≥ 2** satellite export artifacts and composes one federated graph. Writes `.beadloom/federated.json` (deterministic) + `.beadloom/federated.txt` (human-readable report) into the hub project root and echoes the report (plus any DRIFT) to stdout. Fewer than two artifacts, or a file that is not a JSON object, exits `1`.
+
+**Landscape gate — `--fail-on` (BDL-039 / F3).** With `--fail-on`, the run also acts as a CI gate: it **still writes the artifact and prints the report first**, THEN exits `1` if any edge `EdgeVerdict` or contract `ContractVerdict` (matched case-insensitively against the enum value) is in the fail-set — so CI always has `federated.json` to upload even when the gate fails. The failing verdicts (each with its `src → dst` / `contract_key` identity, and for `BREAKING` the missing GraphQL names) are printed to stderr. Exit `0` when clean. A bare `--fail-on` or the token `default` uses the **safe-default fail-set** `breaking,drift,orphaned_consumer,undeclared_producer` (plus the edge-level `undeclared`, the AMQP equivalent of `undeclared_producer`). The pure, testable `gate_failures(fed, fail_on) -> list[GateFailure]` scans the already-computed verdicts and returns deterministically-sorted findings.
+
+**No false gates (principle 3 — a noisy gate gets disabled).** The fail-set **never** includes `external` / `expected` / `dead` / `unmapped` / `confirmed` / `ok` / `cleanup_candidate` (`NEVER_FAIL_VERDICTS`): these are intentional, honest-unknown, or healthy states (`cleanup_candidate` is a warning, not a block). Passing one of them to `--fail-on` is **rejected** with a clear error (exit `2`) so a user cannot arm a false gate. `SAFE_DEFAULT_FAIL_ON` and `NEVER_FAIL_VERDICTS` are disjoint by construction; without `--fail-on`, `federate` is pure reporting (exit `0` regardless of drift).
 
 Aggregation (`aggregate_exports`):
 
@@ -244,7 +248,7 @@ The federated JSON envelope: `{ schema_version, repos, nodes, edges, contracts, 
 **Still non-goals (deferred):**
 
 - **REST / OpenAPI and gRPC contracts** (lowest priority — runtime-generated, no static source files; future F-phase).
-- **CI gating** — `federate` is run by hand on collected export files; no per-repo/landscape CI gate, no SaaS hub, no satellite auto-bootstrap (F3).
+- **CI gating** — the **landscape gate** lands in F3 (`federate --fail-on`, above); a single `beadloom ci` orchestrator + reusable CI integration are the remaining F3 beads. No SaaS hub, no satellite auto-bootstrap.
 - **No VitePress / visual landscape map** (F4), no semantic layer.
 - Hub needs **≥ 2** satellite exports.
 
