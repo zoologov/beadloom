@@ -188,6 +188,23 @@ class TestLintCommand:
         assert "Rules:" in result.output
         assert "Files:" in result.output
 
+    def test_lint_format_github(self, tmp_path: Path) -> None:
+        """--format github -> GitHub Actions ::error annotations with remediation."""
+        project = _project_with_violations(tmp_path)
+        runner = CliRunner()
+        runner.invoke(main, ["lint", "--project", str(project)])
+        _inject_violation(project)
+        result = runner.invoke(
+            main,
+            ["lint", "--project", str(project), "--no-reindex", "--format", "github"],
+        )
+        assert result.exit_code == 0, result.output
+        lines = [ln for ln in result.output.splitlines() if ln.startswith("::")]
+        assert len(lines) >= 1
+        assert lines[0].startswith("::error")
+        # remediation hint surfaces in the annotation
+        assert "—" in lines[0]
+
     def test_lint_no_reindex(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """--no-reindex skips the reindex step."""
         project = _project_with_rules(tmp_path)

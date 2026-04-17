@@ -30,6 +30,7 @@ from beadloom.graph.federation import (
     EdgeVerdict,
     GateFailure,
     aggregate_exports,
+    gate_failure_remediation,
     gate_failures,
 )
 from beadloom.services.cli import main
@@ -337,3 +338,49 @@ class TestFederateFailOnCli:
         # A no-false-gate verdict is refused with a clear, non-zero error.
         assert result.exit_code != 0
         assert "external" in result.output.lower()
+
+
+class TestGateFailureRemediation:
+    """Agent-actionable hints for gate failures (BDL-039 F3 BEAD-02)."""
+
+    def test_breaking_names_missing_surface(self) -> None:
+        f = GateFailure("contract", "graphql:User", "breaking", missing=("email", "name"))
+        hint = gate_failure_remediation(f)
+        assert hint is not None
+        assert "email, name" in hint
+        assert "graphql:User" in hint
+        assert "align the client" in hint
+
+    def test_breaking_without_missing_uses_generic(self) -> None:
+        f = GateFailure("contract", "graphql:User", "breaking")
+        hint = gate_failure_remediation(f)
+        assert hint is not None
+        assert "referenced surface" in hint
+
+    def test_orphaned_consumer(self) -> None:
+        f = GateFailure("contract", "amqp:orders.created", "orphaned_consumer")
+        hint = gate_failure_remediation(f)
+        assert hint is not None
+        assert "no producer for `amqp:orders.created`" in hint
+
+    def test_undeclared_producer(self) -> None:
+        f = GateFailure("contract", "amqp:orders.created", "undeclared_producer")
+        hint = gate_failure_remediation(f)
+        assert hint is not None
+        assert "no consumer" in hint
+
+    def test_edge_undeclared_uses_undeclared_producer_hint(self) -> None:
+        f = GateFailure("edge", "a --> b", "undeclared")
+        hint = gate_failure_remediation(f)
+        assert hint is not None
+        assert "no consumer" in hint
+
+    def test_drift(self) -> None:
+        f = GateFailure("edge", "a --> b", "drift")
+        hint = gate_failure_remediation(f)
+        assert hint is not None
+        assert "only one side" in hint
+
+    def test_unknown_verdict_returns_none(self) -> None:
+        f = GateFailure("contract", "x", "confirmed")
+        assert gate_failure_remediation(f) is None

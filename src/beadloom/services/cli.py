@@ -658,7 +658,9 @@ def _parse_fail_on(raw: str) -> set[str]:
 def _report_gate_failures(
     failures: list[GateFailure],
 ) -> None:
-    """Print each gate failure (identity + verdict + BREAKING names) to stderr."""
+    """Print each gate failure (identity + verdict + BREAKING names + hint) to stderr."""
+    from beadloom.graph.federation import gate_failure_remediation
+
     click.echo(
         f"Landscape gate FAILED: {len(failures)} verdict(s) in the fail-set.",
         err=True,
@@ -668,6 +670,9 @@ def _report_gate_failures(
         if failure.missing:
             line += f" — missing: {', '.join(failure.missing)}"
         click.echo(line, err=True)
+        hint = gate_failure_remediation(failure)
+        if hint:
+            click.echo(f"    fix: {hint}", err=True)
 
 
 def _load_export_artifacts(
@@ -2624,9 +2629,10 @@ def watch_cmd(*, debounce: int, project: Path | None) -> None:
 @click.option(
     "--format",
     "fmt",
-    type=click.Choice(["rich", "json", "porcelain"]),
+    type=click.Choice(["rich", "json", "porcelain", "github"]),
     default=None,
-    help="Output format (default: rich if TTY, porcelain if piped).",
+    help="Output format (default: rich if TTY, porcelain if piped). "
+    "'github' emits GitHub Actions ::error annotations.",
 )
 @click.option(
     "--strict",
@@ -2668,6 +2674,7 @@ def lint(
     2 = configuration error.
     """
     from beadloom.graph.linter import LintError
+    from beadloom.graph.linter import format_github as _format_github
     from beadloom.graph.linter import format_json as _format_json
     from beadloom.graph.linter import format_porcelain as _format_porcelain
     from beadloom.graph.linter import format_rich as _format_rich
@@ -2689,6 +2696,7 @@ def lint(
         "rich": _format_rich,
         "json": _format_json,
         "porcelain": _format_porcelain,
+        "github": _format_github,
     }
     output = formatters[fmt](result)
     if output:

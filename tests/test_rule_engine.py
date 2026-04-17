@@ -18,6 +18,7 @@ from beadloom.graph.rule_engine import (
     LayerRule,
     NodeMatcher,
     RequireRule,
+    Violation,
     evaluate_all,
     evaluate_cardinality_rules,
     evaluate_deny_rules,
@@ -2490,3 +2491,100 @@ class TestEvaluateCardinalityRules:
         violations = evaluate_all(cardinality_db, rules)
         assert len(violations) == 1
         assert violations[0].rule_type == "cardinality"
+
+
+# ---------------------------------------------------------------------------
+# TestRemediation — agent-actionable hints (BDL-039 F3 BEAD-02)
+# ---------------------------------------------------------------------------
+
+
+class TestRemediation:
+    """`Violation.remediation` + `_remediation_for` per rule kind."""
+
+    def _v(self, rule_type: str, **kw: object) -> Violation:
+        base: dict[str, object] = {
+            "rule_name": "r",
+            "rule_description": "d",
+            "rule_type": rule_type,
+            "severity": "error",
+            "file_path": None,
+            "line_number": None,
+            "from_ref_id": "alpha",
+            "to_ref_id": "beta",
+            "message": "msg",
+        }
+        base.update(kw)
+        return Violation(**base)  # type: ignore[arg-type]
+
+    def test_violation_remediation_defaults_none(self) -> None:
+        """Additive field: existing constructions default to None."""
+        v = self._v("deny")
+        assert v.remediation is None
+
+    def test_deny_remediation_names_import(self) -> None:
+        from beadloom.graph.rule_engine import _remediation_for
+
+        v = self._v("deny", file_path="src/billing/x.py")
+        hint = _remediation_for("deny", v)
+        assert hint is not None
+        assert "alpha -> beta" in hint
+        assert "src/billing/x.py" in hint
+
+    def test_forbid_remediation_names_edge(self) -> None:
+        from beadloom.graph.rule_engine import _remediation_for
+
+        hint = _remediation_for("forbid", self._v("forbid"))
+        assert hint is not None
+        assert "alpha -> beta" in hint
+
+    def test_cycle_remediation_breaks_edge(self) -> None:
+        from beadloom.graph.rule_engine import _remediation_for
+
+        hint = _remediation_for("cycle", self._v("cycle"))
+        assert hint is not None
+        assert "break the cycle" in hint
+        assert "alpha -> beta" in hint
+
+    def test_layer_remediation_invert_or_extract(self) -> None:
+        from beadloom.graph.rule_engine import _remediation_for
+
+        hint = _remediation_for("layer", self._v("layer"))
+        assert hint is not None
+        assert "invert" in hint or "extract" in hint
+
+    def test_cardinality_remediation_split(self) -> None:
+        from beadloom.graph.rule_engine import _remediation_for
+
+        hint = _remediation_for("cardinality", self._v("cardinality"))
+        assert hint is not None
+        assert "split" in hint
+
+    def test_require_remediation_add_edge(self) -> None:
+        from beadloom.graph.rule_engine import _remediation_for
+
+        hint = _remediation_for("require", self._v("require"))
+        assert hint is not None
+        assert "add" in hint
+
+    def test_unknown_rule_type_returns_none(self) -> None:
+        from beadloom.graph.rule_engine import _remediation_for
+
+        assert _remediation_for("nonexistent", self._v("nonexistent")) is None
+
+    def test_evaluate_all_populates_remediation(
+        self, cardinality_db: sqlite3.Connection
+    ) -> None:
+        from beadloom.graph.rule_engine import Rule as RuleType
+
+        rules: list[RuleType] = [
+            CardinalityRule(
+                name="sym-limit",
+                description="Max 3 symbols",
+                for_matcher=NodeMatcher(kind="domain"),
+                max_symbols=3,
+            )
+        ]
+        violations = evaluate_all(cardinality_db, rules)
+        assert len(violations) == 1
+        assert violations[0].remediation is not None
+        assert "split" in violations[0].remediation

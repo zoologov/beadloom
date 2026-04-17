@@ -268,7 +268,7 @@ Aggregate ≥2 satellite export artifacts into one federated graph (hub).
 beadloom federate EXPORT1.json EXPORT2.json [...] [--project DIR]
 ```
 
-Composes the namespaced node/edge union (`@repo:ref_id` identity), resolves `@repo:` foreign refs, assigns a three-valued intent-vs-reality verdict per edge (`OK` / `DRIFT` / `EXPECTED` / `CLEANUP_CANDIDATE` / `UNDECLARED` / `DEAD`), reconciles AMQP contracts (confirmed both-sides vs one-sided), and reports per-satellite staleness (commit_sha + age). Writes `.beadloom/federated.json` + `.beadloom/federated.txt` in the hub project root and echoes the report (with any DRIFT) to stdout. Requires at least two artifacts; exits 1 otherwise or if a file is not a JSON object. See the [federation SPEC](../domains/graph/features/federation/SPEC.md).
+Composes the namespaced node/edge union (`@repo:ref_id` identity), resolves `@repo:` foreign refs, assigns a three-valued intent-vs-reality verdict per edge (`OK` / `DRIFT` / `EXPECTED` / `CLEANUP_CANDIDATE` / `UNDECLARED` / `DEAD`), reconciles AMQP contracts (confirmed both-sides vs one-sided), and reports per-satellite staleness (commit_sha + age). Writes `.beadloom/federated.json` + `.beadloom/federated.txt` in the hub project root and echoes the report (with any DRIFT) to stdout. Requires at least two artifacts; exits 1 otherwise or if a file is not a JSON object. The `--fail-on <csv>` landscape gate (writes artifacts first, then exits 1 on matching verdicts) prints an agent-actionable `fix:` hint per failing verdict (BREAKING / ORPHANED_CONSUMER / UNDECLARED_PRODUCER / DRIFT). See the [federation SPEC](../domains/graph/features/federation/SPEC.md).
 
 ### beadloom snapshot
 
@@ -330,10 +330,18 @@ beadloom why REF_ID [--depth N] [--json] [--reverse] [--format {panel,tree}] [--
 Run architecture lint rules against the project.
 
 ```bash
-beadloom lint [--format {rich,json,porcelain}] [--strict] [--fail-on-warn] [--no-reindex] [--project DIR]
+beadloom lint [--format {rich,json,porcelain,github}] [--strict] [--fail-on-warn] [--no-reindex] [--project DIR]
 ```
 
 Checks cross-boundary imports against rules defined in `rules.yml`. Format auto-detects: `rich` if TTY, `porcelain` if piped.
+
+`--format` options:
+- `rich` -- human-readable text (default on a TTY).
+- `json` -- structured output: a backward-compatible `violations` array (now with an additive `remediation` key), a stable agent-actionable `findings` array (`{kind, rule, severity, locations, why, remediation}`), and a `summary` object. Deterministic (violations are pre-sorted).
+- `porcelain` -- one colon-separated line per violation (default when piped).
+- `github` -- GitHub Actions workflow commands (`::error file=…,line=…::<rule>: <message> — <remediation>`) so violations surface as inline PR annotations; warnings use `::warning`.
+
+Each violation carries an agent-actionable `remediation` hint derived per rule kind (deny/forbid → remove/reroute the import or edge; cycle → break the cycle at a named edge; layer → invert the dependency or extract a shared abstraction; cardinality → split the node; require → add the required edge).
 
 Exit codes: 0 = clean (or violations without `--strict`/`--fail-on-warn`), 1 = violations with `--strict` (errors only) or `--fail-on-warn` (any violation), 2 = configuration error.
 
@@ -496,7 +504,7 @@ Module `src/beadloom/services/cli.py`:
 - `snapshot_save` -- save current graph state as a snapshot
 - `snapshot_list` -- list all saved snapshots
 - `snapshot_compare` -- compare two snapshots (added/removed/changed nodes and edges)
-- `lint` -- architecture lint with `--strict`, `--fail-on-warn`, auto-format detection
+- `lint` -- architecture lint with `--strict`, `--fail-on-warn`, auto-format detection, agent-actionable `remediation`, and `--format {rich,json,porcelain,github}` (GitHub annotations)
 - `prime` -- compact project context for AI agents
 - `setup_mcp` -- configure MCP server for editor
 - `setup_rules` -- create IDE rules files

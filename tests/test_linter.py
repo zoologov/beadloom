@@ -11,6 +11,7 @@ import pytest
 from beadloom.graph.linter import (
     LintError,
     LintResult,
+    format_github,
     format_json,
     format_porcelain,
     format_rich,
@@ -492,3 +493,122 @@ class TestFormatPorcelain:
         assert parts[4] == ""  # line_number
         assert parts[5] == "notifications"  # from_ref_id
         assert parts[6] == ""  # to_ref_id
+
+
+# ---------------------------------------------------------------------------
+# Agent-actionable output: remediation + findings + github (BDL-039 F3 BEAD-02)
+# ---------------------------------------------------------------------------
+
+
+def _remediated_violations() -> list[Violation]:
+    return [
+        Violation(
+            rule_name="billing-no-auth",
+            rule_description="Billing must not import auth",
+            rule_type="deny",
+            severity="error",
+            file_path="src/billing/invoice.py",
+            line_number=12,
+            from_ref_id="billing",
+            to_ref_id="auth",
+            message="imports auth",
+            remediation="remove the import `billing -> auth`",
+        ),
+        Violation(
+            rule_name="svc-needs-domain",
+            rule_description="Service must be part of domain",
+            rule_type="require",
+            severity="warn",
+            file_path=None,
+            line_number=None,
+            from_ref_id="notifications",
+            to_ref_id=None,
+            message="no domain edge",
+            remediation="add the required edge from `notifications`",
+        ),
+    ]
+
+
+class TestFormatJsonAgentActionable:
+    """Additive `remediation` key + stable `findings` array."""
+
+    def test_violations_carry_remediation_key(self) -> None:
+        result = _make_result(violations=_remediated_violations())
+        parsed = json.loads(format_json(result))
+        assert parsed["violations"][0]["remediation"] == "remove the import `billing -> auth`"
+
+    def test_findings_array_present_and_shaped(self) -> None:
+        result = _make_result(violations=_remediated_violations())
+        parsed = json.loads(format_json(result))
+        assert "findings" in parsed
+        f0 = parsed["findings"][0]
+        assert set(f0) == {"kind", "rule", "severity", "locations", "why", "remediation"}
+        assert f0["kind"] == "deny"
+        assert f0["rule"] == "billing-no-auth"
+        assert f0["locations"] == [{"file": "src/billing/invoice.py", "line": 12}]
+        assert f0["why"] == "imports auth"
+        assert f0["remediation"] == "remove the import `billing -> auth`"
+
+    def test_finding_without_location_has_empty_locations(self) -> None:
+        result = _make_result(violations=_remediated_violations())
+        parsed = json.loads(format_json(result))
+        # second finding is a require rule with no file/line
+        assert parsed["findings"][1]["locations"] == []
+
+    def test_json_deterministic(self) -> None:
+        result = _make_result(violations=_remediated_violations())
+        assert format_json(result) == format_json(result)
+
+    def test_existing_keys_not_regressed(self) -> None:
+        result = _make_result()
+        parsed = json.loads(format_json(result))
+        v0 = parsed["violations"][0]
+        for key in ("rule_name", "rule_type", "severity", "file_path", "message"):
+            assert key in v0
+
+
+class TestFormatGithub:
+    """`--format github` GitHub Actions annotations."""
+
+    def test_error_annotation_with_location(self) -> None:
+        result = _make_result(violations=_remediated_violations())
+        out = format_github(result)
+        first = out.splitlines()[0]
+        assert first.startswith("::error file=src/billing/invoice.py,line=12::")
+        assert "deny billing-no-auth: imports auth" in first
+        assert "remove the import `billing -> auth`" in first
+
+    def test_warning_level_for_warn_severity(self) -> None:
+        result = _make_result(violations=_remediated_violations())
+        out = format_github(result)
+        warn_line = [ln for ln in out.splitlines() if ln.startswith("::warning")]
+        assert len(warn_line) == 1
+        # require rule has no file/line -> no file= param
+        assert "file=" not in warn_line[0]
+
+    def test_empty_result_is_empty_string(self) -> None:
+        result = _make_result(violations=[])
+        assert format_github(result) == ""
+
+    def test_newlines_escaped(self) -> None:
+        violations = [
+            Violation(
+                rule_name="r",
+                rule_description="d",
+                rule_type="cycle",
+                severity="error",
+                file_path=None,
+                line_number=None,
+                from_ref_id="a",
+                to_ref_id="b",
+                message="line1\nline2",
+                remediation=None,
+            )
+        ]
+        out = format_github(_make_result(violations=violations))
+        assert "\n" not in out  # single logical line
+        assert "%0A" in out
+
+    def test_github_deterministic(self) -> None:
+        result = _make_result(violations=_remediated_violations())
+        assert format_github(result) == format_github(result)

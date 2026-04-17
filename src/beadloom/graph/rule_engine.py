@@ -190,7 +190,13 @@ Rule = (
 
 @dataclass(frozen=True)
 class Violation:
-    """A single rule violation."""
+    """A single rule violation.
+
+    ``remediation`` (BDL-039 F3 BEAD-02) is an additive, agent-actionable
+    "how to fix" hint derived per rule kind by :func:`_remediation_for`. It
+    defaults to ``None`` so existing constructions (and their tests) are
+    unaffected; :func:`evaluate_all` populates it as a deterministic post-pass.
+    """
 
     rule_name: str
     rule_description: str
@@ -201,6 +207,7 @@ class Violation:
     from_ref_id: str | None  # source node
     to_ref_id: str | None  # target node
     message: str  # human-readable explanation
+    remediation: str | None = None  # agent-actionable "how to fix" hint
 
 
 # ---------------------------------------------------------------------------
@@ -1646,11 +1653,51 @@ def evaluate_cardinality_rules(
 # ---------------------------------------------------------------------------
 
 
+def _remediation_for(rule_type: str, violation: Violation) -> str | None:
+    """Derive a templated, agent-actionable "how to fix" hint (BDL-039 F3 G2).
+
+    Returns ``None`` when no specific hint applies for *rule_type* (so the
+    field stays absent rather than carrying a vague placeholder). The hint
+    names the concrete edge/node so an agent can act without re-reading the
+    message prose.
+    """
+    src = violation.from_ref_id or "<source>"
+    dst = violation.to_ref_id or "<target>"
+    if rule_type in {"deny", "forbid_import"}:
+        loc = violation.file_path or src
+        return (
+            f"remove the import `{src} -> {dst}` in `{loc}`, "
+            f"or route it through an allowed intermediary"
+        )
+    if rule_type == "forbid":
+        return f"remove the edge `{src} -> {dst}`, or route it via an allowed node"
+    if rule_type == "cycle":
+        return f"break the cycle by removing the edge `{src} -> {dst}`"
+    if rule_type == "layer":
+        return (
+            f"`{src}` must not depend on upper-layer `{dst}`; "
+            f"invert the dependency or extract a shared abstraction"
+        )
+    if rule_type == "cardinality":
+        return f"`{src}` exceeds its limit ({violation.message}); split it into smaller nodes"
+    if rule_type == "require":
+        return f"add the required edge from `{src}` to a matching target node"
+    return None
+
+
+def _with_remediation(violation: Violation) -> Violation:
+    """Return a copy of *violation* with its derived ``remediation`` populated."""
+    from dataclasses import replace
+
+    return replace(violation, remediation=_remediation_for(violation.rule_type, violation))
+
+
 def evaluate_all(conn: sqlite3.Connection, rules: list[Rule]) -> list[Violation]:
     """Evaluate all rules and return sorted violations.
 
     Supports deny, require, cycle, import boundary, forbid edge, layer,
-    and cardinality rules.
+    and cardinality rules. Each violation is enriched with an agent-actionable
+    ``remediation`` hint (BDL-039 F3 BEAD-02) as a deterministic post-pass.
     """
     deny_rules: list[DenyRule] = []
     require_rules: list[RequireRule] = []
@@ -1685,6 +1732,9 @@ def evaluate_all(conn: sqlite3.Connection, rules: list[Rule]) -> list[Violation]
         + evaluate_layer_rules(conn, layer_rules)
         + evaluate_cardinality_rules(conn, cardinality_rules)
     )
+
+    # Enrich each violation with an agent-actionable remediation hint.
+    violations = [_with_remediation(v) for v in violations]
 
     # Sort by rule_name, then file_path (None sorts first)
     violations.sort(key=lambda v: (v.rule_name, v.file_path or ""))

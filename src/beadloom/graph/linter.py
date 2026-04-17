@@ -215,10 +215,40 @@ def format_rich(result: LintResult) -> str:
     return "\n".join(lines)
 
 
+def _finding(v: Violation) -> dict[str, object]:
+    """Project a :class:`Violation` to the stable, agent-actionable finding shape.
+
+    Shape (BDL-039 F3 BEAD-02): ``{kind, rule, severity, locations, why,
+    remediation}`` — reusable across ``--format json`` and ``--format github``.
+    ``locations`` is a list of ``{file, line}`` (omitting ``line`` when absent),
+    so the same finding maps cleanly to GitHub annotations. Deterministic by
+    construction; ordering is the caller's responsibility (violations are
+    pre-sorted by :func:`~beadloom.graph.rule_engine.evaluate_all`).
+    """
+    locations: list[dict[str, object]] = []
+    if v.file_path is not None:
+        loc: dict[str, object] = {"file": v.file_path}
+        if v.line_number is not None:
+            loc["line"] = v.line_number
+        locations.append(loc)
+    return {
+        "kind": v.rule_type,
+        "rule": v.rule_name,
+        "severity": v.severity,
+        "locations": locations,
+        "why": v.message,
+        "remediation": v.remediation,
+    }
+
+
 def format_json(result: LintResult) -> str:
     """Format a LintResult as structured JSON.
 
-    Returns a JSON string with ``violations`` array and ``summary`` object.
+    Returns a JSON string with a ``violations`` array (backward-compatible
+    keys, plus an additive ``remediation``), a stable agent-actionable
+    ``findings`` array (``{kind, rule, severity, locations, why, remediation}``),
+    and a ``summary`` object. The pre-sorted violation order makes the output
+    deterministic.
     """
     violations_list: list[dict[str, object]] = []
     for v in result.violations:
@@ -232,11 +262,13 @@ def format_json(result: LintResult) -> str:
                 "from_ref_id": v.from_ref_id if v.from_ref_id is not None else None,
                 "to_ref_id": v.to_ref_id if v.to_ref_id is not None else None,
                 "message": v.message,
+                "remediation": v.remediation,
             }
         )
 
     output: dict[str, object] = {
         "violations": violations_list,
+        "findings": [_finding(v) for v in result.violations],
         "summary": {
             "rules_evaluated": result.rules_evaluated,
             "violations_count": len(result.violations),
@@ -249,6 +281,41 @@ def format_json(result: LintResult) -> str:
     }
 
     return json.dumps(output, indent=2)
+
+
+def format_github(result: LintResult) -> str:
+    """Format a LintResult as GitHub Actions workflow commands (BDL-039 F3 G2).
+
+    Emits one ``::error`` / ``::warning`` command per violation so they appear
+    as inline PR annotations::
+
+        ::error file=src/billing/invoice.py,line=12::deny billing-no-auth: <why> — <remediation>
+
+    The ``file``/``line`` parameters are included only when the violation has a
+    location (graph-level violations omit them). Newlines inside a message are
+    escaped to ``%0A`` per the workflow-command spec so the annotation stays on
+    one logical line. Output is deterministic (violations are pre-sorted).
+    Returns an empty string when there are no violations.
+    """
+    if not result.violations:
+        return ""
+
+    lines: list[str] = []
+    for v in result.violations:
+        level = "error" if v.severity == "error" else "warning"
+        params: list[str] = []
+        if v.file_path is not None:
+            params.append(f"file={v.file_path}")
+            if v.line_number is not None:
+                params.append(f"line={v.line_number}")
+        param_str = (" " + ",".join(params)) if params else ""
+        msg = f"{v.rule_type} {v.rule_name}: {v.message}"
+        if v.remediation:
+            msg += f" — {v.remediation}"
+        msg = msg.replace("\r\n", "%0A").replace("\n", "%0A").replace("\r", "%0A")
+        lines.append(f"::{level}{param_str}::{msg}")
+
+    return "\n".join(lines)
 
 
 def format_porcelain(result: LintResult) -> str:

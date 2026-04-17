@@ -968,3 +968,32 @@ def _contract_failure(contract: dict[str, object], verdict: str) -> GateFailure:
         else ()
     )
     return GateFailure("contract", identity, verdict, missing)
+
+
+def gate_failure_remediation(failure: GateFailure) -> str | None:
+    """Derive an agent-actionable "how to fix" hint for a gate failure (G2).
+
+    Mirrors :func:`~beadloom.graph.rule_engine._remediation_for` for the
+    cross-service landscape gate: each contract/edge verdict that armed the
+    gate gets a templated hint naming the concrete contract/edge so an agent
+    (or human) can act without re-deriving the break. Returns ``None`` for
+    verdicts that carry no specific remediation.
+    """
+    verdict = failure.verdict.lower()
+    identity = failure.identity or "<contract>"
+    if verdict == "breaking":
+        names = ", ".join(failure.missing) if failure.missing else "the referenced surface"
+        return (
+            f"consumer references `{names}` absent from the producer SDL of "
+            f"`{identity}`; align the client or restore the field"
+        )
+    if verdict == "orphaned_consumer":
+        return f"no producer for `{identity}`; add a producer or drop the consumer"
+    if verdict in {"undeclared_producer", "undeclared"}:
+        return f"no consumer for `{identity}`; add a consumer or stop producing it"
+    if verdict == "drift":
+        return (
+            f"`{identity}` is declared active but present on only one side; "
+            f"add the missing side or mark it deprecated/planned"
+        )
+    return None
