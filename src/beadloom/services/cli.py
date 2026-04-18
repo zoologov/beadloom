@@ -1619,6 +1619,63 @@ def setup_rules(
 
 
 # beadloom:domain=onboarding
+@main.command("config-check")
+@click.option(
+    "--fix",
+    is_flag=True,
+    default=False,
+    help="Regenerate drifted agent-config artifacts, then re-check.",
+)
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: current directory).",
+)
+def config_check(*, fix: bool, project: Path | None) -> None:
+    """Check that generated agent-config is in sync with the graph.
+
+    Regenerates AGENTS.md + the auto-managed sections of CLAUDE.md + IDE
+    adapters in memory and diffs them against disk.  Exits 1 on drift,
+    0 when clean.  With --fix, regenerates via ``setup-rules --refresh``
+    and re-checks.
+    """
+    from beadloom.infrastructure.db import open_db
+    from beadloom.onboarding import check_config_drift
+    from beadloom.onboarding.scanner import generate_agents_md, refresh_claude_md
+
+    project_root = project or Path.cwd()
+
+    if fix:
+        # Regenerate via the same refresh path used by `setup-rules --refresh`.
+        refresh_claude_md(project_root)
+        generate_agents_md(project_root)
+        from beadloom.onboarding.scanner import setup_rules_auto
+
+        setup_rules_auto(project_root)
+
+    db_path = project_root / ".beadloom" / "beadloom.db"
+    conn = open_db(db_path)
+    try:
+        drifts = check_config_drift(project_root, conn)
+    finally:
+        conn.close()
+
+    if not drifts:
+        click.echo("Agent-config in sync — no drift.")
+        return
+
+    click.echo(f"Agent-config drift detected ({len(drifts)}):", err=True)
+    for drift in drifts:
+        click.echo(f"  - {drift.file}: {drift.reason}", err=True)
+    click.echo(
+        "  Run `beadloom setup-rules --refresh` (or `config-check --fix`) to fix.",
+        err=True,
+    )
+    raise SystemExit(1)
+
+
+# beadloom:domain=onboarding
 @main.command()
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
 @click.option("--update", is_flag=True, help="Also regenerate AGENTS.md.")

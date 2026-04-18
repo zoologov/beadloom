@@ -1026,27 +1026,12 @@ def _build_rules_section(project_root: Path) -> str:
     return "\n".join(lines) + "\n"
 
 
-def generate_agents_md(project_root: Path) -> Path:
-    """Generate .beadloom/AGENTS.md with agent instructions.
-
-    Preserves user content between ``<!-- beadloom:custom-start -->`` and
-    ``<!-- beadloom:custom-end -->`` markers on regeneration.  Old-format
-    files using only ``## Custom`` / the legacy HTML comment are migrated
-    automatically.
-
-    Returns the path to the generated file.
-    """
-    beadloom_dir = project_root / ".beadloom"
-    beadloom_dir.mkdir(parents=True, exist_ok=True)
-    agents_path = beadloom_dir / "AGENTS.md"
-
+def _extract_agents_custom_content(agents_path: Path) -> str:
+    """Extract preserved user content from an existing AGENTS.md (if any)."""
     custom_start = "<!-- beadloom:custom-start -->"
     custom_end = "<!-- beadloom:custom-end -->"
     legacy_comment = "<!-- Add project-specific instructions below this line -->"
 
-    # ------------------------------------------------------------------
-    # Extract user content from existing file (if any).
-    # ------------------------------------------------------------------
     custom_content = ""
     if agents_path.exists():
         text = agents_path.read_text(encoding="utf-8")
@@ -1068,11 +1053,24 @@ def generate_agents_md(project_root: Path) -> Path:
 
     # Strip the legacy comment from preserved content so it is not
     # duplicated inside the new markers (template already includes it).
-    custom_content = custom_content.replace(legacy_comment, "").strip()
+    return custom_content.replace(legacy_comment, "").strip()
 
-    # ------------------------------------------------------------------
-    # Render fresh template.
-    # ------------------------------------------------------------------
+
+def build_agents_md_content(project_root: Path) -> str:
+    """Render the full ``.beadloom/AGENTS.md`` content in memory.
+
+    Pure builder: does not touch disk except to read the existing file's
+    preserved custom block.  Shared by :func:`generate_agents_md` (which
+    writes it) and the AgentConfigAsCode drift checker (which diffs it),
+    guaranteeing a single source of truth for the generated content.
+    """
+    custom_start = "<!-- beadloom:custom-start -->"
+    custom_end = "<!-- beadloom:custom-end -->"
+    legacy_comment = "<!-- Add project-specific instructions below this line -->"
+
+    agents_path = project_root / ".beadloom" / "AGENTS.md"
+    custom_content = _extract_agents_custom_content(agents_path)
+
     rules_section = _build_rules_section(project_root)
     mcp_tools_section = _build_mcp_tools_section()
     content = _AGENTS_MD_TEMPLATE_V2.format(
@@ -1080,16 +1078,29 @@ def generate_agents_md(project_root: Path) -> Path:
         mcp_tools_section=mcp_tools_section,
     )
 
-    # ------------------------------------------------------------------
-    # Inject preserved custom content between the markers.
-    # ------------------------------------------------------------------
     if custom_content:
         placeholder = f"{custom_start}\n{legacy_comment}\n{custom_end}"
-        replacement = (
-            f"{custom_start}\n{custom_content}\n{custom_end}"
-        )
+        replacement = f"{custom_start}\n{custom_content}\n{custom_end}"
         content = content.replace(placeholder, replacement)
 
+    return content
+
+
+def generate_agents_md(project_root: Path) -> Path:
+    """Generate .beadloom/AGENTS.md with agent instructions.
+
+    Preserves user content between ``<!-- beadloom:custom-start -->`` and
+    ``<!-- beadloom:custom-end -->`` markers on regeneration.  Old-format
+    files using only ``## Custom`` / the legacy HTML comment are migrated
+    automatically.
+
+    Returns the path to the generated file.
+    """
+    beadloom_dir = project_root / ".beadloom"
+    beadloom_dir.mkdir(parents=True, exist_ok=True)
+    agents_path = beadloom_dir / "AGENTS.md"
+
+    content = build_agents_md_content(project_root)
     agents_path.write_text(content, encoding="utf-8")
     return agents_path
 

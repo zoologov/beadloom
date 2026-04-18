@@ -1,5 +1,6 @@
 """Onboarding domain — project bootstrap, doc import, and presets."""
 
+from beadloom.onboarding.config_sync import ConfigDrift, check_config_drift
 from beadloom.onboarding.doc_generator import generate_polish_data, generate_skeletons
 from beadloom.onboarding.presets import (
     MICROSERVICES,
@@ -31,10 +32,12 @@ __all__ = [
     "MONOLITH",
     "MONOREPO",
     "PRESETS",
+    "ConfigDrift",
     "Preset",
     "PresetRule",
     "auto_link_docs",
     "bootstrap_project",
+    "check_config_drift",
     "classify_doc",
     "detect_preset",
     "generate_agents_md",

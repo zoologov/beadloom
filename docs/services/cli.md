@@ -460,6 +460,17 @@ beadloom setup-rules --tool {cursor,windsurf,cline} [--project DIR]
 
 Creates thin adapter files (`.cursorrules`, `.windsurfrules`, `.clinerules`) that instruct agents to read AGENTS.md.
 
+### beadloom config-check
+
+AgentConfigAsCode freshness gate: verify that generated agent-config is in sync with the graph.
+
+```bash
+beadloom config-check [--project DIR]   # exit 1 on drift, 0 when clean
+beadloom config-check --fix [--project DIR]  # regenerate drifted artifacts, then re-check
+```
+
+Re-runs the same `setup-rules --refresh` generator in memory and diffs its output against on-disk content for `.beadloom/AGENTS.md`, the auto-managed sections of `.claude/CLAUDE.md`, and present IDE adapter files. Checks ONLY auto-managed regions — editing user-authored prose (the AGENTS.md `custom` block, CLAUDE.md content outside the `auto-start`/`auto-end` markers) never trips it. Prints which file drifted, why, and the remediation (`beadloom setup-rules --refresh`); absent target files are skipped. `--fix` regenerates via the refresh path and re-checks. Delegates to `onboarding/config_sync.py:check_config_drift()`.
+
 ### beadloom setup-mcp
 
 Configure MCP server for your editor.
@@ -508,6 +519,7 @@ Module `src/beadloom/services/cli.py`:
 - `prime` -- compact project context for AI agents
 - `setup_mcp` -- configure MCP server for editor
 - `setup_rules` -- create IDE rules files
+- `config_check` -- AgentConfigAsCode drift gate (`--fix` regenerates); reuses the `setup-rules --refresh` generator
 - `mcp_serve` -- run MCP stdio server
 - `docs` -- Click group for doc commands (`generate`, `polish`, `audit`)
 - `tui` -- launch TUI dashboard (primary command, multi-screen with `--no-watch`)
@@ -519,4 +531,4 @@ All commands accept `--project DIR` to specify the project root. The current dir
 
 ## Testing
 
-CLI is tested via `click.testing.CliRunner`. Each command has a corresponding test file in `tests/test_cli_*.py`: `test_cli_reindex.py`, `test_cli_ctx.py`, `test_cli_graph.py`, `test_cli_status.py`, `test_cli_sync_check.py`, `test_cli_sync_update.py`, `test_cli_hooks.py`, `test_cli_link.py`, `test_cli_docs.py`, `test_cli_mcp.py`, `test_cli_watch.py`, `test_cli_diff.py`, `test_cli_why.py`, `test_cli_lint.py`, `test_cli_init.py`, `test_cli_snapshot.py`.
+CLI is tested via `click.testing.CliRunner`. Each command has a corresponding test file in `tests/test_cli_*.py`: `test_cli_reindex.py`, `test_cli_ctx.py`, `test_cli_graph.py`, `test_cli_status.py`, `test_cli_sync_check.py`, `test_cli_sync_update.py`, `test_cli_hooks.py`, `test_cli_link.py`, `test_cli_docs.py`, `test_cli_mcp.py`, `test_cli_watch.py`, `test_cli_diff.py`, `test_cli_why.py`, `test_cli_lint.py`, `test_cli_init.py`, `test_cli_snapshot.py`, `test_cli_config_check.py`.
