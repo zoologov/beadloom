@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     import sqlite3
     from collections.abc import Sequence
 
+    from beadloom.application.gate import GateResult
     from beadloom.graph.federation import GateFailure
 
 from beadloom import __version__
@@ -2765,6 +2766,164 @@ def lint(
         sys.exit(1)
     if strict and result.has_errors:
         sys.exit(1)
+
+
+# beadloom:domain=application
+@main.command()
+@click.option(
+    "--hub",
+    "hub",
+    multiple=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Satellite export artifact(s); when given, run the federate landscape gate.",
+)
+@click.option(
+    "--fail-on",
+    "fail_on",
+    is_flag=False,
+    flag_value="default",
+    default=None,
+    help=(
+        "Federate fail-set (comma-separated, case-insensitive). A bare --fail-on "
+        "or 'default' uses breaking,drift,orphaned_consumer,undeclared_producer; "
+        "no-false-gate verdicts are rejected. Only used with --hub."
+    ),
+)
+@click.option(
+    "--format",
+    "fmt",
+    type=click.Choice(["rich", "json", "github"]),
+    default=None,
+    help="Output format (default: rich if TTY, github otherwise).",
+)
+@click.option(
+    "--no-reindex",
+    is_flag=True,
+    default=False,
+    help="Skip the reindex step (caller reindexes separately).",
+)
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: current directory).",
+)
+def ci(
+    *,
+    hub: tuple[Path, ...],
+    fail_on: str | None,
+    fmt: str | None,
+    no_reindex: bool,
+    project: Path | None,
+) -> None:
+    """Run the unified CI gate (reindex -> lint -> sync-check -> config-check -> federate).
+
+    Composes the existing checkers into one verdict with a single exit code:
+    0 when every step passed, 1 when any step failed. The output names EVERY
+    step that ran and its honest result (PASS/FAIL/SKIP) — never a green that
+    silently skipped a step. ``--format`` applies uniformly across all steps
+    (findings share the agent-actionable {kind, rule, severity, locations, why,
+    remediation} shape). With ``--hub`` the cross-service landscape gate runs.
+    """
+    from beadloom.application.gate import run_ci_gate
+
+    project_root = project or Path.cwd()
+    fail_set = _parse_fail_on(fail_on) if fail_on is not None else None
+
+    if fmt is None:
+        fmt = "rich" if sys.stdout.isatty() else "github"
+
+    result = run_ci_gate(
+        project_root,
+        fail_on=fail_set,
+        hub_exports=list(hub),
+        no_reindex=no_reindex,
+    )
+
+    output = _format_gate(result, fmt)
+    if output:
+        click.echo(output)
+
+    if not result.ok:
+        sys.exit(1)
+
+
+def _format_gate(result: GateResult, fmt: str) -> str:
+    """Render a :class:`GateResult` in the requested uniform format."""
+    if fmt == "json":
+        return _format_gate_json(result)
+    if fmt == "github":
+        return _format_gate_github(result)
+    return _format_gate_rich(result)
+
+
+def _format_gate_rich(result: GateResult) -> str:
+    """Human report: one honest line per step, then findings, then the verdict."""
+    lines: list[str] = ["Beadloom CI gate", ""]
+    for step in result.steps:
+        lines.append(f"  [{step.status}] {step.name}: {step.summary}")
+    findings = result.findings
+    if findings:
+        lines.append("")
+        for f in findings:
+            loc = _finding_location(f)
+            prefix = f"{loc}: " if loc else ""
+            lines.append(f"  - {prefix}{f.get('why', '')}")
+            remediation = f.get("remediation")
+            if remediation:
+                lines.append(f"      fix: {remediation}")
+    lines.append("")
+    lines.append("PASS — gate clean" if result.ok else "FAIL — gate blocked")
+    return "\n".join(lines)
+
+
+def _format_gate_json(result: GateResult) -> str:
+    """Structured JSON: ``ok`` + per-step status + shared-shape findings."""
+    steps = [
+        {
+            "name": step.name,
+            "status": step.status,
+            "passed": step.passed,
+            "skipped": step.skipped,
+            "summary": step.summary,
+            "findings": step.findings,
+        }
+        for step in result.steps
+    ]
+    return json.dumps({"ok": result.ok, "steps": steps}, indent=2)
+
+
+def _format_gate_github(result: GateResult) -> str:
+    """GitHub Actions annotations — one ::error per finding + a step summary."""
+    lines: list[str] = []
+    for step in result.steps:
+        lines.append(f"::notice::{step.name} {step.status}: {step.summary}")
+    for f in result.findings:
+        level = "error" if f.get("severity") == "error" else "warning"
+        loc = _finding_location(f)
+        param = f" file={loc}" if loc else ""
+        msg = f"{f.get('rule', '')}: {f.get('why', '')}"
+        remediation = f.get("remediation")
+        if remediation:
+            msg += f" — {remediation}"
+        msg = msg.replace("\r\n", "%0A").replace("\n", "%0A").replace("\r", "%0A")
+        lines.append(f"::{level}{param}::{msg}")
+    return "\n".join(lines)
+
+
+def _finding_location(finding: dict[str, object]) -> str:
+    """Extract ``file[:line]`` from a finding's first location, or empty string."""
+    locations = finding.get("locations")
+    if not isinstance(locations, list) or not locations:
+        return ""
+    first = locations[0]
+    if not isinstance(first, dict):
+        return ""
+    file = first.get("file")
+    if not isinstance(file, str):
+        return ""
+    line = first.get("line")
+    return f"{file}:{line}" if isinstance(line, int) else file
 
 
 # beadloom:domain=graph-snapshot

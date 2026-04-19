@@ -471,6 +471,24 @@ beadloom config-check --fix [--project DIR]  # regenerate drifted artifacts, the
 
 Re-runs the same `setup-rules --refresh` generator in memory and diffs its output against on-disk content for `.beadloom/AGENTS.md`, the auto-managed sections of `.claude/CLAUDE.md`, and present IDE adapter files. Checks ONLY auto-managed regions — editing user-authored prose (the AGENTS.md `custom` block, CLAUDE.md content outside the `auto-start`/`auto-end` markers) never trips it. Prints which file drifted, why, and the remediation (`beadloom setup-rules --refresh`); absent target files are skipped. `--fix` regenerates via the refresh path and re-checks. Delegates to `onboarding/config_sync.py:check_config_drift()`.
 
+### beadloom ci
+
+The unified enforcement gate — the single CI convergence point (principle 7: identical for Cursor / Claude Code / human authors).
+
+```bash
+beadloom ci [--hub EXPORT.json ...] [--fail-on CSV] [--format {rich,json,github}] [--no-reindex] [--project DIR]
+```
+
+Composes the existing checkers, in order, into ONE verdict with a single exit code (0 = all steps passed, 1 = any step failed):
+
+1. `reindex` (incremental) — unless `--no-reindex`.
+2. `lint --strict` — architecture boundary rules at error severity.
+3. `sync-check` — doc↔code freshness (stale pairs fail).
+4. `config-check` — AgentConfigAsCode drift.
+5. `federate --fail-on` — the cross-service landscape gate, only when `--hub` export(s) are given (safe-default fail-set `breaking,drift,orphaned_consumer,undeclared_producer`; no-false-gate verdicts rejected).
+
+**Honest gate (the Phase-0 lesson):** the report names every step that ran and its outcome — `PASS` / `FAIL` / `SKIP` — never a green that silently skipped a step. **No short-circuit:** all steps run and ALL findings are collected even after an earlier failure, so one run surfaces every problem. `--format` applies uniformly across every step; findings share the agent-actionable `{kind, rule, severity, locations, why, remediation}` shape (`github` emits `::error` annotations; `json` emits `{ok, steps[]}`). The per-repo `beadloom-aac-lint.yml` reindex+lint+sync steps collapse into one `beadloom ci` call. Orchestration lives in `application/gate.py:run_ci_gate()`; the CLI only parses options and renders.
+
 ### beadloom setup-mcp
 
 Configure MCP server for your editor.
@@ -520,6 +538,7 @@ Module `src/beadloom/services/cli.py`:
 - `setup_mcp` -- configure MCP server for editor
 - `setup_rules` -- create IDE rules files
 - `config_check` -- AgentConfigAsCode drift gate (`--fix` regenerates); reuses the `setup-rules --refresh` generator
+- `ci` -- unified enforcement gate composing reindex -> lint -> sync-check -> config-check -> (optional `--hub`) federate into one exit code; honest per-step PASS/FAIL/SKIP; uniform `--format {rich,json,github}`; delegates to `application/gate.py:run_ci_gate()`
 - `mcp_serve` -- run MCP stdio server
 - `docs` -- Click group for doc commands (`generate`, `polish`, `audit`)
 - `tui` -- launch TUI dashboard (primary command, multi-screen with `--no-watch`)

@@ -19,6 +19,7 @@ the DDD Dependency Rule.
 - **doctor.py** — `run_checks(conn, *, project_root=None)` validates graph health with DB checks (empty summaries, unlinked docs, nodes without docs, isolated nodes, symbol drift, stale sync entries, source coverage gaps) plus an optional "Agent Instructions" check when `project_root` is provided, comparing CLAUDE.md/AGENTS.md factual claims (version, packages, CLI commands, MCP tool count) against runtime truth.
 - **debt_report.py** — `collect_debt_data()` aggregates architecture health signals from lint, sync-check, doctor, git activity, and test mapper. `compute_debt_score()` applies a weighted formula producing a 0-100 debt score with category breakdown, severity classification, and per-node top offenders. `format_debt_report()`/`format_debt_json()` render the report. `compute_debt_trend()` compares against the last graph snapshot.
 - **watcher.py** — `watch()` monitors project files (graph YAML, docs, source) and auto-triggers reindex on changes using `watchfiles`. Graph changes trigger full reindex; other changes trigger incremental. `WatchEvent` frozen dataclass captures per-event metadata. `DEFAULT_DEBOUNCE_MS` constant (500ms).
+- **gate.py** — `run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex)` is the unified CI enforcement gate (the `beadloom ci` orchestrator). It composes the existing checkers IN ORDER — reindex (unless `no_reindex`) → `lint --strict` → `sync-check` → `config-check` (AgentConfigAsCode) → (when `hub_exports` given) `federate --fail-on` — into one `GateResult` whose `.ok` is True only when every step passed. It ORCHESTRATES existing domain code; it reimplements no checker. Honesty invariants: no short-circuit (every step runs and ALL findings are collected even after an earlier failure) and no silent skip (each `GateStep` records `PASS`/`FAIL`/`SKIP`). Findings are projected to the shared agent-actionable shape `{kind, rule, severity, locations, why, remediation}` (reused from `graph/linter.py`) uniformly across all steps, so `--format json`/`github` are identical regardless of which step produced a finding.
 
 ## API
 
@@ -47,6 +48,11 @@ Module `src/beadloom/application/watcher.py`:
 - `WatchEvent` — frozen dataclass: `files_changed`, `is_graph_change`, `reindex_type`
 - `watch(project_root, debounce_ms=DEFAULT_DEBOUNCE_MS, callback=None)` — monitors project files via `watchfiles`
 
+Module `src/beadloom/application/gate.py`:
+- `GateStep` — dataclass: `name`, `passed`, `skipped`, `findings`, `summary`; `.status` -> `PASS`/`FAIL`/`SKIP`
+- `GateResult` — dataclass: `steps`; `.ok` (all steps passed), `.findings` (all findings across steps)
+- `run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex)` -> `GateResult` — composes reindex → lint → sync-check → config-check → (optional) federate; never short-circuits
+
 ## Testing
 
-Tests: `tests/test_reindex.py`, `tests/test_reindex_config.py`, `tests/test_reindex_tests.py`, `tests/test_reindex_activity.py`, `tests/test_reindex_routes.py`, `tests/test_doctor.py`, `tests/test_doctor_drift.py`, `tests/test_doctor_instructions.py`, `tests/test_watcher.py`, `tests/test_debt_report.py`, `tests/test_debt_integration.py`
+Tests: `tests/test_reindex.py`, `tests/test_reindex_config.py`, `tests/test_reindex_tests.py`, `tests/test_reindex_activity.py`, `tests/test_reindex_routes.py`, `tests/test_doctor.py`, `tests/test_doctor_drift.py`, `tests/test_doctor_instructions.py`, `tests/test_watcher.py`, `tests/test_debt_report.py`, `tests/test_debt_integration.py`, `tests/test_gate.py`

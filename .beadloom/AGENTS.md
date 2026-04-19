@@ -50,7 +50,7 @@
 - **service-needs-parent** (require): Every service (except root) must be part_of the beadloom service
 - **no-domain-depends-on-service** (deny): Domains must not have depends_on edges to services
 - **no-dependency-cycles** (forbid_cycles): No circular depends_on chains
-- **architecture-layers** (layers): Services use domains, domains use infrastructure — not reverse
+- **architecture-layers** (layers): Services → application → domains → infrastructure — not reverse
 - **domain-size-limit** (cardinality): Domains should not have too many symbols
 - **tui-no-direct-infra** (forbid_import): TUI must not import infrastructure directly
 - **onboarding-no-direct-infra** (forbid_import): Onboarding must not import infrastructure directly
