@@ -1,0 +1,21 @@
+name: Beadloom Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  beadloom-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Dogfood: run the same composite Action satellites consume.
+      # Per-repo gate (no --hub) — the federated hub pattern is for the
+      # multi-repo aggregator job, documented in docs/guides/ci-setup.md.
+      - name: Beadloom gate
+        uses: ./.github/actions/beadloom-gate
+        with:
+          format: github
