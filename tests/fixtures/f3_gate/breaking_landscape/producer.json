@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "repo": "catalog-service",
+  "commit_sha": "f3a1b2c",
+  "exported_at": "2026-06-01T00:00:00+00:00",
+  "generator": "beadloom f3-dogfood-fixture",
+  "landscape": "commerce-platform",
+  "nodes": [
+    {
+      "ref_id": "catalog-api",
+      "kind": "schema",
+      "summary": "Public GraphQL schema exposed by the catalog service",
+      "lifecycle": "active",
+      "source": null
+    }
+  ],
+  "edges": [
+    {
+      "src": "catalog-api",
+      "dst": "catalog-api",
+      "kind": "produces",
+      "lifecycle": "active",
+      "contract": {
+        "protocol": "graphql",
+        "schema": "PublicCatalogAPI",
+        "direction": "produces",
+        "exposed": ["account", "plan"]
+      }
+    }
+  ]
+}

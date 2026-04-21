@@ -1,0 +1,11 @@
+# Project (F3 dogfood fixture — drifted agent-config)
+
+## 0.1 Project: commerce-platform
+
+<!-- beadloom:auto-start project-info -->
+- **Current version:** 0.0.1-STALE
+<!-- beadloom:auto-end -->
+
+This auto-managed block is deliberately stale relative to the graph, so the
+gate's AgentConfigAsCode check (config-check) must report it as drift. The
+human prose here is never checked.

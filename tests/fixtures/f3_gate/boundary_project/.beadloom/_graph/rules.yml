@@ -1,0 +1,9 @@
+version: 2
+rules:
+  - name: checkout-no-import-catalog
+    description: >-
+      The checkout module must not import the catalog module directly;
+      cross-module access must route through a shared abstraction.
+    forbid_import:
+      from: "src/storefront/checkout/**"
+      to: "storefront/catalog*"

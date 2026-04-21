@@ -1,7 +1,8 @@
 # BDL UX Feedback Log
 
 > Collected during development and dogfooding.
-> Total: 108 issues | Open: 12 | Improvements: 16 | Excluded: 7 | Closed: 73
+> Total: 111 issues | Open: 12 | Improvements: 16 | Excluded: 7 | Closed: 76
+> 2026-06-02 (BDL-039 F3 BEAD-06): VERIFIED #109 #110 #111 (dogfood SUCCESS — the F3 gate BLOCKS all three break-classes: boundary violation, cross-service BREAKING, drifted agent-config — each with a non-zero exit + agent-actionable output). Committed anonymized fixtures under `tests/fixtures/f3_gate/`. See Closed §BDL-039. Total 108→111, Closed 73→76.
 > 2026-06-01 (BDL-038 F2 BEAD-08): VERIFIED #107 (live GraphQL contract mismatch caught before ship — the F2 success criterion) + #108 (paradigm-agnostic FSD round-trip + external native modules + nested company-landscape). See Closed §BDL-038. Closed 71→73.
 > 2026-06-01 (BDL-038 F2 BEAD-01): Opened #105 (domain doc re-stales against all member files when one file is added) + #106 (no non-interactive `mark_synced` CLI). Open 10→12.
 > Last reviewed: BDL-037 (F1: Federation Foundation)
@@ -556,6 +557,14 @@
 ---
 
 ## Closed Issues
+
+### BDL-039 — F3: Tool-Agnostic Enforcement Everywhere (2026-06-02)
+
+> F3 dogfooded (BEAD-06) with committed, anonymized, byte-stable fixtures under `tests/fixtures/f3_gate/` (synthetic role names — `catalog-service`/`storefront-web`/`commerce-platform`; NOT derived from any private repo; the real landscape stays in gitignored scratch). Three reproducible tests (`tests/test_f3_gate_dogfood.py`) prove the F3 success criterion: a CI gate blocks each break-class regardless of who wrote the code, with a non-zero exit AND agent-actionable output. This formalizes the live signal already seen in BEAD-04, where `beadloom ci`'s config-check caught a real stale auto-managed section in Beadloom's own AGENTS.md.
+
+- 109. ~~[INFO] F3 dogfood SUCCESS — the gate BLOCKS a boundary violation, agent-actionable~~ **VERIFIED (BEAD-06)** — a fixture project whose `checkout` module imports `catalog` directly, breaching a committed `forbid_import` rule, runs through `run_ci_gate` (reindex → lint --strict). The gate's `lint` step → **FAIL**, `result.ok is False`, and the finding carries `rule: checkout-no-import-catalog` + a `remediation` hint ("remove the import …, or route it through an allowed intermediary"). `beadloom ci --format github` exits 1 and emits an inline `::error` annotation naming the rule — a violation an agent/CI can act on unaided (principle 4).
+- 110. ~~[INFO] F3 dogfood SUCCESS — the gate BLOCKS a cross-service BREAKING, names the missing field~~ **VERIFIED (BEAD-06)** — two committed satellite `export` artifacts form a one-landscape break: producer `catalog-service` exposes GraphQL `{account, plan}`; consumer `storefront-web` references `{plan, subscriptionTier}`. `gate_failures(fed, {"breaking"})` → exactly one BREAKING contract failure whose `.missing == ("subscriptionTier",)`; the remediation hint names `subscriptionTier`. `beadloom ci --hub producer.json --hub consumer.json` exits 1, naming the `federate` step. Cross-language by NAME, no shared symbol.
+- 111. ~~[INFO] F3 dogfood SUCCESS — the gate BLOCKS a drifted agent-config (AgentConfigAsCode)~~ **VERIFIED (BEAD-06)** — a project whose `.claude/CLAUDE.md` auto-managed section (between `beadloom:auto-start`/`auto-end`) is stale vs the graph. `check_config_drift` reports exactly one drift naming `.claude/CLAUDE.md` (which-file = agent-actionable); `run_ci_gate`'s `config-check` step → **FAIL**, `result.ok is False`; `beadloom ci --format json` exits 1 with the `config-check` step `status: FAIL`. Same class as the live BEAD-04 AGENTS.md catch — human prose outside the markers is never checked (no #73 false positive).
 
 ### BDL-038 — F2: Cross-Service Contract Graph (2026-06-01)
 
