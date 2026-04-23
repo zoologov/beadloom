@@ -2894,14 +2894,19 @@ def _format_gate_json(result: GateResult) -> str:
 
 
 def _format_gate_github(result: GateResult) -> str:
-    """GitHub Actions annotations — one ::error per finding + a step summary."""
+    """GitHub Actions annotations — one ::error per finding + a step summary.
+
+    Emits the valid workflow-command shape ``::error file=<path>,line=<n>::<msg>``
+    (matching ``beadloom lint --format github`` / ``linter.format_github``). The
+    ``file``/``line`` parameters are comma-separated key=value pairs, NOT a
+    ``file=<path:line>`` colon-joined string (which GitHub does not parse).
+    """
     lines: list[str] = []
     for step in result.steps:
         lines.append(f"::notice::{step.name} {step.status}: {step.summary}")
     for f in result.findings:
         level = "error" if f.get("severity") == "error" else "warning"
-        loc = _finding_location(f)
-        param = f" file={loc}" if loc else ""
+        param = _finding_github_params(f)
         msg = f"{f.get('rule', '')}: {f.get('why', '')}"
         remediation = f.get("remediation")
         if remediation:
@@ -2911,8 +2916,35 @@ def _format_gate_github(result: GateResult) -> str:
     return "\n".join(lines)
 
 
+def _finding_github_params(finding: dict[str, object]) -> str:
+    """GitHub annotation parameter string: `` file=<path>,line=<n>`` or ``''``.
+
+    Reads the finding's first location ``{file, line}`` and renders the
+    workflow-command parameter shape (leading space, comma-separated). Returns
+    an empty string for graph-level findings with no file location.
+    """
+    locations = finding.get("locations")
+    if not isinstance(locations, list) or not locations:
+        return ""
+    first = locations[0]
+    if not isinstance(first, dict):
+        return ""
+    file = first.get("file")
+    if not isinstance(file, str) or not file:
+        return ""
+    params = [f"file={file}"]
+    line = first.get("line")
+    if isinstance(line, int):
+        params.append(f"line={line}")
+    return " " + ",".join(params)
+
+
 def _finding_location(finding: dict[str, object]) -> str:
-    """Extract ``file[:line]`` from a finding's first location, or empty string."""
+    """Extract ``file[:line]`` from a finding's first location, or empty string.
+
+    Used by the human-readable (rich) gate report only; GitHub annotations use
+    :func:`_finding_github_params` for the correct ``file=,line=`` shape.
+    """
     locations = finding.get("locations")
     if not isinstance(locations, list) or not locations:
         return ""

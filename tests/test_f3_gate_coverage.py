@@ -535,7 +535,13 @@ class TestNoRegression:
 
 
 class TestHonestGate:
-    _ALL_STEPS: ClassVar[set[str]] = {"reindex", "lint", "sync-check", "config-check"}
+    _ALL_STEPS: ClassVar[set[str]] = {
+        "reindex",
+        "lint",
+        "sync-check",
+        "config-check",
+        "doctor",
+    }
 
     def test_all_steps_reported_even_when_lint_fails(self, tmp_path: Path) -> None:
         # Arrange: an unsatisfiable rule -> lint FAILs, but no short-circuit.
@@ -558,7 +564,14 @@ class TestHonestGate:
             tmp_path, fail_on=None, hub_exports=paths, no_reindex=False
         )
         names = [s.name for s in result.steps]
-        assert names == ["reindex", "lint", "sync-check", "config-check", "federate"]
+        assert names == [
+            "reindex",
+            "lint",
+            "sync-check",
+            "config-check",
+            "doctor",
+            "federate",
+        ]
 
     def test_every_step_has_a_nonempty_status(self, tmp_path: Path) -> None:
         # Honesty invariant: no step ever reports an ambiguous/empty status.

@@ -3,10 +3,11 @@
 # beadloom:domain=application
 
 ``run_ci_gate`` composes the existing checkers — reindex, ``lint --strict``,
-``sync-check``, ``config-check`` (AgentConfigAsCode), and (when hub exports are
-given) ``federate --fail-on`` — into ONE :class:`GateResult` with a single
-``ok`` verdict. It is the principle-7 "CI is the only true enforcement point":
-identical for Cursor / Claude Code / human authors.
+``sync-check``, ``config-check`` (AgentConfigAsCode), ``doctor`` (graph
+integrity), and (when hub exports are given) ``federate --fail-on`` — into ONE
+:class:`GateResult` with a single ``ok`` verdict. It is the principle-7 "CI is
+the only true enforcement point": identical for Cursor / Claude Code / human
+authors.
 
 Two honesty invariants (the Phase-0 lesson):
 
@@ -30,11 +31,28 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    import sqlite3
     from pathlib import Path
+
+    from beadloom.application.doctor import Check
 
 
 # A single finding in the shared, agent-actionable shape (see linter._finding).
 Finding = dict[str, object]
+
+
+def _run_doctor_checks(
+    conn: sqlite3.Connection, *, project_root: Path | None = None
+) -> list[Check]:
+    """Indirection over :func:`beadloom.application.doctor.run_checks`.
+
+    Defined as a module-level seam so the gate's doctor step reuses the exact
+    same integrity checks as ``beadloom doctor`` (no parallel reimplementation),
+    while staying patchable in tests.
+    """
+    from beadloom.application.doctor import run_checks
+
+    return run_checks(conn, project_root=project_root)
 
 
 @dataclass
@@ -96,9 +114,9 @@ def run_ci_gate(
     """Run every gate step in order, collecting all findings; never short-circuit.
 
     Order: (1) reindex unless *no_reindex*; (2) ``lint --strict``;
-    (3) ``sync-check``; (4) ``config-check``; (5) ``federate --fail-on`` when
-    *hub_exports* is non-empty. Returns a :class:`GateResult` whose ``ok`` is
-    True only when every step passed.
+    (3) ``sync-check``; (4) ``config-check``; (5) ``doctor`` (graph integrity);
+    (6) ``federate --fail-on`` when *hub_exports* is non-empty. Returns a
+    :class:`GateResult` whose ``ok`` is True only when every step passed.
 
     *fail_on* is the federate fail-set; ``None`` selects the safe default set
     (``breaking,drift,orphaned_consumer,undeclared_producer``) — the no-false-gate
@@ -109,6 +127,7 @@ def run_ci_gate(
         _step_lint(project_root),
         _step_sync_check(project_root),
         _step_config_check(project_root),
+        _step_doctor(project_root),
     ]
     if hub_exports:
         steps.append(_step_federate(project_root, hub_exports, fail_on))
@@ -213,6 +232,44 @@ def _step_config_check(project_root: Path) -> GateStep:
     return GateStep("config-check", passed=passed, findings=findings, summary=summary)
 
 
+def _step_doctor(project_root: Path) -> GateStep:
+    """``doctor`` — graph/data integrity. Only ERROR-severity checks fail the gate.
+
+    Reuses :func:`beadloom.application.doctor.run_checks` (the exact path
+    ``beadloom doctor`` calls — no reimplementation). WARNING/INFO/OK checks are
+    advisory and never block the build (no false gate): the clean Beadloom repo
+    carries non-error advisories and MUST still exit 0.
+    """
+    from beadloom.application.doctor import Severity
+    from beadloom.infrastructure.db import open_db
+
+    db_path = project_root / ".beadloom" / "beadloom.db"
+    if not db_path.exists():
+        return GateStep(
+            "doctor",
+            passed=False,
+            findings=[
+                _simple_finding(
+                    "doctor", "error", "database not found", "run `beadloom reindex` first"
+                )
+            ],
+            summary="database missing",
+        )
+    conn = open_db(db_path)
+    try:
+        checks = _run_doctor_checks(conn, project_root=project_root)
+    finally:
+        conn.close()
+
+    errors = [c for c in checks if c.severity is Severity.ERROR]
+    findings = [_doctor_finding(c) for c in errors]
+    passed = not errors
+    summary = (
+        f"{len(errors)} integrity error(s)" if errors else f"{len(checks)} check(s) clean"
+    )
+    return GateStep("doctor", passed=passed, findings=findings, summary=summary)
+
+
 def _step_federate(
     project_root: Path, hub_exports: list[Path], fail_on: set[str] | None
 ) -> GateStep:
@@ -315,6 +372,18 @@ def _config_finding(file: str, reason: str) -> Finding:
         "locations": locations,
         "why": reason,
         "remediation": "run `beadloom setup-rules --refresh` (or `config-check --fix`)",
+    }
+
+
+def _doctor_finding(check: Check) -> Finding:
+    """Project a doctor :class:`Check` (ERROR severity) onto the shared shape."""
+    return {
+        "kind": "doctor",
+        "rule": check.name,
+        "severity": "error",
+        "locations": [],
+        "why": check.description,
+        "remediation": "run `beadloom doctor` and fix the reported integrity error",
     }
 
 

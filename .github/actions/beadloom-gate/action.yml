@@ -1,8 +1,8 @@
 name: Beadloom Gate
 description: >-
   Tool-agnostic enforcement gate. Runs `beadloom ci` (reindex -> lint ->
-  sync-check -> config-check -> optional federate landscape gate) as a single
-  verdict with one exit code. Thin wrapper — all logic lives in the CLI.
+  sync-check -> config-check -> doctor -> optional federate landscape gate) as a
+  single verdict with one exit code. Thin wrapper — all logic lives in the CLI.
 
 inputs:
   fail-on:
