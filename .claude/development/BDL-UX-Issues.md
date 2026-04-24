@@ -1,7 +1,8 @@
 # BDL UX Feedback Log
 
 > Collected during development and dogfooding.
-> Total: 111 issues | Open: 12 | Improvements: 16 | Excluded: 7 | Closed: 76
+> Total: 112 issues | Open: 13 | Improvements: 16 | Excluded: 7 | Closed: 76
+> 2026-06-02 (BDL-039 F3 BEAD-09): Opened #112 (incremental reindex displays `Symbols: 0` — per-run delta, not backfilled like nodes/edges per #88; cosmetic, zero gate impact). Total 111→112, Open 12→13.
 > 2026-06-02 (BDL-039 F3 BEAD-06): VERIFIED #109 #110 #111 (dogfood SUCCESS — the F3 gate BLOCKS all three break-classes: boundary violation, cross-service BREAKING, drifted agent-config — each with a non-zero exit + agent-actionable output). Committed anonymized fixtures under `tests/fixtures/f3_gate/`. See Closed §BDL-039. Total 108→111, Closed 73→76.
 > 2026-06-01 (BDL-038 F2 BEAD-08): VERIFIED #107 (live GraphQL contract mismatch caught before ship — the F2 success criterion) + #108 (paradigm-agnostic FSD round-trip + external native modules + nested company-landscape). See Closed §BDL-038. Closed 71→73.
 > 2026-06-01 (BDL-038 F2 BEAD-01): Opened #105 (domain doc re-stales against all member files when one file is added) + #106 (no non-interactive `mark_synced` CLI). Open 10→12.
@@ -36,6 +37,15 @@
 ## Open Issues
 
 > Issues awaiting code fixes in Beadloom.
+
+112. [2026-06-02] [INFO/LOW] Incremental reindex displays `Symbols: 0` — per-run delta, not backfilled to the live total
+
+    **Severity:** info / low (cosmetic display only — zero gate impact)
+    **Command:** `beadloom reindex` (incremental path)
+    **Context:** Observed during BDL-039 F3 tech-writer doc edits. After #88 was fixed, the incremental reindex now backfills `nodes`/`edges` to the true live-DB totals on the docs/code-only path. The `symbols_indexed` counter, however, still reports only the **per-run delta** (symbols touched this run), so a CLI run that changes only docs can print "Symbols: 0" while the DB actually holds all indexed symbols.
+    **Issue:** Inconsistent reporting semantics between counters: `nodes`/`edges` show the live total (per #88), but `symbols_indexed` shows the run delta. A reader can misread "Symbols: 0" as "no symbols indexed."
+    **Expected:** Either backfill `symbols_indexed` to the live DB symbol total on the incremental path (consistent with nodes/edges per #88), or label it explicitly as a delta ("Symbols indexed this run: 0").
+    **Impact:** None on correctness or any gate — `sync-check` / `lint` / `doctor` / `beadloom ci` all read the DB, not this counter. Purely a cosmetic CLI-display artifact.
 
 105. [2026-06-01] [MEDIUM] Adding a new source file to a domain re-stales the domain doc against ALL its member files
 

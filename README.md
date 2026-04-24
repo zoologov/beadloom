@@ -50,7 +50,7 @@ beadloom federate service-a.json service-b.json service-c.json
 - **Nested landscapes — product *and* company scope** — `federate` composes a single product (its back / front / infra / integrations) or a whole company of several products. Standalone products that share no contract never produce mutual noise; cross-product contracts appear only where integration is real.
 - **Per-satellite staleness** — each artifact carries its commit SHA + timestamp, so the hub reports how stale each service's view is (and honestly says "unknown" rather than faking a SHA).
 
-> **Status — honest scope.** Shipped today: AMQP + GraphQL contracts with the presence-based breaking-change check, paradigm- and product-agnostic federation. Dogfooded end-to-end on a real landscape — a real GraphQL `BREAKING` mismatch caught before ship, and a separate FSD-architecture product round-tripped through `export`/`federate` with zero kind loss. **Not yet:** REST/OpenAPI + gRPC contracts, CI-gated landscape enforcement, and the visual landscape map — all on the roadmap, none over-promised here. `federate` is run manually on collected artifacts today.
+> **Status — honest scope.** Shipped today: AMQP + GraphQL contracts with the presence-based breaking-change check, paradigm- and product-agnostic federation, and **CI enforcement** — the contract graph is now CI-gateable via `federate --fail-on` and the unified `beadloom ci` gate (dogfooded on Beadloom's own CI). Dogfooded end-to-end on a real landscape — a real GraphQL `BREAKING` mismatch caught before ship, and a separate FSD-architecture product round-tripped through `export`/`federate` with zero kind loss. **Not yet:** REST/OpenAPI + gRPC contracts and the visual landscape map — both on the roadmap, neither over-promised here. The cross-service hub is run on collected artifacts via a documented pull-based pattern (no SaaS hub).
 
 ## Why Beadloom?
 
@@ -310,12 +310,14 @@ Works with Claude Code, Cursor, Windsurf, Cline, and any MCP-compatible tool.
 | `sync-update REF_ID` | Review and update stale docs |
 | `docs generate` | Generate documentation skeletons from the architecture graph |
 | `docs polish` | Generate structured data for AI-driven documentation enrichment |
-| `lint` | Validate code against architecture boundary rules |
+| `lint` | Validate code against architecture boundary rules (`--format rich/json/porcelain/github`, with `remediation`) |
+| `ci` | Unified CI gate — reindex → lint → sync-check → config-check → doctor → optional federate landscape gate, one exit code |
+| `config-check` | AgentConfigAsCode — check (or `--fix`) that generated agent-config (`AGENTS.md`, `CLAUDE.md` auto regions, IDE adapters) matches the graph |
 | `why REF_ID` | Impact analysis — upstream deps and downstream dependents |
 | `diff` | Show graph changes since a git ref |
 | `link REF_ID [URL]` | Manage external tracker links on graph nodes |
 | `export` | Export the indexed graph as a deterministic federation artifact (JSON) |
-| `federate` | Aggregate ≥2 satellite export artifacts into one federated graph (drift + staleness) |
+| `federate` | Aggregate ≥2 satellite export artifacts into one federated graph (drift + staleness); `--fail-on` arms the landscape CI gate |
 | `tui` | Interactive terminal dashboard (alias: `ui`; requires `beadloom[tui]`) |
 | `docs audit` | Detect stale facts in project-level documentation (README, guides) |
 | `watch` | Auto-reindex on file changes (requires `beadloom[watch]`) |
@@ -397,7 +399,7 @@ docs/
         reindex/SPEC.md
         watcher/SPEC.md
   services/
-    cli.md                                         # 31 CLI commands
+    cli.md                                         # 33 CLI commands
     mcp.md                                         # 14 MCP tools
     tui.md                                         # TUI dashboard
 ```
@@ -478,7 +480,7 @@ uv run mypy                # type checking (strict mode)
 | &nbsp;&nbsp;[Reindex](docs/domains/infrastructure/features/reindex/SPEC.md) | Full and incremental reindex pipeline |
 | &nbsp;&nbsp;[Watcher](docs/domains/infrastructure/features/watcher/SPEC.md) | Auto-reindex on file changes |
 | **Services** | |
-| [CLI Reference](docs/services/cli.md) | All 31 CLI commands |
+| [CLI Reference](docs/services/cli.md) | All 33 CLI commands |
 | [MCP Server](docs/services/mcp.md) | All 14 MCP tools for AI agents |
 | [TUI Dashboard](docs/services/tui.md) | Interactive terminal dashboard |
 | **Guides** | |

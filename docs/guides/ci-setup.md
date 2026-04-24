@@ -108,16 +108,57 @@ arch-lint:
 beadloom lint                     # Human-readable (rich) — default in TTY
 beadloom lint --format json       # Structured JSON for scripts
 beadloom lint --format porcelain  # Machine-readable, one line per violation
+beadloom lint --format github     # GitHub Actions ::error annotations (inline on the PR)
 beadloom lint --no-reindex        # Skip reindex (faster, uses existing DB)
 ```
 
+Every violation carries an agent-actionable `remediation` ("how to fix"), surfaced
+in `json` (a `remediation` key per violation) and rendered into the `github`
+annotation message — so an agent or CI reviewer gets the fix, not just the
+detection.
+
 ## Unified Gate (`beadloom ci`)
 
-`beadloom ci` composes reindex -> lint -> sync-check -> config-check -> (optional)
-federate landscape gate into a single verdict with one exit code (0 = every step
-passed, 1 = any step failed). It names every step that ran and its honest result
-(PASS/FAIL/SKIP). `--format github` emits GitHub annotations so violations show
-inline on the PR.
+`beadloom ci` composes, in order, **reindex -> lint --strict -> sync-check ->
+config-check -> doctor -> (optional) federate landscape gate** into a single
+verdict with one exit code (0 = every step passed, 1 = any step failed). It never
+short-circuits — every step runs and contributes findings — and it names every
+step that ran with its honest result (PASS/FAIL/SKIP); a green is never a silently
+skipped step. All steps share one agent-actionable finding shape
+(`{kind, rule, severity, locations, why, remediation}`), so `--format` applies
+uniformly: `rich` (default in a TTY), `json` (structured), or `github` (default
+when piped — emits `::error` annotations so violations show inline on the PR).
+
+| Step | What it enforces | Skipped when |
+|------|------------------|--------------|
+| `reindex` | rebuild the index from current code/graph | `--no-reindex` |
+| `lint --strict` | architecture-boundary violations | — |
+| `sync-check` | doc-code freshness (stale docs) | — |
+| `config-check` | AgentConfigAsCode — generated agent-config matches the graph | — |
+| `doctor` | graph integrity | — |
+| `federate --fail-on` | cross-service landscape gate | no `--hub` exports given |
+
+Beadloom dogfoods this gate on its own CI: the per-repo gate (`reindex` →
+`lint --strict` → `sync-check` → `config-check` → `doctor`) shipped and runs on
+every Beadloom PR. The cross-service landscape step is opt-in via `--hub`.
+
+### AgentConfigAsCode (`config-check`)
+
+`config-check` treats the generated agent-config as code: it regenerates
+`AGENTS.md`, the auto-managed regions of `CLAUDE.md`, and the IDE rules adapters
+**in memory** (reusing the exact `setup-rules --refresh` generator — no parallel
+reimplementation) and diffs them against disk. It exits `1` on drift, `0` when
+clean. `config-check --fix` regenerates the artifacts and re-checks.
+
+It checks **only** the auto-managed regions (between `beadloom:auto-start` /
+`beadloom:auto-end` markers) — never user-authored prose — so it cannot
+false-positive on hand-written content. This is principle 7 in practice: local
+rules files are verified-fresh, never hand-maintained.
+
+```bash
+beadloom config-check          # exit 1 on agent-config drift, 0 when clean
+beadloom config-check --fix    # regenerate drifted artifacts, then re-check
+```
 
 ### GitHub Actions (composite Action)
 
@@ -169,13 +210,43 @@ beadloom-gate:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 ```
 
+### Landscape gate (`federate --fail-on`)
+
+`federate` is reporting-only by default (exit `0` regardless of drift). Pass
+`--fail-on <csv>` to turn it into a CI gate: it **always writes
+`.beadloom/federated.json` + `.beadloom/federated.txt` and prints the report
+first**, THEN exits `1` if any edge or contract verdict (matched
+case-insensitively) is in the fail-set — so CI always has the artifact to upload
+even when the gate blocks. The failing verdicts (each with its `src → dst` /
+`contract_key` identity, plus the missing GraphQL names for a `BREAKING`) are
+printed to stderr.
+
+- A bare `--fail-on`, or the token `default`, uses the **safe-default fail-set**
+  `breaking,drift,orphaned_consumer,undeclared_producer` (plus the edge-level
+  `undeclared`, the AMQP equivalent of `undeclared_producer`).
+- The fail-set can **never** include a no-false-gate verdict —
+  `external` / `expected` / `dead` / `unmapped` / `confirmed` / `ok` /
+  `cleanup_candidate`. These are intentional, honest-unknown, or healthy states;
+  passing one is rejected with a clear error (exit `2`). This is principle 3 — a
+  noisy gate gets disabled, so the gate refuses to arm a false one.
+
+`beadloom ci --hub <export> ... --fail-on default` runs this same gate as the
+final CI step.
+
 ### Pull-based hub pattern (multi-repo)
 
 The per-repo gate above is for a single repository. To gate the *cross-service*
 landscape, a dedicated hub job pulls the latest `beadloom export` artifact from
-each satellite repo and runs the federate gate. No registry/SaaS is required —
-fetch the exports however your CI already moves artifacts (release assets,
-package registry, object storage), then point `--hub` at each one.
+each satellite repo and runs the federate gate. Each satellite publishes its
+export tagged with the producing commit SHA (the export records `commit_sha` /
+`exported_at` provenance), so the hub can report per-satellite staleness.
+
+No registry/SaaS is Beadloom-built — the per-repo gate is what ships and is
+dogfooded. The hub side is a **documented pattern, run by the satellites' own
+ops**: publish a commit-SHA-tagged export from each repo, then a hub CI job
+pulls **≥ 2** of them (however your CI already moves artifacts — release assets,
+package registry, object storage) and runs `federate --fail-on`. Point `--hub`
+at each pulled export.
 
 ```yaml
 # Hub repo: aggregate satellite exports and gate the federated landscape.

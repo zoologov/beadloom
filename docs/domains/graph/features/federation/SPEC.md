@@ -202,18 +202,53 @@ Aggregation (`aggregate_exports`):
 
 `OK` · `DRIFT` · `EXPECTED` · `CLEANUP_CANDIDATE` · `UNDECLARED` · `DEAD` · `EXTERNAL` · `UNMAPPED` (serialized as the lowercase value). Edge-level; complementary to the contract-level `ContractVerdict` (see `contracts.py`). `EXTERNAL` / `UNMAPPED` (BDL-038 G7/U4) both suppress DRIFT.
 
+#### Enforcement (F3 / BDL-039)
+
+`gate_failures(fed, fail_on) -> list[GateFailure]` is a pure, deterministic
+function over an already-aggregated `FederatedGraph`: it scans each edge
+`EdgeVerdict` and each contract `ContractVerdict` (matched case-insensitively
+against the enum value) and returns a sorted `GateFailure` per verdict in
+`fail_on` (`kind` = `"edge"`/`"contract"`, `identity` = `src --> dst` /
+`contract_key`, `verdict`, and `missing` GraphQL names for a `BREAKING`). It is
+reused by both `federate --fail-on` and the `beadloom ci` orchestrator, so the
+gate is testable without the CLI.
+
+Two module-level frozensets bound the gate (principle 3 — a noisy gate gets
+disabled):
+
+- `SAFE_DEFAULT_FAIL_ON` = `breaking, drift, orphaned_consumer,
+  undeclared_producer, undeclared` — the set a bare `--fail-on` / `default`
+  arms (the edge-level `undeclared` is the AMQP equivalent of
+  `undeclared_producer`).
+- `NEVER_FAIL_VERDICTS` = `external, expected, dead, unmapped, confirmed, ok,
+  cleanup_candidate` — intentional, honest-unknown, or healthy states. These can
+  never enter a fail-set; passing one to `--fail-on` is rejected (exit `2`).
+  The two sets are disjoint by construction.
+
+`federate --fail-on` and `beadloom ci` **write the federated artifact (and print
+the report) before exiting non-zero**, so CI always has `federated.json` to
+upload even when the gate blocks. `beadloom ci` composes the landscape gate as
+its final step (after reindex → lint → sync-check → config-check → doctor); see
+`docs/guides/ci-setup.md`.
+
 #### Public API (`graph/federation.py`)
 
 ```python
 FEDERATION_SCHEMA_VERSION: int  # = 2  (independent of EXPORT_SCHEMA_VERSION = 2)
 
+SAFE_DEFAULT_FAIL_ON: frozenset[str]   # bare --fail-on / "default" arms this set
+NEVER_FAIL_VERDICTS: frozenset[str]    # never gated (rejected by --fail-on)
+
 class EdgeVerdict(enum.Enum): ...
 @dataclass
 class FederatedGraph: ...
+@dataclass(frozen=True)
+class GateFailure: ...   # kind, identity, verdict, missing
 
 def aggregate_exports(exports: list[dict], *, now: str | None = None) -> FederatedGraph
 def serialize_federation(fed: FederatedGraph) -> str        # deterministic JSON
 def render_federation_report(fed: FederatedGraph) -> str    # human-readable text
+def gate_failures(fed: FederatedGraph, fail_on: set[str]) -> list[GateFailure]
 ```
 
 The federated JSON envelope: `{ schema_version, repos, nodes, edges, contracts, unresolved_refs }` (sorted keys). The text report lists the satellites (with sha + age), the edge-verdict counts, an explicit DRIFT list, the contract-verdict counts plus explicit `BREAKING` / `DRIFT` / `ORPHANED_CONSUMER` / `UNDECLARED_PRODUCER` call-outs (with the missing GraphQL names), and any unresolved foreign refs.
@@ -248,7 +283,7 @@ The federated JSON envelope: `{ schema_version, repos, nodes, edges, contracts, 
 **Still non-goals (deferred):**
 
 - **REST / OpenAPI and gRPC contracts** (lowest priority — runtime-generated, no static source files; future F-phase).
-- **CI gating** — the **landscape gate** lands in F3 (`federate --fail-on`, above); a single `beadloom ci` orchestrator + reusable CI integration are the remaining F3 beads. No SaaS hub, no satellite auto-bootstrap.
+- **CI gating** — **delivered in F3 (BDL-039):** the landscape gate (`federate --fail-on`), the unified `beadloom ci` orchestrator (reindex → lint → sync-check → config-check → doctor → optional federate gate), and a reusable composite GitHub Action + GitLab template, dogfooded on Beadloom's own CI. The **pull-based hub** plumbing (SHA-tagged export publishing + fetch) is a documented pattern run by the satellites' ops — no SaaS hub, no satellite auto-bootstrap is Beadloom-built. See `docs/guides/ci-setup.md`.
 - **No VitePress / visual landscape map** (F4), no semantic layer.
 - Hub needs **≥ 2** satellite exports.
 
