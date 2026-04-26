@@ -2007,6 +2007,58 @@ def docs_polish(
         click.echo(format_polish_text(data))
 
 
+# beadloom:domain=application
+@docs.command("site")
+@click.option(
+    "--out",
+    "out_dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="Output directory for the generated site tree (default: site/).",
+)
+@click.option(
+    "--federated",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="A federated.json for the landscape map (consumed by a later showcase).",
+)
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: current directory).",
+)
+def docs_site(
+    *,
+    out_dir: Path | None,
+    federated: Path | None,
+    project: Path | None,
+) -> None:
+    """Generate a VitePress content tree from the architecture graph.
+
+    Reads the indexed graph read-only and emits an architecture overview,
+    one page per node (with summary, symbols, edges-as-links, and an embedded
+    C4/Mermaid diagram), and the VitePress nav/sidebar config — under --out
+    (default site/). Never writes into the source docs/ tree.
+    """
+    from beadloom.application.site import generate_site
+    from beadloom.infrastructure.db import open_db
+
+    project_root = project or Path.cwd()
+    db_path = project_root / ".beadloom" / "beadloom.db"
+    if not db_path.exists():
+        click.echo("Error: database not found. Run `beadloom reindex` first.", err=True)
+        sys.exit(1)
+
+    out = out_dir if out_dir is not None else project_root / "site"
+    conn = open_db(db_path)
+    try:
+        result = generate_site(conn, out, project_root=project_root, federated=federated)
+    finally:
+        conn.close()
+    click.echo(f"Generated {len(result.written)} files under {out}")
+
+
 # beadloom:feature=docs-audit
 @docs.command("audit")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON.")

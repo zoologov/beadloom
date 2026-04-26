@@ -387,6 +387,22 @@ beadloom docs generate [--project DIR]
 
 Creates `docs/` tree: `architecture.md`, domain READMEs, service pages, feature SPECs. Never overwrites existing files. All generated files include `<!-- enrich with: beadloom docs polish -->` markers.
 
+### beadloom docs site
+
+Generate a VitePress content tree from the architecture graph.
+
+```bash
+beadloom docs site [--out DIR] [--federated FILE] [--project DIR]
+```
+
+Reads the indexed graph read-only and emits, under `--out` (default `site/`):
+
+- `index.md` -- architecture overview: domain/service/feature counts, the top-level C4/Mermaid diagram, and a health summary line (nodes/edges/docs/coverage/stale).
+- per-node pages (`domains/<ref>.md`, `services/<ref>.md`, `features/<ref>.md`) -- each with summary, source, public symbols, `part_of`/`depends_on`/`uses` edges rendered as Markdown links to the other node pages, linked hand-written docs, and an embedded scoped C4/Mermaid diagram.
+- `.vitepress/config.generated.mjs` -- the nav/sidebar config imported by the committed VitePress scaffold (`site/.vitepress/config.mjs`); sections: Dashboard / Architecture / Landscape / Documentation.
+
+Beadloom produces, VitePress renders. Output is deterministic (sorted, stable frontmatter, no wall-clock in the diffed output) and is NEVER written into the source `docs/` tree -- only under `--out`. `--federated` is accepted for the cross-repo landscape map (consumed by a later showcase). Run `npm ci && npm run docs:build` in `site/` to render.
+
 ### beadloom docs audit
 
 Detect stale numeric facts in project documentation.

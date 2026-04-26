@@ -32,3 +32,9 @@ htmlcov/
 
 # BDL-037 F1 dogfood scratch (hand-curated satellite slices + hub; never committed)
 .scratch-federation/
+
+# BDL-040 F4 VitePress site: build output + node deps are not committed (the
+# committed scaffold renders the generated content tree from `beadloom docs site`)
+site/.vitepress/dist/
+site/.vitepress/cache/
+site/node_modules/

@@ -19,6 +19,8 @@ the DDD Dependency Rule.
 - **doctor.py** — `run_checks(conn, *, project_root=None)` validates graph health with DB checks (empty summaries, unlinked docs, nodes without docs, isolated nodes, symbol drift, stale sync entries, source coverage gaps) plus an optional "Agent Instructions" check when `project_root` is provided, comparing CLAUDE.md/AGENTS.md factual claims (version, packages, CLI commands, MCP tool count) against runtime truth.
 - **debt_report.py** — `collect_debt_data()` aggregates architecture health signals from lint, sync-check, doctor, git activity, and test mapper. `compute_debt_score()` applies a weighted formula producing a 0-100 debt score with category breakdown, severity classification, and per-node top offenders. `format_debt_report()`/`format_debt_json()` render the report. `compute_debt_trend()` compares against the last graph snapshot.
 - **watcher.py** — `watch()` monitors project files (graph YAML, docs, source) and auto-triggers reindex on changes using `watchfiles`. Graph changes trigger full reindex; other changes trigger incremental. `WatchEvent` frozen dataclass captures per-event metadata. `DEFAULT_DEBOUNCE_MS` constant (500ms).
+- **site.py** — `generate_site(conn, out_dir, *, project_root, federated=None)` is the `docs site` use-case: it reads the indexed graph read-only and writes a VitePress content tree under `out_dir` (default `site/`) — an `index.md` architecture overview (counts + top-level C4/Mermaid + a read-only health summary), one page per node (delegated to `site_pages.py`), and `.vitepress/config.generated.mjs` (nav/sidebar). Beadloom produces, VitePress renders. Output is deterministic (sorted, stable frontmatter, no wall-clock) and never writes into the source `docs/`. Returns a frozen `SiteResult` listing every written path. Reuses `graph/c4.py` (`map_to_c4`/`filter_c4_nodes`/`render_c4_mermaid`) for diagrams; reimplements no graph logic.
+- **site_pages.py** — per-node page rendering for `site.py` (split out to stay under the domain-size limit). `render_all_pages(conn)` returns sorted `NodePage`s; each page has summary, source, public symbols, `part_of`/`depends_on`/`uses` edges as Markdown links to other node pages, linked hand-written docs, and an embedded scoped C4/Mermaid diagram.
 - **gate.py** — `run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex)` is the unified CI enforcement gate (the `beadloom ci` orchestrator). It composes the existing checkers IN ORDER — reindex (unless `no_reindex`) → `lint --strict` → `sync-check` → `config-check` (AgentConfigAsCode) → `doctor` (graph/data integrity; only `ERROR`-severity checks fail the gate, so advisory WARNING/INFO checks never block — no false gate) → (when `hub_exports` given) `federate --fail-on` — into one `GateResult` whose `.ok` is True only when every step passed. It ORCHESTRATES existing domain code; it reimplements no checker (the doctor step reuses `doctor.run_checks`). Honesty invariants: no short-circuit (every step runs and ALL findings are collected even after an earlier failure) and no silent skip (each `GateStep` records `PASS`/`FAIL`/`SKIP`). Findings are projected to the shared agent-actionable shape `{kind, rule, severity, locations, why, remediation}` (reused from `graph/linter.py`) uniformly across all steps, so `--format json`/`github` are identical regardless of which step produced a finding.
 
 ## API
@@ -48,6 +50,14 @@ Module `src/beadloom/application/watcher.py`:
 - `WatchEvent` — frozen dataclass: `files_changed`, `is_graph_change`, `reindex_type`
 - `watch(project_root, debounce_ms=DEFAULT_DEBOUNCE_MS, callback=None)` — monitors project files via `watchfiles`
 
+Module `src/beadloom/application/site.py`:
+- `SiteResult` — frozen dataclass: `out_dir`, `written` (sorted tuple of every written path)
+- `generate_site(conn, out_dir, *, project_root, federated=None)` -> `SiteResult` — deterministic VitePress tree generator; never writes into the source `docs/`
+
+Module `src/beadloom/application/site_pages.py`:
+- `NodeRow` / `NodePage` — frozen dataclasses for a graph node and its rendered page
+- `load_nodes(conn)` -> `list[NodeRow]`; `render_all_pages(conn)` -> sorted `list[NodePage]`
+
 Module `src/beadloom/application/gate.py`:
 - `GateStep` — dataclass: `name`, `passed`, `skipped`, `findings`, `summary`; `.status` -> `PASS`/`FAIL`/`SKIP`
 - `GateResult` — dataclass: `steps`; `.ok` (all steps passed), `.findings` (all findings across steps)
@@ -55,4 +65,4 @@ Module `src/beadloom/application/gate.py`:
 
 ## Testing
 
-Tests: `tests/test_reindex.py`, `tests/test_reindex_config.py`, `tests/test_reindex_tests.py`, `tests/test_reindex_activity.py`, `tests/test_reindex_routes.py`, `tests/test_doctor.py`, `tests/test_doctor_drift.py`, `tests/test_doctor_instructions.py`, `tests/test_watcher.py`, `tests/test_debt_report.py`, `tests/test_debt_integration.py`, `tests/test_gate.py`
+Tests: `tests/test_reindex.py`, `tests/test_reindex_config.py`, `tests/test_reindex_tests.py`, `tests/test_reindex_activity.py`, `tests/test_reindex_routes.py`, `tests/test_doctor.py`, `tests/test_doctor_drift.py`, `tests/test_doctor_instructions.py`, `tests/test_watcher.py`, `tests/test_debt_report.py`, `tests/test_debt_integration.py`, `tests/test_gate.py`, `tests/test_site_generator.py`
