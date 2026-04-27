@@ -5,6 +5,9 @@ Reads the indexed graph read-only and emits, under ``--out`` (default ``site/``)
   top-level C4/Mermaid diagram, a health summary line).
 - per-node pages (``domains/<ref>.md`` / ``services/<ref>.md`` /
   ``features/<ref>.md``) — see :mod:`beadloom.application.site_pages`.
+- ``dashboard.md`` + ``dashboard.data.json`` — Showcase A, the AaC/DocAsCode
+  metrics dashboard (see :mod:`beadloom.application.site_dashboard`); every
+  number comes from the same code path as its gate (honest by construction).
 - ``.vitepress/config.generated.mjs`` — nav/sidebar config consumed by the
   committed VitePress scaffold (sections: Dashboard / Architecture / Landscape /
   Documentation; the latter beads fill the placeholders).
@@ -22,6 +25,11 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from beadloom.application.site_dashboard import (
+    build_dashboard_data,
+    render_dashboard_md,
+    serialize_dashboard_data,
+)
 from beadloom.application.site_pages import NodeRow, load_nodes, render_all_pages
 from beadloom.graph.c4 import filter_c4_nodes, map_to_c4, render_c4_mermaid
 
@@ -198,11 +206,6 @@ def generate_site(
     Returns:
         A :class:`SiteResult` listing every written file (sorted).
     """
-    # ``federated`` is accepted now so the CLI surface is stable; the landscape
-    # map that consumes it lands in BEAD-03.
-    _ = federated
-    _ = project_root
-
     nodes = load_nodes(conn)
     written: list[Path] = []
 
@@ -210,6 +213,18 @@ def generate_site(
 
     for page in render_all_pages(conn):
         _write(out_dir / page.rel_path, page.body, written)
+
+    # Showcase A — the metrics dashboard (machine data + human page). Numbers
+    # come from the same code paths as the gates (honest by construction).
+    dashboard_data = build_dashboard_data(
+        conn, project_root=project_root, federated=federated
+    )
+    _write(
+        out_dir / "dashboard.data.json",
+        serialize_dashboard_data(dashboard_data),
+        written,
+    )
+    _write(out_dir / "dashboard.md", render_dashboard_md(dashboard_data), written)
 
     _write(
         out_dir / ".vitepress" / "config.generated.mjs",

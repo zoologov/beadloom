@@ -36,6 +36,7 @@
 ## Progress Log
 
 - 2026-06-02 — `/task-init` complete: PRD / RFC / CONTEXT / PLAN approved (PRD+RFC revised to the "showcase of 3 Beadloom products" framing — dashboard / interactive architecture / published validated docs); epic `beadloom-83f` + 8 sub-beads created; DAG wired; swarm `beadloom-a8v` (6 waves); `bd ready` confirms .1 unblocked.
+- 2026-06-02 — BEAD-02 done (Showcase A — metrics dashboard). New `application/site_dashboard.py`: `build_dashboard_data` (deterministic JSON-safe dict) + `render_dashboard_md` + `serialize_dashboard_data`. Honest by construction — lint via `graph/linter.lint`, debt via `debt_report.compute_debt_score`+`compute_debt_trend`+`format_debt_json`, docs via read-only `sync_state` coverage/freshness, doctor via `doctor.run_checks`, federated rollup via the `federate` JSON verbatim. Wired into `generate_site` → emits `dashboard.md` + `dashboard.data.json` under `--out`. 15 tests (`tests/test_site_dashboard.py`) assert dashboard==gate equality, determinism, sorted-keys, out-dir-only. Full suite 2993 green; ruff/mypy clean; `beadloom ci` exit 0. application README re-attested to sync fixpoint.
 
 ## Notes / Reminders
 
