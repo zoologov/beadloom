@@ -8,6 +8,10 @@ Reads the indexed graph read-only and emits, under ``--out`` (default ``site/``)
 - ``dashboard.md`` + ``dashboard.data.json`` — Showcase A, the AaC/DocAsCode
   metrics dashboard (see :mod:`beadloom.application.site_dashboard`); every
   number comes from the same code path as its gate (honest by construction).
+- ``landscape.md`` — Showcase B, the 🌟 cross-repo landscape map (see
+  :mod:`beadloom.application.site_landscape`); a Mermaid diagram generated from
+  the ``federate`` hub output (or a degenerate single-repo map), with edges
+  labelled by ``ContractVerdict``, a health overlay, and clickable nodes.
 - ``.vitepress/config.generated.mjs`` — nav/sidebar config consumed by the
   committed VitePress scaffold (sections: Dashboard / Architecture / Landscape /
   Documentation; the latter beads fill the placeholders).
@@ -29,6 +33,10 @@ from beadloom.application.site_dashboard import (
     build_dashboard_data,
     render_dashboard_md,
     serialize_dashboard_data,
+)
+from beadloom.application.site_landscape import (
+    build_landscape_data,
+    render_landscape_md,
 )
 from beadloom.application.site_pages import NodeRow, load_nodes, render_all_pages
 from beadloom.graph.c4 import filter_c4_nodes, map_to_c4, render_c4_mermaid
@@ -225,6 +233,11 @@ def generate_site(
         written,
     )
     _write(out_dir / "dashboard.md", render_dashboard_md(dashboard_data), written)
+
+    # Showcase B — the 🌟 cross-repo landscape map (Mermaid, generated from the
+    # federate hub output when given, else a degenerate single-repo map).
+    landscape_data = build_landscape_data(conn, federated=federated)
+    _write(out_dir / "landscape.md", render_landscape_md(landscape_data), written)
 
     _write(
         out_dir / ".vitepress" / "config.generated.mjs",
