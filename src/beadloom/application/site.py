@@ -12,9 +12,13 @@ Reads the indexed graph read-only and emits, under ``--out`` (default ``site/``)
   :mod:`beadloom.application.site_landscape`); a Mermaid diagram generated from
   the ``federate`` hub output (or a degenerate single-repo map), with edges
   labelled by ``ContractVerdict``, a health overlay, and clickable nodes.
+- ``docs/…`` — Showcase C, the published validated documentation (see
+  :mod:`beadloom.application.site_published`): the REAL ``docs/**`` tree copied
+  in (source never mutated) with a per-doc ``doc_sync`` validation badge (same
+  source as ``sync-check``).
 - ``.vitepress/config.generated.mjs`` — nav/sidebar config consumed by the
   committed VitePress scaffold (sections: Dashboard / Architecture / Landscape /
-  Documentation; the latter beads fill the placeholders).
+  Documentation).
 
 Beadloom produces, VitePress renders. Output is deterministic (sorted, stable
 frontmatter, NO wall-clock in the diffed output) and is NEVER written into the
@@ -39,6 +43,7 @@ from beadloom.application.site_landscape import (
     render_landscape_md,
 )
 from beadloom.application.site_pages import NodeRow, load_nodes, render_all_pages
+from beadloom.application.site_published import publish_docs
 from beadloom.graph.c4 import filter_c4_nodes, map_to_c4, render_c4_mermaid
 
 if TYPE_CHECKING:
@@ -238,6 +243,12 @@ def generate_site(
     # federate hub output when given, else a degenerate single-repo map).
     landscape_data = build_landscape_data(conn, federated=federated)
     _write(out_dir / "landscape.md", render_landscape_md(landscape_data), written)
+
+    # Showcase C — the published validated docs. Copy the REAL docs/ tree into
+    # site/docs/ preserving structure (source never mutated) and inject a
+    # per-doc validation badge from the doc_sync engine (same source as
+    # sync-check). Badges land only in the copy under out_dir.
+    written.extend(publish_docs(conn, out_dir, project_root=project_root))
 
     _write(
         out_dir / ".vitepress" / "config.generated.mjs",
