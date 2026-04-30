@@ -1,0 +1,147 @@
+{
+  "debt": {
+    "categories": [
+      {
+        "details": {
+          "errors": 0,
+          "warnings": 0
+        },
+        "name": "rule_violations",
+        "score": 0.0
+      },
+      {
+        "details": {
+          "stale": 0,
+          "undocumented": 0,
+          "untracked": 8
+        },
+        "name": "doc_gaps",
+        "score": 4.0
+      },
+      {
+        "details": {
+          "dormant": 8,
+          "high_fan_out": 1,
+          "oversized": 0
+        },
+        "name": "complexity",
+        "score": 5.0
+      },
+      {
+        "details": {
+          "untested": 0
+        },
+        "name": "test_gaps",
+        "score": 0.0
+      }
+    ],
+    "debt_score": 9.0,
+    "severity": "low",
+    "top_offenders": [
+      {
+        "reasons": [
+          "high_fan_out"
+        ],
+        "ref_id": "application",
+        "score": 1.0
+      },
+      {
+        "reasons": [
+          "dormant"
+        ],
+        "ref_id": "c4-diagrams",
+        "score": 0.5
+      },
+      {
+        "reasons": [
+          "dormant"
+        ],
+        "ref_id": "cache",
+        "score": 0.5
+      },
+      {
+        "reasons": [
+          "dormant"
+        ],
+        "ref_id": "context-oracle",
+        "score": 0.5
+      },
+      {
+        "reasons": [
+          "dormant"
+        ],
+        "ref_id": "doc-generator",
+        "score": 0.5
+      },
+      {
+        "reasons": [
+          "dormant"
+        ],
+        "ref_id": "docs-audit",
+        "score": 0.5
+      },
+      {
+        "reasons": [
+          "dormant"
+        ],
+        "ref_id": "graph-diff",
+        "score": 0.5
+      },
+      {
+        "reasons": [
+          "dormant"
+        ],
+        "ref_id": "search",
+        "score": 0.5
+      },
+      {
+        "reasons": [
+          "dormant"
+        ],
+        "ref_id": "why",
+        "score": 0.5
+      }
+    ],
+    "trend": {
+      "category_deltas": {
+        "complexity": 4.0,
+        "doc_gaps": 4.0,
+        "meta_doc_staleness": 0.0,
+        "rule_violations": 0.0,
+        "test_gaps": 0.0
+      },
+      "delta": 8.0,
+      "previous_score": 1.0,
+      "previous_snapshot": "2026-06-01 16:36:30 [BDL-038-wave1]"
+    }
+  },
+  "docs": {
+    "coverage_pct": 100.0,
+    "documented": 24,
+    "fresh": 71,
+    "freshness_pct": 100.0,
+    "nodes": 24,
+    "stale": 0,
+    "tracked_pairs": 71
+  },
+  "doctor": {
+    "by_severity": {
+      "ok": 12,
+      "warning": 1
+    },
+    "errors": 0,
+    "passed": true,
+    "total": 13,
+    "warnings": 1
+  },
+  "federated": null,
+  "lint": {
+    "by_severity": {
+      "error": 0,
+      "warn": 0
+    },
+    "errors": 0,
+    "violations": 0,
+    "warnings": 0
+  }
+}

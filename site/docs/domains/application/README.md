@@ -1,3 +1,11 @@
+<!-- beadloom:badge-start -->
+> ✅ **fresh**
+> 
+> last synced 2026-06-02T03:50:36.973056+00:00 · coverage 90% (`application`)
+> 
+> _Validation by Beadloom `doc_sync` — same source as `sync-check`._
+<!-- beadloom:badge-end -->
+
 # Application
 
 Use-case orchestration layer. Sits between the interface layer (`services`/`tui`)

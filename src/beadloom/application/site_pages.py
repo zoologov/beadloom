@@ -175,10 +175,24 @@ def _symbols_section(symbols: list[str]) -> list[str]:
     return lines
 
 
+def _published_doc_link(path: str) -> str:
+    """The site link to a published doc.
+
+    Hand-written docs are published under ``site/docs/…`` (Showcase C copies the
+    real ``docs/`` tree there). The ``docs`` table stores each path *relative to
+    the source ``docs/`` dir* (e.g. ``domains/graph/README.md``); a path already
+    carrying the ``docs/`` prefix is normalised so we never emit ``/docs/docs/…``.
+    The emitted link is rooted at ``/docs/`` so it resolves to the published copy
+    (a bare ``/<path>`` would be a dead link — the doc lives under ``/docs/``).
+    """
+    rel = path[len("docs/") :] if path.startswith("docs/") else path
+    return f"/docs/{rel}"
+
+
 def _docs_section(docs: list[str]) -> list[str]:
     lines: list[str] = ["## Documentation", ""]
     if docs:
-        lines.extend(f"- [{path}](/{path})" for path in docs)
+        lines.extend(f"- [{path}]({_published_doc_link(path)})" for path in docs)
     else:
         lines.append("_No linked documents._")
     lines.append("")

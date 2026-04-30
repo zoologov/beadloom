@@ -1,0 +1,107 @@
+{
+  "contracts": [
+    {
+      "confirmed": true,
+      "contract_key": "graphql:PublicCatalogAPI",
+      "directions": [
+        "consumes",
+        "produces"
+      ],
+      "exposed": [
+        "account",
+        "plan"
+      ],
+      "lifecycle": "active",
+      "message_type": "PublicCatalogAPI",
+      "missing": [
+        "subscriptionTier"
+      ],
+      "protocol": "graphql",
+      "references": [
+        "plan",
+        "subscriptionTier"
+      ],
+      "repos": [
+        "catalog-service",
+        "storefront-web"
+      ],
+      "verdict": "breaking"
+    }
+  ],
+  "edges": [
+    {
+      "contract": {
+        "direction": "produces",
+        "exposed": [
+          "account",
+          "plan"
+        ],
+        "protocol": "graphql",
+        "schema": "PublicCatalogAPI"
+      },
+      "dst": "@catalog-service:catalog-api",
+      "kind": "produces",
+      "landscape": "commerce-platform",
+      "lifecycle": "active",
+      "repo": "catalog-service",
+      "src": "@catalog-service:catalog-api",
+      "verdict": "ok"
+    },
+    {
+      "contract": {
+        "direction": "consumes",
+        "protocol": "graphql",
+        "references": [
+          "plan",
+          "subscriptionTier"
+        ],
+        "schema": "PublicCatalogAPI"
+      },
+      "dst": "@storefront-web:storefront-page",
+      "kind": "consumes",
+      "landscape": "commerce-platform",
+      "lifecycle": "active",
+      "repo": "storefront-web",
+      "src": "@storefront-web:storefront-page",
+      "verdict": "ok"
+    }
+  ],
+  "nodes": [
+    {
+      "kind": "schema",
+      "lifecycle": "active",
+      "ref_id": "@catalog-service:catalog-api",
+      "repo": "catalog-service",
+      "source": null,
+      "summary": "Public GraphQL schema exposed by the catalog service"
+    },
+    {
+      "kind": "page",
+      "lifecycle": "active",
+      "ref_id": "@storefront-web:storefront-page",
+      "repo": "storefront-web",
+      "source": null,
+      "summary": "Storefront page consuming the catalog GraphQL schema"
+    }
+  ],
+  "repos": [
+    {
+      "age_seconds": 0,
+      "commit_sha": "f3a1b2c",
+      "exported_at": "2026-06-01T00:00:00+00:00",
+      "landscape": "commerce-platform",
+      "repo": "catalog-service",
+      "schema_version": 1
+    },
+    {
+      "age_seconds": 0,
+      "commit_sha": "9d7e0a4",
+      "exported_at": "2026-06-01T00:00:00+00:00",
+      "landscape": "commerce-platform",
+      "repo": "storefront-web",
+      "schema_version": 1
+    }
+  ],
+  "schema_version": 2,
+  "unresolved_refs": []
+}

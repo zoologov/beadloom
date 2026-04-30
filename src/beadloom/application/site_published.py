@@ -176,7 +176,10 @@ def build_published_docs(
 
     published: list[PublishedDoc] = []
     for md in sorted(docs_dir.rglob("*.md")):
-        rel = str(md.relative_to(docs_dir))
+        rel_path = md.relative_to(docs_dir)
+        if any(part.startswith(".") for part in rel_path.parts):
+            continue  # skip hidden docs (consistent with publish_docs)
+        rel = str(rel_path)
         entry = by_doc.get(rel)
         if entry is not None and entry[0] in ("ok", "stale"):
             raw_status, reason, ref_id = entry
@@ -232,6 +235,30 @@ def render_published_doc(doc: PublishedDoc, prose: str) -> str:
     return inject_badge(prose, _badge_body(doc))
 
 
+def _render_docs_index(published: list[str]) -> str:
+    """A deterministic landing page for the published-docs section.
+
+    Lists every published doc as a relative link (``.md`` kept — VitePress
+    rewrites to a clean URL). Emitted at ``site/docs/index.md`` so the
+    Documentation nav target ``/docs/`` resolves (it would 404 otherwise — the
+    source ``docs/`` has no root index).
+    """
+    lines = [
+        "---",
+        "title: Documentation",
+        "---",
+        "",
+        "# Documentation",
+        "",
+        "The project's validated documentation, published as-is with a per-doc "
+        "`doc_sync` freshness badge (same source as `sync-check`).",
+        "",
+    ]
+    lines.extend(f"- [{path}](./{path})" for path in published)
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
 def publish_docs(
     conn: sqlite3.Connection,
     out_dir: Path,
@@ -241,7 +268,9 @@ def publish_docs(
     """Copy ``docs/**`` into ``out_dir/docs/…`` with badges; return written paths.
 
     NEVER mutates the source ``docs/`` — badges are injected only into the copy.
-    Non-Markdown files are copied verbatim (no badge). Deterministic.
+    Non-Markdown files are copied verbatim (no badge). A generated
+    ``docs/index.md`` landing page is emitted so the ``/docs/`` nav target
+    resolves. Deterministic.
     """
     docs_dir = project_root / "docs"
     if not docs_dir.is_dir():
@@ -250,11 +279,16 @@ def publish_docs(
     badges = {d.doc_path: d for d in build_published_docs(conn, project_root=project_root)}
     written: list[Path] = []
     out_docs = out_dir / "docs"
+    published_md: list[str] = []
 
     for src in sorted(docs_dir.rglob("*")):
         if not src.is_file():
             continue
         rel = src.relative_to(docs_dir)
+        # Skip hidden / OS-junk files (e.g. ``.DS_Store``): they are
+        # non-deterministic per machine and would pollute the published site.
+        if any(part.startswith(".") for part in rel.parts):
+            continue
         dst = out_docs / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         if src.suffix == ".md":
@@ -262,8 +296,16 @@ def publish_docs(
             doc = badges.get(str(rel))
             content = render_published_doc(doc, prose) if doc is not None else prose
             dst.write_text(content, encoding="utf-8")
+            published_md.append(rel.as_posix())
         else:
             dst.write_bytes(src.read_bytes())
         written.append(dst)
+
+    # Landing page so the `/docs/` nav target resolves (the source docs/ tree
+    # has no root index). Written last; deterministic (sorted links).
+    index = out_docs / "index.md"
+    index.parent.mkdir(parents=True, exist_ok=True)
+    index.write_text(_render_docs_index(sorted(published_md)), encoding="utf-8")
+    written.append(index)
 
     return written

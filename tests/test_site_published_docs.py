@@ -254,6 +254,25 @@ def test_node_coverage_in_badge(conn: sqlite3.Connection, project: Path) -> None
 # ---------------------------------------------------------------------------
 
 
+def test_os_junk_files_not_published(
+    conn: sqlite3.Connection, project: Path
+) -> None:
+    """OS-junk / hidden files (e.g. .DS_Store) in source docs/ are NOT copied.
+
+    They are non-deterministic per machine and would pollute the published
+    site; the publisher must skip dotfiles so regeneration stays byte-stable.
+    """
+    junk = project / "docs" / ".DS_Store"
+    junk.write_bytes(b"\x00\x01macos junk")
+    (project / "docs" / "domains" / ".DS_Store").write_bytes(b"\x00nested junk")
+    out = project / "site"
+    generate_site(conn, out, project_root=project)
+    copied = {p.name for p in (out / "docs").rglob("*") if p.is_file()}
+    assert ".DS_Store" not in copied
+    # Real docs are still published.
+    assert (out / "docs" / "getting-started.md").exists()
+
+
 def test_source_docs_byte_unchanged(conn: sqlite3.Connection, project: Path) -> None:
     docs = project / "docs"
     before = {

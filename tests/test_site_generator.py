@@ -7,16 +7,18 @@ diagram, and nothing is written outside ``--out``.
 
 from __future__ import annotations
 
+import re
 import sqlite3
-from typing import TYPE_CHECKING
+from pathlib import Path, PurePosixPath
 
 import pytest
 
 from beadloom.application.site import generate_site
 from beadloom.infrastructure.db import create_schema
 
-if TYPE_CHECKING:
-    from pathlib import Path
+# Markdown inline links: capture the URL inside (...). Excludes images is not
+# needed here (the generator emits no images).
+_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 
 
 # ---------------------------------------------------------------------------
@@ -56,10 +58,13 @@ def _seed(conn: sqlite3.Connection) -> None:
         "VALUES (?, ?, ?, ?, ?, ?)",
         ("src/beadloom/application/reindex.py", "do_reindex", "function", 1, 10, "h"),
     )
-    # A linked hand-written doc for the application node.
+    # A linked hand-written doc for the application node. Paths in the `docs`
+    # table are stored RELATIVE to the source `docs/` dir (no `docs/` prefix) —
+    # the published copy lives under `site/docs/<path>`, so the generated link
+    # must be rooted at `/docs/` (see test_node_page_doc_links_resolve).
     conn.execute(
         "INSERT INTO docs (path, kind, ref_id, hash) VALUES (?, ?, ?, ?)",
-        ("docs/domains/application/README.md", "domain", "application", "dh"),
+        ("domains/application/README.md", "domain", "application", "dh"),
     )
     conn.commit()
 
@@ -164,7 +169,118 @@ def test_node_page_linked_docs_as_links(conn: sqlite3.Connection, tmp_path: Path
     out = tmp_path / "site"
     generate_site(conn, out, project_root=tmp_path)
     text = (out / "domains" / "application.md").read_text(encoding="utf-8")
-    assert "docs/domains/application/README.md" in text
+    # The doc link is rooted at /docs/ — the published copy lives under site/docs/.
+    assert "](/docs/domains/application/README.md)" in text
+
+
+# ---------------------------------------------------------------------------
+# Internal link resolution (catches dead links WITHOUT needing node/VitePress)
+# ---------------------------------------------------------------------------
+
+
+def _is_external(url: str) -> bool:
+    """A link VitePress does not resolve against the emitted tree."""
+    return (
+        "://" in url
+        or url.startswith(("#", "mailto:", "tel:"))
+        or url.strip() == ""
+    )
+
+
+def _resolve_target(out: Path, page: Path, url: str) -> Path | None:
+    """The file a markdown *url* on *page* should resolve to in the site tree.
+
+    Mirrors VitePress link resolution: absolute (`/foo`) roots at the site root,
+    relative resolves against the page's directory, a trailing `/` means the
+    directory's `index.md`, and the `.md` suffix is optional (clean URLs).
+    Returns ``None`` for external/anchor links (not our concern).
+    """
+    raw = url.split("#", 1)[0].split("?", 1)[0]
+    if _is_external(raw):
+        return None
+    base = PurePosixPath(page.relative_to(out).as_posix()).parent
+    target = (
+        PurePosixPath(raw.lstrip("/"))
+        if raw.startswith("/")
+        else base / raw
+    )
+    # Directory link -> index page.
+    if raw.endswith("/"):
+        target = target / "index"
+    # Try the path as-is, with .md, and as a dir index (clean-URL forms).
+    candidates = [target, target.with_suffix(".md")]
+    if target.suffix == "":
+        candidates.append(target / "index.md")
+    for cand in candidates:
+        resolved = out / PurePosixPath(*cand.parts)
+        if resolved.exists():
+            return resolved
+    return out / PurePosixPath(*target.parts)  # report the primary miss
+
+
+# Directories VitePress does not render (so they are not part of the content
+# tree whose links must resolve): the node toolchain and build/config dirs.
+_NON_CONTENT_DIRS = frozenset({"node_modules", ".vitepress", "dist"})
+
+
+def _dead_links(out: Path) -> list[tuple[str, str]]:
+    """Every internal markdown link in the *content* tree whose target is missing.
+
+    Only the rendered content tree is walked (``node_modules`` / ``.vitepress``
+    are excluded — VitePress does not render them). Links inside fenced code
+    blocks (e.g. Mermaid ``click`` directives) are ignored — not markdown links.
+    """
+    dead: list[tuple[str, str]] = []
+    for md in sorted(out.rglob("*.md")):
+        if any(part in _NON_CONTENT_DIRS for part in md.relative_to(out).parts):
+            continue
+        body = md.read_text(encoding="utf-8")
+        in_fence = False
+        for line in body.splitlines():
+            if line.lstrip().startswith("```"):
+                in_fence = not in_fence
+                continue
+            if in_fence:
+                continue
+            for url in _LINK_RE.findall(line):
+                resolved = _resolve_target(out, md, url)
+                if resolved is not None and not resolved.exists():
+                    dead.append((str(md.relative_to(out)), url))
+    return dead
+
+
+def test_generated_internal_links_resolve(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """Every internal markdown link in the generated tree resolves to a file.
+
+    This is the node-free guard for the VitePress dead-link failure surfaced by
+    the F4 dogfood: node pages used to link hand-written docs at ``/<path>`` even
+    though the published copy lives under ``/docs/<path>``.
+    """
+    # The published doc must exist on disk for its link to resolve.
+    docs = tmp_path / "docs" / "domains" / "application"
+    docs.mkdir(parents=True)
+    (docs / "README.md").write_text("# Application\n", encoding="utf-8")
+
+    out = tmp_path / "site"
+    generate_site(conn, out, project_root=tmp_path)
+
+    assert not _dead_links(out), f"dead internal links: {_dead_links(out)}"
+
+
+def test_committed_site_tree_has_no_dead_links() -> None:
+    """The committed dogfood ``site/`` tree (if present) has no dead links.
+
+    Validates the real generated output `npm run docs:build` consumes, so the
+    VitePress dead-link regression is caught without needing node. Skipped on a
+    checkout where the dogfood site has not been generated.
+    """
+    repo_root = Path(__file__).resolve().parents[1]
+    site = repo_root / "site"
+    if not (site / "index.md").exists():
+        pytest.skip("dogfood site/ not generated in this checkout")
+    assert not _dead_links(site), f"dead internal links in committed site/: {_dead_links(site)}"
 
 
 # ---------------------------------------------------------------------------
