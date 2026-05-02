@@ -399,9 +399,12 @@ Reads the indexed graph read-only and emits, under `--out` (default `site/`):
 
 - `index.md` -- architecture overview: domain/service/feature counts, the top-level C4/Mermaid diagram, and a health summary line (nodes/edges/docs/coverage/stale).
 - per-node pages (`domains/<ref>.md`, `services/<ref>.md`, `features/<ref>.md`) -- each with summary, source, public symbols, `part_of`/`depends_on`/`uses` edges rendered as Markdown links to the other node pages, linked hand-written docs, and an embedded scoped C4/Mermaid diagram.
+- `dashboard.md` + `dashboard.data.json` -- **Showcase A**, the AaC/DocAsCode metrics dashboard (lint count + severity, debt score + trend, doc coverage / sync-check freshness / stale count, doctor pass-fail, and an optional federated rollup). Every number comes from the SAME code path as its gate (`lint` / `debt-report` / `sync-check` / `doctor` / `federate`) -- honest by construction.
+- `landscape.md` -- **Showcase B**, the 🌟 cross-repo landscape map: a Mermaid diagram of the federated contract graph (with `--federated`) or the local graph (without), edges labelled by their verdict, a `classDef` health overlay, and clickable nodes linking to their intra-repo page.
+- `docs/**` + `docs/index.md` -- **Showcase C**, the published validated documentation: the REAL `docs/**` tree copied verbatim (the source of truth, rendered as-is) with a per-doc `doc_sync` freshness badge injected into the COPY only. The source `docs/` is NEVER mutated.
 - `.vitepress/config.generated.mjs` -- the nav/sidebar config imported by the committed VitePress scaffold (`site/.vitepress/config.mjs`); sections: Dashboard / Architecture / Landscape / Documentation.
 
-Beadloom produces, VitePress renders. Output is deterministic (sorted, stable frontmatter, no wall-clock in the diffed output) and is NEVER written into the source `docs/` tree -- only under `--out`. `--federated` is accepted for the cross-repo landscape map (consumed by a later showcase). Run `npm ci && npm run docs:build` in `site/` to render.
+Beadloom produces, VitePress renders. Output is deterministic (sorted, stable frontmatter, no wall-clock in the diffed output) and is NEVER written into the source `docs/` tree -- only under `--out`. `--federated` takes a `federate` hub artifact (`federated.json`) and drives the Showcase B landscape map. To render: `cd site && npm install && npm run docs:build` (preview with `npm run docs:preview`). See the [VitePress Site guide](../guides/vitepress-site.md).
 
 ### beadloom docs audit
 

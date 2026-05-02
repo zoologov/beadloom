@@ -284,7 +284,7 @@ The federated JSON envelope: `{ schema_version, repos, nodes, edges, contracts, 
 
 - **REST / OpenAPI and gRPC contracts** (lowest priority — runtime-generated, no static source files; future F-phase).
 - **CI gating** — **delivered in F3 (BDL-039):** the landscape gate (`federate --fail-on`), the unified `beadloom ci` orchestrator (reindex → lint → sync-check → config-check → doctor → optional federate gate), and a reusable composite GitHub Action + GitLab template, dogfooded on Beadloom's own CI. The **pull-based hub** plumbing (SHA-tagged export publishing + fetch) is a documented pattern run by the satellites' ops — no SaaS hub, no satellite auto-bootstrap is Beadloom-built. See `docs/guides/ci-setup.md`.
-- **No VitePress / visual landscape map** (F4), no semantic layer.
+- **Visual landscape map** — **delivered in F4 (BDL-040):** the `federate` hub artifact (`federated.json`) is consumed by `beadloom docs site --federated` to render the 🌟 cross-repo landscape map (a clickable Mermaid diagram of the contract graph, edges labelled by their `ContractVerdict`/`EdgeVerdict`, a health overlay) in the published VitePress knowledge base. The map carries the hub verdicts verbatim — Beadloom produces, VitePress renders. A richer JS graph library (Cytoscape / D3) remains a follow-up. See `docs/guides/vitepress-site.md`. No semantic layer yet.
 - Hub needs **≥ 2** satellite exports.
 
 ---
