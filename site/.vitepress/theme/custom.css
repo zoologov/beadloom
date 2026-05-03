@@ -1,0 +1,77 @@
+/* Diagram viewer styling for the Beadloom showcase site.
+ *
+ * Scopes pan/zoom framing + the control overlay added by DiagramViewer.vue to
+ * the Mermaid containers rendered by vitepress-plugin-mermaid. With JS
+ * disabled none of the `.bl-pz-*` classes are added, so the static SVG renders
+ * normally (graceful degradation). */
+
+.bl-diagram-viewer {
+  display: none;
+}
+
+/* The Mermaid container, once enhanced, becomes an interactive frame. */
+.mermaid.bl-pz-frame {
+  position: relative;
+  overflow: hidden;
+  height: 480px;
+  max-height: 80vh;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  background: var(--vp-c-bg-soft);
+  resize: vertical;
+}
+
+.mermaid.bl-pz-frame > svg {
+  display: block;
+  cursor: grab;
+}
+
+.mermaid.bl-pz-frame > svg:active {
+  cursor: grabbing;
+}
+
+/* Fullscreen: let the frame fill the screen and re-fit the SVG. */
+.mermaid.bl-pz-frame:fullscreen {
+  height: 100vh;
+  max-height: 100vh;
+  border: none;
+  border-radius: 0;
+  padding: 1rem;
+}
+
+.bl-pz-controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  z-index: 5;
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
+.mermaid.bl-pz-frame:hover .bl-pz-controls,
+.mermaid.bl-pz-frame:focus-within .bl-pz-controls {
+  opacity: 1;
+}
+
+.bl-pz-btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--vp-c-text-1);
+  background: var(--vp-c-bg);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.bl-pz-btn:hover {
+  border-color: var(--vp-c-brand-1);
+  color: var(--vp-c-brand-1);
+}
