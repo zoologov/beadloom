@@ -110,7 +110,7 @@ Produces a `C4Container` diagram with:
 - `_Ext` / `Db` variants for external/database nodes
 - `System_Boundary()` for grouping children by `part_of` parent
 - Nested `Container_Boundary()` for grandchildren
-- `Rel()` for relationships
+- `Rel()` for relationships — emitted **only when both endpoints are declared diagram nodes**. A node rendered solely as a `System_Boundary` anchor (e.g. the System root with children) is NOT an addressable node, so a `Rel()` to it would crash mermaid-C4's `drawRels` (`Cannot read properties of undefined (reading 'x')`). Such Rels are dropped (the relationship still lives in the graph + the landscape map); the drop count is logged.
 
 #### Mermaid Helpers
 
@@ -120,6 +120,8 @@ Produces a `C4Container` diagram with:
 | `_mermaid_grandchildren`   | Nested `Container_Boundary` for grandchildren.|
 | `_mermaid_top_level_node`  | Top-level node with optional boundary.        |
 | `_mermaid_orphan_boundaries` | Boundaries for non-top-level parents.       |
+| `_declared_node_ids`       | The ref_ids emitted as addressable nodes (not boundaries). |
+| `_mermaid_rel_lines`       | `Rel()` lines for declared-endpoint relationships only.    |
 
 ### PlantUML C4
 

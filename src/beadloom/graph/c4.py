@@ -15,6 +15,7 @@ Level assignment priority:
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections import deque
 from dataclasses import dataclass
@@ -22,6 +23,8 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import sqlite3
+
+logger = logging.getLogger(__name__)
 
 
 # Edge kinds that map to C4 Rel() relationships
@@ -372,12 +375,59 @@ def render_c4_mermaid(
     rendered_ids = {n.ref_id for n in top_level}
     lines.extend(_mermaid_orphan_boundaries(boundary_children, rendered_ids, node_by_id))
 
-    for rel in relationships:
-        src_id = _sanitize_id(rel.src)
-        dst_id = _sanitize_id(rel.dst)
-        lines.append(f'    Rel({src_id}, {dst_id}, "{rel.label}")')
+    declared = _declared_node_ids(top_level, boundary_children)
+    lines.extend(_mermaid_rel_lines(relationships, declared))
 
     return "\n".join(lines) + "\n"
+
+
+def _declared_node_ids(
+    top_level: list[C4Node],
+    boundary_children: dict[str, list[C4Node]],
+) -> set[str]:
+    """The ref_ids emitted as addressable C4 node declarations (not boundaries).
+
+    A node is declared (``System(id,…)`` / ``Container(id,…)`` / …) when it is a
+    child grouped inside a boundary, OR a top-level node with NO children. A
+    top-level node WITH children is rendered only as a ``System_Boundary`` anchor
+    — it is NOT a declared node, so a ``Rel()`` to it crashes ``drawRels``.
+    """
+    declared: set[str] = set()
+    for children in boundary_children.values():
+        declared.update(child.ref_id for child in children)
+    for node in top_level:
+        if not boundary_children.get(node.ref_id):
+            declared.add(node.ref_id)
+    return declared
+
+
+def _mermaid_rel_lines(
+    relationships: list[C4Relationship],
+    declared: set[str],
+) -> list[str]:
+    """Emit ``Rel(a, b, …)`` only when BOTH endpoints are declared nodes.
+
+    A relationship whose endpoint is the ``System`` root (rendered as a boundary,
+    not a node) or any undeclared id is dropped — the relationship still lives in
+    the graph + the landscape map, so dropping the undrawable Rel is safe. The
+    drop count is logged.
+    """
+    lines: list[str] = []
+    dropped = 0
+    for rel in relationships:
+        if rel.src not in declared or rel.dst not in declared:
+            dropped += 1
+            continue
+        lines.append(
+            f'    Rel({_sanitize_id(rel.src)}, {_sanitize_id(rel.dst)}, "{rel.label}")'
+        )
+    if dropped:
+        logger.debug(
+            "C4 Mermaid: dropped %d Rel(s) with an undeclared endpoint "
+            "(boundary/root) to keep the diagram renderable",
+            dropped,
+        )
+    return lines
 
 
 # ---------------------------------------------------------------------------

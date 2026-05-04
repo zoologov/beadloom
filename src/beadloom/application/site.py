@@ -42,6 +42,7 @@ from beadloom.application.site_landscape import (
     build_landscape_data,
     render_landscape_md,
 )
+from beadloom.application.site_mermaid_guard import MermaidIssue, validate_mermaid
 from beadloom.application.site_pages import NodeRow, load_nodes, render_all_pages
 from beadloom.application.site_published import publish_docs
 from beadloom.graph.c4 import filter_c4_nodes, map_to_c4, render_c4_mermaid
@@ -51,6 +52,21 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+class MermaidValidationError(RuntimeError):
+    """A generated diagram failed the structural Mermaid guard.
+
+    Raised by :func:`generate_site` so a broken diagram fails ``docs site`` (in
+    pytest/CI) instead of silently shipping a page that crashes the browser
+    render. Carries the offending page path and the structural issues found.
+    """
+
+    def __init__(self, page: str, issues: list[MermaidIssue]) -> None:
+        detail = "; ".join(f"[{i.kind}] {i.message}" for i in issues)
+        super().__init__(f"Mermaid guard rejected {page}: {detail}")
+        self.page = page
+        self.issues = issues
 
 
 @dataclass(frozen=True)
@@ -193,8 +209,50 @@ def _render_nav_config(nodes: list[NodeRow]) -> str:
     )
 
 
+def _extract_mermaid_blocks(content: str) -> list[str]:
+    """Return the body of every ```` ```mermaid ```` fenced block in *content*."""
+    blocks: list[str] = []
+    lines = content.splitlines()
+    inside = False
+    current: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if not inside and stripped.startswith("```mermaid"):
+            inside = True
+            current = []
+            continue
+        if inside and stripped.startswith("```"):
+            inside = False
+            blocks.append("\n".join(current))
+            continue
+        if inside:
+            current.append(line)
+    return blocks
+
+
+def _guard_diagrams(path: Path, content: str) -> None:
+    """Validate every Mermaid diagram in *content*; raise on any structural issue.
+
+    Closes the F4 "build green != renders ok" gap: a reserved-keyword flowchart
+    id or a C4 Rel to an undeclared node fails ``docs site`` here (pytest/CI),
+    not in the browser.
+    """
+    if path.suffix != ".md":
+        return
+    issues: list[MermaidIssue] = []
+    for block in _extract_mermaid_blocks(content):
+        issues.extend(validate_mermaid(block))
+    if issues:
+        raise MermaidValidationError(path.name, issues)
+
+
 def _write(path: Path, content: str, written: list[Path]) -> None:
-    """Write *content* to *path* (creating parents) and record it."""
+    """Write *content* to *path* (creating parents) and record it.
+
+    Every Markdown page is run through the Mermaid structural guard first, so a
+    diagram that would crash the VitePress render fails generation instead.
+    """
+    _guard_diagrams(path, content)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     written.append(path)

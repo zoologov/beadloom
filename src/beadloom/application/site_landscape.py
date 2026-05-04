@@ -71,13 +71,17 @@ def _health_class(verdict: str) -> str:
 
 
 def _mermaid_id(raw: str) -> str:
-    """Sanitize a node id into a Mermaid-safe identifier (``[A-Za-z0-9_]``).
+    """Sanitize a node id into a Mermaid-safe identifier (``n_[A-Za-z0-9_]``).
 
     Mermaid node ids may not contain ``-`` / ``:`` / ``@`` (used by the
-    namespaced ``@repo:ref`` form), so they are replaced with ``_``. The mapping
-    is deterministic; the human label keeps the original id.
+    namespaced ``@repo:ref`` form), so they are replaced with ``_``. The result
+    is also **prefixed** with ``n_`` so the id can NEVER equal a reserved Mermaid
+    keyword: a node named ``graph`` (charset-valid, but colliding with the
+    ``graph LR`` keyword → the live ``got 'GRAPH'`` parse crash) becomes
+    ``n_graph``. The mapping is deterministic; the human label and the ``click``
+    route keep the original id.
     """
-    return re.sub(r"[^A-Za-z0-9_]", "_", raw)
+    return "n_" + re.sub(r"[^A-Za-z0-9_]", "_", raw)
 
 
 def _strip_namespace(raw: str) -> str:

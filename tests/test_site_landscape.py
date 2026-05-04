@@ -140,7 +140,7 @@ def test_render_has_clickable_nodes(tmp_path: Path) -> None:
     data = build_landscape_data(federated=fed)
     md = render_landscape_md(data)
     # Each node is clickable, linking to its service page.
-    assert 'click svc_a "/services/svc-a"' in md
+    assert 'click n_svc_a "/services/svc-a"' in md
     assert "```mermaid" in md
 
 

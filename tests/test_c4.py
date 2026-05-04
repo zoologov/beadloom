@@ -708,6 +708,58 @@ class TestRenderC4MermaidMultipleRels:
         assert 'Rel(b, c, "depends_on")' in result
 
 
+class TestRenderC4MermaidRelIntegrity:
+    """Rel() endpoints must be declared nodes, not undeclared boundary roots.
+
+    The live ``drawRels`` crash (`Cannot read properties of undefined (reading
+    'x')`) was a ``Rel(beadloom, …)`` to the ``System`` root, which is rendered
+    as a ``System_Boundary`` anchor (not an addressable node). Such Rels are
+    dropped (the relationship still lives in the graph + landscape).
+    """
+
+    def test_rel_to_boundary_root_is_dropped(self) -> None:
+        nodes = [
+            C4Node(
+                ref_id="beadloom", label="Beadloom", c4_level="System",
+                description="root", boundary=None,
+                is_external=False, is_database=False,
+            ),
+            C4Node(
+                ref_id="application", label="Application", c4_level="Container",
+                description="", boundary="beadloom",
+                is_external=False, is_database=False,
+            ),
+        ]
+        # A Rel to the boundary root (`beadloom`) — must be dropped.
+        rels = [C4Relationship(src="beadloom", dst="application", label="uses")]
+        result = render_c4_mermaid(nodes, rels)
+        assert "System_Boundary(beadloom" in result
+        assert "Container(application" in result
+        assert "Rel(" not in result  # the undrawable Rel to the root is dropped
+
+    def test_rel_between_declared_children_kept(self) -> None:
+        nodes = [
+            C4Node(
+                ref_id="beadloom", label="Beadloom", c4_level="System",
+                description="root", boundary=None,
+                is_external=False, is_database=False,
+            ),
+            C4Node(
+                ref_id="application", label="Application", c4_level="Container",
+                description="", boundary="beadloom",
+                is_external=False, is_database=False,
+            ),
+            C4Node(
+                ref_id="graph", label="Graph", c4_level="Container",
+                description="", boundary="beadloom",
+                is_external=False, is_database=False,
+            ),
+        ]
+        rels = [C4Relationship(src="application", dst="graph", label="uses")]
+        result = render_c4_mermaid(nodes, rels)
+        assert 'Rel(application, graph, "uses")' in result
+
+
 class TestRenderC4MermaidSanitization:
     """Test that ref_ids with hyphens are sanitized for Mermaid."""
 
