@@ -20,12 +20,12 @@
       },
       {
         "details": {
-          "dormant": 8,
+          "dormant": 7,
           "high_fan_out": 1,
-          "oversized": 0
+          "oversized": 1
         },
         "name": "complexity",
-        "score": 5.0
+        "score": 6.5
       },
       {
         "details": {
@@ -35,22 +35,22 @@
         "score": 0.0
       }
     ],
-    "debt_score": 9.0,
-    "severity": "low",
+    "debt_score": 10.5,
+    "severity": "medium",
     "top_offenders": [
+      {
+        "reasons": [
+          "oversized"
+        ],
+        "ref_id": "graph",
+        "score": 2.0
+      },
       {
         "reasons": [
           "high_fan_out"
         ],
         "ref_id": "application",
         "score": 1.0
-      },
-      {
-        "reasons": [
-          "dormant"
-        ],
-        "ref_id": "c4-diagrams",
-        "score": 0.5
       },
       {
         "reasons": [
@@ -104,13 +104,13 @@
     ],
     "trend": {
       "category_deltas": {
-        "complexity": 4.0,
+        "complexity": 5.5,
         "doc_gaps": 4.0,
         "meta_doc_staleness": 0.0,
         "rule_violations": 0.0,
         "test_gaps": 0.0
       },
-      "delta": 8.0,
+      "delta": 9.5,
       "previous_score": 1.0,
       "previous_snapshot": "2026-06-01 16:36:30 [BDL-038-wave1]"
     }
@@ -118,30 +118,53 @@
   "docs": {
     "coverage_pct": 100.0,
     "documented": 24,
-    "fresh": 71,
+    "fresh": 72,
     "freshness_pct": 100.0,
     "nodes": 24,
     "stale": 0,
-    "tracked_pairs": 71
+    "tracked_pairs": 72
   },
   "doctor": {
     "by_severity": {
       "ok": 12,
-      "warning": 1
+      "warning": 2
     },
     "errors": 0,
     "passed": true,
-    "total": 13,
-    "warnings": 1
+    "total": 14,
+    "warnings": 2
   },
-  "federated": null,
+  "federated": {
+    "contract_count": 1,
+    "contract_verdicts": {
+      "breaking": 1
+    },
+    "edge_count": 2,
+    "repo_count": 2,
+    "services": [
+      {
+        "healthy": true,
+        "repo": "catalog-service",
+        "verdicts": {
+          "ok": 1
+        }
+      },
+      {
+        "healthy": true,
+        "repo": "storefront-web",
+        "verdicts": {
+          "ok": 1
+        }
+      }
+    ]
+  },
   "lint": {
     "by_severity": {
       "error": 0,
-      "warn": 0
+      "warn": 1
     },
     "errors": 0,
-    "violations": 0,
-    "warnings": 0
+    "violations": 1,
+    "warnings": 1
   }
 }

@@ -21,6 +21,8 @@ Use-case orchestration: reindex, doctor, debt report, file watcher
 - `DebtWeights`
 - `GateResult`
 - `GateStep`
+- `MermaidIssue`
+- `MermaidValidationError`
 - `NodeDebt`
 - `NodePage`
 - `NodeRow`
@@ -56,6 +58,7 @@ Use-case orchestration: reindex, doctor, debt report, file watcher
 - `run_checks`
 - `run_ci_gate`
 - `serialize_dashboard_data`
+- `validate_mermaid`
 - `watch`
 
 ## Relationships

@@ -30,6 +30,7 @@ The project's validated documentation, published as-is with a per-doc `doc_sync`
 - [domains/onboarding/features/doc-generator/SPEC.md](./domains/onboarding/features/doc-generator/SPEC.md)
 - [getting-started.md](./getting-started.md)
 - [guides/ci-setup.md](./guides/ci-setup.md)
+- [guides/vitepress-site.md](./guides/vitepress-site.md)
 - [services/cli.md](./services/cli.md)
 - [services/mcp.md](./services/mcp.md)
 - [services/tui.md](./services/tui.md)

@@ -79,6 +79,8 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `LintResult`
 - `McpToolDoc`
 - `Mention`
+- `MermaidIssue`
+- `MermaidValidationError`
 - `NodeChange`
 - `NodeDebt`
 - `NodeDetail`
@@ -304,6 +306,7 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `tui`
 - `ui`
 - `update_node_in_yaml`
+- `validate_mermaid`
 - `validate_rules`
 - `watch`
 - `watch_cmd`
