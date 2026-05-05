@@ -282,9 +282,10 @@ def test_dashboard_data_json_matches_build(tmp_path: Path) -> None:
     out = tmp_path / "site"
     conn = _open(project)
     try:
-        generate_site(conn, out, project_root=project)
+        generate_site(conn, out, project_root=project, now_ts="2026-06-05T00:00:00+00:00")
         conn2 = _open(project)
         try:
+            # build is pure-read of the now-recorded history -> equal to the file.
             expected = build_dashboard_data(conn2, project_root=project)
         finally:
             conn2.close()
@@ -333,10 +334,12 @@ def test_dashboard_files_byte_identical_on_regenerate(tmp_path: Path) -> None:
     out = tmp_path / "site"
     conn = _open(project)
     try:
-        generate_site(conn, out, project_root=project)
+        # Same injected ts both runs -> dedup-by-ts keeps the history (and thus
+        # the diffed file) byte-identical.
+        generate_site(conn, out, project_root=project, now_ts="2026-06-05T00:00:00+00:00")
         first = (out / "dashboard.data.json").read_bytes()
         first_md = (out / "dashboard.md").read_bytes()
-        generate_site(conn, out, project_root=project)
+        generate_site(conn, out, project_root=project, now_ts="2026-06-05T00:00:00+00:00")
         second = (out / "dashboard.data.json").read_bytes()
         second_md = (out / "dashboard.md").read_bytes()
     finally:
@@ -373,4 +376,143 @@ def test_data_json_is_sorted_keys(tmp_path: Path, with_violation: bool) -> None:
     raw = (out / "dashboard.data.json").read_text(encoding="utf-8")
     # Re-serialize with sorted keys; the file is already sorted -> identical.
     reparsed = json.loads(raw)
-    assert raw == json.dumps(reparsed, sort_keys=True, indent=2) + "\n"
+    assert raw == json.dumps(reparsed, sort_keys=True, indent=2, ensure_ascii=False) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# Trends — honest time-series from the metrics-history store only (G5)
+# ---------------------------------------------------------------------------
+
+
+def test_trends_empty_when_no_history(tmp_path: Path) -> None:
+    project = _make_project(tmp_path, with_violation=False)
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project)
+    finally:
+        conn.close()
+    # No recorded points yet -> an empty (but present) series, never fabricated.
+    assert data["trends"] == []
+
+
+def test_trends_are_exactly_recorded_points_sorted(tmp_path: Path) -> None:
+    from beadloom.application.site_metrics_history import (
+        MetricsPoint,
+        append_metrics_point,
+    )
+
+    project = _make_project(tmp_path, with_violation=False)
+
+    def _pt(ts: str, lint: int) -> MetricsPoint:
+        return MetricsPoint(
+            ts=ts,
+            lint_violations=lint,
+            debt_score=1.0,
+            coverage_pct=50.0,
+            sync_pct=100.0,
+            nodes=3,
+            edges=2,
+            symbols=0,
+        )
+
+    append_metrics_point(project, _pt("2026-06-03T00:00:00+00:00", 3))
+    append_metrics_point(project, _pt("2026-06-01T00:00:00+00:00", 1))
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project)
+    finally:
+        conn.close()
+    trends = data["trends"]
+    assert isinstance(trends, list)
+    # Exactly the two recorded points, sorted by ts, no interpolation.
+    assert [p["ts"] for p in trends] == [
+        "2026-06-01T00:00:00+00:00",
+        "2026-06-03T00:00:00+00:00",
+    ]
+    assert [p["lint_violations"] for p in trends] == [1, 3]
+
+
+def test_generate_site_appends_current_point_with_injected_ts(tmp_path: Path) -> None:
+    project = _make_project(tmp_path, with_violation=False)
+    out = tmp_path / "site"
+    conn = _open(project)
+    try:
+        generate_site(conn, out, project_root=project, now_ts="2026-06-05T12:00:00+00:00")
+    finally:
+        conn.close()
+    written = json.loads((out / "dashboard.data.json").read_text(encoding="utf-8"))
+    trends = written["trends"]
+    # The current run's point is recorded with the INJECTED ts (never now()).
+    assert any(p["ts"] == "2026-06-05T12:00:00+00:00" for p in trends)
+
+
+# ---------------------------------------------------------------------------
+# Recommendations — prioritized, honest, from the existing gate data (G6)
+# ---------------------------------------------------------------------------
+
+
+def test_recommendations_present_and_severity_ordered(tmp_path: Path) -> None:
+    project = _make_project(tmp_path, with_violation=True)
+    fed = _federated_json(tmp_path)
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project, federated=fed)
+    finally:
+        conn.close()
+    recs = data["recommendations"]
+    assert isinstance(recs, list)
+    assert recs, "with a violation + federated risks there must be recommendations"
+    # Every item carries the documented shape.
+    for item in recs:
+        assert set(item) == {"kind", "severity", "target", "message", "link"}
+    # Severity-ordered: error/critical before warn/info.
+    rank = {"error": 0, "critical": 0, "warn": 1, "info": 2}
+    severities = [rank.get(str(i["severity"]), 9) for i in recs]
+    assert severities == sorted(severities)
+
+
+def test_lint_recommendations_match_linter(tmp_path: Path) -> None:
+    project = _make_project(tmp_path, with_violation=True)
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project)
+    finally:
+        conn.close()
+    expected = lint(project, reindex_before=False)
+    lint_recs = [r for r in data["recommendations"] if r["kind"] == "lint"]
+    # One lint recommendation per real violation — honest, no invented hotspots.
+    assert len(lint_recs) == len(expected.violations)
+    messages = [str(r["message"]) for r in lint_recs]
+    # Each gate violation's own message is carried verbatim (remediation may be
+    # appended) — the recommendation never invents or drops a violation.
+    for v in expected.violations:
+        assert any(v.message in m for m in messages)
+
+
+def test_contract_risk_recommendations_from_federated(tmp_path: Path) -> None:
+    project = _make_project(tmp_path, with_violation=False)
+    fed = _federated_json(tmp_path)
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project, federated=fed)
+    finally:
+        conn.close()
+    contract_recs = [r for r in data["recommendations"] if r["kind"] == "contract"]
+    # The fixture has exactly one BREAKING contract -> exactly one contract risk.
+    assert len(contract_recs) == 1
+    assert contract_recs[0]["target"] == "k2"
+    assert contract_recs[0]["severity"] == "error"
+
+
+def test_recommendations_deterministic(tmp_path: Path) -> None:
+    project = _make_project(tmp_path, with_violation=True)
+    fed = _federated_json(tmp_path)
+    conn = _open(project)
+    try:
+        first = build_dashboard_data(conn, project_root=project, federated=fed)
+        second = build_dashboard_data(conn, project_root=project, federated=fed)
+    finally:
+        conn.close()
+    assert json.dumps(first["recommendations"], sort_keys=True) == json.dumps(
+        second["recommendations"], sort_keys=True
+    )

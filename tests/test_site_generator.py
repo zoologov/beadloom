@@ -288,16 +288,21 @@ def test_committed_site_tree_has_no_dead_links() -> None:
 # ---------------------------------------------------------------------------
 
 
+_FIXED_TS = "2026-06-05T00:00:00+00:00"
+
+
 def test_regenerate_is_byte_identical(conn: sqlite3.Connection, tmp_path: Path) -> None:
     out = tmp_path / "site"
-    generate_site(conn, out, project_root=tmp_path)
+    # Inject a fixed metrics-history ts: the only wall-clock read is the trend
+    # point; dedup-by-ts keeps the diffed output byte-stable for a fixed history.
+    generate_site(conn, out, project_root=tmp_path, now_ts=_FIXED_TS)
     first = {
         p.relative_to(out): p.read_bytes()
         for p in sorted(out.rglob("*"))
         if p.is_file()
     }
     # Regenerate into the same dir; output must be byte-identical.
-    generate_site(conn, out, project_root=tmp_path)
+    generate_site(conn, out, project_root=tmp_path, now_ts=_FIXED_TS)
     second = {
         p.relative_to(out): p.read_bytes()
         for p in sorted(out.rglob("*"))
@@ -307,11 +312,11 @@ def test_regenerate_is_byte_identical(conn: sqlite3.Connection, tmp_path: Path) 
 
 
 def test_no_wall_clock_in_output(conn: sqlite3.Connection, tmp_path: Path) -> None:
-    """Two generations of the same graph produce identical bytes (no timestamps)."""
+    """Two generations of the same graph produce identical bytes (fixed ts)."""
     out_a = tmp_path / "a"
     out_b = tmp_path / "b"
-    generate_site(conn, out_a, project_root=tmp_path)
-    generate_site(conn, out_b, project_root=tmp_path)
+    generate_site(conn, out_a, project_root=tmp_path, now_ts=_FIXED_TS)
+    generate_site(conn, out_b, project_root=tmp_path, now_ts=_FIXED_TS)
     a = {p.relative_to(out_a): p.read_bytes() for p in sorted(out_a.rglob("*")) if p.is_file()}
     b = {p.relative_to(out_b): p.read_bytes() for p in sorted(out_b.rglob("*")) if p.is_file()}
     assert a == b

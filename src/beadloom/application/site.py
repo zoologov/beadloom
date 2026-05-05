@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from beadloom.application.site_dashboard import (
@@ -43,6 +44,11 @@ from beadloom.application.site_landscape import (
     render_landscape_md,
 )
 from beadloom.application.site_mermaid_guard import MermaidIssue, validate_mermaid
+from beadloom.application.site_metrics_history import (
+    MetricsPoint,
+    append_metrics_point,
+    backfill_structural_history,
+)
 from beadloom.application.site_pages import NodeRow, load_nodes, render_all_pages
 from beadloom.application.site_published import publish_docs
 from beadloom.graph.c4 import filter_c4_nodes, map_to_c4, render_c4_mermaid
@@ -258,12 +264,69 @@ def _write(path: Path, content: str, written: list[Path]) -> None:
     written.append(path)
 
 
+def _to_int(value: object) -> int:
+    """Coerce an honest numeric dashboard value to int (0 on a non-number)."""
+    return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0
+
+
+def _to_float(value: object) -> float:
+    """Coerce an honest numeric dashboard value to float (0.0 on a non-number)."""
+    if isinstance(value, bool):
+        return 0.0
+    return float(value) if isinstance(value, (int, float)) else 0.0
+
+
+def _scalar_metrics(
+    conn: sqlite3.Connection, project_root: Path, federated: Path | None
+) -> dict[str, object]:
+    """Build the dashboard data once to source this run's honest scalar metrics."""
+    return build_dashboard_data(conn, project_root=project_root, federated=federated)
+
+
+def _record_metrics_point(
+    conn: sqlite3.Connection,
+    project_root: Path,
+    *,
+    federated: Path | None,
+    now_ts: str | None,
+) -> None:
+    """Append this run's honest metrics point (injected/now ts) to the history.
+
+    The scalar metrics are taken from the SAME dashboard data the page emits
+    (honest by construction); structural ``edges``/``symbols`` come from the DB.
+    The point's ts is the only wall-clock read and lands solely in the
+    append-only history store — never in the diffed dashboard fields.
+    """
+    ts = now_ts or datetime.now(timezone.utc).isoformat()
+    data = _scalar_metrics(conn, project_root, federated)
+    lint_obj = data["lint"]
+    debt_obj = data["debt"]
+    docs_obj = data["docs"]
+    assert isinstance(lint_obj, dict)
+    assert isinstance(debt_obj, dict)
+    assert isinstance(docs_obj, dict)
+    edges = int(conn.execute("SELECT count(*) FROM edges").fetchone()[0])
+    symbols = int(conn.execute("SELECT count(*) FROM code_symbols").fetchone()[0])
+    point = MetricsPoint(
+        ts=ts,
+        lint_violations=_to_int(lint_obj["violations"]),
+        debt_score=_to_float(debt_obj["debt_score"]),
+        coverage_pct=_to_float(docs_obj["coverage_pct"]),
+        sync_pct=_to_float(docs_obj["freshness_pct"]),
+        nodes=_to_int(docs_obj["nodes"]),
+        edges=edges,
+        symbols=symbols,
+    )
+    append_metrics_point(project_root, point)
+
+
 def generate_site(
     conn: sqlite3.Connection,
     out_dir: Path,
     *,
     project_root: Path,
     federated: Path | None = None,
+    now_ts: str | None = None,
 ) -> SiteResult:
     """Generate the VitePress content tree under *out_dir* (deterministic).
 
@@ -273,6 +336,10 @@ def generate_site(
         project_root: The project root (for resolving relative paths; the source
             ``docs/`` is never written).
         federated: Optional federated.json for the landscape map (later beads).
+        now_ts: ISO-8601 timestamp for the metrics-history point recorded this
+            run. Injected in tests for determinism; defaults to the current UTC
+            instant in production (the only wall-clock read, and only into the
+            append-only history store — never into the diffed dashboard fields).
 
     Returns:
         A :class:`SiteResult` listing every written file (sorted).
@@ -287,6 +354,10 @@ def generate_site(
 
     # Showcase A — the metrics dashboard (machine data + human page). Numbers
     # come from the same code paths as the gates (honest by construction).
+    # Record this run's honest point first (backfill structural history once so
+    # the trend isn't empty on day one), so the emitted series includes "now".
+    backfill_structural_history(conn, project_root)
+    _record_metrics_point(conn, project_root, federated=federated, now_ts=now_ts)
     dashboard_data = build_dashboard_data(
         conn, project_root=project_root, federated=federated
     )

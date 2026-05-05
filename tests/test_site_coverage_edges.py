@@ -32,6 +32,7 @@ import pytest
 from beadloom.application.site import generate_site
 from beadloom.application.site_dashboard import (
     _federated_metrics,
+    _read_federated_payload,
     build_dashboard_data,
 )
 from beadloom.application.site_landscape import (
@@ -323,16 +324,16 @@ def test_landscape_render_ignores_edge_to_unknown_node() -> None:
 
 
 def test_dashboard_federated_unreadable_returns_none(tmp_path: Path) -> None:
-    """An unreadable federated artifact yields a None rollup (no crash)."""
+    """An unreadable federated artifact yields a None payload (no crash)."""
     missing = tmp_path / "does-not-exist.json"
-    assert _federated_metrics(missing) is None
+    assert _read_federated_payload(missing) is None
 
 
 def test_dashboard_federated_non_dict_returns_none(tmp_path: Path) -> None:
     """A federated.json whose top-level value is not a dict yields None."""
     fed = tmp_path / "federated.json"
     fed.write_text("[1, 2, 3]", encoding="utf-8")
-    assert _federated_metrics(fed) is None
+    assert _read_federated_payload(fed) is None
 
 
 def test_dashboard_federated_skips_empty_verdict(tmp_path: Path) -> None:
@@ -350,7 +351,9 @@ def test_dashboard_federated_skips_empty_verdict(tmp_path: Path) -> None:
     }
     fed = tmp_path / "federated.json"
     fed.write_text(json.dumps(payload), encoding="utf-8")
-    rollup = _federated_metrics(fed)
+    loaded = _read_federated_payload(fed)
+    assert loaded is not None
+    rollup = _federated_metrics(loaded)
     assert rollup is not None
     # The empty-verdict contract is not counted.
     assert rollup["contract_verdicts"] == {"confirmed": 1}

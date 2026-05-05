@@ -29,6 +29,8 @@ import logging
 from typing import TYPE_CHECKING
 
 from beadloom.application.debt_report import (
+    DebtReport,
+    NodeDebt,
     collect_debt_data,
     compute_debt_score,
     compute_debt_trend,
@@ -36,7 +38,11 @@ from beadloom.application.debt_report import (
     load_debt_weights,
 )
 from beadloom.application.doctor import Severity, run_checks
-from beadloom.graph.linter import lint
+from beadloom.application.site_metrics_history import (
+    MetricsPoint,
+    read_history,
+)
+from beadloom.graph.linter import LintResult, lint
 
 if TYPE_CHECKING:
     import sqlite3
@@ -48,15 +54,28 @@ logger = logging.getLogger(__name__)
 # problem) — drives the per-service ``healthy`` flag in the federated rollup.
 _UNHEALTHY_VERDICTS = frozenset({"drift", "breaking"})
 
+# Recommendation severity ordering (lower = surfaced first). The panel is
+# severity-ordered so the most actionable problems lead.
+_SEVERITY_RANK: dict[str, int] = {
+    "critical": 0,
+    "error": 0,
+    "warn": 1,
+    "warning": 1,
+    "info": 2,
+}
 
-def _lint_metrics(project_root: Path) -> dict[str, object]:
-    """Lint count + severity breakdown via the exact ``beadloom lint`` path.
+# How many worst-debt offenders to surface as recommendations (the debt report
+# already returns its own ``top_offenders`` cut; we mirror that honest slice).
+_MAX_DEBT_RECS = 5
 
-    Reindex is skipped (``reindex_before=False``): the dashboard runs over the
-    already-indexed DB and must not mutate it, matching the gate's verdict on
-    the current index.
+
+def _lint_metrics(result: LintResult) -> dict[str, object]:
+    """Lint count + severity breakdown from a precomputed ``beadloom lint`` result.
+
+    The result is computed once (``reindex_before=False`` — read-only over the
+    already-indexed DB) and shared with the recommendation panel so the dashboard
+    figure and the lint hotspots can never disagree.
     """
-    result = lint(project_root, reindex_before=False)
     by_severity: dict[str, int] = {}
     for violation in result.violations:
         by_severity[violation.severity] = by_severity.get(violation.severity, 0) + 1
@@ -71,10 +90,8 @@ def _lint_metrics(project_root: Path) -> dict[str, object]:
     }
 
 
-def _debt_metrics(
-    conn: sqlite3.Connection, project_root: Path
-) -> dict[str, object]:
-    """Debt score/categories/offenders via the exact ``--debt-report`` path."""
+def _debt_report(conn: sqlite3.Connection, project_root: Path) -> DebtReport:
+    """Compute the debt report via the exact ``--debt-report`` path (with trend)."""
     from dataclasses import replace
 
     weights = load_debt_weights(project_root)
@@ -83,7 +100,7 @@ def _debt_metrics(
     if trend is not None:
         # compute_debt_score always returns trend=None; attach the computed trend.
         report = replace(report, trend=trend)
-    return format_debt_json(report)
+    return report
 
 
 def _docs_metrics(conn: sqlite3.Connection) -> dict[str, object]:
@@ -149,26 +166,32 @@ def _count_verdicts(items: list[dict[str, object]]) -> dict[str, int]:
     return dict(sorted(counts.items()))
 
 
-def _federated_metrics(federated: Path) -> dict[str, object] | None:
-    """Per-service edge-verdict health + contract-verdict counts.
-
-    Reuses the F2 ``federate`` output verbatim (``edges[].verdict`` /
-    ``contracts[].verdict`` / ``repos[]``) — no re-derivation of verdicts.
-    """
+def _read_federated_payload(federated: Path) -> dict[str, object] | None:
+    """Read the federated artifact JSON (dict), logging + ``None`` on failure."""
     try:
         payload = json.loads(federated.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         logger.warning("Could not read federated artifact %s", federated)
         return None
-    if not isinstance(payload, dict):
-        return None
+    return payload if isinstance(payload, dict) else None
 
+
+def _federated_metrics(payload: dict[str, object]) -> dict[str, object]:
+    """Per-service edge-verdict health + contract-verdict counts.
+
+    Reuses the F2 ``federate`` output verbatim (``edges[].verdict`` /
+    ``contracts[].verdict`` / ``repos[]``) — no re-derivation of verdicts.
+    """
     raw_edges = payload.get("edges", [])
     raw_repos = payload.get("repos", [])
     raw_contracts = payload.get("contracts", [])
-    edges = [e for e in raw_edges if isinstance(e, dict)]
-    repos = [r for r in raw_repos if isinstance(r, dict)]
-    contracts = [c for c in raw_contracts if isinstance(c, dict)]
+    edges = [e for e in raw_edges if isinstance(e, dict)] if isinstance(raw_edges, list) else []
+    repos = [r for r in raw_repos if isinstance(r, dict)] if isinstance(raw_repos, list) else []
+    contracts = (
+        [c for c in raw_contracts if isinstance(c, dict)]
+        if isinstance(raw_contracts, list)
+        else []
+    )
 
     # Group edge verdicts per producing repo.
     per_repo: dict[str, list[dict[str, object]]] = {}
@@ -194,6 +217,158 @@ def _federated_metrics(federated: Path) -> dict[str, object] | None:
     }
 
 
+# ---------------------------------------------------------------------------
+# Trends — honest time-series, exactly the recorded points (G5)
+# ---------------------------------------------------------------------------
+
+
+def _trends(project_root: Path) -> list[dict[str, object]]:
+    """Serialize the recorded metrics-history series (sorted by ts).
+
+    HONEST: returns *only* real recorded points (no interpolation, no fabricated
+    samples). Sparse at first is correct; the series grows one point per
+    ``docs site`` run plus any structural backfill from ``graph_snapshots``.
+    """
+    series: list[MetricsPoint] = read_history(project_root)
+    return [
+        {
+            "ts": p.ts,
+            "lint_violations": p.lint_violations,
+            "debt_score": p.debt_score,
+            "coverage_pct": p.coverage_pct,
+            "sync_pct": p.sync_pct,
+            "nodes": p.nodes,
+            "edges": p.edges,
+            "symbols": p.symbols,
+        }
+        for p in series
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Recommendations — prioritized + actionable, from the existing gate data (G6)
+# ---------------------------------------------------------------------------
+
+
+def _rec(
+    kind: str, severity: str, target: str, message: str, link: str
+) -> dict[str, object]:
+    """Build one recommendation item in the documented shape."""
+    return {
+        "kind": kind,
+        "severity": severity,
+        "target": target,
+        "message": message,
+        "link": link,
+    }
+
+
+def _lint_recommendations(result: LintResult) -> list[dict[str, object]]:
+    """One recommendation per real lint violation (same data as ``beadloom lint``)."""
+    recs: list[dict[str, object]] = []
+    for v in result.violations:
+        target = v.from_ref_id or v.to_ref_id or v.rule_name
+        # Message is the gate's own text verbatim (honest); the actionable
+        # remediation hint is appended when the rule engine provides one.
+        message = v.message
+        if v.remediation:
+            message = f"{message} — {v.remediation}"
+        recs.append(_rec("lint", v.severity, target, message, _node_link(v.from_ref_id)))
+    return recs
+
+
+def _debt_recommendations(offenders: list[NodeDebt]) -> list[dict[str, object]]:
+    """Worst-debt nodes as warnings (mirrors ``debt_report`` top offenders)."""
+    recs: list[dict[str, object]] = []
+    for nd in offenders[:_MAX_DEBT_RECS]:
+        reasons = "; ".join(nd.reasons) if nd.reasons else "accumulated debt"
+        message = f"debt score {nd.score}: {reasons}"
+        recs.append(_rec("debt", "warn", nd.ref_id, message, _node_link(nd.ref_id)))
+    return recs
+
+
+def _stale_doc_recommendations(conn: sqlite3.Connection) -> list[dict[str, object]]:
+    """Stale docs to refresh (the persisted ``sync-check`` result, read-only)."""
+    rows = conn.execute(
+        "SELECT DISTINCT ref_id FROM sync_state WHERE status = 'stale' ORDER BY ref_id"
+    ).fetchall()
+    return [
+        _rec(
+            "stale_doc",
+            "warn",
+            str(row["ref_id"]),
+            "doc is stale vs its code — refresh and re-run sync-check",
+            _node_link(str(row["ref_id"])),
+        )
+        for row in rows
+    ]
+
+
+def _contract_recommendations(
+    payload: dict[str, object] | None,
+) -> list[dict[str, object]]:
+    """Contract risks (BREAKING/DRIFT) from a federated artifact, when present."""
+    if not isinstance(payload, dict):
+        return []
+    contracts = payload.get("contracts")
+    if not isinstance(contracts, list):
+        return []
+    recs: list[dict[str, object]] = []
+    for item in contracts:
+        if not isinstance(item, dict):
+            continue
+        verdict = str(item.get("verdict", "")).lower()
+        if verdict not in _UNHEALTHY_VERDICTS:
+            continue
+        key = str(item.get("contract_key", ""))
+        severity = "error" if verdict == "breaking" else "warn"
+        recs.append(
+            _rec(
+                "contract",
+                severity,
+                key,
+                f"contract {verdict.upper()} — reconcile producer/consumer",
+                "/landscape",
+            )
+        )
+    return recs
+
+
+def _node_link(ref_id: str | None) -> str:
+    """Best-effort link to a node page (kind is unknown here; the dashboard root)."""
+    if not ref_id:
+        return "/dashboard"
+    return f"/dashboard#{ref_id}"
+
+
+def _build_recommendations(
+    conn: sqlite3.Connection,
+    lint_result: LintResult,
+    offenders: list[NodeDebt],
+    federated_payload: dict[str, object] | None,
+) -> list[dict[str, object]]:
+    """Assemble + severity-order the recommendation panel (honest by construction).
+
+    Every item derives from an existing gate code path — no new metric is
+    computed here. The list is severity-ordered (errors first); ties broken
+    deterministically by (kind, target) so the output is byte-stable.
+    """
+    recs: list[dict[str, object]] = []
+    recs.extend(_lint_recommendations(lint_result))
+    recs.extend(_contract_recommendations(federated_payload))
+    recs.extend(_stale_doc_recommendations(conn))
+    recs.extend(_debt_recommendations(offenders))
+    recs.sort(
+        key=lambda r: (
+            _SEVERITY_RANK.get(str(r["severity"]), 9),
+            str(r["kind"]),
+            str(r["target"]),
+            str(r["message"]),
+        )
+    )
+    return recs
+
+
 def build_dashboard_data(
     conn: sqlite3.Connection,
     *,
@@ -208,16 +383,28 @@ def build_dashboard_data(
         federated: Optional ``federate`` output JSON; enables the rollup section.
 
     Returns:
-        A JSON-safe dict with ``lint`` / ``debt`` / ``docs`` / ``doctor`` and a
-        ``federated`` section (``None`` when no artifact is given). Every value
-        comes from the corresponding gate's own code path.
+        A JSON-safe dict with ``lint`` / ``debt`` / ``docs`` / ``doctor`` /
+        ``federated`` (``None`` when no artifact) plus ``trends`` (the recorded
+        time-series) and ``recommendations`` (a prioritized, actionable list).
+        Every value comes from the corresponding gate's own code path; trends
+        are exactly the recorded points (no fabrication).
     """
+    lint_result = lint(project_root, reindex_before=False)
+    report = _debt_report(conn, project_root)
+    federated_payload = (
+        _read_federated_payload(federated) if federated is not None else None
+    )
+    rollup = _federated_metrics(federated_payload) if federated_payload else None
     return {
-        "lint": _lint_metrics(project_root),
-        "debt": _debt_metrics(conn, project_root),
+        "lint": _lint_metrics(lint_result),
+        "debt": format_debt_json(report),
         "docs": _docs_metrics(conn),
         "doctor": _doctor_metrics(conn, project_root),
-        "federated": _federated_metrics(federated) if federated is not None else None,
+        "federated": rollup,
+        "trends": _trends(project_root),
+        "recommendations": _build_recommendations(
+            conn, lint_result, report.top_offenders, federated_payload
+        ),
     }
 
 
