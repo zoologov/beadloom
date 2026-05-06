@@ -492,6 +492,26 @@ def _federated_section(rollup: dict[str, object]) -> list[str]:
     return lines
 
 
+def _widgets_section() -> list[str]:
+    """Mount the committed ECharts widgets (BEAD-04, theme-registered globals).
+
+    Each widget loads ``dashboard.data.json`` (emitted alongside this page) and
+    renders client-side via ``vue-echarts``. The numbers it shows are exactly the
+    serialized data values — the front-end never invents a figure. With JS
+    disabled the widgets render nothing and the honest textual summary below
+    remains the source of truth (graceful degradation).
+    """
+    return [
+        "<ClientOnly>",
+        "  <HealthGauges />",
+        "  <CategoryChart />",
+        "  <TrendCharts />",
+        "  <Recommendations />",
+        "</ClientOnly>",
+        "",
+    ]
+
+
 def render_dashboard_md(data: dict[str, object]) -> str:
     """Render the human ``dashboard.md`` page from the dashboard data.
 
@@ -516,6 +536,7 @@ def render_dashboard_md(data: dict[str, object]) -> str:
         "`doctor` / `federate`). Honest by construction.",
         "",
     ]
+    lines.extend(_widgets_section())
     assert isinstance(lint_data, dict)
     assert isinstance(debt_data, dict)
     assert isinstance(docs_data, dict)

@@ -313,6 +313,56 @@ def test_dashboard_md_renders_numbers_from_data(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Widget mounting (BEAD-04): the page mounts the ECharts widgets AND still
+# carries the honest textual values (graceful when JS is disabled).
+# ---------------------------------------------------------------------------
+
+
+def test_dashboard_md_mounts_echarts_widgets(tmp_path: Path) -> None:
+    """The dashboard page mounts the four committed Vue/ECharts widgets."""
+    project = _make_project(tmp_path, with_violation=True)
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project)
+    finally:
+        conn.close()
+    md = render_dashboard_md(data)
+    for tag in ("<HealthGauges", "<CategoryChart", "<TrendCharts", "<Recommendations"):
+        assert tag in md, f"dashboard.md must mount {tag} ... />"
+
+
+def test_dashboard_md_keeps_honest_values_alongside_widgets(tmp_path: Path) -> None:
+    """The honest textual summary survives — numbers come from the data, not JS."""
+    project = _make_project(tmp_path, with_violation=True)
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project)
+    finally:
+        conn.close()
+    md = render_dashboard_md(data)
+    # Widgets mounted...
+    assert "<HealthGauges" in md
+    # ...and the verbatim gate figures are STILL present (JS-disabled fallback).
+    lint_data = data["lint"]
+    docs_data = data["docs"]
+    assert isinstance(lint_data, dict)
+    assert isinstance(docs_data, dict)
+    assert str(lint_data["violations"]) in md
+    assert f"{docs_data['coverage_pct']}%" in md
+
+
+def test_dashboard_md_is_deterministic(tmp_path: Path) -> None:
+    """render_dashboard_md is a pure function of its data (byte-stable)."""
+    project = _make_project(tmp_path, with_violation=True)
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project)
+    finally:
+        conn.close()
+    assert render_dashboard_md(data) == render_dashboard_md(data)
+
+
+# ---------------------------------------------------------------------------
 # Determinism
 # ---------------------------------------------------------------------------
 

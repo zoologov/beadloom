@@ -67,7 +67,7 @@ Module `src/beadloom/application/site_mermaid_guard.py`:
 Module `src/beadloom/application/site_dashboard.py`:
 
 - `build_dashboard_data(conn, *, project_root, federated=None)` -> `dict` — deterministic dashboard data (lint/debt/docs/doctor + optional federated rollup + `trends` time-series + prioritized `recommendations`); honest by construction (reuses each gate's code path; trends are exactly the recorded points)
-- `render_dashboard_md(data)` -> `str` — render `dashboard.md` from the data dict
+- `render_dashboard_md(data)` -> `str` — render `dashboard.md` from the data dict; mounts the committed ECharts widgets (`<HealthGauges/>`/`<CategoryChart/>`/`<TrendCharts/>`/`<Recommendations/>`, theme-registered, reading `dashboard.data.json`) inside a `<ClientOnly>` block while keeping the honest textual summary as the JS-disabled fallback
 - `serialize_dashboard_data(data)` -> `str` — deterministic JSON (sorted keys) for `dashboard.data.json`
 
 Module `src/beadloom/application/site_metrics_history.py`:

@@ -8,13 +8,19 @@
 // content + Mermaid; this theme only enhances the already-rendered output
 // client-side. Mermaid itself stays enabled via `withMermaid` in config.mjs.
 //
-// NOTE: room is intentionally left in `enhanceApp` for BEAD-04 to register the
-// ECharts dashboard widgets (HealthGauges / CategoryChart / TrendCharts /
-// Recommendations). Do not add those here — that is a separate bead.
+// BEAD-04 registers the ECharts dashboard widgets (HealthGauges / CategoryChart
+// / TrendCharts / Recommendations) globally in `enhanceApp` below, alongside
+// DiagramViewer. They read the deterministic `dashboard.data.json` and render
+// client-side via `vue-echarts`; the dashboard page mounts them inside a
+// `<ClientOnly>` wrapper so the static honest summary remains the fallback.
 
 import { h } from "vue";
 import DefaultTheme from "vitepress/theme";
 import DiagramViewer from "./components/DiagramViewer.vue";
+import HealthGauges from "./components/HealthGauges.vue";
+import CategoryChart from "./components/CategoryChart.vue";
+import TrendCharts from "./components/TrendCharts.vue";
+import Recommendations from "./components/Recommendations.vue";
 import "./custom.css";
 
 /** @type {import('vitepress').Theme} */
@@ -32,7 +38,11 @@ export default {
   enhanceApp({ app }) {
     // Also expose it as a global component so pages can mount it explicitly.
     app.component("DiagramViewer", DiagramViewer);
-    // BEAD-04 registers dashboard widgets here (HealthGauges, CategoryChart,
-    // TrendCharts, Recommendations) — intentionally left unregistered.
+    // Dashboard widgets (BEAD-04) — registered globally so the generated
+    // `dashboard.md` can mount them by name. Each reads `dashboard.data.json`.
+    app.component("HealthGauges", HealthGauges);
+    app.component("CategoryChart", CategoryChart);
+    app.component("TrendCharts", TrendCharts);
+    app.component("Recommendations", Recommendations);
   },
 };

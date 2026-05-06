@@ -10,7 +10,9 @@
     "docs:preview": "vitepress preview ."
   },
   "dependencies": {
-    "svg-pan-zoom": "3.6.2"
+    "echarts": "5.5.1",
+    "svg-pan-zoom": "3.6.2",
+    "vue-echarts": "7.0.3"
   },
   "devDependencies": {
     "mermaid": "11.4.1",
