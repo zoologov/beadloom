@@ -81,6 +81,7 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `Mention`
 - `MermaidIssue`
 - `MermaidValidationError`
+- `MetricsPoint`
 - `NodeChange`
 - `NodeDebt`
 - `NodeDetail`
@@ -117,7 +118,9 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `aggregate_parent_tests`
 - `analyze_git_activity`
 - `analyze_node`
+- `append_metrics_point`
 - `auto_link_docs`
+- `backfill_structural_history`
 - `bfs_subgraph`
 - `bootstrap_project`
 - `build_agents_md_content`
@@ -222,6 +225,7 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `handle_update_node`
 - `handle_why`
 - `has_fts5`
+- `history_path`
 - `import_docs`
 - `incremental_reindex`
 - `index_docs`
@@ -258,6 +262,7 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `prime_context`
 - `publish_docs`
 - `read_deep_config`
+- `read_history`
 - `reconcile_contracts`
 - `refresh_claude_md`
 - `reindex`

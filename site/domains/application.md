@@ -23,6 +23,7 @@ Use-case orchestration: reindex, doctor, debt report, file watcher
 - `GateStep`
 - `MermaidIssue`
 - `MermaidValidationError`
+- `MetricsPoint`
 - `NodeDebt`
 - `NodePage`
 - `NodeRow`
@@ -31,6 +32,8 @@ Use-case orchestration: reindex, doctor, debt report, file watcher
 - `Severity`
 - `SiteResult`
 - `WatchEvent`
+- `append_metrics_point`
+- `backfill_structural_history`
 - `build_dashboard_data`
 - `build_landscape_data`
 - `build_published_docs`
@@ -43,11 +46,13 @@ Use-case orchestration: reindex, doctor, debt report, file watcher
 - `format_top_offenders_json`
 - `format_trend_section`
 - `generate_site`
+- `history_path`
 - `incremental_reindex`
 - `inject_badge`
 - `load_debt_weights`
 - `load_nodes`
 - `publish_docs`
+- `read_history`
 - `reindex`
 - `render_all_pages`
 - `render_dashboard_md`

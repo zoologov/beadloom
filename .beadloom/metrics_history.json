@@ -1,0 +1,22 @@
+[
+  {
+    "coverage_pct": 0.0,
+    "debt_score": 0.0,
+    "edges": 73,
+    "lint_violations": 0,
+    "nodes": 24,
+    "symbols": 579,
+    "sync_pct": 100.0,
+    "ts": "2026-06-01T16:36:30+00:00"
+  },
+  {
+    "coverage_pct": 100.0,
+    "debt_score": 10.5,
+    "edges": 73,
+    "lint_violations": 1,
+    "nodes": 24,
+    "symbols": 755,
+    "sync_pct": 100.0,
+    "ts": "2026-06-02T06:15:47.436273+00:00"
+  }
+]

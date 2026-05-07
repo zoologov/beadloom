@@ -118,11 +118,11 @@
   "docs": {
     "coverage_pct": 100.0,
     "documented": 24,
-    "fresh": 72,
+    "fresh": 73,
     "freshness_pct": 100.0,
     "nodes": 24,
     "stale": 0,
-    "tracked_pairs": 72
+    "tracked_pairs": 73
   },
   "doctor": {
     "by_severity": {
@@ -166,5 +166,78 @@
     "errors": 0,
     "violations": 1,
     "warnings": 1
-  }
+  },
+  "recommendations": [
+    {
+      "kind": "contract",
+      "link": "/landscape",
+      "message": "contract BREAKING — reconcile producer/consumer",
+      "severity": "error",
+      "target": "graphql:PublicCatalogAPI"
+    },
+    {
+      "kind": "debt",
+      "link": "/dashboard#application",
+      "message": "debt score 1.0: high_fan_out",
+      "severity": "warn",
+      "target": "application"
+    },
+    {
+      "kind": "debt",
+      "link": "/dashboard#cache",
+      "message": "debt score 0.5: dormant",
+      "severity": "warn",
+      "target": "cache"
+    },
+    {
+      "kind": "debt",
+      "link": "/dashboard#context-oracle",
+      "message": "debt score 0.5: dormant",
+      "severity": "warn",
+      "target": "context-oracle"
+    },
+    {
+      "kind": "debt",
+      "link": "/dashboard#doc-generator",
+      "message": "debt score 0.5: dormant",
+      "severity": "warn",
+      "target": "doc-generator"
+    },
+    {
+      "kind": "debt",
+      "link": "/dashboard#graph",
+      "message": "debt score 2.0: oversized",
+      "severity": "warn",
+      "target": "graph"
+    },
+    {
+      "kind": "lint",
+      "link": "/dashboard#graph",
+      "message": "Node 'graph' has 202 symbols (max 200): rule 'domain-size-limit' — `graph` exceeds its limit (Node 'graph' has 202 symbols (max 200): rule 'domain-size-limit'); split it into smaller nodes",
+      "severity": "warn",
+      "target": "graph"
+    }
+  ],
+  "trends": [
+    {
+      "coverage_pct": 0.0,
+      "debt_score": 0.0,
+      "edges": 73,
+      "lint_violations": 0,
+      "nodes": 24,
+      "symbols": 579,
+      "sync_pct": 100.0,
+      "ts": "2026-06-01T16:36:30+00:00"
+    },
+    {
+      "coverage_pct": 100.0,
+      "debt_score": 10.5,
+      "edges": 73,
+      "lint_violations": 1,
+      "nodes": 24,
+      "symbols": 755,
+      "sync_pct": 100.0,
+      "ts": "2026-06-02T06:15:47.436273+00:00"
+    }
+  ]
 }
