@@ -37,6 +37,7 @@
 ## Progress Log
 
 - 2026-06-02 — `/task-init` complete (follow-up to F4): PRD / RFC / CONTEXT / PLAN approved; epic `beadloom-fv8` + 8 sub-beads created; DAG wired; swarm `beadloom-9t43` (7 waves); `bd ready` confirms .1 + .2 unblocked.
+- 2026-06-02 — BEAD-09 (`beadloom-fv8.9`) DONE: fixed the live-site landscape bugs (404 clicks/MIME, missing edge, both-green-despite-BREAKING). (1) Modelled the REAL contract in Beadloom's own graph — added `vitepress-site` node (kind=site) + `beadloom --produces--> vitepress-site` and `vitepress-site --consumes--> beadloom` edges sharing `contract_key site-data:site-bundle`. (2) Landscape default = LOCAL contract graph: `_local_landscape` now reconciles produces/consumes edges by contract_key into `Contract`s, classifies → verdict, renders one edge per producer→consumer coloured by ContractVerdict (own-site → one CONFIRMED edge). (3) Hardened clicks: `render_landscape_md(data, pages=…)` emits `click` ONLY for refs with a real generated page (`existing_page_urls`); no page → no click (kills the dead-link 404/MIME). Federated foreign nodes link safely or not at all; edges+verdicts still render. reindex/lint --strict/doctor/ci all exit 0; sync-check re-attested to stable 0. 3078 tests pass (+11 landscape/guard).
 
 ## Notes / Reminders
 

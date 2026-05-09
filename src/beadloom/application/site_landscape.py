@@ -8,19 +8,26 @@ hand-drawn:
 - **Source.** With ``--federated <federated.json>`` (the F2 ``federate`` hub
   output) the map is the cross-repo union: nodes = satellites (``repos[]``),
   edges = the namespaced cross-repo ``edges[]`` between them, each carrying the
-  hub's already-computed verdict. Without it, the map degenerates to a single
-  landscape rendered from the local graph (one repo; intra-repo
-  ``uses``/``depends_on`` edges, all ``confirmed`` since there is nothing to
-  reconcile cross-repo).
+  hub's already-computed verdict. Without it, the map is the **LOCAL contract
+  graph** (BDL-041 F4.4): the nodes that participate in ``produces`` /
+  ``consumes`` contracts and the contract edges between them, each coloured by
+  its reconciled :class:`~beadloom.graph.contracts.ContractVerdict`. It is NOT
+  the structural intra-repo architecture (that lives in the C4 overview) and NOT
+  a foreign fixture — it is the real, honest set of producer→consumer links that
+  exist *in this repo* (e.g. the ``beadloom`` service produces the site data the
+  ``vitepress-site`` consumes → one ``CONFIRMED`` edge).
 - **Verdict labels.** Each edge is labelled by a ``ContractVerdict``-style
   verdict (CONFIRMED / BREAKING / DRIFT / ORPHANED_CONSUMER /
-  UNDECLARED_PRODUCER / EXTERNAL …) carried verbatim from the federated artifact
-  — no re-derivation (reuse the F2 verdicts).
+  UNDECLARED_PRODUCER / EXTERNAL …) — carried verbatim from the federated
+  artifact, or reconciled locally via :func:`reconcile_contracts` + ``classify``.
 - **Health overlay.** A Mermaid ``classDef`` per health bucket (green =
   healthy, red = broken, grey = external/expected) is applied to nodes; broken
   edges get a red ``linkStyle``.
-- **Clickable.** Each node emits ``click <id> "/services/<ref>"`` linking to the
-  intra-repo service page (BEAD-01).
+- **Clickable — hardened (BDL-041 F4.4).** A node emits ``click <id> "<url>"``
+  ONLY when ``url`` is a page that actually exists in the generated tree (the
+  ``pages`` map passed by the generator). A node with no page (a foreign repo,
+  or a non-page kind like ``site``) emits NO click — never a dead link (the live
+  404/MIME bug: clicks went to ``/services/<ref>`` for pages that did not exist).
 
 Thin slice = Mermaid only (VitePress renders it natively + supports ``click``);
 no JS graph library. Output is deterministic (sorted nodes/edges, stable Mermaid
@@ -36,11 +43,16 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
+from beadloom.graph.contracts import Contract, ContractEndpoint, classify
+
 if TYPE_CHECKING:
     import sqlite3
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# Edge kinds that carry a cross-service contract (the local landscape's source).
+_CONTRACT_EDGE_KINDS = ("produces", "consumes")
 
 # Verdicts treated as a real, actionable break (red health). Mirrors the
 # F3 SAFE_DEFAULT_FAIL_ON intent: a cross-service drift/breaking/orphan/undeclared
@@ -135,32 +147,71 @@ def _federated_landscape(federated: Path) -> dict[str, object]:
 
 
 def _local_landscape(conn: sqlite3.Connection) -> dict[str, object]:
-    """Degenerate single-repo map: one landscape from the local graph.
+    """Local **contract** map: the real producer→consumer links in this repo.
 
-    Nodes = top-level services/domains; edges = their ``uses`` / ``depends_on``
-    links. There is no cross-repo peer to reconcile against, so every link is
-    ``confirmed`` (healthy). Reads the indexed DB read-only.
+    Reads the ``produces`` / ``consumes`` edges, groups them by ``contract_key``
+    into a :class:`~beadloom.graph.contracts.Contract`, and assigns each a
+    :class:`~beadloom.graph.contracts.ContractVerdict` via ``classify`` (intent
+    vs reality — ``CONFIRMED`` when both a producer and a consumer are present,
+    ``ORPHANED_CONSUMER`` / ``UNDECLARED_PRODUCER`` otherwise). Each contract
+    becomes one landscape edge per producer→consumer pair carrying that verdict;
+    nodes = the participating endpoints only.
+
+    This is the *contract* graph, NOT the structural intra-repo architecture
+    (which lives in the C4 overview) — so a repo with no produces/consumes
+    contracts yields an empty map. Reads the indexed DB read-only.
     """
-    rows = conn.execute(
-        "SELECT ref_id FROM nodes WHERE kind IN ('service', 'domain') ORDER BY ref_id"
-    ).fetchall()
-    node_ids: set[str] = {str(r["ref_id"]) for r in rows}
     edge_rows = conn.execute(
-        "SELECT src_ref_id, dst_ref_id FROM edges "
-        "WHERE kind IN ('uses', 'depends_on') ORDER BY src_ref_id, dst_ref_id"
+        "SELECT src_ref_id, dst_ref_id, kind, contract_key, lifecycle FROM edges "
+        "WHERE kind IN ('produces', 'consumes') "
+        "ORDER BY contract_key, src_ref_id, dst_ref_id, kind"
     ).fetchall()
+    contracts = _group_local_contracts(edge_rows)
+    node_ids: set[str] = set()
     edges: list[dict[str, object]] = []
     seen: set[tuple[str, str]] = set()
-    for row in edge_rows:
-        src = str(row["src_ref_id"])
-        dst = str(row["dst_ref_id"])
-        if src == dst or (src, dst) in seen:
-            continue
-        seen.add((src, dst))
-        node_ids.add(src)
-        node_ids.add(dst)
-        edges.append({"src": src, "dst": dst, "verdict": _DEFAULT_LOCAL_VERDICT})
+    for contract in contracts:
+        verdict = (contract.verdict or classify(contract)).value
+        producers = sorted({e.ref_id for e in contract.producers})
+        consumers = sorted({e.ref_id for e in contract.consumers})
+        node_ids.update(producers, consumers)
+        for src in producers:
+            for dst in consumers:
+                if src == dst or (src, dst) in seen:
+                    continue
+                seen.add((src, dst))
+                edges.append({"src": src, "dst": dst, "verdict": verdict})
     return _assemble(node_ids, edges, scope="product")
+
+
+def _group_local_contracts(edge_rows: list[sqlite3.Row]) -> list[Contract]:
+    """Group local produces/consumes edge rows into reconciled Contracts.
+
+    The grouping key is the persisted ``contract_key`` (already
+    protocol-prefixed by the loader). Each edge contributes one endpoint whose
+    ``direction`` is the edge ``kind`` (``produces`` / ``consumes``) and whose
+    ``ref_id`` is the edge ``src`` (the declaring node). Deterministic: rows
+    arrive pre-sorted, so contracts appear in ``contract_key`` order.
+    """
+    by_key: dict[str, Contract] = {}
+    for row in edge_rows:
+        key = str(row["contract_key"]) or f"{row['src_ref_id']}->{row['dst_ref_id']}"
+        contract = by_key.get(key)
+        if contract is None:
+            contract = Contract(contract_key=key, protocol="", name=key)
+            by_key[key] = contract
+        contract.endpoints.append(
+            ContractEndpoint(
+                repo="",
+                ref_id=str(row["src_ref_id"]),
+                direction=str(row["kind"]),
+            )
+        )
+        contract.lifecycle = str(row["lifecycle"] or "active")
+    contracts = list(by_key.values())
+    for contract in contracts:
+        contract.verdict = classify(contract)
+    return contracts
 
 
 def _assemble(
@@ -170,6 +221,27 @@ def _assemble(
     nodes = [{"id": ref_id} for ref_id in sorted(node_ids)]
     edges = sorted(edges, key=lambda e: (str(e["src"]), str(e["dst"]), str(e["verdict"])))
     return {"scope": scope, "nodes": nodes, "edges": edges}
+
+
+def existing_page_urls(conn: sqlite3.Connection) -> dict[str, str]:
+    """Map every node that has a generated page to its absolute page URL.
+
+    A node page is emitted only for kinds with an output directory (see
+    :data:`beadloom.application.site_pages._KIND_DIR` — ``service`` / ``domain``
+    / ``feature``). The URL mirrors that page's location (``/<dir>/<ref>``), so
+    the landscape map's ``click`` links resolve to real pages — never a 404
+    (BDL-041 F4.4). A node whose kind has no page directory is absent from the
+    map and therefore renders without a click.
+    """
+    from beadloom.application.site_pages import _KIND_DIR
+
+    rows = conn.execute("SELECT ref_id, kind FROM nodes ORDER BY ref_id").fetchall()
+    urls: dict[str, str] = {}
+    for row in rows:
+        directory = _KIND_DIR.get(str(row["kind"]))
+        if directory is not None:
+            urls[str(row["ref_id"])] = f"/{directory}/{row['ref_id']}"
+    return urls
 
 
 def build_landscape_data(
@@ -216,11 +288,21 @@ def _as_list(value: object) -> list[object]:
 # ---------------------------------------------------------------------------
 
 
-def _node_lines(nodes: list[dict[str, object]], edges: list[dict[str, object]]) -> list[str]:
+def _node_lines(
+    nodes: list[dict[str, object]],
+    edges: list[dict[str, object]],
+    pages: dict[str, str],
+) -> list[str]:
     """Render node declarations + per-node health class + clickable links.
 
     A node's health is the worst verdict on any edge touching it (a broken edge
     poisons its endpoints red); otherwise grey when only neutral, else green.
+
+    A ``click`` is emitted ONLY when the node has a real page in *pages* (the
+    generator's set of existing page URLs). A node with no page (a foreign repo,
+    or a non-page kind such as ``site``) emits no click — never a dead link
+    (BDL-041 F4.4: the live 404/MIME bug came from a click to a page that did not
+    exist).
     """
     health = _node_health(nodes, edges)
     lines: list[str] = []
@@ -229,7 +311,9 @@ def _node_lines(nodes: list[dict[str, object]], edges: list[dict[str, object]]) 
         mid = _mermaid_id(ref)
         lines.append(f"    {mid}[{ref}]")
         lines.append(f"    class {mid} {health[ref]}")
-        lines.append(f'    click {mid} "/services/{ref}"')
+        url = pages.get(ref)
+        if url:
+            lines.append(f'    click {mid} "{url}"')
     return lines
 
 
@@ -287,13 +371,23 @@ def _linkstyle_lines(broken: list[int]) -> list[str]:
     ]
 
 
-def render_landscape_md(data: dict[str, object]) -> str:
+def render_landscape_md(
+    data: dict[str, object], *, pages: dict[str, str] | None = None
+) -> str:
     """Render the ``landscape.md`` page (a Mermaid diagram) from *data*.
+
+    Args:
+        data: The landscape data dict (``{scope, nodes, edges}``).
+        pages: Map of ``ref_id -> existing page URL``. A node emits a ``click``
+            only when present here, so the rendered map never links to a page
+            that does not exist (BDL-041 F4.4 — the live 404/MIME fix). ``None``
+            (no map) means no node is clickable.
 
     Deterministic: nodes/edges are already sorted in *data*; the Mermaid block,
     health ``classDef``s, clickable links, and broken-edge ``linkStyle``s are
     emitted in a stable order. No figure is recomputed here.
     """
+    page_map = pages or {}
     nodes = [n for n in _as_list(data.get("nodes")) if isinstance(n, dict)]
     edges = [e for e in _as_list(data.get("edges")) if isinstance(e, dict)]
     scope = str(data.get("scope", "product"))
@@ -321,7 +415,7 @@ def render_landscape_md(data: dict[str, object]) -> str:
         "```mermaid",
         "graph LR",
     ]
-    body.extend(_node_lines(nodes, edges))
+    body.extend(_node_lines(nodes, edges, page_map))
     body.extend(edge_lines)
     body.extend(_classdef_lines())
     body.extend(_linkstyle_lines(broken))

@@ -41,6 +41,7 @@ from beadloom.application.site_dashboard import (
 )
 from beadloom.application.site_landscape import (
     build_landscape_data,
+    existing_page_urls,
     render_landscape_md,
 )
 from beadloom.application.site_mermaid_guard import MermaidIssue, validate_mermaid
@@ -371,7 +372,12 @@ def generate_site(
     # Showcase B — the 🌟 cross-repo landscape map (Mermaid, generated from the
     # federate hub output when given, else a degenerate single-repo map).
     landscape_data = build_landscape_data(conn, federated=federated)
-    _write(out_dir / "landscape.md", render_landscape_md(landscape_data), written)
+    landscape_pages = existing_page_urls(conn)
+    _write(
+        out_dir / "landscape.md",
+        render_landscape_md(landscape_data, pages=landscape_pages),
+        written,
+    )
 
     # Showcase C — the published validated docs. Copy the REAL docs/ tree into
     # site/docs/ preserving structure (source never mutated) and inject a

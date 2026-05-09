@@ -168,6 +168,11 @@ def _seed_graph_node_repro(conn: sqlite3.Connection) -> None:
     - a domain literally named ``graph`` (landscape id collision);
     - a ``beadloom`` System root with children + a ``uses`` edge from the root
       (the C4 ``Rel(beadloom, …)`` to the undeclared boundary anchor).
+
+    A produces/consumes contract on the ``graph`` node puts it into the local
+    contract landscape, so the landscape id-prefix fix (``n_graph``) is still
+    exercised by the real generator path (BDL-041 F4.4 made the landscape a
+    contract graph rather than the structural arch).
     """
     nodes = [
         ("beadloom", "service", "Beadloom CLI.", None),
@@ -180,15 +185,19 @@ def _seed_graph_node_repro(conn: sqlite3.Connection) -> None:
             (ref_id, kind, summary, source),
         )
     edges = [
-        ("graph", "beadloom", "part_of"),
-        ("cli", "beadloom", "part_of"),
-        ("cli", "graph", "uses"),
-        ("beadloom", "graph", "uses"),  # root -> child: the Rel-to-root repro
+        ("graph", "beadloom", "part_of", ""),
+        ("cli", "beadloom", "part_of", ""),
+        ("cli", "graph", "uses", ""),
+        ("beadloom", "graph", "uses", ""),  # root -> child: the Rel-to-root repro
+        # A contract on the reserved-keyword node, so it lands in the landscape.
+        ("graph", "beadloom", "produces", "amqp:*/*:graph-event"),
+        ("beadloom", "graph", "consumes", "amqp:*/*:graph-event"),
     ]
-    for src, dst, kind in edges:
+    for src, dst, kind, ckey in edges:
         conn.execute(
-            "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES (?, ?, ?)",
-            (src, dst, kind),
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind, contract_key) "
+            "VALUES (?, ?, ?, ?)",
+            (src, dst, kind, ckey),
         )
 
 

@@ -54,6 +54,39 @@ def _seed_single_repo(conn: sqlite3.Connection) -> None:
         )
 
 
+def _seed_contract_repo(conn: sqlite3.Connection) -> None:
+    """A single-repo graph with a real produces/consumes contract pair.
+
+    Mirrors the own-site shape (BDL-041 F4.4): the ``beadloom`` service PRODUCES
+    a ``site-data`` contract that the ``vitepress-site`` consumer CONSUMES. Both
+    edges share one ``contract_key`` so the pair reconciles to ``CONFIRMED``. A
+    structural ``uses`` edge and an unrelated node are also seeded — the local
+    landscape must show the CONTRACT participants, not the structural arch.
+    """
+    nodes = [
+        ("beadloom", "service", "Beadloom service (producer).", "src/beadloom"),
+        ("vitepress-site", "site", "VitePress site (consumer).", "site/"),
+        ("graph", "domain", "Graph domain (not in any contract).", "src/beadloom/graph"),
+    ]
+    for ref_id, kind, summary, source in nodes:
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            (ref_id, kind, summary, source),
+        )
+    edges = [
+        ("vitepress-site", "beadloom", "part_of", ""),
+        ("graph", "beadloom", "depends_on", ""),
+        ("beadloom", "vitepress-site", "produces", "site-data:site-bundle"),
+        ("vitepress-site", "beadloom", "consumes", "site-data:site-bundle"),
+    ]
+    for src, dst, kind, ckey in edges:
+        conn.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind, contract_key) "
+            "VALUES (?, ?, ?, ?)",
+            (src, dst, kind, ckey),
+        )
+
+
 def _open() -> sqlite3.Connection:
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
@@ -138,10 +171,23 @@ def test_render_includes_health_classdefs(tmp_path: Path) -> None:
 def test_render_has_clickable_nodes(tmp_path: Path) -> None:
     fed = _federated_json(tmp_path)
     data = build_landscape_data(federated=fed)
-    md = render_landscape_md(data)
-    # Each node is clickable, linking to its service page.
+    # A federated node maps to a local page only when one exists; pass an
+    # explicit page map so a click is emitted for the covered ref.
+    md = render_landscape_md(data, pages={"svc-a": "/services/svc-a"})
+    # The covered node is clickable, linking to its (existing) page.
     assert 'click n_svc_a "/services/svc-a"' in md
     assert "```mermaid" in md
+
+
+def test_render_omits_click_for_uncovered_node(tmp_path: Path) -> None:
+    """A node absent from the page map emits NO click (no dead link)."""
+    fed = _federated_json(tmp_path)
+    data = build_landscape_data(federated=fed)
+    md = render_landscape_md(data, pages={})  # no pages exist
+    assert "click " not in md
+    # Nodes + edges + verdicts still render.
+    assert "DRIFT" in md
+    assert "n_svc_a" in md
 
 
 def test_render_marks_broken_edge_class(tmp_path: Path) -> None:
@@ -157,34 +203,62 @@ def test_render_marks_broken_edge_class(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_single_repo_one_landscape(tmp_path: Path) -> None:
+def test_local_landscape_is_contract_graph(tmp_path: Path) -> None:
+    """Default (no --federated) = LOCAL contract graph, not the structural arch.
+
+    The map shows only nodes that participate in produces/consumes contracts and
+    the contract edges between them — NOT every depends_on/uses node (that lives
+    in the C4 overview). The unrelated ``graph`` domain is excluded.
+    """
     conn = _open()
     try:
-        _seed_single_repo(conn)
+        _seed_contract_repo(conn)
         conn.commit()
         data = build_landscape_data(conn=conn, federated=None)
     finally:
         conn.close()
-    # One repo (this project); nodes are the local services.
     node_ids = {n["id"] for n in data["nodes"]}
-    assert "cli" in node_ids
-    # The single-repo map renders without crashing and is non-empty.
+    assert node_ids == {"beadloom", "vitepress-site"}
+    # The structural-only node (no contract) is NOT in the landscape.
+    assert "graph" not in node_ids
+
+
+def test_local_landscape_contract_edge_confirmed(tmp_path: Path) -> None:
+    """The real producer->consumer contract renders as one CONFIRMED edge."""
+    conn = _open()
+    try:
+        _seed_contract_repo(conn)
+        conn.commit()
+        data = build_landscape_data(conn=conn, federated=None)
+    finally:
+        conn.close()
+    edges = data["edges"]
+    assert len(edges) == 1
+    edge = edges[0]
+    assert edge["src"] == "beadloom"
+    assert edge["dst"] == "vitepress-site"
+    assert edge["verdict"] == "confirmed"
+    # The CONFIRMED edge renders (not dropped) with a green/healthy node.
+    md = render_landscape_md(data)
+    assert "beadloom -->" in md or "n_beadloom -->" in md
+    assert "CONFIRMED" in md
+    assert "healthy" in md
+
+
+def test_local_landscape_no_contracts_is_empty(tmp_path: Path) -> None:
+    """A graph with no produces/consumes contracts yields an empty contract map."""
+    conn = _open()
+    try:
+        _seed_single_repo(conn)  # only uses/part_of edges, no contracts
+        conn.commit()
+        data = build_landscape_data(conn=conn, federated=None)
+    finally:
+        conn.close()
+    assert data["nodes"] == []
+    assert data["edges"] == []
+    # Still renders a valid (empty) Mermaid diagram, no crash.
     md = render_landscape_md(data)
     assert "```mermaid" in md
-    assert "```" in md
-
-
-def test_single_repo_edges_default_confirmed(tmp_path: Path) -> None:
-    conn = _open()
-    try:
-        _seed_single_repo(conn)
-        conn.commit()
-        data = build_landscape_data(conn=conn, federated=None)
-    finally:
-        conn.close()
-    # Intra-repo edges have no cross-repo verdict; they default to confirmed.
-    for edge in data["edges"]:
-        assert edge["verdict"] == "confirmed"
 
 
 # ---------------------------------------------------------------------------
@@ -217,6 +291,76 @@ def test_generator_landscape_uses_federated(tmp_path: Path) -> None:
         conn.close()
     md = (out / "landscape.md").read_text(encoding="utf-8")
     assert "svc-a" in md
+    assert "DRIFT" in md
+
+
+def _emitted_click_targets(md: str) -> list[str]:
+    """Extract every ``click <id> "<url>"`` URL from a landscape page."""
+    targets: list[str] = []
+    for line in md.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("click "):
+            # ``click n_foo "/services/foo"`` -> /services/foo
+            parts = stripped.split('"')
+            if len(parts) >= 2:
+                targets.append(parts[1])
+    return targets
+
+
+def test_no_click_targets_a_missing_page(tmp_path: Path) -> None:
+    """Guard for the live 404/MIME bug: every emitted click path must EXIST.
+
+    Generates the full site and asserts every landscape ``click`` URL resolves to
+    a real generated page in the tree (no dead link → no 404 → no MIME error).
+    """
+    conn = _open()
+    out = tmp_path / "site"
+    try:
+        _seed_contract_repo(conn)
+        conn.commit()
+        generate_site(conn, out, project_root=tmp_path)
+    finally:
+        conn.close()
+    md = (out / "landscape.md").read_text(encoding="utf-8")
+    targets = _emitted_click_targets(md)
+    for url in targets:
+        # A click URL ``/domains/graph`` must map to a real ``graph.md`` page.
+        rel = url.lstrip("/") + ".md"
+        assert (out / rel).exists(), f"dead click target: {url} (no {rel})"
+
+
+def test_site_node_without_page_has_no_click(tmp_path: Path) -> None:
+    """A node with no generated page (kind=site) must NOT emit a dead click."""
+    conn = _open()
+    out = tmp_path / "site"
+    try:
+        _seed_contract_repo(conn)
+        conn.commit()
+        generate_site(conn, out, project_root=tmp_path)
+    finally:
+        conn.close()
+    md = (out / "landscape.md").read_text(encoding="utf-8")
+    # ``vitepress-site`` (kind=site) has no /services or /domains page → no click.
+    assert "vitepress-site" in md  # the node still renders + carries its edge
+    assert 'click n_vitepress_site' not in md
+
+
+def test_federated_foreign_node_has_no_dead_click(tmp_path: Path) -> None:
+    """A federated foreign repo has no local page — it must not emit a click."""
+    conn = _open()
+    out = tmp_path / "site"
+    fed = _federated_json(tmp_path)
+    try:
+        _seed_contract_repo(conn)
+        conn.commit()
+        generate_site(conn, out, project_root=tmp_path, federated=fed)
+    finally:
+        conn.close()
+    md = (out / "landscape.md").read_text(encoding="utf-8")
+    for url in _emitted_click_targets(md):
+        rel = url.lstrip("/") + ".md"
+        assert (out / rel).exists(), f"dead click target: {url} (no {rel})"
+    # The foreign edges + verdicts still render.
     assert "DRIFT" in md
 
 

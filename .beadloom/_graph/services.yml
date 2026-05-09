@@ -202,6 +202,16 @@ nodes:
     docs:
       - docs/domains/doc-sync/features/docs-audit/SPEC.md
 
+  # Site consumer: the VitePress documentation site. It does not live in
+  # src/beadloom/ — it is the published artifact that CONSUMES the data the
+  # beadloom service produces (the generated graph pages, dashboard.data.json,
+  # landscape Mermaid). Modelled so the own-site landscape map shows a real,
+  # honest producer->consumer contract (BDL-041 F4.4) instead of a foreign fixture.
+  - ref_id: vitepress-site
+    kind: site
+    summary: "VitePress documentation site — renders the beadloom-produced site data (graph pages, dashboard.data.json, landscape Mermaid)"
+    source: site/
+
 edges:
   # Root service: self-referencing to satisfy service-needs-parent rule
   - src: beadloom
@@ -341,6 +351,28 @@ edges:
   - src: reindex
     dst: graph
     kind: uses
+
+  # Real producer->consumer contract (BDL-041 F4.4): the beadloom service
+  # PRODUCES the site data (graph pages, dashboard.data.json, landscape Mermaid);
+  # the VitePress site CONSUMES it. Both sides share one contract_key so the
+  # local landscape map reconciles them to a CONFIRMED verdict (honest, real).
+  - src: vitepress-site
+    dst: beadloom
+    kind: part_of
+  - src: beadloom
+    dst: vitepress-site
+    kind: produces
+    contract:
+      protocol: site-data
+      message_type: site-bundle
+      direction: produces
+  - src: vitepress-site
+    dst: beadloom
+    kind: consumes
+    contract:
+      protocol: site-data
+      message_type: site-bundle
+      direction: consumes
 
   # Application → domain / infrastructure usage edges
   - src: application
