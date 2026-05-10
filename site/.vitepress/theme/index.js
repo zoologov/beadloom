@@ -17,6 +17,8 @@
 import { h } from "vue";
 import DefaultTheme from "vitepress/theme";
 import DiagramViewer from "./components/DiagramViewer.vue";
+import AlertBanner from "./components/AlertBanner.vue";
+import StatusCards from "./components/StatusCards.vue";
 import HealthGauges from "./components/HealthGauges.vue";
 import CategoryChart from "./components/CategoryChart.vue";
 import TrendCharts from "./components/TrendCharts.vue";
@@ -38,8 +40,12 @@ export default {
   enhanceApp({ app }) {
     // Also expose it as a global component so pages can mount it explicitly.
     app.component("DiagramViewer", DiagramViewer);
-    // Dashboard widgets (BEAD-04) — registered globally so the generated
-    // `dashboard.md` can mount them by name. Each reads `dashboard.data.json`.
+    // Dashboard widgets — registered globally so the generated `dashboard.md`
+    // can mount them by name. Each reads `dashboard.data.json`. The critical-
+    // first banner + status cards (BEAD-10) lead; the ECharts widgets (BEAD-04)
+    // follow.
+    app.component("AlertBanner", AlertBanner);
+    app.component("StatusCards", StatusCards);
     app.component("HealthGauges", HealthGauges);
     app.component("CategoryChart", CategoryChart);
     app.component("TrendCharts", TrendCharts);

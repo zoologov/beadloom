@@ -566,3 +566,202 @@ def test_recommendations_deterministic(tmp_path: Path) -> None:
     assert json.dumps(first["recommendations"], sort_keys=True) == json.dumps(
         second["recommendations"], sort_keys=True
     )
+
+
+# ---------------------------------------------------------------------------
+# Attention / alerts — critical-first problem signalling (BEAD-10)
+# ---------------------------------------------------------------------------
+
+
+def test_alerts_present_iff_problems_exist(tmp_path: Path) -> None:
+    """`alerts` is non-empty IFF there are real problems; empty when clean."""
+    (tmp_path / "clean").mkdir()
+    clean = _make_project(tmp_path / "clean", with_violation=False)
+    conn = _open(clean)
+    try:
+        clean_data = build_dashboard_data(conn, project_root=clean)
+    finally:
+        conn.close()
+    # A clean project (no lint errors / stale docs / doctor errors / high debt /
+    # no federated contracts) -> all-clear -> empty alerts list (present key).
+    assert clean_data["alerts"] == []
+
+    (tmp_path / "dirty").mkdir()
+    dirty = _make_project(tmp_path / "dirty", with_violation=True)
+    fed = _federated_json(tmp_path)
+    conn = _open(dirty)
+    try:
+        dirty_data = build_dashboard_data(conn, project_root=dirty, federated=fed)
+    finally:
+        conn.close()
+    alerts = dirty_data["alerts"]
+    assert isinstance(alerts, list)
+    assert alerts, "with a lint error + BREAKING contract there must be alerts"
+
+
+def test_alerts_list_exactly_the_real_problems(tmp_path: Path) -> None:
+    """Each alert maps to a real gate problem — no invented or dropped alerts."""
+    project = _make_project(tmp_path, with_violation=True)
+    fed = _federated_json(tmp_path)
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project, federated=fed)
+    finally:
+        conn.close()
+    alerts = data["alerts"]
+    assert isinstance(alerts, list)
+    kinds = {str(a["kind"]) for a in alerts}
+    # The fixture has a lint error AND one BREAKING contract.
+    assert "lint" in kinds
+    assert "contract" in kinds
+    # No stale docs / no doctor errors in this fixture -> not alerted.
+    assert "stale_doc" not in kinds
+    assert "doctor" not in kinds
+    for a in alerts:
+        assert set(a) == {"kind", "severity", "message"}
+
+
+def test_alerts_severity_ordered_breaking_first(tmp_path: Path) -> None:
+    """Alerts are severity-ordered: BREAKING contracts lead, then errors."""
+    project = _make_project(tmp_path, with_violation=True)
+    fed = _federated_json(tmp_path)
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project, federated=fed)
+    finally:
+        conn.close()
+    alerts = data["alerts"]
+    rank = {"critical": 0, "error": 1, "warn": 2, "info": 3}
+    ranks = [rank.get(str(a["severity"]), 9) for a in alerts]
+    assert ranks == sorted(ranks)
+    # The BREAKING contract is the single most severe -> leads the banner.
+    assert alerts[0]["kind"] == "contract"
+    assert alerts[0]["severity"] == "critical"
+
+
+def test_alerts_deterministic(tmp_path: Path) -> None:
+    project = _make_project(tmp_path, with_violation=True)
+    fed = _federated_json(tmp_path)
+    conn = _open(project)
+    try:
+        first = build_dashboard_data(conn, project_root=project, federated=fed)
+        second = build_dashboard_data(conn, project_root=project, federated=fed)
+    finally:
+        conn.close()
+    assert json.dumps(first["alerts"], sort_keys=True) == json.dumps(
+        second["alerts"], sort_keys=True
+    )
+
+
+# ---------------------------------------------------------------------------
+# Status cards — threshold-colored per metric group (BEAD-10)
+# ---------------------------------------------------------------------------
+
+
+def test_status_cards_cover_all_metric_groups(tmp_path: Path) -> None:
+    """A card per group: lint, debt, docs, doctor (+ federated when present)."""
+    project = _make_project(tmp_path, with_violation=False)
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project)
+    finally:
+        conn.close()
+    cards = data["status_cards"]
+    assert isinstance(cards, list)
+    groups = {str(c["group"]) for c in cards}
+    assert {"lint", "debt", "docs", "doctor"} <= groups
+    # No federated artifact -> no federated card.
+    assert "federated" not in groups
+    for c in cards:
+        assert set(c) == {"group", "label", "status", "value", "detail"}
+        assert c["status"] in {"ok", "warn", "error"}
+
+
+def test_status_cards_clean_project_all_ok(tmp_path: Path) -> None:
+    """A clean project -> every status card is green (ok)."""
+    project = _make_project(tmp_path, with_violation=False)
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project)
+    finally:
+        conn.close()
+    cards = data["status_cards"]
+    statuses = {str(c["group"]): str(c["status"]) for c in cards}
+    # No violations -> lint card is green; no card is red (no error-level problem).
+    assert statuses["lint"] == "ok"
+    assert "error" not in statuses.values()
+
+
+def test_status_cards_thresholds_red_on_errors(tmp_path: Path) -> None:
+    """Lint errors -> red lint card; BREAKING contract -> red federated card."""
+    project = _make_project(tmp_path, with_violation=True)
+    fed = _federated_json(tmp_path)
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project, federated=fed)
+    finally:
+        conn.close()
+    cards = {str(c["group"]): c for c in data["status_cards"]}
+    assert cards["lint"]["status"] == "error"
+    assert "federated" in cards
+    assert cards["federated"]["status"] == "error"
+
+
+def test_status_cards_deterministic(tmp_path: Path) -> None:
+    project = _make_project(tmp_path, with_violation=True)
+    fed = _federated_json(tmp_path)
+    conn = _open(project)
+    try:
+        first = build_dashboard_data(conn, project_root=project, federated=fed)
+        second = build_dashboard_data(conn, project_root=project, federated=fed)
+    finally:
+        conn.close()
+    assert json.dumps(first["status_cards"], sort_keys=True) == json.dumps(
+        second["status_cards"], sort_keys=True
+    )
+
+
+# ---------------------------------------------------------------------------
+# Critical-first MD rendering — Attention banner + status cards (BEAD-10)
+# ---------------------------------------------------------------------------
+
+
+def test_dashboard_md_mounts_alert_banner(tmp_path: Path) -> None:
+    project = _make_project(tmp_path, with_violation=True)
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project)
+    finally:
+        conn.close()
+    md = render_dashboard_md(data)
+    assert "<AlertBanner" in md
+    assert "<StatusCards" in md
+
+
+def test_dashboard_md_all_clear_text_when_clean(tmp_path: Path) -> None:
+    """The honest text fallback shows an all-clear line when there are no alerts."""
+    project = _make_project(tmp_path, with_violation=False)
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project)
+    finally:
+        conn.close()
+    md = render_dashboard_md(data)
+    assert "All clear" in md
+
+
+def test_dashboard_md_lists_alerts_in_text_fallback(tmp_path: Path) -> None:
+    """When problems exist, the honest text fallback names each alert."""
+    project = _make_project(tmp_path, with_violation=True)
+    fed = _federated_json(tmp_path)
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project, federated=fed)
+    finally:
+        conn.close()
+    md = render_dashboard_md(data)
+    alerts = data["alerts"]
+    assert isinstance(alerts, list)
+    assert "Attention" in md
+    for a in alerts:
+        assert str(a["message"]) in md

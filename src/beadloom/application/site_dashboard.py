@@ -68,6 +68,14 @@ _SEVERITY_RANK: dict[str, int] = {
 # already returns its own ``top_offenders`` cut; we mirror that honest slice).
 _MAX_DEBT_RECS = 5
 
+# Alert severity ordering (lower = surfaced first). BREAKING contracts lead the
+# attention banner, then errors (lint/doctor/drift), then warnings (stale/debt).
+_ALERT_RANK: dict[str, int] = {"critical": 0, "error": 1, "warn": 2, "info": 3}
+
+# Debt severities that warrant an attention alert (the debt report's own labels;
+# ``high`` -> error, ``critical`` -> critical). Below ``high`` is not alerted.
+_DEBT_ALERT_SEVERITY: dict[str, str] = {"high": "error", "critical": "critical"}
+
 
 def _lint_metrics(result: LintResult) -> dict[str, object]:
     """Lint count + severity breakdown from a precomputed ``beadloom lint`` result.
@@ -369,6 +377,236 @@ def _build_recommendations(
     return recs
 
 
+# ---------------------------------------------------------------------------
+# Attention alerts — critical-first problem signalling (BEAD-10)
+# ---------------------------------------------------------------------------
+
+
+def _as_int(value: object) -> int:
+    """Coerce a metric value (typed ``object`` from the data dict) to ``int``."""
+    return int(value) if isinstance(value, (int, float)) else 0
+
+
+def _as_float(value: object) -> float:
+    """Coerce a metric value (typed ``object`` from the data dict) to ``float``."""
+    return float(value) if isinstance(value, (int, float)) else 0.0
+
+
+def _alert(kind: str, severity: str, message: str) -> dict[str, object]:
+    """Build one attention alert in the documented shape."""
+    return {"kind": kind, "severity": severity, "message": message}
+
+
+def _contract_alerts(
+    federated_payload: dict[str, object] | None,
+) -> list[dict[str, object]]:
+    """BREAKING (critical) / DRIFT (error) contract alerts from the rollup."""
+    if not isinstance(federated_payload, dict):
+        return []
+    contracts = federated_payload.get("contracts")
+    if not isinstance(contracts, list):
+        return []
+    counts: dict[str, int] = {"breaking": 0, "drift": 0}
+    for item in contracts:
+        if not isinstance(item, dict):
+            continue
+        verdict = str(item.get("verdict", "")).lower()
+        if verdict in counts:
+            counts[verdict] += 1
+    alerts: list[dict[str, object]] = []
+    if counts["breaking"]:
+        alerts.append(
+            _alert(
+                "contract",
+                "critical",
+                f"{counts['breaking']} BREAKING contract(s) — reconcile producer/consumer",
+            )
+        )
+    if counts["drift"]:
+        alerts.append(
+            _alert(
+                "contract",
+                "error",
+                f"{counts['drift']} DRIFT contract(s) — producer/consumer diverging",
+            )
+        )
+    return alerts
+
+
+def _build_alerts(
+    lint_data: dict[str, object],
+    debt_data: dict[str, object],
+    docs_data: dict[str, object],
+    doctor_data: dict[str, object],
+    federated_payload: dict[str, object] | None,
+) -> list[dict[str, object]]:
+    """Derive the attention banner alerts — exactly the real, current problems.
+
+    Honest by construction: every alert maps to a gate figure already computed
+    above (lint errors, doctor errors, stale docs, high debt, BREAKING/DRIFT
+    contracts). An empty list means all-clear. Severity-ordered (BREAKING leads),
+    ties broken deterministically by (kind, message) so the output is byte-stable.
+    """
+    alerts: list[dict[str, object]] = []
+    alerts.extend(_contract_alerts(federated_payload))
+
+    lint_errors = _as_int(lint_data.get("errors", 0))
+    if lint_errors:
+        alerts.append(
+            _alert("lint", "error", f"{lint_errors} lint error(s) — run `beadloom lint`")
+        )
+
+    doctor_errors = _as_int(doctor_data.get("errors", 0))
+    if doctor_errors:
+        alerts.append(
+            _alert(
+                "doctor",
+                "error",
+                f"{doctor_errors} doctor error(s) — run `beadloom doctor`",
+            )
+        )
+
+    stale = _as_int(docs_data.get("stale", 0))
+    if stale:
+        alerts.append(
+            _alert(
+                "stale_doc",
+                "warn",
+                f"{stale} stale doc(s) — refresh and re-run `beadloom sync-check`",
+            )
+        )
+
+    debt_sev = str(debt_data.get("severity", ""))
+    if debt_sev in _DEBT_ALERT_SEVERITY:
+        score = debt_data.get("debt_score")
+        alerts.append(
+            _alert(
+                "debt",
+                _DEBT_ALERT_SEVERITY[debt_sev],
+                f"debt {debt_sev} (score {score}) — see the debt report",
+            )
+        )
+
+    alerts.sort(
+        key=lambda a: (
+            _ALERT_RANK.get(str(a["severity"]), 9),
+            str(a["kind"]),
+            str(a["message"]),
+        )
+    )
+    return alerts
+
+
+# ---------------------------------------------------------------------------
+# Status cards — threshold-colored per metric group (BEAD-10)
+# ---------------------------------------------------------------------------
+
+
+def _card(
+    group: str, label: str, status: str, value: str, detail: str
+) -> dict[str, object]:
+    """Build one status card; ``status`` is the deterministic severity (color)."""
+    return {
+        "group": group,
+        "label": label,
+        "status": status,
+        "value": value,
+        "detail": detail,
+    }
+
+
+def _lint_card(d: dict[str, object]) -> dict[str, object]:
+    errors = _as_int(d.get("errors", 0))
+    warnings = _as_int(d.get("warnings", 0))
+    status = "error" if errors else ("warn" if warnings else "ok")
+    return _card(
+        "lint",
+        "Lint",
+        status,
+        str(d.get("violations", 0)),
+        f"{errors} errors, {warnings} warnings",
+    )
+
+
+def _debt_card(d: dict[str, object]) -> dict[str, object]:
+    sev = str(d.get("severity", ""))
+    status = "error" if sev in _DEBT_ALERT_SEVERITY else (
+        "warn" if sev == "medium" else "ok"
+    )
+    return _card(
+        "debt",
+        "Debt",
+        status,
+        f"{d.get('debt_score', 0)} / 100",
+        sev or "clean",
+    )
+
+
+def _docs_card(d: dict[str, object]) -> dict[str, object]:
+    stale = _as_int(d.get("stale", 0))
+    coverage = _as_float(d.get("coverage_pct", 0.0))
+    status = "warn" if stale else ("warn" if coverage < 80.0 else "ok")
+    return _card(
+        "docs",
+        "Docs",
+        status,
+        f"{coverage}% covered",
+        f"{stale} stale of {d.get('tracked_pairs', 0)} tracked",
+    )
+
+
+def _doctor_card(d: dict[str, object]) -> dict[str, object]:
+    errors = _as_int(d.get("errors", 0))
+    warnings = _as_int(d.get("warnings", 0))
+    status = "error" if errors else ("warn" if warnings else "ok")
+    return _card(
+        "doctor",
+        "Doctor",
+        status,
+        "PASS" if d.get("passed") else "FAIL",
+        f"{errors} errors, {warnings} warnings",
+    )
+
+
+def _federated_card(rollup: dict[str, object]) -> dict[str, object]:
+    verdicts = rollup.get("contract_verdicts", {})
+    counts = verdicts if isinstance(verdicts, dict) else {}
+    breaking = int(counts.get("breaking", 0))
+    drift = int(counts.get("drift", 0))
+    status = "error" if breaking else ("warn" if drift else "ok")
+    return _card(
+        "federated",
+        "Contracts",
+        status,
+        f"{rollup.get('contract_count', 0)} contracts",
+        f"{breaking} breaking, {drift} drift",
+    )
+
+
+def _build_status_cards(
+    lint_data: dict[str, object],
+    debt_data: dict[str, object],
+    docs_data: dict[str, object],
+    doctor_data: dict[str, object],
+    rollup: dict[str, object] | None,
+) -> list[dict[str, object]]:
+    """Compact, threshold-colored cards per metric group (deterministic order).
+
+    Thresholds live here in Python (the card ``status`` is data); the frontend
+    only paints the color. Card values are taken verbatim from the gate figures
+    already computed — no new metric is invented.
+    """
+    cards = [
+        _lint_card(lint_data),
+        _debt_card(debt_data),
+        _docs_card(docs_data),
+        _doctor_card(doctor_data),
+    ]
+    if rollup is not None:
+        cards.append(_federated_card(rollup))
+    return cards
+
+
 def build_dashboard_data(
     conn: sqlite3.Connection,
     *,
@@ -395,12 +633,22 @@ def build_dashboard_data(
         _read_federated_payload(federated) if federated is not None else None
     )
     rollup = _federated_metrics(federated_payload) if federated_payload else None
+    lint_data = _lint_metrics(lint_result)
+    debt_data = format_debt_json(report)
+    docs_data = _docs_metrics(conn)
+    doctor_data = _doctor_metrics(conn, project_root)
     return {
-        "lint": _lint_metrics(lint_result),
-        "debt": format_debt_json(report),
-        "docs": _docs_metrics(conn),
-        "doctor": _doctor_metrics(conn, project_root),
+        "lint": lint_data,
+        "debt": debt_data,
+        "docs": docs_data,
+        "doctor": doctor_data,
         "federated": rollup,
+        "alerts": _build_alerts(
+            lint_data, debt_data, docs_data, doctor_data, federated_payload
+        ),
+        "status_cards": _build_status_cards(
+            lint_data, debt_data, docs_data, doctor_data, rollup
+        ),
         "trends": _trends(project_root),
         "recommendations": _build_recommendations(
             conn, lint_result, report.top_offenders, federated_payload
@@ -493,16 +741,20 @@ def _federated_section(rollup: dict[str, object]) -> list[str]:
 
 
 def _widgets_section() -> list[str]:
-    """Mount the committed ECharts widgets (BEAD-04, theme-registered globals).
+    """Mount the committed widgets — critical-first (banner + cards lead).
 
+    The attention banner (``AlertBanner``) + threshold-colored status cards
+    (``StatusCards``) signal problems first; the ECharts widgets (BEAD-04) follow.
     Each widget loads ``dashboard.data.json`` (emitted alongside this page) and
-    renders client-side via ``vue-echarts``. The numbers it shows are exactly the
-    serialized data values — the front-end never invents a figure. With JS
+    renders client-side. The numbers/states it shows are exactly the serialized
+    data values — the front-end never invents a figure or a severity. With JS
     disabled the widgets render nothing and the honest textual summary below
-    remains the source of truth (graceful degradation).
+    (attention list / all-clear + status table) remains the source of truth.
     """
     return [
         "<ClientOnly>",
+        "  <AlertBanner />",
+        "  <StatusCards />",
         "  <HealthGauges />",
         "  <CategoryChart />",
         "  <TrendCharts />",
@@ -510,6 +762,39 @@ def _widgets_section() -> list[str]:
         "</ClientOnly>",
         "",
     ]
+
+
+def _attention_section(alerts: list[dict[str, object]]) -> list[str]:
+    """Honest text fallback for the attention banner (JS-disabled).
+
+    Lists exactly the real problems (severity-ordered, as computed in Python) or
+    a single green all-clear line when there is nothing wrong.
+    """
+    if not alerts:
+        return [
+            "> **All clear** — no breaking/drift contracts, lint errors, stale "
+            "docs, doctor errors or high debt.",
+            "",
+        ]
+    lines = ["## Attention", "", "The following problems need attention:", ""]
+    for a in alerts:
+        sev = str(a.get("severity", "")).upper()
+        lines.append(f"- **{sev}** — {a.get('message')}")
+    lines.append("")
+    return lines
+
+
+def _status_cards_section(cards: list[dict[str, object]]) -> list[str]:
+    """Honest text fallback for the threshold-colored status cards (a table)."""
+    lines = ["## Status", "", "| Group | Status | Value | Detail |", "| --- | --- | --- | --- |"]
+    indicator = {"ok": "🟢 ok", "warn": "🟡 warn", "error": "🔴 error"}
+    for c in cards:
+        status = indicator.get(str(c.get("status", "")), str(c.get("status", "")))
+        lines.append(
+            f"| {c.get('label')} | {status} | {c.get('value')} | {c.get('detail')} |"
+        )
+    lines.append("")
+    return lines
 
 
 def render_dashboard_md(data: dict[str, object]) -> str:
@@ -523,6 +808,8 @@ def render_dashboard_md(data: dict[str, object]) -> str:
     docs_data = data["docs"]
     doctor_data = data["doctor"]
     federated = data["federated"]
+    alerts = data.get("alerts", [])
+    status_cards = data.get("status_cards", [])
 
     lines: list[str] = [
         "---",
@@ -541,6 +828,11 @@ def render_dashboard_md(data: dict[str, object]) -> str:
     assert isinstance(debt_data, dict)
     assert isinstance(docs_data, dict)
     assert isinstance(doctor_data, dict)
+    assert isinstance(alerts, list)
+    assert isinstance(status_cards, list)
+    # Critical-first: attention banner + status cards lead the text fallback.
+    lines.extend(_attention_section(alerts))
+    lines.extend(_status_cards_section(status_cards))
     lines.extend(_lint_section(lint_data))
     lines.extend(_debt_section(debt_data))
     lines.extend(_docs_section(docs_data))
