@@ -11,34 +11,273 @@ export const sidebar = [
   { text: "Dashboard", items: [{ text: "Metrics", link: "/dashboard" }] },
   {
     text: "Architecture",
+    collapsed: true,
     items: [
-        { text: "Overview", link: "/index" },
-        { text: "agent-prime", link: "/features/agent-prime" },
-        { text: "application", link: "/domains/application" },
-        { text: "beadloom", link: "/services/beadloom" },
-        { text: "c4-diagrams", link: "/features/c4-diagrams" },
-        { text: "cache", link: "/features/cache" },
-        { text: "cli", link: "/services/cli" },
-        { text: "context-oracle", link: "/domains/context-oracle" },
-        { text: "debt-report", link: "/features/debt-report" },
-        { text: "doc-generator", link: "/features/doc-generator" },
-        { text: "doc-sync", link: "/domains/doc-sync" },
-        { text: "docs-audit", link: "/features/docs-audit" },
-        { text: "doctor", link: "/features/doctor" },
-        { text: "graph", link: "/domains/graph" },
-        { text: "graph-diff", link: "/features/graph-diff" },
-        { text: "import-resolver", link: "/features/import-resolver" },
-        { text: "infrastructure", link: "/domains/infrastructure" },
-        { text: "mcp-server", link: "/services/mcp-server" },
-        { text: "onboarding", link: "/domains/onboarding" },
-        { text: "reindex", link: "/features/reindex" },
-        { text: "rule-engine", link: "/features/rule-engine" },
-        { text: "search", link: "/features/search" },
-        { text: "tui", link: "/services/tui" },
-        { text: "watcher", link: "/features/watcher" },
-        { text: "why", link: "/features/why" },
+      { text: "Architecture overview", link: "/index" },
+      {
+        text: "Beadloom",
+        link: "/services/beadloom",
+        items: [
+          {
+            text: "Application",
+            link: "/domains/application",
+            items: [
+              { text: "Debt Report", link: "/features/debt-report" },
+              { text: "Doctor", link: "/features/doctor" },
+              { text: "Reindex", link: "/features/reindex" },
+              { text: "Watcher", link: "/features/watcher" }
+            ],
+          },
+          { text: "Cli", link: "/services/cli" },
+          {
+            text: "Context Oracle",
+            link: "/domains/context-oracle",
+            items: [
+              { text: "Cache", link: "/features/cache" },
+              { text: "Search", link: "/features/search" },
+              { text: "Why", link: "/features/why" }
+            ],
+          },
+          {
+            text: "Doc Sync",
+            link: "/domains/doc-sync",
+            items: [
+              { text: "Docs Audit", link: "/features/docs-audit" }
+            ],
+          },
+          {
+            text: "Graph",
+            link: "/domains/graph",
+            items: [
+              { text: "C4 Diagrams", link: "/features/c4-diagrams" },
+              { text: "Graph Diff", link: "/features/graph-diff" },
+              { text: "Import Resolver", link: "/features/import-resolver" },
+              { text: "Rule Engine", link: "/features/rule-engine" }
+            ],
+          },
+          { text: "Infrastructure", link: "/domains/infrastructure" },
+          { text: "Mcp Server", link: "/services/mcp-server" },
+          {
+            text: "Onboarding",
+            link: "/domains/onboarding",
+            items: [
+              { text: "Agent Prime", link: "/features/agent-prime" },
+              { text: "Doc Generator", link: "/features/doc-generator" }
+            ],
+          },
+          { text: "Tui", link: "/services/tui" }
+        ],
+      },
     ],
   },
   { text: "Landscape", items: [{ text: "Map", link: "/landscape" }] },
-  { text: "Documentation", items: [{ text: "Docs", link: "/docs/" }] },
+  {
+    text: "Documentation",
+    collapsed: true,
+    items: [
+      { text: "Overview", link: "/docs/" },
+      { text: "Architecture", link: "/docs/architecture" },
+      { text: "Getting Started", link: "/docs/getting-started" },
+      {
+        text: "Domains",
+        collapsed: true,
+        items: [
+          {
+            text: "Application",
+            collapsed: true,
+            items: [
+              { text: "README", link: "/docs/domains/application/README" }
+            ],
+          },
+          {
+            text: "Context Oracle",
+            collapsed: true,
+            items: [
+              { text: "README", link: "/docs/domains/context-oracle/README" },
+              {
+                text: "Features",
+                collapsed: true,
+                items: [
+                  {
+                    text: "Cache",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/context-oracle/features/cache/SPEC" }
+                    ],
+                  },
+                  {
+                    text: "Search",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/context-oracle/features/search/SPEC" }
+                    ],
+                  },
+                  {
+                    text: "Why",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/context-oracle/features/why/SPEC" }
+                    ],
+                  }
+                ],
+              }
+            ],
+          },
+          {
+            text: "Doc Sync",
+            collapsed: true,
+            items: [
+              { text: "README", link: "/docs/domains/doc-sync/README" },
+              {
+                text: "Features",
+                collapsed: true,
+                items: [
+                  {
+                    text: "Docs Audit",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/doc-sync/features/docs-audit/SPEC" }
+                    ],
+                  }
+                ],
+              }
+            ],
+          },
+          {
+            text: "Graph",
+            collapsed: true,
+            items: [
+              { text: "README", link: "/docs/domains/graph/README" },
+              {
+                text: "Features",
+                collapsed: true,
+                items: [
+                  {
+                    text: "C4 Diagrams",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/graph/features/c4-diagrams/SPEC" }
+                    ],
+                  },
+                  {
+                    text: "Federation",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/graph/features/federation/SPEC" }
+                    ],
+                  },
+                  {
+                    text: "Graph Diff",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/graph/features/graph-diff/SPEC" }
+                    ],
+                  },
+                  {
+                    text: "Import Resolver",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/graph/features/import-resolver/SPEC" }
+                    ],
+                  },
+                  {
+                    text: "Rule Engine",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/graph/features/rule-engine/SPEC" }
+                    ],
+                  }
+                ],
+              }
+            ],
+          },
+          {
+            text: "Infrastructure",
+            collapsed: true,
+            items: [
+              { text: "README", link: "/docs/domains/infrastructure/README" },
+              {
+                text: "Features",
+                collapsed: true,
+                items: [
+                  {
+                    text: "Debt Report",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/infrastructure/features/debt-report/SPEC" }
+                    ],
+                  },
+                  {
+                    text: "Doctor",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/infrastructure/features/doctor/SPEC" }
+                    ],
+                  },
+                  {
+                    text: "Reindex",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/infrastructure/features/reindex/SPEC" }
+                    ],
+                  },
+                  {
+                    text: "Watcher",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/infrastructure/features/watcher/SPEC" }
+                    ],
+                  }
+                ],
+              }
+            ],
+          },
+          {
+            text: "Onboarding",
+            collapsed: true,
+            items: [
+              { text: "README", link: "/docs/domains/onboarding/README" },
+              {
+                text: "Features",
+                collapsed: true,
+                items: [
+                  {
+                    text: "Agent Prime",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/onboarding/features/agent-prime/SPEC" }
+                    ],
+                  },
+                  {
+                    text: "Doc Generator",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/onboarding/features/doc-generator/SPEC" }
+                    ],
+                  }
+                ],
+              }
+            ],
+          }
+        ],
+      },
+      {
+        text: "Guides",
+        collapsed: true,
+        items: [
+          { text: "Ci Setup", link: "/docs/guides/ci-setup" },
+          { text: "Vitepress Site", link: "/docs/guides/vitepress-site" }
+        ],
+      },
+      {
+        text: "Services",
+        collapsed: true,
+        items: [
+          { text: "Cli", link: "/docs/services/cli" },
+          { text: "Mcp", link: "/docs/services/mcp" },
+          { text: "Tui", link: "/docs/services/tui" }
+        ],
+      },
+    ],
+  },
 ];

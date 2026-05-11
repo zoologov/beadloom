@@ -94,7 +94,7 @@ def test_nav_config_skips_unknown_kind(conn: sqlite3.Connection, tmp_path: Path)
 
     # Assert: the index still generates; the unknown-kind node is absent from nav.
     cfg = (out / ".vitepress" / "config.generated.mjs").read_text(encoding="utf-8")
-    assert '"beadloom"' in cfg
+    assert '"Beadloom"' in cfg  # human-readable label (BDL-041 BEAD-11)
     assert "/services/beadloom" in cfg
     assert "/weird" not in cfg  # no sub-dir -> skipped from the architecture nav
 

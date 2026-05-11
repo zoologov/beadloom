@@ -1,4 +1,5 @@
 {
+  "alerts": [],
   "debt": {
     "categories": [
       {
@@ -12,20 +13,20 @@
       {
         "details": {
           "stale": 0,
-          "undocumented": 0,
-          "untracked": 8
+          "undocumented": 1,
+          "untracked": 9
         },
         "name": "doc_gaps",
-        "score": 4.0
+        "score": 6.5
       },
       {
         "details": {
           "dormant": 7,
           "high_fan_out": 1,
-          "oversized": 1
+          "oversized": 2
         },
         "name": "complexity",
-        "score": 6.5
+        "score": 8.5
       },
       {
         "details": {
@@ -35,9 +36,17 @@
         "score": 0.0
       }
     ],
-    "debt_score": 10.5,
+    "debt_score": 15.0,
     "severity": "medium",
     "top_offenders": [
+      {
+        "reasons": [
+          "oversized",
+          "high_fan_out"
+        ],
+        "ref_id": "application",
+        "score": 3.0
+      },
       {
         "reasons": [
           "oversized"
@@ -47,10 +56,10 @@
       },
       {
         "reasons": [
-          "high_fan_out"
+          "undocumented"
         ],
-        "ref_id": "application",
-        "score": 1.0
+        "ref_id": "vitepress-site",
+        "score": 2.0
       },
       {
         "reasons": [
@@ -104,81 +113,51 @@
     ],
     "trend": {
       "category_deltas": {
-        "complexity": 5.5,
-        "doc_gaps": 4.0,
+        "complexity": 7.5,
+        "doc_gaps": 6.5,
         "meta_doc_staleness": 0.0,
         "rule_violations": 0.0,
         "test_gaps": 0.0
       },
-      "delta": 9.5,
+      "delta": 14.0,
       "previous_score": 1.0,
       "previous_snapshot": "2026-06-01 16:36:30 [BDL-038-wave1]"
     }
   },
   "docs": {
-    "coverage_pct": 100.0,
+    "coverage_pct": 96.0,
     "documented": 24,
-    "fresh": 73,
+    "fresh": 74,
     "freshness_pct": 100.0,
-    "nodes": 24,
+    "nodes": 25,
     "stale": 0,
-    "tracked_pairs": 73
+    "tracked_pairs": 74
   },
   "doctor": {
     "by_severity": {
-      "ok": 12,
-      "warning": 2
+      "ok": 11,
+      "warning": 3
     },
     "errors": 0,
     "passed": true,
     "total": 14,
-    "warnings": 2
+    "warnings": 3
   },
-  "federated": {
-    "contract_count": 1,
-    "contract_verdicts": {
-      "breaking": 1
-    },
-    "edge_count": 2,
-    "repo_count": 2,
-    "services": [
-      {
-        "healthy": true,
-        "repo": "catalog-service",
-        "verdicts": {
-          "ok": 1
-        }
-      },
-      {
-        "healthy": true,
-        "repo": "storefront-web",
-        "verdicts": {
-          "ok": 1
-        }
-      }
-    ]
-  },
+  "federated": null,
   "lint": {
     "by_severity": {
       "error": 0,
-      "warn": 1
+      "warn": 2
     },
     "errors": 0,
-    "violations": 1,
-    "warnings": 1
+    "violations": 2,
+    "warnings": 2
   },
   "recommendations": [
     {
-      "kind": "contract",
-      "link": "/landscape",
-      "message": "contract BREAKING — reconcile producer/consumer",
-      "severity": "error",
-      "target": "graphql:PublicCatalogAPI"
-    },
-    {
       "kind": "debt",
       "link": "/dashboard#application",
-      "message": "debt score 1.0: high_fan_out",
+      "message": "debt score 3.0: oversized; high_fan_out",
       "severity": "warn",
       "target": "application"
     },
@@ -198,17 +177,24 @@
     },
     {
       "kind": "debt",
-      "link": "/dashboard#doc-generator",
-      "message": "debt score 0.5: dormant",
-      "severity": "warn",
-      "target": "doc-generator"
-    },
-    {
-      "kind": "debt",
       "link": "/dashboard#graph",
       "message": "debt score 2.0: oversized",
       "severity": "warn",
       "target": "graph"
+    },
+    {
+      "kind": "debt",
+      "link": "/dashboard#vitepress-site",
+      "message": "debt score 2.0: undocumented",
+      "severity": "warn",
+      "target": "vitepress-site"
+    },
+    {
+      "kind": "lint",
+      "link": "/dashboard#application",
+      "message": "Node 'application' has 224 symbols (max 200): rule 'domain-size-limit' — `application` exceeds its limit (Node 'application' has 224 symbols (max 200): rule 'domain-size-limit'); split it into smaller nodes",
+      "severity": "warn",
+      "target": "application"
     },
     {
       "kind": "lint",
@@ -216,6 +202,36 @@
       "message": "Node 'graph' has 202 symbols (max 200): rule 'domain-size-limit' — `graph` exceeds its limit (Node 'graph' has 202 symbols (max 200): rule 'domain-size-limit'); split it into smaller nodes",
       "severity": "warn",
       "target": "graph"
+    }
+  ],
+  "status_cards": [
+    {
+      "detail": "0 errors, 2 warnings",
+      "group": "lint",
+      "label": "Lint",
+      "status": "warn",
+      "value": "2"
+    },
+    {
+      "detail": "medium",
+      "group": "debt",
+      "label": "Debt",
+      "status": "warn",
+      "value": "15.0 / 100"
+    },
+    {
+      "detail": "0 stale of 74 tracked",
+      "group": "docs",
+      "label": "Docs",
+      "status": "ok",
+      "value": "96.0% covered"
+    },
+    {
+      "detail": "0 errors, 3 warnings",
+      "group": "doctor",
+      "label": "Doctor",
+      "status": "warn",
+      "value": "PASS"
     }
   ],
   "trends": [
@@ -238,6 +254,46 @@
       "symbols": 755,
       "sync_pct": 100.0,
       "ts": "2026-06-02T06:15:47.436273+00:00"
+    },
+    {
+      "coverage_pct": 96.0,
+      "debt_score": 13.0,
+      "edges": 76,
+      "lint_violations": 1,
+      "nodes": 25,
+      "symbols": 757,
+      "sync_pct": 100.0,
+      "ts": "2026-06-02T07:08:47.982734+00:00"
+    },
+    {
+      "coverage_pct": 96.0,
+      "debt_score": 15.0,
+      "edges": 76,
+      "lint_violations": 2,
+      "nodes": 25,
+      "symbols": 782,
+      "sync_pct": 100.0,
+      "ts": "2026-06-02T07:26:41.482580+00:00"
+    },
+    {
+      "coverage_pct": 96.0,
+      "debt_score": 16.0,
+      "edges": 76,
+      "lint_violations": 2,
+      "nodes": 25,
+      "symbols": 782,
+      "sync_pct": 83.6,
+      "ts": "2026-06-02T07:27:24.784147+00:00"
+    },
+    {
+      "coverage_pct": 96.0,
+      "debt_score": 15.0,
+      "edges": 76,
+      "lint_violations": 2,
+      "nodes": 25,
+      "symbols": 782,
+      "sync_pct": 100.0,
+      "ts": "2026-06-02T07:30:35.903714+00:00"
     }
   ]
 }

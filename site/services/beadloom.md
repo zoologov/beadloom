@@ -183,6 +183,7 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `evaluate_import_boundary_rules`
 - `evaluate_layer_rules`
 - `evaluate_require_rules`
+- `existing_page_urls`
 - `export`
 - `extract_imports`
 - `extract_routes`
@@ -226,6 +227,7 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `handle_why`
 - `has_fts5`
 - `history_path`
+- `human_label`
 - `import_docs`
 - `incremental_reindex`
 - `index_docs`
@@ -267,12 +269,15 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `refresh_claude_md`
 - `reindex`
 - `render_all_pages`
+- `render_architecture_group`
 - `render_c4_mermaid`
 - `render_c4_plantuml`
 - `render_dashboard_md`
 - `render_diff`
+- `render_documentation_group`
 - `render_federation_report`
 - `render_landscape_md`
+- `render_nav_config`
 - `render_node_page`
 - `render_published_doc`
 - `render_why`
@@ -341,6 +346,7 @@ C4Container
         Container(mcp_server, "Mcp Server", "", "MCP stdio server with 14 tools for AI agents")
         Container(onboarding, "Onboarding", "", "Project bootstrap, doc import, architecture-aware presets, doc generation")
         Container(tui, "Tui", "", "Interactive 3-screen architecture workstation with dashboard, explorer, doc status")
+        Container(vitepress_site, "Vitepress Site", "", "VitePress documentation site — renders the beadloom-produced site data (graph pages, dashboard.data.json, landscape Mermaid)")
     }
     Rel(application, context_oracle, "depends_on")
     Rel(application, context_oracle, "uses")

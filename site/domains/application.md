@@ -41,12 +41,14 @@ Use-case orchestration: reindex, doctor, debt report, file watcher
 - `compute_debt_score`
 - `compute_debt_trend`
 - `compute_top_offenders`
+- `existing_page_urls`
 - `format_debt_json`
 - `format_debt_report`
 - `format_top_offenders_json`
 - `format_trend_section`
 - `generate_site`
 - `history_path`
+- `human_label`
 - `incremental_reindex`
 - `inject_badge`
 - `load_debt_weights`
@@ -55,8 +57,11 @@ Use-case orchestration: reindex, doctor, debt report, file watcher
 - `read_history`
 - `reindex`
 - `render_all_pages`
+- `render_architecture_group`
 - `render_dashboard_md`
+- `render_documentation_group`
 - `render_landscape_md`
+- `render_nav_config`
 - `render_node_page`
 - `render_published_doc`
 - `resolve_scan_paths`

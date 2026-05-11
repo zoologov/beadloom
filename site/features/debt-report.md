@@ -51,6 +51,7 @@ C4Container
         Container(mcp_server, "Mcp Server", "", "MCP stdio server with 14 tools for AI agents")
         Container(onboarding, "Onboarding", "", "Project bootstrap, doc import, architecture-aware presets, doc generation")
         Container(tui, "Tui", "", "Interactive 3-screen architecture workstation with dashboard, explorer, doc status")
+        Container(vitepress_site, "Vitepress Site", "", "VitePress documentation site — renders the beadloom-produced site data (graph pages, dashboard.data.json, landscape Mermaid)")
     }
     Rel(application, context_oracle, "depends_on")
     Rel(application, context_oracle, "uses")

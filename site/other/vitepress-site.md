@@ -1,29 +1,27 @@
 ---
-title: search
-kind: feature
+title: vitepress-site
+kind: site
 ---
 
-# search
+# vitepress-site
 
-**Kind:** feature
+**Kind:** site
 
-FTS5 full-text search across nodes and documentation
+VitePress documentation site — renders the beadloom-produced site data (graph pages, dashboard.data.json, landscape Mermaid)
 
-**Source:** `src/beadloom/context_oracle/search.py`
+**Source:** `site/`
 
 ## Public symbols
 
-- `has_fts5`
-- `populate_search_index`
-- `search_fts5`
+_None indexed._
 
 ## Relationships
 
-- **part_of**: [context-oracle](../domains/context-oracle.md)
+- **part_of**: [beadloom](../services/beadloom.md)
 
 ## Documentation
 
-- [domains/context-oracle/features/search/SPEC.md](/docs/domains/context-oracle/features/search/SPEC.md)
+_No linked documents._
 
 ## Diagram
 
