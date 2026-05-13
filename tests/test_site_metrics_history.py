@@ -229,3 +229,91 @@ def test_backfill_is_idempotent(tmp_path: Path) -> None:
     finally:
         conn.close()
     assert len(read_history(project)) == 1
+
+
+# ---------------------------------------------------------------------------
+# Robust read: malformed store / rows are skipped (best-effort, never crashes)
+# ---------------------------------------------------------------------------
+
+
+def test_read_malformed_json_returns_empty(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    history_path(project).write_text("{ not json", encoding="utf-8")
+    # A corrupt store degrades to an empty (honest) series, never raises.
+    assert read_history(project) == []
+
+
+def test_read_non_list_payload_returns_empty(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    history_path(project).write_text('{"ts": "2026-01-01"}', encoding="utf-8")
+    # A JSON object (not a list of points) is not a valid store -> empty.
+    assert read_history(project) == []
+
+
+def test_read_skips_rows_without_a_valid_ts(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    history_path(project).write_text(
+        json.dumps(
+            [
+                {"ts": "2026-01-01T00:00:00+00:00", "nodes": 5},
+                {"ts": ""},  # empty ts -> skipped
+                {"ts": 123},  # non-str ts -> skipped
+                {"nodes": 9},  # missing ts -> skipped
+                "not-a-dict",  # non-dict row -> skipped
+            ]
+        ),
+        encoding="utf-8",
+    )
+    series = read_history(project)
+    assert [p.ts for p in series] == ["2026-01-01T00:00:00+00:00"]
+    assert series[0].nodes == 5
+
+
+def test_read_coerces_field_types_and_defaults(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    history_path(project).write_text(
+        json.dumps(
+            [
+                {
+                    "ts": "2026-01-01T00:00:00+00:00",
+                    "lint_violations": True,  # bool -> default 0
+                    "debt_score": False,  # bool -> default 0.0
+                    "coverage_pct": "oops",  # non-numeric -> default 0.0
+                    "sync_pct": "bad",  # non-numeric -> default 100.0
+                    "nodes": "x",  # non-numeric -> default 0
+                    "edges": 7.0,  # float -> int 7
+                    "symbols": 12,
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    point = read_history(project)[0]
+    assert point.lint_violations == 0
+    assert point.debt_score == 0.0
+    assert point.coverage_pct == 0.0
+    assert point.sync_pct == 100.0
+    assert point.nodes == 0
+    assert point.edges == 7
+    assert point.symbols == 12
+
+
+# ---------------------------------------------------------------------------
+# Snapshot ts normalization (dedup against recorded points)
+# ---------------------------------------------------------------------------
+
+
+def test_backfill_normalizes_iso_and_zulu_snapshot_ts(tmp_path: Path) -> None:
+    """A snapshot already in ISO/Zulu form is not double-suffixed with +00:00."""
+    project = _project(tmp_path)
+    conn = _conn(project)
+    try:
+        # Already-ISO created_at (has 'T') -> left as-is (no space replacement).
+        _snapshot(conn, created_at="2026-05-01T10:00:00Z", nodes=3, edges=2, symbols=9)
+        backfill_structural_history(conn, project)
+    finally:
+        conn.close()
+    series = read_history(project)
+    assert len(series) == 1
+    # The 'Z' form is preserved (not given a duplicate +00:00 offset).
+    assert series[0].ts == "2026-05-01T10:00:00Z"

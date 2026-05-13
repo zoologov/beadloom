@@ -85,6 +85,23 @@ def test_prefixed_keyword_id_passes() -> None:
     assert validate_mermaid(text) == []
 
 
+def test_flowchart_non_node_lines_are_ignored() -> None:
+    """Blank/comment/style lines that match neither a node, click nor an edge
+    are skipped without inventing a bad id (no false positive)."""
+    text = "\n".join(
+        [
+            "graph LR",
+            "    %% a comment line",
+            "",
+            "    classDef healthy fill:#0f0",
+            "    n_ok[ok]",
+            "    class n_ok healthy",
+        ]
+    )
+    # Only the valid `n_ok` node is collected; nothing flagged.
+    assert validate_mermaid(text) == []
+
+
 # ---------------------------------------------------------------------------
 # C4 Rel integrity
 # ---------------------------------------------------------------------------

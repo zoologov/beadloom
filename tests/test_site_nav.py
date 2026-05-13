@@ -197,6 +197,67 @@ def test_documentation_group_empty_when_no_docs(tmp_path: Path) -> None:
     assert '"Documentation"' in js
 
 
+def test_documentation_group_prunes_empty_dirs(tmp_path: Path) -> None:
+    """A docs subdir with no markdown (directly or nested) emits no group."""
+    (tmp_path / "docs" / "empty" / "deeper").mkdir(parents=True)
+    (tmp_path / "docs" / "guides").mkdir()
+    (tmp_path / "docs" / "guides" / "intro.md").write_text("# Intro\n", encoding="utf-8")
+    js = render_documentation_group(tmp_path)
+    # The non-empty dir is a group; the empty dir tree is pruned (no dead group).
+    assert '"Guides"' in js
+    assert '"Empty"' not in js
+    assert '"Deeper"' not in js
+
+
+def test_documentation_group_skips_dotfiles_and_dotdirs(tmp_path: Path) -> None:
+    """Hidden ``.md`` files and hidden subdirectories are excluded from nav."""
+    (tmp_path / "docs" / ".hidden").mkdir(parents=True)
+    (tmp_path / "docs" / ".hidden" / "secret.md").write_text("# x\n", encoding="utf-8")
+    (tmp_path / "docs" / ".dotfile.md").write_text("# x\n", encoding="utf-8")
+    (tmp_path / "docs" / "visible.md").write_text("# Visible\n", encoding="utf-8")
+    js = render_documentation_group(tmp_path)
+    assert 'link: "/docs/visible"' in js
+    assert "dotfile" not in js
+    assert "secret" not in js
+    assert "Hidden" not in js
+
+
+def test_documentation_links_resolve_to_existing_docs(tmp_path: Path) -> None:
+    """Every emitted doc nav link maps to a real ``.md`` under docs/ (no dead nav)."""
+    _seed_docs(tmp_path)
+    js = render_documentation_group(tmp_path)
+    docs_dir = tmp_path / "docs"
+    for line in js.splitlines():
+        stripped = line.strip()
+        if 'link: "/docs/' not in stripped:
+            continue
+        url = stripped.split('link: "', 1)[1].split('"', 1)[0]
+        rel = url[len("/docs/") :]
+        if not rel:  # the /docs/ landing link has no backing .md
+            continue
+        assert (docs_dir / f"{rel}.md").is_file(), f"dead doc nav link: {url}"
+
+
+def test_architecture_links_resolve_to_existing_nodes(conn: sqlite3.Connection) -> None:
+    """Every emitted Architecture nav link targets a real node page kind (no dead nav)."""
+    js = render_architecture_group(conn)
+    node_kinds = {
+        str(row["ref_id"]): str(row["kind"])
+        for row in conn.execute("SELECT ref_id, kind FROM nodes").fetchall()
+    }
+    kind_dir = {"service": "services", "domain": "domains", "feature": "features"}
+    for line in js.splitlines():
+        stripped = line.strip()
+        if "link:" not in stripped or "/index" in stripped:
+            continue
+        url = stripped.split('link: "', 1)[1].split('"', 1)[0]
+        parts = url.strip("/").split("/")
+        assert len(parts) == 2, url
+        directory, ref = parts
+        assert ref in node_kinds, f"dead arch nav link to unknown node: {url}"
+        assert kind_dir[node_kinds[ref]] == directory, f"wrong dir for {ref}: {url}"
+
+
 # ---------------------------------------------------------------------------
 # Full config — deterministic, all sections present
 # ---------------------------------------------------------------------------

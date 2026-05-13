@@ -765,3 +765,144 @@ def test_dashboard_md_lists_alerts_in_text_fallback(tmp_path: Path) -> None:
     assert "Attention" in md
     for a in alerts:
         assert str(a["message"]) in md
+
+
+# ---------------------------------------------------------------------------
+# Helper-level unit tests — defensive + threshold branches (pure, no DB/node)
+# ---------------------------------------------------------------------------
+
+
+def test_contract_alerts_handles_malformed_payload() -> None:
+    """A non-dict payload, a missing/non-list ``contracts``, and non-dict items
+    all degrade to no alerts (honest: only real verdicts count)."""
+    from beadloom.application.site_dashboard import _contract_alerts
+
+    assert _contract_alerts(None) == []
+    assert _contract_alerts({"contracts": "nope"}) == []
+    assert _contract_alerts({}) == []
+    # Non-dict items are skipped; only the recognised verdict produces an alert.
+    payload: dict[str, object] = {"contracts": ["x", 1, {"verdict": "drift"}]}
+    alerts = _contract_alerts(payload)
+    assert len(alerts) == 1
+    assert alerts[0]["severity"] == "error"
+    assert "DRIFT" in str(alerts[0]["message"])
+
+
+def test_contract_alerts_drift_only_has_no_breaking() -> None:
+    from beadloom.application.site_dashboard import _contract_alerts
+
+    alerts = _contract_alerts({"contracts": [{"verdict": "drift"}, {"verdict": "drift"}]})
+    # Only a DRIFT alert (no BREAKING) — the breaking branch is skipped.
+    assert [a["kind"] for a in alerts] == ["contract"]
+    assert "2 DRIFT" in str(alerts[0]["message"])
+
+
+def test_build_alerts_each_problem_class_emits_one_alert() -> None:
+    from beadloom.application.site_dashboard import _build_alerts
+
+    alerts = _build_alerts(
+        lint_data={"errors": 0},
+        debt_data={"severity": "critical", "debt_score": 91},
+        docs_data={"stale": 3},
+        doctor_data={"errors": 2},
+        federated_payload=None,
+    )
+    kinds = {str(a["kind"]) for a in alerts}
+    # doctor error, stale doc, and critical debt each surface exactly once.
+    assert kinds == {"doctor", "stale_doc", "debt"}
+    # Severity-ordered: critical debt leads over error doctor over warn stale.
+    rank = {"critical": 0, "error": 1, "warn": 2}
+    severities = [str(a["severity"]) for a in alerts]
+    assert severities == sorted(severities, key=lambda s: rank.get(s, 9))
+
+
+def test_build_alerts_low_debt_is_not_alerted() -> None:
+    from beadloom.application.site_dashboard import _build_alerts
+
+    alerts = _build_alerts(
+        lint_data={"errors": 0},
+        debt_data={"severity": "medium", "debt_score": 40},
+        docs_data={"stale": 0},
+        doctor_data={"errors": 0},
+        federated_payload=None,
+    )
+    # medium debt is below the alert threshold -> all-clear.
+    assert alerts == []
+
+
+@pytest.mark.parametrize(
+    ("severity", "expected"),
+    [("critical", "error"), ("high", "error"), ("medium", "warn"), ("low", "ok"), ("", "ok")],
+)
+def test_debt_card_threshold_status(severity: str, expected: str) -> None:
+    from beadloom.application.site_dashboard import _debt_card
+
+    card = _debt_card({"severity": severity, "debt_score": 10})
+    assert card["status"] == expected
+    assert card["group"] == "debt"
+
+
+@pytest.mark.parametrize(
+    ("stale", "coverage", "expected"),
+    [(2, 95.0, "warn"), (0, 50.0, "warn"), (0, 80.0, "ok"), (0, 100.0, "ok")],
+)
+def test_docs_card_threshold_status(stale: int, coverage: float, expected: str) -> None:
+    from beadloom.application.site_dashboard import _docs_card
+
+    card = _docs_card({"stale": stale, "coverage_pct": coverage, "tracked_pairs": 5})
+    assert card["status"] == expected
+
+
+@pytest.mark.parametrize(
+    ("errors", "warnings", "expected"),
+    [(1, 0, "error"), (0, 2, "warn"), (0, 0, "ok")],
+)
+def test_doctor_card_threshold_status(errors: int, warnings: int, expected: str) -> None:
+    from beadloom.application.site_dashboard import _doctor_card
+
+    card = _doctor_card({"errors": errors, "warnings": warnings, "passed": errors == 0})
+    assert card["status"] == expected
+
+
+@pytest.mark.parametrize(
+    ("breaking", "drift", "expected"),
+    [(1, 0, "error"), (0, 3, "warn"), (0, 0, "ok")],
+)
+def test_federated_card_threshold_status(
+    breaking: int, drift: int, expected: str
+) -> None:
+    from beadloom.application.site_dashboard import _federated_card
+
+    card = _federated_card(
+        {"contract_verdicts": {"breaking": breaking, "drift": drift}, "contract_count": 4}
+    )
+    assert card["status"] == expected
+
+
+def test_node_link_falls_back_to_dashboard_for_empty_ref() -> None:
+    from beadloom.application.site_dashboard import _node_link
+
+    assert _node_link(None) == "/dashboard"
+    assert _node_link("") == "/dashboard"
+    assert _node_link("graph") == "/dashboard#graph"
+
+
+def test_contract_recommendations_handles_malformed_payload() -> None:
+    from beadloom.application.site_dashboard import _contract_recommendations
+
+    assert _contract_recommendations(None) == []
+    assert _contract_recommendations({"contracts": "nope"}) == []
+    # Non-dict item + healthy verdict are skipped; only the unhealthy one stays.
+    recs = _contract_recommendations(
+        {
+            "contracts": [
+                "skip-me",
+                {"verdict": "confirmed", "contract_key": "ok"},
+                {"verdict": "breaking", "contract_key": "amqp:X"},
+            ]
+        }
+    )
+    assert len(recs) == 1
+    assert recs[0]["severity"] == "error"
+    assert recs[0]["target"] == "amqp:X"
+    assert recs[0]["link"] == "/landscape"

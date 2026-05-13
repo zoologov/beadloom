@@ -245,6 +245,34 @@ def test_local_landscape_contract_edge_confirmed(tmp_path: Path) -> None:
     assert "healthy" in md
 
 
+def test_local_landscape_drops_self_loop(tmp_path: Path) -> None:
+    """A contract whose producer == consumer emits no self-edge.
+
+    Guards the ``src == dst`` skip: a node that both produces and consumes the
+    same contract participates as a node but must not draw an edge to itself.
+    """
+    conn = _open()
+    try:
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("self-node", "service", "Self producer/consumer.", "src/x"),
+        )
+        # The same node both produces and consumes the same contract key.
+        for kind in ("produces", "consumes"):
+            conn.execute(
+                "INSERT INTO edges (src_ref_id, dst_ref_id, kind, contract_key) "
+                "VALUES (?, ?, ?, ?)",
+                ("self-node", "self-node", kind, "topic:loop"),
+            )
+        conn.commit()
+        data = build_landscape_data(conn=conn, federated=None)
+    finally:
+        conn.close()
+    # The node participates, but there is no self-edge (src == dst skipped).
+    assert {n["id"] for n in data["nodes"]} == {"self-node"}
+    assert data["edges"] == []
+
+
 def test_local_landscape_no_contracts_is_empty(tmp_path: Path) -> None:
     """A graph with no produces/consumes contracts yields an empty contract map."""
     conn = _open()
