@@ -661,85 +661,6 @@ def serialize_dashboard_data(data: dict[str, object]) -> str:
     return json.dumps(data, sort_keys=True, indent=2, ensure_ascii=False) + "\n"
 
 
-def _lint_section(lint_data: dict[str, object]) -> list[str]:
-    return [
-        "## Lint",
-        "",
-        f"- Violations: {lint_data['violations']} "
-        f"({lint_data['errors']} errors, {lint_data['warnings']} warnings)",
-        "",
-    ]
-
-
-def _debt_section(debt_data: dict[str, object]) -> list[str]:
-    lines = [
-        "## Debt",
-        "",
-        f"- Score: {debt_data['debt_score']} / 100 ({debt_data['severity']})",
-        "",
-    ]
-    categories = debt_data.get("categories", [])
-    if isinstance(categories, list) and categories:
-        lines.append("### Categories")
-        lines.append("")
-        for cat in categories:
-            if isinstance(cat, dict):
-                lines.append(f"- {cat.get('name')}: {cat.get('score')}")
-        lines.append("")
-    return lines
-
-
-def _docs_section(docs_data: dict[str, object]) -> list[str]:
-    return [
-        "## Documentation",
-        "",
-        f"- Coverage: {docs_data['coverage_pct']}% "
-        f"({docs_data['documented']}/{docs_data['nodes']} nodes)",
-        f"- Freshness: {docs_data['freshness_pct']}% "
-        f"({docs_data['stale']} stale of {docs_data['tracked_pairs']} tracked)",
-        "",
-    ]
-
-
-def _doctor_section(doctor_data: dict[str, object]) -> list[str]:
-    status = "PASS" if doctor_data["passed"] else "FAIL"
-    return [
-        "## Doctor",
-        "",
-        f"- Integrity: {status} "
-        f"({doctor_data['errors']} errors, {doctor_data['warnings']} warnings "
-        f"across {doctor_data['total']} checks)",
-        "",
-    ]
-
-
-def _federated_section(rollup: dict[str, object]) -> list[str]:
-    lines = [
-        "## Federated landscape",
-        "",
-        f"- {rollup['repo_count']} services, {rollup['edge_count']} cross-repo edges, "
-        f"{rollup['contract_count']} contracts",
-        "",
-        "### Contract verdicts",
-        "",
-    ]
-    contract_verdicts = rollup.get("contract_verdicts", {})
-    if isinstance(contract_verdicts, dict):
-        for verdict, count in contract_verdicts.items():
-            lines.append(f"- {verdict.upper()}: {count}")
-    lines.append("")
-    lines.append("### Service health")
-    lines.append("")
-    services = rollup.get("services", [])
-    if isinstance(services, list):
-        for svc in services:
-            if isinstance(svc, dict):
-                badge = "healthy" if svc.get("healthy") else "at risk"
-                lines.append(f"- {svc.get('repo')}: {badge}")
-    lines.append("")
-    return lines
-
-
 def _widgets_section() -> list[str]:
     """Mount the committed widgets — critical-first (banner + cards lead).
 
@@ -747,9 +668,10 @@ def _widgets_section() -> list[str]:
     (``StatusCards``) signal problems first; the ECharts widgets (BEAD-04) follow.
     Each widget loads ``dashboard.data.json`` (emitted alongside this page) and
     renders client-side. The numbers/states it shows are exactly the serialized
-    data values — the front-end never invents a figure or a severity. With JS
-    disabled the widgets render nothing and the honest textual summary below
-    (attention list / all-clear + status table) remains the source of truth.
+    data values — the front-end never invents a figure or a severity. These
+    ``ClientOnly`` mounts are the single presentation surface for the dashboard
+    (BEAD-12: the verbose textual metric dump was removed); the honest data lives
+    in ``dashboard.data.json``, computed by ``build_dashboard_data`` (unchanged).
     """
     return [
         "<ClientOnly>",
@@ -764,53 +686,14 @@ def _widgets_section() -> list[str]:
     ]
 
 
-def _attention_section(alerts: list[dict[str, object]]) -> list[str]:
-    """Honest text fallback for the attention banner (JS-disabled).
-
-    Lists exactly the real problems (severity-ordered, as computed in Python) or
-    a single green all-clear line when there is nothing wrong.
-    """
-    if not alerts:
-        return [
-            "> **All clear** — no breaking/drift contracts, lint errors, stale "
-            "docs, doctor errors or high debt.",
-            "",
-        ]
-    lines = ["## Attention", "", "The following problems need attention:", ""]
-    for a in alerts:
-        sev = str(a.get("severity", "")).upper()
-        lines.append(f"- **{sev}** — {a.get('message')}")
-    lines.append("")
-    return lines
-
-
-def _status_cards_section(cards: list[dict[str, object]]) -> list[str]:
-    """Honest text fallback for the threshold-colored status cards (a table)."""
-    lines = ["## Status", "", "| Group | Status | Value | Detail |", "| --- | --- | --- | --- |"]
-    indicator = {"ok": "🟢 ok", "warn": "🟡 warn", "error": "🔴 error"}
-    for c in cards:
-        status = indicator.get(str(c.get("status", "")), str(c.get("status", "")))
-        lines.append(
-            f"| {c.get('label')} | {status} | {c.get('value')} | {c.get('detail')} |"
-        )
-    lines.append("")
-    return lines
-
-
 def render_dashboard_md(data: dict[str, object]) -> str:
     """Render the human ``dashboard.md`` page from the dashboard data.
 
-    Every figure is taken verbatim from *data* (the same dict serialized to
-    ``dashboard.data.json``) — the page never recomputes a metric.
+    The page is the title + a short intro + the ``ClientOnly`` component mounts.
+    The widgets are the single presentation surface; they read the honest figures
+    from ``dashboard.data.json`` (this function never recomputes a metric, and
+    ``build_dashboard_data`` — the source of those figures — is unchanged).
     """
-    lint_data = data["lint"]
-    debt_data = data["debt"]
-    docs_data = data["docs"]
-    doctor_data = data["doctor"]
-    federated = data["federated"]
-    alerts = data.get("alerts", [])
-    status_cards = data.get("status_cards", [])
-
     lines: list[str] = [
         "---",
         "title: Metrics dashboard",
@@ -824,19 +707,4 @@ def render_dashboard_md(data: dict[str, object]) -> str:
         "",
     ]
     lines.extend(_widgets_section())
-    assert isinstance(lint_data, dict)
-    assert isinstance(debt_data, dict)
-    assert isinstance(docs_data, dict)
-    assert isinstance(doctor_data, dict)
-    assert isinstance(alerts, list)
-    assert isinstance(status_cards, list)
-    # Critical-first: attention banner + status cards lead the text fallback.
-    lines.extend(_attention_section(alerts))
-    lines.extend(_status_cards_section(status_cards))
-    lines.extend(_lint_section(lint_data))
-    lines.extend(_debt_section(debt_data))
-    lines.extend(_docs_section(docs_data))
-    lines.extend(_doctor_section(doctor_data))
-    if isinstance(federated, dict):
-        lines.extend(_federated_section(federated))
     return "\n".join(lines) + "\n"

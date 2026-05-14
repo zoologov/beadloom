@@ -295,7 +295,13 @@ def test_dashboard_data_json_matches_build(tmp_path: Path) -> None:
     assert written == expected
 
 
-def test_dashboard_md_renders_numbers_from_data(tmp_path: Path) -> None:
+def test_dashboard_md_is_title_intro_plus_mounts_only(tmp_path: Path) -> None:
+    """The page is just the title + a short intro + the component mounts.
+
+    BEAD-12 (owner decision): the verbose per-metric text dump is gone — the
+    cards/widgets are the single presentation surface. The page keeps the title
+    and a one-line intro, then mounts the ClientOnly components.
+    """
     project = _make_project(tmp_path, with_violation=True)
     conn = _open(project)
     try:
@@ -304,17 +310,12 @@ def test_dashboard_md_renders_numbers_from_data(tmp_path: Path) -> None:
         conn.close()
     md = render_dashboard_md(data)
     assert "# Metrics dashboard" in md
-    assert "Lint" in md
-    assert "Debt" in md
-    assert "Documentation" in md
-    assert "Doctor" in md
-    # The lint error count is rendered verbatim from the data.
-    assert str(data["lint"]["errors"]) in md
+    assert "<ClientOnly>" in md
 
 
 # ---------------------------------------------------------------------------
-# Widget mounting (BEAD-04): the page mounts the ECharts widgets AND still
-# carries the honest textual values (graceful when JS is disabled).
+# Widget mounting (BEAD-04): the page mounts the ECharts widgets. The verbose
+# textual metric dump is removed (BEAD-12) — widgets are the single surface.
 # ---------------------------------------------------------------------------
 
 
@@ -331,8 +332,12 @@ def test_dashboard_md_mounts_echarts_widgets(tmp_path: Path) -> None:
         assert tag in md, f"dashboard.md must mount {tag} ... />"
 
 
-def test_dashboard_md_keeps_honest_values_alongside_widgets(tmp_path: Path) -> None:
-    """The honest textual summary survives — numbers come from the data, not JS."""
+def test_dashboard_md_has_no_verbose_text_dump(tmp_path: Path) -> None:
+    """The verbose per-metric text dump is gone — widgets are the only surface.
+
+    BEAD-12 (owner decision): no per-metric text block, no noscript. The page is
+    the title/intro + the ClientOnly mounts; the cards/widgets present the data.
+    """
     project = _make_project(tmp_path, with_violation=True)
     conn = _open(project)
     try:
@@ -342,13 +347,27 @@ def test_dashboard_md_keeps_honest_values_alongside_widgets(tmp_path: Path) -> N
     md = render_dashboard_md(data)
     # Widgets mounted...
     assert "<HealthGauges" in md
-    # ...and the verbatim gate figures are STILL present (JS-disabled fallback).
+    # ...and the verbose textual metric sections are gone.
+    for heading in (
+        "## Lint",
+        "## Debt",
+        "### Categories",
+        "## Documentation",
+        "## Doctor",
+        "## Status",
+        "## Attention",
+        "## Federated landscape",
+    ):
+        assert heading not in md, f"verbose dump section {heading!r} must be gone"
+    assert "All clear" not in md
+    assert "<noscript" not in md
+    # build_dashboard_data is unchanged — the honest figures are still computed.
     lint_data = data["lint"]
     docs_data = data["docs"]
     assert isinstance(lint_data, dict)
     assert isinstance(docs_data, dict)
-    assert str(lint_data["violations"]) in md
-    assert f"{docs_data['coverage_pct']}%" in md
+    assert "violations" in lint_data
+    assert "coverage_pct" in docs_data
 
 
 def test_dashboard_md_is_deterministic(tmp_path: Path) -> None:
@@ -738,8 +757,12 @@ def test_dashboard_md_mounts_alert_banner(tmp_path: Path) -> None:
     assert "<StatusCards" in md
 
 
-def test_dashboard_md_all_clear_text_when_clean(tmp_path: Path) -> None:
-    """The honest text fallback shows an all-clear line when there are no alerts."""
+def test_dashboard_md_no_alert_text_dump_but_data_honest(tmp_path: Path) -> None:
+    """No textual alert dump (BEAD-12); the AlertBanner mount drives presentation.
+
+    When clean, the data carries an empty ``alerts`` list (honest all-clear) and
+    the page carries no "All clear" text — the AlertBanner renders it client-side.
+    """
     project = _make_project(tmp_path, with_violation=False)
     conn = _open(project)
     try:
@@ -747,11 +770,16 @@ def test_dashboard_md_all_clear_text_when_clean(tmp_path: Path) -> None:
     finally:
         conn.close()
     md = render_dashboard_md(data)
-    assert "All clear" in md
+    assert "<AlertBanner" in md
+    assert "All clear" not in md
+    # Data is unchanged: a clean project yields an empty alerts list.
+    assert data["alerts"] == []
 
 
-def test_dashboard_md_lists_alerts_in_text_fallback(tmp_path: Path) -> None:
-    """When problems exist, the honest text fallback names each alert."""
+def test_dashboard_md_no_alert_messages_in_page_but_data_carries_them(
+    tmp_path: Path,
+) -> None:
+    """Alert messages live only in the data (for the widget), not in page text."""
     project = _make_project(tmp_path, with_violation=True)
     fed = _federated_json(tmp_path)
     conn = _open(project)
@@ -762,9 +790,11 @@ def test_dashboard_md_lists_alerts_in_text_fallback(tmp_path: Path) -> None:
     md = render_dashboard_md(data)
     alerts = data["alerts"]
     assert isinstance(alerts, list)
-    assert "Attention" in md
+    assert alerts, "a project with a violation should produce alerts in the data"
+    assert "## Attention" not in md
+    # The honest messages are NOT dumped into the page (only the AlertBanner mount).
     for a in alerts:
-        assert str(a["message"]) in md
+        assert str(a["message"]) not in md
 
 
 # ---------------------------------------------------------------------------
