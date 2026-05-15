@@ -192,7 +192,7 @@
     {
       "kind": "lint",
       "link": "/dashboard#application",
-      "message": "Node 'application' has 224 symbols (max 200): rule 'domain-size-limit' — `application` exceeds its limit (Node 'application' has 224 symbols (max 200): rule 'domain-size-limit'); split it into smaller nodes",
+      "message": "Node 'application' has 217 symbols (max 200): rule 'domain-size-limit' — `application` exceeds its limit (Node 'application' has 217 symbols (max 200): rule 'domain-size-limit'); split it into smaller nodes",
       "severity": "warn",
       "target": "application"
     },
@@ -304,6 +304,36 @@
       "symbols": 782,
       "sync_pct": 100.0,
       "ts": "2026-06-02T07:34:00.917440+00:00"
+    },
+    {
+      "coverage_pct": 96.0,
+      "debt_score": 15.0,
+      "edges": 76,
+      "lint_violations": 2,
+      "nodes": 25,
+      "symbols": 782,
+      "sync_pct": 100.0,
+      "ts": "2026-06-02T07:46:08.406332+00:00"
+    },
+    {
+      "coverage_pct": 96.0,
+      "debt_score": 15.0,
+      "edges": 76,
+      "lint_violations": 2,
+      "nodes": 25,
+      "symbols": 782,
+      "sync_pct": 100.0,
+      "ts": "2026-06-02T07:46:14.855340+00:00"
+    },
+    {
+      "coverage_pct": 96.0,
+      "debt_score": 15.0,
+      "edges": 76,
+      "lint_violations": 2,
+      "nodes": 25,
+      "symbols": 775,
+      "sync_pct": 100.0,
+      "ts": "2026-06-02T07:57:15.399566+00:00"
     }
   ]
 }
