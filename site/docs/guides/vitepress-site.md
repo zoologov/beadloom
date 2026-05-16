@@ -6,9 +6,16 @@ humans *and* agents. It is the F4 "Living Knowledge Base + Visual Landscape"
 deliverable of Strategy 3.
 
 > **Beadloom produces, VitePress renders.** Beadloom emits a deterministic
-> Markdown/config content tree; VitePress (a static site generator) renders it.
-> There is no live server, no SaaS, and no LLM in this path — freshness comes
-> from rebuilding on push, the same way `beadloom ci` keeps the graph honest.
+> Markdown/config content tree (plus a `dashboard.data.json` data file);
+> committed Vue/ECharts components and VitePress (a static site generator) render
+> it client-side. There is no live server, no SaaS, and no LLM in this path —
+> freshness comes from rebuilding on push, the same way `beadloom ci` keeps the
+> graph honest.
+
+> **Build green ≠ renders ok.** A generation-time Mermaid validity guard rejects
+> the diagram bug classes that crash the browser render *during generation /
+> pytest* — no green `vitepress build` can hide a broken page (see the guard
+> section below).
 
 ## What it generates
 
@@ -23,41 +30,108 @@ Reading the graph **read-only**, the command writes the following under `--out`
 |--------|----------|------------|
 | `index.md` | — | Architecture overview: node counts, the top-level C4/Mermaid diagram, a health summary line. |
 | `domains/<ref>.md`, `services/<ref>.md`, `features/<ref>.md` | Architecture | One page per node: summary, source, public symbols, `part_of`/`depends_on`/`uses` edges as links, linked docs, an embedded scoped C4/Mermaid diagram. |
-| `dashboard.md` + `dashboard.data.json` | **A — metrics dashboard** | AaC/DocAsCode metrics. |
-| `landscape.md` | **B — 🌟 landscape map** | The federated contract graph as an interactive Mermaid diagram. |
+| `dashboard.md` + `dashboard.data.json` | **A — metrics dashboard** | An interactive ECharts dashboard: a critical-first alert banner + status cards, gauges, category charts, honest trends, and a recommendations panel. |
+| `landscape.md` | **B — 🌟 landscape map** | The contract graph as an interactive (pan/zoom/fullscreen) Mermaid diagram. |
 | `docs/**` + `docs/index.md` | **C — published validated docs** | The real `docs/` tree, copied verbatim, with per-doc freshness badges. |
 | `.vitepress/config.generated.mjs` | — | Nav/sidebar config imported by the committed scaffold; sections Dashboard / Architecture / Landscape / Documentation. |
 
-### Showcase A — AaC/DocAsCode metrics dashboard
+### Showcase A — interactive ECharts metrics dashboard
 
-`dashboard.md` (human page) + `dashboard.data.json` (machine data) surface lint
-violations and severity breakdown, the debt score and its trend, doc coverage,
-`sync-check` freshness % and stale count, the `doctor` pass/fail summary, and —
-when `--federated` is given — a per-service edge-verdict + contract-verdict
-rollup.
+Beadloom emits a deterministic data file (`dashboard.data.json`) and a thin
+`dashboard.md` page; committed Vue/ECharts components render it interactively in
+the browser. The page itself is **just a title, a short intro, and the component
+mounts** — there is no verbose per-metric text dump (it was removed in F4.4) and
+no `<noscript>` fallback. The widgets, reading the honest data file, are the
+single presentation surface:
+
+- **`AlertBanner`** + **`StatusCards`** — the **critical-first** UX, shown at the
+  top. `alerts` are the attention-banner problems (BREAKING contracts lead, then
+  DRIFT / lint errors / doctor errors, then stale-doc / high-debt warnings),
+  shown IFF something is wrong (an empty list = the all-clear state). `status_cards`
+  is one threshold-coloured card per metric group (`ok`/`warn`/`error`, the
+  severity computed deterministically in Python — the front-end only paints it).
+- **`HealthGauges`** — gauges for lint, debt, coverage %, and freshness %.
+- **`CategoryChart`** — debt-by-category and lint-by-severity breakdowns.
+- **`TrendCharts`** — line charts over the recorded `trends` series; with fewer
+  than two recorded points it shows an honest "not enough history yet" empty
+  state (no fabricated line).
+- **`Recommendations`** — the prioritized, actionable `recommendations` list
+  (one item per lint violation, BREAKING/DRIFT contract risks, stale docs, worst-
+  debt nodes), severity-ordered, each row linking to the relevant page.
+
+**Honest trends.** `trends` is the time-series recorded in the additive
+`.beadloom/metrics_history.json` append-log (seeded day-one from the existing
+`graph_snapshots` history). It carries ONLY real recorded points — sparse at
+first, growing one point per `docs site` run — with NO interpolation and NO
+fabricated samples; every timestamp is a stored value, never wall-clock `now()`.
 
 **Honest by construction.** Every figure comes from the *same code path* as the
 gate that owns it: `lint` (`graph/linter.lint`), debt (`debt_report`), docs
-(`doc_sync` `sync_state`), `doctor` (`doctor.run_checks`), and the federated
-rollup (the `federate` output, verbatim). The dashboard cannot show a number the
-gate disagrees with — it is the gate, rendered. The page never invents a figure
-the data dict does not contain.
+(`doc_sync` `sync_state`), `doctor` (`doctor.run_checks`), and — when `--federated`
+is given — the `federate` output verbatim (a per-service edge-verdict +
+contract-verdict rollup). The dashboard cannot show a number the gate disagrees
+with — it is the gate, rendered. The widgets never invent a figure the
+`dashboard.data.json` does not contain.
+
+### The generation-time Mermaid guard
+
+Every Mermaid diagram Beadloom emits (the top-level and per-node C4 diagrams, the
+landscape map) is run through a structural validity guard
+(`application/site_mermaid_guard.validate_mermaid`) **before the page is written**.
+The guard is a targeted set of structural validators (not a full Mermaid parser)
+covering the two F4 render bug classes:
+
+1. **Reserved-id / charset** — a flowchart/`graph` node id that equals a reserved
+   Mermaid keyword (e.g. a node literally named `graph`, which produced the
+   "got GRAPH" parse crash) or uses an illegal charset.
+2. **C4 Rel integrity** — a `Rel(a, b, …)` whose endpoint is not a declared
+   diagram node (a Rel to the boundary/`System` root, which crashed `drawRels`).
+
+A structurally broken diagram raises `MermaidValidationError` and **fails
+generation (and pytest)** instead of shipping a page that crashes the browser —
+closing the "build green ≠ renders ok" gap. The two F4 bugs were fixed at the
+source (landscape ids are now prefixed `n_<sanitized>`; C4 emits a `Rel` only
+between declared nodes, dropping — and logging — undrawable Rels safely, since
+the relationship still lives in the graph and the landscape map), and the guard
+keeps the bug classes from regressing.
+
+### Interactive diagrams — pan / zoom / fullscreen
+
+All rendered Mermaid SVGs get pan + wheel-zoom + reset (via `svg-pan-zoom`) and a
+Fullscreen toggle, applied by a global `DiagramViewer` theme component that scans
+each page (and re-scans on route change, since Mermaid renders async). It is
+SSR-safe and renders no markup of its own, so a JS-disabled viewer still gets the
+static diagram.
 
 ### Showcase B — 🌟 the cross-repo landscape map
 
-`landscape.md` renders the federated contract graph (F2) as a **Mermaid**
-diagram:
+`landscape.md` renders the **contract graph** as a **Mermaid** diagram (with
+pan/zoom/fullscreen, like every diagram on the site):
 
+- **Without `--federated` (default — the local contract graph):** the map is the
+  *repo's own* contract reality, not its structural arch. It reads the local
+  graph's `produces` / `consumes` edges, reconciles them by `contract_key` into
+  `Contract`s, classifies each to a verdict, and renders one edge per
+  producer→consumer coloured by that verdict. Beadloom's own site, for example,
+  models `beadloom --produces--> vitepress-site` and `vitepress-site --consumes-->
+  beadloom` (sharing the `site-data:site-bundle` contract), so the local map is a
+  single **`beadloom → vitepress-site` CONFIRMED** edge. A repo with no contracts
+  renders an empty map. (The structural `depends_on` / `uses` arch lives in the
+  C4 overview, not here.)
 - **With `--federated federated.json`** (a `beadloom federate` hub artifact):
   nodes are the satellite services and edges are the cross-repo contract links,
   each carrying the hub's verdict (`CONFIRMED` / `BREAKING` / `ORPHANED_CONSUMER`
   / `UNDECLARED_PRODUCER` / `EXTERNAL` / `DRIFT` / …) verbatim.
-- **Without it:** the map degenerates to a single landscape built from the local
-  graph (`uses` / `depends_on` edges, all `confirmed`).
 
 Edges are labelled by their verdict; a Mermaid `classDef` health overlay colours
 nodes (green = healthy, red = broken, grey = external/expected) and broken edges
-get a red `linkStyle`. Each node is clickable, linking to its intra-repo page.
+get a red `linkStyle`.
+
+**Safe clicks (no 404s).** A node is clickable to its intra-repo page ONLY when a
+page was actually generated for it (`existing_page_urls` maps page-bearing kinds —
+`service` / `domain` / `feature` — to `/<dir>/<ref>`). A node with no page (a
+`site` node, or a foreign federated repo) renders without a click, so the map
+never links to a dead URL.
 
 This is the *thin slice*: Mermaid only (clickable). A richer JS graph library
 (Cytoscape / D3) is a follow-up — no schema bump was needed for the Mermaid map.
@@ -85,12 +159,31 @@ structure, and injects a per-doc validation badge into the **copy only**:
 mutated; there is no AI prose-rewriting (that is the deferred F4.1 follow-up).
 Badges come from `doc_sync`, not from a model.
 
+### Navigation trees
+
+`.vitepress/config.generated.mjs` carries two nested sidebar trees (deterministic,
+sorted, byte-stable, with no dead links):
+
+- **Architecture** — a `collapsed`, `part_of`-nested tree (service root → domains →
+  features) with **human-readable** labels (`context-oracle` → "Context Oracle");
+  roots are nodes with no real `part_of` parent (a `root part_of root` self-edge is
+  ignored so the root service isn't dropped). An "Architecture overview" entry stays
+  on top, and every link resolves to a node page.
+- **Documentation** — mirrors the `docs/` directory tree as a nested, collapsible
+  structure (each subdir a group, each `.md` a `/docs/`-rooted leaf link).
+
+Dashboard and Landscape stay flat.
+
 ## Building and previewing
 
-The committed VitePress **scaffold** (`site/package.json`, `site/.vitepress/config.mjs`)
-renders the generated content tree. The build output (`site/.vitepress/dist/`),
-the VitePress cache, and `site/node_modules/` are gitignored — only the scaffold
-and the generated, deterministic Markdown/config are committed.
+The committed VitePress **scaffold** (`site/package.json`,
+`site/.vitepress/config.mjs`, and the custom theme under
+`site/.vitepress/theme/` — `DiagramViewer` + the ECharts dashboard widgets, with
+`echarts` / `vue-echarts` / `svg-pan-zoom` pinned to exact versions) renders the
+generated content tree. The build output (`site/.vitepress/dist/`), the VitePress
+cache, and `site/node_modules/` are gitignored — only the scaffold and the
+generated, deterministic Markdown/config/data are committed. The Python generator
+and the Mermaid guard stay fully pytest-testable without Node.
 
 ```bash
 # 1. Generate the content tree from the indexed graph (run `beadloom reindex` first).
@@ -148,8 +241,12 @@ jobs:
 
 Identical graph → byte-identical tree: pages are sorted, frontmatter is stable,
 and no wall-clock value lands in the diffed output (the published-doc badge uses
-the stored `sync_state.synced_at`, not "now"). This makes the generated tree safe
-to commit and to diff in review, and makes a rebuilt site reproducible.
+the stored `sync_state.synced_at`, not "now"; the dashboard's `dashboard.data.json`
+— including `trends` and `recommendations` — and the generated Mermaid are sorted
+and byte-stable; the only wall-clock read is the metrics-history point appended to
+`.beadloom/metrics_history.json`, which never lands in a diffed dashboard field).
+This makes the generated tree safe to commit and to diff in review, and makes a
+rebuilt site reproducible.
 
 ## Where this fits — TUI vs VitePress
 
@@ -164,6 +261,13 @@ to commit and to diff in review, and makes a rebuilt site reproducible.
 - **Delivered (F4.2 / F4.3):** the `docs site` generator, all three showcases,
   and the committed VitePress scaffold — dogfooded by building Beadloom's own
   site (`vitepress build` exit 0).
+- **Hardened (F4.4):** render correctness (the two F4 Mermaid bugs fixed at the
+  source + the generation-time validity guard), pan/zoom/fullscreen on every
+  diagram, the interactive ECharts dashboard (critical-first banner + cards,
+  gauges, category charts, honest trends, recommendations — the old text dump
+  removed), and the local contract-graph landscape with safe (page-aware) clicks.
+  Dogfooded on Beadloom's own site (real `vitepress build` exit 0, render
+  browser-confirmed). F4 and F4.4 ship together.
 - **Deferred (F4.1):** the AI tech-writer in CI — orchestrating an *external*
   model to refresh drifted docs, scoped by `sync-check` / `docs polish --json`,
   with team review on a PR. The published-docs showcase intentionally does NOT

@@ -27,6 +27,12 @@ export default withMermaid({
   title: "Beadloom",
   description:
     "Living knowledge base: metrics dashboard, interactive architecture, and validated docs.",
+  // Served as a GitHub *project page* at https://<owner>.github.io/beadloom/.
+  // VitePress auto-prepends this base to markdown/nav links during build; the
+  // Mermaid `click "/services/…"` directives are raw strings the plugin does
+  // NOT rewrite, so DiagramViewer.vue prepends import.meta.env.BASE_URL to them
+  // at runtime (keeps the generated Markdown base-agnostic + deterministic).
+  base: "/beadloom/",
   lastUpdated: false,
   themeConfig: {
     nav,

@@ -16,8 +16,63 @@ const route = useRoute();
 const ATTACHED = "data-bl-pz"; // marks a container we've already enhanced
 const instances = [];
 
+// SVG xlink namespace — Mermaid renders flowchart `click <id> "<url>"`
+// directives as `<a xlink:href="<url>">` wrappers around the node group.
+const XLINK_NS = "http://www.w3.org/1999/xlink";
+
+// Root-absolute internal path prefixes the generator emits (base-agnostic).
+// A click target starting with one of these is an in-site page that must be
+// served under the configured base (e.g. `/beadloom/`).
+const INTERNAL_PREFIXES = ["/services/", "/domains/", "/features/", "/docs/"];
+
 function isBrowser() {
   return typeof window !== "undefined" && typeof document !== "undefined";
+}
+
+// Make a raw Mermaid click target base-aware. Pure + idempotent: a root-absolute
+// internal path gets `base` prepended exactly once; anything else (external URL,
+// in-page anchor, relative path, or a value already under `base`) is returned
+// unchanged. `base` is VitePress's configured base (e.g. "/beadloom/", always
+// trailing-slashed; "/" when unset).
+function baseAwareHref(raw, base) {
+  if (!raw || !base || base === "/") {
+    return raw;
+  }
+  const normBase = base.endsWith("/") ? base : `${base}/`;
+  if (raw.startsWith(normBase)) {
+    return raw; // already base-prefixed
+  }
+  const isInternal = INTERNAL_PREFIXES.some((p) => raw.startsWith(p));
+  if (!isInternal) {
+    return raw; // external / anchor / relative — leave untouched
+  }
+  // raw begins with "/", normBase ends with "/": join without doubling the slash.
+  return normBase + raw.slice(1);
+}
+
+// Rewrite every clickable anchor inside a rendered diagram so its target
+// resolves under the configured base. Mermaid stores the link in `xlink:href`
+// (SVG) and may mirror it in `href`; rewrite whichever is present.
+function rewriteClickTargets(svg, base) {
+  if (base === "/" || !base) {
+    return;
+  }
+  for (const anchor of Array.from(svg.querySelectorAll("a"))) {
+    const xlink = anchor.getAttributeNS(XLINK_NS, "href");
+    if (xlink) {
+      const next = baseAwareHref(xlink, base);
+      if (next !== xlink) {
+        anchor.setAttributeNS(XLINK_NS, "href", next);
+      }
+    }
+    const plain = anchor.getAttribute("href");
+    if (plain) {
+      const next = baseAwareHref(plain, base);
+      if (next !== plain) {
+        anchor.setAttribute("href", next);
+      }
+    }
+  }
 }
 
 function destroyAll() {
@@ -63,6 +118,13 @@ async function enhance(container, svgPanZoom) {
   }
   container.setAttribute(ATTACHED, "true");
   container.classList.add("bl-pz-frame");
+
+  // Base-aware click targets: VitePress rewrites markdown/nav links during the
+  // build, but Mermaid's raw `click "/services/…"` directives are not — so a
+  // diagram node would 404 at the site root under a project-page base. Prepend
+  // the configured base here, on the rendered SVG, so the Markdown stays
+  // base-agnostic + deterministic. (import.meta.env.BASE_URL is "/" when unset.)
+  rewriteClickTargets(svg, import.meta.env.BASE_URL);
 
   // svg-pan-zoom needs explicit dimensions on the SVG to compute its viewport.
   svg.style.maxWidth = "none";
