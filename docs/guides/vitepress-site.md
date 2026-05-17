@@ -198,39 +198,15 @@ beadloom federate service-a.json service-b.json   # writes .beadloom/federated.j
 beadloom docs site --out site --federated .beadloom/federated.json
 ```
 
-### Optional — deploy to GitHub Pages
+### Deploy to GitHub Pages
 
-A minimal workflow that rebuilds the site on every push to the default branch:
+Beadloom ships a ready deploy workflow: **`.github/workflows/deploy-site.yml`**. On every push to `main` (or manual `workflow_dispatch`) it regenerates the site from the graph (`beadloom reindex && beadloom docs site --out site`), runs `npm ci && npm run docs:build`, and publishes `site/.vitepress/dist` via `actions/upload-pages-artifact` + `actions/deploy-pages` (with `pages: write` + `id-token: write` and a `pages` concurrency group). Because CI regenerates the site, the published page never drifts from the code.
 
-```yaml
-# .github/workflows/docs-site.yml
-name: Docs Site
-on:
-  push:
-    branches: [main]
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-jobs:
-  build-deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      - run: pip install beadloom
-      - run: beadloom reindex && beadloom docs site --out site
-      - uses: actions/setup-node@v4
-        with: { node-version: "20" }
-      - run: cd site && npm ci && npm run docs:build
-      - uses: actions/upload-pages-artifact@v3
-        with: { path: site/.vitepress/dist }
-      - uses: actions/deploy-pages@v4
-```
+This repo is served as a **GitHub project page** at `https://zoologov.github.io/beadloom/`, so `site/.vitepress/config.mjs` sets `base: "/beadloom/"`. VitePress prepends that base to markdown/nav links at build time; Mermaid diagram `click` targets are raw strings the plugin does not rewrite, so `DiagramViewer.vue` prepends `import.meta.env.BASE_URL` to internal click hrefs at runtime (the generated Markdown stays base-agnostic).
 
-> Set VitePress's `base` option in `site/.vitepress/config.mjs` to your repo name
-> (e.g. `base: "/beadloom/"`) when deploying to a project Pages URL.
+**One-time setup (repo owner):** Settings → Pages → **Source = GitHub Actions**. Then the first push to `main` deploys the site.
+
+> For a user/organization page or a custom domain served at the root, drop `base` (defaults to `/`) — no other change needed; the base-aware click rewrite is a no-op when base is `/`.
 
 ## Determinism
 

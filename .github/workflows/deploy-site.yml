@@ -1,0 +1,77 @@
+name: Deploy VitePress site to GitHub Pages
+
+# Publishes the F4 VitePress showcase (dashboard + interactive architecture +
+# landscape + validated docs) as a GitHub project page at
+# https://zoologov.github.io/beadloom/ (base: '/beadloom/').
+#
+# Beadloom produces, VitePress renders: this workflow REGENERATES the site from
+# the graph each run (`beadloom docs site`) so the published site never drifts
+# from the code — then VitePress builds the static dist.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment; don't cancel an in-progress production deploy.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra languages
+
+      - name: Reindex graph
+        run: uv run beadloom reindex
+
+      - name: Generate the site from the graph
+        run: uv run beadloom docs site --out site
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install site dependencies
+        run: npm ci
+        working-directory: site
+
+      - name: Build the VitePress site
+        run: npm run docs:build
+        working-directory: site
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/.vitepress/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
