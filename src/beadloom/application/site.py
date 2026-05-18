@@ -323,8 +323,12 @@ def generate_site(
     dashboard_data = build_dashboard_data(
         conn, project_root=project_root, federated=federated
     )
+    # NOTE: the data file goes under `public/` so VitePress copies it verbatim
+    # into the built `dist/` root (it does NOT copy arbitrary srcDir files), so
+    # the widgets' runtime `withBase("/dashboard.data.json")` fetch resolves in
+    # the static build — not just under the dev server (BDL-043).
     _write(
-        out_dir / "dashboard.data.json",
+        out_dir / "public" / "dashboard.data.json",
         serialize_dashboard_data(dashboard_data),
         written,
     )

@@ -272,9 +272,9 @@ def test_generator_emits_dashboard_files(tmp_path: Path) -> None:
     finally:
         conn.close()
     assert (out / "dashboard.md").exists()
-    assert (out / "dashboard.data.json").exists()
+    assert (out / "public" / "dashboard.data.json").exists()
     assert (out / "dashboard.md") in result.written
-    assert (out / "dashboard.data.json") in result.written
+    assert (out / "public" / "dashboard.data.json") in result.written
 
 
 def test_dashboard_data_json_matches_build(tmp_path: Path) -> None:
@@ -291,7 +291,7 @@ def test_dashboard_data_json_matches_build(tmp_path: Path) -> None:
             conn2.close()
     finally:
         conn.close()
-    written = json.loads((out / "dashboard.data.json").read_text(encoding="utf-8"))
+    written = json.loads((out / "public" / "dashboard.data.json").read_text(encoding="utf-8"))
     assert written == expected
 
 
@@ -406,10 +406,10 @@ def test_dashboard_files_byte_identical_on_regenerate(tmp_path: Path) -> None:
         # Same injected ts both runs -> dedup-by-ts keeps the history (and thus
         # the diffed file) byte-identical.
         generate_site(conn, out, project_root=project, now_ts="2026-06-05T00:00:00+00:00")
-        first = (out / "dashboard.data.json").read_bytes()
+        first = (out / "public" / "dashboard.data.json").read_bytes()
         first_md = (out / "dashboard.md").read_bytes()
         generate_site(conn, out, project_root=project, now_ts="2026-06-05T00:00:00+00:00")
-        second = (out / "dashboard.data.json").read_bytes()
+        second = (out / "public" / "dashboard.data.json").read_bytes()
         second_md = (out / "dashboard.md").read_bytes()
     finally:
         conn.close()
@@ -442,7 +442,7 @@ def test_data_json_is_sorted_keys(tmp_path: Path, with_violation: bool) -> None:
         generate_site(conn, out, project_root=project)
     finally:
         conn.close()
-    raw = (out / "dashboard.data.json").read_text(encoding="utf-8")
+    raw = (out / "public" / "dashboard.data.json").read_text(encoding="utf-8")
     # Re-serialize with sorted keys; the file is already sorted -> identical.
     reparsed = json.loads(raw)
     assert raw == json.dumps(reparsed, sort_keys=True, indent=2, ensure_ascii=False) + "\n"
@@ -509,7 +509,7 @@ def test_generate_site_appends_current_point_with_injected_ts(tmp_path: Path) ->
         generate_site(conn, out, project_root=project, now_ts="2026-06-05T12:00:00+00:00")
     finally:
         conn.close()
-    written = json.loads((out / "dashboard.data.json").read_text(encoding="utf-8"))
+    written = json.loads((out / "public" / "dashboard.data.json").read_text(encoding="utf-8"))
     trends = written["trends"]
     # The current run's point is recorded with the INJECTED ts (never now()).
     assert any(p["ts"] == "2026-06-05T12:00:00+00:00" for p in trends)
