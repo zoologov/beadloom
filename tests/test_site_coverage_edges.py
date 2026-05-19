@@ -156,6 +156,154 @@ def test_node_with_no_symbols_or_children_still_renders(
 
 
 # ---------------------------------------------------------------------------
+# site_pages.py: incoming relationships — "Used by" + "Parts" (BDL-044)
+# ---------------------------------------------------------------------------
+
+
+def _build_oracle_graph(conn: sqlite3.Connection) -> None:
+    """A context-oracle-like fixture: consumers + children + a self-edge."""
+    for ref, kind in [
+        ("context-oracle", "domain"),
+        ("application", "domain"),
+        ("graph", "domain"),
+        ("cli", "service"),
+        ("mcp-server", "service"),
+        ("reindex", "feature"),
+        ("infrastructure", "domain"),
+        ("cache", "feature"),
+        ("search", "feature"),
+        ("why", "feature"),
+    ]:
+        _add_node(conn, ref, kind, f"{ref} node.")
+    edges = [
+        # incoming "uses" consumers
+        ("application", "context-oracle", "uses"),
+        ("cli", "context-oracle", "uses"),
+        ("mcp-server", "context-oracle", "uses"),
+        ("reindex", "context-oracle", "uses"),
+        # incoming "depends_on" consumers — application overlaps with uses (dedup),
+        # graph is depends_on only.
+        ("application", "context-oracle", "depends_on"),
+        ("graph", "context-oracle", "depends_on"),
+        # incoming "part_of" children
+        ("cache", "context-oracle", "part_of"),
+        ("search", "context-oracle", "part_of"),
+        ("why", "context-oracle", "part_of"),
+        # a self-edge that must be skipped on both incoming sections
+        ("context-oracle", "context-oracle", "touches_code"),
+        # an outgoing edge (kept as-is, not an incoming consumer)
+        ("context-oracle", "infrastructure", "depends_on"),
+    ]
+    for src, dst, kind in edges:
+        conn.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES (?, ?, ?)",
+            (src, dst, kind),
+        )
+    conn.commit()
+
+
+def test_used_by_lists_deduped_union_of_consumers(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """'Used by' = sorted, deduped union of incoming uses + depends_on."""
+    _build_oracle_graph(conn)
+    out = tmp_path / "site"
+    generate_site(conn, out, project_root=tmp_path)
+    text = (out / "domains" / "context-oracle.md").read_text(encoding="utf-8")
+
+    # The "Used by" line contains every real consumer, sorted + deduped.
+    used_by_line = next(
+        line for line in text.splitlines() if line.startswith("- **Used by**:")
+    )
+    for consumer in ("application", "cli", "graph", "mcp-server", "reindex"):
+        assert consumer in used_by_line
+    # application appears once despite being both a uses + depends_on consumer.
+    assert used_by_line.count("[application]") == 1
+    # alphabetical order: application before cli before graph.
+    assert used_by_line.index("application") < used_by_line.index("cli")
+    assert used_by_line.index("cli") < used_by_line.index("graph")
+    # No separate "Depended on by" section.
+    assert "Depended on by" not in text
+
+
+def test_parts_lists_incoming_part_of_children(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """'Parts' = sorted incoming part_of children, link-safe."""
+    _build_oracle_graph(conn)
+    out = tmp_path / "site"
+    generate_site(conn, out, project_root=tmp_path)
+    text = (out / "domains" / "context-oracle.md").read_text(encoding="utf-8")
+
+    parts_line = next(
+        line for line in text.splitlines() if line.startswith("- **Parts**:")
+    )
+    for child in ("cache", "search", "why"):
+        assert f"[{child}](../features/{child}.md)" in parts_line
+    # sorted: cache < search < why
+    assert parts_line.index("cache") < parts_line.index("search")
+    assert parts_line.index("search") < parts_line.index("why")
+
+
+def test_incoming_sections_skip_self_edge(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """A self-edge never produces an incoming relationship to the node itself."""
+    _build_oracle_graph(conn)
+    out = tmp_path / "site"
+    generate_site(conn, out, project_root=tmp_path)
+    text = (out / "domains" / "context-oracle.md").read_text(encoding="utf-8")
+    # context-oracle must never list itself as a consumer or a part.
+    used_by_line = next(
+        line for line in text.splitlines() if line.startswith("- **Used by**:")
+    )
+    assert "context-oracle" not in used_by_line
+
+
+def test_leaf_with_no_incoming_omits_incoming_sections(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """A node with no incoming edges shows neither 'Used by' nor 'Parts'."""
+    _add_node(conn, "beadloom", "service", "CLI service.")
+    _add_node(conn, "application", "domain", "Use cases.")
+    conn.execute(
+        "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES (?, ?, ?)",
+        ("application", "beadloom", "part_of"),
+    )
+    conn.commit()
+    out = tmp_path / "site"
+    generate_site(conn, out, project_root=tmp_path)
+    # application has an outgoing part_of but no incoming edges.
+    text = (out / "domains" / "application.md").read_text(encoding="utf-8")
+    assert "**Used by**" not in text
+    assert "**Parts**" not in text
+    # The outgoing edge is still rendered.
+    assert "**part_of**" in text
+
+
+def test_incoming_ref_without_page_renders_as_plain_text(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """An incoming ref that has no node page renders as plain text (no dead link)."""
+    _add_node(conn, "context-oracle", "domain", "Oracle.")
+    # 'ghost' has an edge but NO node row -> no page exists for it.
+    conn.execute(
+        "INSERT INTO edges (src_ref_id, dst_ref_id, kind) VALUES (?, ?, ?)",
+        ("ghost", "context-oracle", "uses"),
+    )
+    conn.commit()
+    out = tmp_path / "site"
+    generate_site(conn, out, project_root=tmp_path)
+    text = (out / "domains" / "context-oracle.md").read_text(encoding="utf-8")
+    used_by_line = next(
+        line for line in text.splitlines() if line.startswith("- **Used by**:")
+    )
+    # ghost is named but NOT as a Markdown link (no dead link).
+    assert "ghost" in used_by_line
+    assert "[ghost]" not in used_by_line
+
+
+# ---------------------------------------------------------------------------
 # site_published.py: directory-source coverage, empty ref_id, non-md asset,
 # missing docs/ dir
 # ---------------------------------------------------------------------------

@@ -107,6 +107,51 @@ def _load_edges_for(
     return grouped
 
 
+def _incoming_link(ref: str, kinds: dict[str, str]) -> str:
+    """A link to *ref*'s page if it has one, else plain text (link-safe).
+
+    A page exists for any node present in the graph (``kinds`` holds every
+    node's ref_id). A ref with no page renders as plain text — never a dead
+    link.
+    """
+    if ref not in kinds:
+        return ref
+    return f"[{ref}]({_node_link(kinds[ref], ref)})"
+
+
+def _load_incoming_for(
+    conn: sqlite3.Connection, ref_id: str, kinds: dict[str, str]
+) -> dict[str, list[str]]:
+    """Incoming relationships for a node, link-safe and deterministic.
+
+    Returns a dict with optional keys ``"Used by"`` (deduped union of incoming
+    ``uses`` + ``depends_on`` consumers) and ``"Parts"`` (incoming ``part_of``
+    children). Self-edges are skipped. Each list is sorted by ref and rendered
+    as a link only when the target has a page.
+    """
+    rows = conn.execute(
+        "SELECT DISTINCT src_ref_id, kind FROM edges "
+        "WHERE dst_ref_id = ? AND kind IN ('uses', 'depends_on', 'part_of')",
+        (ref_id,),
+    ).fetchall()
+    used_by: set[str] = set()
+    parts: set[str] = set()
+    for row in rows:
+        src = str(row["src_ref_id"])
+        if src == ref_id:
+            continue
+        if str(row["kind"]) == "part_of":
+            parts.add(src)
+        else:
+            used_by.add(src)
+    incoming: dict[str, list[str]] = {}
+    if used_by:
+        incoming["Used by"] = [_incoming_link(r, kinds) for r in sorted(used_by)]
+    if parts:
+        incoming["Parts"] = [_incoming_link(r, kinds) for r in sorted(parts)]
+    return incoming
+
+
 def _load_symbols(conn: sqlite3.Connection, source: str | None) -> list[str]:
     """Public symbol names whose file lives under *source*, sorted + de-duped."""
     if not source:
@@ -149,8 +194,20 @@ def _scoped_diagram(conn: sqlite3.Connection, ref_id: str) -> str:
     return render_c4_mermaid(scoped_nodes, scoped_rels)
 
 
-def _edges_section(grouped: dict[str, list[str]]) -> list[str]:
-    """Markdown lines for the edges section (stable kind order)."""
+# Incoming relationship sections, in stable display order.
+_INCOMING_LABELS: tuple[str, ...] = ("Used by", "Parts")
+
+
+def _edges_section(
+    grouped: dict[str, list[str]], incoming: dict[str, list[str]]
+) -> list[str]:
+    """Markdown lines for the relationships section (outgoing + incoming).
+
+    Outgoing edges (``part_of`` / ``depends_on`` / ``uses``) render first in
+    stable kind order, then incoming relationships (``Used by`` / ``Parts``).
+    An incoming section with no entries is omitted. Only when there are no
+    relationships at all is the placeholder shown.
+    """
     lines: list[str] = ["## Relationships", ""]
     any_edge = False
     for edge_kind in _EDGE_KINDS:
@@ -159,6 +216,12 @@ def _edges_section(grouped: dict[str, list[str]]) -> list[str]:
             continue
         any_edge = True
         lines.append(f"- **{edge_kind}**: " + ", ".join(links))
+    for label in _INCOMING_LABELS:
+        links = incoming.get(label)
+        if not links:
+            continue
+        any_edge = True
+        lines.append(f"- **{label}**: " + ", ".join(links))
     if not any_edge:
         lines.append("_No relationships._")
     lines.append("")
@@ -206,6 +269,7 @@ def _diagram_section(diagram: str) -> list[str]:
 def render_node_page(conn: sqlite3.Connection, node: NodeRow, kinds: dict[str, str]) -> NodePage:
     """Render one node's Markdown page (deterministic)."""
     grouped = _load_edges_for(conn, node.ref_id, kinds)
+    incoming = _load_incoming_for(conn, node.ref_id, kinds)
     symbols = _load_symbols(conn, node.source)
     docs = _load_docs(conn, node.ref_id)
     diagram = _scoped_diagram(conn, node.ref_id)
@@ -226,7 +290,7 @@ def render_node_page(conn: sqlite3.Connection, node: NodeRow, kinds: dict[str, s
     if node.source:
         lines.extend([f"**Source:** `{node.source}`", ""])
     lines.extend(_symbols_section(symbols))
-    lines.extend(_edges_section(grouped))
+    lines.extend(_edges_section(grouped, incoming))
     lines.extend(_docs_section(docs))
     lines.extend(_diagram_section(diagram))
 
