@@ -38,6 +38,8 @@ Doc-code synchronization tracking and stale detection
 
 - **part_of**: [beadloom](../services/beadloom.md)
 - **depends_on**: [infrastructure](../domains/infrastructure.md)
+- **Used by**: [application](../domains/application.md), [beadloom](../services/beadloom.md), [cli](../services/cli.md), [mcp-server](../services/mcp-server.md), [reindex](../features/reindex.md)
+- **Parts**: [docs-audit](../features/docs-audit.md)
 
 ## Documentation
 

@@ -30,6 +30,7 @@ Domain-agnostic SQLite database layer, health metrics, git activity
 ## Relationships
 
 - **part_of**: [beadloom](../services/beadloom.md)
+- **Used by**: [application](../domains/application.md), [beadloom](../services/beadloom.md), [cli](../services/cli.md), [context-oracle](../domains/context-oracle.md), [doc-sync](../domains/doc-sync.md), [graph](../domains/graph.md), [mcp-server](../services/mcp-server.md)
 
 ## Documentation
 

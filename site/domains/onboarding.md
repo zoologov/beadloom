@@ -40,6 +40,8 @@ Project bootstrap, doc import, architecture-aware presets, doc generation
 ## Relationships
 
 - **part_of**: [beadloom](../services/beadloom.md)
+- **Used by**: [application](../domains/application.md), [cli](../services/cli.md), [mcp-server](../services/mcp-server.md)
+- **Parts**: [agent-prime](../features/agent-prime.md), [doc-generator](../features/doc-generator.md)
 
 ## Documentation
 

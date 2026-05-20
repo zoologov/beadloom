@@ -76,6 +76,8 @@ Use-case orchestration: reindex, doctor, debt report, file watcher
 - **part_of**: [beadloom](../services/beadloom.md)
 - **depends_on**: [context-oracle](../domains/context-oracle.md), [doc-sync](../domains/doc-sync.md), [graph](../domains/graph.md), [infrastructure](../domains/infrastructure.md)
 - **uses**: [context-oracle](../domains/context-oracle.md), [doc-sync](../domains/doc-sync.md), [graph](../domains/graph.md), [infrastructure](../domains/infrastructure.md), [onboarding](../domains/onboarding.md)
+- **Used by**: [beadloom](../services/beadloom.md), [cli](../services/cli.md), [mcp-server](../services/mcp-server.md)
+- **Parts**: [debt-report](../features/debt-report.md), [doctor](../features/doctor.md), [reindex](../features/reindex.md), [watcher](../features/watcher.md)
 
 ## Documentation
 

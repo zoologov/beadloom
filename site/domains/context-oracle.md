@@ -51,6 +51,8 @@ Context bundle building via BFS graph traversal, code indexing, caching, search
 
 - **part_of**: [beadloom](../services/beadloom.md)
 - **depends_on**: [infrastructure](../domains/infrastructure.md)
+- **Used by**: [application](../domains/application.md), [beadloom](../services/beadloom.md), [cli](../services/cli.md), [graph](../domains/graph.md), [mcp-server](../services/mcp-server.md), [reindex](../features/reindex.md)
+- **Parts**: [cache](../features/cache.md), [search](../features/search.md), [why](../features/why.md)
 
 ## Documentation
 

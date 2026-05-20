@@ -325,6 +325,7 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 ## Relationships
 
 - **depends_on**: [application](../domains/application.md), [context-oracle](../domains/context-oracle.md), [doc-sync](../domains/doc-sync.md), [graph](../domains/graph.md), [infrastructure](../domains/infrastructure.md)
+- **Parts**: [application](../domains/application.md), [cli](../services/cli.md), [context-oracle](../domains/context-oracle.md), [doc-sync](../domains/doc-sync.md), [graph](../domains/graph.md), [infrastructure](../domains/infrastructure.md), [mcp-server](../services/mcp-server.md), [onboarding](../domains/onboarding.md), [tui](../services/tui.md), [vitepress-site](../other/vitepress-site.md)
 
 ## Documentation
 

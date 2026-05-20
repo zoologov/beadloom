@@ -103,6 +103,8 @@ YAML graph format, loader, diff, rule engine, import resolver, linter
 
 - **part_of**: [beadloom](../services/beadloom.md)
 - **depends_on**: [context-oracle](../domains/context-oracle.md), [infrastructure](../domains/infrastructure.md)
+- **Used by**: [application](../domains/application.md), [beadloom](../services/beadloom.md), [cli](../services/cli.md), [mcp-server](../services/mcp-server.md), [reindex](../features/reindex.md)
+- **Parts**: [c4-diagrams](../features/c4-diagrams.md), [graph-diff](../features/graph-diff.md), [import-resolver](../features/import-resolver.md), [rule-engine](../features/rule-engine.md)
 
 ## Documentation
 
