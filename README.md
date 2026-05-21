@@ -2,9 +2,9 @@
 
 > Read this in other languages: [Русский](README.ru.md)
 
-**Federated architecture infrastructure with intent-vs-reality enforcement.**
+**Keep your architecture accurate and trustworthy — from a single repo to a whole microservices landscape, or every IT product in your company.**
 
-Beadloom is the cross-service contract graph for a microservices landscape — it detects drift, breaking changes, and orphaned consumers between your services *before they ship*, across paradigms, languages, and product boundaries. Per-repo Architecture-as-Code (a deterministic context graph, doc-sync, boundary lint) is the foundation; the federated landscape is the product.
+Beadloom turns your architecture into something you can query, check, and trust. It keeps a map of how your system is built — domains, services, features, and the dependencies between them — in plain YAML in Git. It watches that your docs and module boundaries don't quietly drift away from the code. And across many services, it catches a broken contract between them before it ships.
 
 [![License: MIT](https://img.shields.io/github/license/zoologov/beadloom)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/zoologov/beadloom?include_prereleases&sort=semver)](https://github.com/zoologov/beadloom/releases)
@@ -15,137 +15,124 @@ Beadloom is the cross-service contract graph for a microservices landscape — i
 [![code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![coverage: 80%+](https://img.shields.io/badge/coverage-80%25%2B-green)](pyproject.toml)
 
----
-
-> An IDE indexes one repo's code. Beadloom maps the contracts *between* your services — and tells you which ones are broken.
-
 **Platforms:** macOS, Linux, Windows &nbsp;|&nbsp; **Python:** 3.10+
 
-## Federation: the cross-service contract graph
+---
 
-In a microservices landscape, the dangerous bugs live *between* services: a consumer relies on a GraphQL field the producer just removed; a queue has a publisher but no subscriber; a declared cross-repo dependency points at a service that was never built. None of that is visible inside a single repo. Beadloom federates the per-repo graphs into one landscape graph and reconciles **declared intent against measured reality** — the moat that a self-indexing agent cannot reproduce, because agents can read your code but cannot invent your *intended* architecture and contracts.
+## What Beadloom gives you
+
+- **A queryable architecture graph.** Your domains, services, features, and dependencies live in YAML in Git. Ask about any node and get a precise, repeatable answer — the same query returns the same result every time, in under 20 ms.
+- **Docs that can't quietly go stale.** Beadloom tracks which docs describe which code. When the code changes and the doc doesn't, it tells you — on every commit, in CI, or on demand.
+- **Boundaries that are actually enforced.** Write your architecture rules in YAML and `beadloom lint` blocks violations in CI — no matter who (or which AI tool) wrote the code.
+- **Contracts checked across services.** Federate the per-repo graphs into one landscape and Beadloom reconciles **what each service says it provides against what its consumers actually use** — flagging a broken or missing contract before it reaches production.
+- **One command of context for AI agents.** `beadloom prime` hands an agent a compact (<2K-token) picture of the architecture at the start of a session, so it works within your design instead of guessing at it.
+- **A published knowledge base.** `beadloom docs site` builds a VitePress site — a metrics dashboard with recommendations, an interactive architecture view, a cross-service landscape map, and your hand-written docs with a freshness badge on each.
+
+## The problems it solves
+
+- **"A consumer broke when the producer changed."** Contracts between services — queues, GraphQL schemas — drift apart silently, and the failure surfaces in production, in a different repo than the change.
+- **"Only two people understand how this works."** Architecture lives in people's heads, not in the repo. When they leave, the knowledge leaves with them.
+- **"The docs are lying."** Documentation goes stale and nobody notices — until someone builds on top of an outdated spec.
+- **"Agents spend the first hour just orienting."** Every session starts from scratch: grep, read, guess. The right 2K tokens of context beat a noisy 200K-token window.
+
+It all comes down to one thing: the architecture you *decided on* and the code you *actually have* drift apart over time, and nothing watches the gap. Beadloom watches it — within a repo (docs, boundaries) and between services (contracts). An AI agent can read your code, but it doesn't know the architecture you intended or the state of the contracts outside its own repo. That's exactly the part that's hard to get any other way.
+
+## Federation: checking contracts between services
+
+Inside one repo, the dangerous bugs hide *between* services: a client uses a GraphQL field the backend just removed; a queue has a publisher but no subscriber; a service declares a dependency on another that was never built. None of it is visible from inside a single repository.
+
+Each service exports its graph as a deterministic, commit-stamped artifact. A hub then composes them into one landscape and reconciles the contracts:
 
 ```bash
-# In each service repo — emit a deterministic, signed-by-commit artifact:
+# In each service repo — emit a deterministic, commit-stamped artifact:
 beadloom export --out service-a.json
 
 # At the hub — compose the landscape and reconcile contracts:
 beadloom federate service-a.json service-b.json service-c.json
 ```
 
-- **Cross-repo identity** — a graph edge names a node in another service as `@<repo>:<ref_id>` (e.g. `consumes @backend:WebAPI`). Plain refs stay local; malformed refs are surfaced, never silently dropped.
-- **The contract graph (AMQP + GraphQL)** — contracts are first-class and identified by a **language-neutral** `contract_key`: AMQP as `amqp:<exchange>/<routing>:<message_type>`, GraphQL as `graphql:<schema>`. A TypeScript client consuming a backend's GraphQL schema reconciles across the language boundary, by contract *name*, never by code symbol.
-- **Contract-level intent-vs-reality verdicts:**
+- **Cross-repo references.** A graph edge can point at a node in another service as `@<repo>:<ref_id>` (e.g. `consumes @backend:WebAPI`). Local refs stay local; a malformed reference is reported, never silently dropped.
+- **Contracts over AMQP and GraphQL.** Contracts are first-class and identified by a **language-neutral key** — AMQP as `amqp:<exchange>/<routing>:<message_type>`, GraphQL as `graphql:<schema>`. A TypeScript client and a backend match by the contract *name*, across the language boundary.
+- **Plan vs. reality, per contract.** Each contract gets a verdict:
 
   | Verdict | Meaning |
   |---------|---------|
-  | `CONFIRMED` | Producer and consumer both present and compatible. |
-  | `BREAKING` | A consumer references a name the producer's current GraphQL SDL no longer exposes — caught *before* it ships (presence-based, not a version diff). |
-  | `ORPHANED_CONSUMER` | Consumes a contract nobody produces. |
-  | `UNDECLARED_PRODUCER` | Produces a contract nobody consumes. |
-  | `EXTERNAL` | Declared present-but-not-ours (e.g. a native bridge) — never false drift. |
-  | `DRIFT` | Edge-level: a declared `active` cross-repo dependency whose target does not resolve. |
+  | `CONFIRMED` | Producer and consumer are both present and compatible. |
+  | `BREAKING` | A consumer uses a name the producer's current GraphQL schema no longer exposes — caught *before* it ships (a presence check, not a version diff). |
+  | `ORPHANED_CONSUMER` | Something consumes a contract nobody produces. |
+  | `UNDECLARED_PRODUCER` | Something produces a contract nobody consumes. |
+  | `EXTERNAL` | Declared as present-but-not-ours (e.g. a native bridge) — never a false alarm. |
+  | `DRIFT` | A declared `active` cross-repo dependency whose target doesn't resolve. |
 
-- **Lifecycle-aware** — every node and edge carries `active` / `planned` / `deprecated` / `dead` / `external`, so a *planned-but-unbuilt* contract reads as `EXPECTED`, not a false alarm, and a `deprecated` one still present is a cleanup candidate.
-- **Nested landscapes — product *and* company scope** — `federate` composes a single product (its back / front / infra / integrations) or a whole company of several products. Standalone products that share no contract never produce mutual noise; cross-product contracts appear only where integration is real.
-- **Per-satellite staleness** — each artifact carries its commit SHA + timestamp, so the hub reports how stale each service's view is (and honestly says "unknown" rather than faking a SHA).
+- **Lifecycle-aware.** Every node and edge carries a status — `active`, `planned`, `deprecated`, `dead`, or `external`. A *planned-but-unbuilt* contract reads as expected, not as a failure; a `deprecated` one still in use is flagged as a cleanup candidate.
+- **Product and company scope.** `federate` composes a single product (its backend, frontend, infra, integrations) or a whole company's IT landscape spanning several products. Products that share no contract don't generate noise about each other; a cross-product contract shows up only where the integration is real.
+- **Honest staleness.** Each artifact carries its commit SHA and timestamp, so the hub reports how old each service's view is — and says "unknown" rather than inventing a SHA.
 
-> **Status — honest scope.** Shipped today: AMQP + GraphQL contracts with the presence-based breaking-change check, paradigm- and product-agnostic federation, and **CI enforcement** — the contract graph is now CI-gateable via `federate --fail-on` and the unified `beadloom ci` gate (dogfooded on Beadloom's own CI). Dogfooded end-to-end on a real landscape — a real GraphQL `BREAKING` mismatch caught before ship, and a separate FSD-architecture product round-tripped through `export`/`federate` with zero kind loss. The federated contract graph also renders as a **🌟 visual landscape map** in the published VitePress site (`beadloom docs site`). **Not yet:** REST/OpenAPI + gRPC contracts — on the roadmap, not over-promised here. The cross-service hub is run on collected artifacts via a documented pull-based pattern (no SaaS hub).
+> **What's shipped, honestly.** Today: AMQP and GraphQL contracts with the presence-based breaking-change check, federation that doesn't care about language or product, and **CI enforcement** — the contract graph can gate CI via `federate --fail-on` and the unified `beadloom ci` (used on Beadloom's own CI). Proven end to end on a real landscape — a real GraphQL `BREAKING` caught before release, and a separate FSD-architecture product round-tripped through `export`/`federate` without losing a thing. The landscape also renders as a visual map in the published VitePress site. **Not yet:** REST/OpenAPI and gRPC contracts — on the roadmap, not promised here. The hub runs on collected artifacts via a documented pull-based pattern — there is no hosted service.
 
-## Why Beadloom?
+## The per-repo foundation
 
-As AI agents generate code geometrically, the architecture that holds a landscape together erodes faster than any team can track by hand. Agents can self-index *reality* (what the code does); they cannot invent your *intent* (the architecture, boundaries, and contracts you decided on). The durable value is the **diff between intent and reality** — especially across service boundaries.
+Federation works because each repo keeps an honest graph of itself. Three building blocks make that possible:
 
-- **"A consumer broke when the producer changed."** Cross-service contracts (queues, GraphQL schemas) drift silently — the failure shows up in production, in a different repo than the change.
-- **"Only two people understand how this works."** Architecture lives in heads, not in the repo. When they leave, the knowledge leaves with them.
-- **"The docs are lying."** Documentation goes stale. Nobody notices until a developer or agent builds on top of outdated specs.
-- **"Agents burn context on orientation, not work."** Every session starts from scratch — grep, read, guess. The right 2K tokens beat a noisy 128K window.
+1. **Context Oracle** — the architecture graph in YAML, stored in Git. Query any node and get a deterministic context bundle in under 20 ms — the same input always gives the same output.
+2. **Doc Sync Engine** — tracks the link between code and docs and catches stale documentation on every commit. No more "the spec says X but the code does Y".
+3. **Architecture Rules** — boundary constraints in YAML, checked by `beadloom lint` and enforced in CI. Boundaries are verified at build time, not hoped for at review time.
 
-The federation contract graph above is the headline. Underneath it, each repo runs the Architecture-as-Code foundation — three queryable primitives that make the per-repo graph honest enough to federate:
+For AI agents, `beadloom prime` rolls all three into a payload under 2K tokens — one command in place of the grep → read → guess loop. Connect over MCP and an agent gets the same context, plus the active rules for whatever it's working on, so it stays inside your boundaries by design.
 
-1. **Context Oracle** — architecture graph in YAML, stored in Git. Query any node → deterministic context bundle in <20ms. Same query, same result, every time.
+### Deterministic context, not a probabilistic guess
 
-2. **Doc Sync Engine** — tracks code↔doc relationships. Catches stale documentation on every commit. No more "the spec says X but the code does Y".
-
-3. **Architecture Rules** — boundary constraints in YAML, validated with `beadloom lint`, enforced in CI. Boundaries are checked at build time — not hoped for at review time.
-
-For AI agents, `beadloom prime` assembles all three into a <2K-token payload — one command replaces the grep→read→guess loop. And `beadloom docs site` publishes the whole thing as a VitePress knowledge base — an AaC/DocAsCode metrics dashboard, interactive architecture, the 🌟 cross-repo landscape map, and the hand-written docs with per-doc freshness badges (every number from the same code path as the gate that measures it).
-
-### Deterministic context, not probabilistic guessing
-
-IDE indexers use semantic search — an LLM decides what's relevant. Beadloom uses **deterministic graph traversal**: BFS over an explicit architecture graph produces the same context bundle every time. The graph is YAML in Git — reviewable, auditable, version-controlled.
+An IDE indexer uses semantic search — an LLM decides what's relevant. Beadloom walks an explicit graph instead, so the same node always yields the same bundle. The graph is YAML in Git: reviewable, auditable, versioned.
 
 |  | Semantic search (IDE) | Beadloom |
 |---|---|---|
-| **Answers** | "Where is this class?" | "What is this feature and how does it fit?" |
-| **Method** | Embeddings + LLM ranking | Explicit graph + BFS |
+| **Answers** | "Where is this class?" | "What is this feature, and how does it fit?" |
+| **Method** | Embeddings + LLM ranking | Explicit graph + traversal |
 | **Result** | Probabilistic | Deterministic |
 | **Docs** | Doesn't track freshness | Catches stale docs every commit |
-| **Architecture** | Doesn't validate | Enforces boundaries, blocks violations |
+| **Boundaries** | Doesn't check them | Enforces them, blocks violations |
 | **Knowledge** | Dies with the session | Lives in Git, survives team changes |
 
----
+## Who it's for
 
-### Research and industry trends
+- **Tech leads & architects** — make architecture explicit, versioned, and able to survive team turnover; enforce boundaries in CI.
+- **Platform / DevEx engineers** — give CI a doc-freshness check and boundary validation that actually work, and hand agents structured context out of the box via MCP.
+- **Individual developers** — stop spending the first hour of every task figuring out how a part of the system works: `beadloom ctx <feature>` (or the VitePress portal) gets you oriented in minutes.
+- **AI-assisted developers** — keep your agents working within the architecture instead of breaking it.
 
-- **[Lost in the Middle](https://arxiv.org/abs/2307.03172)** (Liu et al., 2023) — LLMs lose accuracy on information buried in long contexts. The right 2K tokens beat a noisy 128K window.
-- **[Context Engineering for Coding Agents](https://martinfowler.com/articles/exploring-gen-ai/context-engineering-coding-agents.html)** (Fowler, 2025) — structured context is a core capability for coding agents, not a nice-to-have.
-- **[From Scattered to Structured](https://arxiv.org/html/2601.19548v1)** (Keim & Kaplan, KIT, 2026) — architectural knowledge dispersed across artifacts causes "architectural erosion"; consolidating it into a structured knowledge base is the fix.
-- **[Why AI Coding Agents Aren't Production-Ready](https://venturebeat.com/ai/why-ai-coding-agents-arent-production-ready-brittle-context-windows-broken)** (Raja & Gemawat, VentureBeat, 2025) — practitioners at LinkedIn and Microsoft document how agents hallucinate without architectural context.
-- **[Context Quality vs Quantity](https://www.augmentcode.com/guides/context-quality-vs-quantity-5-ai-tools-that-nail-relevance)** (Augment Code, 2025) — relationship-aware context reduces hallucinations by ~40% compared to naive context stuffing.
-- **[State of Software Architecture 2025](https://icepanel.io/blog/2026-01-21-state-of-software-architecture-survey-2025)** (IcePanel, 2026) — keeping architecture docs current is the #1 challenge; teams lose trust in outdated documentation.
-- **[2026 Agentic Coding Trends](https://claude.com/blog/eight-trends-defining-how-software-gets-built-in-2026)** (Anthropic, 2026) — the industry shifts to agent-orchestration with structured context.
-- **[Architecture Reset](https://itbrief.news/story/ai-coding-tools-face-2026-reset-towards-architecture)** (ITBrief, 2026) — enterprises pivot from "vibe coding" to architecture-first development.
+## Install
 
----
+```bash
+uv tool install beadloom        # recommended
+pipx install beadloom           # alternative
+```
 
-## Who is it for?
+## Quick start
 
-**Tech Lead / Architect** — You want architecture knowledge to be explicit, versionable, and survive team rotation. Beadloom makes the implicit explicit: domains, features, services, dependencies — all in YAML, all in Git. `beadloom lint` enforces boundaries in CI.
+```bash
+# 1. Scan your codebase and generate an initial architecture graph
+#    (work in progress: bootstrap accuracy is still being refined on real projects)
+beadloom init --bootstrap
 
-**Platform / DevEx Engineer** — You build tooling for the team. Beadloom gives your CI pipeline a doc freshness check and architecture boundary validation that actually work. Agents get structured context out of the box via MCP.
+# 2. Review the generated graph (edit domains, rename nodes, add edges)
+vi .beadloom/_graph/services.yml
 
-**Individual Developer** — You're tired of spending the first hour on every task figuring out "how does this part of the system work?" `beadloom ctx FEATURE-ID` gives you the answer in seconds.
+# 3. Build the index and start using it
+beadloom reindex
+beadloom ctx search        # get context for a feature
+beadloom sync-check        # are the docs up to date?
+beadloom lint              # are the architecture rules satisfied?
 
-**AI-Assisted / Agent-Native Developer** — You work with AI agents and need them to work within your architecture, not break it. `beadloom prime` + MCP gives your agent a compact, deterministic context payload at session start.
+# 4. Set up context for AI agents
+beadloom setup-rules       # create IDE adapter files
+beadloom prime             # see exactly what your agent will see
+```
 
-## Key features
-
-- **Cross-service contract graph (federation)** — `beadloom export` emits a deterministic per-repo artifact; `beadloom federate` aggregates ≥2 services into one landscape graph via `@repo:ref_id` edges and assigns **contract-level** intent-vs-reality verdicts (`CONFIRMED` / `BREAKING` / `ORPHANED_CONSUMER` / `UNDECLARED_PRODUCER` / `EXTERNAL`) over AMQP and GraphQL contracts, plus edge-level drift and per-satellite staleness. Nodes and edges carry a `lifecycle` field (`active` / `planned` / `deprecated` / `dead` / `external`); nested product- and company-landscape scoping
-- **Context Oracle** — deterministic graph traversal, compact JSON bundle in <20ms
-- **Doc Sync Engine** — tracks code↔doc relationships, detects stale documentation, integrates with git hooks
-- **Architecture as Code** — define boundary rules in YAML, validate with `beadloom lint`, enforce in CI
-- **Agent Prime** — single entry point for AI agents: `beadloom prime` outputs <2K tokens of architecture context, `setup-rules` creates IDE adapters, `AGENTS.md` carries conventions and MCP tools
-- **Full-text search** — FTS5-powered search across nodes, docs, and code symbols
-- **Impact analysis** — `beadloom why` shows what depends on a node and what breaks if it changes (with `--reverse` and `--depth N` options)
-- **Code-first onboarding** — bootstrap an architecture graph from code structure alone; no docs needed to start
-- **Architecture snapshots** — `beadloom snapshot` saves and compares architecture state over time
-- **MCP server** — 14 tools for AI agents, including write operations, search, impact analysis, diff, and linting
-- **Interactive TUI** — `beadloom tui` terminal dashboard for browsing the graph (alias: `ui`)
-- **Documentation Audit** — detect stale facts in project-level docs (README, guides, CONTRIBUTING) with zero configuration. CI gate via `--fail-if=stale>0`
-- **Architecture Debt Report** — `beadloom status --debt-report` aggregates lint, sync, complexity into a single score 0-100 with CI gate
-- **C4 Architecture Diagrams** — auto-generate C4 Context/Container/Component diagrams in Mermaid and PlantUML formats
-- **Local-first** — single CLI + single SQLite file, no Docker, no cloud dependencies
-
-## How it works
-
-Beadloom maintains an **architecture graph** defined in YAML files under `.beadloom/_graph/`. The graph consists of **nodes** (features, services, domains, entities, ADRs) connected by **edges** (part_of, uses, depends_on, etc.).
-
-The indexing pipeline merges three sources into a single SQLite database:
-
-1. **Graph YAML** — nodes and edges that describe the project architecture
-2. **Documentation** — Markdown files linked to graph nodes, split into searchable chunks
-3. **Code** — source files parsed with tree-sitter to extract symbols and `# beadloom:domain=context-oracle` annotations
-
-When you request context for a node, the Context Oracle runs a breadth-first traversal, collects the relevant subgraph, documentation, and code symbols, and returns a compact bundle.
-
-The Doc Sync Engine tracks which documentation files correspond to which code files. On every commit (via a git hook), it detects stale docs and either warns or blocks the commit.
+No documentation required to start — Beadloom bootstraps a skeleton from code structure alone. From there you fill it in by hand or with any AI agent (see `docs polish`), and Beadloom keeps it current.
 
 ## Architecture as Code
 
-Beadloom doesn't just describe architecture — it enforces it. Define boundary rules in YAML, validate with `beadloom lint`, and block violations in CI.
-
-**Rules** (`.beadloom/_graph/rules.yml`) — rules from this project:
+Beadloom doesn't just describe your architecture — it enforces it. You write boundary rules in YAML, check them with `beadloom lint`, and block violations in CI. These are real rules from this project:
 
 ```yaml
 version: 3
@@ -163,41 +150,14 @@ rules:
       has_edge_to: { ref_id: beadloom }
       edge_kind: part_of
 
-  - name: feature-needs-domain
-    description: "Every feature must be part_of a domain"
-    require:
-      for: { kind: feature }
-      has_edge_to: { kind: domain }
-      edge_kind: part_of
-
-  - name: service-needs-parent
-    description: "Every service (except root) must be part_of the beadloom service"
-    require:
-      for: { kind: service, exclude: [beadloom] }
-      has_edge_to: { ref_id: beadloom }
-      edge_kind: part_of
-
   - name: no-domain-depends-on-service
-    description: "Domains must not have depends_on edges to services"
+    description: "Domains must not depend on services"
     deny:
       from: { kind: domain }
       to: { kind: service }
       unless_edge: [part_of]
-```
 
-**Advanced rule types** — forbid edges, layer enforcement, cycle detection, import boundaries, and cardinality limits:
-
-```yaml
-rules:
-  # Forbid edges between tagged groups
-  - name: ui-no-native
-    severity: error
-    forbid:
-      from: { tag: ui-layer }
-      to: { tag: native-layer }
-      edge_kind: uses
-
-  # Layer enforcement (top-down)
+  # Enforce layer direction (services → domains → infrastructure)
   - name: architecture-layers
     severity: warn
     layers:
@@ -205,94 +165,55 @@ rules:
       - { name: domains, tag: layer-domain }
       - { name: infrastructure, tag: layer-infra }
     enforce: top-down
-    allow_skip: true
-    edge_kind: depends_on
 
-  # Cycle detection
-  - name: no-dependency-cycles
-    severity: warn
-    forbid_cycles:
-      edge_kind: depends_on
-
-  # Import boundary
+  # Keep the TUI out of the database layer
   - name: tui-no-direct-infra
     forbid_import:
       from: "src/beadloom/tui/**"
       to: "src/beadloom/infrastructure/**"
 
-  # Cardinality limits
+  # Warn when a node grows too large
   - name: domain-size-limit
     severity: warn
     check:
       for: { kind: domain }
-      max_symbols: 200
+      max_symbols: 200      # too much code in one domain
 ```
 
-7 rule types available: `require`, `deny`, `forbid`, `layers`, `forbid_cycles`, `forbid_import`, `check`. NodeMatcher supports `tags` and `exclude` for flexible rule targeting.
-
-**Validate:**
+Seven rule types are available: `require`, `deny`, `forbid`, `layers`, `forbid_cycles`, `forbid_import`, and `check`.
 
 ```bash
-beadloom lint                 # rich output in terminal
+beadloom lint                 # readable output in the terminal
 beadloom lint --strict        # exit 1 on violations (for CI)
-beadloom lint --format json   # machine-readable output
+beadloom lint --format json   # machine-readable
 ```
 
-**Agent-aware constraints** — when an agent calls `get_context("why")`, the response includes active rules for that node. Agents respect architectural boundaries by design, not by accident.
+When an agent asks for context on a node, the response includes the rules that apply to it — so it respects your boundaries by design, not by luck. Import analysis covers **Python, TypeScript/JavaScript, Go, Rust, Kotlin, Java, Swift, C/C++, and Objective-C**.
 
-Supported languages for import analysis: **Python, TypeScript/JavaScript, Go, Rust, Kotlin, Java, Swift, C/C++, Objective-C**.
+## Key features
 
-## Install
+- **Cross-service contract graph** — `export` per repo, `federate` ≥2 services into one landscape with per-contract verdicts (`CONFIRMED` / `BREAKING` / `ORPHANED_CONSUMER` / `UNDECLARED_PRODUCER` / `EXTERNAL`) over AMQP and GraphQL, plus per-service staleness; product- and company-level scope.
+- **CI enforcement** — `beadloom ci` runs reindex → lint → sync-check → config-check → doctor → optional landscape gate behind one exit code; ships as a reusable GitHub Action.
+- **Context Oracle** — deterministic graph traversal, a compact JSON bundle in under 20 ms.
+- **Doc Sync Engine** — tracks code↔doc links, catches stale docs, hooks into git.
+- **Agent context** — `beadloom prime` (<2K tokens), `setup-rules` for IDE adapters, an MCP server with 14 tools, and `config-check` to keep the agent files in sync with the graph.
+- **Full-text search** — FTS5 across nodes, docs, and code symbols.
+- **Impact analysis** — `beadloom why` shows what depends on a node and what breaks if it changes.
+- **Code-first onboarding** — bootstrap a graph from code structure alone; no docs needed to start.
+- **Snapshots & debt** — `snapshot` compares architecture over time; `status --debt-report` rolls lint, sync, and complexity into one 0–100 score with a CI gate.
+- **C4 diagrams** — auto-generated Context / Container / Component diagrams in Mermaid and PlantUML.
+- **Published site** — `beadloom docs site` builds a VitePress knowledge base (dashboard, interactive architecture, landscape map, validated docs).
+- **Local-first** — one CLI and one SQLite file. No Docker, no cloud — plus a VitePress knowledge base for the team.
 
-```bash
-uv tool install beadloom        # recommended
-pipx install beadloom            # alternative
-```
+## How it works
 
-## Quick start
+Beadloom keeps an architecture graph in YAML under `.beadloom/_graph/` — **nodes** (features, services, domains, entities, ADRs) connected by **edges** (`part_of`, `uses`, `depends_on`, …). Reindexing merges three sources into one SQLite database:
 
-```bash
-# 1. Scan your codebase and generate an architecture graph
-beadloom init --bootstrap
+1. **Graph YAML** — the nodes and edges that describe the architecture.
+2. **Documentation** — Markdown linked to graph nodes, split into searchable chunks.
+3. **Code** — source files parsed with tree-sitter for symbols and `# beadloom:domain=...` annotations.
 
-# 2. Review the generated graph (edit domains, rename nodes, add edges)
-vi .beadloom/_graph/services.yml
-
-# 3. Build the index and start using it
-beadloom reindex
-beadloom ctx search              # get context for a feature
-beadloom sync-check                # check if docs are up to date
-beadloom lint                      # check architecture rules
-
-# 4. Set up context injection for AI agents
-beadloom setup-rules               # create IDE adapter files
-beadloom prime                      # verify: see what your agent will see
-```
-
-No documentation required to start — Beadloom bootstraps from code structure alone.
-
-### Agent Prime — one command, full context
-
-Beadloom injects context into AI agents through a three-layer architecture:
-
-1. **IDE adapters** — `beadloom setup-rules` creates `.cursorrules`, `.windsurfrules`, `.clinerules` that point to `.beadloom/AGENTS.md`
-2. **AGENTS.md** — project conventions, architecture rules from `rules.yml`, MCP tool catalog — loaded automatically by the agent
-3. **`beadloom prime`** — dynamic context payload (<2K tokens): architecture summary, health metrics, active rules, domain map
-
-For programmatic access, connect via MCP:
-
-```json
-{
-  "mcpServers": {
-    "beadloom": {
-      "command": "beadloom",
-      "args": ["mcp-serve"]
-    }
-  }
-}
-```
-
-Works with Claude Code, Cursor, Windsurf, Cline, and any MCP-compatible tool.
+Ask for a node's context and the Context Oracle runs a breadth-first traversal, gathers the relevant subgraph, docs, and code symbols, and returns a compact bundle. The Doc Sync Engine tracks which docs belong to which code and, on every commit (via a git hook), warns or blocks when they fall out of sync.
 
 ## CLI commands
 
@@ -304,159 +225,59 @@ Works with Claude Code, Cursor, Windsurf, Cline, and any MCP-compatible tool.
 | `ctx REF_ID` | Get a context bundle (Markdown or `--json`) |
 | `graph [REF_ID]` | Visualize the architecture graph (Mermaid or JSON) |
 | `search QUERY` | Full-text search across nodes, docs, and code symbols |
-| `status` | Project index statistics and documentation coverage |
+| `status` | Index statistics, documentation coverage, and debt report |
 | `doctor` | Validate the architecture graph |
-| `sync-check` | Check doc↔code synchronization status |
+| `sync-check` | Check doc↔code synchronization |
 | `sync-update REF_ID` | Review and update stale docs |
-| `docs generate` | Generate documentation skeletons from the architecture graph |
-| `docs polish` | Generate structured data for AI-driven documentation enrichment |
-| `docs site` | Generate a VitePress knowledge base from the graph (metrics dashboard + interactive architecture + 🌟 cross-repo landscape map + published validated docs) |
-| `lint` | Validate code against architecture boundary rules (`--format rich/json/porcelain/github`, with `remediation`) |
-| `ci` | Unified CI gate — reindex → lint → sync-check → config-check → doctor → optional federate landscape gate, one exit code |
-| `config-check` | AgentConfigAsCode — check (or `--fix`) that generated agent-config (`AGENTS.md`, `CLAUDE.md` auto regions, IDE adapters) matches the graph |
-| `why REF_ID` | Impact analysis — upstream deps and downstream dependents |
+| `why REF_ID` | Impact analysis — what it depends on and what depends on it |
+| `lint` | Check code against architecture rules (`--strict`, `--format rich/json/porcelain/github`) |
+| `ci` | Unified CI gate: reindex → lint → sync-check → config-check → doctor → optional landscape gate |
+| `config-check` | Check (or `--fix`) that generated agent files match the graph |
+| `export` | Export the indexed graph as a deterministic federation artifact |
+| `federate` | Compose ≥2 export artifacts into one landscape. `--fail-on` arms the CI gate |
+| `docs generate` | Generate documentation skeletons from the graph |
+| `docs polish` | Emit structured data for AI-assisted doc enrichment |
+| `docs site` | Build a VitePress site (dashboard, architecture, landscape map, validated docs) |
+| `docs audit` | Detect stale facts in project docs (README, guides) |
 | `diff` | Show graph changes since a git ref |
-| `link REF_ID [URL]` | Manage external tracker links on graph nodes |
-| `export` | Export the indexed graph as a deterministic federation artifact (JSON) |
-| `federate` | Aggregate ≥2 satellite export artifacts into one federated graph (drift + staleness); `--fail-on` arms the landscape CI gate |
-| `tui` | Interactive terminal dashboard (alias: `ui`; requires `beadloom[tui]`) |
-| `docs audit` | Detect stale facts in project-level documentation (README, guides) |
-| `watch` | Auto-reindex on file changes (requires `beadloom[watch]`) |
 | `snapshot` | Save and compare architecture snapshots |
-| `install-hooks` | Install the beadloom pre-commit hook |
-| `prime` | Output compact project context for AI agent injection |
+| `link REF_ID [URL]` | Manage external tracker links on nodes |
+| `prime` | Output compact project context for AI agents |
 | `setup-rules` | Create IDE adapter files (`.cursorrules`, `.windsurfrules`, `.clinerules`) |
-| `setup-mcp` | Configure MCP server for AI agents |
-| `mcp-serve` | Run the MCP server (stdio transport) |
+| `setup-mcp` | Configure the MCP server for AI agents |
+| `mcp-serve` | Run the MCP server (stdio) |
+| `tui` / `ui` | Interactive terminal dashboard (requires `beadloom[tui]`) |
+| `watch` | Auto-reindex on file changes (requires `beadloom[watch]`) |
+| `install-hooks` | Install the pre-commit hook |
 
 ## MCP tools
 
-| Tool | Description |
-|------|-------------|
-| `prime` | Compact project context for AI agent session start |
-| `get_context` | Context bundle for a ref_id (graph + docs + code symbols + constraints) |
-| `get_graph` | Subgraph around a node (nodes and edges as JSON) |
-| `list_nodes` | List graph nodes, optionally filtered by kind |
-| `sync_check` | Check if documentation is up-to-date with code |
-| `get_status` | Documentation coverage and index statistics |
-| `update_node` | Update a node's summary or metadata in YAML and SQLite |
-| `mark_synced` | Mark documentation as synchronized with code |
-| `search` | Full-text search across nodes, docs, and code symbols |
-| `generate_docs` | Generate structured documentation data for AI-driven enrichment |
-| `why` | Impact analysis — upstream and downstream dependencies in the graph |
-| `diff` | Graph changes relative to a git revision |
-| `lint` | Run architecture lint rules. Returns violations as JSON |
-| `get_debt_report` | Architecture debt report — aggregated score with categories and top offenders |
+`beadloom mcp-serve` exposes 14 tools to AI agents: `prime`, `get_context`, `get_graph`, `list_nodes`, `sync_check`, `get_status`, `update_node`, `mark_synced`, `search`, `generate_docs`, `why`, `diff`, `lint`, and `get_debt_report`. Works with Claude Code, Cursor, Windsurf, Cline, and any MCP-compatible tool. Wire it up with:
+
+```json
+{
+  "mcpServers": {
+    "beadloom": { "command": "beadloom", "args": ["mcp-serve"] }
+  }
+}
+```
 
 ## Configuration
 
-All project data lives under `.beadloom/` in your repository root:
+Everything lives under `.beadloom/` in your repo:
 
-- **`.beadloom/config.yml`** — scan paths, languages, sync engine settings
-- **`.beadloom/_graph/*.yml`** — architecture graph definition (YAML, version-controlled)
-- **`.beadloom/_graph/rules.yml`** — architecture boundary rules
-- **`.beadloom/AGENTS.md`** — project conventions and MCP tool catalog for AI agents
-- **`.beadloom/beadloom.db`** — SQLite index (auto-generated, add to `.gitignore`)
+- **`config.yml`** — scan paths, languages, sync settings
+- **`_graph/*.yml`** — the architecture graph (version-controlled)
+- **`_graph/rules.yml`** — boundary rules
+- **`AGENTS.md`** — conventions and the MCP tool catalog for agents
+- **`beadloom.db`** — the SQLite index (auto-generated; add to `.gitignore`)
 
-Link code to graph nodes with annotations:
+Link code to a graph node with a one-line annotation:
 
 ```python
 # beadloom:domain=doc-sync
 def check_freshness(db: sqlite3.Connection, ref_id: str) -> SyncStatus:
     ...
-```
-
-## Documentation structure
-
-Beadloom uses a domain-first layout. Here is the actual structure from this project:
-
-```
-docs/
-  architecture.md                                  # system design
-  getting-started.md                               # quick start guide
-  guides/
-    ci-setup.md                                    # CI integration
-  domains/
-    context-oracle/
-      README.md                                    # domain overview
-      features/
-        cache/SPEC.md                              # L1+L2 cache spec
-        search/SPEC.md                             # FTS5 search spec
-        why/SPEC.md                                # impact analysis spec
-    graph/
-      README.md
-      features/
-        graph-diff/SPEC.md
-        rule-engine/SPEC.md
-        import-resolver/SPEC.md
-    doc-sync/
-      README.md
-    onboarding/
-      README.md
-    infrastructure/
-      README.md
-      features/
-        doctor/SPEC.md
-        reindex/SPEC.md
-        watcher/SPEC.md
-  services/
-    cli.md                                         # 34 CLI commands
-    mcp.md                                         # 14 MCP tools
-    tui.md                                         # TUI dashboard
-```
-
-Each domain gets a `README.md` (overview, invariants, API). Each feature gets a `SPEC.md` (purpose, data structures, algorithm, constraints).
-
-## Context bundle example
-
-`beadloom ctx why --json` returns a deterministic context bundle — graph, docs, and code symbols assembled via BFS in <20ms:
-
-```json
-{
-  "version": 2,
-  "focus": {
-    "ref_id": "why",
-    "kind": "feature",
-    "summary": "Impact analysis — upstream deps and downstream consumers via bidirectional BFS"
-  },
-  "graph": {
-    "nodes": [
-      { "ref_id": "why", "kind": "feature", "summary": "Impact analysis ..." },
-      { "ref_id": "context-oracle", "kind": "domain", "summary": "BFS graph traversal, caching, search" },
-      { "ref_id": "beadloom", "kind": "service", "summary": "CLI + MCP server" },
-      { "ref_id": "search", "kind": "feature", "summary": "FTS5 full-text search" },
-      { "ref_id": "cache", "kind": "feature", "summary": "ETag-based bundle cache" }
-    ],
-    "edges": [
-      { "src": "why", "dst": "context-oracle", "kind": "part_of" },
-      { "src": "context-oracle", "dst": "beadloom", "kind": "part_of" },
-      { "src": "cli", "dst": "context-oracle", "kind": "uses" }
-    ]
-  },
-  "text_chunks": ["... 10 doc chunks from SPEC.md files ..."],
-  "code_symbols": ["... 146 symbols from traversed modules ..."],
-  "sync_status": { "stale_docs": [], "last_reindex": "2026-02-13T..." }
-}
-```
-
-BFS depth=2 from `why` traverses: `why` → `context-oracle` (parent domain) → sibling features (`search`, `cache`), services (`cli`, `mcp-server`), cross-domain deps (`infrastructure`, `graph`) — 24 nodes, 73 edges total.
-
-## Beads integration
-
-*A context loom for your [beads](https://github.com/steveyegge/beads).*
-
-Beadloom complements [Beads](https://github.com/steveyegge/beads) by providing structured context to planner/coder/reviewer agents. Beads workers call `get_context(feature_id)` via MCP and receive a ready-made bundle instead of searching the codebase from scratch.
-
-Beadloom works independently of Beads — the integration is optional.
-
-## Development
-
-```bash
-uv sync --dev              # install with dev dependencies
-uv run pytest              # run tests
-uv run ruff check src/     # lint
-uv run ruff format src/    # format
-uv run mypy                # type checking (strict mode)
 ```
 
 ## Docs
@@ -465,32 +286,25 @@ uv run mypy                # type checking (strict mode)
 |----------|-------------|
 | [architecture.md](docs/architecture.md) | System design and component overview |
 | [getting-started.md](docs/getting-started.md) | Quick start guide |
-| **Domains** | |
-| [Context Oracle](docs/domains/context-oracle/README.md) | BFS algorithm, context assembly, caching, search |
-| &nbsp;&nbsp;[Cache](docs/domains/context-oracle/features/cache/SPEC.md) | L1 in-memory + L2 SQLite bundle cache |
-| &nbsp;&nbsp;[Search](docs/domains/context-oracle/features/search/SPEC.md) | FTS5 full-text search |
-| &nbsp;&nbsp;[Why](docs/domains/context-oracle/features/why/SPEC.md) | Impact analysis via bidirectional BFS |
-| [Graph](docs/domains/graph/README.md) | YAML graph format, diff, rule engine, linter |
-| &nbsp;&nbsp;[Graph Diff](docs/domains/graph/features/graph-diff/SPEC.md) | Git ref comparison for graph changes |
-| &nbsp;&nbsp;[Rule Engine](docs/domains/graph/features/rule-engine/SPEC.md) | Architecture-as-Code deny/require rules |
-| &nbsp;&nbsp;[Import Resolver](docs/domains/graph/features/import-resolver/SPEC.md) | Multi-language import analysis |
-| [Doc Sync](docs/domains/doc-sync/README.md) | Doc↔code synchronization engine |
-| [Onboarding](docs/domains/onboarding/README.md) | Project bootstrap and presets |
-| [Infrastructure](docs/domains/infrastructure/README.md) | Database, health metrics, reindex |
-| &nbsp;&nbsp;[Doctor](docs/domains/infrastructure/features/doctor/SPEC.md) | Graph validation checks |
-| &nbsp;&nbsp;[Reindex](docs/domains/infrastructure/features/reindex/SPEC.md) | Full and incremental reindex pipeline |
-| &nbsp;&nbsp;[Watcher](docs/domains/infrastructure/features/watcher/SPEC.md) | Auto-reindex on file changes |
-| **Services** | |
-| [CLI Reference](docs/services/cli.md) | All 34 CLI commands |
-| [MCP Server](docs/services/mcp.md) | All 14 MCP tools for AI agents |
-| [TUI Dashboard](docs/services/tui.md) | Interactive terminal dashboard |
-| **Guides** | |
 | [CI Setup](docs/guides/ci-setup.md) | GitHub Actions / GitLab CI integration |
-| [VitePress Site](docs/guides/vitepress-site.md) | Publish a VitePress knowledge base (dashboard + landscape map + validated docs) |
+| [VitePress Site](docs/guides/vitepress-site.md) | Publish a VitePress knowledge base |
+| **Domains** | [Context Oracle](docs/domains/context-oracle/README.md) · [Graph](docs/domains/graph/README.md) · [Doc Sync](docs/domains/doc-sync/README.md) · [Onboarding](docs/domains/onboarding/README.md) · [Infrastructure](docs/domains/infrastructure/README.md) |
+| **Services** | [CLI Reference](docs/services/cli.md) · [MCP Server](docs/services/mcp.md) · [TUI Dashboard](docs/services/tui.md) |
 
-## Known Issues
+## Beads integration
 
-See [UX Issues Log](.claude/development/BDL-UX-Issues.md) for the full list of known issues.
+*A context loom for your [beads](https://github.com/steveyegge/beads).*
+
+Beadloom complements [Beads](https://github.com/steveyegge/beads): worker agents call `get_context(feature_id)` over MCP and get a ready-made bundle instead of searching the codebase from scratch. The integration is optional — Beadloom works fine on its own.
+
+## Development
+
+```bash
+uv sync --dev              # install with dev dependencies
+uv run pytest              # run tests
+uv run ruff check src/     # lint
+uv run mypy                # type checking (strict)
+```
 
 ## License
 
