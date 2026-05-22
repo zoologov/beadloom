@@ -119,7 +119,7 @@ def render_architecture_group(conn: sqlite3.Connection) -> str:
 
     Roots are nodes with no ``part_of`` parent (the service root); each root nests
     its domains, which nest their features — all with human-readable labels. An
-    "Architecture overview" entry (the C4 index page) stays at the top.
+    "Architecture overview" entry (the ``/architecture`` page) stays at the top.
     """
     kinds = _load_arch_nodes(conn)
     children = _load_part_of_children(conn, kinds)
@@ -135,7 +135,9 @@ def render_architecture_group(conn: sqlite3.Connection) -> str:
     }
     roots = sorted(ref for ref in kinds if ref not in has_parent)
 
-    items: list[str] = [f'{_INDENT * 3}{{ text: "Architecture overview", link: "/index" }}']
+    items: list[str] = [
+        f'{_INDENT * 3}{{ text: "Architecture overview", link: "/architecture" }}'
+    ]
     for root in roots:
         items.append("\n".join(_arch_node_js(root, kinds, children, 3, frozenset())))
     return (
@@ -199,21 +201,22 @@ def _doc_children_js(directory: Path, base: Path, depth: int) -> list[str]:
     return blocks
 
 
-def render_documentation_group(project_root: Path) -> str:
-    """The Documentation sidebar group, mirroring the ``docs/`` tree (JS fragment).
+def render_documentation_group_from_dir(docs_dir: Path, *, collapsed: bool) -> str:
+    """The Documentation sidebar group built from a docs directory (JS fragment).
 
     Each docs subdirectory becomes a nested, collapsible group; ``.md`` files
-    become leaf links rooted at ``/docs/`` (the published copy). The ``/docs/``
-    landing link is always first so the group is never empty.
+    become leaf links rooted at ``/docs/`` (the published copy). An "Overview"
+    link to ``/docs/`` is always first so the group is never empty and leads with
+    a real landing page.
     """
-    docs_dir = project_root / "docs"
+    collapsed_js = "true" if collapsed else "false"
     items: list[str] = [f'{_INDENT * 3}{{ text: "Overview", link: "/docs/" }}']
     if docs_dir.is_dir():
         items.extend(_doc_children_js(docs_dir, docs_dir, 3))
     return (
         f"{_INDENT}{{\n"
         f'{_INDENT * 2}text: "Documentation",\n'
-        f"{_INDENT * 2}collapsed: true,\n"
+        f"{_INDENT * 2}collapsed: {collapsed_js},\n"
         f"{_INDENT * 2}items: [\n"
         + ",\n".join(items)
         + f",\n{_INDENT * 2}],\n"
@@ -221,33 +224,86 @@ def render_documentation_group(project_root: Path) -> str:
     )
 
 
+def render_documentation_group(project_root: Path) -> str:
+    """Collapsed Documentation group rooted at ``project_root / "docs"``.
+
+    Backward-compatible wrapper around :func:`render_documentation_group_from_dir`.
+    """
+    return render_documentation_group_from_dir(project_root / "docs", collapsed=True)
+
+
 # ---------------------------------------------------------------------------
 # Full config module
 # ---------------------------------------------------------------------------
 
 
+def render_nav() -> str:
+    """The top-nav JS array — intentionally empty (JS fragment).
+
+    BDL-046: top-nav items are removed; the VitePress default theme still renders
+    the appearance (light/dark) toggle, local search, and the locale switcher in
+    the nav bar regardless of ``nav`` entries.
+    """
+    return "[]"
+
+
+def render_sidebar(
+    conn: sqlite3.Connection,
+    *,
+    docs_root: Path,
+    has_getting_started: bool,
+) -> str:
+    """The full ordered EN sidebar JS array (deterministic, link-safe).
+
+    Order: About · Getting Started (only if its page exists) · Dashboard (flat) ·
+    Architecture (collapsed ``part_of`` tree, overview -> ``/architecture``) ·
+    Landscape map (flat) · Documentation (expanded, Overview-led). Dashboard and
+    Landscape are plain ``{ text, link }`` entries, not one-child groups.
+    """
+    arch_group = render_architecture_group(conn)
+    docs_group = render_documentation_group_from_dir(docs_root, collapsed=False)
+    entries: list[str] = [f'{_INDENT}{{ text: "About", link: "/" }}']
+    if has_getting_started:
+        entries.append(
+            f'{_INDENT}{{ text: "Getting Started", link: "/docs/getting-started" }}'
+        )
+    entries.append(f'{_INDENT}{{ text: "Dashboard", link: "/dashboard" }}')
+    entries.append(arch_group)
+    entries.append(f'{_INDENT}{{ text: "Landscape map", link: "/landscape" }}')
+    entries.append(docs_group)
+    return "[\n" + ",\n".join(entries) + ",\n]"
+
+
 def render_nav_config(conn: sqlite3.Connection, project_root: Path) -> str:
     """The full generated VitePress nav/sidebar config module (deterministic).
 
-    Top nav stays flat (Dashboard / Architecture / Landscape / Documentation).
-    The sidebar keeps Dashboard + Landscape flat, and uses the nested trees for
-    Architecture (``part_of``) and Documentation (``docs/``).
+    Top nav is empty (``render_nav``); the sidebar is the ordered, link-safe tree
+    from :func:`render_sidebar` (About / Getting Started / Dashboard / Architecture
+    / Landscape map / Documentation).
     """
-    arch_group = render_architecture_group(conn)
-    docs_group = render_documentation_group(project_root)
+    docs_root = project_root / "docs"
+    has_getting_started = _getting_started_exists(docs_root)
+    nav = render_nav()
+    sidebar = render_sidebar(
+        conn, docs_root=docs_root, has_getting_started=has_getting_started
+    )
     return (
         "// GENERATED by `beadloom docs site` — do not edit by hand.\n"
         "// Imported by .vitepress/config.mjs; regenerated deterministically.\n"
-        "export const nav = [\n"
-        '  { text: "Dashboard", link: "/dashboard" },\n'
-        '  { text: "Architecture", link: "/index" },\n'
-        '  { text: "Landscape", link: "/landscape" },\n'
-        '  { text: "Documentation", link: "/docs/" },\n'
-        "];\n\n"
-        "export const sidebar = [\n"
-        '  { text: "Dashboard", items: [{ text: "Metrics", link: "/dashboard" }] },\n'
-        f"{arch_group},\n"
-        '  { text: "Landscape", items: [{ text: "Map", link: "/landscape" }] },\n'
-        f"{docs_group},\n"
-        "];\n"
+        f"export const nav = {nav};\n\n"
+        f"export const sidebar = {sidebar};\n"
+    )
+
+
+def _getting_started_exists(docs_root: Path) -> bool:
+    """True if a ``getting-started.*`` page is published under *docs_root*.
+
+    Link-safe: the sidebar only emits the Getting Started entry when a backing
+    page exists (any markdown extension), never a dead link.
+    """
+    if not docs_root.is_dir():
+        return False
+    return any(
+        p.is_file() and p.stem == "getting-started" and p.suffix == ".md"
+        for p in docs_root.iterdir()
     )

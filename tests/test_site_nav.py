@@ -21,7 +21,9 @@ from beadloom.application.site_nav import (
     human_label,
     render_architecture_group,
     render_documentation_group,
+    render_nav,
     render_nav_config,
+    render_sidebar,
 )
 from beadloom.infrastructure.db import create_schema
 
@@ -248,7 +250,7 @@ def test_architecture_links_resolve_to_existing_nodes(conn: sqlite3.Connection) 
     kind_dir = {"service": "services", "domain": "domains", "feature": "features"}
     for line in js.splitlines():
         stripped = line.strip()
-        if "link:" not in stripped or "/index" in stripped:
+        if "link:" not in stripped or "/architecture" in stripped:
             continue
         url = stripped.split('link: "', 1)[1].split('"', 1)[0]
         parts = url.strip("/").split("/")
@@ -292,3 +294,162 @@ def test_render_nav_config_is_valid_js_structure(
     assert js.count("{") == js.count("}")
     assert re.search(r"export const nav = \[", js)
     assert re.search(r"export const sidebar = \[", js)
+
+
+# ---------------------------------------------------------------------------
+# BDL-046 BEAD-02 — restructured ordered sidebar + empty top nav
+# ---------------------------------------------------------------------------
+
+
+def _top_level_texts(js: str) -> list[str]:
+    """The ``text:`` labels of the top-level sidebar entries, in document order.
+
+    Each top-level entry opens with ``  {`` (exactly two-space indentation). For a
+    flat entry the ``text:`` key is inline on that line; for a group it is on the
+    next line at four-space indentation. We capture the first ``text:`` per entry.
+    """
+    texts: list[str] = []
+    lines = js.splitlines()
+    for idx, line in enumerate(lines):
+        if not (line.startswith("  {") and not line.startswith("   ")):
+            continue
+        head = line if 'text: "' in line else lines[idx + 1]
+        texts.append(head.split('text: "', 1)[1].split('"', 1)[0])
+    return texts
+
+
+def test_render_nav_is_empty(conn: sqlite3.Connection) -> None:
+    """Top nav is emptied — theme keeps appearance/search/locale regardless."""
+    assert render_nav() == "[]"
+
+
+def test_render_nav_config_top_nav_is_empty(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    _seed_docs(tmp_path)
+    js = render_nav_config(conn, tmp_path)
+    assert re.search(r"export const nav = \[\s*\];", js)
+
+
+def test_sidebar_top_level_order_with_getting_started(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    _seed_docs(tmp_path)
+    js = render_sidebar(conn, docs_root=tmp_path / "docs", has_getting_started=True)
+    assert _top_level_texts(js) == [
+        "About",
+        "Getting Started",
+        "Dashboard",
+        "Architecture",
+        "Landscape map",
+        "Documentation",
+    ]
+
+
+def test_sidebar_omits_getting_started_when_absent(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    _seed_docs(tmp_path)
+    js = render_sidebar(conn, docs_root=tmp_path / "docs", has_getting_started=False)
+    assert _top_level_texts(js) == [
+        "About",
+        "Dashboard",
+        "Architecture",
+        "Landscape map",
+        "Documentation",
+    ]
+    # No top-level Getting Started entry (a docs-tree leaf of the same name may
+    # still exist inside the Documentation group — that is fine and unrelated).
+    assert "Getting Started" not in _top_level_texts(js)
+
+
+def test_sidebar_about_first_links_root(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    js = render_sidebar(conn, docs_root=tmp_path / "docs", has_getting_started=False)
+    assert '{ text: "About", link: "/" }' in js
+
+
+def test_sidebar_getting_started_links_doc(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    js = render_sidebar(conn, docs_root=tmp_path / "docs", has_getting_started=True)
+    assert "Getting Started" in _top_level_texts(js)
+    assert 'link: "/docs/getting-started" }' in js
+
+
+def test_sidebar_dashboard_is_flat(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """Dashboard is a plain link, not a one-child 'Metrics' group."""
+    js = render_sidebar(conn, docs_root=tmp_path / "docs", has_getting_started=False)
+    assert '{ text: "Dashboard", link: "/dashboard" }' in js
+    assert "Metrics" not in js
+
+
+def test_sidebar_landscape_is_flat(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """Landscape map is a plain link, not a one-child 'Map' group."""
+    js = render_sidebar(conn, docs_root=tmp_path / "docs", has_getting_started=False)
+    assert '{ text: "Landscape map", link: "/landscape" }' in js
+    assert '{ text: "Map"' not in js
+
+
+def test_sidebar_architecture_collapsed_with_overview_link(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    js = render_sidebar(conn, docs_root=tmp_path / "docs", has_getting_started=False)
+    assert '"Architecture"' in js
+    assert "collapsed: true" in js
+    # Overview entry now points at the dedicated /architecture page (BEAD-03),
+    # not the former /index landing.
+    assert '{ text: "Architecture overview", link: "/architecture" }' in js
+    assert 'link: "/index"' not in js
+
+
+def test_sidebar_documentation_expanded_overview_led(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    _seed_docs(tmp_path)
+    js = render_sidebar(conn, docs_root=tmp_path / "docs", has_getting_started=False)
+    assert '"Documentation"' in js
+    assert "collapsed: false" in js
+    overview_pos = js.index('{ text: "Overview", link: "/docs/" }')
+    doc_section = js.index('"Documentation"')
+    assert overview_pos > doc_section
+
+
+def test_sidebar_is_deterministic(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    _seed_docs(tmp_path)
+    a = render_sidebar(conn, docs_root=tmp_path / "docs", has_getting_started=True)
+    b = render_sidebar(conn, docs_root=tmp_path / "docs", has_getting_started=True)
+    assert a == b
+
+
+def test_nav_config_auto_detects_getting_started(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """``render_nav_config`` emits the top-level Getting Started entry iff the
+    backing page exists under ``docs/`` (link-safe auto-detection)."""
+    js_absent = render_nav_config(conn, tmp_path)  # no docs/ dir at all
+    assert "Getting Started" not in _top_level_texts(_sidebar_array(js_absent))
+    _seed_docs(tmp_path)  # adds docs/getting-started.md
+    js_present = render_nav_config(conn, tmp_path)
+    assert "Getting Started" in _top_level_texts(_sidebar_array(js_present))
+
+
+def _sidebar_array(config_js: str) -> str:
+    """Extract the ``sidebar`` array body from a generated config module."""
+    return config_js.split("export const sidebar = ", 1)[1]
+
+
+def test_sidebar_balanced_brackets(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    _seed_docs(tmp_path)
+    js = render_sidebar(conn, docs_root=tmp_path / "docs", has_getting_started=True)
+    assert js.count("[") == js.count("]")
+    assert js.count("{") == js.count("}")
