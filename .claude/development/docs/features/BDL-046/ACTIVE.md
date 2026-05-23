@@ -6,7 +6,7 @@
 
 ## Current Focus
 
-- **Phase:** Wave 1 (dev) — `site_about.py` ∥ `site_nav.py`
+- **Phase:** Wave 2 (dev) — `site.py` (BEAD-03 running)
 - **Coordinator:** main loop (multi-agent)
 - **Parent:** `beadloom-ivts`
 - **Blockers:** none
@@ -15,9 +15,9 @@
 
 | Bead | Role | Status |
 |------|------|--------|
-| beadloom-ivts.1 | dev (site_about) | ready |
-| beadloom-ivts.2 | dev (site_nav) | ready |
-| beadloom-ivts.3 | dev (site.py home/arch/docs-overview) | blocked ← 1,2 |
+| beadloom-ivts.1 | dev (site_about) | ✓ done (W1) |
+| beadloom-ivts.2 | dev (site_nav) | ✓ done (W1) |
+| beadloom-ivts.3 | dev (site.py home/arch/docs-overview) | in progress (W2) |
 | beadloom-ivts.4 | dev (RU locale data) | blocked ← 2,3 |
 | beadloom-ivts.5 | dev (config.mjs locales) | blocked ← 4 |
 | beadloom-ivts.6 | test | blocked ← 1-5 |
@@ -38,3 +38,4 @@ W1 `01∥02` → W2 `03` → W3 `04` → W4 `05` → test `06` → review `07` �
 ## Progress Log
 
 - 2026-06-02: docs approved (PRD/RFC/CONTEXT/PLAN), 9 beads + DAG created, coordinator activated, Wave 1 launching.
+- 2026-06-02: W1 done + committed. site_about + site_nav shipped (47 tests, ruff/mypy clean). Doc-freshness gate: editing a domain README clears the synced stamp for ALL (README↔code) pairs under that ref → re-baseline the whole ref with `mark_synced_by_ref(conn, 'application', root)` then `sync-check` (no reindex) to fixpoint. W2 (BEAD-03 site.py) launched.

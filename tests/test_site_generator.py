@@ -110,12 +110,13 @@ def test_emits_vitepress_config(conn: sqlite3.Connection, tmp_path: Path) -> Non
     assert "Documentation" in text
 
 
-def test_index_has_counts_and_diagram_and_health(
+def test_architecture_page_has_counts_and_diagram_and_health(
     conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
+    # BDL-046: the architecture overview moved off the landing to /architecture.
     out = tmp_path / "site"
     generate_site(conn, out, project_root=tmp_path)
-    text = (out / "index.md").read_text(encoding="utf-8")
+    text = (out / "architecture.md").read_text(encoding="utf-8")
     assert "1 service" in text or "1 services" in text
     assert "2 domains" in text
     assert "1 feature" in text or "1 features" in text
@@ -124,6 +125,95 @@ def test_index_has_counts_and_diagram_and_health(
     assert "C4Container" in text
     # Health summary line (coverage).
     assert "coverage" in text.lower()
+    assert (out / "architecture.md") in result_written(conn, out, tmp_path)
+
+
+def result_written(
+    conn: sqlite3.Connection, out: Path, project_root: Path
+) -> tuple[Path, ...]:
+    """Re-run the generator (idempotent) to read the returned written tuple."""
+    return generate_site(conn, out, project_root=project_root).written
+
+
+# ---------------------------------------------------------------------------
+# BDL-046: About home (EN + RU), architecture page, docs overview
+# ---------------------------------------------------------------------------
+
+
+def test_index_is_readme_about_not_architecture_overview(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    # README at the project root becomes the About home page.
+    (tmp_path / "README.md").write_text(
+        "# Beadloom\n\nKEEP YOUR ARCHITECTURE ACCURATE marker.\n", encoding="utf-8"
+    )
+    out = tmp_path / "site"
+    result = generate_site(conn, out, project_root=tmp_path)
+    text = (out / "index.md").read_text(encoding="utf-8")
+    # README marker present; the C4 architecture overview is NOT on the home page.
+    assert "KEEP YOUR ARCHITECTURE ACCURATE marker." in text
+    assert "C4Container" not in text
+    assert "Architecture overview" not in text
+    assert (out / "index.md") in result.written
+
+
+def test_index_falls_back_to_overview_without_readme(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    # No README.md -> robust fallback to the former architecture overview body.
+    out = tmp_path / "site"
+    generate_site(conn, out, project_root=tmp_path)
+    text = (out / "index.md").read_text(encoding="utf-8")
+    assert "C4Container" in text
+
+
+def test_ru_index_from_readme_ru(conn: sqlite3.Connection, tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("# Beadloom\n\nEN home.\n", encoding="utf-8")
+    (tmp_path / "README.ru.md").write_text(
+        "# Beadloom\n\nRU_HOME_MARKER (russian about).\n", encoding="utf-8"
+    )
+    out = tmp_path / "site"
+    result = generate_site(conn, out, project_root=tmp_path)
+    ru = (out / "ru" / "index.md").read_text(encoding="utf-8")
+    assert "RU_HOME_MARKER (russian about)." in ru
+    assert (out / "ru" / "index.md") in result.written
+
+
+def test_ru_index_skipped_without_readme_ru(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    (tmp_path / "README.md").write_text("# Beadloom\n\nEN home.\n", encoding="utf-8")
+    out = tmp_path / "site"
+    generate_site(conn, out, project_root=tmp_path)
+    assert not (out / "ru" / "index.md").exists()
+
+
+def test_docs_index_is_grouped_overview(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    # Build a small published docs tree (Domains / Services / Guides + a loose doc).
+    docs = tmp_path / "docs"
+    (docs / "domains").mkdir(parents=True)
+    (docs / "services").mkdir()
+    (docs / "guides").mkdir()
+    (docs / "getting-started.md").write_text("# GS\n", encoding="utf-8")
+    (docs / "domains" / "application.md").write_text("# App\n", encoding="utf-8")
+    (docs / "services" / "beadloom.md").write_text("# Svc\n", encoding="utf-8")
+    (docs / "guides" / "intro.md").write_text("# Intro\n", encoding="utf-8")
+
+    out = tmp_path / "site"
+    generate_site(conn, out, project_root=tmp_path)
+    text = (out / "docs" / "index.md").read_text(encoding="utf-8")
+    # Grouped section headings, not a flat link wall.
+    assert "## Domains" in text
+    assert "## Services" in text
+    assert "## Guides" in text
+    # Only published pages, link-safe and /docs/-rooted (clean URLs).
+    assert "/docs/domains/application" in text
+    assert "/docs/services/beadloom" in text
+    # Exactly one docs index page.
+    docs_indexes = [p for p in out.rglob("index.md") if p.parent.name == "docs"]
+    assert len(docs_indexes) == 1
 
 
 # ---------------------------------------------------------------------------

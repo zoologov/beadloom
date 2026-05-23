@@ -1,8 +1,15 @@
 """The `docs site` use-case: generate a VitePress content tree from the graph.
 
 Reads the indexed graph read-only and emits, under ``--out`` (default ``site/``):
-- ``index.md`` — architecture overview (domain/service/feature counts, the
-  top-level C4/Mermaid diagram, a health summary line).
+- ``index.md`` — the About home page, rendered from the project ``README.md``
+  via :func:`beadloom.application.site_about.render_about` (link-rebased so
+  README links resolve on the site). Falls back to the architecture overview
+  body when no ``README.md`` is present.
+- ``ru/index.md`` — the RU About page, rendered from ``README.ru.md`` the same
+  way (omitted when that file is absent).
+- ``architecture.md`` — architecture overview (domain/service/feature counts,
+  the top-level C4/Mermaid diagram, a health summary line); this is the body
+  that used to live at ``index.md`` before the About home replaced it.
 - per-node pages (``domains/<ref>.md`` / ``services/<ref>.md`` /
   ``features/<ref>.md``) — see :mod:`beadloom.application.site_pages`.
 - ``dashboard.md`` + ``dashboard.data.json`` — Showcase A, the AaC/DocAsCode
@@ -34,6 +41,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from beadloom.application.site_about import render_about
 from beadloom.application.site_dashboard import (
     build_dashboard_data,
     render_dashboard_md,
@@ -50,9 +58,9 @@ from beadloom.application.site_metrics_history import (
     append_metrics_point,
     backfill_structural_history,
 )
-from beadloom.application.site_nav import render_nav_config
+from beadloom.application.site_nav import human_label, render_nav_config
 from beadloom.application.site_pages import NodeRow, load_nodes, render_all_pages
-from beadloom.application.site_published import publish_docs
+from beadloom.application.site_published import build_published_docs, publish_docs
 from beadloom.graph.c4 import filter_c4_nodes, map_to_c4, render_c4_mermaid
 
 if TYPE_CHECKING:
@@ -60,6 +68,10 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+#: Canonical repo URL used to rebase unknown internal README links to absolute
+#: GitHub URLs (so the About page never carries a broken site-relative link).
+_REPO_URL = "https://github.com/zoologov/beadloom"
 
 
 class MermaidValidationError(RuntimeError):
@@ -174,6 +186,71 @@ def _render_index(conn: sqlite3.Connection, nodes: list[NodeRow]) -> str:
         "```",
         "",
     ]
+    return "\n".join(lines) + "\n"
+
+
+def _published_doc_slugs(conn: sqlite3.Connection, project_root: Path) -> set[str]:
+    """The set of slugs that get a published ``/docs/<slug>`` page.
+
+    Derived from the SAME data the docs tree publishes
+    (:func:`build_published_docs`): a slug is the doc's ``docs/``-relative path
+    with the ``.md`` suffix stripped (e.g. ``getting-started``,
+    ``domains/application``). Used both to rebase README links in the About page
+    and to build the grouped docs overview — link-safe by construction.
+    """
+    slugs: set[str] = set()
+    for doc in build_published_docs(conn, project_root=project_root):
+        path = doc.doc_path.replace("\\", "/")
+        slugs.add(path[: -len(".md")] if path.endswith(".md") else path)
+    return slugs
+
+
+def _render_about_page(readme_path: Path, slugs: set[str]) -> str | None:
+    """The About-page body for *readme_path*, or None when the file is absent."""
+    if not readme_path.is_file():
+        return None
+    readme_text = readme_path.read_text(encoding="utf-8")
+    return render_about(
+        readme_text, published_doc_slugs=slugs, repo_url=_REPO_URL
+    )
+
+
+def _render_docs_overview(slugs: set[str]) -> str:
+    """A grouped docs overview (intro + Domains / Services / Guides / Other).
+
+    Replaces the flat link wall ``publish_docs`` emits at ``docs/index.md`` with
+    a guided map grouped by top-level docs directory. Link-safe: only published
+    slugs are listed, each as an extension-less ``/docs/<slug>`` link. The slug's
+    last path segment is human-labelled (``getting-started`` -> ``Getting
+    Started``). Deterministic (sorted within each group).
+    """
+    groups: dict[str, list[str]] = {}
+    for slug in slugs:
+        head, sep, _ = slug.partition("/")
+        section = head if sep else ""
+        groups.setdefault(section, []).append(slug)
+
+    lines = [
+        "---",
+        "title: Documentation",
+        "---",
+        "",
+        "# Documentation",
+        "",
+        "The project's validated documentation, published as-is with a per-doc "
+        "`doc_sync` freshness badge (same source as `sync-check`). Browse it by "
+        "area below.",
+        "",
+    ]
+    ordered = sorted(groups, key=lambda s: (s == "", s))
+    for section in ordered:
+        heading = human_label(section) if section else "Overview"
+        lines.append(f"## {heading}")
+        lines.append("")
+        for slug in sorted(groups[section]):
+            label = human_label(slug.rsplit("/", 1)[-1])
+            lines.append(f"- [{label}](/docs/{slug})")
+        lines.append("")
     return "\n".join(lines) + "\n"
 
 
@@ -309,7 +386,18 @@ def generate_site(
     nodes = load_nodes(conn)
     written: list[Path] = []
 
-    _write(out_dir / "index.md", _render_index(conn, nodes), written)
+    # About home (EN) from README.md, with the architecture overview moved to
+    # its own /architecture page. Falls back to the overview when no README.
+    slugs = _published_doc_slugs(conn, project_root)
+    overview = _render_index(conn, nodes)
+    about_en = _render_about_page(project_root / "README.md", slugs)
+    _write(out_dir / "index.md", about_en if about_en is not None else overview, written)
+    _write(out_dir / "architecture.md", overview, written)
+
+    # RU About (locale root) from README.ru.md — skipped if absent (no failure).
+    about_ru = _render_about_page(project_root / "README.ru.md", slugs)
+    if about_ru is not None:
+        _write(out_dir / "ru" / "index.md", about_ru, written)
 
     for page in render_all_pages(conn):
         _write(out_dir / page.rel_path, page.body, written)
@@ -348,7 +436,16 @@ def generate_site(
     # site/docs/ preserving structure (source never mutated) and inject a
     # per-doc validation badge from the doc_sync engine (same source as
     # sync-check). Badges land only in the copy under out_dir.
-    written.extend(publish_docs(conn, out_dir, project_root=project_root))
+    published = publish_docs(conn, out_dir, project_root=project_root)
+    written.extend(published)
+    # Replace the flat docs landing publish_docs emits with a grouped overview
+    # (Domains / Services / Guides …). The path is already recorded by
+    # publish_docs, so overwrite its body in place — exactly one docs/index.md.
+    docs_index = out_dir / "docs" / "index.md"
+    if docs_index in published:
+        overview_md = _render_docs_overview(slugs)
+        _guard_diagrams(docs_index, overview_md)
+        docs_index.write_text(overview_md, encoding="utf-8")
 
     _write(
         out_dir / ".vitepress" / "config.generated.mjs",
