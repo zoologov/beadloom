@@ -6,7 +6,7 @@
 
 ## Current Focus
 
-- **Phase:** Wave 2 (dev) — `site.py` (BEAD-03 running)
+- **Phase:** Wave 3 (dev) — RU locale data (BEAD-04 running)
 - **Coordinator:** main loop (multi-agent)
 - **Parent:** `beadloom-ivts`
 - **Blockers:** none
@@ -17,8 +17,8 @@
 |------|------|--------|
 | beadloom-ivts.1 | dev (site_about) | ✓ done (W1) |
 | beadloom-ivts.2 | dev (site_nav) | ✓ done (W1) |
-| beadloom-ivts.3 | dev (site.py home/arch/docs-overview) | in progress (W2) |
-| beadloom-ivts.4 | dev (RU locale data) | blocked ← 2,3 |
+| beadloom-ivts.3 | dev (site.py home/arch/docs-overview) | ✓ done (W2) |
+| beadloom-ivts.4 | dev (RU locale data) | in progress (W3) |
 | beadloom-ivts.5 | dev (config.mjs locales) | blocked ← 4 |
 | beadloom-ivts.6 | test | blocked ← 1-5 |
 | beadloom-ivts.7 | review | blocked ← 6 |

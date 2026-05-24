@@ -24,6 +24,7 @@ from beadloom.application.site_nav import (
     render_nav,
     render_nav_config,
     render_sidebar,
+    render_sidebar_ru,
 )
 from beadloom.infrastructure.db import create_schema
 
@@ -453,3 +454,118 @@ def test_sidebar_balanced_brackets(
     js = render_sidebar(conn, docs_root=tmp_path / "docs", has_getting_started=True)
     assert js.count("[") == js.count("]")
     assert js.count("{") == js.count("}")
+
+
+# ---------------------------------------------------------------------------
+# BDL-046 BEAD-04 — RU locale sidebar (curated About-only) + navRu/sidebarRu
+# ---------------------------------------------------------------------------
+
+
+def test_sidebar_ru_about_links_ru_home(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """The only translated page: About points at the RU home ``/ru/``."""
+    js = render_sidebar_ru(conn, docs_root=tmp_path / "docs", has_getting_started=False)
+    assert '{ text: "О проекте", link: "/ru/" }' in js
+    # EN About link must not leak into the RU sidebar's About entry.
+    assert '{ text: "About", link: "/" }' not in js
+
+
+def test_sidebar_ru_top_level_order_matches_en(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """RU sidebar mirrors the EN top-level ORDER exactly (only labels differ)."""
+    _seed_docs(tmp_path)
+    ru = render_sidebar_ru(
+        conn, docs_root=tmp_path / "docs", has_getting_started=True
+    )
+    assert _top_level_texts(ru) == [
+        "О проекте",
+        "С чего начать",
+        "Дашборд",
+        "Архитектура",
+        "Карта ландшафта",
+        "Документация",
+    ]
+
+
+def test_sidebar_ru_omits_getting_started_when_absent(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    _seed_docs(tmp_path)
+    ru = render_sidebar_ru(
+        conn, docs_root=tmp_path / "docs", has_getting_started=False
+    )
+    assert _top_level_texts(ru) == [
+        "О проекте",
+        "Дашборд",
+        "Архитектура",
+        "Карта ландшафта",
+        "Документация",
+    ]
+
+
+def test_sidebar_ru_non_about_links_point_at_en_routes(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """Only About is translated; every other link targets the EN routes."""
+    _seed_docs(tmp_path)
+    ru = render_sidebar_ru(
+        conn, docs_root=tmp_path / "docs", has_getting_started=True
+    )
+    assert 'link: "/dashboard"' in ru
+    assert 'link: "/landscape"' in ru
+    assert 'link: "/architecture"' in ru
+    assert 'link: "/docs/getting-started"' in ru
+    assert 'link: "/docs/"' in ru
+    assert 'link: "/services/beadloom"' in ru
+    assert 'link: "/domains/context-oracle"' in ru
+    # No non-About link is rebased under /ru/.
+    for line in ru.splitlines():
+        stripped = line.strip()
+        if "link:" not in stripped:
+            continue
+        url = stripped.split('link: "', 1)[1].split('"', 1)[0]
+        if url == "/ru/":
+            continue
+        assert not url.startswith("/ru/"), f"non-About link rebased to RU: {url}"
+
+
+def test_sidebar_ru_is_deterministic(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    _seed_docs(tmp_path)
+    a = render_sidebar_ru(conn, docs_root=tmp_path / "docs", has_getting_started=True)
+    b = render_sidebar_ru(conn, docs_root=tmp_path / "docs", has_getting_started=True)
+    assert a == b
+
+
+def test_sidebar_ru_balanced_brackets(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    _seed_docs(tmp_path)
+    ru = render_sidebar_ru(conn, docs_root=tmp_path / "docs", has_getting_started=True)
+    assert ru.count("[") == ru.count("]")
+    assert ru.count("{") == ru.count("}")
+
+
+def test_render_nav_config_exports_ru_locale(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """config.generated.mjs additionally exports navRu + sidebarRu."""
+    _seed_docs(tmp_path)
+    js = render_nav_config(conn, tmp_path)
+    assert re.search(r"export const navRu = \[\s*\];", js)
+    assert re.search(r"export const sidebarRu = \[", js)
+    # The RU About link is present in the module.
+    assert '{ text: "О проекте", link: "/ru/" }' in js
+    # Existing EN exports remain.
+    assert re.search(r"export const nav = \[", js)
+    assert re.search(r"export const sidebar = \[", js)
+
+
+def test_render_nav_config_ru_section_is_deterministic(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    _seed_docs(tmp_path)
+    assert render_nav_config(conn, tmp_path) == render_nav_config(conn, tmp_path)
