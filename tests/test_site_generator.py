@@ -188,6 +188,82 @@ def test_ru_index_skipped_without_readme_ru(
     assert not (out / "ru" / "index.md").exists()
 
 
+def test_docs_index_loose_docs_under_overview_section(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """Top-level (un-sectioned) docs are grouped under an 'Overview' heading.
+
+    A doc with no leading directory segment (e.g. ``getting-started.md``) has
+    no section, so the grouped overview lists it under a synthetic 'Overview'
+    heading with a human-labelled, /docs/-rooted clean link.
+    """
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "getting-started.md").write_text("# GS\n", encoding="utf-8")
+    out = tmp_path / "site"
+    generate_site(conn, out, project_root=tmp_path)
+    text = (out / "docs" / "index.md").read_text(encoding="utf-8")
+    assert "## Overview" in text
+    assert "[Getting Started](/docs/getting-started)" in text
+
+
+def test_architecture_page_is_not_the_about_home(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """With a README, the overview lives ONLY at /architecture, not at /index."""
+    (tmp_path / "README.md").write_text(
+        "# Beadloom\n\nABOUT_MARKER body.\n", encoding="utf-8"
+    )
+    out = tmp_path / "site"
+    generate_site(conn, out, project_root=tmp_path)
+    index = (out / "index.md").read_text(encoding="utf-8")
+    arch = (out / "architecture.md").read_text(encoding="utf-8")
+    assert "ABOUT_MARKER body." in index
+    assert "Architecture overview" not in index
+    assert "Architecture overview" in arch
+    assert "ABOUT_MARKER" not in arch
+
+
+def test_written_tuple_is_sorted_and_contains_new_paths(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """SiteResult.written is sorted and lists the BDL-046 pages.
+
+    index.md (About), architecture.md (moved overview), ru/index.md (RU About),
+    docs/index.md (grouped overview) all appear, and the tuple is sorted.
+    """
+    (tmp_path / "README.md").write_text("# B\n\nEN.\n", encoding="utf-8")
+    (tmp_path / "README.ru.md").write_text("# B\n\nRU.\n", encoding="utf-8")
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "getting-started.md").write_text("# GS\n", encoding="utf-8")
+    out = tmp_path / "site"
+    result = generate_site(conn, out, project_root=tmp_path)
+    assert list(result.written) == sorted(result.written)
+    for rel in ("index.md", "architecture.md", "ru/index.md", "docs/index.md"):
+        assert out / rel in result.written
+
+
+def test_exactly_one_docs_index_when_source_has_root_index(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """A source docs/index.md does not create a duplicate landing page.
+
+    The grouped overview overwrites the single published docs/index.md in
+    place — there is exactly one, even when the source tree ships its own.
+    """
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "index.md").write_text("# Source landing\n", encoding="utf-8")
+    (docs / "getting-started.md").write_text("# GS\n", encoding="utf-8")
+    out = tmp_path / "site"
+    generate_site(conn, out, project_root=tmp_path)
+    docs_indexes = [p for p in out.rglob("index.md") if p.parent.name == "docs"]
+    assert len(docs_indexes) == 1
+    # The grouped overview won (intro paragraph present), not the source body.
+    text = docs_indexes[0].read_text(encoding="utf-8")
+    assert "title: Documentation" in text
+
+
 def test_docs_index_is_grouped_overview(
     conn: sqlite3.Connection, tmp_path: Path
 ) -> None:

@@ -569,3 +569,69 @@ def test_render_nav_config_ru_section_is_deterministic(
 ) -> None:
     _seed_docs(tmp_path)
     assert render_nav_config(conn, tmp_path) == render_nav_config(conn, tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# BDL-046 BEAD-06 — holistic edge cases (empty graph, no docs dir, RU mirror)
+# ---------------------------------------------------------------------------
+
+
+def test_architecture_group_empty_graph_keeps_overview_entry() -> None:
+    """An empty graph still emits the Architecture group with its overview link.
+
+    No nodes -> no part_of tree, but the group is never empty: the
+    ``/architecture`` overview entry is always present (link-safe, no crash).
+    """
+    db = sqlite3.connect(":memory:")
+    db.row_factory = sqlite3.Row
+    create_schema(db)
+    js = render_architecture_group(db)
+    db.close()
+    assert '"Architecture"' in js
+    assert '{ text: "Architecture overview", link: "/architecture" }' in js
+
+
+def test_render_nav_config_no_docs_dir_still_emits_all_exports(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """With no docs/ directory the config still exports all four arrays.
+
+    Documentation group degrades to just its Overview link; Getting Started is
+    omitted (no backing page); the module stays valid (balanced brackets).
+    """
+    js = render_nav_config(conn, tmp_path)  # tmp_path has no docs/
+    for export in ("export const nav = ", "export const sidebar = ",
+                   "export const navRu = ", "export const sidebarRu = "):
+        assert export in js
+    assert '{ text: "Overview", link: "/docs/" }' in js
+    assert "Getting Started" not in _top_level_texts(_sidebar_array(js))
+    assert js.count("{") == js.count("}")
+    assert js.count("[") == js.count("]")
+
+
+def test_sidebar_ru_reuses_en_architecture_subtree_labels(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """Only the group HEADER is Russian; interior node labels stay English.
+
+    The RU sidebar reuses the EN Architecture/Documentation subtrees verbatim
+    (same links + nesting), swapping only the top-level header label. So the
+    header is 'Архитектура' but the interior 'Context Oracle' / 'Cache' node
+    labels remain English (every interior link is an EN route anyway).
+    """
+    ru = render_sidebar_ru(conn, docs_root=tmp_path / "docs", has_getting_started=False)
+    assert '"Архитектура"' in ru
+    assert '"Context Oracle"' in ru  # interior node label stays EN
+    assert '"Cache"' in ru
+    # The EN top-level header label must not leak as a top-level entry.
+    assert "Architecture" not in _top_level_texts(ru)
+
+
+def test_sidebar_ru_documentation_header_is_russian(
+    conn: sqlite3.Connection, tmp_path: Path
+) -> None:
+    _seed_docs(tmp_path)
+    ru = render_sidebar_ru(conn, docs_root=tmp_path / "docs", has_getting_started=False)
+    assert '"Документация"' in ru
+    # Overview leaf link unchanged (EN route).
+    assert '{ text: "Overview", link: "/docs/" }' in ru

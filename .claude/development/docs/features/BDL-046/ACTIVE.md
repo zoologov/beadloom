@@ -6,7 +6,7 @@
 
 ## Current Focus
 
-- **Phase:** Wave 3 (dev) — RU locale data (BEAD-04 running)
+- **Phase:** Test wave — BEAD-06 (dev W1-W4 all done + committed)
 - **Coordinator:** main loop (multi-agent)
 - **Parent:** `beadloom-ivts`
 - **Blockers:** none
