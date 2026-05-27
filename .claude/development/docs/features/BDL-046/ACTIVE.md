@@ -6,8 +6,9 @@
 
 ## Current Focus
 
-- **Phase:** Dogfood (BEAD-08) — build found a defect → fix BEAD-10 (dev) running, then re-build
-- **Review:** BEAD-07 = OK (closed)
+- **Phase:** Dogfood round 2 — browser found 3 issues → fix beads 11(dev)/12(test)/13(review); BEAD-11 running
+- **Review:** BEAD-07 = OK (closed); BEAD-10 fix (badge-link dead links) = done+deployed
+- **Live dogfood findings (round 2):** (1) locale switcher translated the menu; (2) switcher 404'd on every page except /ru/; (3) docs-overview link wall reads poorly. Root cause for 1+2: VitePress `locales` is the wrong tool for curated About-only (global /x↔/ru/x mapping). FIX: drop locales, single EN sidebar, About bilingual via in-page cross-link (render_about rewrites README cross-links to /ru/↔/). #3: owner chose intro + section descriptions, no link wall.
 - **Coordinator:** main loop (multi-agent)
 - **Parent:** `beadloom-ivts`
 - **Blockers:** none

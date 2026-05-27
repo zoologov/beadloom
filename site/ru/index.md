@@ -1,6 +1,6 @@
 # Beadloom
 
-> Read this in other languages: English
+> Read this in other languages: [English](/)
 
 **Держите архитектуру актуальной и достоверной — от одного репозитория до целого ландшафта микросервисов или всех IT-продуктов компании.**
 

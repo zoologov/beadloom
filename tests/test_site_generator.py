@@ -188,14 +188,14 @@ def test_ru_index_skipped_without_readme_ru(
     assert not (out / "ru" / "index.md").exists()
 
 
-def test_docs_index_loose_docs_under_overview_section(
+def test_docs_index_loose_docs_under_general_section(
     conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
-    """Top-level (un-sectioned) docs are grouped under an 'Overview' heading.
+    """Top-level (un-sectioned) docs are described under a 'General' heading.
 
-    A doc with no leading directory segment (e.g. ``getting-started.md``) has
-    no section, so the grouped overview lists it under a synthetic 'Overview'
-    heading with a human-labelled, /docs/-rooted clean link.
+    A doc with no leading directory segment (e.g. ``getting-started.md``) has no
+    section, so the overview names it as inline TEXT under a synthetic 'General'
+    heading (human-labelled, no link).
     """
     docs = tmp_path / "docs"
     docs.mkdir()
@@ -203,8 +203,10 @@ def test_docs_index_loose_docs_under_overview_section(
     out = tmp_path / "site"
     generate_site(conn, out, project_root=tmp_path)
     text = (out / "docs" / "index.md").read_text(encoding="utf-8")
-    assert "## Overview" in text
-    assert "[Getting Started](/docs/getting-started)" in text
+    assert "## General" in text
+    assert "Getting Started" in text
+    # Named as text, never as a link.
+    assert "](/docs/" not in text
 
 
 def test_architecture_page_is_not_the_about_home(
@@ -284,9 +286,11 @@ def test_docs_index_is_grouped_overview(
     assert "## Domains" in text
     assert "## Services" in text
     assert "## Guides" in text
-    # Only published pages, link-safe and /docs/-rooted (clean URLs).
-    assert "/docs/domains/application" in text
-    assert "/docs/services/beadloom" in text
+    # Members are named as inline TEXT, human-labelled (no link wall).
+    assert "Application" in text
+    assert "Beadloom" in text
+    # NO links in the body — the navigable tree is the expanded sidebar.
+    assert "](/docs/" not in text
     # Exactly one docs index page.
     docs_indexes = [p for p in out.rglob("index.md") if p.parent.name == "docs"]
     assert len(docs_indexes) == 1

@@ -2,7 +2,7 @@
   "alerts": [
     {
       "kind": "stale_doc",
-      "message": "1 stale doc(s) — refresh and re-run `beadloom sync-check`",
+      "message": "14 stale doc(s) — refresh and re-run `beadloom sync-check`",
       "severity": "warn"
     }
   ],
@@ -134,21 +134,21 @@
   "docs": {
     "coverage_pct": 96.0,
     "documented": 24,
-    "fresh": 74,
-    "freshness_pct": 98.7,
+    "fresh": 61,
+    "freshness_pct": 81.3,
     "nodes": 25,
-    "stale": 1,
+    "stale": 14,
     "tracked_pairs": 75
   },
   "doctor": {
     "by_severity": {
       "ok": 10,
-      "warning": 4
+      "warning": 17
     },
     "errors": 0,
     "passed": true,
-    "total": 14,
-    "warnings": 4
+    "total": 27,
+    "warnings": 17
   },
   "federated": null,
   "lint": {
@@ -234,14 +234,14 @@
       "value": "16.0 / 100"
     },
     {
-      "detail": "1 stale of 75 tracked",
+      "detail": "14 stale of 75 tracked",
       "group": "docs",
       "label": "Docs",
       "status": "warn",
       "value": "96.0% covered"
     },
     {
-      "detail": "0 errors, 4 warnings",
+      "detail": "0 errors, 17 warnings",
       "group": "doctor",
       "label": "Doctor",
       "status": "warn",
@@ -408,6 +408,26 @@
       "symbols": 790,
       "sync_pct": 98.7,
       "ts": "2026-06-02T13:38:32.382714+00:00"
+    },
+    {
+      "coverage_pct": 96.0,
+      "debt_score": 16.0,
+      "edges": 76,
+      "lint_violations": 2,
+      "nodes": 25,
+      "symbols": 790,
+      "sync_pct": 81.3,
+      "ts": "2026-06-02T14:01:47.632845+00:00"
+    },
+    {
+      "coverage_pct": 96.0,
+      "debt_score": 16.0,
+      "edges": 76,
+      "lint_violations": 2,
+      "nodes": 25,
+      "symbols": 790,
+      "sync_pct": 81.3,
+      "ts": "2026-06-02T14:02:29.979806+00:00"
     }
   ]
 }

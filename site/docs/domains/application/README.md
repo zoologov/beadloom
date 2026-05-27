@@ -1,7 +1,7 @@
 <!-- beadloom:badge-start -->
-> ⚠️ **stale** — hash_changed
+> ⚠️ **stale** — symbols_changed
 > 
-> last synced 2026-06-02T13:37:28.823569+00:00 · coverage 93% (`application`)
+> last synced 2026-06-02T14:00:29.352874+00:00 · coverage 93% (`application`)
 > 
 > _Validation by Beadloom `doc_sync` — same source as `sync-check`._
 <!-- beadloom:badge-end -->

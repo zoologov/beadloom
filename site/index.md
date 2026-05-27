@@ -1,6 +1,6 @@
 # Beadloom
 
-> Read this in other languages: Русский
+> Read this in other languages: [Русский](/ru/)
 
 **Keep your architecture accurate and trustworthy — from a single repo to a whole microservices landscape, or every IT product in your company.**
 

@@ -11,20 +11,17 @@
 import { withMermaid } from "vitepress-plugin-mermaid";
 
 // The generated nav/sidebar. Regenerate with `beadloom docs site` before build.
-// Falls back to empty arrays if the site has not been generated yet.
-// `navRu`/`sidebarRu` drive the RU locale (curated About-only): the RU sidebar
-// translates only the top-level labels + points About at /ru/; every other link
-// stays on the EN routes (BDL-046).
+// Falls back to empty arrays if the site has not been generated yet. A single
+// shared EN sidebar (BDL-046 BEAD-11): VitePress `locales` was dropped because
+// its global /x↔/ru/x mapping translated the whole menu and 404'd off /ru/. The
+// bilingual About is now an in-page cross-link (/ ↔ /ru/) emitted in the README
+// transform, not a locale switcher.
 let nav = [];
 let sidebar = [];
-let navRu = [];
-let sidebarRu = [];
 try {
   const generated = await import("./config.generated.mjs");
   nav = generated.nav ?? [];
   sidebar = generated.sidebar ?? [];
-  navRu = generated.navRu ?? [];
-  sidebarRu = generated.sidebarRu ?? [];
 } catch {
   // config.generated.mjs is produced by `beadloom docs site`; absent on a
   // fresh checkout before the first generation.
@@ -41,24 +38,11 @@ export default withMermaid({
   // at runtime (keeps the generated Markdown base-agnostic + deterministic).
   base: "/beadloom/",
   lastUpdated: false,
-  // Curated bilingual entry (BDL-046): only the About page is translated. The
-  // default theme renders the locale switcher (the visible language toggle) plus
-  // the appearance toggle + local search regardless of the empty top nav. The RU
-  // locale serves /ru/ (About from README.ru.md); its other menu links return to
-  // the EN routes — switching to RU and opening a doc shows the EN doc by design.
-  locales: {
-    root: {
-      label: "English",
-      lang: "en",
-      themeConfig: { nav, sidebar },
-    },
-    ru: {
-      label: "Русский",
-      lang: "ru",
-      link: "/ru/",
-      themeConfig: { nav: navRu, sidebar: sidebarRu },
-    },
-  },
+  // Single shared EN sidebar (BDL-046 BEAD-11): VitePress `locales` was dropped.
+  // The default theme still renders the appearance toggle + local search. The
+  // bilingual About is an in-page cross-link: the EN About (/) links to the RU
+  // About (/ru/) and back, generated from the README cross-link line.
+  themeConfig: { nav, sidebar },
   mermaid: {
     // Mermaid renderer options (C4 + flowchart render natively).
   },

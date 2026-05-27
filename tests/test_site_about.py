@@ -45,7 +45,8 @@ def test_published_doc_link_strips_leading_dot_slash() -> None:
     assert out == "[guide](/docs/getting-started)"
 
 
-def test_readme_ru_cross_link_dropped_keeps_text() -> None:
+def test_readme_ru_cross_link_dropped_keeps_text_when_no_routes() -> None:
+    """Back-compat: without ``cross_link_routes`` the link is dropped (text kept)."""
     out = render_about(
         "Read this in [Russian](README.ru.md).",
         published_doc_slugs=set(),
@@ -54,13 +55,74 @@ def test_readme_ru_cross_link_dropped_keeps_text() -> None:
     assert out == "Read this in Russian."
 
 
-def test_readme_en_cross_link_dropped_keeps_text() -> None:
+def test_readme_en_cross_link_dropped_keeps_text_when_no_routes() -> None:
     out = render_about(
         "Read this in [English](README.md).",
         published_doc_slugs=set(),
         repo_url=_REPO,
     )
     assert out == "Read this in English."
+
+
+# ---------------------------------------------------------------------------
+# BDL-046 BEAD-11 — cross_link_routes rewrites README cross-links to a route
+# (replaces the locale switcher: the bilingual About is now an in-page link).
+# ---------------------------------------------------------------------------
+
+_CROSS = {"readme.ru.md": "/ru/", "readme.md": "/"}
+
+
+def test_cross_link_ru_rewritten_to_ru_route_keeps_text() -> None:
+    """EN About: ``[Русский](README.ru.md)`` -> link to ``/ru/`` (text kept)."""
+    out = render_about(
+        "> Read this in other languages: [Русский](README.ru.md)",
+        published_doc_slugs=set(),
+        repo_url=_REPO,
+        cross_link_routes=_CROSS,
+    )
+    assert out == "> Read this in other languages: [Русский](/ru/)"
+
+
+def test_cross_link_en_rewritten_to_root_route_keeps_text() -> None:
+    """RU About: ``[English](README.md)`` -> link to ``/`` (text kept)."""
+    out = render_about(
+        "> Read this in other languages: [English](README.md)",
+        published_doc_slugs=set(),
+        repo_url=_REPO,
+        cross_link_routes=_CROSS,
+    )
+    assert out == "> Read this in other languages: [English](/)"
+
+
+def test_cross_link_route_is_case_insensitive() -> None:
+    out = render_about(
+        "[en](Readme.MD) and [ru](README.RU.MD)",
+        published_doc_slugs=set(),
+        repo_url=_REPO,
+        cross_link_routes=_CROSS,
+    )
+    assert out == "[en](/) and [ru](/ru/)"
+
+
+def test_cross_link_route_strips_leading_dot_slash() -> None:
+    out = render_about(
+        "Read in [Russian](./README.ru.md).",
+        published_doc_slugs=set(),
+        repo_url=_REPO,
+        cross_link_routes=_CROSS,
+    )
+    assert out == "Read in [Russian](/ru/)."
+
+
+def test_cross_link_route_unmapped_target_falls_back() -> None:
+    """A target not in the map still falls through the normal rules (GitHub)."""
+    out = render_about(
+        "[lic](LICENSE)",
+        published_doc_slugs=set(),
+        repo_url=_REPO,
+        cross_link_routes=_CROSS,
+    )
+    assert out == f"[lic]({_REPO}/blob/main/LICENSE)"
 
 
 def test_unknown_internal_link_becomes_absolute_github_url() -> None:

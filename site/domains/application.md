@@ -68,7 +68,6 @@ Use-case orchestration: reindex, doctor, debt report, file watcher
 - `render_node_page`
 - `render_published_doc`
 - `render_sidebar`
-- `render_sidebar_ru`
 - `resolve_scan_paths`
 - `run_checks`
 - `run_ci_gate`

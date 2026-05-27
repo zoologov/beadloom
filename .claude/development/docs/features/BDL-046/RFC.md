@@ -73,9 +73,11 @@ New/changed `site_nav.py` API: `render_sidebar(conn, *, docs_root, has_getting_s
 
 `config.generated.mjs` exports `nav = []`. The VitePress default theme renders the **appearance (light/dark) toggle**, **local search** (if configured), and the **locale switcher** in the nav bar independently of `nav` entries — so removing nav items keeps all three. No `config.mjs` change needed for this beyond what locales require (below).
 
-### 4. Bilingual About via locales (G5)
+### 4. Bilingual About — in-page toggle (G5)
 
-Use VitePress's native i18n. `config.mjs` gains a `locales` block; the generator drives per-locale nav/sidebar:
+> **Design correction (dogfood, round 2):** the original plan below used VitePress `locales` for the language switch. Live dogfood proved it the WRONG tool for "only About is bilingual": the default-theme locale switcher does a global `/x ↔ /ru/x` path mapping for EVERY page, so (a) it translated the whole menu and (b) clicking it on any page other than `/ru/` 404'd (no mirrored RU tree exists). **Corrected design:** drop `locales` entirely; keep a single EN sidebar (menu never translated); make the bilingual About an **in-page cross-link** — `render_about` rewrites the README's `[Русский](README.ru.md)` / `[English](README.md)` line to the counterpart route (`/ru/` ↔ `/`) instead of dropping it. The toggle then appears ONLY on About and never 404s elsewhere. `navRu`/`sidebarRu`/`render_sidebar_ru` are removed. The struck-through `locales` plan below is kept for the record.
+
+~~Use VitePress's native i18n. `config.mjs` gains a `locales` block; the generator drives per-locale nav/sidebar:~~
 
 ```js
 // config.mjs (shell) — locales merged from generated per-locale trees

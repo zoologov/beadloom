@@ -205,24 +205,36 @@ def _published_doc_slugs(conn: sqlite3.Connection, project_root: Path) -> set[st
     return slugs
 
 
+#: README cross-link basename (lowercased) -> site route. Rewrites the README's
+#: ``[Русский](README.ru.md)`` / ``[English](README.md)`` toggle into an in-page
+#: cross-link between the EN About (``/``) and the RU About (``/ru/``) — replaces
+#: the dropped VitePress locale switcher (BDL-046 BEAD-11).
+_CROSS_LINK_ROUTES: dict[str, str] = {"readme.ru.md": "/ru/", "readme.md": "/"}
+
+
 def _render_about_page(readme_path: Path, slugs: set[str]) -> str | None:
     """The About-page body for *readme_path*, or None when the file is absent."""
     if not readme_path.is_file():
         return None
     readme_text = readme_path.read_text(encoding="utf-8")
     return render_about(
-        readme_text, published_doc_slugs=slugs, repo_url=_REPO_URL
+        readme_text,
+        published_doc_slugs=slugs,
+        repo_url=_REPO_URL,
+        cross_link_routes=_CROSS_LINK_ROUTES,
     )
 
 
 def _render_docs_overview(slugs: set[str]) -> str:
-    """A grouped docs overview (intro + Domains / Services / Guides / Other).
+    """A short docs overview: intro + per-section one-line descriptions.
 
-    Replaces the flat link wall ``publish_docs`` emits at ``docs/index.md`` with
-    a guided map grouped by top-level docs directory. Link-safe: only published
-    slugs are listed, each as an extension-less ``/docs/<slug>`` link. The slug's
-    last path segment is human-labelled (``getting-started`` -> ``Getting
-    Started``). Deterministic (sorted within each group).
+    Replaces the flat link wall ``publish_docs`` emits at ``docs/index.md``. The
+    full navigable tree is already the expanded Documentation sidebar, so the
+    body is descriptive, NOT a second copy of that tree: an intro paragraph, then
+    a ``## <Group>`` heading per top-level docs group (Domains / Services /
+    Guides / any other) followed by a single sentence that NAMES that group's
+    members as inline, human-labelled TEXT (e.g. "graph, doc-sync, …") — never as
+    links. Deterministic (sorted within each group); link-safe (no links at all).
     """
     groups: dict[str, list[str]] = {}
     for slug in slugs:
@@ -238,20 +250,44 @@ def _render_docs_overview(slugs: set[str]) -> str:
         "# Documentation",
         "",
         "The project's validated documentation, published as-is with a per-doc "
-        "`doc_sync` freshness badge (same source as `sync-check`). Browse it by "
-        "area below.",
+        "`doc_sync` freshness badge (same source as `sync-check`). Use the "
+        "Documentation menu on the left to browse the full tree; the sections "
+        "below describe what each area covers.",
         "",
     ]
     ordered = sorted(groups, key=lambda s: (s == "", s))
     for section in ordered:
-        heading = human_label(section) if section else "Overview"
+        heading = human_label(section) if section else "General"
+        members = _section_members(section, groups[section])
         lines.append(f"## {heading}")
         lines.append("")
-        for slug in sorted(groups[section]):
-            label = human_label(slug.rsplit("/", 1)[-1])
-            lines.append(f"- [{label}](/docs/{slug})")
+        lines.append(_docs_section_sentence(heading, members))
         lines.append("")
     return "\n".join(lines) + "\n"
+
+
+def _section_members(section: str, slugs: list[str]) -> list[str]:
+    """Human-labelled member names for a docs group, sorted + de-duplicated.
+
+    The meaningful member is the path segment *immediately after* the section
+    head (e.g. ``domains/application/README`` -> ``application``), not the last
+    segment (which is often a generic ``README`` / ``SPEC``). Un-sectioned docs
+    fall back to their own stem.
+    """
+    names: set[str] = set()
+    for slug in slugs:
+        parts = slug.split("/")
+        member = parts[1] if section and len(parts) > 1 else parts[-1]
+        names.add(human_label(member))
+    return sorted(names)
+
+
+def _docs_section_sentence(heading: str, members: list[str]) -> str:
+    """One descriptive sentence naming a docs group's members as inline text."""
+    named = ", ".join(members)
+    return f"{heading} documentation covers {named}." if named else (
+        f"{heading} documentation."
+    )
 
 
 def _extract_mermaid_blocks(content: str) -> list[str]:

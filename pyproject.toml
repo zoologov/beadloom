@@ -114,11 +114,10 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101"]
-# BDL-046 BEAD-04: bilingual RU sidebar labels are intentional Cyrillic literals
-# ("О проекте", "Архитектура", ...) — RUF001 ambiguous-unicode warnings are false
-# positives for deliberate non-Latin UI strings.
-"src/beadloom/application/site_nav.py" = ["RUF001"]
-"tests/test_site_nav.py" = ["RUF001", "S101"]
+# BDL-046 BEAD-11: the bilingual About cross-link test uses the intentional
+# Cyrillic label "Русский" — RUF001 ambiguous-unicode is a false positive for a
+# deliberate non-Latin UI string.
+"tests/test_site_about.py" = ["RUF001", "S101"]
 
 [tool.mypy]
 python_version = "3.10"

@@ -284,7 +284,6 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `render_node_page`
 - `render_published_doc`
 - `render_sidebar`
-- `render_sidebar_ru`
 - `render_why`
 - `render_why_tree`
 - `resolve_import_to_node`

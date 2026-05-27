@@ -10,8 +10,12 @@ Rebasing rules (applied to both ``[text](target)`` links and
 
 - ``docs/<x>.md`` / ``docs/<x>`` whose slug ``<x>`` is published ->
   extension-less site link ``/docs/<x>``.
-- ``README.ru.md`` / ``README.md`` cross-links -> link dropped, visible text
-  kept (the VitePress locale switcher handles language).
+- ``README.ru.md`` / ``README.md`` cross-links: if ``cross_link_routes`` maps
+  the (lowercased) target basename to a site route, the link target is REWRITTEN
+  to that route (visible text kept) — this is the bilingual About toggle
+  (``[Русский](README.ru.md)`` -> ``[Русский](/ru/)``). When no map is given (or
+  the target is absent from it) the link is dropped, keeping only the text
+  (back-compat).
 - any other internal/relative target (``LICENSE``, source paths, an
   unpublished ``docs/<x>``) -> absolute GitHub URL
   ``{repo_url}/blob/main/<path>`` (a leading ``./`` is stripped).
@@ -52,8 +56,15 @@ def render_about(
     *,
     published_doc_slugs: set[str],
     repo_url: str,
+    cross_link_routes: dict[str, str] | None = None,
 ) -> str:
-    """Transform README Markdown into the About-page body (link rebasing)."""
+    """Transform README Markdown into the About-page body (link rebasing).
+
+    ``cross_link_routes`` maps a lowercased README cross-link basename (e.g.
+    ``"readme.ru.md"``) to the site route to rewrite it to (e.g. ``"/ru/"``).
+    When ``None`` the cross-link is dropped (text kept) — back-compat.
+    """
+    routes = cross_link_routes or {}
     segments = _PROTECT_RE.split(readme_text)
     # re.split with one capture group yields: prose, code, prose, code, ...
     # even indices are prose (rewrite); odd indices are protected (keep).
@@ -62,7 +73,7 @@ def render_about(
         if index % 2 == 1:
             out.append(segment)
         else:
-            out.append(_rewrite_prose(segment, published_doc_slugs, repo_url))
+            out.append(_rewrite_prose(segment, published_doc_slugs, repo_url, routes))
     return "".join(out)
 
 
@@ -70,10 +81,11 @@ def _rewrite_prose(
     prose: str,
     published_doc_slugs: set[str],
     repo_url: str,
+    routes: dict[str, str],
 ) -> str:
     def replace(match: re.Match[str]) -> str:
         bang, text, target = match.group(1), match.group(2), match.group(3)
-        return _rebase_one(bang, text, target, published_doc_slugs, repo_url)
+        return _rebase_one(bang, text, target, published_doc_slugs, repo_url, routes)
 
     return _LINK_RE.sub(replace, prose)
 
@@ -84,12 +96,13 @@ def _rebase_one(
     target: str,
     published_doc_slugs: set[str],
     repo_url: str,
+    routes: dict[str, str],
 ) -> str:
     # Badge-link idiom: the visible text is itself a nested image. Rebase its
     # (possibly relative) target by recursing through the prose rewriter so the
     # inner and outer targets are both handled by the same rules.
     if "![" in text:
-        text = _rewrite_prose(text, published_doc_slugs, repo_url)
+        text = _rewrite_prose(text, published_doc_slugs, repo_url, routes)
 
     stripped = target.strip()
     if _is_absolute_or_anchor(stripped):
@@ -98,7 +111,11 @@ def _rebase_one(
     path = stripped[2:] if stripped.startswith("./") else stripped
 
     if path.lower() in _README_CROSS_LINKS:
-        # Drop the link, keep the visible text (locale switcher handles this).
+        route = routes.get(path.lower())
+        if route is not None:
+            # Bilingual About: rewrite to the counterpart route, keep the text.
+            return f"{bang}[{text}]({route})"
+        # No route given: drop the link, keep the visible text (back-compat).
         return text
 
     site_link = _published_site_link(path, published_doc_slugs)
