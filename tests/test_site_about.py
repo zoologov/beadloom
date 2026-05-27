@@ -341,3 +341,70 @@ def test_image_with_empty_alt_rebased() -> None:
         repo_url=_REPO,
     )
     assert out == f"![]({_REPO}/blob/main/docs/assets/x.png)"
+
+
+# ---------------------------------------------------------------------------
+# BDL-046 BEAD-10 — badge-link idiom [![alt](img)](target) (dogfood defect)
+# ---------------------------------------------------------------------------
+
+
+def test_badge_link_license_rebases_outer_target_keeps_inner_shields() -> None:
+    """``[![License: MIT](shields-url)](LICENSE)`` -> outer target rebased,
+    inner absolute shields URL untouched. Regression: VitePress emitted a dead
+    ``./LICENSE`` link because only the inner image was matched."""
+    out = render_about(
+        "[![License: MIT](https://img.shields.io/github/license/zoologov/beadloom)](LICENSE)",
+        published_doc_slugs=set(),
+        repo_url=_REPO,
+    )
+    assert out == (
+        "[![License: MIT](https://img.shields.io/github/license/zoologov/beadloom)]"
+        f"({_REPO}/blob/main/LICENSE)"
+    )
+
+
+def test_badge_link_coverage_rebases_outer_target_to_pyproject() -> None:
+    out = render_about(
+        "[![coverage: 80%+](https://img.shields.io/badge/coverage-80%25%2B-green)](pyproject.toml)",
+        published_doc_slugs=set(),
+        repo_url=_REPO,
+    )
+    assert out == (
+        "[![coverage: 80%+](https://img.shields.io/badge/coverage-80%25%2B-green)]"
+        f"({_REPO}/blob/main/pyproject.toml)"
+    )
+
+
+def test_badge_link_target_published_doc_becomes_site_link() -> None:
+    out = render_about(
+        "[![guide](https://img.shields.io/badge/docs-guide-blue)](docs/getting-started.md)",
+        published_doc_slugs={"getting-started"},
+        repo_url=_REPO,
+    )
+    assert out == (
+        "[![guide](https://img.shields.io/badge/docs-guide-blue)]"
+        "(/docs/getting-started)"
+    )
+
+
+def test_badge_link_target_readme_cross_link_dropped_keeps_image() -> None:
+    """When the outer target is a README cross-link, the link is dropped but the
+    inner image (the visible badge) is kept."""
+    out = render_about(
+        "[![ru](https://img.shields.io/badge/lang-ru-red)](README.ru.md)",
+        published_doc_slugs=set(),
+        repo_url=_REPO,
+    )
+    assert out == "![ru](https://img.shields.io/badge/lang-ru-red)"
+
+
+def test_plain_link_and_plain_image_still_work() -> None:
+    out = render_about(
+        "[text](LICENSE) and ![alt](img.png)",
+        published_doc_slugs=set(),
+        repo_url=_REPO,
+    )
+    assert out == (
+        f"[text]({_REPO}/blob/main/LICENSE) and "
+        f"![alt]({_REPO}/blob/main/img.png)"
+    )

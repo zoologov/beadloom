@@ -268,6 +268,7 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `reconcile_contracts`
 - `refresh_claude_md`
 - `reindex`
+- `render_about`
 - `render_all_pages`
 - `render_architecture_group`
 - `render_c4_mermaid`
@@ -275,11 +276,15 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `render_dashboard_md`
 - `render_diff`
 - `render_documentation_group`
+- `render_documentation_group_from_dir`
 - `render_federation_report`
 - `render_landscape_md`
+- `render_nav`
 - `render_nav_config`
 - `render_node_page`
 - `render_published_doc`
+- `render_sidebar`
+- `render_sidebar_ru`
 - `render_why`
 - `render_why_tree`
 - `resolve_import_to_node`

@@ -6,7 +6,8 @@
 
 ## Current Focus
 
-- **Phase:** Test wave — BEAD-06 (dev W1-W4 all done + committed)
+- **Phase:** Dogfood (BEAD-08) — build found a defect → fix BEAD-10 (dev) running, then re-build
+- **Review:** BEAD-07 = OK (closed)
 - **Coordinator:** main loop (multi-agent)
 - **Parent:** `beadloom-ivts`
 - **Blockers:** none

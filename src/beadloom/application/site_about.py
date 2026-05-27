@@ -20,6 +20,11 @@ Rebasing rules (applied to both ``[text](target)`` links and
 
 Links inside inline code spans (``` `...` ```) and fenced code blocks
 (```` ``` ````) are never rewritten.
+
+The badge-link idiom ``[![alt](img)](target)`` (an image used as link text) is
+handled too: the OUTER link ``target`` is rebased by the rules above, and the
+INNER image is recursed through the same rules (so an absolute shields.io badge
+URL stays untouched while a relative inner target would also be rebased).
 """
 
 # beadloom:domain=application
@@ -29,9 +34,11 @@ from __future__ import annotations
 import re
 
 # Inline link/image:  optional leading "!" (image), [text], (target).
-# The target group is non-greedy and stops at the first ")" — sufficient for
-# README-style targets (no parenthesised URLs / titles in our READMEs).
-_LINK_RE = re.compile(r"(!?)\[([^\]]*)\]\(([^)]*)\)")
+# The text group may itself contain a complete nested image — the badge-link
+# idiom ``[![alt](img)](target)`` — so we allow either plain text (no brackets)
+# or a whole ``![alt](url)`` token inside it. The target group stops at the
+# first ")" — sufficient for README-style targets (no parenthesised titles).
+_LINK_RE = re.compile(r"(!?)\[((?:[^\[\]]|!\[[^\]]*\]\([^)]*\))*)\]\(([^)]*)\)")
 
 # Code spans and fenced blocks: protected regions we must not rewrite.
 # Fenced blocks first (greedier) so they win over inline-span matching.
@@ -78,6 +85,12 @@ def _rebase_one(
     published_doc_slugs: set[str],
     repo_url: str,
 ) -> str:
+    # Badge-link idiom: the visible text is itself a nested image. Rebase its
+    # (possibly relative) target by recursing through the prose rewriter so the
+    # inner and outer targets are both handled by the same rules.
+    if "![" in text:
+        text = _rewrite_prose(text, published_doc_slugs, repo_url)
+
     stripped = target.strip()
     if _is_absolute_or_anchor(stripped):
         return f"{bang}[{text}]({target})"
