@@ -1,11 +1,5 @@
 {
-  "alerts": [
-    {
-      "kind": "stale_doc",
-      "message": "14 stale doc(s) — refresh and re-run `beadloom sync-check`",
-      "severity": "warn"
-    }
-  ],
+  "alerts": [],
   "debt": {
     "categories": [
       {
@@ -18,12 +12,12 @@
       },
       {
         "details": {
-          "stale": 1,
+          "stale": 0,
           "undocumented": 1,
           "untracked": 9
         },
         "name": "doc_gaps",
-        "score": 7.5
+        "score": 6.5
       },
       {
         "details": {
@@ -42,17 +36,16 @@
         "score": 0.0
       }
     ],
-    "debt_score": 16.0,
+    "debt_score": 15.0,
     "severity": "medium",
     "top_offenders": [
       {
         "reasons": [
-          "stale_doc",
           "oversized",
           "high_fan_out"
         ],
         "ref_id": "application",
-        "score": 4.0
+        "score": 3.0
       },
       {
         "reasons": [
@@ -121,12 +114,12 @@
     "trend": {
       "category_deltas": {
         "complexity": 7.5,
-        "doc_gaps": 7.5,
+        "doc_gaps": 6.5,
         "meta_doc_staleness": 0.0,
         "rule_violations": 0.0,
         "test_gaps": 0.0
       },
-      "delta": 15.0,
+      "delta": 14.0,
       "previous_score": 1.0,
       "previous_snapshot": "2026-06-01 16:36:30 [BDL-038-wave1]"
     }
@@ -134,21 +127,21 @@
   "docs": {
     "coverage_pct": 96.0,
     "documented": 24,
-    "fresh": 61,
-    "freshness_pct": 81.3,
+    "fresh": 75,
+    "freshness_pct": 100.0,
     "nodes": 25,
-    "stale": 14,
+    "stale": 0,
     "tracked_pairs": 75
   },
   "doctor": {
     "by_severity": {
-      "ok": 10,
-      "warning": 17
+      "ok": 11,
+      "warning": 3
     },
     "errors": 0,
     "passed": true,
-    "total": 27,
-    "warnings": 17
+    "total": 14,
+    "warnings": 3
   },
   "federated": null,
   "lint": {
@@ -164,7 +157,7 @@
     {
       "kind": "debt",
       "link": "/dashboard#application",
-      "message": "debt score 4.0: stale_doc; oversized; high_fan_out",
+      "message": "debt score 3.0: oversized; high_fan_out",
       "severity": "warn",
       "target": "application"
     },
@@ -199,7 +192,7 @@
     {
       "kind": "lint",
       "link": "/dashboard#application",
-      "message": "Node 'application' has 232 symbols (max 200): rule 'domain-size-limit' — `application` exceeds its limit (Node 'application' has 232 symbols (max 200): rule 'domain-size-limit'); split it into smaller nodes",
+      "message": "Node 'application' has 233 symbols (max 200): rule 'domain-size-limit' — `application` exceeds its limit (Node 'application' has 233 symbols (max 200): rule 'domain-size-limit'); split it into smaller nodes",
       "severity": "warn",
       "target": "application"
     },
@@ -209,13 +202,6 @@
       "message": "Node 'graph' has 202 symbols (max 200): rule 'domain-size-limit' — `graph` exceeds its limit (Node 'graph' has 202 symbols (max 200): rule 'domain-size-limit'); split it into smaller nodes",
       "severity": "warn",
       "target": "graph"
-    },
-    {
-      "kind": "stale_doc",
-      "link": "/dashboard#application",
-      "message": "doc is stale vs its code — refresh and re-run sync-check",
-      "severity": "warn",
-      "target": "application"
     }
   ],
   "status_cards": [
@@ -231,17 +217,17 @@
       "group": "debt",
       "label": "Debt",
       "status": "warn",
-      "value": "16.0 / 100"
+      "value": "15.0 / 100"
     },
     {
-      "detail": "14 stale of 75 tracked",
+      "detail": "0 stale of 75 tracked",
       "group": "docs",
       "label": "Docs",
-      "status": "warn",
+      "status": "ok",
       "value": "96.0% covered"
     },
     {
-      "detail": "0 errors, 17 warnings",
+      "detail": "0 errors, 3 warnings",
       "group": "doctor",
       "label": "Doctor",
       "status": "warn",
@@ -428,6 +414,16 @@
       "symbols": 790,
       "sync_pct": 81.3,
       "ts": "2026-06-02T14:02:29.979806+00:00"
+    },
+    {
+      "coverage_pct": 96.0,
+      "debt_score": 15.0,
+      "edges": 76,
+      "lint_violations": 2,
+      "nodes": 25,
+      "symbols": 791,
+      "sync_pct": 100.0,
+      "ts": "2026-06-02T14:12:22.163484+00:00"
     }
   ]
 }
