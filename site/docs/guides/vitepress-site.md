@@ -147,7 +147,7 @@ structure, and injects a per-doc validation badge into the **copy only**:
   also shows the stored `last synced` time (deterministic, not wall-clock) and
   the owning node's source-coverage %.
 - The badge is wrapped between stable `<!-- beadloom:badge-start -->
-> ⚪ **untracked** — not tracked by any doc-code pair
+> 📘 **reference** — overview/guide, not tied to a code symbol
 > 
 > _Validation by Beadloom `doc_sync` — same source as `sync-check`._
 <!-- beadloom:badge-end -->

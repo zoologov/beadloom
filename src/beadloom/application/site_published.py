@@ -16,8 +16,11 @@ site. Per published doc the badge shows:
   / ``untracked_files``), exactly matching ``sync-check`` for that ``doc_path``;
 - ``last synced <ts>`` — the stored ``sync_state.synced_at`` (a persisted value,
   NOT wall-clock, so the diffed output stays deterministic);
-- the owning node's doc-coverage % (tracked source files / total, read-only);
-- a doc tracked by NO pair is badged ``untracked`` honestly.
+- the owning node's doc-coverage % (tracked source files / total, read-only) —
+  for fresh/stale docs only;
+- a doc tracked by NO pair is badged neutrally as a ``reference`` (an
+  overview/guide not tied to a code symbol), with no coverage % (that figure is
+  the node's source coverage, unrelated to the prose, so it would mislead).
 
 Never mutate the source
 -----------------------
@@ -210,13 +213,16 @@ def _badge_body(doc: PublishedDoc) -> str:
     elif doc.status == "stale":
         head = f"⚠️ **stale** — {doc.reason}"
     else:
-        head = "⚪ **untracked** — not tracked by any doc-code pair"
+        # An untracked doc is a guide/overview not tied to a code symbol — not a
+        # defect. Use neutral wording and DO NOT print a coverage % (the node's
+        # source-coverage is unrelated to this prose and reads as a contradiction).
+        head = "📘 **reference** — overview/guide, not tied to a code symbol"
 
     parts = [f"> {head}"]
     meta: list[str] = []
     if doc.synced_at:
         meta.append(f"last synced {doc.synced_at}")
-    if doc.ref_id:
+    if doc.ref_id and doc.status != "untracked":
         meta.append(f"coverage {doc.coverage_pct:.0f}% (`{doc.ref_id}`)")
     if meta:
         parts.append("> ")

@@ -1,4 +1,5 @@
 # beadloom:domain=graph
+# beadloom:feature=rule-engine
 """Architecture rule engine: parse rules.yml, validate, and evaluate against the graph DB."""
 
 from __future__ import annotations

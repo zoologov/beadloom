@@ -6,6 +6,7 @@ per-node issue tracking.
 """
 
 # beadloom:domain=application
+# beadloom:feature=debt-report
 
 from __future__ import annotations
 

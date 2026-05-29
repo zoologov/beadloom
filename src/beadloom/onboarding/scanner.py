@@ -1282,6 +1282,7 @@ def _format_prime_json(
     return result
 
 
+# beadloom:feature=agent-prime
 def prime_context(
     project_root: Path,
     *,

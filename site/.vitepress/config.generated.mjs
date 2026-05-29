@@ -47,6 +47,7 @@ export const sidebar = [
             link: "/domains/graph",
             items: [
               { text: "C4 Diagrams", link: "/features/c4-diagrams" },
+              { text: "Federation", link: "/features/federation" },
               { text: "Graph Diff", link: "/features/graph-diff" },
               { text: "Import Resolver", link: "/features/import-resolver" },
               { text: "Rule Engine", link: "/features/rule-engine" }

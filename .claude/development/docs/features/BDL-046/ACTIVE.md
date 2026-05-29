@@ -6,8 +6,9 @@
 
 ## Current Focus
 
-- **Phase:** Dogfood round 2 — browser found 3 issues → fix beads 11(dev)/12(test)/13(review); BEAD-11 running
-- **Review:** BEAD-07 = OK (closed); BEAD-10 fix (badge-link dead links) = done+deployed
+- **Phase:** Dogfood round 3 — browser found stale architecture.md + 12 untracked docs. BEAD-14 (dev) DONE (not committed/closed): made 8 feature SPECs fresh (root cause = build_sync_state needs a `feature=<ref>` symbol annotation, not the YAML `source:` field; added federation node) + neutral untracked badge. published-docs fresh 16→24, untracked 12→4 (genuine guides only). site build = 0 dead links. Then tech-writer (09) incl architecture.md refresh, then final deploy.
+- **Round 2 = done+deployed:** locale switch removed, in-page About toggle, docs-overview descriptions (owner confirmed in browser).
+- **Round-3 owner decisions:** architecture.md = UPDATE (add application + refresh facts); untracked = FULL (badge wording + add graph `source` to 8 feature nodes → SPECs fresh). architecture.md refresh folded into tech-writer BEAD-09.
 - **Live dogfood findings (round 2):** (1) locale switcher translated the menu; (2) switcher 404'd on every page except /ru/; (3) docs-overview link wall reads poorly. Root cause for 1+2: VitePress `locales` is the wrong tool for curated About-only (global /x↔/ru/x mapping). FIX: drop locales, single EN sidebar, About bilingual via in-page cross-link (render_about rewrites README cross-links to /ru/↔/). #3: owner chose intro + section descriptions, no link wall.
 - **Coordinator:** main loop (multi-agent)
 - **Parent:** `beadloom-ivts`

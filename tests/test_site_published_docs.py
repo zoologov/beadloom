@@ -26,6 +26,7 @@ from beadloom.application.site import generate_site
 from beadloom.application.site_published import (
     BADGE_END,
     BADGE_START,
+    _badge_body,
     build_published_docs,
     inject_badge,
 )
@@ -208,13 +209,45 @@ def test_stale_doc_badges_stale_with_reason(
     assert "hash_changed" in text
 
 
-def test_untracked_doc_badges_untracked(
+def test_untracked_doc_badges_neutral_reference(
     conn: sqlite3.Connection, project: Path
 ) -> None:
+    """An untracked doc gets NEUTRAL 'reference' wording (not a defect) and
+    must NOT print a misleading 'coverage X%' line (BEAD-14)."""
     out = project / "site"
     generate_site(conn, out, project_root=project)
     text = (out / "docs" / "orphan.md").read_text(encoding="utf-8")
-    assert "untracked" in text.lower()
+    # Neutral wording: an overview/guide, not tied to a code symbol.
+    assert "reference" in text.lower()
+    assert "not tied to a code symbol" in text.lower()
+    # The old confusing wording is gone.
+    assert "untracked" not in text.lower()
+    # No misleading coverage line for an untracked doc.
+    assert "coverage" not in text.lower()
+    # The validation footer is still present.
+    assert "doc_sync" in text
+
+
+def test_untracked_doc_badge_no_coverage_even_with_ref(project: Path) -> None:
+    """A doc linked to a node but with NO sync pair is still untracked and must
+    not print the node's source-coverage % (it is unrelated to this doc)."""
+    db = sqlite3.connect(":memory:")
+    db.row_factory = sqlite3.Row
+    create_schema(db)
+    _seed_graph(db)
+    # getting-started.md is linked to the 'beadloom' node but has no sync pair.
+    db.execute(
+        "INSERT INTO docs (path, kind, ref_id, hash) VALUES (?, ?, ?, ?)",
+        ("getting-started.md", "other", "beadloom", "h1"),
+    )
+    db.commit()
+    docs = build_published_docs(db, project_root=project)
+    by_path = {d.doc_path: d for d in docs}
+    gs = by_path["getting-started.md"]
+    assert gs.status == "untracked"
+    body = _badge_body(gs)
+    assert "coverage" not in body.lower()
+    assert "reference" in body.lower()
 
 
 def test_badge_status_equals_sync_check(

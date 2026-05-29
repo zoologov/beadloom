@@ -1,6 +1,7 @@
 """Impact analysis: bidirectional BFS from a target node."""
 
 # beadloom:domain=context-oracle
+# beadloom:feature=why
 
 from __future__ import annotations
 

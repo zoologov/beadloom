@@ -1,7 +1,5 @@
 <!-- beadloom:badge-start -->
-> ⚪ **untracked** — not tracked by any doc-code pair
-> 
-> coverage 100% (`beadloom`)
+> 📘 **reference** — overview/guide, not tied to a code symbol
 > 
 > _Validation by Beadloom `doc_sync` — same source as `sync-check`._
 <!-- beadloom:badge-end -->

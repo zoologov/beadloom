@@ -104,7 +104,7 @@ YAML graph format, loader, diff, rule engine, import resolver, linter
 - **part_of**: [beadloom](../services/beadloom.md)
 - **depends_on**: [context-oracle](../domains/context-oracle.md), [infrastructure](../domains/infrastructure.md)
 - **Used by**: [application](../domains/application.md), [beadloom](../services/beadloom.md), [cli](../services/cli.md), [mcp-server](../services/mcp-server.md), [reindex](../features/reindex.md)
-- **Parts**: [c4-diagrams](../features/c4-diagrams.md), [graph-diff](../features/graph-diff.md), [import-resolver](../features/import-resolver.md), [rule-engine](../features/rule-engine.md)
+- **Parts**: [c4-diagrams](../features/c4-diagrams.md), [federation](../features/federation.md), [graph-diff](../features/graph-diff.md), [import-resolver](../features/import-resolver.md), [rule-engine](../features/rule-engine.md)
 
 ## Documentation
 
@@ -116,6 +116,7 @@ YAML graph format, loader, diff, rule engine, import resolver, linter
 C4Container
     System_Boundary(graph_boundary, "graph") {
         Component(c4_diagrams, "C4 Diagrams", "", "C4 architecture model mapping with Mermaid and PlantUML renderers")
+        Component(federation, "Federation", "", "Cross-repo node identity (@repo:ref) and deterministic satellite export")
         Component(graph_diff, "Graph Diff", "", "Git ref comparison — added/removed/changed nodes and edges")
         Component(import_resolver, "Import Resolver", "", "Multi-language import analysis and depends_on edge generation")
         Component(rule_engine, "Rule Engine", "", "Architecture-as-Code rule engine with require/deny rules")

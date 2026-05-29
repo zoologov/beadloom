@@ -16,6 +16,7 @@ and ``exported_at`` so the hub can report staleness it cannot otherwise verify.
 """
 
 # beadloom:domain=graph
+# beadloom:feature=federation
 
 from __future__ import annotations
 

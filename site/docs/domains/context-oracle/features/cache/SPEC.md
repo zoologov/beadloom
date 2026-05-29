@@ -1,7 +1,7 @@
 <!-- beadloom:badge-start -->
-> ⚪ **untracked** — not tracked by any doc-code pair
+> ✅ **fresh**
 > 
-> coverage 100% (`cache`)
+> last synced 2026-06-02T14:35:00.546836+00:00 · coverage 100% (`cache`)
 > 
 > _Validation by Beadloom `doc_sync` — same source as `sync-check`._
 <!-- beadloom:badge-end -->

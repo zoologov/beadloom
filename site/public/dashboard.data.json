@@ -14,10 +14,10 @@
         "details": {
           "stale": 0,
           "undocumented": 1,
-          "untracked": 9
+          "untracked": 2
         },
         "name": "doc_gaps",
-        "score": 6.5
+        "score": 3.0
       },
       {
         "details": {
@@ -36,7 +36,7 @@
         "score": 0.0
       }
     ],
-    "debt_score": 15.0,
+    "debt_score": 11.5,
     "severity": "medium",
     "top_offenders": [
       {
@@ -114,34 +114,34 @@
     "trend": {
       "category_deltas": {
         "complexity": 7.5,
-        "doc_gaps": 6.5,
+        "doc_gaps": 3.0,
         "meta_doc_staleness": 0.0,
         "rule_violations": 0.0,
         "test_gaps": 0.0
       },
-      "delta": 14.0,
+      "delta": 10.5,
       "previous_score": 1.0,
       "previous_snapshot": "2026-06-01 16:36:30 [BDL-038-wave1]"
     }
   },
   "docs": {
-    "coverage_pct": 96.0,
-    "documented": 24,
-    "fresh": 75,
+    "coverage_pct": 96.2,
+    "documented": 25,
+    "fresh": 83,
     "freshness_pct": 100.0,
-    "nodes": 25,
+    "nodes": 26,
     "stale": 0,
-    "tracked_pairs": 75
+    "tracked_pairs": 83
   },
   "doctor": {
     "by_severity": {
       "ok": 11,
-      "warning": 3
+      "warning": 2
     },
     "errors": 0,
     "passed": true,
-    "total": 14,
-    "warnings": 3
+    "total": 13,
+    "warnings": 2
   },
   "federated": null,
   "lint": {
@@ -217,17 +217,17 @@
       "group": "debt",
       "label": "Debt",
       "status": "warn",
-      "value": "15.0 / 100"
+      "value": "11.5 / 100"
     },
     {
-      "detail": "0 stale of 75 tracked",
+      "detail": "0 stale of 83 tracked",
       "group": "docs",
       "label": "Docs",
       "status": "ok",
-      "value": "96.0% covered"
+      "value": "96.2% covered"
     },
     {
-      "detail": "0 errors, 3 warnings",
+      "detail": "0 errors, 2 warnings",
       "group": "doctor",
       "label": "Doctor",
       "status": "warn",
@@ -424,6 +424,16 @@
       "symbols": 791,
       "sync_pct": 100.0,
       "ts": "2026-06-02T14:12:22.163484+00:00"
+    },
+    {
+      "coverage_pct": 96.2,
+      "debt_score": 11.5,
+      "edges": 85,
+      "lint_violations": 2,
+      "nodes": 26,
+      "symbols": 791,
+      "sync_pct": 100.0,
+      "ts": "2026-06-02T14:35:36.925532+00:00"
     }
   ]
 }

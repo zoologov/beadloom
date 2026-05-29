@@ -1,6 +1,7 @@
 """Import resolver: extract imports via tree-sitter and resolve to graph nodes."""
 
 # beadloom:domain=graph
+# beadloom:feature=import-resolver
 
 from __future__ import annotations
 

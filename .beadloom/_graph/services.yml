@@ -162,6 +162,14 @@ nodes:
     docs:
       - docs/domains/graph/features/c4-diagrams/SPEC.md
 
+  # Feature: Federation (cross-repo node identity + satellite export)
+  - ref_id: federation
+    kind: feature
+    summary: "Cross-repo node identity (@repo:ref) and deterministic satellite export"
+    source: src/beadloom/graph/federation.py
+    docs:
+      - docs/domains/graph/features/federation/SPEC.md
+
   # Feature: Cache
   - ref_id: cache
     kind: feature
@@ -282,6 +290,9 @@ edges:
     dst: graph
     kind: part_of
   - src: c4-diagrams
+    dst: graph
+    kind: part_of
+  - src: federation
     dst: graph
     kind: part_of
   - src: debt-report

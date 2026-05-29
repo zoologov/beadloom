@@ -1,6 +1,7 @@
 """Documentation skeleton generator from architecture graph."""
 
 # beadloom:domain=onboarding
+# beadloom:feature=doc-generator
 
 from __future__ import annotations
 
