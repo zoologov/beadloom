@@ -21,12 +21,12 @@
       },
       {
         "details": {
-          "dormant": 7,
+          "dormant": 4,
           "high_fan_out": 1,
           "oversized": 2
         },
         "name": "complexity",
-        "score": 8.5
+        "score": 7.0
       },
       {
         "details": {
@@ -36,8 +36,8 @@
         "score": 0.0
       }
     ],
-    "debt_score": 11.5,
-    "severity": "medium",
+    "debt_score": 10.0,
+    "severity": "low",
     "top_offenders": [
       {
         "reasons": [
@@ -65,21 +65,7 @@
         "reasons": [
           "dormant"
         ],
-        "ref_id": "cache",
-        "score": 0.5
-      },
-      {
-        "reasons": [
-          "dormant"
-        ],
         "ref_id": "context-oracle",
-        "score": 0.5
-      },
-      {
-        "reasons": [
-          "dormant"
-        ],
-        "ref_id": "doc-generator",
         "score": 0.5
       },
       {
@@ -102,24 +88,17 @@
         ],
         "ref_id": "search",
         "score": 0.5
-      },
-      {
-        "reasons": [
-          "dormant"
-        ],
-        "ref_id": "why",
-        "score": 0.5
       }
     ],
     "trend": {
       "category_deltas": {
-        "complexity": 7.5,
+        "complexity": 6.0,
         "doc_gaps": 3.0,
         "meta_doc_staleness": 0.0,
         "rule_violations": 0.0,
         "test_gaps": 0.0
       },
-      "delta": 10.5,
+      "delta": 9.0,
       "previous_score": 1.0,
       "previous_snapshot": "2026-06-01 16:36:30 [BDL-038-wave1]"
     }
@@ -163,17 +142,17 @@
     },
     {
       "kind": "debt",
-      "link": "/dashboard#cache",
-      "message": "debt score 0.5: dormant",
-      "severity": "warn",
-      "target": "cache"
-    },
-    {
-      "kind": "debt",
       "link": "/dashboard#context-oracle",
       "message": "debt score 0.5: dormant",
       "severity": "warn",
       "target": "context-oracle"
+    },
+    {
+      "kind": "debt",
+      "link": "/dashboard#docs-audit",
+      "message": "debt score 0.5: dormant",
+      "severity": "warn",
+      "target": "docs-audit"
     },
     {
       "kind": "debt",
@@ -213,11 +192,11 @@
       "value": "2"
     },
     {
-      "detail": "medium",
+      "detail": "low",
       "group": "debt",
       "label": "Debt",
-      "status": "warn",
-      "value": "11.5 / 100"
+      "status": "ok",
+      "value": "10.0 / 100"
     },
     {
       "detail": "0 stale of 83 tracked",
@@ -434,6 +413,16 @@
       "symbols": 791,
       "sync_pct": 100.0,
       "ts": "2026-06-02T14:35:36.925532+00:00"
+    },
+    {
+      "coverage_pct": 96.2,
+      "debt_score": 10.0,
+      "edges": 85,
+      "lint_violations": 2,
+      "nodes": 26,
+      "symbols": 791,
+      "sync_pct": 100.0,
+      "ts": "2026-06-02T15:39:17.945107+00:00"
     }
   ]
 }

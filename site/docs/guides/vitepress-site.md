@@ -1,5 +1,7 @@
 # VitePress Site Guide
 
+> 📘 **reference** — overview/guide, not tied to a single code symbol.
+
 `beadloom docs site` turns the indexed architecture graph into a **VitePress
 knowledge base** — a published, versioned, URL-shareable source of truth for
 humans *and* agents. It is the F4 "Living Knowledge Base + Visual Landscape"
@@ -28,12 +30,14 @@ Reading the graph **read-only**, the command writes the following under `--out`
 
 | Output | Showcase | What it is |
 |--------|----------|------------|
-| `index.md` | — | Architecture overview: node counts, the top-level C4/Mermaid diagram, a health summary line. |
+| `index.md` | — | **About** — the home page (`/`), generated from `README.md` with links rebased so they resolve on the site (see [Information architecture](#information-architecture)). Falls back to the architecture overview if no README. |
+| `ru/index.md` | — | **About (RU)** — the `/ru/` page, generated from `README.ru.md` by the same transform. The bilingual entry is an in-page cross-link, NOT VitePress locales (see below). |
+| `architecture.md` | Architecture | Architecture overview (`/architecture`): node counts, the top-level C4/Mermaid diagram, a health summary line. (This is the page that used to be `index.md`.) |
 | `domains/<ref>.md`, `services/<ref>.md`, `features/<ref>.md` | Architecture | One page per node: summary, source, public symbols, `part_of`/`depends_on`/`uses` edges as links, linked docs, an embedded scoped C4/Mermaid diagram. |
 | `dashboard.md` + `dashboard.data.json` | **A — metrics dashboard** | An interactive ECharts dashboard: a critical-first alert banner + status cards, gauges, category charts, honest trends, and a recommendations panel. |
 | `landscape.md` | **B — 🌟 landscape map** | The contract graph as an interactive (pan/zoom/fullscreen) Mermaid diagram. |
-| `docs/**` + `docs/index.md` | **C — published validated docs** | The real `docs/` tree, copied verbatim, with per-doc freshness badges. |
-| `.vitepress/config.generated.mjs` | — | Nav/sidebar config imported by the committed scaffold; sections Dashboard / Architecture / Landscape / Documentation. |
+| `docs/**` + `docs/index.md` | **C — published validated docs** | The real `docs/` tree, copied verbatim, with per-doc freshness/reference badges. `docs/index.md` is a descriptive Documentation **Overview** (intro + per-section descriptions), not a flat link wall. |
+| `.vitepress/config.generated.mjs` | — | Nav/sidebar config imported by the committed scaffold. The top nav is empty; the left sidebar is a single ordered EN tree (see [Information architecture](#information-architecture)). |
 
 ### Showcase A — interactive ECharts metrics dashboard
 
@@ -159,20 +163,118 @@ structure, and injects a per-doc validation badge into the **copy only**:
 mutated; there is no AI prose-rewriting (that is the deferred F4.1 follow-up).
 Badges come from `doc_sync`, not from a model.
 
-### Navigation trees
+## Information architecture
 
-`.vitepress/config.generated.mjs` carries two nested sidebar trees (deterministic,
-sorted, byte-stable, with no dead links):
+The portal (reshaped in BDL-046) leads with **About = the README as the landing
+page** and a single ordered EN sidebar; there is **no top nav**. All of this is
+emitted by `application/site_nav.py` into `.vitepress/config.generated.mjs`
+(deterministic, sorted, byte-stable, link-safe — no dead entries).
 
-- **Architecture** — a `collapsed`, `part_of`-nested tree (service root → domains →
-  features) with **human-readable** labels (`context-oracle` → "Context Oracle");
-  roots are nodes with no real `part_of` parent (a `root part_of root` self-edge is
-  ignored so the root service isn't dropped). An "Architecture overview" entry stays
-  on top, and every link resolves to a node page.
-- **Documentation** — mirrors the `docs/` directory tree as a nested, collapsible
-  structure (each subdir a group, each `.md` a `/docs/`-rooted leaf link).
+### Left sidebar — exact order
 
-Dashboard and Landscape stay flat.
+`render_sidebar()` emits the sidebar in this fixed order:
+
+```
+About            → /            (link — README home; always present)
+Getting Started  → /docs/getting-started   (link — emitted ONLY if the page exists)
+Dashboard        → /dashboard   (link, FLAT — no "Metrics" child)
+Architecture     → group, collapsed: true
+                     • Architecture overview → /architecture
+                     • <part_of tree…>       (service root → domains → features)
+Landscape map    → /landscape   (link, FLAT — no "Map" child)
+Documentation    → group, collapsed: false  (EXPANDED)
+                     • Overview → /docs/
+                     • <docs/ tree…>         (each subdir a group, each .md a /docs/-rooted leaf)
+```
+
+- **Dashboard** and **Landscape map** are flat `{ text, link }` entries (the old
+  single-child "Metrics" / "Map" groups were removed).
+- **Architecture** stays `collapsed: true` with the human-readable `part_of` tree
+  (`context-oracle` → "Context Oracle"); the "Architecture overview" entry leads
+  it and points at `/architecture` (the page that used to be the `/` landing).
+- **Documentation** is `collapsed: false` (expanded) and led by an **Overview**
+  (`/docs/`). Roots in the Architecture tree are nodes with no real `part_of`
+  parent (a `root part_of root` self-edge is ignored so the root service isn't
+  dropped). Every link resolves to a generated page.
+
+### About = README landing (EN `/`, RU `/ru/`)
+
+`application/site_about.render_about()` turns the `README.md` into the `/` home
+page (and `README.ru.md` into `/ru/`), **rebasing** repo-relative links so they
+resolve on the published site:
+
+| README link target | Rebased to |
+|--------------------|------------|
+| `docs/<x>.md` whose slug `<x>` is published | extension-less site link `/docs/<x>` |
+| `README.ru.md` / `README.md` cross-link | rewritten to the counterpart route (`/ru/` ↔ `/`) — the bilingual toggle (see below) |
+| `LICENSE`, source paths, an unpublished `docs/<x>` | absolute GitHub URL `https://github.com/<owner>/beadloom/blob/main/<path>` |
+| external URLs + shields.io badges + pure anchors | unchanged |
+
+The transform is pure and deterministic, leaves prose / inline code / fenced
+blocks untouched, and handles the badge-link idiom `[![alt](img)](target)`
+(rebases the outer link, recurses the inner image). The About page is plain
+Markdown (no `layout: home` hero) so it reads identically to the README on
+GitHub. If no README exists, `/` falls back to the architecture overview.
+
+### Bilingual About via in-page cross-link (NOT VitePress locales)
+
+The language toggle is an **in-page cross-link**: `render_about` rewrites the
+README's `[Русский](README.ru.md)` / `[English](README.md)` line to the
+counterpart route (`/` ↔ `/ru/`), driven by `site._CROSS_LINK_ROUTES`. The
+toggle therefore appears ONLY on the two About pages and never 404s elsewhere;
+the rest of the portal stays EN.
+
+> **Why not VitePress `locales`?** It was evaluated and **dropped**. The
+> default-theme locale switcher does a global `/x ↔ /ru/x` path mapping for
+> *every* page, so in dogfooding it (a) translated the whole menu — even though
+> only About is bilingual — and (b) 404'd when clicked on any page other than
+> `/ru/`, because no mirrored RU tree exists. A single curated About-only
+> in-page link gives the bilingual entry without a mirrored tree or a translated
+> menu. (`navRu` / `sidebarRu` / a `locales` config block were all removed.)
+
+### Empty top nav
+
+The top `nav` is `[]` (`render_nav()` returns `[]`). The VitePress default theme
+still renders the **appearance (light/dark) toggle** and the **built-in local
+search** in the nav bar independently of `nav` entries, so removing the nav items
+keeps both. (There is no locale switcher — see above.)
+
+### Documentation Overview
+
+`docs/index.md` is generated by `site._render_docs_overview()` as a short
+**descriptive** page: a one-paragraph intro plus a `## <Group>` heading per
+top-level docs group (Domains / Services / Guides / …) followed by a single
+sentence that NAMES that group's members as inline, human-labelled **text** —
+deliberately **not** a second copy of the sidebar tree (the expanded
+Documentation sidebar is the navigable map; a duplicate link wall read poorly in
+dogfooding). It is link-safe (no links at all) and deterministic.
+
+### How feature docs get tracked + the reference badge
+
+Published docs carry a per-doc badge (injected into the `site/docs/` **copy**
+only, between `<!-- beadloom:badge-start -->` / `<!-- beadloom:badge-end -->`
+markers; the source `docs/` is never mutated):
+
+- A doc tied to a code symbol shows `✅ fresh` or `⚠️ stale — <reason>`, computed
+  by `doc_sync` via the SAME path `beadloom sync-check` runs.
+- A doc tracked by **no** sync pair (an overview/guide, like this one) is badged
+  neutrally as **`📘 reference — overview/guide, not tied to a code symbol`** —
+  it is not a defect, so it shows no coverage % (which would read as a
+  contradiction). This reworded badge replaced the old "untracked" wording.
+
+A **feature SPEC** becomes "tracked" (so its doc shows fresh/stale, not
+reference) by adding a per-symbol annotation comment to the owning source file:
+
+```python
+# beadloom:feature=<ref>
+```
+
+`doc_sync`'s `build_sync_state` reads file-level `# beadloom:feature=<ref>` /
+`# beadloom:domain=<ref>` annotations (parsed by `_FILE_ANNOTATION_RE` in
+`doc_sync/engine.py`) to bind a source file to a graph node — even when the file
+has no extractable top-level symbol — so the file counts as tracked and its SPEC
+is freshness-checked. (This is the annotation, NOT the YAML `source:` field, that
+drives per-SPEC freshness.)
 
 ## Building and previewing
 
@@ -234,6 +336,14 @@ rebuilt site reproducible.
 
 ## Scope and follow-ups
 
+- **Portal IA + bilingual About (BDL-046):** About = README as the landing
+  (`/`); a single ordered EN sidebar (About / Getting Started / flat Dashboard /
+  collapsed Architecture with a `/architecture` overview / flat Landscape map /
+  expanded Documentation led by a descriptive Overview); empty top nav (theme
+  toggle + search retained); bilingual About via an in-page `/` ↔ `/ru/`
+  cross-link (VitePress `locales` evaluated and dropped); feature SPECs tracked
+  via per-symbol `# beadloom:feature=<ref>` annotations; the neutral "📘
+  reference" badge for overviews/guides. Browser-confirmed on the deployed site.
 - **Delivered (F4.2 / F4.3):** the `docs site` generator, all three showcases,
   and the committed VitePress scaffold — dogfooded by building Beadloom's own
   site (`vitepress build` exit 0).

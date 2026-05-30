@@ -1,22 +1,33 @@
 # Beadloom Architecture
 
+> 📘 **reference** — overview/deep-dive, not tied to a single code symbol. It aligns with (does not replace) the generated [`/architecture` C4 overview](../services/cli.md#beadloom-docs-site) on the published portal.
+
 Beadloom turns Architecture as Code into Architectural Intelligence — structured, queryable knowledge about your system that humans and AI agents consume in <20ms.
 
 ## System Design
 
-The system is organized into five DDD domain packages and three service layers:
+The system is organized into six DDD domain packages, an application (use-case orchestration) layer, and two interface layers:
 
 **Domains:**
-1. **Context Oracle** (`context_oracle/`) — BFS graph traversal, context bundle assembly, code indexing, two-tier caching, FTS5 search
+1. **Context Oracle** (`context_oracle/`) — BFS graph traversal, context bundle assembly, code indexing, two-tier caching, FTS5 search, `why` impact analysis
 2. **Doc Sync** (`doc_sync/`) — doc↔code synchronization tracking, stale detection, symbol-level hashing, docs audit
-3. **Graph** (`graph/`) — YAML graph loader, diff engine, rule engine, import resolver (9 languages), architecture linter
-4. **Onboarding** (`onboarding/`) — project bootstrap, doc generation/polishing, architecture-aware presets, Agent Prime, AGENTS.md generation
-5. **Infrastructure** (`infrastructure/`) — SQLite database layer, incremental reindex, health snapshots with trends, doctor, file watcher
+3. **Graph** (`graph/`) — YAML graph loader, diff engine, rule engine, import resolver (9 languages), architecture linter, C4 diagram emitter, federation
+4. **Onboarding** (`onboarding/`) — project bootstrap, doc generation/polishing, architecture-aware presets, AGENTS.md / IDE-rules generation, config sync
+5. **Infrastructure** (`infrastructure/`) — domain-agnostic SQLite database layer, health metrics, git-activity tracking
 
-**Services:**
-- **CLI** (`services/cli.py`) — Click-based CLI with 29 commands
-- **MCP Server** (`services/mcp_server.py`) — stdio server with 14 tools for AI agents
-- **TUI** (`tui/`) — interactive terminal dashboard (Textual)
+**Application (use-case orchestration)** (`application/`) — composes the domains into end-to-end use cases. It owns:
+- `reindex.py` — the full + incremental reindex pipeline (drop → recreate → reload graph/docs/code/sync; SHA-256 `file_index` for incremental runs)
+- `doctor.py` — graph + data integrity checks
+- `debt_report.py` — architecture-debt aggregation, scoring, trend tracking, CI gating
+- `watcher.py` — file watcher for auto-reindex on change
+- `gate.py` — the unified `beadloom ci` gate (reindex → lint → sync-check → config-check → doctor → optional federate)
+- the VitePress site generators — `site.py` (orchestrator), `site_pages.py`, `site_nav.py`, `site_about.py`, `site_dashboard.py`, `site_landscape.py`, `site_published.py`, `site_mermaid_guard.py`, `site_metrics_history.py`
+
+**Interface layers:**
+- **Services** (`services/`) — **CLI** (`services/cli.py`, Click-based) and **MCP Server** (`services/mcp_server.py`, stdio server with 14 tools for AI agents). Both call into the application layer and Context Oracle; the CLI never reaches past those layers.
+- **TUI** (`tui/`) — interactive terminal architecture workstation (Textual): dashboard, explorer, doc-status screens.
+
+A `layer` rule in `.beadloom/_graph/rules.yml` enforces the direction `services / tui → application → domains` (the interface layers depend inward; domains never depend on the application or service layers).
 
 ---
 
@@ -24,22 +35,24 @@ The system is organized into five DDD domain packages and three service layers:
 
 ### Data Flow
 
+The `application/reindex.py` orchestrator drives the indexing pipeline, calling
+each domain in order; the resulting SQLite index is then read back by Context
+Oracle for sub-20ms context bundles.
+
 ```
 YAML Graph Files (.beadloom/_graph/*.yml)
        ↓
-   graph/loader.py       → SQLite (nodes, edges, rules)
-       ↓
-   graph/import_resolver.py → SQLite (code_imports)
-       ↓
-   doc_sync/doc_indexer.py → SQLite (docs, chunks, search_index)
-       ↓
-   context_oracle/code_indexer.py → SQLite (code_symbols)
-       ↓
-   infrastructure/reindex.py → SQLite (file_index, health_snapshots)
+   application/reindex.py  (orchestrates the pipeline below)
+       │
+       ├─ graph/loader.py            → SQLite (nodes, edges, rules)
+       ├─ graph/import_resolver.py   → SQLite (code_imports)
+       ├─ doc_sync/doc_indexer.py    → SQLite (docs, chunks, search_index)
+       ├─ context_oracle/code_indexer.py → SQLite (code_symbols)
+       └─ (writes file_index, health_snapshots)
        ↓
    context_oracle/builder.py ← BFS traversal → context bundle (JSON)
        ↓                                       ↕ L1 memory / L2 SQLite cache
-   services/cli.py / services/mcp_server.py → user / AI agent
+   services/cli.py / services/mcp_server.py / tui/ → user / AI agent
 ```
 
 ### SQLite Schema
@@ -93,7 +106,7 @@ Default parameters:
 
 Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3) and enforce boundaries between graph nodes.
 
-**Rule types (v1.8.0):**
+**Rule types** (7, parsed by `graph/rule_engine.py`, evaluated by `graph/linter.py`):
 
 | Type | Semantics | Example |
 |------|-----------|---------|
