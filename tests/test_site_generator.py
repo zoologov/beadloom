@@ -398,7 +398,9 @@ def _dead_links(out: Path) -> list[tuple[str, str]]:
 
     Only the rendered content tree is walked (``node_modules`` / ``.vitepress``
     are excluded — VitePress does not render them). Links inside fenced code
-    blocks (e.g. Mermaid ``click`` directives) are ignored — not markdown links.
+    blocks (e.g. Mermaid ``click`` directives) AND inline code spans (e.g. a doc
+    that shows ``[text](README.ru.md)`` syntax as an example) are ignored — they
+    are not rendered as markdown links, so they cannot be dead.
     """
     dead: list[tuple[str, str]] = []
     for md in sorted(out.rglob("*.md")):
@@ -412,11 +414,33 @@ def _dead_links(out: Path) -> list[tuple[str, str]]:
                 continue
             if in_fence:
                 continue
+            # Strip inline code spans (`` `...` `` / ``` ``...`` ```) — link-like
+            # syntax inside them is illustrative, not a real link (mirrors the
+            # code-span protection in application/site_about.render_about).
+            line = re.sub(r"``[^`]+``|`[^`]+`", "", line)
             for url in _LINK_RE.findall(line):
                 resolved = _resolve_target(out, md, url)
                 if resolved is not None and not resolved.exists():
                     dead.append((str(md.relative_to(out)), url))
     return dead
+
+
+def test_dead_links_ignores_inline_code_examples(tmp_path: Path) -> None:
+    """Link-like syntax inside inline code spans is illustrative, not a real link.
+
+    Regression for the BDL-046 CI failure: a guide documenting the README
+    link-rebasing rules legitimately shows ``[Русский](README.ru.md)`` and
+    ``[![alt](img)](target)`` as examples inside backticks. VitePress renders
+    these as inline code (not links), so the dead-link guard must skip them.
+    """
+    out = tmp_path / "site"
+    (out / "docs" / "guides").mkdir(parents=True)
+    (out / "docs" / "guides" / "example.md").write_text(
+        "The transform rewrites `[Русский](README.ru.md)` / `[English](README.md)` "
+        "and handles the badge idiom `[![alt](img)](target)` — all examples.\n",
+        encoding="utf-8",
+    )
+    assert _dead_links(out) == []
 
 
 def test_generated_internal_links_resolve(
