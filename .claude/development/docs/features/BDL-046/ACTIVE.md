@@ -6,7 +6,7 @@
 
 ## Current Focus
 
-- **Phase:** COMPLETE pending owner final browser check. All 14 sub-beads closed + committed + deployed (final run green). Parent epic to close after owner confirms the live site.
+- **Phase:** DONE ✅ — epic closed, all docs Status: Done. Owner confirmed the live site; all 3 CI workflows green (Tests/Gate/Deploy) after the dead-link-guard fix (the committed-site Python test flagged inline-code example links the tech-writer guide legitimately shows; _dead_links now skips inline code spans).
 - **Round 3 DONE+deployed:** 8 feature SPECs fresh (root cause = `# beadloom:feature=<ref>` symbol annotation, not YAML `source:`; added federation node) + neutral "📘 reference" badge (fresh 16→24, untracked 12→4 genuine guides). Tech-writer refreshed architecture.md (+application), portal guide, CHANGELOG, STRATEGY-3.
 - **Round 2 = done+deployed:** locale switch removed, in-page About toggle, docs-overview descriptions (owner confirmed in browser).
 - **Round-3 owner decisions:** architecture.md = UPDATE (add application + refresh facts); untracked = FULL (badge wording + add graph `source` to 8 feature nodes → SPECs fresh). architecture.md refresh folded into tech-writer BEAD-09.

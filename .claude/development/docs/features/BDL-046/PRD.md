@@ -1,6 +1,6 @@
 # PRD: BDL-046 — VitePress portal: navigation + bilingual About
 
-> **Status:** Approved
+> **Status:** Done
 > **Created:** 2026-06-02
 
 ---
