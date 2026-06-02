@@ -42,7 +42,14 @@ export default withMermaid({
   // The default theme still renders the appearance toggle + local search. The
   // bilingual About is an in-page cross-link: the EN About (/) links to the RU
   // About (/ru/) and back, generated from the README cross-link line.
-  themeConfig: { nav, sidebar },
+  themeConfig: {
+    nav,
+    sidebar,
+    // GitHub repo button in the nav bar (default-theme social link).
+    socialLinks: [
+      { icon: "github", link: "https://github.com/zoologov/beadloom" },
+    ],
+  },
   mermaid: {
     // Mermaid renderer options (C4 + flowchart render natively).
   },

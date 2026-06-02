@@ -14,6 +14,9 @@ Beadloom turns your architecture into something you can query, check, and trust.
 [![mypy: strict](https://img.shields.io/badge/mypy-strict-blue)](https://mypy-lang.org/)
 [![code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![coverage: 80%+](https://img.shields.io/badge/coverage-80%25%2B-green)](pyproject.toml)
+[![Docs portal](https://img.shields.io/badge/docs-portal-8A2BE2)](https://zoologov.github.io/beadloom/)
+
+📖 **Documentation portal:** [zoologov.github.io/beadloom](https://zoologov.github.io/beadloom/) — interactive architecture, metrics dashboard, and the validated docs.
 
 **Platforms:** macOS, Linux, Windows &nbsp;|&nbsp; **Python:** 3.10+
 

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-06-02
+
+**Federation + a living, navigable public portal.** This release adds cross-repo contract federation and a tool-agnostic CI gate (F1–F3), a generated VitePress knowledge-base portal with an interactive metrics dashboard, interactive architecture + cross-repo landscape map, and the published validated docs (F4/F4.4), and reshapes that portal into a navigable, bilingual (EN/RU) front door with the README as its landing page (BDL-046). Everything is additive — no breaking changes to the CLI/API or the graph schema.
+
 Phase 0 "Foundation / Honesty Gate" (BDL-036): Beadloom now passes its own checks honestly.
 Phase F1 "Federation Foundation" (BDL-037): cross-repo federation thin slice — `@repo:ref_id` identity, the `lifecycle` field, `beadloom export`, and `beadloom federate`, dogfooded on the real core-monolith ↔ integration-service RabbitMQ contract.
 Phase F2 "Cross-Service Contract Graph" (BDL-038): a first-class cross-service contract graph — AMQP exchange identity + GraphQL SDL contracts, contract-level intent-vs-reality verdicts (incl. presence-based `BREAKING`), the `external`/`unmapped` lifecycle, nested product-vs-company landscapes, and paradigm-agnostic node/edge kinds.
