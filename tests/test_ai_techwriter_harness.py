@@ -116,6 +116,7 @@ def patch_substrate(monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str, objec
     monkeypatch.setattr("tools.ai_techwriter.packet.beadloom_docs_polish_json", fake_polish)
     monkeypatch.setattr("tools.ai_techwriter.packet.beadloom_ctx_json", fake_ctx)
     monkeypatch.setattr("tools.ai_techwriter.packet.beadloom_why", fake_why)
+    monkeypatch.setattr(runner, "beadloom_docs_polish_json", fake_polish)
     monkeypatch.setattr(runner, "beadloom_sync_update", fake_sync_update)
     monkeypatch.setattr(runner, "beadloom_ci", fake_ci)
     yield state
@@ -314,23 +315,25 @@ def test_fixpoint_rebaselines_restale_siblings_then_stabilises(
     assert "doc-sync" in patch_substrate["sync_update_calls"]  # type: ignore[operator]
 
 
-def test_fixpoint_round_cap_flags_when_never_stable(
+def test_fixpoint_no_progress_flags_before_round_cap(
     project: Path, patch_substrate: dict[str, object]
 ) -> None:
     (project / "docs" / "graph.md").write_text("old", encoding="utf-8")
-    # graph clears in per-doc loop, but a sibling stays stale forever => cap hit
+    # graph clears in per-doc loop, but a sibling stays stale forever with the
+    # IDENTICAL stale set => the no-progress guard flags at round 2, before the
+    # round cap (3) is reached.
     sib = _stale_report(("doc-sync", "docs/doc-sync.md", "hash_changed", "src/d.py"))
     reports = [
         _stale_report(("graph", "docs/graph.md", "symbols_changed", "src/g.py")),
         _CLEAN,  # per-doc re-check: graph fresh
-    ] + [sib] * 30  # fixpoint never stabilises
+    ] + [sib] * 30  # fixpoint never stabilises, same set each round
     patch_substrate["scope"] = _ScriptedScope(reports)
     cfg = HarnessConfig(max_fixpoint_rounds=3)
     result = run_harness(
         project, agent=FakeAgentRunner(project_root=project),
         publisher=FakePublisher(), now_ts=NOW, config=cfg,
     )
-    assert result.fixpoint_rounds == 3
+    assert result.fixpoint_rounds == 2  # no-progress break, not the cap
     assert result.flagged is True
     assert any("fixpoint not reached" in r for r in result.flagged_reasons)
 

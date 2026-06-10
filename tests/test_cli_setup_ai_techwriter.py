@@ -52,6 +52,10 @@ class TestVendoredHarnessAsset:
         assert (root / "recipe.yaml").read_text(encoding="utf-8") == (
             live / "recipe.yaml"
         ).read_text(encoding="utf-8")
+        # The vendored parent tools/__init__.py asset byte-matches the live file.
+        assert (root / "tools_init.py.txt").read_text(encoding="utf-8") == (
+            live.parent / "__init__.py"
+        ).read_text(encoding="utf-8")
 
 
 class TestSyncVendoredHarness:
@@ -91,6 +95,16 @@ class TestSetupAiTechwriterGithub:
         assert (harness / "recipe.yaml").exists()
         # Vendored python is real .py (not the .py.txt asset form).
         assert not (harness / "runner.py.txt").exists()
+
+    def test_vendors_tools_package_init(self, tmp_path: Path) -> None:
+        """The parent ``tools/__init__.py`` is vendored too, so the target does
+        not rely on implicit namespace-package behavior for the
+        ``python -m tools.ai_techwriter`` invocation (BEAD-11 hardening)."""
+        project = tmp_path / "proj"
+        project.mkdir()
+        _run(project, "github")
+        tools_init = project / "tools" / "__init__.py"
+        assert tools_init.is_file()
 
     def test_writes_getting_started_guide(self, tmp_path: Path) -> None:
         project = tmp_path / "proj"

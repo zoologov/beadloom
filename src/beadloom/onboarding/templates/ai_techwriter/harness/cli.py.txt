@@ -27,7 +27,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import click
 
@@ -112,8 +112,8 @@ def main(ctx: click.Context, platform: str, project_root: Path, dry_run: bool) -
 
     Thin wrapper: assemble seams → inject a real timestamp → run_harness.
     """
-    now: Callable[[], str] = _resolve(ctx, "now", _default_now)  # type: ignore[assignment]
-    run: RunHarness = _resolve(ctx, "run_harness", _real_run_harness)  # type: ignore[assignment]
+    now = cast("Callable[[], str]", _resolve(ctx, "now", _default_now))
+    run = cast("RunHarness", _resolve(ctx, "run_harness", _real_run_harness))
 
     if dry_run:
         click.echo(f"dry-run: platform={platform} project-root={project_root}")

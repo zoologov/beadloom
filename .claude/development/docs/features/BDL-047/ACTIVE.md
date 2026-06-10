@@ -6,7 +6,7 @@
 
 ## Current Focus
 
-- **Phase:** Test wave — BEAD-07. All dev (W1–W5) done+committed.
+- **Phase:** Fix cycle — BEAD-11 (review ISSUES: precedence bug + recipe allow-list + minors). CRITICAL secret (credentials.md) scrubbed from git; owner rotating. Then dogfood (09).
 - **Coordinator:** main loop (multi-agent)
 - **Parent:** `beadloom-zqlr`
 - **Blockers:** none for dev. BEAD-09 (dogfood) gated on owner-provided `QWEN_API_KEY` + runner(s).
@@ -21,9 +21,10 @@
 | beadloom-zqlr.4 | dev — both CI wrappers (GH+GL) | ✓ done (W4) |
 | beadloom-zqlr.5 | dev — setup-ai-techwriter | ✓ dev-done (W5, vendor approach; not committed/closed — awaiting coordinator) |
 | beadloom-zqlr.6 | dev — dashboard widget (G9) | ✓ done (W3) |
-| beadloom-zqlr.7 | test | in progress |
-| beadloom-zqlr.8 | review | blocked ← 7 |
-| beadloom-zqlr.9 | dogfood (needs key) | blocked ← 8 |
+| beadloom-zqlr.7 | test | ✓ done |
+| beadloom-zqlr.8 | review | ✓ done (ISSUES) |
+| beadloom-zqlr.11 | dev-fix (review) | in progress |
+| beadloom-zqlr.9 | dogfood (needs key) | blocked ← 11 |
 | beadloom-zqlr.10 | tech-writer | blocked ← 9 |
 
 ## Waves

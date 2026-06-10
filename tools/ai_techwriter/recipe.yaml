@@ -36,16 +36,30 @@ settings:
 # radius. Read-only filesystem (code + diffs), beadloom read commands, git read,
 # and writes restricted to docs/** (and tracked doc files). No src/ writes, no
 # arbitrary shell, no network except the model endpoint.
+#
+# CLOSED WHITELIST / DENY-ALL-UNLISTED (BEAD-11 hardening). The blast-radius
+# guarantee MUST NOT depend on Goose's allow/deny default. We make it safe
+# whichever way Goose resolves precedence:
+#   * If Goose is deny-by-default (only `allow` is permitted): the `allow` list
+#     below is already the closed whitelist — nothing else runs.
+#   * If Goose is allow-by-default-then-subtract-`deny`: the catch-all denies
+#     `fs.write:**` and `shell:**` at the END of `deny` close the surface, and
+#     the narrow `allow` entries re-open ONLY the doc writes + read commands.
+# Either way: write only docs/**, run only the listed read commands, nothing
+# else. The catch-all denies are the load-bearing safety line — keep them LAST
+# and do NOT remove them. BEAD-09 dogfood MUST prove this empirically (attempt a
+# denied write to src/** and a denied `rm`/`curl`, confirm Goose refuses both)
+# BEFORE any unattended scheduled run.
 tools:
   allow:
     # read-only filesystem: read code, diffs, the current doc
     - "fs.read:**"
-    # beadloom read commands (architecture truth)
+    # beadloom read commands (architecture truth) — pinned subcommands only
     - "shell:beadloom ctx *"
     - "shell:beadloom why *"
     - "shell:beadloom search *"
     - "shell:beadloom sync-check*"
-    # git read commands (what changed)
+    # git read commands (what changed) — pinned subcommands only
     - "shell:git diff*"
     - "shell:git log*"
     - "shell:git show*"
@@ -53,17 +67,22 @@ tools:
     - "fs.write:docs/**"
     - "fs.write:*.md"
   deny:
-    # never write source or config
+    # never write source or config (explicit, even though the catch-all covers it)
     - "fs.write:src/**"
     - "fs.write:tools/**"
     - "fs.write:.beadloom/**"
-    # no arbitrary shell beyond the read commands above
+    # no arbitrary shell beyond the read commands above (explicit)
     - "shell:rm *"
     - "shell:curl *"
     - "shell:wget *"
     # beadloom commands that mutate baselines belong to the harness, not the agent
     - "shell:beadloom sync-update*"
     - "shell:beadloom reindex*"
+    # CATCH-ALL (keep LAST): deny every write and every shell command not
+    # explicitly re-opened in `allow` above. This is what makes the surface a
+    # closed whitelist regardless of Goose's default allow/deny semantics.
+    - "fs.write:**"
+    - "shell:**"
 
 instructions: >
   You are the Technical Writer + Systems Analyst for this repository. You make

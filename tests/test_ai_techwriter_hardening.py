@@ -112,6 +112,7 @@ def patch_substrate(monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str, objec
 
     monkeypatch.setattr(scope, "beadloom_sync_check_json", fake_sync_check)
     monkeypatch.setattr("tools.ai_techwriter.packet.beadloom_docs_polish_json", fake_polish)
+    monkeypatch.setattr(runner, "beadloom_docs_polish_json", fake_polish)
     monkeypatch.setattr("tools.ai_techwriter.packet.beadloom_ctx_json", fake_ctx)
     monkeypatch.setattr("tools.ai_techwriter.packet.beadloom_why", fake_why)
     monkeypatch.setattr(runner, "beadloom_sync_update", fake_sync_update)
@@ -171,8 +172,9 @@ def test_fixpoint_terminates_even_if_scope_is_adversarially_infinite(
     project: Path, patch_substrate: dict[str, object]
 ) -> None:
     """The subtle invariant: a scope that NEVER goes clean must still terminate
-    (bounded by max_fixpoint_rounds) and flag — never hang. We assert the loop
-    consulted scope a bounded number of times.
+    and flag — never hang. With a *stable* (never-shrinking) stale set the
+    no-progress guard fires BEFORE the round-cap: it stops as soon as a round
+    re-baselines the identical set the previous round already re-baselined.
     """
     (project / "docs" / "graph.md").write_text("old", encoding="utf-8")
 
@@ -199,11 +201,50 @@ def test_fixpoint_terminates_even_if_scope_is_adversarially_infinite(
         config=cfg,
     )
     assert result.flagged is True
-    assert result.fixpoint_rounds == 5  # exactly the cap, not unbounded
+    # No-progress: round 1 sees {sib}, round 2 sees the identical {sib} again
+    # (re-baselining cleared nothing) => break at round 2, NOT the full cap.
+    assert result.fixpoint_rounds == 2
     assert any("fixpoint not reached after 5 rounds" in r for r in result.flagged_reasons)
-    # Bounded scope consultation: initial scope + per-doc recheck + <= cap+1
-    # fixpoint reads. The key property is it is FINITE.
-    assert always.calls <= 2 + cfg.max_fixpoint_rounds + 1
+    # Bounded scope consultation: initial scope + per-doc recheck + the two
+    # fixpoint reads before the no-progress break. The key property is FINITE.
+    assert always.calls <= 2 + 2 + 1
+
+
+def test_fixpoint_runs_full_round_cap_when_set_keeps_shrinking(
+    project: Path, patch_substrate: dict[str, object]
+) -> None:
+    """No-progress must NOT mis-fire while the stale set is still shrinking:
+    a scope that drops one ref per round (so each round's set differs from the
+    last) keeps going until it reaches 0, never tripping the guard early."""
+    (project / "docs" / "graph.md").write_text("old", encoding="utf-8")
+    # per-doc: graph stale -> recheck fresh; then fixpoint rounds shrink
+    # {a,b,c} -> {b,c} -> {c} -> {} (each round's set differs => progress).
+    scripted = [
+        _stale_report(("graph", "docs/graph.md", "hash_changed", "src/g.py")),
+        _CLEAN,  # per-doc re-check
+        _stale_report(
+            ("a", "docs/a.md", "hash_changed", "src/a.py"),
+            ("b", "docs/b.md", "hash_changed", "src/b.py"),
+            ("c", "docs/c.md", "hash_changed", "src/c.py"),
+        ),
+        _stale_report(
+            ("b", "docs/b.md", "hash_changed", "src/b.py"),
+            ("c", "docs/c.md", "hash_changed", "src/c.py"),
+        ),
+        _stale_report(("c", "docs/c.md", "hash_changed", "src/c.py")),
+        _CLEAN,
+    ]
+    patch_substrate["scope"] = _ScriptedScope(scripted)
+    cfg = HarnessConfig(max_fixpoint_rounds=10, per_doc_retries=0)
+    result = run_harness(
+        project,
+        agent=FakeAgentRunner(project_root=project),
+        publisher=FakePublisher(),
+        now_ts=NOW,
+        config=cfg,
+    )
+    assert result.flagged is False
+    assert result.fixpoint_rounds == 3  # ran every shrinking round, then clean
 
 
 def test_fixpoint_clean_on_first_round_records_zero_rounds(
@@ -277,23 +318,21 @@ def test_body_lists_none_when_no_docs_refreshed_and_flagged_reasons() -> None:
     assert "Tokens: in=10 out=5" in body
 
 
-def test_branch_with_no_docs_refreshed_is_a_dangling_prefix_bug(
+def test_branch_with_no_docs_refreshed_falls_back_to_refresh_docs(
     project: Path, patch_substrate: dict[str, object]
 ) -> None:
-    """A gate-failed run that refreshed NOTHING produces a branch name.
+    """A gate-failed run that refreshed NOTHING yields the readable fallback
+    branch ``ai-techwriter/refresh-docs`` (BEAD-11 fix for the BEAD-08 finding).
 
-    KNOWN BUG (BEAD-07 finding for review): the intended fallback
-    ``ai-techwriter/refresh-docs`` is DEAD because of operator precedence in
-    ``runner._publish``::
+    The bug was operator precedence in ``runner._publish``::
 
         branch = _BRANCH_PREFIX + "-".join(sorted(stems))[:60] or "...docs"
 
-    ``+`` binds before ``or``, so when ``docs_refreshed`` is empty the left
-    operand is the non-empty string ``"ai-techwriter/refresh-"`` and the ``or``
-    never fires. Result: a *dangling-prefix* branch with a trailing hyphen and
-    no slug. This test pins the CURRENT behavior so the suite stays green; the
-    reviewer should decide whether to wrap the join in parens to restore the
-    fallback. (Git would accept the name, so it is not fatal — just ugly.)
+    ``+`` bound before ``or``, so for an empty ``docs_refreshed`` the left
+    operand was the non-empty ``"ai-techwriter/refresh-"`` and the ``or`` never
+    fired — producing a dangling ``ai-techwriter/refresh-`` with a trailing
+    hyphen. The fix parenthesizes the slug so ``or`` scopes to it; with zero
+    docs the slug is empty so the ``"docs"`` fallback applies.
     """
     (project / "docs" / "graph.md").write_text("old", encoding="utf-8")
     patch_substrate["scope"] = _ScriptedScope(
@@ -308,7 +347,7 @@ def test_branch_with_no_docs_refreshed_is_a_dangling_prefix_bug(
     )
     assert result.docs_refreshed == []
     branch = str(publisher.published[0]["branch"])
-    assert branch == "ai-techwriter/refresh-"  # documents the bug
+    assert branch == "ai-techwriter/refresh-docs"  # readable fallback, no trailing hyphen
 
 
 def test_duplicate_doc_path_refreshed_only_once(

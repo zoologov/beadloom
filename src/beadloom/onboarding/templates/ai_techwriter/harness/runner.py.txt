@@ -14,7 +14,11 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from tools.ai_techwriter.commands import beadloom_ci, beadloom_sync_update
+from tools.ai_techwriter.commands import (
+    beadloom_ci,
+    beadloom_docs_polish_json,
+    beadloom_sync_update,
+)
 from tools.ai_techwriter.models import (
     DriftItem,
     HarnessConfig,
@@ -73,7 +77,9 @@ def _repair_each_doc(
     result: HarnessResult,
 ) -> None:
     """Per-doc loop: agent -> sync-update -> re-check, with bounded retry."""
-    polish_report: dict[str, object] | None = None
+    # Fetch the whole ``docs polish`` report ONCE and reuse it across every doc
+    # (RFC Q4 design intent), instead of re-shelling per doc in build_packet.
+    polish_report: dict[str, object] | None = beadloom_docs_polish_json(project_root)
     for item in stale:
         if _budget_exceeded(cfg, result):
             result.flagged = True
@@ -132,25 +138,44 @@ def _run_fixpoint(
 ) -> None:
     """Global fixpoint: re-baseline newly re-staled siblings until stable 0.
 
-    Bounded by ``max_fixpoint_rounds`` and no-progress detection (the
-    re-stale-siblings invariant is bounded — RFC Q3).
+    Terminates on whichever fires first (RFC Q3 "no-progress / round-cap"):
+
+    * **natural**: the stale set reaches 0 (clean) — success;
+    * **no-progress**: re-baselining a round leaves the *same* stale ref-id set
+      it started with (the set stopped shrinking and ``sync-update`` cleared
+      nothing) — flag immediately, no point spending the remaining rounds;
+    * **round-cap**: ``max_fixpoint_rounds`` exhausted — flag.
     """
+    prev_refs: set[str] | None = None
     for round_no in range(cfg.max_fixpoint_rounds):
         stale = discover_scope(project_root)
         if not stale:
             return
         result.fixpoint_rounds = round_no + 1
+        cur_refs = {item.ref_id for item in stale}
         for item in stale:
             beadloom_sync_update(project_root, item.ref_id)
-        # No-progress guard: if the set did not shrink AND re-baselining didn't
-        # clear it, the next round handles it; the round-cap bounds the loop.
+        if cur_refs == prev_refs:
+            # No-progress: this round saw the identical stale set the previous
+            # round re-baselined, yet it is still stale — further rounds cannot
+            # help. Flag now rather than burning the remaining round budget.
+            _flag_fixpoint_stuck(result, cfg, stale)
+            return
+        prev_refs = cur_refs
     remaining = discover_scope(project_root)
     if remaining:
-        result.flagged = True
-        result.flagged_reasons.append(
-            f"fixpoint not reached after {cfg.max_fixpoint_rounds} rounds: "
-            + ", ".join(d.ref_id for d in remaining)
-        )
+        _flag_fixpoint_stuck(result, cfg, remaining)
+
+
+def _flag_fixpoint_stuck(
+    result: HarnessResult, cfg: HarnessConfig, remaining: list[DriftItem]
+) -> None:
+    """Flag a fixpoint that never reached a clean state (no-progress / cap)."""
+    result.flagged = True
+    result.flagged_reasons.append(
+        f"fixpoint not reached after {cfg.max_fixpoint_rounds} rounds: "
+        + ", ".join(d.ref_id for d in remaining)
+    )
 
 
 def _run_gate(project_root: Path, *, result: HarnessResult) -> None:
@@ -166,9 +191,9 @@ def _publish(
     project_root: Path, *, publisher: ReviewPublisher, result: HarnessResult
 ) -> None:
     """Open the PR/MR (flagged iff the run is not clean-green)."""
-    branch = _BRANCH_PREFIX + "-".join(
-        sorted(Path(p).stem for p in result.docs_refreshed)
-    )[:60] or f"{_BRANCH_PREFIX}docs"
+    branch = _BRANCH_PREFIX + (
+        "-".join(sorted(Path(p).stem for p in result.docs_refreshed))[:60] or "docs"
+    )
     title = _title(result)
     body = _body(result)
     result.pr_url = publisher.publish(

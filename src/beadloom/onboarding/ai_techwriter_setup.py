@@ -47,6 +47,14 @@ HARNESS_MODULES: tuple[str, ...] = (
     "seams",
 )
 
+#: Asset name for the vendored parent ``tools/__init__.py`` (kept distinct from
+#: the harness package's own ``__init__`` so it lands one directory up).
+_TOOLS_INIT_ASSET = "tools_init.py.txt"
+
+#: Default content for the vendored parent ``tools/__init__.py`` when the live
+#: repo's copy is unavailable (sync source of truth is the live file).
+_TOOLS_INIT_DEFAULT = '"""Repo tooling (not part of the installed ``beadloom`` wheel)."""\n'
+
 #: Supported CI platforms (RFC Q5 table) — both first-class.
 PLATFORMS: tuple[str, ...] = ("github", "gitlab")
 
@@ -82,11 +90,22 @@ def vendor_harness(target_root: Path) -> Path:
     src = vendored_harness_root()
     dest = target_root / "tools" / "ai_techwriter"
     dest.mkdir(parents=True, exist_ok=True)
+    # Vendor the parent ``tools/__init__.py`` so the target is a regular package
+    # (no reliance on implicit namespace packages for ``python -m tools...``).
+    _write(target_root / "tools" / "__init__.py", _vendored_tools_init())
     for module in HARNESS_MODULES:
         content = (src / f"{module}.py.txt").read_text(encoding="utf-8")
         _write(dest / f"{module}.py", content)
     _write(dest / "recipe.yaml", (src / "recipe.yaml").read_text(encoding="utf-8"))
     return dest
+
+
+def _vendored_tools_init() -> str:
+    """Content for the vendored ``tools/__init__.py`` (packaged asset or default)."""
+    asset = vendored_harness_root() / _TOOLS_INIT_ASSET
+    if asset.is_file():
+        return asset.read_text(encoding="utf-8")
+    return _TOOLS_INIT_DEFAULT
 
 
 def _scaffold_github(target_root: Path) -> Path:
@@ -170,4 +189,14 @@ def sync_vendored_harness(live_root: Path) -> list[str]:
         written.append(f"{module}.py.txt")
     shutil.copyfile(live_root / "recipe.yaml", dest / "recipe.yaml")
     written.append("recipe.yaml")
+    # Snapshot the live parent ``tools/__init__.py`` so the vendored target is a
+    # regular package (drift-guarded like the harness modules).
+    parent_init = live_root.parent / "__init__.py"
+    content = (
+        parent_init.read_text(encoding="utf-8")
+        if parent_init.is_file()
+        else _TOOLS_INIT_DEFAULT
+    )
+    (dest / _TOOLS_INIT_ASSET).write_text(content, encoding="utf-8")
+    written.append(_TOOLS_INIT_ASSET)
     return written
