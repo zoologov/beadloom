@@ -46,6 +46,10 @@ MCP_TOOL_CATALOG: tuple[McpToolDoc, ...] = (
     McpToolDoc("diff", "Graph changes since a git ref"),
     McpToolDoc("lint", "Architecture boundary violations with severity"),
     McpToolDoc("get_debt_report", "Architecture debt report with score and offenders"),
+    McpToolDoc("task_init", "Scaffold a work item: docs folder + 4-role bead DAG"),
+    McpToolDoc("bead_context", "One payload: ctx + why + doc excerpt + active rules"),
+    McpToolDoc("complete_bead", "Refusing gate: run beadloom ci (+tests); close only on PASS"),
+    McpToolDoc("checkpoint", "bd comment + timestamped ACTIVE.md progress note"),
 )
 
 

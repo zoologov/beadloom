@@ -1,0 +1,413 @@
+# CLAUDE.md — Multi-Agent Development Core
+
+> **Version:** 3.1 (agents/ + commands/ split)
+> **Integration:** steveyegge/beads CLI (1.0.4, embedded Dolt)
+> **Process skills (`.claude/commands/`, slash, run in main loop):** `/task-init`, `/coordinator`, `/checkpoint`, `/templates`
+> **Role subagents (`.claude/agents/`, launched via the `Agent` tool):** `dev`, `test`, `review`, `tech-writer`
+> **See §0.0 Process Architecture for how these fit together.**
+
+---
+
+## 0.0 Process Architecture (entry point → roles)
+
+One entry point, two kinds of unit. This is the whole map:
+
+```
+CLAUDE.md  ← entry point: critical rules, setup, bd/beadloom essentials, this map
+│
+├─ .claude/commands/  — SLASH SKILLS, injected into the MAIN-LOOP session (you, now)
+│    /task-init    scaffold any work item (PRD/RFC/CONTEXT/PLAN/ACTIVE or BRIEF) + create beads
+│    /coordinator  orchestrate multi-agent work (waves, gates, merge-slot) — MAIN-LOOP only
+│    /checkpoint   bd-comment + ACTIVE.md progress saves
+│    /templates    document templates used by /task-init
+│
+└─ .claude/agents/    — ROLE SUBAGENTS, launched via the `Agent` tool (isolated context)
+     dev · test · review · tech-writer   (canonical role definitions; scoped tools; model: opus)
+```
+
+**Why coordinator is a command, not an agent:** the coordinator IS the main-loop process that *spawns* subagents via the `Agent` tool. A subagent cannot spawn subagents, so orchestration must live in the main loop. `/coordinator` is a skill injected into that loop.
+
+**Two ways a role runs:**
+- **Multi-agent (default for epics/features):** `/coordinator` launches roles as subagents — `Agent(subagent_type="dev"|"test"|"review"|"tech-writer", run_in_background=True)`. The role's full protocol lives in `.claude/agents/<role>.md` (single source of truth) and is NOT re-injected by the coordinator.
+- **Single-agent (one small bead, no orchestration):** the main loop adopts the role inline by reading and following `.claude/agents/<role>.md` directly. (There are no `/dev` `/test` `/review` `/tech-writer` slash commands — roles are subagents, not skills.)
+
+**Flow:** `/task-init` (docs + beads) → `/coordinator` (waves: dev → test → review → tech-writer, gated by bead dependencies) → commit per wave. Durable state lives in files (`CONTEXT.md`/`ACTIVE.md`) + bead comments, never chat.
+
+---
+
+## 0. CRITICAL RULES
+
+> **READ FIRST. ALWAYS FOLLOW.**
+
+### Setup (one-time, per clone)
+
+```bash
+git config beads.role maintainer   # or "contributor" — required by bd 1.0.4 (silences GH#2950 warning)
+beadloom install-hooks             # pre-commit hook: lint + sync-check enforcement
+```
+
+### BEFORE any work
+
+```bash
+# 1. Get project context
+beadloom prime                    # compact architecture + health overview
+
+# 2. Check available tasks
+bd ready
+
+# 3. Claim task
+bd update <bead-id> --status in_progress --claim
+
+# 4. Read context via Beadloom (never hardcode paths)
+beadloom ctx <ref-id>             # architecture context for the area you'll touch
+beadloom why <ref-id>             # impact: what depends on this?
+
+# 5. Read epic context (if applicable)
+# .claude/development/docs/features/{ISSUE-KEY}/CONTEXT.md
+# .claude/development/docs/features/{ISSUE-KEY}/ACTIVE.md
+
+# 6. Confirm understanding to user
+```
+
+### DURING work
+
+```bash
+# Checkpoint every 30 min or 5 steps
+bd comments add <bead-id> "CHECKPOINT: [what was done]"
+
+# Update ACTIVE.md after each significant action
+```
+
+### WHEN COMPLETING bead
+
+```bash
+# 1. Tests pass
+uv run pytest
+
+# 2. Code quality (same checks as CI)
+uv run ruff check src/ tests/
+uv run mypy src/
+
+# 3. Beadloom validation
+beadloom reindex
+beadloom sync-check
+beadloom lint --strict
+
+# 4. Final checkpoint
+bd comments add <bead-id> "COMPLETED: [results]"
+
+# 5. Close bead (shows newly unblocked work)
+bd close <bead-id> --suggest-next
+# (append --session "$CLAUDE_SESSION_ID" only if that env var is set)
+```
+
+---
+
+## 0.1 Project: __BEADLOOM_PROJECT_NAME__
+
+<!-- beadloom:auto-start project-info -->
+- **Stack:** Python 3.10+, SQLite, Click, Rich, tree-sitter
+- **Tests:** pytest + pytest-cov
+- **Linter/formatter:** ruff (lint + format)
+- **Type checking:** mypy --strict
+- **Architecture:** DDD packages -- `application/`, `context_oracle/`, `doc_sync/`, `graph/`, `infrastructure/`, `onboarding/`, `services/`, `tui/`
+- **Current version:** 1.10.0
+<!-- beadloom:auto-end -->
+
+---
+
+## 1. Skills — Dynamic Loading
+
+**Slash skills (main loop):**
+
+| Situation | Command | Description |
+|-----------|---------|-------------|
+| New work item | `/task-init` | Setup any type: epic, feature, bug, task, chore |
+| Parallel work | `/coordinator` | Orchestrate multi-agent waves (spawns role subagents) |
+| Need templates | `/templates` | PRD, RFC, CONTEXT, PLAN, ACTIVE, BRIEF |
+| Create checkpoint | `/checkpoint` | Format, rules |
+
+**Role subagents (via the `Agent` tool — see §0.0):** `dev` (TDD implementation), `test` (pytest, coverage), `review` (quality, read-only), `tech-writer` (doc refresh). Defined in `.claude/agents/<role>.md`. For a single small bead without orchestration, the main loop adopts a role inline by following its `.claude/agents/<role>.md`.
+
+**Rule:** Invoke a slash skill when you need detailed instructions; launch a role subagent (or follow its agent file inline) to do role work.
+
+---
+
+## 2. Beads CLI — Essentials
+
+```bash
+# Available tasks (no blockers)
+bd ready
+bd ready --claim                  # atomically claim the next ready bead (1.0.4)
+
+# All tasks
+bd list
+
+# Details + history
+bd show <id>
+bd comments <id>
+
+# Claim task
+bd update <id> --status in_progress --claim
+
+# Add checkpoint (does NOT overwrite description)
+bd comments add <id> "checkpoint text"
+
+# Close task (--suggest-next shows newly unblocked beads; 1.0.4)
+bd close <id> --suggest-next
+
+# Dependency graph
+bd graph --all
+
+# Add dependency
+bd dep add <id> <depends-on-id>
+```
+
+**Multi-agent coordination (new in 1.0.4) — used by `/coordinator`:**
+- `bd swarm` — epic → DAG → waves (`create` / `validate` / `status`)
+- `bd gate` — async wait conditions (review→tech-writer; CI via `gh:run` / `gh:pr`)
+- `bd merge-slot` — serialize parallel merges (one agent merges at a time)
+
+**IMPORTANT:**
+- `bd comments add` — for checkpoints (preserves history)
+- `bd update --append-notes` — for notes
+- NEVER work on a task without `--claim`
+- ALWAYS close via `bd close`; `--suggest-next` lists *candidate* unblocked beads — **confirm with `bd ready`** (it may list still-blocked beads; verified bd 1.0.4 quirk, see BDL-UX-Issues #97)
+- `--session "$CLAUDE_SESSION_ID"` on close is optional (audit trail; only if the env var is set)
+
+---
+
+## 2.1 Beadloom CLI — Essentials
+
+```bash
+# Agent context (start of session)
+beadloom prime                   # compact context for AI agent injection (<2K tokens)
+
+# Project structure (use instead of hardcoded paths)
+beadloom status                  # overview: nodes, edges, docs, coverage, trends
+beadloom graph                   # Mermaid architecture diagram
+beadloom ctx <ref-id>            # full context: code, docs, constraints
+beadloom ctx <ref-id> --json     # structured JSON for parsing
+beadloom search "<query>"        # FTS5 search across nodes and docs
+beadloom why <ref-id>            # impact analysis: upstream deps + downstream dependents
+
+# Validation (run before committing)
+beadloom reindex                 # rebuild index after code/graph changes
+beadloom sync-check              # check doc-code freshness (exit 2 = stale)
+beadloom lint --strict           # architecture boundary check (exit 1 = violation)
+beadloom doctor                  # graph integrity validation
+
+# Change tracking & visualization
+beadloom diff --since <git-ref>  # graph changes vs a git ref (exit 1 = changes) — use in the review role
+beadloom snapshot save           # snapshot architecture state; `snapshot compare <a> <b>` to diff
+beadloom link <ref-id> <url>     # link a graph node to an external tracker issue (GitHub/Jira)
+
+# Cross-repo federation (F1 / BDL-037)
+beadloom export [--out FILE]     # deterministic federation artifact (schema v1: graph + lifecycle + AMQP contract meta)
+beadloom federate <exports...>   # hub: aggregate >=2 satellite exports -> federated graph (drift verdicts + staleness)
+
+# Documentation
+beadloom docs generate           # generate doc skeletons from graph
+beadloom docs polish             # structured data for AI doc enrichment
+
+# Setup (one-time)
+beadloom init                    # initialize beadloom in a project
+beadloom setup-rules             # create IDE rules files referencing AGENTS.md
+beadloom setup-mcp               # configure MCP server for IDE
+beadloom install-hooks           # pre-commit hook: lint + sync-check enforcement
+
+# After changing code
+# 1. beadloom reindex            — re-index changed files
+# 2. beadloom sync-check         — check if docs went stale
+# 3. If stale: update the doc, then beadloom reindex again
+# 4. beadloom lint --strict      — verify architecture boundaries
+```
+
+**IMPORTANT:**
+- NEVER hardcode file paths — use `beadloom ctx`/`graph`/`search` to discover structure
+- ALWAYS start sessions with `beadloom prime` for project context
+- ALWAYS run `beadloom sync-check` before committing
+- If sync-check reports stale docs, update them before proceeding
+
+---
+
+## 3. File Memory (protection against auto-compaction)
+
+**Document language:** ALL documents (PRD, RFC, CONTEXT, PLAN, ACTIVE, BRIEF) MUST be written in English.
+
+```
+.claude/development/docs/features/{ISSUE-KEY}/
+├── PRD.md       <- REQUIREMENTS: business goals (epic/feature only)
+├── RFC.md       <- ARCHITECTURE: technical solution (epic/feature only)
+├── CONTEXT.md   <- CORE: state, decisions, standards (epic/feature only)
+├── PLAN.md      <- DAG: beads and dependencies (epic/feature only)
+├── BRIEF.md     <- COMBINED: problem + solution + plan (bug/task/chore only)
+└── ACTIVE.md    <- FOCUS: current work, progress (ALL types)
+```
+
+| Priority | File | When to read |
+|----------|------|--------------|
+| **P0** | CONTEXT.md | Always at the start |
+| **P0** | ACTIVE.md | Always at the start |
+| **P1** | beads comments | When resuming work |
+
+**Rule:** NEVER rely on "memory" from chat. Read the files!
+
+---
+
+## 4. Agent Roles
+
+| Role | How it runs | When to use |
+|------|-------------|-------------|
+| **Developer** | `agents/dev.md` (`subagent_type: dev`) | Implementing beads (TDD) |
+| **Reviewer** | `agents/review.md` (`subagent_type: review`) | Quality verification (read-only) |
+| **Tester** | `agents/test.md` (`subagent_type: test`) | Writing tests |
+| **Tech Writer** | `agents/tech-writer.md` (`subagent_type: tech-writer`) | Documentation updates |
+| **Coordinator** | `/coordinator` skill (main loop) | Multi-agent orchestration |
+
+### Single agent (one small bead, no orchestration)
+The main loop adopts the role inline by following `.claude/agents/<role>.md` directly; use `/checkpoint` for saving progress.
+
+### Multi-agent mode (default for epics/features)
+Coordinator MUST be activated before multi-bead work:
+1. Invoke `/coordinator` skill (main-loop only — see §0.0).
+2. Complete `/task-init` flow BEFORE creating any beads or writing code.
+3. Coordinator gets technical context through filtered sources (strategy specs, sub-agent summaries), NEVER reads raw source code directly.
+4. Coordinator launches roles as first-class subagents via the `Agent` tool (`subagent_type: dev|test|review|tech-writer`), tracked through `bd swarm` / `gate` / `merge-slot`.
+
+Roles are defined canonically in `.claude/agents/{dev,test,review,tech-writer}.md` (single source of truth; no slash-command wrappers).
+
+---
+
+## 5. DAG and Priorities
+
+| Priority | Description | Rule |
+|----------|-------------|------|
+| **P0** | Critical, blocks others | Execute first |
+| **P1** | High, important | After P0 |
+| **P2** | Medium, improvements | When there is time |
+| **P3** | Low, nice-to-have | Last priority |
+
+**Rules:**
+- Only take from `bd ready`
+- Do NOT take a bead with unresolved dependencies
+- Do NOT take P2/P3 while P0/P1 exist
+
+---
+
+## 6. Git
+
+```
+Commit format:
+[{ISSUE-KEY}] <type>: <description>
+
+Types: feat, fix, refactor, docs, test, chore
+
+Example:
+[MCP-001] feat: add health endpoint
+```
+
+---
+
+## 7. Anti-patterns (NEVER)
+
+### Planning
+- Starting without an agreed plan
+- Taking a bead with unresolved dependencies
+- Changing DAG without notifying the user
+- Creating beads before PLAN is approved (beads are created in Step 3 of /task-init)
+- Coordinator reading raw source code (use strategy specs + sub-agent summaries instead)
+
+### Work
+- Starting without reading CONTEXT.md
+- Relying on chat memory
+- Working on multiple beads simultaneously
+- Ignoring checkpoints
+
+### Completion
+- Completing a bead without `bd comments add`
+- Completing without `bd close`
+- Committing with failing tests
+
+### Beadloom
+- Committing without `beadloom sync-check`
+- Hardcoding file paths instead of using `beadloom ctx`/`graph`
+- Skipping `beadloom reindex` after graph YAML changes
+- Ignoring `beadloom lint` violations
+
+### Shell
+- Using `cp`, `mv`, `rm` without `-f` flag (may hang on interactive prompts)
+
+### Code
+- Using `Any` / `# type: ignore` without reason
+- Leaving `print()` / `breakpoint()`
+- Writing code without a test (TDD violation)
+- Bare `except:` without specifying exception type
+- `import *`
+- Mutable default arguments (`def f(x=[]):`)
+
+---
+
+## 8. Quick Reference
+
+### Session start
+```bash
+beadloom prime                        # project context
+bd ready
+bd update <id> --status in_progress --claim
+beadloom ctx <ref-id>                 # architecture context for the area
+# Read CONTEXT.md, ACTIVE.md (if epic)
+# Confirm to user
+```
+
+### During work
+```bash
+# Every 30 min
+bd comments add <id> "CHECKPOINT: ..."
+# Update ACTIVE.md
+```
+
+### Completing bead
+```bash
+uv run pytest
+bd comments add <id> "COMPLETED: ..."
+bd close <id> --suggest-next          # shows newly unblocked beads
+```
+
+### New work item
+```
+/task-init
+```
+
+### Need templates
+```
+/templates
+```
+
+---
+
+## 9. Agent Checklist
+
+### At start
+- [ ] `beadloom prime` -> project overview
+- [ ] `bd ready` -> selected a task
+- [ ] `bd update <id> --status in_progress --claim`
+- [ ] `beadloom ctx <ref-id>` -> architecture context
+- [ ] Read CONTEXT.md and ACTIVE.md (if epic)
+- [ ] Confirmed understanding to user
+
+### During work
+- [ ] Updating ACTIVE.md
+- [ ] Checkpoint in beads every 30 min
+- [ ] Following TDD (if code)
+
+### At completion
+- [ ] Tests pass
+- [ ] `bd comments add` — final checkpoint
+- [ ] `bd close <id>`
+- [ ] ACTIVE.md cleaned
+
+---
+
+> **Need detailed instructions?** Slash skills: `/task-init` | `/coordinator` | `/templates` | `/checkpoint`.
+> Role subagents (`Agent` tool / follow the agent file inline): `dev` | `test` | `review` | `tech-writer` — see §0.0.

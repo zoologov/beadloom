@@ -12,6 +12,7 @@ from mcp.server import Server
 from mcp.types import TextContent
 
 from beadloom import __version__
+from beadloom.application.gate import run_ci_gate
 from beadloom.application.reindex import incremental_reindex
 from beadloom.context_oracle.builder import bfs_subgraph, build_context
 from beadloom.context_oracle.cache import ContextCache, SqliteCache, compute_etag
@@ -20,6 +21,7 @@ from beadloom.graph.diff import compute_diff
 from beadloom.graph.linter import LintResult, lint
 from beadloom.graph.loader import update_node_in_yaml
 from beadloom.infrastructure.db import get_meta, open_db
+from beadloom.services.bd_seam import BdUnavailableError, run_bd
 
 if TYPE_CHECKING:
     import sqlite3
@@ -463,6 +465,378 @@ def handle_get_debt_report(
     return format_debt_json(report, category=category)
 
 
+# --- Process-tools (BDL-048): deterministic, tool-agnostic dev-flow steps ---
+#
+# These four tools make the dev flow's process steps REAL operations callable
+# from any MCP client. They are SINGLE deterministic operations: none spawns a
+# sub-agent and none runs a loop — orchestration stays in the harness (G4).
+# `complete_bead` is advisory-strong: it runs the real `beadloom ci` gate and
+# refuses to close on a red gate, but the true enforcement point remains
+# `beadloom ci` in CI (G5).
+
+
+# Per-type document skeletons scaffolded by `task_init`.
+_FULL_DOCS = ("PRD", "RFC", "CONTEXT", "PLAN", "ACTIVE")
+_SIMPLE_DOCS = ("BRIEF", "ACTIVE")
+_FULL_TYPES = frozenset({"epic", "feature"})
+# The mandatory 4-role structure for every work item.
+_ROLE_DAG = (
+    ("dev", ()),
+    ("test", ("dev",)),
+    ("review", ("test",)),
+    ("tech-writer", ("review",)),
+)
+
+
+def _features_dir(project_root: Path, key: str) -> Path:
+    """Resolve the per-work-item docs folder for *key*."""
+    return project_root / ".claude" / "development" / "docs" / "features" / key
+
+
+def _doc_skeleton(name: str, key: str, type_: str) -> str:
+    """A minimal, valid skeleton for one work-item doc (English, status Draft)."""
+    if name == "ACTIVE":
+        return (
+            f"# ACTIVE: {key}\n\n"
+            "> **Phase:** Development\n\n---\n\n## Current Bead\n\n"
+            "## Progress\n\n## Notes\n"
+        )
+    if name == "BRIEF":
+        return (
+            f"# BRIEF: {key}\n\n> **Type:** {type_}\n> **Status:** Draft\n\n---\n\n"
+            "## Problem\n\n## Solution\n\n## Beads\n\n## Acceptance Criteria\n"
+        )
+    return f"# {name}: {key}\n\n> **Status:** Draft\n\n---\n\n(scaffold — fill in)\n"
+
+
+def _scaffold_docs(project_root: Path, *, type_: str, key: str) -> list[str]:
+    """Create the docs folder + per-type skeletons; return created paths."""
+    target = _features_dir(project_root, key)
+    target.mkdir(parents=True, exist_ok=True)
+    names = _FULL_DOCS if type_ in _FULL_TYPES else _SIMPLE_DOCS
+    created: list[str] = []
+    for name in names:
+        path = target / f"{name}.md"
+        if not path.exists():
+            path.write_text(_doc_skeleton(name, key, type_), encoding="utf-8")
+        created.append(str(path))
+    return created
+
+
+def _bd_create_bead(
+    *, project_root: Path, key: str, role: str, type_: str
+) -> str:
+    """Create one role bead via `bd create`; return its id (or raise on failure)."""
+    title = f"[{key}] {role}: {role} work"
+    result = run_bd(
+        ["create", title, "--type", type_, "--silent"],
+        cwd=str(project_root),
+    )
+    if not result.ok:
+        msg = f"bd create failed for role {role}: {result.stderr.strip()}"
+        raise RuntimeError(msg)
+    return result.stdout.strip().splitlines()[-1].strip() if result.stdout.strip() else ""
+
+
+def handle_task_init(
+    project_root: Path,
+    *,
+    type_: str,
+    key: str,
+) -> dict[str, Any]:
+    """Scaffold a work item: docs folder + skeletons + a valid 4-role bead DAG.
+
+    Creates ``.claude/development/docs/features/<key>/`` with the per-type doc
+    skeletons (PRD/RFC/CONTEXT/PLAN/ACTIVE for epic/feature; BRIEF/ACTIVE
+    otherwise) and a deterministic role DAG (dev → test → review → tech-writer)
+    via the mockable ``bd`` seam. Returns created bead ids + doc paths.
+
+    This is a single deterministic operation — it does NOT orchestrate or spawn
+    agents; the coordinator/harness does that.
+    """
+    doc_paths = _scaffold_docs(project_root, type_=type_, key=key)
+    bead_type = "feature" if type_ in _FULL_TYPES else "task"
+    try:
+        role_ids: dict[str, str] = {}
+        bead_ids: list[str] = []
+        for role, _deps in _ROLE_DAG:
+            bead_id = _bd_create_bead(
+                project_root=project_root, key=key, role=role, type_=bead_type
+            )
+            role_ids[role] = bead_id
+            bead_ids.append(bead_id)
+        # Wire the standard dependencies: each role depends on the previous one.
+        for role, deps in _ROLE_DAG:
+            for dep_role in deps:
+                run_bd(
+                    ["dep", "add", role_ids[role], role_ids[dep_role]],
+                    cwd=str(project_root),
+                )
+    except BdUnavailableError as exc:
+        return {"status": "ERROR", "error": str(exc), "doc_paths": doc_paths}
+    except RuntimeError as exc:
+        return {"status": "ERROR", "error": str(exc), "doc_paths": doc_paths}
+    return {"status": "OK", "bead_ids": bead_ids, "doc_paths": doc_paths}
+
+
+def _bd_show(bead: str, project_root: Path) -> dict[str, Any]:
+    """Return the first record of `bd show <bead> --json` (or empty dict)."""
+    result = run_bd(["show", bead, "--json"], cwd=str(project_root))
+    if not result.ok or not result.stdout.strip():
+        return {}
+    try:
+        parsed = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return {}
+    if isinstance(parsed, list):
+        return parsed[0] if parsed and isinstance(parsed[0], dict) else {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _extract_field(record: dict[str, Any], field: str) -> str | None:
+    """Extract a ``field: value`` token from the bead's design/description text."""
+    text = " ".join(
+        str(record.get(k, "")) for k in ("design", "description", "title", "notes")
+    )
+    marker = f"{field}:"
+    idx = text.find(marker)
+    if idx < 0:
+        return None
+    rest = text[idx + len(marker) :].strip()
+    token = rest.split(",")[0].split()[0] if rest else ""
+    return token or None
+
+
+def _active_rules_for_node(
+    project_root: Path, conn: sqlite3.Connection, ref_id: str
+) -> list[dict[str, str]]:
+    """Return the rules whose matcher applies to *ref_id*'s node (best-effort)."""
+    from beadloom.graph.rule_engine import (
+        CardinalityRule,
+        DenyRule,
+        ForbidEdgeRule,
+        RequireRule,
+        load_rules,
+    )
+
+    rules_path = project_root / ".beadloom" / "_graph" / "rules.yml"
+    if not rules_path.exists():
+        return []
+    row = conn.execute("SELECT kind FROM nodes WHERE ref_id = ?", (ref_id,)).fetchone()
+    node_kind = row["kind"] if row else ""
+    out: list[dict[str, str]] = []
+    for rule in load_rules(rules_path):
+        matchers = []
+        if isinstance(rule, (DenyRule, ForbidEdgeRule)):
+            matchers = [rule.from_matcher, rule.to_matcher]
+        elif isinstance(rule, (RequireRule, CardinalityRule)):
+            matchers = [rule.for_matcher]
+        # Global rules (cycle/import/layer) have no NodeMatcher: treat as active.
+        applies = not matchers or any(
+            m.matches(ref_id, node_kind) for m in matchers
+        )
+        if applies:
+            out.append({"name": rule.name, "description": rule.description})
+    return out
+
+
+def _doc_excerpt(project_root: Path, record: dict[str, Any]) -> str | None:
+    """Best-effort CONTEXT.md + ACTIVE.md excerpt for the bead's epic/feature."""
+    epic = _extract_field(record, "epic") or _extract_field(record, "feature")
+    if not epic:
+        return None
+    feature_dir = _features_dir(project_root, epic)
+    parts: list[str] = []
+    for name in ("CONTEXT.md", "ACTIVE.md"):
+        path = feature_dir / name
+        if path.exists():
+            parts.append(f"--- {name} ---\n{path.read_text(encoding='utf-8')[:2000]}")
+    return "\n\n".join(parts) if parts else None
+
+
+def handle_bead_context(
+    project_root: Path,
+    *,
+    bead: str,
+) -> dict[str, Any]:
+    """One structured payload: ctx + why + doc excerpt + active rules for a bead.
+
+    Resolves the bead's graph ref (from ``bd show``), then reuses
+    ``context_oracle`` (ctx + why) and ``graph.rule_engine`` (active rules) plus
+    a CONTEXT.md/ACTIVE.md excerpt when present. Deterministic; read-only.
+    """
+    try:
+        record = _bd_show(bead, project_root)
+    except BdUnavailableError as exc:
+        return {"status": "ERROR", "error": str(exc)}
+    ref_id = _extract_field(record, "ref") or _extract_field(record, "area")
+    if ref_id is None:
+        return {
+            "status": "ERROR",
+            "error": (
+                f"could not resolve a graph ref for bead {bead}; "
+                "add a `ref: <ref_id>` token to the bead's design/description"
+            ),
+        }
+    db_path = project_root / ".beadloom" / "beadloom.db"
+    conn = open_db(db_path)
+    try:
+        context = handle_get_context(conn, ref_id=ref_id)
+        try:
+            impact = handle_why(conn, ref_id=ref_id)
+        except LookupError:
+            impact = {"ref_id": ref_id, "upstream": [], "downstream": []}
+        active_rules = _active_rules_for_node(project_root, conn, ref_id)
+    finally:
+        conn.close()
+    return {
+        "status": "OK",
+        "bead": bead,
+        "ref_id": ref_id,
+        "context": context,
+        "impact": impact,
+        "active_rules": active_rules,
+        "doc_excerpt": _doc_excerpt(project_root, record),
+    }
+
+
+def _run_test_suite(project_root: Path) -> tuple[bool, str]:
+    """Run the project's pytest suite; return ``(passed, summary)``.
+
+    A module-level seam so tests can stub the (slow) suite while still
+    exercising ``complete_bead``'s gate logic.
+    """
+    import subprocess
+
+    try:
+        # `uv` is resolved from PATH by design; argv is fixed (no shell, no user input).
+        completed = subprocess.run(
+            ["uv", "run", "pytest", "-q"],  # noqa: S607
+            cwd=str(project_root),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return False, "pytest runner not available"
+    passed = completed.returncode == 0
+    summary = (completed.stdout or "").strip().splitlines()[-1:] or [""]
+    return passed, summary[0]
+
+
+def handle_complete_bead(
+    project_root: Path,
+    *,
+    bead: str,
+    run_tests: bool = True,
+) -> dict[str, Any]:
+    """The refusing gate: run ``beadloom ci`` (+ tests) before closing a bead.
+
+    Reuses :func:`application.gate.run_ci_gate` (reindex → lint → sync-check →
+    config-check → doctor) and, when *run_tests* is True (the default), the test
+    suite. On PASS the bead is closed (``bd close --suggest-next``) and the
+    next-ready output is returned. On FAIL the bead is NOT closed — the findings
+    are returned so the agent must fix them first.
+
+    Set *run_tests=False* for a fast gate-only check (skips the suite).
+
+    This is advisory-strong, not the true enforcement point: CI still runs
+    ``beadloom ci`` independently (G5).
+    """
+    gate = run_ci_gate(
+        project_root, fail_on=None, hub_exports=[], no_reindex=False
+    )
+    findings: list[dict[str, object]] = list(gate.findings)
+    gate_ok = gate.ok
+
+    tests_ok = True
+    if run_tests:
+        tests_ok, test_summary = _run_test_suite(project_root)
+        if not tests_ok:
+            findings.append(
+                {
+                    "kind": "tests",
+                    "rule": "pytest",
+                    "severity": "error",
+                    "locations": [],
+                    "why": f"test suite failed: {test_summary}",
+                    "remediation": "run `uv run pytest` and fix the failing tests",
+                }
+            )
+
+    if not (gate_ok and tests_ok):
+        return {"status": "FAIL", "bead": bead, "findings": findings}
+
+    try:
+        close = run_bd(
+            ["close", bead, "--suggest-next"], cwd=str(project_root)
+        )
+    except BdUnavailableError as exc:
+        return {"status": "ERROR", "error": str(exc), "findings": findings}
+    if not close.ok:
+        return {
+            "status": "ERROR",
+            "bead": bead,
+            "error": f"gate passed but `bd close` failed: {close.stderr.strip()}",
+        }
+    return {
+        "status": "PASS",
+        "bead": bead,
+        "findings": [],
+        "next": close.stdout.strip(),
+    }
+
+
+def _append_active_note(project_root: Path, record: dict[str, Any], text: str) -> bool:
+    """Best-effort append of a timestamped note to the bead's ACTIVE.md."""
+    epic = _extract_field(record, "epic") or _extract_field(record, "feature")
+    if not epic:
+        return False
+    active = _features_dir(project_root, epic) / "ACTIVE.md"
+    if not active.exists():
+        return False
+    from datetime import datetime, timezone
+
+    stamp = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
+    with active.open("a", encoding="utf-8") as fh:
+        fh.write(f"\n- {stamp} — {text}\n")
+    return True
+
+
+def handle_checkpoint(
+    project_root: Path,
+    *,
+    bead: str,
+    text: str,
+) -> dict[str, Any]:
+    """Record a checkpoint: ``bd comments add`` + timestamped ACTIVE.md note.
+
+    Adds *text* as a bead comment (preserves history) and, best-effort, appends
+    a timestamped progress line to the bead's ACTIVE.md (skipped cleanly if the
+    file cannot be located). Deterministic; no orchestration.
+    """
+    try:
+        record = _bd_show(bead, project_root)
+        comment = run_bd(
+            ["comments", "add", bead, text], cwd=str(project_root)
+        )
+    except BdUnavailableError as exc:
+        return {"status": "ERROR", "error": str(exc)}
+    if not comment.ok:
+        return {
+            "status": "ERROR",
+            "bead": bead,
+            "error": f"`bd comments add` failed: {comment.stderr.strip()}",
+        }
+    active_updated = _append_active_note(project_root, record, text)
+    return {
+        "status": "OK",
+        "bead": bead,
+        "comment_added": True,
+        "active_updated": active_updated,
+    }
+
+
 # --- MCP Server creation ---
 
 _TOOLS = [
@@ -715,6 +1089,97 @@ _TOOLS = [
                     ),
                 },
             },
+        },
+    ),
+    mcp.Tool(
+        name="task_init",
+        description=(
+            "Scaffold a work item: create its docs folder + per-type skeletons "
+            "(PRD/RFC/CONTEXT/PLAN/ACTIVE for epic/feature; BRIEF/ACTIVE otherwise) "
+            "and a valid 4-role bead DAG (dev -> test -> review -> tech-writer) via "
+            "the `bd` CLI. Returns created bead ids + doc paths. This is a single "
+            "deterministic operation: it does NOT orchestrate or spawn sub-agents."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "enum": ["epic", "feature", "bug", "task", "chore"],
+                    "description": "Work-item type (selects the doc set + bead type)",
+                },
+                "key": {
+                    "type": "string",
+                    "description": "Issue key (e.g. ABC-123) — names the docs folder",
+                },
+            },
+            "required": ["type", "key"],
+        },
+    ),
+    mcp.Tool(
+        name="bead_context",
+        description=(
+            "Return ONE structured payload for a bead: graph context (ctx) + impact "
+            "analysis (why) + CONTEXT.md/ACTIVE.md excerpt (if present) + the active "
+            "architecture rules for the bead's area. Resolves the bead's graph ref "
+            "from `bd show`. Read-only and deterministic."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "bead": {
+                    "type": "string",
+                    "description": "Bead id (e.g. bd-42)",
+                },
+            },
+            "required": ["bead"],
+        },
+    ),
+    mcp.Tool(
+        name="complete_bead",
+        description=(
+            "Refusing completion gate: run `beadloom ci` (reindex -> lint -> "
+            "sync-check -> config-check -> doctor) and, by default, the test suite. "
+            "On PASS: close the bead (`bd close --suggest-next`) and return next-ready. "
+            "On FAIL: do NOT close — return the findings so the agent must fix them. "
+            "Advisory-strong only: the true enforcement point remains `beadloom ci` in CI."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "bead": {
+                    "type": "string",
+                    "description": "Bead id to complete",
+                },
+                "run_tests": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "Run the test suite too (False = fast gate-only check)",
+                },
+            },
+            "required": ["bead"],
+        },
+    ),
+    mcp.Tool(
+        name="checkpoint",
+        description=(
+            "Record a checkpoint: add `text` as a bead comment (`bd comments add`, "
+            "preserves history) and best-effort append a timestamped progress note to "
+            "the bead's ACTIVE.md. Deterministic; no orchestration."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "bead": {
+                    "type": "string",
+                    "description": "Bead id",
+                },
+                "text": {
+                    "type": "string",
+                    "description": "Checkpoint text",
+                },
+            },
+            "required": ["bead", "text"],
         },
     ),
 ]
@@ -1020,6 +1485,39 @@ def _dispatch_tool(
             project_root,
             trend=bool(args.get("trend", False)),
             category=args.get("category"),
+        )
+
+    # --- Process-tools (BDL-048) ---
+    if name == "task_init":
+        if project_root is None:
+            msg = "task_init requires project_root"
+            raise ValueError(msg)
+        return handle_task_init(
+            project_root, type_=str(args["type"]), key=str(args["key"])
+        )
+
+    if name == "bead_context":
+        if project_root is None:
+            msg = "bead_context requires project_root"
+            raise ValueError(msg)
+        return handle_bead_context(project_root, bead=str(args["bead"]))
+
+    if name == "complete_bead":
+        if project_root is None:
+            msg = "complete_bead requires project_root"
+            raise ValueError(msg)
+        return handle_complete_bead(
+            project_root,
+            bead=str(args["bead"]),
+            run_tests=bool(args.get("run_tests", True)),
+        )
+
+    if name == "checkpoint":
+        if project_root is None:
+            msg = "checkpoint requires project_root"
+            raise ValueError(msg)
+        return handle_checkpoint(
+            project_root, bead=str(args["bead"]), text=str(args["text"])
         )
 
     msg = f"Unknown tool: {name}"

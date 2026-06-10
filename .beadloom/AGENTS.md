@@ -43,6 +43,10 @@
 | `diff` | Graph changes since a git ref |
 | `lint` | Architecture boundary violations with severity |
 | `get_debt_report` | Architecture debt report with score and offenders |
+| `task_init` | Scaffold a work item: docs folder + 4-role bead DAG |
+| `bead_context` | One payload: ctx + why + doc excerpt + active rules |
+| `complete_bead` | Refusing gate: run beadloom ci (+tests); close only on PASS |
+| `checkpoint` | bd comment + timestamped ACTIVE.md progress note |
 ## Architecture Rules
 
 - **domain-needs-parent** (require): Every domain must be part_of the beadloom service

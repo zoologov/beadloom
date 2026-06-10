@@ -1745,6 +1745,62 @@ def setup_ai_techwriter(*, platform: str, project: Path | None) -> None:
 
 
 # beadloom:domain=onboarding
+@main.command("setup-agentic-flow")
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: current directory).",
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Overwrite hand-edited scaffolded flow files (default: preserve them).",
+)
+def setup_agentic_flow(*, project: Path | None, force: bool) -> None:
+    """Scaffold Beadloom's proven multi-agent dev flow into this repo (BDL-048).
+
+    In the setup-* family (alongside setup-rules / setup-mcp). Idempotently
+    drops the role subagents (``.claude/agents/{dev,test,review,tech-writer}.md``)
+    and slash skills (``.claude/commands/{coordinator,task-init,checkpoint,
+    templates}.md``) — vendored byte-identical to Beadloom's own proven flow —
+    plus a ``.claude/CLAUDE.md`` whose auto-regions are generated for THIS
+    project (name / stack / version / packages). User prose outside the
+    auto-regions is never touched; --force overwrites hand-edited flow files.
+    """
+    from beadloom.onboarding.agentic_flow_setup import scaffold
+
+    project_root = project or Path.cwd()
+    result = scaffold(project_root, force=force)
+
+    for name in result.agents_written:
+        click.echo(f"Wrote .claude/agents/{name}.md")
+    for name in result.agents_skipped:
+        click.echo(f"Skipped .claude/agents/{name}.md (hand-edited; use --force)")
+    for name in result.commands_written:
+        click.echo(f"Wrote .claude/commands/{name}.md")
+    for name in result.commands_skipped:
+        click.echo(f"Skipped .claude/commands/{name}.md (hand-edited; use --force)")
+    if result.claude_md is not None:
+        click.echo(f"Wrote {result.claude_md.relative_to(project_root)}")
+
+    click.echo(
+        "\nHonest boundary: the coordinator + Agent-spawn are Claude-Code-native "
+        "(orchestration stays in the harness). The Beadloom MCP process-tools are "
+        "the deterministic, tool-agnostic substrate the flow calls — MCP serves "
+        "tools, not orchestration. The single source of TRUE enforcement remains "
+        "`beadloom ci` in CI (lint/sync-check/config-check/doctor); the in-flow "
+        "gates are advisory-strong, not a substitute for CI."
+    )
+    click.echo(
+        "Next: 1) `beadloom config-check` keeps the scaffolded flow + CLAUDE.md "
+        "auto-regions honest, 2) `beadloom setup-mcp` wires the process-tools for "
+        "your IDE, 3) start work with `/task-init` then `/coordinator`."
+    )
+
+
+# beadloom:domain=onboarding
 @main.command("config-check")
 @click.option(
     "--fix",
