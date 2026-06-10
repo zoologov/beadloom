@@ -8,11 +8,14 @@
 name: AI tech-writer
 
 on:
-  # v1 triggers (RFC Q5): manual dispatch + nightly schedule.
+  # Trigger on push to main/master (G10) — refresh docs as soon as code lands,
+  # closing the staleness window a nightly schedule would leave open. The
+  # concurrency group below + the no-auto-merge / 0-stale-no-op design keep this
+  # loop-safe (the agent's merged PR triggers a clean no-op run).
+  push:
+    branches: [main, master]
+  # Manual dispatch stays useful (re-run on demand).
   workflow_dispatch: {}
-  schedule:
-    # Nightly at 03:17 UTC (off-peak; offset to avoid the top-of-hour rush).
-    - cron: "17 3 * * *"
 
 # gh pr create needs write to contents (push the branch) + pull-requests.
 permissions:

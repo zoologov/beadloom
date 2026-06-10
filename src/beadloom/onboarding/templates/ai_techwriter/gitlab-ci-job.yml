@@ -15,9 +15,11 @@ ai-techwriter:
   tags:
     - self-hosted
     - ai-techwriter
-  # v1 triggers (RFC Q5): manual (web "Run pipeline") + scheduled pipelines.
+  # Trigger on push to main/master (G10) — refresh docs as soon as code lands,
+  # closing the staleness window a scheduled pipeline would leave open. Manual
+  # ("Run pipeline" from the web) stays available.
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"'
     - if: '$CI_PIPELINE_SOURCE == "web"'
       when: manual
   variables:

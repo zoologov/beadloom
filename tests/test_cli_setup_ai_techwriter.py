@@ -85,6 +85,21 @@ class TestSetupAiTechwriterGithub:
         assert "python -m tools.ai_techwriter --platform github" in text
         assert "QWEN_API_KEY" in text
 
+    def test_github_workflow_triggers_on_push_main_master(self, tmp_path: Path) -> None:
+        """G10: trigger on push to main/master (+ manual dispatch), not nightly cron."""
+        project = tmp_path / "proj"
+        project.mkdir()
+        _run(project, "github")
+        text = (project / ".github" / "workflows" / "ai-techwriter.yml").read_text(
+            encoding="utf-8"
+        )
+        assert "push:" in text
+        assert "branches: [main, master]" in text
+        assert "workflow_dispatch: {}" in text
+        # No nightly schedule — on-push closes the staleness window.
+        assert "schedule:" not in text
+        assert "cron:" not in text
+
     def test_vendors_harness_package(self, tmp_path: Path) -> None:
         project = tmp_path / "proj"
         project.mkdir()
@@ -136,6 +151,17 @@ class TestSetupAiTechwriterGitlab:
         text = ci.read_text(encoding="utf-8")
         assert "ai-techwriter:" in text
         assert "python -m tools.ai_techwriter --platform gitlab" in text
+
+    def test_gitlab_job_triggers_on_push_main_master(self, tmp_path: Path) -> None:
+        """G10: trigger on push to main/master (+ manual web), not scheduled pipelines."""
+        project = tmp_path / "proj"
+        project.mkdir()
+        _run(project, "gitlab")
+        text = (project / ".gitlab-ci.yml").read_text(encoding="utf-8")
+        assert '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"' in text
+        assert '$CI_PIPELINE_SOURCE == "web"' in text
+        # No schedule-only gating.
+        assert '$CI_PIPELINE_SOURCE == "schedule"' not in text
 
     def test_vendors_harness_for_gitlab_too(self, tmp_path: Path) -> None:
         project = tmp_path / "proj"
