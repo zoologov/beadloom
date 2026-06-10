@@ -80,6 +80,10 @@ packages = ["src/beadloom"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Repo root on sys.path so the ``tools.ai_techwriter`` repo-tooling package
+# (BDL-047 F4.1 harness — not part of the installed ``beadloom`` wheel) is
+# importable in tests alongside the installed package.
+pythonpath = ["."]
 addopts = [
     "--strict-markers",
     "--strict-config",
@@ -89,7 +93,9 @@ addopts = [
 [tool.ruff]
 target-version = "py310"
 line-length = 99
-src = ["src", "tests"]
+# ``tools`` holds the BDL-047 AI tech-writer harness (repo tooling, not core);
+# kept in ruff/mypy/pytest scope alongside src + tests.
+src = ["src", "tests", "tools"]
 
 [tool.ruff.lint]
 select = [

@@ -6,7 +6,7 @@
 
 ## Current Focus
 
-- **Phase:** Wave 1 (dev) — BEAD-01 (non-interactive mark-synced CLI)
+- **Phase:** Wave 2 (dev) — BEAD-02 (harness + adapter + run-record). W1 (BEAD-01) done + committed.
 - **Coordinator:** main loop (multi-agent)
 - **Parent:** `beadloom-zqlr`
 - **Blockers:** none for dev. BEAD-09 (dogfood) gated on owner-provided `QWEN_API_KEY` + runner(s).
@@ -15,8 +15,8 @@
 
 | Bead | Role | Status |
 |------|------|--------|
-| beadloom-zqlr.1 | dev — mark-synced CLI | ready |
-| beadloom-zqlr.2 | dev — harness + adapter + run-record | blocked ← 1 |
+| beadloom-zqlr.1 | dev — mark-synced CLI | ✓ done (W1) |
+| beadloom-zqlr.2 | dev — harness + adapter + run-record | in progress (W2) |
 | beadloom-zqlr.3 | dev — Goose recipe + Qwen | blocked ← 2 |
 | beadloom-zqlr.4 | dev — both CI wrappers (GH+GL) | blocked ← 2,3 |
 | beadloom-zqlr.5 | dev — setup-ai-techwriter | blocked ← 3,4 |

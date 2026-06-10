@@ -38,10 +38,12 @@ jobs:
         run: uv sync --extra dev --extra languages --extra tui --extra watch
 
       - name: Lint (ruff)
-        run: uv run ruff check src/ tests/
+        run: uv run ruff check src/ tests/ tools/
 
       - name: Type check (mypy)
-        run: uv run mypy
+        # tools/ holds the BDL-047 AI tech-writer harness (repo tooling, not the
+        # installed beadloom wheel) — type-checked alongside the core package.
+        run: uv run mypy src/ tools/
 
       - name: Tests with coverage
         run: uv run pytest --cov=beadloom --cov-report=term-missing --cov-fail-under=80
