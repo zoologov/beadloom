@@ -681,11 +681,17 @@ def handle_bead_context(
     db_path = project_root / ".beadloom" / "beadloom.db"
     conn = open_db(db_path)
     try:
-        context = handle_get_context(conn, ref_id=ref_id)
         try:
+            context = handle_get_context(conn, ref_id=ref_id)
             impact = handle_why(conn, ref_id=ref_id)
         except LookupError:
-            impact = {"ref_id": ref_id, "upstream": [], "downstream": []}
+            return {
+                "status": "ERROR",
+                "error": (
+                    f"bead {bead} resolved to ref '{ref_id}' which is not in the "
+                    "graph; reindex or fix the ref"
+                ),
+            }
         active_rules = _active_rules_for_node(project_root, conn, ref_id)
     finally:
         conn.close()

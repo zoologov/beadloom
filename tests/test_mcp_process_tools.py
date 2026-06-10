@@ -503,13 +503,13 @@ class TestBeadContextHardening:
         assert result["status"] == "ERROR"
         assert "ref" in result["error"]
 
-    def test_unknown_ref_raises_lookup_error(self, project: Path) -> None:
-        """A bead pointing at a ref that is NOT a graph node raises LookupError
-        from the context builder. The MCP dispatcher's `_call_tool` converts
-        that into an "Error: ..." TextContent (so the client still gets a clean
-        message), but `handle_bead_context` itself does NOT swallow it — see the
-        BUG note: the why-fallback only guards a present node, not an absent one.
-        """
+    def test_resolved_but_absent_ref_returns_structured_error(
+        self, project: Path
+    ) -> None:
+        """A bead that resolves to a ref which is NOT a graph node degrades to a
+        clean structured ERROR (no raised LookupError). The context builder would
+        raise LookupError for an absent node; `handle_bead_context` now catches it
+        and returns the {status: ERROR, ...} contract for direct callers too."""
         import json
 
         from beadloom.services.mcp_server import handle_bead_context
@@ -517,8 +517,11 @@ class TestBeadContextHardening:
         show = json.dumps([{"id": "bd-1", "design": "ref: NOPE-404"}])
         with patch("beadloom.services.mcp_server.run_bd") as run_bd:
             run_bd.return_value = BdResult(0, show, "")
-            with pytest.raises(LookupError):
-                handle_bead_context(project, bead="bd-1")
+            result = handle_bead_context(project, bead="bd-1")
+
+        assert result["status"] == "ERROR"
+        assert "NOPE-404" in result["error"]
+        assert "graph" in result["error"]
 
     def test_missing_context_active_docs_degrades(self, project: Path) -> None:
         """When the bead names an epic with NO CONTEXT/ACTIVE docs, doc_excerpt
