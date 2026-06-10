@@ -1736,8 +1736,10 @@ def setup_ai_techwriter(*, platform: str, project: Path | None) -> None:
     for path in created:
         click.echo(f"Wrote {path.relative_to(project_root)}")
     click.echo(
-        "Next: 1) register a self-hosted runner (Goose installed), "
-        "2) add the QWEN_API_KEY secret/variable, 3) commit + enable the pipeline. "
+        "Next: 1) pick a box (>=4 GB RAM), 2) get a runner registration token + "
+        "add the QWEN_API_KEY secret/variable, 3) on the VPS run "
+        "./tools/ai_techwriter/provision-runner.sh --platform <github|gitlab> "
+        "--repo <url> --token <tok>, then commit + enable the pipeline. "
         "See docs/guides/ai-techwriter.md."
     )
 

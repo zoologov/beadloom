@@ -58,6 +58,13 @@ _TOOLS_INIT_DEFAULT = '"""Repo tooling (not part of the installed ``beadloom`` w
 #: Supported CI platforms (RFC Q5 table) — both first-class.
 PLATFORMS: tuple[str, ...] = ("github", "gitlab")
 
+#: Asset name for the hardened, idempotent self-hosted-runner provisioner.
+_PROVISION_RUNNER_ASSET = "provision-runner.sh.txt"
+
+#: rwxr-xr-x — the provisioner is dropped executable so the operator can run it
+#: directly (``./provision-runner.sh ...``).
+_EXEC_MODE = 0o755
+
 #: GitLab CI job marker, used to detect "already wired" in an existing file.
 _GITLAB_JOB_MARKER = "ai-techwriter:"
 
@@ -155,6 +162,16 @@ def _scaffold_guide(target_root: Path) -> Path:
     return guide
 
 
+def _scaffold_provision_runner(target_root: Path) -> Path:
+    """Drop the hardened, idempotent ``provision-runner.sh`` alongside the
+    vendored harness (``tools/ai_techwriter/``), executable so the operator can
+    run it directly. Clean overwrite on re-run (idempotent)."""
+    script = target_root / "tools" / "ai_techwriter" / "provision-runner.sh"
+    _write(script, _read_asset(_PROVISION_RUNNER_ASSET))
+    script.chmod(_EXEC_MODE)
+    return script
+
+
 def scaffold(target_root: Path, *, platform: str) -> list[Path]:
     """Scaffold the AI tech-writer into ``target_root`` for ``platform``.
 
@@ -169,6 +186,7 @@ def scaffold(target_root: Path, *, platform: str) -> list[Path]:
         created.append(_scaffold_gitlab(target_root))
     else:
         created.append(_scaffold_github(target_root))
+    created.append(_scaffold_provision_runner(target_root))
     created.append(_scaffold_guide(target_root))
     return created
 

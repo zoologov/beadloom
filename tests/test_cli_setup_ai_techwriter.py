@@ -176,6 +176,149 @@ class TestSetupAiTechwriterGitlab:
         assert not (project / ".github" / "workflows" / "ai-techwriter.yml").exists()
 
 
+class TestProvisionRunnerScript:
+    """BEAD-14 (G11): setup-ai-techwriter also drops a hardened, idempotent
+    ``provision-runner.sh`` so any project gets a first-class easy start at
+    standing up the self-hosted VPS runner the AI tech-writer needs."""
+
+    def _provision_path(self, project: Path) -> Path:
+        return project / "tools" / "ai_techwriter" / "provision-runner.sh"
+
+    def test_github_scaffold_drops_provision_runner(self, tmp_path: Path) -> None:
+        project = tmp_path / "proj"
+        project.mkdir()
+        result = _run(project, "github")
+        assert result.exit_code == 0, result.output
+        script = self._provision_path(project)
+        assert script.exists()
+
+    def test_gitlab_scaffold_drops_provision_runner(self, tmp_path: Path) -> None:
+        project = tmp_path / "proj"
+        project.mkdir()
+        result = _run(project, "gitlab")
+        assert result.exit_code == 0, result.output
+        assert self._provision_path(project).exists()
+
+    def test_provision_runner_is_executable(self, tmp_path: Path) -> None:
+        import os
+
+        project = tmp_path / "proj"
+        project.mkdir()
+        _run(project, "github")
+        script = self._provision_path(project)
+        assert os.access(script, os.X_OK), "provision-runner.sh must be executable"
+
+    def test_provision_runner_fail_hard_and_hardening_markers(
+        self, tmp_path: Path
+    ) -> None:
+        """The lessons we lived: fail-hard shell, RAM/swap/disk guards."""
+        project = tmp_path / "proj"
+        project.mkdir()
+        _run(project, "github")
+        text = self._provision_path(project).read_text(encoding="utf-8")
+        # fail-hard on critical steps.
+        assert "set -euo pipefail" in text
+        # RAM precheck (refuse/warn under ~2 GB, recommend >=4 GB).
+        assert "MIN_RAM" in text or "min_ram" in text
+        assert "MemTotal" in text or "/proc/meminfo" in text
+        # Swap guaranteed BEFORE apt, fail hard if it can't be created.
+        assert "swapon" in text
+        assert "swapfile" in text.lower()
+        # Disk precheck (fail under a sane threshold ~5 GB).
+        assert "MIN_DISK" in text or "min_disk" in text or "df " in text
+
+    def test_provision_runner_parameterized_both_platforms(
+        self, tmp_path: Path
+    ) -> None:
+        """Parameterized, not repo-hardcoded: takes repo URL + token + platform,
+        and registers a GitHub Actions runner OR a GitLab Runner accordingly."""
+        project = tmp_path / "proj"
+        project.mkdir()
+        _run(project, "github")
+        text = self._provision_path(project).read_text(encoding="utf-8")
+        # Clean CLI: flags for repo / token / platform.
+        assert "--platform" in text
+        assert "--repo" in text
+        assert "--token" in text
+        # GitHub registration step (Actions runner config).
+        assert "config.sh" in text
+        assert "self-hosted,ai-techwriter" in text or "self-hosted" in text
+        # GitLab registration step (GitLab Runner).
+        assert "gitlab-runner" in text and "register" in text
+
+    def test_provision_runner_goose_best_effort_verified(self, tmp_path: Path) -> None:
+        """Goose/beadloom/bd are best-effort + verified (warn + report
+        ``goose --version`` at the end), not fail-hard."""
+        project = tmp_path / "proj"
+        project.mkdir()
+        _run(project, "github")
+        text = self._provision_path(project).read_text(encoding="utf-8")
+        assert "goose --version" in text
+        assert "beadloom" in text
+
+    def test_provision_runner_no_inlined_secret(self, tmp_path: Path) -> None:
+        """No secrets inlined: token comes via arg/env, never written to repo."""
+        project = tmp_path / "proj"
+        project.mkdir()
+        _run(project, "github")
+        text = self._provision_path(project).read_text(encoding="utf-8")
+        # The QWEN key lives only on the runner / CI secret, not in this script.
+        assert "QWEN_API_KEY=" not in text
+
+    def test_provision_runner_bash_parses(self, tmp_path: Path) -> None:
+        """``bash -n`` must parse the emitted script (shellcheck-clean where
+        available; at minimum valid bash syntax)."""
+        import shutil
+        import subprocess
+
+        project = tmp_path / "proj"
+        project.mkdir()
+        _run(project, "github")
+        script = self._provision_path(project)
+        bash = shutil.which("bash")
+        assert bash is not None
+        proc = subprocess.run(  # noqa: S603 - fixed argv
+            [bash, "-n", str(script)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert proc.returncode == 0, proc.stderr
+        shellcheck = shutil.which("shellcheck")
+        if shellcheck is not None:
+            sc = subprocess.run(  # noqa: S603 - fixed argv
+                [shellcheck, "-S", "warning", str(script)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            assert sc.returncode == 0, sc.stdout + sc.stderr
+
+    def test_provision_runner_rerun_idempotent(self, tmp_path: Path) -> None:
+        project = tmp_path / "proj"
+        project.mkdir()
+        _run(project, "github")
+        script = self._provision_path(project)
+        before = script.read_text(encoding="utf-8")
+        script.write_text("# stale\n", encoding="utf-8")
+        _run(project, "github")
+        assert script.read_text(encoding="utf-8") == before
+
+    def test_guide_documents_provision_runner_flow(self, tmp_path: Path) -> None:
+        """The guide documents the <=3-step flow including the provision-runner
+        invocation with --platform/--repo/--token."""
+        project = tmp_path / "proj"
+        project.mkdir()
+        _run(project, "github")
+        guide = (project / "docs" / "guides" / "ai-techwriter.md").read_text(
+            encoding="utf-8"
+        )
+        assert "provision-runner.sh" in guide
+        assert "--platform" in guide
+        assert "--repo" in guide
+        assert "--token" in guide
+
+
 class TestVendoredHarnessIsRunnable:
     def test_vendored_harness_runs_dry_run(self, tmp_path: Path) -> None:
         """The whole point of vendoring: ``python -m tools.ai_techwriter``
