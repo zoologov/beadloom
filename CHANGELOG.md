@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Phase "Agentic-flow packaging" (BDL-048): packages Beadloom's proven solo
+multi-agent dev flow into the product. One command (`beadloom setup-agentic-flow`)
+scaffolds the flow into any repo — the role subagents + slash skills vendored
+**byte-identical** to Beadloom's own live `.claude/` (drift-guarded), with the
+`CLAUDE.md` auto-regions generated per-project — and `config-check` now
+drift-checks (and `--fix` restores) those scaffolded flow files. Four MCP
+**process-tools** (`task_init` / `bead_context` / `complete_bead` / `checkpoint`)
+make the flow's deterministic steps callable from ANY MCP client; the MCP catalog
+is now **18 tools**. **Honest boundary (not overclaimed):** MCP serves
+deterministic process-tools, NOT orchestration — the coordinator + Agent-spawn
+stay Claude-Code-native/harness; `complete_bead` is advisory-strong; the single
+source of TRUE enforcement remains `beadloom ci` in CI. Additive — no schema bump.
+
+### Added (BDL-048)
+- **`beadloom setup-agentic-flow [--project DIR] [--force]`** — one-command, idempotent scaffold of the packaged multi-agent dev flow into a repo (in the `setup-*` family). Drops `.claude/agents/{dev,test,review,tech-writer}.md` + `.claude/commands/{coordinator,task-init,checkpoint,templates}.md` **vendored byte-identical** from package-data assets (drift-guarded against the live `.claude/`), plus a `.claude/CLAUDE.md` whose auto-regions are generated for THIS project (name / stack / version — version from Beadloom's `__version__`) via the existing `refresh_claude_md` machinery. A matching file is left alone, a hand-edited file is skipped (reported as such) unless `--force`; user prose outside the CLAUDE.md auto-regions is never touched. New module `onboarding/agentic_flow_setup.py` (`scaffold()` + `sync_agentic_flow()` drift guard) (BDL-048 G1)
+- **`config-check` covers the scaffolded flow** — when a repo has the agentic flow scaffolded, `config-check` byte-compares each vendored `agents/*` + `commands/*` file against the shipped template, and `--fix` re-drops them (`config_sync.refresh_agentic_flow_files`, gated on the flow already being present — never forced onto a repo that did not adopt it) alongside refreshing the CLAUDE.md auto-regions (BDL-048 G1)
+- **Four MCP process-tools** on `services/mcp_server.py` (catalog 14 → 18) — deterministic, refusable operations over the substrate, callable from any MCP client (tool-agnostic via `setup-mcp`). They do NOT orchestrate or spawn sub-agents:
+  - **`task_init(type, key)`** — scaffold the docs folder + per-type skeletons (PRD/RFC/CONTEXT/PLAN/ACTIVE or BRIEF/ACTIVE) + a valid 4-role bead DAG (dev → test → review → tech-writer) via `bd`.
+  - **`bead_context(bead)`** — ONE payload: `ctx` + `why` + a CONTEXT.md/ACTIVE.md excerpt + the active architecture rules for the bead's area (resolves the bead's graph ref from `bd show`); read-only.
+  - **`complete_bead(bead, run_tests=true)`** — the **refusing gate**: runs `beadloom ci` (reindex → lint → sync-check → config-check → doctor, via `application/gate.run_ci_gate`) + the test suite; **on PASS** closes the bead (`bd close --suggest-next`), **on FAIL REFUSES to close** and returns the findings. Advisory-strong, not the true enforcement point.
+  - **`checkpoint(bead, text)`** — `bd comments add` + a best-effort timestamped ACTIVE.md note.
+- **`services/bd_seam.py`** — a thin, mockable wrapper over the `bd` (beads) CLI (`run_bd()` → `BdResult`; `BdUnavailableError` with a clear message when `bd` is absent), so the bead-touching process-tools are testable without a real `bd` binary (BDL-048)
+- **Getting-started guide** `docs/guides/agentic-flow.md` — the packaged flow, `setup-agentic-flow` (scaffold / idempotency / `config-check --fix`), the four process-tools (and that `complete_bead` refuses red), the tool-agnostic angle, and the honest boundary (orchestration stays in the harness; CI is the true enforcement) (BDL-048 G7)
+
 Phase F4.1 "AI tech-writer in CI" (BDL-047): closes the DocAsCode loop at the *fix*
 step. Beadloom already detects doc drift honestly; F4.1 adds automated remediation —
 on push to `main`/`master`, a deterministic, platform-agnostic harness

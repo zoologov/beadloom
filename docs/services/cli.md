@@ -504,6 +504,8 @@ beadloom config-check --fix [--project DIR]  # regenerate drifted artifacts, the
 
 Re-runs the same `setup-rules --refresh` generator in memory and diffs its output against on-disk content for `.beadloom/AGENTS.md`, the auto-managed sections of `.claude/CLAUDE.md`, and present IDE adapter files. Checks ONLY auto-managed regions — editing user-authored prose (the AGENTS.md `custom` block, CLAUDE.md content outside the `auto-start`/`auto-end` markers) never trips it. Prints which file drifted, why, and the remediation (`beadloom setup-rules --refresh`); absent target files are skipped. `--fix` regenerates via the refresh path and re-checks. Delegates to `onboarding/config_sync.py:check_config_drift()`.
 
+As of BDL-048, when a repo has the agentic flow scaffolded (`beadloom setup-agentic-flow`), `config-check` also drift-checks the **scaffolded flow files**: each vendored `.claude/agents/*` + `.claude/commands/*` file is byte-compared against the shipped template. `--fix` re-drops the vendored flow files (`config_sync.refresh_agentic_flow_files`) alongside refreshing the CLAUDE.md auto-regions; the fix is gated on the flow already being scaffolded (it never forces the flow onto a repo that did not adopt it).
+
 ### beadloom ci
 
 The unified enforcement gate — the single CI convergence point (principle 7: identical for Cursor / Claude Code / human authors).
@@ -572,6 +574,37 @@ Idempotently scaffolds (clean overwrite on re-run):
 
 Delegates to `onboarding/ai_techwriter_setup.py:scaffold()`.
 
+### beadloom setup-agentic-flow
+
+Scaffold Beadloom's proven multi-agent dev flow into this repo (BDL-048). In the
+`setup-*` family alongside `setup-rules` / `setup-mcp` / `setup-ai-techwriter`.
+
+```bash
+beadloom setup-agentic-flow [--project DIR] [--force]
+```
+
+Idempotently drops the role subagents
+(`.claude/agents/{dev,test,review,tech-writer}.md`) and slash skills
+(`.claude/commands/{coordinator,task-init,checkpoint,templates}.md`) — vendored
+**byte-identical** to Beadloom's own proven flow (a drift-guard test keeps the
+templates equal to the live `.claude/`) — plus a `.claude/CLAUDE.md` whose
+auto-regions are generated for THIS project (name / stack / version / packages)
+via the same `refresh_claude_md` machinery `setup-rules --refresh` uses (the
+CLAUDE.md version comes from Beadloom's own `__version__`, BDL-UX #92).
+
+A vendored file that already matches is left alone; a hand-edited file is
+**skipped** (reported as such) so user edits are not silently clobbered.
+`--force` overwrites hand-edited flow files. User prose outside the CLAUDE.md
+auto-regions is never touched. Delegates to
+`onboarding/agentic_flow_setup.py:scaffold()`.
+
+The command prints the **honest boundary**: the coordinator + `Agent`-spawn are
+Claude-Code-native (orchestration stays in the harness); the Beadloom MCP
+process-tools are the deterministic, tool-agnostic substrate the flow calls; and
+the single source of TRUE enforcement remains `beadloom ci` in CI (the in-flow
+gates are advisory-strong, not a substitute for CI). See the
+[Agentic Dev Flow guide](../guides/agentic-flow.md).
+
 ### beadloom mcp-serve
 
 Launch MCP stdio server.
@@ -608,7 +641,8 @@ Module `src/beadloom/services/cli.py`:
 - `setup_mcp` -- configure MCP server for editor
 - `setup_rules` -- create IDE rules files
 - `setup_ai_techwriter` -- scaffold the AI tech-writer (vendored harness + recipe + chosen platform CI wrapper + getting-started guide) for one-command opt-in; delegates to `onboarding/ai_techwriter_setup.py:scaffold()`
-- `config_check` -- AgentConfigAsCode drift gate (`--fix` regenerates); reuses the `setup-rules --refresh` generator
+- `setup_agentic_flow` -- scaffold the packaged multi-agent dev flow (`.claude/agents/*` + `commands/*` vendored byte-identical + CLAUDE.md auto-regions per-project); idempotent, `--force` overwrites hand-edited flow files; delegates to `onboarding/agentic_flow_setup.py:scaffold()`
+- `config_check` -- AgentConfigAsCode drift gate (`--fix` regenerates); reuses the `setup-rules --refresh` generator; also drift-checks/restores the scaffolded agentic-flow files when the flow is present
 - `ci` -- unified enforcement gate composing reindex -> lint -> sync-check -> config-check -> doctor -> (optional `--hub`) federate into one exit code; honest per-step PASS/FAIL/SKIP; uniform `--format {rich,json,github}` (github = valid `::error file=,line=` annotations); delegates to `application/gate.py:run_ci_gate()`
 - `mcp_serve` -- run MCP stdio server
 - `docs` -- Click group for doc commands (`generate`, `polish`, `audit`)
@@ -621,4 +655,4 @@ All commands accept `--project DIR` to specify the project root. The current dir
 
 ## Testing
 
-CLI is tested via `click.testing.CliRunner`. Each command has a corresponding test file in `tests/test_cli_*.py`: `test_cli_reindex.py`, `test_cli_ctx.py`, `test_cli_graph.py`, `test_cli_status.py`, `test_cli_sync_check.py`, `test_cli_sync_update.py`, `test_cli_hooks.py`, `test_cli_link.py`, `test_cli_docs.py`, `test_cli_mcp.py`, `test_cli_watch.py`, `test_cli_diff.py`, `test_cli_why.py`, `test_cli_lint.py`, `test_cli_init.py`, `test_cli_snapshot.py`, `test_cli_config_check.py`.
+CLI is tested via `click.testing.CliRunner`. Each command has a corresponding test file in `tests/test_cli_*.py`: `test_cli_reindex.py`, `test_cli_ctx.py`, `test_cli_graph.py`, `test_cli_status.py`, `test_cli_sync_check.py`, `test_cli_sync_update.py`, `test_cli_hooks.py`, `test_cli_link.py`, `test_cli_docs.py`, `test_cli_mcp.py`, `test_cli_watch.py`, `test_cli_diff.py`, `test_cli_why.py`, `test_cli_lint.py`, `test_cli_init.py`, `test_cli_snapshot.py`, `test_cli_config_check.py`, `test_cli_setup_agentic_flow.py`.
