@@ -81,7 +81,11 @@ class TestSetupAiTechwriterGithub:
         wf = project / ".github" / "workflows" / "ai-techwriter.yml"
         assert wf.exists()
         text = wf.read_text(encoding="utf-8")
-        assert "name: AI tech-writer" in text
+        # BDL-050: the scaffolded workflow is now the consolidated CI pipeline
+        # (gate / tests / site-build / ai-techwriter) rather than a single
+        # ai-techwriter job — its top-level name is `CI`.
+        assert "name: CI" in text
+        assert "ai-techwriter:" in text
         assert "python -m tools.ai_techwriter" in text
         assert "--platform github" in text
         assert "QWEN_API_KEY" in text

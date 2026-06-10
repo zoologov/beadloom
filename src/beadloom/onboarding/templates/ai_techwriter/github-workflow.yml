@@ -1,16 +1,29 @@
-# AI tech-writer (BDL-047 / F4.1 · BDL-049) — GitHub wrapper around the harness.
+# Consolidated CI pipeline (BDL-050) — GitHub. ONE ordered pipeline so that
+# merge-ability means "everything that protects the trunk is green":
 #
-# Thin wrapper: it only triggers + wires the secret + picks the platform flag.
-# All orchestration lives in tools/ai_techwriter (python -m tools.ai_techwriter).
-# The GitLab counterpart (.gitlab-ci.yml ai-techwriter job) calls the SAME
-# entrypoint — only the trigger, the secret naming, and --platform differ.
-name: AI tech-writer
+#   PR open ─► gate ─┐
+#             tests ─┼─(all green?)─► ai-techwriter ─► PR unblocked
+#        site-build ─┘   └─(any red)──► ai-techwriter skipped → PR blocked
+#
+# gate / tests / site-build run in parallel on GitHub-hosted runners;
+# ai-techwriter (the self-hosted runner where Goose + the API key live) has
+# `needs: [gate, tests, site-build]`, so a broken PR never spends Qwen tokens.
+# The ai-techwriter job calls the SAME entrypoint as the GitLab counterpart
+# (python -m tools.ai_techwriter) — only the trigger, the secret naming, and
+# --platform differ.
+#
+# ADOPTERS: `gate` runs `beadloom ci` (reindex -> lint -> sync-check ->
+# config-check -> doctor) directly via uv — no extra setup. Required status
+# checks (branch protection): require `gate`, `tests (3.10)`..`tests (3.13)`,
+# `site-build`, `ai-techwriter` (these are the job names + matrix legs below).
+# `beadloom setup-branch-protection` applies exactly this set.
+name: CI
 
 on:
-  # Trunk-based: fire on a PR to main/master — run ONCE per PR against the PR's
-  # own diff (--since merge-base below). The agent commits its doc refresh ONTO
-  # the PR head branch (--target pr-branch) so code + docs become one reviewable
-  # PR; the loop-guard step keeps the agent's own push from re-triggering the
+  # Trunk-based: fire once per PR to main/master — run against the PR's own diff
+  # (--since merge-base below). The agent commits its doc refresh ONTO the PR
+  # head branch (--target pr-branch) so code + docs become one reviewable PR;
+  # the loop-guard step keeps the agent's own push from re-triggering the
   # `synchronize` event.
   pull_request:
     types: [opened, synchronize, reopened]
@@ -25,23 +38,112 @@ on:
         required: false
         default: ""
 
+# One run per PR; cancel a superseded run when a new commit lands.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 # The pr-branch publisher pushes the refresh commit (contents) + posts a PR
 # comment (pull-requests).
 permissions:
   contents: write
   pull-requests: write
 
-# One run per PR; cancel a superseded run when a new commit lands.
-concurrency:
-  group: ai-techwriter-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
+  # ---------------------------------------------------------------------- #
+  # gate — the `beadloom ci` verdict (reindex -> lint -> sync-check ->
+  # config-check -> doctor) run directly via uv (no composite Action needed).
+  # ---------------------------------------------------------------------- #
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra languages
+
+      - name: Beadloom gate
+        run: uv run beadloom ci --format github
+
+  # ---------------------------------------------------------------------- #
+  # tests — the 3.10-3.13 matrix. NO paths filter: it runs on every PR so each
+  # leg is a reliable required check.
+  # ---------------------------------------------------------------------- #
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra languages
+
+      - name: Tests
+        run: uv run pytest
+
+  # ---------------------------------------------------------------------- #
+  # site-build — regenerate + build the docs site on every PR (the BUILD half,
+  # no deploy) so doc/site breaks are caught BEFORE they land on the trunk.
+  # ---------------------------------------------------------------------- #
+  site-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra languages
+
+      - name: Reindex graph
+        run: uv run beadloom reindex
+
+      - name: Generate the site from the graph
+        run: uv run beadloom docs site --out site
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install site dependencies
+        run: npm ci
+        working-directory: site
+
+      - name: Build the site
+        run: npm run docs:build
+        working-directory: site
+
+  # ---------------------------------------------------------------------- #
+  # ai-techwriter — runs ONLY after gate + tests + site-build are green
+  # (`needs:`), so a broken PR never spends Qwen tokens. Body preserved from the
+  # BDL-049 model — only the trigger / secret naming / --platform differ.
+  # ---------------------------------------------------------------------- #
   ai-techwriter:
+    needs: [gate, tests, site-build]
     # Self-hosted runner where Goose + the API key live.
     runs-on: [self-hosted, ai-techwriter]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # Full history so git diff / the merge-base / the gate can read prior
           # state; check out the PR HEAD branch so the agent can commit onto it.
@@ -75,7 +177,7 @@ jobs:
 
       - name: Install uv
         if: env.AI_TW_SKIP != '1'
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
 
       # Beadloom (the substrate) + the harness deps, pinned via the lockfile.
       - name: Install Beadloom + harness deps

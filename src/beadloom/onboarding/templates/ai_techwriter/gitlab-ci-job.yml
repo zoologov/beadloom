@@ -1,17 +1,99 @@
-# GitLab CI — AI tech-writer (BDL-047 / F4.1 · BDL-049) wrapper around the
-# harness.
+# GitLab CI — consolidated pipeline (BDL-050) mirroring the GitHub ci.yml.
+# ONE ordered pipeline so merge-ability means "everything that protects the
+# trunk is green":
 #
-# Minimal pipeline: just the ai-techwriter job. It is the GitLab counterpart of
-# .github/workflows/ai-techwriter.yml and calls the SAME entrypoint
-# (python -m tools.ai_techwriter) — only the trigger, the secret naming, and
-# the --platform flag differ. No unrelated stages are invented; add other
-# stages here only when GitLab CI is actually adopted for this repo.
+#   MR open ─► verify(gate ∥ tests ∥ site-build) ─► docs(ai-techwriter)
+#
+# Stage `verify` runs gate / tests (3.10-3.13 matrix) / site-build in parallel
+# on shared runners; stage `docs` runs ai-techwriter ONLY after all three are
+# green (`needs: [gate, tests, site-build]`) so a broken MR never spends Qwen
+# tokens. The ai-techwriter job is the GitLab counterpart of GitHub's
+# ai-techwriter job and calls the SAME entrypoint (python -m tools.ai_techwriter)
+# — only the trigger, the secret naming, and --platform differ.
+#
+# Verdict exit codes are honoured by the harness itself (tools/ai_techwriter):
+# ok/infra -> exit 0 (a dead runner / exhausted quota does NOT block the MR),
+# flagged -> exit 1 (a real unresolved doc drift fails the job). So no GitLab
+# `allow_failure` is needed — the job runs and its exit code gates.
+#
+# ADOPTERS: `gate` runs `beadloom ci` directly via uv (no extra setup). When
+# this repo merges into an existing .gitlab-ci.yml, only the ai-techwriter job
+# is appended (the verify-stage jobs assume Beadloom owns the pipeline).
 
 stages:
-  - ai-techwriter
+  - verify
+  - docs
 
+# --------------------------------------------------------------------------- #
+# gate — the `beadloom ci` verdict (reindex -> lint -> sync-check ->
+# config-check -> doctor) run directly via uv.
+# --------------------------------------------------------------------------- #
+gate:
+  stage: verify
+  image: python:3.12-slim
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+  variables:
+    GIT_DEPTH: "0"
+  script:
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - export PATH="$HOME/.local/bin:$PATH"
+    - uv sync --extra dev --extra languages
+    - uv run beadloom ci
+
+# --------------------------------------------------------------------------- #
+# tests — the 3.10-3.13 matrix. NO paths filter: it runs on every MR so each
+# leg is a reliable required check.
+# --------------------------------------------------------------------------- #
+tests:
+  stage: verify
+  image: python:${PYTHON_VERSION}-slim
+  parallel:
+    matrix:
+      - PYTHON_VERSION: ["3.10", "3.11", "3.12", "3.13"]
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+  script:
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - export PATH="$HOME/.local/bin:$PATH"
+    - uv sync --extra dev --extra languages
+    - uv run pytest
+
+# --------------------------------------------------------------------------- #
+# site-build — regenerate + build the docs site on every MR (the BUILD half,
+# no deploy) so doc/site breaks are caught BEFORE they land on the trunk.
+# --------------------------------------------------------------------------- #
+site-build:
+  stage: verify
+  image: node:22-bullseye
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+  script:
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - export PATH="$HOME/.local/bin:$PATH"
+    - uv python install 3.12
+    - uv sync --extra dev --extra languages
+    - uv run beadloom reindex
+    - uv run beadloom docs site --out site
+    - cd site && npm ci && npm run docs:build
+
+# --------------------------------------------------------------------------- #
+# ai-techwriter — runs ONLY after gate + tests + site-build are green
+# (`needs:`), so a broken MR never spends Qwen tokens. Body preserved from the
+# BDL-049 model — only the trigger / secret naming / --platform differ.
+# --------------------------------------------------------------------------- #
 ai-techwriter:
-  stage: ai-techwriter
+  stage: docs
+  needs:
+    - gate
+    - tests
+    - site-build
   # Self-hosted GitLab Runner where Goose + the API key live.
   tags:
     - self-hosted
@@ -67,6 +149,9 @@ ai-techwriter:
     # --since is the merge-base of the MR target branch and HEAD — exactly "what
     # this MR changed". Falls back to the MR diff base SHA if merge-base cannot
     # resolve.
+    #
+    # The harness exit code gates the job directly: ok/infra -> 0 (don't block),
+    # flagged -> 1 (block). No allow_failure — the verdict IS the gate.
     - since="$(git merge-base "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" HEAD 2>/dev/null || true)"
     - if [ -z "$since" ]; then since="$CI_MERGE_REQUEST_DIFF_BASE_SHA"; fi
     - uv run python -m tools.ai_techwriter --platform gitlab --target pr-branch --since "$since"
