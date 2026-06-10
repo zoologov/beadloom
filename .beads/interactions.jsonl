@@ -176,3 +176,5 @@
 {"id":"int-8d9027b5","kind":"field_change","created_at":"2026-06-10T08:14:07.916208Z","actor":"v.zoologov","issue_id":"beadloom-zqlr.6","extra":{"field":"status","new_value":"in_progress","old_value":"open"}}
 {"id":"int-e20f6b61","kind":"field_change","created_at":"2026-06-10T08:27:12.032143Z","actor":"v.zoologov","issue_id":"beadloom-zqlr.3","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
 {"id":"int-137512e3","kind":"field_change","created_at":"2026-06-10T08:27:12.795746Z","actor":"v.zoologov","issue_id":"beadloom-zqlr.6","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
+{"id":"int-8f9bd480","kind":"field_change","created_at":"2026-06-10T08:27:40.006737Z","actor":"v.zoologov","issue_id":"beadloom-zqlr.4","extra":{"field":"status","new_value":"in_progress","old_value":"open"}}
+{"id":"int-76898085","kind":"field_change","created_at":"2026-06-10T08:36:57.412607Z","actor":"v.zoologov","issue_id":"beadloom-zqlr.4","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}

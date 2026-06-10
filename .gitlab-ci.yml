@@ -1,0 +1,38 @@
+# GitLab CI — AI tech-writer (BDL-047 / F4.1) wrapper around the one harness.
+#
+# Minimal pipeline: just the ai-techwriter job. It is the GitLab counterpart of
+# .github/workflows/ai-techwriter.yml and calls the SAME entrypoint
+# (python -m tools.ai_techwriter) — only the trigger, the secret naming, and
+# the --platform flag differ (RFC Q5 table). No unrelated stages are invented;
+# add other stages here only when GitLab CI is actually adopted for this repo.
+
+stages:
+  - ai-techwriter
+
+ai-techwriter:
+  stage: ai-techwriter
+  # Self-hosted GitLab Runner on the VPS where Goose + the API key live (RFC Q5).
+  tags:
+    - self-hosted
+    - ai-techwriter
+  # v1 triggers (RFC Q5): manual (web "Run pipeline") + scheduled pipelines.
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+  variables:
+    # Full clone so git diff / the gate can read prior state.
+    GIT_DEPTH: "0"
+  script:
+    # Install uv (pinned), then Beadloom (the substrate) + harness deps.
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - export PATH="$HOME/.local/bin:$PATH"
+    - uv sync --extra dev --extra languages
+    # Goose is provisioned on the self-hosted runner image (pinned there).
+    - goose --version
+    # Rebuild the index so sync-check sees current code-doc state.
+    - uv run beadloom reindex
+    # The one entrypoint. 0 stale -> clean no-op exit 0; flagged -> non-zero.
+    # QWEN_API_KEY is a masked CI/CD variable (never inlined); the MR is opened
+    # by the GitLabPublisher via glab inside the harness.
+    - uv run python -m tools.ai_techwriter --platform gitlab

@@ -1,0 +1,60 @@
+# AI tech-writer (BDL-047 / F4.1) — GitHub wrapper around the one harness.
+#
+# Thin wrapper: it only triggers + wires the secret + picks the platform flag.
+# All orchestration lives in tools/ai_techwriter (python -m tools.ai_techwriter).
+# The GitLab counterpart (.gitlab-ci.yml ai-techwriter job) calls the SAME
+# entrypoint — only the trigger, the secret naming, and --platform differ
+# (RFC Q5 table). Distinct from tests.yml / deploy-site.yml (do not touch those).
+name: AI tech-writer
+
+on:
+  # v1 triggers (RFC Q5): manual dispatch + nightly schedule.
+  workflow_dispatch: {}
+  schedule:
+    # Nightly at 03:17 UTC (off-peak; offset to avoid the top-of-hour rush).
+    - cron: "17 3 * * *"
+
+# gh pr create needs write to contents (push the branch) + pull-requests.
+permissions:
+  contents: write
+  pull-requests: write
+
+# One run at a time: never open competing refresh PRs.
+concurrency:
+  group: ai-techwriter
+  cancel-in-progress: false
+
+jobs:
+  ai-techwriter:
+    # Self-hosted VPS runner where Goose + the API key live (RFC Q5).
+    runs-on: [self-hosted, ai-techwriter]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so git diff / the gate can read prior state.
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      # Beadloom (the substrate) + the harness deps, pinned via the lockfile.
+      - name: Install Beadloom + harness deps
+        run: uv sync --extra dev --extra languages
+
+      # Goose is provisioned on the self-hosted runner image (pinned there);
+      # this step asserts it is present rather than installing ad hoc.
+      - name: Verify Goose is available (pinned on the runner)
+        run: goose --version
+
+      # Rebuild the index so sync-check sees current code↔doc state.
+      - name: Beadloom reindex
+        run: uv run beadloom reindex
+
+      # The one entrypoint. 0 stale → clean no-op exit 0; flagged → non-zero.
+      - name: Run AI tech-writer harness (GitHub)
+        env:
+          # Repository secret — never inlined; resolved only on the runner.
+          QWEN_API_KEY: ${{ secrets.QWEN_API_KEY }}
+          # gh pr create authenticates with the job token.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: uv run python -m tools.ai_techwriter --platform github

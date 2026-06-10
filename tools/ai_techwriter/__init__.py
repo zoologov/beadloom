@@ -15,6 +15,7 @@ model, or network access. A clock/timestamp is injected (mirroring how
 
 from __future__ import annotations
 
+from tools.ai_techwriter.cli import main
 from tools.ai_techwriter.models import (
     AgentResult,
     ContextPacket,
@@ -61,6 +62,7 @@ __all__ = [
     "RunRecord",
     "default_recipe_path",
     "discover_scope",
+    "main",
     "qwen_provider",
     "run_harness",
 ]
