@@ -271,8 +271,10 @@ def _load_symbols_by_source(project_root: Path) -> dict[str, list[dict[str, Any]
             fp: str = row["file_path"]
             symbols_by_source.setdefault(fp, []).append(dict(row))
         conn.close()
-    except sqlite3.OperationalError:
-        pass
+    except sqlite3.OperationalError as exc:
+        # Non-fatal (e.g. missing code_symbols table): degrade gracefully,
+        # but surface the error at debug level so it stays observable.
+        logger.debug("Skipping code_symbols load from SQLite: %s", exc)
     return symbols_by_source
 
 
@@ -308,8 +310,10 @@ def _load_extra_from_sqlite(project_root: Path) -> dict[str, dict[str, Any]]:
             except (json.JSONDecodeError, TypeError):
                 continue
         conn.close()
-    except sqlite3.OperationalError:
-        pass
+    except sqlite3.OperationalError as exc:
+        # Non-fatal (e.g. missing nodes table): degrade gracefully, but
+        # surface the error at debug level so it stays observable.
+        logger.debug("Skipping extra-blob load from nodes table in SQLite: %s", exc)
     return result
 
 

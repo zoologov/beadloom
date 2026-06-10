@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 import yaml
@@ -829,3 +830,64 @@ class TestGenerateBeadloomReadme:
         content = readme.read_text(encoding="utf-8")
         assert "myproject" in content
         assert "AI Agent Native Architecture Graph" in content
+
+
+# ---------------------------------------------------------------------------
+# TestSqliteLoadersOperationalError
+# ---------------------------------------------------------------------------
+
+
+def _create_empty_db(tmp_path: Path) -> Path:
+    """Create a beadloom.db file that exists but has no expected tables.
+
+    Querying ``code_symbols`` / ``nodes`` against it raises
+    ``sqlite3.OperationalError`` (no such table), exercising the
+    graceful-degradation path of the SQLite loaders.
+    """
+    import sqlite3
+
+    db_dir = tmp_path / ".beadloom"
+    db_dir.mkdir(parents=True, exist_ok=True)
+    db_path = db_dir / "beadloom.db"
+    # Open + close to materialize an empty (table-less) database file.
+    conn = sqlite3.connect(str(db_path))
+    conn.close()
+    return db_path
+
+
+class TestSqliteLoadersOperationalError:
+    """OperationalError on the SQLite loaders is logged, not silently swallowed."""
+
+    def test_load_symbols_logs_and_does_not_crash(
+        self, tmp_path: Path, caplog: Any
+    ) -> None:
+        """Missing code_symbols table -> empty dict + debug log, no crash."""
+        from beadloom.onboarding.doc_generator import _load_symbols_by_source
+
+        _create_empty_db(tmp_path)
+
+        with caplog.at_level(logging.DEBUG, logger="beadloom.onboarding.doc_generator"):
+            result = _load_symbols_by_source(tmp_path)
+
+        assert result == {}
+        assert any(
+            record.levelno == logging.DEBUG and "code_symbols" in record.getMessage()
+            for record in caplog.records
+        ), f"expected a debug log mentioning code_symbols, got: {caplog.records}"
+
+    def test_load_extra_logs_and_does_not_crash(
+        self, tmp_path: Path, caplog: Any
+    ) -> None:
+        """Missing nodes table -> empty dict + debug log, no crash."""
+        from beadloom.onboarding.doc_generator import _load_extra_from_sqlite
+
+        _create_empty_db(tmp_path)
+
+        with caplog.at_level(logging.DEBUG, logger="beadloom.onboarding.doc_generator"):
+            result = _load_extra_from_sqlite(tmp_path)
+
+        assert result == {}
+        assert any(
+            record.levelno == logging.DEBUG and "nodes" in record.getMessage()
+            for record in caplog.records
+        ), f"expected a debug log mentioning nodes, got: {caplog.records}"
