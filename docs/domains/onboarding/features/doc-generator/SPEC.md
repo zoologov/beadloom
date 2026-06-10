@@ -91,13 +91,13 @@ When SQLite database exists (post-reindex), skeletons include:
 - **`<!-- enrich with: beadloom docs polish -->`** markers in all generated files
 - **Standalone mode**: loads graph from YAML when called without explicit nodes/edges
 - **Polish data** includes code symbols from SQLite when available (post-reindex)
-- **Best-effort symbols**: no error if DB or `code_symbols` table is missing
+- **Best-effort symbols with debug logging**: SQLite errors (e.g., missing `code_symbols` or `nodes` tables) degrade gracefully without raising, but are logged at debug level for observability (UX#127)
 - **`part_of` filtering**: `_edges_for()` excludes structural edges from dependency lists
 - **docs: writeback**: only for newly created files, never overwrites existing `docs:` values
 
 ## Testing
 
-- `tests/test_doc_generator.py` — unit tests for skeletons, mermaid, polish data, docs: writeback, SQLite edges, text format (32 tests)
+- `tests/test_doc_generator.py` — unit tests for skeletons, mermaid, polish data, docs: writeback, SQLite edges, text format (37 tests)
 - `tests/test_cli_docs.py` — CLI `docs generate` / `docs polish` (8 tests)
 - `tests/test_integration_onboarding.py` — end-to-end pipeline with idempotency (13 tests)
 

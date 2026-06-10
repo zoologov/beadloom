@@ -1,0 +1,15 @@
+[
+  {
+    "ts": "2026-06-10T13:43:00.650797+00:00",
+    "platform": "github",
+    "docs_refreshed": [
+      "domains/onboarding/README.md",
+      "domains/onboarding/features/doc-generator/SPEC.md"
+    ],
+    "input_tokens": 97847,
+    "output_tokens": 5347,
+    "model": "qwen3.7-plus",
+    "gate": "green",
+    "pr_url": ""
+  }
+]
