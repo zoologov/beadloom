@@ -1327,5 +1327,11 @@ def incremental_reindex(
     result.nodes_loaded = conn.execute("SELECT count(*) FROM nodes").fetchone()[0]
     result.edges_loaded = conn.execute("SELECT count(*) FROM edges").fetchone()[0]
 
+    # #112: symbols_indexed accumulated only the per-run delta (re-indexed
+    # changed/added code files), so a docs-only incremental run reported
+    # "Symbols: 0" even on an intact index. Mirror the #88 nodes/edges
+    # backfill: report the true live-DB symbol total.
+    result.symbols_indexed = conn.execute("SELECT count(*) FROM code_symbols").fetchone()[0]
+
     conn.close()
     return result

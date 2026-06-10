@@ -1288,6 +1288,38 @@ class TestIncrementalReindexTotals:
         assert expected_nodes >= 1
         assert result.nodes_loaded == expected_nodes
 
+    def test_changed_doc_reports_true_symbol_total(
+        self,
+        project: Path,
+        db_path: Path,
+    ) -> None:
+        """#112 — after a doc-only incremental reindex, symbols_indexed
+        reflects the live DB total, not the per-run delta of 0."""
+        graph_dir = project / ".beadloom" / "_graph"
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n  - ref_id: N1\n    kind: domain\n    summary: N1\n"
+        )
+        (project / "src" / "mod.py").write_text(
+            "def alpha():\n    pass\n\n\ndef beta():\n    pass\n"
+        )
+        doc = project / "docs" / "spec.md"
+        doc.write_text("## Spec\n\nOriginal.\n")
+
+        incremental_reindex(project)
+
+        # Trigger the docs-only incremental path (no code/graph change).
+        doc.write_text("## Spec\n\nUpdated content.\n")
+        result = incremental_reindex(project)
+
+        assert not result.nothing_changed
+
+        conn = open_db(db_path)
+        expected_symbols = conn.execute("SELECT count(*) FROM code_symbols").fetchone()[0]
+        conn.close()
+
+        assert expected_symbols >= 2
+        assert result.symbols_indexed == expected_symbols
+
 
 class TestStoredIndexHelpersNarrowExcepts:
     """#94 — missing-table read returns {}; other sqlite errors propagate."""
