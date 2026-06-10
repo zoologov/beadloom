@@ -25,6 +25,8 @@ from tools.ai_techwriter.models import AgentResult, ContextPacket
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from tools.ai_techwriter.provider import ProviderConfig
+
 logger = logging.getLogger(__name__)
 
 
@@ -59,11 +61,17 @@ class ReviewPublisher(Protocol):
 
 
 class GooseAgentRunner:
-    """Real agent seam: shells out to Goose with a recipe + the packet.
+    """Real agent seam: shells out to Goose with a recipe + provider + packet.
 
-    Thin by design — the recipe/provider wiring is BEAD-03. Here we only define
-    the invocation contract: pass the packet as JSON on a recipe param, run
-    Goose headless, and read back a small JSON usage report it emits.
+    Builds the headless ``goose run`` invocation from the shipped recipe (tool
+    allow-list + the tech-writer instructions), the :class:`ProviderConfig`
+    (Qwen3.7-Plus over an OpenAI-compatible endpoint; key resolved from env, set
+    on the child process, never inlined), and the per-doc context packet. Parses
+    the JSON usage report Goose emits into an :class:`AgentResult`.
+
+    A failed / empty run is handled gracefully: an empty :class:`AgentResult`
+    (no rewritten paths) is returned so the harness's fixpoint treats the doc as
+    still stale and retries / flags it — it never crashes the run.
     """
 
     def __init__(
@@ -71,31 +79,40 @@ class GooseAgentRunner:
         *,
         project_root: Path,
         recipe_path: Path,
-        model: str,
+        provider: ProviderConfig,
     ) -> None:
         self._project_root = project_root
         self._recipe_path = recipe_path
-        self._model = model
+        self._provider = provider
 
     def run(self, packet: ContextPacket) -> AgentResult:
         """Invoke Goose headless on *packet*; parse its usage report."""
-        packet_json = json.dumps(_packet_payload(packet))
-        result = run_command(
-            [
-                "goose",
-                "run",
-                "--recipe",
-                str(self._recipe_path),
-                "--params",
-                f"packet={packet_json}",
-            ],
-            cwd=self._project_root,
-        )
+        args = self._build_command(packet)
+        env = self._provider.goose_env(api_key=self._provider.resolve_api_key())
+        result = run_command(args, cwd=self._project_root, env=env)
         if not result.ok:
-            raise RuntimeError(
-                f"goose run failed (rc={result.returncode}): {result.stderr[:500]}"
+            logger.warning(
+                "goose run failed (rc=%d): %s",
+                result.returncode,
+                result.stderr[:500],
             )
-        return _parse_goose_usage(result.stdout, default_model=self._model, packet=packet)
+            return _empty_result(self._provider.model)
+        return _parse_goose_usage(result.stdout, default_model=self._provider.model, packet=packet)
+
+    def _build_command(self, packet: ContextPacket) -> list[str]:
+        """Construct the headless ``goose run`` argv (recipe + packet + caps)."""
+        packet_json = json.dumps(_packet_payload(packet))
+        return [
+            "goose",
+            "run",
+            "--recipe",
+            str(self._recipe_path),
+            "--params",
+            f"packet={packet_json}",
+            "--max-turns",
+            str(self._provider.max_turns),
+            "--no-session",
+        ]
 
 
 def _packet_payload(packet: ContextPacket) -> dict[str, object]:
@@ -111,9 +128,7 @@ def _packet_payload(packet: ContextPacket) -> dict[str, object]:
     }
 
 
-def _parse_goose_usage(
-    stdout: str, *, default_model: str, packet: ContextPacket
-) -> AgentResult:
+def _parse_goose_usage(stdout: str, *, default_model: str, packet: ContextPacket) -> AgentResult:
     """Parse the JSON usage line Goose emits (last JSON object in stdout)."""
     usage: dict[str, object] = {}
     for line in reversed(stdout.splitlines()):
@@ -133,6 +148,16 @@ def _parse_goose_usage(
         input_tokens=_as_int(usage.get("input_tokens")),
         output_tokens=_as_int(usage.get("output_tokens")),
         model=str(usage.get("model") or default_model),
+    )
+
+
+def _empty_result(model: str) -> AgentResult:
+    """An empty result: no docs written, no tokens — 'still stale' to the loop."""
+    return AgentResult(
+        rewritten_paths=(),
+        input_tokens=0,
+        output_tokens=0,
+        model=model,
     )
 
 

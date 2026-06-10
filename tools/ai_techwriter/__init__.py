@@ -25,6 +25,11 @@ from tools.ai_techwriter.models import (
     PublishResult,
     RunRecord,
 )
+from tools.ai_techwriter.provider import (
+    ProviderConfig,
+    default_recipe_path,
+    qwen_provider,
+)
 from tools.ai_techwriter.runner import run_harness
 from tools.ai_techwriter.scope import discover_scope
 from tools.ai_techwriter.seams import (
@@ -50,9 +55,12 @@ __all__ = [
     "GooseAgentRunner",
     "HarnessConfig",
     "HarnessResult",
+    "ProviderConfig",
     "PublishResult",
     "ReviewPublisher",
     "RunRecord",
+    "default_recipe_path",
     "discover_scope",
+    "qwen_provider",
     "run_harness",
 ]

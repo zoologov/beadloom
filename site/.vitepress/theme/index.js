@@ -22,6 +22,7 @@ import StatusCards from "./components/StatusCards.vue";
 import HealthGauges from "./components/HealthGauges.vue";
 import CategoryChart from "./components/CategoryChart.vue";
 import TrendCharts from "./components/TrendCharts.vue";
+import AiTechwriterActivity from "./components/AiTechwriterActivity.vue";
 import Recommendations from "./components/Recommendations.vue";
 import "./custom.css";
 
@@ -49,6 +50,9 @@ export default {
     app.component("HealthGauges", HealthGauges);
     app.component("CategoryChart", CategoryChart);
     app.component("TrendCharts", TrendCharts);
+    // AI tech-writer activity (G9): run-record store -> docs refreshed + token
+    // spend (tokens fact, $ labeled estimate). SSR-safe under <ClientOnly>.
+    app.component("AiTechwriterActivity", AiTechwriterActivity);
     app.component("Recommendations", Recommendations);
   },
 };

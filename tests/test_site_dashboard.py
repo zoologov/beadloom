@@ -936,3 +936,206 @@ def test_contract_recommendations_handles_malformed_payload() -> None:
     assert recs[0]["severity"] == "error"
     assert recs[0]["target"] == "amqp:X"
     assert recs[0]["link"] == "/landscape"
+
+
+# ---------------------------------------------------------------------------
+# AI tech-writer activity — run-record store, honest by construction (G9)
+# ---------------------------------------------------------------------------
+
+
+def _write_runs(project: Path, records: list[dict[str, object]]) -> None:
+    """Write the append-only run-record store the harness (BEAD-02) emits."""
+    store = project / ".beadloom" / "ai_techwriter_runs.json"
+    store.parent.mkdir(parents=True, exist_ok=True)
+    store.write_text(json.dumps(records, indent=2) + "\n", encoding="utf-8")
+
+
+def _run(
+    ts: str,
+    *,
+    docs: list[str],
+    in_tok: int,
+    out_tok: int,
+    gate: str = "green",
+    platform: str = "github",
+) -> dict[str, object]:
+    return {
+        "ts": ts,
+        "platform": platform,
+        "docs_refreshed": docs,
+        "input_tokens": in_tok,
+        "output_tokens": out_tok,
+        "model": "qwen3.7-plus",
+        "gate": gate,
+        "pr_url": "https://example.test/pr/1",
+    }
+
+
+def test_ai_techwriter_section_present_and_empty_when_no_store(tmp_path: Path) -> None:
+    """No store on disk -> a present-but-empty section (no data, not an error)."""
+    project = _make_project(tmp_path, with_violation=False)
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project)
+    finally:
+        conn.close()
+    ai = data["ai_techwriter"]
+    assert isinstance(ai, dict)
+    assert ai["runs"] == []
+    assert ai["totals"] == {
+        "runs": 0,
+        "docs_refreshed": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+    }
+
+
+def test_ai_techwriter_empty_store_is_empty_section(tmp_path: Path) -> None:
+    project = _make_project(tmp_path, with_violation=False)
+    _write_runs(project, [])
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project)
+    finally:
+        conn.close()
+    assert data["ai_techwriter"]["runs"] == []
+
+
+def test_ai_techwriter_malformed_store_degrades_to_empty(tmp_path: Path) -> None:
+    """A corrupt store is not data (no fabrication) -> empty section, not a crash."""
+    project = _make_project(tmp_path, with_violation=False)
+    store = project / ".beadloom" / "ai_techwriter_runs.json"
+    store.parent.mkdir(parents=True, exist_ok=True)
+    store.write_text("{ not json", encoding="utf-8")
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project)
+    finally:
+        conn.close()
+    assert data["ai_techwriter"]["runs"] == []
+
+
+def test_ai_techwriter_runs_sorted_with_cumulative_series(tmp_path: Path) -> None:
+    """Runs are sorted by ts; docs/tokens accumulate (only recorded runs)."""
+    project = _make_project(tmp_path, with_violation=False)
+    _write_runs(
+        project,
+        [
+            _run("2026-06-03T00:00:00+00:00", docs=["a.md", "b.md"], in_tok=300, out_tok=120),
+            _run("2026-06-01T00:00:00+00:00", docs=["a.md"], in_tok=100, out_tok=40),
+        ],
+    )
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project)
+    finally:
+        conn.close()
+    runs = data["ai_techwriter"]["runs"]
+    assert [r["ts"] for r in runs] == [
+        "2026-06-01T00:00:00+00:00",
+        "2026-06-03T00:00:00+00:00",
+    ]
+    # Per-run docs-refreshed COUNT (fact, from the record).
+    assert [r["docs_refreshed"] for r in runs] == [1, 2]
+    # Cumulative docs refreshed over time.
+    assert [r["cumulative_docs"] for r in runs] == [1, 3]
+    # Tokens are facts; cumulative in/out.
+    assert [r["input_tokens"] for r in runs] == [100, 300]
+    assert [r["output_tokens"] for r in runs] == [40, 120]
+    assert [r["cumulative_input_tokens"] for r in runs] == [100, 400]
+    assert [r["cumulative_output_tokens"] for r in runs] == [40, 160]
+
+
+def test_ai_techwriter_totals_are_summed_facts(tmp_path: Path) -> None:
+    project = _make_project(tmp_path, with_violation=False)
+    _write_runs(
+        project,
+        [
+            _run("2026-06-01T00:00:00+00:00", docs=["a.md"], in_tok=100, out_tok=40),
+            _run("2026-06-03T00:00:00+00:00", docs=["a.md", "b.md"], in_tok=300, out_tok=120),
+        ],
+    )
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project)
+    finally:
+        conn.close()
+    totals = data["ai_techwriter"]["totals"]
+    assert totals == {
+        "runs": 2,
+        "docs_refreshed": 3,
+        "input_tokens": 400,
+        "output_tokens": 160,
+    }
+
+
+def test_ai_techwriter_cost_is_labeled_estimate_not_a_hard_figure(tmp_path: Path) -> None:
+    """$ cost is a CLEARLY-LABELED estimate at a configured rate — never a fact."""
+    from beadloom.application.site_dashboard import _USD_PER_1M_TOKENS
+
+    project = _make_project(tmp_path, with_violation=False)
+    _write_runs(
+        project,
+        [_run("2026-06-01T00:00:00+00:00", docs=["a.md"], in_tok=1_000_000, out_tok=0)],
+    )
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project)
+    finally:
+        conn.close()
+    cost = data["ai_techwriter"]["cost_estimate"]
+    # The estimate is explicitly flagged as an estimate with its rate + label.
+    assert cost["is_estimate"] is True
+    assert cost["rate_usd_per_1m"] == _USD_PER_1M_TOKENS
+    assert "est" in str(cost["label"]).lower()
+    # 1M total tokens at the configured rate -> exactly the rate in USD.
+    assert cost["usd"] == pytest.approx(_USD_PER_1M_TOKENS)
+
+
+def test_ai_techwriter_section_deterministic(tmp_path: Path) -> None:
+    project = _make_project(tmp_path, with_violation=False)
+    _write_runs(
+        project,
+        [
+            _run("2026-06-01T00:00:00+00:00", docs=["a.md"], in_tok=100, out_tok=40),
+            _run("2026-06-03T00:00:00+00:00", docs=["b.md"], in_tok=200, out_tok=80),
+        ],
+    )
+    conn = _open(project)
+    try:
+        first = build_dashboard_data(conn, project_root=project)
+        second = build_dashboard_data(conn, project_root=project)
+    finally:
+        conn.close()
+    assert json.dumps(first["ai_techwriter"], sort_keys=True) == json.dumps(
+        second["ai_techwriter"], sort_keys=True
+    )
+
+
+def test_ai_techwriter_skips_malformed_rows(tmp_path: Path) -> None:
+    """A list with junk rows keeps only well-formed records (honest, no invention)."""
+    project = _make_project(tmp_path, with_violation=False)
+    records: list[dict[str, object]] = [
+        _run("2026-06-01T00:00:00+00:00", docs=["a.md"], in_tok=100, out_tok=40),
+        {"platform": "github"},  # no ts -> skipped
+    ]
+    _write_runs(project, records)
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project)
+    finally:
+        conn.close()
+    runs = data["ai_techwriter"]["runs"]
+    assert len(runs) == 1
+    assert runs[0]["ts"] == "2026-06-01T00:00:00+00:00"
+
+
+def test_dashboard_md_mounts_ai_techwriter_widget(tmp_path: Path) -> None:
+    project = _make_project(tmp_path, with_violation=False)
+    conn = _open(project)
+    try:
+        data = build_dashboard_data(conn, project_root=project)
+    finally:
+        conn.close()
+    md = render_dashboard_md(data)
+    assert "<AiTechwriterActivity" in md

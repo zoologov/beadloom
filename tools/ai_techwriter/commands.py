@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import subprocess
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -33,21 +34,27 @@ class CommandResult:
         return self.returncode == 0
 
 
-def run_command(args: list[str], *, cwd: Path) -> CommandResult:
+def run_command(args: list[str], *, cwd: Path, env: dict[str, str] | None = None) -> CommandResult:
     """Run *args* in *cwd*, capturing stdout/stderr (never raises on non-zero).
 
     The single subprocess seam: every external call funnels through here so
     tests patch exactly one function. ``check`` is intentionally False — the
     harness inspects exit codes itself (a failing gate is data, not an
     exception).
+
+    *env*, when given, is **overlaid on** the current process environment (so
+    PATH etc. survive) — used to pass the Goose provider knobs + the resolved
+    API key without mutating the harness's own environment.
     """
     logger.debug("run: %s (cwd=%s)", " ".join(args), cwd)
+    full_env = {**os.environ, **env} if env is not None else None
     completed = subprocess.run(  # noqa: S603 - args are constructed internally, never shell
         args,
         cwd=str(cwd),
         capture_output=True,
         text=True,
         check=False,
+        env=full_env,
     )
     return CommandResult(
         returncode=completed.returncode,
@@ -75,9 +82,7 @@ def beadloom_sync_check_json(project_root: Path) -> dict[str, object]:
 
 def beadloom_docs_polish_json(project_root: Path) -> dict[str, object]:
     """Run ``beadloom docs polish --format json`` and parse the enrichment data."""
-    result = run_command(
-        ["beadloom", "docs", "polish", "--format", "json"], cwd=project_root
-    )
+    result = run_command(["beadloom", "docs", "polish", "--format", "json"], cwd=project_root)
     if not result.stdout.strip():
         raise RuntimeError(f"docs polish produced no JSON (rc={result.returncode})")
     parsed = json.loads(result.stdout)
@@ -105,9 +110,7 @@ def beadloom_why(project_root: Path, ref_id: str) -> str:
 
 def beadloom_sync_update(project_root: Path, ref_id: str) -> CommandResult:
     """Re-baseline one ref non-interactively (W1: ``sync-update <ref> --yes``)."""
-    return run_command(
-        ["beadloom", "sync-update", ref_id, "--yes"], cwd=project_root
-    )
+    return run_command(["beadloom", "sync-update", ref_id, "--yes"], cwd=project_root)
 
 
 def beadloom_ci(project_root: Path) -> CommandResult:
