@@ -1,4 +1,4 @@
-# AI tech-writer (BDL-047 / F4.1) — GitHub wrapper around the one harness.
+# AI tech-writer (BDL-047 / F4.1 · BDL-049) — GitHub wrapper around the harness.
 #
 # Thin wrapper: it only triggers + wires the secret + picks the platform flag.
 # All orchestration lives in tools/ai_techwriter (python -m tools.ai_techwriter).
@@ -8,31 +8,35 @@
 name: AI tech-writer
 
 on:
-  # Trigger on push to main/master (G10) — refresh docs as soon as code lands,
-  # closing the staleness window a nightly schedule would leave open. The
-  # concurrency group below + the no-auto-merge / 0-stale-no-op design keep this
-  # loop-safe (the agent's merged PR triggers a clean no-op run).
-  push:
+  # BDL-049: trunk-based. Fire on a PR to main/master — run ONCE per PR against
+  # the PR's own diff (--since merge-base below). The agent commits its doc
+  # refresh ONTO the PR head branch (--target pr-branch) so code + docs become
+  # one reviewable PR; the loop-guard step keeps the agent's own push from
+  # re-triggering the `synchronize` event. (push:main removed — was per-push,
+  # could red main, and spawned orphan doc-PRs.)
+  pull_request:
+    types: [opened, synchronize, reopened]
     branches: [main, master]
-  # Manual dispatch stays useful (re-run on demand). Optional `since` input lets
-  # an operator re-run over an explicit baseline ref (e.g. re-check accumulated
-  # drift); when empty it falls back to the push parent / HEAD~1.
+  # Manual dispatch stays useful (re-run on demand over an explicit baseline).
+  # It has no PR context, so it keeps the branch-PR publish path (HEAD~1 / the
+  # given `since`), distinct from the pull_request path below.
   workflow_dispatch:
     inputs:
       since:
-        description: "Baseline git ref for drift detection (default: push parent / HEAD~1)"
+        description: "Baseline git ref for drift detection (default: HEAD~1)"
         required: false
         default: ""
 
-# gh pr create needs write to contents (push the branch) + pull-requests.
+# The pr-branch publisher pushes the refresh commit (contents) + posts a PR
+# comment (pull-requests).
 permissions:
   contents: write
   pull-requests: write
 
-# One run at a time: never open competing refresh PRs.
+# One run per PR; cancel a superseded run when a new commit lands (G8).
 concurrency:
-  group: ai-techwriter
-  cancel-in-progress: false
+  group: ai-techwriter-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   ai-techwriter:
@@ -41,49 +45,80 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Full history so git diff / the gate can read prior state.
+          # Full history so git diff / the merge-base / the gate can read prior
+          # state; check out the PR HEAD branch so the agent can commit onto it.
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      # Loop-guard (G5): if the PR head commit is the agent's own refresh
+      # (authored by beadloom-ai-techwriter OR a [skip ai-techwriter] subject),
+      # skip — the agent's push must not spawn a second `synchronize` run.
+      - name: Loop-guard (skip the agent's own refresh commit)
+        run: |
+          author="$(git log -1 --format='%an')"
+          subject="$(git log -1 --format='%s')"
+          if [ "$author" = "beadloom-ai-techwriter" ] || \
+             printf '%s' "$subject" | grep -qF '[skip ai-techwriter]'; then
+            echo "skip: PR head is the agent's own refresh commit"
+            echo "AI_TW_SKIP=1" >> "$GITHUB_ENV"
+          fi
 
       - name: Install uv
+        if: env.AI_TW_SKIP != '1'
         uses: astral-sh/setup-uv@v5
 
       # Beadloom (the substrate) + the harness deps, pinned via the lockfile.
       - name: Install Beadloom + harness deps
+        if: env.AI_TW_SKIP != '1'
         run: uv sync --extra dev --extra languages
 
       # Goose is provisioned on the self-hosted runner image (pinned there);
       # this step asserts it is present rather than installing ad hoc.
       - name: Verify Goose is available (pinned on the runner)
+        if: env.AI_TW_SKIP != '1'
         run: goose --version
 
       # Rebuild the index so sync-check sees current code↔doc state.
       - name: Beadloom reindex
+        if: env.AI_TW_SKIP != '1'
         run: uv run beadloom reindex
 
-      # The one entrypoint. 0 stale → clean no-op exit 0; flagged → non-zero.
-      #
-      # --since <push parent> makes drift detection baseline-relative: a fresh
-      # checkout re-baselines sync_state to the just-pushed code, so without a
-      # ref baseline sync-check reports 0 stale even when the push left a doc
-      # behind. `github.event.before` is the push parent; it is an all-zero SHA
-      # on a first push / force-push, and unset on workflow_dispatch — the guard
-      # falls back to HEAD~1 in both cases (and the harness defensively treats a
-      # zero SHA as "no baseline" too).
-      - name: Run AI tech-writer harness (GitHub)
+      # PR path: --since is the merge-base of the PR base and HEAD — exactly
+      # "what this PR changed" (robust when the branch is behind/ahead of base).
+      # Falls back to the PR base SHA if merge-base cannot resolve. The agent
+      # commits the refresh onto the PR head branch + comments on the PR.
+      - name: Run AI tech-writer harness (GitHub · pr-branch)
+        if: env.AI_TW_SKIP != '1' && github.event_name == 'pull_request'
         env:
           # Repository secret — never inlined; resolved only on the runner.
           QWEN_API_KEY: ${{ secrets.QWEN_API_KEY }}
           # Workspace-specific MaaS endpoint (secret); falls back to the generic
           # DashScope gateway in the harness when unset.
           QWEN_BASE_URL: ${{ secrets.QWEN_BASE_URL }}
-          # gh pr create authenticates with the job token.
+          # gh commit/push + gh pr comment authenticate with the job token.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BEFORE_SHA: ${{ github.event.before }}
+          # The pr-branch publisher resolves the PR to comment on from this.
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          since="$(git merge-base "origin/$BASE_REF" HEAD 2>/dev/null || true)"
+          if [ -z "$since" ]; then since="$BASE_SHA"; fi
+          uv run python -m tools.ai_techwriter \
+            --platform github --target pr-branch --since "$since"
+
+      # Manual dispatch path: no PR context, so keep the branch-PR publish path
+      # (cuts a doc-refresh branch + opens a PR). --since is the operator input
+      # when given, else HEAD~1.
+      - name: Run AI tech-writer harness (GitHub · branch-pr · manual)
+        if: env.AI_TW_SKIP != '1' && github.event_name == 'workflow_dispatch'
+        env:
+          QWEN_API_KEY: ${{ secrets.QWEN_API_KEY }}
+          QWEN_BASE_URL: ${{ secrets.QWEN_BASE_URL }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INPUT_SINCE: ${{ inputs.since }}
         run: |
-          # Prefer an explicit dispatch input, else the push parent, else HEAD~1.
-          since="${INPUT_SINCE:-$BEFORE_SHA}"
-          case "$since" in
-            ""|0000000000000000000000000000000000000000) since="HEAD~1" ;;
-          esac
-          uv run python -m tools.ai_techwriter --platform github --since "$since"
+          since="${INPUT_SINCE:-HEAD~1}"
+          case "$since" in "") since="HEAD~1" ;; esac
+          uv run python -m tools.ai_techwriter \
+            --platform github --target branch-pr --since "$since"

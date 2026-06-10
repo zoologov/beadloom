@@ -82,21 +82,26 @@ class TestSetupAiTechwriterGithub:
         assert wf.exists()
         text = wf.read_text(encoding="utf-8")
         assert "name: AI tech-writer" in text
-        assert "python -m tools.ai_techwriter --platform github" in text
+        assert "python -m tools.ai_techwriter" in text
+        assert "--platform github" in text
         assert "QWEN_API_KEY" in text
 
-    def test_github_workflow_triggers_on_push_main_master(self, tmp_path: Path) -> None:
-        """G10: trigger on push to main/master (+ manual dispatch), not nightly cron."""
+    def test_github_workflow_triggers_on_pull_request(self, tmp_path: Path) -> None:
+        """BDL-049: trunk-based — trigger on pull_request (+ manual dispatch),
+        not push:main, not nightly cron."""
         project = tmp_path / "proj"
         project.mkdir()
         _run(project, "github")
         text = (project / ".github" / "workflows" / "ai-techwriter.yml").read_text(
             encoding="utf-8"
         )
-        assert "push:" in text
+        assert "pull_request:" in text
         assert "branches: [main, master]" in text
-        assert "workflow_dispatch: {}" in text
-        # No nightly schedule — on-push closes the staleness window.
+        assert "workflow_dispatch:" in text
+        assert "--target pr-branch" in text
+        # push:main removed (trunk-based replaces per-push refresh).
+        assert "\n  push:" not in text
+        # No nightly schedule.
         assert "schedule:" not in text
         assert "cron:" not in text
 
@@ -152,14 +157,18 @@ class TestSetupAiTechwriterGitlab:
         assert "ai-techwriter:" in text
         assert "python -m tools.ai_techwriter --platform gitlab" in text
 
-    def test_gitlab_job_triggers_on_push_main_master(self, tmp_path: Path) -> None:
-        """G10: trigger on push to main/master (+ manual web), not scheduled pipelines."""
+    def test_gitlab_job_triggers_on_merge_request(self, tmp_path: Path) -> None:
+        """BDL-049: trunk-based — trigger on merge_request_event (+ manual web),
+        not push-to-main, not scheduled pipelines."""
         project = tmp_path / "proj"
         project.mkdir()
         _run(project, "gitlab")
         text = (project / ".gitlab-ci.yml").read_text(encoding="utf-8")
-        assert '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"' in text
+        assert '$CI_PIPELINE_SOURCE == "merge_request_event"' in text
         assert '$CI_PIPELINE_SOURCE == "web"' in text
+        assert "--target pr-branch" in text
+        # The old push-to-main gate is gone.
+        assert '$CI_COMMIT_BRANCH == "main"' not in text
         # No schedule-only gating.
         assert '$CI_PIPELINE_SOURCE == "schedule"' not in text
 
