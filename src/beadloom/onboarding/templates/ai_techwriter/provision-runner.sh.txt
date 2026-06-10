@@ -200,7 +200,7 @@ install_gh() {
   fi
   log "installing gh CLI (best-effort)"
   {
-    mkdir -p -m 755 /etc/apt/keyrings
+    install -d -m 755 /etc/apt/keyrings
     curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
       | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
     chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
