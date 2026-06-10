@@ -411,7 +411,9 @@ def test_github_publisher_commits_before_push(monkeypatch: pytest.MonkeyPatch) -
     assert git_calls[0][:3] == ["git", "checkout", "-b"]
     assert git_calls[1][:3] == ["git", "add", "--"]
     assert "commit" in git_calls[2]
-    assert git_calls[3][:3] == ["git", "push", "--set-upstream"]
+    # BUG-J: the bot's deterministic refresh branch is force-pushed so a
+    # lingering branch from a prior run can't block it with a non-fast-forward.
+    assert git_calls[3][:4] == ["git", "push", "--force", "--set-upstream"]
     # The run-record path is staged alongside docs (so it rides in the commit).
     add_call = git_calls[1]
     assert "docs" in add_call
@@ -482,3 +484,188 @@ def test_publisher_real_git_commit_and_push_carries_doc_and_record(
     assert ".beadloom/ai_techwriter_runs.json" in tree
     doc_in_commit = _git_out(bare, "show", f"{pushed_head}:docs/graph.md")
     assert "refreshed by AI" in doc_in_commit
+
+
+# --------------------------------------------------------------------------- #
+# BUG-J force-push + pr_url backfill
+# --------------------------------------------------------------------------- #
+
+
+def test_push_branch_uses_force(monkeypatch: pytest.MonkeyPatch) -> None:
+    """BUG-J: the push must be a ``--force`` push of the bot's refresh branch."""
+    seen: list[list[str]] = []
+
+    def fake_run(args: list[str], *, cwd: Path) -> CommandResult:
+        seen.append(args)
+        return CommandResult(0, "https://github.com/o/r/pull/1\n", "")
+
+    monkeypatch.setattr(seams, "run_command", fake_run)
+    GitHubPublisher().publish(
+        project_root=Path("/x"), branch="ai/x", title="T", body="B", flagged=False
+    )
+    push = next(c for c in seen if c[:2] == ["git", "push"])
+    assert "--force" in push
+    assert push == ["git", "push", "--force", "--set-upstream", "origin", "ai/x"]
+
+
+def _seed_repo_with_origin(work: Path, bare: Path) -> str:
+    """Seed a 'main' checkout (one commit) + a bare origin; return base HEAD."""
+    _git_out(work, "init", "-b", "main")
+    _git_out(work, "config", "user.name", "seed")
+    _git_out(work, "config", "user.email", "seed@example.test")
+    (work / "docs").mkdir()
+    (work / "docs" / "graph.md").write_text("old\n", encoding="utf-8")
+    _git_out(work, "add", "-A")
+    _git_out(work, "commit", "-m", "seed")
+    base_head = _git_out(work, "rev-parse", "HEAD").strip()
+    _git_out(bare.parent, "init", "--bare", str(bare))
+    _git_out(work, "remote", "add", "origin", str(bare))
+    _git_out(work, "push", "-u", "origin", "main")
+    return base_head
+
+
+def test_push_succeeds_over_preexisting_remote_branch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """BUG-J real-git: a lingering remote refresh branch must NOT block the run.
+
+    Pre-create the deterministic refresh branch on origin (with unrelated
+    history, as a stale prior run would leave it). With the force-push the new
+    run still publishes and the branch head advances to the new proposal commit.
+    """
+    work = tmp_path / "work"
+    work.mkdir()
+    bare = tmp_path / "origin.git"
+    _seed_repo_with_origin(work, bare)
+
+    branch = "ai-techwriter/refresh-graph"
+    # A prior run left an unmergeable branch on origin (divergent history).
+    _git_out(work, "checkout", "-b", branch)
+    (work / "docs" / "graph.md").write_text("STALE prior proposal\n", encoding="utf-8")
+    _git_out(work, "add", "-A")
+    _git_out(work, "commit", "-m", "stale prior run")
+    _git_out(work, "push", "-u", "origin", branch)
+    stale_head = _git_out(bare, "rev-parse", branch).strip()
+    # Back on main; drop the LOCAL branch so the run starts from a fresh
+    # checkout state — the lingering branch exists only on origin (the BUG-J
+    # scenario: a prior run's branch persists remotely, e.g. an open PR).
+    _git_out(work, "checkout", "main")
+    _git_out(work, "branch", "-D", branch)
+    # The new run's working state: agent edit + run-record.
+    (work / "docs" / "graph.md").write_text("old\nrefreshed by AI\n", encoding="utf-8")
+    (work / ".beadloom").mkdir()
+    (work / ".beadloom" / "ai_techwriter_runs.json").write_text("[]\n", encoding="utf-8")
+
+    real_run = commands.run_command
+
+    def fake_run(args: list[str], *, cwd: Path) -> CommandResult:
+        if args[0] == "gh":
+            return CommandResult(0, "https://github.com/o/r/pull/42\n", "")
+        return real_run(args, cwd=cwd)
+
+    monkeypatch.setattr(seams, "run_command", fake_run)
+    url = GitHubPublisher().publish(
+        project_root=work, branch=branch, title="docs: refresh", body="B", flagged=False
+    )
+    assert url == "https://github.com/o/r/pull/42"
+    new_head = _git_out(bare, "rev-parse", branch).strip()
+    assert new_head != stale_head  # the force-push moved the branch head.
+    doc_in_commit = _git_out(bare, "show", f"{new_head}:docs/graph.md")
+    assert "refreshed by AI" in doc_in_commit
+
+
+def test_pr_url_backfilled_into_record_recommitted_and_repushed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """After create, the last run-record entry gets the URL + is re-pushed.
+
+    Real-git: only ``gh pr create`` is mocked. The store starts with an entry
+    whose ``pr_url`` is empty; after publish the entry carries the returned URL
+    AND that URL-bearing record is present in the pushed branch's tree.
+    """
+    work = tmp_path / "work"
+    work.mkdir()
+    bare = tmp_path / "origin.git"
+    _seed_repo_with_origin(work, bare)
+
+    (work / "docs" / "graph.md").write_text("old\nrefreshed by AI\n", encoding="utf-8")
+    (work / ".beadloom").mkdir()
+    store = work / ".beadloom" / "ai_techwriter_runs.json"
+    store.write_text(json.dumps([{"ts": "t0", "pr_url": ""}]) + "\n", encoding="utf-8")
+
+    real_run = commands.run_command
+
+    def fake_run(args: list[str], *, cwd: Path) -> CommandResult:
+        if args[0] == "gh":
+            return CommandResult(0, "https://github.com/o/r/pull/77\n", "")
+        return real_run(args, cwd=cwd)
+
+    monkeypatch.setattr(seams, "run_command", fake_run)
+    branch = "ai-techwriter/refresh-graph"
+    url = GitHubPublisher().publish(
+        project_root=work, branch=branch, title="docs: refresh", body="B", flagged=False
+    )
+    assert url == "https://github.com/o/r/pull/77"
+
+    # The on-disk store's last entry now carries the URL.
+    records = json.loads(store.read_text(encoding="utf-8"))
+    assert records[-1]["pr_url"] == "https://github.com/o/r/pull/77"
+    # The pushed branch head carries the URL-bearing record (amend + re-push).
+    head = _git_out(bare, "rev-parse", branch).strip()
+    record_in_commit = _git_out(bare, "show", f"{head}:.beadloom/ai_techwriter_runs.json")
+    assert "https://github.com/o/r/pull/77" in record_in_commit
+
+
+def test_backfill_failure_does_not_fail_the_run(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A failing post-create amend/push must NOT fail the run.
+
+    The first push (pre-create) succeeds; ``gh`` returns the URL; the SECOND
+    push (post-amend) fails. ``publish`` still returns the URL and logs a
+    warning rather than raising.
+    """
+    push_calls = {"n": 0}
+
+    def fake_run(args: list[str], *, cwd: Path) -> CommandResult:
+        if args[0] == "gh":
+            return CommandResult(0, "https://github.com/o/r/pull/9\n", "")
+        if args[:2] == ["git", "push"]:
+            push_calls["n"] += 1
+            if push_calls["n"] >= 2:
+                return CommandResult(1, "", "non-fast-forward")
+        return CommandResult(0, "", "")
+
+    monkeypatch.setattr(seams, "run_command", fake_run)
+    # A non-empty store so the backfill proceeds to the amend + second push.
+    monkeypatch.setattr(seams, "load_runs", lambda root: [{"ts": "t0", "pr_url": ""}])
+    monkeypatch.setattr(seams, "runs_store_path", lambda root: Path("/dev/null"))
+    with caplog.at_level("WARNING"):
+        url = GitHubPublisher().publish(
+            project_root=Path("/x"), branch="ai/x", title="T", body="B", flagged=False
+        )
+    assert url == "https://github.com/o/r/pull/9"
+    assert any("backfill pr_url" in r.message for r in caplog.records)
+
+
+def test_record_pr_url_noop_when_store_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No store / empty store: backfill is a no-op (no amend, no second push)."""
+    seen: list[list[str]] = []
+
+    def fake_run(args: list[str], *, cwd: Path) -> CommandResult:
+        seen.append(args)
+        if args[0] == "gh":
+            return CommandResult(0, "https://github.com/o/r/pull/3\n", "")
+        return CommandResult(0, "", "")
+
+    monkeypatch.setattr(seams, "run_command", fake_run)
+    monkeypatch.setattr(seams, "load_runs", lambda root: [])
+    url = GitHubPublisher().publish(
+        project_root=Path("/x"), branch="ai/x", title="T", body="B", flagged=False
+    )
+    assert url == "https://github.com/o/r/pull/3"
+    # Exactly one push (pre-create); no amend, no second push.
+    assert sum(1 for c in seen if c[:2] == ["git", "push"]) == 1
+    assert not any("--amend" in c for c in seen)

@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from tools.ai_techwriter.commands import run_command
 from tools.ai_techwriter.models import AgentResult, ContextPacket
+from tools.ai_techwriter.runs_store import load_runs, runs_store_path
 
 if TYPE_CHECKING:
     from tools.ai_techwriter.provider import ProviderConfig
@@ -236,7 +237,9 @@ class GitHubPublisher:
         result = run_command(args, cwd=project_root)
         if not result.ok:
             raise RuntimeError(f"gh pr create failed (rc={result.returncode}): {result.stderr}")
-        return result.stdout.strip()
+        url = result.stdout.strip()
+        _backfill_pr_url(project_root, branch, url)
+        return url
 
 
 class GitLabPublisher:
@@ -275,7 +278,9 @@ class GitLabPublisher:
         result = run_command(args, cwd=project_root)
         if not result.ok:
             raise RuntimeError(f"glab mr create failed (rc={result.returncode}): {result.stderr}")
-        return result.stdout.strip()
+        url = result.stdout.strip()
+        _backfill_pr_url(project_root, branch, url)
+        return url
 
 
 def _commit_changes(project_root: Path, branch: str, title: str) -> None:
@@ -319,10 +324,85 @@ def _git(project_root: Path, args: list[str], label: str) -> None:
 
 
 def _push_branch(project_root: Path, branch: str) -> None:
-    """Push *branch* to origin (create the upstream ref)."""
-    result = run_command(["git", "push", "--set-upstream", "origin", branch], cwd=project_root)
+    """Force-push *branch* to origin, creating/updating the upstream ref.
+
+    BUG-J: the refresh branch name is deterministic (derived from the doc
+    slugs), so a lingering branch from a prior run (e.g. an unmerged PR's head)
+    makes a plain ``git push`` fail non-fast-forward. The refresh branch is a
+    regenerated, bot-owned proposal branch, so force-pushing it is *correct* —
+    it updates the open PR/MR's head to the latest proposal. Plain ``--force``
+    (not ``--force-with-lease``) is right here: the branch is exclusively the
+    bot's, and a lease can't be established on a fresh CI checkout that just
+    created the local branch.
+    """
+    args = ["git", "push", "--force", "--set-upstream", "origin", branch]
+    result = run_command(args, cwd=project_root)
     if not result.ok:
         raise RuntimeError(f"git push failed (rc={result.returncode}): {result.stderr}")
+
+
+def _backfill_pr_url(project_root: Path, branch: str, url: str) -> None:
+    """Best-effort: stamp *url* into the run-record, then amend + re-push.
+
+    Closes the chicken-and-egg gap (the run-record is committed *before* the
+    PR/MR exists, so it always carried an empty ``pr_url``). Now that the branch
+    is force-pushable (BUG-J), after the PR/MR is created we: (1) write *url*
+    into the latest run-record entry, (2) ``git commit --amend --no-edit`` with
+    the bot identity, and (3) force-push so the PR head carries the URL.
+
+    This is best-effort polish — the PR/MR itself is the source of truth. If any
+    step fails the run is NOT failed: we log a warning and move on (the caller
+    still returns the real PR/MR URL).
+    """
+    try:
+        if not _record_pr_url(project_root, url):
+            return
+        _amend_commit(project_root)
+        _push_branch(project_root, branch)
+    except (RuntimeError, OSError) as exc:
+        logger.warning(
+            "could not backfill pr_url into the run-record (PR/MR already created at %s): %s",
+            url,
+            exc,
+        )
+
+
+def _record_pr_url(project_root: Path, url: str) -> bool:
+    """Write *url* into the last run-record entry; return True if one was updated.
+
+    No-op (returns False) when the store is absent/empty — there is nothing to
+    stamp, so the caller skips the amend + re-push.
+    """
+    records = load_runs(project_root)
+    if not records:
+        return False
+    records[-1]["pr_url"] = url
+    path = runs_store_path(project_root)
+    path.write_text(json.dumps(records, indent=2) + "\n", encoding="utf-8")
+    return True
+
+
+def _amend_commit(project_root: Path) -> None:
+    """Re-include the updated run-record into HEAD via ``commit --amend``.
+
+    Stages the run-record path and amends the existing commit (``--no-edit``,
+    same message) with the same inline bot identity as :func:`_commit_changes`,
+    so CI without a global git config can still amend.
+    """
+    _git(project_root, ["add", "--", *_STAGED_PATHS], "git add (amend)")
+    _git(
+        project_root,
+        [
+            "-c",
+            f"user.name={_BOT_NAME}",
+            "-c",
+            f"user.email={_BOT_EMAIL}",
+            "commit",
+            "--amend",
+            "--no-edit",
+        ],
+        "git commit --amend",
+    )
 
 
 class FakeAgentRunner:
