@@ -35,7 +35,9 @@ from tools.ai_techwriter.models import HarnessConfig, HarnessResult
 from tools.ai_techwriter.provider import ProviderConfig, default_recipe_path, qwen_provider
 from tools.ai_techwriter.runner import run_harness as _real_run_harness
 from tools.ai_techwriter.seams import (
+    GitHubPRBranchPublisher,
     GitHubPublisher,
+    GitLabPRBranchPublisher,
     GitLabPublisher,
     GooseAgentRunner,
     ReviewPublisher,
@@ -46,6 +48,12 @@ if TYPE_CHECKING:
 
 #: Supported CI platforms (RFC Q5 table) — both first-class.
 PLATFORMS = ("github", "gitlab")
+
+#: Publish targets (BDL-049). ``branch-pr`` is the original behaviour (cut a new
+#: branch + open a PR/MR) — kept for ``workflow_dispatch`` / manual runs with no
+#: PR context. ``pr-branch`` commits the refresh onto the EXISTING PR head
+#: branch + posts a comment (the ``on: pull_request`` path).
+TARGETS = ("branch-pr", "pr-branch")
 
 #: Type of the injectable run_harness seam (mirrors runner.run_harness).
 RunHarness = Callable[..., HarnessResult]
@@ -74,8 +82,17 @@ def _build_agent(project_root: Path, provider: ProviderConfig) -> AgentRunner:
     )
 
 
-def _build_publisher(platform: str) -> ReviewPublisher:
-    """Map the platform flag to its PR/MR adapter (the only platform seam)."""
+def _build_publisher(platform: str, target: str) -> ReviewPublisher:
+    """Map ``(platform, target)`` to its publish adapter (the only platform seam).
+
+    ``branch-pr`` keeps the original branch-cutting publishers (manual /
+    ``workflow_dispatch`` use, no PR context); ``pr-branch`` selects the
+    commit-onto-the-PR-head-branch publishers (BDL-049, ``on: pull_request``).
+    """
+    if target == "pr-branch":
+        if platform == "gitlab":
+            return GitLabPRBranchPublisher()
+        return GitHubPRBranchPublisher()
     if platform == "gitlab":
         return GitLabPublisher()
     return GitHubPublisher()
@@ -108,6 +125,14 @@ def _resolve(ctx: click.Context, key: str, default: object) -> object:
     "drift. An all-zero SHA (force-push / first-push) is treated as unset.",
 )
 @click.option(
+    "--target",
+    type=click.Choice(TARGETS),
+    default="branch-pr",
+    help="Publish target: 'branch-pr' (default) cuts a new branch + opens a "
+    "PR/MR (manual / workflow_dispatch); 'pr-branch' commits the refresh onto "
+    "the existing PR head branch + posts a comment (on: pull_request).",
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     default=False,
@@ -119,6 +144,7 @@ def main(
     platform: str,
     project_root: Path,
     since: str | None,
+    target: str,
     dry_run: bool,
 ) -> None:
     """Run the AI tech-writer harness for one CI platform.
@@ -131,13 +157,13 @@ def main(
 
     if dry_run:
         click.echo(f"dry-run: platform={platform} project-root={project_root}")
-        click.echo(f"dry-run: since={since_ref or '(stored sync_state)'}")
+        click.echo(f"dry-run: since={since_ref or '(stored sync_state)'} target={target}")
         click.echo("dry-run: would wire qwen_provider + GooseAgentRunner + publisher")
         return
 
     provider = qwen_provider()
     agent = _build_agent(project_root, provider)
-    publisher = _build_publisher(platform)
+    publisher = _build_publisher(platform, target)
     config = HarnessConfig(platform=platform)
 
     result = run(

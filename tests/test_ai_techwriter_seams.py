@@ -16,7 +16,9 @@ from tools.ai_techwriter.commands import CommandResult
 from tools.ai_techwriter.models import ContextPacket
 from tools.ai_techwriter.provider import qwen_provider
 from tools.ai_techwriter.seams import (
+    GitHubPRBranchPublisher,
     GitHubPublisher,
+    GitLabPRBranchPublisher,
     GitLabPublisher,
     GooseAgentRunner,
 )
@@ -669,3 +671,312 @@ def test_record_pr_url_noop_when_store_empty(
     # Exactly one push (pre-create); no amend, no second push.
     assert sum(1 for c in seen if c[:2] == ["git", "push"]) == 1
     assert not any("--amend" in c for c in seen)
+
+
+# --------------------------------------------------------------------------- #
+# BDL-049: pr-branch publish mode (commit onto the PR head branch + comment)
+# --------------------------------------------------------------------------- #
+
+
+def _has_staged_docs(args: list[str]) -> bool:
+    """True for the ``git diff --cached --quiet -- docs`` probe call."""
+    return args[:4] == ["git", "diff", "--cached", "--quiet"]
+
+
+def test_github_pr_branch_commits_to_current_branch_no_checkout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """pr-branch mode commits onto the CURRENT branch (no ``git checkout -b``)."""
+    seen: list[list[str]] = []
+
+    def fake_run(args: list[str], *, cwd: Path) -> CommandResult:
+        seen.append(args)
+        if _has_staged_docs(args):
+            return CommandResult(1, "", "")  # docs changed → commit
+        return CommandResult(0, "", "")
+
+    monkeypatch.setenv("PR_URL", "https://github.com/o/r/pull/5")
+    monkeypatch.setattr(seams, "run_command", fake_run)
+    url = GitHubPRBranchPublisher().publish(
+        project_root=Path("/x"),
+        branch="ignored-branch",
+        title="docs: AI tech-writer refresh (2 doc(s))",
+        body="B",
+        flagged=False,
+    )
+    # pr_url is resolved from the CI env (the PR pre-exists), NOT from gh.
+    assert url == "https://github.com/o/r/pull/5"
+    git_calls = [c for c in seen if c[0] == "git"]
+    # Never cuts a new branch — stays on the runner's PR-head checkout.
+    assert not any(c[:3] == ["git", "checkout", "-b"] for c in git_calls)
+    assert not any("checkout" in c for c in git_calls)
+    # Commit message starts with the loop-guard token.
+    commit_call = next(c for c in git_calls if "commit" in c)
+    msg = commit_call[commit_call.index("-m") + 1]
+    assert msg.startswith("[skip ai-techwriter]")
+    assert "docs: AI tech-writer refresh (2 doc(s))" in msg
+    # Bot identity inlined (CI without global git config still commits).
+    assert any("user.name=beadloom-ai-techwriter" in a for a in commit_call)
+    # Push is a PLAIN push of the current branch (HEAD), NOT a force-push.
+    push_call = next(c for c in git_calls if c[:2] == ["git", "push"])
+    assert "--force" not in push_call
+    assert push_call == ["git", "push", "origin", "HEAD"]
+
+
+def test_github_pr_branch_posts_pr_comment_not_pr_create(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """pr-branch mode posts a PR comment; it never runs ``gh pr create``."""
+    seen: list[list[str]] = []
+
+    def fake_run(args: list[str], *, cwd: Path) -> CommandResult:
+        seen.append(args)
+        if _has_staged_docs(args):
+            return CommandResult(1, "", "")
+        return CommandResult(0, "", "")
+
+    monkeypatch.setenv("PR_URL", "https://github.com/o/r/pull/8")
+    monkeypatch.setattr(seams, "run_command", fake_run)
+    GitHubPRBranchPublisher().publish(
+        project_root=Path("/x"), branch="b", title="T", body="summary body", flagged=False
+    )
+    gh_calls = [c for c in seen if c[0] == "gh"]
+    assert gh_calls, "a gh pr comment must be posted"
+    assert all("create" not in c for c in gh_calls)
+    comment = gh_calls[0]
+    assert comment[:3] == ["gh", "pr", "comment"]
+    assert "https://github.com/o/r/pull/8" in comment
+    assert "--body" in comment
+    assert comment[comment.index("--body") + 1] == "summary body"
+
+
+def test_github_pr_branch_zero_docs_skips_empty_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """0 docs changed → no empty commit and no push (record + comment only)."""
+    seen: list[list[str]] = []
+
+    def fake_run(args: list[str], *, cwd: Path) -> CommandResult:
+        seen.append(args)
+        if _has_staged_docs(args):
+            return CommandResult(0, "", "")  # nothing staged under docs → no-op
+        return CommandResult(0, "", "")
+
+    monkeypatch.setenv("PR_URL", "https://github.com/o/r/pull/2")
+    monkeypatch.setattr(seams, "run_command", fake_run)
+    url = GitHubPRBranchPublisher().publish(
+        project_root=Path("/x"), branch="b", title="T", body="B", flagged=False
+    )
+    assert url == "https://github.com/o/r/pull/2"
+    git_calls = [c for c in seen if c[0] == "git"]
+    assert not any("commit" in c for c in git_calls), "no empty commit on a 0-doc no-op"
+    assert not any(c[:2] == ["git", "push"] for c in git_calls), "nothing to push"
+    # The comment is still posted (the run happened).
+    assert any(c[0] == "gh" for c in seen)
+
+
+def test_github_pr_branch_comment_failure_does_not_fail_run(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A failing PR comment is best-effort: the run still succeeds (commit is it)."""
+
+    def fake_run(args: list[str], *, cwd: Path) -> CommandResult:
+        if args[0] == "gh":
+            return CommandResult(1, "", "gh comment boom")
+        if _has_staged_docs(args):
+            return CommandResult(1, "", "")
+        return CommandResult(0, "", "")
+
+    monkeypatch.setenv("PR_URL", "https://github.com/o/r/pull/4")
+    monkeypatch.setattr(seams, "run_command", fake_run)
+    with caplog.at_level("WARNING"):
+        url = GitHubPRBranchPublisher().publish(
+            project_root=Path("/x"), branch="b", title="T", body="B", flagged=False
+        )
+    assert url == "https://github.com/o/r/pull/4"
+    assert any("comment" in r.message.lower() for r in caplog.records)
+
+
+def test_github_pr_branch_pr_url_empty_when_env_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No PR_URL in env → pr_url is empty and no comment is attempted."""
+    seen: list[list[str]] = []
+
+    def fake_run(args: list[str], *, cwd: Path) -> CommandResult:
+        seen.append(args)
+        if _has_staged_docs(args):
+            return CommandResult(1, "", "")
+        return CommandResult(0, "", "")
+
+    monkeypatch.delenv("PR_URL", raising=False)
+    monkeypatch.setattr(seams, "run_command", fake_run)
+    url = GitHubPRBranchPublisher().publish(
+        project_root=Path("/x"), branch="b", title="T", body="B", flagged=False
+    )
+    assert url == ""
+    # Commit/push still happen; only the comment is skipped (no target).
+    assert any("commit" in c for c in seen if c[0] == "git")
+    assert not any(c[0] == "gh" for c in seen)
+
+
+def test_github_pr_branch_raises_on_push_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A real push failure (not the comment) still fails the run — the commit
+    must land on the PR branch."""
+
+    def fake_run(args: list[str], *, cwd: Path) -> CommandResult:
+        if args[:2] == ["git", "push"]:
+            return CommandResult(1, "", "push rejected")
+        if _has_staged_docs(args):
+            return CommandResult(1, "", "")
+        return CommandResult(0, "", "")
+
+    monkeypatch.setenv("PR_URL", "https://github.com/o/r/pull/1")
+    monkeypatch.setattr(seams, "run_command", fake_run)
+    with pytest.raises(RuntimeError, match="git push failed"):
+        GitHubPRBranchPublisher().publish(
+            project_root=Path("/x"), branch="b", title="T", body="B", flagged=False
+        )
+
+
+def test_gitlab_pr_branch_commits_and_posts_mr_note(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GitLab pr-branch: commit to current branch + ``glab mr note`` (not create)."""
+    seen: list[list[str]] = []
+
+    def fake_run(args: list[str], *, cwd: Path) -> CommandResult:
+        seen.append(args)
+        if _has_staged_docs(args):
+            return CommandResult(1, "", "")
+        return CommandResult(0, "", "")
+
+    monkeypatch.setenv("CI_MERGE_REQUEST_IID", "12")
+    monkeypatch.setenv(
+        "CI_MERGE_REQUEST_PROJECT_URL", "https://gitlab.com/o/r"
+    )
+    monkeypatch.setattr(seams, "run_command", fake_run)
+    url = GitLabPRBranchPublisher().publish(
+        project_root=Path("/x"), branch="b", title="T", body="note body", flagged=False
+    )
+    # Run-record URL composed from the CI MR env.
+    assert url == "https://gitlab.com/o/r/-/merge_requests/12"
+    glab_calls = [c for c in seen if c[0] == "glab"]
+    assert glab_calls, "a glab mr note must be posted"
+    assert all("create" not in c for c in glab_calls)
+    note = glab_calls[0]
+    assert note[:3] == ["glab", "mr", "note"]
+    assert "12" in note
+    git_calls = [c for c in seen if c[0] == "git"]
+    assert not any("checkout" in c for c in git_calls)
+    push_call = next(c for c in git_calls if c[:2] == ["git", "push"])
+    assert "--force" not in push_call
+
+
+def test_pr_branch_publishers_satisfy_protocol() -> None:
+    """Both pr-branch publishers are drop-in ReviewPublishers (seam-compatible)."""
+    assert isinstance(GitHubPRBranchPublisher(), seams.ReviewPublisher)
+    assert isinstance(GitLabPRBranchPublisher(), seams.ReviewPublisher)
+
+
+def test_pr_branch_real_git_commits_onto_current_branch_with_skip_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Real-git: pr-branch commits the doc edit onto the CURRENT (PR head) branch.
+
+    Exercises real ``git add / commit / push`` against a local bare origin; only
+    ``gh pr comment`` is mocked. Asserts: the commit lands on the checked-out
+    PR-head branch (no new branch is created), its message starts with
+    ``[skip ai-techwriter]`` (the loop-guard), it is authored by the bot, and
+    the pushed branch carries the doc edit + run-record.
+    """
+    work = tmp_path / "work"
+    work.mkdir()
+    bare = tmp_path / "origin.git"
+    _seed_repo_with_origin(work, bare)
+
+    # The runner is checked out on the PR head branch (NOT main).
+    pr_branch = "features/example"
+    _git_out(work, "checkout", "-b", pr_branch)
+    _git_out(work, "push", "-u", "origin", pr_branch)
+    head_before = _git_out(bare, "rev-parse", pr_branch).strip()
+
+    # Agent left an uncommitted doc edit; the harness wrote the run-record.
+    (work / "docs" / "graph.md").write_text("old\nrefreshed by AI\n", encoding="utf-8")
+    (work / ".beadloom").mkdir()
+    (work / ".beadloom" / "ai_techwriter_runs.json").write_text("[]\n", encoding="utf-8")
+
+    real_run = commands.run_command
+
+    def fake_run(args: list[str], *, cwd: Path) -> CommandResult:
+        if args[0] == "gh":
+            return CommandResult(0, "", "")
+        return real_run(args, cwd=cwd)
+
+    monkeypatch.setenv("PR_URL", "https://github.com/o/r/pull/55")
+    monkeypatch.setattr(seams, "run_command", fake_run)
+    url = GitHubPRBranchPublisher().publish(
+        project_root=work,
+        branch="ignored",
+        title="docs: AI tech-writer refresh (1 doc(s))",
+        body="B",
+        flagged=False,
+    )
+    assert url == "https://github.com/o/r/pull/55"
+
+    # No NEW branch was created — only the seed 'main' + the PR head branch exist.
+    branches = {
+        b.strip().lstrip("* ").strip()
+        for b in _git_out(work, "branch", "--format=%(refname:short)").splitlines()
+        if b.strip()
+    }
+    assert branches == {"main", pr_branch}
+
+    # The PR head branch advanced by one commit on origin.
+    head_after = _git_out(bare, "rev-parse", pr_branch).strip()
+    assert head_after != head_before
+
+    # The new commit carries the skip-token message + bot author + the changes.
+    subject = _git_out(bare, "log", "-1", "--format=%s", pr_branch).strip()
+    assert subject.startswith("[skip ai-techwriter]")
+    author = _git_out(bare, "log", "-1", "--format=%an", pr_branch).strip()
+    assert author == "beadloom-ai-techwriter"
+    doc_in_commit = _git_out(bare, "show", f"{head_after}:docs/graph.md")
+    assert "refreshed by AI" in doc_in_commit
+    tree = _git_out(bare, "show", "--stat", "--format=", head_after)
+    assert ".beadloom/ai_techwriter_runs.json" in tree
+
+
+def test_pr_branch_real_git_zero_docs_makes_no_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Real-git: a 0-doc run (only the record written) creates NO commit/push."""
+    work = tmp_path / "work"
+    work.mkdir()
+    bare = tmp_path / "origin.git"
+    _seed_repo_with_origin(work, bare)
+    pr_branch = "features/example"
+    _git_out(work, "checkout", "-b", pr_branch)
+    _git_out(work, "push", "-u", "origin", pr_branch)
+    head_before = _git_out(work, "rev-parse", "HEAD").strip()
+
+    # No doc edit — only the run-record changed (the flagged-needs-human case).
+    (work / ".beadloom").mkdir()
+    (work / ".beadloom" / "ai_techwriter_runs.json").write_text("[]\n", encoding="utf-8")
+
+    real_run = commands.run_command
+
+    def fake_run(args: list[str], *, cwd: Path) -> CommandResult:
+        if args[0] == "gh":
+            return CommandResult(0, "", "")
+        return real_run(args, cwd=cwd)
+
+    monkeypatch.setenv("PR_URL", "https://github.com/o/r/pull/66")
+    monkeypatch.setattr(seams, "run_command", fake_run)
+    url = GitHubPRBranchPublisher().publish(
+        project_root=work, branch="ignored", title="docs: refresh (0 doc(s))", body="B",
+        flagged=True,
+    )
+    assert url == "https://github.com/o/r/pull/66"
+    # HEAD did not move — no empty commit was created.
+    assert _git_out(work, "rev-parse", "HEAD").strip() == head_before

@@ -167,8 +167,11 @@ beadloom snapshot compare <pre-wave> <post-wave>   # architecture evolution this
 
 ## Per-wave commit checklist
 
+> Per-wave commits land on the `features/<ISSUE-KEY>` branch (trunk-based — see below), never directly on `main`.
+
 ```
 BEFORE WAVE COMMIT:
+□ On the features/<ISSUE-KEY> branch (NOT main — main is branch-protected)
 □ All wave beads closed (`bd ready` / `bd dep tree`; `bd swarm status` if epic)
 □ bd comments show checkpoints for every wave bead
 □ CONTEXT.md current (phase, new files, last-updated); ACTIVE.md reflects results
@@ -179,6 +182,27 @@ BEFORE WAVE COMMIT:
 ```
 
 ---
+
+## Trunk-based branching + PR-gated integration (MANDATORY)
+
+The coordinator runs the whole epic/feature on a **short-lived `features/<ISSUE-KEY>` branch** — `main` is branch-protected (no direct push). The wave/gate model above is unchanged; only *where* commits land and *how* they reach `main` changes:
+
+```
+git switch -c features/<ISSUE-KEY>        # once, at activation (branch off main)
+# ... waves run; per-wave commits land on features/<ISSUE-KEY> (NOT main) ...
+# when the epic/feature slice is green: open ONE PR features/<ISSUE-KEY> -> main
+```
+
+- **One branch per epic/feature.** All per-wave commits (dev → test → review → tech-writer) land on `features/<ISSUE-KEY>`, not `main`. The per-wave commit checklist still applies — it just commits to the feature branch.
+- **One PR to `main` per epic/feature** (or per shippable slice), opened after the local waves are green. Not one PR per commit — that is the solo-friction trap.
+- **The PR triggers the AI tech-writer + CI.** On `pull_request → main`, the AI tech-writer runs ONCE against the PR's diff (`--since` = merge-base) and **commits its doc refresh back INTO the PR branch** (no orphan doc-PR); `beadloom ci` runs as a **required status check**. A loop-guard (`[skip ai-techwriter]` + bot author) stops the agent's own push from re-triggering.
+- **Merge to `main` only when green.** Merge the PR only once CI is green AND the agent's doc refresh has landed in the PR. The human merges (no auto-merge). Because CI is a required check, `main` stays always-green.
+- **Gate the merge with `bd gate`** (the CI bridge already in this playbook):
+  ```bash
+  bd gate create --type gh:pr --blocks <merge-bead>   # block the merge bead until the PR's checks pass
+  bd gate discover && bd gate check                    # resolve + auto-close when green
+  ```
+- One-time per repo: `beadloom setup-branch-protection` configures `main` protection (PR required, `beadloom ci` a required check, owner still mergeable). See `.claude/CLAUDE.md` §6 Git.
 
 ## Conflict resolution
 

@@ -295,7 +295,20 @@ Roles are defined canonically in `.claude/agents/{dev,test,review,tech-writer}.m
 
 ---
 
-## 6. Git
+## 6. Git — Trunk-based development
+
+`main` is **branch-protected** (no direct push). All work integrates via a PR.
+
+```
+Trunk-based flow:
+1. Branch off main:   git switch -c features/{ISSUE-KEY}
+2. Commit per wave    onto features/{ISSUE-KEY} (dev → test → review → tech-writer)
+3. ONE PR to main     per epic/feature (or shippable slice) — not one PR per commit
+4. The PR triggers     the AI tech-writer (commits its doc refresh INTO the PR branch)
+                       + CI (`beadloom ci` is a REQUIRED status check)
+5. Merge when green    human merges once CI is green + the doc refresh has landed
+                       (no auto-merge; no direct push to main → main stays always-green)
+```
 
 ```
 Commit format:
@@ -306,6 +319,10 @@ Types: feat, fix, refactor, docs, test, chore
 Example:
 [MCP-001] feat: add health endpoint
 ```
+
+One-time per repo: `beadloom setup-branch-protection` configures `main` protection
+(PR required, `beadloom ci` a required check, `enforce_admins: false`, 0 required
+reviews → the owner stays mergeable). Safe to re-run.
 
 ---
 

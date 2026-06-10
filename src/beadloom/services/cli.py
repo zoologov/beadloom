@@ -1801,6 +1801,86 @@ def setup_agentic_flow(*, project: Path | None, force: bool) -> None:
 
 
 # beadloom:domain=onboarding
+@main.command("setup-branch-protection")
+@click.option(
+    "--repo",
+    "repo_slug",
+    required=True,
+    metavar="OWNER/NAME",
+    help="GitHub repository as owner/name (e.g. acme/widget).",
+)
+@click.option(
+    "--branch",
+    default="main",
+    show_default=True,
+    help="Branch to protect (the trunk).",
+)
+@click.option(
+    "--check",
+    "contexts",
+    multiple=True,
+    metavar="CONTEXT",
+    help="Required status-check context name (repeatable; default: the CI gate).",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Print the exact `gh api` call + payload without invoking GitHub.",
+)
+def setup_branch_protection(
+    *,
+    repo_slug: str,
+    branch: str,
+    contexts: tuple[str, ...],
+    dry_run: bool,
+) -> None:
+    """Configure trunk-based branch protection on ``main`` via ``gh api`` (BDL-049).
+
+    Idempotently sets `main` (or ``--branch``) protection so the trunk-based flow
+    is enforced: a PR is required (no direct push), ``beadloom ci`` is a REQUIRED
+    status check, ``enforce_admins: false`` + 0 required reviews so the owner is
+    never locked out (can self-merge). Safe to re-run (a declarative PUT).
+    ``--dry-run`` documents the exact call without touching GitHub.
+    """
+    from beadloom.onboarding.branch_protection import (
+        DEFAULT_STATUS_CHECK_CONTEXTS,
+        BranchProtectionRequest,
+        apply_branch_protection,
+    )
+
+    if "/" not in repo_slug or repo_slug.count("/") != 1 or repo_slug.startswith("/"):
+        raise click.BadParameter("--repo must be OWNER/NAME (e.g. acme/widget).")
+    owner, repo = repo_slug.split("/", 1)
+    if not owner or not repo:
+        raise click.BadParameter("--repo must be OWNER/NAME (e.g. acme/widget).")
+    check_contexts = contexts or DEFAULT_STATUS_CHECK_CONTEXTS
+
+    if dry_run:
+        request = BranchProtectionRequest(
+            owner=owner,
+            repo=repo,
+            branch=branch,
+            status_check_contexts=tuple(check_contexts),
+        )
+        click.echo("gh " + " ".join(request.gh_args()))
+        click.echo("--- payload (stdin) ---")
+        click.echo(request.payload_json())
+        return
+
+    apply_branch_protection(
+        owner,
+        repo,
+        branch=branch,
+        status_check_contexts=tuple(check_contexts),
+    )
+    click.echo(
+        f"Protected {owner}/{repo}@{branch}: PR required, "
+        f"{', '.join(check_contexts)} a required check, owner still mergeable."
+    )
+
+
+# beadloom:domain=onboarding
 @main.command("config-check")
 @click.option(
     "--fix",
