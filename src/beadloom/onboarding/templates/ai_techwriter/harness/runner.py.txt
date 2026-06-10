@@ -63,8 +63,12 @@ def run_harness(
     _repair_each_doc(project_root, stale, agent=agent, cfg=cfg, result=result)
     _run_fixpoint(project_root, cfg=cfg, result=result)
     _run_gate(project_root, result=result)
-    _publish(project_root, publisher=publisher, result=result)
+    # Emit the run-record BEFORE publishing: the publisher's commit stages the
+    # record file (``.beadloom/ai_techwriter_runs.json``) so it rides in the
+    # PR/MR — the record must exist on disk before the commit. (The 0-stale
+    # no-op above returns early: no record, no PR.)
     _emit_record(project_root, now_ts=now_ts, cfg=cfg, result=result)
+    _publish(project_root, publisher=publisher, result=result)
     return result
 
 

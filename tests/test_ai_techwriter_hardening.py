@@ -461,7 +461,7 @@ def test_gitlab_publisher_adds_needs_human_label_when_flagged(
         project_root=Path("/x"), branch="ai/z", title="T", body="B", flagged=True
     )
     assert url.endswith("/merge_requests/9")
-    mr_call = seen[1]
+    mr_call = next(c for c in seen if c[0] == "glab")
     assert "--label" in mr_call and "needs-human" in mr_call
 
 
@@ -480,7 +480,8 @@ def test_github_publisher_no_label_when_not_flagged(
     GitHubPublisher().publish(
         project_root=Path("/x"), branch="b", title="T", body="B", flagged=False
     )
-    assert "--label" not in seen[1]
+    gh_call = next(c for c in seen if c[0] == "gh")
+    assert "--label" not in gh_call
 
 
 # --------------------------------------------------------------------------- #

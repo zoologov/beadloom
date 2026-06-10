@@ -442,8 +442,40 @@ def test_run_record_emitted_with_injected_ts_and_fact_tokens(
     assert rec["output_tokens"] == 567
     assert rec["model"] == "qwen3.7-plus"
     assert rec["gate"] == "green"
-    assert rec["pr_url"] == "https://x/pr/9"
+    # The record is committed INSIDE the PR (emitted before publish), so it
+    # cannot yet know its own PR URL: the on-disk record has an empty pr_url.
+    # The live PR URL is still surfaced on the in-memory result for the CI log.
+    assert rec["pr_url"] == ""
     assert result.run_record is not None
+    assert result.pr_url == "https://x/pr/9"
+
+
+def test_emit_record_runs_before_publish(
+    project: Path, patch_substrate: dict[str, object]
+) -> None:
+    """BUG-B regression: the run-record must exist on disk BEFORE the publisher
+    commits, so it rides in the PR. We assert the record file already exists at
+    the moment ``publish`` is invoked."""
+    (project / "docs" / "graph.md").write_text("old", encoding="utf-8")
+    patch_substrate["scope"] = _ScriptedScope(
+        [_stale_report(("graph", "docs/graph.md", "symbols_changed", "src/g.py")), _CLEAN]
+    )
+
+    seen_at_publish: dict[str, bool] = {}
+
+    class _OrderProbePublisher(FakePublisher):
+        def publish(self, **kwargs: object) -> str:  # type: ignore[override]
+            seen_at_publish["record_existed"] = runs_store.runs_store_path(project).exists()
+            return super().publish(**kwargs)  # type: ignore[arg-type]
+
+    result = run_harness(
+        project,
+        agent=FakeAgentRunner(project_root=project),
+        publisher=_OrderProbePublisher(),
+        now_ts=NOW,
+    )
+    assert result.no_op is False
+    assert seen_at_publish["record_existed"] is True
 
 
 def test_run_record_appends_not_overwrites(project: Path) -> None:

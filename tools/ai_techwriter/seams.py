@@ -29,6 +29,19 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: Bot identity stamped on the auto-commit. Set inline on the ``git commit`` so
+#: CI runners without a global git config can still commit (no network, no user
+#: config required). A noreply address keeps the bot out of contributor stats.
+_BOT_NAME = "beadloom-ai-techwriter"
+_BOT_EMAIL = "beadloom-ai-techwriter@users.noreply.github.com"
+
+#: Paths staged into the auto-commit: the agent's doc edits AND the G9
+#: run-record (``.beadloom/ai_techwriter_runs.json`` is tracked — only the
+#: ``.beadloom/*.db`` files are gitignored). Staging the run-record guarantees a
+#: non-empty commit even when 0 docs changed (flagged-needs-human case), so
+#: ``git commit`` never fails on "nothing to commit".
+_STAGED_PATHS = ("docs", ".beadloom/ai_techwriter_runs.json")
+
 
 @runtime_checkable
 class AgentRunner(Protocol):
@@ -185,6 +198,7 @@ class GitHubPublisher:
         flagged: bool,
     ) -> str:
         """Push *branch* and open a GitHub PR; return its URL."""
+        _commit_changes(project_root, branch, title)
         _push_branch(project_root, branch)
         args = ["gh", "pr", "create", "--head", branch, "--title", title, "--body", body]
         if flagged:
@@ -208,6 +222,7 @@ class GitLabPublisher:
         flagged: bool,
     ) -> str:
         """Push *branch* and open a GitLab MR; return its URL."""
+        _commit_changes(project_root, branch, title)
         _push_branch(project_root, branch)
         args = [
             "glab",
@@ -227,6 +242,46 @@ class GitLabPublisher:
         if not result.ok:
             raise RuntimeError(f"glab mr create failed (rc={result.returncode}): {result.stderr}")
         return result.stdout.strip()
+
+
+def _commit_changes(project_root: Path, branch: str, title: str) -> None:
+    """Cut *branch* from the current checkout and commit the harness's changes.
+
+    The agent leaves its doc rewrites as uncommitted working-tree changes and
+    the harness writes the G9 run-record before publishing; neither is committed
+    yet. Without this step ``_push_branch`` would push ``main``'s HEAD under a
+    new branch name → an **empty** PR/MR (BUG-A). Here we:
+
+    1. ``git checkout -b <branch>`` from the current (main) checkout,
+    2. stage the doc edits **and** the run-record (:data:`_STAGED_PATHS`),
+    3. ``git commit`` with an inline bot identity so CI without a global git
+       config still commits.
+
+    The staged run-record guarantees a non-empty commit even when 0 docs
+    changed, so ``git commit`` never fails on "nothing to commit".
+    """
+    _git(project_root, ["checkout", "-b", branch], "git checkout -b")
+    _git(project_root, ["add", "--", *_STAGED_PATHS], "git add")
+    _git(
+        project_root,
+        [
+            "-c",
+            f"user.name={_BOT_NAME}",
+            "-c",
+            f"user.email={_BOT_EMAIL}",
+            "commit",
+            "-m",
+            title,
+        ],
+        "git commit",
+    )
+
+
+def _git(project_root: Path, args: list[str], label: str) -> None:
+    """Run a ``git`` subcommand in *project_root*; raise with *label* on failure."""
+    result = run_command(["git", *args], cwd=project_root)
+    if not result.ok:
+        raise RuntimeError(f"{label} failed (rc={result.returncode}): {result.stderr}")
 
 
 def _push_branch(project_root: Path, branch: str) -> None:
