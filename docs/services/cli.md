@@ -207,7 +207,20 @@ beadloom sync-update REF_ID --check [--project DIR]
 
 # Interactive: open stale docs in $EDITOR, mark synced after editing
 beadloom sync-update REF_ID [--project DIR]
+
+# Non-interactive: re-baseline freshness without an editor or prompt
+beadloom sync-update REF_ID --yes [--project DIR]
+
+# Non-interactive, fixpoint loop: re-baseline every currently-stale ref
+beadloom sync-update --all --yes [--project DIR]
 ```
+
+`--yes` (`-y`) records that the doc(s) for the ref match the code now (recomputes
+file hashes + symbols hash, sets `status='ok'`), prints a concise summary, and
+exits 0 — no editor, no prompt. This is the primitive a CI/script fixpoint loop
+uses to re-baseline freshness after a doc is rewritten; it is the same operation
+the interactive path performs after an edit. `--all` re-baselines every ref
+`sync-check` currently flags stale (deterministic; requires `--yes`).
 
 For automated doc updates, use your AI agent (Claude Code, Cursor, etc.) with Beadloom's MCP tools. See `.beadloom/AGENTS.md` for agent instructions.
 
@@ -543,7 +556,7 @@ Module `src/beadloom/services/cli.py`:
 - `doctor` -- run validation checks
 - `status` -- show index statistics with health trends and context metrics; `--debt-report` mode with `--fail-if`, `--category` flags
 - `sync_check` -- check doc-code sync with reason/details (reason-aware output for `untracked_files`, `missing_modules`, `symbols_changed`)
-- `sync_update` -- review and update stale docs interactively
+- `sync_update` -- review and update stale docs interactively; `--check` for status-only; `--yes`/`-y` for a non-interactive re-baseline; `--all` (with `--yes`) re-baselines every stale ref
 - `install_hooks` -- install/remove pre-commit hook
 - `link` -- manage external tracker links
 - `search` -- FTS5 search with LIKE fallback

@@ -1345,9 +1345,58 @@ def install_hooks(
 
 
 # beadloom:domain=doc-sync
+def _mark_synced_noninteractive(
+    conn: sqlite3.Connection,
+    project_root: Path,
+    *,
+    ref_id: str | None,
+    all_refs: bool,
+) -> None:
+    """Re-baseline freshness for a ref (or every stale ref) without prompting.
+
+    Wraps ``mark_synced_by_ref``: recomputes hashes + symbols_hash and records
+    ``status='ok'``. Prints a concise, deterministic summary and exits 0.
+    """
+    from beadloom.doc_sync.engine import check_sync, mark_synced_by_ref
+
+    if all_refs:
+        results = check_sync(conn, project_root=project_root)
+        stale_refs = sorted({r["ref_id"] for r in results if r["status"] == "stale"})
+        if not stale_refs:
+            click.echo("No stale refs to re-baseline.")
+            return
+        total = 0
+        for ref in stale_refs:
+            rows = mark_synced_by_ref(conn, ref, project_root)
+            total += rows
+            click.echo(f"Re-baselined {ref}: {rows} pair(s).")
+        click.echo(f"Marked {len(stale_refs)} ref(s) synced ({total} pair(s) total).")
+        return
+
+    assert ref_id is not None  # guaranteed by the command-level validation
+    rows = mark_synced_by_ref(conn, ref_id, project_root)
+    if rows == 0:
+        click.echo(f"No sync pairs found for {ref_id}; nothing to re-baseline.")
+        return
+    click.echo(f"Re-baselined {ref_id}: {rows} pair(s).")
+
+
 @main.command("sync-update")
-@click.argument("ref_id")
+@click.argument("ref_id", required=False)
 @click.option("--check", "check_only", is_flag=True, help="Only show status, don't open editor.")
+@click.option(
+    "--yes",
+    "-y",
+    "assume_yes",
+    is_flag=True,
+    help="Non-interactive: re-baseline freshness without an editor or prompt.",
+)
+@click.option(
+    "--all",
+    "all_refs",
+    is_flag=True,
+    help="With --yes: re-baseline every currently-stale ref (for the fixpoint loop).",
+)
 @click.option(
     "--project",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
@@ -1355,20 +1404,33 @@ def install_hooks(
     help="Project root (default: current directory).",
 )
 def sync_update(
-    ref_id: str,
+    ref_id: str | None,
     *,
     check_only: bool,
+    assume_yes: bool,
+    all_refs: bool,
     project: Path | None,
 ) -> None:
     """Show sync status and update docs for a ref_id.
 
     Use --check to only display status without opening an editor.
 
+    Use --yes (-y) for a non-interactive re-baseline (no editor/prompt): records
+    that the doc(s) match the code now. Add --all to re-baseline every stale ref
+    in one call (useful for an automated fixpoint loop).
+
     For automated doc updates, use your AI agent (Claude Code, Cursor, etc.)
     with Beadloom's MCP tools (update_node, mark_synced).
     """
     from beadloom.doc_sync.engine import check_sync
     from beadloom.infrastructure.db import open_db
+
+    if all_refs and not assume_yes:
+        raise click.UsageError("--all requires --yes (non-interactive only).")
+    if all_refs and ref_id is not None:
+        raise click.UsageError("--all and an explicit REF_ID are mutually exclusive.")
+    if not all_refs and ref_id is None:
+        raise click.UsageError("Provide a REF_ID (or use --all with --yes).")
 
     project_root = project or Path.cwd()
     db_path = project_root / ".beadloom" / "beadloom.db"
@@ -1378,6 +1440,12 @@ def sync_update(
         sys.exit(1)
 
     conn = open_db(db_path)
+
+    if assume_yes:
+        _mark_synced_noninteractive(conn, project_root, ref_id=ref_id, all_refs=all_refs)
+        conn.close()
+        return
+
     results = check_sync(conn, project_root=project_root)
     filtered = [r for r in results if r["ref_id"] == ref_id]
 
