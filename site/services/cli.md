@@ -35,6 +35,9 @@ Click-based CLI with 21 commands
 - `prime`
 - `reindex`
 - `search`
+- `setup_agentic_flow`
+- `setup_ai_techwriter`
+- `setup_branch_protection`
 - `setup_mcp`
 - `setup_rules`
 - `snapshot`

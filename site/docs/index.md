@@ -12,7 +12,11 @@ Domains documentation covers Application, Context Oracle, Doc Sync, Graph, Infra
 
 ## Guides
 
-Guides documentation covers Ci Setup, Vitepress Site.
+Guides documentation covers Agentic Flow, Ai Techwriter, Ci Setup, Vitepress Site.
+
+## Presentations
+
+Presentations documentation covers Beadloom Team 30min, Beadloom Team 30min Notes, README.
 
 ## Services
 

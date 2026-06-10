@@ -1,14 +1,14 @@
 <!-- beadloom:badge-start -->
 > ✅ **fresh**
 > 
-> last synced 2026-06-02T18:55:14.194946+00:00 · coverage 100% (`mcp-server`)
+> last synced 2026-06-10T21:18:54.402746+00:00 · coverage 100% (`mcp-server`)
 > 
 > _Validation by Beadloom `doc_sync` — same source as `sync-check`._
 <!-- beadloom:badge-end -->
 
 # MCP Server
 
-Beadloom provides an MCP (Model Context Protocol) server with 14 tools for integration with AI agents.
+Beadloom provides an MCP (Model Context Protocol) server with 18 tools for integration with AI agents: 14 read/write tools over the architecture graph, plus four **process-tools** (`task_init` / `bead_context` / `complete_bead` / `checkpoint`, added in BDL-048) that make the deterministic steps of Beadloom's multi-agent dev flow callable from any MCP client. See the [Agentic Dev Flow guide](../guides/agentic-flow.md).
 
 ## Specification
 
@@ -255,6 +255,73 @@ Get architecture debt report with score, categories, and top offenders.
 
 `trend` (boolean, default false): include trend vs last snapshot. `category` (string, optional): filter to specific category -- accepts `rule_violations`, `doc_gaps`, `complexity`, `test_gaps` (or short names: `rules`, `docs`, `tests`). Returns: `debt_score` (0-100), `severity` (clean/low/medium/high/critical), `categories` list (each with `name`, `score`, `details`), `top_offenders` list (each with `ref_id`, `score`, `reasons`), and `trend` (null or object with `previous_snapshot`, `previous_score`, `delta`, `category_deltas`).
 
+### Process-tools (BDL-048)
+
+Four tools that expose the deterministic steps of Beadloom's multi-agent dev flow to any MCP client. They are single deterministic operations — they do **NOT** orchestrate or spawn sub-agents (orchestration stays in the harness; see the honest boundary in the [Agentic Dev Flow guide](../guides/agentic-flow.md)). The three bead-touching tools drive the `bd` (beads) CLI through a thin, mockable seam (`services/bd_seam.py:run_bd`); if `bd` is absent they return a structured `{"status": "ERROR", ...}`.
+
+#### task_init
+
+Scaffold a work item: create its docs folder + per-type skeletons and a valid 4-role bead DAG.
+
+```json
+{
+  "name": "task_init",
+  "arguments": {
+    "type": "feature",
+    "key": "ABC-123"
+  }
+}
+```
+
+`type` (one of `epic`, `feature`, `bug`, `task`, `chore`) selects the doc set (PRD/RFC/CONTEXT/PLAN/ACTIVE for `epic`/`feature`; BRIEF/ACTIVE otherwise) and the bead type. `key` names the `.claude/development/docs/features/<key>/` folder. Creates a dev → test → review → tech-writer bead DAG (each role depending on the previous) via `bd`. Returns `{ "status": "OK", "bead_ids": [...], "doc_paths": [...] }` (or `{"status": "ERROR", ...}` with the partial `doc_paths`).
+
+#### bead_context
+
+Return ONE structured payload for a bead: graph context + impact + doc excerpt + active rules.
+
+```json
+{
+  "name": "bead_context",
+  "arguments": {
+    "bead": "bd-42"
+  }
+}
+```
+
+Resolves the bead's graph ref from a `ref:` (or `area:`) token in the bead's design/description via `bd show`, then reuses `context_oracle` (ctx + why) and `graph/rule_engine` (active rules). Read-only and deterministic. Returns `{ "status": "OK", "bead", "ref_id", "context", "impact", "active_rules", "doc_excerpt" }` (a `CONTEXT.md`/`ACTIVE.md` excerpt when locatable, else null). Returns `{"status": "ERROR", ...}` when the ref cannot be resolved or is not in the graph.
+
+#### complete_bead
+
+The **refusing completion gate**: run `beadloom ci` (+ tests) before closing a bead.
+
+```json
+{
+  "name": "complete_bead",
+  "arguments": {
+    "bead": "bd-42",
+    "run_tests": true
+  }
+}
+```
+
+Runs the `beadloom ci` gate (reindex → lint → sync-check → config-check → doctor, via `application/gate.run_ci_gate`) and, when `run_tests` is true (the default), the test suite. **On PASS** it closes the bead (`bd close --suggest-next`) and returns `{ "status": "PASS", "bead", "findings": [], "next": ... }`. **On FAIL** it does NOT close the bead — it returns `{ "status": "FAIL", "bead", "findings": [...] }` so the agent must fix the findings first. Set `run_tests=false` for a fast gate-only check (skips the suite). This gate is **advisory-strong**, not the true enforcement point — `beadloom ci` in CI remains the single source of true enforcement.
+
+#### checkpoint
+
+Record a checkpoint: a `bd comments add` plus a timestamped ACTIVE.md note.
+
+```json
+{
+  "name": "checkpoint",
+  "arguments": {
+    "bead": "bd-42",
+    "text": "CHECKPOINT: wired the parser"
+  }
+}
+```
+
+Adds `text` as a bead comment (preserves history) and, best-effort, appends a timestamped progress line to the bead's ACTIVE.md (skipped cleanly when the file cannot be located). Returns `{ "status": "OK", "bead", "comment_added": true, "active_updated": <bool> }`.
+
 ## API
 
 MCP server is implemented in `src/beadloom/services/mcp_server.py`:
@@ -278,6 +345,14 @@ Handler functions (sync, testable without MCP transport):
 - `handle_lint(project_root, *, severity="all")` -- architecture lint
 - `handle_get_debt_report(conn, project_root, *, trend=False, category=None)` -- architecture debt report
 
+Process-tool handlers (BDL-048; the three bead-touching ones drive `bd` via the `services/bd_seam.py:run_bd` seam):
+- `handle_task_init(project_root, *, type_, key)` -- scaffold docs folder + per-type skeletons + a 4-role bead DAG (dev → test → review → tech-writer)
+- `handle_bead_context(project_root, *, bead)` -- one payload: ctx + why + CONTEXT/ACTIVE excerpt + active rules (resolves the bead's graph ref from `bd show`)
+- `handle_complete_bead(project_root, *, bead, run_tests=True)` -- the refusing gate: `run_ci_gate` (+ tests); PASS closes the bead (`bd close --suggest-next`), FAIL returns findings and does NOT close; advisory-strong (CI is the true gate)
+- `handle_checkpoint(project_root, *, bead, text)` -- `bd comments add` + best-effort timestamped ACTIVE.md note
+
+The `bd` seam lives in `src/beadloom/services/bd_seam.py`: `run_bd(args, *, cwd=None)` returns a `BdResult(returncode, stdout, stderr)` (with `.ok`), and raises `BdUnavailableError` with a clear message when the `bd` binary is not on PATH. Tests patch this seam so the process-tools run without a real `bd` binary.
+
 ## Testing
 
-Tests in `tests/test_mcp_server.py` and `tests/test_mcp_new_tools.py` verify each handler directly (without MCP transport).
+Tests in `tests/test_mcp_server.py` and `tests/test_mcp_new_tools.py` verify each read/write handler directly (without MCP transport). The process-tools are tested in `tests/test_mcp_process_tools.py` (with the `bd` seam + gate mocked — `complete_bead` is asserted to REFUSE on a red gate and to close on green) and the seam itself in `tests/test_bd_seam.py`.

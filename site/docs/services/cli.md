@@ -1,7 +1,7 @@
 <!-- beadloom:badge-start -->
 > ✅ **fresh**
 > 
-> last synced 2026-06-02T18:55:14.194946+00:00 · coverage 100% (`cli`)
+> last synced 2026-06-10T21:18:54.402746+00:00 · coverage 100% (`cli`)
 > 
 > _Validation by Beadloom `doc_sync` — same source as `sync-check`._
 <!-- beadloom:badge-end -->
@@ -190,7 +190,7 @@ Checks:
 Check doc-code synchronization.
 
 ```bash
-beadloom sync-check [--porcelain] [--json] [--report] [--ref REF_ID] [--project DIR]
+beadloom sync-check [--porcelain] [--json] [--report] [--ref REF_ID] [--since GIT_REF] [--project DIR]
 ```
 
 Exit codes: 0 = all OK, 1 = error, 2 = stale pairs found.
@@ -199,6 +199,7 @@ Exit codes: 0 = all OK, 1 = error, 2 = stale pairs found.
 - `--json` -- structured JSON output with summary and pair details. Each pair includes `status`, `ref_id`, `doc_path`, `code_path`, `reason`, and optional `details`.
 - `--report` -- ready-to-post Markdown report for CI (GitHub/GitLab).
 - `--ref` -- filter results by ref_id.
+- `--since GIT_REF` -- compute drift against the code state at a **git ref** (e.g. the push's parent commit) instead of the stored `sync_state` baseline. Reports pairs whose code drifted since the ref while the doc was not correspondingly updated. This makes drift detection work on a **fresh CI checkout**: a clean clone reindexes from scratch and re-baselines `sync_state` to the just-pushed code, so without a ref baseline `sync-check` sees 0 stale even when the push left a doc behind. Mirrors `beadloom diff --since`. Used by the AI tech-writer harness (it passes the push parent — `github.event.before` / `$CI_COMMIT_BEFORE_SHA`, falling back to `HEAD~1`).
 
 Human-readable output includes reason-aware formatting:
 - `untracked_files` reason: displays list of untracked files in `details`.
@@ -215,7 +216,20 @@ beadloom sync-update REF_ID --check [--project DIR]
 
 # Interactive: open stale docs in $EDITOR, mark synced after editing
 beadloom sync-update REF_ID [--project DIR]
+
+# Non-interactive: re-baseline freshness without an editor or prompt
+beadloom sync-update REF_ID --yes [--project DIR]
+
+# Non-interactive, fixpoint loop: re-baseline every currently-stale ref
+beadloom sync-update --all --yes [--project DIR]
 ```
+
+`--yes` (`-y`) records that the doc(s) for the ref match the code now (recomputes
+file hashes + symbols hash, sets `status='ok'`), prints a concise summary, and
+exits 0 — no editor, no prompt. This is the primitive a CI/script fixpoint loop
+uses to re-baseline freshness after a doc is rewritten; it is the same operation
+the interactive path performs after an edit. `--all` re-baselines every ref
+`sync-check` currently flags stale (deterministic; requires `--yes`).
 
 For automated doc updates, use your AI agent (Claude Code, Cursor, etc.) with Beadloom's MCP tools. See `.beadloom/AGENTS.md` for agent instructions.
 
@@ -498,6 +512,8 @@ beadloom config-check --fix [--project DIR]  # regenerate drifted artifacts, the
 
 Re-runs the same `setup-rules --refresh` generator in memory and diffs its output against on-disk content for `.beadloom/AGENTS.md`, the auto-managed sections of `.claude/CLAUDE.md`, and present IDE adapter files. Checks ONLY auto-managed regions — editing user-authored prose (the AGENTS.md `custom` block, CLAUDE.md content outside the `auto-start`/`auto-end` markers) never trips it. Prints which file drifted, why, and the remediation (`beadloom setup-rules --refresh`); absent target files are skipped. `--fix` regenerates via the refresh path and re-checks. Delegates to `onboarding/config_sync.py:check_config_drift()`.
 
+As of BDL-048, when a repo has the agentic flow scaffolded (`beadloom setup-agentic-flow`), `config-check` also drift-checks the **scaffolded flow files**: each vendored `.claude/agents/*` + `.claude/commands/*` file is byte-compared against the shipped template. `--fix` re-drops the vendored flow files (`config_sync.refresh_agentic_flow_files`) alongside refreshing the CLAUDE.md auto-regions; the fix is gated on the flow already being scaffolded (it never forces the flow onto a repo that did not adopt it).
+
 ### beadloom ci
 
 The unified enforcement gate — the single CI convergence point (principle 7: identical for Cursor / Claude Code / human authors).
@@ -530,6 +546,110 @@ beadloom setup-mcp --remove [--tool {claude-code,cursor,windsurf}] [--project DI
 - `cursor` -- `.cursor/mcp.json` in project root
 - `windsurf` -- `~/.codeium/windsurf/mcp_config.json` (global)
 
+### beadloom setup-ai-techwriter
+
+Scaffold the AI tech-writer (BDL-047 / F4.1) into this repo for one-command,
+3-step opt-in. In the `setup-*` family alongside `setup-mcp` / `setup-rules`.
+
+```bash
+beadloom setup-ai-techwriter --platform {github,gitlab} [--project DIR]
+```
+
+Idempotently scaffolds (clean overwrite on re-run):
+
+- **Vendors** the deterministic harness package + Goose recipe into
+  `tools/ai_techwriter/`. The harness lives in repo tooling (not the `beadloom`
+  wheel), so on any target repo `python -m tools.ai_techwriter` would not
+  resolve; vendoring copies it in, making the setup self-contained (the runner
+  needs only `beadloom` + `goose` + python). The harness is shipped as package
+  data (`onboarding/templates/ai_techwriter/`, inert `.py.txt` assets kept
+  byte-identical to the live source by a drift-guard test — principle 5).
+- The chosen platform's CI wrapper: `.github/workflows/ai-techwriter.yml`
+  (GitHub) **or** an `ai-techwriter` job in `.gitlab-ci.yml` (GitLab). As of
+  BDL-049 both trigger on a **PR to main/master** — GitHub `on: pull_request`
+  (`opened`/`synchronize`/`reopened`), GitLab `merge_request_event` — plus a
+  manual fallback (`workflow_dispatch`). They call the same
+  `python -m tools.ai_techwriter` entrypoint; the PR path passes
+  `--target pr-branch` and `--since $(git merge-base origin/<base> HEAD)` so the
+  agent commits its refresh into the PR branch; the manual path uses
+  `--target branch-pr`. A loop-guard skips the agent's own
+  `[skip ai-techwriter]` commit, and `cancel-in-progress: true` supersedes older
+  runs. Only the trigger, the secret naming (`QWEN_API_KEY` repo secret vs CI/CD
+  variable), and `--platform` differ. An existing `.gitlab-ci.yml` is appended to
+  (job-only, stripping the standalone `stages:` header) — never blindly
+  clobbered; an already-wired file is left as-is.
+- `tools/ai_techwriter/provision-runner.sh` — a hardened, idempotent,
+  executable (`0o755`) self-hosted-runner provisioner (`--platform/--repo/--token`):
+  guarantees swap **before** any apt/build (the OOM lesson), RAM (~2 GB min,
+  ~4 GB recommended) + disk (~5 GB) prechecks, fail-hard on the critical
+  steps (toolchain + runner register/start), and best-effort + verified
+  Goose/beadloom/bd installs reported at the end.
+- `docs/guides/ai-techwriter.md` — the 3-step getting-started guide.
+
+Delegates to `onboarding/ai_techwriter_setup.py:scaffold()`.
+
+### beadloom setup-agentic-flow
+
+Scaffold Beadloom's proven multi-agent dev flow into this repo (BDL-048). In the
+`setup-*` family alongside `setup-rules` / `setup-mcp` / `setup-ai-techwriter`.
+
+```bash
+beadloom setup-agentic-flow [--project DIR] [--force]
+```
+
+Idempotently drops the role subagents
+(`.claude/agents/{dev,test,review,tech-writer}.md`) and slash skills
+(`.claude/commands/{coordinator,task-init,checkpoint,templates}.md`) — vendored
+**byte-identical** to Beadloom's own proven flow (a drift-guard test keeps the
+templates equal to the live `.claude/`) — plus a `.claude/CLAUDE.md` whose
+auto-regions are generated for THIS project (name / stack / version / packages)
+via the same `refresh_claude_md` machinery `setup-rules --refresh` uses (the
+CLAUDE.md version comes from Beadloom's own `__version__`, BDL-UX #92).
+
+A vendored file that already matches is left alone; a hand-edited file is
+**skipped** (reported as such) so user edits are not silently clobbered.
+`--force` overwrites hand-edited flow files. User prose outside the CLAUDE.md
+auto-regions is never touched. Delegates to
+`onboarding/agentic_flow_setup.py:scaffold()`.
+
+The command prints the **honest boundary**: the coordinator + `Agent`-spawn are
+Claude-Code-native (orchestration stays in the harness); the Beadloom MCP
+process-tools are the deterministic, tool-agnostic substrate the flow calls; and
+the single source of TRUE enforcement remains `beadloom ci` in CI (the in-flow
+gates are advisory-strong, not a substitute for CI). See the
+[Agentic Dev Flow guide](../guides/agentic-flow.md).
+
+### beadloom setup-branch-protection
+
+Configure trunk-based branch protection on `main` via `gh api` (BDL-049), so the
+CI gate becomes **true enforcement** rather than advisory. GitHub only.
+
+```bash
+beadloom setup-branch-protection --repo OWNER/NAME [--branch main] [--check CONTEXT]... [--dry-run]
+```
+
+Idempotently sets `main` (or `--branch`) protection with a declarative
+`PUT repos/{owner}/{repo}/branches/{branch}/protection`: a **PR is required** (no
+direct push), the always-on **`beadloom-gate` check is a required status check**
+(`strict: true`), and `enforce_admins: false` + 0 required reviews +
+`restrictions: null` so the **solo owner is never locked out** (can self-merge).
+`PUT .../protection` is declarative, so re-running re-settles the same state.
+
+- `--repo OWNER/NAME` (required) — the GitHub repository (e.g. `acme/widget`).
+- `--branch` (default `main`) — the trunk to protect.
+- `--check CONTEXT` (repeatable) — overrides the default required-check context
+  (`beadloom-gate`) **entirely**. A context MUST match a real GitHub check-run
+  name EXACTLY and must NOT be a **path-filtered** workflow's check: such a check
+  does not run on PRs that miss the filter, so under `strict: true` the PR — and
+  therefore `main` — would never become mergeable. (The repo's path-filtered
+  `Tests` legs are why they are not the default; a repo whose tests run on every
+  PR can require them via `--check`.)
+- `--dry-run` — print the exact `gh api` call + JSON payload without touching
+  GitHub.
+
+Delegates to `onboarding/branch_protection.py:apply_branch_protection()` (the
+`gh` invocation is injected via a `GhRunner` seam for mockable tests).
+
 ### beadloom mcp-serve
 
 Launch MCP stdio server.
@@ -550,8 +670,8 @@ Module `src/beadloom/services/cli.py`:
 - `federate` -- aggregate >=2 satellite export artifacts into one federated graph (drift verdicts + staleness)
 - `doctor` -- run validation checks
 - `status` -- show index statistics with health trends and context metrics; `--debt-report` mode with `--fail-if`, `--category` flags
-- `sync_check` -- check doc-code sync with reason/details (reason-aware output for `untracked_files`, `missing_modules`, `symbols_changed`)
-- `sync_update` -- review and update stale docs interactively
+- `sync_check` -- check doc-code sync with reason/details (reason-aware output for `untracked_files`, `missing_modules`, `symbols_changed`); `--since GIT_REF` measures drift against a git ref instead of the stored baseline (fresh-checkout / per-push drift detection)
+- `sync_update` -- review and update stale docs interactively; `--check` for status-only; `--yes`/`-y` for a non-interactive re-baseline; `--all` (with `--yes`) re-baselines every stale ref
 - `install_hooks` -- install/remove pre-commit hook
 - `link` -- manage external tracker links
 - `search` -- FTS5 search with LIKE fallback
@@ -565,7 +685,9 @@ Module `src/beadloom/services/cli.py`:
 - `prime` -- compact project context for AI agents
 - `setup_mcp` -- configure MCP server for editor
 - `setup_rules` -- create IDE rules files
-- `config_check` -- AgentConfigAsCode drift gate (`--fix` regenerates); reuses the `setup-rules --refresh` generator
+- `setup_ai_techwriter` -- scaffold the AI tech-writer (vendored harness + recipe + chosen platform CI wrapper + getting-started guide) for one-command opt-in; delegates to `onboarding/ai_techwriter_setup.py:scaffold()`
+- `setup_agentic_flow` -- scaffold the packaged multi-agent dev flow (`.claude/agents/*` + `commands/*` vendored byte-identical + CLAUDE.md auto-regions per-project); idempotent, `--force` overwrites hand-edited flow files; delegates to `onboarding/agentic_flow_setup.py:scaffold()`
+- `config_check` -- AgentConfigAsCode drift gate (`--fix` regenerates); reuses the `setup-rules --refresh` generator; also drift-checks/restores the scaffolded agentic-flow files when the flow is present
 - `ci` -- unified enforcement gate composing reindex -> lint -> sync-check -> config-check -> doctor -> (optional `--hub`) federate into one exit code; honest per-step PASS/FAIL/SKIP; uniform `--format {rich,json,github}` (github = valid `::error file=,line=` annotations); delegates to `application/gate.py:run_ci_gate()`
 - `mcp_serve` -- run MCP stdio server
 - `docs` -- Click group for doc commands (`generate`, `polish`, `audit`)
@@ -578,4 +700,4 @@ All commands accept `--project DIR` to specify the project root. The current dir
 
 ## Testing
 
-CLI is tested via `click.testing.CliRunner`. Each command has a corresponding test file in `tests/test_cli_*.py`: `test_cli_reindex.py`, `test_cli_ctx.py`, `test_cli_graph.py`, `test_cli_status.py`, `test_cli_sync_check.py`, `test_cli_sync_update.py`, `test_cli_hooks.py`, `test_cli_link.py`, `test_cli_docs.py`, `test_cli_mcp.py`, `test_cli_watch.py`, `test_cli_diff.py`, `test_cli_why.py`, `test_cli_lint.py`, `test_cli_init.py`, `test_cli_snapshot.py`, `test_cli_config_check.py`.
+CLI is tested via `click.testing.CliRunner`. Each command has a corresponding test file in `tests/test_cli_*.py`: `test_cli_reindex.py`, `test_cli_ctx.py`, `test_cli_graph.py`, `test_cli_status.py`, `test_cli_sync_check.py`, `test_cli_sync_update.py`, `test_cli_hooks.py`, `test_cli_link.py`, `test_cli_docs.py`, `test_cli_mcp.py`, `test_cli_watch.py`, `test_cli_diff.py`, `test_cli_why.py`, `test_cli_lint.py`, `test_cli_init.py`, `test_cli_snapshot.py`, `test_cli_config_check.py`, `test_cli_setup_agentic_flow.py`.

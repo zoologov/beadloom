@@ -1,4 +1,42 @@
 {
+  "ai_techwriter": {
+    "cost_estimate": {
+      "is_estimate": true,
+      "label": "est. @ $0.4/1M tokens",
+      "rate_usd_per_1m": 0.4,
+      "usd": 0.0723
+    },
+    "runs": [
+      {
+        "cumulative_docs": 2,
+        "cumulative_input_tokens": 97847,
+        "cumulative_output_tokens": 5347,
+        "docs_refreshed": 2,
+        "gate": "green",
+        "input_tokens": 97847,
+        "output_tokens": 5347,
+        "platform": "github",
+        "ts": "2026-06-10T13:43:00.650797+00:00"
+      },
+      {
+        "cumulative_docs": 3,
+        "cumulative_input_tokens": 171847,
+        "cumulative_output_tokens": 8847,
+        "docs_refreshed": 1,
+        "gate": "green",
+        "input_tokens": 74000,
+        "output_tokens": 3500,
+        "platform": "github",
+        "ts": "2026-06-10T20:59:17.618917+00:00"
+      }
+    ],
+    "totals": {
+      "docs_refreshed": 3,
+      "input_tokens": 171847,
+      "output_tokens": 8847,
+      "runs": 2
+    }
+  },
   "alerts": [],
   "debt": {
     "categories": [
@@ -106,21 +144,21 @@
   "docs": {
     "coverage_pct": 96.2,
     "documented": 25,
-    "fresh": 83,
+    "fresh": 86,
     "freshness_pct": 100.0,
     "nodes": 26,
     "stale": 0,
-    "tracked_pairs": 83
+    "tracked_pairs": 86
   },
   "doctor": {
     "by_severity": {
       "ok": 11,
-      "warning": 2
+      "warning": 7
     },
     "errors": 0,
     "passed": true,
-    "total": 13,
-    "warnings": 2
+    "total": 18,
+    "warnings": 7
   },
   "federated": null,
   "lint": {
@@ -171,7 +209,7 @@
     {
       "kind": "lint",
       "link": "/dashboard#application",
-      "message": "Node 'application' has 233 symbols (max 200): rule 'domain-size-limit' — `application` exceeds its limit (Node 'application' has 233 symbols (max 200): rule 'domain-size-limit'); split it into smaller nodes",
+      "message": "Node 'application' has 239 symbols (max 200): rule 'domain-size-limit' — `application` exceeds its limit (Node 'application' has 239 symbols (max 200): rule 'domain-size-limit'); split it into smaller nodes",
       "severity": "warn",
       "target": "application"
     },
@@ -199,14 +237,14 @@
       "value": "10.0 / 100"
     },
     {
-      "detail": "0 stale of 83 tracked",
+      "detail": "0 stale of 86 tracked",
       "group": "docs",
       "label": "Docs",
       "status": "ok",
       "value": "96.2% covered"
     },
     {
-      "detail": "0 errors, 2 warnings",
+      "detail": "0 errors, 7 warnings",
       "group": "doctor",
       "label": "Doctor",
       "status": "warn",
@@ -430,9 +468,9 @@
       "edges": 85,
       "lint_violations": 2,
       "nodes": 26,
-      "symbols": 791,
+      "symbols": 853,
       "sync_pct": 100.0,
-      "ts": "2026-06-02T19:54:46.079523+00:00"
+      "ts": "2026-06-10T21:47:50.306485+00:00"
     }
   ]
 }
