@@ -531,6 +531,50 @@ def test_fakes_satisfy_protocols() -> None:
     assert isinstance(FakePublisher(), ReviewPublisher)
 
 
+# --------------------------------------------------------------------------- #
+# BUG-E: branch-name dedup / disambiguation
+# --------------------------------------------------------------------------- #
+
+
+def test_branch_name_dedupes_duplicate_stems() -> None:
+    """BUG-E: many ``SPEC.md`` files must NOT produce refresh-SPEC-SPEC-SPEC.
+
+    Disambiguate with the parent-dir + stem and dedupe, so the slug is stable
+    and filesystem/git-safe.
+    """
+    docs = [
+        "docs/domains/graph/features/graph-diff/SPEC.md",
+        "docs/domains/context-oracle/features/search/SPEC.md",
+        "docs/domains/doc-sync/features/docs-audit/SPEC.md",
+    ]
+    branch = runner._branch_name(docs)
+    assert branch.startswith("ai-techwriter/refresh-")
+    assert "SPEC-SPEC-SPEC" not in branch
+    # Each doc contributes a DISTINCT, identifiable segment (parent-dir + stem).
+    assert "graph-diff" in branch
+    assert "search" in branch or "docs-audit" in branch
+
+
+def test_branch_name_is_deterministic_and_bounded() -> None:
+    docs = [f"docs/d{i}/SPEC.md" for i in range(40)]
+    a = runner._branch_name(docs)
+    b = runner._branch_name(list(reversed(docs)))
+    assert a == b  # order-independent (deterministic)
+    assert len(a) <= len("ai-techwriter/refresh-") + 60
+    assert "SPEC-SPEC" not in a
+
+
+def test_branch_name_collapses_when_too_many_docs() -> None:
+    docs = [f"docs/domains/d{i}/README.md" for i in range(30)]
+    branch = runner._branch_name(docs)
+    # Falls back to a count-based slug rather than an unbounded stem pile.
+    assert "30-docs" in branch
+
+
+def test_branch_name_empty_falls_back_to_docs() -> None:
+    assert runner._branch_name([]) == "ai-techwriter/refresh-docs"
+
+
 def test_runs_store_load_handles_missing_and_empty(project: Path) -> None:
     assert runs_store.load_runs(project) == []
     runs_store.runs_store_path(project).write_text("", encoding="utf-8")

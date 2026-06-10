@@ -16,16 +16,23 @@ description: >
   Rewrite exactly one drifted documentation file so it accurately reflects the
   current code, given a structured context packet assembled by the harness.
 
-# The harness passes the per-doc input packet (RFC Q4) as a single JSON param:
+# The harness writes the per-doc input packet (RFC Q4) to a TEMP FILE and passes
+# only its PATH here. BUG-C: the packet (full doc content + ctx + why + docs
+# polish JSON) is tens of KB on real docs and blows ARG_MAX if inlined on argv
+# (`[Errno 7] Argument list too long: 'goose'`), so the agent reads the JSON
+# from `packet_file` via the allowed read-only filesystem tool instead.
 #   { ref_id, doc_path, current_content, drift_reason, docs_polish_json, ctx, why }
 parameters:
-  - key: packet
+  - key: packet_file
     input_type: string
     requirement: required
     description: >
-      JSON context packet for the one drifted doc: ref_id, doc_path,
-      current_content, drift_reason (symbols_changed / hash_changed / untracked
-      + the changed code files), docs_polish_json[ref], ctx(ref), why(ref).
+      Absolute path to a temp JSON file holding the context packet for the one
+      drifted doc: ref_id, doc_path, current_content, drift_reason
+      (symbols_changed / hash_changed / untracked + the changed code files),
+      docs_polish_json[ref], ctx(ref), why(ref). Read it with the read-only
+      filesystem tool — it is NOT inlined (ARG_MAX). The harness deletes the
+      file after the run.
 
 # Quality first: extended thinking stays ENABLED (RFC Q2, principle 10). Cost is
 # bounded by scope + the harness's runaway hard caps, never by capping reasoning.
@@ -93,7 +100,9 @@ instructions: >
 
 prompt: |
   Refresh exactly ONE drifted documentation file so it accurately reflects the
-  current code. Everything you need is in the `packet` parameter (JSON):
+  current code. The `packet_file` parameter is the PATH to a JSON file holding
+  everything you need — read that file FIRST with the read-only filesystem tool
+  (it is NOT inlined as a parameter). The JSON has these fields:
 
     - ref_id            — the graph node this doc documents
     - doc_path          — the ONE file you may rewrite (under docs/**)
@@ -105,8 +114,9 @@ prompt: |
     - why               — `beadloom why <ref>`: impact / dependents
 
   Procedure:
-  1. Parse `packet`. Read the current doc and the code files named in
-     `drift_reason`. Use `beadloom ctx <ref_id>` / `beadloom why <ref_id>` and
+  1. Read the JSON file at `packet_file` and parse it. Read the current doc and
+     the code files named in `drift_reason`. Use `beadloom ctx <ref_id>` /
+     `beadloom why <ref_id>` and
      read-only `git diff` / `git show` to understand exactly what changed.
   2. Reconcile the doc against the new code semantics: update the summary,
      module list, API signatures (use the CURRENT signatures), and testing

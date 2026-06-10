@@ -17,14 +17,14 @@ from __future__ import annotations
 
 import json
 import logging
+import tempfile
+from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from tools.ai_techwriter.commands import run_command
 from tools.ai_techwriter.models import AgentResult, ContextPacket
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from tools.ai_techwriter.provider import ProviderConfig
 
 logger = logging.getLogger(__name__)
@@ -99,10 +99,31 @@ class GooseAgentRunner:
         self._provider = provider
 
     def run(self, packet: ContextPacket) -> AgentResult:
-        """Invoke Goose headless on *packet*; parse its usage report."""
-        args = self._build_command(packet)
-        env = self._provider.goose_env(api_key=self._provider.resolve_api_key())
-        result = run_command(args, cwd=self._project_root, env=env)
+        """Invoke Goose headless on *packet*; parse its usage report.
+
+        BUG-C: the packet (full doc content + ctx + why + docs-polish JSON) is
+        tens of KB on real docs and blows ``ARG_MAX`` if inlined on argv
+        (``[Errno 7] Argument list too long``). It is written to a temp file and
+        only the FILE PATH is passed to Goose (``--params packet_file=<path>``);
+        the recipe instructs the agent to read it via the allowed read-only FS
+        tool. The temp file is always cleaned up, even on error.
+        """
+        packet_json = json.dumps(_packet_payload(packet))
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            suffix=".json",
+            prefix="ai_techwriter_packet_",
+            delete=False,
+        ) as handle:
+            handle.write(packet_json)
+            packet_file = Path(handle.name)
+        try:
+            args = self._build_command(packet_file)
+            env = self._provider.goose_env(api_key=self._provider.resolve_api_key())
+            result = run_command(args, cwd=self._project_root, env=env)
+        finally:
+            packet_file.unlink(missing_ok=True)
         if not result.ok:
             logger.warning(
                 "goose run failed (rc=%d): %s",
@@ -112,16 +133,19 @@ class GooseAgentRunner:
             return _empty_result(self._provider.model)
         return _parse_goose_usage(result.stdout, default_model=self._provider.model, packet=packet)
 
-    def _build_command(self, packet: ContextPacket) -> list[str]:
-        """Construct the headless ``goose run`` argv (recipe + packet + caps)."""
-        packet_json = json.dumps(_packet_payload(packet))
+    def _build_command(self, packet_file: Path) -> list[str]:
+        """Construct the headless ``goose run`` argv (recipe + packet FILE + caps).
+
+        Only the *path* to the packet file goes on argv — never the payload — so
+        the invocation stays well under ``ARG_MAX`` regardless of doc size.
+        """
         return [
             "goose",
             "run",
             "--recipe",
             str(self._recipe_path),
             "--params",
-            f"packet={packet_json}",
+            f"packet_file={packet_file}",
             "--max-turns",
             str(self._provider.max_turns),
             "--no-session",
@@ -197,12 +221,18 @@ class GitHubPublisher:
         body: str,
         flagged: bool,
     ) -> str:
-        """Push *branch* and open a GitHub PR; return its URL."""
+        """Push *branch* and open a GitHub PR; return its URL.
+
+        BUG-D: no ``--label needs-human``. A flagged run already prefixes the
+        title with "⚠ needs human", so the label is redundant — and dropping it
+        removes the dependency on the target repo owning that label (``gh pr
+        create`` errors out with "could not add label: 'needs-human' not found"
+        otherwise). *flagged* still drives the title prefix upstream.
+        """
+        del flagged  # title already encodes the flagged state; no label needed.
         _commit_changes(project_root, branch, title)
         _push_branch(project_root, branch)
         args = ["gh", "pr", "create", "--head", branch, "--title", title, "--body", body]
-        if flagged:
-            args += ["--label", "needs-human"]
         result = run_command(args, cwd=project_root)
         if not result.ok:
             raise RuntimeError(f"gh pr create failed (rc={result.returncode}): {result.stderr}")
@@ -221,7 +251,13 @@ class GitLabPublisher:
         body: str,
         flagged: bool,
     ) -> str:
-        """Push *branch* and open a GitLab MR; return its URL."""
+        """Push *branch* and open a GitLab MR; return its URL.
+
+        BUG-D: no ``--label needs-human`` (same rationale as the GitHub path —
+        the title already prefixes "⚠ needs human" and the target project need
+        not own that label). *flagged* still drives the title prefix upstream.
+        """
+        del flagged  # title already encodes the flagged state; no label needed.
         _commit_changes(project_root, branch, title)
         _push_branch(project_root, branch)
         args = [
@@ -236,8 +272,6 @@ class GitLabPublisher:
             body,
             "--yes",
         ]
-        if flagged:
-            args += ["--label", "needs-human"]
         result = run_command(args, cwd=project_root)
         if not result.ok:
             raise RuntimeError(f"glab mr create failed (rc={result.returncode}): {result.stderr}")

@@ -447,9 +447,15 @@ def test_goose_usage_parse_handles_rewritten_paths_list(
 # --------------------------------------------------------------------------- #
 
 
-def test_gitlab_publisher_adds_needs_human_label_when_flagged(
+def test_gitlab_publisher_no_label_even_when_flagged(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """BUG-D: no ``--label needs-human`` even when flagged.
+
+    The flagged title already prefixes "⚠ needs human", so the label is
+    redundant and would require the target project to own a ``needs-human``
+    label (``glab mr create`` fails with "could not add label" otherwise).
+    """
     seen: list[list[str]] = []
 
     def fake_run(args: list[str], *, cwd: Path) -> CommandResult:
@@ -464,7 +470,8 @@ def test_gitlab_publisher_adds_needs_human_label_when_flagged(
     )
     assert url.endswith("/merge_requests/9")
     mr_call = next(c for c in seen if c[0] == "glab")
-    assert "--label" in mr_call and "needs-human" in mr_call
+    assert "--label" not in mr_call
+    assert "needs-human" not in mr_call
 
 
 def test_github_publisher_no_label_when_not_flagged(

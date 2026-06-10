@@ -11,6 +11,7 @@ and clock (``now_ts``). The agent and publisher are the only non-deterministic
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -30,11 +31,68 @@ from tools.ai_techwriter.runs_store import append_run
 from tools.ai_techwriter.scope import discover_scope
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from tools.ai_techwriter.seams import AgentRunner, ReviewPublisher
 
 logger = logging.getLogger(__name__)
 
 _BRANCH_PREFIX = "ai-techwriter/refresh-"
+#: Max length of the slug *after* the prefix (keeps the full ref git/FS-safe).
+_BRANCH_SLUG_MAX = 60
+#: Above this many distinct docs, the per-doc slug pile is meaningless noise —
+#: collapse to a deterministic count-based slug (``refresh-<n>-docs``) instead.
+_BRANCH_MANY_DOCS = 5
+#: Disambiguating segments are filesystem/git-safe lowercase ``a-z0-9-`` tokens.
+_SLUG_UNSAFE = re.compile(r"[^a-z0-9]+")
+
+
+def _doc_slug(doc_path: str) -> str:
+    """A git/FS-safe disambiguating slug for one doc: ``parent-stem``.
+
+    Using the parent directory + stem (not the bare stem) is what fixes BUG-E:
+    many ``SPEC.md`` files no longer collapse into ``SPEC-SPEC-SPEC`` — each
+    becomes e.g. ``graph-diff`` (``.../graph-diff/SPEC.md``). A bare-stem-only
+    doc (no informative parent, e.g. ``README.md`` at the doc root) falls back
+    to just the stem.
+    """
+    path = Path(doc_path)
+    parent = path.parent.name
+    stem = path.stem
+    raw = f"{parent}-{stem}" if parent and parent not in {".", "docs"} else stem
+    return _SLUG_UNSAFE.sub("-", raw.lower()).strip("-")
+
+
+def _branch_name(docs_refreshed: Sequence[str]) -> str:
+    """Deterministic, git/FS-safe branch name for the refreshed docs (BUG-E).
+
+    * Empty -> ``refresh-docs``.
+    * Many docs (> :data:`_BRANCH_MANY_DOCS`) -> ``refresh-<n>-docs`` (the
+      per-doc slug pile would be noise and risk overflowing the cap).
+    * Otherwise the deduped, sorted (order-independent) per-doc slugs joined by
+      ``-``, capped at :data:`_BRANCH_SLUG_MAX` chars on a segment boundary.
+    """
+    count = len(docs_refreshed)
+    if count == 0:
+        return f"{_BRANCH_PREFIX}docs"
+    if count > _BRANCH_MANY_DOCS:
+        return f"{_BRANCH_PREFIX}{count}-docs"
+    slugs = sorted({slug for p in docs_refreshed if (slug := _doc_slug(p))})
+    slug = _cap_segments(slugs) or "docs"
+    return f"{_BRANCH_PREFIX}{slug}"
+
+
+def _cap_segments(slugs: list[str]) -> str:
+    """Join *slugs* with ``-``, dropping whole segments to fit the length cap."""
+    out: list[str] = []
+    used = 0
+    for seg in slugs:
+        extra = len(seg) + (1 if out else 0)
+        if used + extra > _BRANCH_SLUG_MAX:
+            break
+        out.append(seg)
+        used += extra
+    return "-".join(out)
 
 
 def run_harness(
@@ -203,9 +261,7 @@ def _publish(
     project_root: Path, *, publisher: ReviewPublisher, result: HarnessResult
 ) -> None:
     """Open the PR/MR (flagged iff the run is not clean-green)."""
-    branch = _BRANCH_PREFIX + (
-        "-".join(sorted(Path(p).stem for p in result.docs_refreshed))[:60] or "docs"
-    )
+    branch = _branch_name(result.docs_refreshed)
     title = _title(result)
     body = _body(result)
     result.pr_url = publisher.publish(

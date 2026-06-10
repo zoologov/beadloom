@@ -196,16 +196,52 @@ def test_goose_runner_builds_command_with_recipe_provider_and_caps(
     assert args[:2] == ["goose", "run"]
     assert "--recipe" in args
     assert "/x/tools/ai_techwriter/recipe.yaml" in args
-    # the per-doc packet is passed as a recipe param
-    assert any(a.startswith("packet=") for a in args)
+    # BUG-C: the packet is NEVER inlined on argv (ARG_MAX blows on real docs).
+    # It is written to a temp file and only the FILE PATH is passed as a param.
+    assert not any(a.startswith("packet=") for a in args)
+    packet_file_params = [a for a in args if a.startswith("packet_file=")]
+    assert len(packet_file_params) == 1
+    packet_path = packet_file_params[0].split("=", 1)[1]
+    # No argv token carries the (potentially huge) packet JSON payload.
+    assert not any('"current_content"' in a for a in args)
     # generous runaway hard caps are wired (safety net, not a quality knob)
     assert "--max-turns" in args
+    # the temp packet file is cleaned up after the run (no leak).
+    assert not Path(packet_path).exists()
     # provider config wired via env; the key is the resolved secret value
     env = captured["env"]
     assert isinstance(env, dict)
     assert env["GOOSE_PROVIDER"] == "openai"
     assert env["GOOSE_MODEL"] == "qwen3.7-plus"
     assert env["OPENAI_API_KEY"] == "k-from-secret"
+
+
+def test_goose_runner_writes_full_packet_to_temp_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """BUG-C: the full packet (doc content + ctx + why + polish JSON) must be
+    written to the temp file the recipe reads — argv only carries the path."""
+    captured: dict[str, object] = {}
+
+    def fake_run(
+        args: list[str], *, cwd: Path, env: dict[str, str] | None = None
+    ) -> CommandResult:
+        path = next(a.split("=", 1)[1] for a in args if a.startswith("packet_file="))
+        # The file must exist (with its full payload) WHILE goose runs.
+        captured["payload"] = json.loads(Path(path).read_text(encoding="utf-8"))
+        return CommandResult(0, "{}", "")
+
+    monkeypatch.setattr(seams, "run_command", fake_run)
+    runner = GooseAgentRunner(
+        project_root=Path("/x"), recipe_path=Path("r.yaml"), provider=qwen_provider()
+    )
+    runner.run(_packet())
+    payload = captured["payload"]
+    assert isinstance(payload, dict)
+    assert payload["ref_id"] == "graph"
+    assert payload["doc_path"] == "docs/graph.md"
+    assert payload["current_content"] == "old"
+    assert payload["why"] == "why graph"
 
 
 def test_goose_runner_defaults_when_no_usage_line(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -289,7 +325,10 @@ def test_github_publisher_pushes_and_creates_pr(monkeypatch: pytest.MonkeyPatch)
     assert git_calls[3][1] == "push"
     gh_call = next(c for c in seen if c[0] == "gh")
     assert gh_call[:3] == ["gh", "pr", "create"]
-    assert "--label" in gh_call and "needs-human" in gh_call
+    # BUG-D: no --label needs-human (the title already prefixes "⚠ needs human";
+    # the repo need not own a 'needs-human' label).
+    assert "--label" not in gh_call
+    assert "needs-human" not in gh_call
 
 
 def test_github_publisher_raises_on_pr_failure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -330,13 +369,15 @@ def test_gitlab_publisher_pushes_and_creates_mr(monkeypatch: pytest.MonkeyPatch)
 
     monkeypatch.setattr(seams, "run_command", fake_run)
     url = GitLabPublisher().publish(
-        project_root=Path("/x"), branch="ai/y", title="T", body="B", flagged=False
+        project_root=Path("/x"), branch="ai/y", title="T", body="B", flagged=True
     )
     assert url == "https://gitlab.com/o/r/-/merge_requests/5"
     mr_call = next(c for c in seen if c[0] == "glab")
     assert mr_call[:3] == ["glab", "mr", "create"]
     assert "--source-branch" in mr_call
-    assert "--label" not in mr_call  # not flagged
+    # BUG-D: even when flagged, no --label needs-human (title prefixes it).
+    assert "--label" not in mr_call
+    assert "needs-human" not in mr_call
 
 
 def test_gitlab_publisher_raises_on_mr_failure(monkeypatch: pytest.MonkeyPatch) -> None:

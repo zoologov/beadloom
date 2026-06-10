@@ -137,9 +137,11 @@ def test_default_recipe_path_points_at_shipped_yaml() -> None:
 def test_recipe_declares_constrained_tool_allow_list() -> None:
     recipe = yaml.safe_load(default_recipe_path().read_text(encoding="utf-8"))
     assert isinstance(recipe, dict)
-    # The recipe takes the per-doc packet as a parameter.
+    # BUG-C: the recipe takes the PATH to the packet JSON (packet_file), never
+    # the inlined packet (ARG_MAX) — the agent reads the file with fs.read.
     param_names = {p["key"] for p in recipe["parameters"]}
-    assert "packet" in param_names
+    assert "packet_file" in param_names
+    assert "packet" not in param_names
     # Instructions port the tech-writer protocol (accuracy over volume, mark
     # unknowns, freshness-baseline gotcha, reconcile doc<->code).
     text = (recipe.get("instructions", "") + recipe.get("prompt", "")).lower()
