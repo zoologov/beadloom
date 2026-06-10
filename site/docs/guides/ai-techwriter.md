@@ -1,3 +1,9 @@
+<!-- beadloom:badge-start -->
+> 📘 **reference** — overview/guide, not tied to a code symbol
+> 
+> _Validation by Beadloom `doc_sync` — same source as `sync-check`._
+<!-- beadloom:badge-end -->
+
 # AI tech-writer in CI (BDL-047 / F4.1 · BDL-049)
 
 The **AI tech-writer** closes Beadloom's DocAsCode loop at the "fix" step. Beadloom

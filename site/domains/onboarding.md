@@ -13,12 +13,17 @@ Project bootstrap, doc import, architecture-aware presets, doc generation
 
 ## Public symbols
 
+- `BranchProtectionRequest`
 - `ConfigDrift`
+- `GhRunner`
 - `Preset`
 - `PresetRule`
+- `ScaffoldResult`
+- `apply_branch_protection`
 - `auto_link_docs`
 - `bootstrap_project`
 - `build_agents_md_content`
+- `build_protection_payload`
 - `check_config_drift`
 - `classify_doc`
 - `detect_preset`
@@ -32,10 +37,18 @@ Project bootstrap, doc import, architecture-aware presets, doc generation
 - `non_interactive_init`
 - `prime_context`
 - `read_deep_config`
+- `refresh_agentic_flow_files`
 - `refresh_claude_md`
+- `scaffold`
 - `scan_project`
 - `setup_mcp_auto`
 - `setup_rules_auto`
+- `sync_agentic_flow`
+- `sync_vendored_harness`
+- `templates_root`
+- `vendor_harness`
+- `vendored_flow_root`
+- `vendored_harness_root`
 
 ## Relationships
 

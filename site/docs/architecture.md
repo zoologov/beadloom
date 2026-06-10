@@ -30,7 +30,7 @@ The system is organized into six DDD domain packages, an application (use-case o
 - the VitePress site generators — `site.py` (orchestrator), `site_pages.py`, `site_nav.py`, `site_about.py`, `site_dashboard.py`, `site_landscape.py`, `site_published.py`, `site_mermaid_guard.py`, `site_metrics_history.py`
 
 **Interface layers:**
-- **Services** (`services/`) — **CLI** (`services/cli.py`, Click-based) and **MCP Server** (`services/mcp_server.py`, stdio server with 14 tools for AI agents). Both call into the application layer and Context Oracle; the CLI never reaches past those layers.
+- **Services** (`services/`) — **CLI** (`services/cli.py`, Click-based) and **MCP Server** (`services/mcp_server.py`, stdio server with 18 tools for AI agents — 14 graph read/write tools + four BDL-048 process-tools). Both call into the application layer and Context Oracle; the CLI never reaches past those layers.
 - **TUI** (`tui/`) — interactive terminal architecture workstation (Textual): dashboard, explorer, doc-status screens.
 
 A `layer` rule in `.beadloom/_graph/rules.yml` enforces the direction `services / tui → application → domains` (the interface layers depend inward; domains never depend on the application or service layers).

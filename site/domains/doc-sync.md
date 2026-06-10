@@ -25,6 +25,7 @@ Doc-code synchronization tracking and stale detection
 - `check_doc_coverage`
 - `check_source_coverage`
 - `check_sync`
+- `check_sync_since`
 - `chunk_markdown`
 - `classify_section`
 - `compare_facts`

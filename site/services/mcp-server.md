@@ -14,6 +14,9 @@ MCP stdio server with 14 tools for AI agents
 ## Public symbols
 
 - `create_server`
+- `handle_bead_context`
+- `handle_checkpoint`
+- `handle_complete_bead`
 - `handle_diff`
 - `handle_get_context`
 - `handle_get_debt_report`
@@ -24,6 +27,7 @@ MCP stdio server with 14 tools for AI agents
 - `handle_mark_synced`
 - `handle_search`
 - `handle_sync_check`
+- `handle_task_init`
 - `handle_update_node`
 - `handle_why`
 

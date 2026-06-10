@@ -1,7 +1,7 @@
 <!-- beadloom:badge-start -->
 > ✅ **fresh**
 > 
-> last synced 2026-06-02T18:55:14.194946+00:00 · coverage 50% (`doc-sync`)
+> last synced 2026-06-10T21:18:54.402746+00:00 · coverage 50% (`doc-sync`)
 > 
 > _Validation by Beadloom `doc_sync` — same source as `sync-check`._
 <!-- beadloom:badge-end -->
@@ -60,7 +60,7 @@ class SyncPair:
 - **doc_indexer.py** -- Markdown scanning, chunking by H2 headings, section classification, and SQLite population
 - **audit.py** -- Documentation audit: fact registry, comparator, and audit facade for detecting stale numeric facts
 - **scanner.py** -- Document scanner: keyword-proximity extraction of numeric fact mentions from markdown files
-- **cli.py** (in `services/cli.py`) -- `beadloom sync-check` CLI command with `--porcelain`, `--json`, `--report`, `--ref` options
+- **cli.py** (in `services/cli.py`) -- `beadloom sync-check` CLI command with `--porcelain`, `--json`, `--report`, `--ref`, `--since GIT_REF` options
 
 ### Features
 
@@ -95,7 +95,9 @@ beadloom install-hooks --mode block
 - `build_sync_state(conn: sqlite3.Connection) -> list[SyncPair]` -- Build sync pairs from docs and code_symbols sharing a ref_id.
 - `check_sync(conn: sqlite3.Connection, project_root: Path | None = None) -> list[dict[str, Any]]` -- Multi-phase sync check. Returns list of dicts with fields: `doc_path`, `code_path`, `ref_id`, `status`, `reason`, and optional `details`. Runs hash comparison, symbol drift detection, source coverage, and doc coverage checks.
 - `mark_synced(conn: sqlite3.Connection, doc_path: str, code_path: str, project_root: Path) -> None` -- Recompute hashes for a doc-code pair and mark as synced. Updates `symbols_hash` baseline.
-- `mark_synced_by_ref(conn: sqlite3.Connection, ref_id: str, project_root: Path) -> int` -- Mark all doc-code pairs for a ref_id as synced. Returns the number of rows updated.
+- `mark_synced_by_ref(conn: sqlite3.Connection, ref_id: str, project_root: Path) -> int` -- Mark all doc-code pairs for a ref_id as synced. Returns the number of rows updated. (Backs `beadloom sync-update --yes`/`--all`.)
+- `check_sync_since(conn: sqlite3.Connection, *, project_root: Path, since: str) -> list[dict[str, Any]]` -- Report doc-code pairs that drifted **relative to a git ref baseline** (instead of the stored `sync_state`). A pair is stale-since-ref iff its code file changed between `since` and the working tree **and** its linked doc was *not* correspondingly updated since `since` (if the doc also changed, the dev already touched it → `ok`). Reads git (`git show <ref>:<path>`) + disk only; mutates neither `sync_state` nor the working tree; result shape mirrors `check_sync` so the JSON/porcelain renderers are shared. This is what makes drift detection survive a fresh CI checkout (a clean clone re-baselines `sync_state` to the just-pushed code, masking per-push drift).
+- `_validate_git_ref(project_root: Path, ref: str) -> bool` -- `git rev-parse --verify <ref>`; an all-zero SHA (force-push / first-push sentinel) never resolves so it is rejected. Mirrors `graph.diff._validate_git_ref`.
 - `check_source_coverage(conn: sqlite3.Connection, project_root: Path) -> list[dict[str, Any]]` -- Check if all source files in a node's directory are tracked. Returns list of dicts with `ref_id`, `doc_path`, `untracked_files`.
 - `check_doc_coverage(conn: sqlite3.Connection, project_root: Path) -> list[dict[str, Any]]` -- Check if documentation mentions module names from the source directory. Returns list of dicts with `ref_id`, `doc_path`, `missing_modules`.
 
@@ -108,7 +110,7 @@ beadloom install-hooks --mode block
 ### CLI (`beadloom sync-check`)
 
 ```
-beadloom sync-check [--porcelain] [--json] [--report] [--ref REF_ID] [--project DIR]
+beadloom sync-check [--porcelain] [--json] [--report] [--ref REF_ID] [--since GIT_REF] [--project DIR]
 ```
 
 | Flag | Description |
@@ -117,6 +119,7 @@ beadloom sync-check [--porcelain] [--json] [--report] [--ref REF_ID] [--project 
 | `--json` | Structured JSON output with summary and pairs |
 | `--report` | Markdown report for CI posting |
 | `--ref` | Filter results by ref_id |
+| `--since` | Baseline = code state at this git ref (e.g. the push's parent) instead of the stored `sync_state`; reports pairs whose code drifted since the ref while the doc was not correspondingly updated. Delegates to `check_sync_since`; invalid/zero refs are rejected via `_validate_git_ref`. |
 | `--project` | Project root (default: current directory) |
 
 Exit codes: `0` = all ok, `1` = error, `2` = stale pairs found.

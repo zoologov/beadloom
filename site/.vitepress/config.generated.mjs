@@ -263,8 +263,19 @@ export const sidebar = [
         text: "Guides",
         collapsed: true,
         items: [
+          { text: "Agentic Flow", link: "/docs/guides/agentic-flow" },
+          { text: "Ai Techwriter", link: "/docs/guides/ai-techwriter" },
           { text: "Ci Setup", link: "/docs/guides/ci-setup" },
           { text: "Vitepress Site", link: "/docs/guides/vitepress-site" }
+        ],
+      },
+      {
+        text: "Presentations",
+        collapsed: true,
+        items: [
+          { text: "README", link: "/docs/presentations/README" },
+          { text: "Beadloom Team 30min Notes", link: "/docs/presentations/beadloom-team-30min-notes" },
+          { text: "Beadloom Team 30min", link: "/docs/presentations/beadloom-team-30min" }
         ],
       },
       {
