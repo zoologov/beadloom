@@ -63,13 +63,22 @@ def run_command(args: list[str], *, cwd: Path, env: dict[str, str] | None = None
     )
 
 
-def beadloom_sync_check_json(project_root: Path) -> dict[str, object]:
+def beadloom_sync_check_json(
+    project_root: Path, *, since: str | None = None
+) -> dict[str, object]:
     """Run ``beadloom sync-check --json`` and parse the report.
+
+    When *since* is given, the baseline becomes the code state at that git ref
+    (the push's parent commit) via ``--since <ref>`` — this is how CI detects
+    per-push drift that a fresh from-scratch reindex would otherwise mask.
 
     Exit code 2 means stale docs were found — that is expected data, not an
     error, so it is parsed normally.
     """
-    result = run_command(["beadloom", "sync-check", "--json"], cwd=project_root)
+    args = ["beadloom", "sync-check", "--json"]
+    if since:
+        args += ["--since", since]
+    result = run_command(args, cwd=project_root)
     if not result.stdout.strip():
         raise RuntimeError(
             f"sync-check produced no JSON (rc={result.returncode}): {result.stderr}"

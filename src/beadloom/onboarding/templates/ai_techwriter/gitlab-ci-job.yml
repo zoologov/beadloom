@@ -39,4 +39,12 @@ ai-techwriter:
     # masked CI/CD variables (never inlined), exposed to the job env automatically
     # so the harness resolves them at run time; the MR is opened
     # by the GitLabPublisher via glab inside the harness.
-    - uv run python -m tools.ai_techwriter --platform gitlab
+    #
+    # --since <push parent> makes drift detection baseline-relative (a fresh
+    # clone re-baselines sync_state to the just-pushed code, masking per-push
+    # drift otherwise). $CI_COMMIT_BEFORE_SHA is the push parent; it is an
+    # all-zero SHA on a first push / force-push and empty on a manual run — the
+    # guard falls back to HEAD~1 (the harness also treats a zero SHA as unset).
+    - since="$CI_COMMIT_BEFORE_SHA"
+    - case "$since" in ""|0000000000000000000000000000000000000000) since="HEAD~1" ;; esac
+    - uv run python -m tools.ai_techwriter --platform gitlab --since "$since"

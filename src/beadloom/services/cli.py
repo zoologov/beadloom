@@ -1075,6 +1075,14 @@ def status(
 @click.option("--report", "output_report", is_flag=True, help="Markdown report for CI posting.")
 @click.option("--ref", "ref_filter", default=None, help="Filter by ref_id.")
 @click.option(
+    "--since",
+    "since_ref",
+    default=None,
+    help="Baseline = code state at this git ref (e.g. the push's parent commit) "
+    "instead of the stored sync_state. Reports pairs whose code drifted since "
+    "the ref while the doc was not correspondingly updated.",
+)
+@click.option(
     "--project",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     default=None,
@@ -1086,13 +1094,14 @@ def sync_check(
     output_json: bool,
     output_report: bool,
     ref_filter: str | None,
+    since_ref: str | None,
     project: Path | None,
 ) -> None:
     """Check doc-code synchronization status.
 
     Exit codes: 0 = all ok, 1 = error, 2 = stale pairs found.
     """
-    from beadloom.doc_sync.engine import check_sync
+    from beadloom.doc_sync.engine import _validate_git_ref, check_sync, check_sync_since
     from beadloom.infrastructure.db import open_db
 
     project_root = project or Path.cwd()
@@ -1102,8 +1111,17 @@ def sync_check(
         click.echo("Error: database not found. Run `beadloom reindex` first.", err=True)
         sys.exit(1)
 
+    if since_ref is not None and (
+        set(since_ref) == {"0"} or not _validate_git_ref(project_root, since_ref)
+    ):
+        click.echo(f"Error: Invalid git ref: '{since_ref}'", err=True)
+        sys.exit(1)
+
     conn = open_db(db_path)
-    results = check_sync(conn, project_root=project_root)
+    if since_ref is not None:
+        results = check_sync_since(conn, project_root=project_root, since=since_ref)
+    else:
+        results = check_sync(conn, project_root=project_root)
     conn.close()
 
     if ref_filter:

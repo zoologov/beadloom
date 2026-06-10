@@ -54,6 +54,14 @@ jobs:
         run: uv run beadloom reindex
 
       # The one entrypoint. 0 stale → clean no-op exit 0; flagged → non-zero.
+      #
+      # --since <push parent> makes drift detection baseline-relative: a fresh
+      # checkout re-baselines sync_state to the just-pushed code, so without a
+      # ref baseline sync-check reports 0 stale even when the push left a doc
+      # behind. `github.event.before` is the push parent; it is an all-zero SHA
+      # on a first push / force-push, and unset on workflow_dispatch — the guard
+      # falls back to HEAD~1 in both cases (and the harness defensively treats a
+      # zero SHA as "no baseline" too).
       - name: Run AI tech-writer harness (GitHub)
         env:
           # Repository secret — never inlined; resolved only on the runner.
@@ -63,4 +71,10 @@ jobs:
           QWEN_BASE_URL: ${{ secrets.QWEN_BASE_URL }}
           # gh pr create authenticates with the job token.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: uv run python -m tools.ai_techwriter --platform github
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          since="$BEFORE_SHA"
+          case "$since" in
+            ""|0000000000000000000000000000000000000000) since="HEAD~1" ;;
+          esac
+          uv run python -m tools.ai_techwriter --platform github --since "$since"

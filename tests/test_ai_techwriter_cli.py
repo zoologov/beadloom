@@ -44,6 +44,7 @@ class _SpyHarness:
         publisher: object,
         now_ts: str,
         config: HarnessConfig | None = None,
+        since: str | None = None,
     ) -> HarnessResult:
         self.calls.append(
             {
@@ -52,6 +53,7 @@ class _SpyHarness:
                 "publisher": publisher,
                 "now_ts": now_ts,
                 "config": config,
+                "since": since,
             }
         )
         return self.result
@@ -82,6 +84,45 @@ def test_no_op_when_nothing_stale_exits_zero(project: Path) -> None:
     assert result.exit_code == 0, result.output
     assert spy.calls, "run_harness should have been invoked"
     assert spy.calls[0]["now_ts"] == "2026-06-10T00:00:00+00:00"
+
+
+def test_since_threaded_into_harness(project: Path) -> None:
+    """--since <ref> is passed straight through to run_harness."""
+    spy = _SpyHarness(HarnessResult(no_op=True, gate_passed=True))
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        ["--platform", "github", "--project-root", str(project), "--since", "abc123"],
+        obj={"run_harness": spy, "now": lambda: "T"},
+    )
+    assert result.exit_code == 0, result.output
+    assert spy.calls[0]["since"] == "abc123"
+
+
+def test_since_defaults_to_none(project: Path) -> None:
+    """No --since → run_harness gets since=None (stored-state baseline)."""
+    spy = _SpyHarness(HarnessResult(no_op=True, gate_passed=True))
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        ["--platform", "github", "--project-root", str(project)],
+        obj={"run_harness": spy, "now": lambda: "T"},
+    )
+    assert result.exit_code == 0, result.output
+    assert spy.calls[0]["since"] is None
+
+
+def test_since_zero_sha_normalized_to_none(project: Path) -> None:
+    """An all-zero SHA (force-push / first-push) falls back to None."""
+    spy = _SpyHarness(HarnessResult(no_op=True, gate_passed=True))
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        ["--platform", "github", "--project-root", str(project), "--since", "0" * 40],
+        obj={"run_harness": spy, "now": lambda: "T"},
+    )
+    assert result.exit_code == 0, result.output
+    assert spy.calls[0]["since"] is None
 
 
 def test_github_platform_wires_github_publisher(project: Path) -> None:

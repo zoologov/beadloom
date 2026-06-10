@@ -44,16 +44,24 @@ def run_harness(
     publisher: ReviewPublisher,
     now_ts: str,
     config: HarnessConfig | None = None,
+    since: str | None = None,
 ) -> HarnessResult:
     """Drive one full AI tech-writer run; return a structured result.
 
     *now_ts* is the injected timestamp stored in the run-record (never read
     from the wall clock here), mirroring ``site.py``'s ``now_ts``.
+
+    *since* (a git ref — the push's parent commit) governs only the *initial*
+    scope discovery: drift is measured against the code at that ref so a fresh
+    CI checkout still sees the per-push drift. The fixpoint + per-doc freshness
+    re-checks intentionally use the stored-state path: after the agent rewrites
+    a doc and ``sync-update`` re-baselines it, "fresh" means consistent with the
+    working tree, not with the (now-superseded) parent commit.
     """
     cfg = config or HarnessConfig()
     result = HarnessResult(model="")
 
-    stale = discover_scope(project_root)
+    stale = discover_scope(project_root, since=since)
     if not stale:
         logger.info("ai-techwriter: 0 stale docs — no-op")
         result.no_op = True

@@ -101,22 +101,37 @@ def _resolve(ctx: click.Context, key: str, default: object) -> object:
     help="Repo root to operate on (defaults to the current directory).",
 )
 @click.option(
+    "--since",
+    default=None,
+    help="Baseline = code state at this git ref (the push's parent commit). "
+    "Drift is measured against it so a fresh CI checkout still detects per-push "
+    "drift. An all-zero SHA (force-push / first-push) is treated as unset.",
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     default=False,
     help="Report the wiring and exit WITHOUT running the harness (no model/PR).",
 )
 @click.pass_context
-def main(ctx: click.Context, platform: str, project_root: Path, dry_run: bool) -> None:
+def main(
+    ctx: click.Context,
+    platform: str,
+    project_root: Path,
+    since: str | None,
+    dry_run: bool,
+) -> None:
     """Run the AI tech-writer harness for one CI platform.
 
     Thin wrapper: assemble seams → inject a real timestamp → run_harness.
     """
     now = cast("Callable[[], str]", _resolve(ctx, "now", _default_now))
     run = cast("RunHarness", _resolve(ctx, "run_harness", _real_run_harness))
+    since_ref = _normalize_since(since)
 
     if dry_run:
         click.echo(f"dry-run: platform={platform} project-root={project_root}")
+        click.echo(f"dry-run: since={since_ref or '(stored sync_state)'}")
         click.echo("dry-run: would wire qwen_provider + GooseAgentRunner + publisher")
         return
 
@@ -131,8 +146,26 @@ def main(ctx: click.Context, platform: str, project_root: Path, dry_run: bool) -
         publisher=publisher,
         now_ts=now(),
         config=config,
+        since=since_ref,
     )
     _report(result)
+
+
+def _normalize_since(since: str | None) -> str | None:
+    """Drop empty / all-zero SHAs (force-push / first-push sentinel) to None.
+
+    CI passes ``github.event.before`` / ``$CI_COMMIT_BEFORE_SHA``, which is an
+    all-zero SHA on a first push or a force-push. The shell guard in the wrapper
+    already falls back to ``HEAD~1`` for that case, but this is a defensive
+    second line: an unusable baseline becomes the default (stored-state) path
+    rather than an error.
+    """
+    if since is None:
+        return None
+    stripped = since.strip()
+    if not stripped or set(stripped) == {"0"}:
+        return None
+    return stripped
 
 
 def _report(result: HarnessResult) -> None:

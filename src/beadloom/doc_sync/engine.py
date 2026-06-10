@@ -7,6 +7,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -293,6 +294,108 @@ def check_sync(
             )
 
     conn.commit()
+    return results
+
+
+def _validate_git_ref(project_root: Path, ref: str) -> bool:
+    """Check a git ref resolves, mirroring ``graph.diff._validate_git_ref``.
+
+    Uses ``git rev-parse --verify <ref>``. An all-zero SHA (force-push /
+    first-push sentinel) never resolves, so it is rejected here too.
+    """
+    result = subprocess.run(  # noqa: S603
+        ["git", "rev-parse", "--verify", ref],  # noqa: S607
+        cwd=project_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def _file_content_at_ref(project_root: Path, rel_path: str, ref: str) -> str | None:
+    """Return *rel_path* content at *ref* via ``git show``, or None if absent.
+
+    Non-destructive: reads from the object store, never touches the working
+    tree or any beadloom DB.
+    """
+    result = subprocess.run(  # noqa: S603
+        ["git", "show", f"{ref}:{rel_path}"],  # noqa: S607
+        cwd=project_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout
+
+
+def _hash_text(text: str) -> str:
+    """SHA-256 of *text* (UTF-8), matching :func:`_file_hash`'s digest."""
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def check_sync_since(
+    conn: sqlite3.Connection,
+    *,
+    project_root: Path,
+    since: str,
+) -> list[dict[str, Any]]:
+    """Report doc-code pairs that drifted **relative to a git ref baseline**.
+
+    Unlike :func:`check_sync` (which compares against the stored ``sync_state``
+    baseline), this compares the *current* working tree against the code state
+    captured at ``since``. A fresh CI checkout re-baselines ``sync_state`` to
+    the just-pushed code, masking per-push drift; the ref baseline is immune to
+    that because it reads the parent commit straight from git history.
+
+    A tracked pair is **stale-since-ref** iff:
+
+    * its code file changed between ``since`` and the working tree, **and**
+    * its linked doc was *not* correspondingly updated since ``since``.
+
+    If the doc *also* changed since ``since`` the dev already touched it, so the
+    pair is reported ``ok`` (we never re-flag a doc the dev just updated).
+
+    Pure and deterministic (no wall-clock); reads git + disk only, mutates
+    neither ``sync_state`` nor the working tree. The result list mirrors
+    :func:`check_sync`'s shape so the JSON/porcelain renderers are shared.
+    """
+    sync_rows = conn.execute(
+        "SELECT doc_path, code_path, ref_id FROM sync_state"
+    ).fetchall()
+
+    results: list[dict[str, Any]] = []
+    for row in sync_rows:
+        doc_path = row["doc_path"]
+        code_path = row["code_path"]
+        ref_id = row["ref_id"]
+        if not code_path:
+            continue
+
+        code_at_ref = _file_content_at_ref(project_root, code_path, since)
+        current_code_hash = _file_hash(project_root / code_path)
+        ref_code_hash = _hash_text(code_at_ref) if code_at_ref is not None else None
+        code_drifted = ref_code_hash != current_code_hash
+
+        doc_rel = str(Path("docs") / doc_path)
+        doc_at_ref = _file_content_at_ref(project_root, doc_rel, since)
+        current_doc_hash = _file_hash(project_root / "docs" / doc_path)
+        ref_doc_hash = _hash_text(doc_at_ref) if doc_at_ref is not None else None
+        doc_changed = ref_doc_hash != current_doc_hash
+
+        stale = code_drifted and not doc_changed
+        results.append(
+            {
+                "doc_path": doc_path,
+                "code_path": code_path,
+                "ref_id": ref_id,
+                "status": "stale" if stale else "ok",
+                "reason": "hash_changed" if stale else "ok",
+            }
+        )
+
     return results
 
 

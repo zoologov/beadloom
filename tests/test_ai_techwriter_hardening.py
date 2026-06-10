@@ -88,7 +88,9 @@ def patch_substrate(monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str, objec
         "sync_update_calls": [],
     }
 
-    def fake_sync_check(project_root: Path) -> dict[str, object]:
+    def fake_sync_check(
+        project_root: Path, *, since: str | None = None
+    ) -> dict[str, object]:
         report: dict[str, object] = state["scope"](project_root)  # type: ignore[operator]
         return report
 

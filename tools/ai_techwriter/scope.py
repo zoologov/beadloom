@@ -15,12 +15,16 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def discover_scope(project_root: Path) -> list[DriftItem]:
+def discover_scope(project_root: Path, *, since: str | None = None) -> list[DriftItem]:
     """Return the stale doc refs (with drift reasons) for *project_root*.
+
+    When *since* is given, drift is measured against the code state at that git
+    ref (the push's parent commit) rather than the stored sync_state — the CI
+    path, immune to a fresh-checkout re-baseline masking per-push drift.
 
     Empty list => nothing drifted => the harness no-ops (clean exit).
     """
-    report = beadloom_sync_check_json(project_root)
+    report = beadloom_sync_check_json(project_root, since=since)
     return parse_scope(report)
 
 
