@@ -174,6 +174,40 @@ class TestApply:
         assert body["required_status_checks"]["contexts"] == ["Beadloom Gate"]
 
 
+class TestDefaultRunner:
+    """The default :class:`GhRunner` shells out to the real ``gh`` CLI.
+
+    We mock ``subprocess.run`` so nothing touches GitHub: the test asserts the
+    argv + stdin are forwarded faithfully and stdout is returned (BDL-050
+    hardening — previously the default-runner branch was uncovered).
+    """
+
+    def test_default_runner_forwards_argv_and_stdin(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import subprocess
+
+        from beadloom.onboarding import branch_protection as bp
+
+        seen: dict[str, object] = {}
+
+        class _Completed:
+            stdout = '{"ok": true}'
+
+        def fake_run(argv: list[str], **kwargs: object) -> _Completed:
+            seen["argv"] = argv
+            seen["input"] = kwargs.get("input")
+            seen["check"] = kwargs.get("check")
+            return _Completed()
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        # No ``runner=`` → the production _subprocess_runner default is exercised.
+        req = bp.apply_branch_protection("acme", "widget")
+        assert seen["argv"] == ["gh", *req.gh_args()]
+        assert seen["input"] == req.payload_json()
+        assert seen["check"] is True
+
+
 class TestCli:
     def test_dry_run_prints_exact_gh_call_without_invoking(self) -> None:
         """--dry-run documents the exact gh api call and does NOT touch GitHub."""
