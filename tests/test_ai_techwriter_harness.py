@@ -16,6 +16,7 @@ from tools.ai_techwriter.models import (
     ContextPacket,
     DriftItem,
     HarnessConfig,
+    HarnessResult,
     RunRecord,
 )
 from tools.ai_techwriter.packet import build_packet, select_polish_for_ref
@@ -716,3 +717,52 @@ def test_doc_still_drifted_since_ref_after_repair_flags_not_green(
     assert any("still" in r and "graph" in r for r in result.flagged_reasons)
     assert result.run_record is not None
     assert result.run_record.gate == "flagged"
+
+
+# --------------------------------------------------------------------------- #
+# BDL-050: classify_verdict (ok / flagged / infra) — tokens>0 discriminator
+# --------------------------------------------------------------------------- #
+
+
+def test_verdict_ok_for_noop() -> None:
+    """A 0-stale no-op classifies as ``ok`` (nothing to gate)."""
+    result = HarnessResult(no_op=True, gate_passed=True)
+    assert runner.classify_verdict(result) == "ok"
+
+
+def test_verdict_ok_for_clean_run() -> None:
+    """A clean (not flagged) run classifies as ``ok`` regardless of tokens."""
+    result = HarnessResult(
+        docs_refreshed=["docs/a.md"], gate_passed=True, input_tokens=100, output_tokens=50
+    )
+    assert runner.classify_verdict(result) == "ok"
+
+
+def test_verdict_flagged_when_flagged_and_tokens_produced() -> None:
+    """flagged + the model produced output (tokens>0) => genuine doc problem."""
+    result = HarnessResult(
+        flagged=True,
+        flagged_reasons=["beadloom ci failed (rc=1)"],
+        input_tokens=10,
+        output_tokens=0,
+    )
+    assert runner.classify_verdict(result) == "flagged"
+
+
+def test_verdict_infra_when_flagged_and_no_tokens() -> None:
+    """flagged + NO tokens at all => the agent never ran => ``infra`` (don't block)."""
+    result = HarnessResult(
+        flagged=True,
+        flagged_reasons=["agent failed for graph after 3 attempts"],
+        input_tokens=0,
+        output_tokens=0,
+    )
+    assert runner.classify_verdict(result) == "infra"
+
+
+def test_verdict_boundary_one_token_is_flagged_not_infra() -> None:
+    """The discriminator is exact: a single output token => flagged, not infra."""
+    one = HarnessResult(flagged=True, input_tokens=0, output_tokens=1)
+    zero = HarnessResult(flagged=True, input_tokens=0, output_tokens=0)
+    assert runner.classify_verdict(one) == "flagged"
+    assert runner.classify_verdict(zero) == "infra"

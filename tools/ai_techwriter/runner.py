@@ -37,6 +37,41 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: The three CI verdicts (BDL-050). ``ok`` / ``flagged`` gate as before; ``infra``
+#: is the new "couldn't run" bucket that must NOT block a PR (a dead self-hosted
+#: runner / an exhausted model quota is not a doc problem).
+VERDICT_OK = "ok"
+VERDICT_FLAGGED = "flagged"
+VERDICT_INFRA = "infra"
+
+
+def classify_verdict(result: HarnessResult) -> str:
+    """Classify a finished run into ``ok`` / ``flagged`` / ``infra`` (BDL-050).
+
+    The discriminator between a genuine doc problem and an infra failure is
+    **whether the model ever produced output** (``input_tokens + output_tokens``):
+
+    * **ok** — a 0-stale no-op OR a clean run (``not flagged``). Nothing to gate.
+    * **flagged** (BLOCK) — ``flagged`` AND the agent produced tokens
+      (``> 0``): the model ran but the docs aren't clean (post-refresh
+      ``beadloom ci`` red, fixpoint not reached, or budget exceeded mid-work).
+      A real "needs human" → the CI required check goes red.
+    * **infra** (DON'T block) — ``flagged`` AND **no tokens at all** (``== 0``):
+      every agent attempt failed before producing a single token (process /
+      goose error, provider 5xx / timeout, exhausted quota). It *couldn't run*,
+      so blocking the PR would freeze all merges on dead infra.
+
+    Conservative by construction: ``tokens == 0`` ⇒ ``infra``; *any* token ⇒
+    the ``flagged`` verdict stands. A misclassified ``infra`` is made loud by the
+    CI annotation, so a human re-runs rather than silently shipping stale docs.
+    """
+    if not result.flagged:
+        return VERDICT_OK
+    if result.input_tokens + result.output_tokens > 0:
+        return VERDICT_FLAGGED
+    return VERDICT_INFRA
+
+
 _BRANCH_PREFIX = "ai-techwriter/refresh-"
 #: Max length of the slug *after* the prefix (keeps the full ref git/FS-safe).
 _BRANCH_SLUG_MAX = 60

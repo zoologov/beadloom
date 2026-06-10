@@ -1,25 +1,24 @@
-# AI tech-writer (BDL-047 / F4.1 · BDL-049) — GitHub wrapper around the harness.
+# Consolidated PR pipeline (BDL-050) — replaces the three independent PR
+# workflows (beadloom-gate.yml / tests.yml / ai-techwriter.yml) with ONE ordered
+# pipeline so merge-ability means "everything that protects main is green":
 #
-# Thin wrapper: it only triggers + wires the secret + picks the platform flag.
-# All orchestration lives in tools/ai_techwriter (python -m tools.ai_techwriter).
-# The GitLab counterpart (.gitlab-ci.yml ai-techwriter job) calls the SAME
-# entrypoint — only the trigger, the secret naming, and --platform differ
-# (RFC Q5 table). Distinct from tests.yml / deploy-site.yml (do not touch those).
-name: AI tech-writer
+#   PR open ─► gate ─┐
+#             tests ─┼─(all green?)─► ai-techwriter ─► PR unblocked
+#        site-build ─┘   └─(any red)──► ai-techwriter skipped → PR blocked
+#
+# gate / tests / site-build run in parallel on GitHub-hosted runners;
+# ai-techwriter (self-hosted VPS where Goose + the API key live) has
+# `needs: [gate, tests, site-build]` so a broken PR never spends Qwen tokens.
+# deploy-site.yml stays the ONLY thing on push:main (main is green by
+# construction under strict trunk-based — BDL-049).
+name: CI
 
 on:
-  # BDL-049: trunk-based. Fire on a PR to main/master — run ONCE per PR against
-  # the PR's own diff (--since merge-base below). The agent commits its doc
-  # refresh ONTO the PR head branch (--target pr-branch) so code + docs become
-  # one reviewable PR; the loop-guard step keeps the agent's own push from
-  # re-triggering the `synchronize` event. (push:main removed — was per-push,
-  # could red main, and spawned orphan doc-PRs.)
+  # Trunk-based (BDL-049): fire once per PR to main/master.
   pull_request:
     types: [opened, synchronize, reopened]
     branches: [main, master]
-  # Manual dispatch stays useful (re-run on demand over an explicit baseline).
-  # It has no PR context, so it keeps the branch-PR publish path (HEAD~1 / the
-  # given `since`), distinct from the pull_request path below.
+  # Manual dispatch keeps the ai-techwriter branch-PR fallback (no PR context).
   workflow_dispatch:
     inputs:
       since:
@@ -27,23 +26,115 @@ on:
         required: false
         default: ""
 
-# The pr-branch publisher pushes the refresh commit (contents) + posts a PR
-# comment (pull-requests).
+# One run per PR; cancel a superseded run when a new commit lands.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+# ai-techwriter's pr-branch publisher pushes the refresh commit (contents) +
+# posts a PR comment (pull-requests).
 permissions:
   contents: write
   pull-requests: write
 
-# One run per PR; cancel a superseded run when a new commit lands (G8).
-concurrency:
-  group: ai-techwriter-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
+  # ---------------------------------------------------------------------- #
+  # gate — the beadloom ci verdict (reindex -> lint -> sync-check -> doctor).
+  # Same composite Action satellites consume (was beadloom-gate.yml).
+  # ---------------------------------------------------------------------- #
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Beadloom gate
+        uses: ./.github/actions/beadloom-gate
+        with:
+          format: github
+
+  # ---------------------------------------------------------------------- #
+  # tests — the 3.10-3.13 matrix (was tests.yml). NO paths filter: it runs on
+  # every PR so each leg is a reliable required check (G2).
+  # ---------------------------------------------------------------------- #
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra languages --extra tui --extra watch
+
+      - name: Lint (ruff)
+        run: uv run ruff check src/ tests/ tools/
+
+      - name: Type check (mypy)
+        # tools/ holds the BDL-047 AI tech-writer harness (repo tooling, not the
+        # installed beadloom wheel) — type-checked alongside the core package.
+        run: uv run mypy src/ tools/
+
+      - name: Tests with coverage
+        run: uv run pytest --cov=beadloom --cov-report=term-missing --cov-fail-under=80
+
+  # ---------------------------------------------------------------------- #
+  # site-build — regenerate + build the VitePress site on every PR (G3, closes
+  # beadloom-wozp). The BUILD half of deploy-site (NO Pages deploy) — catches
+  # VitePress/mermaid/interpolation breaks BEFORE they land on main.
+  # ---------------------------------------------------------------------- #
+  site-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra languages
+
+      - name: Reindex graph
+        run: uv run beadloom reindex
+
+      - name: Generate the site from the graph
+        run: uv run beadloom docs site --out site
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install site dependencies
+        run: npm ci
+        working-directory: site
+
+      - name: Build the VitePress site
+        run: npm run docs:build
+        working-directory: site
+
+  # ---------------------------------------------------------------------- #
+  # ai-techwriter — runs ONLY after gate + tests + site-build are green, so a
+  # broken PR never spends Qwen tokens (US-1). Body copied VERBATIM from the
+  # retired ai-techwriter.yml (BDL-049 model) — only the trigger moved into this
+  # file + the `needs:` was added. Do NOT change the harness invocation.
+  # ---------------------------------------------------------------------- #
   ai-techwriter:
+    needs: [gate, tests, site-build]
     # Self-hosted VPS runner where Goose + the API key live (RFC Q5).
     runs-on: [self-hosted, ai-techwriter]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # Full history so git diff / the merge-base / the gate can read prior
           # state; check out the PR HEAD branch so the agent can commit onto it.
@@ -52,9 +143,9 @@ jobs:
           # Persist a PAT (AI_TW_PAT) as the git credential `git push` uses.
           # WHY: GitHub does NOT re-trigger workflows on pushes authored by the
           # default GITHUB_TOKEN (anti-recursion) — so the agent's refresh
-          # commit would NOT fire `beadloom-gate`, leaving the required check
+          # commit would NOT fire the `gate` check, leaving the required check
           # missing on the PR HEAD → unmergeable. A PAT-authored push is a
-          # normal push → it triggers `beadloom-gate`. The `[skip ai-techwriter]`
+          # normal push → it triggers `gate`. The `[skip ai-techwriter]`
           # loop-guard above still stops THIS workflow re-running on that push.
           # Falls back to github.token when AI_TW_PAT is absent (variant-C:
           # PAT-less repos still check out + run, just without auto-gating).
@@ -75,7 +166,7 @@ jobs:
 
       - name: Install uv
         if: env.AI_TW_SKIP != '1'
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
 
       # Beadloom (the substrate) + the harness deps, pinned via the lockfile.
       - name: Install Beadloom + harness deps
@@ -106,7 +197,7 @@ jobs:
           # DashScope gateway in the harness when unset.
           QWEN_BASE_URL: ${{ secrets.QWEN_BASE_URL }}
           # gh push + gh pr comment authenticate with the PAT so the agent's
-          # refresh commit triggers `beadloom-gate` (GITHUB_TOKEN pushes are
+          # refresh commit triggers the `gate` check (GITHUB_TOKEN pushes are
           # non-recursive — see the checkout token comment above). Falls back to
           # GITHUB_TOKEN when AI_TW_PAT is absent (variant-C).
           GH_TOKEN: ${{ secrets.AI_TW_PAT || secrets.GITHUB_TOKEN }}

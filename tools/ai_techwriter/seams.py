@@ -88,6 +88,22 @@ class ReviewPublisher(Protocol):
         ...
 
 
+@runtime_checkable
+class CommentPublisher(Protocol):
+    """A publisher that can post a standalone comment on the existing PR/MR.
+
+    BDL-050 ``infra`` path: when the agent never ran (tokens==0) there is no
+    refresh to publish, but the entrypoint still wants to leave a best-effort
+    "could not run — docs were NOT checked" note on the PR/MR. The pr-branch
+    publishers (which already resolve the pre-existing PR/MR from the CI env)
+    implement this; other publishers simply do not, so the caller skips it.
+    """
+
+    def comment(self, *, project_root: Path, body: str) -> bool:
+        """Post *body* on the pre-existing PR/MR; return True iff it was posted."""
+        ...
+
+
 class GooseAgentRunner:
     """Real agent seam: shells out to Goose with a recipe + provider + packet.
 
@@ -335,6 +351,19 @@ class GitHubPRBranchPublisher:
             _post_pr_comment(project_root, ["gh", "pr", "comment", pr_url, "--body", body])
         return pr_url
 
+    def comment(self, *, project_root: Path, body: str) -> bool:
+        """Best-effort note on the pre-existing PR (BDL-050 infra path).
+
+        Resolves the PR from :data:`_GH_PR_URL_ENV` (the same env the publish
+        path uses); with no PR context there is nothing to comment on, so it is
+        a no-op (returns False). Never raises — the caller already has the loud
+        ``::warning::`` annotation as the primary signal.
+        """
+        pr_url = os.environ.get(_GH_PR_URL_ENV, "").strip()
+        if not pr_url:
+            return False
+        return _post_pr_comment(project_root, ["gh", "pr", "comment", pr_url, "--body", body])
+
 
 class GitLabPRBranchPublisher:
     """BDL-049 pr-branch mode for GitLab MRs (mirror of the GitHub path).
@@ -364,6 +393,18 @@ class GitLabPRBranchPublisher:
         if iid:
             _post_pr_comment(project_root, ["glab", "mr", "note", iid, "--message", body])
         return mr_url
+
+    def comment(self, *, project_root: Path, body: str) -> bool:
+        """Best-effort note on the pre-existing MR (BDL-050 infra path).
+
+        Resolves the MR IID from :data:`_GL_MR_IID_ENV`; with no MR context it
+        is a no-op (returns False). Never raises — the ``::warning::`` annotation
+        is the primary signal.
+        """
+        iid = os.environ.get(_GL_MR_IID_ENV, "").strip()
+        if not iid:
+            return False
+        return _post_pr_comment(project_root, ["glab", "mr", "note", iid, "--message", body])
 
 
 def _gitlab_mr_url(iid: str) -> str:
@@ -430,12 +471,13 @@ def _push_current_branch(project_root: Path) -> None:
         raise RuntimeError(f"git push failed (rc={result.returncode}): {result.stderr}")
 
 
-def _post_pr_comment(project_root: Path, args: list[str]) -> None:
+def _post_pr_comment(project_root: Path, args: list[str]) -> bool:
     """Post a PR/MR comment best-effort: log + swallow failure (commit is it).
 
     Mirrors :func:`_backfill_pr_url`'s best-effort discipline — the refresh
     commit on the PR branch is the deliverable, so a flaky ``gh``/``glab``
-    comment never fails the run.
+    comment never fails the run. Returns True iff the comment was posted (the
+    BDL-050 ``infra`` path uses this to know whether the note actually landed).
     """
     result = run_command(args, cwd=project_root)
     if not result.ok:
@@ -444,6 +486,7 @@ def _post_pr_comment(project_root: Path, args: list[str]) -> None:
             result.returncode,
             result.stderr[:500],
         )
+    return result.ok
 
 
 def _commit_changes(project_root: Path, branch: str, title: str) -> None:
