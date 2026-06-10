@@ -3,8 +3,16 @@
 
 Trunk-based development (CLAUDE.md §6 Git) requires ``main`` to be
 branch-protected: every change integrates via a PR (no direct push) and the
-``beadloom ci`` gate is a **required status check**, so the gate becomes true
+``beadloom-gate`` check is a **required status check**, so the gate becomes true
 enforcement (hardening BDL-048 G5) rather than advisory CI.
+
+.. important::
+   A required status-check context must match a **real GitHub check-run name
+   exactly**, and must NOT be a check produced by a **path-filtered** workflow.
+   A path-filtered check does not run on PRs that miss the filter, so under
+   ``strict: true`` the PR — and therefore ``main`` — becomes permanently
+   unmergeable. The default :data:`DEFAULT_STATUS_CHECK_CONTEXTS` is the
+   always-on ``beadloom-gate`` check-run for exactly this reason.
 
 The helper configures GitHub branch protection via ``gh api``::
 
@@ -16,8 +24,9 @@ The helper configures GitHub branch protection via ``gh api``::
 with this payload (the protection contract):
 
 - ``required_status_checks`` — ``strict: true`` (the branch must be up to date)
-  + ``contexts`` = the CI/test workflow check names (default
-  :data:`DEFAULT_STATUS_CHECK_CONTEXTS`).
+  + ``contexts`` = the **real** GitHub check-run names that run on every PR
+  (default :data:`DEFAULT_STATUS_CHECK_CONTEXTS` = the always-on
+  ``beadloom-gate`` check; never a path-filtered workflow's check).
 - ``required_pull_request_reviews`` — ``{"required_approving_review_count": 0}``:
   a PR IS required, but the **solo owner can self-merge** (no human review
   needed). Team review later is a one-field bump.
@@ -37,10 +46,21 @@ import subprocess
 from dataclasses import dataclass
 from typing import Protocol
 
-#: Default required status-check contexts — the Beadloom CI gate + test job, by
-#: their GitHub check-run names. Override via ``status_check_contexts`` when a
-#: repo names its workflow checks differently.
-DEFAULT_STATUS_CHECK_CONTEXTS: tuple[str, ...] = ("beadloom ci", "tests")
+#: Default required status-check context — the **real** GitHub check-run name of
+#: the always-on Beadloom gate (the ``beadloom-gate`` job in the *Beadloom Gate*
+#: workflow). That workflow runs on EVERY ``pull_request`` with **no ``paths:``
+#: filter**, so the check always reports — making it safe to require under
+#: ``strict: true``.
+#:
+#: A required status-check context MUST match a real GitHub check-run name
+#: EXACTLY, and you must NOT require a check produced by a **path-filtered**
+#: workflow: such a check does not run on PRs that miss the path filter, so under
+#: ``strict: true`` the PR (and ``main``) becomes permanently unmergeable. The
+#: repo's ``Tests`` workflow (``test (3.10)``…``test (3.13)``) IS path-filtered,
+#: which is exactly why those legs are NOT the default. A repo whose test checks
+#: run on every PR can require them by overriding ``status_check_contexts``
+#: (CLI: repeatable ``--check``).
+DEFAULT_STATUS_CHECK_CONTEXTS: tuple[str, ...] = ("beadloom-gate",)
 
 #: The protected branch (trunk). Configurable, but ``main`` is the default trunk.
 DEFAULT_BRANCH = "main"
@@ -65,9 +85,12 @@ def build_protection_payload(
 ) -> dict[str, object]:
     """Build the GitHub branch-protection request body (the protection contract).
 
-    PR required (no direct push), ``beadloom ci`` a required check (``strict``),
-    ``enforce_admins: false`` + 0 required reviews + ``restrictions: null`` so the
-    solo owner is never locked out and can still self-merge.
+    PR required (no direct push), the always-on ``beadloom-gate`` check required
+    (``strict``), ``enforce_admins: false`` + 0 required reviews +
+    ``restrictions: null`` so the solo owner is never locked out and can still
+    self-merge. ``status_check_contexts`` must be **real check-run names** and
+    must NOT include a path-filtered workflow's check (it would not run on every
+    PR → stuck PRs under ``strict``).
     """
     return {
         "required_status_checks": {

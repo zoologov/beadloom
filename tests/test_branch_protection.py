@@ -45,6 +45,16 @@ class TestPayload:
         assert checks["strict"] is True
         assert checks["contexts"] == list(DEFAULT_STATUS_CHECK_CONTEXTS)
 
+    def test_default_context_is_the_always_on_gate_check_run(self) -> None:
+        """The default required check is the real always-on ``beadloom-gate``
+        check-run (runs on EVERY PR, no ``paths:`` filter). It must NOT default
+        to the path-filtered ``Tests`` legs (``test (3.x)``) — requiring a
+        path-filtered check that does not run on a PR stalls it forever
+        (MAJOR-1, review .5)."""
+        assert DEFAULT_STATUS_CHECK_CONTEXTS == ("beadloom-gate",)
+        payload = build_protection_payload()
+        assert payload["required_status_checks"]["contexts"] == ["beadloom-gate"]
+
     def test_payload_honors_custom_contexts(self) -> None:
         payload = build_protection_payload(status_check_contexts=("Beadloom Gate",))
         assert payload["required_status_checks"]["contexts"] == ["Beadloom Gate"]
@@ -181,6 +191,37 @@ class TestCli:
         assert payload["enforce_admins"] is False
         assert payload["restrictions"] is None
         assert payload["required_status_checks"]["strict"] is True
+
+    def test_dry_run_default_check_is_always_on_gate(self) -> None:
+        """Without ``--check``, the required check defaults to ``beadloom-gate``
+        (the always-on, non-path-filtered check-run) — not the path-filtered
+        ``Tests`` legs."""
+        result = CliRunner().invoke(
+            main,
+            ["setup-branch-protection", "--repo", "acme/widget", "--dry-run"],
+        )
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output.split("--- payload (stdin) ---", 1)[1])
+        assert payload["required_status_checks"]["contexts"] == ["beadloom-gate"]
+
+    def test_dry_run_check_option_overrides_default_exactly(self) -> None:
+        """Repeated ``--check`` replaces the default with exactly those contexts."""
+        result = CliRunner().invoke(
+            main,
+            [
+                "setup-branch-protection",
+                "--repo",
+                "acme/widget",
+                "--check",
+                "a",
+                "--check",
+                "b",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output.split("--- payload (stdin) ---", 1)[1])
+        assert payload["required_status_checks"]["contexts"] == ["a", "b"]
 
     def test_dry_run_honors_custom_branch_and_checks(self) -> None:
         """--branch + repeated --check flow into the dry-run gh call + payload."""

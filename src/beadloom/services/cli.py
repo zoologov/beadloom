@@ -1820,7 +1820,13 @@ def setup_agentic_flow(*, project: Path | None, force: bool) -> None:
     "contexts",
     multiple=True,
     metavar="CONTEXT",
-    help="Required status-check context name (repeatable; default: the CI gate).",
+    help=(
+        "Required status-check context name (repeatable; replaces the default "
+        "entirely). Default: 'beadloom-gate' (the always-on gate check-run). A "
+        "context MUST match a real GitHub check-run name EXACTLY and must NOT be "
+        "a path-filtered workflow's check (it would not run on every PR, which "
+        "stalls PRs under strict checks)."
+    ),
 )
 @click.option(
     "--dry-run",
@@ -1838,10 +1844,16 @@ def setup_branch_protection(
     """Configure trunk-based branch protection on ``main`` via ``gh api`` (BDL-049).
 
     Idempotently sets `main` (or ``--branch``) protection so the trunk-based flow
-    is enforced: a PR is required (no direct push), ``beadloom ci`` is a REQUIRED
-    status check, ``enforce_admins: false`` + 0 required reviews so the owner is
-    never locked out (can self-merge). Safe to re-run (a declarative PUT).
-    ``--dry-run`` documents the exact call without touching GitHub.
+    is enforced: a PR is required (no direct push), the always-on
+    ``beadloom-gate`` check is a REQUIRED status check, ``enforce_admins: false``
+    + 0 required reviews so the owner is never locked out (can self-merge). Safe
+    to re-run (a declarative PUT). ``--dry-run`` documents the exact call without
+    touching GitHub.
+
+    Required check contexts must match real GitHub check-run names EXACTLY and
+    must NOT be path-filtered workflow checks (they would not run on every PR, so
+    under ``strict`` the PR/``main`` would never become mergeable). Override the
+    default with repeatable ``--check``.
     """
     from beadloom.onboarding.branch_protection import (
         DEFAULT_STATUS_CHECK_CONTEXTS,
