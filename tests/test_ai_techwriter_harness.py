@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING
 import pytest
 from tools.ai_techwriter import commands, runner, runs_store, scope
 from tools.ai_techwriter.models import (
+    AgentResult,
+    ContextPacket,
     DriftItem,
     HarnessConfig,
     RunRecord,
@@ -66,15 +68,21 @@ _CLEAN = {"summary": {"total": 0, "ok": 0, "stale": 0}, "pairs": []}
 
 
 class _ScriptedScope:
-    """Returns a queued sequence of sync-check reports (last repeats)."""
+    """Returns a queued sequence of sync-check reports (last repeats).
+
+    Records the ``since`` ref passed on every call so tests can assert the
+    harness threads ``--since`` through every drift check (BUG-I).
+    """
 
     def __init__(self, reports: list[dict[str, object]]) -> None:
         self._reports = reports
         self.calls = 0
+        self.since_args: list[str | None] = []
 
-    def __call__(self, project_root: Path) -> dict[str, object]:
+    def __call__(self, project_root: Path, since: str | None = None) -> dict[str, object]:
         idx = min(self.calls, len(self._reports) - 1)
         self.calls += 1
+        self.since_args.append(since)
         return self._reports[idx]
 
 
@@ -94,7 +102,7 @@ def patch_substrate(monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str, objec
     def fake_sync_check(
         project_root: Path, *, since: str | None = None
     ) -> dict[str, object]:
-        return state["scope"](project_root)  # type: ignore[operator]
+        return state["scope"](project_root, since)  # type: ignore[operator]
 
     def fake_polish(project_root: Path) -> dict[str, object]:
         return {"nodes": [{"ref_id": "graph", "summary": "graph node"}]}
@@ -271,12 +279,14 @@ def test_per_doc_retry_exhausted_flags_pr(
     project: Path, patch_substrate: dict[str, object]
 ) -> None:
     (project / "docs" / "graph.md").write_text("old", encoding="utf-8")
-    # ref stays stale forever => retries exhausted
+    # ref stays stale forever => retries exhausted. The agent DOES edit (writes a
+    # marker) but the drift never clears, so this exercises the "edited but still
+    # stale after N attempts" path (distinct from the BUG-H no-edit path).
     patch_substrate["scope"] = _ScriptedScope(
         [_stale_report(("graph", "docs/graph.md", "hash_changed", "src/g.py"))]
     )
     cfg = HarnessConfig(per_doc_retries=2)
-    agent = FakeAgentRunner(project_root=project, write_marker=None)
+    agent = FakeAgentRunner(project_root=project)
     publisher = FakePublisher()
     result = run_harness(
         project, agent=agent, publisher=publisher, now_ts=NOW, config=cfg
@@ -285,6 +295,8 @@ def test_per_doc_retry_exhausted_flags_pr(
     assert len(agent.calls) == 3
     assert result.flagged is True
     assert any("still stale" in r for r in result.flagged_reasons)
+    # The doc WAS edited (agent produced rewritten paths) so it is honestly listed.
+    assert result.docs_refreshed == ["docs/graph.md"]
     assert publisher.published[0]["flagged"] is True
     assert "needs human" in str(publisher.published[0]["title"])
 
@@ -581,3 +593,126 @@ def test_runs_store_load_handles_missing_and_empty(project: Path) -> None:
     assert runs_store.load_runs(project) == []
     runs_store.runs_store_path(project).write_text("{}", encoding="utf-8")
     assert runs_store.load_runs(project) == []
+
+
+# --------------------------------------------------------------------------- #
+# BUG-H: a failed/empty agent run must NOT be recorded as a refresh / green
+# --------------------------------------------------------------------------- #
+
+
+class _EmptyAgentRunner:
+    """An agent whose run always returns an EMPTY result (no rewritten paths).
+
+    Models the live BUG-H case: ``goose run failed: Invalid recipe`` →
+    ``GooseAgentRunner`` returns ``_empty_result`` (rc!=0, no raise). The harness
+    must treat this as "no edit produced" — never mark the doc refreshed/green.
+    """
+
+    def __init__(self, *, model: str = "qwen-empty") -> None:
+        self._model = model
+        self.calls: list[ContextPacket] = []
+
+    def run(self, packet: ContextPacket) -> AgentResult:
+        self.calls.append(packet)
+        return AgentResult(
+            rewritten_paths=(), input_tokens=0, output_tokens=0, model=self._model
+        )
+
+
+def test_empty_agent_result_does_not_mark_doc_refreshed_or_green(
+    project: Path, patch_substrate: dict[str, object]
+) -> None:
+    """BUG-H: every agent attempt returns an empty result (goose rc!=0). Even if
+    a fresh-checkout sync-check would report clean, the doc must NOT be counted
+    as refreshed, the run must be flagged, and the gate must NOT be green."""
+    (project / "docs" / "graph.md").write_text("old", encoding="utf-8")
+    # The sync-check is CLEAN after the (no-op) attempt — the G12 blindness that
+    # would falsely declare success on a fresh CI checkout.
+    patch_substrate["scope"] = _ScriptedScope(
+        [_stale_report(("graph", "docs/graph.md", "symbols_changed", "src/g.py")), _CLEAN]
+    )
+    cfg = HarnessConfig(per_doc_retries=2)
+    agent = _EmptyAgentRunner()
+    publisher = FakePublisher()
+    result = run_harness(
+        project, agent=agent, publisher=publisher, now_ts=NOW, config=cfg
+    )
+    assert result.docs_refreshed == []  # no false refresh
+    assert result.flagged is True
+    assert any("agent" in r.lower() and "graph" in r for r in result.flagged_reasons)
+    # Run-record honestly reflects the failure: no docs, gate flagged.
+    assert result.run_record is not None
+    assert result.run_record.docs_refreshed == ()
+    assert result.run_record.gate == "flagged"
+    assert publisher.published[0]["flagged"] is True
+
+
+def test_agent_failure_then_real_edit_marks_doc_refreshed(
+    project: Path, patch_substrate: dict[str, object]
+) -> None:
+    """BUG-H mirror: when the agent ACTUALLY produces an edit, the doc IS marked
+    refreshed and the run is green — the honest-success path still works."""
+    (project / "docs" / "graph.md").write_text("old", encoding="utf-8")
+    patch_substrate["scope"] = _ScriptedScope(
+        [_stale_report(("graph", "docs/graph.md", "symbols_changed", "src/g.py")), _CLEAN]
+    )
+    agent = FakeAgentRunner(project_root=project, model="qwen-test")
+    result = run_harness(project, agent=agent, publisher=FakePublisher(), now_ts=NOW)
+    assert result.docs_refreshed == ["docs/graph.md"]
+    assert result.flagged is False
+    assert result.run_record is not None
+    assert result.run_record.gate == "green"
+
+
+# --------------------------------------------------------------------------- #
+# BUG-I: --since is threaded through the fixpoint + verification, and is the
+# AUTHORITATIVE drift check for this loop.
+# --------------------------------------------------------------------------- #
+
+
+def test_since_is_threaded_through_every_drift_check(
+    project: Path, patch_substrate: dict[str, object]
+) -> None:
+    """BUG-I: ``--since <ref>`` governs not only the initial scope discovery but
+    EVERY subsequent drift check (per-doc re-verify + fixpoint), so a fresh CI
+    checkout cannot mask per-push drift in the verification path."""
+    (project / "docs" / "graph.md").write_text("old", encoding="utf-8")
+    scripted = _ScriptedScope(
+        [_stale_report(("graph", "docs/graph.md", "symbols_changed", "src/g.py")), _CLEAN]
+    )
+    patch_substrate["scope"] = scripted
+    agent = FakeAgentRunner(project_root=project)
+    run_harness(
+        project, agent=agent, publisher=FakePublisher(), now_ts=NOW, since="abc123"
+    )
+    # Every sync-check (discovery, per-doc re-check, fixpoint) used the same ref.
+    assert scripted.since_args  # at least one call happened
+    assert all(s == "abc123" for s in scripted.since_args)
+
+
+def test_doc_still_drifted_since_ref_after_repair_flags_not_green(
+    project: Path, patch_substrate: dict[str, object]
+) -> None:
+    """BUG-I: the AUTHORITATIVE check is ``--since <ref>``. If the doc is still
+    drifted relative to the parent commit after repair+retries — even though the
+    agent 'edited' and a stored-baseline check would be clean — the run is
+    flagged, never green."""
+    (project / "docs" / "graph.md").write_text("old", encoding="utf-8")
+    # --since always reports graph stale (still drifted relative to parent).
+    patch_substrate["scope"] = _ScriptedScope(
+        [_stale_report(("graph", "docs/graph.md", "symbols_changed", "src/g.py"))]
+    )
+    cfg = HarnessConfig(per_doc_retries=2)
+    agent = FakeAgentRunner(project_root=project)  # writes a marker each call
+    publisher = FakePublisher()
+    result = run_harness(
+        project, agent=agent, publisher=publisher, now_ts=NOW, config=cfg, since="parent-sha"
+    )
+    # The agent DID produce an edit each attempt, so the doc is honestly listed
+    # as refreshed — but the AUTHORITATIVE --since check never goes clean, so the
+    # run is flagged, not green.
+    assert result.docs_refreshed == ["docs/graph.md"]
+    assert result.flagged is True
+    assert any("still" in r and "graph" in r for r in result.flagged_reasons)
+    assert result.run_record is not None
+    assert result.run_record.gate == "flagged"

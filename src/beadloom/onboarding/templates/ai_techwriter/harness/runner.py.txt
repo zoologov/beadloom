@@ -109,12 +109,16 @@ def run_harness(
     *now_ts* is the injected timestamp stored in the run-record (never read
     from the wall clock here), mirroring ``site.py``'s ``now_ts``.
 
-    *since* (a git ref — the push's parent commit) governs only the *initial*
-    scope discovery: drift is measured against the code at that ref so a fresh
-    CI checkout still sees the per-push drift. The fixpoint + per-doc freshness
-    re-checks intentionally use the stored-state path: after the agent rewrites
-    a doc and ``sync-update`` re-baselines it, "fresh" means consistent with the
-    working tree, not with the (now-superseded) parent commit.
+    *since* (a git ref — the push's parent commit) is the AUTHORITATIVE drift
+    baseline for the whole loop (BUG-I). It governs not only the *initial* scope
+    discovery but every subsequent drift check — the per-doc freshness re-check
+    AND the global fixpoint — so "is this doc still drifted relative to the
+    parent?" is answered against the SAME baseline the scope used. On a fresh CI
+    checkout the stored sync_state is always clean, so verifying against the
+    stored state (the old behaviour) would falsely declare success; threading
+    *since* through verification is what makes the loop actually prove the
+    per-push drift was resolved. ``beadloom ci`` (:func:`_run_gate`) remains an
+    additional gate, but the ``--since`` re-check is authoritative for this loop.
     """
     cfg = config or HarnessConfig()
     result = HarnessResult(model="")
@@ -126,8 +130,8 @@ def run_harness(
         result.gate_passed = True
         return result
 
-    _repair_each_doc(project_root, stale, agent=agent, cfg=cfg, result=result)
-    _run_fixpoint(project_root, cfg=cfg, result=result)
+    _repair_each_doc(project_root, stale, agent=agent, cfg=cfg, result=result, since=since)
+    _run_fixpoint(project_root, cfg=cfg, result=result, since=since)
     _run_gate(project_root, result=result)
     # Emit the run-record BEFORE publishing: the publisher's commit stages the
     # record file (``.beadloom/ai_techwriter_runs.json``) so it rides in the
@@ -145,8 +149,14 @@ def _repair_each_doc(
     agent: AgentRunner,
     cfg: HarnessConfig,
     result: HarnessResult,
+    since: str | None,
 ) -> None:
-    """Per-doc loop: agent -> sync-update -> re-check, with bounded retry."""
+    """Per-doc loop: agent -> sync-update -> re-check, with bounded retry.
+
+    A doc is added to ``result.docs_refreshed`` ONLY when the agent actually
+    produced an edit for it (BUG-H) — a failed/empty agent run (goose rc!=0 →
+    empty :class:`AgentResult`) never marks the doc refreshed.
+    """
     # Fetch the whole ``docs polish`` report ONCE and reuse it across every doc
     # (RFC Q4 design intent), instead of re-shelling per doc in build_packet.
     polish_report: dict[str, object] | None = beadloom_docs_polish_json(project_root)
@@ -155,10 +165,16 @@ def _repair_each_doc(
             result.flagged = True
             result.flagged_reasons.append(f"budget exceeded before repairing {item.ref_id}")
             return
-        ok = _repair_one_doc(
-            project_root, item, agent=agent, cfg=cfg, result=result, polish_report=polish_report
+        edited = _repair_one_doc(
+            project_root,
+            item,
+            agent=agent,
+            cfg=cfg,
+            result=result,
+            polish_report=polish_report,
+            since=since,
         )
-        if ok and item.doc_path not in result.docs_refreshed:
+        if edited and item.doc_path not in result.docs_refreshed:
             result.docs_refreshed.append(item.doc_path)
 
 
@@ -170,14 +186,24 @@ def _repair_one_doc(
     cfg: HarnessConfig,
     result: HarnessResult,
     polish_report: dict[str, object] | None,
+    since: str | None,
 ) -> bool:
-    """Repair one doc with retry <= per_doc_retries; True if it went fresh."""
+    """Repair one doc with retry <= per_doc_retries.
+
+    Returns True iff the agent produced a real edit for this doc (non-empty
+    rewritten paths) — that, not mere stored-state freshness, is what marks the
+    doc refreshed (BUG-H). Freshness is verified against *since* (the parent
+    commit), the authoritative baseline (BUG-I); a doc that never goes
+    fresh-since-ref after all attempts is flagged. An agent run that produced no
+    edit at all across every attempt is flagged as an agent failure.
+    """
     attempts = cfg.per_doc_retries + 1
+    edited = False
     for attempt in range(attempts):
         if _budget_exceeded(cfg, result):
             result.flagged = True
             result.flagged_reasons.append(f"budget exceeded mid-retry for {item.ref_id}")
-            return False
+            return edited
         packet = build_packet(project_root, item, polish_report=polish_report)
         result.total_turns += 1
         try:
@@ -189,22 +215,35 @@ def _repair_one_doc(
         result.output_tokens += agent_result.output_tokens
         if agent_result.model:
             result.model = agent_result.model
+        if not agent_result.rewritten_paths:
+            # goose rc!=0 → empty result: no edit produced, nothing to verify.
+            logger.warning("agent produced no edit for %s (attempt %d)", item.ref_id, attempt + 1)
+            continue
+        edited = True
         beadloom_sync_update(project_root, item.ref_id)
-        if _ref_is_fresh(project_root, item.ref_id):
+        if _ref_is_fresh(project_root, item.ref_id, since=since):
             return True
         logger.info("ref %s still stale after attempt %d", item.ref_id, attempt + 1)
-    result.flagged = True
-    result.flagged_reasons.append(f"{item.ref_id} still stale after {attempts} attempts")
-    return False
+    if not edited:
+        result.flagged = True
+        result.flagged_reasons.append(f"agent failed for {item.ref_id} after {attempts} attempts")
+    else:
+        result.flagged = True
+        result.flagged_reasons.append(f"{item.ref_id} still stale after {attempts} attempts")
+    return edited
 
 
-def _ref_is_fresh(project_root: Path, ref_id: str) -> bool:
-    """True if *ref_id* has no stale pairs in a fresh sync-check."""
-    return ref_id not in {item.ref_id for item in discover_scope(project_root)}
+def _ref_is_fresh(project_root: Path, ref_id: str, *, since: str | None) -> bool:
+    """True if *ref_id* has no stale pairs in a sync-check against *since*.
+
+    Verifies against the same ``--since`` baseline the scope used (BUG-I), so a
+    fresh-checkout stored-state re-baseline cannot mask unresolved per-push drift.
+    """
+    return ref_id not in {item.ref_id for item in discover_scope(project_root, since=since)}
 
 
 def _run_fixpoint(
-    project_root: Path, *, cfg: HarnessConfig, result: HarnessResult
+    project_root: Path, *, cfg: HarnessConfig, result: HarnessResult, since: str | None
 ) -> None:
     """Global fixpoint: re-baseline newly re-staled siblings until stable 0.
 
@@ -218,7 +257,7 @@ def _run_fixpoint(
     """
     prev_refs: set[str] | None = None
     for round_no in range(cfg.max_fixpoint_rounds):
-        stale = discover_scope(project_root)
+        stale = discover_scope(project_root, since=since)
         if not stale:
             return
         result.fixpoint_rounds = round_no + 1
@@ -232,7 +271,7 @@ def _run_fixpoint(
             _flag_fixpoint_stuck(result, cfg, stale)
             return
         prev_refs = cur_refs
-    remaining = discover_scope(project_root)
+    remaining = discover_scope(project_root, since=since)
     if remaining:
         _flag_fixpoint_stuck(result, cfg, remaining)
 

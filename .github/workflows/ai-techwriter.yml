@@ -14,8 +14,15 @@ on:
   # loop-safe (the agent's merged PR triggers a clean no-op run).
   push:
     branches: [main, master]
-  # Manual dispatch stays useful (re-run on demand).
-  workflow_dispatch: {}
+  # Manual dispatch stays useful (re-run on demand). Optional `since` input lets
+  # an operator re-run over an explicit baseline ref (e.g. re-check accumulated
+  # drift); when empty it falls back to the push parent / HEAD~1.
+  workflow_dispatch:
+    inputs:
+      since:
+        description: "Baseline git ref for drift detection (default: push parent / HEAD~1)"
+        required: false
+        default: ""
 
 # gh pr create needs write to contents (push the branch) + pull-requests.
 permissions:
@@ -72,8 +79,10 @@ jobs:
           # gh pr create authenticates with the job token.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BEFORE_SHA: ${{ github.event.before }}
+          INPUT_SINCE: ${{ inputs.since }}
         run: |
-          since="$BEFORE_SHA"
+          # Prefer an explicit dispatch input, else the push parent, else HEAD~1.
+          since="${INPUT_SINCE:-$BEFORE_SHA}"
           case "$since" in
             ""|0000000000000000000000000000000000000000) since="HEAD~1" ;;
           esac

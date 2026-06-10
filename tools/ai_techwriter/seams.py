@@ -332,6 +332,13 @@ class FakeAgentRunner:
     to the touched docs, and can be configured per-call to fail (to exercise
     the per-doc retry loop). Reports fixed token usage so run-records are
     deterministic.
+
+    Honest empty-result semantics (BUG-H): the fake reports
+    ``rewritten_paths`` ONLY when it actually edits a doc. With
+    ``write_marker=None`` (no edit written) it returns an EMPTY
+    :class:`AgentResult`, mirroring the real ``GooseAgentRunner`` returning
+    ``_empty_result`` on a failed ``goose run`` — so the harness treats it as
+    "no edit produced", never a refresh.
     """
 
     def __init__(
@@ -353,18 +360,25 @@ class FakeAgentRunner:
         self.calls: list[ContextPacket] = []
 
     def run(self, packet: ContextPacket) -> AgentResult:
-        """Record the call; optionally fail or write a marker; return usage."""
+        """Record the call; optionally fail or write a marker; return usage.
+
+        Returns a result with non-empty ``rewritten_paths`` only when an edit is
+        actually written (``write_marker`` set); otherwise an empty result with
+        no rewritten paths (the no-edit / failed-agent case, BUG-H).
+        """
         self.calls.append(packet)
         if len(self.calls) <= self._fail_first_n:
             raise RuntimeError("FakeAgentRunner: simulated agent failure")
-        if self._project_root is not None and self._write_marker is not None:
+        edited = self._project_root is not None and self._write_marker is not None
+        if edited:
+            assert self._project_root is not None  # narrowed by ``edited``
             target = self._project_root / packet.doc_path
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(
                 f"{packet.current_content}\n{self._write_marker}\n", encoding="utf-8"
             )
         return AgentResult(
-            rewritten_paths=(packet.doc_path,),
+            rewritten_paths=(packet.doc_path,) if edited else (),
             input_tokens=self._input_tokens,
             output_tokens=self._output_tokens,
             model=self._model,

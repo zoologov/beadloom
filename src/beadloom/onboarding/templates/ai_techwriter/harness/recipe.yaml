@@ -100,9 +100,9 @@ instructions: >
 
 prompt: |
   Refresh exactly ONE drifted documentation file so it accurately reflects the
-  current code. The `packet_file` parameter is the PATH to a JSON file holding
-  everything you need — read that file FIRST with the read-only filesystem tool
-  (it is NOT inlined as a parameter). The JSON has these fields:
+  current code. The path to a JSON file holding everything you need is
+  `{{ packet_file }}` — read that file FIRST with the read-only filesystem tool
+  (the packet is NOT inlined as a parameter). The JSON has these fields:
 
     - ref_id            — the graph node this doc documents
     - doc_path          — the ONE file you may rewrite (under docs/**)
@@ -114,7 +114,7 @@ prompt: |
     - why               — `beadloom why <ref>`: impact / dependents
 
   Procedure:
-  1. Read the JSON file at `packet_file` and parse it. Read the current doc and
+  1. Read the JSON file at `{{ packet_file }}` and parse it. Read the current doc and
      the code files named in `drift_reason`. Use `beadloom ctx <ref_id>` /
      `beadloom why <ref_id>` and
      read-only `git diff` / `git show` to understand exactly what changed.
