@@ -1688,6 +1688,43 @@ def setup_rules(
 
 
 # beadloom:domain=onboarding
+@main.command("setup-ai-techwriter")
+@click.option(
+    "--platform",
+    type=click.Choice(["github", "gitlab"]),
+    required=True,
+    help="CI platform to scaffold for (github or gitlab).",
+)
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: current directory).",
+)
+def setup_ai_techwriter(*, platform: str, project: Path | None) -> None:
+    """Scaffold the AI tech-writer into this repo (BDL-047 / F4.1, G8).
+
+    In the setup-* family (alongside setup-mcp / setup-rules). Idempotently
+    vendors the deterministic harness package + Goose recipe into
+    ``tools/ai_techwriter/`` (self-contained — the runner needs only beadloom +
+    goose + python), drops the chosen platform's CI wrapper, and writes the
+    3-step getting-started guide ``docs/guides/ai-techwriter.md``. Re-running
+    cleanly overwrites the generated files.
+    """
+    from beadloom.onboarding.ai_techwriter_setup import scaffold
+
+    project_root = project or Path.cwd()
+    created = scaffold(project_root, platform=platform)
+    for path in created:
+        click.echo(f"Wrote {path.relative_to(project_root)}")
+    click.echo(
+        "Next: 1) register a self-hosted runner (Goose installed), "
+        "2) add the QWEN_API_KEY secret/variable, 3) commit + enable the pipeline. "
+        "See docs/guides/ai-techwriter.md."
+    )
+
+
+# beadloom:domain=onboarding
 @main.command("config-check")
 @click.option(
     "--fix",

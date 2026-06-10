@@ -535,6 +535,33 @@ beadloom setup-mcp --remove [--tool {claude-code,cursor,windsurf}] [--project DI
 - `cursor` -- `.cursor/mcp.json` in project root
 - `windsurf` -- `~/.codeium/windsurf/mcp_config.json` (global)
 
+### beadloom setup-ai-techwriter
+
+Scaffold the AI tech-writer (BDL-047 / F4.1) into this repo for one-command,
+3-step opt-in. In the `setup-*` family alongside `setup-mcp` / `setup-rules`.
+
+```bash
+beadloom setup-ai-techwriter --platform {github,gitlab} [--project DIR]
+```
+
+Idempotently scaffolds (clean overwrite on re-run):
+
+- **Vendors** the deterministic harness package + Goose recipe into
+  `tools/ai_techwriter/`. The harness lives in repo tooling (not the `beadloom`
+  wheel), so on any target repo `python -m tools.ai_techwriter` would not
+  resolve; vendoring copies it in, making the setup self-contained (the runner
+  needs only `beadloom` + `goose` + python). The harness is shipped as package
+  data (`onboarding/templates/ai_techwriter/`, inert `.py.txt` assets kept
+  byte-identical to the live source by a drift-guard test — principle 5).
+- The chosen platform's CI wrapper: `.github/workflows/ai-techwriter.yml`
+  (GitHub) **or** an `ai-techwriter` job in `.gitlab-ci.yml` (GitLab). An
+  existing `.gitlab-ci.yml` is appended to (job-only, stripping the standalone
+  `stages:` header) — never blindly clobbered; an already-wired file is left
+  as-is.
+- `docs/guides/ai-techwriter.md` — the 3-step getting-started guide.
+
+Delegates to `onboarding/ai_techwriter_setup.py:scaffold()`.
+
 ### beadloom mcp-serve
 
 Launch MCP stdio server.
@@ -570,6 +597,7 @@ Module `src/beadloom/services/cli.py`:
 - `prime` -- compact project context for AI agents
 - `setup_mcp` -- configure MCP server for editor
 - `setup_rules` -- create IDE rules files
+- `setup_ai_techwriter` -- scaffold the AI tech-writer (vendored harness + recipe + chosen platform CI wrapper + getting-started guide) for one-command opt-in; delegates to `onboarding/ai_techwriter_setup.py:scaffold()`
 - `config_check` -- AgentConfigAsCode drift gate (`--fix` regenerates); reuses the `setup-rules --refresh` generator
 - `ci` -- unified enforcement gate composing reindex -> lint -> sync-check -> config-check -> doctor -> (optional `--hub`) federate into one exit code; honest per-step PASS/FAIL/SKIP; uniform `--format {rich,json,github}` (github = valid `::error file=,line=` annotations); delegates to `application/gate.py:run_ci_gate()`
 - `mcp_serve` -- run MCP stdio server
