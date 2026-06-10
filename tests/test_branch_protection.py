@@ -2,8 +2,10 @@
 
 The helper configures GitHub branch protection on ``main`` via ``gh api`` so that
 the trunk-based flow is enforced: a PR is required (no direct push), ``beadloom
-ci`` is a *required status check*, ``enforce_admins: false`` + 0 required reviews
-so the solo owner is never locked out, and ``restrictions: null``.
+ci`` is a *required status check*, ``enforce_admins: true`` (strict trunk-based —
+even admins go through PRs and cannot bypass the gate), 0 required reviews so the
+solo owner can still self-merge once the gate is green, and ``restrictions:
+null`` (no push-restriction allow-list).
 
 These tests NEVER touch GitHub: the ``gh`` invocation is injected as a runner
 callable and mocked. We assert (a) the exact request payload the helper WOULD
@@ -33,10 +35,14 @@ class TestPayload:
         reviews = payload["required_pull_request_reviews"]
         assert reviews == {"required_approving_review_count": 0}
 
-    def test_payload_does_not_enforce_admins_or_restrict(self) -> None:
-        """Owner must never be locked out: admins not enforced, no restrictions."""
+    def test_payload_enforces_admins_with_no_restrictions(self) -> None:
+        """Strict trunk-based: even admins go through PRs (``enforce_admins:
+        true``), but there is no push-restriction allow-list. Owner is not
+        locked out — with 0 required reviews + the always-on ``beadloom-gate``
+        check the owner can still self-merge their own PR once the gate is
+        green; they just cannot direct-push or bypass the gate."""
         payload = build_protection_payload()
-        assert payload["enforce_admins"] is False
+        assert payload["enforce_admins"] is True
         assert payload["restrictions"] is None
 
     def test_payload_required_status_checks_strict_with_default_contexts(self) -> None:
@@ -177,8 +183,9 @@ class TestCli:
         assert result.exit_code != 0
 
     def test_dry_run_payload_is_owner_safe_and_strict(self) -> None:
-        """The printed payload is owner-safe: 0 reviews, admins not enforced,
-        strict required checks, no restrictions (owner never locked out)."""
+        """The printed payload is strict trunk-based + owner-safe: 0 reviews,
+        ``enforce_admins: true`` (even admins go through PRs), strict required
+        checks, no restrictions (owner still self-merges via the gate)."""
         result = CliRunner().invoke(
             main,
             ["setup-branch-protection", "--repo", "acme/widget", "--dry-run"],
@@ -188,7 +195,7 @@ class TestCli:
         assert payload["required_pull_request_reviews"] == {
             "required_approving_review_count": 0
         }
-        assert payload["enforce_admins"] is False
+        assert payload["enforce_admins"] is True
         assert payload["restrictions"] is None
         assert payload["required_status_checks"]["strict"] is True
 

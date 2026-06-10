@@ -30,8 +30,14 @@ with this payload (the protection contract):
 - ``required_pull_request_reviews`` — ``{"required_approving_review_count": 0}``:
   a PR IS required, but the **solo owner can self-merge** (no human review
   needed). Team review later is a one-field bump.
-- ``enforce_admins: false`` and ``restrictions: null`` — the owner is NEVER
-  locked out (admins are exempt; no push-restriction allow-list).
+- ``enforce_admins: true`` — **strict trunk-based**: even repo admins (the
+  owner) go through PRs and CANNOT direct-push to ``main`` or bypass the gate.
+  Combined with ``required_approving_review_count: 0`` + the reliable always-on
+  ``beadloom-gate`` required check, the owner is NOT locked out — they can still
+  self-merge their own PR once the gate is green. Escape hatch: if
+  ``beadloom-gate`` ever breaks, temporarily remove protection via the API
+  (``gh api --method DELETE .../protection``) and re-apply once fixed.
+- ``restrictions: null`` — no push-restriction allow-list.
 
 ``PUT .../protection`` is **declarative**, so applying it twice is naturally
 idempotent: the second call sends the byte-identical payload and re-settles the
@@ -86,18 +92,19 @@ def build_protection_payload(
     """Build the GitHub branch-protection request body (the protection contract).
 
     PR required (no direct push), the always-on ``beadloom-gate`` check required
-    (``strict``), ``enforce_admins: false`` + 0 required reviews +
-    ``restrictions: null`` so the solo owner is never locked out and can still
-    self-merge. ``status_check_contexts`` must be **real check-run names** and
-    must NOT include a path-filtered workflow's check (it would not run on every
-    PR → stuck PRs under ``strict``).
+    (``strict``), ``enforce_admins: true`` (strict trunk-based — even admins go
+    through PRs, no bypass) + 0 required reviews + ``restrictions: null`` so the
+    owner is NOT locked out and can still self-merge their own PR once the gate
+    is green. ``status_check_contexts`` must be **real check-run names** and must
+    NOT include a path-filtered workflow's check (it would not run on every PR →
+    stuck PRs under ``strict``).
     """
     return {
         "required_status_checks": {
             "strict": True,
             "contexts": list(status_check_contexts),
         },
-        "enforce_admins": False,
+        "enforce_admins": True,
         "required_pull_request_reviews": {"required_approving_review_count": 0},
         "restrictions": None,
     }

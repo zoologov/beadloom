@@ -265,3 +265,98 @@ def test_github_grants_contents_and_pull_request_write(path: Path) -> None:
     perms = doc["permissions"]
     assert perms["contents"] == "write"
     assert perms["pull-requests"] == "write"
+
+
+# --------------------------------------------------------------------------- #
+# BDL-049 BEAD-09: GITHUB_TOKEN non-recursion fix — the agent's PR-path push
+# must authenticate with a PAT (secrets.AI_TW_PAT) so it TRIGGERS beadloom-gate,
+# with a fallback to the default token so PAT-less repos still work (variant-C).
+# --------------------------------------------------------------------------- #
+
+#: The fallback expression the checkout token + GH_TOKEN must use on the PR path.
+PAT_FALLBACK_CHECKOUT = "secrets.AI_TW_PAT || github.token"
+PAT_FALLBACK_GH_TOKEN = "secrets.AI_TW_PAT || secrets.GITHUB_TOKEN"  # noqa: S105 - GH expression, not a secret
+
+
+@pytest.mark.parametrize("path", GITHUB_FILES, ids=lambda p: p.name)
+def test_github_checkout_uses_pat_with_token_fallback(path: Path) -> None:
+    """``actions/checkout`` persists the credential ``git push`` uses; it must be
+    the PAT (so the agent's push triggers ``beadloom-gate``) with a fallback to
+    the default token (variant-C: PAT-less repos still check out + work)."""
+    steps = _gh_steps(path)
+    checkout = next(
+        s for s in steps if str(s.get("uses", "")).startswith("actions/checkout")
+    )
+    with_block = checkout.get("with")
+    assert isinstance(with_block, dict), "checkout must declare a with: block"
+    token = str(with_block.get("token", ""))
+    assert PAT_FALLBACK_CHECKOUT in token, token
+
+
+@pytest.mark.parametrize("path", GITHUB_FILES, ids=lambda p: p.name)
+def test_github_pr_path_gh_token_uses_pat_with_token_fallback(path: Path) -> None:
+    """The pr-branch harness step's ``GH_TOKEN`` must use the PAT (so ``gh`` push
+    + ``gh pr comment`` authenticate as the PAT) with a fallback to GITHUB_TOKEN."""
+    steps = _gh_steps(path)
+    pr_step = next(
+        s
+        for s in steps
+        if isinstance(s.get("run"), str) and "--target pr-branch" in s["run"]
+    )
+    env = pr_step.get("env")
+    assert isinstance(env, dict)
+    gh_token = str(env.get("GH_TOKEN", ""))
+    assert PAT_FALLBACK_GH_TOKEN in gh_token, gh_token
+
+
+@pytest.mark.parametrize("path", GITHUB_FILES, ids=lambda p: p.name)
+def test_github_dispatch_path_does_not_use_pat(path: Path) -> None:
+    """The workflow_dispatch (branch-pr) path has no PR to re-gate, so it stays
+    on the default token — the PAT wiring is PR-path-only."""
+    steps = _gh_steps(path)
+    dispatch_step = next(
+        s
+        for s in steps
+        if isinstance(s.get("run"), str) and "--target branch-pr" in s["run"]
+    )
+    env = dispatch_step.get("env")
+    assert isinstance(env, dict)
+    gh_token = str(env.get("GH_TOKEN", ""))
+    assert "AI_TW_PAT" not in gh_token, gh_token
+    assert "secrets.GITHUB_TOKEN" in gh_token
+
+
+@pytest.mark.parametrize("path", GITLAB_FILES, ids=lambda p: p.name)
+def test_gitlab_pr_path_uses_pat_with_job_token_fallback(path: Path) -> None:
+    """GitLab mirror: CI_JOB_TOKEN pushes also do not trigger pipelines, so the
+    MR pr-branch push/comment authenticates with an access-token CI/CD variable
+    (AI_TW_PAT) with a fallback to CI_JOB_TOKEN / the default."""
+    text = path.read_text(encoding="utf-8")
+    assert "AI_TW_PAT" in text
+    # The fallback to the job token keeps PAT-less projects working.
+    assert "CI_JOB_TOKEN" in text
+
+
+def test_live_github_pat_wiring_mirrored_in_template() -> None:
+    """The vendored GitHub template mirrors the live PAT||token wiring so a
+    scaffolded repo auto-gates the agent's commit the same way."""
+    for path in GITHUB_FILES:
+        text = path.read_text(encoding="utf-8")
+        assert PAT_FALLBACK_CHECKOUT in text
+        assert PAT_FALLBACK_GH_TOKEN in text
+
+
+def test_template_github_documents_pat_secret_for_adopters() -> None:
+    """The vendored GitHub template tells adopters to create the AI_TW_PAT secret
+    (and that without it the agent's commit won't auto-trigger the check)."""
+    text = GH_TEMPLATE.read_text(encoding="utf-8")
+    assert "AI_TW_PAT" in text
+    # Adopter guidance present (a comment explaining the secret).
+    assert "beadloom-gate" in text
+
+
+def test_template_gitlab_documents_pat_variable_for_adopters() -> None:
+    """The vendored GitLab template tells adopters to create the access-token
+    CI/CD variable for auto-pipeline-trigger on the agent's commit."""
+    text = GL_TEMPLATE.read_text(encoding="utf-8")
+    assert "AI_TW_PAT" in text

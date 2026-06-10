@@ -11,5 +11,17 @@
     "model": "qwen3.7-plus",
     "gate": "green",
     "pr_url": ""
+  },
+  {
+    "ts": "2026-06-10T20:59:17.618917+00:00",
+    "platform": "github",
+    "docs_refreshed": [
+      "domains/onboarding/README.md"
+    ],
+    "input_tokens": 74000,
+    "output_tokens": 3500,
+    "model": "qwen3.7-plus",
+    "gate": "green",
+    "pr_url": ""
   }
 ]
