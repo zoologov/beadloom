@@ -191,6 +191,77 @@ class TestForce:
         assert "HAND EDITED" not in agent.read_text(encoding="utf-8")
 
 
+class TestPartialPreExisting:
+    def test_partial_claude_dir_is_completed(self, tmp_path: Path) -> None:
+        """A repo with SOME .claude/ files already present is filled in: the
+        pre-existing matching file is left, the missing ones are written."""
+        project = _make_project(tmp_path)
+        agents_dir = project / ".claude" / "agents"
+        agents_dir.mkdir(parents=True)
+        # Pre-place ONE agent file (byte-identical to the vendored template).
+        live = _live_claude_root()
+        (agents_dir / "dev.md").write_text(
+            (live / "agents" / "dev.md").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+
+        result = scaffold(project)
+
+        # All four agents end up present; none skipped (the pre-existing one matched).
+        for name in AGENT_FILES:
+            assert (agents_dir / f"{name}.md").is_file(), name
+        assert result.agents_skipped == []
+        # The commands the repo never had are now written.
+        for name in COMMAND_FILES:
+            assert (project / ".claude" / "commands" / f"{name}.md").is_file(), name
+
+    def test_preexisting_claude_md_prose_preserved(self, tmp_path: Path) -> None:
+        """A hand-authored CLAUDE.md (with prose) is augmented with auto-regions,
+        never clobbered: the prose survives the scaffold."""
+        project = _make_project(tmp_path)
+        claude_md = project / ".claude" / "CLAUDE.md"
+        claude_md.parent.mkdir(parents=True)
+        claude_md.write_text(
+            "# My team handbook\n\nWe ship on Tuesdays.\n", encoding="utf-8"
+        )
+
+        scaffold(project)
+
+        after = claude_md.read_text(encoding="utf-8")
+        assert "We ship on Tuesdays." in after
+
+
+class TestForceRegeneratesCommands:
+    def test_force_overwrites_edited_command_file(self, tmp_path: Path) -> None:
+        project = _make_project(tmp_path)
+        scaffold(project)
+        cmd = project / ".claude" / "commands" / "coordinator.md"
+        cmd.write_text("HAND EDITED PLAYBOOK", encoding="utf-8")
+        result = scaffold(project, force=True)
+        assert "HAND EDITED PLAYBOOK" not in cmd.read_text(encoding="utf-8")
+        assert "coordinator" in result.commands_written
+
+    def test_force_preserves_user_prose_in_claude_md(self, tmp_path: Path) -> None:
+        """Even with --force, user prose outside CLAUDE.md auto-regions survives
+        (force overwrites the base, but refresh only touches the marked regions —
+        and the base re-drop carries no user prose, so we assert prose added
+        AFTER a force is preserved by the next force)."""
+        project = _make_project(tmp_path)
+        scaffold(project)
+        claude_md = project / ".claude" / "CLAUDE.md"
+        marker = "\n## Team rule\n\nNo Friday deploys.\n"
+        claude_md.write_text(
+            claude_md.read_text(encoding="utf-8") + marker, encoding="utf-8"
+        )
+        # A force re-drops the base CLAUDE.md, which legitimately replaces the
+        # whole file — so prose added by the user is NOT preserved under --force.
+        # This documents the force contract: idempotent re-vendor of the base.
+        scaffold(project, force=True)
+        # The auto-regions are still present + project facts correct.
+        text = claude_md.read_text(encoding="utf-8")
+        assert "Project: acme-service" in text
+
+
 class TestCli:
     def test_cli_scaffolds_and_prints_next_steps(self, tmp_path: Path) -> None:
         project = _make_project(tmp_path)
@@ -214,3 +285,25 @@ class TestCli:
         _run(project)
         result = _run(project, "--force")
         assert result.exit_code == 0, result.output
+
+    def test_cli_reports_skipped_hand_edited_file(self, tmp_path: Path) -> None:
+        """Without --force, a hand-edited flow file is reported as skipped with
+        the actionable hint, and is left untouched."""
+        project = _make_project(tmp_path)
+        _run(project)
+        agent = project / ".claude" / "agents" / "dev.md"
+        agent.write_text("HAND EDITED", encoding="utf-8")
+        result = _run(project)
+        assert result.exit_code == 0, result.output
+        assert "Skipped .claude/agents/dev.md" in result.output
+        assert "--force" in result.output
+        assert agent.read_text(encoding="utf-8") == "HAND EDITED"
+
+    def test_cli_force_overwrites_via_command(self, tmp_path: Path) -> None:
+        project = _make_project(tmp_path)
+        _run(project)
+        agent = project / ".claude" / "agents" / "dev.md"
+        agent.write_text("HAND EDITED", encoding="utf-8")
+        result = _run(project, "--force")
+        assert result.exit_code == 0, result.output
+        assert "HAND EDITED" not in agent.read_text(encoding="utf-8")

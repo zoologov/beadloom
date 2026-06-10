@@ -12,8 +12,14 @@ from __future__ import annotations
 import sqlite3
 from typing import TYPE_CHECKING
 
+import pytest
+
 from beadloom.onboarding.agentic_flow_setup import AGENT_FILES, COMMAND_FILES, scaffold
-from beadloom.onboarding.config_sync import ConfigDrift, check_config_drift
+from beadloom.onboarding.config_sync import (
+    ConfigDrift,
+    check_config_drift,
+    refresh_agentic_flow_files,
+)
 from beadloom.onboarding.scanner import (
     _RULES_ADAPTER_TEMPLATE,
     generate_agents_md,
@@ -318,6 +324,49 @@ class TestAgenticFlowDrift:
         ]
         assert flow_drifts == []
 
+    @pytest.mark.parametrize("kind", ["agents", "commands"])
+    @pytest.mark.parametrize("idx", [0, 1, 2, 3])
+    def test_each_flow_file_independently_detected(
+        self, tmp_path: Path, kind: str, idx: int
+    ) -> None:
+        """The byte-equality guard fails for EACH individual flow file when it
+        diverges — so no single template can silently drift from the proven flow.
+        """
+        names = AGENT_FILES if kind == "agents" else COMMAND_FILES
+        name = names[idx]
+        project = _make_scaffolded_project(tmp_path)
+        target = project / ".claude" / kind / f"{name}.md"
+        target.write_text(target.read_text(encoding="utf-8") + "\n<!-- diverged -->\n")
+
+        conn = _make_conn()
+        try:
+            drifts = check_config_drift(project, conn)
+        finally:
+            conn.close()
+
+        assert any(d.file == f".claude/{kind}/{name}.md" for d in drifts)
+
+    def test_partial_scaffold_not_flagged(self, tmp_path: Path) -> None:
+        """A repo with SOME (but not all) flow files present is not flagged —
+        the flow is only checked when fully scaffolded."""
+        project = _make_scaffolded_project(tmp_path)
+        # Remove one command file -> the flow is no longer fully scaffolded.
+        (project / ".claude" / "commands" / f"{COMMAND_FILES[0]}.md").unlink()
+        # Diverge a remaining file; it must still NOT be flagged.
+        agent = project / ".claude" / "agents" / "dev.md"
+        agent.write_text("HAND EDITED\n", encoding="utf-8")
+
+        conn = _make_conn()
+        try:
+            drifts = check_config_drift(project, conn)
+        finally:
+            conn.close()
+
+        flow_drifts = [
+            d for d in drifts if "/agents/" in d.file or "/commands/" in d.file
+        ]
+        assert flow_drifts == []
+
     def test_all_drifted_flow_files_reported(self, tmp_path: Path) -> None:
         """Every present-but-drifted flow file gets its own ConfigDrift."""
         project = _make_scaffolded_project(tmp_path)
@@ -343,6 +392,65 @@ class TestAgenticFlowDrift:
             f".claude/commands/{n}.md" for n in COMMAND_FILES
         }
         assert flow_files == expected
+
+
+# ---------------------------------------------------------------------------
+# refresh_agentic_flow_files — the config-check --fix companion.
+# ---------------------------------------------------------------------------
+
+
+class TestRefreshAgenticFlowFiles:
+    def test_restores_drifted_files_byte_identical(self, tmp_path: Path) -> None:
+        """``--fix`` restores every drifted flow file to the shipped template
+        byte-for-byte (and the post-fix check is clean)."""
+        project = _make_scaffolded_project(tmp_path)
+        agent = project / ".claude" / "agents" / "dev.md"
+        cmd = project / ".claude" / "commands" / "coordinator.md"
+        original = agent.read_text(encoding="utf-8")
+        agent.write_text("HAND EDITED\n", encoding="utf-8")
+        cmd.write_text("REWRITTEN\n", encoding="utf-8")
+
+        written = refresh_agentic_flow_files(project)
+
+        assert "agents/dev.md" in written
+        assert "commands/coordinator.md" in written
+        assert agent.read_text(encoding="utf-8") == original
+        conn = _make_conn()
+        try:
+            drifts = check_config_drift(project, conn)
+        finally:
+            conn.close()
+        flow_drifts = [
+            d for d in drifts if "/agents/" in d.file or "/commands/" in d.file
+        ]
+        assert flow_drifts == []
+
+    def test_noop_on_unscaffolded_repo(self, tmp_path: Path) -> None:
+        """``--fix`` never forces the flow onto a repo that did not adopt it."""
+        assert refresh_agentic_flow_files(tmp_path) == []
+        # No .claude/ tree was created as a side effect.
+        assert not (tmp_path / ".claude" / "agents").exists()
+
+    def test_noop_on_partial_scaffold(self, tmp_path: Path) -> None:
+        """A partially-scaffolded repo (some files missing) is left untouched."""
+        project = _make_scaffolded_project(tmp_path)
+        (project / ".claude" / "agents" / "test.md").unlink()
+        agent = project / ".claude" / "agents" / "dev.md"
+        agent.write_text("HAND EDITED\n", encoding="utf-8")
+
+        assert refresh_agentic_flow_files(project) == []
+        # The divergent file is NOT restored (flow not fully scaffolded).
+        assert agent.read_text(encoding="utf-8") == "HAND EDITED\n"
+
+    def test_rewrites_all_files_even_when_in_sync(self, tmp_path: Path) -> None:
+        """On a fully-scaffolded repo, every flow file is reported rewritten
+        (force=True) — idempotent and byte-stable."""
+        project = _make_scaffolded_project(tmp_path)
+        written = refresh_agentic_flow_files(project)
+        expected = {f"agents/{n}.md" for n in AGENT_FILES} | {
+            f"commands/{n}.md" for n in COMMAND_FILES
+        }
+        assert set(written) == expected
 
 
 # ---------------------------------------------------------------------------

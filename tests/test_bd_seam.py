@@ -55,3 +55,53 @@ def test_run_bd_passes_cwd() -> None:
     with patch("beadloom.services.bd_seam.subprocess.run", return_value=completed) as run:
         run_bd(["ready"], cwd="/work/x")
     assert run.call_args.kwargs["cwd"] == "/work/x"
+
+
+# --- Hardening: edge cases on the seam's normalization + invocation shape. ---
+
+
+def test_run_bd_normalizes_none_streams() -> None:
+    """`subprocess` may hand back ``None`` for stdout/stderr; the seam coerces
+    them to empty strings so callers can always ``.strip()`` safely."""
+    completed = MagicMock(returncode=0, stdout=None, stderr=None)
+    with patch("beadloom.services.bd_seam.subprocess.run", return_value=completed):
+        result = run_bd(["ready"])
+    assert result.stdout == ""
+    assert result.stderr == ""
+    assert result.ok is True
+
+
+def test_bd_result_ok_false_on_nonzero() -> None:
+    """``BdResult.ok`` is a pure function of the returncode."""
+    assert BdResult(returncode=2, stdout="", stderr="").ok is False
+    assert BdResult(returncode=0, stdout="", stderr="").ok is True
+
+
+def test_bd_result_is_frozen() -> None:
+    """``BdResult`` is an immutable value object (frozen dataclass)."""
+    import dataclasses
+
+    result = BdResult(returncode=0, stdout="", stderr="")
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        result.returncode = 1  # type: ignore[misc]
+
+
+def test_run_bd_invokes_with_capture_and_no_check() -> None:
+    """The seam captures output and never raises on a non-zero exit
+    (``check=False``) so callers inspect ``returncode`` themselves."""
+    completed = MagicMock(returncode=0, stdout="", stderr="")
+    with patch("beadloom.services.bd_seam.subprocess.run", return_value=completed) as run:
+        run_bd(["show", "bd-1"])
+    kwargs = run.call_args.kwargs
+    assert kwargs["capture_output"] is True
+    assert kwargs["text"] is True
+    assert kwargs["check"] is False
+    assert kwargs["timeout"] is not None
+
+
+def test_run_bd_default_cwd_is_none() -> None:
+    """Without an explicit ``cwd`` the invocation inherits the process cwd."""
+    completed = MagicMock(returncode=0, stdout="", stderr="")
+    with patch("beadloom.services.bd_seam.subprocess.run", return_value=completed) as run:
+        run_bd(["ready"])
+    assert run.call_args.kwargs["cwd"] is None
