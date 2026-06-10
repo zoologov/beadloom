@@ -49,6 +49,16 @@ jobs:
           # state; check out the PR HEAD branch so the agent can commit onto it.
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.ref }}
+          # Persist a PAT (AI_TW_PAT) as the git credential `git push` uses.
+          # WHY: GitHub does NOT re-trigger workflows on pushes authored by the
+          # default GITHUB_TOKEN (anti-recursion) — so the agent's refresh
+          # commit would NOT fire `beadloom-gate`, leaving the required check
+          # missing on the PR HEAD → unmergeable. A PAT-authored push is a
+          # normal push → it triggers `beadloom-gate`. The `[skip ai-techwriter]`
+          # loop-guard above still stops THIS workflow re-running on that push.
+          # Falls back to github.token when AI_TW_PAT is absent (variant-C:
+          # PAT-less repos still check out + run, just without auto-gating).
+          token: ${{ secrets.AI_TW_PAT || github.token }}
 
       # Loop-guard (G5): if the PR head commit is the agent's own refresh
       # (authored by beadloom-ai-techwriter OR a [skip ai-techwriter] subject),
@@ -95,8 +105,11 @@ jobs:
           # Workspace-specific MaaS endpoint (secret); falls back to the generic
           # DashScope gateway in the harness when unset.
           QWEN_BASE_URL: ${{ secrets.QWEN_BASE_URL }}
-          # gh commit/push + gh pr comment authenticate with the job token.
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # gh push + gh pr comment authenticate with the PAT so the agent's
+          # refresh commit triggers `beadloom-gate` (GITHUB_TOKEN pushes are
+          # non-recursive — see the checkout token comment above). Falls back to
+          # GITHUB_TOKEN when AI_TW_PAT is absent (variant-C).
+          GH_TOKEN: ${{ secrets.AI_TW_PAT || secrets.GITHUB_TOKEN }}
           # The pr-branch publisher resolves the PR to comment on from this.
           PR_URL: ${{ github.event.pull_request.html_url }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}

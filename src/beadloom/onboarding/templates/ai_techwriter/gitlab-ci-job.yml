@@ -45,6 +45,17 @@ ai-techwriter:
     - uv sync --extra dev --extra languages
     # Goose is provisioned on the self-hosted runner image (pinned there).
     - goose --version
+    # Point the push remote + glab at an access token so the agent's refresh
+    # commit TRIGGERS the MR pipeline. WHY: a push authenticated with
+    # CI_JOB_TOKEN does NOT trigger a new pipeline (anti-recursion) — so your
+    # required check would be missing on the MR HEAD.
+    # ADOPTERS: create a project/group access-token CI/CD variable `AI_TW_PAT`
+    # (scopes: api + write_repository). WITHOUT it, the agent's commit will NOT
+    # auto-trigger your required pipeline — you'd have to re-run it manually.
+    # Falls back to CI_JOB_TOKEN when AI_TW_PAT is unset (push still works).
+    - 'PUSH_TOKEN="${AI_TW_PAT:-$CI_JOB_TOKEN}"'
+    - git remote set-url --push origin "https://gitlab-ci-token:${PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - 'export GITLAB_TOKEN="${AI_TW_PAT:-$CI_JOB_TOKEN}"'
     # Rebuild the index so sync-check sees current code-doc state.
     - uv run beadloom reindex
     # The one entrypoint. QWEN_API_KEY (+ optional QWEN_BASE_URL) are masked
