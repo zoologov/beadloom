@@ -557,13 +557,19 @@ Idempotently scaffolds (clean overwrite on re-run):
   data (`onboarding/templates/ai_techwriter/`, inert `.py.txt` assets kept
   byte-identical to the live source by a drift-guard test — principle 5).
 - The chosen platform's CI wrapper: `.github/workflows/ai-techwriter.yml`
-  (GitHub) **or** an `ai-techwriter` job in `.gitlab-ci.yml` (GitLab). Both
-  trigger on **push to main/master** (+ manual dispatch) and call the same
-  `python -m tools.ai_techwriter` entrypoint; only the trigger, the secret
-  naming (`QWEN_API_KEY` repo secret vs CI/CD variable), and `--platform`
-  differ. An existing `.gitlab-ci.yml` is appended to (job-only, stripping the
-  standalone `stages:` header) — never blindly clobbered; an already-wired file
-  is left as-is.
+  (GitHub) **or** an `ai-techwriter` job in `.gitlab-ci.yml` (GitLab). As of
+  BDL-049 both trigger on a **PR to main/master** — GitHub `on: pull_request`
+  (`opened`/`synchronize`/`reopened`), GitLab `merge_request_event` — plus a
+  manual fallback (`workflow_dispatch`). They call the same
+  `python -m tools.ai_techwriter` entrypoint; the PR path passes
+  `--target pr-branch` and `--since $(git merge-base origin/<base> HEAD)` so the
+  agent commits its refresh into the PR branch; the manual path uses
+  `--target branch-pr`. A loop-guard skips the agent's own
+  `[skip ai-techwriter]` commit, and `cancel-in-progress: true` supersedes older
+  runs. Only the trigger, the secret naming (`QWEN_API_KEY` repo secret vs CI/CD
+  variable), and `--platform` differ. An existing `.gitlab-ci.yml` is appended to
+  (job-only, stripping the standalone `stages:` header) — never blindly
+  clobbered; an already-wired file is left as-is.
 - `tools/ai_techwriter/provision-runner.sh` — a hardened, idempotent,
   executable (`0o755`) self-hosted-runner provisioner (`--platform/--repo/--token`):
   guarantees swap **before** any apt/build (the OOM lesson), RAM (~2 GB min,
@@ -604,6 +610,37 @@ process-tools are the deterministic, tool-agnostic substrate the flow calls; and
 the single source of TRUE enforcement remains `beadloom ci` in CI (the in-flow
 gates are advisory-strong, not a substitute for CI). See the
 [Agentic Dev Flow guide](../guides/agentic-flow.md).
+
+### beadloom setup-branch-protection
+
+Configure trunk-based branch protection on `main` via `gh api` (BDL-049), so the
+CI gate becomes **true enforcement** rather than advisory. GitHub only.
+
+```bash
+beadloom setup-branch-protection --repo OWNER/NAME [--branch main] [--check CONTEXT]... [--dry-run]
+```
+
+Idempotently sets `main` (or `--branch`) protection with a declarative
+`PUT repos/{owner}/{repo}/branches/{branch}/protection`: a **PR is required** (no
+direct push), the always-on **`beadloom-gate` check is a required status check**
+(`strict: true`), and `enforce_admins: false` + 0 required reviews +
+`restrictions: null` so the **solo owner is never locked out** (can self-merge).
+`PUT .../protection` is declarative, so re-running re-settles the same state.
+
+- `--repo OWNER/NAME` (required) — the GitHub repository (e.g. `acme/widget`).
+- `--branch` (default `main`) — the trunk to protect.
+- `--check CONTEXT` (repeatable) — overrides the default required-check context
+  (`beadloom-gate`) **entirely**. A context MUST match a real GitHub check-run
+  name EXACTLY and must NOT be a **path-filtered** workflow's check: such a check
+  does not run on PRs that miss the filter, so under `strict: true` the PR — and
+  therefore `main` — would never become mergeable. (The repo's path-filtered
+  `Tests` legs are why they are not the default; a repo whose tests run on every
+  PR can require them via `--check`.)
+- `--dry-run` — print the exact `gh api` call + JSON payload without touching
+  GitHub.
+
+Delegates to `onboarding/branch_protection.py:apply_branch_protection()` (the
+`gh` invocation is injected via a `GhRunner` seam for mockable tests).
 
 ### beadloom mcp-serve
 

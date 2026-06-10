@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Phase "Trunk-based + PR-triggered AI tech-writer" (BDL-049): moves the AI
+tech-writer from an `on: push` to `main` trigger to **`on: pull_request` → `main`**,
+and the whole dev flow to **trunk-based development**. The agent now runs **once per
+PR** against a clean `--since $(git merge-base origin/<base> HEAD)` baseline and
+**commits its doc refresh back onto the PR head branch** (`--target pr-branch`,
+message `[skip ai-techwriter] …`) + posts a PR comment — code and its doc updates
+review and merge in one PR; no orphan doc-PRs. A **loop-guard** (bot author /
+`[skip ai-techwriter]` subject → the workflow's `AI_TW_SKIP` early-skip step) stops
+the agent's own push from re-triggering the `synchronize` event, and
+`cancel-in-progress: true` cancels a superseded in-flight run. GitLab mirrors the
+model via `merge_request_event`. This fixes the redundant 1h/768K-token re-refreshes,
+the red-`main` window, and the orphan-doc-PR pile-up seen during BDL-047/048.
+**Honest framing (not overclaimed):** no auto-merge — a human merges the PR; CI on
+the PR (`beadloom-gate` as a **required check** via the new
+`beadloom setup-branch-protection`) is the true enforcement; the agent's refresh is a
+proposal in the PR.
+
+### Added (BDL-049)
+- **`beadloom setup-branch-protection --repo OWNER/NAME [--branch] [--check] [--dry-run]`** — idempotent `main` (or `--branch`) branch protection via `gh api` (declarative `PUT .../protection`): a PR is required (no direct push), the always-on `beadloom-gate` check is a **required status check** (`strict: true`), `enforce_admins: false` + 0 required reviews + `restrictions: null` so the solo owner is never locked out (can self-merge). `--check` (repeatable) overrides the default required-check context entirely; it must match a **real** GitHub check-run name and must NOT be a path-filtered workflow's check (it would not run on every PR → stuck PRs under `strict`). `--dry-run` prints the exact `gh api` call + JSON payload without touching GitHub. New module `onboarding/branch_protection.py` (`build_protection_payload`, `BranchProtectionRequest`, `apply_branch_protection`; injectable `GhRunner` seam for mockable tests) (BDL-049 G6)
+- **`--target {branch-pr,pr-branch}` on the AI tech-writer harness** (`tools/ai_techwriter`) — `pr-branch` (the `on: pull_request` path) commits the refresh **onto the existing PR head branch** + posts a PR/MR comment (`GitHubPRBranchPublisher` / `GitLabPRBranchPublisher`), resolving the PR/MR from the CI env; `branch-pr` (the default, for manual `workflow_dispatch` with no PR context) keeps the original branch-cutting + open-PR behaviour (BDL-049 G4)
+
+### Changed (BDL-049)
+- **AI tech-writer triggers on `pull_request` to `main`/`master`, not `push`.** `.github/workflows/ai-techwriter.yml` now fires on `pull_request` (`opened`, `synchronize`, `reopened`); the `push: branches:[main]` trigger is removed. `--since` is `git merge-base origin/$BASE_REF HEAD` (fallback: the PR base SHA) — exactly "what this PR changed" — replacing `--since github.event.before`. A **loop-guard** step skips the run (`AI_TW_SKIP=1`) when the PR head commit's author is `beadloom-ai-techwriter` OR its subject contains `[skip ai-techwriter]`. `concurrency` now sets `cancel-in-progress: true` (a new commit cancels the older in-flight run for that PR). `workflow_dispatch` is kept as a manual fallback and uses the `--target branch-pr` path (BDL-049 G2/G3/G5/G8)
+- **GitLab CI mirrors the model** — the `ai-techwriter` job in `.gitlab-ci.yml` now runs on `rules: $CI_PIPELINE_SOURCE == "merge_request_event"`, computes `--since` from `git merge-base origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME HEAD` (fallback `$CI_MERGE_REQUEST_DIFF_BASE_SHA`), publishes `--target pr-branch` onto `$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME`, and applies the same loop-guard. The vendored CI templates (`onboarding/templates/ai_techwriter/{github-workflow,gitlab-ci-job}.yml`) mirror both platforms (BDL-049 G7)
+- **Vendored coordinator flow is now trunk-based** — `CLAUDE.md` §6 (Git) and the vendored `.claude/commands/coordinator.md` describe feature-branch + one PR to `main` + merge-when-green, re-vendored so the BDL-048 drift-guard stays green and `setup-agentic-flow` scaffolds the trunk-based flow into any repo (BDL-049 G1)
+- **Docs** — the AI tech-writer guide (`docs/guides/ai-techwriter.md`) and the agentic-flow guide (`docs/guides/agentic-flow.md`) now describe the PR-triggered / trunk-based model (merge-base `--since`, `--target pr-branch`, loop-guard, `cancel-in-progress`, `workflow_dispatch` fallback, GitLab MR mirror, `setup-branch-protection`) (BDL-049 G10)
+
 Phase "Agentic-flow packaging" (BDL-048): packages Beadloom's proven solo
 multi-agent dev flow into the product. One command (`beadloom setup-agentic-flow`)
 scaffolds the flow into any repo — the role subagents + slash skills vendored
