@@ -10,11 +10,27 @@ from typing import TYPE_CHECKING
 
 from click.testing import CliRunner
 
+from beadloom.onboarding.agentic_flow_setup import scaffold
 from beadloom.onboarding.scanner import generate_agents_md
 from beadloom.services.cli import main
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+def _scaffolded_project(tmp_path: Path) -> Path:
+    project = tmp_path / "acme-service"
+    project.mkdir()
+    (project / "pyproject.toml").write_text(
+        '[project]\nname = "acme-service"\nversion = "9.9.9"\n'
+        'dependencies = ["click", "rich"]\n',
+        encoding="utf-8",
+    )
+    # config-check opens .beadloom/beadloom.db; ensure the dir exists (a real
+    # repo would have run `beadloom init`).
+    (project / ".beadloom").mkdir(parents=True, exist_ok=True)
+    scaffold(project)
+    return project
 
 
 def _write_rules_yml(project_root: Path, *, domains: list[str]) -> None:
@@ -65,5 +81,35 @@ class TestConfigCheckCLI:
         # A follow-up check is clean.
         recheck = CliRunner().invoke(
             main, ["config-check", "--project", str(tmp_path)]
+        )
+        assert recheck.exit_code == 0
+
+
+class TestConfigCheckAgenticFlow:
+    def test_edited_flow_file_reports_drift(self, tmp_path: Path) -> None:
+        project = _scaffolded_project(tmp_path)
+        (project / ".claude" / "agents" / "dev.md").write_text(
+            "HAND EDITED\n", encoding="utf-8"
+        )
+
+        result = CliRunner().invoke(
+            main, ["config-check", "--project", str(project)]
+        )
+        assert result.exit_code == 1
+        assert ".claude/agents/dev.md" in result.output
+
+    def test_fix_restores_drifted_flow_file(self, tmp_path: Path) -> None:
+        project = _scaffolded_project(tmp_path)
+        agent = project / ".claude" / "agents" / "dev.md"
+        agent.write_text("HAND EDITED\n", encoding="utf-8")
+
+        result = CliRunner().invoke(
+            main, ["config-check", "--fix", "--project", str(project)]
+        )
+        assert result.exit_code == 0
+        assert "HAND EDITED" not in agent.read_text(encoding="utf-8")
+
+        recheck = CliRunner().invoke(
+            main, ["config-check", "--project", str(project)]
         )
         assert recheck.exit_code == 0

@@ -12,6 +12,7 @@ from __future__ import annotations
 import sqlite3
 from typing import TYPE_CHECKING
 
+from beadloom.onboarding.agentic_flow_setup import AGENT_FILES, COMMAND_FILES, scaffold
 from beadloom.onboarding.config_sync import ConfigDrift, check_config_drift
 from beadloom.onboarding.scanner import (
     _RULES_ADAPTER_TEMPLATE,
@@ -21,6 +22,19 @@ from beadloom.onboarding.scanner import (
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+def _make_scaffolded_project(tmp_path: Path) -> Path:
+    """A project root with the agentic flow scaffolded into it."""
+    project = tmp_path / "acme-service"
+    project.mkdir()
+    (project / "pyproject.toml").write_text(
+        '[project]\nname = "acme-service"\nversion = "9.9.9"\n'
+        'dependencies = ["click", "rich"]\n',
+        encoding="utf-8",
+    )
+    scaffold(project)
+    return project
 
 
 def _make_conn() -> sqlite3.Connection:
@@ -232,6 +246,103 @@ class TestAdapterDrift:
             conn.close()
 
         assert all(d.file != ".cursorrules" for d in drifts)
+
+
+class TestAgenticFlowDrift:
+    """Drift for the scaffolded ``.claude/agents/*`` + ``.claude/commands/*``."""
+
+    def test_freshly_scaffolded_flow_has_no_drift(self, tmp_path: Path) -> None:
+        """Right after ``scaffold``, the flow files match the vendored templates."""
+        project = _make_scaffolded_project(tmp_path)
+
+        conn = _make_conn()
+        try:
+            drifts = check_config_drift(project, conn)
+        finally:
+            conn.close()
+
+        flow_drifts = [
+            d for d in drifts if "/agents/" in d.file or "/commands/" in d.file
+        ]
+        assert flow_drifts == []
+
+    def test_edited_agent_file_reports_drift(self, tmp_path: Path) -> None:
+        """A hand-edited scaffolded agent file is reported as drifted."""
+        project = _make_scaffolded_project(tmp_path)
+        agent = project / ".claude" / "agents" / "dev.md"
+        agent.write_text("HAND EDITED PROTOCOL\n", encoding="utf-8")
+
+        conn = _make_conn()
+        try:
+            drifts = check_config_drift(project, conn)
+        finally:
+            conn.close()
+
+        flow_drifts = [d for d in drifts if d.file == ".claude/agents/dev.md"]
+        assert len(flow_drifts) == 1
+
+    def test_edited_command_file_reports_drift(self, tmp_path: Path) -> None:
+        """A hand-edited scaffolded command file is reported as drifted."""
+        project = _make_scaffolded_project(tmp_path)
+        cmd = project / ".claude" / "commands" / "coordinator.md"
+        cmd.write_text("REWRITTEN PLAYBOOK\n", encoding="utf-8")
+
+        conn = _make_conn()
+        try:
+            drifts = check_config_drift(project, conn)
+        finally:
+            conn.close()
+
+        flow_drifts = [d for d in drifts if d.file == ".claude/commands/coordinator.md"]
+        assert len(flow_drifts) == 1
+
+    def test_unscaffolded_project_not_flagged(self, tmp_path: Path) -> None:
+        """A repo without the flow scaffolded is never flagged for flow drift.
+
+        The flow is only checked when ALL of the canonical agents+commands are
+        present (a repo that never adopted the flow must not be forced into it).
+        """
+        # Only a stray, partial set of files — flow was never scaffolded.
+        agents_dir = tmp_path / ".claude" / "agents"
+        agents_dir.mkdir(parents=True)
+        (agents_dir / "dev.md").write_text("just my own notes\n", encoding="utf-8")
+
+        conn = _make_conn()
+        try:
+            drifts = check_config_drift(tmp_path, conn)
+        finally:
+            conn.close()
+
+        flow_drifts = [
+            d for d in drifts if "/agents/" in d.file or "/commands/" in d.file
+        ]
+        assert flow_drifts == []
+
+    def test_all_drifted_flow_files_reported(self, tmp_path: Path) -> None:
+        """Every present-but-drifted flow file gets its own ConfigDrift."""
+        project = _make_scaffolded_project(tmp_path)
+        for name in AGENT_FILES:
+            (project / ".claude" / "agents" / f"{name}.md").write_text(
+                "x\n", encoding="utf-8"
+            )
+        for name in COMMAND_FILES:
+            (project / ".claude" / "commands" / f"{name}.md").write_text(
+                "y\n", encoding="utf-8"
+            )
+
+        conn = _make_conn()
+        try:
+            drifts = check_config_drift(project, conn)
+        finally:
+            conn.close()
+
+        flow_files = {
+            d.file for d in drifts if "/agents/" in d.file or "/commands/" in d.file
+        }
+        expected = {f".claude/agents/{n}.md" for n in AGENT_FILES} | {
+            f".claude/commands/{n}.md" for n in COMMAND_FILES
+        }
+        assert flow_files == expected
 
 
 # ---------------------------------------------------------------------------

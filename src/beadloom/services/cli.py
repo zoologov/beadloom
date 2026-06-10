@@ -1836,6 +1836,14 @@ def config_check(*, fix: bool, project: Path | None) -> None:
 
         setup_rules_auto(project_root)
 
+        # Re-drop drifted agentic-flow files (only if the flow is scaffolded —
+        # never force the flow onto a repo that did not adopt it). Restores the
+        # vendored agents/commands; CLAUDE.md regions are already refreshed
+        # above, so user prose outside the auto-regions is preserved.
+        from beadloom.onboarding.config_sync import refresh_agentic_flow_files
+
+        refresh_agentic_flow_files(project_root)
+
     db_path = project_root / ".beadloom" / "beadloom.db"
     conn = open_db(db_path)
     try:
