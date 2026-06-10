@@ -182,7 +182,7 @@ Checks:
 Check doc-code synchronization.
 
 ```bash
-beadloom sync-check [--porcelain] [--json] [--report] [--ref REF_ID] [--project DIR]
+beadloom sync-check [--porcelain] [--json] [--report] [--ref REF_ID] [--since GIT_REF] [--project DIR]
 ```
 
 Exit codes: 0 = all OK, 1 = error, 2 = stale pairs found.
@@ -191,6 +191,7 @@ Exit codes: 0 = all OK, 1 = error, 2 = stale pairs found.
 - `--json` -- structured JSON output with summary and pair details. Each pair includes `status`, `ref_id`, `doc_path`, `code_path`, `reason`, and optional `details`.
 - `--report` -- ready-to-post Markdown report for CI (GitHub/GitLab).
 - `--ref` -- filter results by ref_id.
+- `--since GIT_REF` -- compute drift against the code state at a **git ref** (e.g. the push's parent commit) instead of the stored `sync_state` baseline. Reports pairs whose code drifted since the ref while the doc was not correspondingly updated. This makes drift detection work on a **fresh CI checkout**: a clean clone reindexes from scratch and re-baselines `sync_state` to the just-pushed code, so without a ref baseline `sync-check` sees 0 stale even when the push left a doc behind. Mirrors `beadloom diff --since`. Used by the AI tech-writer harness (it passes the push parent — `github.event.before` / `$CI_COMMIT_BEFORE_SHA`, falling back to `HEAD~1`).
 
 Human-readable output includes reason-aware formatting:
 - `untracked_files` reason: displays list of untracked files in `details`.
@@ -554,10 +555,19 @@ Idempotently scaffolds (clean overwrite on re-run):
   data (`onboarding/templates/ai_techwriter/`, inert `.py.txt` assets kept
   byte-identical to the live source by a drift-guard test — principle 5).
 - The chosen platform's CI wrapper: `.github/workflows/ai-techwriter.yml`
-  (GitHub) **or** an `ai-techwriter` job in `.gitlab-ci.yml` (GitLab). An
-  existing `.gitlab-ci.yml` is appended to (job-only, stripping the standalone
-  `stages:` header) — never blindly clobbered; an already-wired file is left
-  as-is.
+  (GitHub) **or** an `ai-techwriter` job in `.gitlab-ci.yml` (GitLab). Both
+  trigger on **push to main/master** (+ manual dispatch) and call the same
+  `python -m tools.ai_techwriter` entrypoint; only the trigger, the secret
+  naming (`QWEN_API_KEY` repo secret vs CI/CD variable), and `--platform`
+  differ. An existing `.gitlab-ci.yml` is appended to (job-only, stripping the
+  standalone `stages:` header) — never blindly clobbered; an already-wired file
+  is left as-is.
+- `tools/ai_techwriter/provision-runner.sh` — a hardened, idempotent,
+  executable (`0o755`) self-hosted-runner provisioner (`--platform/--repo/--token`):
+  guarantees swap **before** any apt/build (the OOM lesson), RAM (~2 GB min,
+  ~4 GB recommended) + disk (~5 GB) prechecks, fail-hard on the critical
+  steps (toolchain + runner register/start), and best-effort + verified
+  Goose/beadloom/bd installs reported at the end.
 - `docs/guides/ai-techwriter.md` — the 3-step getting-started guide.
 
 Delegates to `onboarding/ai_techwriter_setup.py:scaffold()`.
@@ -582,7 +592,7 @@ Module `src/beadloom/services/cli.py`:
 - `federate` -- aggregate >=2 satellite export artifacts into one federated graph (drift verdicts + staleness)
 - `doctor` -- run validation checks
 - `status` -- show index statistics with health trends and context metrics; `--debt-report` mode with `--fail-if`, `--category` flags
-- `sync_check` -- check doc-code sync with reason/details (reason-aware output for `untracked_files`, `missing_modules`, `symbols_changed`)
+- `sync_check` -- check doc-code sync with reason/details (reason-aware output for `untracked_files`, `missing_modules`, `symbols_changed`); `--since GIT_REF` measures drift against a git ref instead of the stored baseline (fresh-checkout / per-push drift detection)
 - `sync_update` -- review and update stale docs interactively; `--check` for status-only; `--yes`/`-y` for a non-interactive re-baseline; `--all` (with `--yes`) re-baselines every stale ref
 - `install_hooks` -- install/remove pre-commit hook
 - `link` -- manage external tracker links

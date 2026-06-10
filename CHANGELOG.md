@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Phase F4.1 "AI tech-writer in CI" (BDL-047): closes the DocAsCode loop at the *fix*
+step. Beadloom already detects doc drift honestly; F4.1 adds automated remediation —
+on push to `main`/`master`, a deterministic, platform-agnostic harness
+(`tools/ai_techwriter/`) drives a **Goose** agent + **Qwen3.7-Plus** (external API)
+to rewrite ONLY the drifted docs, verifies freshness to a fixpoint, runs
+`beadloom ci`, and opens a **PR/MR for human review** (never auto-merges; flagged
+"⚠ needs human" if the gate is not green). Runs on a self-hosted VPS runner where
+the API key + Goose live; dual-platform (GitHub Actions + GitLab CI), first-class.
+Dogfood-proven on the real VPS runner (refresh PR merged). Honesty preserved:
+`sync-check → 0` proves *freshness*, the human PR review proves *correctness*. Only
+two additive core changes (a non-interactive `sync-update` and a `sync-check --since`
+primitive) + one new `setup-*` command; no schema bump.
+
+### Added (BDL-047 / F4.1)
+- **`beadloom sync-check --since <git-ref>`** — measures doc-code drift against the code state at a **git ref** (e.g. the push's parent) instead of the stored `sync_state` baseline. Reports pairs whose code drifted since the ref while the doc was not correspondingly updated. Makes drift detection survive a **fresh CI checkout** (a clean clone re-baselines `sync_state` to the just-pushed code, masking per-push drift). Mirrors `diff --since`; rejects invalid/all-zero refs. New engine fn `doc_sync/engine.check_sync_since` (reads `git show <ref>:<path>` + disk only; mutates nothing) (BDL-047 G12)
+- **`beadloom sync-update [REF] --yes [--all]`** — a **non-interactive** re-baseline (no editor/prompt): records that the doc(s) match the code now (recompute hashes/symbols, `status='ok'`). `--all` (with `--yes`) re-baselines every currently-stale ref in one call — the primitive a CI fixpoint loop needs. Wraps the existing `mark_synced_by_ref`. Closes UX #106 (BDL-047 W1)
+- **`beadloom setup-ai-techwriter --platform {github,gitlab}`** — one-command, idempotent opt-in (in the `setup-*` family). **Vendors** the deterministic harness package + Goose recipe into `tools/ai_techwriter/` (self-contained — the runner needs only `beadloom` + `goose` + python), drops the chosen platform's CI wrapper, a hardened `provision-runner.sh`, and the getting-started guide `docs/guides/ai-techwriter.md`. The harness is shipped as drift-guarded package data (inert `.py.txt` assets kept byte-identical to the live source) (BDL-047 G8/G11)
+- **The deterministic harness** (`tools/ai_techwriter/`, repo tooling, not the wheel): discover scope from `sync-check --json --since` → per-doc context packet (`docs polish --format json` + `ctx`/`why`) → Goose rewrite → `sync-update --yes` → fixpoint re-check (per-doc retry ≤2, fixpoint rounds ≤10, hard caps 50 turns / 2M tokens) → `beadloom ci` gate → branch + PR/MR via a per-platform adapter (`gh` / `glab`). Entrypoint `python -m tools.ai_techwriter --platform {github,gitlab} --since <ref> [--dry-run]`. Goose never decides scope, marks synced, or merges (BDL-047 W2/W3)
+- **Both CI wrappers trigger on push to main/master** (+ manual dispatch): `.github/workflows/ai-techwriter.yml` and the `ai-techwriter` job in `.gitlab-ci.yml` call the SAME entrypoint; only the trigger, secret naming (`QWEN_API_KEY` repo secret / CI/CD variable; optional `QWEN_BASE_URL`), and `--platform` differ. The push parent (`github.event.before` / `$CI_COMMIT_BEFORE_SHA`, fallback `HEAD~1`) feeds `--since`. Loop-safe: a human-merged refresh PR triggers a 0-stale no-op; `concurrency` serializes (BDL-047 G10)
+- **`provision-runner.sh`** — a hardened, idempotent, executable self-hosted-runner provisioner (`--platform/--repo/--token`): guarantees swap **before** apt/build (the OOM lesson), RAM (~2 GB min, ~4 GB recommended) + disk (~5 GB) prechecks, fail-hard on the critical steps (toolchain + runner register/start), best-effort + verified Goose/beadloom/bd installs reported at the end (BDL-047 G11)
+- **G9 dashboard widget "AI tech-writer activity"** — the harness appends an honest **run-record** per run to `.beadloom/ai_techwriter_runs.json` (`ts` stored not `now()`, platform, docs_refreshed, input/output tokens, model, gate, pr_url); the VitePress dashboard renders an `AiTechwriterActivity` widget (`site_dashboard.build_dashboard_data` `ai_techwriter` section): docs-refreshed + token spend per-run and cumulative, ONLY real recorded runs (no interpolation). **Tokens are fact** (from the API `usage`); the **dollar figure is a clearly-labeled estimate** ("est. @ $X/1M tokens"), never a hard cost. Absent/empty/corrupt store → empty-but-present section (BDL-047 G9)
+- **Getting-started guide** `docs/guides/ai-techwriter.md` — the loop, the 3-step setup, both platforms, the on-push trigger, the honesty model, and the G9 widget (BDL-047 G7)
+
 ## [1.10.0] - 2026-06-02
 
 **Federation + a living, navigable public portal.** This release adds cross-repo contract federation and a tool-agnostic CI gate (F1–F3), a generated VitePress knowledge-base portal with an interactive metrics dashboard, interactive architecture + cross-repo landscape map, and the published validated docs (F4/F4.4), and reshapes that portal into a navigable, bilingual (EN/RU) front door with the README as its landing page (BDL-046). Everything is additive — no breaking changes to the CLI/API or the graph schema.
