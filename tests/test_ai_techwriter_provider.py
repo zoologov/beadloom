@@ -13,7 +13,9 @@ from typing import TYPE_CHECKING
 
 import yaml
 from tools.ai_techwriter.provider import (
+    DASHSCOPE_OPENAI_BASE_URL,
     DEFAULT_API_KEY_ENV,
+    DEFAULT_BASE_URL_ENV,
     QWEN_MODEL,
     ProviderConfig,
     default_recipe_path,
@@ -70,6 +72,41 @@ def test_provider_resolve_key_none_when_unset(monkeypatch: pytest.MonkeyPatch) -
     cfg = qwen_provider()
     monkeypatch.delenv("QWEN_API_KEY", raising=False)
     assert cfg.resolve_api_key() is None
+
+
+# --------------------------------------------------------------------------- #
+# base_url env resolution (QWEN_BASE_URL → MaaS workspace endpoint)
+# --------------------------------------------------------------------------- #
+
+
+def test_base_url_env_name_is_qwen_base_url() -> None:
+    assert DEFAULT_BASE_URL_ENV == "QWEN_BASE_URL"
+
+
+def test_qwen_provider_base_url_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("QWEN_BASE_URL", "https://maas.example.com/v1")
+    cfg = qwen_provider()
+    assert cfg.base_url == "https://maas.example.com/v1"
+
+
+def test_qwen_provider_base_url_default_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("QWEN_BASE_URL", raising=False)
+    cfg = qwen_provider()
+    assert cfg.base_url == DASHSCOPE_OPENAI_BASE_URL
+
+
+def test_qwen_provider_base_url_default_when_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    # An empty/whitespace var must not silently point Goose at "" — fall back.
+    monkeypatch.setenv("QWEN_BASE_URL", "")
+    cfg = qwen_provider()
+    assert cfg.base_url == DASHSCOPE_OPENAI_BASE_URL
+
+
+def test_qwen_provider_explicit_base_url_wins_over_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    # An explicit caller arg overrides both env and the generic default.
+    monkeypatch.setenv("QWEN_BASE_URL", "https://from-env/v1")
+    cfg = qwen_provider(base_url="https://explicit/v1")
+    assert cfg.base_url == "https://explicit/v1"
 
 
 def test_custom_provider_config() -> None:

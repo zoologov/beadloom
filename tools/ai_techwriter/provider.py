@@ -6,7 +6,10 @@ The model boundary, in one typed place:
   DashScope** endpoint. The API key is read from a **named environment
   variable** (``QWEN_API_KEY`` by default) and is **never inlined** in the repo
   or in this module — only referenced by name, resolved at run time on the
-  CI runner that holds the secret.
+  CI runner that holds the secret. The **base URL is env-overridable** via
+  ``QWEN_BASE_URL`` (the workspace-specific Alibaba MaaS endpoint), falling back
+  to the generic DashScope gateway when unset/empty — read at resolve time, no
+  I/O at import (mirrors how the key is resolved).
 * Generous per-run **hard caps** (max turns / tokens) act purely as a runaway
   safety net (RFC Q2) — never as a per-call quality knob; extended thinking
   stays ENABLED (quality first, no tiering — principle 10).
@@ -27,7 +30,11 @@ QWEN_MODEL = "qwen3.7-plus"
 #: Env var holding the model API key on the CI runner (never inlined).
 DEFAULT_API_KEY_ENV = "QWEN_API_KEY"
 
-#: DashScope OpenAI-compatible gateway (international endpoint).
+#: Env var optionally overriding the base URL with the workspace-specific
+#: Alibaba MaaS endpoint (set as a CI secret; resolved at run time, never inlined).
+DEFAULT_BASE_URL_ENV = "QWEN_BASE_URL"
+
+#: DashScope OpenAI-compatible gateway (international endpoint) — generic fallback.
 DASHSCOPE_OPENAI_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 
 
@@ -84,10 +91,16 @@ class ProviderConfig:
 def qwen_provider(
     *,
     api_key_env: str = DEFAULT_API_KEY_ENV,
+    base_url: str | None = None,
     max_turns: int = 50,
     max_tokens: int = 2_000_000,
 ) -> ProviderConfig:
     """Default provider config: Qwen3.7-Plus via DashScope (OpenAI-compatible).
+
+    The ``base_url`` is resolved in precedence order: an explicit *base_url* arg
+    wins, else the ``QWEN_BASE_URL`` env var (the workspace MaaS endpoint), else
+    the generic :data:`DASHSCOPE_OPENAI_BASE_URL`. The env read happens here at
+    resolve time (no I/O at import) and an empty/whitespace value falls back.
 
     Caps default to a generous runaway ceiling (mirrors
     :class:`~tools.ai_techwriter.models.HarnessConfig`) — a safety net only.
@@ -95,12 +108,18 @@ def qwen_provider(
     return ProviderConfig(
         provider="openai",
         model=QWEN_MODEL,
-        base_url=DASHSCOPE_OPENAI_BASE_URL,
+        base_url=base_url if base_url is not None else _resolve_base_url(),
         api_key_env=api_key_env,
         max_turns=max_turns,
         max_tokens=max_tokens,
         thinking_enabled=True,
     )
+
+
+def _resolve_base_url() -> str:
+    """Base URL from ``QWEN_BASE_URL`` (stripped), else the generic default."""
+    value = os.environ.get(DEFAULT_BASE_URL_ENV, "").strip()
+    return value or DASHSCOPE_OPENAI_BASE_URL
 
 
 def default_recipe_path() -> Path:

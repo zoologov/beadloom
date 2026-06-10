@@ -33,6 +33,8 @@ ai-techwriter:
     # Rebuild the index so sync-check sees current code-doc state.
     - uv run beadloom reindex
     # The one entrypoint. 0 stale -> clean no-op exit 0; flagged -> non-zero.
-    # QWEN_API_KEY is a masked CI/CD variable (never inlined); the MR is opened
+    # QWEN_API_KEY (and the optional workspace-MaaS endpoint QWEN_BASE_URL) are
+    # masked CI/CD variables (never inlined), exposed to the job env automatically
+    # so the harness resolves them at run time; the MR is opened
     # by the GitLabPublisher via glab inside the harness.
     - uv run python -m tools.ai_techwriter --platform gitlab

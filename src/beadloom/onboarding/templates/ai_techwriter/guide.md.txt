@@ -28,7 +28,9 @@ human proves *correctness*.
    scope it to this repo and use an ephemeral (clean-checkout) workspace.
 2. **Add the `QWEN_API_KEY` secret** — a GitHub repository secret *or* a GitLab
    masked CI/CD variable. It is referenced only by name in the wrapper and
-   resolved on the runner; it is never written into the repo.
+   resolved on the runner; it is never written into the repo. Optionally also set
+   `QWEN_BASE_URL` (same way) to point at a workspace-specific MaaS endpoint; when
+   unset the harness uses the generic DashScope gateway.
 3. **Run `beadloom setup-ai-techwriter --platform <github|gitlab>`** (already
    done if you are reading this), **commit** the scaffolded files, and **enable
    the pipeline** (GitHub: the workflow is on once committed; GitLab: enable the

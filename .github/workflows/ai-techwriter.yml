@@ -55,6 +55,9 @@ jobs:
         env:
           # Repository secret — never inlined; resolved only on the runner.
           QWEN_API_KEY: ${{ secrets.QWEN_API_KEY }}
+          # Workspace-specific MaaS endpoint (secret); falls back to the generic
+          # DashScope gateway in the harness when unset.
+          QWEN_BASE_URL: ${{ secrets.QWEN_BASE_URL }}
           # gh pr create authenticates with the job token.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: uv run python -m tools.ai_techwriter --platform github
