@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from click.testing import CliRunner
 
 from beadloom.onboarding.branch_protection import (
@@ -108,6 +109,37 @@ class TestApply:
         assert req.owner == "acme"
         assert req.repo == "widget"
 
+    def test_apply_surfaces_gh_error_cleanly(self) -> None:
+        """A failing ``gh`` runner (e.g. CalledProcessError) propagates unswallowed.
+
+        The helper does not silently ignore a GitHub error — the caller sees the
+        failure (a real ``gh api`` failure would raise ``CalledProcessError``;
+        the helper must NOT mask it).
+        """
+        import subprocess
+
+        def boom(argv: list[str], stdin: str) -> str:
+            raise subprocess.CalledProcessError(1, argv, stderr="403 Forbidden")
+
+        with pytest.raises(subprocess.CalledProcessError):
+            apply_branch_protection("acme", "widget", runner=boom)
+
+    def test_apply_honors_custom_branch_and_contexts(self) -> None:
+        """A non-default branch + custom contexts flow into the sent request."""
+        runner = _FakeRunner()
+        req = apply_branch_protection(
+            "acme",
+            "widget",
+            branch="trunk",
+            status_check_contexts=("Beadloom Gate",),
+            runner=runner,
+        )
+        assert req.branch == "trunk"
+        args, stdin = runner.calls[0]
+        assert "repos/acme/widget/branches/trunk/protection" in args
+        body = json.loads(stdin)
+        assert body["required_status_checks"]["contexts"] == ["Beadloom Gate"]
+
 
 class TestCli:
     def test_dry_run_prints_exact_gh_call_without_invoking(self) -> None:
@@ -123,9 +155,51 @@ class TestCli:
         assert "required_status_checks" in result.output
         assert "enforce_admins" in result.output
 
-    def test_rejects_malformed_repo(self) -> None:
+    @pytest.mark.parametrize(
+        "bad_repo",
+        ["no-slash", "/leading", "a/b/c", "owner/", "/"],
+    )
+    def test_rejects_malformed_repo(self, bad_repo: str) -> None:
         result = CliRunner().invoke(
             main,
-            ["setup-branch-protection", "--repo", "no-slash", "--dry-run"],
+            ["setup-branch-protection", "--repo", bad_repo, "--dry-run"],
         )
         assert result.exit_code != 0
+
+    def test_dry_run_payload_is_owner_safe_and_strict(self) -> None:
+        """The printed payload is owner-safe: 0 reviews, admins not enforced,
+        strict required checks, no restrictions (owner never locked out)."""
+        result = CliRunner().invoke(
+            main,
+            ["setup-branch-protection", "--repo", "acme/widget", "--dry-run"],
+        )
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output.split("--- payload (stdin) ---", 1)[1])
+        assert payload["required_pull_request_reviews"] == {
+            "required_approving_review_count": 0
+        }
+        assert payload["enforce_admins"] is False
+        assert payload["restrictions"] is None
+        assert payload["required_status_checks"]["strict"] is True
+
+    def test_dry_run_honors_custom_branch_and_checks(self) -> None:
+        """--branch + repeated --check flow into the dry-run gh call + payload."""
+        result = CliRunner().invoke(
+            main,
+            [
+                "setup-branch-protection",
+                "--repo",
+                "acme/widget",
+                "--branch",
+                "trunk",
+                "--check",
+                "Beadloom Gate",
+                "--check",
+                "lint",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "repos/acme/widget/branches/trunk/protection" in result.output
+        payload = json.loads(result.output.split("--- payload (stdin) ---", 1)[1])
+        assert payload["required_status_checks"]["contexts"] == ["Beadloom Gate", "lint"]

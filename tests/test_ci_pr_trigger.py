@@ -153,3 +153,115 @@ def test_live_and_template_github_share_trigger_model() -> None:
     tmpl_on = tmpl.get("on", tmpl.get(True))
     assert "pull_request" in live_on and "pull_request" in tmpl_on
     assert "push" not in live_on and "push" not in tmpl_on
+
+
+# --------------------------------------------------------------------------- #
+# BDL-049 hardening: AI_TW_SKIP gating + structural loop-guard guarantees
+# --------------------------------------------------------------------------- #
+
+
+def _gh_steps(path: Path) -> list[dict[str, object]]:
+    """The ordered step list of the single ai-techwriter job in a GH workflow."""
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    jobs = doc["jobs"]
+    job = jobs["ai-techwriter"]
+    steps = job["steps"]
+    assert isinstance(steps, list)
+    return [s for s in steps if isinstance(s, dict)]
+
+
+@pytest.mark.parametrize("path", GITHUB_FILES, ids=lambda p: p.name)
+def test_github_loop_guard_sets_skip_flag_before_work(path: Path) -> None:
+    """The loop-guard runs as an EARLY step and sets AI_TW_SKIP in the env file.
+
+    It must come before the install/harness steps so it can short-circuit the
+    agent's own ``synchronize`` re-trigger.
+    """
+    steps = _gh_steps(path)
+    guard_idx = next(
+        i
+        for i, s in enumerate(steps)
+        if isinstance(s.get("run"), str) and "AI_TW_SKIP=1" in s["run"]
+    )
+    # The guard reads the head commit author + subject (belt-and-suspenders).
+    guard = steps[guard_idx]["run"]
+    assert isinstance(guard, str)
+    assert "git log -1" in guard
+    assert "beadloom-ai-techwriter" in guard
+    assert "[skip ai-techwriter]" in guard
+    assert "GITHUB_ENV" in guard
+    # The harness step (the model + commit) comes AFTER the guard.
+    harness_idx = next(
+        i
+        for i, s in enumerate(steps)
+        if isinstance(s.get("run"), str) and "tools.ai_techwriter" in s["run"]
+    )
+    assert guard_idx < harness_idx
+
+
+@pytest.mark.parametrize("path", GITHUB_FILES, ids=lambda p: p.name)
+def test_github_every_post_guard_step_is_gated_on_skip(path: Path) -> None:
+    """Every step that does work (after the guard) is gated by AI_TW_SKIP != '1'.
+
+    Without the gate the agent's own refresh push would still install + run the
+    model on the next ``synchronize`` (the loop). Each working step's ``if:``
+    must reference the skip flag.
+    """
+    steps = _gh_steps(path)
+    guard_idx = next(
+        i
+        for i, s in enumerate(steps)
+        if isinstance(s.get("run"), str) and "AI_TW_SKIP=1" in s["run"]
+    )
+    post_guard = steps[guard_idx + 1 :]
+    assert post_guard, "there must be work steps after the guard"
+    for step in post_guard:
+        cond = step.get("if")
+        assert isinstance(cond, str), f"missing if-gate on step {step.get('name')}"
+        assert "AI_TW_SKIP" in cond, f"step {step.get('name')} not gated on AI_TW_SKIP"
+
+
+@pytest.mark.parametrize("path", GITHUB_FILES, ids=lambda p: p.name)
+def test_github_pr_path_and_dispatch_path_are_mutually_exclusive(path: Path) -> None:
+    """The pr-branch harness step is PR-only; the branch-pr step is dispatch-only.
+
+    So a single trigger never runs both publish targets.
+    """
+    steps = _gh_steps(path)
+    pr_step = next(
+        s
+        for s in steps
+        if isinstance(s.get("run"), str) and "--target pr-branch" in s["run"]
+    )
+    dispatch_step = next(
+        s
+        for s in steps
+        if isinstance(s.get("run"), str) and "--target branch-pr" in s["run"]
+    )
+    assert "pull_request" in str(pr_step.get("if"))
+    assert "workflow_dispatch" in str(dispatch_step.get("if"))
+
+
+@pytest.mark.parametrize("path", GITHUB_FILES, ids=lambda p: p.name)
+def test_github_dispatch_path_keeps_branch_pr_target(path: Path) -> None:
+    """workflow_dispatch (no PR context) keeps the original branch-PR publish."""
+    text = path.read_text(encoding="utf-8")
+    assert "--target branch-pr" in text
+
+
+def test_live_and_template_gitlab_share_trigger_model() -> None:
+    """The vendored GitLab template mirrors the live pipeline's MR trigger model."""
+    for path in GITLAB_FILES:
+        text = path.read_text(encoding="utf-8")
+        assert '$CI_PIPELINE_SOURCE == "merge_request_event"' in text
+        assert "--target pr-branch" in text
+
+
+@pytest.mark.parametrize("path", GITHUB_FILES, ids=lambda p: p.name)
+def test_github_grants_contents_and_pull_request_write(path: Path) -> None:
+    """The pr-branch publisher needs contents:write (push) + pull-requests:write
+    (comment) — both must be granted."""
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    perms = doc["permissions"]
+    assert perms["contents"] == "write"
+    assert perms["pull-requests"] == "write"
