@@ -16,7 +16,9 @@ from click.testing import CliRunner
 from tools.ai_techwriter import cli
 from tools.ai_techwriter.models import HarnessConfig, HarnessResult
 from tools.ai_techwriter.seams import (
+    GitHubPRBranchPublisher,
     GitHubPublisher,
+    GitLabPRBranchPublisher,
     GitLabPublisher,
 )
 
@@ -261,8 +263,71 @@ def test_build_agent_constructs_goose_runner(project: Path) -> None:
 
 def test_build_publisher_maps_platform() -> None:
     """The publisher builder maps the platform string to the right adapter."""
-    assert isinstance(cli._build_publisher("github"), GitHubPublisher)
-    assert isinstance(cli._build_publisher("gitlab"), GitLabPublisher)
+    assert isinstance(cli._build_publisher("github", "branch-pr"), GitHubPublisher)
+    assert isinstance(cli._build_publisher("gitlab", "branch-pr"), GitLabPublisher)
+
+
+# --------------------------------------------------------------------------- #
+# BDL-049: --target {branch-pr,pr-branch}
+# --------------------------------------------------------------------------- #
+
+
+def test_target_defaults_to_branch_pr(project: Path) -> None:
+    """No --target → the existing branch-cutting GitHubPublisher (today's path)."""
+    spy = _SpyHarness(HarnessResult(no_op=True, gate_passed=True))
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        ["--platform", "github", "--project-root", str(project)],
+        obj={"run_harness": spy, "now": lambda: "T"},
+    )
+    assert result.exit_code == 0, result.output
+    assert isinstance(spy.calls[0]["publisher"], GitHubPublisher)
+
+
+def test_target_pr_branch_wires_github_pr_branch_publisher(project: Path) -> None:
+    """--target pr-branch + github → the commit-to-current-branch publisher."""
+    spy = _SpyHarness(HarnessResult(no_op=True, gate_passed=True))
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        ["--platform", "github", "--target", "pr-branch", "--project-root", str(project)],
+        obj={"run_harness": spy, "now": lambda: "T"},
+    )
+    assert result.exit_code == 0, result.output
+    assert isinstance(spy.calls[0]["publisher"], GitHubPRBranchPublisher)
+
+
+def test_target_pr_branch_wires_gitlab_pr_branch_publisher(project: Path) -> None:
+    """--target pr-branch + gitlab → the GitLab commit-to-current-branch publisher."""
+    spy = _SpyHarness(HarnessResult(no_op=True, gate_passed=True))
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        ["--platform", "gitlab", "--target", "pr-branch", "--project-root", str(project)],
+        obj={"run_harness": spy, "now": lambda: "T"},
+    )
+    assert result.exit_code == 0, result.output
+    assert isinstance(spy.calls[0]["publisher"], GitLabPRBranchPublisher)
+
+
+def test_invalid_target_is_rejected(project: Path) -> None:
+    """An unknown --target is rejected by the CLI (non-zero, no harness call)."""
+    spy = _SpyHarness(HarnessResult(no_op=True))
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        ["--platform", "github", "--target", "nope", "--project-root", str(project)],
+        obj={"run_harness": spy, "now": lambda: "T"},
+    )
+    assert result.exit_code != 0
+    assert not spy.calls
+
+
+def test_build_publisher_maps_target() -> None:
+    """The publisher builder maps (platform, target) to the right adapter."""
+    assert isinstance(cli._build_publisher("github", "pr-branch"), GitHubPRBranchPublisher)
+    assert isinstance(cli._build_publisher("gitlab", "pr-branch"), GitLabPRBranchPublisher)
 
 
 def test_default_now_is_iso_utc_string() -> None:

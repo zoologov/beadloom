@@ -10,10 +10,41 @@ call.
 This guide covers:
 
 - what the packaged flow is and how to scaffold it (`beadloom setup-agentic-flow`),
+- the **trunk-based development model** the flow runs on (BDL-049),
 - how `beadloom config-check` keeps the scaffolded flow honest (`--fix` restores it),
 - the four MCP **process-tools** (`task_init` / `bead_context` / `complete_bead` / `checkpoint`),
 - the tool-agnostic angle (any MCP client via `beadloom setup-mcp`),
 - the **honest boundary**: orchestration stays in the harness; CI is the true enforcement.
+
+## Trunk-based development (BDL-049)
+
+The coordinator flow is **trunk-based**: `main` is the integration point and is
+**branch-protected** (no direct push). Each epic/feature runs on a short-lived
+branch and integrates via a single PR:
+
+1. **Branch off main** — `git switch -c features/<ISSUE-KEY>`.
+2. **Commit per wave** onto that branch (dev → test → review → tech-writer).
+3. **Open ONE PR to `main`** per epic/feature (or shippable slice) — not one PR per
+   commit.
+4. **The PR triggers** the [AI tech-writer](./ai-techwriter.md) (which commits its
+   doc refresh **into the PR branch** — code + docs in one reviewable PR, no orphan
+   doc-PRs) **and** CI, where `beadloom ci` (the `beadloom-gate` check) is a
+   **required status check**.
+5. **Merge when green** — a human merges once CI is green and any doc refresh has
+   landed. No auto-merge; no direct push to `main`, so `main` stays always-green.
+
+Protect `main` once per repo (idempotent; safe to re-run):
+
+```bash
+beadloom setup-branch-protection --repo OWNER/NAME
+```
+
+This requires a PR to `main` with the always-on `beadloom-gate` check required,
+while keeping the owner mergeable (`enforce_admins: false`, 0 required reviews) so a
+solo maintainer is never locked out. The vendored `.claude/CLAUDE.md` §6 (Git) and
+`.claude/commands/coordinator.md` describe this same model, so a scaffolded repo
+gets the trunk-based flow by default. **CI on the PR is the true enforcement** — the
+agent's refresh and the deterministic gate are proposals/checks; the human merges.
 
 ## What the packaged flow is
 
@@ -163,7 +194,8 @@ This is stated deliberately, not glossed over:
 
 ## See also
 
-- [CLI reference](../services/cli.md) — `setup-agentic-flow`, `config-check`, `ci`, `setup-mcp`.
+- [CLI reference](../services/cli.md) — `setup-agentic-flow`, `config-check`, `ci`, `setup-mcp`, `setup-branch-protection`.
+- [AI tech-writer guide](./ai-techwriter.md) — the PR-triggered doc-refresh loop on the trunk-based model.
 - [MCP server](../services/mcp.md) — the full tool catalog (18 tools).
 - [Onboarding domain](../domains/onboarding/README.md) — the scaffold + config-sync internals.
 - [CI setup guide](./ci-setup.md) — `beadloom ci` as the enforcement gate.

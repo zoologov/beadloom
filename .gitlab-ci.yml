@@ -1,4 +1,5 @@
-# GitLab CI — AI tech-writer (BDL-047 / F4.1) wrapper around the one harness.
+# GitLab CI — AI tech-writer (BDL-047 / F4.1 · BDL-049) wrapper around the
+# harness.
 #
 # Minimal pipeline: just the ai-techwriter job. It is the GitLab counterpart of
 # .github/workflows/ai-techwriter.yml and calls the SAME entrypoint
@@ -15,17 +16,29 @@ ai-techwriter:
   tags:
     - self-hosted
     - ai-techwriter
-  # Trigger on push to main/master (G10) — refresh docs as soon as code lands,
-  # closing the staleness window a scheduled pipeline would leave open. Manual
-  # ("Run pipeline" from the web) stays available.
+  # BDL-049: trunk-based. Run on a merge request (the GitLab mirror of GitHub's
+  # pull_request) — once per MR against the MR's own diff (--since merge-base).
+  # The push-to-main gate is dropped: the agent commits its refresh onto the MR
+  # source branch (--target pr-branch), and the loop-guard below keeps the
+  # agent's own push from re-triggering. Manual ("Run pipeline") stays available.
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_PIPELINE_SOURCE == "web"'
       when: manual
   variables:
-    # Full clone so git diff / the gate can read prior state.
+    # Full clone so git diff / the merge-base / the gate can read prior state.
     GIT_DEPTH: "0"
   script:
+    # Loop-guard (G5): skip the agent's own refresh commit (authored by
+    # beadloom-ai-techwriter OR a [skip ai-techwriter] subject) so its push to
+    # the MR source branch does not re-trigger the pipeline.
+    - author="$(git log -1 --format='%an')"
+    - subject="$(git log -1 --format='%s')"
+    - |
+      if [ "$author" = "beadloom-ai-techwriter" ] || \
+         printf '%s' "$subject" | grep -qF '[skip ai-techwriter]'; then
+        echo "skip: MR head is the agent's own refresh commit"; exit 0
+      fi
     # Install uv (pinned), then Beadloom (the substrate) + harness deps.
     - curl -LsSf https://astral.sh/uv/install.sh | sh
     - export PATH="$HOME/.local/bin:$PATH"
@@ -34,17 +47,15 @@ ai-techwriter:
     - goose --version
     # Rebuild the index so sync-check sees current code-doc state.
     - uv run beadloom reindex
-    # The one entrypoint. 0 stale -> clean no-op exit 0; flagged -> non-zero.
-    # QWEN_API_KEY (and the optional workspace-MaaS endpoint QWEN_BASE_URL) are
-    # masked CI/CD variables (never inlined), exposed to the job env automatically
-    # so the harness resolves them at run time; the MR is opened by the
-    # GitLabPublisher via glab inside the harness.
+    # The one entrypoint. QWEN_API_KEY (+ optional QWEN_BASE_URL) are masked
+    # CI/CD variables (never inlined), exposed to the job env automatically. The
+    # pr-branch publisher commits the refresh onto $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME
+    # and posts an MR note via glab; it resolves the MR from CI_MERGE_REQUEST_IID
+    # + CI_MERGE_REQUEST_PROJECT_URL (exposed automatically on a merge_request_event).
     #
-    # --since <push parent> makes drift detection baseline-relative (a fresh
-    # clone re-baselines sync_state to the just-pushed code, masking per-push
-    # drift otherwise). $CI_COMMIT_BEFORE_SHA is the push parent; it is an
-    # all-zero SHA on a first push / force-push and empty on a manual run — the
-    # guard falls back to HEAD~1 (the harness also treats a zero SHA as unset).
-    - since="$CI_COMMIT_BEFORE_SHA"
-    - case "$since" in ""|0000000000000000000000000000000000000000) since="HEAD~1" ;; esac
-    - uv run python -m tools.ai_techwriter --platform gitlab --since "$since"
+    # --since is the merge-base of the MR target branch and HEAD — exactly "what
+    # this MR changed". Falls back to the MR diff base SHA if merge-base cannot
+    # resolve.
+    - since="$(git merge-base "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" HEAD 2>/dev/null || true)"
+    - if [ -z "$since" ]; then since="$CI_MERGE_REQUEST_DIFF_BASE_SHA"; fi
+    - uv run python -m tools.ai_techwriter --platform gitlab --target pr-branch --since "$since"

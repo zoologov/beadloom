@@ -42,3 +42,4 @@ site/node_modules/
 
 # BDL-047 agent credentials (never committed)
 .claude/development/docs/features/BDL-047/credentials.md
+docs/presentations

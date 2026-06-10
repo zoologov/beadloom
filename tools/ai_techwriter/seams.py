@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
@@ -35,6 +36,19 @@ logger = logging.getLogger(__name__)
 #: config required). A noreply address keeps the bot out of contributor stats.
 _BOT_NAME = "beadloom-ai-techwriter"
 _BOT_EMAIL = "beadloom-ai-techwriter@users.noreply.github.com"
+
+#: BDL-049 loop-guard token. The pr-branch refresh commit message STARTS with
+#: this so the workflow's early-skip step (and a belt-and-suspenders author
+#: check) can tell the agent's own push apart from a human push and NOT
+#: re-trigger the ``pull_request: synchronize`` run (an otherwise-infinite loop).
+_SKIP_TOKEN = "[skip ai-techwriter]"  # noqa: S105 - loop-guard token, not a secret
+
+#: BDL-049 pr-branch mode: CI env vars the workflow injects so the publisher can
+#: resolve the pre-existing PR/MR (no chicken-and-egg — the PR already exists).
+#: GitHub passes the full PR URL; GitLab passes the MR IID + project URL.
+_GH_PR_URL_ENV = "PR_URL"
+_GL_MR_IID_ENV = "CI_MERGE_REQUEST_IID"
+_GL_MR_PROJECT_URL_ENV = "CI_MERGE_REQUEST_PROJECT_URL"
 
 #: Paths staged into the auto-commit: the agent's doc edits AND the G9
 #: run-record (``.beadloom/ai_techwriter_runs.json`` is tracked — only the
@@ -281,6 +295,155 @@ class GitLabPublisher:
         url = result.stdout.strip()
         _backfill_pr_url(project_root, branch, url)
         return url
+
+
+class GitHubPRBranchPublisher:
+    """BDL-049 pr-branch mode: commit the refresh onto the EXISTING PR head.
+
+    On a ``pull_request`` run the runner is already checked out on the PR head
+    branch, so instead of cutting a new branch + ``gh pr create`` (which yields
+    an orphan doc-PR), this publisher commits the refreshed docs + run-record
+    *onto the current branch* and posts a summary comment on the pre-existing
+    PR. Code + docs become one reviewable PR; the human still merges.
+
+    The PR URL is resolved from the CI env (:data:`_GH_PR_URL_ENV`) — reliable
+    now because the PR pre-exists (no chicken-and-egg, no amend/backfill). The
+    comment is best-effort: if ``gh pr comment`` fails the run still succeeds
+    (the commit is the deliverable).
+    """
+
+    def publish(
+        self,
+        *,
+        project_root: Path,
+        branch: str,
+        title: str,
+        body: str,
+        flagged: bool,
+    ) -> str:
+        """Commit onto the current branch + push + comment; return the PR URL.
+
+        *branch* / *flagged* are part of the :class:`ReviewPublisher` contract
+        but unused here: pr-branch mode never cuts a branch, and the title
+        already encodes the flagged state.
+        """
+        del branch, flagged
+        pr_url = os.environ.get(_GH_PR_URL_ENV, "").strip()
+        if _commit_to_current_branch(project_root, title):
+            _push_current_branch(project_root)
+        if pr_url:
+            _post_pr_comment(project_root, ["gh", "pr", "comment", pr_url, "--body", body])
+        return pr_url
+
+
+class GitLabPRBranchPublisher:
+    """BDL-049 pr-branch mode for GitLab MRs (mirror of the GitHub path).
+
+    Commits the refresh onto the MR source branch the runner checked out and
+    posts a ``glab mr note`` on the pre-existing MR instead of ``glab mr
+    create``. The MR URL for the run-record is composed from the CI MR env
+    (:data:`_GL_MR_PROJECT_URL_ENV` + :data:`_GL_MR_IID_ENV`); the note is
+    best-effort.
+    """
+
+    def publish(
+        self,
+        *,
+        project_root: Path,
+        branch: str,
+        title: str,
+        body: str,
+        flagged: bool,
+    ) -> str:
+        """Commit onto the current branch + push + MR note; return the MR URL."""
+        del branch, flagged
+        iid = os.environ.get(_GL_MR_IID_ENV, "").strip()
+        mr_url = _gitlab_mr_url(iid)
+        if _commit_to_current_branch(project_root, title):
+            _push_current_branch(project_root)
+        if iid:
+            _post_pr_comment(project_root, ["glab", "mr", "note", iid, "--message", body])
+        return mr_url
+
+
+def _gitlab_mr_url(iid: str) -> str:
+    """Compose the MR URL from the CI env (empty when the env is incomplete)."""
+    project_url = os.environ.get(_GL_MR_PROJECT_URL_ENV, "").strip()
+    if not iid or not project_url:
+        return ""
+    return f"{project_url.rstrip('/')}/-/merge_requests/{iid}"
+
+
+def _commit_to_current_branch(project_root: Path, title: str) -> bool:
+    """Stage docs + record and commit onto the CURRENT branch (no ``checkout -b``).
+
+    Returns True iff a commit was made. When the agent produced no doc edit
+    (0 docs changed) there is nothing to land, so we skip the commit entirely
+    rather than create an empty/record-only commit on the PR branch (BDL-049
+    no-op rule). The commit message STARTS with :data:`_SKIP_TOKEN` so the
+    workflow loop-guard does not re-trigger on the agent's own push, and uses
+    the inline bot identity so a CI runner without a global git config commits.
+    """
+    if not _has_doc_changes(project_root):
+        return False
+    _git(project_root, ["add", "--", *_STAGED_PATHS], "git add")
+    message = f"{_SKIP_TOKEN} {title}"
+    _git(
+        project_root,
+        [
+            "-c",
+            f"user.name={_BOT_NAME}",
+            "-c",
+            f"user.email={_BOT_EMAIL}",
+            "commit",
+            "-m",
+            message,
+        ],
+        "git commit",
+    )
+    return True
+
+
+def _has_doc_changes(project_root: Path) -> bool:
+    """True when there are staged-or-unstaged changes under ``docs/``.
+
+    Stages ``docs`` then probes ``git diff --cached --quiet -- docs`` (rc 0 =
+    clean, rc 1 = changes). This is what implements the 0-doc no-op: a run that
+    only wrote the run-record (no doc edit) must NOT produce a commit.
+    """
+    _git(project_root, ["add", "--", "docs"], "git add (probe)")
+    probe = run_command(
+        ["git", "diff", "--cached", "--quiet", "--", "docs"], cwd=project_root
+    )
+    return not probe.ok
+
+
+def _push_current_branch(project_root: Path) -> None:
+    """Push the current branch (``HEAD``) — a plain, non-force push.
+
+    The runner is checked out on the PR head branch and we add a new commit on
+    top, so a fast-forward plain push is correct (no force: this is not the
+    bot-owned regenerated proposal branch of the branch-PR path).
+    """
+    result = run_command(["git", "push", "origin", "HEAD"], cwd=project_root)
+    if not result.ok:
+        raise RuntimeError(f"git push failed (rc={result.returncode}): {result.stderr}")
+
+
+def _post_pr_comment(project_root: Path, args: list[str]) -> None:
+    """Post a PR/MR comment best-effort: log + swallow failure (commit is it).
+
+    Mirrors :func:`_backfill_pr_url`'s best-effort discipline — the refresh
+    commit on the PR branch is the deliverable, so a flaky ``gh``/``glab``
+    comment never fails the run.
+    """
+    result = run_command(args, cwd=project_root)
+    if not result.ok:
+        logger.warning(
+            "could not post the PR/MR comment (rc=%d): %s",
+            result.returncode,
+            result.stderr[:500],
+        )
 
 
 def _commit_changes(project_root: Path, branch: str, title: str) -> None:
