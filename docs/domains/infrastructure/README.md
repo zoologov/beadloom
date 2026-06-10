@@ -1,6 +1,6 @@
 # Infrastructure
 
-Domain-agnostic SQLite database layer, health metrics, and git activity analysis.
+Domain-agnostic SQLite database layer, health metrics, git activity analysis, and MCP tool catalog.
 
 > Note: the cross-domain orchestrators (`reindex`, `doctor`, `debt_report`, `watcher`)
 > live in the [application](../application/README.md) layer, not here, so that
@@ -13,7 +13,7 @@ Domain-agnostic SQLite database layer, health metrics, and git activity analysis
 - **db.py** — `open_db()` opens a SQLite connection with WAL mode and foreign keys enabled, returning a connection with `sqlite3.Row` row factory. `create_schema()` creates all tables and applies incremental migrations via `ensure_schema_migrations()`. `get_meta()`/`set_meta()` for key-value metadata. Exports `SCHEMA_VERSION` constant (currently `"4"` — BDL-038 G7 added `external` to the `nodes`/`edges`/`foreign_edges` `lifecycle` CHECK). The `rules` table CHECK constraint covers all 7 rule types: `deny`, `require`, `forbid_cycles`, `layers`, `cardinality`, `forbid_import`, `forbid_edge`.
 - **health.py** — `take_snapshot()` captures current index statistics (node/edge/doc counts, coverage percentage, stale docs, isolated nodes) and persists them to the `health_snapshots` table. `get_latest_snapshots()` retrieves history for trend comparison. `compute_trend()` computes trend indicators (arrows and deltas) between two snapshots.
 - **git_activity.py** — `GitActivity` frozen dataclass holds per-node metrics: `commits_30d`, `commits_90d`, `last_commit_date`, `top_contributors`, `activity_level`. `analyze_git_activity()` runs `git log --since=90 days ago`, parses output, maps changed files to nodes via longest source-prefix match, and classifies activity (hot: >20 commits/30d, warm: 5-20, cold: 1-4, dormant: 0 commits/90d).
-- **mcp_tools.py** — single-source catalog of MCP tool metadata used by AGENTS.md generation. `McpToolDoc` describes one tool; `mcp_tool_names()` returns the canonical tool-name list (pinned to the live MCP `_TOOLS` registry by a drift-guard test) so the documented tool count cannot drift.
+- **mcp_tools.py** — single-source catalog of MCP tool metadata. Contains an ordered `MCP_TOOL_CATALOG` of 18 `McpToolDoc` entries (one per registered MCP tool) that serves as the canonical source of truth for tool names. The MCP server (`services/mcp_server.py`) builds full `mcp.Tool` objects from this catalog, and agent-facing documentation (`onboarding` `generate_agents_md`) enumerates the same catalog. `mcp_tool_names()` returns the canonical tool-name tuple in registration order. Pinned to the live MCP `_TOOLS` registry by a drift-guard test so the documented tool count cannot drift.
 
 ### Database Schema
 
@@ -55,6 +55,11 @@ Module `src/beadloom/infrastructure/health.py`:
 Module `src/beadloom/infrastructure/git_activity.py`:
 - `GitActivity` — frozen dataclass: `commits_30d`, `commits_90d`, `last_commit_date`, `top_contributors`, `activity_level`
 - `analyze_git_activity(project_root, source_dirs)` -> `dict[str, GitActivity]` — parses `git log` for 90 days, maps files to nodes, classifies activity level (hot/warm/cold/dormant)
+
+Module `src/beadloom/infrastructure/mcp_tools.py`:
+- `McpToolDoc` — `NamedTuple` with fields `name: str` and `summary: str`; describes one MCP tool for documentation purposes
+- `MCP_TOOL_CATALOG` — `tuple[McpToolDoc, ...]` containing 18 entries in registration order (matches `_TOOLS` in `services/mcp_server.py`); the canonical single source of truth for MCP tool names
+- `mcp_tool_names()` -> `tuple[str, ...]` — returns the registered MCP tool names in catalog order
 
 > The orchestrator modules `reindex`, `doctor`, `debt_report`, and `watcher` were
 > relocated to the [application](../application/README.md) layer. Their API and

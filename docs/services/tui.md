@@ -234,10 +234,12 @@ src/beadloom/tui/
     lint_panel.py          -- LintPanelWidget
     activity.py            -- ActivityWidget
     status_bar.py          -- StatusBarWidget
-    node_detail_panel.py   -- NodeDetailPanel
+    node_detail.py         -- NodeDetail (legacy simple detail widget)
+    node_detail_panel.py   -- NodeDetailPanel (full detail panel for Explorer)
     dependency_path.py     -- DependencyPathWidget
     context_preview.py     -- ContextPreviewWidget
     doc_health.py          -- DocHealthTable + compute helpers
+    domain_list.py         -- DomainList
     help_overlay.py        -- HelpOverlay (ModalScreen)
     search_overlay.py      -- SearchOverlay (ModalScreen)
   styles/
@@ -285,7 +287,14 @@ Module `src/beadloom/tui/file_watcher.py`:
 TUI tests use Textual's headless pilot framework (`app.run_test()`).
 
 ```bash
-uv run pytest tests/test_tui.py -v
+uv run pytest tests/test_tui.py tests/tui/ -v
 ```
 
-Tests cover all 7 data providers, app shell instantiation, screen switching, CLI commands (`tui` and `ui`), all dashboard and explorer widgets, file watcher integration, overlays, keyboard actions, and status bar notifications. Total: 285 tests.
+Test files:
+- `tests/test_tui.py` -- Core TUI tests (data providers, app shell, screen switching, CLI commands)
+- `tests/tui/test_context_scroll.py` -- Context preview widget scrolling
+- `tests/tui/test_dashboard_action_bar.py` -- Dashboard action bar keybindings
+- `tests/tui/test_node_detail_symbols.py` -- Node detail symbols display
+- `tests/tui/test_screen_descriptions.py` -- Screen description labels
+
+Tests cover all 7 data providers, app shell instantiation, screen switching, CLI commands (`tui` and `ui`), all dashboard and explorer widgets, file watcher integration, overlays, keyboard actions, and status bar notifications. Total: 252 tests.

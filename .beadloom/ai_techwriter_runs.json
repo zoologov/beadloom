@@ -11,5 +11,28 @@
     "model": "qwen3.7-plus",
     "gate": "green",
     "pr_url": ""
+  },
+  {
+    "ts": "2026-06-10T16:03:19.611227+00:00",
+    "platform": "github",
+    "docs_refreshed": [
+      "domains/application/README.md",
+      "domains/context-oracle/README.md",
+      "domains/context-oracle/features/search/SPEC.md",
+      "domains/doc-sync/README.md",
+      "domains/doc-sync/features/docs-audit/SPEC.md",
+      "domains/graph/README.md",
+      "domains/graph/features/graph-diff/SPEC.md",
+      "domains/infrastructure/README.md",
+      "domains/infrastructure/features/doctor/SPEC.md",
+      "domains/infrastructure/features/reindex/SPEC.md",
+      "domains/infrastructure/features/watcher/SPEC.md",
+      "services/tui.md"
+    ],
+    "input_tokens": 845000,
+    "output_tokens": 87700,
+    "model": "qwen3.7-plus",
+    "gate": "green",
+    "pr_url": "https://github.com/zoologov/beadloom/pull/2"
   }
 ]

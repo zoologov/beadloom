@@ -1,6 +1,6 @@
 # Search
 
-FTS5 full-text search over architecture graph nodes and their associated documentation chunks.
+FTS5 full-text search across nodes and documentation.
 
 Source: `src/beadloom/context_oracle/search.py`
 
@@ -9,6 +9,8 @@ Source: `src/beadloom/context_oracle/search.py`
 ### Purpose
 
 Provides keyword search across all indexed nodes and their documentation content. The primary engine is SQLite FTS5, which supports ranked full-text matching with snippet extraction. When FTS5 is unavailable (missing SQLite extension or empty index), the CLI falls back to SQL `LIKE` queries.
+
+<!-- TODO: verify - module docstring mentions "optional sqlite-vec semantic search" but no sqlite-vec implementation is present in the current code -->
 
 ### FTS5 Virtual Table
 
@@ -156,8 +158,9 @@ LIKE fallback behavior:
 LIKE fallback results do not include `snippet` or `rank` fields.
 
 Output format (non-JSON):
-- Each result displays as `[kind] ref_id: summary`
-- If a snippet is available (FTS5 mode), it is displayed on the next line indented
+- If no results: `No results found.`
+- Each result displays as `  [kind] ref_id: summary` (2-space indent)
+- If a snippet is available (FTS5 mode), it is displayed on the next line with 4-space indent: `    <snippet>`
 
 ### MCP Integration
 

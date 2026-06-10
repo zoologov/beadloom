@@ -148,6 +148,7 @@ Each `Violation` carries an additive `remediation: str | None` (default `None` s
 - `lint(project_root: Path, *, rules_path: Path | None = None, reindex_before: bool = True) -> LintResult` -- Run the full lint process: optional reindex, load rules, evaluate, return results. Raises `LintError` on invalid configuration.
 - `format_rich(result: LintResult) -> str` -- Format a `LintResult` as human-readable text with violation markers.
 - `format_json(result: LintResult) -> str` -- Format a `LintResult` as structured JSON with violations array and summary.
+- `format_github(result: LintResult) -> str` -- Format a `LintResult` as GitHub Actions workflow commands (`::error`/`::warning` annotations) for inline PR annotations (BDL-039 F3 G2).
 - `format_porcelain(result: LintResult) -> str` -- Format a `LintResult` as machine-readable one-line-per-violation output.
 
 ### Module `src/beadloom/graph/snapshot.py`
@@ -160,7 +161,7 @@ Each `Violation` carries an additive `remediation: str | None` (default `None` s
 
 - `map_to_c4(conn: sqlite3.Connection) -> tuple[list[C4Node], list[C4Relationship]]` -- Map architecture graph to C4 model elements. Reads all nodes and edges from the database. Assigns C4 levels using explicit `c4_level` in node extras (priority) or `part_of` depth heuristic (depth 0=System, 1=Container, 2+=Component). Returns a tuple of C4 nodes and relationships.
 - `render_c4_mermaid(nodes: list[C4Node], relationships: list[C4Relationship]) -> str` -- Render C4 model as Mermaid C4 diagram syntax (`C4Container`). Produces `System()`, `Container()`, `Component()` elements with `_Ext`/`Db` variants for external/database nodes. Groups children in `System_Boundary()` blocks.
-- `render_c4_plantuml(nodes: list[C4Node], relationships: list[C4Relationship]) -> str` -- Render C4 model as C4-PlantUML syntax. Produces a complete `@startuml`/`@enduml` block with `!include` for the C4-PlantUML stdlib. Uses standard macros: `System()`, `Container()`, `Component()`, `Rel()` with `_Ext`/`Db` variants.
+- `render_c4_plantuml(nodes: list[C4Node], relationships: list[C4Relationship], *, level: str = "container") -> str` -- Render C4 model as C4-PlantUML syntax. Produces a complete `@startuml`/`@enduml` block with `!include` for the C4-PlantUML stdlib. Uses standard macros: `System()`, `Container()`, `Component()`, `Rel()` with `_Ext`/`Db` variants.
 - `filter_c4_nodes(nodes: list[C4Node], relationships: list[C4Relationship], *, level: str = "container", scope: str | None = None) -> tuple[list[C4Node], list[C4Relationship]]` -- Filter C4 nodes by diagram level. `"context"` keeps only System-level and external nodes. `"container"` keeps System and Container nodes. `"component"` requires `scope` and keeps children of the scoped container. Raises `ValueError` if `level="component"` without `scope`, or if `scope` ref_id is not found.
 
 ### Module `src/beadloom/graph/federation.py`
@@ -214,7 +215,7 @@ Minimal, dependency-free GraphQL SDL surface extractor (F2). See the [federation
 | `LayerDef` | rule_engine | Frozen dataclass: `name`, `tag`. Defines a single architecture layer for use in `LayerRule` |
 | `LayerRule` | rule_engine | Frozen dataclass: `name`, `description`, `layers` (tuple of `LayerDef`), `enforce` (`"top-down"`), `allow_skip` (default True), `edge_kind` (default `"uses"`), `severity`. Enforces dependency direction between ordered layers |
 | `CardinalityRule` | rule_engine | Frozen dataclass: `name`, `description`, `for_matcher`, `max_symbols`, `max_files`, `min_doc_coverage`, `severity` (default `"warn"`). Detects architectural smells via node-level cardinality checks |
-| `Violation` | rule_engine | Frozen dataclass: `rule_name`, `rule_description`, `rule_type` (`deny`/`require`/`cycle`/`forbid_import`/`forbid`/`layer`/`cardinality`), `severity`, `file_path`, `line_number`, `from_ref_id`, `to_ref_id`, `message` |
+| `Violation` | rule_engine | Frozen dataclass: `rule_name`, `rule_description`, `rule_type` (`deny`/`require`/`cycle`/`forbid_import`/`forbid`/`layer`/`cardinality`), `severity`, `file_path`, `line_number`, `from_ref_id`, `to_ref_id`, `message`, `remediation` (`str | None` — agent-actionable "how to fix" hint populated by `evaluate_all` via `_remediation_for`) |
 | `SnapshotInfo` | snapshot | Frozen dataclass: `id`, `label`, `created_at`, `node_count`, `edge_count`, `symbols_count` |
 | `SnapshotDiff` | snapshot | Frozen dataclass: `old_id`, `new_id`, `added_nodes`, `removed_nodes`, `changed_nodes`, `added_edges`, `removed_edges`, property `has_changes` |
 | `ImportInfo` | import_resolver | Frozen dataclass: `file_path`, `line_number`, `import_path`, `resolved_ref_id` |

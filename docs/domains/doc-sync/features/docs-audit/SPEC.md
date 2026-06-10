@@ -2,7 +2,7 @@
 
 Zero-config detection of stale facts in project markdown documentation.
 
-Source: `src/beadloom/doc_sync/audit.py`, `src/beadloom/doc_sync/scanner.py`
+Source: `src/beadloom/doc_sync/audit.py`, `src/beadloom/doc_sync/scanner.py`, `src/beadloom/services/cli.py`
 
 ## Specification
 
@@ -151,13 +151,15 @@ beadloom docs audit [--json] [--fail-if EXPR] [--stale-only] [--verbose] [--path
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `--json` | flag | `False` | Output results as structured JSON |
-| `--fail-if` | `str` | `None` | CI gate expression (e.g., `stale>0`, `stale>=5`) |
+| `--fail-if` | `str` | `None` | CI gate expression (e.g., `stale>0`, `stale>5`) |
 | `--stale-only` | flag | `False` | Show only stale findings |
 | `--verbose` | flag | `False` | Include extra detail (unmatched mentions, fact sources) |
 | `--path` | `str` (multiple) | `None` | Override default scan paths with custom glob patterns |
 | `--project` | `Path` | current directory | Project root |
 
-The `--fail-if` expression supports the `stale` metric with `>` and `>=` operators. When the condition is met, the command exits with code 1.
+The `--fail-if` expression supports the `stale` metric with `>` and `>=` operators. The expression is validated early (before running the audit), and the CI gate check occurs after output so users see results even when the gate fails. When the condition is met, the command exits with code 1.
+
+The command requires a populated SQLite database at `.beadloom/beadloom.db`. If the database is not found, it exits with an error message directing the user to run `beadloom reindex` first.
 
 ### Configuration
 
@@ -219,6 +221,21 @@ def parse_fail_condition(expr: str) -> tuple[str, str, int]
 ```
 Parse a `--fail-if` expression. Returns `(metric, operator, threshold)`. Raises `click.BadParameter` on invalid input.
 
+### CLI Command Handler
+
+```python
+def docs_audit(
+    *,
+    output_json: bool,
+    stale_only: bool,
+    verbose_flag: bool,
+    scan_paths: tuple[str, ...],
+    project: Path | None,
+    fail_if_expr: str | None,
+) -> None
+```
+Click command handler for `beadloom docs audit`. Validates the `--fail-if` expression early, opens the database, runs the audit, formats output (JSON or rich text), and checks the CI gate condition after displaying results.
+
 ### Public Classes
 
 ```python
@@ -252,6 +269,7 @@ class AuditResult: ...
 - Each number in a line is matched to at most one fact type (first keyword match wins).
 - Tolerance merging order: built-in `DEFAULT_TOLERANCES` < user overrides from config.
 - When ground truth is 0 and tolerance > 0, only an exact mention of 0 is accepted.
+- The `--fail-if` expression is validated before running the audit (fail-fast), but the gate check occurs after output so users see results.
 
 ## Constraints
 
@@ -263,7 +281,7 @@ class AuditResult: ...
 
 ## Testing
 
-Test files: `tests/test_docs_audit.py`, `tests/test_doc_scanner.py`
+Test files: `tests/test_docs_audit_cli.py`, `tests/test_doc_scanner.py`
 
 Key scenarios:
 
@@ -276,3 +294,4 @@ Key scenarios:
 - **Config loading**: Verify tolerance overrides and extra facts from config.yml.
 - **Full audit pipeline**: Verify `run_audit` end-to-end with stale and fresh findings.
 - **Fail condition parsing**: Verify valid and invalid `--fail-if` expressions.
+- **CLI command**: Verify the `docs_audit` command handler validates options, opens the database, runs the audit, and formats output correctly.

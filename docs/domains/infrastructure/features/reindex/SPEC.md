@@ -237,7 +237,7 @@ def _load_rules_into_db(
 ) -> None
 ```
 
-Load architecture rules from `rules.yml` into the `rules` table. Supports `DenyRule` and `RequireRule` types.
+Load architecture rules from `rules.yml` into the `rules` table. Supports all 7 v3 rule types via `_serialize_rule`: `DenyRule`, `RequireRule`, `CycleRule`, `ImportBoundaryRule`, `ForbidEdgeRule`, `LayerRule`, and `CardinalityRule`.
 
 ```python
 def _store_test_mappings(project_root: Path, conn: sqlite3.Connection) -> None

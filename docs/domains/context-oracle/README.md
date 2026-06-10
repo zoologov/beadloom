@@ -485,8 +485,8 @@ The context-oracle domain exposes functionality through several CLI commands in 
 - `beadloom ctx REF_IDS... [--json] [--markdown] [--depth N] [--max-nodes N] [--max-chunks N] [--project DIR]` -- Build and display context bundle
 - `beadloom search QUERY [--kind KIND] [--limit N] [--json] [--project DIR]` -- FTS5 search with LIKE fallback
 - `beadloom why REF_ID [--depth N] [--reverse] [--format panel|tree] [--json] [--project DIR]` -- Impact analysis
-- `beadloom graph [REF_IDS...] [--json] [--depth N] [--project DIR]` -- Architecture graph (Mermaid or JSON)
-- `beadloom lint [--strict] [--fail-on-warn] [--no-reindex] [--format rich|json|porcelain] [--project DIR]` -- Architecture lint rules
+- `beadloom graph [REF_IDS...] [--json] [--depth N] [--format mermaid|c4|c4-plantuml] [--level context|container|component] [--scope REF] [--project DIR]` -- Architecture graph (Mermaid, C4-Mermaid, C4-PlantUML, or JSON). C4 formats use the C4 model pipeline (`beadloom.graph.c4`) with level filtering and optional component scoping.
+- `beadloom lint [--strict] [--fail-on-warn] [--no-reindex] [--format rich|json|porcelain|github] [--project DIR]` -- Architecture lint rules. The `github` format emits GitHub Actions `::error` annotations for CI integration.
 
 ## Testing
 

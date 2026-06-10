@@ -15,7 +15,7 @@ the DDD Dependency Rule.
 
 ### Modules
 
-- **reindex.py** — `reindex(root)` performs full reindex: snapshot sync baselines → drop tables → create schema → load graph YAML → store deep config → index docs → index code → resolve imports → load rules → map tests → analyze git activity → extract API routes → build sync state (with preserved symbol hashes) → populate FTS5 → clear bundle cache → take health snapshot → populate file index → store parser fingerprint. `incremental_reindex(root)` updates only changed files; detects parser availability changes via fingerprint comparison and graph YAML changes via `_graph_yaml_changed()`, triggering full reindex when needed.
+- **reindex.py** — `reindex(root)` performs full reindex: snapshot sync baselines → drop tables → create schema → load graph YAML → store deep config → index docs → index code → resolve imports → load rules → map tests → analyze git activity → extract API routes → build sync state (with preserved symbol hashes) → populate FTS5 → clear bundle cache → take health snapshot → populate file index → store parser fingerprint. `incremental_reindex(root)` updates only changed files; detects parser availability changes via fingerprint comparison and graph YAML changes via `_graph_yaml_changed()`, triggering full reindex when needed. Backfills `nodes_loaded`, `edges_loaded`, and `symbols_indexed` from the live DB at the end so the CLI reports true totals (not just per-run deltas) even on docs-only incremental runs (#88, #112).
 - **doctor.py** — `run_checks(conn, *, project_root=None)` validates graph health with DB checks (empty summaries, unlinked docs, nodes without docs, isolated nodes, symbol drift, stale sync entries, source coverage gaps) plus an optional "Agent Instructions" check when `project_root` is provided, comparing CLAUDE.md/AGENTS.md factual claims (version, packages, CLI commands, MCP tool count) against runtime truth.
 - **debt_report.py** — `collect_debt_data()` aggregates architecture health signals from lint, sync-check, doctor, git activity, and test mapper. `compute_debt_score()` applies a weighted formula producing a 0-100 debt score with category breakdown, severity classification, and per-node top offenders. `format_debt_report()`/`format_debt_json()` render the report. `compute_debt_trend()` compares against the last graph snapshot.
 - **watcher.py** — `watch()` monitors project files (graph YAML, docs, source) and auto-triggers reindex on changes using `watchfiles`. Graph changes trigger full reindex; other changes trigger incremental. `WatchEvent` frozen dataclass captures per-event metadata. `DEFAULT_DEBOUNCE_MS` constant (500ms).
@@ -33,9 +33,9 @@ the DDD Dependency Rule.
 ## API
 
 Module `src/beadloom/application/reindex.py`:
-- `ReindexResult` — dataclass with counts, `nothing_changed` flag, `errors`, and `warnings`
+- `ReindexResult` — dataclass with counts (`nodes_loaded`, `edges_loaded`, `docs_indexed`, `chunks_indexed`, `symbols_indexed`, `imports_indexed`, `rules_loaded`), `nothing_changed` flag, `errors`, and `warnings`
 - `reindex(project_root, *, docs_dir=None)` -> `ReindexResult` — full reindex with sync baseline preservation
-- `incremental_reindex(project_root, *, docs_dir=None)` -> `ReindexResult` — incremental reindex with parser fingerprint and graph YAML change detection
+- `incremental_reindex(project_root, *, docs_dir=None)` -> `ReindexResult` — incremental reindex with parser fingerprint and graph YAML change detection; backfills `nodes_loaded`, `edges_loaded`, `symbols_indexed` from live DB for accurate totals (#88, #112)
 - `resolve_scan_paths(project_root)` -> `list[str]` — resolves source scan directories from config
 
 Module `src/beadloom/application/doctor.py`:

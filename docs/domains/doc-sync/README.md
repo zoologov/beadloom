@@ -116,6 +116,36 @@ beadloom sync-check [--porcelain] [--json] [--report] [--ref REF_ID] [--since GI
 
 Exit codes: `0` = all ok, `1` = error, `2` = stale pairs found.
 
+### CLI (`beadloom sync-update`)
+
+```
+beadloom sync-update [REF_ID] [--check] [--yes|-y] [--all] [--project DIR]
+```
+
+Show sync status and update docs for a ref_id. With `--check`, only displays status without opening an editor. With `--yes`/`-y`, re-baselines freshness non-interactively (no editor/prompt) by calling `mark_synced_by_ref`. With `--all` (requires `--yes`), re-baselines every currently-stale ref in one call (useful for an automated fixpoint loop). `--all` and an explicit `REF_ID` are mutually exclusive; without `--yes`, a `REF_ID` is required.
+
+For automated doc updates, the recommended path is the MCP tools (`update_node`, `mark_synced`).
+
+### CLI (`beadloom install-hooks`)
+
+```
+beadloom install-hooks [--mode {warn,block}] [--remove] [--project DIR]
+```
+
+| Flag | Description |
+|------|----------|
+| `--mode` | Hook mode: `warn` (default, does not block commits) or `block` (blocks commits on stale docs) |
+| `--remove` | Remove the pre-commit hook instead of installing it |
+| `--project` | Project root (default: current directory) |
+
+### Module `src/beadloom/services/cli.py` (doc-sync helpers)
+
+- `sync_check(...)` -- Click command implementing `beadloom sync-check`. Dispatches to `check_sync` or `check_sync_since` based on `--since`, renders output in human/porcelain/JSON/report formats.
+- `_build_sync_report(results: list[dict[str, str]]) -> str` -- Build a Markdown report from sync-check results (used by `--report`).
+- `install_hooks(*, mode: str, remove: bool, project: Path | None)` -- Install or remove the beadloom pre-commit hook.
+- `_mark_synced_noninteractive(conn: sqlite3.Connection, project_root: Path, *, ref_id: str | None, all_refs: bool) -> None` -- Re-baseline freshness for a ref (or every stale ref) without prompting. Wraps `mark_synced_by_ref`: recomputes hashes + `symbols_hash` and records `status='ok'`. Prints a concise, deterministic summary.
+- `sync_update(ref_id: str | None, *, check_only: bool, assume_yes: bool, all_refs: bool, project: Path | None)` -- Click command implementing `beadloom sync-update`. In interactive mode, opens each stale doc in `$EDITOR` and calls `mark_synced` per pair. In `--yes` mode, delegates to `_mark_synced_noninteractive`.
+
 ## Testing
 
 Tests: `tests/test_sync_engine.py`, `tests/test_cli_sync_check.py`, `tests/test_cli_sync_update.py`, `tests/test_source_coverage.py`, `tests/test_doc_coverage.py`

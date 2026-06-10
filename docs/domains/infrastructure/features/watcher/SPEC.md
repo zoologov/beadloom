@@ -101,12 +101,14 @@ beadloom watch [--debounce MS] [--project DIR]
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `--debounce` | `int` | `500` | Debounce interval in milliseconds |
-| `--project` | `Path` | `.` | Path to the project root |
+| `--debounce` | `int` | `500` | Debounce delay in ms. |
+| `--project` | `Path \| None` | `None` (current directory) | Project root; must exist (`exists=True`). Falls back to `Path.cwd()` when omitted. |
 
 The CLI command (`watch_cmd` in `cli.py`) performs two pre-flight checks before invoking `watch()`:
-1. Verifies that `watchfiles` is importable; exits with error and install instructions if missing.
+1. Verifies that `watchfiles` is importable (imports `watch` from `beadloom.application.watcher`); exits with error and install instructions if missing.
 2. Verifies that the `.beadloom/_graph/` directory exists; exits with error suggesting `beadloom init` if missing.
+
+A second `ImportError` catch wraps the `watch()` invocation itself, guarding against late import failures.
 
 ## API
 
