@@ -11,11 +11,12 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from tools.ai_techwriter import commands, seams
-from tools.ai_techwriter.commands import CommandResult
-from tools.ai_techwriter.models import ContextPacket
-from tools.ai_techwriter.provider import qwen_provider
-from tools.ai_techwriter.seams import (
+
+from beadloom.ai_agents.ai_techwriter import commands, seams
+from beadloom.ai_agents.ai_techwriter.commands import CommandResult
+from beadloom.ai_agents.ai_techwriter.models import ContextPacket
+from beadloom.ai_agents.ai_techwriter.provider import qwen_provider
+from beadloom.ai_agents.ai_techwriter.seams import (
     GitHubPRBranchPublisher,
     GitHubPublisher,
     GitLabPRBranchPublisher,
@@ -189,7 +190,7 @@ def test_goose_runner_builds_command_with_recipe_provider_and_caps(
     monkeypatch.setattr(seams, "run_command", fake_run)
     runner = GooseAgentRunner(
         project_root=Path("/x"),
-        recipe_path=Path("/x/tools/ai_techwriter/recipe.yaml"),
+        recipe_path=Path("/x/beadloom/ai_agents/ai_techwriter/recipe.yaml"),
         provider=qwen_provider(),
     )
     runner.run(_packet())
@@ -197,7 +198,7 @@ def test_goose_runner_builds_command_with_recipe_provider_and_caps(
     assert isinstance(args, list)
     assert args[:2] == ["goose", "run"]
     assert "--recipe" in args
-    assert "/x/tools/ai_techwriter/recipe.yaml" in args
+    assert "/x/beadloom/ai_agents/ai_techwriter/recipe.yaml" in args
     # BUG-C: the packet is NEVER inlined on argv (ARG_MAX blows on real docs).
     # It is written to a temp file and only the FILE PATH is passed as a param.
     assert not any(a.startswith("packet=") for a in args)

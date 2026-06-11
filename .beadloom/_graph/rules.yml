@@ -3,7 +3,7 @@ version: 3
 tags:
   layer-service: [cli, mcp-server, tui]
   layer-application: [application]
-  layer-domain: [context-oracle, doc-sync, graph, onboarding]
+  layer-domain: [context-oracle, doc-sync, graph, onboarding, ai_agents]
   layer-infra: [infrastructure]
 
 rules:
@@ -86,3 +86,24 @@ rules:
     forbid_import:
       from: "src/beadloom/onboarding/**"
       to: "src/beadloom/infrastructure/**"
+
+  # ai_agents is a leaf consumer (BDL-051 / S2): it MAY consume application /
+  # context_oracle / graph / doc_sync read APIs + the bd/beadloom shells, but it
+  # must NOT be imported BY the core. These two forbid_import rules cover the
+  # core source dirs without matching ai_agents' own internal imports — the
+  # ``a[!i]*`` pattern picks ``application`` while excluding ``ai_agents``, and
+  # ``[!a]*`` picks every other (context_oracle / doc_sync / graph /
+  # infrastructure / onboarding / services / tui) source dir.
+  - name: core-no-import-ai-agents
+    description: "Core domains/services must not import the ai_agents domain"
+    severity: error
+    forbid_import:
+      from: "src/beadloom/[!a]*/**"
+      to: "beadloom/ai_agents/**"
+
+  - name: application-no-import-ai-agents
+    description: "Application must not import the ai_agents domain (leaf consumer only)"
+    severity: error
+    forbid_import:
+      from: "src/beadloom/a[!i]*/**"
+      to: "beadloom/ai_agents/**"

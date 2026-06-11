@@ -1,9 +1,13 @@
-"""Tests for `beadloom setup-ai-techwriter` (BDL-047 / F4.1, G8).
+"""Tests for `beadloom setup-ai-techwriter` (BDL-047 / F4.1, G8; BDL-051 / S2).
 
-The command scaffolds the AI tech-writer into ANY target repo: it vendors the
-deterministic harness package + Goose recipe, drops the chosen platform's CI
-wrapper, and writes the 3-step getting-started guide. It is idempotent (a
-re-run cleanly overwrites the generated copy) and rejects unknown platforms.
+The command scaffolds the AI tech-writer into ANY target repo. Since BDL-051 / S2
+the harness ships INSIDE the installed ``beadloom`` package
+(:mod:`beadloom.ai_agents.ai_techwriter`), so the scaffold no longer vendors any
+Python: it drops the chosen platform's CI wrapper (which invokes
+``python -m beadloom.ai_agents.ai_techwriter``), the operator artifacts
+``tools/ai_techwriter/{recipe.yaml,provision-runner.sh}`` copied from the harness
+package data, and the getting-started guide. It is idempotent (a re-run cleanly
+overwrites the generated copy) and rejects unknown platforms.
 """
 
 from __future__ import annotations
@@ -12,10 +16,6 @@ from typing import TYPE_CHECKING
 
 from click.testing import CliRunner
 
-from beadloom.onboarding.ai_techwriter_setup import (
-    HARNESS_MODULES,
-    vendored_harness_root,
-)
 from beadloom.services.cli import main
 
 if TYPE_CHECKING:
@@ -30,46 +30,44 @@ def _run(project: Path, platform: str) -> object:
     )
 
 
-class TestVendoredHarnessAsset:
-    def test_vendored_root_exists_and_has_all_modules(self) -> None:
-        root = vendored_harness_root()
-        assert root.is_dir()
-        for module in HARNESS_MODULES:
-            assert (root / f"{module}.py.txt").is_file(), module
-        assert (root / "recipe.yaml").is_file()
+class TestNoVendoring:
+    """BDL-051 / S2: the harness ships in the installed package — the scaffold
+    must NOT copy any harness Python, and the vendoring machinery is gone."""
 
-    def test_vendored_harness_matches_live_source(self) -> None:
-        """No hand-maintained drift (principle 5): the packaged harness must
-        byte-match the live ``tools/ai_techwriter`` source."""
-        from pathlib import Path
+    def test_does_not_vendor_harness_python(self, tmp_path: Path) -> None:
+        from beadloom.onboarding.ai_techwriter_setup import scaffold
 
-        live = Path(__file__).resolve().parents[1] / "tools" / "ai_techwriter"
-        root = vendored_harness_root()
-        for module in HARNESS_MODULES:
-            assert (root / f"{module}.py.txt").read_text(encoding="utf-8") == (
-                live / f"{module}.py"
-            ).read_text(encoding="utf-8"), module
-        assert (root / "recipe.yaml").read_text(encoding="utf-8") == (
-            live / "recipe.yaml"
-        ).read_text(encoding="utf-8")
-        # The vendored parent tools/__init__.py asset byte-matches the live file.
-        assert (root / "tools_init.py.txt").read_text(encoding="utf-8") == (
-            live.parent / "__init__.py"
-        ).read_text(encoding="utf-8")
+        project = tmp_path / "proj"
+        project.mkdir()
+        scaffold(project, platform="github")
+        # No harness .py is copied into the target (it ships in the wheel).
+        assert not (project / "tools" / "ai_techwriter" / "runner.py").exists()
+        assert not (project / "tools" / "ai_techwriter" / "cli.py").exists()
+        assert not (project / "tools" / "__init__.py").exists()
 
+    def test_vendoring_api_retired(self) -> None:
+        """The BDL-047/048 vendoring symbols are removed from the module."""
+        import beadloom.onboarding.ai_techwriter_setup as setup
 
-class TestSyncVendoredHarness:
-    def test_sync_round_trips_live_source(self, tmp_path: Path) -> None:
-        from pathlib import Path
+        assert not hasattr(setup, "HARNESS_MODULES")
+        assert not hasattr(setup, "sync_vendored_harness")
+        assert not hasattr(setup, "vendored_harness_root")
+        assert not hasattr(setup, "vendor_harness")
 
-        from beadloom.onboarding.ai_techwriter_setup import sync_vendored_harness
+    def test_recipe_copied_from_package_data(self, tmp_path: Path) -> None:
+        """The recipe lands as an operator reference, byte-identical to the
+        harness package-data recipe (read via importlib.resources)."""
+        from beadloom.ai_agents.ai_techwriter.provider import default_recipe_path
+        from beadloom.onboarding.ai_techwriter_setup import scaffold
 
-        live = Path(__file__).resolve().parents[1] / "tools" / "ai_techwriter"
-        written = sync_vendored_harness(live)
-        # Every module + the recipe is (re)written; idempotent against the
-        # packaged copy (this is the drift guard run as code).
-        assert "runner.py.txt" in written
-        assert "recipe.yaml" in written
+        project = tmp_path / "proj"
+        project.mkdir()
+        scaffold(project, platform="github")
+        recipe = project / "tools" / "ai_techwriter" / "recipe.yaml"
+        assert recipe.is_file()
+        assert recipe.read_text(encoding="utf-8") == default_recipe_path().read_text(
+            encoding="utf-8"
+        )
 
 
 class TestSetupAiTechwriterGithub:
@@ -86,7 +84,7 @@ class TestSetupAiTechwriterGithub:
         # ai-techwriter job — its top-level name is `CI`.
         assert "name: CI" in text
         assert "ai-techwriter:" in text
-        assert "python -m tools.ai_techwriter" in text
+        assert "python -m beadloom.ai_agents.ai_techwriter" in text
         assert "--platform github" in text
         assert "QWEN_API_KEY" in text
 
@@ -109,26 +107,19 @@ class TestSetupAiTechwriterGithub:
         assert "schedule:" not in text
         assert "cron:" not in text
 
-    def test_vendors_harness_package(self, tmp_path: Path) -> None:
+    def test_drops_operator_recipe_no_harness_python(self, tmp_path: Path) -> None:
+        """BDL-051 / S2: the scaffold drops the operator recipe (package-data
+        reference) but never the harness Python — the harness ships in the
+        installed ``beadloom`` package."""
         project = tmp_path / "proj"
         project.mkdir()
         _run(project, "github")
         harness = project / "tools" / "ai_techwriter"
-        assert (harness / "__main__.py").exists()
-        assert (harness / "runner.py").exists()
         assert (harness / "recipe.yaml").exists()
-        # Vendored python is real .py (not the .py.txt asset form).
-        assert not (harness / "runner.py.txt").exists()
-
-    def test_vendors_tools_package_init(self, tmp_path: Path) -> None:
-        """The parent ``tools/__init__.py`` is vendored too, so the target does
-        not rely on implicit namespace-package behavior for the
-        ``python -m tools.ai_techwriter`` invocation (BEAD-11 hardening)."""
-        project = tmp_path / "proj"
-        project.mkdir()
-        _run(project, "github")
-        tools_init = project / "tools" / "__init__.py"
-        assert tools_init.is_file()
+        # No vendored harness Python (it ships in the wheel) and no parent init.
+        assert not (harness / "runner.py").exists()
+        assert not (harness / "__main__.py").exists()
+        assert not (project / "tools" / "__init__.py").exists()
 
     def test_writes_getting_started_guide(self, tmp_path: Path) -> None:
         project = tmp_path / "proj"
@@ -159,7 +150,7 @@ class TestSetupAiTechwriterGitlab:
         assert ci.exists()
         text = ci.read_text(encoding="utf-8")
         assert "ai-techwriter:" in text
-        assert "python -m tools.ai_techwriter --platform gitlab" in text
+        assert "python -m beadloom.ai_agents.ai_techwriter --platform gitlab" in text
 
     def test_gitlab_job_triggers_on_merge_request(self, tmp_path: Path) -> None:
         """BDL-049: trunk-based — trigger on merge_request_event (+ manual web),
@@ -176,11 +167,13 @@ class TestSetupAiTechwriterGitlab:
         # No schedule-only gating.
         assert '$CI_PIPELINE_SOURCE == "schedule"' not in text
 
-    def test_vendors_harness_for_gitlab_too(self, tmp_path: Path) -> None:
+    def test_drops_operator_recipe_for_gitlab_too(self, tmp_path: Path) -> None:
         project = tmp_path / "proj"
         project.mkdir()
         _run(project, "gitlab")
-        assert (project / "tools" / "ai_techwriter" / "runner.py").exists()
+        assert (project / "tools" / "ai_techwriter" / "recipe.yaml").exists()
+        # No vendored harness Python (ships in the wheel).
+        assert not (project / "tools" / "ai_techwriter" / "runner.py").exists()
 
     def test_does_not_create_github_workflow(self, tmp_path: Path) -> None:
         project = tmp_path / "proj"
@@ -332,11 +325,11 @@ class TestProvisionRunnerScript:
         assert "--token" in guide
 
 
-class TestVendoredHarnessIsRunnable:
-    def test_vendored_harness_runs_dry_run(self, tmp_path: Path) -> None:
-        """The whole point of vendoring: ``python -m tools.ai_techwriter``
-        resolves + runs from a fresh target repo with only the scaffolded
-        files present (no Beadloom source tree)."""
+class TestInstalledHarnessIsRunnable:
+    def test_installed_harness_runs_dry_run(self, tmp_path: Path) -> None:
+        """BDL-051 / S2: the harness ships in the installed ``beadloom`` package,
+        so ``python -m beadloom.ai_agents.ai_techwriter`` resolves + runs from a
+        scaffolded target repo (no vendored Python copied into the repo)."""
         import subprocess
         import sys
 
@@ -346,7 +339,14 @@ class TestVendoredHarnessIsRunnable:
         project.mkdir()
         scaffold(project, platform="github")
         proc = subprocess.run(  # noqa: S603 - fixed argv (no untrusted input)
-            [sys.executable, "-m", "tools.ai_techwriter", "--platform", "github", "--dry-run"],
+            [
+                sys.executable,
+                "-m",
+                "beadloom.ai_agents.ai_techwriter",
+                "--platform",
+                "github",
+                "--dry-run",
+            ],
             cwd=project,
             capture_output=True,
             text=True,
@@ -362,13 +362,13 @@ class TestIdempotenceAndErrors:
         project.mkdir()
         first = _run(project, "github")
         assert first.exit_code == 0, first.output
-        runner_py = project / "tools" / "ai_techwriter" / "runner.py"
-        before = runner_py.read_text(encoding="utf-8")
-        # Mutate the vendored copy; a re-run must restore (clean overwrite).
-        runner_py.write_text("# stale\n", encoding="utf-8")
+        recipe = project / "tools" / "ai_techwriter" / "recipe.yaml"
+        before = recipe.read_text(encoding="utf-8")
+        # Mutate the scaffolded operator copy; a re-run must restore (clean overwrite).
+        recipe.write_text("# stale\n", encoding="utf-8")
         second = _run(project, "github")
         assert second.exit_code == 0, second.output
-        assert runner_py.read_text(encoding="utf-8") == before
+        assert recipe.read_text(encoding="utf-8") == before
 
     def test_unknown_platform_errors(self, tmp_path: Path) -> None:
         project = tmp_path / "proj"

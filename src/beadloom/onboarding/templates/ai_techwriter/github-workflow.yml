@@ -9,7 +9,7 @@
 # ai-techwriter (the self-hosted runner where Goose + the API key live) has
 # `needs: [gate, tests, site-build]`, so a broken PR never spends Qwen tokens.
 # The ai-techwriter job calls the SAME entrypoint as the GitLab counterpart
-# (python -m tools.ai_techwriter) — only the trigger, the secret naming, and
+# (python -m beadloom.ai_agents.ai_techwriter) — only the trigger, the secret naming, and
 # --platform differ.
 #
 # ADOPTERS: `gate` runs `beadloom ci` (reindex -> lint -> sync-check ->
@@ -218,7 +218,7 @@ jobs:
         run: |
           since="$(git merge-base "origin/$BASE_REF" HEAD 2>/dev/null || true)"
           if [ -z "$since" ]; then since="$BASE_SHA"; fi
-          uv run python -m tools.ai_techwriter \
+          uv run python -m beadloom.ai_agents.ai_techwriter \
             --platform github --target pr-branch --since "$since"
 
       # Manual dispatch path: no PR context, so keep the branch-PR publish path
@@ -234,5 +234,5 @@ jobs:
         run: |
           since="${INPUT_SINCE:-HEAD~1}"
           case "$since" in "") since="HEAD~1" ;; esac
-          uv run python -m tools.ai_techwriter \
+          uv run python -m beadloom.ai_agents.ai_techwriter \
             --platform github --target branch-pr --since "$since"

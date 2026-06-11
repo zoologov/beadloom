@@ -1,3 +1,5 @@
+# beadloom:domain=ai_agents
+# beadloom:feature=ai-techwriter
 """Goose provider config + recipe location (RFC Q2 / Q4).
 
 The model boundary, in one typed place:
@@ -22,6 +24,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from importlib import resources
 from pathlib import Path
 
 #: Canonical model id (top-tier, no tiering — RFC Q2).
@@ -103,7 +106,7 @@ def qwen_provider(
     resolve time (no I/O at import) and an empty/whitespace value falls back.
 
     Caps default to a generous runaway ceiling (mirrors
-    :class:`~tools.ai_techwriter.models.HarnessConfig`) — a safety net only.
+    :class:`~beadloom.ai_agents.ai_techwriter.models.HarnessConfig`) — a safety net only.
     """
     return ProviderConfig(
         provider="openai",
@@ -123,5 +126,14 @@ def _resolve_base_url() -> str:
 
 
 def default_recipe_path() -> Path:
-    """Path to the shipped Goose recipe (``tools/ai_techwriter/recipe.yaml``)."""
-    return Path(__file__).resolve().parent / "recipe.yaml"
+    """Filesystem path to the Goose recipe shipped as package data.
+
+    ``recipe.yaml`` rides inside the installed ``beadloom`` wheel alongside this
+    module (BDL-051 / S2 — no more ``tools/`` relative paths nor vendoring), so
+    it is located via :mod:`importlib.resources` rather than a hand-built
+    ``Path``. Beadloom always installs as a regular (non-zipimport) package, so
+    the resource resolves to a concrete on-disk path that Goose can read via
+    its ``--recipe`` argument.
+    """
+    resource = resources.files("beadloom.ai_agents.ai_techwriter") / "recipe.yaml"
+    return Path(str(resource))

@@ -18,10 +18,11 @@ from typing import TYPE_CHECKING
 import pytest
 import yaml
 from click.testing import CliRunner, Result
-from tools.ai_techwriter import cli, commands, runner, scope
-from tools.ai_techwriter.models import HarnessConfig, HarnessResult
-from tools.ai_techwriter.runner import _branch_name, classify_verdict, run_harness
-from tools.ai_techwriter.seams import FakeAgentRunner, FakePublisher
+
+from beadloom.ai_agents.ai_techwriter import cli, commands, runner, scope
+from beadloom.ai_agents.ai_techwriter.models import HarnessConfig, HarnessResult
+from beadloom.ai_agents.ai_techwriter.runner import _branch_name, classify_verdict, run_harness
+from beadloom.ai_agents.ai_techwriter.seams import FakeAgentRunner, FakePublisher
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -109,9 +110,11 @@ def patch_substrate(monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str, objec
         return commands.CommandResult(0 if state["ci_ok"] else 1, "", "")
 
     monkeypatch.setattr(scope, "beadloom_sync_check_json", fake_sync_check)
-    monkeypatch.setattr("tools.ai_techwriter.packet.beadloom_docs_polish_json", fake_polish)
-    monkeypatch.setattr("tools.ai_techwriter.packet.beadloom_ctx_json", fake_ctx)
-    monkeypatch.setattr("tools.ai_techwriter.packet.beadloom_why", fake_why)
+    monkeypatch.setattr(
+        "beadloom.ai_agents.ai_techwriter.packet.beadloom_docs_polish_json", fake_polish
+    )
+    monkeypatch.setattr("beadloom.ai_agents.ai_techwriter.packet.beadloom_ctx_json", fake_ctx)
+    monkeypatch.setattr("beadloom.ai_agents.ai_techwriter.packet.beadloom_why", fake_why)
     monkeypatch.setattr(runner, "beadloom_docs_polish_json", fake_polish)
     monkeypatch.setattr(runner, "beadloom_sync_update", fake_sync_update)
     monkeypatch.setattr(runner, "beadloom_ci", fake_ci)

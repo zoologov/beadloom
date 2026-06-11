@@ -1,4 +1,4 @@
-"""Tests for the BDL-047 AI tech-writer harness (tools/ai_techwriter).
+"""Tests for the BDL-047 AI tech-writer harness (beadloom/ai_agents/ai_techwriter).
 
 Goose + model + PR/MR are behind seams (FakeAgentRunner / FakePublisher) and
 the subprocess wrappers are patched, so nothing here touches Goose, the model,
@@ -10,8 +10,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-from tools.ai_techwriter import commands, runner, runs_store, scope
-from tools.ai_techwriter.models import (
+
+from beadloom.ai_agents.ai_techwriter import commands, runner, runs_store, scope
+from beadloom.ai_agents.ai_techwriter.models import (
     AgentResult,
     ContextPacket,
     DriftItem,
@@ -19,10 +20,10 @@ from tools.ai_techwriter.models import (
     HarnessResult,
     RunRecord,
 )
-from tools.ai_techwriter.packet import build_packet, select_polish_for_ref
-from tools.ai_techwriter.runner import run_harness
-from tools.ai_techwriter.scope import parse_scope
-from tools.ai_techwriter.seams import (
+from beadloom.ai_agents.ai_techwriter.packet import build_packet, select_polish_for_ref
+from beadloom.ai_agents.ai_techwriter.runner import run_harness
+from beadloom.ai_agents.ai_techwriter.scope import parse_scope
+from beadloom.ai_agents.ai_techwriter.seams import (
     AgentRunner,
     FakeAgentRunner,
     FakePublisher,
@@ -124,9 +125,11 @@ def patch_substrate(monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str, objec
         return commands.CommandResult(0 if state["ci_ok"] else 1, "", "")
 
     monkeypatch.setattr(scope, "beadloom_sync_check_json", fake_sync_check)
-    monkeypatch.setattr("tools.ai_techwriter.packet.beadloom_docs_polish_json", fake_polish)
-    monkeypatch.setattr("tools.ai_techwriter.packet.beadloom_ctx_json", fake_ctx)
-    monkeypatch.setattr("tools.ai_techwriter.packet.beadloom_why", fake_why)
+    monkeypatch.setattr(
+        "beadloom.ai_agents.ai_techwriter.packet.beadloom_docs_polish_json", fake_polish
+    )
+    monkeypatch.setattr("beadloom.ai_agents.ai_techwriter.packet.beadloom_ctx_json", fake_ctx)
+    monkeypatch.setattr("beadloom.ai_agents.ai_techwriter.packet.beadloom_why", fake_why)
     monkeypatch.setattr(runner, "beadloom_docs_polish_json", fake_polish)
     monkeypatch.setattr(runner, "beadloom_sync_update", fake_sync_update)
     monkeypatch.setattr(runner, "beadloom_ci", fake_ci)

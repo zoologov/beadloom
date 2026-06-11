@@ -75,12 +75,12 @@ jobs:
         run: uv sync --extra dev --extra languages --extra tui --extra watch
 
       - name: Lint (ruff)
-        run: uv run ruff check src/ tests/ tools/
+        run: uv run ruff check src/ tests/
 
       - name: Type check (mypy)
-        # tools/ holds the BDL-047 AI tech-writer harness (repo tooling, not the
-        # installed beadloom wheel) — type-checked alongside the core package.
-        run: uv run mypy src/ tools/
+        # The AI tech-writer harness moved into src/beadloom/ai_agents/ (BDL-051 S2),
+        # so it's covered by `src/` — no separate `tools/` path anymore.
+        run: uv run mypy src/
 
       - name: Tests with coverage
         run: uv run pytest --cov=beadloom --cov-report=term-missing --cov-fail-under=80
@@ -208,7 +208,7 @@ jobs:
         run: |
           since="$(git merge-base "origin/$BASE_REF" HEAD 2>/dev/null || true)"
           if [ -z "$since" ]; then since="$BASE_SHA"; fi
-          uv run python -m tools.ai_techwriter \
+          uv run python -m beadloom.ai_agents.ai_techwriter \
             --platform github --target pr-branch --since "$since"
 
       # Manual dispatch path: no PR context, so keep the branch-PR publish path
@@ -224,5 +224,5 @@ jobs:
         run: |
           since="${INPUT_SINCE:-HEAD~1}"
           case "$since" in "") since="HEAD~1" ;; esac
-          uv run python -m tools.ai_techwriter \
+          uv run python -m beadloom.ai_agents.ai_techwriter \
             --platform github --target branch-pr --since "$since"

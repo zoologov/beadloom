@@ -17,11 +17,17 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-from tools.ai_techwriter import commands, runner, runs_store, scope, seams
-from tools.ai_techwriter.commands import CommandResult
-from tools.ai_techwriter.models import ContextPacket, DriftItem, HarnessConfig, HarnessResult
-from tools.ai_techwriter.runner import _body, _title, run_harness
-from tools.ai_techwriter.seams import (
+
+from beadloom.ai_agents.ai_techwriter import commands, runner, runs_store, scope, seams
+from beadloom.ai_agents.ai_techwriter.commands import CommandResult
+from beadloom.ai_agents.ai_techwriter.models import (
+    ContextPacket,
+    DriftItem,
+    HarnessConfig,
+    HarnessResult,
+)
+from beadloom.ai_agents.ai_techwriter.runner import _body, _title, run_harness
+from beadloom.ai_agents.ai_techwriter.seams import (
     FakeAgentRunner,
     FakePublisher,
     GitHubPublisher,
@@ -33,7 +39,7 @@ from tools.ai_techwriter.seams import (
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from tools.ai_techwriter.provider import ProviderConfig
+    from beadloom.ai_agents.ai_techwriter.provider import ProviderConfig
 
 NOW = "2026-06-10T00:00:00+00:00"
 
@@ -113,10 +119,12 @@ def patch_substrate(monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str, objec
         return commands.CommandResult(0 if state["ci_ok"] else 1, "", "")
 
     monkeypatch.setattr(scope, "beadloom_sync_check_json", fake_sync_check)
-    monkeypatch.setattr("tools.ai_techwriter.packet.beadloom_docs_polish_json", fake_polish)
+    monkeypatch.setattr(
+        "beadloom.ai_agents.ai_techwriter.packet.beadloom_docs_polish_json", fake_polish
+    )
     monkeypatch.setattr(runner, "beadloom_docs_polish_json", fake_polish)
-    monkeypatch.setattr("tools.ai_techwriter.packet.beadloom_ctx_json", fake_ctx)
-    monkeypatch.setattr("tools.ai_techwriter.packet.beadloom_why", fake_why)
+    monkeypatch.setattr("beadloom.ai_agents.ai_techwriter.packet.beadloom_ctx_json", fake_ctx)
+    monkeypatch.setattr("beadloom.ai_agents.ai_techwriter.packet.beadloom_why", fake_why)
     monkeypatch.setattr(runner, "beadloom_sync_update", fake_sync_update)
     monkeypatch.setattr(runner, "beadloom_ci", fake_ci)
     yield state
@@ -417,7 +425,7 @@ def test_goose_usage_parse_coerces_string_token_counts(
 
 
 def _qwen() -> ProviderConfig:
-    from tools.ai_techwriter.provider import qwen_provider
+    from beadloom.ai_agents.ai_techwriter.provider import qwen_provider
 
     return qwen_provider()
 
@@ -516,7 +524,7 @@ def test_build_packet_fetches_polish_when_not_provided(
 ) -> None:
     """When the harness does not pre-fetch polish, build_packet fetches it
     itself (packet.py line 35 branch) and selects the ref slice."""
-    from tools.ai_techwriter.packet import build_packet
+    from beadloom.ai_agents.ai_techwriter.packet import build_packet
 
     (project / "docs" / "graph.md").write_text("content", encoding="utf-8")
     item = DriftItem(
@@ -529,7 +537,7 @@ def test_build_packet_fetches_polish_when_not_provided(
 
 def test_read_doc_returns_empty_for_missing_file(project: Path) -> None:
     """A packet for a not-yet-existing doc reads as '' (packet.py line 65)."""
-    from tools.ai_techwriter.packet import read_doc
+    from beadloom.ai_agents.ai_techwriter.packet import read_doc
 
     assert read_doc(project, "docs/does-not-exist.md") == ""
 
@@ -556,7 +564,7 @@ def test_append_run_on_corrupt_store_raises_not_silent(project: Path) -> None:
     it — documenting the asymmetry so it is a conscious contract."""
     import json as _json
 
-    from tools.ai_techwriter.models import RunRecord
+    from beadloom.ai_agents.ai_techwriter.models import RunRecord
 
     runs_store.runs_store_path(project).write_text("{ not json", encoding="utf-8")
     rec = RunRecord(

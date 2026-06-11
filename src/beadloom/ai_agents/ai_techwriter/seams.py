@@ -1,3 +1,5 @@
+# beadloom:domain=ai_agents
+# beadloom:feature=ai-techwriter
 """Mockable seams: the agent (Goose) and the review publisher (PR/MR).
 
 These two interfaces wall off the only non-deterministic / network-touching
@@ -22,12 +24,12 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from tools.ai_techwriter.commands import run_command
-from tools.ai_techwriter.models import AgentResult, ContextPacket
-from tools.ai_techwriter.runs_store import load_runs, runs_store_path
+from beadloom.ai_agents.ai_techwriter.commands import run_command
+from beadloom.ai_agents.ai_techwriter.models import AgentResult, ContextPacket
+from beadloom.ai_agents.ai_techwriter.runs_store import load_runs, runs_store_path
 
 if TYPE_CHECKING:
-    from tools.ai_techwriter.provider import ProviderConfig
+    from beadloom.ai_agents.ai_techwriter.provider import ProviderConfig
 
 logger = logging.getLogger(__name__)
 

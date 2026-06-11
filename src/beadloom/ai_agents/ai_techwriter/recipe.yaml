@@ -2,7 +2,7 @@
 #
 # BDL-047 / F4.1. Ported from .claude/agents/tech-writer.md, scoped down to a
 # single per-doc rewrite driven by the deterministic harness
-# (tools/ai_techwriter/). The harness owns scope, mark-synced, the fixpoint, the
+# (beadloom.ai_agents.ai_techwriter). The harness owns scope, mark-synced, the fixpoint, the
 # gate, and the PR/MR — this recipe owns ONLY the rewrite of the doc named in
 # the packet.
 #

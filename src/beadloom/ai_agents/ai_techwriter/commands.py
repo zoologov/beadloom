@@ -1,3 +1,5 @@
+# beadloom:domain=ai_agents
+# beadloom:feature=ai-techwriter
 """Thin, patchable wrappers around ``beadloom`` / ``git`` subprocess calls.
 
 These are the only place the harness shells out to external tools. They are

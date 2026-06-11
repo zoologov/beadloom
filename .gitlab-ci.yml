@@ -8,10 +8,10 @@
 # on shared runners; stage `docs` runs ai-techwriter ONLY after all three are
 # green (`needs: [gate, tests, site-build]`) so a broken MR never spends Qwen
 # tokens. ai-techwriter is the GitLab counterpart of GitHub's ai-techwriter job
-# and calls the SAME entrypoint (python -m tools.ai_techwriter) — only the
+# and calls the SAME entrypoint (python -m beadloom.ai_agents.ai_techwriter) — only the
 # trigger, the secret naming, and the --platform flag differ (RFC Q5 table).
 #
-# Verdict exit codes are honoured by the harness itself (tools/ai_techwriter):
+# Verdict exit codes are honoured by the harness itself (beadloom/ai_agents/ai_techwriter):
 # ok/infra -> exit 0 (a dead runner / exhausted quota does NOT block the MR),
 # flagged -> exit 1 (a real unresolved doc drift fails the job). So no GitLab
 # `allow_failure` is needed — the job simply runs and its exit code gates.
@@ -58,8 +58,8 @@ tests:
     - curl -LsSf https://astral.sh/uv/install.sh | sh
     - export PATH="$HOME/.local/bin:$PATH"
     - uv sync --extra dev --extra languages --extra tui --extra watch
-    - uv run ruff check src/ tests/ tools/
-    - uv run mypy src/ tools/
+    - uv run ruff check src/ tests/
+    - uv run mypy src/
     - uv run pytest --cov=beadloom --cov-report=term-missing --cov-fail-under=80
 
 # --------------------------------------------------------------------------- #
@@ -153,4 +153,4 @@ ai-techwriter:
     # flagged -> 1 (block). No allow_failure — the verdict IS the gate.
     - since="$(git merge-base "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" HEAD 2>/dev/null || true)"
     - if [ -z "$since" ]; then since="$CI_MERGE_REQUEST_DIFF_BASE_SHA"; fi
-    - uv run python -m tools.ai_techwriter --platform gitlab --target pr-branch --since "$since"
+    - uv run python -m beadloom.ai_agents.ai_techwriter --platform gitlab --target pr-branch --since "$since"

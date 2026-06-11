@@ -110,7 +110,7 @@ bd close <bead-id> --suggest-next
 - **Tests:** pytest + pytest-cov
 - **Linter/formatter:** ruff (lint + format)
 - **Type checking:** mypy --strict
-- **Architecture:** DDD packages -- `application/`, `context_oracle/`, `doc_sync/`, `graph/`, `infrastructure/`, `onboarding/`, `services/`, `tui/`
+- **Architecture:** DDD packages -- `ai_agents/`, `application/`, `context_oracle/`, `doc_sync/`, `graph/`, `infrastructure/`, `onboarding/`, `services/`, `tui/`
 - **Current version:** 1.10.0
 <!-- beadloom:auto-end -->
 

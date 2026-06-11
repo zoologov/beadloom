@@ -1,3 +1,5 @@
+# beadloom:domain=ai_agents
+# beadloom:feature=ai-techwriter
 """Discover scope: parse ``beadloom sync-check --json`` into drift items.
 
 Deterministic. Groups the flat per-pair report into one :class:`DriftItem`
@@ -8,8 +10,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tools.ai_techwriter.commands import beadloom_sync_check_json
-from tools.ai_techwriter.models import DriftItem
+from beadloom.ai_agents.ai_techwriter.commands import beadloom_sync_check_json
+from beadloom.ai_agents.ai_techwriter.models import DriftItem
 
 if TYPE_CHECKING:
     from pathlib import Path
