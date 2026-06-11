@@ -1,3 +1,5 @@
+# beadloom:domain=application
+# beadloom:feature=site-generation
 """Showcase A — the AaC/DocAsCode metrics dashboard (BDL-040 BEAD-02).
 
 Builds the dashboard *data* — a deterministic, JSON-safe dict — and renders the

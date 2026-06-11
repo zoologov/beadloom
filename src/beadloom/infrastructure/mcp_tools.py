@@ -1,3 +1,5 @@
+# beadloom:domain=infrastructure
+# beadloom:component=mcp-tools
 """Canonical catalog of MCP tools — single source of truth for tool names.
 
 The MCP server (``services/mcp_server.py``) builds full ``mcp.Tool`` objects

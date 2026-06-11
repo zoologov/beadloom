@@ -1,6 +1,7 @@
 """Sync engine: doc-code synchronization state management."""
 
 # beadloom:domain=doc-sync
+# beadloom:feature=sync-check
 
 from __future__ import annotations
 

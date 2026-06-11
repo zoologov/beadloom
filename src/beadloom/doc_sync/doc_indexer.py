@@ -1,6 +1,7 @@
 """Document indexer: Markdown scanning, chunking, and SQLite population."""
 
 # beadloom:domain=doc-sync
+# beadloom:component=doc-indexer
 
 from __future__ import annotations
 

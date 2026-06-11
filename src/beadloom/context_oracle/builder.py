@@ -1,6 +1,7 @@
 """Context builder: BFS subgraph traversal + context bundle assembly."""
 
 # beadloom:domain=context-oracle
+# beadloom:component=context-builder
 
 from __future__ import annotations
 

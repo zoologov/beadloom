@@ -1,4 +1,5 @@
 # beadloom:domain=onboarding
+# beadloom:feature=ai-techwriter-setup
 """Scaffold the AI tech-writer into any repo (BDL-047 / F4.1, G8).
 
 ``beadloom setup-ai-techwriter --platform github|gitlab`` makes opt-in a

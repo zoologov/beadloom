@@ -1,3 +1,5 @@
+# beadloom:domain=application
+# beadloom:feature=site-generation
 """VitePress nav/sidebar tree builders (BDL-041 F4.4 BEAD-11).
 
 The Architecture sidebar group is a collapsed, ``part_of``-nested tree with

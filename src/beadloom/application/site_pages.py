@@ -1,3 +1,5 @@
+# beadloom:domain=application
+# beadloom:feature=site-generation
 """Per-node page rendering for the `docs site` generator (BDL-040 BEAD-01).
 
 Split out of ``application/site.py`` to keep each module under the domain-size

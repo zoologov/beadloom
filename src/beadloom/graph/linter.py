@@ -1,4 +1,5 @@
 # beadloom:domain=graph
+# beadloom:feature=rule-engine
 """Linter orchestrator: load rules, ensure index is fresh, evaluate, format results."""
 
 from __future__ import annotations

@@ -75,7 +75,7 @@ rules:
   # internal-only (docstring-only glue). Seeded minimally; S3b decides the rest.
   - name: module-coverage
     description: "Every src module must be a tracked node (feature/component/…) or explicitly exempt"
-    severity: warn
+    severity: error
     module_coverage:
       source_root: src/beadloom/
       min_symbols: 1

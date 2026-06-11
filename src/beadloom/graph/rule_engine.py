@@ -225,8 +225,9 @@ class ModuleCoverageRule:
     - its path matches an entry in ``exempt`` (a tuple of ``fnmatch`` globs).
 
     An uncovered module produces one finding naming the file and its symbol
-    count. Findings are advisory (``severity: warn``) until S3b classifies every
-    module; the rule must not fail ``lint --strict`` yet.
+    count. Since BDL-051 S3b classified every module, the rule is promoted to
+    ``severity: error`` — a new shadow module (uncovered + not exempt) fails
+    ``lint --strict``, enforcing the no-shadow-code guarantee.
 
     The exempt criterion (documented in ``rules.yml`` and the architecture-model
     guide): a module may be exempt when it has ``< N`` public symbols **and**
@@ -1963,9 +1964,8 @@ def _node_source_paths(conn: sqlite3.Connection) -> set[str]:
     """Return the set of node ``source`` values that point at a single module file.
 
     A module is *covered by being a node's source* when its path equals a node's
-    ``source``. Directory sources (domains/services, ending in ``/``) are not
-    module files, so they are excluded here — modules under a domain directory
-    are covered by their ``feature``/``component`` annotation, not by the domain.
+    ``source``. Directory sources (ending in ``/``) are not single files and are
+    handled separately by :func:`_node_dir_source_prefixes`.
     """
     rows = conn.execute("SELECT source FROM nodes WHERE source IS NOT NULL").fetchall()
     sources: set[str] = set()
@@ -1974,6 +1974,37 @@ def _node_source_paths(conn: sqlite3.Connection) -> set[str]:
         if source and not source.endswith("/"):
             sources.add(source)
     return sources
+
+
+def _node_dir_source_prefixes(conn: sqlite3.Connection, source_root: str) -> set[str]:
+    """Return directory ``source`` prefixes that COVER every module beneath them.
+
+    Owner choice (BDL-051 / BEAD-14): a node whose ``source`` is a directory may
+    stand for its whole subtree as a single node — e.g. the ``tui`` *service*
+    node covers all of ``src/beadloom/tui/`` (no per-widget nodes).
+
+    Two kinds are deliberately excluded so the lint is not trivially satisfied:
+
+    * ``domain`` nodes — a domain directory is *coarse ownership*, not coverage;
+      modules under it must still carry a ``feature``/``component`` annotation
+      (the architecture-model policy), and
+    * any node whose source equals ``source_root`` itself (the root service
+      ``src/beadloom/``) — it spans the entire tree, so it can never be coverage.
+    """
+    rows = conn.execute(
+        "SELECT kind, source FROM nodes WHERE source IS NOT NULL"
+    ).fetchall()
+    root_norm = source_root.rstrip("/") + "/"
+    prefixes: set[str] = set()
+    for row in rows:
+        kind = str(row[0])
+        source = str(row[1])
+        if not source.endswith("/") or kind == "domain":
+            continue
+        if source.rstrip("/") + "/" == root_norm:
+            continue
+        prefixes.add(source.rstrip("/") + "/")
+    return prefixes
 
 
 def _module_coverage_state(
@@ -2041,7 +2072,8 @@ def evaluate_module_coverage_rules(
     A module is *covered* when it carries a ``feature``/``component`` annotation
     (read from ``code_symbols.annotations`` where available), equals a node's
     ``source``, or matches an ``exempt`` glob. An uncovered module produces one
-    advisory (``warn``) finding naming the file and its symbol count.
+    finding naming the file and its symbol count (severity per the rule —
+    ``error`` since BDL-051 S3b).
 
     *project_root* defaults to the current working directory.
     """
@@ -2055,6 +2087,7 @@ def evaluate_module_coverage_rules(
 
     for rule in rules:
         coverage = _module_coverage_state(conn, rule.source_root)
+        dir_prefixes = _node_dir_source_prefixes(conn, rule.source_root)
         # Union: every disk module is a candidate even with zero indexed symbols.
         candidates = dict(coverage)
         for disk_path in _disk_modules(root, rule.source_root):
@@ -2064,6 +2097,8 @@ def evaluate_module_coverage_rules(
             if symbol_count < rule.min_symbols and file_path in coverage:
                 continue
             if annotated or file_path in node_sources:
+                continue
+            if any(file_path.startswith(prefix) for prefix in dir_prefixes):
                 continue
             if any(fnmatch.fnmatch(file_path, pat) for pat in rule.exempt):
                 continue

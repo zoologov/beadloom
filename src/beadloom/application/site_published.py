@@ -1,3 +1,5 @@
+# beadloom:domain=application
+# beadloom:feature=site-generation
 """Showcase C — published validated documentation + per-doc badges (BDL-040 BEAD-04).
 
 The REAL root ``docs/`` tree is published as a first-class site section: every

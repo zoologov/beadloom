@@ -1,4 +1,5 @@
 # beadloom:domain=onboarding
+# beadloom:feature=branch-protection
 """Idempotent ``main`` branch-protection helper (BDL-049 / BEAD-03).
 
 Trunk-based development (CLAUDE.md §6 Git) requires ``main`` to be

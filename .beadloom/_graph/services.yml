@@ -227,6 +227,159 @@ nodes:
     docs:
       - docs/domains/doc-sync/features/docs-audit/SPEC.md
 
+  # === BDL-051 S3b (BEAD-14): full module-coverage classification ===
+
+  # --- Features (capabilities with a SPEC.md) ---
+
+  - ref_id: code-indexer
+    kind: feature
+    summary: "Tree-sitter code symbol indexer — parses src into symbols + extracts beadloom annotations"
+    source: src/beadloom/context_oracle/code_indexer.py
+    docs:
+      - docs/domains/context-oracle/features/code-indexer/SPEC.md
+
+  - ref_id: route-extraction
+    kind: feature
+    summary: "API route extraction — tree-sitter AST + regex fallback across 12 web frameworks"
+    source: src/beadloom/context_oracle/route_extractor.py
+    docs:
+      - docs/domains/context-oracle/features/route-extraction/SPEC.md
+
+  - ref_id: test-mapping
+    kind: feature
+    summary: "Test mapping — detect test frameworks and map test files to the source nodes they cover"
+    source: src/beadloom/context_oracle/test_mapper.py
+    docs:
+      - docs/domains/context-oracle/features/test-mapping/SPEC.md
+
+  - ref_id: sync-check
+    kind: feature
+    summary: "Doc-code sync engine — symbols_hash freshness state, stale detection, mark-synced baselining"
+    source: src/beadloom/doc_sync/engine.py
+    docs:
+      - docs/domains/doc-sync/features/sync-check/SPEC.md
+
+  - ref_id: snapshot
+    kind: feature
+    summary: "Architecture snapshot store — save, list, and compare graph states over time"
+    source: src/beadloom/graph/snapshot.py
+    docs:
+      - docs/domains/graph/features/snapshot/SPEC.md
+
+  - ref_id: ci-gate
+    kind: feature
+    summary: "Unified CI gate (`beadloom ci`) — one convergence point composing reindex/lint/sync-check/config-check/doctor/federate into a single verdict"
+    source: src/beadloom/application/gate.py
+    docs:
+      - docs/domains/application/features/ci-gate/SPEC.md
+
+  - ref_id: config-check
+    kind: feature
+    summary: "AgentConfigAsCode — drift detection (and --fix) for generated agent-config artifacts (AGENTS.md, CLAUDE.md auto-blocks, IDE adapters)"
+    source: src/beadloom/onboarding/config_sync.py
+    docs:
+      - docs/domains/onboarding/features/config-check/SPEC.md
+
+  - ref_id: ai-techwriter-setup
+    kind: feature
+    summary: "`setup-ai-techwriter` — scaffold the packaged AI tech-writer harness (CI workflow + recipe + guide) into any repo; no vendoring"
+    source: src/beadloom/onboarding/ai_techwriter_setup.py
+    docs:
+      - docs/domains/onboarding/features/ai-techwriter-setup/SPEC.md
+
+  - ref_id: branch-protection
+    kind: feature
+    summary: "`setup-branch-protection` — idempotent main branch-protection (PR-required + ci.yml required status checks)"
+    source: src/beadloom/onboarding/branch_protection.py
+    docs:
+      - docs/domains/onboarding/features/branch-protection/SPEC.md
+
+  - ref_id: agentic-flow-setup
+    kind: feature
+    summary: "`setup-agentic-flow` — scaffold Beadloom's proven multi-agent dev flow (agents/commands templates, vendored 1:1 + drift-guard) into any repo"
+    source: src/beadloom/onboarding/agentic_flow_setup.py
+    docs:
+      - docs/domains/onboarding/features/agentic-flow-setup/SPEC.md
+
+  - ref_id: site-generation
+    kind: feature
+    summary: "`docs site` — generate the VitePress content tree from the indexed graph (About/architecture/per-node pages, dashboard, landscape, nav, mermaid guard)"
+    source: src/beadloom/application/site.py
+    docs:
+      - docs/domains/application/features/site-generation/SPEC.md
+
+  # --- Components (internal/infra building blocks with a DOC.md) ---
+
+  - ref_id: graph-loader
+    kind: component
+    summary: "YAML graph parser + SQLite loader — reads .beadloom/_graph/*.yml into the nodes/edges tables"
+    source: src/beadloom/graph/loader.py
+    docs:
+      - docs/domains/graph/components/graph-loader/DOC.md
+
+  - ref_id: contracts
+    kind: component
+    summary: "First-class cross-service contract model + protocol-agnostic reconciliation (contract_key, ContractVerdict)"
+    source: src/beadloom/graph/contracts.py
+    docs:
+      - docs/domains/graph/components/contracts/DOC.md
+
+  - ref_id: sdl
+    kind: component
+    summary: "Minimal dependency-free GraphQL SDL surface extractor for the cross-service contract graph"
+    source: src/beadloom/graph/sdl.py
+    docs:
+      - docs/domains/graph/components/sdl/DOC.md
+
+  - ref_id: context-builder
+    kind: component
+    summary: "Context bundle builder — BFS subgraph traversal + bundle assembly for ctx/prime"
+    source: src/beadloom/context_oracle/builder.py
+    docs:
+      - docs/domains/context-oracle/components/context-builder/DOC.md
+
+  - ref_id: doc-indexer
+    kind: component
+    summary: "Document indexer — Markdown scanning, chunking, and SQLite population for docs"
+    source: src/beadloom/doc_sync/doc_indexer.py
+    docs:
+      - docs/domains/doc-sync/components/doc-indexer/DOC.md
+
+  - ref_id: db
+    kind: component
+    summary: "SQLite database layer — connection management, schema creation, meta helpers"
+    source: src/beadloom/infrastructure/db.py
+    docs:
+      - docs/domains/infrastructure/components/db/DOC.md
+
+  - ref_id: git-activity
+    kind: component
+    summary: "Git history analysis — per-node commit activity, contributors, and activity classification"
+    source: src/beadloom/infrastructure/git_activity.py
+    docs:
+      - docs/domains/infrastructure/components/git-activity/DOC.md
+
+  - ref_id: health
+    kind: component
+    summary: "Health metrics — snapshots, trend computation, and the Rich health dashboard"
+    source: src/beadloom/infrastructure/health.py
+    docs:
+      - docs/domains/infrastructure/components/health/DOC.md
+
+  - ref_id: mcp-tools
+    kind: component
+    summary: "Canonical catalog of MCP tool names — single source of truth shared by the MCP server and the docs generator"
+    source: src/beadloom/infrastructure/mcp_tools.py
+    docs:
+      - docs/domains/infrastructure/components/mcp-tools/DOC.md
+
+  - ref_id: bd-seam
+    kind: component
+    summary: "Mockable seam over the `bd` (beads) CLI — funnels every bd invocation through one testable function"
+    source: src/beadloom/services/bd_seam.py
+    docs:
+      - docs/services/components/bd-seam/DOC.md
+
   # Site consumer: the VitePress documentation site. It does not live in
   # src/beadloom/ — it is the published artifact that CONSUMES the data the
   # beadloom service produces (the generated graph pages, dashboard.data.json,
@@ -326,6 +479,73 @@ edges:
     kind: part_of
   - src: docs-audit
     dst: doc-sync
+    kind: part_of
+
+  # BDL-051 S3b (BEAD-14): new features part_of their domains
+  - src: code-indexer
+    dst: context-oracle
+    kind: part_of
+  - src: route-extraction
+    dst: context-oracle
+    kind: part_of
+  - src: test-mapping
+    dst: context-oracle
+    kind: part_of
+  - src: sync-check
+    dst: doc-sync
+    kind: part_of
+  - src: snapshot
+    dst: graph
+    kind: part_of
+  - src: ci-gate
+    dst: application
+    kind: part_of
+  - src: site-generation
+    dst: application
+    kind: part_of
+  - src: config-check
+    dst: onboarding
+    kind: part_of
+  - src: ai-techwriter-setup
+    dst: onboarding
+    kind: part_of
+  - src: branch-protection
+    dst: onboarding
+    kind: part_of
+  - src: agentic-flow-setup
+    dst: onboarding
+    kind: part_of
+
+  # BDL-051 S3b (BEAD-14): components part_of their domains/services
+  - src: graph-loader
+    dst: graph
+    kind: part_of
+  - src: contracts
+    dst: graph
+    kind: part_of
+  - src: sdl
+    dst: graph
+    kind: part_of
+  - src: context-builder
+    dst: context-oracle
+    kind: part_of
+  - src: doc-indexer
+    dst: doc-sync
+    kind: part_of
+  - src: db
+    dst: infrastructure
+    kind: part_of
+  - src: git-activity
+    dst: infrastructure
+    kind: part_of
+  - src: health
+    dst: infrastructure
+    kind: part_of
+  - src: mcp-tools
+    dst: infrastructure
+    kind: part_of
+  - src: bd-seam
+    dst: mcp-server
     kind: part_of
 
   # Service → domain usage edges

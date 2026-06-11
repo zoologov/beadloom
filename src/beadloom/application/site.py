@@ -1,3 +1,5 @@
+# beadloom:domain=application
+# beadloom:feature=site-generation
 """The `docs site` use-case: generate a VitePress content tree from the graph.
 
 Reads the indexed graph read-only and emits, under ``--out`` (default ``site/``):

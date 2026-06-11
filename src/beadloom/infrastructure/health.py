@@ -1,6 +1,7 @@
 """Health metrics: snapshots, trend computation, and Rich dashboard."""
 
 # beadloom:domain=infrastructure
+# beadloom:component=health
 
 from __future__ import annotations
 

@@ -1,4 +1,5 @@
 # beadloom:domain=onboarding
+# beadloom:feature=agentic-flow-setup
 """Scaffold Beadloom's proven multi-agent dev flow into any repo (BDL-048).
 
 ``beadloom setup-agentic-flow`` makes the flow that built this codebase

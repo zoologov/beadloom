@@ -1,6 +1,7 @@
 """Architecture snapshot storage: save, list, and compare graph states."""
 
 # beadloom:domain=graph
+# beadloom:feature=snapshot
 
 from __future__ import annotations
 

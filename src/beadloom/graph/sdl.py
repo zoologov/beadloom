@@ -1,3 +1,5 @@
+# beadloom:domain=graph
+# beadloom:component=sdl
 """Minimal, dependency-free GraphQL SDL surface extractor (BDL-038 BEAD-03).
 
 The cross-service contract graph needs only the *names* a GraphQL producer

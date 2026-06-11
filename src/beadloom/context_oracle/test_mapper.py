@@ -1,6 +1,7 @@
 """Test mapper: detect test frameworks and map test files to source nodes."""
 
 # beadloom:domain=context-oracle
+# beadloom:feature=test-mapping
 
 from __future__ import annotations
 

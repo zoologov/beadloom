@@ -1,6 +1,6 @@
-"""Unified CI gate orchestrator — the single convergence point (BDL-039 F3).
-
 # beadloom:domain=application
+# beadloom:feature=ci-gate
+"""Unified CI gate orchestrator — the single convergence point (BDL-039 F3).
 
 ``run_ci_gate`` composes the existing checkers — reindex, ``lint --strict``,
 ``sync-check``, ``config-check`` (AgentConfigAsCode), ``doctor`` (graph

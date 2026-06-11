@@ -1,3 +1,5 @@
+# beadloom:domain=graph
+# beadloom:component=contracts
 """First-class cross-service contract model + protocol-agnostic reconciliation.
 
 F2 (BDL-038) promotes the cross-service contract out of the edge-buried
