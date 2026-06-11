@@ -1,3 +1,4 @@
+# beadloom:domain=ai_agents
 """Deterministic, platform-agnostic AI tech-writer harness (BDL-047 / F4.1).
 
 Repo tooling (NOT ``src/beadloom`` core). Orchestrates the loop:
@@ -15,8 +16,8 @@ model, or network access. A clock/timestamp is injected (mirroring how
 
 from __future__ import annotations
 
-from tools.ai_techwriter.cli import main
-from tools.ai_techwriter.models import (
+from beadloom.ai_agents.ai_techwriter.cli import main
+from beadloom.ai_agents.ai_techwriter.models import (
     AgentResult,
     ContextPacket,
     DriftItem,
@@ -26,14 +27,14 @@ from tools.ai_techwriter.models import (
     PublishResult,
     RunRecord,
 )
-from tools.ai_techwriter.provider import (
+from beadloom.ai_agents.ai_techwriter.provider import (
     ProviderConfig,
     default_recipe_path,
     qwen_provider,
 )
-from tools.ai_techwriter.runner import run_harness
-from tools.ai_techwriter.scope import discover_scope
-from tools.ai_techwriter.seams import (
+from beadloom.ai_agents.ai_techwriter.runner import run_harness
+from beadloom.ai_agents.ai_techwriter.scope import discover_scope
+from beadloom.ai_agents.ai_techwriter.seams import (
     AgentRunner,
     FakeAgentRunner,
     FakePublisher,

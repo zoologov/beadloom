@@ -1,3 +1,5 @@
+# beadloom:domain=ai_agents
+# beadloom:feature=ai-techwriter
 """Typed, immutable data structures for the AI tech-writer harness.
 
 Pure data — no I/O, no subprocess. Every structure that crosses a seam (agent,

@@ -1,3 +1,5 @@
+# beadloom:domain=ai_agents
+# beadloom:feature=ai-techwriter
 """The deterministic orchestrator (RFC Q3 loop).
 
     discover -> per-doc { agent (seam) -> sync-update -> re-check + retry }
@@ -15,25 +17,25 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from tools.ai_techwriter.commands import (
+from beadloom.ai_agents.ai_techwriter.commands import (
     beadloom_ci,
     beadloom_docs_polish_json,
     beadloom_sync_update,
 )
-from tools.ai_techwriter.models import (
+from beadloom.ai_agents.ai_techwriter.models import (
     DriftItem,
     HarnessConfig,
     HarnessResult,
     RunRecord,
 )
-from tools.ai_techwriter.packet import build_packet
-from tools.ai_techwriter.runs_store import append_run
-from tools.ai_techwriter.scope import discover_scope
+from beadloom.ai_agents.ai_techwriter.packet import build_packet
+from beadloom.ai_agents.ai_techwriter.runs_store import append_run
+from beadloom.ai_agents.ai_techwriter.scope import discover_scope
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from tools.ai_techwriter.seams import AgentRunner, ReviewPublisher
+    from beadloom.ai_agents.ai_techwriter.seams import AgentRunner, ReviewPublisher
 
 logger = logging.getLogger(__name__)
 

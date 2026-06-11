@@ -12,7 +12,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import yaml
-from tools.ai_techwriter.provider import (
+
+from beadloom.ai_agents.ai_techwriter.provider import (
     DASHSCOPE_OPENAI_BASE_URL,
     DEFAULT_API_KEY_ENV,
     DEFAULT_BASE_URL_ENV,

@@ -1,3 +1,5 @@
+# beadloom:domain=ai_agents
+# beadloom:feature=ai-techwriter
 """Build the per-doc context packet handed to the agent seam (RFC Q4).
 
 Deterministic assembly: current doc content + drift reason + the polish-json
@@ -8,12 +10,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tools.ai_techwriter.commands import (
+from beadloom.ai_agents.ai_techwriter.commands import (
     beadloom_ctx_json,
     beadloom_docs_polish_json,
     beadloom_why,
 )
-from tools.ai_techwriter.models import ContextPacket, DriftItem
+from beadloom.ai_agents.ai_techwriter.models import ContextPacket, DriftItem
 
 if TYPE_CHECKING:
     from pathlib import Path

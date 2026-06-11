@@ -1,13 +1,15 @@
+# beadloom:domain=ai_agents
+# beadloom:feature=ai-techwriter
 """Thin CLI entrypoint CI invokes around the one harness (RFC Q5).
 
-``python -m tools.ai_techwriter --platform github|gitlab [--dry-run]``
+``python -m beadloom.ai_agents.ai_techwriter --platform github|gitlab [--dry-run]``
 
 This is the single entrypoint BOTH CI wrappers call — only the trigger, the
 secret naming, and the ``--platform`` flag differ (GitHub workflow vs GitLab
 job). The wrapper itself is deliberately *thin*: it only assembles the seams
 (provider, Goose agent, the platform PR/MR publisher), injects a real
 timestamp, and delegates the whole deterministic loop to
-:func:`tools.ai_techwriter.runner.run_harness`.
+:func:`beadloom.ai_agents.ai_techwriter.runner.run_harness`.
 
 The builders (:func:`_build_agent`, :func:`_build_publisher`, :func:`_default_now`)
 and ``run_harness`` are injectable (via the Click context ``obj``) so the
@@ -15,7 +17,7 @@ arg-wiring is unit-testable with every non-deterministic / network-touching
 seam faked — no Goose, no model, no git, no network.
 
 Exit codes (for CI visibility) — driven by the harness *verdict* (BDL-050,
-:func:`tools.ai_techwriter.runner.classify_verdict`), NOT by the bare
+:func:`beadloom.ai_agents.ai_techwriter.runner.classify_verdict`), NOT by the bare
 ``result.flagged``. The discriminator between a genuine doc failure and an
 infra failure is whether the model ever produced output (``tokens > 0``):
 
@@ -42,15 +44,19 @@ from typing import TYPE_CHECKING, cast
 
 import click
 
-from tools.ai_techwriter.models import HarnessConfig, HarnessResult
-from tools.ai_techwriter.provider import ProviderConfig, default_recipe_path, qwen_provider
-from tools.ai_techwriter.runner import (
+from beadloom.ai_agents.ai_techwriter.models import HarnessConfig, HarnessResult
+from beadloom.ai_agents.ai_techwriter.provider import (
+    ProviderConfig,
+    default_recipe_path,
+    qwen_provider,
+)
+from beadloom.ai_agents.ai_techwriter.runner import (
     VERDICT_FLAGGED,
     VERDICT_INFRA,
     classify_verdict,
 )
-from tools.ai_techwriter.runner import run_harness as _real_run_harness
-from tools.ai_techwriter.seams import (
+from beadloom.ai_agents.ai_techwriter.runner import run_harness as _real_run_harness
+from beadloom.ai_agents.ai_techwriter.seams import (
     CommentPublisher,
     GitHubPRBranchPublisher,
     GitHubPublisher,
@@ -61,7 +67,7 @@ from tools.ai_techwriter.seams import (
 )
 
 if TYPE_CHECKING:
-    from tools.ai_techwriter.seams import AgentRunner
+    from beadloom.ai_agents.ai_techwriter.seams import AgentRunner
 
 #: The PR/MR note + CI annotation copy for the BDL-050 ``infra`` verdict. Kept as
 #: a constant so the annotation and the comment carry the identical message.

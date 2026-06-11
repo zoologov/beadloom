@@ -71,6 +71,23 @@ nodes:
     docs:
       - docs/domains/application/README.md
 
+  # Domain: AI Agents (governed AI-agent harnesses, shipped in the wheel)
+  - ref_id: ai_agents
+    kind: domain
+    summary: "Governed AI-agent harnesses (Goose + model) over Beadloom read APIs + bd/beadloom shells; ships in the package"
+    source: src/beadloom/ai_agents/
+    tags: [layer-domain]
+    docs:
+      - docs/domains/ai_agents/README.md
+
+  # Feature: AI Tech-Writer (the deterministic doc-refresh harness)
+  - ref_id: ai-techwriter
+    kind: feature
+    summary: "Deterministic, seam-isolated PR-triggered doc-refresh harness (discover drift -> packet -> agent -> fixpoint -> gate -> publish; verdict ok/flagged/infra)"
+    source: src/beadloom/ai_agents/ai_techwriter/
+    docs:
+      - docs/domains/ai_agents/features/ai-techwriter/SPEC.md
+
   # Service: CLI
   - ref_id: cli
     kind: service
@@ -245,6 +262,9 @@ edges:
   - src: application
     dst: beadloom
     kind: part_of
+  - src: ai_agents
+    dst: beadloom
+    kind: part_of
 
   # Services are part_of beadloom
   - src: cli
@@ -268,6 +288,9 @@ edges:
     kind: part_of
   - src: agent-prime
     dst: onboarding
+    kind: part_of
+  - src: ai-techwriter
+    dst: ai_agents
     kind: part_of
 
   # Features are part_of their parent domains

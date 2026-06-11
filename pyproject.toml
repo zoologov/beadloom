@@ -71,19 +71,25 @@ all = [
 
 [project.scripts]
 beadloom = "beadloom.services.cli:main"
+# The governed AI tech-writer harness ships inside the wheel (BDL-051 / S2);
+# CI normally invokes `python -m beadloom.ai_agents.ai_techwriter`, this console
+# entry is the equivalent direct invocation.
+beadloom-ai-techwriter = "beadloom.ai_agents.ai_techwriter.cli:main"
 
 [tool.hatch.version]
 path = "src/beadloom/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/beadloom"]
+# Ship the harness's non-Python operator artifacts (the Goose recipe + the
+# runner provisioner) as package data so they resolve via importlib.resources
+# from the installed wheel (BDL-051 / S2 — no more vendoring).
+[tool.hatch.build.targets.wheel.force-include]
+"src/beadloom/ai_agents/ai_techwriter/recipe.yaml" = "beadloom/ai_agents/ai_techwriter/recipe.yaml"
+"src/beadloom/ai_agents/ai_techwriter/provision-runner.sh" = "beadloom/ai_agents/ai_techwriter/provision-runner.sh"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Repo root on sys.path so the ``tools.ai_techwriter`` repo-tooling package
-# (BDL-047 F4.1 harness — not part of the installed ``beadloom`` wheel) is
-# importable in tests alongside the installed package.
-pythonpath = ["."]
 addopts = [
     "--strict-markers",
     "--strict-config",
@@ -93,9 +99,7 @@ addopts = [
 [tool.ruff]
 target-version = "py310"
 line-length = 99
-# ``tools`` holds the BDL-047 AI tech-writer harness (repo tooling, not core);
-# kept in ruff/mypy/pytest scope alongside src + tests.
-src = ["src", "tests", "tools"]
+src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = [

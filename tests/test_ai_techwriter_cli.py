@@ -1,6 +1,6 @@
-"""Tests for the BDL-047 AI tech-writer CLI entrypoint (tools/ai_techwriter/cli).
+"""Tests for the BDL-047 AI tech-writer CLI entrypoint (beadloom/ai_agents/ai_techwriter/cli).
 
-The CLI is the thin wrapper CI invokes (``python -m tools.ai_techwriter``). All
+The CLI is the thin wrapper CI invokes (``python -m beadloom.ai_agents.ai_techwriter``). All
 non-deterministic / network-touching seams (the Goose agent, the PR/MR
 publisher, and ``run_harness`` itself) are faked or injected, so nothing here
 touches Goose, the model, git, or the network. The timestamp is produced by an
@@ -13,9 +13,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 from click.testing import CliRunner
-from tools.ai_techwriter import cli
-from tools.ai_techwriter.models import HarnessConfig, HarnessResult
-from tools.ai_techwriter.seams import (
+
+from beadloom.ai_agents.ai_techwriter import cli
+from beadloom.ai_agents.ai_techwriter.models import HarnessConfig, HarnessResult
+from beadloom.ai_agents.ai_techwriter.seams import (
     GitHubPRBranchPublisher,
     GitHubPublisher,
     GitLabPRBranchPublisher,
@@ -379,8 +380,8 @@ def test_flagged_boundary_one_token_blocks(project: Path) -> None:
 
 def test_build_agent_constructs_goose_runner(project: Path) -> None:
     """The default agent builder constructs a GooseAgentRunner (no run() called)."""
-    from tools.ai_techwriter.provider import qwen_provider
-    from tools.ai_techwriter.seams import GooseAgentRunner
+    from beadloom.ai_agents.ai_techwriter.provider import qwen_provider
+    from beadloom.ai_agents.ai_techwriter.seams import GooseAgentRunner
 
     agent = cli._build_agent(project, qwen_provider())
     assert isinstance(agent, GooseAgentRunner)

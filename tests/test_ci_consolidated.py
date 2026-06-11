@@ -134,8 +134,8 @@ def test_ci_tests_job_keeps_lint_mypy_coverage_steps() -> None:
     runs = "\n".join(
         str(s.get("run", "")) for s in tests["steps"] if isinstance(s, dict)
     )
-    assert "ruff check src/ tests/ tools/" in runs
-    assert "mypy src/ tools/" in runs
+    assert "ruff check src/ tests/" in runs
+    assert "mypy src/" in runs
     assert "--cov-fail-under=80" in runs
 
 

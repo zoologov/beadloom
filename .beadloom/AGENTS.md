@@ -59,6 +59,8 @@
 - **unregistered-feature-candidate** (unknown): Substantial domain-only modules that model no feature (candidates)
 - **tui-no-direct-infra** (forbid_import): TUI must not import infrastructure directly
 - **onboarding-no-direct-infra** (forbid_import): Onboarding must not import infrastructure directly
+- **core-no-import-ai-agents** (forbid_import): Core domains/services must not import the ai_agents domain
+- **application-no-import-ai-agents** (forbid_import): Application must not import the ai_agents domain (leaf consumer only)
 
 ## Custom
 

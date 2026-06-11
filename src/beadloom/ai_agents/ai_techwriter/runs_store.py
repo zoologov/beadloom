@@ -1,3 +1,5 @@
+# beadloom:domain=ai_agents
+# beadloom:feature=ai-techwriter
 """Append-only run-record store (G9): ``.beadloom/ai_techwriter_runs.json``.
 
 Mirrors the honest-by-construction ``site_metrics_history`` store: a JSON array
@@ -13,7 +15,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from tools.ai_techwriter.models import RunRecord
+    from beadloom.ai_agents.ai_techwriter.models import RunRecord
 
 RUNS_FILENAME = "ai_techwriter_runs.json"
 

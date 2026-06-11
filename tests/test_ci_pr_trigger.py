@@ -198,7 +198,7 @@ def test_github_loop_guard_sets_skip_flag_before_work(path: Path) -> None:
     harness_idx = next(
         i
         for i, s in enumerate(steps)
-        if isinstance(s.get("run"), str) and "tools.ai_techwriter" in s["run"]
+        if isinstance(s.get("run"), str) and "beadloom.ai_agents.ai_techwriter" in s["run"]
     )
     assert guard_idx < harness_idx
 

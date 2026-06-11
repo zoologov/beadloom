@@ -1722,12 +1722,14 @@ def setup_rules(
 def setup_ai_techwriter(*, platform: str, project: Path | None) -> None:
     """Scaffold the AI tech-writer into this repo (BDL-047 / F4.1, G8).
 
-    In the setup-* family (alongside setup-mcp / setup-rules). Idempotently
-    vendors the deterministic harness package + Goose recipe into
-    ``tools/ai_techwriter/`` (self-contained — the runner needs only beadloom +
-    goose + python), drops the chosen platform's CI wrapper, and writes the
-    3-step getting-started guide ``docs/guides/ai-techwriter.md``. Re-running
-    cleanly overwrites the generated files.
+    In the setup-* family (alongside setup-mcp / setup-rules). The harness ships
+    inside the installed ``beadloom`` package (BDL-051 / S2), so this no longer
+    vendors any Python: it idempotently drops the chosen platform's CI wrapper
+    (which invokes ``python -m beadloom.ai_agents.ai_techwriter``), the operator
+    artifacts ``tools/ai_techwriter/{recipe.yaml,provision-runner.sh}`` (copied
+    from package data for reference + runner provisioning), and the
+    getting-started guide ``docs/guides/ai-techwriter.md``. Re-running cleanly
+    overwrites the generated files.
     """
     from beadloom.onboarding.ai_techwriter_setup import scaffold
 
