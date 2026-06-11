@@ -197,7 +197,7 @@ CREATE TABLE IF NOT EXISTS rules (
     rule_type   TEXT NOT NULL CHECK(rule_type IN (
         'deny', 'require', 'forbid_cycles', 'layers',
         'cardinality', 'forbid_import', 'forbid_edge',
-        'unregistered_feature_candidate'
+        'unregistered_feature_candidate', 'module_coverage'
     )),
     rule_json   TEXT NOT NULL,
     enabled     INTEGER NOT NULL DEFAULT 1

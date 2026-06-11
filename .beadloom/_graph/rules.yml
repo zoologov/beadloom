@@ -64,14 +64,24 @@ rules:
       for: { kind: domain }
       max_symbols: 200
 
-  - name: unregistered-feature-candidate
-    description: "Substantial domain-only modules that model no feature (candidates)"
+  # COVERAGE lint (BDL-051 S3a) — supersedes the S1 unregistered-feature-candidate
+  # sprawl-lint with a stronger, complete-coverage check. Goal: NO SHADOW CODE.
+  # Every src/beadloom/**.py module with >= min_symbols indexed symbols must be
+  # COVERED: it carries a `feature`/`component` annotation, it IS a node's
+  # `source`, OR its path matches an `exempt` glob below. Anything else is a
+  # finding. Severity is `warn` for now (S3b classifies every module, then this
+  # is promoted to error). The exempt list is VISIBLE here — not a silent escape
+  # hatch. Exempt criterion: < N public symbols AND not backing a CLI command AND
+  # internal-only (docstring-only glue). Seeded minimally; S3b decides the rest.
+  - name: module-coverage
+    description: "Every src module must be a tracked node (feature/component/…) or explicitly exempt"
     severity: warn
-    unregistered_feature_candidate:
-      for: { kind: domain }
-      min_symbols: 5
-      # Accepted domain-level plumbing (listed in the domain README, no SPEC).
-      exclude:
+    module_coverage:
+      source_root: src/beadloom/
+      min_symbols: 1
+      exempt:
+        - "**/__init__.py"
+        - "**/__main__.py"
         - "**/onboarding/config_reader.py"
         - "**/onboarding/presets.py"
 

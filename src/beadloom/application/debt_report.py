@@ -435,7 +435,7 @@ def _count_violations(
 
     try:
         rules = load_rules(rules_path)
-        violations = evaluate_all(conn, rules)
+        violations = evaluate_all(conn, rules, project_root=project_root)
     except (ValueError, OSError):
         return 0, 0, {}
 

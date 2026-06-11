@@ -20,16 +20,20 @@ Parent: `BDL-051` (epic). Four slices, each a trunk-based PR (dev → test → r
 | .4 | dev | move `tools/ai_techwriter` → `src/beadloom/ai_agents/ai_techwriter/` + annotations + `services.yml` nodes (ai_agents domain, ai-techwriter feature) + SPEC; update imports + `ci.yml`/`.gitlab-ci.yml`/templates invocation → `beadloom.ai_agents.ai_techwriter`; retire `HARNESS_MODULES`/`*.py.txt`/`sync_vendored_harness`/drift-guard; recipe+provisioner → package-data; `ai_agents` boundary rule | .3 |
 | .5 | test | move-regression tests (harness behavior unchanged; scaffold emits installed-module workflow; recipe as package-data; boundary rule) | .4 |
 | .6 | review | S2 (no BDL-049/050 regression; vendoring cleanly retired; boundaries) | .5 |
-| **S3 — onboarding re-model + 6-domain audit** | | | |
-| .7 | dev | register onboarding features (config-check, branch-protection, agentic-flow-setup, ai-techwriter-setup) — `services.yml` + `# beadloom:feature=` + SPEC skeletons; audit the other 5 domains (fix or explicit-accept); lint clean | .3 |
-| .8 | test | graph/sync-check tests for the new nodes; lint clean (or warns only on accepted) | .7 |
-| .9 | review | S3 (modeling correctness; no invisible capabilities left) | .8 |
+| **S3a — taxonomy + coverage-lint** (EXPANDED 2026-06-11) | | | |
+| .7 | dev | add `component` node kind (rule_engine VALID_NODE_KINDS + services.yml); replace sprawl-lint with COVERAGE-lint (every src module = node OR explicit exempt); exempt mechanism in rules.yml (<N symbols AND not-CLI AND internal) | .3 |
+| .8 | test | coverage-lint (flags unclassified module; exempt honored; component kind valid) | .7 |
+| .9 | review | S3a (taxonomy + coverage-lint correctness, exempt not a silent escape) | .8 |
+| **S3b — classify ALL ~80 modules** | | | |
+| .14 | dev | classify every src module → feature/component/exempt; create nodes (services.yml + annotations) + SPEC/DOC skeletons; coverage-lint clean | .9 |
+| .15 | test | nodes/sync-check/coverage-lint clean across all 7 domains | .14 |
+| .16 | review | classification correctness; no shadow code; each exempt justified | .15 |
 | **S4 — process-tools ACTIVE-table fix + adoption** | | | |
 | .10 | dev | `checkpoint`/`complete_bead` maintain the `ACTIVE.md` bead-status table (tolerant parser, best-effort) in `mcp_server.py`; wire coordinator adoption note | .3 |
 | .11 | test | ACTIVE-table update tests (flip row on done/in-progress; fallback when unparseable; bd/gate mocked) | .10 |
 | .12 | review | S4 (fail-safe; correct-by-construction ACTIVE) | .11 |
 | **epic close** | | | |
-| .13 | tech-writer | guides + CHANGELOG + ROADMAP + fill the new SPECs + renumber speed → BDL-052 (re-label stub `beadloom-parl`) | .6,.9,.12 |
+| .13 | tech-writer | guides + CHANGELOG + ROADMAP + fill the new SPEC/DOC skeletons + renumber speed → BDL-052 (re-label stub `beadloom-parl`) | .6,.12,.16 |
 
 ## Dependencies / DAG
 
