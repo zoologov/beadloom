@@ -3450,3 +3450,402 @@ class TestUnregisteredFeatureCandidateReindexSurvival:
             conn.close()
         assert row is not None
         assert row[0] == "unregistered_feature_candidate"
+
+
+# ---------------------------------------------------------------------------
+# component node kind (BDL-051 S3a / BEAD-07)
+# ---------------------------------------------------------------------------
+
+
+class TestComponentNodeKind:
+    """The 'component' node kind is a first-class, valid node kind."""
+
+    def test_component_in_valid_node_kinds(self) -> None:
+        from beadloom.graph.rule_engine import VALID_NODE_KINDS
+
+        assert "component" in VALID_NODE_KINDS
+
+    def test_matcher_parses_component_kind(self, tmp_path: Path) -> None:
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\nrules:\n"
+            "  - name: comp-rule\n"
+            "    description: components need a parent\n"
+            "    require:\n"
+            "      for: { kind: component }\n"
+            "      has_edge_to: { kind: domain }\n"
+            "      edge_kind: part_of\n"
+        )
+        rules = load_rules(rules_path)
+        assert isinstance(rules[0], RequireRule)
+        assert rules[0].for_matcher.kind == "component"
+
+    def test_component_node_round_trips_through_loader(self, tmp_path: Path) -> None:
+        """A component node loads into the nodes table without 'Unknown kind'."""
+        from beadloom.graph.loader import load_graph
+
+        graph_dir = tmp_path / "_graph"
+        graph_dir.mkdir()
+        (graph_dir / "services.yml").write_text(
+            "version: 1\n"
+            "nodes:\n"
+            "  - ref_id: beadloom\n"
+            "    kind: service\n"
+            "    summary: root\n"
+            "  - ref_id: graph\n"
+            "    kind: domain\n"
+            "    summary: graph domain\n"
+            "    source: src/beadloom/graph/\n"
+            "  - ref_id: graph-loader\n"
+            "    kind: component\n"
+            "    summary: the loader building block\n"
+            "    source: src/beadloom/graph/loader.py\n"
+            "edges:\n"
+            "  - src: graph\n"
+            "    dst: beadloom\n"
+            "    kind: part_of\n"
+            "  - src: graph-loader\n"
+            "    dst: graph\n"
+            "    kind: part_of\n"
+        )
+        conn = sqlite3.connect(":memory:")
+        try:
+            create_schema(conn)
+            result = load_graph(graph_dir, conn)
+            conn.commit()
+            assert result.errors == []
+            row = conn.execute(
+                "SELECT kind FROM nodes WHERE ref_id = ?", ("graph-loader",)
+            ).fetchone()
+        finally:
+            conn.close()
+        assert row is not None
+        assert row[0] == "component"
+
+
+# ---------------------------------------------------------------------------
+# ModuleCoverageRule — coverage lint (BDL-051 S3a / BEAD-07)
+# ---------------------------------------------------------------------------
+
+
+def _coverage_db() -> sqlite3.Connection:
+    """In-memory DB: a covered (component), covered (feature), node-source, and
+    uncovered (domain-only) module, plus an exempt-style trivial module."""
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys=ON")
+    create_schema(conn)
+
+    conn.execute(
+        "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+        ("onboarding", "domain", "Onboarding", "src/beadloom/onboarding/"),
+    )
+    # A component node whose source IS a module file -> that module is covered
+    # by being a node's source.
+    conn.execute(
+        "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+        ("onb-scanner", "component", "scanner", "src/beadloom/onboarding/scanner.py"),
+    )
+
+    # Uncovered: domain-only, no feature/component annotation.
+    for i in range(6):
+        _insert_symbol(
+            conn,
+            "src/beadloom/onboarding/branch_protection.py",
+            f"public_fn_{i}",
+            {"domain": "onboarding"},
+        )
+    # Covered via component= annotation.
+    for i in range(4):
+        _insert_symbol(
+            conn,
+            "src/beadloom/onboarding/config_sync.py",
+            f"sync_fn_{i}",
+            {"domain": "onboarding", "component": "config-check"},
+        )
+    # Covered via feature= annotation.
+    for i in range(3):
+        _insert_symbol(
+            conn,
+            "src/beadloom/onboarding/agentic_flow_setup.py",
+            f"flow_fn_{i}",
+            {"domain": "onboarding", "feature": "agentic-flow-setup"},
+        )
+    # Covered because the module path equals a node's source.
+    for i in range(5):
+        _insert_symbol(
+            conn,
+            "src/beadloom/onboarding/scanner.py",
+            f"scan_fn_{i}",
+            {"domain": "onboarding"},
+        )
+    # Trivial/plumbing module (will be exempted by glob in some tests).
+    for i in range(2):
+        _insert_symbol(
+            conn,
+            "src/beadloom/onboarding/presets.py",
+            f"preset_fn_{i}",
+            {"domain": "onboarding"},
+        )
+
+    conn.commit()
+    return conn
+
+
+def _coverage_rule(
+    *,
+    source_root: str = "src/beadloom/",
+    min_symbols: int = 1,
+    exempt: tuple[str, ...] = (),
+    severity: str = "warn",
+) -> object:
+    """Build a ModuleCoverageRule for tests."""
+    from beadloom.graph.rule_engine import ModuleCoverageRule
+
+    return ModuleCoverageRule(
+        name="module-coverage",
+        description="every src module must be a node or exempt",
+        source_root=source_root,
+        min_symbols=min_symbols,
+        exempt=exempt,
+        severity=severity,
+    )
+
+
+class TestModuleCoverageDataclass:
+    def test_create_with_defaults(self) -> None:
+        from beadloom.graph.rule_engine import ModuleCoverageRule
+
+        rule = ModuleCoverageRule(name="module-coverage", description="d")
+        assert rule.source_root == "src/beadloom/"
+        assert rule.min_symbols == 1
+        assert rule.exempt == ()
+        assert rule.severity == "warn"
+
+
+class TestModuleCoverageYamlParsing:
+    def test_parse_full_rule(self, tmp_path: Path) -> None:
+        from beadloom.graph.rule_engine import ModuleCoverageRule
+
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\nrules:\n"
+            "  - name: module-coverage\n"
+            "    description: coverage\n"
+            "    severity: warn\n"
+            "    module_coverage:\n"
+            "      source_root: src/beadloom/\n"
+            "      min_symbols: 1\n"
+            "      exempt:\n"
+            "        - '**/__init__.py'\n"
+            "        - '**/presets.py'\n"
+        )
+        rules = load_rules(rules_path)
+        assert len(rules) == 1
+        rule = rules[0]
+        assert isinstance(rule, ModuleCoverageRule)
+        assert rule.source_root == "src/beadloom/"
+        assert rule.min_symbols == 1
+        assert rule.exempt == ("**/__init__.py", "**/presets.py")
+
+    def test_defaults_when_omitted(self, tmp_path: Path) -> None:
+        from beadloom.graph.rule_engine import ModuleCoverageRule
+
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\nrules:\n"
+            "  - name: module-coverage\n"
+            "    description: coverage\n"
+            "    module_coverage: {}\n"
+        )
+        rules = load_rules(rules_path)
+        assert isinstance(rules[0], ModuleCoverageRule)
+        assert rules[0].min_symbols == 1
+        assert rules[0].severity == "warn"
+
+    def test_negative_min_symbols_rejected(self, tmp_path: Path) -> None:
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\nrules:\n"
+            "  - name: module-coverage\n"
+            "    description: coverage\n"
+            "    module_coverage:\n"
+            "      min_symbols: -1\n"
+        )
+        with pytest.raises(ValueError, match="min_symbols must be non-negative"):
+            load_rules(rules_path)
+
+    def test_not_a_mapping_rejected(self, tmp_path: Path) -> None:
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\nrules:\n"
+            "  - name: module-coverage\n"
+            "    description: coverage\n"
+            "    module_coverage: not-a-mapping\n"
+        )
+        with pytest.raises(ValueError, match="must be a mapping"):
+            load_rules(rules_path)
+
+
+class TestEvaluateModuleCoverage:
+    def test_uncovered_module_flagged(self) -> None:
+        from beadloom.graph.rule_engine import evaluate_module_coverage_rules
+
+        conn = _coverage_db()
+        try:
+            violations = evaluate_module_coverage_rules(conn, [_coverage_rule()])  # type: ignore[list-item]
+        finally:
+            conn.close()
+        flagged = {v.file_path for v in violations}
+        assert "src/beadloom/onboarding/branch_protection.py" in flagged
+
+    def test_component_annotation_covers(self) -> None:
+        from beadloom.graph.rule_engine import evaluate_module_coverage_rules
+
+        conn = _coverage_db()
+        try:
+            violations = evaluate_module_coverage_rules(conn, [_coverage_rule()])  # type: ignore[list-item]
+        finally:
+            conn.close()
+        flagged = {v.file_path for v in violations}
+        assert "src/beadloom/onboarding/config_sync.py" not in flagged
+
+    def test_feature_annotation_covers(self) -> None:
+        from beadloom.graph.rule_engine import evaluate_module_coverage_rules
+
+        conn = _coverage_db()
+        try:
+            violations = evaluate_module_coverage_rules(conn, [_coverage_rule()])  # type: ignore[list-item]
+        finally:
+            conn.close()
+        flagged = {v.file_path for v in violations}
+        assert "src/beadloom/onboarding/agentic_flow_setup.py" not in flagged
+
+    def test_node_source_covers(self) -> None:
+        from beadloom.graph.rule_engine import evaluate_module_coverage_rules
+
+        conn = _coverage_db()
+        try:
+            violations = evaluate_module_coverage_rules(conn, [_coverage_rule()])  # type: ignore[list-item]
+        finally:
+            conn.close()
+        flagged = {v.file_path for v in violations}
+        # scanner.py has only domain= annotation but it IS a component node's source.
+        assert "src/beadloom/onboarding/scanner.py" not in flagged
+
+    def test_exempt_glob_honored(self) -> None:
+        from beadloom.graph.rule_engine import evaluate_module_coverage_rules
+
+        conn = _coverage_db()
+        try:
+            violations = evaluate_module_coverage_rules(
+                conn, [_coverage_rule(exempt=("**/presets.py",))]  # type: ignore[list-item]
+            )
+        finally:
+            conn.close()
+        flagged = {v.file_path for v in violations}
+        assert "src/beadloom/onboarding/presets.py" not in flagged
+
+    def test_not_exempt_when_glob_misses(self) -> None:
+        from beadloom.graph.rule_engine import evaluate_module_coverage_rules
+
+        conn = _coverage_db()
+        try:
+            violations = evaluate_module_coverage_rules(
+                conn, [_coverage_rule(exempt=("**/other.py",))]  # type: ignore[list-item]
+            )
+        finally:
+            conn.close()
+        flagged = {v.file_path for v in violations}
+        assert "src/beadloom/onboarding/presets.py" in flagged
+
+    def test_message_names_file_and_symbol_count(self) -> None:
+        from beadloom.graph.rule_engine import evaluate_module_coverage_rules
+
+        conn = _coverage_db()
+        try:
+            violations = evaluate_module_coverage_rules(conn, [_coverage_rule()])  # type: ignore[list-item]
+        finally:
+            conn.close()
+        v = next(
+            v
+            for v in violations
+            if v.file_path == "src/beadloom/onboarding/branch_protection.py"
+        )
+        assert "branch_protection.py" in v.message
+        assert "6 symbols" in v.message
+        assert "not covered" in v.message
+        assert v.rule_type == "module_coverage"
+        assert v.severity == "warn"
+
+    def test_below_min_symbols_not_flagged(self) -> None:
+        from beadloom.graph.rule_engine import evaluate_module_coverage_rules
+
+        conn = _coverage_db()
+        try:
+            # presets.py has 2 symbols; require >=3 -> not flagged.
+            violations = evaluate_module_coverage_rules(
+                conn, [_coverage_rule(min_symbols=3)]  # type: ignore[list-item]
+            )
+        finally:
+            conn.close()
+        flagged = {v.file_path for v in violations}
+        assert "src/beadloom/onboarding/presets.py" not in flagged
+
+
+class TestModuleCoverageSeverityWarn:
+    def test_warn_severity_does_not_fail_strict(self) -> None:
+        """A module-coverage finding is severity warn (does not block lint --strict)."""
+        conn = _coverage_db()
+        try:
+            violations = evaluate_all(conn, [_coverage_rule()])  # type: ignore[list-item]
+        finally:
+            conn.close()
+        coverage = [v for v in violations if v.rule_type == "module_coverage"]
+        assert coverage  # there is at least one finding
+        assert all(v.severity == "warn" for v in coverage)
+        # lint --strict fails only on error-severity violations.
+        assert not any(v.severity == "error" for v in coverage)
+
+
+class TestModuleCoverageSerializationRoundTrip:
+    def test_serialize_and_reindex(self, tmp_path: Path) -> None:
+        from beadloom.application.reindex import (
+            ReindexResult,
+            _load_rules_into_db,
+            _serialize_rule,
+        )
+        from beadloom.graph.rule_engine import load_rules
+
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\nrules:\n"
+            "  - name: module-coverage\n"
+            "    description: coverage\n"
+            "    severity: warn\n"
+            "    module_coverage:\n"
+            "      source_root: src/beadloom/\n"
+            "      min_symbols: 1\n"
+            "      exempt:\n"
+            "        - '**/__init__.py'\n"
+        )
+        rules = load_rules(rules_path)
+        rule_type, rule_def = _serialize_rule(rules[0])
+        assert rule_type == "module_coverage"
+        assert rule_def["min_symbols"] == 1
+        assert rule_def["exempt"] == ["**/__init__.py"]
+
+        conn = sqlite3.connect(":memory:")
+        try:
+            create_schema(conn)
+            result = ReindexResult()
+            _load_rules_into_db(rules_path, conn, result)
+            conn.commit()
+            assert result.errors == []
+            row = conn.execute(
+                "SELECT rule_type FROM rules WHERE name = ?", ("module-coverage",)
+            ).fetchone()
+        finally:
+            conn.close()
+        assert row is not None
+        assert row[0] == "module_coverage"

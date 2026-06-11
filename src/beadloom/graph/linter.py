@@ -134,8 +134,10 @@ def lint(
         ).fetchone()
         imports_resolved: int = int(row[0]) if row is not None else 0
 
-        # Step h: Evaluate all rules.
-        violations = evaluate_all(conn, rules)
+        # Step h: Evaluate all rules. ``project_root`` roots the on-disk module
+        # enumeration used by the module-coverage rule (closes the zero-symbol
+        # false-negative — BDL-051 S3a / BEAD-17).
+        violations = evaluate_all(conn, rules, project_root=project_root)
 
         # Step i: Measure elapsed time.
         elapsed = (time.monotonic() - start) * 1000

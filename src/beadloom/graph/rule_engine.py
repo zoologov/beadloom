@@ -7,19 +7,21 @@ from __future__ import annotations
 import fnmatch
 import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import yaml
 
 if TYPE_CHECKING:
     import sqlite3
-    from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-VALID_NODE_KINDS: frozenset[str] = frozenset({"domain", "feature", "service", "entity", "adr"})
+VALID_NODE_KINDS: frozenset[str] = frozenset(
+    {"domain", "feature", "component", "service", "entity", "adr"}
+)
 VALID_EDGE_KINDS: frozenset[str] = frozenset(
     {"part_of", "depends_on", "uses", "implements", "touches_entity", "touches_code"}
 )
@@ -204,6 +206,42 @@ class UnregisteredFeatureCandidateRule:
     severity: str = "warn"
 
 
+@dataclass(frozen=True)
+class ModuleCoverageRule:
+    """Require every ``src/`` module to be a tracked node or explicitly exempt.
+
+    This is the BDL-051 S3a *coverage* lint — the stronger, complete-coverage
+    successor to :class:`UnregisteredFeatureCandidateRule`. The goal is **no
+    shadow code**: every source module is either tracked by a node or named on a
+    visible exempt list.
+
+    For each module under ``source_root`` that has at least ``min_symbols``
+    indexed symbols, the module is **covered** when any of:
+
+    - one of its symbols' ``annotations`` carries a ``feature`` key, or
+    - one of its symbols' ``annotations`` carries a ``component`` key, or
+    - the module's path equals a ``domain``/``service``/``component``/… node's
+      ``source`` (it *is* a node), or
+    - its path matches an entry in ``exempt`` (a tuple of ``fnmatch`` globs).
+
+    An uncovered module produces one finding naming the file and its symbol
+    count. Findings are advisory (``severity: warn``) until S3b classifies every
+    module; the rule must not fail ``lint --strict`` yet.
+
+    The exempt criterion (documented in ``rules.yml`` and the architecture-model
+    guide): a module may be exempt when it has ``< N`` public symbols **and**
+    does not back a CLI command **and** is internal-only (docstring-only glue).
+    The list lives in ``rules.yml`` — it is visible, not a silent escape hatch.
+    """
+
+    name: str
+    description: str
+    source_root: str = "src/beadloom/"
+    min_symbols: int = 1
+    exempt: tuple[str, ...] = ()
+    severity: str = "warn"
+
+
 Rule = (
     DenyRule
     | RequireRule
@@ -213,6 +251,7 @@ Rule = (
     | LayerRule
     | CardinalityRule
     | UnregisteredFeatureCandidateRule
+    | ModuleCoverageRule
 )
 
 
@@ -678,6 +717,52 @@ def _parse_unregistered_feature_candidate_rule(
     )
 
 
+def _parse_module_coverage_rule(
+    name: str,
+    description: str,
+    data: dict[str, object],
+    *,
+    severity: str = "warn",
+) -> ModuleCoverageRule:
+    """Parse the 'module_coverage' block of a rule.
+
+    YAML example::
+
+        - name: module-coverage
+          module_coverage:
+            source_root: src/beadloom/
+            min_symbols: 1
+            exempt:
+              - "**/__init__.py"
+          severity: warn
+    """
+    source_root_raw = data.get("source_root", "src/beadloom/")
+    source_root = str(source_root_raw)
+
+    min_symbols_raw = data.get("min_symbols", 1)
+    min_symbols = int(min_symbols_raw)  # type: ignore[call-overload]
+    if min_symbols < 0:
+        msg = f"Rule '{name}': module_coverage.min_symbols must be non-negative"
+        raise ValueError(msg)
+
+    exempt_raw = data.get("exempt", [])
+    if exempt_raw is None:
+        exempt_raw = []
+    if not isinstance(exempt_raw, list):
+        msg = f"Rule '{name}': module_coverage.exempt must be a list"
+        raise ValueError(msg)
+    exempt = tuple(str(item) for item in exempt_raw)
+
+    return ModuleCoverageRule(
+        name=name,
+        description=description,
+        source_root=source_root,
+        min_symbols=min_symbols,
+        exempt=exempt,
+        severity=severity,
+    )
+
+
 def load_rules(rules_path: Path) -> list[Rule]:
     """Parse rules.yml and return validated Rule objects.
 
@@ -727,11 +812,13 @@ def load_rules(rules_path: Path) -> list[Rule]:
         description = str(rule_data.get("description", ""))
 
         has_unregistered = "unregistered_feature_candidate" in rule_data
+        has_module_coverage = "module_coverage" in rule_data
 
         # Parse severity (v2 feature, defaults to "error" for v1 backward compat).
-        # The advisory ``unregistered_feature_candidate`` check defaults to
-        # "warn" when severity is omitted (it must never fail the build).
-        default_severity = "warn" if has_unregistered else "error"
+        # The advisory ``unregistered_feature_candidate`` and ``module_coverage``
+        # checks default to "warn" when severity is omitted (they must never fail
+        # the build until S3b classifies every module).
+        default_severity = "warn" if (has_unregistered or has_module_coverage) else "error"
         severity_raw = rule_data.get("severity", default_severity)
         severity = str(severity_raw)
         if severity not in VALID_RULE_SEVERITIES:
@@ -759,13 +846,15 @@ def load_rules(rules_path: Path) -> list[Rule]:
                 has_layers,
                 has_check,
                 has_unregistered,
+                has_module_coverage,
             ]
         )
         if rule_type_count != 1:
             msg = (
                 f"rules.yml: rule '{name}' must have exactly one of "
                 f"'deny', 'require', 'forbid_cycles', 'forbid_import', "
-                f"'forbid', 'layers', 'check', or 'unregistered_feature_candidate'"
+                f"'forbid', 'layers', 'check', 'unregistered_feature_candidate', "
+                f"or 'module_coverage'"
             )
             raise ValueError(msg)
 
@@ -812,6 +901,14 @@ def load_rules(rules_path: Path) -> list[Rule]:
                 _parse_unregistered_feature_candidate_rule(
                     name, description, ufc_data, severity=severity
                 )
+            )
+        elif has_module_coverage:
+            mc_data = rule_data["module_coverage"]
+            if not isinstance(mc_data, dict):
+                msg = f"Rule '{name}': 'module_coverage' must be a mapping"
+                raise ValueError(msg)
+            rules.append(
+                _parse_module_coverage_rule(name, description, mc_data, severity=severity)
             )
         else:
             cycle_data = rule_data["forbid_cycles"]
@@ -1858,6 +1955,140 @@ def evaluate_unregistered_feature_candidate_rules(
 
 
 # ---------------------------------------------------------------------------
+# Module-coverage rule evaluation
+# ---------------------------------------------------------------------------
+
+
+def _node_source_paths(conn: sqlite3.Connection) -> set[str]:
+    """Return the set of node ``source`` values that point at a single module file.
+
+    A module is *covered by being a node's source* when its path equals a node's
+    ``source``. Directory sources (domains/services, ending in ``/``) are not
+    module files, so they are excluded here — modules under a domain directory
+    are covered by their ``feature``/``component`` annotation, not by the domain.
+    """
+    rows = conn.execute("SELECT source FROM nodes WHERE source IS NOT NULL").fetchall()
+    sources: set[str] = set()
+    for row in rows:
+        source = str(row[0])
+        if source and not source.endswith("/"):
+            sources.add(source)
+    return sources
+
+
+def _module_coverage_state(
+    conn: sqlite3.Connection, source_root: str
+) -> dict[str, tuple[int, bool]]:
+    """Group indexed symbols under *source_root* into per-module coverage state.
+
+    Returns ``{file_path: (symbol_count, has_feature_or_component_annotation)}``
+    for every module with at least one indexed symbol.
+    """
+    rows = conn.execute(
+        "SELECT file_path, annotations FROM code_symbols WHERE file_path LIKE ?",
+        (source_root + "%",),
+    ).fetchall()
+
+    counts: dict[str, int] = {}
+    annotated: dict[str, bool] = {}
+    for row in rows:
+        file_path = str(row[0])
+        counts[file_path] = counts.get(file_path, 0) + 1
+        annotations = _file_annotations(row[1])
+        if annotations is not None and ("feature" in annotations or "component" in annotations):
+            annotated[file_path] = True
+
+    return {path: (count, annotated.get(path, False)) for path, count in counts.items()}
+
+
+def _disk_modules(project_root: Path, source_root: str) -> list[str]:
+    """Enumerate ``.py`` modules on DISK under ``project_root / source_root``.
+
+    Returns repo-relative, forward-slash file paths (matching how
+    ``code_symbols.file_path`` and node ``source`` values are stored), sorted
+    deterministically. This is the candidate enumeration that closes the
+    zero-symbol false-negative: a real module with no indexed ``def``/``class``
+    symbol produces no ``code_symbols`` row, yet it is still a real module and
+    must be a coverage candidate (BDL-051 S3a / BEAD-17).
+    """
+    base = (project_root / source_root).resolve()
+    if not base.is_dir():
+        return []
+    rel_root = source_root.rstrip("/")
+    modules: list[str] = []
+    for path in base.rglob("*.py"):
+        if not path.is_file():
+            continue
+        rel = path.resolve().relative_to(base).as_posix()
+        modules.append(f"{rel_root}/{rel}")
+    return sorted(modules)
+
+
+def evaluate_module_coverage_rules(
+    conn: sqlite3.Connection,
+    rules: list[ModuleCoverageRule],
+    *,
+    project_root: Path | None = None,
+) -> list[Violation]:
+    """Flag every ``src/`` module that is neither a tracked node nor exempt (S3a).
+
+    The candidate set is enumerated from **disk** (every ``.py`` under
+    ``project_root / source_root``) unioned with any module that has indexed
+    ``code_symbols`` rows. Disk enumeration closes the zero-symbol false-negative:
+    a real module with no top-level ``def``/``class`` produces no symbol row, yet
+    it is a real module and must be a candidate (BDL-051 S3a / BEAD-17, review .9).
+
+    A module is *covered* when it carries a ``feature``/``component`` annotation
+    (read from ``code_symbols.annotations`` where available), equals a node's
+    ``source``, or matches an ``exempt`` glob. An uncovered module produces one
+    advisory (``warn``) finding naming the file and its symbol count.
+
+    *project_root* defaults to the current working directory.
+    """
+    if not rules:
+        return []
+
+    root = project_root if project_root is not None else Path.cwd()
+
+    violations: list[Violation] = []
+    node_sources = _node_source_paths(conn)
+
+    for rule in rules:
+        coverage = _module_coverage_state(conn, rule.source_root)
+        # Union: every disk module is a candidate even with zero indexed symbols.
+        candidates = dict(coverage)
+        for disk_path in _disk_modules(root, rule.source_root):
+            if disk_path not in candidates:
+                candidates[disk_path] = (0, False)
+        for file_path, (symbol_count, annotated) in sorted(candidates.items()):
+            if symbol_count < rule.min_symbols and file_path in coverage:
+                continue
+            if annotated or file_path in node_sources:
+                continue
+            if any(fnmatch.fnmatch(file_path, pat) for pat in rule.exempt):
+                continue
+
+            violations.append(
+                Violation(
+                    rule_name=rule.name,
+                    rule_description=rule.description,
+                    rule_type="module_coverage",
+                    severity=rule.severity,
+                    file_path=file_path,
+                    line_number=None,
+                    from_ref_id=None,
+                    to_ref_id=None,
+                    message=(
+                        f"{file_path} ({symbol_count} symbols): not covered by any node "
+                        f"and not exempt — classify as a feature/component or add to exempt."
+                    ),
+                )
+            )
+
+    return violations
+
+
+# ---------------------------------------------------------------------------
 # Combined evaluation
 # ---------------------------------------------------------------------------
 
@@ -1898,6 +2129,13 @@ def _remediation_for(rule_type: str, violation: Violation) -> str | None:
             f"annotation + SPEC.md), or accept it as domain-level plumbing "
             f"(list it in the domain README and add it to the rule's `exclude`)"
         )
+    if rule_type == "module_coverage":
+        loc = violation.file_path or src
+        return (
+            f"classify `{loc}`: model it as a feature or component (add a node + "
+            f"`# beadloom:feature=`/`# beadloom:component=` annotation + a doc), "
+            f"or add its path to the rule's `exempt` list if it is trivial glue"
+        )
     return None
 
 
@@ -1908,12 +2146,20 @@ def _with_remediation(violation: Violation) -> Violation:
     return replace(violation, remediation=_remediation_for(violation.rule_type, violation))
 
 
-def evaluate_all(conn: sqlite3.Connection, rules: list[Rule]) -> list[Violation]:
+def evaluate_all(
+    conn: sqlite3.Connection,
+    rules: list[Rule],
+    *,
+    project_root: Path | None = None,
+) -> list[Violation]:
     """Evaluate all rules and return sorted violations.
 
     Supports deny, require, cycle, import boundary, forbid edge, layer,
     and cardinality rules. Each violation is enriched with an agent-actionable
     ``remediation`` hint (BDL-039 F3 BEAD-02) as a deterministic post-pass.
+
+    *project_root* (default: cwd) roots the on-disk module enumeration the
+    ``module-coverage`` rule uses to close the zero-symbol false-negative.
     """
     deny_rules: list[DenyRule] = []
     require_rules: list[RequireRule] = []
@@ -1923,6 +2169,7 @@ def evaluate_all(conn: sqlite3.Connection, rules: list[Rule]) -> list[Violation]
     layer_rules: list[LayerRule] = []
     cardinality_rules: list[CardinalityRule] = []
     unregistered_rules: list[UnregisteredFeatureCandidateRule] = []
+    module_coverage_rules: list[ModuleCoverageRule] = []
 
     for rule in rules:
         if isinstance(rule, DenyRule):
@@ -1941,6 +2188,8 @@ def evaluate_all(conn: sqlite3.Connection, rules: list[Rule]) -> list[Violation]
             cardinality_rules.append(rule)
         elif isinstance(rule, UnregisteredFeatureCandidateRule):
             unregistered_rules.append(rule)
+        elif isinstance(rule, ModuleCoverageRule):
+            module_coverage_rules.append(rule)
 
     violations = (
         evaluate_deny_rules(conn, deny_rules)
@@ -1951,6 +2200,9 @@ def evaluate_all(conn: sqlite3.Connection, rules: list[Rule]) -> list[Violation]
         + evaluate_layer_rules(conn, layer_rules)
         + evaluate_cardinality_rules(conn, cardinality_rules)
         + evaluate_unregistered_feature_candidate_rules(conn, unregistered_rules)
+        + evaluate_module_coverage_rules(
+            conn, module_coverage_rules, project_root=project_root
+        )
     )
 
     # Enrich each violation with an agent-actionable remediation hint.

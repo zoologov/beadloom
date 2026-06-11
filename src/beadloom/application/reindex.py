@@ -376,7 +376,7 @@ def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
 
     Supports all v3 rule types: DenyRule, RequireRule, CycleRule,
     ImportBoundaryRule, ForbidEdgeRule, LayerRule, CardinalityRule,
-    UnregisteredFeatureCandidateRule.
+    UnregisteredFeatureCandidateRule, ModuleCoverageRule.
     """
     from beadloom.graph.rule_engine import (
         CardinalityRule,
@@ -385,6 +385,7 @@ def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
         ForbidEdgeRule,
         ImportBoundaryRule,
         LayerRule,
+        ModuleCoverageRule,
         RequireRule,
         UnregisteredFeatureCandidateRule,
     )
@@ -464,6 +465,15 @@ def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
         if rule.exclude:
             rule_def["exclude"] = list(rule.exclude)
         return ("unregistered_feature_candidate", rule_def)
+
+    if isinstance(rule, ModuleCoverageRule):
+        rule_def = {
+            "source_root": rule.source_root,
+            "min_symbols": rule.min_symbols,
+        }
+        if rule.exempt:
+            rule_def["exempt"] = list(rule.exempt)
+        return ("module_coverage", rule_def)
 
     # Should never happen with known Rule types, but guard against future additions.
     msg = f"Unknown rule type: {type(rule).__name__}"
