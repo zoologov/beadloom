@@ -622,20 +622,22 @@ beadloom setup-branch-protection --repo OWNER/NAME [--branch main] [--check CONT
 
 Idempotently sets `main` (or `--branch`) protection with a declarative
 `PUT repos/{owner}/{repo}/branches/{branch}/protection`: a **PR is required** (no
-direct push), the always-on **`beadloom-gate` check is a required status check**
-(`strict: true`), and `enforce_admins: false` + 0 required reviews +
-`restrictions: null` so the **solo owner is never locked out** (can self-merge).
-`PUT .../protection` is declarative, so re-running re-settles the same state.
+direct push), the consolidated `ci.yml` checks — `gate`, `tests (3.10)`,
+`tests (3.11)`, `tests (3.12)`, `tests (3.13)`, `site-build`, `ai-techwriter`
+(ci.yml's job names + matrix legs) — are **required status checks**
+(`strict: true`), and `enforce_admins: true` + 0 required reviews so the
+**solo owner is never locked out** (can self-merge). `PUT .../protection` is
+declarative, so re-running re-settles the same state.
 
 - `--repo OWNER/NAME` (required) — the GitHub repository (e.g. `acme/widget`).
 - `--branch` (default `main`) — the trunk to protect.
-- `--check CONTEXT` (repeatable) — overrides the default required-check context
-  (`beadloom-gate`) **entirely**. A context MUST match a real GitHub check-run
-  name EXACTLY and must NOT be a **path-filtered** workflow's check: such a check
-  does not run on PRs that miss the filter, so under `strict: true` the PR — and
-  therefore `main` — would never become mergeable. (The repo's path-filtered
-  `Tests` legs are why they are not the default; a repo whose tests run on every
-  PR can require them via `--check`.)
+- `--check CONTEXT` (repeatable) — overrides the default required-check contexts
+  (the consolidated `ci.yml` job check-runs listed above) **entirely**. A context
+  MUST match a real GitHub check-run name EXACTLY and must NOT be a
+  **path-filtered** workflow's check: such a check does not run on PRs that miss
+  the filter, so under `strict: true` the PR — and therefore `main` — would never
+  become mergeable. BDL-050 dropped the `tests` `paths:` filter precisely so each
+  matrix leg runs on every PR and is a reliable required check.
 - `--dry-run` — print the exact `gh api` call + JSON payload without touching
   GitHub.
 

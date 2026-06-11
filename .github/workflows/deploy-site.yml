@@ -18,6 +18,15 @@ permissions:
   pages: write
   id-token: write
 
+# BDL-050 Node24 bump: actions/checkout@v5, setup-uv@v6, setup-node@v5 run
+# natively on Node24. The GitHub Pages actions (configure-pages@v5,
+# upload-pages-artifact@v3, deploy-pages@v4 — the current majors) still ship
+# Node20 entrypoints, so we opt the whole workflow into the Node24 runtime via
+# this documented stopgap until those actions publish Node24 majors (avoids the
+# 2026-06-16 Node20 deprecation annotations).
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 # Allow one concurrent deployment; don't cancel an in-progress production deploy.
 concurrency:
   group: pages
@@ -27,10 +36,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
 
       - name: Set up Python
         run: uv python install 3.12
@@ -45,9 +54,9 @@ jobs:
         run: uv run beadloom docs site --out site
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: 18
+          node-version: 22
 
       - name: Install site dependencies
         run: npm ci

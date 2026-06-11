@@ -19,7 +19,11 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-GH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ai-techwriter.yml"
+# BDL-050: the ai-techwriter job folded into the consolidated ci.yml (the three
+# old PR workflows — beadloom-gate.yml / tests.yml / ai-techwriter.yml — were
+# retired). The ai-techwriter job body moved VERBATIM, so these BDL-049
+# structural checks now run over ci.yml's ``ai-techwriter`` job.
+GH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 GL_PIPELINE = REPO_ROOT / ".gitlab-ci.yml"
 TEMPLATES = REPO_ROOT / "src" / "beadloom" / "onboarding" / "templates" / "ai_techwriter"
 GH_TEMPLATE = TEMPLATES / "github-workflow.yml"

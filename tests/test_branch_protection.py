@@ -51,15 +51,32 @@ class TestPayload:
         assert checks["strict"] is True
         assert checks["contexts"] == list(DEFAULT_STATUS_CHECK_CONTEXTS)
 
-    def test_default_context_is_the_always_on_gate_check_run(self) -> None:
-        """The default required check is the real always-on ``beadloom-gate``
-        check-run (runs on EVERY PR, no ``paths:`` filter). It must NOT default
-        to the path-filtered ``Tests`` legs (``test (3.x)``) — requiring a
-        path-filtered check that does not run on a PR stalls it forever
-        (MAJOR-1, review .5)."""
-        assert DEFAULT_STATUS_CHECK_CONTEXTS == ("beadloom-gate",)
+    def test_default_contexts_are_the_consolidated_ci_check_runs(self) -> None:
+        """BDL-050: the default required checks are the consolidated ``ci.yml``
+        job check-run names — ``gate``, the four ``tests (3.x)`` matrix legs,
+        ``site-build`` and ``ai-techwriter``. All run on EVERY PR (no ``paths:``
+        filter — the matrix is un-filtered now), so requiring them under
+        ``strict`` never stalls a PR. They must match ``ci.yml``'s job names +
+        matrix legs EXACTLY."""
+        assert DEFAULT_STATUS_CHECK_CONTEXTS == (
+            "gate",
+            "tests (3.10)",
+            "tests (3.11)",
+            "tests (3.12)",
+            "tests (3.13)",
+            "site-build",
+            "ai-techwriter",
+        )
         payload = build_protection_payload()
-        assert payload["required_status_checks"]["contexts"] == ["beadloom-gate"]
+        assert payload["required_status_checks"]["contexts"] == [
+            "gate",
+            "tests (3.10)",
+            "tests (3.11)",
+            "tests (3.12)",
+            "tests (3.13)",
+            "site-build",
+            "ai-techwriter",
+        ]
 
     def test_payload_honors_custom_contexts(self) -> None:
         payload = build_protection_payload(status_check_contexts=("Beadloom Gate",))
@@ -157,6 +174,40 @@ class TestApply:
         assert body["required_status_checks"]["contexts"] == ["Beadloom Gate"]
 
 
+class TestDefaultRunner:
+    """The default :class:`GhRunner` shells out to the real ``gh`` CLI.
+
+    We mock ``subprocess.run`` so nothing touches GitHub: the test asserts the
+    argv + stdin are forwarded faithfully and stdout is returned (BDL-050
+    hardening — previously the default-runner branch was uncovered).
+    """
+
+    def test_default_runner_forwards_argv_and_stdin(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import subprocess
+
+        from beadloom.onboarding import branch_protection as bp
+
+        seen: dict[str, object] = {}
+
+        class _Completed:
+            stdout = '{"ok": true}'
+
+        def fake_run(argv: list[str], **kwargs: object) -> _Completed:
+            seen["argv"] = argv
+            seen["input"] = kwargs.get("input")
+            seen["check"] = kwargs.get("check")
+            return _Completed()
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        # No ``runner=`` → the production _subprocess_runner default is exercised.
+        req = bp.apply_branch_protection("acme", "widget")
+        assert seen["argv"] == ["gh", *req.gh_args()]
+        assert seen["input"] == req.payload_json()
+        assert seen["check"] is True
+
+
 class TestCli:
     def test_dry_run_prints_exact_gh_call_without_invoking(self) -> None:
         """--dry-run documents the exact gh api call and does NOT touch GitHub."""
@@ -199,17 +250,26 @@ class TestCli:
         assert payload["restrictions"] is None
         assert payload["required_status_checks"]["strict"] is True
 
-    def test_dry_run_default_check_is_always_on_gate(self) -> None:
-        """Without ``--check``, the required check defaults to ``beadloom-gate``
-        (the always-on, non-path-filtered check-run) — not the path-filtered
-        ``Tests`` legs."""
+    def test_dry_run_default_check_is_the_consolidated_ci_set(self) -> None:
+        """BDL-050: without ``--check``, the required checks default to the
+        consolidated ``ci.yml`` job set (``gate`` + the four ``tests (3.x)``
+        legs + ``site-build`` + ``ai-techwriter``) — all un-filtered, so
+        ``strict`` never stalls a PR."""
         result = CliRunner().invoke(
             main,
             ["setup-branch-protection", "--repo", "acme/widget", "--dry-run"],
         )
         assert result.exit_code == 0, result.output
         payload = json.loads(result.output.split("--- payload (stdin) ---", 1)[1])
-        assert payload["required_status_checks"]["contexts"] == ["beadloom-gate"]
+        assert payload["required_status_checks"]["contexts"] == [
+            "gate",
+            "tests (3.10)",
+            "tests (3.11)",
+            "tests (3.12)",
+            "tests (3.13)",
+            "site-build",
+            "ai-techwriter",
+        ]
 
     def test_dry_run_check_option_overrides_default_exactly(self) -> None:
         """Repeated ``--check`` replaces the default with exactly those contexts."""

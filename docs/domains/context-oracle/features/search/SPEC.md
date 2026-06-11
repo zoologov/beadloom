@@ -156,12 +156,13 @@ LIKE fallback behavior:
 LIKE fallback results do not include `snippet` or `rank` fields.
 
 Output format (non-JSON):
-- Each result displays as `[kind] ref_id: summary`
-- If a snippet is available (FTS5 mode), it is displayed on the next line indented
+- If no results found: outputs `No results found.`
+- Each result displays as `  [kind] ref_id: summary` (two leading spaces)
+- If a snippet is available (FTS5 mode), it is displayed on the next line with four leading spaces: `    <snippet>`
 
 ### MCP Integration
 
-The `search` MCP tool exposes the same parameters (`query`, `kind`, `limit`) and returns the same result structure as JSON.
+The `search` MCP tool exposes the same parameters (`query`, `kind`, `limit`) and returns the same result structure as JSON. The MCP handler (`handle_search` in `mcp_server.py`) implements the same FTS5-with-LIKE-fallback logic as the CLI.
 
 ## API
 
@@ -216,7 +217,7 @@ Escape a raw query string for safe use in FTS5 MATCH expressions.
 
 ## Testing
 
-Tests are located in `tests/test_search.py`. Key scenarios:
+Tests are located in `tests/test_search.py` (20 test cases). Key scenarios:
 
 - **Basic search**: Index nodes with known content, search for a term, verify matching results with correct fields.
 - **Kind filtering**: Verify that `kind` parameter restricts results to the specified node kind.

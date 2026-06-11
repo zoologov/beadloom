@@ -3,16 +3,17 @@
 
 Trunk-based development (CLAUDE.md §6 Git) requires ``main`` to be
 branch-protected: every change integrates via a PR (no direct push) and the
-``beadloom-gate`` check is a **required status check**, so the gate becomes true
-enforcement (hardening BDL-048 G5) rather than advisory CI.
+consolidated ``ci.yml`` checks are **required status checks**, so the pipeline
+becomes true enforcement (hardening BDL-048 G5) rather than advisory CI.
 
 .. important::
    A required status-check context must match a **real GitHub check-run name
    exactly**, and must NOT be a check produced by a **path-filtered** workflow.
    A path-filtered check does not run on PRs that miss the filter, so under
    ``strict: true`` the PR — and therefore ``main`` — becomes permanently
-   unmergeable. The default :data:`DEFAULT_STATUS_CHECK_CONTEXTS` is the
-   always-on ``beadloom-gate`` check-run for exactly this reason.
+   unmergeable. The default :data:`DEFAULT_STATUS_CHECK_CONTEXTS` is the set of
+   consolidated, un-filtered ``ci.yml`` job check-runs (BDL-050) for exactly
+   this reason.
 
 The helper configures GitHub branch protection via ``gh api``::
 
@@ -25,17 +26,18 @@ with this payload (the protection contract):
 
 - ``required_status_checks`` — ``strict: true`` (the branch must be up to date)
   + ``contexts`` = the **real** GitHub check-run names that run on every PR
-  (default :data:`DEFAULT_STATUS_CHECK_CONTEXTS` = the always-on
-  ``beadloom-gate`` check; never a path-filtered workflow's check).
+  (default :data:`DEFAULT_STATUS_CHECK_CONTEXTS` = the consolidated ``ci.yml``
+  job check-runs ``gate`` / ``tests (3.10..3.13)`` / ``site-build`` /
+  ``ai-techwriter``; never a path-filtered workflow's check).
 - ``required_pull_request_reviews`` — ``{"required_approving_review_count": 0}``:
   a PR IS required, but the **solo owner can self-merge** (no human review
   needed). Team review later is a one-field bump.
 - ``enforce_admins: true`` — **strict trunk-based**: even repo admins (the
   owner) go through PRs and CANNOT direct-push to ``main`` or bypass the gate.
-  Combined with ``required_approving_review_count: 0`` + the reliable always-on
-  ``beadloom-gate`` required check, the owner is NOT locked out — they can still
-  self-merge their own PR once the gate is green. Escape hatch: if
-  ``beadloom-gate`` ever breaks, temporarily remove protection via the API
+  Combined with ``required_approving_review_count: 0`` + the reliable
+  un-filtered ``ci.yml`` required checks, the owner is NOT locked out — they can
+  still self-merge their own PR once the pipeline is green. Escape hatch: if a
+  required check ever breaks, temporarily remove protection via the API
   (``gh api --method DELETE .../protection``) and re-apply once fixed.
 - ``restrictions: null`` — no push-restriction allow-list.
 
@@ -52,21 +54,33 @@ import subprocess
 from dataclasses import dataclass
 from typing import Protocol
 
-#: Default required status-check context — the **real** GitHub check-run name of
-#: the always-on Beadloom gate (the ``beadloom-gate`` job in the *Beadloom Gate*
-#: workflow). That workflow runs on EVERY ``pull_request`` with **no ``paths:``
-#: filter**, so the check always reports — making it safe to require under
-#: ``strict: true``.
+#: Default required status-check contexts — the **real** GitHub check-run names
+#: of the consolidated ``.github/workflows/ci.yml`` pipeline (BDL-050). Each
+#: name is exactly a ``ci.yml`` job name (and, for ``tests``, each
+#: ``python-version`` matrix leg renders as ``tests (3.x)``):
+#:
+#: * ``gate`` — the ``beadloom ci`` verdict job (was ``beadloom-gate``);
+#: * ``tests (3.10)`` ... ``tests (3.13)`` -- the un-filtered 3.10-3.13 matrix;
+#: * ``site-build`` — the VitePress build job;
+#: * ``ai-techwriter`` — gated on ``needs: [gate, tests, site-build]``.
 #:
 #: A required status-check context MUST match a real GitHub check-run name
-#: EXACTLY, and you must NOT require a check produced by a **path-filtered**
-#: workflow: such a check does not run on PRs that miss the path filter, so under
-#: ``strict: true`` the PR (and ``main``) becomes permanently unmergeable. The
-#: repo's ``Tests`` workflow (``test (3.10)``…``test (3.13)``) IS path-filtered,
-#: which is exactly why those legs are NOT the default. A repo whose test checks
-#: run on every PR can require them by overriding ``status_check_contexts``
-#: (CLI: repeatable ``--check``).
-DEFAULT_STATUS_CHECK_CONTEXTS: tuple[str, ...] = ("beadloom-gate",)
+#: EXACTLY, and must NOT be a **path-filtered** workflow's check: such a check
+#: does not run on PRs that miss the path filter, so under ``strict: true`` the
+#: PR (and ``main``) becomes permanently unmergeable. BDL-050 dropped the
+#: ``tests`` ``paths:`` filter precisely so each matrix leg runs on EVERY PR and
+#: is a reliable required check. A repo with a different check layout can
+#: override these by passing ``status_check_contexts`` (CLI: repeatable
+#: ``--check``).
+DEFAULT_STATUS_CHECK_CONTEXTS: tuple[str, ...] = (
+    "gate",
+    "tests (3.10)",
+    "tests (3.11)",
+    "tests (3.12)",
+    "tests (3.13)",
+    "site-build",
+    "ai-techwriter",
+)
 
 #: The protected branch (trunk). Configurable, but ``main`` is the default trunk.
 DEFAULT_BRANCH = "main"
@@ -91,11 +105,12 @@ def build_protection_payload(
 ) -> dict[str, object]:
     """Build the GitHub branch-protection request body (the protection contract).
 
-    PR required (no direct push), the always-on ``beadloom-gate`` check required
+    PR required (no direct push), the consolidated ``ci.yml`` checks required
     (``strict``), ``enforce_admins: true`` (strict trunk-based — even admins go
     through PRs, no bypass) + 0 required reviews + ``restrictions: null`` so the
-    owner is NOT locked out and can still self-merge their own PR once the gate
-    is green. ``status_check_contexts`` must be **real check-run names** and must
+    owner is NOT locked out and can still self-merge their own PR once the
+    pipeline is green. ``status_check_contexts`` must be **real check-run names**
+    and must
     NOT include a path-filtered workflow's check (it would not run on every PR →
     stuck PRs under ``strict``).
     """

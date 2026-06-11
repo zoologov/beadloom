@@ -227,13 +227,15 @@ def test_clean_green_run_exits_zero(project: Path) -> None:
 
 
 def test_flagged_run_exits_nonzero(project: Path) -> None:
-    """A flagged run (needs human) signals via a non-zero exit for CI visibility."""
+    """A flagged run WITH model output (tokens>0) → verdict flagged → exit 1."""
     spy = _SpyHarness(
         HarnessResult(
             docs_refreshed=["docs/a.md"],
             gate_passed=False,
             flagged=True,
             flagged_reasons=["beadloom ci failed"],
+            input_tokens=100,
+            output_tokens=50,
             pr_url="u",
         )
     )
@@ -243,8 +245,131 @@ def test_flagged_run_exits_nonzero(project: Path) -> None:
         ["--platform", "github", "--project-root", str(project)],
         obj={"run_harness": spy, "now": lambda: "T"},
     )
-    assert result.exit_code != 0
+    assert result.exit_code == 1
     assert "needs human" in result.output.lower() or "flagged" in result.output.lower()
+
+
+# --------------------------------------------------------------------------- #
+# BDL-050: verdict-driven exit codes (ok/infra → 0, flagged → 1) + infra signal
+# --------------------------------------------------------------------------- #
+
+
+def test_infra_verdict_exits_zero_with_warning(project: Path) -> None:
+    """flagged + NO tokens (agent never ran) → verdict infra → exit 0 + ::warning::.
+
+    A dead runner / exhausted quota must NOT block the PR; the loud GitHub
+    annotation surfaces that docs were NOT checked.
+    """
+    spy = _SpyHarness(
+        HarnessResult(
+            docs_refreshed=[],
+            gate_passed=False,
+            flagged=True,
+            flagged_reasons=["agent failed for graph after 3 attempts"],
+            input_tokens=0,
+            output_tokens=0,
+        )
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        ["--platform", "github", "--project-root", str(project)],
+        obj={"run_harness": spy, "now": lambda: "T"},
+    )
+    assert result.exit_code == 0, result.output
+    assert "::warning title=AI tech-writer::" in result.output
+    assert "docs were not checked" in result.output.lower()
+
+
+def test_infra_verdict_attempts_pr_comment_via_publisher(project: Path) -> None:
+    """On infra, the entrypoint posts a best-effort note via the comment seam."""
+    comments: list[str] = []
+
+    class _CommentingPublisher:
+        """A publisher that satisfies ReviewPublisher + CommentPublisher."""
+
+        def publish(self, **_kwargs: object) -> str:
+            return ""
+
+        def comment(self, *, project_root: Path, body: str) -> bool:
+            del project_root
+            comments.append(body)
+            return True
+
+    spy = _SpyHarness(
+        HarnessResult(
+            flagged=True,
+            flagged_reasons=["goose run failed (rc=1)"],
+            input_tokens=0,
+            output_tokens=0,
+        )
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        ["--platform", "github", "--project-root", str(project)],
+        obj={
+            "run_harness": spy,
+            "now": lambda: "T",
+            "publisher": _CommentingPublisher(),
+        },
+    )
+    assert result.exit_code == 0, result.output
+    assert comments, "infra path should attempt a PR/MR comment"
+    assert "could not run" in comments[0].lower()
+
+
+def test_infra_comment_failure_does_not_fail_run(project: Path) -> None:
+    """A failing comment seam never turns an infra run into a non-zero exit."""
+
+    class _BrokenCommentPublisher:
+        def publish(self, **_kwargs: object) -> str:
+            return ""
+
+        def comment(self, *, project_root: Path, body: str) -> bool:
+            del project_root, body
+            raise RuntimeError("gh exploded")
+
+    spy = _SpyHarness(
+        HarnessResult(
+            flagged=True,
+            flagged_reasons=["provider 503"],
+            input_tokens=0,
+            output_tokens=0,
+        )
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        ["--platform", "github", "--project-root", str(project)],
+        obj={
+            "run_harness": spy,
+            "now": lambda: "T",
+            "publisher": _BrokenCommentPublisher(),
+        },
+    )
+    assert result.exit_code == 0, result.output
+    assert "::warning title=AI tech-writer::" in result.output
+
+
+def test_flagged_boundary_one_token_blocks(project: Path) -> None:
+    """The tokens>0 boundary at the CLI: a single token → flagged → exit 1."""
+    spy = _SpyHarness(
+        HarnessResult(
+            flagged=True,
+            flagged_reasons=["fixpoint not reached"],
+            input_tokens=0,
+            output_tokens=1,
+        )
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        ["--platform", "github", "--project-root", str(project)],
+        obj={"run_harness": spy, "now": lambda: "T"},
+    )
+    assert result.exit_code == 1, result.output
+    assert "::warning" not in result.output
 
 
 # --------------------------------------------------------------------------- #

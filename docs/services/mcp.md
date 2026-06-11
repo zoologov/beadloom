@@ -12,7 +12,23 @@ The server operates via stdio transport. Launch:
 beadloom mcp-serve [--project DIR]
 ```
 
-Configuration for Claude Code (`.mcp.json`):
+Configuration for supported editors/tools:
+
+```bash
+# Claude Code (default) — writes .mcp.json
+beadloom setup-mcp
+
+# Cursor — writes .cursor/mcp.json
+beadloom setup-mcp --tool cursor
+
+# Windsurf — writes ~/.codeium/windsurf/mcp_config.json (global)
+beadloom setup-mcp --tool windsurf
+
+# Remove configuration
+beadloom setup-mcp --remove
+```
+
+Claude Code (`.mcp.json`):
 
 ```json
 {
@@ -25,7 +41,33 @@ Configuration for Claude Code (`.mcp.json`):
 }
 ```
 
-Automatic setup: `beadloom setup-mcp`
+Cursor (`.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "beadloom": {
+      "command": "beadloom",
+      "args": ["mcp-serve"]
+    }
+  }
+}
+```
+
+Windsurf (`~/.codeium/windsurf/mcp_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "beadloom": {
+      "command": "beadloom",
+      "args": ["mcp-serve", "--project", "/path/to/project"]
+    }
+  }
+}
+```
+
+Note: Windsurf uses a global config, so the `--project` path is automatically included.
 
 ### Features
 

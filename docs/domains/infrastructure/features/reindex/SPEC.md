@@ -16,11 +16,11 @@ The reindex module orchestrates the complete data pipeline that transforms YAML 
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `nodes_loaded` | `int` | `0` | Number of graph nodes loaded from YAML |
-| `edges_loaded` | `int` | `0` | Number of graph edges loaded from YAML |
+| `nodes_loaded` | `int` | `0` | Number of graph nodes loaded from YAML (full reindex) or live-DB total (incremental) |
+| `edges_loaded` | `int` | `0` | Number of graph edges loaded from YAML (full reindex) or live-DB total (incremental) |
 | `docs_indexed` | `int` | `0` | Number of Markdown documents indexed |
 | `chunks_indexed` | `int` | `0` | Number of document chunks created |
-| `symbols_indexed` | `int` | `0` | Number of code symbols extracted |
+| `symbols_indexed` | `int` | `0` | Number of code symbols extracted (full reindex) or live-DB total (incremental) |
 | `imports_indexed` | `int` | `0` | Number of code imports resolved |
 | `rules_loaded` | `int` | `0` | Number of architecture rules loaded from `rules.yml` |
 | `nothing_changed` | `bool` | `False` | `True` when incremental reindex detects no file changes |
@@ -117,6 +117,7 @@ _DEFAULT_SCAN_DIRS = ("src", "lib", "app")
    - Clear `bundle_cache` (conservative invalidation).
    - Update `file_index` incrementally.
    - Update meta timestamps and take health snapshot.
+   - **Backfill result counts**: Populate `nodes_loaded`, `edges_loaded`, and `symbols_indexed` with live-DB totals (not per-run deltas), matching the behavior of the `nothing_changed` path.
 
 ### Configuration
 
@@ -171,7 +172,7 @@ Full reindex: drop all tables, recreate schema, and reload everything from disk.
 def incremental_reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResult
 ```
 
-Incremental reindex: only process files that changed since the last reindex. Falls back to `reindex()` when graph YAML changed or no prior file index exists.
+Incremental reindex: only process files that changed since the last reindex. Falls back to `reindex()` when graph YAML changed or no prior file index exists. The returned `ReindexResult` has `nodes_loaded`, `edges_loaded`, and `symbols_indexed` populated with live-DB totals (not per-run deltas), ensuring accurate reporting even when the incremental path does not touch the graph.
 
 ```python
 def resolve_scan_paths(project_root: Path) -> list[str]
@@ -359,6 +360,7 @@ class ReindexResult:
 - Incremental reindex always rebuilds `sync_state` from scratch (full delete + rebuild) even though only some files changed, using preserved `symbols_hash` values.
 - Incremental reindex always clears `bundle_cache` (conservative invalidation).
 - Incremental reindex re-extracts API routes after code changes.
+- Incremental reindex backfills `nodes_loaded`, `edges_loaded`, and `symbols_indexed` with live-DB totals (not per-run deltas), ensuring accurate reporting even when the incremental path does not touch the graph or code symbols.
 - `file_index` is fully replaced after full reindex and incrementally updated after incremental reindex.
 - Meta key `last_reindex_at` is updated on every successful reindex (including no-change incremental runs).
 - `_graph_yaml_changed()` performs a direct hash comparison on graph files by kind, independent of `_diff_files()`, to catch changes even when `file_index` is stale.
@@ -381,8 +383,8 @@ Tests should cover the following scenarios:
 - **Full reindex end-to-end**: Verify that a project with YAML graph, docs, and source code produces a populated database with correct counts in `ReindexResult`.
 - **Sync baseline preservation**: Verify `_snapshot_sync_baselines()` captures `symbols_hash` before drop and that `_build_initial_sync_state()` restores them.
 - **Incremental no-change**: Verify `nothing_changed=True` when no files have been modified since the last reindex.
-- **Incremental doc change**: Modify a Markdown file, run incremental reindex, verify the doc is re-indexed and chunks updated.
-- **Incremental code change**: Modify a source file, run incremental reindex, verify symbols are re-indexed.
+- **Incremental doc change**: Modify a Markdown file, run incremental reindex, verify the doc is re-indexed and chunks updated. Verify `nodes_loaded`, `edges_loaded`, and `symbols_indexed` are populated with live-DB totals.
+- **Incremental code change**: Modify a source file, run incremental reindex, verify symbols are re-indexed. Verify `symbols_indexed` reflects the live-DB total.
 - **Incremental file addition**: Add a new file, verify it appears in results.
 - **Incremental file deletion**: Delete a file, verify its data is removed from the database.
 - **Graph YAML change triggers full reindex**: Modify a `.beadloom/_graph/*.yml` file, verify incremental falls back to full reindex via `_graph_yaml_changed()`.

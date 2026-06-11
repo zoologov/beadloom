@@ -14,12 +14,23 @@ and ``run_harness`` are injectable (via the Click context ``obj``) so the
 arg-wiring is unit-testable with every non-deterministic / network-touching
 seam faked — no Goose, no model, no git, no network.
 
-Exit codes (for CI visibility):
+Exit codes (for CI visibility) — driven by the harness *verdict* (BDL-050,
+:func:`tools.ai_techwriter.runner.classify_verdict`), NOT by the bare
+``result.flagged``. The discriminator between a genuine doc failure and an
+infra failure is whether the model ever produced output (``tokens > 0``):
 
-* ``0`` — no-op (0 stale) **or** a clean green run (PR/MR opened, gate green).
-* ``1`` — a *flagged* run (a PR/MR was opened but it needs human attention:
-  the gate failed or the budget was exceeded). The PR/MR is the deliverable;
-  the non-zero exit just surfaces "needs human" in the CI run, never a crash.
+* ``0`` — **ok**: no-op (0 stale) **or** a clean green run (gate green); **or**
+  **infra**: the agent never ran (``tokens == 0`` — a dead self-hosted runner,
+  a provider 5xx / timeout, or an exhausted quota). An infra failure is *not* a
+  doc problem, so it MUST NOT block the PR — instead the entrypoint emits a
+  GitHub ``::warning::`` annotation and posts a best-effort PR/MR note saying the
+  docs were NOT checked on this push.
+* ``1`` — **flagged**: the model ran (``tokens > 0``) but the docs still aren't
+  clean (post-refresh ``beadloom ci`` red, fixpoint not reached, or budget
+  exceeded mid-work). A real "needs human" → the CI required check goes red.
+
+So the required ``ai-techwriter`` check is red ONLY on a genuine ``flagged``
+verdict; dead infra / an exhausted \\$30 quota never freezes merges.
 """
 
 from __future__ import annotations
@@ -33,8 +44,14 @@ import click
 
 from tools.ai_techwriter.models import HarnessConfig, HarnessResult
 from tools.ai_techwriter.provider import ProviderConfig, default_recipe_path, qwen_provider
+from tools.ai_techwriter.runner import (
+    VERDICT_FLAGGED,
+    VERDICT_INFRA,
+    classify_verdict,
+)
 from tools.ai_techwriter.runner import run_harness as _real_run_harness
 from tools.ai_techwriter.seams import (
+    CommentPublisher,
     GitHubPRBranchPublisher,
     GitHubPublisher,
     GitLabPRBranchPublisher,
@@ -45,6 +62,13 @@ from tools.ai_techwriter.seams import (
 
 if TYPE_CHECKING:
     from tools.ai_techwriter.seams import AgentRunner
+
+#: The PR/MR note + CI annotation copy for the BDL-050 ``infra`` verdict. Kept as
+#: a constant so the annotation and the comment carry the identical message.
+_INFRA_MESSAGE = (
+    "could not run (infra) — docs were NOT checked on this PR; "
+    "re-run before relying on freshness"
+)
 
 #: Supported CI platforms (RFC Q5 table) — both first-class.
 PLATFORMS = ("github", "gitlab")
@@ -163,7 +187,10 @@ def main(
 
     provider = qwen_provider()
     agent = _build_agent(project_root, provider)
-    publisher = _build_publisher(platform, target)
+    publisher = cast(
+        "ReviewPublisher",
+        _resolve(ctx, "publisher", _build_publisher(platform, target)),
+    )
     config = HarnessConfig(platform=platform)
 
     result = run(
@@ -174,7 +201,7 @@ def main(
         config=config,
         since=since_ref,
     )
-    _report(result)
+    _report(result, project_root=project_root, publisher=publisher)
 
 
 def _normalize_since(since: str | None) -> str | None:
@@ -194,8 +221,17 @@ def _normalize_since(since: str | None) -> str | None:
     return stripped
 
 
-def _report(result: HarnessResult) -> None:
-    """Echo a one-line outcome; raise Exit(1) for a flagged run."""
+def _report(
+    result: HarnessResult, *, project_root: Path, publisher: ReviewPublisher
+) -> None:
+    """Echo the outcome; map the verdict to an exit code (BDL-050).
+
+    ``ok``/``infra`` → exit 0 (a clean run, a no-op, or "couldn't run"); only a
+    genuine ``flagged`` verdict (the model ran, ``tokens > 0``, docs still dirty)
+    raises ``Exit(1)`` so the required CI check goes red. On ``infra`` we also
+    emit a loud GitHub ``::warning::`` annotation + a best-effort PR/MR note so a
+    skipped check is visible (a human re-runs before trusting freshness).
+    """
     if result.no_op:
         click.echo("ai-techwriter: 0 stale docs — no-op (exit 0)")
         return
@@ -204,11 +240,43 @@ def _report(result: HarnessResult) -> None:
         f"gate={'green' if result.gate_passed else 'FAILED'}, pr={result.pr_url or '(none)'}"
     )
     click.echo(summary)
-    if result.flagged:
+    verdict = classify_verdict(result)
+    if verdict == VERDICT_INFRA:
+        _report_infra(result, project_root=project_root, publisher=publisher)
+        return
+    if verdict == VERDICT_FLAGGED:
         click.echo("ai-techwriter: flagged — needs human attention:")
         for reason in result.flagged_reasons:
             click.echo(f"  ⚠ {reason}")
         raise click.exceptions.Exit(1)
+
+
+def _report_infra(
+    result: HarnessResult, *, project_root: Path, publisher: ReviewPublisher
+) -> None:
+    """Surface an ``infra`` verdict WITHOUT blocking the PR (exit 0).
+
+    Emits the GitHub Actions ``::warning::`` annotation (always) and posts a
+    best-effort PR/MR note via the publisher's comment seam (only the pr-branch
+    publishers implement it; if it can't, the annotation alone stands — never an
+    exit-1). The run-record was already emitted honestly by the harness
+    (tokens=0, the flagged_reasons).
+    """
+    click.echo(f"::warning title=AI tech-writer::{_INFRA_MESSAGE}")
+    for reason in result.flagged_reasons:
+        click.echo(f"  (infra) {reason}")
+    _post_infra_comment(project_root=project_root, publisher=publisher)
+
+
+def _post_infra_comment(*, project_root: Path, publisher: ReviewPublisher) -> None:
+    """Best-effort PR/MR note for the infra verdict (annotation is primary)."""
+    if not isinstance(publisher, CommentPublisher):
+        return
+    body = f"⚠ AI tech-writer {_INFRA_MESSAGE}"
+    try:
+        publisher.comment(project_root=project_root, body=body)
+    except (RuntimeError, OSError) as exc:  # best-effort; never fail the run
+        click.echo(f"ai-techwriter: infra comment skipped ({exc})")
 
 
 if __name__ == "__main__":  # pragma: no cover - module-exec convenience

@@ -1822,10 +1822,12 @@ def setup_agentic_flow(*, project: Path | None, force: bool) -> None:
     metavar="CONTEXT",
     help=(
         "Required status-check context name (repeatable; replaces the default "
-        "entirely). Default: 'beadloom-gate' (the always-on gate check-run). A "
-        "context MUST match a real GitHub check-run name EXACTLY and must NOT be "
-        "a path-filtered workflow's check (it would not run on every PR, which "
-        "stalls PRs under strict checks)."
+        "entirely). Default: the consolidated ci.yml job check-runs — 'gate', "
+        "'tests (3.10)', 'tests (3.11)', 'tests (3.12)', 'tests (3.13)', "
+        "'site-build', 'ai-techwriter' (these are ci.yml's job names + matrix "
+        "legs). A context MUST match a real GitHub check-run name EXACTLY and "
+        "must NOT be a path-filtered workflow's check (it would not run on every "
+        "PR, which stalls PRs under strict checks)."
     ),
 )
 @click.option(
@@ -1844,11 +1846,12 @@ def setup_branch_protection(
     """Configure trunk-based branch protection on ``main`` via ``gh api`` (BDL-049).
 
     Idempotently sets `main` (or ``--branch``) protection so the trunk-based flow
-    is enforced: a PR is required (no direct push), the always-on
-    ``beadloom-gate`` check is a REQUIRED status check, ``enforce_admins: false``
-    + 0 required reviews so the owner is never locked out (can self-merge). Safe
-    to re-run (a declarative PUT). ``--dry-run`` documents the exact call without
-    touching GitHub.
+    is enforced: a PR is required (no direct push), the consolidated ``ci.yml``
+    checks (``gate`` / ``tests (3.10..3.13)`` / ``site-build`` /
+    ``ai-techwriter`` — ci.yml's job names + matrix legs) are REQUIRED status
+    checks, ``enforce_admins: true`` + 0 required reviews so the owner is never
+    locked out (can self-merge). Safe to re-run (a declarative PUT).
+    ``--dry-run`` documents the exact call without touching GitHub.
 
     Required check contexts must match real GitHub check-run names EXACTLY and
     must NOT be path-filtered workflow checks (they would not run on every PR, so

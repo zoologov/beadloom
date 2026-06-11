@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Phase "CI consolidation" (BDL-050): replaces the three independent PR workflows
+(`beadloom-gate.yml` / `tests.yml` / `ai-techwriter.yml`) with **one
+`.github/workflows/ci.yml`** on `pull_request → main`. Jobs `gate` ∥ `tests`
+(3.10–3.13 matrix) ∥ `site-build` (VitePress build) run in parallel; `ai-techwriter`
+has **`needs: [gate, tests, site-build]`** so it runs only when all three are green —
+**a broken PR never spends Qwen tokens**. The AI tech-writer harness now classifies
+each run into a **verdict** `{ok, flagged, infra}` (discriminator: `tokens > 0`): a
+genuine unresolved doc drift (`flagged`) blocks the PR (exit 1), but an **infra
+failure** (`infra` — a dead self-hosted runner, an exhausted `$30` quota, a provider
+5xx; `tokens == 0`) PASSES (exit 0) with a loud `::warning::` + a best-effort PR
+comment, so dead infra never freezes merges. `tests` dropped its `paths:` filter (so
+every leg runs on every PR and is a reliable required check); `site-build` is now a PR
+check (a VitePress/mermaid/interpolation break is caught **before** it lands on
+`main`); the redundant `push: main` gate/tests runs were removed (`main` is green by
+construction under strict trunk-based — `deploy-site.yml` is the only `push: main`
+job). All workflow actions are Node24-compatible. Branch protection now requires the
+**7 consolidated check-runs**. GitLab mirrors the structure via stages
+`verify → docs` with the same `needs`. **Honest framing:** still no auto-merge — a
+human merges; CI on the PR is the true enforcement; the agent's refresh is a proposal.
+
+### Added (BDL-050)
+- **Consolidated `.github/workflows/ci.yml`** — one `on: pull_request → [main, master]` (+ `workflow_dispatch`) pipeline with jobs `gate` (the `beadloom-gate` composite Action) ∥ `tests` (3.10–3.13 matrix) ∥ `site-build` (`beadloom docs site` + `npm run docs:build`) → `ai-techwriter` (`needs: [gate, tests, site-build]`, self-hosted). `concurrency: ci-${{ github.event.pull_request.number || github.ref }}` with `cancel-in-progress: true`. The `ai-techwriter` job body is the BDL-049 model verbatim (loop-guard, `--since merge-base`, `--target pr-branch`, `AI_TW_PAT` push, PR comment) — only the trigger moved into `ci.yml` and the exit code is now verdict-driven (BDL-050 G1/G7)
+- **AI tech-writer verdict `{ok, flagged, infra}`** (`tools/ai_techwriter/runner.py::classify_verdict` + `cli.py::_report`) — the discriminator between a doc problem and an infra failure is whether the model produced output (`input_tokens + output_tokens > 0`). `ok` (no-op / clean) and `infra` (`tokens == 0` — process/provider error, 5xx, exhausted quota) → exit 0; `flagged` (`tokens > 0` but docs still dirty: post-refresh `beadloom ci` red / fixpoint not reached / budget exceeded) → exit 1 (the required check goes red). On `infra` the entrypoint also emits a GitHub `::warning::` annotation + a best-effort PR/MR comment so a skipped check is visible. A dead runner / exhausted `$30` quota never freezes merges; a real unresolved doc drift does (BDL-050 G1 / RFC Q1)
+
+### Changed (BDL-050)
+- **Required status checks = the 7 consolidated `ci.yml` check-runs.** `onboarding/branch_protection.py::DEFAULT_STATUS_CHECK_CONTEXTS` is now `("gate", "tests (3.10)", "tests (3.11)", "tests (3.12)", "tests (3.13)", "site-build", "ai-techwriter")` (was the single `beadloom-gate`). `enforce_admins: true` + 0 required reviews kept (strict trunk-based; owner self-merges). Re-apply with `beadloom setup-branch-protection` (BDL-050 G2/G4)
+- **`tests` un-filtered + required.** The 3.10–3.13 matrix lost its `paths:` filter and runs on every PR, so each leg can be a strict required check without stalling. `push: main` gate/tests runs were removed — `deploy-site.yml` is the ONLY `push: main` job (BDL-050 G2/G5)
+- **`site-build` is a PR check** (closes `beadloom-wozp`) — the VitePress build (the BUILD half of `deploy-site`, no Pages deploy) runs on every PR, catching VitePress/mermaid/dead-link/interpolation breaks before they reach `main` (BDL-050 G3)
+- **Node24-compatible actions** (closes `beadloom-t7vn`) — `actions/checkout@v5`, `astral-sh/setup-uv@v6`, `actions/setup-node@v5`, `node-version: 22` across the workflows; `deploy-site.yml` opts the whole workflow into the Node24 runtime via `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true` as a documented stopgap until `configure-pages` / `upload-pages-artifact` / `deploy-pages` publish Node24 majors — avoids the 2026-06-16 Node20 deprecation (BDL-050 G6)
+- **GitLab mirror** — `.gitlab-ci.yml` now consolidates into stages `verify` (`gate` ∥ `tests` ∥ `site-build`) → `docs` (`ai-techwriter` with `needs: [gate, tests, site-build]`), gated on `$CI_PIPELINE_SOURCE == "merge_request_event"`, with the same `AI_TW_PAT` push + verdict exit handling (no `allow_failure` — the verdict IS the gate). Vendored CI templates re-vendored to match (drift-guard green) (BDL-050 G7)
+- **Docs** — the AI tech-writer guide (`docs/guides/ai-techwriter.md`) and the agentic-flow guide (`docs/guides/agentic-flow.md`) now describe the consolidated `ci.yml` (needs-ordering), the verdict semantics, and the 7-check branch protection; the team-facing `BDL-AI-AGENTS-ARCHITECTURE.md` was refreshed end-to-end (PR-triggered consolidated model + diagrams) (BDL-050 G8)
+
 Phase "Trunk-based + PR-triggered AI tech-writer" (BDL-049): moves the AI
 tech-writer from an `on: push` to `main` trigger to **`on: pull_request` → `main`**,
 and the whole dev flow to **trunk-based development**. The agent now runs **once per

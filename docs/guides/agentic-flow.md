@@ -16,7 +16,7 @@ This guide covers:
 - the tool-agnostic angle (any MCP client via `beadloom setup-mcp`),
 - the **honest boundary**: orchestration stays in the harness; CI is the true enforcement.
 
-## Trunk-based development (BDL-049)
+## Trunk-based development (BDL-049 · BDL-050 consolidated CI)
 
 The coordinator flow is **trunk-based**: `main` is the integration point and is
 **branch-protected** (no direct push). Each epic/feature runs on a short-lived
@@ -26,10 +26,12 @@ branch and integrates via a single PR:
 2. **Commit per wave** onto that branch (dev → test → review → tech-writer).
 3. **Open ONE PR to `main`** per epic/feature (or shippable slice) — not one PR per
    commit.
-4. **The PR triggers** the [AI tech-writer](./ai-techwriter.md) (which commits its
-   doc refresh **into the PR branch** — code + docs in one reviewable PR, no orphan
-   doc-PRs) **and** CI, where `beadloom ci` (the `beadloom-gate` check) is a
-   **required status check**.
+4. **The PR triggers** the consolidated CI pipeline (`.github/workflows/ci.yml`,
+   BDL-050): `gate` (the `beadloom ci` verdict) ∥ `tests` (the 3.10–3.13 matrix) ∥
+   `site-build` (the VitePress build) run in parallel, then the
+   [AI tech-writer](./ai-techwriter.md) job runs **only after all three are green**
+   (`needs: [gate, tests, site-build]`) and commits its doc refresh **into the PR
+   branch** — code + docs in one reviewable PR, no orphan doc-PRs.
 5. **Merge when green** — a human merges once CI is green and any doc refresh has
    landed. No auto-merge; no direct push to `main`, so `main` stays always-green.
 
@@ -39,9 +41,12 @@ Protect `main` once per repo (idempotent; safe to re-run):
 beadloom setup-branch-protection --repo OWNER/NAME
 ```
 
-This requires a PR to `main` with the always-on `beadloom-gate` check required,
-while keeping the owner mergeable (`enforce_admins: false`, 0 required reviews) so a
-solo maintainer is never locked out. The vendored `.claude/CLAUDE.md` §6 (Git) and
+This requires a PR to `main` with the consolidated `ci.yml`'s **7 check-runs as
+required status checks** — `gate`, `tests (3.10)`, `tests (3.11)`, `tests (3.12)`,
+`tests (3.13)`, `site-build`, `ai-techwriter` (BDL-050). Strict trunk-based keeps
+`enforce_admins: true` (even the owner integrates via a PR) with 0 required reviews,
+so the solo maintainer self-merges but `main` is never bypassed (BDL-049). The
+vendored `.claude/CLAUDE.md` §6 (Git) and
 `.claude/commands/coordinator.md` describe this same model, so a scaffolded repo
 gets the trunk-based flow by default. **CI on the PR is the true enforcement** — the
 agent's refresh and the deterministic gate are proposals/checks; the human merges.
