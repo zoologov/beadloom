@@ -774,6 +774,8 @@ def handle_complete_bead(
         return {"status": "FAIL", "bead": bead, "findings": findings}
 
     try:
+        # Locate the bead's epic ACTIVE.md before closing (best-effort, mocked in tests).
+        record = _bd_show(bead, project_root)
         close = run_bd(
             ["close", bead, "--suggest-next"], cwd=str(project_root)
         )
@@ -785,12 +787,80 @@ def handle_complete_bead(
             "bead": bead,
             "error": f"gate passed but `bd close` failed: {close.stderr.strip()}",
         }
+    # Best-effort: flip the ACTIVE.md table row to done. A table-update failure
+    # must NOT fail the tool or the (already-successful) close.
+    active_updated = _set_bead_table_status(project_root, record, bead, "✓ done")
     return {
         "status": "PASS",
         "bead": bead,
         "findings": [],
         "next": close.stdout.strip(),
+        "active_updated": active_updated,
     }
+
+
+def _split_table_row(line: str) -> list[str] | None:
+    """Split a markdown table *line* into its cells, or None if it is not one.
+
+    A table row is a line whose stripped form starts and ends with ``|``. The
+    leading/trailing empty fragments produced by the border pipes are dropped;
+    the inner cell texts are returned stripped.
+    """
+    stripped = line.strip()
+    if not (stripped.startswith("|") and stripped.endswith("|")):
+        return None
+    return [cell.strip() for cell in stripped.strip("|").split("|")]
+
+
+def _is_separator_cells(cells: list[str]) -> bool:
+    """True for a markdown header-separator row (cells are all ``---`` dashes)."""
+    return bool(cells) and all(set(c) <= {"-", ":"} and c for c in cells)
+
+
+def _set_active_table_status(active_path: Path, bead_id: str, status: str) -> bool:
+    """Best-effort: flip the status cell of *bead_id*'s row in an ACTIVE.md table.
+
+    Parses the markdown table(s) in *active_path*, finds the row whose FIRST cell
+    equals *bead_id* as a whole token (so ``...mukc.1`` never matches
+    ``...mukc.10``), replaces its LAST (status) cell with *status*, and writes the
+    file back. Tolerant: a missing file, no table, or no matching row leaves the
+    file untouched and returns ``False``. Never raises, never corrupts the file.
+    """
+    try:
+        original = active_path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    lines = original.splitlines(keepends=True)
+    for idx, line in enumerate(lines):
+        cells = _split_table_row(line)
+        if cells is None or len(cells) < 2 or _is_separator_cells(cells):
+            continue
+        if cells[0] != bead_id:
+            continue
+        # Sanitize a (possibly user-supplied via checkpoint) status so it can't
+        # corrupt the row: collapse any whitespace run — incl. newlines/CR/tabs —
+        # to single spaces (no row-splitting), then replace "|" with "/" (no extra
+        # cell). Neither is meaningful in a short one-line status label.
+        cells[-1] = " ".join(status.split()).replace("|", "/")
+        newline = "\n" if line.endswith("\n") else ""
+        lines[idx] = "| " + " | ".join(cells) + " |" + newline
+        try:
+            active_path.write_text("".join(lines), encoding="utf-8")
+        except OSError:
+            return False
+        return True
+    return False
+
+
+def _set_bead_table_status(
+    project_root: Path, record: dict[str, Any], bead_id: str, status: str
+) -> bool:
+    """Locate the bead's epic ACTIVE.md and flip its table row (best-effort)."""
+    epic = _extract_field(record, "epic") or _extract_field(record, "feature")
+    if not epic:
+        return False
+    active = _features_dir(project_root, epic) / "ACTIVE.md"
+    return _set_active_table_status(active, bead_id, status)
 
 
 def _append_active_note(project_root: Path, record: dict[str, Any], text: str) -> bool:
@@ -814,12 +884,15 @@ def handle_checkpoint(
     *,
     bead: str,
     text: str,
+    status: str = "in progress",
 ) -> dict[str, Any]:
-    """Record a checkpoint: ``bd comments add`` + timestamped ACTIVE.md note.
+    """Record a checkpoint: ``bd comments add`` + ACTIVE.md note + table row.
 
-    Adds *text* as a bead comment (preserves history) and, best-effort, appends
-    a timestamped progress line to the bead's ACTIVE.md (skipped cleanly if the
-    file cannot be located). Deterministic; no orchestration.
+    Adds *text* as a bead comment (preserves history) and, best-effort: appends
+    a timestamped progress line to the bead's ACTIVE.md AND flips the bead's
+    bead-status table row to *status* (default ``"in progress"``) so the table
+    stays current by construction. Both ACTIVE.md updates are skipped cleanly if
+    the file/table/row cannot be located. Deterministic; no orchestration.
     """
     try:
         record = _bd_show(bead, project_root)
@@ -835,11 +908,13 @@ def handle_checkpoint(
             "error": f"`bd comments add` failed: {comment.stderr.strip()}",
         }
     active_updated = _append_active_note(project_root, record, text)
+    table_updated = _set_bead_table_status(project_root, record, bead, status)
     return {
         "status": "OK",
         "bead": bead,
         "comment_added": True,
         "active_updated": active_updated,
+        "table_updated": table_updated,
     }
 
 
@@ -1170,8 +1245,10 @@ _TOOLS = [
         name="checkpoint",
         description=(
             "Record a checkpoint: add `text` as a bead comment (`bd comments add`, "
-            "preserves history) and best-effort append a timestamped progress note to "
-            "the bead's ACTIVE.md. Deterministic; no orchestration."
+            "preserves history), best-effort append a timestamped progress note to "
+            "the bead's ACTIVE.md, AND flip the bead's bead-status table row to "
+            "`status` (default 'in progress') so the table stays current. "
+            "Deterministic; no orchestration."
         ),
         inputSchema={
             "type": "object",
@@ -1183,6 +1260,14 @@ _TOOLS = [
                 "text": {
                     "type": "string",
                     "description": "Checkpoint text",
+                },
+                "status": {
+                    "type": "string",
+                    "default": "in progress",
+                    "description": (
+                        "Status to write into the bead's ACTIVE.md table row "
+                        "(default 'in progress')"
+                    ),
                 },
             },
             "required": ["bead", "text"],
@@ -1523,7 +1608,10 @@ def _dispatch_tool(
             msg = "checkpoint requires project_root"
             raise ValueError(msg)
         return handle_checkpoint(
-            project_root, bead=str(args["bead"]), text=str(args["text"])
+            project_root,
+            bead=str(args["bead"]),
+            text=str(args["text"]),
+            status=str(args.get("status", "in progress")),
         )
 
     msg = f"Unknown tool: {name}"
