@@ -15,10 +15,10 @@ the DDD Dependency Rule.
 
 Each feature has its own `SPEC.md`:
 
-- **[Reindex](features/reindex/SPEC.md)** — full + incremental index rebuild (`beadloom reindex`).
-- **[Doctor](features/doctor/SPEC.md)** — graph/data integrity checks (`beadloom doctor`).
-- **[Debt Report](features/debt-report/SPEC.md)** — weighted architecture-debt score.
-- **[Watcher](features/watcher/SPEC.md)** — file-watch auto-reindex.
+- **[Reindex](../infrastructure/features/reindex/SPEC.md)** — full + incremental index rebuild (`beadloom reindex`).
+- **[Doctor](../infrastructure/features/doctor/SPEC.md)** — graph/data integrity checks (`beadloom doctor`).
+- **[Debt Report](../infrastructure/features/debt-report/SPEC.md)** — weighted architecture-debt score.
+- **[Watcher](../infrastructure/features/watcher/SPEC.md)** — file-watch auto-reindex.
 - **[Site Generation](features/site-generation/SPEC.md)** — the VitePress site generator (`beadloom docs site`).
 - **[CI Gate](features/ci-gate/SPEC.md)** — the unified `beadloom ci` enforcement gate.
 

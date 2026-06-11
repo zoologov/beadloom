@@ -1,7 +1,7 @@
 <!-- beadloom:badge-start -->
 > ✅ **fresh**
 > 
-> last synced 2026-06-10T21:18:54.402746+00:00 · coverage 100% (`cli`)
+> last synced 2026-06-11T14:19:08.709748+00:00 · coverage 100% (`cli`)
 > 
 > _Validation by Beadloom `doc_sync` — same source as `sync-check`._
 <!-- beadloom:badge-end -->
@@ -548,8 +548,9 @@ beadloom setup-mcp --remove [--tool {claude-code,cursor,windsurf}] [--project DI
 
 ### beadloom setup-ai-techwriter
 
-Scaffold the AI tech-writer (BDL-047 / F4.1) into this repo for one-command,
-3-step opt-in. In the `setup-*` family alongside `setup-mcp` / `setup-rules`.
+Scaffold the AI tech-writer (BDL-047 / F4.1; harness packaged in BDL-051 / S2)
+into this repo for one-command, 3-step opt-in. In the `setup-*` family alongside
+`setup-mcp` / `setup-rules`.
 
 ```bash
 beadloom setup-ai-techwriter --platform {github,gitlab} [--project DIR]
@@ -557,19 +558,20 @@ beadloom setup-ai-techwriter --platform {github,gitlab} [--project DIR]
 
 Idempotently scaffolds (clean overwrite on re-run):
 
-- **Vendors** the deterministic harness package + Goose recipe into
-  `tools/ai_techwriter/`. The harness lives in repo tooling (not the `beadloom`
-  wheel), so on any target repo `python -m tools.ai_techwriter` would not
-  resolve; vendoring copies it in, making the setup self-contained (the runner
-  needs only `beadloom` + `goose` + python). The harness is shipped as package
-  data (`onboarding/templates/ai_techwriter/`, inert `.py.txt` assets kept
-  byte-identical to the live source by a drift-guard test — principle 5).
+- **No Python vendoring.** As of BDL-051 / S2 the harness ships **inside** the
+  installed `beadloom` package as the `beadloom.ai_agents.ai_techwriter` domain,
+  so adopters depend on `beadloom` and invoke it directly via
+  `python -m beadloom.ai_agents.ai_techwriter` (the BDL-047/048 `tools/` Python
+  vendoring + drift-guard machinery is retired). Only the operator artifacts —
+  the Goose `recipe.yaml` (a readable reference of the agent's blast radius) and
+  `provision-runner.sh` — are copied (from package data via
+  `importlib.resources`) into `tools/ai_techwriter/` for operator convenience.
 - The chosen platform's CI wrapper: `.github/workflows/ai-techwriter.yml`
   (GitHub) **or** an `ai-techwriter` job in `.gitlab-ci.yml` (GitLab). As of
   BDL-049 both trigger on a **PR to main/master** — GitHub `on: pull_request`
   (`opened`/`synchronize`/`reopened`), GitLab `merge_request_event` — plus a
   manual fallback (`workflow_dispatch`). They call the same
-  `python -m tools.ai_techwriter` entrypoint; the PR path passes
+  `python -m beadloom.ai_agents.ai_techwriter` entrypoint; the PR path passes
   `--target pr-branch` and `--since $(git merge-base origin/<base> HEAD)` so the
   agent commits its refresh into the PR branch; the manual path uses
   `--target branch-pr`. A loop-guard skips the agent's own
@@ -630,20 +632,22 @@ beadloom setup-branch-protection --repo OWNER/NAME [--branch main] [--check CONT
 
 Idempotently sets `main` (or `--branch`) protection with a declarative
 `PUT repos/{owner}/{repo}/branches/{branch}/protection`: a **PR is required** (no
-direct push), the always-on **`beadloom-gate` check is a required status check**
-(`strict: true`), and `enforce_admins: false` + 0 required reviews +
-`restrictions: null` so the **solo owner is never locked out** (can self-merge).
-`PUT .../protection` is declarative, so re-running re-settles the same state.
+direct push), the consolidated `ci.yml` checks — `gate`, `tests (3.10)`,
+`tests (3.11)`, `tests (3.12)`, `tests (3.13)`, `site-build`, `ai-techwriter`
+(ci.yml's job names + matrix legs) — are **required status checks**
+(`strict: true`), and `enforce_admins: true` + 0 required reviews so the
+**solo owner is never locked out** (can self-merge). `PUT .../protection` is
+declarative, so re-running re-settles the same state.
 
 - `--repo OWNER/NAME` (required) — the GitHub repository (e.g. `acme/widget`).
 - `--branch` (default `main`) — the trunk to protect.
-- `--check CONTEXT` (repeatable) — overrides the default required-check context
-  (`beadloom-gate`) **entirely**. A context MUST match a real GitHub check-run
-  name EXACTLY and must NOT be a **path-filtered** workflow's check: such a check
-  does not run on PRs that miss the filter, so under `strict: true` the PR — and
-  therefore `main` — would never become mergeable. (The repo's path-filtered
-  `Tests` legs are why they are not the default; a repo whose tests run on every
-  PR can require them via `--check`.)
+- `--check CONTEXT` (repeatable) — overrides the default required-check contexts
+  (the consolidated `ci.yml` job check-runs listed above) **entirely**. A context
+  MUST match a real GitHub check-run name EXACTLY and must NOT be a
+  **path-filtered** workflow's check: such a check does not run on PRs that miss
+  the filter, so under `strict: true` the PR — and therefore `main` — would never
+  become mergeable. BDL-050 dropped the `tests` `paths:` filter precisely so each
+  matrix leg runs on every PR and is a reliable required check.
 - `--dry-run` — print the exact `gh api` call + JSON payload without touching
   GitHub.
 

@@ -1,7 +1,7 @@
 <!-- beadloom:badge-start -->
 > ✅ **fresh**
 > 
-> last synced 2026-06-10T21:18:54.402746+00:00 · coverage 100% (`docs-audit`)
+> last synced 2026-06-11T14:19:08.709748+00:00 · coverage 100% (`docs-audit`)
 > 
 > _Validation by Beadloom `doc_sync` — same source as `sync-check`._
 <!-- beadloom:badge-end -->
@@ -271,7 +271,7 @@ class AuditResult: ...
 
 ## Testing
 
-Test files: `tests/test_docs_audit.py`, `tests/test_doc_scanner.py`
+Test files: `tests/test_docs_audit_cli.py`, `tests/test_doc_scanner.py`
 
 Key scenarios:
 
@@ -284,3 +284,4 @@ Key scenarios:
 - **Config loading**: Verify tolerance overrides and extra facts from config.yml.
 - **Full audit pipeline**: Verify `run_audit` end-to-end with stale and fresh findings.
 - **Fail condition parsing**: Verify valid and invalid `--fail-if` expressions.
+- **CLI integration**: Verify `beadloom docs audit` command options, output formats (JSON/Rich), and CI gate behavior.

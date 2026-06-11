@@ -4,7 +4,7 @@
       "is_estimate": true,
       "label": "est. @ $0.4/1M tokens",
       "rate_usd_per_1m": 0.4,
-      "usd": 0.0723
+      "usd": 0.3515
     },
     "runs": [
       {
@@ -28,16 +28,33 @@
         "output_tokens": 3500,
         "platform": "github",
         "ts": "2026-06-10T20:59:17.618917+00:00"
+      },
+      {
+        "cumulative_docs": 16,
+        "cumulative_input_tokens": 752847,
+        "cumulative_output_tokens": 125847,
+        "docs_refreshed": 13,
+        "gate": "green",
+        "input_tokens": 581000,
+        "output_tokens": 117000,
+        "platform": "github",
+        "ts": "2026-06-10T23:34:55.398678+00:00"
       }
     ],
     "totals": {
-      "docs_refreshed": 3,
-      "input_tokens": 171847,
-      "output_tokens": 8847,
-      "runs": 2
+      "docs_refreshed": 16,
+      "input_tokens": 752847,
+      "output_tokens": 125847,
+      "runs": 3
     }
   },
-  "alerts": [],
+  "alerts": [
+    {
+      "kind": "stale_doc",
+      "message": "15 stale doc(s) — refresh and re-run `beadloom sync-check`",
+      "severity": "warn"
+    }
+  ],
   "debt": {
     "categories": [
       {
@@ -50,12 +67,12 @@
       },
       {
         "details": {
-          "stale": 0,
+          "stale": 1,
           "undocumented": 1,
           "untracked": 2
         },
         "name": "doc_gaps",
-        "score": 3.0
+        "score": 4.0
       },
       {
         "details": {
@@ -74,16 +91,17 @@
         "score": 0.0
       }
     ],
-    "debt_score": 10.0,
-    "severity": "low",
+    "debt_score": 11.0,
+    "severity": "medium",
     "top_offenders": [
       {
         "reasons": [
+          "stale_doc",
           "oversized",
           "high_fan_out"
         ],
         "ref_id": "application",
-        "score": 3.0
+        "score": 4.0
       },
       {
         "reasons": [
@@ -110,14 +128,14 @@
         "reasons": [
           "dormant"
         ],
-        "ref_id": "docs-audit",
+        "ref_id": "doc-sync",
         "score": 0.5
       },
       {
         "reasons": [
           "dormant"
         ],
-        "ref_id": "graph-diff",
+        "ref_id": "docs-audit",
         "score": 0.5
       },
       {
@@ -128,37 +146,26 @@
         "score": 0.5
       }
     ],
-    "trend": {
-      "category_deltas": {
-        "complexity": 6.0,
-        "doc_gaps": 3.0,
-        "meta_doc_staleness": 0.0,
-        "rule_violations": 0.0,
-        "test_gaps": 0.0
-      },
-      "delta": 9.0,
-      "previous_score": 1.0,
-      "previous_snapshot": "2026-06-01 16:36:30 [BDL-038-wave1]"
-    }
+    "trend": null
   },
   "docs": {
-    "coverage_pct": 96.2,
-    "documented": 25,
-    "fresh": 86,
-    "freshness_pct": 100.0,
-    "nodes": 26,
-    "stale": 0,
-    "tracked_pairs": 86
+    "coverage_pct": 98.0,
+    "documented": 48,
+    "fresh": 122,
+    "freshness_pct": 89.1,
+    "nodes": 49,
+    "stale": 15,
+    "tracked_pairs": 137
   },
   "doctor": {
     "by_severity": {
-      "ok": 11,
-      "warning": 7
+      "ok": 10,
+      "warning": 23
     },
     "errors": 0,
     "passed": true,
-    "total": 18,
-    "warnings": 7
+    "total": 33,
+    "warnings": 23
   },
   "federated": null,
   "lint": {
@@ -174,7 +181,7 @@
     {
       "kind": "debt",
       "link": "/dashboard#application",
-      "message": "debt score 3.0: oversized; high_fan_out",
+      "message": "debt score 4.0: stale_doc; oversized; high_fan_out",
       "severity": "warn",
       "target": "application"
     },
@@ -187,10 +194,10 @@
     },
     {
       "kind": "debt",
-      "link": "/dashboard#docs-audit",
+      "link": "/dashboard#doc-sync",
       "message": "debt score 0.5: dormant",
       "severity": "warn",
-      "target": "docs-audit"
+      "target": "doc-sync"
     },
     {
       "kind": "debt",
@@ -216,9 +223,16 @@
     {
       "kind": "lint",
       "link": "/dashboard#graph",
-      "message": "Node 'graph' has 202 symbols (max 200): rule 'domain-size-limit' — `graph` exceeds its limit (Node 'graph' has 202 symbols (max 200): rule 'domain-size-limit'); split it into smaller nodes",
+      "message": "Node 'graph' has 214 symbols (max 200): rule 'domain-size-limit' — `graph` exceeds its limit (Node 'graph' has 214 symbols (max 200): rule 'domain-size-limit'); split it into smaller nodes",
       "severity": "warn",
       "target": "graph"
+    },
+    {
+      "kind": "stale_doc",
+      "link": "/dashboard#application",
+      "message": "doc is stale vs its code — refresh and re-run sync-check",
+      "severity": "warn",
+      "target": "application"
     }
   ],
   "status_cards": [
@@ -230,21 +244,21 @@
       "value": "2"
     },
     {
-      "detail": "low",
+      "detail": "medium",
       "group": "debt",
       "label": "Debt",
-      "status": "ok",
-      "value": "10.0 / 100"
+      "status": "warn",
+      "value": "11.0 / 100"
     },
     {
-      "detail": "0 stale of 86 tracked",
+      "detail": "15 stale of 137 tracked",
       "group": "docs",
       "label": "Docs",
-      "status": "ok",
-      "value": "96.2% covered"
+      "status": "warn",
+      "value": "98.0% covered"
     },
     {
-      "detail": "0 errors, 7 warnings",
+      "detail": "0 errors, 23 warnings",
       "group": "doctor",
       "label": "Doctor",
       "status": "warn",
@@ -471,6 +485,16 @@
       "symbols": 853,
       "sync_pct": 100.0,
       "ts": "2026-06-10T21:47:50.306485+00:00"
+    },
+    {
+      "coverage_pct": 98.0,
+      "debt_score": 11.0,
+      "edges": 131,
+      "lint_violations": 2,
+      "nodes": 49,
+      "symbols": 946,
+      "sync_pct": 89.1,
+      "ts": "2026-06-11T14:37:29.557372+00:00"
     }
   ]
 }

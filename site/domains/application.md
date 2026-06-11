@@ -81,7 +81,7 @@ Use-case orchestration: reindex, doctor, debt report, file watcher
 - **depends_on**: [context-oracle](../domains/context-oracle.md), [doc-sync](../domains/doc-sync.md), [graph](../domains/graph.md), [infrastructure](../domains/infrastructure.md)
 - **uses**: [context-oracle](../domains/context-oracle.md), [doc-sync](../domains/doc-sync.md), [graph](../domains/graph.md), [infrastructure](../domains/infrastructure.md), [onboarding](../domains/onboarding.md)
 - **Used by**: [beadloom](../services/beadloom.md), [cli](../services/cli.md), [mcp-server](../services/mcp-server.md)
-- **Parts**: [debt-report](../features/debt-report.md), [doctor](../features/doctor.md), [reindex](../features/reindex.md), [watcher](../features/watcher.md)
+- **Parts**: [ci-gate](../features/ci-gate.md), [debt-report](../features/debt-report.md), [doctor](../features/doctor.md), [reindex](../features/reindex.md), [site-generation](../features/site-generation.md), [watcher](../features/watcher.md)
 
 ## Documentation
 
@@ -92,9 +92,11 @@ Use-case orchestration: reindex, doctor, debt report, file watcher
 ```mermaid
 C4Container
     System_Boundary(application_boundary, "application") {
+        Component(ci_gate, "Ci Gate", "", "Unified CI gate (`beadloom ci`) — one convergence point composing reindex/lint/sync-check/config-check/doctor/federate into a single verdict")
         Component(debt_report, "Debt Report", "", "Architecture debt aggregation, scoring, trend tracking, and CI gating")
         Component(doctor, "Doctor", "", "Validation checks for graph and data integrity")
         Component(reindex, "Reindex", "", "Full reindex pipeline — drop, recreate, reload graph/docs/code/sync")
+        Component(site_generation, "Site Generation", "", "`docs site` — generate the VitePress content tree from the indexed graph (About/architecture/per-node pages, dashboard, landscape, nav, mermaid guard)")
         Component(watcher, "Watcher", "", "File watcher for auto-reindex on changes")
     }
 ```

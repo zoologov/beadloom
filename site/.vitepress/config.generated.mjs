@@ -16,12 +16,21 @@ export const sidebar = [
         link: "/services/beadloom",
         items: [
           {
+            text: "Ai Agents",
+            link: "/domains/ai_agents",
+            items: [
+              { text: "Ai Techwriter", link: "/features/ai-techwriter" }
+            ],
+          },
+          {
             text: "Application",
             link: "/domains/application",
             items: [
+              { text: "Ci Gate", link: "/features/ci-gate" },
               { text: "Debt Report", link: "/features/debt-report" },
               { text: "Doctor", link: "/features/doctor" },
               { text: "Reindex", link: "/features/reindex" },
+              { text: "Site Generation", link: "/features/site-generation" },
               { text: "Watcher", link: "/features/watcher" }
             ],
           },
@@ -31,7 +40,10 @@ export const sidebar = [
             link: "/domains/context-oracle",
             items: [
               { text: "Cache", link: "/features/cache" },
+              { text: "Code Indexer", link: "/features/code-indexer" },
+              { text: "Route Extraction", link: "/features/route-extraction" },
               { text: "Search", link: "/features/search" },
+              { text: "Test Mapping", link: "/features/test-mapping" },
               { text: "Why", link: "/features/why" }
             ],
           },
@@ -39,7 +51,8 @@ export const sidebar = [
             text: "Doc Sync",
             link: "/domains/doc-sync",
             items: [
-              { text: "Docs Audit", link: "/features/docs-audit" }
+              { text: "Docs Audit", link: "/features/docs-audit" },
+              { text: "Sync Check", link: "/features/sync-check" }
             ],
           },
           {
@@ -50,7 +63,8 @@ export const sidebar = [
               { text: "Federation", link: "/features/federation" },
               { text: "Graph Diff", link: "/features/graph-diff" },
               { text: "Import Resolver", link: "/features/import-resolver" },
-              { text: "Rule Engine", link: "/features/rule-engine" }
+              { text: "Rule Engine", link: "/features/rule-engine" },
+              { text: "Snapshot", link: "/features/snapshot" }
             ],
           },
           { text: "Infrastructure", link: "/domains/infrastructure" },
@@ -60,6 +74,10 @@ export const sidebar = [
             link: "/domains/onboarding",
             items: [
               { text: "Agent Prime", link: "/features/agent-prime" },
+              { text: "Agentic Flow Setup", link: "/features/agentic-flow-setup" },
+              { text: "Ai Techwriter Setup", link: "/features/ai-techwriter-setup" },
+              { text: "Branch Protection", link: "/features/branch-protection" },
+              { text: "Config Check", link: "/features/config-check" },
               { text: "Doc Generator", link: "/features/doc-generator" }
             ],
           },
@@ -81,10 +99,50 @@ export const sidebar = [
         collapsed: true,
         items: [
           {
+            text: "Ai Agents",
+            collapsed: true,
+            items: [
+              { text: "README", link: "/docs/domains/ai_agents/README" },
+              {
+                text: "Features",
+                collapsed: true,
+                items: [
+                  {
+                    text: "Ai Techwriter",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/ai_agents/features/ai-techwriter/SPEC" }
+                    ],
+                  }
+                ],
+              }
+            ],
+          },
+          {
             text: "Application",
             collapsed: true,
             items: [
-              { text: "README", link: "/docs/domains/application/README" }
+              { text: "README", link: "/docs/domains/application/README" },
+              {
+                text: "Features",
+                collapsed: true,
+                items: [
+                  {
+                    text: "Ci Gate",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/application/features/ci-gate/SPEC" }
+                    ],
+                  },
+                  {
+                    text: "Site Generation",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/application/features/site-generation/SPEC" }
+                    ],
+                  }
+                ],
+              }
             ],
           },
           {
@@ -92,6 +150,19 @@ export const sidebar = [
             collapsed: true,
             items: [
               { text: "README", link: "/docs/domains/context-oracle/README" },
+              {
+                text: "Components",
+                collapsed: true,
+                items: [
+                  {
+                    text: "Context Builder",
+                    collapsed: true,
+                    items: [
+                      { text: "DOC", link: "/docs/domains/context-oracle/components/context-builder/DOC" }
+                    ],
+                  }
+                ],
+              },
               {
                 text: "Features",
                 collapsed: true,
@@ -104,10 +175,31 @@ export const sidebar = [
                     ],
                   },
                   {
+                    text: "Code Indexer",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/context-oracle/features/code-indexer/SPEC" }
+                    ],
+                  },
+                  {
+                    text: "Route Extraction",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/context-oracle/features/route-extraction/SPEC" }
+                    ],
+                  },
+                  {
                     text: "Search",
                     collapsed: true,
                     items: [
                       { text: "SPEC", link: "/docs/domains/context-oracle/features/search/SPEC" }
+                    ],
+                  },
+                  {
+                    text: "Test Mapping",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/context-oracle/features/test-mapping/SPEC" }
                     ],
                   },
                   {
@@ -127,6 +219,19 @@ export const sidebar = [
             items: [
               { text: "README", link: "/docs/domains/doc-sync/README" },
               {
+                text: "Components",
+                collapsed: true,
+                items: [
+                  {
+                    text: "Doc Indexer",
+                    collapsed: true,
+                    items: [
+                      { text: "DOC", link: "/docs/domains/doc-sync/components/doc-indexer/DOC" }
+                    ],
+                  }
+                ],
+              },
+              {
                 text: "Features",
                 collapsed: true,
                 items: [
@@ -135,6 +240,13 @@ export const sidebar = [
                     collapsed: true,
                     items: [
                       { text: "SPEC", link: "/docs/domains/doc-sync/features/docs-audit/SPEC" }
+                    ],
+                  },
+                  {
+                    text: "Sync Check",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/doc-sync/features/sync-check/SPEC" }
                     ],
                   }
                 ],
@@ -146,6 +258,33 @@ export const sidebar = [
             collapsed: true,
             items: [
               { text: "README", link: "/docs/domains/graph/README" },
+              {
+                text: "Components",
+                collapsed: true,
+                items: [
+                  {
+                    text: "Contracts",
+                    collapsed: true,
+                    items: [
+                      { text: "DOC", link: "/docs/domains/graph/components/contracts/DOC" }
+                    ],
+                  },
+                  {
+                    text: "Graph Loader",
+                    collapsed: true,
+                    items: [
+                      { text: "DOC", link: "/docs/domains/graph/components/graph-loader/DOC" }
+                    ],
+                  },
+                  {
+                    text: "Sdl",
+                    collapsed: true,
+                    items: [
+                      { text: "DOC", link: "/docs/domains/graph/components/sdl/DOC" }
+                    ],
+                  }
+                ],
+              },
               {
                 text: "Features",
                 collapsed: true,
@@ -184,6 +323,13 @@ export const sidebar = [
                     items: [
                       { text: "SPEC", link: "/docs/domains/graph/features/rule-engine/SPEC" }
                     ],
+                  },
+                  {
+                    text: "Snapshot",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/graph/features/snapshot/SPEC" }
+                    ],
                   }
                 ],
               }
@@ -194,6 +340,40 @@ export const sidebar = [
             collapsed: true,
             items: [
               { text: "README", link: "/docs/domains/infrastructure/README" },
+              {
+                text: "Components",
+                collapsed: true,
+                items: [
+                  {
+                    text: "Db",
+                    collapsed: true,
+                    items: [
+                      { text: "DOC", link: "/docs/domains/infrastructure/components/db/DOC" }
+                    ],
+                  },
+                  {
+                    text: "Git Activity",
+                    collapsed: true,
+                    items: [
+                      { text: "DOC", link: "/docs/domains/infrastructure/components/git-activity/DOC" }
+                    ],
+                  },
+                  {
+                    text: "Health",
+                    collapsed: true,
+                    items: [
+                      { text: "DOC", link: "/docs/domains/infrastructure/components/health/DOC" }
+                    ],
+                  },
+                  {
+                    text: "Mcp Tools",
+                    collapsed: true,
+                    items: [
+                      { text: "DOC", link: "/docs/domains/infrastructure/components/mcp-tools/DOC" }
+                    ],
+                  }
+                ],
+              },
               {
                 text: "Features",
                 collapsed: true,
@@ -247,6 +427,34 @@ export const sidebar = [
                     ],
                   },
                   {
+                    text: "Agentic Flow Setup",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/onboarding/features/agentic-flow-setup/SPEC" }
+                    ],
+                  },
+                  {
+                    text: "Ai Techwriter Setup",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/onboarding/features/ai-techwriter-setup/SPEC" }
+                    ],
+                  },
+                  {
+                    text: "Branch Protection",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/onboarding/features/branch-protection/SPEC" }
+                    ],
+                  },
+                  {
+                    text: "Config Check",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/onboarding/features/config-check/SPEC" }
+                    ],
+                  },
+                  {
                     text: "Doc Generator",
                     collapsed: true,
                     items: [
@@ -265,6 +473,7 @@ export const sidebar = [
         items: [
           { text: "Agentic Flow", link: "/docs/guides/agentic-flow" },
           { text: "Ai Techwriter", link: "/docs/guides/ai-techwriter" },
+          { text: "Architecture Model", link: "/docs/guides/architecture-model" },
           { text: "Ci Setup", link: "/docs/guides/ci-setup" },
           { text: "Vitepress Site", link: "/docs/guides/vitepress-site" }
         ],
@@ -284,7 +493,20 @@ export const sidebar = [
         items: [
           { text: "Cli", link: "/docs/services/cli" },
           { text: "Mcp", link: "/docs/services/mcp" },
-          { text: "Tui", link: "/docs/services/tui" }
+          { text: "Tui", link: "/docs/services/tui" },
+          {
+            text: "Components",
+            collapsed: true,
+            items: [
+              {
+                text: "Bd Seam",
+                collapsed: true,
+                items: [
+                  { text: "DOC", link: "/docs/services/components/bd-seam/DOC" }
+                ],
+              }
+            ],
+          }
         ],
       },
     ],

@@ -1,7 +1,7 @@
 <!-- beadloom:badge-start -->
-> ✅ **fresh**
+> ⚠️ **stale** — hash_changed
 > 
-> last synced 2026-06-10T21:18:54.402746+00:00 · coverage 93% (`application`)
+> last synced 2026-06-11T14:19:08.709748+00:00 · coverage 100% (`application`)
 > 
 > _Validation by Beadloom `doc_sync` — same source as `sync-check`._
 <!-- beadloom:badge-end -->
@@ -19,11 +19,22 @@ depended upon by a lower layer. Extracting these orchestrators out of
 `infrastructure` is what lets `infrastructure` stay domain-agnostic and restores
 the DDD Dependency Rule.
 
+## Features
+
+Each feature has its own `SPEC.md`:
+
+- **[Reindex](../infrastructure/features/reindex/SPEC.md)** — full + incremental index rebuild (`beadloom reindex`).
+- **[Doctor](../infrastructure/features/doctor/SPEC.md)** — graph/data integrity checks (`beadloom doctor`).
+- **[Debt Report](../infrastructure/features/debt-report/SPEC.md)** — weighted architecture-debt score.
+- **[Watcher](../infrastructure/features/watcher/SPEC.md)** — file-watch auto-reindex.
+- **[Site Generation](features/site-generation/SPEC.md)** — the VitePress site generator (`beadloom docs site`).
+- **[CI Gate](features/ci-gate/SPEC.md)** — the unified `beadloom ci` enforcement gate.
+
 ## Specification
 
 ### Modules
 
-- **reindex.py** — `reindex(root)` performs full reindex: snapshot sync baselines → drop tables → create schema → load graph YAML → store deep config → index docs → index code → resolve imports → load rules → map tests → analyze git activity → extract API routes → build sync state (with preserved symbol hashes) → populate FTS5 → clear bundle cache → take health snapshot → populate file index → store parser fingerprint. `incremental_reindex(root)` updates only changed files; detects parser availability changes via fingerprint comparison and graph YAML changes via `_graph_yaml_changed()`, triggering full reindex when needed.
+- **reindex.py** — `reindex(root)` performs full reindex: snapshot sync baselines → drop tables → create schema → load graph YAML → store deep config → index docs → index code → resolve imports → load rules → map tests → analyze git activity → extract API routes → build sync state (with preserved symbol hashes) → populate FTS5 → clear bundle cache → take health snapshot → populate file index → store parser fingerprint. `incremental_reindex(root)` updates only changed files; detects parser availability changes via fingerprint comparison and graph YAML changes via `_graph_yaml_changed()`, triggering full reindex when needed. Backfills `symbols_indexed` from the live DB (total `code_symbols` count) so the result reports the true symbol total, not just the per-run delta (mirroring the #88 nodes/edges backfill).
 - **doctor.py** — `run_checks(conn, *, project_root=None)` validates graph health with DB checks (empty summaries, unlinked docs, nodes without docs, isolated nodes, symbol drift, stale sync entries, source coverage gaps) plus an optional "Agent Instructions" check when `project_root` is provided, comparing CLAUDE.md/AGENTS.md factual claims (version, packages, CLI commands, MCP tool count) against runtime truth.
 - **debt_report.py** — `collect_debt_data()` aggregates architecture health signals from lint, sync-check, doctor, git activity, and test mapper. `compute_debt_score()` applies a weighted formula producing a 0-100 debt score with category breakdown, severity classification, and per-node top offenders. `format_debt_report()`/`format_debt_json()` render the report. `compute_debt_trend()` compares against the last graph snapshot.
 - **watcher.py** — `watch()` monitors project files (graph YAML, docs, source) and auto-triggers reindex on changes using `watchfiles`. Graph changes trigger full reindex; other changes trigger incremental. `WatchEvent` frozen dataclass captures per-event metadata. `DEFAULT_DEBOUNCE_MS` constant (500ms).
