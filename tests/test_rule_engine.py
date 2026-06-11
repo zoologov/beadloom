@@ -33,6 +33,8 @@ from beadloom.infrastructure.db import create_schema, open_db
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from beadloom.graph.rule_engine import UnregisteredFeatureCandidateRule
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -2588,3 +2590,863 @@ class TestRemediation:
         assert len(violations) == 1
         assert violations[0].remediation is not None
         assert "split" in violations[0].remediation
+
+
+# ---------------------------------------------------------------------------
+# UnregisteredFeatureCandidateRule tests (BDL-051 S1 / BEAD-01)
+# ---------------------------------------------------------------------------
+
+
+def _insert_symbol(
+    conn: sqlite3.Connection,
+    file_path: str,
+    symbol_name: str,
+    annotations: dict[str, str],
+) -> None:
+    """Insert a single code_symbols row with the given annotations JSON."""
+    conn.execute(
+        "INSERT INTO code_symbols"
+        " (file_path, symbol_name, kind, line_start, line_end, annotations, file_hash)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (file_path, symbol_name, "function", 1, 10, json.dumps(annotations), "h"),
+    )
+
+
+@pytest.fixture()
+def sprawl_db() -> sqlite3.Connection:
+    """In-memory DB with a domain that has a domain-only file + a featured file."""
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys=ON")
+    create_schema(conn)
+
+    conn.execute(
+        "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+        ("onboarding", "domain", "Onboarding", "src/beadloom/onboarding/"),
+    )
+
+    # Domain-only candidate file: 6 indexed symbols, domain= but no feature=.
+    for i in range(6):
+        _insert_symbol(
+            conn,
+            "src/beadloom/onboarding/branch_protection.py",
+            f"public_fn_{i}",
+            {"domain": "onboarding"},
+        )
+
+    # A registered-feature file: domain= AND feature= -> never a candidate.
+    for i in range(8):
+        _insert_symbol(
+            conn,
+            "src/beadloom/onboarding/scanner.py",
+            f"scan_fn_{i}",
+            {"domain": "onboarding", "feature": "agent-prime"},
+        )
+
+    # A small plumbing helper: domain-only but below the threshold.
+    for i in range(2):
+        _insert_symbol(
+            conn,
+            "src/beadloom/onboarding/config_reader.py",
+            f"cfg_fn_{i}",
+            {"domain": "onboarding"},
+        )
+
+    conn.commit()
+    return conn
+
+
+class TestUnregisteredFeatureCandidateDataclass:
+    def test_create_with_defaults(self) -> None:
+        from beadloom.graph.rule_engine import UnregisteredFeatureCandidateRule
+
+        rule = UnregisteredFeatureCandidateRule(
+            name="sprawl",
+            description="desc",
+            for_matcher=NodeMatcher(kind="domain"),
+        )
+        assert rule.min_symbols == 5
+        assert rule.exclude == ()
+        assert rule.severity == "warn"
+
+
+class TestUnregisteredFeatureCandidateYamlParsing:
+    def test_parse_rule(self, tmp_path: Path) -> None:
+        from beadloom.graph.rule_engine import UnregisteredFeatureCandidateRule
+
+        rules_file = tmp_path / "rules.yml"
+        rules_file.write_text(
+            "version: 3\nrules:\n"
+            "  - name: unregistered-feature-candidate\n"
+            "    description: Flag domain-only modules\n"
+            "    unregistered_feature_candidate:\n"
+            "      for: { kind: domain }\n"
+            "      min_symbols: 7\n"
+            "      exclude:\n"
+            "        - '**/config_reader.py'\n"
+            "    severity: warn\n"
+        )
+        rules = load_rules(rules_file)
+        assert len(rules) == 1
+        rule = rules[0]
+        assert isinstance(rule, UnregisteredFeatureCandidateRule)
+        assert rule.min_symbols == 7
+        assert rule.exclude == ("**/config_reader.py",)
+        assert rule.severity == "warn"
+
+    def test_parse_rule_defaults(self, tmp_path: Path) -> None:
+        from beadloom.graph.rule_engine import UnregisteredFeatureCandidateRule
+
+        rules_file = tmp_path / "rules.yml"
+        rules_file.write_text(
+            "version: 3\nrules:\n"
+            "  - name: sprawl\n"
+            "    description: d\n"
+            "    unregistered_feature_candidate:\n"
+            "      for: { kind: domain }\n"
+            "    severity: warn\n"
+        )
+        rules = load_rules(rules_file)
+        assert isinstance(rules[0], UnregisteredFeatureCandidateRule)
+        assert rules[0].min_symbols == 5
+        assert rules[0].exclude == ()
+
+
+class TestEvaluateUnregisteredFeatureCandidateRules:
+    def test_flags_domain_only_file(self, sprawl_db: sqlite3.Connection) -> None:
+        from beadloom.graph.rule_engine import (
+            UnregisteredFeatureCandidateRule,
+            evaluate_unregistered_feature_candidate_rules,
+        )
+
+        rules = [
+            UnregisteredFeatureCandidateRule(
+                name="sprawl",
+                description="Flag domain-only modules",
+                for_matcher=NodeMatcher(kind="domain"),
+                min_symbols=5,
+            )
+        ]
+        violations = evaluate_unregistered_feature_candidate_rules(sprawl_db, rules)
+        assert len(violations) == 1
+        v = violations[0]
+        assert v.severity == "warn"
+        assert v.rule_type == "unregistered_feature_candidate"
+        assert v.from_ref_id == "onboarding"
+        assert v.file_path == "src/beadloom/onboarding/branch_protection.py"
+        assert "6 symbols" in v.message
+        assert "branch_protection.py" in v.message
+
+    def test_does_not_flag_featured_file(self, sprawl_db: sqlite3.Connection) -> None:
+        from beadloom.graph.rule_engine import (
+            UnregisteredFeatureCandidateRule,
+            evaluate_unregistered_feature_candidate_rules,
+        )
+
+        rules = [
+            UnregisteredFeatureCandidateRule(
+                name="sprawl",
+                description="d",
+                for_matcher=NodeMatcher(kind="domain"),
+                min_symbols=5,
+            )
+        ]
+        violations = evaluate_unregistered_feature_candidate_rules(sprawl_db, rules)
+        flagged = {v.file_path for v in violations}
+        assert "src/beadloom/onboarding/scanner.py" not in flagged
+
+    def test_respects_threshold(self, sprawl_db: sqlite3.Connection) -> None:
+        from beadloom.graph.rule_engine import (
+            UnregisteredFeatureCandidateRule,
+            evaluate_unregistered_feature_candidate_rules,
+        )
+
+        rules = [
+            UnregisteredFeatureCandidateRule(
+                name="sprawl",
+                description="d",
+                for_matcher=NodeMatcher(kind="domain"),
+                min_symbols=7,  # branch_protection only has 6 public -> below
+            )
+        ]
+        violations = evaluate_unregistered_feature_candidate_rules(sprawl_db, rules)
+        assert violations == []
+
+    def test_respects_exclude_glob(self, sprawl_db: sqlite3.Connection) -> None:
+        from beadloom.graph.rule_engine import (
+            UnregisteredFeatureCandidateRule,
+            evaluate_unregistered_feature_candidate_rules,
+        )
+
+        rules = [
+            UnregisteredFeatureCandidateRule(
+                name="sprawl",
+                description="d",
+                for_matcher=NodeMatcher(kind="domain"),
+                min_symbols=5,
+                exclude=("**/branch_protection.py",),
+            )
+        ]
+        violations = evaluate_unregistered_feature_candidate_rules(sprawl_db, rules)
+        assert violations == []
+
+    def test_evaluate_all_includes_candidate(self, sprawl_db: sqlite3.Connection) -> None:
+        from beadloom.graph.rule_engine import (
+            Rule as RuleType,
+        )
+        from beadloom.graph.rule_engine import (
+            UnregisteredFeatureCandidateRule,
+        )
+
+        rules: list[RuleType] = [
+            UnregisteredFeatureCandidateRule(
+                name="sprawl",
+                description="d",
+                for_matcher=NodeMatcher(kind="domain"),
+                min_symbols=5,
+            )
+        ]
+        violations = evaluate_all(sprawl_db, rules)
+        assert len(violations) == 1
+        assert violations[0].rule_type == "unregistered_feature_candidate"
+
+
+class TestUnregisteredFeatureCandidateRealRepo:
+    """Run the lint against the real Beadloom index (BDL-051 dogfood).
+
+    Slice 1 only asserts the lint SEES the onboarding sprawl as warns;
+    Slice 3 will re-model those modules into features. The build must NOT
+    fail from these warns (warn severity).
+    """
+
+    def test_flags_real_onboarding_candidates(self) -> None:
+        import pathlib
+
+        from beadloom.graph.rule_engine import (
+            UnregisteredFeatureCandidateRule,
+            evaluate_unregistered_feature_candidate_rules,
+        )
+        from beadloom.infrastructure.db import open_db
+
+        repo_root = pathlib.Path(__file__).resolve().parents[1]
+        db_path = repo_root / ".beadloom" / "beadloom.db"
+        if not db_path.is_file():
+            pytest.skip("real index db not present")
+
+        conn = open_db(db_path)
+        try:
+            rules = [
+                UnregisteredFeatureCandidateRule(
+                    name="unregistered-feature-candidate",
+                    description="domain-only modules",
+                    for_matcher=NodeMatcher(kind="domain"),
+                    min_symbols=5,
+                )
+            ]
+            violations = evaluate_unregistered_feature_candidate_rules(conn, rules)
+        finally:
+            conn.close()
+
+        flagged = {v.file_path for v in violations}
+        expected = {
+            "src/beadloom/onboarding/config_sync.py",
+            "src/beadloom/onboarding/branch_protection.py",
+            "src/beadloom/onboarding/agentic_flow_setup.py",
+            "src/beadloom/onboarding/ai_techwriter_setup.py",
+        }
+        # The lint must SEE each known onboarding sprawl candidate.
+        assert expected.issubset(flagged), f"missing: {expected - flagged}"
+        # All findings are advisory warns (never fail the build).
+        assert all(v.severity == "warn" for v in violations)
+
+
+# ---------------------------------------------------------------------------
+# UnregisteredFeatureCandidateRule — HARDENING edge cases (BDL-051 S1 / BEAD-02)
+# ---------------------------------------------------------------------------
+
+
+def _ufc_rule(
+    *,
+    min_symbols: int = 5,
+    exclude: tuple[str, ...] = (),
+) -> UnregisteredFeatureCandidateRule:
+    """Build a domain-scoped UnregisteredFeatureCandidateRule for tests."""
+    from beadloom.graph.rule_engine import UnregisteredFeatureCandidateRule
+
+    return UnregisteredFeatureCandidateRule(
+        name="unregistered-feature-candidate",
+        description="domain-only modules",
+        for_matcher=NodeMatcher(kind="domain"),
+        min_symbols=min_symbols,
+        exclude=exclude,
+    )
+
+
+@pytest.fixture()
+def domain_db() -> sqlite3.Connection:
+    """In-memory DB with a single ``graph`` domain node and no symbols yet.
+
+    Tests populate ``code_symbols`` themselves so each can target a precise
+    threshold / annotation shape without sharing state with other tests.
+    """
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    create_schema(conn)
+    conn.execute(
+        "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+        ("graph", "domain", "Graph domain", "src/beadloom/graph/"),
+    )
+    conn.commit()
+    yield conn  # type: ignore[misc]
+    conn.close()
+
+
+def _populate(
+    conn: sqlite3.Connection,
+    file_path: str,
+    count: int,
+    annotations: dict[str, str],
+) -> None:
+    """Insert *count* symbols for *file_path* all sharing *annotations*."""
+    for i in range(count):
+        _insert_symbol(conn, file_path, f"sym_{i}", annotations)
+    conn.commit()
+
+
+class TestUnregisteredFeatureCandidateParseValidation:
+    """Parser error and edge paths for the unregistered_feature_candidate block."""
+
+    def test_for_must_be_mapping(self, tmp_path: Path) -> None:
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\nrules:\n"
+            "  - name: sprawl\n"
+            "    description: d\n"
+            "    unregistered_feature_candidate:\n"
+            "      for: not-a-mapping\n"
+        )
+        with pytest.raises(ValueError, match="for must be a mapping"):
+            load_rules(rules_path)
+
+    def test_negative_min_symbols_rejected(self, tmp_path: Path) -> None:
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\nrules:\n"
+            "  - name: sprawl\n"
+            "    description: d\n"
+            "    unregistered_feature_candidate:\n"
+            "      for: { kind: domain }\n"
+            "      min_symbols: -1\n"
+        )
+        with pytest.raises(ValueError, match="min_symbols must be non-negative"):
+            load_rules(rules_path)
+
+    def test_exclude_null_normalizes_to_empty(self, tmp_path: Path) -> None:
+        from beadloom.graph.rule_engine import UnregisteredFeatureCandidateRule
+
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\nrules:\n"
+            "  - name: sprawl\n"
+            "    description: d\n"
+            "    unregistered_feature_candidate:\n"
+            "      for: { kind: domain }\n"
+            "      exclude: null\n"
+        )
+        rules = load_rules(rules_path)
+        assert isinstance(rules[0], UnregisteredFeatureCandidateRule)
+        assert rules[0].exclude == ()
+
+    def test_exclude_non_list_rejected(self, tmp_path: Path) -> None:
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\nrules:\n"
+            "  - name: sprawl\n"
+            "    description: d\n"
+            "    unregistered_feature_candidate:\n"
+            "      for: { kind: domain }\n"
+            "      exclude: '*/single.py'\n"
+        )
+        with pytest.raises(ValueError, match="exclude must be a list"):
+            load_rules(rules_path)
+
+    def test_block_must_be_mapping(self, tmp_path: Path) -> None:
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\nrules:\n"
+            "  - name: sprawl\n"
+            "    description: d\n"
+            "    unregistered_feature_candidate: not-a-mapping\n"
+        )
+        with pytest.raises(ValueError, match="must be a mapping"):
+            load_rules(rules_path)
+
+    def test_defaults_to_warn_when_severity_omitted(self, tmp_path: Path) -> None:
+        """Advisory rule defaults to warn severity even with no explicit severity."""
+        from beadloom.graph.rule_engine import UnregisteredFeatureCandidateRule
+
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\nrules:\n"
+            "  - name: sprawl\n"
+            "    description: d\n"
+            "    unregistered_feature_candidate:\n"
+            "      for: { kind: domain }\n"
+        )
+        rules = load_rules(rules_path)
+        assert isinstance(rules[0], UnregisteredFeatureCandidateRule)
+        assert rules[0].severity == "warn"
+
+
+class TestUnregisteredFeatureCandidateThreshold:
+    """Exact threshold N: == N flagged, N-1 not; custom min_symbols honored."""
+
+    def test_exactly_n_symbols_flagged(self, domain_db: sqlite3.Connection) -> None:
+        from beadloom.graph.rule_engine import (
+            evaluate_unregistered_feature_candidate_rules,
+        )
+
+        _populate(domain_db, "src/beadloom/graph/widget.py", 5, {"domain": "graph"})
+        violations = evaluate_unregistered_feature_candidate_rules(
+            domain_db, [_ufc_rule(min_symbols=5)]
+        )
+        assert [v.file_path for v in violations] == ["src/beadloom/graph/widget.py"]
+
+    def test_n_minus_one_symbols_not_flagged(self, domain_db: sqlite3.Connection) -> None:
+        from beadloom.graph.rule_engine import (
+            evaluate_unregistered_feature_candidate_rules,
+        )
+
+        _populate(domain_db, "src/beadloom/graph/widget.py", 4, {"domain": "graph"})
+        violations = evaluate_unregistered_feature_candidate_rules(
+            domain_db, [_ufc_rule(min_symbols=5)]
+        )
+        assert violations == []
+
+    @pytest.mark.parametrize(
+        ("min_symbols", "symbol_count", "expected_flagged"),
+        [
+            (3, 3, True),  # exactly the custom threshold
+            (3, 2, False),  # one below the custom threshold
+            (10, 10, True),  # higher custom threshold met exactly
+            (10, 9, False),  # higher custom threshold missed by one
+        ],
+    )
+    def test_custom_min_symbols_honored(
+        self,
+        domain_db: sqlite3.Connection,
+        min_symbols: int,
+        symbol_count: int,
+        expected_flagged: bool,
+    ) -> None:
+        from beadloom.graph.rule_engine import (
+            evaluate_unregistered_feature_candidate_rules,
+        )
+
+        _populate(domain_db, "src/beadloom/graph/widget.py", symbol_count, {"domain": "graph"})
+        violations = evaluate_unregistered_feature_candidate_rules(
+            domain_db, [_ufc_rule(min_symbols=min_symbols)]
+        )
+        assert bool(violations) is expected_flagged
+
+
+class TestUnregisteredFeatureCandidateFeaturePresent:
+    """A file carrying a ``feature`` annotation is never flagged."""
+
+    def test_feature_present_never_flagged_even_when_huge(
+        self, domain_db: sqlite3.Connection
+    ) -> None:
+        from beadloom.graph.rule_engine import (
+            evaluate_unregistered_feature_candidate_rules,
+        )
+
+        # 50 symbols, well over any threshold, but it models a feature.
+        _populate(
+            domain_db,
+            "src/beadloom/graph/loader.py",
+            50,
+            {"domain": "graph", "feature": "graph-loader"},
+        )
+        violations = evaluate_unregistered_feature_candidate_rules(
+            domain_db, [_ufc_rule(min_symbols=5)]
+        )
+        assert violations == []
+
+    def test_feature_on_some_rows_suppresses_whole_file(
+        self, domain_db: sqlite3.Connection
+    ) -> None:
+        """If ANY symbol row in a file declares a feature, the file is excused.
+
+        Annotations are per-symbol; a single feature-bearing symbol marks the
+        file as feature-modeled, so it must not be flagged as a candidate.
+        """
+        from beadloom.graph.rule_engine import (
+            evaluate_unregistered_feature_candidate_rules,
+        )
+
+        path = "src/beadloom/graph/loader.py"
+        for i in range(6):
+            _insert_symbol(domain_db, path, f"plain_{i}", {"domain": "graph"})
+        _insert_symbol(domain_db, path, "featured", {"domain": "graph", "feature": "graph-loader"})
+        domain_db.commit()
+
+        violations = evaluate_unregistered_feature_candidate_rules(
+            domain_db, [_ufc_rule(min_symbols=5)]
+        )
+        assert violations == []
+
+
+class TestUnregisteredFeatureCandidateExclude:
+    """Exclude allow-list: excluded glob skipped; non-excluded sibling flagged."""
+
+    def test_excluded_glob_not_flagged_but_sibling_is(
+        self, domain_db: sqlite3.Connection
+    ) -> None:
+        from beadloom.graph.rule_engine import (
+            evaluate_unregistered_feature_candidate_rules,
+        )
+
+        _populate(domain_db, "src/beadloom/graph/presets.py", 6, {"domain": "graph"})
+        _populate(domain_db, "src/beadloom/graph/resolver.py", 6, {"domain": "graph"})
+
+        violations = evaluate_unregistered_feature_candidate_rules(
+            domain_db, [_ufc_rule(min_symbols=5, exclude=("*/presets.py",))]
+        )
+        flagged = {v.file_path for v in violations}
+        assert flagged == {"src/beadloom/graph/resolver.py"}
+
+    def test_double_star_glob_matches_nested_path(
+        self, domain_db: sqlite3.Connection
+    ) -> None:
+        """fnmatch semantics: ``**/presets.py`` matches the full slash path."""
+        from beadloom.graph.rule_engine import (
+            evaluate_unregistered_feature_candidate_rules,
+        )
+
+        _populate(domain_db, "src/beadloom/graph/presets.py", 6, {"domain": "graph"})
+        violations = evaluate_unregistered_feature_candidate_rules(
+            domain_db, [_ufc_rule(min_symbols=5, exclude=("**/presets.py",))]
+        )
+        assert violations == []
+
+    def test_non_matching_glob_does_not_suppress(
+        self, domain_db: sqlite3.Connection
+    ) -> None:
+        """A glob that does not match the candidate path leaves it flagged."""
+        from beadloom.graph.rule_engine import (
+            evaluate_unregistered_feature_candidate_rules,
+        )
+
+        _populate(domain_db, "src/beadloom/graph/resolver.py", 6, {"domain": "graph"})
+        violations = evaluate_unregistered_feature_candidate_rules(
+            domain_db, [_ufc_rule(min_symbols=5, exclude=("*/unrelated.py",))]
+        )
+        assert {v.file_path for v in violations} == {"src/beadloom/graph/resolver.py"}
+
+
+class TestUnregisteredFeatureCandidateAnnotationRobustness:
+    """Malformed / empty / NULL annotations are handled without crashing."""
+
+    @pytest.mark.parametrize(
+        "raw_annotations",
+        [
+            "not-json{",  # malformed JSON
+            "",  # empty string
+            "[1, 2, 3]",  # valid JSON but not a dict
+            "null",  # JSON null
+            '"a string"',  # JSON scalar
+        ],
+    )
+    def test_malformed_annotations_not_spuriously_flagged(
+        self, domain_db: sqlite3.Connection, raw_annotations: str
+    ) -> None:
+        from beadloom.graph.rule_engine import (
+            evaluate_unregistered_feature_candidate_rules,
+        )
+
+        for i in range(6):
+            domain_db.execute(
+                "INSERT INTO code_symbols"
+                " (file_path, symbol_name, kind, line_start, line_end, annotations, file_hash)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                ("src/beadloom/graph/broken.py", f"s{i}", "function", 1, 10, raw_annotations, "h"),
+            )
+        domain_db.commit()
+
+        violations = evaluate_unregistered_feature_candidate_rules(
+            domain_db, [_ufc_rule(min_symbols=5)]
+        )
+        # No domain attribution can be parsed → not a candidate, and no crash.
+        assert violations == []
+
+    def test_null_annotations_not_flagged(self, domain_db: sqlite3.Connection) -> None:
+        from beadloom.graph.rule_engine import (
+            evaluate_unregistered_feature_candidate_rules,
+        )
+
+        for i in range(6):
+            domain_db.execute(
+                "INSERT INTO code_symbols"
+                " (file_path, symbol_name, kind, line_start, line_end, annotations, file_hash)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                ("src/beadloom/graph/nullann.py", f"s{i}", "function", 1, 10, None, "h"),
+            )
+        domain_db.commit()
+
+        violations = evaluate_unregistered_feature_candidate_rules(
+            domain_db, [_ufc_rule(min_symbols=5)]
+        )
+        assert violations == []
+
+    def test_domain_without_feature_key_is_flagged(
+        self, domain_db: sqlite3.Connection
+    ) -> None:
+        """A clean domain-only file (domain key, no feature key) is a candidate."""
+        from beadloom.graph.rule_engine import (
+            evaluate_unregistered_feature_candidate_rules,
+        )
+
+        _populate(domain_db, "src/beadloom/graph/widget.py", 6, {"domain": "graph"})
+        violations = evaluate_unregistered_feature_candidate_rules(
+            domain_db, [_ufc_rule(min_symbols=5)]
+        )
+        assert {v.file_path for v in violations} == {"src/beadloom/graph/widget.py"}
+
+
+class TestUnregisteredFeatureCandidateDomainAttribution:
+    """A candidate is counted under the RIGHT domain, with no cross-domain leak."""
+
+    def test_no_cross_domain_leak(self) -> None:
+        from beadloom.graph.rule_engine import (
+            evaluate_unregistered_feature_candidate_rules,
+        )
+
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        create_schema(conn)
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("graph", "domain", "Graph", "src/beadloom/graph/"),
+        )
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("onboarding", "domain", "Onboarding", "src/beadloom/onboarding/"),
+        )
+        conn.commit()
+
+        # An onboarding-annotated file living under the onboarding source prefix.
+        _populate(conn, "src/beadloom/onboarding/setup.py", 6, {"domain": "onboarding"})
+        # A graph-annotated file under the graph source prefix.
+        _populate(conn, "src/beadloom/graph/resolver.py", 6, {"domain": "graph"})
+
+        try:
+            violations = evaluate_unregistered_feature_candidate_rules(conn, [_ufc_rule()])
+        finally:
+            conn.close()
+
+        # Each candidate is attributed to exactly its own domain.
+        attribution = {(v.from_ref_id, v.file_path) for v in violations}
+        assert attribution == {
+            ("onboarding", "src/beadloom/onboarding/setup.py"),
+            ("graph", "src/beadloom/graph/resolver.py"),
+        }
+
+    def test_wrong_domain_annotation_under_prefix_not_attributed(
+        self, domain_db: sqlite3.Connection
+    ) -> None:
+        """A file under graph/ but annotated domain=other is NOT a graph candidate.
+
+        The rule keys on the ``annotations.domain`` value, not merely the path
+        prefix, so a mis-annotated file does not leak into the graph findings.
+        """
+        from beadloom.graph.rule_engine import (
+            evaluate_unregistered_feature_candidate_rules,
+        )
+
+        _populate(domain_db, "src/beadloom/graph/stray.py", 6, {"domain": "onboarding"})
+        violations = evaluate_unregistered_feature_candidate_rules(
+            domain_db, [_ufc_rule(min_symbols=5)]
+        )
+        assert violations == []
+
+
+class TestUnregisteredFeatureCandidateSourceHandling:
+    """Source-prefix handling: NULL source skipped; message uses a relative path."""
+
+    def test_domain_with_null_source_is_skipped(self) -> None:
+        from beadloom.graph.rule_engine import (
+            evaluate_unregistered_feature_candidate_rules,
+        )
+
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        create_schema(conn)
+        # Domain node with NULL source — no prefix to group files under.
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("graph", "domain", "Graph", None),
+        )
+        conn.commit()
+        _populate(conn, "src/beadloom/graph/widget.py", 6, {"domain": "graph"})
+
+        try:
+            violations = evaluate_unregistered_feature_candidate_rules(conn, [_ufc_rule()])
+        finally:
+            conn.close()
+        assert violations == []
+
+    def test_message_uses_domain_relative_path(self, domain_db: sqlite3.Connection) -> None:
+        """The finding message rewrites the source prefix to ``<domain>/...``."""
+        from beadloom.graph.rule_engine import (
+            evaluate_unregistered_feature_candidate_rules,
+        )
+
+        _populate(domain_db, "src/beadloom/graph/widget.py", 6, {"domain": "graph"})
+        violations = evaluate_unregistered_feature_candidate_rules(
+            domain_db, [_ufc_rule(min_symbols=5)]
+        )
+        assert len(violations) == 1
+        # Prefix "src/beadloom/graph/" is rewritten to "graph/".
+        assert "graph/widget.py" in violations[0].message
+        assert "6 symbols" in violations[0].message
+
+
+class TestUnregisteredFeatureCandidateRemediation:
+    """evaluate_all enriches UFC findings with an actionable remediation hint."""
+
+    def test_remediation_hint_present(self, sprawl_db: sqlite3.Connection) -> None:
+        violations = evaluate_all(sprawl_db, [_ufc_rule(min_symbols=5)])
+        assert len(violations) == 1
+        remediation = violations[0].remediation
+        assert remediation is not None
+        assert "model" in remediation
+        assert "exclude" in remediation
+
+
+class TestUnregisteredFeatureCandidateSeverity:
+    """The warn-severity rule never flips ``lint --strict`` to a failure."""
+
+    def test_warn_violation_does_not_set_has_errors(
+        self, sprawl_db: sqlite3.Connection
+    ) -> None:
+        from beadloom.graph.linter import LintResult
+
+        violations = evaluate_all(sprawl_db, [_ufc_rule(min_symbols=5)])
+        assert len(violations) == 1
+        result = LintResult(violations=violations)
+        # The strict exit path keys on has_errors; warn-only must stay clean.
+        assert result.has_errors is False
+        assert result.error_count == 0
+        assert result.warning_count == 1
+
+
+class TestUnregisteredFeatureCandidateSerializationRoundTrip:
+    """The rule survives reindex serialization: serialize → DB CHECK → reload."""
+
+    def test_serialize_round_trip_through_db(self, tmp_path: Path) -> None:
+        from beadloom.application.reindex import _serialize_rule
+        from beadloom.graph.rule_engine import load_rules
+
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\nrules:\n"
+            "  - name: unregistered-feature-candidate\n"
+            "    description: domain-only modules\n"
+            "    severity: warn\n"
+            "    unregistered_feature_candidate:\n"
+            "      for: { kind: domain }\n"
+            "      min_symbols: 5\n"
+            "      exclude:\n"
+            "        - '**/config_reader.py'\n"
+        )
+        rule = load_rules(rules_path)[0]
+
+        rule_type, rule_def = _serialize_rule(rule)
+        assert rule_type == "unregistered_feature_candidate"
+        assert rule_def["min_symbols"] == 5
+        assert rule_def["exclude"] == ["**/config_reader.py"]
+
+        # The rules-table CHECK must accept this rule_type (no IntegrityError).
+        conn = sqlite3.connect(":memory:")
+        try:
+            create_schema(conn)
+            conn.execute(
+                "INSERT INTO rules (name, description, rule_type, rule_json, enabled)"
+                " VALUES (?, ?, ?, ?, 1)",
+                (rule.name, rule.description, rule_type, json.dumps(rule_def)),
+            )
+            conn.commit()
+            row = conn.execute(
+                "SELECT rule_type, rule_json FROM rules WHERE name = ?", (rule.name,)
+            ).fetchone()
+        finally:
+            conn.close()
+
+        assert row[0] == "unregistered_feature_candidate"
+        assert json.loads(row[1])["min_symbols"] == 5
+
+    def test_serialize_without_exclude_omits_key(self, tmp_path: Path) -> None:
+        """exclude=() serializes without an ``exclude`` key (clean default)."""
+        from beadloom.application.reindex import _serialize_rule
+        from beadloom.graph.rule_engine import load_rules
+
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\nrules:\n"
+            "  - name: sprawl\n"
+            "    description: d\n"
+            "    severity: warn\n"
+            "    unregistered_feature_candidate:\n"
+            "      for: { kind: domain }\n"
+        )
+        rule = load_rules(rules_path)[0]
+        rule_type, rule_def = _serialize_rule(rule)
+        assert rule_type == "unregistered_feature_candidate"
+        assert "exclude" not in rule_def
+
+    def test_db_check_rejects_unknown_rule_type(self) -> None:
+        """Regression guard: the CHECK constraint is genuinely enforced."""
+        conn = sqlite3.connect(":memory:")
+        try:
+            create_schema(conn)
+            with pytest.raises(sqlite3.IntegrityError):
+                conn.execute(
+                    "INSERT INTO rules (name, description, rule_type, rule_json, enabled)"
+                    " VALUES (?, ?, ?, ?, 1)",
+                    ("bogus", "d", "totally_unknown_type", "{}"),
+                )
+        finally:
+            conn.close()
+
+
+class TestUnregisteredFeatureCandidateReindexSurvival:
+    """A full reindex loads the rule into the DB without raising."""
+
+    def test_reindex_loads_rule_into_db(self, tmp_path: Path) -> None:
+        from beadloom.application.reindex import ReindexResult, _load_rules_into_db
+
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\nrules:\n"
+            "  - name: unregistered-feature-candidate\n"
+            "    description: domain-only modules\n"
+            "    severity: warn\n"
+            "    unregistered_feature_candidate:\n"
+            "      for: { kind: domain }\n"
+            "      min_symbols: 5\n"
+        )
+        conn = sqlite3.connect(":memory:")
+        try:
+            create_schema(conn)
+            result = ReindexResult()
+            _load_rules_into_db(rules_path, conn, result)
+            conn.commit()
+            assert result.errors == []
+            row = conn.execute(
+                "SELECT rule_type FROM rules WHERE name = ?",
+                ("unregistered-feature-candidate",),
+            ).fetchone()
+        finally:
+            conn.close()
+        assert row is not None
+        assert row[0] == "unregistered_feature_candidate"

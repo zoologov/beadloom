@@ -374,8 +374,9 @@ def _serialize_node_matcher(matcher: object) -> dict[str, object]:
 def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
     """Serialize a parsed Rule object to (rule_type, rule_json_dict).
 
-    Supports all 7 v3 rule types: DenyRule, RequireRule, CycleRule,
-    ImportBoundaryRule, ForbidEdgeRule, LayerRule, CardinalityRule.
+    Supports all v3 rule types: DenyRule, RequireRule, CycleRule,
+    ImportBoundaryRule, ForbidEdgeRule, LayerRule, CardinalityRule,
+    UnregisteredFeatureCandidateRule.
     """
     from beadloom.graph.rule_engine import (
         CardinalityRule,
@@ -385,6 +386,7 @@ def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
         ImportBoundaryRule,
         LayerRule,
         RequireRule,
+        UnregisteredFeatureCandidateRule,
     )
 
     rule_def: dict[str, object]
@@ -453,6 +455,15 @@ def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
         if rule.edge_kind is not None:
             rule_def["edge_kind"] = rule.edge_kind
         return ("forbid_edge", rule_def)
+
+    if isinstance(rule, UnregisteredFeatureCandidateRule):
+        rule_def = {
+            "for": _serialize_node_matcher(rule.for_matcher),
+            "min_symbols": rule.min_symbols,
+        }
+        if rule.exclude:
+            rule_def["exclude"] = list(rule.exclude)
+        return ("unregistered_feature_candidate", rule_def)
 
     # Should never happen with known Rule types, but guard against future additions.
     msg = f"Unknown rule type: {type(rule).__name__}"

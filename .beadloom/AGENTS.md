@@ -56,6 +56,7 @@
 - **no-dependency-cycles** (forbid_cycles): No circular depends_on chains
 - **architecture-layers** (layers): Services → application → domains → infrastructure — not reverse
 - **domain-size-limit** (cardinality): Domains should not have too many symbols
+- **unregistered-feature-candidate** (unknown): Substantial domain-only modules that model no feature (candidates)
 - **tui-no-direct-infra** (forbid_import): TUI must not import infrastructure directly
 - **onboarding-no-direct-infra** (forbid_import): Onboarding must not import infrastructure directly
 
