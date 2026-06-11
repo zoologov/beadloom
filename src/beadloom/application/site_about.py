@@ -1,3 +1,5 @@
+# beadloom:domain=application
+# beadloom:feature=site-generation
 """README -> VitePress About page transform (BDL-046 BEAD-01).
 
 :func:`render_about` rebases a README's Markdown link/image targets so they

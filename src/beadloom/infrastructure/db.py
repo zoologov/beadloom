@@ -1,6 +1,7 @@
 """SQLite database layer: connection management, schema, meta helpers."""
 
 # beadloom:domain=infrastructure
+# beadloom:component=db
 
 from __future__ import annotations
 

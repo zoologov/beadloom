@@ -1,6 +1,7 @@
 """Code symbol indexer: tree-sitter parsing and beadloom annotation extraction."""
 
 # beadloom:domain=context-oracle
+# beadloom:feature=code-indexer
 
 from __future__ import annotations
 

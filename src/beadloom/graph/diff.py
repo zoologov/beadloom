@@ -1,6 +1,7 @@
 """Graph delta: compare current graph YAML with state at a git ref."""
 
 # beadloom:domain=graph
+# beadloom:feature=graph-diff
 
 from __future__ import annotations
 

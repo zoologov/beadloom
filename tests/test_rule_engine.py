@@ -2812,14 +2812,15 @@ class TestEvaluateUnregisteredFeatureCandidateRules:
 
 
 class TestUnregisteredFeatureCandidateRealRepo:
-    """Run the lint against the real Beadloom index (BDL-051 dogfood).
+    """Run the (retired) sprawl-lint against the real Beadloom index (BDL-051 dogfood).
 
-    Slice 1 only asserts the lint SEES the onboarding sprawl as warns;
-    Slice 3 will re-model those modules into features. The build must NOT
-    fail from these warns (warn severity).
+    Slice 1 saw the onboarding modules as domain-only sprawl candidates; Slice 3b
+    (BEAD-14) re-modeled them into features (config-check, branch-protection,
+    agentic-flow-setup, ai-techwriter-setup). So they must now carry a
+    ``# beadloom:feature=`` annotation and NO LONGER be flagged as candidates.
     """
 
-    def test_flags_real_onboarding_candidates(self) -> None:
+    def test_remodeled_onboarding_modules_no_longer_candidates(self) -> None:
         import pathlib
 
         from beadloom.graph.rule_engine import (
@@ -2848,15 +2849,15 @@ class TestUnregisteredFeatureCandidateRealRepo:
             conn.close()
 
         flagged = {v.file_path for v in violations}
-        expected = {
+        remodeled = {
             "src/beadloom/onboarding/config_sync.py",
             "src/beadloom/onboarding/branch_protection.py",
             "src/beadloom/onboarding/agentic_flow_setup.py",
             "src/beadloom/onboarding/ai_techwriter_setup.py",
         }
-        # The lint must SEE each known onboarding sprawl candidate.
-        assert expected.issubset(flagged), f"missing: {expected - flagged}"
-        # All findings are advisory warns (never fail the build).
+        # Post-S3b: each re-modeled module is a feature now, so it is NOT a candidate.
+        assert flagged.isdisjoint(remodeled), f"still flagged: {flagged & remodeled}"
+        # Whatever (if anything) remains is still advisory warn (never fails the build).
         assert all(v.severity == "warn" for v in violations)
 
 

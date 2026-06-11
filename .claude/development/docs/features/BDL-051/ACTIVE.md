@@ -6,7 +6,7 @@
 
 ## Current Focus
 
-- **Phase:** S2 MERGED (PR #8). ai_agents domain live. S2+S4 MERGED. S3 EXPANDED (owner): component kind + COVERAGE-lint + classify-all. Now S3a (.7 dev: component + coverage-lint). POLICY: [skip ai-techwriter] on slice-PRs (per-slice agent ~15min — untenable); all docs in tech-writer .13. Reinforces BDL-052 (non-blocking).
+- **Phase:** S2 MERGED (PR #8). ai_agents domain live. S2+S4 MERGED. S3 EXPANDED (owner): component kind + COVERAGE-lint + classify-all. S1/S2/S4/S3a MERGED. Now S3b (.14 dev: classify all 49 — site→A, tui→C). POLICY: [skip ai-techwriter] on slice-PRs (per-slice agent ~15min — untenable); all docs in tech-writer .13. Reinforces BDL-052 (non-blocking).
 - **Branch:** `features/BDL-051` (trunk-based; each slice is its own PR via ci.yml).
 - **Coordinator:** main loop (multi-agent).
 - **Parent:** `beadloom-mukc`
@@ -24,9 +24,9 @@
 | beadloom-mukc.7 | dev — S3a component kind + coverage-lint + exempt | impl complete (full ci rc0); ready for test .8 |
 | beadloom-mukc.8 | test — S3a | ✓ done |
 | beadloom-mukc.9 | review — S3a | ✓ done (PASS-WITH-FIXES; major fixed .17) |
-| beadloom-mukc.14 | dev — S3b classify ALL modules + nodes + SPEC skeletons | blocked ← 9 |
-| beadloom-mukc.15 | test — S3b | blocked ← 14 |
-| beadloom-mukc.16 | review — S3b | blocked ← 15 |
+| beadloom-mukc.14 | dev — S3b classify ALL modules + nodes + SPEC skeletons | impl complete (full ci rc0; coverage-lint 0 + promoted to error); ready for test .15 |
+| beadloom-mukc.15 | test — S3b | ✓ done |
+| beadloom-mukc.16 | review — S3b | ✓ done (PASS; guarantee enforced) |
 | beadloom-mukc.10 | dev — S4 ACTIVE-table fix + adopt | ✓ done |
 | beadloom-mukc.11 | test — S4 | ✓ done (found+fixed pipe bug) |
 | beadloom-mukc.12 | review — S4 | ✓ done (PASS-WITH-FIXES; newline major fixed) |

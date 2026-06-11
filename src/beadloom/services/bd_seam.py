@@ -1,6 +1,6 @@
-"""Mockable seam over the ``bd`` (beads) CLI.
-
 # beadloom:service=mcp-server
+# beadloom:component=bd-seam
+"""Mockable seam over the ``bd`` (beads) CLI.
 
 The MCP process-tools (``task_init`` / ``complete_bead`` / ``checkpoint``)
 drive the beads issue tracker. Rather than scatter ``subprocess`` calls across

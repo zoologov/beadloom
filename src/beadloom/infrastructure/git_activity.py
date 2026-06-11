@@ -5,6 +5,7 @@ changed files to their closest source directory (node).
 """
 
 # beadloom:domain=infrastructure
+# beadloom:component=git-activity
 
 from __future__ import annotations
 

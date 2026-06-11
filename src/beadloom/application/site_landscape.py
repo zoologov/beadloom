@@ -1,3 +1,5 @@
+# beadloom:domain=application
+# beadloom:feature=site-generation
 """Showcase B — the 🌟 cross-repo landscape map (BDL-040 BEAD-03).
 
 Builds the landscape *data* — a deterministic, JSON-safe dict of nodes

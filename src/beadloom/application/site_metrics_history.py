@@ -1,3 +1,5 @@
+# beadloom:domain=application
+# beadloom:feature=site-generation
 """Metrics-history append-store for honest dashboard trends (BDL-041 F4.4).
 
 A tiny additive append-log of real metric points persisted to

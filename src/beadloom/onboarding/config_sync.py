@@ -1,4 +1,5 @@
 # beadloom:domain=onboarding
+# beadloom:feature=config-check
 """AgentConfigAsCode — drift detection for generated agent-config artifacts.
 
 Beadloom's ``setup-rules --refresh`` generator owns three classes of

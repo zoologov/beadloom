@@ -254,6 +254,40 @@ class TestCoverageClassificationMatrix:
         # The module is NOT covered just by living under the domain directory.
         assert "src/beadloom/graph/under_dir.py" in {v.file_path for v in violations}
 
+    def test_service_directory_source_covers_modules_under_it(
+        self, mem_db: sqlite3.Connection, tmp_path: Path
+    ) -> None:
+        """A *service* node whose `source` is a directory covers every module under it.
+
+        Owner choice (BDL-051 / BEAD-14): the `tui` service node covers the whole
+        `src/beadloom/tui/` tree as one node (no per-widget nodes). A directory
+        `source` on a service therefore covers contained modules, while a *domain*
+        directory source does NOT (coarse ownership is not coverage).
+        """
+        mem_db.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("tui", "service", "tui", "src/beadloom/tui/"),
+        )
+        _insert_symbol(mem_db, "src/beadloom/tui/widgets/status_bar.py", "fn", {})
+        violations = evaluate_module_coverage_rules(mem_db, [_mc_rule()], project_root=tmp_path)
+        assert "src/beadloom/tui/widgets/status_bar.py" not in {v.file_path for v in violations}
+
+    def test_root_service_directory_source_does_not_cover_everything(
+        self, mem_db: sqlite3.Connection, tmp_path: Path
+    ) -> None:
+        """The root `beadloom` service (source == source_root) must NOT cover the tree.
+
+        Otherwise the whole lint is trivially satisfied. Only sub-tree service /
+        feature / component directory sources count as coverage.
+        """
+        mem_db.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+            ("beadloom", "service", "root", "src/beadloom/"),
+        )
+        _insert_symbol(mem_db, "src/beadloom/graph/orphan.py", "fn", {"domain": "graph"})
+        violations = evaluate_module_coverage_rules(mem_db, [_mc_rule()], project_root=tmp_path)
+        assert "src/beadloom/graph/orphan.py" in {v.file_path for v in violations}
+
     def test_source_root_scopes_evaluation(
         self, mem_db: sqlite3.Connection, tmp_path: Path
     ) -> None:
@@ -453,21 +487,45 @@ class TestExemptGlobNuances:
 # ---------------------------------------------------------------------------
 
 
-class TestWarnNotFail:
-    def test_many_findings_all_warn_never_error(
-        self, mem_db: sqlite3.Connection, tmp_path: Path
+class TestSeverityIsHonored:
+    @pytest.mark.parametrize("severity", ["warn", "error"])
+    def test_findings_carry_the_rule_severity(
+        self, mem_db: sqlite3.Connection, tmp_path: Path, severity: str
     ) -> None:
-        """Even with many uncovered modules, every finding is severity warn."""
+        """Every finding carries the rule's configured severity (warn OR error)."""
         for n in range(20):
             _insert_symbol(mem_db, f"src/beadloom/graph/mod_{n}.py", "fn", {"domain": "graph"})
-        violations = evaluate_all(mem_db, [_mc_rule()], project_root=tmp_path)
+        violations = evaluate_all(mem_db, [_mc_rule(severity=severity)], project_root=tmp_path)
         mc = [v for v in violations if v.rule_type == "module_coverage"]
         assert len(mc) == 20
-        assert all(v.severity == "warn" for v in mc)
-        assert not any(v.severity == "error" for v in mc)
+        assert all(v.severity == severity for v in mc)
 
-    def test_real_repo_lint_strict_exits_zero_despite_flagged(self) -> None:
-        """`lint --strict` over the live repo exits 0 (module-coverage is warn)."""
+
+class TestRealRepoCoveragePromoted:
+    """BDL-051 S3b / BEAD-14: every module is classified, so the rule is `error`."""
+
+    def test_live_repo_module_coverage_rule_is_error(self) -> None:
+        """The repo's `module-coverage` rule has been PROMOTED from warn to error."""
+        rules = load_rules(Path.cwd() / ".beadloom" / "_graph" / "rules.yml")
+        mc = [r for r in rules if isinstance(r, ModuleCoverageRule)]
+        assert len(mc) == 1
+        assert mc[0].severity == "error"
+
+    def test_live_repo_has_zero_module_coverage_findings(self) -> None:
+        """`module-coverage` reports ZERO findings over the live src tree (no shadow code)."""
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["lint", "--format", "json", "--project", str(Path.cwd()), "--no-reindex"],
+        )
+        assert result.exit_code in (0, 1), result.output
+        payload = json.loads(result.output)
+        findings = payload["violations"]
+        coverage = [f for f in findings if f.get("rule_name") == "module-coverage"]
+        assert coverage == [], coverage
+
+    def test_real_repo_lint_strict_exits_zero(self) -> None:
+        """`lint --strict` over the live repo exits 0 — coverage clean despite error severity."""
         runner = CliRunner()
         result = runner.invoke(
             main, ["lint", "--strict", "--project", str(Path.cwd()), "--no-reindex"]
@@ -586,13 +644,17 @@ class TestUnregisteredFeatureCandidateRetired:
         assert "UnregisteredFeatureCandidateRule" not in type_names
 
     def test_real_rules_yml_has_module_coverage_rule(self) -> None:
-        """The successor module-coverage rule IS present in the real rules.yml."""
+        """The successor module-coverage rule IS present in the real rules.yml.
+
+        Post-S3b (BEAD-14): every module is classified, so the rule has been
+        PROMOTED from warn to error (any future shadow module fails CI).
+        """
         rules_path = Path.cwd() / ".beadloom" / "_graph" / "rules.yml"
         rules = load_rules(rules_path)
         mc = [r for r in rules if isinstance(r, ModuleCoverageRule)]
         assert len(mc) == 1
         assert mc[0].name == "module-coverage"
-        assert mc[0].severity == "warn"
+        assert mc[0].severity == "error"
         # The minimally-seeded exempt list is visible (not a silent escape hatch).
         assert "**/__init__.py" in mc[0].exempt
 
@@ -603,8 +665,8 @@ class TestUnregisteredFeatureCandidateRetired:
 
 
 class TestRealRepoCoverageGuard:
-    """Until S3b classifies them, known shadow modules stay flagged — a guard
-    that the coverage lint keeps its teeth (no silent regression to 0 findings)."""
+    """Post-S3b (BEAD-14): every module is classified, so the live tree has ZERO
+    coverage findings. The formerly-shadow modules are now covered by a node."""
 
     def _real_coverage_findings(self) -> set[str]:
         runner = CliRunner()
@@ -620,17 +682,17 @@ class TestRealRepoCoverageGuard:
                 flagged.add(parts[3])
         return flagged
 
-    def test_known_shadow_modules_still_flagged(self) -> None:
-        """The expected shadow modules remain flagged (regression guard for S3b)."""
+    def test_formerly_shadow_modules_now_covered(self) -> None:
+        """The modules classified in S3b are no longer flagged (they have nodes now)."""
         flagged = self._real_coverage_findings()
-        for shadow in (
+        for covered in (
             "src/beadloom/graph/loader.py",
             "src/beadloom/infrastructure/db.py",
             "src/beadloom/doc_sync/engine.py",
         ):
-            assert shadow in flagged, f"{shadow} should still be flagged until S3b"
+            assert covered not in flagged, f"{covered} should be covered post-S3b"
 
-    def test_coverage_lint_still_has_findings(self) -> None:
-        """The coverage lint is not silently disabled — it still reports findings."""
+    def test_coverage_lint_reports_no_findings(self) -> None:
+        """Every src module is classified — the coverage lint reports zero findings."""
         flagged = self._real_coverage_findings()
-        assert len(flagged) > 0
+        assert flagged == set(), flagged

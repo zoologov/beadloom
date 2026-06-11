@@ -1,6 +1,7 @@
 """API route extraction: tree-sitter AST + regex fallback for 12 frameworks."""
 
 # beadloom:domain=context-oracle
+# beadloom:feature=route-extraction
 
 from __future__ import annotations
 

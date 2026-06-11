@@ -1,3 +1,5 @@
+# beadloom:domain=application
+# beadloom:feature=site-generation
 """Generation-time Mermaid validity guard (BDL-041 F4.4 BEAD-01).
 
 A *targeted structural* validator — NOT a full Mermaid parser — that rejects the

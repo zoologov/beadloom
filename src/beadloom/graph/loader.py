@@ -5,6 +5,7 @@ Reads ``.beadloom/_graph/*.yml`` files and populates the ``nodes`` and
 """
 
 # beadloom:domain=graph
+# beadloom:component=graph-loader
 
 from __future__ import annotations
 
