@@ -13,4 +13,20 @@ contributors, and an activity classification — by mapping each changed file to
 its closest source directory (node). Feeds the health dashboard and the
 landscape with an honest "where is the work happening" signal.
 
-> Component doc skeleton (BDL-051 S3b / BEAD-14). Tech-writer (BEAD-13) fills prose.
+## Public surface
+
+- `analyze_git_activity(project_root, source_dirs)` — run `git log` over ~90
+  days, parse it, map each changed file to its owning node by longest
+  source-prefix match, and return `{ref_id: GitActivity}`.
+- `GitActivity` — frozen dataclass: `commits_30d`, `commits_90d`,
+  `last_commit_date`, `top_contributors`, `activity_level`
+  (`hot` >20/30d, `warm` 5–20, `cold` 1–4, `dormant` 0/90d).
+
+## Collaborators
+
+Run by `reindex` (application layer), which stores the result in `nodes.extra`.
+That `activity` then surfaces in the context bundle (`builder`), the debt
+report, the metrics dashboard, and the landscape. Reads git via subprocess
+only; no network.
+
+> Component doc (BDL-051). Public surface verified against `git_activity.py`.

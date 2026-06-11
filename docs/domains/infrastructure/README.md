@@ -6,6 +6,15 @@ Domain-agnostic SQLite database layer, health metrics, and git activity analysis
 > live in the [application](../application/README.md) layer, not here, so that
 > `infrastructure` never imports a domain (the DDD Dependency Rule).
 
+## Components
+
+Internal building blocks, each with a `DOC.md`:
+
+- **[DB](components/db/DOC.md)** — the domain-agnostic SQLite layer (connection, schema, migrations, `meta`).
+- **[Health](components/health/DOC.md)** — health snapshots + trend computation.
+- **[Git Activity](components/git-activity/DOC.md)** — per-node `git log` activity metrics.
+- **[MCP Tools](components/mcp-tools/DOC.md)** — the canonical MCP tool-name catalog.
+
 ## Specification
 
 ### Modules

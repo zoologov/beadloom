@@ -14,4 +14,25 @@ derivation, the `ContractVerdict` enum, and `reconcile_contracts` (which
 `federation.py` delegates to). Promotes the contract out of the edge-buried
 `extra.contract` blob into a first-class object computed at the federation hub.
 
-> Component doc skeleton (BDL-051 S3b / BEAD-14). Tech-writer (BEAD-13) fills prose.
+## Public surface
+
+- `reconcile_contracts(edges)` — group AMQP + GraphQL contract-bearing edges
+  into first-class `Contract`s by key, attaching the producer `exposed` surface
+  and consumer `references`.
+- `classify(contract)` — derive the contract-level `ContractVerdict`.
+- `contract_key(payload)` — the protocol-prefixed, language-neutral key
+  (`amqp:<exchange>/<routing>:<message_type>`, `graphql:<schema>`).
+- `cross_landscape_keys(edges)` / `edge_group_key(...)` — grouping helpers for
+  landscape-scoped reconciliation.
+- `Contract` / `ContractEndpoint` — the model (with `Contract.to_report_dict`
+  for projecting back to the F1 flat shape).
+- `ContractVerdict` — the contract-level intent-vs-reality enum.
+
+## Collaborators
+
+`federation.py` delegates all contract reconciliation + classification here.
+Consumes `produces` / `consumes` edges (and their `extra.contract` payloads)
+from the graph; the verdicts feed the federation gate and the landscape map.
+See the [federation SPEC](../../features/federation/SPEC.md).
+
+> Component doc (BDL-051). Public surface verified against `contracts.py`.
