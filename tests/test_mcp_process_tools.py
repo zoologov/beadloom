@@ -878,6 +878,228 @@ class TestCheckpointHardening:
 
 
 # ---------------------------------------------------------------------------
+# BDL-051 BEAD-10: ACTIVE.md bead-status TABLE maintenance
+# ---------------------------------------------------------------------------
+
+
+_ACTIVE_TABLE = """# ACTIVE: EPIC-1
+
+## Bead status
+
+| Bead | Role | Status |
+|------|------|--------|
+| beadloom-mukc.1 | dev — first | in progress |
+| beadloom-mukc.10 | dev — tenth | in progress |
+| beadloom-mukc.2 | test — second | ✓ done |
+
+## Progress
+"""
+
+
+class TestSetActiveTableStatus:
+    def test_flips_matching_row_status(self, tmp_path: Path) -> None:
+        from beadloom.services.mcp_server import _set_active_table_status
+
+        active = tmp_path / "ACTIVE.md"
+        active.write_text(_ACTIVE_TABLE, encoding="utf-8")
+        ok = _set_active_table_status(active, "beadloom-mukc.10", "✓ done")
+        assert ok is True
+        text = active.read_text(encoding="utf-8")
+        assert "| beadloom-mukc.10 | dev — tenth | ✓ done |" in text
+        # Other rows are preserved untouched.
+        assert "| beadloom-mukc.1 | dev — first | in progress |" in text
+        assert "| beadloom-mukc.2 | test — second | ✓ done |" in text
+
+    def test_bead_id_is_token_matched_not_prefix(self, tmp_path: Path) -> None:
+        """`.1` must not match `.10` — the row for `.1` stays untouched when we
+        flip `.10`, and flipping `.1` does not touch `.10`."""
+        from beadloom.services.mcp_server import _set_active_table_status
+
+        active = tmp_path / "ACTIVE.md"
+        active.write_text(_ACTIVE_TABLE, encoding="utf-8")
+        ok = _set_active_table_status(active, "beadloom-mukc.1", "✓ done")
+        assert ok is True
+        text = active.read_text(encoding="utf-8")
+        assert "| beadloom-mukc.1 | dev — first | ✓ done |" in text
+        # `.10` is left in progress (NOT collaterally flipped).
+        assert "| beadloom-mukc.10 | dev — tenth | in progress |" in text
+
+    def test_status_cell_with_extra_prose_replaced_cleanly(
+        self, tmp_path: Path
+    ) -> None:
+        from beadloom.services.mcp_server import _set_active_table_status
+
+        active = tmp_path / "ACTIVE.md"
+        active.write_text(
+            "| Bead | Role | Status |\n"
+            "|------|------|--------|\n"
+            "| bd-x | dev | in progress — blocked on review feedback |\n",
+            encoding="utf-8",
+        )
+        ok = _set_active_table_status(active, "bd-x", "✓ done")
+        assert ok is True
+        assert "| bd-x | dev | ✓ done |" in active.read_text(encoding="utf-8")
+
+    def test_missing_file_returns_false(self, tmp_path: Path) -> None:
+        from beadloom.services.mcp_server import _set_active_table_status
+
+        ok = _set_active_table_status(tmp_path / "nope.md", "bd-x", "✓ done")
+        assert ok is False
+
+    def test_no_table_returns_false_and_unchanged(self, tmp_path: Path) -> None:
+        from beadloom.services.mcp_server import _set_active_table_status
+
+        active = tmp_path / "ACTIVE.md"
+        body = "# ACTIVE\n\nNo table here, just prose.\n"
+        active.write_text(body, encoding="utf-8")
+        ok = _set_active_table_status(active, "bd-x", "✓ done")
+        assert ok is False
+        assert active.read_text(encoding="utf-8") == body
+
+    def test_no_matching_row_returns_false_and_unchanged(
+        self, tmp_path: Path
+    ) -> None:
+        from beadloom.services.mcp_server import _set_active_table_status
+
+        active = tmp_path / "ACTIVE.md"
+        active.write_text(_ACTIVE_TABLE, encoding="utf-8")
+        before = active.read_text(encoding="utf-8")
+        ok = _set_active_table_status(active, "beadloom-mukc.999", "✓ done")
+        assert ok is False
+        assert active.read_text(encoding="utf-8") == before
+
+
+def _active_with_table(project: Path, epic: str, bead: str) -> Path:
+    feat = project / ".claude" / "development" / "docs" / "features" / epic
+    feat.mkdir(parents=True, exist_ok=True)
+    active = feat / "ACTIVE.md"
+    active.write_text(
+        "| Bead | Role | Status |\n"
+        "|------|------|--------|\n"
+        f"| {bead} | dev | in progress |\n"
+        "| other-bead | test | in progress |\n",
+        encoding="utf-8",
+    )
+    return active
+
+
+class TestCompleteBeadActiveTable:
+    def test_pass_flips_row_to_done(self, project: Path) -> None:
+        import json
+
+        from beadloom.application.gate import GateResult, GateStep
+        from beadloom.services.mcp_server import handle_complete_bead
+
+        active = _active_with_table(project, "EPIC-1", "bd-1")
+        green = GateResult(steps=[GateStep("lint", passed=True, summary="clean")])
+        show = json.dumps([{"id": "bd-1", "design": "epic: EPIC-1"}])
+        with patch(
+            "beadloom.services.mcp_server.run_ci_gate", return_value=green
+        ), patch("beadloom.services.mcp_server.run_bd") as run_bd:
+            run_bd.side_effect = [
+                BdResult(0, show, ""),  # bd show (locate ACTIVE)
+                BdResult(0, "next: bd-2\n", ""),  # bd close
+            ]
+            result = handle_complete_bead(project, bead="bd-1", run_tests=False)
+
+        assert result["status"] == "PASS"
+        text = active.read_text(encoding="utf-8")
+        assert "| bd-1 | dev | ✓ done |" in text
+        # The sibling row is untouched.
+        assert "| other-bead | test | in progress |" in text
+
+    def test_fail_leaves_table_alone(self, project: Path) -> None:
+        from beadloom.application.gate import GateResult, GateStep
+        from beadloom.services.mcp_server import handle_complete_bead
+
+        active = _active_with_table(project, "EPIC-1", "bd-1")
+        before = active.read_text(encoding="utf-8")
+        red = GateResult(
+            steps=[GateStep("lint", passed=False, findings=[{"why": "x"}], summary="1")]
+        )
+        with patch(
+            "beadloom.services.mcp_server.run_ci_gate", return_value=red
+        ), patch("beadloom.services.mcp_server.run_bd"):
+            result = handle_complete_bead(project, bead="bd-1", run_tests=False)
+
+        assert result["status"] == "FAIL"
+        assert active.read_text(encoding="utf-8") == before
+
+    def test_pass_with_no_active_table_still_passes(self, project: Path) -> None:
+        """A missing ACTIVE/table must NOT fail the tool nor the close."""
+        from beadloom.application.gate import GateResult, GateStep
+        from beadloom.services.mcp_server import handle_complete_bead
+
+        green = GateResult(steps=[GateStep("lint", passed=True)])
+        with patch(
+            "beadloom.services.mcp_server.run_ci_gate", return_value=green
+        ), patch("beadloom.services.mcp_server.run_bd") as run_bd:
+            run_bd.side_effect = [
+                BdResult(0, "[]", ""),  # bd show — no epic
+                BdResult(0, "next", ""),  # bd close
+            ]
+            result = handle_complete_bead(project, bead="bd-1", run_tests=False)
+
+        assert result["status"] == "PASS"
+
+
+class TestCheckpointActiveTable:
+    def test_checkpoint_sets_row_in_progress(self, project: Path) -> None:
+        import json
+
+        from beadloom.services.mcp_server import handle_checkpoint
+
+        active = _active_with_table(project, "EPIC-1", "bd-1")
+        # Pre-set the row to something else so we can see it flip.
+        active.write_text(
+            active.read_text(encoding="utf-8").replace(
+                "| bd-1 | dev | in progress |", "| bd-1 | dev | todo |"
+            ),
+            encoding="utf-8",
+        )
+        show = json.dumps([{"id": "bd-1", "design": "epic: EPIC-1"}])
+        with patch("beadloom.services.mcp_server.run_bd") as run_bd:
+            run_bd.side_effect = [BdResult(0, show, ""), BdResult(0, "", "")]
+            result = handle_checkpoint(project, bead="bd-1", text="working")
+
+        assert result["status"] == "OK"
+        assert "| bd-1 | dev | in progress |" in active.read_text(encoding="utf-8")
+
+    def test_checkpoint_explicit_status(self, project: Path) -> None:
+        import json
+
+        from beadloom.services.mcp_server import handle_checkpoint
+
+        active = _active_with_table(project, "EPIC-1", "bd-1")
+        show = json.dumps([{"id": "bd-1", "design": "epic: EPIC-1"}])
+        with patch("beadloom.services.mcp_server.run_bd") as run_bd:
+            run_bd.side_effect = [BdResult(0, show, ""), BdResult(0, "", "")]
+            result = handle_checkpoint(
+                project, bead="bd-1", text="blocked", status="blocked"
+            )
+
+        assert result["status"] == "OK"
+        assert "| bd-1 | dev | blocked |" in active.read_text(encoding="utf-8")
+
+    def test_checkpoint_no_table_is_best_effort(self, project: Path) -> None:
+        """The note-append path still works; table update silently no-ops."""
+        import json
+
+        from beadloom.services.mcp_server import handle_checkpoint
+
+        feat = project / ".claude" / "development" / "docs" / "features" / "EPIC-1"
+        feat.mkdir(parents=True)
+        (feat / "ACTIVE.md").write_text("# ACTIVE\n\n## Progress\n", encoding="utf-8")
+        show = json.dumps([{"id": "bd-1", "design": "epic: EPIC-1"}])
+        with patch("beadloom.services.mcp_server.run_bd") as run_bd:
+            run_bd.side_effect = [BdResult(0, show, ""), BdResult(0, "", "")]
+            result = handle_checkpoint(project, bead="bd-1", text="note")
+
+        assert result["status"] == "OK"
+        assert result["comment_added"] is True
+
+
+# ---------------------------------------------------------------------------
 # Hardening: dispatch routing for the 4 process-tools + project_root guards
 # ---------------------------------------------------------------------------
 
@@ -975,3 +1197,409 @@ class TestDispatchProcessTools:
                 _dispatch_tool(conn, "nope", {}, project_root=project)
         finally:
             conn.close()
+
+
+# ---------------------------------------------------------------------------
+# S4 BEAD-11: ACTIVE-table maintenance — real-file integration + safety
+#
+# These verify behaviour the dev's unit tests don't already cover: a realistic
+# full ACTIVE.md (heading + Bead-status table with prose-bearing Role/Status
+# cells + a Progress Log that also mentions bead ids in PROSE), exact byte
+# preservation of everything outside the one flipped row, idempotency, and the
+# pipe-in-status corruption edge (current behaviour pinned; see BUG comment).
+# ---------------------------------------------------------------------------
+
+
+# A realistic ACTIVE.md like the ones this repo uses for BDL-0xx epics: a real
+# `| Bead | Role | Status |` table mixing ✓ done / in progress / blocked, prose
+# inside Role/Status cells, plus a Progress Log that name-drops bead ids in
+# prose (which must NOT be mistaken for table rows).
+_REAL_ACTIVE = """# ACTIVE: BDL-051 — Beadloom governs itself
+
+> **Phase:** Development
+
+---
+
+## Bead status
+
+| Bead | Role | Status |
+|------|------|--------|
+| beadloom-mukc.1 | dev — graph discipline | ✓ done |
+| beadloom-mukc.10 | dev — ACTIVE table | in progress |
+| beadloom-mukc.11 | test — ACTIVE table | blocked on .10 |
+| beadloom-mukc.2 | review — ai_agents | in progress (needs rebase) |
+
+## Progress Log
+
+- 2026-06-11 — beadloom-mukc.10 landed the table helper; beadloom-mukc.11 next.
+- 2026-06-11 — note: beadloom-mukc.1 closed earlier today.
+
+## Notes
+
+Nothing | with a stray pipe in prose should ever be treated as a row.
+"""
+
+
+def _real_active(tmp_path: Path) -> Path:
+    active = tmp_path / "ACTIVE.md"
+    active.write_text(_REAL_ACTIVE, encoding="utf-8")
+    return active
+
+
+class TestActiveTableRealFileIntegration:
+    """A realistic full ACTIVE.md: only the one target row changes; the rest of
+    the file (headings, sibling rows, Progress Log, Notes) stays byte-for-byte."""
+
+    def test_flips_only_target_row_rest_byte_identical(self, tmp_path: Path) -> None:
+        from beadloom.services.mcp_server import _set_active_table_status
+
+        active = _real_active(tmp_path)
+        ok = _set_active_table_status(active, "beadloom-mukc.11", "✓ done")
+
+        assert ok is True
+        after = active.read_text(encoding="utf-8")
+        # Target row's status cell flipped (prose status replaced cleanly).
+        assert "| beadloom-mukc.11 | test — ACTIVE table | ✓ done |" in after
+        # Reconstruct the expected file: only that one line differs.
+        expected = _REAL_ACTIVE.replace(
+            "| beadloom-mukc.11 | test — ACTIVE table | blocked on .10 |",
+            "| beadloom-mukc.11 | test — ACTIVE table | ✓ done |",
+        )
+        assert after == expected
+
+    def test_sibling_rows_and_prose_untouched(self, tmp_path: Path) -> None:
+        from beadloom.services.mcp_server import _set_active_table_status
+
+        active = _real_active(tmp_path)
+        _set_active_table_status(active, "beadloom-mukc.10", "✓ done")
+        after = active.read_text(encoding="utf-8")
+
+        # Sibling table rows: byte-unchanged.
+        assert "| beadloom-mukc.1 | dev — graph discipline | ✓ done |" in after
+        assert "| beadloom-mukc.11 | test — ACTIVE table | blocked on .10 |" in after
+        assert "| beadloom-mukc.2 | review — ai_agents | in progress (needs rebase) |" in after
+        # Headings + Progress Log + Notes: untouched.
+        assert "# ACTIVE: BDL-051 — Beadloom governs itself" in after
+        assert "## Progress Log" in after
+        assert "## Notes" in after
+
+    def test_bead_id_in_progress_log_prose_not_mistaken_for_row(
+        self, tmp_path: Path
+    ) -> None:
+        """`beadloom-mukc.1` is name-dropped in the Progress Log; flipping its
+        table row must change ONLY the table row, leaving the prose lines and the
+        stray-pipe Notes line exactly as-is."""
+        from beadloom.services.mcp_server import _set_active_table_status
+
+        active = _real_active(tmp_path)
+        ok = _set_active_table_status(active, "beadloom-mukc.1", "✓ done")
+
+        assert ok is True
+        after = active.read_text(encoding="utf-8")
+        # Prose mentions are preserved verbatim.
+        assert (
+            "- 2026-06-11 — beadloom-mukc.10 landed the table helper;"
+            " beadloom-mukc.11 next." in after
+        )
+        assert "- 2026-06-11 — note: beadloom-mukc.1 closed earlier today." in after
+        # The stray-pipe prose line in Notes is not turned into a row.
+        assert (
+            "Nothing | with a stray pipe in prose should ever be treated as a row."
+            in after
+        )
+        # Only the .1 *table* row reflects the flip (it was already ✓ done, so the
+        # whole file is unchanged except for canonicalised spacing — assert equal).
+        assert after == _REAL_ACTIVE
+
+    @pytest.mark.parametrize(
+        ("target", "must_stay"),
+        [
+            ("beadloom-mukc.1", ("beadloom-mukc.10", "beadloom-mukc.11")),
+            ("beadloom-mukc.10", ("beadloom-mukc.1", "beadloom-mukc.11")),
+            ("beadloom-mukc.11", ("beadloom-mukc.1", "beadloom-mukc.10")),
+        ],
+    )
+    def test_similar_ids_only_exact_one_flips(
+        self, tmp_path: Path, target: str, must_stay: tuple[str, ...]
+    ) -> None:
+        """`.1` / `.10` / `.11` are distinct whole tokens — flipping one never
+        collaterally changes another's status cell."""
+        from beadloom.services.mcp_server import _set_active_table_status
+
+        active = _real_active(tmp_path)
+        # Capture each sibling's exact row line before the flip.
+        before_lines = {
+            other: next(
+                ln
+                for ln in _REAL_ACTIVE.splitlines()
+                if ln.strip().startswith(f"| {other} ")
+            )
+            for other in must_stay
+        }
+        ok = _set_active_table_status(active, target, "✓ DONE-MARKER")
+
+        assert ok is True
+        after = active.read_text(encoding="utf-8")
+        assert f"| {target} " in after and "✓ DONE-MARKER" in after
+        for other, line in before_lines.items():
+            assert line in after, f"{other} row must stay untouched"
+            assert "✓ DONE-MARKER" not in line
+
+    def test_idempotent_double_set_is_stable(self, tmp_path: Path) -> None:
+        """Setting the same status twice → second write is a stable no-change
+        (no duplicated cells / corruption)."""
+        from beadloom.services.mcp_server import _set_active_table_status
+
+        active = _real_active(tmp_path)
+        ok1 = _set_active_table_status(active, "beadloom-mukc.10", "✓ done")
+        first = active.read_text(encoding="utf-8")
+        ok2 = _set_active_table_status(active, "beadloom-mukc.10", "✓ done")
+        second = active.read_text(encoding="utf-8")
+
+        assert ok1 is True and ok2 is True
+        assert first == second
+        # Exactly one occurrence of the flipped row — no duplication.
+        assert second.count("| beadloom-mukc.10 | dev — ACTIVE table | ✓ done |") == 1
+
+    @pytest.mark.parametrize(
+        "status",
+        ["✓ done", "in progress", "blocked", "⏸ paused", "done — ✓ (90% cov)"],
+    )
+    def test_status_with_unicode_markdown_round_trips(
+        self, tmp_path: Path, status: str
+    ) -> None:
+        """Unicode/markdown status values land verbatim in the status cell and
+        survive a re-read (UTF-8 round-trip), with a 3-cell row preserved."""
+        from beadloom.services.mcp_server import _set_active_table_status
+
+        active = _real_active(tmp_path)
+        ok = _set_active_table_status(active, "beadloom-mukc.11", status)
+
+        assert ok is True
+        after = active.read_text(encoding="utf-8")
+        assert f"| beadloom-mukc.11 | test — ACTIVE table | {status} |" in after
+        # The row still has exactly three columns (two interior separators).
+        row = next(
+            ln for ln in after.splitlines() if "beadloom-mukc.11" in ln and "|" in ln
+        )
+        assert row.strip().count("|") == 4  # | a | b | c | → 4 pipes
+
+    def test_no_final_newline_file_does_not_grow_a_newline(
+        self, tmp_path: Path
+    ) -> None:
+        """A row on the last line without a trailing newline keeps no trailing
+        newline after the flip (EOL preserved)."""
+        from beadloom.services.mcp_server import _set_active_table_status
+
+        active = tmp_path / "ACTIVE.md"
+        active.write_text(
+            "| Bead | Role | Status |\n"
+            "|------|------|--------|\n"
+            "| bd-x | dev | todo |",  # no trailing newline
+            encoding="utf-8",
+        )
+        ok = _set_active_table_status(active, "bd-x", "✓ done")
+
+        assert ok is True
+        after = active.read_text(encoding="utf-8")
+        assert after.endswith("| bd-x | dev | ✓ done |")
+        assert not after.endswith("\n")
+
+
+    def test_write_failure_is_swallowed_returns_false(self, tmp_path: Path) -> None:
+        """If the write-back raises OSError (e.g. read-only FS), the helper does
+        not propagate — it returns False rather than crashing the tool."""
+        import pathlib
+
+        from beadloom.services.mcp_server import _set_active_table_status
+
+        active = _real_active(tmp_path)
+        orig = active.read_text(encoding="utf-8")
+        with patch.object(
+            pathlib.Path, "write_text", side_effect=OSError("read-only")
+        ):
+            ok = _set_active_table_status(active, "beadloom-mukc.10", "✓ done")
+
+        assert ok is False
+        # File content is left intact (the failed write changed nothing on disk).
+        assert active.read_text(encoding="utf-8") == orig
+
+
+class TestActiveTableStatusWithPipe:
+    """A status arg containing a `|` is a safety edge: the helper neither escapes
+    so the helper replaces any pipe in the status with "/" — the row stays a clean
+    3 cells and never gains an extra column. See BUG comment on the bead (fixed)."""
+
+    def test_pipe_in_status_is_escaped_not_injected(
+        self, tmp_path: Path
+    ) -> None:
+        from beadloom.services.mcp_server import (
+            _set_active_table_status,
+            _split_table_row,
+        )
+
+        active = tmp_path / "ACTIVE.md"
+        active.write_text(
+            "| Bead | Role | Status |\n"
+            "|------|------|--------|\n"
+            "| bd-x | dev | todo |\n",
+            encoding="utf-8",
+        )
+        ok = _set_active_table_status(active, "bd-x", "done | EXTRA")
+
+        assert ok is True
+        after = active.read_text(encoding="utf-8")
+        row = next(ln for ln in after.splitlines() if ln.startswith("| bd-x"))
+        cells = _split_table_row(row)
+        # FIXED: the pipe is replaced with "/" → the row stays 3 cells (no extra column).
+        assert cells is not None and len(cells) == 3
+        assert cells[0] == "bd-x" and cells[1] == "dev"
+        assert cells[2] == "done / EXTRA"
+
+    def test_newline_in_status_does_not_split_the_row(self, tmp_path: Path) -> None:
+        # A newline/CR/tab in a (user-supplied) status must not split the row
+        # across lines — whitespace is collapsed to single spaces.
+        from beadloom.services.mcp_server import (
+            _set_active_table_status,
+            _split_table_row,
+        )
+
+        active = tmp_path / "ACTIVE.md"
+        active.write_text(
+            "| Bead | Role | Status |\n"
+            "|------|------|--------|\n"
+            "| bd-x | dev | todo |\n"
+            "| bd-y | test | todo |\n",
+            encoding="utf-8",
+        )
+        ok = _set_active_table_status(active, "bd-x", "in\nprogress\r\nnow\t!")
+
+        assert ok is True
+        after = active.read_text(encoding="utf-8")
+        # Still exactly 4 lines (header + sep + 2 rows) — no row split.
+        assert len(after.splitlines()) == 4
+        row = next(ln for ln in after.splitlines() if ln.startswith("| bd-x"))
+        cells = _split_table_row(row)
+        assert cells is not None and len(cells) == 3
+        assert cells[2] == "in progress now !"
+        # The untouched row is byte-identical.
+        assert "| bd-y | test | todo |" in after
+
+
+class TestCompleteBeadActiveTableEndToEnd:
+    """complete_bead end-to-end via the public dispatch path (bd + gate mocked):
+    PASS flips the row + closes; FAIL leaves the row + does not close; a missing
+    ACTIVE still PASSes (best-effort)."""
+
+    def _epic_active(self, project: Path, bead: str) -> Path:
+        feat = project / ".claude" / "development" / "docs" / "features" / "EPIC-1"
+        feat.mkdir(parents=True, exist_ok=True)
+        active = feat / "ACTIVE.md"
+        active.write_text(
+            "# ACTIVE: EPIC-1\n\n## Bead status\n\n"
+            "| Bead | Role | Status |\n"
+            "|------|------|--------|\n"
+            f"| {bead} | dev | in progress |\n"
+            "| sibling-bead | test | in progress |\n\n"
+            "## Progress Log\n\n- kickoff\n",
+            encoding="utf-8",
+        )
+        return active
+
+    def test_pass_flips_row_and_closes(self, project: Path) -> None:
+        import json
+
+        from beadloom.application.gate import GateResult, GateStep
+        from beadloom.services.mcp_server import _dispatch_tool
+
+        active = self._epic_active(project, "bd-1")
+        before = active.read_text(encoding="utf-8")
+        green = GateResult(steps=[GateStep("lint", passed=True, summary="clean")])
+        show = json.dumps([{"id": "bd-1", "design": "epic: EPIC-1"}])
+        conn = _conn(project)
+        try:
+            with patch(
+                "beadloom.services.mcp_server.run_ci_gate", return_value=green
+            ), patch("beadloom.services.mcp_server.run_bd") as run_bd:
+                run_bd.side_effect = [
+                    BdResult(0, show, ""),  # bd show — locate ACTIVE
+                    BdResult(0, "next: bd-2\n", ""),  # bd close
+                ]
+                result = _dispatch_tool(
+                    conn,
+                    "complete_bead",
+                    {"bead": "bd-1", "run_tests": False},
+                    project_root=project,
+                )
+                # bd close WAS invoked (PASS implies the close happened).
+                close_calls = [
+                    c for c in run_bd.call_args_list if c.args[0][0] == "close"
+                ]
+        finally:
+            conn.close()
+
+        assert result["status"] == "PASS"
+        assert result["active_updated"] is True
+        assert len(close_calls) == 1
+        after = active.read_text(encoding="utf-8")
+        assert "| bd-1 | dev | ✓ done |" in after
+        assert "| sibling-bead | test | in progress |" in after
+        # Everything outside the flipped row is byte-identical.
+        assert after == before.replace(
+            "| bd-1 | dev | in progress |", "| bd-1 | dev | ✓ done |"
+        )
+
+    def test_fail_does_not_flip_and_does_not_close(self, project: Path) -> None:
+        from beadloom.application.gate import GateResult, GateStep
+        from beadloom.services.mcp_server import _dispatch_tool
+
+        active = self._epic_active(project, "bd-1")
+        before = active.read_text(encoding="utf-8")
+        red = GateResult(
+            steps=[GateStep("lint", passed=False, findings=[{"why": "x"}], summary="1")]
+        )
+        conn = _conn(project)
+        try:
+            with patch(
+                "beadloom.services.mcp_server.run_ci_gate", return_value=red
+            ), patch("beadloom.services.mcp_server.run_bd") as run_bd:
+                result = _dispatch_tool(
+                    conn,
+                    "complete_bead",
+                    {"bead": "bd-1", "run_tests": False},
+                    project_root=project,
+                )
+                # bd was never called on a red gate (no show, no close).
+                assert run_bd.call_count == 0
+        finally:
+            conn.close()
+
+        assert result["status"] == "FAIL"
+        assert active.read_text(encoding="utf-8") == before
+
+    def test_pass_with_no_active_still_passes_and_closes(self, project: Path) -> None:
+        """No epic ACTIVE at all → still PASS + close (active_updated False)."""
+        from beadloom.application.gate import GateResult, GateStep
+        from beadloom.services.mcp_server import _dispatch_tool
+
+        green = GateResult(steps=[GateStep("lint", passed=True)])
+        conn = _conn(project)
+        try:
+            with patch(
+                "beadloom.services.mcp_server.run_ci_gate", return_value=green
+            ), patch("beadloom.services.mcp_server.run_bd") as run_bd:
+                run_bd.side_effect = [
+                    BdResult(0, "[]", ""),  # bd show — no epic resolvable
+                    BdResult(0, "next", ""),  # bd close
+                ]
+                result = _dispatch_tool(
+                    conn,
+                    "complete_bead",
+                    {"bead": "bd-1", "run_tests": False},
+                    project_root=project,
+                )
+        finally:
+            conn.close()
+
+        assert result["status"] == "PASS"
+        assert result["active_updated"] is False

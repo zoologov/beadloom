@@ -6,7 +6,7 @@
 
 ## Current Focus
 
-- **Phase:** S1 MERGED (PR #7, main 35769d7). Next: S2 (ai_agents move). POLICY: [skip ai-techwriter] on slice-PRs (per-slice agent ~15min — untenable); all docs in tech-writer .13. Reinforces BDL-052 (non-blocking).
+- **Phase:** S2 MERGED (PR #8). ai_agents domain live. Next: S4 (ACTIVE-table fix, autonomous), then STOP at S3 (feature list sign-off). POLICY: [skip ai-techwriter] on slice-PRs (per-slice agent ~15min — untenable); all docs in tech-writer .13. Reinforces BDL-052 (non-blocking).
 - **Branch:** `features/BDL-051` (trunk-based; each slice is its own PR via ci.yml).
 - **Coordinator:** main loop (multi-agent).
 - **Parent:** `beadloom-mukc`
@@ -24,9 +24,9 @@
 | beadloom-mukc.7 | dev — S3 onboarding re-model + audit | blocked ← 3 |
 | beadloom-mukc.8 | test — S3 | blocked ← 7 |
 | beadloom-mukc.9 | review — S3 | blocked ← 8 |
-| beadloom-mukc.10 | dev — S4 ACTIVE-table fix + adopt | blocked ← 3 |
-| beadloom-mukc.11 | test — S4 | blocked ← 10 |
-| beadloom-mukc.12 | review — S4 | blocked ← 11 |
+| beadloom-mukc.10 | dev — S4 ACTIVE-table fix + adopt | ✓ done |
+| beadloom-mukc.11 | test — S4 | ✓ done (found+fixed pipe bug) |
+| beadloom-mukc.12 | review — S4 | ✓ done (PASS-WITH-FIXES; newline major fixed) |
 | beadloom-mukc.13 | tech-writer (epic close) | blocked ← 6,9,12 |
 
 ## Waves (trunk-based: one slice-PR at a time)

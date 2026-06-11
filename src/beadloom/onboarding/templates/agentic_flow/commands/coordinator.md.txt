@@ -93,6 +93,10 @@ Review wave:  after test
 Docs wave:    ONLY after review = OK
 ```
 
+### Drive deterministic steps through the process-tools
+
+For the deterministic, repeatable steps of the loop — scaffolding, per-bead context, checkpoints, completion — the coordinator SHOULD call the Beadloom MCP process-tools (`task_init` / `bead_context` / `checkpoint` / `complete_bead`) rather than hand-running the equivalent shell. In particular `checkpoint` and `complete_bead` maintain the epic's `ACTIVE.md` bead-status table by construction (`checkpoint` → row `in progress`; `complete_bead` PASS → row `✓ done`), so the table never drifts from `bd`. Honest boundary: orchestration (Agent-spawn, wave gating) stays main-loop — the process-tools cover the deterministic steps, not the spawning.
+
 ### Launching sub-agents (Agent tool, background)
 
 ALWAYS launch parallel agents with `run_in_background: true` so results go to files/bead-comments, not the parent context. The subagent already knows its role — the prompt only needs the bead id, context pointers, and the return contract:
