@@ -50,6 +50,18 @@ if TYPE_CHECKING:
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RULES_PATH = REPO_ROOT / ".beadloom" / "_graph" / "rules.yml"
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _built_repo_graph() -> None:
+    """Build the live repo graph DB once before the tests that query it.
+
+    The tests below run ``ctx``/``lint --project REPO_ROOT`` against the real
+    repo. A fresh CI checkout has no graph DB (it's gitignored and the ``tests``
+    job doesn't reindex), so those assertions fail with "node not found" unless
+    we build it here. ``reindex`` is deterministic + idempotent.
+    """
+    CliRunner().invoke(main, ["reindex", "--project", str(REPO_ROOT)])
 SERVICES_PATH = REPO_ROOT / ".beadloom" / "_graph" / "services.yml"
 
 
