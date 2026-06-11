@@ -4,19 +4,17 @@
 > the scaffolded files (CI wrapper, operator artifacts, this guide); do not
 > hand-edit them.
 
-<!-- TODO: tech-writer (BDL-051 .13) — full refresh to the BDL-049/050 model
-     (PR-triggered: runs on a PR to main, commits the refresh INTO the PR,
-     verdict ok/flagged/infra). The "push to main/master" prose below is the
-     pre-BDL-049 model and is stale. -->
-
-
-The **AI tech-writer** keeps your docs honest: on push to main/master (or on
-demand) it
-finds docs that have drifted from the code (`beadloom sync-check`), has a Goose
-agent (Qwen3.7-Plus) rewrite each drifted doc against the current code, proves
-freshness with Beadloom's own gate, and opens a **pull/merge request for human
-review**. It never auto-merges — `sync-check → 0` proves *freshness*, only a
-human proves *correctness*.
+The **AI tech-writer** keeps your docs honest: on every **pull/merge request to
+`main`/`master`** (or on demand via `workflow_dispatch`) it finds docs that have
+drifted from the code (`beadloom sync-check`), has a Goose agent rewrite each
+drifted doc against the current code, proves freshness with Beadloom's own gate
+(`beadloom ci`), and — on the PR path — **commits the refresh straight back into
+the PR branch** for human review (the manual path cuts a branch + opens a PR).
+Each run resolves to one verdict: `ok` (clean / no-op), `flagged` (the model ran
+but docs still aren't clean → check red, PR blocked), or `infra` (the agent
+never produced output → check stays green with a loud warning). It never
+auto-merges — `sync-check → 0` proves *freshness*, only a human proves
+*correctness*.
 
 ## What `setup-ai-techwriter` dropped into this repo
 

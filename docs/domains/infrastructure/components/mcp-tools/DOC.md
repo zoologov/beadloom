@@ -15,4 +15,19 @@ count can never drift from the registered count. Lives in `infrastructure` (the
 lowest layer) so both `services` and `onboarding` may depend on it without
 violating the layering rules.
 
-> Component doc skeleton (BDL-051 S3b / BEAD-14). Tech-writer (BEAD-13) fills prose.
+## Public surface
+
+- `MCP_TOOL_CATALOG` — the canonical ordered tuple of `McpToolDoc` entries
+  (currently 18 tools, each a `(name, description)` pair).
+- `mcp_tool_names()` — the tuple of tool names derived from the catalog.
+- `McpToolDoc` — a `NamedTuple` of `(name, description)` for one tool.
+
+## Collaborators
+
+The MCP server (`services/mcp_server.py`) builds full `mcp.Tool` objects (with
+input schemas) from this catalog; the onboarding AGENTS.md generator
+(`scanner.generate_agents_md`) enumerates the same list. A drift-guard test
+pins `mcp_tool_names()` to the live MCP `_TOOLS` registry, so the documented
+tool count can never diverge from the registered count.
+
+> Component doc (BDL-051). Public surface verified against `mcp_tools.py`.

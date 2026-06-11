@@ -6,7 +6,7 @@
 
 ## Current Focus
 
-- **Phase:** S2 MERGED (PR #8). ai_agents domain live. S2+S4 MERGED. S3 EXPANDED (owner): component kind + COVERAGE-lint + classify-all. S1/S2/S4/S3a MERGED. Now S3b (.14 dev: classify all 49 — site→A, tui→C). POLICY: [skip ai-techwriter] on slice-PRs (per-slice agent ~15min — untenable); all docs in tech-writer .13. Reinforces BDL-052 (non-blocking).
+- **Phase:** S2 MERGED (PR #8). ai_agents domain live. S2+S4 MERGED. S3 EXPANDED (owner): component kind + COVERAGE-lint + classify-all. EPIC COMPLETE — S1/S2/S3a/S3b/S4 all merged; tech-writer .13 done (filling SPEC/DOCs); all 17 beads + epic closed. Merging the .13 docs PR. POLICY: [skip ai-techwriter] on slice-PRs (per-slice agent ~15min — untenable); all docs in tech-writer .13. Reinforces BDL-052 (non-blocking).
 - **Branch:** `features/BDL-051` (trunk-based; each slice is its own PR via ci.yml).
 - **Coordinator:** main loop (multi-agent).
 - **Parent:** `beadloom-mukc`
@@ -17,20 +17,20 @@
 |------|------|--------|
 | beadloom-mukc.1 | dev — S1 def + sprawl lint | ✓ done |
 | beadloom-mukc.2 | test — S1 lint | ✓ done |
-| beadloom-mukc.3 | review — S1 | ✓ done (PASS-WITH-FIXES; 2 minor→S3/.13) |
-| beadloom-mukc.4 | dev — S2 ai_agents move + retire vendoring | in progress (impl complete; full ci rc0) |
-| beadloom-mukc.5 | test — S2 | ✓ done (found+fixed tools/ CI bug) |
-| beadloom-mukc.6 | review — S2 | ✓ done (PASS-WITH-FIXES; crit+major fixed) |
-| beadloom-mukc.7 | dev — S3a component kind + coverage-lint + exempt | impl complete (full ci rc0); ready for test .8 |
+| beadloom-mukc.3 | review — S1 | ✓ done |
+| beadloom-mukc.4 | dev — S2 ai_agents move + retire vendoring | ✓ done |
+| beadloom-mukc.5 | test — S2 | ✓ done |
+| beadloom-mukc.6 | review — S2 | ✓ done |
+| beadloom-mukc.7 | dev — S3a component kind + coverage-lint + exempt | ✓ done |
 | beadloom-mukc.8 | test — S3a | ✓ done |
-| beadloom-mukc.9 | review — S3a | ✓ done (PASS-WITH-FIXES; major fixed .17) |
-| beadloom-mukc.14 | dev — S3b classify ALL modules + nodes + SPEC skeletons | impl complete (full ci rc0; coverage-lint 0 + promoted to error); ready for test .15 |
+| beadloom-mukc.9 | review — S3a | ✓ done |
+| beadloom-mukc.14 | dev — S3b classify ALL modules + nodes + SPEC skeletons | ✓ done |
 | beadloom-mukc.15 | test — S3b | ✓ done |
-| beadloom-mukc.16 | review — S3b | ✓ done (PASS; guarantee enforced) |
+| beadloom-mukc.16 | review — S3b | ✓ done |
 | beadloom-mukc.10 | dev — S4 ACTIVE-table fix + adopt | ✓ done |
-| beadloom-mukc.11 | test — S4 | ✓ done (found+fixed pipe bug) |
-| beadloom-mukc.12 | review — S4 | ✓ done (PASS-WITH-FIXES; newline major fixed) |
-| beadloom-mukc.13 | tech-writer (epic close) | blocked ← 6,9,12 |
+| beadloom-mukc.11 | test — S4 | ✓ done |
+| beadloom-mukc.12 | review — S4 | ✓ done |
+| beadloom-mukc.13 | tech-writer (epic close) | ✓ done |
 
 ## Waves (trunk-based: one slice-PR at a time)
 
@@ -55,3 +55,5 @@ W1 (S1) `.1→.2→.3` → W2 (S2) `.4→.5→.6` → W3 (S3) `.7→.8→.9` →
 - 2026-06-11: S3 EXPANDED (owner decision): introduce `component` node kind + a COVERAGE-lint (every src module = node OR explicit exempt — no shadow code) + classify ALL ~80 modules. Split into S3a (.7/.8/.9 taxonomy+lint) + S3b (.14/.15/.16 classify-all). .13 tech-writer ← .16. RFC/PLAN updated. S2(#8)+S4(#9) merged.
 
 - 2026-06-11: **S3a / BEAD-07 dev impl complete (NOT committed).** TDD (RED→GREEN), 18 new tests (component kind ×3 + ModuleCoverage dataclass/parse/eval/serialize/severity ×15). (1) `component` added to `VALID_NODE_KINDS` (round-trips through loader→nodes table; nodes has NO kind CHECK since BDL-038 U1, so no DB migration for the kind). `# beadloom:component=` parses automatically (parse_annotations is generic key=value). (2) New `ModuleCoverageRule` (rule_type `module_coverage`, name `module-coverage`) SUPERSEDES `unregistered-feature-candidate` in rules.yml: a module under `source_root` with ≥`min_symbols` symbols is COVERED iff feature|component annotation OR path == a node's `source` (file-source, not dir) OR matches `exempt` glob; else WARN finding. Old UFC rule code/tests kept intact (no longer wired in rules.yml). (3) Exempt seeded minimal: `**/__init__.py`, onboarding/config_reader.py, onboarding/presets.py (visible in rules.yml; criterion documented). (4) `_serialize_rule` + rules-table rule_type CHECK extended (`module_coverage`); reindex round-trips. (5) `docs/guides/architecture-model.md`: `component` kind section + coverage-lint section + exempt criterion. On real repo: 49 modules flagged WARN; `lint --strict` rc0 (warn doesn't fail — S3b promotes to error). **Full `beadloom ci` rc0** (config-check + sync-update --all fixpoint after rule_engine.py/db.py/reindex.py edits). 3795 pytest pass, ruff+mypy clean. Handoff → .8 (test).
+
+- 2026-06-11: ALL beads + epic CLOSED (reconciled — earlier bd closes hadn't persisted across branch/merge; closed in dep order). tech-writer .13 filled 21 SPEC/DOC + architecture-model fixes + READMEs + CHANGELOG + ROADMAP (BDL-051 SHIPPED, speed→BDL-052). beadloom ci rc 0.

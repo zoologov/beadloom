@@ -2,6 +2,23 @@
 
 YAML format for describing the project architecture graph, with loader, diff engine, rule engine, import resolver, linter, snapshot storage, C4 architecture model mapping, and cross-repo federation.
 
+## Features and components
+
+Features (each with a `SPEC.md`):
+
+- **[Graph Diff](features/graph-diff/SPEC.md)** — graph delta engine vs a git ref / snapshot.
+- **[Rule Engine](features/rule-engine/SPEC.md)** — architecture-boundary lint (incl. `module-coverage`).
+- **[Import Resolver](features/import-resolver/SPEC.md)** — code-import → edge resolution.
+- **[C4 Diagrams](features/c4-diagrams/SPEC.md)** — graph → C4/Mermaid mapping.
+- **[Federation](features/federation/SPEC.md)** — cross-repo export + hub aggregation.
+- **[Snapshot](features/snapshot/SPEC.md)** — point-in-time graph snapshots + compare.
+
+Components (internal building blocks, each with a `DOC.md`):
+
+- **[Graph Loader](components/graph-loader/DOC.md)** — YAML → `nodes` / `edges` ingestion seam.
+- **[Contracts](components/contracts/DOC.md)** — first-class cross-service contract model.
+- **[SDL](components/sdl/DOC.md)** — dependency-free GraphQL SDL surface extractor.
+
 ## Specification
 
 ### File Location

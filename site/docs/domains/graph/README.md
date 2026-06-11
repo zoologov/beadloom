@@ -1,7 +1,7 @@
 <!-- beadloom:badge-start -->
 > ✅ **fresh**
 > 
-> last synced 2026-06-10T21:18:54.402746+00:00 · coverage 90% (`graph`)
+> last synced 2026-06-11T14:19:08.709748+00:00 · coverage 90% (`graph`)
 > 
 > _Validation by Beadloom `doc_sync` — same source as `sync-check`._
 <!-- beadloom:badge-end -->
@@ -9,6 +9,23 @@
 # Graph Domain
 
 YAML format for describing the project architecture graph, with loader, diff engine, rule engine, import resolver, linter, snapshot storage, C4 architecture model mapping, and cross-repo federation.
+
+## Features and components
+
+Features (each with a `SPEC.md`):
+
+- **[Graph Diff](features/graph-diff/SPEC.md)** — graph delta engine vs a git ref / snapshot.
+- **[Rule Engine](features/rule-engine/SPEC.md)** — architecture-boundary lint (incl. `module-coverage`).
+- **[Import Resolver](features/import-resolver/SPEC.md)** — code-import → edge resolution.
+- **[C4 Diagrams](features/c4-diagrams/SPEC.md)** — graph → C4/Mermaid mapping.
+- **[Federation](features/federation/SPEC.md)** — cross-repo export + hub aggregation.
+- **[Snapshot](features/snapshot/SPEC.md)** — point-in-time graph snapshots + compare.
+
+Components (internal building blocks, each with a `DOC.md`):
+
+- **[Graph Loader](components/graph-loader/DOC.md)** — YAML → `nodes` / `edges` ingestion seam.
+- **[Contracts](components/contracts/DOC.md)** — first-class cross-service contract model.
+- **[SDL](components/sdl/DOC.md)** — dependency-free GraphQL SDL surface extractor.
 
 ## Specification
 
@@ -246,4 +263,4 @@ Minimal, dependency-free GraphQL SDL surface extractor (F2). See the [federation
 
 ## Testing
 
-Tests: `tests/test_graph_loader.py`, `tests/test_cli_graph.py`, `tests/test_diff.py`, `tests/test_cli_diff.py`, `tests/test_rule_engine.py`, `tests/test_rule_severity.py`, `tests/test_cycle_rule.py`, `tests/test_import_boundary_rule.py`, `tests/test_linter.py`, `tests/test_cli_lint.py`, `tests/test_import_resolver.py`, `tests/test_import_scan.py`, `tests/test_symbol_diff_polish.py`, `tests/test_snapshot.py`, `tests/test_cli_snapshot.py`, `tests/test_c4.py`, `tests/test_graph_federation.py`, `tests/test_lifecycle_rules.py`, `tests/test_export.py`, `tests/test_federate.py`, `tests/test_federate_roundtrip_db.py`, `tests/test_graph_contracts.py`
+Tests: `tests/test_graph_loader.py`, `tests/test_cli_graph.py`, `tests/test_diff.py`, `tests/test_diff_enhanced.py`, `tests/test_cli_diff.py`, `tests/test_rule_engine.py`, `tests/test_rule_severity.py`, `tests/test_cycle_rule.py`, `tests/test_import_boundary_rule.py`, `tests/test_linter.py`, `tests/test_cli_lint.py`, `tests/test_import_resolver.py`, `tests/test_import_scan.py`, `tests/test_symbol_diff_polish.py`, `tests/test_snapshot.py`, `tests/test_cli_snapshot.py`, `tests/test_c4.py`, `tests/test_graph_federation.py`, `tests/test_graph_contracts.py`, `tests/test_graph_sdl.py`, `tests/test_lifecycle_rules.py`, `tests/test_export.py`, `tests/test_federate.py`, `tests/test_federate_roundtrip_db.py`

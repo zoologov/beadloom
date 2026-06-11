@@ -1,7 +1,7 @@
 <!-- beadloom:badge-start -->
 > ✅ **fresh**
 > 
-> last synced 2026-06-10T21:18:54.402746+00:00 · coverage 50% (`doc-sync`)
+> last synced 2026-06-11T14:19:08.709748+00:00 · coverage 50% (`doc-sync`)
 > 
 > _Validation by Beadloom `doc_sync` — same source as `sync-check`._
 <!-- beadloom:badge-end -->
@@ -60,11 +60,16 @@ class SyncPair:
 - **doc_indexer.py** -- Markdown scanning, chunking by H2 headings, section classification, and SQLite population
 - **audit.py** -- Documentation audit: fact registry, comparator, and audit facade for detecting stale numeric facts
 - **scanner.py** -- Document scanner: keyword-proximity extraction of numeric fact mentions from markdown files
-- **cli.py** (in `services/cli.py`) -- `beadloom sync-check` CLI command with `--porcelain`, `--json`, `--report`, `--ref`, `--since GIT_REF` options
+- **cli.py** (in `services/cli.py`) -- `beadloom sync-check` CLI command with `--porcelain`, `--json`, `--report`, `--ref`, `--since GIT_REF` options; `beadloom sync-update` for non-interactive re-baselining; `beadloom install-hooks` for pre-commit hook installation
 
 ### Features
 
+- **[Sync Check](features/sync-check/SPEC.md)** -- The doc-code synchronization engine (`beadloom sync-check` / `sync-update`).
 - **[Docs Audit](features/docs-audit/SPEC.md)** -- Zero-config meta-doc staleness detection via keyword-proximity matching. CLI: `beadloom docs audit`.
+
+### Components
+
+- **[Doc Indexer](components/doc-indexer/DOC.md)** -- Markdown scan + chunk + `docs`/`chunks` population; the doc half of every sync-check pair.
 
 ### Git Hook Integration
 
@@ -123,6 +128,30 @@ beadloom sync-check [--porcelain] [--json] [--report] [--ref REF_ID] [--since GI
 | `--project` | Project root (default: current directory) |
 
 Exit codes: `0` = all ok, `1` = error, `2` = stale pairs found.
+
+### CLI (`beadloom sync-update`)
+
+```
+beadloom sync-update [REF_ID] [--check] [--yes|-y] [--all] [--project DIR]
+```
+
+Show sync status and update docs for a ref_id. In interactive mode (default), displays stale pairs and opens each stale doc in `$EDITOR` for manual correction, then marks them synced via `mark_synced`. In non-interactive mode (`--yes`), delegates to `_mark_synced_noninteractive` which calls `mark_synced_by_ref` to re-baseline hashes without prompting.
+
+| Argument/Flag | Description |
+|---------------|----------|
+| `REF_ID` | Optional positional argument; the ref to update. Required unless `--all` is used. |
+| `--check` | Only show status, don't open editor. |
+| `--yes` / `-y` | Non-interactive: re-baseline freshness without an editor or prompt. |
+| `--all` | With `--yes`: re-baseline every currently-stale ref (for the fixpoint loop). Requires `--yes`; mutually exclusive with an explicit `REF_ID`. |
+| `--project` | Project root (default: current directory). |
+
+### CLI (`beadloom install-hooks`)
+
+```
+beadloom install-hooks [--mode {warn,block}] [--remove] [--project DIR]
+```
+
+Installs or removes a pre-commit hook that runs `beadloom sync-check` automatically. In `warn` mode (default), the hook prints stale status but does not block the commit. In `block` mode, the hook exits non-zero on stale docs, preventing the commit. The `--remove` flag deletes the installed hook.
 
 ## Testing
 
