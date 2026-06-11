@@ -64,6 +64,17 @@ rules:
       for: { kind: domain }
       max_symbols: 200
 
+  - name: unregistered-feature-candidate
+    description: "Substantial domain-only modules that model no feature (candidates)"
+    severity: warn
+    unregistered_feature_candidate:
+      for: { kind: domain }
+      min_symbols: 5
+      # Accepted domain-level plumbing (listed in the domain README, no SPEC).
+      exclude:
+        - "**/onboarding/config_reader.py"
+        - "**/onboarding/presets.py"
+
   - name: tui-no-direct-infra
     description: "TUI must not import infrastructure directly"
     forbid_import:

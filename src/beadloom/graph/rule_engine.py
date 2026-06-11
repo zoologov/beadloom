@@ -178,6 +178,32 @@ class CardinalityRule:
     severity: str = "warn"
 
 
+@dataclass(frozen=True)
+class UnregisteredFeatureCandidateRule:
+    """Flag substantial domain-only modules that model no feature (BDL-051 S1).
+
+    For each node matching ``for_matcher`` (typically ``kind: domain``), groups
+    indexed ``code_symbols`` rows by ``file_path`` and inspects each file's
+    ``annotations`` JSON. A file is a *candidate unregistered feature* when:
+
+    - its annotations carry a ``domain`` key equal to the matched node's
+      ``ref_id`` (it is attributed to this domain),
+    - its annotations carry **no** ``feature`` key (it models no feature), and
+    - its indexed-symbol count is ``>= min_symbols`` (it is substantial).
+
+    Findings are advisory (``severity: warn``): they name a modeling candidate,
+    they do not decide it. Known domain-level plumbing can be silenced via
+    ``exclude`` (a tuple of ``fnmatch`` file-path globs).
+    """
+
+    name: str
+    description: str
+    for_matcher: NodeMatcher
+    min_symbols: int = 5
+    exclude: tuple[str, ...] = ()
+    severity: str = "warn"
+
+
 Rule = (
     DenyRule
     | RequireRule
@@ -186,6 +212,7 @@ Rule = (
     | ForbidEdgeRule
     | LayerRule
     | CardinalityRule
+    | UnregisteredFeatureCandidateRule
 )
 
 
@@ -599,6 +626,58 @@ def _parse_check_rule(
     )
 
 
+def _parse_unregistered_feature_candidate_rule(
+    name: str,
+    description: str,
+    data: dict[str, object],
+    *,
+    severity: str = "warn",
+) -> UnregisteredFeatureCandidateRule:
+    """Parse the 'unregistered_feature_candidate' block of a rule.
+
+    YAML example::
+
+        - name: unregistered-feature-candidate
+          unregistered_feature_candidate:
+            for: { kind: domain }
+            min_symbols: 5
+            exclude:
+              - "**/config_reader.py"
+          severity: warn
+    """
+    for_data = data.get("for")
+    if not isinstance(for_data, dict):
+        msg = f"Rule '{name}': unregistered_feature_candidate.for must be a mapping"
+        raise ValueError(msg)
+
+    for_matcher = _parse_node_matcher(
+        for_data, f"Rule '{name}' unregistered_feature_candidate.for"
+    )
+
+    min_symbols_raw = data.get("min_symbols", 5)
+    min_symbols = int(min_symbols_raw)  # type: ignore[call-overload]
+    if min_symbols < 0:
+        msg = f"Rule '{name}': unregistered_feature_candidate.min_symbols must be non-negative"
+        raise ValueError(msg)
+
+    exclude_raw = data.get("exclude", [])
+    if exclude_raw is None:
+        exclude_raw = []
+    if not isinstance(exclude_raw, list):
+        msg = f"Rule '{name}': unregistered_feature_candidate.exclude must be a list"
+        raise ValueError(msg)
+    exclude = tuple(str(item) for item in exclude_raw)
+
+    return UnregisteredFeatureCandidateRule(
+        name=name,
+        description=description,
+        for_matcher=for_matcher,
+        min_symbols=min_symbols,
+        exclude=exclude,
+        severity=severity,
+    )
+
+
 def load_rules(rules_path: Path) -> list[Rule]:
     """Parse rules.yml and return validated Rule objects.
 
@@ -647,8 +726,13 @@ def load_rules(rules_path: Path) -> list[Rule]:
 
         description = str(rule_data.get("description", ""))
 
-        # Parse severity (v2 feature, defaults to "error" for v1 backward compat)
-        severity_raw = rule_data.get("severity", "error")
+        has_unregistered = "unregistered_feature_candidate" in rule_data
+
+        # Parse severity (v2 feature, defaults to "error" for v1 backward compat).
+        # The advisory ``unregistered_feature_candidate`` check defaults to
+        # "warn" when severity is omitted (it must never fail the build).
+        default_severity = "warn" if has_unregistered else "error"
+        severity_raw = rule_data.get("severity", default_severity)
         severity = str(severity_raw)
         if severity not in VALID_RULE_SEVERITIES:
             msg = (
@@ -674,13 +758,14 @@ def load_rules(rules_path: Path) -> list[Rule]:
                 has_forbid,
                 has_layers,
                 has_check,
+                has_unregistered,
             ]
         )
         if rule_type_count != 1:
             msg = (
                 f"rules.yml: rule '{name}' must have exactly one of "
                 f"'deny', 'require', 'forbid_cycles', 'forbid_import', "
-                f"'forbid', 'layers', or 'check'"
+                f"'forbid', 'layers', 'check', or 'unregistered_feature_candidate'"
             )
             raise ValueError(msg)
 
@@ -718,6 +803,16 @@ def load_rules(rules_path: Path) -> list[Rule]:
                 msg = f"Rule '{name}': 'check' must be a mapping"
                 raise ValueError(msg)
             rules.append(_parse_check_rule(name, description, check_data, severity=severity))
+        elif has_unregistered:
+            ufc_data = rule_data["unregistered_feature_candidate"]
+            if not isinstance(ufc_data, dict):
+                msg = f"Rule '{name}': 'unregistered_feature_candidate' must be a mapping"
+                raise ValueError(msg)
+            rules.append(
+                _parse_unregistered_feature_candidate_rule(
+                    name, description, ufc_data, severity=severity
+                )
+            )
         else:
             cycle_data = rule_data["forbid_cycles"]
             if not isinstance(cycle_data, dict):
@@ -1650,6 +1745,119 @@ def evaluate_cardinality_rules(
 
 
 # ---------------------------------------------------------------------------
+# Unregistered-feature-candidate rule evaluation
+# ---------------------------------------------------------------------------
+
+
+def _file_annotations(annotations_raw: object) -> dict[str, object] | None:
+    """Parse a code_symbols ``annotations`` JSON value into a dict, or None."""
+    if annotations_raw is None:
+        return None
+    try:
+        parsed = json.loads(str(annotations_raw))
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _candidate_files_for_domain(
+    conn: sqlite3.Connection, domain_ref_id: str, source_prefix: str
+) -> dict[str, int]:
+    """Group indexed symbols under *source_prefix* into per-file candidate counts.
+
+    A file qualifies as a candidate (and appears in the returned mapping) when
+    its annotations carry a ``domain`` key equal to *domain_ref_id* and carry
+    **no** ``feature`` key. The mapped value is the file's indexed-symbol count.
+    """
+    rows = conn.execute(
+        "SELECT file_path, annotations FROM code_symbols WHERE file_path LIKE ?",
+        (source_prefix + "%",),
+    ).fetchall()
+
+    counts: dict[str, int] = {}
+    domain_only: dict[str, bool] = {}
+    has_feature: dict[str, bool] = {}
+
+    for row in rows:
+        file_path = str(row[0])
+        counts[file_path] = counts.get(file_path, 0) + 1
+        annotations = _file_annotations(row[1])
+        if annotations is None:
+            continue
+        if annotations.get("domain") == domain_ref_id:
+            domain_only[file_path] = True
+        if "feature" in annotations:
+            has_feature[file_path] = True
+
+    return {
+        path: count
+        for path, count in counts.items()
+        if domain_only.get(path, False) and not has_feature.get(path, False)
+    }
+
+
+def evaluate_unregistered_feature_candidate_rules(
+    conn: sqlite3.Connection, rules: list[UnregisteredFeatureCandidateRule]
+) -> list[Violation]:
+    """Flag substantial domain-only modules that model no feature (BDL-051 S1).
+
+    For each node matching a rule's ``for_matcher``, finds source files that are
+    attributed to the node's domain (``annotations.domain == ref_id``), carry no
+    ``feature`` annotation, and have at least ``min_symbols`` indexed symbols.
+    Files matching any ``exclude`` glob are skipped. Each candidate produces one
+    advisory (``warn``) finding naming the file and its symbol count.
+    """
+    if not rules:
+        return []
+
+    violations: list[Violation] = []
+
+    all_nodes = conn.execute("SELECT ref_id, kind, source FROM nodes").fetchall()
+
+    for rule in rules:
+        for node_row in all_nodes:
+            node_ref_id = str(node_row[0])
+            node_kind = str(node_row[1])
+            node_source: str | None = str(node_row[2]) if node_row[2] is not None else None
+
+            if not rule.for_matcher.matches(node_ref_id, node_kind):
+                continue
+            if node_source is None:
+                continue
+
+            prefix = node_source.rstrip("/") + "/"
+            candidates = _candidate_files_for_domain(conn, node_ref_id, prefix)
+
+            for file_path, symbol_count in sorted(candidates.items()):
+                if symbol_count < rule.min_symbols:
+                    continue
+                if any(fnmatch.fnmatch(file_path, pat) for pat in rule.exclude):
+                    continue
+
+                rel = file_path
+                if rel.startswith(prefix):
+                    rel = node_ref_id + "/" + rel[len(prefix) :]
+                violations.append(
+                    Violation(
+                        rule_name=rule.name,
+                        rule_description=rule.description,
+                        rule_type="unregistered_feature_candidate",
+                        severity=rule.severity,
+                        file_path=file_path,
+                        line_number=None,
+                        from_ref_id=node_ref_id,
+                        to_ref_id=None,
+                        message=(
+                            f"{rel} ({symbol_count} symbols): domain-only, no feature "
+                            f"— candidate unregistered feature (rule '{rule.name}')."
+                        ),
+                    )
+                )
+
+    return violations
+
+
+# ---------------------------------------------------------------------------
 # Combined evaluation
 # ---------------------------------------------------------------------------
 
@@ -1683,6 +1891,13 @@ def _remediation_for(rule_type: str, violation: Violation) -> str | None:
         return f"`{src}` exceeds its limit ({violation.message}); split it into smaller nodes"
     if rule_type == "require":
         return f"add the required edge from `{src}` to a matching target node"
+    if rule_type == "unregistered_feature_candidate":
+        loc = violation.file_path or src
+        return (
+            f"model `{loc}` as a feature (add a node + `# beadloom:feature=` "
+            f"annotation + SPEC.md), or accept it as domain-level plumbing "
+            f"(list it in the domain README and add it to the rule's `exclude`)"
+        )
     return None
 
 
@@ -1707,6 +1922,7 @@ def evaluate_all(conn: sqlite3.Connection, rules: list[Rule]) -> list[Violation]
     forbid_edge_rules: list[ForbidEdgeRule] = []
     layer_rules: list[LayerRule] = []
     cardinality_rules: list[CardinalityRule] = []
+    unregistered_rules: list[UnregisteredFeatureCandidateRule] = []
 
     for rule in rules:
         if isinstance(rule, DenyRule):
@@ -1723,6 +1939,8 @@ def evaluate_all(conn: sqlite3.Connection, rules: list[Rule]) -> list[Violation]
             layer_rules.append(rule)
         elif isinstance(rule, CardinalityRule):
             cardinality_rules.append(rule)
+        elif isinstance(rule, UnregisteredFeatureCandidateRule):
+            unregistered_rules.append(rule)
 
     violations = (
         evaluate_deny_rules(conn, deny_rules)
@@ -1732,6 +1950,7 @@ def evaluate_all(conn: sqlite3.Connection, rules: list[Rule]) -> list[Violation]
         + evaluate_forbid_edge_rules(conn, forbid_edge_rules)
         + evaluate_layer_rules(conn, layer_rules)
         + evaluate_cardinality_rules(conn, cardinality_rules)
+        + evaluate_unregistered_feature_candidate_rules(conn, unregistered_rules)
     )
 
     # Enrich each violation with an agent-actionable remediation hint.
