@@ -12,6 +12,18 @@ from mcp.server import Server
 from mcp.types import TextContent
 
 from beadloom import __version__
+
+# S4 table primitives now live in application/active_table; re-exported here
+# under their original private names for back-compat (S4 tests import them).
+from beadloom.application.active_table import (
+    is_separator_cells as _is_separator_cells,
+)
+from beadloom.application.active_table import (
+    set_active_table_status as _set_active_table_status,
+)
+from beadloom.application.active_table import (
+    split_table_row as _split_table_row,
+)
 from beadloom.application.gate import run_ci_gate
 from beadloom.application.reindex import incremental_reindex
 from beadloom.context_oracle.builder import bfs_subgraph, build_context
@@ -26,6 +38,13 @@ from beadloom.services.bd_seam import BdUnavailableError, run_bd
 if TYPE_CHECKING:
     import sqlite3
     from pathlib import Path
+
+# Back-compat re-exports of the S4 table primitives (moved to active_table).
+__all__ = [
+    "_is_separator_cells",
+    "_set_active_table_status",
+    "_split_table_row",
+]
 
 
 # --- Mtime helpers for cache invalidation ---
@@ -797,59 +816,6 @@ def handle_complete_bead(
         "next": close.stdout.strip(),
         "active_updated": active_updated,
     }
-
-
-def _split_table_row(line: str) -> list[str] | None:
-    """Split a markdown table *line* into its cells, or None if it is not one.
-
-    A table row is a line whose stripped form starts and ends with ``|``. The
-    leading/trailing empty fragments produced by the border pipes are dropped;
-    the inner cell texts are returned stripped.
-    """
-    stripped = line.strip()
-    if not (stripped.startswith("|") and stripped.endswith("|")):
-        return None
-    return [cell.strip() for cell in stripped.strip("|").split("|")]
-
-
-def _is_separator_cells(cells: list[str]) -> bool:
-    """True for a markdown header-separator row (cells are all ``---`` dashes)."""
-    return bool(cells) and all(set(c) <= {"-", ":"} and c for c in cells)
-
-
-def _set_active_table_status(active_path: Path, bead_id: str, status: str) -> bool:
-    """Best-effort: flip the status cell of *bead_id*'s row in an ACTIVE.md table.
-
-    Parses the markdown table(s) in *active_path*, finds the row whose FIRST cell
-    equals *bead_id* as a whole token (so ``...mukc.1`` never matches
-    ``...mukc.10``), replaces its LAST (status) cell with *status*, and writes the
-    file back. Tolerant: a missing file, no table, or no matching row leaves the
-    file untouched and returns ``False``. Never raises, never corrupts the file.
-    """
-    try:
-        original = active_path.read_text(encoding="utf-8")
-    except OSError:
-        return False
-    lines = original.splitlines(keepends=True)
-    for idx, line in enumerate(lines):
-        cells = _split_table_row(line)
-        if cells is None or len(cells) < 2 or _is_separator_cells(cells):
-            continue
-        if cells[0] != bead_id:
-            continue
-        # Sanitize a (possibly user-supplied via checkpoint) status so it can't
-        # corrupt the row: collapse any whitespace run — incl. newlines/CR/tabs —
-        # to single spaces (no row-splitting), then replace "|" with "/" (no extra
-        # cell). Neither is meaningful in a short one-line status label.
-        cells[-1] = " ".join(status.split()).replace("|", "/")
-        newline = "\n" if line.endswith("\n") else ""
-        lines[idx] = "| " + " | ".join(cells) + " |" + newline
-        try:
-            active_path.write_text("".join(lines), encoding="utf-8")
-        except OSError:
-            return False
-        return True
-    return False
 
 
 def _set_bead_table_status(

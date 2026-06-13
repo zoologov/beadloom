@@ -20,8 +20,10 @@ Architecture-as-Code rule engine with require/deny rules
 - `ImportBoundaryRule`
 - `LayerDef`
 - `LayerRule`
+- `ModuleCoverageRule`
 - `NodeMatcher`
 - `RequireRule`
+- `UnregisteredFeatureCandidateRule`
 - `Violation`
 - `evaluate_all`
 - `evaluate_cardinality_rules`
@@ -30,7 +32,9 @@ Architecture-as-Code rule engine with require/deny rules
 - `evaluate_forbid_edge_rules`
 - `evaluate_import_boundary_rules`
 - `evaluate_layer_rules`
+- `evaluate_module_coverage_rules`
 - `evaluate_require_rules`
+- `evaluate_unregistered_feature_candidate_rules`
 - `load_rules`
 - `load_rules_with_tags`
 - `validate_rules`
@@ -48,6 +52,7 @@ Architecture-as-Code rule engine with require/deny rules
 ```mermaid
 C4Container
     System_Boundary(beadloom_boundary, "Beadloom") {
+        Container(ai_agents, "Ai_Agents", "", "Governed AI-agent harnesses (Goose + model) over Beadloom read APIs + bd/beadloom shells; ships in the package")
         Container(application, "Application", "", "Use-case orchestration: reindex, doctor, debt report, file watcher")
         Container(cli, "Cli", "", "Click-based CLI with 21 commands")
         Container(context_oracle, "Context Oracle", "", "Context bundle building via BFS graph traversal, code indexing, caching, search")

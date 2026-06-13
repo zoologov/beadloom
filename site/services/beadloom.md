@@ -15,6 +15,8 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 
 - `ActivityDataProvider`
 - `ActivityWidget`
+- `AgentResult`
+- `AgentRunner`
 - `AuditFinding`
 - `AuditResult`
 - `BdResult`
@@ -27,9 +29,12 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `CardinalityRule`
 - `CategoryScore`
 - `Check`
+- `CommandResult`
+- `CommentPublisher`
 - `ConfigDrift`
 - `ContextCache`
 - `ContextDataProvider`
+- `ContextPacket`
 - `ContextPreviewWidget`
 - `Contract`
 - `ContractEndpoint`
@@ -49,11 +54,14 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `DocScanner`
 - `DocStatusScreen`
 - `DomainList`
+- `DriftItem`
 - `EdgeChange`
 - `EdgeVerdict`
 - `ExplorerScreen`
 - `Fact`
 - `FactRegistry`
+- `FakeAgentRunner`
+- `FakePublisher`
 - `FederatedGraph`
 - `FederatedRef`
 - `FederationRefError`
@@ -64,11 +72,18 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `GateStep`
 - `GhRunner`
 - `GitActivity`
+- `GitHubPRBranchPublisher`
+- `GitHubPublisher`
+- `GitLabPRBranchPublisher`
+- `GitLabPublisher`
+- `GooseAgentRunner`
 - `GraphDataProvider`
 - `GraphDiff`
 - `GraphLoadResult`
 - `GraphParseError`
 - `GraphTreeWidget`
+- `HarnessConfig`
+- `HarnessResult`
 - `HealthSnapshot`
 - `HelpOverlay`
 - `ImpactSummary`
@@ -86,6 +101,7 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `MermaidIssue`
 - `MermaidValidationError`
 - `MetricsPoint`
+- `ModuleCoverageRule`
 - `NodeChange`
 - `NodeDebt`
 - `NodeDetail`
@@ -98,11 +114,16 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `ParsedFile`
 - `Preset`
 - `PresetRule`
+- `ProviderConfig`
+- `PublishResult`
 - `PublishedDoc`
+- `ReconcileResult`
 - `ReindexNeeded`
 - `ReindexResult`
 - `RequireRule`
+- `ReviewPublisher`
 - `Route`
+- `RunRecord`
 - `ScaffoldResult`
 - `SearchOverlay`
 - `Severity`
@@ -115,18 +136,28 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `SyncPair`
 - `TestMapping`
 - `TreeNode`
+- `UnregisteredFeatureCandidateRule`
 - `Violation`
 - `WatchEvent`
 - `WhyDataProvider`
 - `WhyResult`
+- `active_sync`
 - `aggregate_exports`
 - `aggregate_parent_tests`
 - `analyze_git_activity`
 - `analyze_node`
 - `append_metrics_point`
+- `append_run`
 - `apply_branch_protection`
 - `auto_link_docs`
 - `backfill_structural_history`
+- `bd_status_to_cell`
+- `beadloom_ci`
+- `beadloom_ctx_json`
+- `beadloom_docs_polish_json`
+- `beadloom_sync_check_json`
+- `beadloom_sync_update`
+- `beadloom_why`
 - `bfs_subgraph`
 - `bootstrap_project`
 - `build_agents_md_content`
@@ -135,6 +166,7 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `build_export`
 - `build_help_text`
 - `build_landscape_data`
+- `build_packet`
 - `build_protection_payload`
 - `build_published_docs`
 - `build_sync_state`
@@ -149,6 +181,7 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `classify`
 - `classify_doc`
 - `classify_section`
+- `classify_verdict`
 - `clear_cache`
 - `collect_chunks`
 - `collect_debt_data`
@@ -171,9 +204,11 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `cross_landscape_keys`
 - `ctx`
 - `current_commit_sha`
+- `default_recipe_path`
 - `detect_preset`
 - `diff_cmd`
 - `diff_to_dict`
+- `discover_scope`
 - `docs`
 - `docs_audit`
 - `docs_generate`
@@ -190,7 +225,9 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `evaluate_forbid_edge_rules`
 - `evaluate_import_boundary_rules`
 - `evaluate_layer_rules`
+- `evaluate_module_coverage_rules`
 - `evaluate_require_rules`
+- `evaluate_unregistered_feature_candidate_rules`
 - `existing_page_urls`
 - `export`
 - `extract_imports`
@@ -249,6 +286,7 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `install_hooks`
 - `interactive_init`
 - `is_foreign_ref`
+- `is_separator_cells`
 - `launch`
 - `link`
 - `lint`
@@ -258,6 +296,7 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `load_nodes`
 - `load_rules`
 - `load_rules_with_tags`
+- `load_runs`
 - `main`
 - `map_tests`
 - `map_to_c4`
@@ -271,12 +310,16 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `parse_fail_condition`
 - `parse_graph_file`
 - `parse_ref`
+- `parse_scope`
 - `populate_search_index`
 - `prime`
 - `prime_context`
 - `publish_docs`
+- `qwen_provider`
 - `read_deep_config`
+- `read_doc`
 - `read_history`
+- `reconcile_active_tables`
 - `reconcile_contracts`
 - `refresh_agentic_flow_files`
 - `refresh_claude_md`
@@ -308,14 +351,19 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `run_bd`
 - `run_checks`
 - `run_ci_gate`
+- `run_command`
+- `run_harness`
+- `runs_store_path`
 - `save_snapshot`
 - `scaffold`
 - `scan_project`
 - `search`
 - `search_fts5`
+- `select_polish_for_ref`
 - `serialize_dashboard_data`
 - `serialize_export`
 - `serialize_federation`
+- `set_active_table_status`
 - `set_meta`
 - `setup_agentic_flow`
 - `setup_ai_techwriter`
@@ -328,6 +376,7 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `snapshot_compare`
 - `snapshot_list`
 - `snapshot_save`
+- `split_table_row`
 - `start_file_watcher`
 - `status`
 - `suggest_ref_id`
@@ -335,7 +384,6 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `sync_agentic_flow`
 - `sync_check`
 - `sync_update`
-- `sync_vendored_harness`
 - `take_snapshot`
 - `templates_root`
 - `tui`
@@ -343,9 +391,7 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `update_node_in_yaml`
 - `validate_mermaid`
 - `validate_rules`
-- `vendor_harness`
 - `vendored_flow_root`
-- `vendored_harness_root`
 - `watch`
 - `watch_cmd`
 - `why`
@@ -353,7 +399,7 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 ## Relationships
 
 - **depends_on**: [application](../domains/application.md), [context-oracle](../domains/context-oracle.md), [doc-sync](../domains/doc-sync.md), [graph](../domains/graph.md), [infrastructure](../domains/infrastructure.md)
-- **Parts**: [application](../domains/application.md), [cli](../services/cli.md), [context-oracle](../domains/context-oracle.md), [doc-sync](../domains/doc-sync.md), [graph](../domains/graph.md), [infrastructure](../domains/infrastructure.md), [mcp-server](../services/mcp-server.md), [onboarding](../domains/onboarding.md), [tui](../services/tui.md), [vitepress-site](../other/vitepress-site.md)
+- **Parts**: [ai_agents](../domains/ai_agents.md), [application](../domains/application.md), [cli](../services/cli.md), [context-oracle](../domains/context-oracle.md), [doc-sync](../domains/doc-sync.md), [graph](../domains/graph.md), [infrastructure](../domains/infrastructure.md), [mcp-server](../services/mcp-server.md), [onboarding](../domains/onboarding.md), [tui](../services/tui.md), [vitepress-site](../other/vitepress-site.md)
 
 ## Documentation
 
@@ -366,6 +412,7 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 ```mermaid
 C4Container
     System_Boundary(beadloom_boundary, "beadloom") {
+        Container(ai_agents, "Ai_Agents", "", "Governed AI-agent harnesses (Goose + model) over Beadloom read APIs + bd/beadloom shells; ships in the package")
         Container(application, "Application", "", "Use-case orchestration: reindex, doctor, debt report, file watcher")
         Container(cli, "Cli", "", "Click-based CLI with 21 commands")
         Container(context_oracle, "Context Oracle", "", "Context bundle building via BFS graph traversal, code indexing, caching, search")

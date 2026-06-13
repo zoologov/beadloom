@@ -43,7 +43,7 @@ CLAUDE.md  ← entry point: critical rules, setup, bd/beadloom essentials, this 
 
 ```bash
 git config beads.role maintainer   # or "contributor" — required by bd 1.0.4 (silences GH#2950 warning)
-beadloom install-hooks             # pre-commit hook: lint + sync-check enforcement
+beadloom install-hooks             # pre-commit hook: lint + sync-check + ACTIVE/tracker coherence
 ```
 
 ### BEFORE any work
@@ -214,7 +214,7 @@ beadloom docs polish             # structured data for AI doc enrichment
 beadloom init                    # initialize beadloom in a project
 beadloom setup-rules             # create IDE rules files referencing AGENTS.md
 beadloom setup-mcp               # configure MCP server for IDE
-beadloom install-hooks           # pre-commit hook: lint + sync-check enforcement
+beadloom install-hooks           # pre-commit hook: lint + sync-check + ACTIVE/tracker coherence
 
 # After changing code
 # 1. beadloom reindex            — re-index changed files

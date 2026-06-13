@@ -29,6 +29,7 @@ File watcher for auto-reindex on changes
 ```mermaid
 C4Container
     System_Boundary(beadloom_boundary, "Beadloom") {
+        Container(ai_agents, "Ai_Agents", "", "Governed AI-agent harnesses (Goose + model) over Beadloom read APIs + bd/beadloom shells; ships in the package")
         Container(application, "Application", "", "Use-case orchestration: reindex, doctor, debt report, file watcher")
         Container(cli, "Cli", "", "Click-based CLI with 21 commands")
         Container(context_oracle, "Context Oracle", "", "Context bundle building via BFS graph traversal, code indexing, caching, search")

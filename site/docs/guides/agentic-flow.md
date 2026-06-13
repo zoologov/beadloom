@@ -22,7 +22,7 @@ This guide covers:
 - the tool-agnostic angle (any MCP client via `beadloom setup-mcp`),
 - the **honest boundary**: orchestration stays in the harness; CI is the true enforcement.
 
-## Trunk-based development (BDL-049)
+## Trunk-based development (BDL-049 · BDL-050 consolidated CI)
 
 The coordinator flow is **trunk-based**: `main` is the integration point and is
 **branch-protected** (no direct push). Each epic/feature runs on a short-lived
@@ -32,10 +32,12 @@ branch and integrates via a single PR:
 2. **Commit per wave** onto that branch (dev → test → review → tech-writer).
 3. **Open ONE PR to `main`** per epic/feature (or shippable slice) — not one PR per
    commit.
-4. **The PR triggers** the [AI tech-writer](./ai-techwriter.md) (which commits its
-   doc refresh **into the PR branch** — code + docs in one reviewable PR, no orphan
-   doc-PRs) **and** CI, where `beadloom ci` (the `beadloom-gate` check) is a
-   **required status check**.
+4. **The PR triggers** the consolidated CI pipeline (`.github/workflows/ci.yml`,
+   BDL-050): `gate` (the `beadloom ci` verdict) ∥ `tests` (the 3.10–3.13 matrix) ∥
+   `site-build` (the VitePress build) run in parallel, then the
+   [AI tech-writer](./ai-techwriter.md) job runs **only after all three are green**
+   (`needs: [gate, tests, site-build]`) and commits its doc refresh **into the PR
+   branch** — code + docs in one reviewable PR, no orphan doc-PRs.
 5. **Merge when green** — a human merges once CI is green and any doc refresh has
    landed. No auto-merge; no direct push to `main`, so `main` stays always-green.
 
@@ -45,9 +47,12 @@ Protect `main` once per repo (idempotent; safe to re-run):
 beadloom setup-branch-protection --repo OWNER/NAME
 ```
 
-This requires a PR to `main` with the always-on `beadloom-gate` check required,
-while keeping the owner mergeable (`enforce_admins: false`, 0 required reviews) so a
-solo maintainer is never locked out. The vendored `.claude/CLAUDE.md` §6 (Git) and
+This requires a PR to `main` with the consolidated `ci.yml`'s **7 check-runs as
+required status checks** — `gate`, `tests (3.10)`, `tests (3.11)`, `tests (3.12)`,
+`tests (3.13)`, `site-build`, `ai-techwriter` (BDL-050). Strict trunk-based keeps
+`enforce_admins: true` (even the owner integrates via a PR) with 0 required reviews,
+so the solo maintainer self-merges but `main` is never bypassed (BDL-049). The
+vendored `.claude/CLAUDE.md` §6 (Git) and
 `.claude/commands/coordinator.md` describe this same model, so a scaffolded repo
 gets the trunk-based flow by default. **CI on the PR is the true enforcement** — the
 agent's refresh and the deterministic gate are proposals/checks; the human merges.
@@ -168,6 +173,36 @@ history) and, best-effort, appends a timestamped progress note to the bead's
 ACTIVE.md (skipped cleanly if the file cannot be located). Deterministic; no
 orchestration.
 
+## ACTIVE.md stays honest by construction (BDL-053)
+
+Each epic's `ACTIVE.md` carries a **bead-status table** (`| Bead | Role | Status
+| … |`) the coordinator reads to know where the wave stands. Historically the
+coordinator hand-edited those Status cells, which drifted from `bd` (the source
+of truth) whenever a row was missed. BDL-053 makes the table **correct by
+construction** instead of by discipline:
+
+- **`beadloom active-sync`** reconciles every epic's bead-status table FROM `bd`
+  (rewrites each Status cell to match the bead's `bd` status; a richer
+  coordinator note is preserved when its state agrees) and re-exports the tracked
+  `.beads/issues.jsonl`. See the
+  [CLI reference](../services/cli.md#beadloom-active-sync) for the
+  `--epic`/`--check`/`--json`/`--no-export` flags.
+- **The pre-commit hook runs it as a guarded auto-fix step.** After the lint /
+  mypy / sync-check steps, the hook calls `active-sync` and restages the touched
+  `features/**/ACTIVE.md` + `.beads/issues.jsonl`, so the committed table matches
+  `bd` on every commit — the coordinator no longer maintains rows by hand. The
+  step **never blocks** the commit and runs only when both `bd` and `beadloom`
+  are installed.
+- **Safe no-op for every adopter.** With no `ACTIVE.md` table, no `bd`, or an
+  untracked jsonl, `active-sync` (and the hook step) exits 0 and changes nothing —
+  so a repo that has not adopted the flow is never affected; it works
+  out-of-the-box.
+
+The reconcile core (`application/active_table.py`) is the **same** tolerant,
+fail-safe parser/updater the `checkpoint` / `complete_bead` MCP process-tools use
+to flip a single row — so single-row updates and full reconcile share one format
+(the `active-table` [component](../domains/application/components/active-table/DOC.md)).
+
 ## Tool-agnostic via MCP
 
 The process-tools are plain MCP tools, so any MCP client — Claude Code, Cursor,
@@ -200,7 +235,8 @@ This is stated deliberately, not glossed over:
 
 ## See also
 
-- [CLI reference](../services/cli.md) — `setup-agentic-flow`, `config-check`, `ci`, `setup-mcp`, `setup-branch-protection`.
+- [CLI reference](../services/cli.md) — `setup-agentic-flow`, `config-check`, `ci`, `setup-mcp`, `setup-branch-protection`, `install-hooks`, `active-sync`.
+- [Active Table component](../domains/application/components/active-table/DOC.md) — the shared ACTIVE.md bead-status table parser/updater + reconcile-from-`bd` core.
 - [AI tech-writer guide](./ai-techwriter.md) — the PR-triggered doc-refresh loop on the trunk-based model.
 - [MCP server](../services/mcp.md) — the full tool catalog (18 tools).
 - [Onboarding domain](../domains/onboarding/README.md) — the scaffold + config-sync internals.

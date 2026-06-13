@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Phase "Tracker / ACTIVE coherence hook" (BDL-053): makes each epic's `ACTIVE.md`
+bead-status table **correct by construction** instead of by coordinator
+discipline. New `beadloom active-sync` reconciles every epic's table FROM `bd`
+(the source of truth) — rewriting each Status cell to match the bead's `bd`
+status while preserving a richer coordinator note when its state agrees — and
+re-exports the tracked `.beads/issues.jsonl`. It is wired into the pre-commit hook
+(both `warn` and `block` templates) as a **guarded auto-fix step** that restages
+the touched `ACTIVE.md` + jsonl so every commit is coherent. The reconcile core
+(`application/active_table.py`) is the SAME tolerant, fail-safe parser the MCP S4
+`checkpoint` / `complete_bead` tools use for single-row updates. **Safe no-op by
+construction:** with no `ACTIVE.md` table, no `bd`, or an untracked jsonl, the
+command (and the hook step) exits 0 and changes nothing — so it works
+out-of-the-box for every adopter and never blocks a commit.
+
+### Added (BDL-053)
+- **`beadloom active-sync`** (`services/cli.py`) — reconcile each epic's ACTIVE.md bead-status table from `bd`. `--epic KEY` scopes to one epic; `--check` reports drift on a throwaway copy without writing (exit 1 on drift, 0 clean); `--json` emits `{changed_files, drifted_rows[{path,bead_id,old,new}]}`; `--no-export` skips the jsonl sync. Default (fix) mode rewrites drifted Status cells and best-effort runs `bd export -o .beads/issues.jsonl` (only when that file is git-tracked). No-op contract: no ACTIVE table / no `bd` / untracked jsonl → exit 0, zero behavior change
+- **`application/active_table.py` reconcile core** — `reconcile_active_tables(project_root, bd_statuses, *, epic=None)` (pure with respect to `bd`: the caller injects the status map) returns a `ReconcileResult` (`changed_files`, `drifted_rows`); `bd_status_to_cell` documents the `bd`-status → Status-cell map (`closed → ✓ done`, `in_progress → in progress`, `blocked → blocked`, `open`/`ready → ready`; unknown → `None`). Classified as the new `active-table` **component** node with its own DOC.md
+- **Pre-commit hook ACTIVE / tracker coherence step** — both `install-hooks` templates (`warn` and `block`) gained a guarded final step that runs `beadloom active-sync` and restages `.claude/development/docs/features/**` + `.beads/issues.jsonl` only when both `bd` and `beadloom` are installed. Never blocks the commit; a complete no-op in any repo without `bd`/ACTIVE
+
 Phase "CI consolidation" (BDL-050): replaces the three independent PR workflows
 (`beadloom-gate.yml` / `tests.yml` / `ai-techwriter.yml`) with **one
 `.github/workflows/ci.yml`** on `pull_request → main`. Jobs `gate` ∥ `tests`

@@ -1,7 +1,7 @@
 <!-- beadloom:badge-start -->
 > ✅ **fresh**
 > 
-> last synced 2026-06-10T21:18:54.402746+00:00 · coverage 100% (`mcp-server`)
+> last synced 2026-06-13T22:42:55.793320+00:00 · coverage 100% (`mcp-server`)
 > 
 > _Validation by Beadloom `doc_sync` — same source as `sync-check`._
 <!-- beadloom:badge-end -->
@@ -20,7 +20,23 @@ The server operates via stdio transport. Launch:
 beadloom mcp-serve [--project DIR]
 ```
 
-Configuration for Claude Code (`.mcp.json`):
+Configuration for supported editors/tools:
+
+```bash
+# Claude Code (default) — writes .mcp.json
+beadloom setup-mcp
+
+# Cursor — writes .cursor/mcp.json
+beadloom setup-mcp --tool cursor
+
+# Windsurf — writes ~/.codeium/windsurf/mcp_config.json (global)
+beadloom setup-mcp --tool windsurf
+
+# Remove configuration
+beadloom setup-mcp --remove
+```
+
+Claude Code (`.mcp.json`):
 
 ```json
 {
@@ -33,7 +49,33 @@ Configuration for Claude Code (`.mcp.json`):
 }
 ```
 
-Automatic setup: `beadloom setup-mcp`
+Cursor (`.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "beadloom": {
+      "command": "beadloom",
+      "args": ["mcp-serve"]
+    }
+  }
+}
+```
+
+Windsurf (`~/.codeium/windsurf/mcp_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "beadloom": {
+      "command": "beadloom",
+      "args": ["mcp-serve", "--project", "/path/to/project"]
+    }
+  }
+}
+```
+
+Note: Windsurf uses a global config, so the `--project` path is automatically included.
 
 ### Features
 
@@ -304,23 +346,26 @@ The **refusing completion gate**: run `beadloom ci` (+ tests) before closing a b
 }
 ```
 
-Runs the `beadloom ci` gate (reindex → lint → sync-check → config-check → doctor, via `application/gate.run_ci_gate`) and, when `run_tests` is true (the default), the test suite. **On PASS** it closes the bead (`bd close --suggest-next`) and returns `{ "status": "PASS", "bead", "findings": [], "next": ... }`. **On FAIL** it does NOT close the bead — it returns `{ "status": "FAIL", "bead", "findings": [...] }` so the agent must fix the findings first. Set `run_tests=false` for a fast gate-only check (skips the suite). This gate is **advisory-strong**, not the true enforcement point — `beadloom ci` in CI remains the single source of true enforcement.
+Runs the `beadloom ci` gate (reindex → lint → sync-check → config-check → doctor, via `application/gate.run_ci_gate`) and, when `run_tests` is true (the default), the test suite. **On PASS** it closes the bead (`bd close --suggest-next`), best-effort flips the bead's row in the epic's `ACTIVE.md` bead-status table to `✓ done`, and returns `{ "status": "PASS", "bead", "findings": [], "next": ..., "active_updated": <bool> }`. **On FAIL** it does NOT close the bead and leaves the table untouched — it returns `{ "status": "FAIL", "bead", "findings": [...] }` so the agent must fix the findings first. Set `run_tests=false` for a fast gate-only check (skips the suite). This gate is **advisory-strong**, not the true enforcement point — `beadloom ci` in CI remains the single source of true enforcement.
 
 #### checkpoint
 
-Record a checkpoint: a `bd comments add` plus a timestamped ACTIVE.md note.
+Record a checkpoint: a `bd comments add` plus ACTIVE.md note + bead-status table row update.
 
 ```json
 {
   "name": "checkpoint",
   "arguments": {
     "bead": "bd-42",
-    "text": "CHECKPOINT: wired the parser"
+    "text": "CHECKPOINT: wired the parser",
+    "status": "in progress"
   }
 }
 ```
 
-Adds `text` as a bead comment (preserves history) and, best-effort, appends a timestamped progress line to the bead's ACTIVE.md (skipped cleanly when the file cannot be located). Returns `{ "status": "OK", "bead", "comment_added": true, "active_updated": <bool> }`.
+Adds `text` as a bead comment (preserves history) and, best-effort: appends a timestamped progress line to the bead's ACTIVE.md AND flips the bead's row in the ACTIVE.md bead-status table to `status` (default `"in progress"`). Both ACTIVE.md updates are skipped cleanly when the file/table/row cannot be located. Returns `{ "status": "OK", "bead", "comment_added": true, "active_updated": <bool>, "table_updated": <bool> }`.
+
+The bead-status table updater (`_set_active_table_status`) is deterministic and **tolerant**: it matches the bead-id as a whole token in the row's first cell (so `…mukc.1` never collaterally matches `…mukc.10`), replaces the row's last (status) cell, and preserves every other row and the file's formatting; a missing file, no table, or no matching row is a no-op (returns `False`, file unchanged). It never raises and never corrupts the file — so it cannot fail the tool or the close.
 
 ## API
 
@@ -348,8 +393,9 @@ Handler functions (sync, testable without MCP transport):
 Process-tool handlers (BDL-048; the three bead-touching ones drive `bd` via the `services/bd_seam.py:run_bd` seam):
 - `handle_task_init(project_root, *, type_, key)` -- scaffold docs folder + per-type skeletons + a 4-role bead DAG (dev → test → review → tech-writer)
 - `handle_bead_context(project_root, *, bead)` -- one payload: ctx + why + CONTEXT/ACTIVE excerpt + active rules (resolves the bead's graph ref from `bd show`)
-- `handle_complete_bead(project_root, *, bead, run_tests=True)` -- the refusing gate: `run_ci_gate` (+ tests); PASS closes the bead (`bd close --suggest-next`), FAIL returns findings and does NOT close; advisory-strong (CI is the true gate)
-- `handle_checkpoint(project_root, *, bead, text)` -- `bd comments add` + best-effort timestamped ACTIVE.md note
+- `handle_complete_bead(project_root, *, bead, run_tests=True)` -- the refusing gate: `run_ci_gate` (+ tests); PASS closes the bead (`bd close --suggest-next`) + best-effort flips its ACTIVE.md table row to `✓ done`, FAIL returns findings and does NOT close (table untouched); advisory-strong (CI is the true gate)
+- `handle_checkpoint(project_root, *, bead, text, status="in progress")` -- `bd comments add` + best-effort timestamped ACTIVE.md note + best-effort ACTIVE.md table row → `status`
+- `_set_active_table_status(active_path, bead_id, status)` -- deterministic, tolerant markdown-table row updater (whole-token bead-id match in the first cell; replaces the last cell; no-op + `False` on missing file/table/row; never raises)
 
 The `bd` seam lives in `src/beadloom/services/bd_seam.py`: `run_bd(args, *, cwd=None)` returns a `BdResult(returncode, stdout, stderr)` (with `.ok`), and raises `BdUnavailableError` with a clear message when the `bd` binary is not on PATH. Tests patch this seam so the process-tools run without a real `bd` binary.
 

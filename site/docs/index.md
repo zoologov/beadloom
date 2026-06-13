@@ -8,11 +8,11 @@ The project's validated documentation, published as-is with a per-doc `doc_sync`
 
 ## Domains
 
-Domains documentation covers Application, Context Oracle, Doc Sync, Graph, Infrastructure, Onboarding.
+Domains documentation covers Ai Agents, Application, Context Oracle, Doc Sync, Graph, Infrastructure, Onboarding.
 
 ## Guides
 
-Guides documentation covers Agentic Flow, Ai Techwriter, Ci Setup, Vitepress Site.
+Guides documentation covers Agentic Flow, Ai Techwriter, Architecture Model, Ci Setup, Vitepress Site.
 
 ## Presentations
 
@@ -20,7 +20,7 @@ Presentations documentation covers Beadloom Team 30min, Beadloom Team 30min Note
 
 ## Services
 
-Services documentation covers Cli, Mcp, Tui.
+Services documentation covers Cli, Components, Mcp, Tui.
 
 ## General
 

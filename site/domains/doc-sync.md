@@ -40,7 +40,7 @@ Doc-code synchronization tracking and stale detection
 - **part_of**: [beadloom](../services/beadloom.md)
 - **depends_on**: [infrastructure](../domains/infrastructure.md)
 - **Used by**: [application](../domains/application.md), [beadloom](../services/beadloom.md), [cli](../services/cli.md), [mcp-server](../services/mcp-server.md), [reindex](../features/reindex.md)
-- **Parts**: [docs-audit](../features/docs-audit.md)
+- **Parts**: [doc-indexer](../other/doc-indexer.md), [docs-audit](../features/docs-audit.md), [sync-check](../features/sync-check.md)
 
 ## Documentation
 
@@ -51,7 +51,9 @@ Doc-code synchronization tracking and stale detection
 ```mermaid
 C4Container
     System_Boundary(doc_sync_boundary, "doc-sync") {
+        Component(doc_indexer, "Doc Indexer", "", "Document indexer — Markdown scanning, chunking, and SQLite population for docs")
         Component(docs_audit, "Docs Audit", "", "Zero-config meta-doc staleness detection via keyword-proximity matching")
+        Component(sync_check, "Sync Check", "", "Doc-code sync engine — symbols_hash freshness state, stale detection, mark-synced baselining")
     }
 ```
 

@@ -38,12 +38,14 @@ YAML graph format, loader, diff, rule engine, import resolver, linter
 - `LayerRule`
 - `LintError`
 - `LintResult`
+- `ModuleCoverageRule`
 - `NodeChange`
 - `NodeMatcher`
 - `ParsedFile`
 - `RequireRule`
 - `SnapshotDiff`
 - `SnapshotInfo`
+- `UnregisteredFeatureCandidateRule`
 - `Violation`
 - `aggregate_exports`
 - `build_export`
@@ -64,7 +66,9 @@ YAML graph format, loader, diff, rule engine, import resolver, linter
 - `evaluate_forbid_edge_rules`
 - `evaluate_import_boundary_rules`
 - `evaluate_layer_rules`
+- `evaluate_module_coverage_rules`
 - `evaluate_require_rules`
+- `evaluate_unregistered_feature_candidate_rules`
 - `extract_imports`
 - `extract_surface`
 - `filter_c4_nodes`
@@ -104,7 +108,7 @@ YAML graph format, loader, diff, rule engine, import resolver, linter
 - **part_of**: [beadloom](../services/beadloom.md)
 - **depends_on**: [context-oracle](../domains/context-oracle.md), [infrastructure](../domains/infrastructure.md)
 - **Used by**: [application](../domains/application.md), [beadloom](../services/beadloom.md), [cli](../services/cli.md), [mcp-server](../services/mcp-server.md), [reindex](../features/reindex.md)
-- **Parts**: [c4-diagrams](../features/c4-diagrams.md), [federation](../features/federation.md), [graph-diff](../features/graph-diff.md), [import-resolver](../features/import-resolver.md), [rule-engine](../features/rule-engine.md)
+- **Parts**: [c4-diagrams](../features/c4-diagrams.md), [contracts](../other/contracts.md), [federation](../features/federation.md), [graph-diff](../features/graph-diff.md), [graph-loader](../other/graph-loader.md), [import-resolver](../features/import-resolver.md), [rule-engine](../features/rule-engine.md), [sdl](../other/sdl.md), [snapshot](../features/snapshot.md)
 
 ## Documentation
 
@@ -116,10 +120,14 @@ YAML graph format, loader, diff, rule engine, import resolver, linter
 C4Container
     System_Boundary(graph_boundary, "graph") {
         Component(c4_diagrams, "C4 Diagrams", "", "C4 architecture model mapping with Mermaid and PlantUML renderers")
+        Component(contracts, "Contracts", "", "First-class cross-service contract model + protocol-agnostic reconciliation (contract_key, ContractVerdict)")
         Component(federation, "Federation", "", "Cross-repo node identity (@repo:ref) and deterministic satellite export")
         Component(graph_diff, "Graph Diff", "", "Git ref comparison — added/removed/changed nodes and edges")
+        Component(graph_loader, "Graph Loader", "", "YAML graph parser + SQLite loader — reads .beadloom/_graph/*.yml into the nodes/edges tables")
         Component(import_resolver, "Import Resolver", "", "Multi-language import analysis and depends_on edge generation")
         Component(rule_engine, "Rule Engine", "", "Architecture-as-Code rule engine with require/deny rules")
+        Component(sdl, "Sdl", "", "Minimal dependency-free GraphQL SDL surface extractor for the cross-service contract graph")
+        Component(snapshot, "Snapshot", "", "Architecture snapshot store — save, list, and compare graph states over time")
     }
 ```
 

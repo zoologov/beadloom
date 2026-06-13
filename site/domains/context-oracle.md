@@ -52,7 +52,7 @@ Context bundle building via BFS graph traversal, code indexing, caching, search
 - **part_of**: [beadloom](../services/beadloom.md)
 - **depends_on**: [infrastructure](../domains/infrastructure.md)
 - **Used by**: [application](../domains/application.md), [beadloom](../services/beadloom.md), [cli](../services/cli.md), [graph](../domains/graph.md), [mcp-server](../services/mcp-server.md), [reindex](../features/reindex.md)
-- **Parts**: [cache](../features/cache.md), [search](../features/search.md), [why](../features/why.md)
+- **Parts**: [cache](../features/cache.md), [code-indexer](../features/code-indexer.md), [context-builder](../other/context-builder.md), [route-extraction](../features/route-extraction.md), [search](../features/search.md), [test-mapping](../features/test-mapping.md), [why](../features/why.md)
 
 ## Documentation
 
@@ -64,7 +64,11 @@ Context bundle building via BFS graph traversal, code indexing, caching, search
 C4Container
     System_Boundary(context_oracle_boundary, "context-oracle") {
         Component(cache, "Cache", "", "ETag-based context bundle cache (in-memory + SQLite)")
+        Component(code_indexer, "Code Indexer", "", "Tree-sitter code symbol indexer — parses src into symbols + extracts beadloom annotations")
+        Component(context_builder, "Context Builder", "", "Context bundle builder — BFS subgraph traversal + bundle assembly for ctx/prime")
+        Component(route_extraction, "Route Extraction", "", "API route extraction — tree-sitter AST + regex fallback across 12 web frameworks")
         Component(search, "Search", "", "FTS5 full-text search across nodes and documentation")
+        Component(test_mapping, "Test Mapping", "", "Test mapping — detect test frameworks and map test files to the source nodes they cover")
         Component(why, "Why", "", "Impact analysis — upstream deps and downstream consumers via bidirectional BFS")
     }
 ```

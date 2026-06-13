@@ -4,7 +4,7 @@
 > _Validation by Beadloom `doc_sync` — same source as `sync-check`._
 <!-- beadloom:badge-end -->
 
-# AI tech-writer in CI (BDL-047 / F4.1 · BDL-049)
+# AI tech-writer in CI (BDL-047 / F4.1 · BDL-049 · BDL-050)
 
 The **AI tech-writer** closes Beadloom's DocAsCode loop at the "fix" step. Beadloom
 is honest-by-construction at *detecting* doc drift (`beadloom sync-check` flags a
@@ -18,11 +18,20 @@ PR — no orphan doc-PRs. Nothing auto-merges — `sync-check → 0` proves *fre
 only a human (who merges the PR) proves *correctness*; `beadloom ci` as a required
 check on `main` is the true enforcement.
 
+**BDL-050** folds the agent into one consolidated `.github/workflows/ci.yml`: the
+`ai-techwriter` job has `needs: [gate, tests, site-build]`, so it runs **only after**
+the gate + the 3.10–3.13 test matrix + the VitePress site-build are all green — a
+broken PR never spends Qwen tokens. The harness now classifies each run into a
+**verdict** (`ok` / `flagged` / `infra`): a genuine unresolved doc drift (`flagged`)
+blocks the PR, but an infra failure (`infra` — a dead runner / exhausted quota / a
+provider 5xx) PASSES with a loud `::warning::` so it never freezes merges. See
+[Verdict (BDL-050)](#verdict-ok-flagged-infra-bdl-050).
+
 > This page is the getting-started guide for the maintainer. The same content is
 > scaffolded into any target repo by `beadloom setup-ai-techwriter` (the vendored
 > copy lives at `docs/guides/ai-techwriter.md` in that repo).
 
-## The loop (BDL-049: trunk-based, PR-triggered)
+## The loop (BDL-049: trunk-based, PR-triggered · BDL-050: consolidated `ci.yml`)
 
 ```
 open / update a PR to main/master  (pull_request: opened, synchronize, reopened)
@@ -47,8 +56,13 @@ open / update a PR to main/master  (pull_request: opened, synchronize, reopened)
         post a PR comment summarizing docs refreshed + tokens + gate
         gate green     → comment is a plain refresh summary
         not green / budget exceeded → comment flagged "⚠ needs human"
+  → verdict (BDL-050): ok/infra → exit 0; flagged → exit 1 (required check red)
   → human merges the PR when CI is green (no auto-merge)
 ```
+
+BDL-050 runs this job as `ai-techwriter` inside the single `ci.yml`, gated on
+`needs: [gate, tests, site-build]`. The job body is the BDL-049 model verbatim — only
+the trigger moved into `ci.yml` and the exit code is now driven by the verdict.
 
 Why `--since <merge-base>`: a fresh CI checkout reindexes from scratch and
 re-baselines the stored `sync_state` to the PR's code, so a plain `sync-check`
@@ -91,6 +105,25 @@ trunk-based development flow itself.
   synced or merges — those steps are deterministic and owned by the harness.
 - Bounded by design: per-doc retries (default 2), max fixpoint rounds (10), and
   hard caps on total turns (50) / tokens (2M) act as a runaway safety net.
+
+## Verdict: `ok` / `flagged` / `infra` (BDL-050)
+
+The required `ai-techwriter` check is red **only** on a genuine doc failure, never on
+broken infra. The harness (`tools/ai_techwriter/runner.py::classify_verdict`) maps each
+finished run to one verdict; `cli.py` maps the verdict → exit code. The discriminator
+between a doc problem and an infra failure is **whether the model ever produced output**
+(`input_tokens + output_tokens > 0`):
+
+| Verdict | When | Exit code | Effect |
+|---|---|---|---|
+| **ok** | 0-stale no-op **or** a clean refresh (`not flagged`) | `0` | check green |
+| **flagged** | the model ran (`tokens > 0`) but docs still aren't clean — post-refresh `beadloom ci` red, fixpoint not reached, or budget exceeded mid-work | `1` | **check red → PR blocked** (a real "needs human") |
+| **infra** | the agent never produced a token (`tokens == 0`) — dead self-hosted runner, provider 5xx / timeout, exhausted quota: it *couldn't run* | `0` | check green + a loud `::warning::` annotation + a best-effort PR comment ("docs were NOT checked — re-run before relying on freshness") |
+
+Net: a dead VPS or an exhausted `$30` quota does **not** freeze merges; a real
+unresolved doc drift does. The classification is conservative by construction
+(`tokens == 0 ⇒ infra`); a misclassified `infra` is made loud by the annotation, so a
+human re-runs rather than silently shipping stale docs.
 
 ## Setup (3 steps)
 
@@ -140,23 +173,27 @@ required-check gate is true enforcement (one-time, idempotent):
 beadloom setup-branch-protection --repo OWNER/NAME    # GitHub; safe to re-run
 ```
 
-This requires a PR to `main` (no direct push) with the always-on `beadloom-gate`
-check as a **required status check**, while keeping the owner mergeable
-(`enforce_admins: false`, 0 required reviews). See `docs/services/cli.md` for the
-full command + `--check`/`--branch`/`--dry-run` options.
+This requires a PR to `main` (no direct push) with the consolidated `ci.yml`'s
+**7 check-runs as required status checks** — `gate`, `tests (3.10)`, `tests (3.11)`,
+`tests (3.12)`, `tests (3.13)`, `site-build`, `ai-techwriter` (BDL-050). Under strict
+trunk-based (`enforce_admins: true`, BDL-049) even the owner integrates via a PR; with
+0 required reviews the solo maintainer still self-merges. See `docs/services/cli.md`
+for the full command + `--check`/`--branch`/`--dry-run` options.
 
 ## Triggering
 
 | | GitHub | GitLab |
 |---|---|---|
-| Wrapper | `.github/workflows/ai-techwriter.yml` | `ai-techwriter` job in `.gitlab-ci.yml` |
+| Wrapper | `ai-techwriter` job in `.github/workflows/ci.yml` (BDL-050: was the standalone `ai-techwriter.yml`) | `ai-techwriter` job (stage `docs`) in `.gitlab-ci.yml` |
+| Ordering | `needs: [gate, tests, site-build]` — runs only when all three are green | `needs: [gate, tests, site-build]` (stage `verify` → stage `docs`) |
 | Primary trigger | `pull_request` (`opened`, `synchronize`, `reopened`) → `[main, master]` | rule `$CI_PIPELINE_SOURCE == "merge_request_event"` |
 | Manual fallback | `workflow_dispatch` (no PR context → branch-PR path) | (manual pipeline / `web`) |
 | Baseline (`--since`) | `git merge-base origin/$BASE_REF HEAD` → PR base SHA | `git merge-base origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME HEAD` → `$CI_MERGE_REQUEST_DIFF_BASE_SHA` |
 | Publish target | `--target pr-branch`: commit onto `pull_request.head.ref` + `gh pr comment` | `--target pr-branch`: commit onto `$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME` + `glab` MR note |
 | Secret | repository secret `QWEN_API_KEY` (+ optional `QWEN_BASE_URL`) | masked CI/CD variable `QWEN_API_KEY` |
+| Push token | `AI_TW_PAT` (falls back to `github.token`) so the refresh commit triggers the `gate` check | `AI_TW_PAT` (falls back to `CI_JOB_TOKEN`) |
 | Loop-guard | skip if head commit author is `beadloom-ai-techwriter` OR subject has `[skip ai-techwriter]` (sets `AI_TW_SKIP=1`) | same check on the head commit |
-| Concurrency | `group: ai-techwriter-<PR-number>`, `cancel-in-progress: true` | (single job per pipeline) |
+| Concurrency | `group: ci-<PR-number>`, `cancel-in-progress: true` (the whole `ci.yml`) | (single job per pipeline) |
 
 Both wrappers call the **same** entrypoint — only the trigger, the secret naming,
 `--platform`, and the publish `--target` differ:

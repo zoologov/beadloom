@@ -1,7 +1,7 @@
 <!-- beadloom:badge-start -->
 > ✅ **fresh**
 > 
-> last synced 2026-06-10T21:18:54.402746+00:00 · coverage 90% (`graph`)
+> last synced 2026-06-13T22:42:55.793320+00:00 · coverage 90% (`graph`)
 > 
 > _Validation by Beadloom `doc_sync` — same source as `sync-check`._
 <!-- beadloom:badge-end -->
@@ -246,4 +246,4 @@ Minimal, dependency-free GraphQL SDL surface extractor (F2). See the [federation
 
 ## Testing
 
-Tests: `tests/test_graph_loader.py`, `tests/test_cli_graph.py`, `tests/test_diff.py`, `tests/test_cli_diff.py`, `tests/test_rule_engine.py`, `tests/test_rule_severity.py`, `tests/test_cycle_rule.py`, `tests/test_import_boundary_rule.py`, `tests/test_linter.py`, `tests/test_cli_lint.py`, `tests/test_import_resolver.py`, `tests/test_import_scan.py`, `tests/test_symbol_diff_polish.py`, `tests/test_snapshot.py`, `tests/test_cli_snapshot.py`, `tests/test_c4.py`, `tests/test_graph_federation.py`, `tests/test_lifecycle_rules.py`, `tests/test_export.py`, `tests/test_federate.py`, `tests/test_federate_roundtrip_db.py`, `tests/test_graph_contracts.py`
+Tests: `tests/test_graph_loader.py`, `tests/test_cli_graph.py`, `tests/test_diff.py`, `tests/test_diff_enhanced.py`, `tests/test_cli_diff.py`, `tests/test_rule_engine.py`, `tests/test_rule_severity.py`, `tests/test_cycle_rule.py`, `tests/test_import_boundary_rule.py`, `tests/test_linter.py`, `tests/test_cli_lint.py`, `tests/test_import_resolver.py`, `tests/test_import_scan.py`, `tests/test_symbol_diff_polish.py`, `tests/test_snapshot.py`, `tests/test_cli_snapshot.py`, `tests/test_c4.py`, `tests/test_graph_federation.py`, `tests/test_graph_contracts.py`, `tests/test_graph_sdl.py`, `tests/test_lifecycle_rules.py`, `tests/test_export.py`, `tests/test_federate.py`, `tests/test_federate_roundtrip_db.py`

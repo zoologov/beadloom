@@ -4,7 +4,7 @@
       "is_estimate": true,
       "label": "est. @ $0.4/1M tokens",
       "rate_usd_per_1m": 0.4,
-      "usd": 0.0723
+      "usd": 0.3515
     },
     "runs": [
       {
@@ -28,13 +28,24 @@
         "output_tokens": 3500,
         "platform": "github",
         "ts": "2026-06-10T20:59:17.618917+00:00"
+      },
+      {
+        "cumulative_docs": 16,
+        "cumulative_input_tokens": 752847,
+        "cumulative_output_tokens": 125847,
+        "docs_refreshed": 13,
+        "gate": "green",
+        "input_tokens": 581000,
+        "output_tokens": 117000,
+        "platform": "github",
+        "ts": "2026-06-10T23:34:55.398678+00:00"
       }
     ],
     "totals": {
-      "docs_refreshed": 3,
-      "input_tokens": 171847,
-      "output_tokens": 8847,
-      "runs": 2
+      "docs_refreshed": 16,
+      "input_tokens": 752847,
+      "output_tokens": 125847,
+      "runs": 3
     }
   },
   "alerts": [],
@@ -59,12 +70,12 @@
       },
       {
         "details": {
-          "dormant": 4,
+          "dormant": 5,
           "high_fan_out": 1,
           "oversized": 2
         },
         "name": "complexity",
-        "score": 7.0
+        "score": 7.5
       },
       {
         "details": {
@@ -74,8 +85,8 @@
         "score": 0.0
       }
     ],
-    "debt_score": 10.0,
-    "severity": "low",
+    "debt_score": 10.5,
+    "severity": "medium",
     "top_offenders": [
       {
         "reasons": [
@@ -103,7 +114,21 @@
         "reasons": [
           "dormant"
         ],
+        "ref_id": "active-table",
+        "score": 0.5
+      },
+      {
+        "reasons": [
+          "dormant"
+        ],
         "ref_id": "context-oracle",
+        "score": 0.5
+      },
+      {
+        "reasons": [
+          "dormant"
+        ],
+        "ref_id": "doc-sync",
         "score": 0.5
       },
       {
@@ -117,48 +142,30 @@
         "reasons": [
           "dormant"
         ],
-        "ref_id": "graph-diff",
-        "score": 0.5
-      },
-      {
-        "reasons": [
-          "dormant"
-        ],
         "ref_id": "search",
         "score": 0.5
       }
     ],
-    "trend": {
-      "category_deltas": {
-        "complexity": 6.0,
-        "doc_gaps": 3.0,
-        "meta_doc_staleness": 0.0,
-        "rule_violations": 0.0,
-        "test_gaps": 0.0
-      },
-      "delta": 9.0,
-      "previous_score": 1.0,
-      "previous_snapshot": "2026-06-01 16:36:30 [BDL-038-wave1]"
-    }
+    "trend": null
   },
   "docs": {
-    "coverage_pct": 96.2,
-    "documented": 25,
-    "fresh": 86,
+    "coverage_pct": 98.0,
+    "documented": 49,
+    "fresh": 139,
     "freshness_pct": 100.0,
-    "nodes": 26,
+    "nodes": 50,
     "stale": 0,
-    "tracked_pairs": 86
+    "tracked_pairs": 139
   },
   "doctor": {
     "by_severity": {
       "ok": 11,
-      "warning": 7
+      "warning": 8
     },
     "errors": 0,
     "passed": true,
-    "total": 18,
-    "warnings": 7
+    "total": 19,
+    "warnings": 8
   },
   "federated": null,
   "lint": {
@@ -173,6 +180,13 @@
   "recommendations": [
     {
       "kind": "debt",
+      "link": "/dashboard#active-table",
+      "message": "debt score 0.5: dormant",
+      "severity": "warn",
+      "target": "active-table"
+    },
+    {
+      "kind": "debt",
       "link": "/dashboard#application",
       "message": "debt score 3.0: oversized; high_fan_out",
       "severity": "warn",
@@ -184,13 +198,6 @@
       "message": "debt score 0.5: dormant",
       "severity": "warn",
       "target": "context-oracle"
-    },
-    {
-      "kind": "debt",
-      "link": "/dashboard#docs-audit",
-      "message": "debt score 0.5: dormant",
-      "severity": "warn",
-      "target": "docs-audit"
     },
     {
       "kind": "debt",
@@ -209,14 +216,14 @@
     {
       "kind": "lint",
       "link": "/dashboard#application",
-      "message": "Node 'application' has 239 symbols (max 200): rule 'domain-size-limit' — `application` exceeds its limit (Node 'application' has 239 symbols (max 200): rule 'domain-size-limit'); split it into smaller nodes",
+      "message": "Node 'application' has 249 symbols (max 200): rule 'domain-size-limit' — `application` exceeds its limit (Node 'application' has 249 symbols (max 200): rule 'domain-size-limit'); split it into smaller nodes",
       "severity": "warn",
       "target": "application"
     },
     {
       "kind": "lint",
       "link": "/dashboard#graph",
-      "message": "Node 'graph' has 202 symbols (max 200): rule 'domain-size-limit' — `graph` exceeds its limit (Node 'graph' has 202 symbols (max 200): rule 'domain-size-limit'); split it into smaller nodes",
+      "message": "Node 'graph' has 214 symbols (max 200): rule 'domain-size-limit' — `graph` exceeds its limit (Node 'graph' has 214 symbols (max 200): rule 'domain-size-limit'); split it into smaller nodes",
       "severity": "warn",
       "target": "graph"
     }
@@ -230,21 +237,21 @@
       "value": "2"
     },
     {
-      "detail": "low",
+      "detail": "medium",
       "group": "debt",
       "label": "Debt",
-      "status": "ok",
-      "value": "10.0 / 100"
+      "status": "warn",
+      "value": "10.5 / 100"
     },
     {
-      "detail": "0 stale of 86 tracked",
+      "detail": "0 stale of 139 tracked",
       "group": "docs",
       "label": "Docs",
       "status": "ok",
-      "value": "96.2% covered"
+      "value": "98.0% covered"
     },
     {
-      "detail": "0 errors, 7 warnings",
+      "detail": "0 errors, 8 warnings",
       "group": "doctor",
       "label": "Doctor",
       "status": "warn",
@@ -471,6 +478,16 @@
       "symbols": 853,
       "sync_pct": 100.0,
       "ts": "2026-06-10T21:47:50.306485+00:00"
+    },
+    {
+      "coverage_pct": 98.0,
+      "debt_score": 10.5,
+      "edges": 133,
+      "lint_violations": 2,
+      "nodes": 50,
+      "symbols": 961,
+      "sync_pct": 100.0,
+      "ts": "2026-06-13T22:46:10.197880+00:00"
     }
   ]
 }

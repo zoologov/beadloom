@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     import sqlite3
     from collections.abc import Sequence
 
+    from beadloom.application.active_table import ReconcileResult
     from beadloom.application.gate import GateResult
     from beadloom.graph.federation import GateFailure
 
@@ -1265,6 +1266,17 @@ fi
 if [ $exit_code -eq 1 ]; then
   echo "Warning: beadloom sync-check failed (index may be stale)"
 fi
+
+# --- ACTIVE / tracker coherence ---
+# Guarded no-op: only runs when BOTH `bd` and `beadloom` are installed. In any
+# repo without `bd` (or without ACTIVE tables) this block does nothing and never
+# blocks the commit. Auto-fixes the bead-status tables + tracked issues.jsonl
+# and restages them so the commit is coherent by construction.
+if command -v bd >/dev/null 2>&1 && command -v beadloom >/dev/null 2>&1; then
+  beadloom active-sync >/dev/null 2>&1
+  git add -u .claude/development/docs/features 2>/dev/null
+  [ -f .beads/issues.jsonl ] && git add .beads/issues.jsonl 2>/dev/null
+fi
 """
 
 _HOOK_TEMPLATE_BLOCK = """\
@@ -1307,6 +1319,17 @@ fi
 
 if [ $exit_code -eq 1 ]; then
   echo "Warning: beadloom sync-check failed (index may be stale)"
+fi
+
+# --- ACTIVE / tracker coherence ---
+# Guarded no-op: only runs when BOTH `bd` and `beadloom` are installed. In any
+# repo without `bd` (or without ACTIVE tables) this block does nothing and never
+# blocks the commit. Auto-fixes the bead-status tables + tracked issues.jsonl
+# and restages them so the commit is coherent by construction (never blocks).
+if command -v bd >/dev/null 2>&1 && command -v beadloom >/dev/null 2>&1; then
+  beadloom active-sync >/dev/null 2>&1
+  git add -u .claude/development/docs/features 2>/dev/null
+  [ -f .beads/issues.jsonl ] && git add .beads/issues.jsonl 2>/dev/null
 fi
 
 if [ $failed -ne 0 ]; then
@@ -1360,6 +1383,246 @@ def install_hooks(
     hook_path.write_text(template)
     hook_path.chmod(hook_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     click.echo(f"Installed pre-commit hook (mode: {mode}).")
+
+
+# beadloom:component=active-table
+def _bd_statuses_from_list(beads: list[dict[str, object]]) -> dict[str, str]:
+    """Build ``{bead_id -> status_token}`` from a ``bd list --json`` payload.
+
+    Each bead's own ``status`` is taken verbatim, except that an ``open`` bead
+    with at least one *open blocker* is reported as ``"blocked"`` so the ACTIVE
+    table reflects readiness. A blocker is a ``dependencies`` entry of type
+    ``blocks`` whose target bead is not ``closed`` (parent-child links never
+    block). Malformed entries are skipped defensively (best-effort, never raises).
+    """
+    statuses: dict[str, str] = {}
+    blockers: dict[str, list[str]] = {}
+    for bead in beads:
+        bead_id = bead.get("id")
+        status = bead.get("status")
+        if not isinstance(bead_id, str) or not isinstance(status, str):
+            continue
+        statuses[bead_id] = status
+        deps = bead.get("dependencies")
+        targets: list[str] = []
+        if isinstance(deps, list):
+            for dep in deps:
+                if not isinstance(dep, dict) or dep.get("type") != "blocks":
+                    continue
+                target = dep.get("depends_on_id")
+                if isinstance(target, str):
+                    targets.append(target)
+        blockers[bead_id] = targets
+
+    for bead_id, status in list(statuses.items()):
+        if status != "open":
+            continue
+        if any(statuses.get(t) not in (None, "closed") for t in blockers.get(bead_id, [])):
+            statuses[bead_id] = "blocked"
+    return statuses
+
+
+# beadloom:component=active-table
+def _query_bd_statuses(project_root: Path) -> dict[str, str] | None:
+    """Return bead-id -> status from ``bd list --json``, or None if bd unavailable.
+
+    Funnels through :func:`bd_seam.run_bd` (mockable). Returns ``None`` when ``bd``
+    is not installed (``BdUnavailableError``) or the call/JSON fails — the caller
+    treats ``None`` as "skip, no-op" so a non-flow repo is never affected.
+    """
+    from beadloom.services.bd_seam import BdUnavailableError, run_bd
+
+    try:
+        result = run_bd(["list", "--json"], cwd=str(project_root))
+    except BdUnavailableError:
+        return None
+    if not result.ok:
+        return None
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, list):
+        return None
+    beads = [b for b in payload if isinstance(b, dict)]
+    return _bd_statuses_from_list(beads)
+
+
+# beadloom:component=active-table
+def _jsonl_is_tracked(project_root: Path) -> bool:
+    """True when ``.beads/issues.jsonl`` exists AND is git-tracked in *project_root*."""
+    import subprocess
+
+    jsonl = project_root / ".beads" / "issues.jsonl"
+    if not jsonl.is_file():
+        return False
+    try:
+        # Fixed argv, no shell; queries the index for the tracked path.
+        completed = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", ".beads/issues.jsonl"],  # noqa: S607
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return False
+    return completed.returncode == 0
+
+
+# beadloom:component=active-table
+def _export_jsonl(project_root: Path) -> None:
+    """Best-effort ``bd export -o .beads/issues.jsonl`` when the jsonl is tracked.
+
+    Keeps the tracked tracker artifact honest across branch/squash-merge (the
+    bd-close jsonl-drift fix). Skips silently if ``bd`` is unavailable or the
+    jsonl isn't tracked — never raises.
+    """
+    from beadloom.services.bd_seam import BdUnavailableError, run_bd
+
+    if not _jsonl_is_tracked(project_root):
+        return
+    try:
+        run_bd(["export", "-o", ".beads/issues.jsonl"], cwd=str(project_root))
+    except BdUnavailableError:
+        return
+
+
+# beadloom:component=active-table
+@main.command("active-sync")
+@click.option("--epic", "epic", default=None, help="Reconcile only this epic's ACTIVE.md.")
+@click.option(
+    "--check",
+    "check_only",
+    is_flag=True,
+    help="Report drift without writing; exit 1 if any drift, 0 if clean.",
+)
+@click.option("--json", "output_json", is_flag=True, help="Machine-readable JSON output.")
+@click.option(
+    "--no-export",
+    "no_export",
+    is_flag=True,
+    help="Skip the `bd export` jsonl sync (fix mode only).",
+)
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: current directory).",
+)
+def active_sync(
+    *,
+    epic: str | None,
+    check_only: bool,
+    output_json: bool,
+    no_export: bool,
+    project: Path | None,
+) -> None:
+    """Reconcile ACTIVE.md bead-status tables from ``bd`` (the source of truth).
+
+    For each epic's ACTIVE.md, rewrites the bead-status table's Status cells to
+    match ``bd`` (rich coordinator notes are preserved when the state agrees).
+    Default = fix mode (writes + syncs the tracked ``.beads/issues.jsonl`` via
+    ``bd export``); ``--check`` reports drift without writing (exit 1 on drift).
+
+    No-op contract: if ``bd`` is unavailable OR there is no ACTIVE file with a
+    bead-status table, this exits 0 and writes nothing (a non-flow repo is never
+    affected).
+    """
+    from beadloom.application.active_table import reconcile_active_tables
+
+    project_root = project or Path.cwd()
+
+    if not _has_active_table(project_root, epic):
+        click.echo("active-sync: no ACTIVE.md bead tables — nothing to reconcile (skipped).")
+        return
+
+    bd_statuses = _query_bd_statuses(project_root)
+    if bd_statuses is None:
+        click.echo("active-sync: bd unavailable — skipped.")
+        return
+
+    if check_only:
+        _active_sync_check(project_root, bd_statuses, epic=epic, output_json=output_json)
+        return
+
+    result = reconcile_active_tables(project_root, bd_statuses, epic=epic)
+    if not no_export:
+        _export_jsonl(project_root)
+    _emit_active_sync(result, output_json=output_json, check=False)
+
+
+# beadloom:component=active-table
+def _has_active_table(project_root: Path, epic: str | None) -> bool:
+    """True when at least one in-scope ACTIVE.md contains a bead-status table."""
+    from beadloom.application.active_table import (
+        _discover_active_files,
+        _find_status_column,
+    )
+
+    for path in _discover_active_files(project_root, epic):
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+        except OSError:
+            continue
+        if _find_status_column(lines) is not None:
+            return True
+    return False
+
+
+# beadloom:component=active-table
+def _active_sync_check(
+    project_root: Path,
+    bd_statuses: dict[str, str],
+    *,
+    epic: str | None,
+    output_json: bool,
+) -> None:
+    """``--check`` mode: detect drift on a throwaway copy, never write; exit 1 on drift."""
+    import shutil
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        sandbox = Path(tmp) / "proj"
+        src = project_root / ".claude" / "development" / "docs" / "features"
+        if src.is_dir():
+            shutil.copytree(
+                src, sandbox / ".claude" / "development" / "docs" / "features"
+            )
+        from beadloom.application.active_table import reconcile_active_tables
+
+        result = reconcile_active_tables(sandbox, bd_statuses, epic=epic)
+    drift = bool(result.drifted_rows)
+    _emit_active_sync(result, output_json=output_json, check=True)
+    if drift:
+        sys.exit(1)
+
+
+# beadloom:component=active-table
+def _emit_active_sync(
+    result: ReconcileResult,
+    *,
+    output_json: bool,
+    check: bool,
+) -> None:
+    """Print the reconcile outcome (JSON or human-readable)."""
+    if output_json:
+        payload = {
+            "changed_files": [str(p) for p in result.changed_files],
+            "drifted_rows": [
+                {"path": str(p), "bead_id": bid, "old": old, "new": new}
+                for (p, bid, old, new) in result.drifted_rows
+            ],
+        }
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    if not result.drifted_rows:
+        click.echo("active-sync: ACTIVE tables already coherent.")
+        return
+    verb = "would update" if check else "updated"
+    click.echo(f"active-sync: {verb} {len(result.drifted_rows)} row(s):")
+    for path, bead_id, old, new in result.drifted_rows:
+        click.echo(f"  {path}: {bead_id}  {old!r} -> {new!r}")
 
 
 # beadloom:domain=doc-sync
