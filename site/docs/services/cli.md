@@ -1,7 +1,7 @@
 <!-- beadloom:badge-start -->
 > ✅ **fresh**
 > 
-> last synced 2026-06-11T14:19:08.709748+00:00 · coverage 100% (`cli`)
+> last synced 2026-06-13T22:53:18.143877+00:00 · coverage 100% (`cli`)
 > 
 > _Validation by Beadloom `doc_sync` — same source as `sync-check`._
 <!-- beadloom:badge-end -->
@@ -244,6 +244,68 @@ beadloom install-hooks [--mode warn|block] [--project DIR]
 # Remove
 beadloom install-hooks --remove [--project DIR]
 ```
+
+The installed hook runs, in order: ruff lint, mypy, `beadloom sync-check`
+(`--mode warn` reports stale docs; `--mode block` fails the commit on stale docs),
+and finally the **ACTIVE / tracker coherence** step. That last step is a guarded
+auto-fix: it runs only when BOTH `bd` and `beadloom` are on `PATH`, calls
+`beadloom active-sync` to reconcile each epic's ACTIVE.md bead-status table from
+`bd` and re-export `.beads/issues.jsonl`, then restages the touched
+`.claude/development/docs/features/**` files and `.beads/issues.jsonl` so the
+commit is coherent **by construction**. It never blocks the commit (it runs even
+in `block` mode without affecting the exit code), and in any repo without `bd` —
+or without ACTIVE tables — the block is a complete no-op (see
+[`active-sync`](#beadloom-active-sync)).
+
+### beadloom active-sync
+
+Reconcile each epic's `ACTIVE.md` bead-status table from `bd` — the source of
+truth — and re-export the tracked `.beads/issues.jsonl`.
+
+```bash
+# Fix mode (default): rewrite drifted Status cells + bd export the jsonl
+beadloom active-sync [--epic KEY] [--no-export] [--project DIR]
+
+# Check mode: report drift without writing; exit 1 if any drift, 0 if clean
+beadloom active-sync --check [--epic KEY] [--project DIR]
+
+# Machine-readable JSON (works with --check or fix mode)
+beadloom active-sync --json [--check] [--epic KEY] [--project DIR]
+```
+
+For every epic's `ACTIVE.md`, it finds the bead-status table and rewrites each
+Status cell to match the bead's current `bd` status (`closed → ✓ done`,
+`in_progress → in progress`, `open`/`ready → ready`, and `blocked` for an `open`
+bead with an open blocker). A richer coordinator note is preserved when its state
+already agrees (e.g. `✓ done (PASS-WITH-FIXES)` is left intact for a `closed`
+bead). Only Status cells change — prose, the Progress Log, and other columns are
+byte-preserved. The reconcile core (`application/active_table.py`,
+`reconcile_active_tables` / `bd_status_to_cell`) is the same one the MCP S4
+process-tools (`checkpoint` / `complete_bead`) use.
+
+This is the mechanism that keeps `ACTIVE.md` honest **by construction** — wired
+into the pre-commit hook (above), the coordinator no longer hand-edits
+bead-status rows; the table is reconciled from `bd` on every commit.
+
+- `--epic KEY` — reconcile only `features/<KEY>/ACTIVE.md` (default: every
+  `features/*/ACTIVE.md`).
+- `--check` — report drift on a throwaway copy without writing; **exit 1** if any
+  row would change, **exit 0** when clean. Never writes and never exports.
+- `--json` — machine-readable output: `{ "changed_files": [...], "drifted_rows":
+  [ { "path", "bead_id", "old", "new" }, ... ] }`.
+- `--no-export` — skip the `bd export` jsonl sync (fix mode only).
+- `--project DIR` — project root (default: current directory).
+
+In fix mode (no `--check`), after rewriting it best-effort runs
+`bd export -o .beads/issues.jsonl` — but only when that file is already
+git-tracked — so the tracked tracker artifact stays honest across
+branch/squash-merge. `--no-export` skips that step.
+
+**No-op contract.** `active-sync` exits **0 and writes nothing** when there is no
+`ACTIVE.md` with a bead-status table, OR when `bd` is unavailable, OR when
+`.beads/issues.jsonl` is not tracked (the export is skipped). So a non-flow repo —
+or any adopter without the agentic flow — is never affected; the command (and the
+hook step that calls it) is a safe out-of-the-box no-op.
 
 ### beadloom link
 
@@ -676,7 +738,8 @@ Module `src/beadloom/services/cli.py`:
 - `status` -- show index statistics with health trends and context metrics; `--debt-report` mode with `--fail-if`, `--category` flags
 - `sync_check` -- check doc-code sync with reason/details (reason-aware output for `untracked_files`, `missing_modules`, `symbols_changed`); `--since GIT_REF` measures drift against a git ref instead of the stored baseline (fresh-checkout / per-push drift detection)
 - `sync_update` -- review and update stale docs interactively; `--check` for status-only; `--yes`/`-y` for a non-interactive re-baseline; `--all` (with `--yes`) re-baselines every stale ref
-- `install_hooks` -- install/remove pre-commit hook
+- `install_hooks` -- install/remove pre-commit hook (lint -> mypy -> sync-check -> guarded ACTIVE/tracker-coherence auto-fix step)
+- `active_sync` -- reconcile each epic's ACTIVE.md bead-status table from `bd` (`--epic`/`--check`/`--json`/`--no-export`); fix mode also `bd export`s the tracked `.beads/issues.jsonl`; safe no-op when no ACTIVE table or no `bd`; delegates to `application/active_table.py:reconcile_active_tables()`
 - `link` -- manage external tracker links
 - `search` -- FTS5 search with LIKE fallback
 - `why` -- impact analysis (upstream + downstream) with `--reverse` and `--format {panel,tree}`
@@ -704,4 +767,4 @@ All commands accept `--project DIR` to specify the project root. The current dir
 
 ## Testing
 
-CLI is tested via `click.testing.CliRunner`. Each command has a corresponding test file in `tests/test_cli_*.py`: `test_cli_reindex.py`, `test_cli_ctx.py`, `test_cli_graph.py`, `test_cli_status.py`, `test_cli_sync_check.py`, `test_cli_sync_update.py`, `test_cli_hooks.py`, `test_cli_link.py`, `test_cli_docs.py`, `test_cli_mcp.py`, `test_cli_watch.py`, `test_cli_diff.py`, `test_cli_why.py`, `test_cli_lint.py`, `test_cli_init.py`, `test_cli_snapshot.py`, `test_cli_config_check.py`, `test_cli_setup_agentic_flow.py`.
+CLI is tested via `click.testing.CliRunner`. Each command has a corresponding test file in `tests/test_cli_*.py`: `test_cli_reindex.py`, `test_cli_ctx.py`, `test_cli_graph.py`, `test_cli_status.py`, `test_cli_sync_check.py`, `test_cli_sync_update.py`, `test_cli_hooks.py`, `test_cli_link.py`, `test_cli_docs.py`, `test_cli_mcp.py`, `test_cli_watch.py`, `test_cli_diff.py`, `test_cli_why.py`, `test_cli_lint.py`, `test_cli_init.py`, `test_cli_snapshot.py`, `test_cli_config_check.py`, `test_cli_setup_agentic_flow.py`, `test_cli_active_sync.py` (+ `test_cli_active_sync_hardening.py`).

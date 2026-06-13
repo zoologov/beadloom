@@ -380,6 +380,13 @@ nodes:
     docs:
       - docs/services/components/bd-seam/DOC.md
 
+  - ref_id: active-table
+    kind: component
+    summary: "Shared ACTIVE.md bead-status table parser/updater + reconcile-from-bd core (tolerant, fail-safe; MCP S4 tools + active-sync build on it)"
+    source: src/beadloom/application/active_table.py
+    docs:
+      - docs/domains/application/components/active-table/DOC.md
+
   # Site consumer: the VitePress documentation site. It does not live in
   # src/beadloom/ — it is the published artifact that CONSUMES the data the
   # beadloom service produces (the generated graph pages, dashboard.data.json,
@@ -546,6 +553,9 @@ edges:
     kind: part_of
   - src: bd-seam
     dst: mcp-server
+    kind: part_of
+  - src: active-table
+    dst: application
     kind: part_of
 
   # Service → domain usage edges

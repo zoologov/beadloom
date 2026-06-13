@@ -48,13 +48,7 @@
       "runs": 3
     }
   },
-  "alerts": [
-    {
-      "kind": "stale_doc",
-      "message": "15 stale doc(s) — refresh and re-run `beadloom sync-check`",
-      "severity": "warn"
-    }
-  ],
+  "alerts": [],
   "debt": {
     "categories": [
       {
@@ -67,12 +61,12 @@
       },
       {
         "details": {
-          "stale": 1,
+          "stale": 0,
           "undocumented": 1,
           "untracked": 2
         },
         "name": "doc_gaps",
-        "score": 4.0
+        "score": 3.0
       },
       {
         "details": {
@@ -91,17 +85,16 @@
         "score": 0.0
       }
     ],
-    "debt_score": 11.0,
-    "severity": "medium",
+    "debt_score": 10.0,
+    "severity": "low",
     "top_offenders": [
       {
         "reasons": [
-          "stale_doc",
           "oversized",
           "high_fan_out"
         ],
         "ref_id": "application",
-        "score": 4.0
+        "score": 3.0
       },
       {
         "reasons": [
@@ -150,22 +143,22 @@
   },
   "docs": {
     "coverage_pct": 98.0,
-    "documented": 48,
-    "fresh": 122,
-    "freshness_pct": 89.1,
-    "nodes": 49,
-    "stale": 15,
-    "tracked_pairs": 137
+    "documented": 49,
+    "fresh": 139,
+    "freshness_pct": 100.0,
+    "nodes": 50,
+    "stale": 0,
+    "tracked_pairs": 139
   },
   "doctor": {
     "by_severity": {
-      "ok": 10,
-      "warning": 23
+      "ok": 11,
+      "warning": 8
     },
     "errors": 0,
     "passed": true,
-    "total": 33,
-    "warnings": 23
+    "total": 19,
+    "warnings": 8
   },
   "federated": null,
   "lint": {
@@ -181,7 +174,7 @@
     {
       "kind": "debt",
       "link": "/dashboard#application",
-      "message": "debt score 4.0: stale_doc; oversized; high_fan_out",
+      "message": "debt score 3.0: oversized; high_fan_out",
       "severity": "warn",
       "target": "application"
     },
@@ -216,7 +209,7 @@
     {
       "kind": "lint",
       "link": "/dashboard#application",
-      "message": "Node 'application' has 239 symbols (max 200): rule 'domain-size-limit' — `application` exceeds its limit (Node 'application' has 239 symbols (max 200): rule 'domain-size-limit'); split it into smaller nodes",
+      "message": "Node 'application' has 249 symbols (max 200): rule 'domain-size-limit' — `application` exceeds its limit (Node 'application' has 249 symbols (max 200): rule 'domain-size-limit'); split it into smaller nodes",
       "severity": "warn",
       "target": "application"
     },
@@ -226,13 +219,6 @@
       "message": "Node 'graph' has 214 symbols (max 200): rule 'domain-size-limit' — `graph` exceeds its limit (Node 'graph' has 214 symbols (max 200): rule 'domain-size-limit'); split it into smaller nodes",
       "severity": "warn",
       "target": "graph"
-    },
-    {
-      "kind": "stale_doc",
-      "link": "/dashboard#application",
-      "message": "doc is stale vs its code — refresh and re-run sync-check",
-      "severity": "warn",
-      "target": "application"
     }
   ],
   "status_cards": [
@@ -244,21 +230,21 @@
       "value": "2"
     },
     {
-      "detail": "medium",
+      "detail": "low",
       "group": "debt",
       "label": "Debt",
-      "status": "warn",
-      "value": "11.0 / 100"
+      "status": "ok",
+      "value": "10.0 / 100"
     },
     {
-      "detail": "15 stale of 137 tracked",
+      "detail": "0 stale of 139 tracked",
       "group": "docs",
       "label": "Docs",
-      "status": "warn",
+      "status": "ok",
       "value": "98.0% covered"
     },
     {
-      "detail": "0 errors, 23 warnings",
+      "detail": "0 errors, 8 warnings",
       "group": "doctor",
       "label": "Doctor",
       "status": "warn",
@@ -495,6 +481,16 @@
       "symbols": 946,
       "sync_pct": 89.1,
       "ts": "2026-06-11T14:37:29.557372+00:00"
+    },
+    {
+      "coverage_pct": 98.0,
+      "debt_score": 10.0,
+      "edges": 133,
+      "lint_violations": 2,
+      "nodes": 50,
+      "symbols": 961,
+      "sync_pct": 100.0,
+      "ts": "2026-06-13T22:53:20.035060+00:00"
     }
   ]
 }

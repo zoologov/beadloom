@@ -124,6 +124,19 @@ export const sidebar = [
             items: [
               { text: "README", link: "/docs/domains/application/README" },
               {
+                text: "Components",
+                collapsed: true,
+                items: [
+                  {
+                    text: "Active Table",
+                    collapsed: true,
+                    items: [
+                      { text: "DOC", link: "/docs/domains/application/components/active-table/DOC" }
+                    ],
+                  }
+                ],
+              },
+              {
                 text: "Features",
                 collapsed: true,
                 items: [

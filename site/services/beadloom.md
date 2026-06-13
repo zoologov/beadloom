@@ -117,6 +117,7 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `ProviderConfig`
 - `PublishResult`
 - `PublishedDoc`
+- `ReconcileResult`
 - `ReindexNeeded`
 - `ReindexResult`
 - `RequireRule`
@@ -140,6 +141,7 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `WatchEvent`
 - `WhyDataProvider`
 - `WhyResult`
+- `active_sync`
 - `aggregate_exports`
 - `aggregate_parent_tests`
 - `analyze_git_activity`
@@ -149,6 +151,7 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `apply_branch_protection`
 - `auto_link_docs`
 - `backfill_structural_history`
+- `bd_status_to_cell`
 - `beadloom_ci`
 - `beadloom_ctx_json`
 - `beadloom_docs_polish_json`
@@ -283,6 +286,7 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `install_hooks`
 - `interactive_init`
 - `is_foreign_ref`
+- `is_separator_cells`
 - `launch`
 - `link`
 - `lint`
@@ -315,6 +319,7 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `read_deep_config`
 - `read_doc`
 - `read_history`
+- `reconcile_active_tables`
 - `reconcile_contracts`
 - `refresh_agentic_flow_files`
 - `refresh_claude_md`
@@ -358,6 +363,7 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `serialize_dashboard_data`
 - `serialize_export`
 - `serialize_federation`
+- `set_active_table_status`
 - `set_meta`
 - `setup_agentic_flow`
 - `setup_ai_techwriter`
@@ -370,6 +376,7 @@ Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)
 - `snapshot_compare`
 - `snapshot_list`
 - `snapshot_save`
+- `split_table_row`
 - `start_file_watcher`
 - `status`
 - `suggest_ref_id`

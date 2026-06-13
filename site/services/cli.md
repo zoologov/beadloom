@@ -13,6 +13,7 @@ Click-based CLI with 21 commands
 
 ## Public symbols
 
+- `active_sync`
 - `ci`
 - `config_check`
 - `ctx`

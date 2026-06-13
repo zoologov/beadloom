@@ -167,6 +167,36 @@ history) and, best-effort, appends a timestamped progress note to the bead's
 ACTIVE.md (skipped cleanly if the file cannot be located). Deterministic; no
 orchestration.
 
+## ACTIVE.md stays honest by construction (BDL-053)
+
+Each epic's `ACTIVE.md` carries a **bead-status table** (`| Bead | Role | Status
+| … |`) the coordinator reads to know where the wave stands. Historically the
+coordinator hand-edited those Status cells, which drifted from `bd` (the source
+of truth) whenever a row was missed. BDL-053 makes the table **correct by
+construction** instead of by discipline:
+
+- **`beadloom active-sync`** reconciles every epic's bead-status table FROM `bd`
+  (rewrites each Status cell to match the bead's `bd` status; a richer
+  coordinator note is preserved when its state agrees) and re-exports the tracked
+  `.beads/issues.jsonl`. See the
+  [CLI reference](../services/cli.md#beadloom-active-sync) for the
+  `--epic`/`--check`/`--json`/`--no-export` flags.
+- **The pre-commit hook runs it as a guarded auto-fix step.** After the lint /
+  mypy / sync-check steps, the hook calls `active-sync` and restages the touched
+  `features/**/ACTIVE.md` + `.beads/issues.jsonl`, so the committed table matches
+  `bd` on every commit — the coordinator no longer maintains rows by hand. The
+  step **never blocks** the commit and runs only when both `bd` and `beadloom`
+  are installed.
+- **Safe no-op for every adopter.** With no `ACTIVE.md` table, no `bd`, or an
+  untracked jsonl, `active-sync` (and the hook step) exits 0 and changes nothing —
+  so a repo that has not adopted the flow is never affected; it works
+  out-of-the-box.
+
+The reconcile core (`application/active_table.py`) is the **same** tolerant,
+fail-safe parser/updater the `checkpoint` / `complete_bead` MCP process-tools use
+to flip a single row — so single-row updates and full reconcile share one format
+(the `active-table` [component](../domains/application/components/active-table/DOC.md)).
+
 ## Tool-agnostic via MCP
 
 The process-tools are plain MCP tools, so any MCP client — Claude Code, Cursor,
@@ -199,7 +229,8 @@ This is stated deliberately, not glossed over:
 
 ## See also
 
-- [CLI reference](../services/cli.md) — `setup-agentic-flow`, `config-check`, `ci`, `setup-mcp`, `setup-branch-protection`.
+- [CLI reference](../services/cli.md) — `setup-agentic-flow`, `config-check`, `ci`, `setup-mcp`, `setup-branch-protection`, `install-hooks`, `active-sync`.
+- [Active Table component](../domains/application/components/active-table/DOC.md) — the shared ACTIVE.md bead-status table parser/updater + reconcile-from-`bd` core.
 - [AI tech-writer guide](./ai-techwriter.md) — the PR-triggered doc-refresh loop on the trunk-based model.
 - [MCP server](../services/mcp.md) — the full tool catalog (18 tools).
 - [Onboarding domain](../domains/onboarding/README.md) — the scaffold + config-sync internals.
