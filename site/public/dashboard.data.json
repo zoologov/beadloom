@@ -70,12 +70,12 @@
       },
       {
         "details": {
-          "dormant": 5,
+          "dormant": 4,
           "high_fan_out": 1,
           "oversized": 2
         },
         "name": "complexity",
-        "score": 7.5
+        "score": 7.0
       },
       {
         "details": {
@@ -85,8 +85,8 @@
         "score": 0.0
       }
     ],
-    "debt_score": 10.5,
-    "severity": "medium",
+    "debt_score": 10.0,
+    "severity": "low",
     "top_offenders": [
       {
         "reasons": [
@@ -109,13 +109,6 @@
         ],
         "ref_id": "vitepress-site",
         "score": 2.0
-      },
-      {
-        "reasons": [
-          "dormant"
-        ],
-        "ref_id": "active-table",
-        "score": 0.5
       },
       {
         "reasons": [
@@ -180,13 +173,6 @@
   "recommendations": [
     {
       "kind": "debt",
-      "link": "/dashboard#active-table",
-      "message": "debt score 0.5: dormant",
-      "severity": "warn",
-      "target": "active-table"
-    },
-    {
-      "kind": "debt",
       "link": "/dashboard#application",
       "message": "debt score 3.0: oversized; high_fan_out",
       "severity": "warn",
@@ -198,6 +184,13 @@
       "message": "debt score 0.5: dormant",
       "severity": "warn",
       "target": "context-oracle"
+    },
+    {
+      "kind": "debt",
+      "link": "/dashboard#doc-sync",
+      "message": "debt score 0.5: dormant",
+      "severity": "warn",
+      "target": "doc-sync"
     },
     {
       "kind": "debt",
@@ -237,11 +230,11 @@
       "value": "2"
     },
     {
-      "detail": "medium",
+      "detail": "low",
       "group": "debt",
       "label": "Debt",
-      "status": "warn",
-      "value": "10.5 / 100"
+      "status": "ok",
+      "value": "10.0 / 100"
     },
     {
       "detail": "0 stale of 139 tracked",
@@ -481,13 +474,23 @@
     },
     {
       "coverage_pct": 98.0,
-      "debt_score": 10.5,
+      "debt_score": 11.0,
+      "edges": 131,
+      "lint_violations": 2,
+      "nodes": 49,
+      "symbols": 946,
+      "sync_pct": 89.1,
+      "ts": "2026-06-11T14:37:29.557372+00:00"
+    },
+    {
+      "coverage_pct": 98.0,
+      "debt_score": 10.0,
       "edges": 133,
       "lint_violations": 2,
       "nodes": 50,
       "symbols": 961,
       "sync_pct": 100.0,
-      "ts": "2026-06-13T22:46:10.197880+00:00"
+      "ts": "2026-06-13T22:53:20.035060+00:00"
     }
   ]
 }

@@ -602,8 +602,9 @@ beadloom setup-mcp --remove [--tool {claude-code,cursor,windsurf}] [--project DI
 
 ### beadloom setup-ai-techwriter
 
-Scaffold the AI tech-writer (BDL-047 / F4.1) into this repo for one-command,
-3-step opt-in. In the `setup-*` family alongside `setup-mcp` / `setup-rules`.
+Scaffold the AI tech-writer (BDL-047 / F4.1; harness packaged in BDL-051 / S2)
+into this repo for one-command, 3-step opt-in. In the `setup-*` family alongside
+`setup-mcp` / `setup-rules`.
 
 ```bash
 beadloom setup-ai-techwriter --platform {github,gitlab} [--project DIR]
@@ -611,19 +612,20 @@ beadloom setup-ai-techwriter --platform {github,gitlab} [--project DIR]
 
 Idempotently scaffolds (clean overwrite on re-run):
 
-- **Vendors** the deterministic harness package + Goose recipe into
-  `tools/ai_techwriter/`. The harness lives in repo tooling (not the `beadloom`
-  wheel), so on any target repo `python -m tools.ai_techwriter` would not
-  resolve; vendoring copies it in, making the setup self-contained (the runner
-  needs only `beadloom` + `goose` + python). The harness is shipped as package
-  data (`onboarding/templates/ai_techwriter/`, inert `.py.txt` assets kept
-  byte-identical to the live source by a drift-guard test — principle 5).
+- **No Python vendoring.** As of BDL-051 / S2 the harness ships **inside** the
+  installed `beadloom` package as the `beadloom.ai_agents.ai_techwriter` domain,
+  so adopters depend on `beadloom` and invoke it directly via
+  `python -m beadloom.ai_agents.ai_techwriter` (the BDL-047/048 `tools/` Python
+  vendoring + drift-guard machinery is retired). Only the operator artifacts —
+  the Goose `recipe.yaml` (a readable reference of the agent's blast radius) and
+  `provision-runner.sh` — are copied (from package data via
+  `importlib.resources`) into `tools/ai_techwriter/` for operator convenience.
 - The chosen platform's CI wrapper: `.github/workflows/ai-techwriter.yml`
   (GitHub) **or** an `ai-techwriter` job in `.gitlab-ci.yml` (GitLab). As of
   BDL-049 both trigger on a **PR to main/master** — GitHub `on: pull_request`
   (`opened`/`synchronize`/`reopened`), GitLab `merge_request_event` — plus a
   manual fallback (`workflow_dispatch`). They call the same
-  `python -m tools.ai_techwriter` entrypoint; the PR path passes
+  `python -m beadloom.ai_agents.ai_techwriter` entrypoint; the PR path passes
   `--target pr-branch` and `--since $(git merge-base origin/<base> HEAD)` so the
   agent commits its refresh into the PR branch; the manual path uses
   `--target branch-pr`. A loop-guard skips the agent's own

@@ -1,7 +1,7 @@
 <!-- beadloom:badge-start -->
 > ✅ **fresh**
 > 
-> last synced 2026-06-13T22:42:55.793320+00:00 · coverage 100% (`context-oracle`)
+> last synced 2026-06-13T22:53:18.143877+00:00 · coverage 100% (`context-oracle`)
 > 
 > _Validation by Beadloom `doc_sync` — same source as `sync-check`._
 <!-- beadloom:badge-end -->
@@ -9,6 +9,21 @@
 # Context Oracle
 
 Context Oracle is the core domain of beadloom, responsible for building context bundles via BFS traversal of the architecture graph, code symbol indexing, caching, full-text search, API route extraction, test mapping, and impact analysis.
+
+## Features and components
+
+Features (each with a `SPEC.md`):
+
+- **[Code Indexer](features/code-indexer/SPEC.md)** — tree-sitter symbol + `beadloom:` annotation extraction.
+- **[Route Extraction](features/route-extraction/SPEC.md)** — API route discovery across web frameworks.
+- **[Test Mapping](features/test-mapping/SPEC.md)** — test-to-source-node mapping + coverage.
+- **[Search](features/search/SPEC.md)** — FTS5 full-text search over nodes + docs.
+- **[Cache](features/cache/SPEC.md)** — two-tier context-bundle cache.
+- **[Why](features/why/SPEC.md)** — bidirectional impact analysis.
+
+Components (internal building blocks, each with a `DOC.md`):
+
+- **[Context Builder](components/context-builder/DOC.md)** — the BFS bundle assembler behind `ctx` / `prime`.
 
 ## Specification
 

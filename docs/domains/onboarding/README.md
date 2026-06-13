@@ -2,6 +2,17 @@
 
 Project bootstrap, documentation import, and architecture-aware initialization.
 
+## Features
+
+Each feature has its own `SPEC.md`:
+
+- **[Agent Prime](features/agent-prime/SPEC.md)** — compact project context for AI sessions (`beadloom prime`).
+- **[Doc Generator](features/doc-generator/SPEC.md)** — doc skeletons + polish data from the graph (`beadloom docs generate` / `polish`).
+- **[Config Check](features/config-check/SPEC.md)** — AgentConfigAsCode drift detection (`beadloom config-check`).
+- **[Branch Protection](features/branch-protection/SPEC.md)** — strict trunk-based `main` protection (`beadloom setup-branch-protection`).
+- **[Agentic Flow Setup](features/agentic-flow-setup/SPEC.md)** — scaffold the multi-agent dev flow 1:1 (`beadloom setup-agentic-flow`).
+- **[AI Tech-Writer Setup](features/ai-techwriter-setup/SPEC.md)** — scaffold the packaged AI tech-writer harness (`beadloom setup-ai-techwriter`).
+
 ## Specification
 
 ### Modules

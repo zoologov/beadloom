@@ -1,7 +1,7 @@
 <!-- beadloom:badge-start -->
 > ✅ **fresh**
 > 
-> last synced 2026-06-13T22:42:55.793320+00:00 · coverage 100% (`sdl`)
+> last synced 2026-06-13T22:53:18.143877+00:00 · coverage 100% (`sdl`)
 > 
 > _Validation by Beadloom `doc_sync` — same source as `sync-check`._
 <!-- beadloom:badge-end -->
@@ -22,4 +22,17 @@ consumer's declared `references` can be checked for presence. This module
 implements a tiny line/brace scanner over the SDL text rather than pulling in a
 full GraphQL parser (`graphql-core` is the documented upgrade path).
 
-> Component doc skeleton (BDL-051 S3b / BEAD-14). Tech-writer (BEAD-13) fills prose.
+## Public surface
+
+- `extract_surface(sdl_text)` — return the exposed surface as a `set[str]`: the
+  top-level `Query` / `Mutation` / `Subscription` field names plus the
+  `type` / `input` / `enum` / `interface` type names declared in the SDL.
+
+## Collaborators
+
+Called by the graph-loader (`_fold_graphql_surface`) at load time to fold a
+GraphQL producer's `exposed: [...]` surface into the stored contract payload,
+which `contracts.py` then reconciles against a consumer's declared `references`.
+Pure, dependency-free, deterministic.
+
+> Component doc (BDL-051). Public surface verified against `sdl.py`.

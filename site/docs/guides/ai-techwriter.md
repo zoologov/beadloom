@@ -109,7 +109,7 @@ trunk-based development flow itself.
 ## Verdict: `ok` / `flagged` / `infra` (BDL-050)
 
 The required `ai-techwriter` check is red **only** on a genuine doc failure, never on
-broken infra. The harness (`tools/ai_techwriter/runner.py::classify_verdict`) maps each
+broken infra. The harness (`beadloom.ai_agents.ai_techwriter.runner::classify_verdict`) maps each
 finished run to one verdict; `cli.py` maps the verdict → exit code. The discriminator
 between a doc problem and an infra failure is **whether the model ever produced output**
 (`input_tokens + output_tokens > 0`):
@@ -144,9 +144,10 @@ human re-runs rather than silently shipping stale docs.
    beadloom setup-ai-techwriter --platform github   # or: gitlab
    ```
 
-   This idempotently drops the vendored harness (`tools/ai_techwriter/`), the
-   platform wrapper, `tools/ai_techwriter/provision-runner.sh`, and this guide.
-   Then on the VPS:
+   This idempotently drops the platform wrapper (which calls the **packaged**
+   harness `python -m beadloom.ai_agents.ai_techwriter` — no Python is vendored
+   as of BDL-051 / S2), the operator artifacts `tools/ai_techwriter/recipe.yaml`
+   + `tools/ai_techwriter/provision-runner.sh`, and this guide. Then on the VPS:
 
    ```bash
    ./tools/ai_techwriter/provision-runner.sh \
@@ -200,10 +201,10 @@ Both wrappers call the **same** entrypoint — only the trigger, the secret nami
 
 ```bash
 # PR / MR path (commits the refresh into the existing PR/MR branch):
-uv run python -m tools.ai_techwriter --platform <github|gitlab> --target pr-branch --since <merge-base>
+uv run python -m beadloom.ai_agents.ai_techwriter --platform <github|gitlab> --target pr-branch --since <merge-base>
 
 # Manual workflow_dispatch path (no PR context → cut a branch + open a PR/MR):
-uv run python -m tools.ai_techwriter --platform <github|gitlab> --target branch-pr --since <ref-or-HEAD~1>
+uv run python -m beadloom.ai_agents.ai_techwriter --platform <github|gitlab> --target branch-pr --since <ref-or-HEAD~1>
 ```
 
 `--target` selects the publish mode: `pr-branch` (the `pull_request` path) commits

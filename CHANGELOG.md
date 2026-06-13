@@ -26,6 +26,35 @@ out-of-the-box for every adopter and never blocks a commit.
 - **`application/active_table.py` reconcile core** — `reconcile_active_tables(project_root, bd_statuses, *, epic=None)` (pure with respect to `bd`: the caller injects the status map) returns a `ReconcileResult` (`changed_files`, `drifted_rows`); `bd_status_to_cell` documents the `bd`-status → Status-cell map (`closed → ✓ done`, `in_progress → in progress`, `blocked → blocked`, `open`/`ready → ready`; unknown → `None`). Classified as the new `active-table` **component** node with its own DOC.md
 - **Pre-commit hook ACTIVE / tracker coherence step** — both `install-hooks` templates (`warn` and `block`) gained a guarded final step that runs `beadloom active-sync` and restages `.claude/development/docs/features/**` + `.beads/issues.jsonl` only when both `bd` and `beadloom` are installed. Never blocks the commit; a complete no-op in any repo without `bd`/ACTIVE
 
+Phase "Beadloom governs itself" (BDL-051): closes the graph-discipline gap so
+Beadloom's own architecture is **honest-by-construction**. Three threads land
+together: (1) a new **`component` node kind** — an internal/infra building block
+that earns a node + a `DOC.md` (the mirror of a `feature`'s `SPEC.md`), attributed
+in code with `# beadloom:component=<id>`; (2) a **`module-coverage` lint** promoted
+to **`severity: error`** (it supersedes the advisory `unregistered-feature-candidate`
+sprawl-lint): every `src/beadloom/**.py` module with ≥1 symbol is either a tracked
+node (feature/component, or under a node's `source` — incl. a **directory** source
+like `tui/`) or named on a minimal, **visible** `exempt:` list in `rules.yml` —
+**no shadow code**, and a new untracked module now **fails `beadloom ci`**; (3) the
+AI tech-writer harness moved out of `tools/` into a first-class
+**`ai_agents/ai_techwriter` domain** shipped inside the wheel (adopters run
+`python -m beadloom.ai_agents.ai_techwriter` — **no Python vendoring**). ALL src
+modules were classified (**21 new feature/component nodes** + the seeded exempt
+list). The MCP `checkpoint` / `complete_bead` process-tools now **maintain the
+`ACTIVE.md` status table** correct-by-construction. **Honest framing:** the lint is
+the enforcement; this epic dogfooded the whole model on Beadloom itself.
+
+### Added (BDL-051)
+- **`component` node kind** — a tracked internal/infra building block with a `part_of` edge to its domain, a `source: <file>`, and a `docs: <DOC.md>`; attributed via `# beadloom:component=<id>` (the mirror of `# beadloom:feature=`). 10 component nodes: `graph/{loader,contracts,sdl}`, `context-oracle/context-builder`, `doc-sync/doc-indexer`, `infrastructure/{db,health,git-activity,mcp-tools}`, `services/bd-seam` (BDL-051 / S3a/S3b)
+- **`ai_agents/ai_techwriter` domain** — the deterministic, seam-isolated PR-triggered doc-refresh harness, moved from the retired `tools/ai_techwriter` repo-tooling package INTO the installed `beadloom` package (graph-tracked, lint-governed, shipped in the wheel). Behaviour is the BDL-049/050 model byte-unchanged; adopters invoke `python -m beadloom.ai_agents.ai_techwriter`. A `core-no-import-ai-agents` / `application-no-import-ai-agents` `forbid_import` pair keeps it a **leaf consumer** (BDL-051 / S2)
+- **11 feature `SPEC.md` + 10 component `DOC.md`** filled — the newly-classified capabilities (`site-generation`, `ci-gate`, `code-indexer`, `route-extraction`, `test-mapping`, `sync-check`, `snapshot`, `config-check`, `branch-protection`, `agentic-flow-setup`, `ai-techwriter-setup`, `ai-techwriter`) and the component docs (BDL-051 / S3b + the docs wave)
+
+### Changed (BDL-051)
+- **`module-coverage` lint is now `severity: error`** (was `warn`) — with every src module classified, a new untracked module fails `beadloom lint --strict` / `beadloom ci`. It supersedes the older `unregistered-feature-candidate` advisory sprawl-lint with a whole-tree check; a node's `source` may be a **directory** (dir-source coverage — the `tui` service covers all of `src/beadloom/tui/`) (BDL-051 / S3a)
+- **No Python vendoring in `setup-ai-techwriter`** — the scaffold no longer copies harness Python into a target repo (the BDL-047/048 `HARNESS_MODULES` / `vendor_harness` / `sync_vendored_harness` drift-guard machinery is retired); it emits only the CI wrapper (invoking the packaged module) + the operator artifacts (`recipe.yaml` / `provision-runner.sh`, copied from package data) (BDL-051 / S2)
+- **MCP `checkpoint` / `complete_bead` maintain the `ACTIVE.md` status table** — the process-tools update the bead-status table + progress log in `ACTIVE.md` correct-by-construction, not just `bd` comments (BDL-051 / S4)
+- **Docs** — the architecture-model guide gained the directory-`source` coverage note + the corrected feature/component example (`code-indexer` is a feature); domain READMEs now index their features + components; the AI tech-writer guide + `services/cli.md` reference the packaged `beadloom.ai_agents.ai_techwriter` module (no `tools.ai_techwriter`) (BDL-051 docs wave)
+
 Phase "CI consolidation" (BDL-050): replaces the three independent PR workflows
 (`beadloom-gate.yml` / `tests.yml` / `ai-techwriter.yml`) with **one
 `.github/workflows/ci.yml`** on `pull_request → main`. Jobs `gate` ∥ `tests`

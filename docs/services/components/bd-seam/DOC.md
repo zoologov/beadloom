@@ -14,4 +14,20 @@ issue tracker; rather than scattering `subprocess` calls across the handlers,
 every `bd` invocation funnels through `run_bd`. Tests patch `run_bd` (or the
 module-level `subprocess.run`) so the tools run without a real `bd` binary.
 
-> Component doc skeleton (BDL-051 S3b / BEAD-14). Tech-writer (BEAD-13) fills prose.
+## Public surface
+
+- `run_bd(args, *, cwd=None)` — invoke `bd` with *args* (no leading `bd`) and
+  capture its output; raises `BdUnavailableError` when the `bd` binary is not
+  installed / not on PATH.
+- `BdResult` — frozen dataclass: `returncode`, `stdout`, `stderr`, plus an
+  `ok` property (True iff `returncode == 0`).
+- `BdUnavailableError` — raised when `bd` is unavailable.
+- `_BD_TIMEOUT_S` — the per-invocation timeout (60s).
+
+## Collaborators
+
+The single funnel for the MCP process-tools (`task_init` / `complete_bead` /
+`checkpoint`) that drive the beads tracker. Tests patch `run_bd` (or the
+module-level `subprocess.run`) to run the tools without a real `bd` binary.
+
+> Component doc (BDL-051). Public surface verified against `bd_seam.py`.

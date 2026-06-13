@@ -1,7 +1,7 @@
 <!-- beadloom:badge-start -->
 > ✅ **fresh**
 > 
-> last synced 2026-06-13T22:42:55.793320+00:00 · coverage 50% (`doc-sync`)
+> last synced 2026-06-13T22:53:18.143877+00:00 · coverage 50% (`doc-sync`)
 > 
 > _Validation by Beadloom `doc_sync` — same source as `sync-check`._
 <!-- beadloom:badge-end -->
@@ -64,7 +64,12 @@ class SyncPair:
 
 ### Features
 
+- **[Sync Check](features/sync-check/SPEC.md)** -- The doc-code synchronization engine (`beadloom sync-check` / `sync-update`).
 - **[Docs Audit](features/docs-audit/SPEC.md)** -- Zero-config meta-doc staleness detection via keyword-proximity matching. CLI: `beadloom docs audit`.
+
+### Components
+
+- **[Doc Indexer](components/doc-indexer/DOC.md)** -- Markdown scan + chunk + `docs`/`chunks` population; the doc half of every sync-check pair.
 
 ### Git Hook Integration
 

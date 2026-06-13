@@ -1,7 +1,7 @@
 <!-- beadloom:badge-start -->
 > ✅ **fresh**
 > 
-> last synced 2026-06-13T22:42:55.793320+00:00 · coverage 100% (`infrastructure`)
+> last synced 2026-06-13T22:53:18.143877+00:00 · coverage 100% (`infrastructure`)
 > 
 > _Validation by Beadloom `doc_sync` — same source as `sync-check`._
 <!-- beadloom:badge-end -->
@@ -13,6 +13,15 @@ Domain-agnostic SQLite database layer, health metrics, and git activity analysis
 > Note: the cross-domain orchestrators (`reindex`, `doctor`, `debt_report`, `watcher`)
 > live in the [application](../application/README.md) layer, not here, so that
 > `infrastructure` never imports a domain (the DDD Dependency Rule).
+
+## Components
+
+Internal building blocks, each with a `DOC.md`:
+
+- **[DB](components/db/DOC.md)** — the domain-agnostic SQLite layer (connection, schema, migrations, `meta`).
+- **[Health](components/health/DOC.md)** — health snapshots + trend computation.
+- **[Git Activity](components/git-activity/DOC.md)** — per-node `git log` activity metrics.
+- **[MCP Tools](components/mcp-tools/DOC.md)** — the canonical MCP tool-name catalog.
 
 ## Specification
 

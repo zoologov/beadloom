@@ -1,7 +1,7 @@
 <!-- beadloom:badge-start -->
 > ✅ **fresh**
 > 
-> last synced 2026-06-13T22:42:55.793320+00:00 · coverage 93% (`application`)
+> last synced 2026-06-13T22:53:18.143877+00:00 · coverage 93% (`application`)
 > 
 > _Validation by Beadloom `doc_sync` — same source as `sync-check`._
 <!-- beadloom:badge-end -->
@@ -18,6 +18,17 @@ layer may depend on domains and infrastructure (legal top-down); it is never
 depended upon by a lower layer. Extracting these orchestrators out of
 `infrastructure` is what lets `infrastructure` stay domain-agnostic and restores
 the DDD Dependency Rule.
+
+## Features
+
+Each feature has its own `SPEC.md`:
+
+- **[Reindex](../infrastructure/features/reindex/SPEC.md)** — full + incremental index rebuild (`beadloom reindex`).
+- **[Doctor](../infrastructure/features/doctor/SPEC.md)** — graph/data integrity checks (`beadloom doctor`).
+- **[Debt Report](../infrastructure/features/debt-report/SPEC.md)** — weighted architecture-debt score.
+- **[Watcher](../infrastructure/features/watcher/SPEC.md)** — file-watch auto-reindex.
+- **[Site Generation](features/site-generation/SPEC.md)** — the VitePress site generator (`beadloom docs site`).
+- **[CI Gate](features/ci-gate/SPEC.md)** — the unified `beadloom ci` enforcement gate.
 
 ## Specification
 

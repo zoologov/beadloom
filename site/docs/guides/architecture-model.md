@@ -47,10 +47,12 @@ and every feature must have a `SPEC.md` describing that contract.
 
 A **component** is an internal/infra **building block** — a tracked module that
 is *not* a user-facing capability but still warrants a doc and a node. Think
-`db`, `graph/loader`, the context-bundle builder, the code indexer,
-`git_activity`: substantial machinery the rest of the system stands on, with a
-real surface worth documenting, but no externally-visible "command" or contract
-of its own.
+`db`, `graph/loader`, the context-bundle builder, `git_activity`, the `bd`
+seam: substantial machinery the rest of the system stands on, with a real
+surface worth documenting, but no externally-visible "command" or contract of
+its own. (The code indexer, by contrast, *is* a feature — it has a distinct
+input/output contract: source files → `code_symbols` rows — so it earns a
+`SPEC.md`, not a `DOC.md`.)
 
 A component is declared in `services.yml` exactly like a feature — `kind:
 component`, a `source: <file>`, a `part_of` edge to its domain, and a `docs:
@@ -92,6 +94,18 @@ The matching nodes are declared in `services.yml`:
   `SPEC.md`, and
 - a `component` node per internal building block, with a `part_of` edge to its
   domain, a `source: <file>`, and a `docs: <DOC.md>`.
+
+### A node's `source` may be a directory
+
+A node's `source:` is usually a single file, but it may also be a **directory**
+— *dir-source coverage*. When `source:` names a directory (e.g. the `tui`
+service declares `source: src/beadloom/tui/`), the node covers **every** module
+under that prefix at once, so those modules need no per-file `feature=` /
+`component=` annotation to satisfy the coverage lint — the directory `source`
+**is** their coverage. The `module-coverage` lint treats "the module's path is
+under a node's `source`" the same way it treats "the module's path *is* a
+node's `source`". This keeps a cohesive leaf package (like `tui/`) modeled as
+one node without forcing a node per file.
 
 After editing annotations or `services.yml`, run `beadloom reindex` (then
 `beadloom sync-check`) so the index reflects reality.

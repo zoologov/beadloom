@@ -1,7 +1,7 @@
 <!-- beadloom:badge-start -->
 > ✅ **fresh**
 > 
-> last synced 2026-06-13T22:42:55.793320+00:00 · coverage 90% (`graph`)
+> last synced 2026-06-13T22:53:18.143877+00:00 · coverage 90% (`graph`)
 > 
 > _Validation by Beadloom `doc_sync` — same source as `sync-check`._
 <!-- beadloom:badge-end -->
@@ -9,6 +9,23 @@
 # Graph Domain
 
 YAML format for describing the project architecture graph, with loader, diff engine, rule engine, import resolver, linter, snapshot storage, C4 architecture model mapping, and cross-repo federation.
+
+## Features and components
+
+Features (each with a `SPEC.md`):
+
+- **[Graph Diff](features/graph-diff/SPEC.md)** — graph delta engine vs a git ref / snapshot.
+- **[Rule Engine](features/rule-engine/SPEC.md)** — architecture-boundary lint (incl. `module-coverage`).
+- **[Import Resolver](features/import-resolver/SPEC.md)** — code-import → edge resolution.
+- **[C4 Diagrams](features/c4-diagrams/SPEC.md)** — graph → C4/Mermaid mapping.
+- **[Federation](features/federation/SPEC.md)** — cross-repo export + hub aggregation.
+- **[Snapshot](features/snapshot/SPEC.md)** — point-in-time graph snapshots + compare.
+
+Components (internal building blocks, each with a `DOC.md`):
+
+- **[Graph Loader](components/graph-loader/DOC.md)** — YAML → `nodes` / `edges` ingestion seam.
+- **[Contracts](components/contracts/DOC.md)** — first-class cross-service contract model.
+- **[SDL](components/sdl/DOC.md)** — dependency-free GraphQL SDL surface extractor.
 
 ## Specification
 
