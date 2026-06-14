@@ -45,8 +45,34 @@ data).
 ## Modules
 
 - **runner.py** — the deterministic orchestrator (the loop above) and the
-  `{ok, flagged, infra}` verdict classification (`classify_verdict`).
-- **scope.py** — drift discovery from `beadloom sync-check --json`.
+  `{ok, flagged, infra}` verdict classification (`classify_verdict`). Per-doc
+  repair runs in a bounded session pool (`HarnessConfig.max_parallel`, default 3
+  — RAM-aware for the 8GB self-hosted VPS); each doc gets its own Goose session,
+  and the per-session results are folded back in stale order so the aggregate /
+  verdict is identical whether the pool ran them sequentially or concurrently.
+- **backoff.py** — per-session 429/5xx exponential back-off (`RateLimitError`,
+  `retry_with_backoff`) so concurrent sessions degrade gracefully against the
+  rate-limited model endpoint instead of failing; the `sleep` seam is injected
+  so the policy is deterministic and instant under test.
+- **scope.py** — drift discovery from `beadloom sync-check --json`; when a
+  `--since` baseline is given it also applies symbol-level narrowing
+  (`symbol_scope`) before returning the stale set.
+- **symbol_scope.py** — symbol-level scope narrowing (BDL-052 S4). Narrows the
+  stale set from "changed FILE → all its doc pairs" to "doc references a CHANGED
+  symbol", killing the god-file fan-out (a one-symbol edit to `cli.py` no longer
+  drifts every doc the file is linked to). For each stale pair it intersects the
+  symbols whose body changed in the touched file (vs `--since`, via git hunks ∩
+  a Python `def`/`class` line-range map) with the symbols the doc references. The
+  changed-symbol set unions BOTH diff sides — new-side edited/added defs AND
+  **old-side removed/renamed** defs (so a doc naming a symbol that was deleted,
+  whose name is gone from the new content, is still attributed and KEPT, never
+  silently dropped); an
+  empty intersection drops the pair from the agent run AND `sync-update`-baselines
+  it so `sync-check` still reaches 0 without a rewrite. Conservative by
+  construction: any unavailable/ambiguous attribution (no `--since`, a
+  non-symbol drift reason, a non-Python file, a change outside any symbol body)
+  keeps the pair in scope — it never under-refreshes. Shared by the local flow
+  and the CI agent (both reach it through `discover_scope`).
 - **packet.py** — per-doc context-packet assembly.
 - **seams.py** — the mockable seams: the agent runner (Goose) and the review
   publisher (GitHub/GitLab, pr-branch + branch-pr variants), plus their fakes.

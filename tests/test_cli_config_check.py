@@ -156,3 +156,54 @@ class TestConfigCheckAgenticFlow:
         )
         assert result.exit_code == 1
         assert ".claude/CLAUDE.md" in result.output
+
+
+class TestConfigCheckFlowYml:
+    """BDL-052 S3: config-check covers .beadloom/flow.yml + composed adapters."""
+
+    def _write_flow(self, project: Path, body: str) -> None:
+        (project / ".beadloom").mkdir(parents=True, exist_ok=True)
+        (project / ".beadloom" / "flow.yml").write_text(body, encoding="utf-8")
+
+    def test_bad_flow_yml_flagged(self, tmp_path: Path) -> None:
+        project = _scaffolded_project(tmp_path)
+        self._write_flow(
+            project, "tools: [emacs]\narchitecture: [ddd]\nstack: [python]\n"
+        )
+        result = CliRunner().invoke(
+            main, ["config-check", "--project", str(project)]
+        )
+        assert result.exit_code == 1
+        assert "flow.yml" in result.output
+
+    def test_composed_adapter_drift_flagged_with_flow(self, tmp_path: Path) -> None:
+        project = _scaffolded_project(tmp_path)
+        self._write_flow(
+            project, "tools: [claude]\narchitecture: [ddd]\nstack: [python]\n"
+        )
+        # Recompose so the adapter matches the flow, then hand-edit it.
+        CliRunner().invoke(
+            main, ["config-check", "--fix", "--project", str(project)]
+        )
+        (project / ".claude" / "agents" / "dev.md").write_text(
+            "HAND EDITED\n", encoding="utf-8"
+        )
+        result = CliRunner().invoke(
+            main, ["config-check", "--project", str(project)]
+        )
+        assert result.exit_code == 1
+        assert ".claude/agents/dev.md" in result.output
+
+    def test_fix_recomposes_adapters_for_flow(self, tmp_path: Path) -> None:
+        project = _scaffolded_project(tmp_path)
+        self._write_flow(
+            project, "tools: [claude, cursor]\narchitecture: [fsd]\nstack: [vuejs]\n"
+        )
+        result = CliRunner().invoke(
+            main, ["config-check", "--fix", "--project", str(project)]
+        )
+        assert result.exit_code == 0, result.output
+        # The cursor set + FSD/vuejs composition were written.
+        cursor_dev = project / ".cursor" / "agents" / "dev.md"
+        assert cursor_dev.is_file()
+        assert "Feature-Sliced Design" in cursor_dev.read_text(encoding="utf-8")

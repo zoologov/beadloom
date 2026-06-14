@@ -1,0 +1,15 @@
+<!-- overlay:javascript — modern JavaScript idioms + tooling. -->
+## STACK (JavaScript)
+
+- **ES modules** (`import`/`export`), `const`/`let` (never `var`); prefer pure functions + immutable updates; arrow functions for callbacks.
+- Use `async`/`await` over raw promise chains; always handle rejections; no floating promises.
+- Strict equality (`===`); guard `null`/`undefined` with `??` / optional chaining (`?.`); no implicit global leakage.
+- No `console.log` left in shipped code (use the project logger); no secrets in source.
+
+### Tooling commands
+```bash
+npm install            # or pnpm / yarn — match the repo's lockfile
+npm run lint           # eslint
+npm test               # the project's test runner (jest / vitest)
+beadloom reindex && beadloom sync-check && beadloom lint --strict
+```

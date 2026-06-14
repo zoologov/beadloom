@@ -30,6 +30,13 @@ from beadloom.onboarding.agentic_flow_setup import (
     _scaffold_vendored,
     _vendored_asset,
 )
+from beadloom.onboarding.flow_config import (
+    FLOW_CONFIG_RELPATH,
+    FlowConfigError,
+    load_flow_config,
+)
+from beadloom.onboarding.role_adapters import TOOL_AGENT_DIRS, generate_adapters
+from beadloom.onboarding.role_composer import ROLE_NAMES, compose_all_roles
 from beadloom.onboarding.scanner import (
     _RULES_ADAPTER_TEMPLATE,
     _RULES_CONFIGS,
@@ -199,8 +206,20 @@ def _agentic_flow_drifts(project_root: Path) -> list[ConfigDrift]:
     if not _agentic_flow_scaffolded(project_root):
         return []
 
+    # When a flow.yml is present the role files (.claude/agents/*) are COMPOSED
+    # from CORE+overlays and checked by :func:`_composed_adapter_drifts` against
+    # that config — the vendored byte-compare (which assumes Beadloom's own
+    # ddd+python) would false-positive on any other stack. So only check the
+    # commands here; agents are the composer's responsibility.
+    flow_yml = (project_root / FLOW_CONFIG_RELPATH).is_file()
+    kinds = (
+        tuple(k for k in _AGENTIC_FLOW_KINDS if k[0] != "agents")
+        if flow_yml
+        else _AGENTIC_FLOW_KINDS
+    )
+
     drifts: list[ConfigDrift] = []
-    for kind, names in _AGENTIC_FLOW_KINDS:
+    for kind, names in kinds:
         for name in names:
             path = project_root / ".claude" / kind / f"{name}.md"
             try:
@@ -219,6 +238,91 @@ def _agentic_flow_drifts(project_root: Path) -> list[ConfigDrift]:
                 )
             )
     return drifts
+
+
+def _flow_config_drift(project_root: Path) -> ConfigDrift | None:
+    """Drift for an invalid ``.beadloom/flow.yml`` (BDL-052 S3).
+
+    Absent ``flow.yml`` is not drift (a repo may never adopt the configurator).
+    A *present* one that fails validation (unknown tool / architecture / stack,
+    malformed YAML) is reported with the validator's actionable message so
+    ``config-check`` surfaces exactly what to fix.
+    """
+    if not (project_root / FLOW_CONFIG_RELPATH).is_file():
+        return None
+    try:
+        load_flow_config(project_root)
+    except FlowConfigError as exc:
+        return ConfigDrift(file=str(FLOW_CONFIG_RELPATH), reason=str(exc))
+    return None
+
+
+def _composed_adapter_drifts(project_root: Path) -> list[ConfigDrift]:
+    """Drift for composed role adapters vs ``compose_role`` for this flow.yml.
+
+    Only runs when a valid ``.beadloom/flow.yml`` is present. For each tool the
+    config names, byte-compares every existing ``<tool-agent-dir>/<role>.md``
+    against the freshly-composed body (CORE + the configured architecture +
+    stack overlays). A hand-edit of an adapter, or a CORE/overlay change without
+    re-running ``setup-agentic-flow``, makes the on-disk file differ and is
+    reported — the BDL-048 drift-guard pattern, now over the composer.
+    """
+    if not (project_root / FLOW_CONFIG_RELPATH).is_file():
+        return []
+    try:
+        config = load_flow_config(project_root)
+    except FlowConfigError:
+        # The invalid-config drift is reported separately; don't double-report.
+        return []
+
+    composed = compose_all_roles(config)
+    drifts: list[ConfigDrift] = []
+    for tool in config.tools:
+        agent_dir = TOOL_AGENT_DIRS[tool]
+        for role in ROLE_NAMES:
+            rel = agent_dir / f"{role}.md"
+            path = project_root / rel
+            if not path.is_file():
+                continue
+            try:
+                on_disk = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if on_disk == composed[role]:
+                continue
+            drifts.append(
+                ConfigDrift(
+                    file=str(rel),
+                    reason=(
+                        "composed role adapter drifted from CORE+overlays for "
+                        f"flow.yml ({config.architecture}+{','.join(config.stack)}) "
+                        "— run `beadloom setup-agentic-flow` to recompose"
+                    ),
+                )
+            )
+    return drifts
+
+
+def refresh_composed_adapters(project_root: Path) -> list[str]:
+    """Recompose + rewrite the per-tool role adapters for this flow.yml.
+
+    The ``config-check --fix`` companion to :func:`_composed_adapter_drifts`:
+    when a valid ``.beadloom/flow.yml`` is present, regenerates every configured
+    tool's adapter set from CORE + overlays (overwriting drifted files). A
+    no-op (returns ``[]``) when ``flow.yml`` is absent or invalid.
+    """
+    if not (project_root / FLOW_CONFIG_RELPATH).is_file():
+        return []
+    try:
+        config = load_flow_config(project_root)
+    except FlowConfigError:
+        return []
+    result = generate_adapters(config, project_root)
+    written: list[str] = []
+    for files in result.agents.values():
+        written.extend(files)
+    written.extend(result.extra)
+    return written
 
 
 def refresh_agentic_flow_files(project_root: Path) -> list[str]:
@@ -272,5 +376,10 @@ def check_config_drift(
 
     drifts.extend(_adapter_drifts(project_root))
     drifts.extend(_agentic_flow_drifts(project_root))
+
+    flow = _flow_config_drift(project_root)
+    if flow is not None:
+        drifts.append(flow)
+    drifts.extend(_composed_adapter_drifts(project_root))
 
     return sorted(drifts, key=lambda d: d.file)

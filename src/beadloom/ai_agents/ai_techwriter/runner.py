@@ -14,15 +14,22 @@ from __future__ import annotations
 
 import logging
 import re
+import time
+from collections import deque
+from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from beadloom.ai_agents.ai_techwriter.backoff import RateLimitError, retry_with_backoff
 from beadloom.ai_agents.ai_techwriter.commands import (
     beadloom_ci,
     beadloom_docs_polish_json,
     beadloom_sync_update,
 )
 from beadloom.ai_agents.ai_techwriter.models import (
+    AgentResult,
+    ContextPacket,
     DriftItem,
     HarnessConfig,
     HarnessResult,
@@ -33,7 +40,7 @@ from beadloom.ai_agents.ai_techwriter.runs_store import append_run
 from beadloom.ai_agents.ai_techwriter.scope import discover_scope
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
     from beadloom.ai_agents.ai_techwriter.seams import AgentRunner, ReviewPublisher
 
@@ -140,6 +147,7 @@ def run_harness(
     now_ts: str,
     config: HarnessConfig | None = None,
     since: str | None = None,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> HarnessResult:
     """Drive one full AI tech-writer run; return a structured result.
 
@@ -167,7 +175,9 @@ def run_harness(
         result.gate_passed = True
         return result
 
-    _repair_each_doc(project_root, stale, agent=agent, cfg=cfg, result=result, since=since)
+    _repair_each_doc(
+        project_root, stale, agent=agent, cfg=cfg, result=result, since=since, sleep=sleep
+    )
     _run_fixpoint(project_root, cfg=cfg, result=result, since=since)
     _run_gate(project_root, result=result)
     # Emit the run-record BEFORE publishing: the publisher's commit stages the
@@ -179,6 +189,39 @@ def run_harness(
     return result
 
 
+@dataclass
+class _DocWork:
+    """Per-doc, session-isolated accumulator (no shared :class:`HarnessResult`).
+
+    Each Goose session writes ONLY into its own ``_DocWork``; the harness folds
+    them back into the single :class:`HarnessResult` in deterministic stale
+    order (:func:`_fold_doc`), so the aggregate is identical whether the pool
+    ran the sessions sequentially (``max_parallel=1``) or concurrently.
+    """
+
+    ref_id: str
+    doc_path: str
+    turns: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    model: str = ""
+    edited: bool = False
+    flagged_reasons: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class _Budget:
+    """Folded-so-far totals captured at submit time (the per-doc budget snapshot).
+
+    A session checks its own accumulation PLUS this prior snapshot against the
+    runaway caps, mirroring the sequential mid-retry guard against the shared
+    result — but without touching shared state, so it is thread-safe.
+    """
+
+    prior_turns: int
+    prior_tokens: int
+
+
 def _repair_each_doc(
     project_root: Path,
     stale: list[DriftItem],
@@ -187,32 +230,136 @@ def _repair_each_doc(
     cfg: HarnessConfig,
     result: HarnessResult,
     since: str | None,
+    sleep: Callable[[float], None],
 ) -> None:
-    """Per-doc loop: agent -> sync-update -> re-check, with bounded retry.
+    """Bounded-parallel per-doc repair, folded deterministically into *result*.
 
-    A doc is added to ``result.docs_refreshed`` ONLY when the agent actually
-    produced an edit for it (BUG-H) — a failed/empty agent run (goose rc!=0 →
-    empty :class:`AgentResult`) never marks the doc refreshed.
+    Replaces the old sequential loop with a :class:`ThreadPoolExecutor` capped
+    at ``cfg.max_parallel`` (default 3, RAM-aware for the 8GB VPS): each doc gets
+    its OWN Goose session (its own :class:`_DocWork`), wrapped in 429/5xx
+    exponential back-off. Sessions are submitted in stale order, gated by the
+    same between-doc budget check as before (computed from the folded-so-far
+    totals), then their results are folded back IN ORDER — so the per-doc
+    outcomes, the token/turn aggregate, and the verdict are IDENTICAL to the
+    sequential behaviour for the same (mocked) sessions.
     """
     # Fetch the whole ``docs polish`` report ONCE and reuse it across every doc
     # (RFC Q4 design intent), instead of re-shelling per doc in build_packet.
     polish_report: dict[str, object] | None = beadloom_docs_polish_json(project_root)
-    for item in stale:
-        if _budget_exceeded(cfg, result):
-            result.flagged = True
-            result.flagged_reasons.append(f"budget exceeded before repairing {item.ref_id}")
-            return
-        edited = _repair_one_doc(
+    workers = max(cfg.max_parallel, 1)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        _dispatch_and_fold(
+            pool,
             project_root,
-            item,
+            stale,
             agent=agent,
             cfg=cfg,
             result=result,
             polish_report=polish_report,
             since=since,
+            sleep=sleep,
         )
-        if edited and item.doc_path not in result.docs_refreshed:
-            result.docs_refreshed.append(item.doc_path)
+
+
+def _dispatch_and_fold(
+    pool: ThreadPoolExecutor,
+    project_root: Path,
+    stale: list[DriftItem],
+    *,
+    agent: AgentRunner,
+    cfg: HarnessConfig,
+    result: HarnessResult,
+    polish_report: dict[str, object] | None,
+    since: str | None,
+    sleep: Callable[[float], None],
+) -> None:
+    """Submit docs into a bounded window (<= ``max_parallel``) + fold IN ORDER.
+
+    At most ``cfg.max_parallel`` sessions are in flight at once (the pool size
+    plus this window cap guarantee it); the FIFO queue is folded in stale order
+    so the aggregate is order-deterministic. The between-doc budget gate is the
+    same as the old sequential one (computed from the folded-so-far totals);
+    once it fires we stop submitting and flag, exactly as before.
+    """
+    window = max(cfg.max_parallel, 1)
+    pending: deque[Future[_DocWork]] = deque()
+    for item in stale:
+        if _budget_exceeded(cfg, result):
+            _budget_stop(result, item.ref_id, pending)
+            return
+        budget = _Budget(prior_turns=result.total_turns, prior_tokens=_total_tokens(result))
+        pending.append(
+            pool.submit(
+                _repair_one_doc,
+                project_root,
+                item,
+                agent=agent,
+                cfg=cfg,
+                polish_report=polish_report,
+                since=since,
+                budget=budget,
+                sleep=sleep,
+            )
+        )
+        if len(pending) >= window:
+            _fold_doc(result, pending.popleft().result())
+    _drain(pending, result)
+    _flag_if_budget_overrun(cfg, result)
+
+
+def _flag_if_budget_overrun(cfg: HarnessConfig, result: HarnessResult) -> None:
+    """Flag a runaway-cap overrun detected only after folding the window.
+
+    The between-doc pre-submit guard catches overruns deterministically when the
+    folded-so-far total already exceeds a cap (the sequential / ``max_parallel=1``
+    case). When several sessions ran concurrently in one window their combined
+    usage can cross a cap only once all are folded — surface that honestly here
+    (idempotent: never double-adds a budget reason).
+    """
+    if not _budget_exceeded(cfg, result):
+        return
+    if any("budget exceeded" in reason for reason in result.flagged_reasons):
+        return
+    result.flagged = True
+    result.flagged_reasons.append("budget exceeded")
+
+
+def _budget_stop(
+    result: HarnessResult, ref_id: str, pending: deque[Future[_DocWork]]
+) -> None:
+    """Flag a budget-exceeded stop: fold the in-flight window, then flag + halt.
+
+    Mirrors the sequential between-doc budget guard: the runaway cap tripped, so
+    no further docs are submitted. The already-submitted window is still folded
+    (its sessions ran) so the run-record stays honest.
+    """
+    _drain(pending, result)
+    result.flagged = True
+    result.flagged_reasons.append(f"budget exceeded before repairing {ref_id}")
+
+
+def _drain(pending: deque[Future[_DocWork]], result: HarnessResult) -> None:
+    """Fold every still-pending session in FIFO (stale) order."""
+    while pending:
+        _fold_doc(result, pending.popleft().result())
+
+
+def _fold_doc(result: HarnessResult, work: _DocWork) -> None:
+    """Merge one session's isolated :class:`_DocWork` into the shared result.
+
+    Deterministic given the call order: tokens/turns accumulate, a real edit
+    appends the doc once (BUG-H), and any per-doc flag reason is carried over.
+    """
+    result.total_turns += work.turns
+    result.input_tokens += work.input_tokens
+    result.output_tokens += work.output_tokens
+    if work.model:
+        result.model = work.model
+    if work.edited and work.doc_path not in result.docs_refreshed:
+        result.docs_refreshed.append(work.doc_path)
+    if work.flagged_reasons:
+        result.flagged = True
+        result.flagged_reasons.extend(work.flagged_reasons)
 
 
 def _repair_one_doc(
@@ -221,53 +368,120 @@ def _repair_one_doc(
     *,
     agent: AgentRunner,
     cfg: HarnessConfig,
-    result: HarnessResult,
     polish_report: dict[str, object] | None,
     since: str | None,
-) -> bool:
-    """Repair one doc with retry <= per_doc_retries.
+    budget: _Budget,
+    sleep: Callable[[float], None],
+) -> _DocWork:
+    """Repair one doc in its own session (retry <= per_doc_retries); return its work.
 
-    Returns True iff the agent produced a real edit for this doc (non-empty
-    rewritten paths) — that, not mere stored-state freshness, is what marks the
-    doc refreshed (BUG-H). Freshness is verified against *since* (the parent
-    commit), the authoritative baseline (BUG-I); a doc that never goes
-    fresh-since-ref after all attempts is flagged. An agent run that produced no
-    edit at all across every attempt is flagged as an agent failure.
+    Pure w.r.t. the shared :class:`HarnessResult`: it accumulates into a fresh
+    :class:`_DocWork` so it is thread-safe in the pool. ``work.edited`` is True
+    iff the agent produced a real edit (non-empty rewritten paths) — that, not
+    mere stored-state freshness, is what marks the doc refreshed (BUG-H).
+    Freshness is verified against *since* (BUG-I). 429/5xx back-off is applied
+    per attempt; a doc that never goes fresh, or never edits, is flagged.
     """
+    work = _DocWork(ref_id=item.ref_id, doc_path=item.doc_path)
     attempts = cfg.per_doc_retries + 1
-    edited = False
     for attempt in range(attempts):
-        if _budget_exceeded(cfg, result):
-            result.flagged = True
-            result.flagged_reasons.append(f"budget exceeded mid-retry for {item.ref_id}")
-            return edited
-        packet = build_packet(project_root, item, polish_report=polish_report)
-        result.total_turns += 1
-        try:
-            agent_result = agent.run(packet)
-        except (RuntimeError, OSError) as exc:
-            logger.warning("agent failed for %s (attempt %d): %s", item.ref_id, attempt + 1, exc)
-            continue
-        result.input_tokens += agent_result.input_tokens
-        result.output_tokens += agent_result.output_tokens
-        if agent_result.model:
-            result.model = agent_result.model
-        if not agent_result.rewritten_paths:
-            # goose rc!=0 → empty result: no edit produced, nothing to verify.
-            logger.warning("agent produced no edit for %s (attempt %d)", item.ref_id, attempt + 1)
-            continue
-        edited = True
-        beadloom_sync_update(project_root, item.ref_id)
-        if _ref_is_fresh(project_root, item.ref_id, since=since):
-            return True
-        logger.info("ref %s still stale after attempt %d", item.ref_id, attempt + 1)
-    if not edited:
-        result.flagged = True
-        result.flagged_reasons.append(f"agent failed for {item.ref_id} after {attempts} attempts")
+        if _doc_budget_exceeded(cfg, budget, work):
+            work.flagged_reasons.append(f"budget exceeded mid-retry for {item.ref_id}")
+            return work
+        if _run_one_attempt(
+            project_root, item, agent=agent, cfg=cfg, polish_report=polish_report,
+            since=since, work=work, attempt=attempt, sleep=sleep,
+        ):
+            return work
+    _flag_doc_outcome(work, item, attempts)
+    return work
+
+
+def _run_one_attempt(
+    project_root: Path,
+    item: DriftItem,
+    *,
+    agent: AgentRunner,
+    cfg: HarnessConfig,
+    polish_report: dict[str, object] | None,
+    since: str | None,
+    work: _DocWork,
+    attempt: int,
+    sleep: Callable[[float], None],
+) -> bool:
+    """One agent->sync-update->re-check attempt; True iff the doc went fresh."""
+    packet = build_packet(project_root, item, polish_report=polish_report)
+    work.turns += 1
+    agent_result = _call_agent_with_backoff(agent, packet, cfg=cfg, sleep=sleep, attempt=attempt)
+    if agent_result is None:
+        return False  # no edit produced this attempt (failure / give-up / empty)
+    work.input_tokens += agent_result.input_tokens
+    work.output_tokens += agent_result.output_tokens
+    if agent_result.model:
+        work.model = agent_result.model
+    if not agent_result.rewritten_paths:
+        logger.warning("agent produced no edit for %s (attempt %d)", item.ref_id, attempt + 1)
+        return False
+    work.edited = True
+    beadloom_sync_update(project_root, item.ref_id)
+    if _ref_is_fresh(project_root, item.ref_id, since=since):
+        return True
+    logger.info("ref %s still stale after attempt %d", item.ref_id, attempt + 1)
+    return False
+
+
+def _call_agent_with_backoff(
+    agent: AgentRunner,
+    packet: ContextPacket,
+    *,
+    cfg: HarnessConfig,
+    sleep: Callable[[float], None],
+    attempt: int,
+) -> AgentResult | None:
+    """Run the agent with 429/5xx exponential back-off; None on give-up/failure.
+
+    A :class:`RateLimitError` (provider 429/5xx) retries with exponential
+    back-off inside this single attempt's budget; exhausting it (or any other
+    ``RuntimeError`` / ``OSError``) is logged and treated as a no-edit attempt
+    (return None) — exactly as a failed sequential agent run was.
+    """
+
+    def _call() -> AgentResult:
+        return agent.run(packet)
+
+    try:
+        return retry_with_backoff(
+            _call, attempts=cfg.backoff_attempts, base=cfg.backoff_base, sleep=sleep
+        )
+    except RateLimitError as exc:
+        logger.warning(
+            "agent rate-limited for %s (attempt %d): %s", packet.ref_id, attempt + 1, exc
+        )
+        return None
+    except (RuntimeError, OSError) as exc:
+        logger.warning("agent failed for %s (attempt %d): %s", packet.ref_id, attempt + 1, exc)
+        return None
+
+
+def _flag_doc_outcome(work: _DocWork, item: DriftItem, attempts: int) -> None:
+    """Record the per-doc flag reason after the retry budget is spent."""
+    if not work.edited:
+        work.flagged_reasons.append(f"agent failed for {item.ref_id} after {attempts} attempts")
     else:
-        result.flagged = True
-        result.flagged_reasons.append(f"{item.ref_id} still stale after {attempts} attempts")
-    return edited
+        work.flagged_reasons.append(f"{item.ref_id} still stale after {attempts} attempts")
+
+
+def _doc_budget_exceeded(cfg: HarnessConfig, budget: _Budget, work: _DocWork) -> bool:
+    """True when this session's own usage + the submit-time snapshot trips a cap."""
+    if budget.prior_turns + work.turns >= cfg.max_total_turns:
+        return True
+    used = budget.prior_tokens + work.input_tokens + work.output_tokens
+    return used >= cfg.max_total_tokens
+
+
+def _total_tokens(result: HarnessResult) -> int:
+    """Tokens accumulated into the shared result so far."""
+    return result.input_tokens + result.output_tokens
 
 
 def _ref_is_fresh(project_root: Path, ref_id: str, *, since: str | None) -> bool:

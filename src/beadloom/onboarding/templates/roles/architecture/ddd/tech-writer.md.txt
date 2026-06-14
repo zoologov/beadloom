@@ -1,0 +1,5 @@
+<!-- overlay:ddd — DDD doc layout (domain README + feature SPEC). -->
+## ARCHITECTURE (Domain-Driven Design)
+
+Docs mirror the DDD graph: one README per **domain**, one SPEC per **feature/component**. A doc's `# beadloom:` ref ties it to its node, so `sync-check` can tell when the domain/feature's symbols drifted from its prose. When a new domain/feature node appears, add its doc; when a module moves layer, move/retitle its doc to match.
+

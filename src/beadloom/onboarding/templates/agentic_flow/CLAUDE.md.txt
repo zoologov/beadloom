@@ -43,7 +43,8 @@ CLAUDE.md  ← entry point: critical rules, setup, bd/beadloom essentials, this 
 
 ```bash
 git config beads.role maintainer   # or "contributor" — required by bd 1.0.4 (silences GH#2950 warning)
-beadloom install-hooks             # pre-commit hook: lint + sync-check + ACTIVE/tracker coherence
+beadloom install-hooks             # pre-commit (lint + sync-check + ACTIVE/tracker coherence) +
+                                   # pre-push Beadloom Gate (full `beadloom ci`; blocks on red, --no-verify to skip)
 ```
 
 ### BEFORE any work
@@ -214,7 +215,8 @@ beadloom docs polish             # structured data for AI doc enrichment
 beadloom init                    # initialize beadloom in a project
 beadloom setup-rules             # create IDE rules files referencing AGENTS.md
 beadloom setup-mcp               # configure MCP server for IDE
-beadloom install-hooks           # pre-commit hook: lint + sync-check + ACTIVE/tracker coherence
+beadloom setup-agentic-flow      # compose+write role adapters from .beadloom/flow.yml (ddd|fsd × stack, claude/cursor)
+beadloom install-hooks           # pre-commit (lint + sync-check + coherence) + pre-push Beadloom Gate (full `beadloom ci`)
 
 # After changing code
 # 1. beadloom reindex            — re-index changed files
@@ -321,8 +323,9 @@ Example:
 ```
 
 One-time per repo: `beadloom setup-branch-protection` configures `main` protection
-(PR required, `beadloom ci` a required check, `enforce_admins: false`, 0 required
-reviews → the owner stays mergeable). Safe to re-run.
+(PR required, `beadloom ci` a required check, `enforce_admins: true` — strict
+trunk-based, even the owner integrates via a PR — and 0 required reviews → the
+owner still self-merges). Safe to re-run.
 
 ---
 

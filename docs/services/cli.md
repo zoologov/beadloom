@@ -227,17 +227,23 @@ For automated doc updates, use your AI agent (Claude Code, Cursor, etc.) with Be
 
 ### beadloom install-hooks
 
-Install git pre-commit hook for synchronization checking.
+Install (or remove) Beadloom's git hooks: a **pre-commit** hook (the lighter
+synchronization check) and a **pre-push** hook (the authoritative blocking
+**Beadloom Gate**). By default both are installed.
 
 ```bash
-# Install (warning mode)
+# Install BOTH hooks (pre-commit warn mode + pre-push Gate)
 beadloom install-hooks [--mode warn|block] [--project DIR]
 
-# Remove
-beadloom install-hooks --remove [--project DIR]
+# Install only one
+beadloom install-hooks --pre-commit [--mode warn|block] [--project DIR]
+beadloom install-hooks --pre-push [--project DIR]
+
+# Remove (both, or the selected one)
+beadloom install-hooks --remove [--pre-commit|--pre-push] [--project DIR]
 ```
 
-The installed hook runs, in order: ruff lint, mypy, `beadloom sync-check`
+**Pre-commit hook** runs, in order: ruff lint, mypy, `beadloom sync-check`
 (`--mode warn` reports stale docs; `--mode block` fails the commit on stale docs),
 and finally the **ACTIVE / tracker coherence** step. That last step is a guarded
 auto-fix: it runs only when BOTH `bd` and `beadloom` are on `PATH`, calls
@@ -248,6 +254,21 @@ commit is coherent **by construction**. It never blocks the commit (it runs even
 in `block` mode without affecting the exit code), and in any repo without `bd` —
 or without ACTIVE tables — the block is a complete no-op (see
 [`active-sync`](#beadloom-active-sync)).
+
+**Pre-push hook (Beadloom Gate)** is the authoritative blocking enforcement of
+the hard invariant *"no code in `main` without current docs."* On every push it
+runs the full Gate (`beadloom ci` — incremental reindex → `lint --strict`
+(module-coverage included) → sync-check → config-check → doctor) and **exits
+non-zero to block the push** on red, printing an
+actionable message ("Beadloom Gate failed … run the tech-writer (or
+`/coordinator`) then re-push; `git push --no-verify` to override"). It is
+**fail-safe**: in any repo without `beadloom` on `PATH` the hook is a safe no-op
+and never blocks. The full Gate lives in pre-push (not duplicated on every commit)
+because pushes are less frequent than commits; the pre-commit hook stays the
+lighter warn/block check. `--no-verify` is the documented (discouraged) escape
+hatch.
+
+Both hooks are idempotent — re-running `install-hooks` overwrites cleanly.
 
 ### beadloom active-sync
 
@@ -566,7 +587,9 @@ beadloom config-check --fix [--project DIR]  # regenerate drifted artifacts, the
 
 Re-runs the same `setup-rules --refresh` generator in memory and diffs its output against on-disk content for `.beadloom/AGENTS.md`, the auto-managed sections of `.claude/CLAUDE.md`, and present IDE adapter files. Checks ONLY auto-managed regions — editing user-authored prose (the AGENTS.md `custom` block, CLAUDE.md content outside the `auto-start`/`auto-end` markers) never trips it. Prints which file drifted, why, and the remediation (`beadloom setup-rules --refresh`); absent target files are skipped. `--fix` regenerates via the refresh path and re-checks. Delegates to `onboarding/config_sync.py:check_config_drift()`.
 
-As of BDL-048, when a repo has the agentic flow scaffolded (`beadloom setup-agentic-flow`), `config-check` also drift-checks the **scaffolded flow files**: each vendored `.claude/agents/*` + `.claude/commands/*` file is byte-compared against the shipped template. `--fix` re-drops the vendored flow files (`config_sync.refresh_agentic_flow_files`) alongside refreshing the CLAUDE.md auto-regions; the fix is gated on the flow already being scaffolded (it never forces the flow onto a repo that did not adopt it).
+As of BDL-048, when a repo has the agentic flow scaffolded (`beadloom setup-agentic-flow`), `config-check` also drift-checks the **scaffolded flow files**: each vendored `.claude/commands/*` file is byte-compared against the shipped template. `--fix` re-drops the vendored flow files (`config_sync.refresh_agentic_flow_files`) alongside refreshing the CLAUDE.md auto-regions; the fix is gated on the flow already being scaffolded (it never forces the flow onto a repo that did not adopt it).
+
+As of **BDL-052 S3**, when a valid `.beadloom/flow.yml` is present `config-check` also: (a) validates `flow.yml` itself (an invalid config is reported as drift; an absent one is not); and (b) byte-compares each **composed role adapter** (`<tool>/agents/<role>.md` for every tool the config names) against the freshly recomposed body (`compose_role(...)` for the configured architecture + stack overlays) — `config_sync._composed_adapter_drifts`. When a `flow.yml` is present the role agents are composer-owned, so the byte-vendor compare is skipped for `agents` (it would false-positive on a non-Python stack). `--fix` recomposes the per-tool adapter sets (`config_sync.refresh_composed_adapters`). **Known limitation:** the composed-adapter check iterates only the tools named in `flow.yml`, so adapters left behind by a tool dropped from a narrowed `flow.yml` (e.g. orphaned `.cursor/agents/*`) are neither flagged nor recomposed; a follow-up bead tracks an orphaned-adapter lint.
 
 ### beadloom ci
 
@@ -646,27 +669,44 @@ Delegates to `onboarding/ai_techwriter_setup.py:scaffold()`.
 
 ### beadloom setup-agentic-flow
 
-Scaffold Beadloom's proven multi-agent dev flow into this repo (BDL-048). In the
-`setup-*` family alongside `setup-rules` / `setup-mcp` / `setup-ai-techwriter`.
+Scaffold Beadloom's proven multi-agent dev flow into this repo (BDL-048 / 052).
+In the `setup-*` family alongside `setup-rules` / `setup-mcp` /
+`setup-ai-techwriter`.
 
 ```bash
-beadloom setup-agentic-flow [--project DIR] [--force]
+beadloom setup-agentic-flow [--project DIR] [--force] \
+    [--tool claude|cursor]...        # repeatable; default: flow.yml or claude
+    [--architecture ddd|fsd]         # default: flow.yml or ddd
+    [--stack python,fastapi,javascript,typescript,vuejs]  # CSV; default: flow.yml or auto-detected
 ```
 
-Idempotently drops the role subagents
-(`.claude/agents/{dev,test,review,tech-writer}.md`) and slash skills
-(`.claude/commands/{coordinator,task-init,checkpoint,templates}.md`) — vendored
-**byte-identical** to Beadloom's own proven flow (a drift-guard test keeps the
-templates equal to the live `.claude/`) — plus a `.claude/CLAUDE.md` whose
-auto-regions are generated for THIS project (name / stack / version / packages)
-via the same `refresh_claude_md` machinery `setup-rules --refresh` uses (the
-CLAUDE.md version comes from Beadloom's own `__version__`, BDL-UX #92).
+As of **BDL-052 S3** the role subagents are **composed** (not byte-vendored)
+from CORE + the selected architecture overlay (`ddd`/`fsd`) + the selected stack
+overlays, then written as a per-tool adapter set for every configured tool:
+`claude` → `.claude/agents/{dev,test,review,tech-writer}.md`; `cursor` →
+`.cursor/agents/*` plus a `.cursor/rules/beadloom-flow.md` orchestrator pointer.
+Selection comes from `.beadloom/flow.yml`, overridden by the
+`--tool`/`--architecture`/`--stack` flags (defaults `claude` / `ddd` /
+auto-detected stack — **flag → flow.yml → default** precedence). An invalid
+selection raises a `FlowConfigError` naming the bad value + the allowed set. A
+drift-guard (`config-check`) keeps every generated adapter byte-identical to its
+composition.
 
-A vendored file that already matches is left alone; a hand-edited file is
-**skipped** (reported as such) so user edits are not silently clobbered.
-`--force` overwrites hand-edited flow files. User prose outside the CLAUDE.md
-auto-regions is never touched. Delegates to
-`onboarding/agentic_flow_setup.py:scaffold()`.
+The slash skills
+(`.claude/commands/{coordinator,task-init,checkpoint,templates}.md`) are still
+vendored **byte-identical** to Beadloom's own proven flow, plus a
+`.claude/CLAUDE.md` whose auto-regions are generated for THIS project (name /
+stack / version / packages) via the same `refresh_claude_md` machinery
+`setup-rules --refresh` uses (the CLAUDE.md version comes from Beadloom's own
+`__version__`, BDL-UX #92).
+
+A vendored command that already matches is left alone; a hand-edited command is
+**skipped** (reported as such) so user edits are not silently clobbered;
+`--force` overwrites it. Composed role adapters are owned by the configurator
+(re-running recomposes them). User prose outside the CLAUDE.md auto-regions is
+never touched. Delegates to `onboarding/role_adapters.py:generate_adapters()`
+(the adapters) + `onboarding/agentic_flow_setup.py:scaffold()` (the commands +
+CLAUDE.md).
 
 The command prints the **honest boundary**: the coordinator + `Agent`-spawn are
 Claude-Code-native (orchestration stays in the harness); the Beadloom MCP
@@ -730,7 +770,7 @@ Module `src/beadloom/services/cli.py`:
 - `status` -- show index statistics with health trends and context metrics; `--debt-report` mode with `--fail-if`, `--category` flags
 - `sync_check` -- check doc-code sync with reason/details (reason-aware output for `untracked_files`, `missing_modules`, `symbols_changed`); `--since GIT_REF` measures drift against a git ref instead of the stored baseline (fresh-checkout / per-push drift detection)
 - `sync_update` -- review and update stale docs interactively; `--check` for status-only; `--yes`/`-y` for a non-interactive re-baseline; `--all` (with `--yes`) re-baselines every stale ref
-- `install_hooks` -- install/remove pre-commit hook (lint -> mypy -> sync-check -> guarded ACTIVE/tracker-coherence auto-fix step)
+- `install_hooks` -- install/remove the pre-commit hook (lint -> mypy -> sync-check -> guarded ACTIVE/tracker-coherence auto-fix step) AND/OR the pre-push Beadloom Gate hook (`beadloom ci`, blocks the push on red; `command -v beadloom` guard -> safe no-op outside a flow repo); `--pre-commit`/`--pre-push` selectors (default both), `--remove`, idempotent
 - `active_sync` -- reconcile each epic's ACTIVE.md bead-status table from `bd` (`--epic`/`--check`/`--json`/`--no-export`); fix mode also `bd export`s the tracked `.beads/issues.jsonl`; safe no-op when no ACTIVE table or no `bd`; delegates to `application/active_table.py:reconcile_active_tables()`
 - `link` -- manage external tracker links
 - `search` -- FTS5 search with LIKE fallback

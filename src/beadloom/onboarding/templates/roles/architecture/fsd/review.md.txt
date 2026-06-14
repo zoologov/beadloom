@@ -1,0 +1,11 @@
+<!-- overlay:fsd — FSD boundary review checklist + annotation vocabulary. -->
+## ARCHITECTURE (Feature-Sliced Design)
+
+Verify the change respects FSD layering:
+```
+app → processes → pages → widgets → features → entities → shared
+```
+- No import from a lower layer to a **higher** one; no cross-slice import within the same layer (must go through a public API / a lower layer); cross-slice access uses the slice `index.ts`, not deep paths.
+- Segments stay within their role (`ui` / `model` / `api` / `lib` / `config`); business logic lives in `model`, IO in `api`.
+- Every new module is placed in the right layer/slice/segment **and** carries the correct `beadloom:domain` (layer) / `beadloom:feature` (slice) / `beadloom:component` (segment) annotation, and a new slice has a doc — else `module-coverage` (error) and `lint --strict` go red. Illegal import or missing annotation/doc → **Major**.
+

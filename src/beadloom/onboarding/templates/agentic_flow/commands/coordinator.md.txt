@@ -47,8 +47,8 @@ When the RFC needs technical context: delegate to an Explore sub-agent in the ba
 
 1. **One bead = one agent** at a time. Do NOT batch multiple beads into one agent (keeps contexts small, failures isolated).
 2. **Synchronization through files + beads**, not chat. CONTEXT.md is the source of truth.
-3. **Only independent beads run in parallel** (no shared dependencies). `bd ready` (universal) / `bd dep tree` is authoritative for what is launchable — NOT `bd close --suggest-next` (which can list still-blocked beads; see BDL-UX-Issues #97).
-4. **Serialize landings** with `bd merge-slot` so parallel agents never race on commits/merges.
+3. **Independent ready beads in the same wave MUST be launched concurrently** — one subagent each, all in the same batch (`run_in_background: true`), NOT one-at-a-time. Parallelism is mandatory, not optional: if `bd ready` lists N independent beads, spawn N subagents now. `bd ready` (universal) / `bd dep tree` is authoritative for what is launchable — NOT `bd close --suggest-next` (which can list still-blocked beads; see BDL-UX-Issues #97).
+4. **Serialize landings** with `bd merge-slot` so the parallel agents never race on commits/merges — they run concurrently but land one at a time.
 
 ---
 
@@ -84,14 +84,39 @@ Dependencies ARE the gates: a downstream bead never appears in `bd ready` until 
 Launch each wave from `bd ready` (filtered to this epic); `bd swarm status` adds a grouped view for `epic`-type parents:
 
 ```
-Wave 1 (dev): independent dev beads in parallel (one subagent each)
+Wave 1 (dev): independent dev beads in parallel (one subagent each — MUST be concurrent)
 Wave 2 (dev): beads unblocked by Wave 1
 Test wave:    after ALL dev beads close
 Review wave:  after test
   ├── OK     → docs wave
   └── ISSUES → coordinator opens fix beads, re-runs dev→test→review
-Docs wave:    ONLY after review = OK
+Docs wave:    ONLY after review = OK (tech-writer)
+Gate wave:    run the Beadloom Gate, loop tech-writer until green, THEN push → PR
 ```
+
+### The Gate-enforced loop (explicit tool steps — do NOT rely on memory)
+
+After the docs wave, the coordinator enforces the hard invariant ("no code in
+`main` without current docs") through a deterministic state machine. These are
+explicit tool calls, branching on the Gate's exit code — not prose to remember:
+
+```
+1. Run the tech-writer subagent on the wave's refs (docs wave above).
+2. Run the Beadloom Gate:           beadloom ci        # exit 0 = green, non-zero = red
+3. WHILE the Gate is red AND attempts < 3:
+     a. Identify the drifted refs    (beadloom sync-check --json / the Gate output)
+     b. Run the tech-writer subagent on EXACTLY those drifted refs
+     c. Re-run the Gate:             beadloom ci        # re-gate
+4. Gate green → push (the pre-push hook re-checks the Gate as a backstop) → open the PR.
+5. Gate STILL red after the bound (≤3 attempts) → STOP. Do NOT push. Surface a
+   clear failure (flag the bead + a bd comment with the unresolved refs) instead
+   of spinning. A human/`/coordinator` re-entry resolves it.
+```
+
+The push step relies on the **pre-push Beadloom Gate hook** (`beadloom install-hooks`
+installs `pre-push`) as the authoritative blocking backstop: even if the loop above
+is skipped, a red Gate blocks the push. `git push --no-verify` is the documented,
+discouraged escape hatch.
 
 ### Drive deterministic steps through the process-tools
 

@@ -154,19 +154,28 @@ def _scaffold_claude_md(project_root: Path, *, force: bool) -> tuple[Path, list[
     return claude_md, changed
 
 
-def scaffold(project_root: Path, *, force: bool = False) -> ScaffoldResult:
+def scaffold(
+    project_root: Path, *, force: bool = False, include_agents: bool = True
+) -> ScaffoldResult:
     """Scaffold the agentic flow into ``project_root``.
 
-    Idempotently drops the vendored ``agents/*`` + ``commands/*`` into
-    ``.claude/`` (byte-identical to the live proven flow) and generates the
+    Idempotently drops the vendored ``commands/*`` into ``.claude/`` (the slash
+    skills, byte-identical to the live proven flow) and generates the
     ``.claude/CLAUDE.md`` auto-regions for the target project. Safe to re-run;
     ``force`` overwrites hand-edited scaffolded files.
+
+    Since BDL-052 S3 the role files (``.claude/agents/*``) are **composed** from
+    CORE + overlays by :func:`~beadloom.onboarding.role_adapters.generate_adapters`
+    (the source of truth for those files). Pass ``include_agents=False`` so this
+    function leaves them to the composer; the default still drops the vendored
+    agents for the plain BDL-048 byte-identical scaffold path.
     """
     result = ScaffoldResult()
-    agents_dir = project_root / ".claude" / "agents"
-    result.agents_written, result.agents_skipped = _scaffold_vendored(
-        agents_dir, "agents", AGENT_FILES, force=force
-    )
+    if include_agents:
+        agents_dir = project_root / ".claude" / "agents"
+        result.agents_written, result.agents_skipped = _scaffold_vendored(
+            agents_dir, "agents", AGENT_FILES, force=force
+        )
     commands_dir = project_root / ".claude" / "commands"
     result.commands_written, result.commands_skipped = _scaffold_vendored(
         commands_dir, "commands", COMMAND_FILES, force=force

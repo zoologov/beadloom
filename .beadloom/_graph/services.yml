@@ -301,6 +301,27 @@ nodes:
     docs:
       - docs/domains/onboarding/features/agentic-flow-setup/SPEC.md
 
+  - ref_id: flow-config
+    kind: feature
+    summary: "`.beadloom/flow.yml` schema + loader (FlowConfig) — declares tools/architecture/stack/quality for the role configurator; strict validation + auto-detect/resolve defaults"
+    source: src/beadloom/onboarding/flow_config.py
+    docs:
+      - docs/domains/onboarding/features/flow-config/SPEC.md
+
+  - ref_id: role-composer
+    kind: feature
+    summary: "compose_role — assembles a role file from CORE + one architecture overlay (ddd/fsd) + stack overlays (python/fastapi/js/ts/vue), deterministically ordered"
+    source: src/beadloom/onboarding/role_composer.py
+    docs:
+      - docs/domains/onboarding/features/role-composer/SPEC.md
+
+  - ref_id: role-adapters
+    kind: feature
+    summary: "generate_adapters — writes per-tool role adapter sets (.claude/agents/*, .cursor/agents/* + Cursor orchestrator) from composed roles; the drift-guard's single writer"
+    source: src/beadloom/onboarding/role_adapters.py
+    docs:
+      - docs/domains/onboarding/features/role-adapters/SPEC.md
+
   - ref_id: site-generation
     kind: feature
     summary: "`docs site` — generate the VitePress content tree from the indexed graph (About/architecture/per-node pages, dashboard, landscape, nav, mermaid guard)"
@@ -520,6 +541,15 @@ edges:
     dst: onboarding
     kind: part_of
   - src: agentic-flow-setup
+    dst: onboarding
+    kind: part_of
+  - src: flow-config
+    dst: onboarding
+    kind: part_of
+  - src: role-composer
+    dst: onboarding
+    kind: part_of
+  - src: role-adapters
     dst: onboarding
     kind: part_of
 

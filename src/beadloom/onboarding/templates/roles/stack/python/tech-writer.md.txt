@@ -1,0 +1,36 @@
+<!-- overlay:python — Python doc-format reference + sync commands. -->
+## STACK (Python)
+
+### Doc-format reference
+```markdown
+# <Domain/Feature Name>
+
+<One-line summary matching the node summary in the graph.>
+
+## Specification
+### Modules
+- **module_name.py** — `public_func()` does X. `ClassName` handles Y.
+### <Domain-specific sections>
+<Architecture, data flow, configuration, …>
+
+## Invariants
+- <Key guarantees / constraints that must hold>
+
+## API
+Module `src/<pkg>/<package>/<module>.py`:
+- `function_name(args)` → `ReturnType` — description
+- `ClassName` — description
+
+## Testing
+Tests: `tests/test_<module>.py`, `tests/test_<related>.py`
+```
+
+### Commands
+```bash
+beadloom sync-check --json            # stale list with reasons
+beadloom ctx <ref-id>                 # current symbols/deps/files
+beadloom sync-update <ref-id> --check # stale pairs for one ref
+beadloom docs polish                  # enrichment data (symbol drift, deps)
+beadloom reindex && beadloom sync-check   # reset baseline + verify ok
+```
+Docs live under `docs/domains/<domain>/README.md` and `docs/domains/<domain>/features/<feature>/SPEC.md`. Edit ONLY under `docs/`.

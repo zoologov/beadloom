@@ -1,0 +1,9 @@
+<!-- overlay:fastapi — FastAPI idioms (routers, Depends, pydantic, async). -->
+## STACK (FastAPI)
+
+- **Routers** per resource (`APIRouter(prefix=..., tags=[...])`); wire them in the app factory, not at import time.
+- **Dependency injection** via `Depends(...)` for db sessions / auth / settings — never reach for globals; keep handlers thin and push logic into the service layer.
+- **Pydantic models** for request/response (`BaseModel`); separate the API schema from the persistence model; validate at the edge.
+- **Async** handlers (`async def`) when doing IO; never block the event loop (no sync DB/HTTP in an async path — use an async client or a threadpool).
+- Raise `HTTPException(status_code=..., detail=...)` for client errors; return typed response models, not raw dicts.
+- Config via `pydantic-settings` (`BaseSettings`), read from env — no hardcoded secrets.

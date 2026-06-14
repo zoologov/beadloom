@@ -21,9 +21,11 @@ import json
 import logging
 import os
 import tempfile
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from beadloom.ai_agents.ai_techwriter.backoff import RateLimitError
 from beadloom.ai_agents.ai_techwriter.commands import run_command
 from beadloom.ai_agents.ai_techwriter.models import AgentResult, ContextPacket
 from beadloom.ai_agents.ai_techwriter.runs_store import load_runs, runs_store_path
@@ -638,6 +640,7 @@ class FakeAgentRunner:
         output_tokens: int = 50,
         write_marker: str | None = "<!-- refreshed -->",
         fail_first_n: int = 0,
+        rate_limit_first_n: int = 0,
     ) -> None:
         self._project_root = project_root
         self._model = model
@@ -645,17 +648,28 @@ class FakeAgentRunner:
         self._output_tokens = output_tokens
         self._write_marker = write_marker
         self._fail_first_n = fail_first_n
+        self._rate_limit_first_n = rate_limit_first_n
         self.calls: list[ContextPacket] = []
+        self._lock = threading.Lock()
 
     def run(self, packet: ContextPacket) -> AgentResult:
-        """Record the call; optionally fail or write a marker; return usage.
+        """Record the call; optionally fail / rate-limit / write a marker; return usage.
 
         Returns a result with non-empty ``rewritten_paths`` only when an edit is
         actually written (``write_marker`` set); otherwise an empty result with
         no rewritten paths (the no-edit / failed-agent case, BUG-H).
+
+        ``rate_limit_first_n`` makes the first N calls raise
+        :class:`RateLimitError` (the provider 429/5xx signal) so the parallel
+        runner's per-session back-off can be exercised deterministically.
+        Thread-safe (called concurrently from the bounded session pool).
         """
-        self.calls.append(packet)
-        if len(self.calls) <= self._fail_first_n:
+        with self._lock:
+            self.calls.append(packet)
+            call_index = len(self.calls)
+        if call_index <= self._rate_limit_first_n:
+            raise RateLimitError("FakeAgentRunner: simulated 429 rate-limit")
+        if call_index <= self._fail_first_n + self._rate_limit_first_n:
             raise RuntimeError("FakeAgentRunner: simulated agent failure")
         edited = self._project_root is not None and self._write_marker is not None
         if edited:

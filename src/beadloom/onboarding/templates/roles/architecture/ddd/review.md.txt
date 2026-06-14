@@ -1,0 +1,11 @@
+<!-- overlay:ddd — DDD boundary review checklist + annotation vocabulary. -->
+## ARCHITECTURE (Domain-Driven Design)
+
+Verify the change respects the DDD layering:
+```
+Services (cli / mcp / tui) → application → Domains → infrastructure
+```
+- No domain→domain (peer), no domain→services/application (inward→outward), no infrastructure→domain, no new dependency cycle.
+- A **leaf-consumer** domain must not be imported by any core domain/service (a `forbid_import` boundary).
+- Every new module is placed in the right layer **and** carries the correct `# beadloom:domain` / `# beadloom:feature` / `# beadloom:component` annotation, and a new domain/feature has a doc — else `module-coverage` (error) and `lint --strict` go red. Stale/missing annotation or doc → **Major**.
+

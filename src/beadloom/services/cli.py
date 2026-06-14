@@ -15,6 +15,7 @@ import click
 if TYPE_CHECKING:
     import sqlite3
     from collections.abc import Sequence
+    from types import ModuleType
 
     from beadloom.application.active_table import ReconcileResult
     from beadloom.application.gate import GateResult
@@ -1271,11 +1272,11 @@ fi
 # Guarded no-op: only runs when BOTH `bd` and `beadloom` are installed. In any
 # repo without `bd` (or without ACTIVE tables) this block does nothing and never
 # blocks the commit. Auto-fixes the bead-status tables + tracked issues.jsonl
-# and restages them so the commit is coherent by construction.
+# and restages them so the commit is coherent by construction. `--stage` stages
+# EXACTLY the reconciled ACTIVE.md(s) + the exported jsonl — never an unrelated
+# concurrently-edited doc in the same subtree.
 if command -v bd >/dev/null 2>&1 && command -v beadloom >/dev/null 2>&1; then
-  beadloom active-sync >/dev/null 2>&1
-  git add -u .claude/development/docs/features 2>/dev/null
-  [ -f .beads/issues.jsonl ] && git add .beads/issues.jsonl 2>/dev/null
+  beadloom active-sync --stage >/dev/null 2>&1
 fi
 """
 
@@ -1326,13 +1327,41 @@ fi
 # repo without `bd` (or without ACTIVE tables) this block does nothing and never
 # blocks the commit. Auto-fixes the bead-status tables + tracked issues.jsonl
 # and restages them so the commit is coherent by construction (never blocks).
+# `--stage` stages EXACTLY the reconciled ACTIVE.md(s) + the exported jsonl —
+# never an unrelated concurrently-edited doc in the same subtree.
 if command -v bd >/dev/null 2>&1 && command -v beadloom >/dev/null 2>&1; then
-  beadloom active-sync >/dev/null 2>&1
-  git add -u .claude/development/docs/features 2>/dev/null
-  [ -f .beads/issues.jsonl ] && git add .beads/issues.jsonl 2>/dev/null
+  beadloom active-sync --stage >/dev/null 2>&1
 fi
 
 if [ $failed -ne 0 ]; then
+  exit 1
+fi
+"""
+
+# Pre-push hook: the AUTHORITATIVE blocking Beadloom Gate. Runs the full
+# `beadloom ci` Gate (incremental reindex -> lint -> coverage-lint -> sync-check
+# -> doctor) and exits non-zero to BLOCK the push on red. Guarded + fail-safe:
+# in any repo without `beadloom` on PATH the hook is a safe no-op (never blocks).
+# Idempotent (re-running install-hooks overwrites cleanly). `--no-verify` is the
+# documented escape hatch. The pre-commit hook stays the lighter warn check; the
+# full Gate lives here so it isn't duplicated on every commit.
+_HOOK_TEMPLATE_PRE_PUSH = """\
+#!/bin/sh
+# pre-push hook managed by beadloom -- the blocking Beadloom Gate.
+
+# Fail-safe: outside a Beadloom flow repo (no `beadloom` on PATH) this hook is a
+# safe no-op so it never blocks a push in a repo that does not use Beadloom.
+if ! command -v beadloom >/dev/null 2>&1; then
+  exit 0
+fi
+
+echo "Running Beadloom Gate (beadloom ci)..."
+beadloom ci
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "Beadloom Gate failed (docs stale / lint / coverage / doctor)."
+  echo "Run the tech-writer (or /coordinator) to refresh docs, then re-push."
+  echo "To override (discouraged): git push --no-verify"
   exit 1
 fi
 """
@@ -1346,7 +1375,19 @@ fi
     default="warn",
     help="Hook mode: warn (default) or block commits on stale docs.",
 )
-@click.option("--remove", is_flag=True, help="Remove the pre-commit hook.")
+@click.option("--remove", is_flag=True, help="Remove the selected hook(s).")
+@click.option(
+    "--pre-commit",
+    "pre_commit",
+    is_flag=True,
+    help="Operate on the pre-commit hook only (default: both pre-commit + pre-push).",
+)
+@click.option(
+    "--pre-push",
+    "pre_push",
+    is_flag=True,
+    help="Operate on the pre-push Gate hook only (default: both pre-commit + pre-push).",
+)
 @click.option(
     "--project",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
@@ -1357,9 +1398,17 @@ def install_hooks(
     *,
     mode: str,
     remove: bool,
+    pre_commit: bool,
+    pre_push: bool,
     project: Path | None,
 ) -> None:
-    """Install or remove beadloom pre-commit hook."""
+    """Install or remove beadloom git hooks.
+
+    By default installs BOTH the pre-commit hook (lighter warn/block check) and
+    the pre-push hook (the authoritative blocking Beadloom Gate). Use
+    ``--pre-commit`` / ``--pre-push`` to select one. ``--remove`` removes the
+    selected hook(s).
+    """
     import stat
 
     project_root = project or Path.cwd()
@@ -1369,20 +1418,50 @@ def install_hooks(
         click.echo("Error: .git/hooks not found. Is this a git repository?", err=True)
         sys.exit(1)
 
-    hook_path = hooks_dir / "pre-commit"
+    # No selector -> operate on both hooks.
+    do_pre_commit = pre_commit or not (pre_commit or pre_push)
+    do_pre_push = pre_push or not (pre_commit or pre_push)
 
     if remove:
-        if hook_path.exists():
-            hook_path.unlink()
-            click.echo("Removed pre-commit hook.")
-        else:
-            click.echo("No pre-commit hook to remove.")
+        _remove_hooks(hooks_dir, pre_commit=do_pre_commit, pre_push=do_pre_push)
         return
 
-    template = _HOOK_TEMPLATE_BLOCK if mode == "block" else _HOOK_TEMPLATE_WARN
+    if do_pre_commit:
+        template = _HOOK_TEMPLATE_BLOCK if mode == "block" else _HOOK_TEMPLATE_WARN
+        _write_hook(hooks_dir / "pre-commit", template, stat)
+        click.echo(f"Installed pre-commit hook (mode: {mode}).")
+    if do_pre_push:
+        _write_hook(hooks_dir / "pre-push", _HOOK_TEMPLATE_PRE_PUSH, stat)
+        click.echo("Installed pre-push hook (Beadloom Gate, blocking).")
+
+
+def _write_hook(hook_path: Path, template: str, stat_mod: ModuleType) -> None:
+    """Write an executable git hook (idempotent overwrite)."""
     hook_path.write_text(template)
-    hook_path.chmod(hook_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    click.echo(f"Installed pre-commit hook (mode: {mode}).")
+    hook_path.chmod(
+        hook_path.stat().st_mode
+        | stat_mod.S_IXUSR
+        | stat_mod.S_IXGRP
+        | stat_mod.S_IXOTH
+    )
+
+
+def _remove_hooks(hooks_dir: Path, *, pre_commit: bool, pre_push: bool) -> None:
+    """Remove the selected git hook(s); report what was removed."""
+    targets: list[str] = []
+    if pre_commit:
+        targets.append("pre-commit")
+    if pre_push:
+        targets.append("pre-push")
+    removed_any = False
+    for name in targets:
+        path = hooks_dir / name
+        if path.exists():
+            path.unlink()
+            click.echo(f"Removed {name} hook.")
+            removed_any = True
+    if not removed_any:
+        click.echo("No matching hook to remove.")
 
 
 # beadloom:component=active-table
@@ -1471,20 +1550,55 @@ def _jsonl_is_tracked(project_root: Path) -> bool:
 
 
 # beadloom:component=active-table
-def _export_jsonl(project_root: Path) -> None:
+def _export_jsonl(project_root: Path) -> bool:
     """Best-effort ``bd export -o .beads/issues.jsonl`` when the jsonl is tracked.
 
     Keeps the tracked tracker artifact honest across branch/squash-merge (the
     bd-close jsonl-drift fix). Skips silently if ``bd`` is unavailable or the
-    jsonl isn't tracked — never raises.
+    jsonl isn't tracked — never raises. Returns ``True`` when ``bd export`` was
+    actually run (so a caller may stage the exact jsonl path), else ``False``.
     """
     from beadloom.services.bd_seam import BdUnavailableError, run_bd
 
     if not _jsonl_is_tracked(project_root):
-        return
+        return False
     try:
         run_bd(["export", "-o", ".beads/issues.jsonl"], cwd=str(project_root))
     except BdUnavailableError:
+        return False
+    return True
+
+
+# beadloom:component=active-table
+def _stage_reconciled(
+    project_root: Path,
+    changed_files: list[Path],
+    *,
+    exported_jsonl: bool,
+) -> None:
+    """``git add`` EXACTLY the reconciled ACTIVE.md paths (+ the exported jsonl).
+
+    Replaces the old broad ``git add -u .claude/development/docs/features`` in the
+    hook, which over-staged any concurrently-edited sibling doc in that subtree.
+    Best-effort and guarded: no paths → no-op; no git / failure → silently skip
+    (never raises, never stages anything beyond the supplied paths).
+    """
+    import subprocess
+
+    paths = [str(p) for p in changed_files]
+    if exported_jsonl:
+        paths.append(".beads/issues.jsonl")
+    if not paths:
+        return
+    try:
+        # Fixed argv (no shell); `--` guards the explicit, reconciled paths only.
+        subprocess.run(  # noqa: S603
+            ["git", "add", "--", *paths],  # noqa: S607
+            cwd=project_root,
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
         return
 
 
@@ -1505,6 +1619,13 @@ def _export_jsonl(project_root: Path) -> None:
     help="Skip the `bd export` jsonl sync (fix mode only).",
 )
 @click.option(
+    "--stage",
+    "stage",
+    is_flag=True,
+    help="git add EXACTLY the reconciled ACTIVE.md(s) + the exported jsonl "
+    "(fix mode only); never stages unrelated files. Best-effort (no git → skip).",
+)
+@click.option(
     "--project",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     default=None,
@@ -1516,6 +1637,7 @@ def active_sync(
     check_only: bool,
     output_json: bool,
     no_export: bool,
+    stage: bool,
     project: Path | None,
 ) -> None:
     """Reconcile ACTIVE.md bead-status tables from ``bd`` (the source of truth).
@@ -1527,7 +1649,9 @@ def active_sync(
 
     No-op contract: if ``bd`` is unavailable OR there is no ACTIVE file with a
     bead-status table, this exits 0 and writes nothing (a non-flow repo is never
-    affected).
+    affected). With ``--stage`` (fix mode), ``git add`` is run on EXACTLY the
+    reconciled ACTIVE.md paths + the exported jsonl — nothing else (so a
+    concurrently-edited sibling doc is never collaterally staged).
     """
     from beadloom.application.active_table import reconcile_active_tables
 
@@ -1547,8 +1671,9 @@ def active_sync(
         return
 
     result = reconcile_active_tables(project_root, bd_statuses, epic=epic)
-    if not no_export:
-        _export_jsonl(project_root)
+    exported = False if no_export else _export_jsonl(project_root)
+    if stage:
+        _stage_reconciled(project_root, result.changed_files, exported_jsonl=exported)
     _emit_active_sync(result, output_json=output_json, check=False)
 
 
@@ -2023,26 +2148,85 @@ def setup_ai_techwriter(*, platform: str, project: Path | None) -> None:
     default=False,
     help="Overwrite hand-edited scaffolded flow files (default: preserve them).",
 )
-def setup_agentic_flow(*, project: Path | None, force: bool) -> None:
-    """Scaffold Beadloom's proven multi-agent dev flow into this repo (BDL-048).
+@click.option(
+    "--tool",
+    "tools",
+    multiple=True,
+    type=click.Choice(["claude", "cursor"]),
+    help="Tool adapter set(s) to generate (repeatable). Default: flow.yml or claude.",
+)
+@click.option(
+    "--architecture",
+    "architecture",
+    type=click.Choice(["ddd", "fsd"]),
+    default=None,
+    help="Architecture methodology overlay. Default: flow.yml or ddd.",
+)
+@click.option(
+    "--stack",
+    "stack",
+    default=None,
+    help=(
+        "Comma-separated stack overlays "
+        "(python,fastapi,javascript,typescript,vuejs). Default: flow.yml or "
+        "auto-detected."
+    ),
+)
+def setup_agentic_flow(
+    *,
+    project: Path | None,
+    force: bool,
+    tools: tuple[str, ...],
+    architecture: str | None,
+    stack: str | None,
+) -> None:
+    """Scaffold Beadloom's proven multi-agent dev flow into this repo (BDL-048/052).
 
-    In the setup-* family (alongside setup-rules / setup-mcp). Idempotently
-    drops the role subagents (``.claude/agents/{dev,test,review,tech-writer}.md``)
-    and slash skills (``.claude/commands/{coordinator,task-init,checkpoint,
-    templates}.md``) — vendored byte-identical to Beadloom's own proven flow —
-    plus a ``.claude/CLAUDE.md`` whose auto-regions are generated for THIS
-    project (name / stack / version / packages). User prose outside the
-    auto-regions is never touched; --force overwrites hand-edited flow files.
+    In the setup-* family (alongside setup-rules / setup-mcp). Composes the role
+    subagents from CORE + the selected architecture overlay (``ddd``/``fsd``) +
+    the selected stack overlays, then writes the per-tool adapter set(s) — for
+    ``claude`` to ``.claude/agents/*`` (+ ``.claude/commands/*`` + a per-project
+    ``.claude/CLAUDE.md``), for ``cursor`` to ``.cursor/agents/*`` (+ a Cursor
+    orchestrator pointer). Selection comes from ``.beadloom/flow.yml`` (or the
+    ``--tool``/``--architecture``/``--stack`` flags, which override it; defaults
+    are ``claude`` / ``ddd`` / auto-detected stack). A drift-guard test keeps
+    every generated adapter byte-identical to its composition. User prose
+    outside CLAUDE.md auto-regions is never touched; --force overwrites
+    hand-edited Claude flow files.
     """
     from beadloom.onboarding.agentic_flow_setup import scaffold
+    from beadloom.onboarding.flow_config import FlowConfigError, resolve_flow_config
+    from beadloom.onboarding.role_adapters import generate_adapters
 
     project_root = project or Path.cwd()
-    result = scaffold(project_root, force=force)
+    stack_tuple = (
+        tuple(s.strip() for s in stack.split(",") if s.strip())
+        if stack is not None
+        else ()
+    )
+    try:
+        config = resolve_flow_config(
+            project_root,
+            tools=tools,
+            architecture=architecture,
+            stack=stack_tuple,
+        )
+    except FlowConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
 
-    for name in result.agents_written:
-        click.echo(f"Wrote .claude/agents/{name}.md")
-    for name in result.agents_skipped:
-        click.echo(f"Skipped .claude/agents/{name}.md (hand-edited; use --force)")
+    click.echo(
+        f"Composing roles: architecture={config.architecture}, "
+        f"stack={','.join(config.stack)}, tools={','.join(config.tools)}"
+    )
+    adapters = generate_adapters(config, project_root)
+    for tool, files in adapters.agents.items():
+        for rel in files:
+            click.echo(f"Wrote {rel} ({tool})")
+    for rel in adapters.extra:
+        click.echo(f"Wrote {rel}")
+
+    result = scaffold(project_root, force=force, include_agents=False)
+
     for name in result.commands_written:
         click.echo(f"Wrote .claude/commands/{name}.md")
     for name in result.commands_skipped:
@@ -2200,9 +2384,16 @@ def config_check(*, fix: bool, project: Path | None) -> None:
         # never force the flow onto a repo that did not adopt it). Restores the
         # vendored agents/commands; CLAUDE.md regions are already refreshed
         # above, so user prose outside the auto-regions is preserved.
-        from beadloom.onboarding.config_sync import refresh_agentic_flow_files
+        from beadloom.onboarding.config_sync import (
+            refresh_agentic_flow_files,
+            refresh_composed_adapters,
+        )
 
         refresh_agentic_flow_files(project_root)
+        # Recompose the per-tool role adapters from .beadloom/flow.yml (no-op
+        # when flow.yml is absent/invalid). The composer owns .claude/agents/*
+        # + .cursor/agents/* once a flow.yml exists.
+        refresh_composed_adapters(project_root)
 
     db_path = project_root / ".beadloom" / "beadloom.db"
     conn = open_db(db_path)
