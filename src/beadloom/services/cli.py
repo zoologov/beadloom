@@ -1272,11 +1272,11 @@ fi
 # Guarded no-op: only runs when BOTH `bd` and `beadloom` are installed. In any
 # repo without `bd` (or without ACTIVE tables) this block does nothing and never
 # blocks the commit. Auto-fixes the bead-status tables + tracked issues.jsonl
-# and restages them so the commit is coherent by construction.
+# and restages them so the commit is coherent by construction. `--stage` stages
+# EXACTLY the reconciled ACTIVE.md(s) + the exported jsonl — never an unrelated
+# concurrently-edited doc in the same subtree.
 if command -v bd >/dev/null 2>&1 && command -v beadloom >/dev/null 2>&1; then
-  beadloom active-sync >/dev/null 2>&1
-  git add -u .claude/development/docs/features 2>/dev/null
-  [ -f .beads/issues.jsonl ] && git add .beads/issues.jsonl 2>/dev/null
+  beadloom active-sync --stage >/dev/null 2>&1
 fi
 """
 
@@ -1327,10 +1327,10 @@ fi
 # repo without `bd` (or without ACTIVE tables) this block does nothing and never
 # blocks the commit. Auto-fixes the bead-status tables + tracked issues.jsonl
 # and restages them so the commit is coherent by construction (never blocks).
+# `--stage` stages EXACTLY the reconciled ACTIVE.md(s) + the exported jsonl —
+# never an unrelated concurrently-edited doc in the same subtree.
 if command -v bd >/dev/null 2>&1 && command -v beadloom >/dev/null 2>&1; then
-  beadloom active-sync >/dev/null 2>&1
-  git add -u .claude/development/docs/features 2>/dev/null
-  [ -f .beads/issues.jsonl ] && git add .beads/issues.jsonl 2>/dev/null
+  beadloom active-sync --stage >/dev/null 2>&1
 fi
 
 if [ $failed -ne 0 ]; then
@@ -1550,20 +1550,55 @@ def _jsonl_is_tracked(project_root: Path) -> bool:
 
 
 # beadloom:component=active-table
-def _export_jsonl(project_root: Path) -> None:
+def _export_jsonl(project_root: Path) -> bool:
     """Best-effort ``bd export -o .beads/issues.jsonl`` when the jsonl is tracked.
 
     Keeps the tracked tracker artifact honest across branch/squash-merge (the
     bd-close jsonl-drift fix). Skips silently if ``bd`` is unavailable or the
-    jsonl isn't tracked — never raises.
+    jsonl isn't tracked — never raises. Returns ``True`` when ``bd export`` was
+    actually run (so a caller may stage the exact jsonl path), else ``False``.
     """
     from beadloom.services.bd_seam import BdUnavailableError, run_bd
 
     if not _jsonl_is_tracked(project_root):
-        return
+        return False
     try:
         run_bd(["export", "-o", ".beads/issues.jsonl"], cwd=str(project_root))
     except BdUnavailableError:
+        return False
+    return True
+
+
+# beadloom:component=active-table
+def _stage_reconciled(
+    project_root: Path,
+    changed_files: list[Path],
+    *,
+    exported_jsonl: bool,
+) -> None:
+    """``git add`` EXACTLY the reconciled ACTIVE.md paths (+ the exported jsonl).
+
+    Replaces the old broad ``git add -u .claude/development/docs/features`` in the
+    hook, which over-staged any concurrently-edited sibling doc in that subtree.
+    Best-effort and guarded: no paths → no-op; no git / failure → silently skip
+    (never raises, never stages anything beyond the supplied paths).
+    """
+    import subprocess
+
+    paths = [str(p) for p in changed_files]
+    if exported_jsonl:
+        paths.append(".beads/issues.jsonl")
+    if not paths:
+        return
+    try:
+        # Fixed argv (no shell); `--` guards the explicit, reconciled paths only.
+        subprocess.run(  # noqa: S603
+            ["git", "add", "--", *paths],  # noqa: S607
+            cwd=project_root,
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
         return
 
 
@@ -1584,6 +1619,13 @@ def _export_jsonl(project_root: Path) -> None:
     help="Skip the `bd export` jsonl sync (fix mode only).",
 )
 @click.option(
+    "--stage",
+    "stage",
+    is_flag=True,
+    help="git add EXACTLY the reconciled ACTIVE.md(s) + the exported jsonl "
+    "(fix mode only); never stages unrelated files. Best-effort (no git → skip).",
+)
+@click.option(
     "--project",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     default=None,
@@ -1595,6 +1637,7 @@ def active_sync(
     check_only: bool,
     output_json: bool,
     no_export: bool,
+    stage: bool,
     project: Path | None,
 ) -> None:
     """Reconcile ACTIVE.md bead-status tables from ``bd`` (the source of truth).
@@ -1606,7 +1649,9 @@ def active_sync(
 
     No-op contract: if ``bd`` is unavailable OR there is no ACTIVE file with a
     bead-status table, this exits 0 and writes nothing (a non-flow repo is never
-    affected).
+    affected). With ``--stage`` (fix mode), ``git add`` is run on EXACTLY the
+    reconciled ACTIVE.md paths + the exported jsonl — nothing else (so a
+    concurrently-edited sibling doc is never collaterally staged).
     """
     from beadloom.application.active_table import reconcile_active_tables
 
@@ -1626,8 +1671,9 @@ def active_sync(
         return
 
     result = reconcile_active_tables(project_root, bd_statuses, epic=epic)
-    if not no_export:
-        _export_jsonl(project_root)
+    exported = False if no_export else _export_jsonl(project_root)
+    if stage:
+        _stage_reconciled(project_root, result.changed_files, exported_jsonl=exported)
     _emit_active_sync(result, output_json=output_json, check=False)
 
 

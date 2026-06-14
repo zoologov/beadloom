@@ -86,8 +86,10 @@ class TestInstallHooksCommand:
         content = (project / ".git" / "hooks" / "pre-commit").read_text()
         assert "ACTIVE / tracker coherence" in content
         assert "command -v bd >/dev/null 2>&1" in content
-        assert "active-sync" in content
-        assert ".beads/issues.jsonl" in content
+        assert "active-sync --stage" in content
+        # --stage stages exactly the reconciled paths; the broad `git add -u`
+        # over the features subtree (which over-staged unrelated docs) is gone.
+        assert "git add -u .claude/development/docs/features" not in content
 
     def test_coherence_block_present_block(self, tmp_path: Path) -> None:
         project = _setup_git_project(tmp_path)
@@ -96,7 +98,8 @@ class TestInstallHooksCommand:
         content = (project / ".git" / "hooks" / "pre-commit").read_text()
         assert "ACTIVE / tracker coherence" in content
         assert "command -v bd >/dev/null 2>&1" in content
-        assert "active-sync" in content
+        assert "active-sync --stage" in content
+        assert "git add -u .claude/development/docs/features" not in content
 
     def test_coherence_block_after_sync_check(self, tmp_path: Path) -> None:
         project = _setup_git_project(tmp_path)

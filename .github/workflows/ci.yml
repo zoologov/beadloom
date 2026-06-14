@@ -164,9 +164,13 @@ jobs:
             echo "AI_TW_SKIP=1" >> "$GITHUB_ENV"
           fi
 
+      # S5 (BDL-052): enable setup-uv's built-in dependency cache so the
+      # self-hosted runner skips re-downloading the wheels every PR.
       - name: Install uv
         if: env.AI_TW_SKIP != '1'
         uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
 
       # Beadloom (the substrate) + the harness deps, pinned via the lockfile.
       - name: Install Beadloom + harness deps
@@ -179,9 +183,22 @@ jobs:
         if: env.AI_TW_SKIP != '1'
         run: goose --version
 
-      # Rebuild the index so sync-check sees current code↔doc state.
-      - name: Beadloom reindex
+      # S5 (BDL-052): cache the built index DB keyed on a hash of everything that
+      # feeds it (the graph YAML + all source + all docs). On a hit the index is
+      # already current for this exact tree, so the reindex below is skipped; any
+      # graph/src/docs change rotates the key → miss → a full reindex runs.
+      - name: Cache the Beadloom index
         if: env.AI_TW_SKIP != '1'
+        id: index-cache
+        uses: actions/cache@v4
+        with:
+          path: .beadloom/beadloom.db
+          key: beadloom-index-${{ hashFiles('.beadloom/_graph/**', 'src/**', 'docs/**') }}
+
+      # Rebuild the index so sync-check sees current code↔doc state — skipped on
+      # a cache hit (the cached DB already matches this tree's hash).
+      - name: Beadloom reindex
+        if: env.AI_TW_SKIP != '1' && steps.index-cache.outputs.cache-hit != 'true'
         run: uv run beadloom reindex
 
       # PR path: --since is the merge-base of the PR base and HEAD — exactly

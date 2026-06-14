@@ -456,10 +456,11 @@ def test_coherence_block_guarded_and_runs_active_sync(tmp_path: Path, mode: str)
     content = _install_hook(tmp_path, mode)
     assert "ACTIVE / tracker coherence" in content
     assert "command -v bd >/dev/null 2>&1" in content
-    assert "beadloom active-sync" in content
-    # Restages both the ACTIVE docs and the tracked jsonl.
-    assert "git add -u .claude/development/docs/features" in content
-    assert ".beads/issues.jsonl" in content
+    # `--stage` restages EXACTLY the reconciled ACTIVE.md(s) + the exported jsonl.
+    assert "beadloom active-sync --stage" in content
+    # The old broad `git add -u` over the features subtree (which over-staged an
+    # unrelated concurrently-edited doc) is gone.
+    assert "git add -u .claude/development/docs/features" not in content
 
 
 @pytest.mark.parametrize("mode", ["warn", "block"])

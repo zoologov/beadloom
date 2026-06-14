@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from beadloom.ai_agents.ai_techwriter.commands import beadloom_sync_check_json
 from beadloom.ai_agents.ai_techwriter.models import DriftItem
+from beadloom.ai_agents.ai_techwriter.symbol_scope import narrow_by_changed_symbols
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -22,12 +23,17 @@ def discover_scope(project_root: Path, *, since: str | None = None) -> list[Drif
 
     When *since* is given, drift is measured against the code state at that git
     ref (the push's parent commit) rather than the stored sync_state — the CI
-    path, immune to a fresh-checkout re-baseline masking per-push drift.
+    path, immune to a fresh-checkout re-baseline masking per-push drift. With a
+    *since* baseline the stale set is additionally **symbol-narrowed**
+    (:func:`narrow_by_changed_symbols`): pairs whose doc references no changed
+    symbol are dropped and baselined clean, killing the god-file fan-out. Without
+    *since* there is no baseline to diff against, so narrowing is skipped.
 
     Empty list => nothing drifted => the harness no-ops (clean exit).
     """
     report = beadloom_sync_check_json(project_root, since=since)
-    return parse_scope(report)
+    stale = parse_scope(report)
+    return narrow_by_changed_symbols(stale, project_root, since=since)
 
 
 def parse_scope(report: dict[str, object]) -> list[DriftItem]:

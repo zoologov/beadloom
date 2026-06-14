@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import subprocess
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -127,3 +128,57 @@ def beadloom_sync_update(project_root: Path, ref_id: str) -> CommandResult:
 def beadloom_ci(project_root: Path) -> CommandResult:
     """Run the unified gate (``beadloom ci``). rc 0 = green, 1 = failure."""
     return run_command(["beadloom", "ci"], cwd=project_root)
+
+
+def git_file_at_ref(project_root: Path, rel_path: str, ref: str) -> str | None:
+    """Return *rel_path*'s content at *ref* via ``git show``, or None if absent.
+
+    Reads from the object store only — never the working tree or any DB. Used by
+    symbol-scope narrowing to diff a touched file against the push's parent.
+    """
+    result = run_command(["git", "show", f"{ref}:{rel_path}"], cwd=project_root)
+    if not result.ok:
+        return None
+    return result.stdout
+
+
+def read_working_file(project_root: Path, rel_path: str) -> str | None:
+    """Return the current working-tree content of *rel_path*, or None if absent."""
+    target = project_root / rel_path
+    if not target.is_file():
+        return None
+    try:
+        return target.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+_HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
+
+
+def git_changed_line_numbers(project_root: Path, rel_path: str, since: str) -> set[int]:
+    """Return the set of *new-side* line numbers changed in *rel_path* since *ref*.
+
+    Uses ``git diff --unified=0 <ref> -- <path>`` and parses the ``@@`` hunk
+    headers, so attribution is to the working-tree line numbers (which the
+    symbol-range map is also keyed on). An empty set means "no changed lines
+    detected" — callers treat that as ambiguous and keep the pair (conservative).
+    """
+    result = run_command(
+        ["git", "diff", "--unified=0", since, "--", rel_path], cwd=project_root
+    )
+    if not result.ok:
+        return set()
+    changed: set[int] = set()
+    for line in result.stdout.splitlines():
+        match = _HUNK_RE.match(line)
+        if match is None:
+            continue
+        start = int(match.group(1))
+        count = int(match.group(2)) if match.group(2) is not None else 1
+        if count == 0:
+            # A pure deletion hunk anchors on the new-side line before the gap.
+            changed.add(start)
+            continue
+        changed.update(range(start, start + count))
+    return changed

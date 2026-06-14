@@ -317,3 +317,151 @@ def test_check_mode_does_not_export(tmp_path: Path) -> None:
     with patch("beadloom.services.bd_seam.run_bd", side_effect=fake_run_bd):
         CliRunner().invoke(main, ["active-sync", "--check", "--project", str(tmp_path)])
     assert not any(c[:1] == ["export"] for c in calls), calls
+
+
+# ---------------------------------------------------------------------------
+# --stage — git add EXACTLY the reconciled ACTIVE.md(s) + the jsonl, nothing else
+# ---------------------------------------------------------------------------
+
+
+def _git_out(cwd: Path, *args: str) -> str:
+    import subprocess
+
+    out = subprocess.run(  # noqa: S603
+        ["git", *args], cwd=cwd, check=True, capture_output=True, text=True  # noqa: S607
+    )
+    return out.stdout
+
+
+def _staged_paths(cwd: Path) -> set[str]:
+    """Paths currently in the git index (staged)."""
+    out = _git_out(cwd, "diff", "--cached", "--name-only")
+    return {line for line in out.splitlines() if line}
+
+
+def _init_repo(tmp_path: Path) -> None:
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "config", "user.email", "t@t.t")
+    _git(tmp_path, "config", "user.name", "t")
+
+
+def test_stage_stages_only_reconciled_active_not_unrelated_doc(tmp_path: Path) -> None:
+    """The over-staging bug pinned: a concurrently-edited sibling doc in the same
+    features subtree must NOT be staged — only the reconciled ACTIVE.md is."""
+    active = _write_active(tmp_path, "DEMO")
+    # An unrelated, concurrently-modified doc in the SAME features subtree.
+    unrelated = active.parent / "CONTEXT.md"
+    unrelated.write_text("original\n", encoding="utf-8")
+    _init_repo(tmp_path)
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "baseline")
+    # Now dirty the unrelated doc in the working tree (NOT staged).
+    unrelated.write_text("concurrent edit\n", encoding="utf-8")
+
+    beads = [{"id": "demo-a.1", "status": "closed", "dependencies": []}]
+    with patch(
+        "beadloom.services.bd_seam.run_bd",
+        return_value=_result_ok(_bd_list_json(beads)),
+    ):
+        result = CliRunner().invoke(
+            main, ["active-sync", "--stage", "--project", str(tmp_path), "--no-export"]
+        )
+    assert result.exit_code == 0, result.output
+    rel_active = "/".join(active.relative_to(tmp_path).parts)
+    rel_unrelated = "/".join(unrelated.relative_to(tmp_path).parts)
+    staged = _staged_paths(tmp_path)
+    assert rel_active in staged, staged
+    assert rel_unrelated not in staged, staged
+
+
+def test_stage_stages_exported_jsonl(tmp_path: Path) -> None:
+    active = _write_active(tmp_path, "DEMO")
+    beads_dir = tmp_path / ".beads"
+    beads_dir.mkdir()
+    (beads_dir / "issues.jsonl").write_text("{}\n", encoding="utf-8")
+    _init_repo(tmp_path)
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "baseline")
+
+    beads = [{"id": "demo-a.1", "status": "closed", "dependencies": []}]
+
+    def fake_run_bd(args: list[str], *, cwd: str | None = None) -> BdResult:
+        if args[0] == "list":
+            return _result_ok(_bd_list_json(beads))
+        if args[0] == "export":
+            # Simulate bd writing a fresh jsonl.
+            (beads_dir / "issues.jsonl").write_text('{"id":"demo-a.1"}\n', encoding="utf-8")
+            return _result_ok("")
+        return _result_ok("")
+
+    with patch("beadloom.services.bd_seam.run_bd", side_effect=fake_run_bd):
+        result = CliRunner().invoke(
+            main, ["active-sync", "--stage", "--project", str(tmp_path)]
+        )
+    assert result.exit_code == 0, result.output
+    staged = _staged_paths(tmp_path)
+    rel_active = "/".join(active.relative_to(tmp_path).parts)
+    assert ".beads/issues.jsonl" in staged, staged
+    assert rel_active in staged, staged
+
+
+def test_stage_noop_when_nothing_reconciled(tmp_path: Path) -> None:
+    active = _write_active(tmp_path, "DEMO")
+    unrelated = active.parent / "CONTEXT.md"
+    unrelated.write_text("original\n", encoding="utf-8")
+    _init_repo(tmp_path)
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "baseline")
+    unrelated.write_text("concurrent edit\n", encoding="utf-8")
+
+    # bd agrees with every cell -> no drift, nothing reconciled.
+    beads = [
+        {"id": "demo-a.1", "status": "open", "dependencies": []},
+        {"id": "demo-a.2", "status": "in_progress", "dependencies": []},
+        {"id": "demo-a.3", "status": "open", "dependencies": []},
+    ]
+    with patch(
+        "beadloom.services.bd_seam.run_bd",
+        return_value=_result_ok(_bd_list_json(beads)),
+    ):
+        result = CliRunner().invoke(
+            main, ["active-sync", "--stage", "--project", str(tmp_path), "--no-export"]
+        )
+    assert result.exit_code == 0, result.output
+    # Nothing reconciled -> nothing staged at all.
+    assert _staged_paths(tmp_path) == set()
+
+
+def test_stage_best_effort_when_not_a_git_repo(tmp_path: Path) -> None:
+    """No git repo -> --stage skips staging silently and still exits 0."""
+    _write_active(tmp_path, "DEMO")
+    beads = [{"id": "demo-a.1", "status": "closed", "dependencies": []}]
+    with patch(
+        "beadloom.services.bd_seam.run_bd",
+        return_value=_result_ok(_bd_list_json(beads)),
+    ):
+        result = CliRunner().invoke(
+            main, ["active-sync", "--stage", "--project", str(tmp_path), "--no-export"]
+        )
+    assert result.exit_code == 0, result.output
+
+
+def test_stage_is_a_noop_in_check_mode(tmp_path: Path) -> None:
+    """--check never writes, so --stage stages nothing even if combined."""
+    active = _write_active(tmp_path, "DEMO")
+    _init_repo(tmp_path)
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "baseline")
+    active.write_text(_ACTIVE_TABLE, encoding="utf-8")  # keep clean working tree
+
+    beads = [{"id": "demo-a.1", "status": "closed", "dependencies": []}]
+    with patch(
+        "beadloom.services.bd_seam.run_bd",
+        return_value=_result_ok(_bd_list_json(beads)),
+    ):
+        result = CliRunner().invoke(
+            main, ["active-sync", "--check", "--stage", "--project", str(tmp_path)]
+        )
+    # --check exits 1 on drift; nothing is staged.
+    assert result.exit_code == 1, result.output
+    assert _staged_paths(tmp_path) == set()

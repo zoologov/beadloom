@@ -6,7 +6,7 @@
 
 ## Current Focus
 
-- **Phase:** S1+S2 committed. S3 (configurator) in progress. Then S4/S5/S6 — parallel via worktrees.
+- **Phase:** S1+S2 committed. S1+S2+S3 committed. S4/S5/S6 dev running IN PARALLEL (worktree-isolated).
 - **Branch:** `features/BDL-052` (one branch; commit per slice; ONE PR at the end).
 - **Coordinator:** main loop (multi-agent; independent dev beads run in parallel).
 - **Parent:** `beadloom-3m2d`
@@ -24,13 +24,13 @@
 | beadloom-3m2d.7 | dev — S3 configurator (flow.yml + ddd/fsd + overlays + adapters) | ✓ done (impl; +47 tests; ci rc0) |
 | beadloom-3m2d.8 | test — S3 | ✓ done |
 | beadloom-3m2d.9 | review — S3 | ✓ done (PASS; orphaned-adapter minor→followup/.19) |
-| beadloom-3m2d.10 | dev — S4 symbol-scope | blocked ← 1 |
+| beadloom-3m2d.10 | dev — S4 symbol-scope | in progress (parallel worktree) |
 | beadloom-3m2d.11 | test — S4 | blocked ← 10 |
 | beadloom-3m2d.12 | review — S4 | blocked ← 11 |
-| beadloom-3m2d.13 | dev — S5 CI parallel+cache | blocked ← 1 |
+| beadloom-3m2d.13 | dev — S5 CI parallel+cache | in progress (parallel worktree) |
 | beadloom-3m2d.14 | test — S5 | blocked ← 13 |
 | beadloom-3m2d.15 | review — S5 | blocked ← 14 |
-| beadloom-3m2d.16 | dev — S6 active-sync --stage | blocked ← 1 |
+| beadloom-3m2d.16 | dev — S6 active-sync --stage | in progress (parallel worktree) |
 | beadloom-3m2d.17 | test — S6 | blocked ← 16 |
 | beadloom-3m2d.18 | review — S6 | blocked ← 17 |
 | beadloom-3m2d.19 | tech-writer — epic close | blocked ← 3,6,9,12,15,18 |

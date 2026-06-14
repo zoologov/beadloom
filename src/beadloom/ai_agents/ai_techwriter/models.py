@@ -123,6 +123,14 @@ class HarnessConfig:
     max_fixpoint_rounds: int = 10
     max_total_turns: int = 50
     max_total_tokens: int = 2_000_000
+    #: Max concurrent Goose sessions in the per-doc repair pool (S5). Default 3 is
+    #: RAM-aware for the 8GB self-hosted VPS (~3 sessions); 1 = sequential. Each
+    #: doc still gets its own session; aggregation is identical to sequential.
+    max_parallel: int = 3
+    #: Per-session 429/5xx exponential back-off budget (total tries, >= 1).
+    backoff_attempts: int = 4
+    #: Base delay (seconds) for the back-off schedule (``base * 2**n``).
+    backoff_base: float = 1.0
 
 
 @dataclass
