@@ -2,15 +2,17 @@
 
 > Read this in other languages: [Русский](README.ru.md)
 
-**Keep your architecture accurate and trustworthy — from a single repo to a whole microservices landscape, or every IT product in your company.**
+**Keep the architecture you intended and the code you actually shipped from drifting apart — from a single repo to a whole microservices landscape, or every IT product in your company.**
 
-Beadloom turns your architecture into something you can query, check, and trust. It keeps a map of how your system is built — domains, services, features, and the dependencies between them — in plain YAML in Git. It watches that your docs and module boundaries don't quietly drift away from the code. And across many services, it catches a broken contract between them before it ships.
+Beadloom is one free, MIT-licensed tool that closes the loop between **intent and reality**: it keeps a queryable map of how your system is *meant* to be built — domains, services, features, and the contracts between them — in plain YAML in Git, then continuously checks the *actual* code against it. Docs that don't match the code are flagged by construction. Module boundaries are enforced in CI. Across many services, a broken cross-service contract is caught before it ships. And the same graph powers a configurable, tool-agnostic **agentic dev flow** — so your AI agents (and your team) build *inside* the architecture instead of around it.
+
+**The moat isn't any single feature — it's the integrated loop.** Architecture-as-code, doc-sync, contract federation, and the agentic dev workflow are usually four separate commercial point-tools. Beadloom is the one place they share a graph, so each reinforces the others, free and self-hostable.
 
 [![License: MIT](https://img.shields.io/github/license/zoologov/beadloom)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/zoologov/beadloom?include_prereleases&sort=semver)](https://github.com/zoologov/beadloom/releases)
 [![PyPI](https://img.shields.io/pypi/v/beadloom)](https://pypi.org/project/beadloom/)
 [![Python](https://img.shields.io/pypi/pyversions/beadloom)](https://pypi.org/project/beadloom/)
-[![Tests](https://img.shields.io/github/actions/workflow/status/zoologov/beadloom/tests.yml?label=Tests)](https://github.com/zoologov/beadloom/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/zoologov/beadloom/ci.yml?branch=main&label=CI)](https://github.com/zoologov/beadloom/actions/workflows/ci.yml)
 [![mypy: strict](https://img.shields.io/badge/mypy-strict-blue)](https://mypy-lang.org/)
 [![code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![coverage: 80%+](https://img.shields.io/badge/coverage-80%25%2B-green)](pyproject.toml)
@@ -29,6 +31,7 @@ Beadloom turns your architecture into something you can query, check, and trust.
 - **Boundaries that are actually enforced.** Write your architecture rules in YAML and `beadloom lint` blocks violations in CI — no matter who (or which AI tool) wrote the code.
 - **Contracts checked across services.** Federate the per-repo graphs into one landscape and Beadloom reconciles **what each service says it provides against what its consumers actually use** — flagging a broken or missing contract before it reaches production.
 - **One command of context for AI agents.** `beadloom prime` hands an agent a compact (<2K-token) picture of the architecture at the start of a session, so it works within your design instead of guessing at it.
+- **A configurable, tool-agnostic agentic dev flow.** Declare your stack and methodology in `.beadloom/flow.yml`, and `beadloom setup-agentic-flow` composes a multi-agent workflow (dev → test → review → tech-writer) and writes the adapter set for **Claude Code and Cursor** at parity — DDD or FSD architecture, your stack overlays. A pre-push **Beadloom Gate** then guarantees "no code reaches `main` without current docs and clean boundaries".
 - **A published knowledge base.** `beadloom docs site` builds a VitePress site — a metrics dashboard with recommendations, an interactive architecture view, a cross-service landscape map, and your hand-written docs with a freshness badge on each.
 
 ## The problems it solves
@@ -95,6 +98,30 @@ An IDE indexer uses semantic search — an LLM decides what's relevant. Beadloom
 | **Docs** | Doesn't track freshness | Catches stale docs every commit |
 | **Boundaries** | Doesn't check them | Enforces them, blocks violations |
 | **Knowledge** | Dies with the session | Lives in Git, survives team changes |
+
+## The agentic dev flow — configurable, tool-agnostic, Gate-enforced
+
+The same graph that answers `prime`/`ctx` also drives a packaged multi-agent development workflow. You declare *what your project is* once, in `.beadloom/flow.yml`:
+
+```yaml
+tools:        [claude, cursor]   # generate adapters for one or both
+architecture: [ddd]              # ddd | fsd (exactly one)
+stack:        [python]           # python, fastapi, javascript, typescript, vuejs
+quality:      [clean-code, tdd]
+```
+
+`beadloom setup-agentic-flow` then **composes** each role (dev, test, review, tech-writer) from a CORE protocol + your architecture overlay + your stack overlays, and writes a per-tool adapter set — `.claude/agents/*` for Claude Code, `.cursor/agents/*` for Cursor — at parity. `config-check` byte-guards every generated adapter against its composition, so the workflow never silently drifts from the graph.
+
+The flow is **local-primary and Gate-enforced**:
+
+- **Pre-push Beadloom Gate.** `beadloom install-hooks` installs a pre-push hook that runs the full `beadloom ci` (reindex → `lint --strict` → sync-check → config-check → doctor) and **blocks the push on red** — "no code reaches `main` without current docs and clean boundaries". It is fail-safe (a no-op when `beadloom` isn't on `PATH`); `git push --no-verify` is the documented escape hatch.
+- **The AI tech-writer.** A PR-triggered harness (shipping inside the wheel, `python -m beadloom.ai_agents.ai_techwriter`) repairs drifted docs *on the PR branch* — symbol-scoped (a doc is rewritten only when a symbol it references actually changed), bounded-parallel, and verdict-classified so a dead runner or exhausted quota never freezes merges. CI is the true enforcement; the agent's refresh is a proposal a human merges.
+
+Because the same canonical flow runs on Claude Code and Cursor, and the architecture/stack are config rather than hand-written prose, you adopt the workflow without re-authoring it per project.
+
+## Beadloom governs itself
+
+Beadloom applies its own thesis to its own codebase — there is **no shadow code**. The `module-coverage` lint is promoted to `severity: error`: every source module is either a tracked graph node (a `feature` with a `SPEC.md` or a `component` with a `DOC.md`) or named on a small, visible exempt list — so a new untracked module **fails `beadloom ci`**. Internal building blocks earn a first-class **`component` node kind** (the infra mirror of a `feature`), and even the AI tech-writer harness lives in a graph-tracked `ai_agents` domain. The architecture-as-code claim is enforced, not hoped for.
 
 ## Who it's for
 
@@ -199,7 +226,9 @@ When an agent asks for context on a node, the response includes the rules that a
 - **CI enforcement** — `beadloom ci` runs reindex → lint → sync-check → config-check → doctor → optional landscape gate behind one exit code; ships as a reusable GitHub Action.
 - **Context Oracle** — deterministic graph traversal, a compact JSON bundle in under 20 ms.
 - **Doc Sync Engine** — tracks code↔doc links, catches stale docs, hooks into git.
-- **Agent context** — `beadloom prime` (<2K tokens), `setup-rules` for IDE adapters, an MCP server with 14 tools, and `config-check` to keep the agent files in sync with the graph.
+- **Agent context** — `beadloom prime` (<2K tokens), `setup-rules` for IDE adapters, an MCP server with 18 tools, and `config-check` to keep the agent files in sync with the graph.
+- **Agentic dev flow** — `setup-agentic-flow` composes a configurable, tool-agnostic multi-agent workflow (Claude Code + Cursor; DDD/FSD × stack overlays) from `.beadloom/flow.yml`, enforced by a pre-push Beadloom Gate and a PR-triggered AI tech-writer.
+- **Self-governing** — `module-coverage` lint (`error`) means no shadow code; the `component` node kind tracks internal building blocks alongside `feature` nodes.
 - **Full-text search** — FTS5 across nodes, docs, and code symbols.
 - **Impact analysis** — `beadloom why` shows what depends on a node and what breaks if it changes.
 - **Code-first onboarding** — bootstrap a graph from code structure alone; no docs needed to start.
@@ -246,16 +275,18 @@ Ask for a node's context and the Context Oracle runs a breadth-first traversal, 
 | `snapshot` | Save and compare architecture snapshots |
 | `link REF_ID [URL]` | Manage external tracker links on nodes |
 | `prime` | Output compact project context for AI agents |
+| `active-sync` | Reconcile each epic's `ACTIVE.md` bead-status table from the tracker (`bd`) |
 | `setup-rules` | Create IDE adapter files (`.cursorrules`, `.windsurfrules`, `.clinerules`) |
 | `setup-mcp` | Configure the MCP server for AI agents |
+| `setup-agentic-flow` | Compose + write the multi-agent role adapters from `.beadloom/flow.yml` (`--tool`/`--architecture`/`--stack`) |
 | `mcp-serve` | Run the MCP server (stdio) |
 | `tui` / `ui` | Interactive terminal dashboard (requires `beadloom[tui]`) |
 | `watch` | Auto-reindex on file changes (requires `beadloom[watch]`) |
-| `install-hooks` | Install the pre-commit hook |
+| `install-hooks` | Install the pre-commit hook + the pre-push Beadloom Gate (full `beadloom ci`) |
 
 ## MCP tools
 
-`beadloom mcp-serve` exposes 14 tools to AI agents: `prime`, `get_context`, `get_graph`, `list_nodes`, `sync_check`, `get_status`, `update_node`, `mark_synced`, `search`, `generate_docs`, `why`, `diff`, `lint`, and `get_debt_report`. Works with Claude Code, Cursor, Windsurf, Cline, and any MCP-compatible tool. Wire it up with:
+`beadloom mcp-serve` exposes 18 tools to AI agents: 14 graph read/write tools — `prime`, `get_context`, `get_graph`, `list_nodes`, `sync_check`, `get_status`, `update_node`, `mark_synced`, `search`, `generate_docs`, `why`, `diff`, `lint`, `get_debt_report` — plus four process tools that drive the agentic flow: `task_init`, `bead_context`, `checkpoint`, `complete_bead`. Works with Claude Code, Cursor, Windsurf, Cline, and any MCP-compatible tool. Wire it up with:
 
 ```json
 {
@@ -270,6 +301,7 @@ Ask for a node's context and the Context Oracle runs a breadth-first traversal, 
 Everything lives under `.beadloom/` in your repo:
 
 - **`config.yml`** — scan paths, languages, sync settings
+- **`flow.yml`** — the agentic-flow declaration: `tools` (claude/cursor), `architecture` (ddd/fsd), `stack` overlays, `quality` (consumed by `setup-agentic-flow`)
 - **`_graph/*.yml`** — the architecture graph (version-controlled)
 - **`_graph/rules.yml`** — boundary rules
 - **`AGENTS.md`** — conventions and the MCP tool catalog for agents

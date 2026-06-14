@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-06-14
+
+**Beadloom 2.0 — the self-governing, configurable, tool-agnostic agentic dev loop.**
+A major release consolidating BDL-049/050/051/053/052. Headline: Beadloom now
+applies its own architecture-as-code thesis to itself (no shadow code, no stale
+docs — enforced by deterministic gates), and the packaged multi-agent flow is
+configurable per stack/architecture/tool (Claude Code + Cursor).
+
+**Breaking changes (why MAJOR):**
+- The AI tech-writer harness moved `tools.ai_techwriter` → `beadloom.ai_agents.ai_techwriter`
+  (invoke `python -m beadloom.ai_agents.ai_techwriter`); the BDL-047/048 Python
+  vendoring in `setup-ai-techwriter` is retired (harness ships in the wheel).
+- `module-coverage` lint promoted to `severity: error` — a repo with an
+  unclassified `src` module now fails `beadloom ci` (previously a warning).
+- `setup-agentic-flow` role files are now composer-owned (generated from
+  `.beadloom/flow.yml`); hand-edits are recomposed.
+
 Phase "Usable doc-flow + role configurator" (BDL-052): makes the packaged
 multi-agent flow **tool- and stack-agnostic** and adds a **local-primary**
 enforcement layer. (S1) a blocking **pre-push Beadloom Gate** hook runs the full
