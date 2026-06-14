@@ -76,6 +76,90 @@ class TestVendoredFlowAssets:
             ) == (live / "commands" / f"{name}.md").read_text(encoding="utf-8"), name
 
 
+class TestCoordinatorGateLoop:
+    """BDL-052 S1: the coordinator encodes the Gate-enforced loop + explicit
+    mandatory parallelism as tool steps (not prose to remember)."""
+
+    def _coordinator_text(self) -> str:
+        return (_live_claude_root() / "commands" / "coordinator.md").read_text(
+            encoding="utf-8"
+        )
+
+    def test_gate_loop_encoded(self) -> None:
+        text = self._coordinator_text()
+        lowered = text.lower()
+        # The Gate is run as an explicit tool step.
+        assert "beadloom ci" in lowered
+        # The retry loop: while Gate red -> run tech-writer -> re-gate.
+        assert "while" in lowered
+        assert "re-gate" in lowered or "re-run" in lowered
+        # Bounded retries (no infinite spin).
+        assert "bound" in lowered or "retr" in lowered
+
+    def test_parallelism_explicit_and_mandatory(self) -> None:
+        text = self._coordinator_text()
+        lowered = text.lower()
+        assert "must" in lowered and "concurrent" in lowered
+        assert "merge-slot" in lowered
+
+    def test_gate_loop_is_bounded_with_explicit_stop(self) -> None:
+        """The retry loop is bounded (a numeric attempt cap) and STOPs instead of
+        spinning forever when the Gate stays red."""
+        text = self._coordinator_text()
+        lowered = text.lower()
+        # An explicit numeric bound on attempts (not just the word 'bounded').
+        assert "attempts < 3" in lowered or "≤3" in text or "3 attempts" in lowered
+        # On exhaustion it STOPs and does NOT push.
+        assert "stop" in lowered
+        assert "do not push" in lowered
+
+    def test_gate_loop_runs_techwriter_then_regates(self) -> None:
+        """The loop body is: run tech-writer on drifted refs -> re-run the Gate."""
+        text = self._coordinator_text()
+        lowered = text.lower()
+        assert "tech-writer" in lowered
+        # The Gate is re-run inside the loop (re-gate).
+        assert lowered.count("beadloom ci") >= 2
+
+    def test_independent_ready_beads_launched_concurrently(self) -> None:
+        """Mandatory parallelism: N independent ready beads -> N subagents at once,
+        not one-at-a-time."""
+        text = self._coordinator_text()
+        lowered = text.lower()
+        assert "one-at-a-time" in lowered or "one at a time" in lowered
+        assert "mandatory" in lowered
+
+    def test_pre_push_hook_named_as_backstop(self) -> None:
+        """The coordinator points at the pre-push Gate hook as the blocking
+        backstop, with the documented --no-verify escape hatch."""
+        text = self._coordinator_text()
+        lowered = text.lower()
+        assert "pre-push" in lowered
+        assert "install-hooks" in lowered
+        assert "--no-verify" in lowered
+
+
+class TestCoordinatorVendoredDriftGuard:
+    """The vendored coordinator template is byte-identical to the live one (so the
+    scaffold ships the latest Gate-loop + parallelism encoding)."""
+
+    def test_vendored_coordinator_byte_identical_to_live(self) -> None:
+        from pathlib import Path
+
+        vendored = (
+            Path(__file__).resolve().parents[1]
+            / "src"
+            / "beadloom"
+            / "onboarding"
+            / "templates"
+            / "agentic_flow"
+            / "commands"
+            / "coordinator.md.txt"
+        )
+        live = _live_claude_root() / "commands" / "coordinator.md"
+        assert vendored.read_text(encoding="utf-8") == live.read_text(encoding="utf-8")
+
+
 class TestSyncAgenticFlow:
     def test_sync_round_trips_live_source(self) -> None:
         written = sync_agentic_flow(_live_claude_root())

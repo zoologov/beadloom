@@ -15,6 +15,7 @@ import click
 if TYPE_CHECKING:
     import sqlite3
     from collections.abc import Sequence
+    from types import ModuleType
 
     from beadloom.application.active_table import ReconcileResult
     from beadloom.application.gate import GateResult
@@ -1337,6 +1338,34 @@ if [ $failed -ne 0 ]; then
 fi
 """
 
+# Pre-push hook: the AUTHORITATIVE blocking Beadloom Gate. Runs the full
+# `beadloom ci` Gate (incremental reindex -> lint -> coverage-lint -> sync-check
+# -> doctor) and exits non-zero to BLOCK the push on red. Guarded + fail-safe:
+# in any repo without `beadloom` on PATH the hook is a safe no-op (never blocks).
+# Idempotent (re-running install-hooks overwrites cleanly). `--no-verify` is the
+# documented escape hatch. The pre-commit hook stays the lighter warn check; the
+# full Gate lives here so it isn't duplicated on every commit.
+_HOOK_TEMPLATE_PRE_PUSH = """\
+#!/bin/sh
+# pre-push hook managed by beadloom -- the blocking Beadloom Gate.
+
+# Fail-safe: outside a Beadloom flow repo (no `beadloom` on PATH) this hook is a
+# safe no-op so it never blocks a push in a repo that does not use Beadloom.
+if ! command -v beadloom >/dev/null 2>&1; then
+  exit 0
+fi
+
+echo "Running Beadloom Gate (beadloom ci)..."
+beadloom ci
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "Beadloom Gate failed (docs stale / lint / coverage / doctor)."
+  echo "Run the tech-writer (or /coordinator) to refresh docs, then re-push."
+  echo "To override (discouraged): git push --no-verify"
+  exit 1
+fi
+"""
+
 
 # beadloom:domain=doc-sync
 @main.command("install-hooks")
@@ -1346,7 +1375,19 @@ fi
     default="warn",
     help="Hook mode: warn (default) or block commits on stale docs.",
 )
-@click.option("--remove", is_flag=True, help="Remove the pre-commit hook.")
+@click.option("--remove", is_flag=True, help="Remove the selected hook(s).")
+@click.option(
+    "--pre-commit",
+    "pre_commit",
+    is_flag=True,
+    help="Operate on the pre-commit hook only (default: both pre-commit + pre-push).",
+)
+@click.option(
+    "--pre-push",
+    "pre_push",
+    is_flag=True,
+    help="Operate on the pre-push Gate hook only (default: both pre-commit + pre-push).",
+)
 @click.option(
     "--project",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
@@ -1357,9 +1398,17 @@ def install_hooks(
     *,
     mode: str,
     remove: bool,
+    pre_commit: bool,
+    pre_push: bool,
     project: Path | None,
 ) -> None:
-    """Install or remove beadloom pre-commit hook."""
+    """Install or remove beadloom git hooks.
+
+    By default installs BOTH the pre-commit hook (lighter warn/block check) and
+    the pre-push hook (the authoritative blocking Beadloom Gate). Use
+    ``--pre-commit`` / ``--pre-push`` to select one. ``--remove`` removes the
+    selected hook(s).
+    """
     import stat
 
     project_root = project or Path.cwd()
@@ -1369,20 +1418,50 @@ def install_hooks(
         click.echo("Error: .git/hooks not found. Is this a git repository?", err=True)
         sys.exit(1)
 
-    hook_path = hooks_dir / "pre-commit"
+    # No selector -> operate on both hooks.
+    do_pre_commit = pre_commit or not (pre_commit or pre_push)
+    do_pre_push = pre_push or not (pre_commit or pre_push)
 
     if remove:
-        if hook_path.exists():
-            hook_path.unlink()
-            click.echo("Removed pre-commit hook.")
-        else:
-            click.echo("No pre-commit hook to remove.")
+        _remove_hooks(hooks_dir, pre_commit=do_pre_commit, pre_push=do_pre_push)
         return
 
-    template = _HOOK_TEMPLATE_BLOCK if mode == "block" else _HOOK_TEMPLATE_WARN
+    if do_pre_commit:
+        template = _HOOK_TEMPLATE_BLOCK if mode == "block" else _HOOK_TEMPLATE_WARN
+        _write_hook(hooks_dir / "pre-commit", template, stat)
+        click.echo(f"Installed pre-commit hook (mode: {mode}).")
+    if do_pre_push:
+        _write_hook(hooks_dir / "pre-push", _HOOK_TEMPLATE_PRE_PUSH, stat)
+        click.echo("Installed pre-push hook (Beadloom Gate, blocking).")
+
+
+def _write_hook(hook_path: Path, template: str, stat_mod: ModuleType) -> None:
+    """Write an executable git hook (idempotent overwrite)."""
     hook_path.write_text(template)
-    hook_path.chmod(hook_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    click.echo(f"Installed pre-commit hook (mode: {mode}).")
+    hook_path.chmod(
+        hook_path.stat().st_mode
+        | stat_mod.S_IXUSR
+        | stat_mod.S_IXGRP
+        | stat_mod.S_IXOTH
+    )
+
+
+def _remove_hooks(hooks_dir: Path, *, pre_commit: bool, pre_push: bool) -> None:
+    """Remove the selected git hook(s); report what was removed."""
+    targets: list[str] = []
+    if pre_commit:
+        targets.append("pre-commit")
+    if pre_push:
+        targets.append("pre-push")
+    removed_any = False
+    for name in targets:
+        path = hooks_dir / name
+        if path.exists():
+            path.unlink()
+            click.echo(f"Removed {name} hook.")
+            removed_any = True
+    if not removed_any:
+        click.echo("No matching hook to remove.")
 
 
 # beadloom:component=active-table

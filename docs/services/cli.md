@@ -227,17 +227,23 @@ For automated doc updates, use your AI agent (Claude Code, Cursor, etc.) with Be
 
 ### beadloom install-hooks
 
-Install git pre-commit hook for synchronization checking.
+Install (or remove) Beadloom's git hooks: a **pre-commit** hook (the lighter
+synchronization check) and a **pre-push** hook (the authoritative blocking
+**Beadloom Gate**). By default both are installed.
 
 ```bash
-# Install (warning mode)
+# Install BOTH hooks (pre-commit warn mode + pre-push Gate)
 beadloom install-hooks [--mode warn|block] [--project DIR]
 
-# Remove
-beadloom install-hooks --remove [--project DIR]
+# Install only one
+beadloom install-hooks --pre-commit [--mode warn|block] [--project DIR]
+beadloom install-hooks --pre-push [--project DIR]
+
+# Remove (both, or the selected one)
+beadloom install-hooks --remove [--pre-commit|--pre-push] [--project DIR]
 ```
 
-The installed hook runs, in order: ruff lint, mypy, `beadloom sync-check`
+**Pre-commit hook** runs, in order: ruff lint, mypy, `beadloom sync-check`
 (`--mode warn` reports stale docs; `--mode block` fails the commit on stale docs),
 and finally the **ACTIVE / tracker coherence** step. That last step is a guarded
 auto-fix: it runs only when BOTH `bd` and `beadloom` are on `PATH`, calls
@@ -248,6 +254,20 @@ commit is coherent **by construction**. It never blocks the commit (it runs even
 in `block` mode without affecting the exit code), and in any repo without `bd` —
 or without ACTIVE tables — the block is a complete no-op (see
 [`active-sync`](#beadloom-active-sync)).
+
+**Pre-push hook (Beadloom Gate)** is the authoritative blocking enforcement of
+the hard invariant *"no code in `main` without current docs."* On every push it
+runs the full Gate (`beadloom ci` — incremental reindex → lint → coverage-lint →
+sync-check → doctor) and **exits non-zero to block the push** on red, printing an
+actionable message ("Beadloom Gate failed … run the tech-writer (or
+`/coordinator`) then re-push; `git push --no-verify` to override"). It is
+**fail-safe**: in any repo without `beadloom` on `PATH` the hook is a safe no-op
+and never blocks. The full Gate lives in pre-push (not duplicated on every commit)
+because pushes are less frequent than commits; the pre-commit hook stays the
+lighter warn/block check. `--no-verify` is the documented (discouraged) escape
+hatch.
+
+Both hooks are idempotent — re-running `install-hooks` overwrites cleanly.
 
 ### beadloom active-sync
 
@@ -730,7 +750,7 @@ Module `src/beadloom/services/cli.py`:
 - `status` -- show index statistics with health trends and context metrics; `--debt-report` mode with `--fail-if`, `--category` flags
 - `sync_check` -- check doc-code sync with reason/details (reason-aware output for `untracked_files`, `missing_modules`, `symbols_changed`); `--since GIT_REF` measures drift against a git ref instead of the stored baseline (fresh-checkout / per-push drift detection)
 - `sync_update` -- review and update stale docs interactively; `--check` for status-only; `--yes`/`-y` for a non-interactive re-baseline; `--all` (with `--yes`) re-baselines every stale ref
-- `install_hooks` -- install/remove pre-commit hook (lint -> mypy -> sync-check -> guarded ACTIVE/tracker-coherence auto-fix step)
+- `install_hooks` -- install/remove the pre-commit hook (lint -> mypy -> sync-check -> guarded ACTIVE/tracker-coherence auto-fix step) AND/OR the pre-push Beadloom Gate hook (`beadloom ci`, blocks the push on red; `command -v beadloom` guard -> safe no-op outside a flow repo); `--pre-commit`/`--pre-push` selectors (default both), `--remove`, idempotent
 - `active_sync` -- reconcile each epic's ACTIVE.md bead-status table from `bd` (`--epic`/`--check`/`--json`/`--no-export`); fix mode also `bd export`s the tracked `.beads/issues.jsonl`; safe no-op when no ACTIVE table or no `bd`; delegates to `application/active_table.py:reconcile_active_tables()`
 - `link` -- manage external tracker links
 - `search` -- FTS5 search with LIKE fallback
