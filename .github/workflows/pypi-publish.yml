@@ -28,10 +28,12 @@ jobs:
         run: uv sync --extra dev --extra languages --extra tui --extra watch
 
       - name: Lint (ruff)
-        run: uv run ruff check src/ tests/ tools/
+        run: uv run ruff check src/ tests/
 
       - name: Type check (mypy)
-        run: uv run mypy src/ tools/
+        # The AI tech-writer harness moved into src/beadloom/ai_agents/ (BDL-051 S2),
+        # so it's covered by `src/` — no separate `tools/` path anymore.
+        run: uv run mypy src/
 
       - name: Tests with coverage
         run: uv run pytest --cov=beadloom --cov-report=term-missing --cov-fail-under=80
