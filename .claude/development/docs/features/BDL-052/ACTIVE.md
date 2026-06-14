@@ -18,9 +18,9 @@
 | beadloom-3m2d.1 | dev — S1 pre-push Gate hook + coordinator loop + parallelism | ✓ done |
 | beadloom-3m2d.2 | test — S1 | ✓ done |
 | beadloom-3m2d.3 | review — S1 | ✓ done (PASS; 1 minor→.19) |
-| beadloom-3m2d.4 | dev — S2 CORE roles (restore+modernize) | blocked ← 1 |
-| beadloom-3m2d.5 | test — S2 | blocked ← 4 |
-| beadloom-3m2d.6 | review — S2 | blocked ← 5 |
+| beadloom-3m2d.4 | dev — S2 CORE roles (restore+modernize) | ✓ done |
+| beadloom-3m2d.5 | test — S2 | ✓ done |
+| beadloom-3m2d.6 | review — S2 | ✓ done (PASS; conftest nit fixed) |
 | beadloom-3m2d.7 | dev — S3 configurator (flow.yml + ddd/fsd + overlays + adapters) | blocked ← 6 |
 | beadloom-3m2d.8 | test — S3 | blocked ← 7 |
 | beadloom-3m2d.9 | review — S3 | blocked ← 8 |
