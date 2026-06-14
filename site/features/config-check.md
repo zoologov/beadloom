@@ -16,6 +16,7 @@ AgentConfigAsCode — drift detection (and --fix) for generated agent-config art
 - `ConfigDrift`
 - `check_config_drift`
 - `refresh_agentic_flow_files`
+- `refresh_composed_adapters`
 
 ## Relationships
 

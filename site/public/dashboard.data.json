@@ -142,13 +142,13 @@
     "trend": null
   },
   "docs": {
-    "coverage_pct": 98.0,
-    "documented": 49,
-    "fresh": 139,
+    "coverage_pct": 98.1,
+    "documented": 52,
+    "fresh": 149,
     "freshness_pct": 100.0,
-    "nodes": 50,
+    "nodes": 53,
     "stale": 0,
-    "tracked_pairs": 139
+    "tracked_pairs": 149
   },
   "doctor": {
     "by_severity": {
@@ -237,11 +237,11 @@
       "value": "10.0 / 100"
     },
     {
-      "detail": "0 stale of 139 tracked",
+      "detail": "0 stale of 149 tracked",
       "group": "docs",
       "label": "Docs",
       "status": "ok",
-      "value": "98.0% covered"
+      "value": "98.1% covered"
     },
     {
       "detail": "0 errors, 8 warnings",
@@ -491,6 +491,16 @@
       "symbols": 961,
       "sync_pct": 100.0,
       "ts": "2026-06-13T22:53:20.035060+00:00"
+    },
+    {
+      "coverage_pct": 98.1,
+      "debt_score": 10.0,
+      "edges": 139,
+      "lint_violations": 2,
+      "nodes": 53,
+      "symbols": 1018,
+      "sync_pct": 100.0,
+      "ts": "2026-06-14T12:54:32.900400+00:00"
     }
   ]
 }

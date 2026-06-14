@@ -1,77 +1,33 @@
 ---
-title: ai-techwriter
+title: flow-config
 kind: feature
 ---
 
-# ai-techwriter
+# flow-config
 
 **Kind:** feature
 
-Deterministic, seam-isolated PR-triggered doc-refresh harness (discover drift -> packet -> agent -> fixpoint -> gate -> publish; verdict ok/flagged/infra)
+`.beadloom/flow.yml` schema + loader (FlowConfig) — declares tools/architecture/stack/quality for the role configurator; strict validation + auto-detect/resolve defaults
 
-**Source:** `src/beadloom/ai_agents/ai_techwriter/`
+**Source:** `src/beadloom/onboarding/flow_config.py`
 
 ## Public symbols
 
-- `AgentResult`
-- `AgentRunner`
-- `CommandResult`
-- `CommentPublisher`
-- `ContextPacket`
-- `DriftItem`
-- `FakeAgentRunner`
-- `FakePublisher`
-- `GateResult`
-- `GitHubPRBranchPublisher`
-- `GitHubPublisher`
-- `GitLabPRBranchPublisher`
-- `GitLabPublisher`
-- `GooseAgentRunner`
-- `HarnessConfig`
-- `HarnessResult`
-- `ProviderConfig`
-- `PublishResult`
-- `RateLimitError`
-- `ReviewPublisher`
-- `RunRecord`
-- `append_run`
-- `backoff_delay`
-- `beadloom_ci`
-- `beadloom_ctx_json`
-- `beadloom_docs_polish_json`
-- `beadloom_sync_check_json`
-- `beadloom_sync_update`
-- `beadloom_why`
-- `build_packet`
-- `changed_symbols`
-- `classify_verdict`
-- `default_recipe_path`
-- `discover_scope`
-- `doc_referenced_symbols`
-- `git_changed_line_numbers`
-- `git_changed_line_numbers_old_side`
-- `git_file_at_ref`
-- `load_runs`
-- `main`
-- `narrow_by_changed_symbols`
-- `parse_scope`
-- `python_symbol_ranges`
-- `qwen_provider`
-- `read_doc`
-- `read_working_file`
-- `retry_with_backoff`
-- `run_command`
-- `run_harness`
-- `runs_store_path`
-- `select_polish_for_ref`
+- `FlowConfig`
+- `FlowConfigError`
+- `build_flow_config`
+- `detect_stack`
+- `load_flow_config`
+- `load_flow_config_or_default`
+- `resolve_flow_config`
 
 ## Relationships
 
-- **part_of**: [ai_agents](../domains/ai_agents.md)
+- **part_of**: [onboarding](../domains/onboarding.md)
 
 ## Documentation
 
-- [domains/ai_agents/features/ai-techwriter/SPEC.md](/docs/domains/ai_agents/features/ai-techwriter/SPEC.md)
+- [domains/onboarding/features/flow-config/SPEC.md](/docs/domains/onboarding/features/flow-config/SPEC.md)
 
 ## Diagram
 

@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Phase "Usable doc-flow + role configurator" (BDL-052): makes the packaged
+multi-agent flow **tool- and stack-agnostic** and adds a **local-primary**
+enforcement layer. (S1) a blocking **pre-push Beadloom Gate** hook runs the full
+`beadloom ci` on every push and blocks on red (`git push --no-verify` is the
+documented escape hatch), with the coordinator Gate-loop + explicit parallelism.
+(S2) restored + modernized the CORE `dev`/`test`/`review`/`tech-writer` role
+protocols. (S3) the **role configurator**: a repo declares `.beadloom/flow.yml`
+(`architecture: ddd|fsd` + `stack` + `tools` + `quality`) and Beadloom **composes**
+each role from CORE + the selected architecture overlay + stack overlays, then
+writes a per-tool **adapter set** — `.claude/agents/*` for Claude Code and
+`.cursor/agents/*` (+ a Cursor orchestrator pointer) for Cursor — at parity;
+`config-check` byte-guards every composed adapter against `compose_role(...)`.
+(S4) **symbol-level scope** for the AI tech-writer: a changed file no longer
+fans out to every linked doc — a doc is rewritten only when it references a
+symbol whose body changed (unioning new-side edits AND old-side removed/renamed
+defs so a doc naming a deleted symbol is still KEPT), conservative when
+attribution is unavailable. (S5) the CI `ai-techwriter` job runs per-doc repair
+in a **bounded parallel session pool** (`HarnessConfig.max_parallel`, default 3)
+with per-session 429/5xx **exponential back-off** and a uv-dependency + Beadloom-
+index **cache** (behaviour unchanged vs sequential; folded in stale order so the
+verdict is identical). (S6) `beadloom active-sync --stage` (restage the touched
+files). Result: local authoring is tool-agnostic and Gate-enforced, CI is the
+fallback/true enforcement, and the same canonical flow runs on Claude Code +
+Cursor.
+
+### Added (BDL-052)
+- **Pre-push Beadloom Gate** — `beadloom install-hooks --pre-push` installs a hook that runs `beadloom ci` (reindex → `lint --strict` → sync-check → config-check → doctor) and blocks the push on red; fail-safe (no-op without `beadloom` on `PATH`); `git push --no-verify` overrides
+- **`.beadloom/flow.yml` + `flow_config.py`** — `FlowConfig` (frozen) + `build_flow_config` / `load_flow_config` / `load_flow_config_or_default` / `resolve_flow_config` (flag → flow.yml → default) + `detect_stack`; strict validation naming the bad value + allowed set (`FlowConfigError`). Supported: tools `claude`/`cursor`; architecture `ddd`/`fsd` (exactly one); stack `python`/`fastapi`/`javascript`/`typescript`/`vuejs`
+- **`role_composer.py`** — `compose_role(role, *, architecture, stack)` = CORE + one architecture overlay + sorted stack overlays (byte-deterministic); `compose_all_roles`; FSD at parity with DDD
+- **`role_adapters.py`** — `generate_adapters(config, project_root)` writes the per-tool adapter set(s) (`claude` → `.claude/agents/*`; `cursor` → `.cursor/agents/*` + `.cursor/rules/beadloom-flow.md`); the single writer the drift-guard verifies against
+- **`beadloom setup-agentic-flow --tool/--architecture/--stack`** — compose + write the configured adapters (defaults `claude`/`ddd`/auto-detected); `config-check`/`--fix` validate `flow.yml` and recompose drifted adapters (`_composed_adapter_drifts` / `refresh_composed_adapters`)
+- **AI tech-writer symbol scope** (`ai_techwriter/symbol_scope.py`) — narrows the stale set to docs that reference a changed symbol (git hunks ∩ Python `def`/`class` ranges, both diff sides); an empty intersection drops AND baselines the pair so `sync-check` still reaches 0
+- **AI tech-writer bounded parallel + back-off** (`ai_techwriter/runner.py` pool keyed on `HarnessConfig.max_parallel` default 3; `ai_techwriter/backoff.py` `RateLimitError`/`retry_with_backoff`) + CI uv-dep + index caches
+- **`beadloom active-sync --stage`** — restage the touched `ACTIVE.md` + `.beads/issues.jsonl`
+
+### Known limitations (BDL-052)
+- **Orphaned adapters not drift-guarded.** `config-check`'s composed-adapter check iterates only the tools named in `.beadloom/flow.yml`. If a tool is dropped from a narrowed `flow.yml`, the previously-scaffolded adapter set (e.g. `.cursor/agents/*`) is left un-checked and un-recomposed. A follow-up bead tracks an orphaned-adapter lint; until then, remove a dropped tool's adapter directory by hand.
+
 Phase "Tracker / ACTIVE coherence hook" (BDL-053): makes each epic's `ACTIVE.md`
 bead-status table **correct by construction** instead of by coordinator
 discipline. New `beadloom active-sync` reconciles every epic's table FROM `bd`

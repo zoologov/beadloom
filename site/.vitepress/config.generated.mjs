@@ -78,7 +78,10 @@ export const sidebar = [
               { text: "Ai Techwriter Setup", link: "/features/ai-techwriter-setup" },
               { text: "Branch Protection", link: "/features/branch-protection" },
               { text: "Config Check", link: "/features/config-check" },
-              { text: "Doc Generator", link: "/features/doc-generator" }
+              { text: "Doc Generator", link: "/features/doc-generator" },
+              { text: "Flow Config", link: "/features/flow-config" },
+              { text: "Role Adapters", link: "/features/role-adapters" },
+              { text: "Role Composer", link: "/features/role-composer" }
             ],
           },
           { text: "Tui", link: "/services/tui" }
@@ -472,6 +475,27 @@ export const sidebar = [
                     collapsed: true,
                     items: [
                       { text: "SPEC", link: "/docs/domains/onboarding/features/doc-generator/SPEC" }
+                    ],
+                  },
+                  {
+                    text: "Flow Config",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/onboarding/features/flow-config/SPEC" }
+                    ],
+                  },
+                  {
+                    text: "Role Adapters",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/onboarding/features/role-adapters/SPEC" }
+                    ],
+                  },
+                  {
+                    text: "Role Composer",
+                    collapsed: true,
+                    items: [
+                      { text: "SPEC", link: "/docs/domains/onboarding/features/role-composer/SPEC" }
                     ],
                   }
                 ],

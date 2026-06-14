@@ -1,77 +1,29 @@
 ---
-title: ai-techwriter
+title: role-composer
 kind: feature
 ---
 
-# ai-techwriter
+# role-composer
 
 **Kind:** feature
 
-Deterministic, seam-isolated PR-triggered doc-refresh harness (discover drift -> packet -> agent -> fixpoint -> gate -> publish; verdict ok/flagged/infra)
+compose_role — assembles a role file from CORE + one architecture overlay (ddd/fsd) + stack overlays (python/fastapi/js/ts/vue), deterministically ordered
 
-**Source:** `src/beadloom/ai_agents/ai_techwriter/`
+**Source:** `src/beadloom/onboarding/role_composer.py`
 
 ## Public symbols
 
-- `AgentResult`
-- `AgentRunner`
-- `CommandResult`
-- `CommentPublisher`
-- `ContextPacket`
-- `DriftItem`
-- `FakeAgentRunner`
-- `FakePublisher`
-- `GateResult`
-- `GitHubPRBranchPublisher`
-- `GitHubPublisher`
-- `GitLabPRBranchPublisher`
-- `GitLabPublisher`
-- `GooseAgentRunner`
-- `HarnessConfig`
-- `HarnessResult`
-- `ProviderConfig`
-- `PublishResult`
-- `RateLimitError`
-- `ReviewPublisher`
-- `RunRecord`
-- `append_run`
-- `backoff_delay`
-- `beadloom_ci`
-- `beadloom_ctx_json`
-- `beadloom_docs_polish_json`
-- `beadloom_sync_check_json`
-- `beadloom_sync_update`
-- `beadloom_why`
-- `build_packet`
-- `changed_symbols`
-- `classify_verdict`
-- `default_recipe_path`
-- `discover_scope`
-- `doc_referenced_symbols`
-- `git_changed_line_numbers`
-- `git_changed_line_numbers_old_side`
-- `git_file_at_ref`
-- `load_runs`
-- `main`
-- `narrow_by_changed_symbols`
-- `parse_scope`
-- `python_symbol_ranges`
-- `qwen_provider`
-- `read_doc`
-- `read_working_file`
-- `retry_with_backoff`
-- `run_command`
-- `run_harness`
-- `runs_store_path`
-- `select_polish_for_ref`
+- `compose_all_roles`
+- `compose_role`
+- `roles_templates_root`
 
 ## Relationships
 
-- **part_of**: [ai_agents](../domains/ai_agents.md)
+- **part_of**: [onboarding](../domains/onboarding.md)
 
 ## Documentation
 
-- [domains/ai_agents/features/ai-techwriter/SPEC.md](/docs/domains/ai_agents/features/ai-techwriter/SPEC.md)
+- [domains/onboarding/features/role-composer/SPEC.md](/docs/domains/onboarding/features/role-composer/SPEC.md)
 
 ## Diagram
 

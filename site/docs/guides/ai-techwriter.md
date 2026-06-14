@@ -125,6 +125,63 @@ unresolved doc drift does. The classification is conservative by construction
 (`tokens == 0 ⇒ infra`); a misclassified `infra` is made loud by the annotation, so a
 human re-runs rather than silently shipping stale docs.
 
+## Scope + throughput knobs (BDL-052 S4 / S5)
+
+BDL-052 narrowed *what* the agent rewrites and sped up *how* the run executes —
+the loop behaviour and verdict above are byte-unchanged.
+
+### Symbol-level scope (S4)
+
+When a `--since` baseline is given (always, on the CI path), drift discovery
+applies **symbol-level narrowing** (`ai_techwriter.symbol_scope`, called from
+`scope.discover_scope`) before returning the stale set. Instead of "a changed
+FILE drifts every doc linked to it", a stale pair is kept only when the doc
+**references a symbol whose body actually changed** in the touched file — so a
+one-symbol edit to a god-file like `cli.py` no longer fans out to every doc that
+file is linked to. For each pair it intersects the changed-symbol set (computed
+from git hunks ∩ a Python `def`/`class` line-range map) with the symbols the doc
+references; an empty intersection drops the pair from the agent run **and**
+`sync-update`-baselines it, so `sync-check` still reaches 0 without a needless
+rewrite.
+
+The changed-symbol set unions **both diff sides** — new-side edited/added defs
+**and old-side removed/renamed defs** — so a doc that names a symbol which was
+deleted/renamed (its name now gone from the new source) is still attributed and
+**KEPT**, never silently dropped. Narrowing is **conservative by construction**:
+any unavailable or ambiguous attribution (no `--since`, a non-symbol drift
+reason, a non-Python file, a change outside any symbol body) keeps the pair in
+scope, so it never under-refreshes.
+
+### Bounded parallel sessions + back-off (S5)
+
+Per-doc repair runs in a **bounded session pool** sized by
+`HarnessConfig.max_parallel` (default **3** — RAM-aware for the 8 GB self-hosted
+VPS). Each doc gets its own Goose session; at most `max_parallel` sessions are in
+flight at once, and the per-session results are **folded back in stale order**, so
+the aggregate, the budget accounting, and the verdict are identical whether the
+pool ran sequentially (`max_parallel=1`) or concurrently. `max_parallel` is an
+internal `HarnessConfig` knob (the CLI uses the default); lower it to 1 to force
+sequential behaviour when debugging.
+
+Concurrent sessions hitting the same rate-limited model endpoint degrade
+gracefully via per-session **exponential back-off** (`ai_techwriter.backoff`:
+`RateLimitError` / `retry_with_backoff`) on 429/5xx responses instead of failing
+the run; the `sleep` seam is injected, so the policy is deterministic and instant
+under test.
+
+### CI caches (S5)
+
+The consolidated `ci.yml` `ai-techwriter` job adds two caches that change only
+speed, not behaviour:
+
+- **uv dependency cache** — `setup-uv` with `enable-cache: true`, so the runner
+  stops re-downloading wheels every PR.
+- **Beadloom index cache** — `actions/cache` over `.beadloom/beadloom.db`, keyed
+  on `hashFiles('.beadloom/_graph/**', 'src/**', 'docs/**')`. On a hit the index
+  already matches this exact tree, so the `beadloom reindex` step is **skipped**;
+  any graph/source/doc change rotates the key → miss → a full reindex runs. The
+  freshness guarantee is unchanged (a stale tree can never produce a hit).
+
 ## Setup (3 steps)
 
 1. **Register a self-hosted runner on the VPS** (where Goose + the API key
