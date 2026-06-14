@@ -1,7 +1,7 @@
 <!-- beadloom:badge-start -->
 > ✅ **fresh**
 > 
-> last synced 2026-06-14T12:30:18.610981+00:00 · coverage 100% (`doc-generator`)
+> last synced 2026-06-14T18:52:29.106245+00:00 · coverage 100% (`doc-generator`)
 > 
 > _Validation by Beadloom `doc_sync` — same source as `sync-check`._
 <!-- beadloom:badge-end -->

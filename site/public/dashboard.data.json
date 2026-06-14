@@ -39,13 +39,24 @@
         "output_tokens": 117000,
         "platform": "github",
         "ts": "2026-06-10T23:34:55.398678+00:00"
+      },
+      {
+        "cumulative_docs": 17,
+        "cumulative_input_tokens": 752847,
+        "cumulative_output_tokens": 125847,
+        "docs_refreshed": 1,
+        "gate": "green",
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "platform": "github",
+        "ts": "2026-06-14T12:59:41.747942+00:00"
       }
     ],
     "totals": {
-      "docs_refreshed": 16,
+      "docs_refreshed": 17,
       "input_tokens": 752847,
       "output_tokens": 125847,
-      "runs": 3
+      "runs": 4
     }
   },
   "alerts": [],
@@ -70,12 +81,12 @@
       },
       {
         "details": {
-          "dormant": 4,
+          "dormant": 8,
           "high_fan_out": 1,
           "oversized": 2
         },
         "name": "complexity",
-        "score": 7.0
+        "score": 9.0
       },
       {
         "details": {
@@ -85,8 +96,8 @@
         "score": 0.0
       }
     ],
-    "debt_score": 10.0,
-    "severity": "low",
+    "debt_score": 12.0,
+    "severity": "medium",
     "top_offenders": [
       {
         "reasons": [
@@ -135,7 +146,28 @@
         "reasons": [
           "dormant"
         ],
+        "ref_id": "doctor",
+        "score": 0.5
+      },
+      {
+        "reasons": [
+          "dormant"
+        ],
+        "ref_id": "infrastructure",
+        "score": 0.5
+      },
+      {
+        "reasons": [
+          "dormant"
+        ],
         "ref_id": "search",
+        "score": 0.5
+      },
+      {
+        "reasons": [
+          "dormant"
+        ],
+        "ref_id": "tui",
         "score": 0.5
       }
     ],
@@ -230,11 +262,11 @@
       "value": "2"
     },
     {
-      "detail": "low",
+      "detail": "medium",
       "group": "debt",
       "label": "Debt",
-      "status": "ok",
-      "value": "10.0 / 100"
+      "status": "warn",
+      "value": "12.0 / 100"
     },
     {
       "detail": "0 stale of 149 tracked",
@@ -501,6 +533,66 @@
       "symbols": 1018,
       "sync_pct": 100.0,
       "ts": "2026-06-14T12:54:32.900400+00:00"
+    },
+    {
+      "coverage_pct": 98.1,
+      "debt_score": 10.0,
+      "edges": 139,
+      "lint_violations": 2,
+      "nodes": 53,
+      "symbols": 1018,
+      "sync_pct": 100.0,
+      "ts": "2026-06-14T14:52:46.500001+00:00"
+    },
+    {
+      "coverage_pct": 98.1,
+      "debt_score": 10.0,
+      "edges": 139,
+      "lint_violations": 2,
+      "nodes": 53,
+      "symbols": 1018,
+      "sync_pct": 100.0,
+      "ts": "2026-06-14T15:07:26.274052+00:00"
+    },
+    {
+      "coverage_pct": 98.1,
+      "debt_score": 12.0,
+      "edges": 139,
+      "lint_violations": 2,
+      "nodes": 53,
+      "symbols": 1018,
+      "sync_pct": 100.0,
+      "ts": "2026-06-14T18:42:29.780463+00:00"
+    },
+    {
+      "coverage_pct": 98.1,
+      "debt_score": 12.0,
+      "edges": 139,
+      "lint_violations": 2,
+      "nodes": 53,
+      "symbols": 1018,
+      "sync_pct": 100.0,
+      "ts": "2026-06-14T18:42:50.344003+00:00"
+    },
+    {
+      "coverage_pct": 98.1,
+      "debt_score": 12.0,
+      "edges": 139,
+      "lint_violations": 2,
+      "nodes": 53,
+      "symbols": 1018,
+      "sync_pct": 100.0,
+      "ts": "2026-06-14T18:52:40.148165+00:00"
+    },
+    {
+      "coverage_pct": 98.1,
+      "debt_score": 12.0,
+      "edges": 139,
+      "lint_violations": 2,
+      "nodes": 53,
+      "symbols": 1018,
+      "sync_pct": 100.0,
+      "ts": "2026-06-14T18:55:24.936512+00:00"
     }
   ]
 }

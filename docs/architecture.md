@@ -6,14 +6,15 @@ Beadloom turns Architecture as Code into Architectural Intelligence — structur
 
 ## System Design
 
-The system is organized into six DDD domain packages, an application (use-case orchestration) layer, and two interface layers:
+The system is organized into seven DDD domain packages, an application (use-case orchestration) layer, and two interface layers:
 
 **Domains:**
 1. **Context Oracle** (`context_oracle/`) — BFS graph traversal, context bundle assembly, code indexing, two-tier caching, FTS5 search, `why` impact analysis
 2. **Doc Sync** (`doc_sync/`) — doc↔code synchronization tracking, stale detection, symbol-level hashing, docs audit
 3. **Graph** (`graph/`) — YAML graph loader, diff engine, rule engine, import resolver (9 languages), architecture linter, C4 diagram emitter, federation
-4. **Onboarding** (`onboarding/`) — project bootstrap, doc generation/polishing, architecture-aware presets, AGENTS.md / IDE-rules generation, config sync
+4. **Onboarding** (`onboarding/`) — project bootstrap, doc generation/polishing, architecture-aware presets, AGENTS.md / IDE-rules generation, config sync, and the **agentic-flow role configurator** (`flow_config.py`, `role_composer.py`, `role_adapters.py`)
 5. **Infrastructure** (`infrastructure/`) — domain-agnostic SQLite database layer, health metrics, git-activity tracking
+6. **AI Agents** (`ai_agents/`) — governed AI-agent harnesses that ship inside the wheel; hosts the deterministic, seam-isolated **AI tech-writer** (`ai_agents/ai_techwriter/`, run via `python -m beadloom.ai_agents.ai_techwriter`). A **leaf consumer**: it may read `application`/`context_oracle`/`graph`/`doc_sync` APIs but must never be imported by the core domains or services (enforced by the `core-no-import-ai-agents` / `application-no-import-ai-agents` `forbid_import` rules).
 
 **Application (use-case orchestration)** (`application/`) — composes the domains into end-to-end use cases. It owns:
 - `reindex.py` — the full + incremental reindex pipeline (drop → recreate → reload graph/docs/code/sync; SHA-256 `file_index` for incremental runs)
@@ -27,7 +28,21 @@ The system is organized into six DDD domain packages, an application (use-case o
 - **Services** (`services/`) — **CLI** (`services/cli.py`, Click-based) and **MCP Server** (`services/mcp_server.py`, stdio server with 18 tools for AI agents — 14 graph read/write tools + four BDL-048 process-tools). Both call into the application layer and Context Oracle; the CLI never reaches past those layers.
 - **TUI** (`tui/`) — interactive terminal architecture workstation (Textual): dashboard, explorer, doc-status screens.
 
-A `layer` rule in `.beadloom/_graph/rules.yml` enforces the direction `services / tui → application → domains` (the interface layers depend inward; domains never depend on the application or service layers).
+A `layers` rule in `.beadloom/_graph/rules.yml` enforces the direction `services / tui → application → domains` (the interface layers depend inward; domains never depend on the application or service layers).
+
+### Node Kinds
+
+The graph distinguishes the kinds of node it tracks:
+
+| Kind | Doc | Annotation | Description |
+|------|-----|------------|-------------|
+| `service` | `services/<name>.md` | `# beadloom:service=<id>` | An interface/process boundary (CLI, MCP server, TUI) |
+| `domain` | `domains/<name>/README.md` | `# beadloom:domain=<id>` | A DDD domain package |
+| `feature` | `features/<name>/SPEC.md` | `# beadloom:feature=<id>` | A user-facing capability inside a domain |
+| `component` | `<name>/DOC.md` | `# beadloom:component=<id>` | An internal/infra building block — the mirror of a `feature` for code that is not user-facing |
+| `entity` / `adr` | — | — | Domain entities and architecture decisions |
+
+The **`component` kind** (BDL-051) and the **`module-coverage` lint** (promoted to `severity: error`) together close the no-shadow-code gap: every `src` module with at least one symbol must be a tracked node (`feature` or `component`, or covered by a node's `source` — including a **directory** source like `tui/`) or named on a small, visible `exempt:` list in `rules.yml`. A new untracked module therefore fails `beadloom lint --strict` / `beadloom ci`.
 
 ---
 
@@ -104,30 +119,32 @@ Default parameters:
 
 ### Rules Engine
 
-Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3) and enforce boundaries between graph nodes.
+Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3) and enforce boundaries between graph nodes. The YAML key on each rule selects its type.
 
 **Rule types** (7, parsed by `graph/rule_engine.py`, evaluated by `graph/linter.py`):
 
-| Type | Semantics | Example |
-|------|-----------|---------|
-| `deny` | Forbid imports between matched nodes | `domain:* → service:*` — domains must not depend on services |
-| `require` | Require edges from matched nodes to targets | Every `service:*` must have a `part_of` edge to a `domain:*` |
-| `forbid_edge` | Forbid specific edge patterns between tagged node groups | Nodes tagged `ui-layer` must not have `uses` edges to `native-layer` |
-| `layer` | Enforce layered architecture direction | Top-down: presentation → domain → infrastructure |
-| `cycle_detection` | Detect circular dependencies in the graph | No cycles on `uses`/`depends_on` edges |
-| `import_boundary` | Control file-level import boundaries | Files in `components/map/**` must not import from `components/calendar/**` |
-| `cardinality` | Enforce complexity limits per node | Max 500 symbols, max 50 files per domain |
+| YAML key | Semantics | Example |
+|----------|-----------|---------|
+| `deny` | Forbid `depends_on`/import relationships between matched nodes | `domain:* → service:*` — domains must not depend on services |
+| `require` | Require edges from matched nodes to targets | Every `domain:*` must have a `part_of` edge to the `beadloom` service |
+| `forbid` | Forbid specific edge patterns between tagged node groups | Nodes tagged `ui-layer` must not have `uses` edges to `native-layer` |
+| `layers` | Enforce layered architecture direction | Top-down: services → domains → infrastructure |
+| `forbid_cycles` | Detect circular dependencies in the graph | No cycles on `uses`/`depends_on` edges |
+| `forbid_import` | Control file-level import boundaries | Files in `src/beadloom/tui/**` must not import from `src/beadloom/infrastructure/**` |
+| `check` | Enforce complexity / coverage limits per node | `max_symbols: 200` per domain; `module-coverage` (every src module tracked) |
+
+> Internally each parsed rule carries a `rule_type` string (`deny` / `require` / `forbid` / `layer` / `forbid_import` / `cardinality` / …) used by the evaluators; the **authoring key** in `rules.yml` is the column above.
 
 **Evaluation:**
-- Deny rules are checked against the `code_imports` table: resolved import ref_ids are matched against rule patterns
-- Require rules are checked against the `edges` table: nodes matching `from` pattern must have specified edge kind to nodes matching `to` pattern
+- `deny` rules are checked against the `code_imports` table: resolved import ref_ids are matched against rule patterns
+- `require` rules are checked against the `edges` table: nodes matching the `for`/`from` pattern must have the specified edge kind to the target
 - Node matchers support an optional `exclude` field (list of ref_ids) to exempt specific nodes from rule matching
 - `unless_edge` exemptions allow otherwise-forbidden imports when a specific edge kind exists between the nodes
-- ForbidEdge rules check edge patterns between nodes matching tag selectors
-- Layer rules verify dependency direction across ordered architectural layers
-- Cycle detection uses BFS/DFS to find circular dependency paths
-- Import boundary rules query the `code_imports` table for forbidden cross-boundary imports
-- Cardinality rules count symbols/files per node and check against limits
+- `forbid` rules check edge patterns between nodes matching tag selectors
+- `layers` rules verify dependency direction across ordered architectural layers
+- `forbid_cycles` uses BFS/DFS to find circular dependency paths
+- `forbid_import` rules query the `code_imports` table for forbidden cross-boundary imports
+- `check` rules count symbols/files per node (cardinality) and verify module coverage; `module-coverage` is `severity: error`
 
 **Output formats:**
 - **Rich** — human-readable with Unicode indicators (✓, ✗, ▲, ▼)
@@ -231,6 +248,45 @@ Snapshots are stored in SQLite and enable architecture drift detection across re
 
 **Graceful degradation:** works without DB (static-only mode with warning).
 
+### CI Gate
+
+`application/gate.py` powers `beadloom ci` — the unified gate that composes the
+existing checkers into one verdict with a single exit code: **reindex → `lint
+--strict` → sync-check → config-check → doctor → (optional) federate landscape
+gate**. Every step's honest result is printed (PASS / FAIL / SKIP) — never a
+green that silently skipped a step. `--format rich|json|github` applies
+uniformly; `--hub <export>` arms the cross-service landscape gate. The same gate
+runs as the **pre-push Beadloom Gate** hook (`install-hooks --pre-push`) and in
+CI (`.github/workflows/ci.yml`).
+
+### Agentic Flow Configurator
+
+The `onboarding` domain composes the packaged multi-agent dev flow from a
+declaration in `.beadloom/flow.yml`:
+
+```
+.beadloom/flow.yml  ──load──▶  flow_config.py (FlowConfig: tools, architecture, stack, quality)
+                                      │
+                                      ▼
+                              role_composer.py  compose_role(role, architecture=, stack=)
+                                      │   = CORE protocol + ONE architecture overlay (ddd|fsd)
+                                      │     + sorted stack overlays (byte-deterministic)
+                                      ▼
+                              role_adapters.py  generate_adapters(config, project_root)
+                                      │
+                          ┌───────────┴───────────┐
+                          ▼                        ▼
+                .claude/agents/* (Claude Code)   .cursor/agents/* (Cursor)
+```
+
+- **`flow_config.py`** — `FlowConfig` (frozen) + `resolve_flow_config` (flag → `flow.yml` → default) + `detect_stack`; strict validation. Supported: tools `claude`/`cursor`; architecture `ddd`/`fsd` (exactly one); stack `python`/`fastapi`/`javascript`/`typescript`/`vuejs`.
+- **`role_composer.py`** — `compose_role(role, *, architecture, stack)` = CORE + one architecture overlay + sorted stack overlays; FSD at parity with DDD. Overlay templates live under `onboarding/templates/roles/{core,architecture/<arch>,stack/<stack>}/`.
+- **`role_adapters.py`** — `generate_adapters(config, project_root)` writes the per-tool adapter set(s). `beadloom setup-agentic-flow --tool/--architecture/--stack` is the CLI entrypoint; `config-check`/`--fix` byte-guards each composed adapter against `compose_role(...)` and recomposes drift.
+
+The AI tech-writer harness (`ai_agents/ai_techwriter/`) is the runtime half of
+the flow: a PR-triggered, symbol-scoped, bounded-parallel doc-refresh harness —
+see the `ai_agents` domain README + the `ai-techwriter` feature SPEC.
+
 ---
 
 ## Invariants
@@ -250,7 +306,8 @@ Snapshots are stored in SQLite and enable architecture drift detection across re
 - Source scan paths are configurable via `scan_paths` in `.beadloom/config.yml` (default: `src`, `lib`, `app`)
 - Graph is read only from `.beadloom/_graph/*.yml`
 - Rules are read from `.beadloom/_graph/rules.yml`
-- Rules support 7 types: deny, require, forbid_edge, layer, cycle_detection, import_boundary, cardinality
+- Rules support 7 authoring keys: `deny`, `require`, `forbid`, `layers`, `forbid_cycles`, `forbid_import`, `check`
+- `ai_agents` is a leaf consumer — never imported by core domains/services (`forbid_import` enforced)
 - Maximum chunk size: 2000 characters
 - Levenshtein suggestions: maximum 5, distance threshold = max(len/2, 3)
 

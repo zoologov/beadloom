@@ -1,8 +1,10 @@
-# Beadloom Roadmap (post-v1.10.0)
+# Beadloom Roadmap (post-v2.0.0)
 
+> **v2.0.0 SHIPPED (2026-06-14)** — consolidates BDL-049/050/051/053/052: strict trunk-based, consolidated CI, "governs itself" (component kind + module-coverage=error + ai_agents domain), tracker/ACTIVE coherence, and the configurable tool-agnostic agentic doc-flow + pre-push Gate. Follow-ups: orphaned-adapter lint; graph-model FSD-layer support; more stack/tool overlays (Kotlin/Swift/C++/RN/Apollo); `ty` migration when it reaches stable 1.0.
+>
 > The single forward-looking planning doc. Pure engineering debt & bugs live in `BDL-UX-Issues.md` (cross-referenced).
 > Built from a revision of the historical strategy/review docs (now under `archive/`) + a spot-check of REVIEW-2 against HEAD.
-> Baseline: v1.10.0, 91.6% coverage, mypy --strict clean, `sync-check` 0 stale.
+> Baseline: v2.0.0, mypy --strict clean, `sync-check` 0 stale.
 > Item format: **[Pn] Name** — what/why. _Source; verification status._
 
 ---

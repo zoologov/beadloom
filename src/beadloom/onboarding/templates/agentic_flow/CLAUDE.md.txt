@@ -112,7 +112,7 @@ bd close <bead-id> --suggest-next
 - **Linter/formatter:** ruff (lint + format)
 - **Type checking:** mypy --strict
 - **Architecture:** DDD packages -- `ai_agents/`, `application/`, `context_oracle/`, `doc_sync/`, `graph/`, `infrastructure/`, `onboarding/`, `services/`, `tui/`
-- **Current version:** 1.10.0
+- **Current version:** 2.0.0
 <!-- beadloom:auto-end -->
 
 ---
