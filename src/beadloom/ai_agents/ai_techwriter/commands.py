@@ -154,6 +154,8 @@ def read_working_file(project_root: Path, rel_path: str) -> str | None:
 
 
 _HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
+#: Old-side (``-``) span of a hunk header: ``@@ -<start>[,<count>] +... @@``.
+_HUNK_OLD_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@")
 
 
 def git_changed_line_numbers(project_root: Path, rel_path: str, since: str) -> set[int]:
@@ -164,6 +166,32 @@ def git_changed_line_numbers(project_root: Path, rel_path: str, since: str) -> s
     symbol-range map is also keyed on). An empty set means "no changed lines
     detected" — callers treat that as ambiguous and keep the pair (conservative).
     """
+    return _changed_lines(project_root, rel_path, since, _HUNK_RE)
+
+
+def git_changed_line_numbers_old_side(
+    project_root: Path, rel_path: str, since: str
+) -> set[int]:
+    """Return the set of *old-side* (``-``) line numbers changed in *rel_path*.
+
+    The mirror of :func:`git_changed_line_numbers` for the ``since`` revision's
+    own line numbers. This is what attributes **removed or renamed** top-level
+    symbols (S4): a deleted ``def``/``class`` no longer exists on the new side,
+    so its name never enters the new-side changed set — but its old-side body
+    lines map back to its old name via the *old* content's symbol ranges, so a
+    doc that references only the gone name is correctly KEPT in scope.
+    """
+    return _changed_lines(project_root, rel_path, since, _HUNK_OLD_RE)
+
+
+def _changed_lines(
+    project_root: Path, rel_path: str, since: str, hunk_re: re.Pattern[str]
+) -> set[int]:
+    """Parse ``git diff --unified=0`` hunk headers for *hunk_re*'s side span.
+
+    *hunk_re* captures ``(start, count)`` for one side (new or old). A pure
+    no-context hunk on that side (``count == 0``) anchors on its ``start`` line.
+    """
     result = run_command(
         ["git", "diff", "--unified=0", since, "--", rel_path], cwd=project_root
     )
@@ -171,13 +199,13 @@ def git_changed_line_numbers(project_root: Path, rel_path: str, since: str) -> s
         return set()
     changed: set[int] = set()
     for line in result.stdout.splitlines():
-        match = _HUNK_RE.match(line)
+        match = hunk_re.match(line)
         if match is None:
             continue
         start = int(match.group(1))
         count = int(match.group(2)) if match.group(2) is not None else 1
         if count == 0:
-            # A pure deletion hunk anchors on the new-side line before the gap.
+            # A pure no-side hunk anchors on the line before the gap.
             changed.add(start)
             continue
         changed.update(range(start, start + count))

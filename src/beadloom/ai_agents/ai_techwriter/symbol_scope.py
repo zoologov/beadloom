@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING
 from beadloom.ai_agents.ai_techwriter.commands import (
     beadloom_sync_update,
     git_changed_line_numbers,
+    git_changed_line_numbers_old_side,
     git_file_at_ref,
     read_working_file,
 )
@@ -180,7 +181,10 @@ def _pair_keeps(
 
     Ambiguity (kept) covers: a non-Python file, a vanished revision, no
     detectable changed lines, or changed lines that map to no symbol body
-    (e.g. a module-level / import edit).
+    (e.g. a module-level / import edit). The changed-symbol set unions BOTH
+    diff sides — new-side edited/added defs AND **old-side removed/renamed**
+    defs (S4) — so a doc naming a symbol that was deleted (whose name is gone
+    from the new content) is still attributed and KEPT, never under-refreshed.
     """
     if not code_path.endswith(_PY_SUFFIX):
         return True  # only Python is attributed here
@@ -190,13 +194,33 @@ def _pair_keeps(
     if new_content is None or old_content is None:
         return True  # added/removed file revision -> ambiguous
 
-    changed_lines = git_changed_line_numbers(project_root, code_path, since)
-    if not changed_lines:
+    changed = _pair_changed_symbols(code_path, project_root, new_content, old_content, since)
+    if changed is None:
         return True  # no detectable hunks -> ambiguous
-
-    changed = changed_symbols(new_content=new_content, changed_lines=changed_lines)
     if not changed:
         return True  # change outside any symbol body -> ambiguous
 
     referenced = doc_referenced_symbols(doc_text, changed)
     return bool(referenced)
+
+
+def _pair_changed_symbols(
+    code_path: str,
+    project_root: Path,
+    new_content: str,
+    old_content: str,
+    since: str,
+) -> set[str] | None:
+    """Top-level symbols changed in *code_path*, unioning both diff sides.
+
+    Returns ``None`` when no changed lines are detectable on either side (the
+    caller treats that as ambiguous and keeps the pair). Otherwise the union of
+    new-side edited/added defs and old-side removed/renamed defs.
+    """
+    new_lines = git_changed_line_numbers(project_root, code_path, since)
+    old_lines = git_changed_line_numbers_old_side(project_root, code_path, since)
+    if not new_lines and not old_lines:
+        return None
+    changed = changed_symbols(new_content=new_content, changed_lines=new_lines)
+    changed |= changed_symbols(new_content=old_content, changed_lines=old_lines)
+    return changed

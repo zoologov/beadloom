@@ -6,7 +6,7 @@
 
 ## Current Focus
 
-- **Phase:** S1+S2 committed. S1+S2+S3 committed. S4/S5/S6 dev running IN PARALLEL (worktree-isolated).
+- **Phase:** S1+S2 committed. S1+S2+S3 + S4/S5/S6-dev committed (parallel worktrees). 3 reviews running in parallel; then tech-writer .19.
 - **Branch:** `features/BDL-052` (one branch; commit per slice; ONE PR at the end).
 - **Coordinator:** main loop (multi-agent; independent dev beads run in parallel).
 - **Parent:** `beadloom-3m2d`
@@ -24,15 +24,15 @@
 | beadloom-3m2d.7 | dev — S3 configurator (flow.yml + ddd/fsd + overlays + adapters) | ✓ done (impl; +47 tests; ci rc0) |
 | beadloom-3m2d.8 | test — S3 | ✓ done |
 | beadloom-3m2d.9 | review — S3 | ✓ done (PASS; orphaned-adapter minor→followup/.19) |
-| beadloom-3m2d.10 | dev — S4 symbol-scope | in progress (parallel worktree) |
-| beadloom-3m2d.11 | test — S4 | blocked ← 10 |
-| beadloom-3m2d.12 | review — S4 | blocked ← 11 |
-| beadloom-3m2d.13 | dev — S5 CI parallel+cache | in progress (parallel worktree) |
-| beadloom-3m2d.14 | test — S5 | blocked ← 13 |
-| beadloom-3m2d.15 | review — S5 | blocked ← 14 |
-| beadloom-3m2d.16 | dev — S6 active-sync --stage | in progress (parallel worktree) |
-| beadloom-3m2d.17 | test — S6 | blocked ← 16 |
-| beadloom-3m2d.18 | review — S6 | blocked ← 17 |
+| beadloom-3m2d.10 | dev — S4 symbol-scope | ✓ done |
+| beadloom-3m2d.11 | test — S4 | ✓ done (dev TDD) |
+| beadloom-3m2d.12 | review — S4 | ✓ done (PASS-WITH-FIXES; MAJOR→.20) |
+| beadloom-3m2d.13 | dev — S5 CI parallel+cache | ✓ done |
+| beadloom-3m2d.14 | test — S5 | ✓ done (dev TDD) |
+| beadloom-3m2d.15 | review — S5 | ✓ done (PASS; minor→.20) |
+| beadloom-3m2d.16 | dev — S6 active-sync --stage | ✓ done |
+| beadloom-3m2d.17 | test — S6 | ✓ done (dev TDD) |
+| beadloom-3m2d.18 | review — S6 | ✓ done (PASS; nitpick→.20) |
 | beadloom-3m2d.19 | tech-writer — epic close | blocked ← 3,6,9,12,15,18 |
 
 ## Waves (one branch; commit per slice; ONE PR at the end)
@@ -50,3 +50,4 @@ W1 S1(.1→.2→.3) → W2 S2(.4→.5→.6) → W3 S3(.7→.8→.9) → W4 S4(.1
 
 - 2026-06-14: PRD/RFC(+Addendum)/CONTEXT/PLAN approved; epic `beadloom-3m2d` + 19 beads + DAG; branch `features/BDL-052`. W1 (S1) launched (.1 dev). Owner additions folded: restore lost agent rules (point 2), role configurator core+overlays (point 3), FSD first-class with DDD, explicit parallelism (point 1).
 - 2026-06-14: BEAD-07 (S3 dev) implemented. `.beadloom/flow.yml` + `flow_config.py` (FlowConfig, strict validation, resolve/detect-stack); overlays under `onboarding/templates/roles/` (core/{4 roles} extracted from S2; architecture/{ddd,fsd} at parity + annotation vocab; stack/{python,fastapi,javascript,typescript,vuejs}); `role_composer.compose_role` (CORE+arch+sorted-stack, deterministic); `role_adapters.generate_adapters` (.claude/agents/* + .cursor/agents/* + .cursor/rules orchestrator); `setup-agentic-flow --tool/--stack/--architecture`; drift-guard (live .claude/agents/* == compose(ddd,python), catches hand-edit + CORE-change); config-check covers flow.yml + composed drift. 3 new modules classified (features part_of onboarding) + SPEC docs (coverage-lint 0). +47 tests; suite 4129 green; ruff+mypy clean; `beadloom ci` rc 0. NOT committed — hand to .8 (test).
+| beadloom-3m2d.20 | dev-fix — S4 under-scope (removed-symbol) + S5/S6 minor tests | in progress |

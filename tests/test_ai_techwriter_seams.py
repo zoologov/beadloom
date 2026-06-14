@@ -93,6 +93,39 @@ def test_run_command_captures_nonzero_without_raising(tmp_path: Path) -> None:
     assert res.ok is False
 
 
+# A unified=0 diff that REMOVES a top-level def: the old side has lines 1-2,
+# the new side collapses to a 0-count hunk anchored on the prior line (0).
+_REMOVAL_DIFF = (
+    "diff --git a/src/cli.py b/src/cli.py\n"
+    "--- a/src/cli.py\n"
+    "+++ b/src/cli.py\n"
+    "@@ -1,2 +0,0 @@\n"
+    "-def removed():\n"
+    "-    return 1\n"
+)
+
+
+def test_git_changed_line_numbers_old_side_parses_removal(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Old-side parser captures the deleted span (1-2); new side captures none."""
+    monkeypatch.setattr(
+        commands, "run_command", lambda args, *, cwd: CommandResult(0, _REMOVAL_DIFF, "")
+    )
+    assert commands.git_changed_line_numbers_old_side(tmp_path, "src/cli.py", "HEAD~1") == {1, 2}
+    # The new side is a pure 0-count deletion hunk -> anchors on line 0 only.
+    assert commands.git_changed_line_numbers(tmp_path, "src/cli.py", "HEAD~1") == {0}
+
+
+def test_git_changed_line_numbers_old_side_empty_on_diff_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        commands, "run_command", lambda args, *, cwd: CommandResult(1, "", "boom")
+    )
+    assert commands.git_changed_line_numbers_old_side(tmp_path, "src/cli.py", "HEAD~1") == set()
+
+
 def test_sync_check_json_raises_on_non_object(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         commands, "run_command", lambda args, *, cwd: CommandResult(0, "[1,2]", "")

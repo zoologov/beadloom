@@ -109,10 +109,16 @@ class _FakeGit:
     """Patchable stand-in for the git/file seams used by narrowing.
 
     ``files`` maps a code path -> (content_at_since, current_content,
-    changed_line_numbers).
+    new_side_changed_lines[, old_side_changed_lines]). The optional 4th element
+    is the OLD-side (``-``) changed line numbers — used to attribute removed /
+    renamed top-level symbols (S4); it defaults to the empty set.
     """
 
-    def __init__(self, files: dict[str, tuple[str | None, str | None, set[int]]]) -> None:
+    def __init__(
+        self,
+        files: dict[str, tuple[str | None, str | None, set[int]]]
+        | dict[str, tuple[str | None, str | None, set[int], set[int]]],
+    ) -> None:
         self.files = files
 
     def show(self, project_root: Path, rel_path: str, ref: str) -> str | None:
@@ -131,6 +137,10 @@ class _FakeGit:
         entry = self.files.get(rel_path)
         return entry[2] if entry else set()
 
+    def old_changed_lines(self, project_root: Path, rel_path: str, since: str) -> set[int]:
+        entry = self.files.get(rel_path)
+        return entry[3] if entry and len(entry) > 3 else set()
+
 
 def _patch_git(monkeypatch: pytest.MonkeyPatch, fake: _FakeGit) -> list[str]:
     """Patch the git/file seams + capture which refs got sync-update'd."""
@@ -138,6 +148,9 @@ def _patch_git(monkeypatch: pytest.MonkeyPatch, fake: _FakeGit) -> list[str]:
     monkeypatch.setattr(symbol_scope, "git_file_at_ref", fake.show)
     monkeypatch.setattr(symbol_scope, "read_working_file", fake.read)
     monkeypatch.setattr(symbol_scope, "git_changed_line_numbers", fake.changed_lines)
+    monkeypatch.setattr(
+        symbol_scope, "git_changed_line_numbers_old_side", fake.old_changed_lines
+    )
 
     def fake_update(project_root: Path, ref_id: str) -> object:
         baselined.append(ref_id)
@@ -209,6 +222,84 @@ def test_doc_referencing_changed_symbol_is_kept(
     kept = narrow_by_changed_symbols(items, tmp_path, since="HEAD~1")
     assert [k.ref_id for k in kept] == ["ref0"]
     assert baselined == []
+
+
+# --------------------------------------------------------------------------- #
+# S4 MAJOR: removed / renamed top-level symbols (old-side attribution)
+# --------------------------------------------------------------------------- #
+
+
+# A top-level symbol `removed` is deleted on the new side; the new side keeps
+# only `untouched`. The OLD side (line 1-2) is `removed`'s body.
+_REMOVED_OLD = (
+    "def removed():\n    return 1\n\n"  # old lines 1-2
+    "def untouched():\n    return 2\n"  # old lines 4-5
+)
+_REMOVED_NEW = "def untouched():\n    return 2\n"  # new lines 1-2
+
+
+def test_doc_referencing_removed_symbol_is_kept(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A doc that names ONLY a removed top-level symbol must be KEPT, not dropped.
+
+    The removed name never appears on the new side, so a new-side-only changed
+    set intersects empty -> the doc would be silently dropped + baselined even
+    though it genuinely needs the update. Old-side attribution keeps it in scope.
+    """
+    items = _god_file_docs(1)
+    _write_docs(tmp_path, items, {"ref0": "Docs for the `removed` helper.\n"})
+    # New-side changed lines: none map to a surviving symbol (the deletion hunk
+    # anchors on the new-side line). Old-side changed lines 1-2 = `removed`'s body.
+    fake = _FakeGit({"src/cli.py": (_REMOVED_OLD, _REMOVED_NEW, {1}, {1, 2})})
+    baselined = _patch_git(monkeypatch, fake)
+    kept = narrow_by_changed_symbols(items, tmp_path, since="HEAD~1")
+    assert [k.ref_id for k in kept] == ["ref0"]
+    assert baselined == []
+
+
+# A rename: old name `was_named` gone, new name `now_named` added.
+_RENAME_OLD = "def was_named():\n    return 1\n"  # old lines 1-2
+_RENAME_NEW = "def now_named():\n    return 1\n"  # new lines 1-2
+
+
+def test_doc_referencing_renamed_old_name_is_kept(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A rename: a doc naming the OLD (now-gone) symbol name must be KEPT."""
+    items = _god_file_docs(1)
+    _write_docs(tmp_path, items, {"ref0": "Docs for `was_named`.\n"})
+    fake = _FakeGit({"src/cli.py": (_RENAME_OLD, _RENAME_NEW, {1, 2}, {1, 2})})
+    baselined = _patch_git(monkeypatch, fake)
+    kept = narrow_by_changed_symbols(items, tmp_path, since="HEAD~1")
+    assert [k.ref_id for k in kept] == ["ref0"]
+    assert baselined == []
+
+
+def test_doc_referencing_only_unrelated_surviving_symbol_still_dropped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Old-side attribution must stay narrow: when ONLY a removed symbol changed
+    and the doc names a different, untouched surviving symbol -> still dropped.
+
+    Old content keeps `removed` (lines 1-2) then `survivor` (lines 4-5); only
+    `removed` is deleted, so old-side change = {1,2} -> `removed`. The new side's
+    deletion hunk anchors on line 0 (no surviving symbol touched). The doc names
+    `survivor` -> empty intersection -> dropped + baselined.
+    """
+    old = (
+        "def removed():\n    return 1\n\n"  # old lines 1-2
+        "def survivor():\n    return 2\n"  # old lines 4-5
+    )
+    new = "def survivor():\n    return 2\n"  # new lines 1-2 (unchanged body)
+    items = _god_file_docs(1)
+    _write_docs(tmp_path, items, {"ref0": "Docs for `survivor`.\n"})
+    # New-side deletion hunk anchors on line 0 -> maps to no symbol body.
+    fake = _FakeGit({"src/cli.py": (old, new, {0}, {1, 2})})
+    baselined = _patch_git(monkeypatch, fake)
+    kept = narrow_by_changed_symbols(items, tmp_path, since="HEAD~1")
+    assert kept == []
+    assert baselined == ["ref0"]
 
 
 def test_conservative_fallback_no_since_keeps_all(

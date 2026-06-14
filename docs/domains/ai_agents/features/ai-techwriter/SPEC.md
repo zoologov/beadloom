@@ -62,7 +62,11 @@ data).
   symbol", killing the god-file fan-out (a one-symbol edit to `cli.py` no longer
   drifts every doc the file is linked to). For each stale pair it intersects the
   symbols whose body changed in the touched file (vs `--since`, via git hunks ∩
-  a Python `def`/`class` line-range map) with the symbols the doc references; an
+  a Python `def`/`class` line-range map) with the symbols the doc references. The
+  changed-symbol set unions BOTH diff sides — new-side edited/added defs AND
+  **old-side removed/renamed** defs (so a doc naming a symbol that was deleted,
+  whose name is gone from the new content, is still attributed and KEPT, never
+  silently dropped); an
   empty intersection drops the pair from the agent run AND `sync-update`-baselines
   it so `sync-check` still reaches 0 without a rewrite. Conservative by
   construction: any unavailable/ambiguous attribution (no `--since`, a

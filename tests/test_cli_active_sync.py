@@ -405,6 +405,35 @@ def test_stage_stages_exported_jsonl(tmp_path: Path) -> None:
     assert rel_active in staged, staged
 
 
+def test_stage_no_export_does_not_stage_jsonl(tmp_path: Path) -> None:
+    """`--stage --no-export` stages ONLY the reconciled ACTIVE path(s).
+
+    With `--no-export` there is no `bd export` step, so the tracked
+    `.beads/issues.jsonl` must NOT be added to the git index even though it
+    exists in the repo — only the reconciled ACTIVE.md is staged (negative S6)."""
+    active = _write_active(tmp_path, "DEMO")
+    beads_dir = tmp_path / ".beads"
+    beads_dir.mkdir()
+    (beads_dir / "issues.jsonl").write_text("{}\n", encoding="utf-8")
+    _init_repo(tmp_path)
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "baseline")
+
+    beads = [{"id": "demo-a.1", "status": "closed", "dependencies": []}]
+    with patch(
+        "beadloom.services.bd_seam.run_bd",
+        return_value=_result_ok(_bd_list_json(beads)),
+    ):
+        result = CliRunner().invoke(
+            main, ["active-sync", "--stage", "--project", str(tmp_path), "--no-export"]
+        )
+    assert result.exit_code == 0, result.output
+    staged = _staged_paths(tmp_path)
+    rel_active = "/".join(active.relative_to(tmp_path).parts)
+    assert rel_active in staged, staged
+    assert ".beads/issues.jsonl" not in staged, staged
+
+
 def test_stage_noop_when_nothing_reconciled(tmp_path: Path) -> None:
     active = _write_active(tmp_path, "DEMO")
     unrelated = active.parent / "CONTEXT.md"

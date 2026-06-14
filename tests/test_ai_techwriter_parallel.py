@@ -248,6 +248,48 @@ def test_session_gives_up_after_backoff_budget(
 
 
 # --------------------------------------------------------------------------- #
+# between-doc budget gate (the `_budget_stop` branch) in the parallel runner
+# --------------------------------------------------------------------------- #
+
+
+def test_budget_gate_stops_further_submissions_mid_window(
+    project: Path, patch_substrate: dict[str, object]
+) -> None:
+    """The runaway-budget gate trips mid-window: it folds the in-flight window,
+    flags `budget exceeded before repairing <ref>`, and submits NO further docs.
+
+    Sequential window (`max_parallel=1`) so the gate is hit deterministically:
+    after doc `a` is folded (1 turn), `max_total_turns=1` makes the pre-submit
+    `_budget_exceeded` guard fire on doc `b` -> `_budget_stop` -> only `a` runs.
+    """
+    for name in ("a", "b", "c"):
+        (project / "docs" / f"{name}.md").write_text("old", encoding="utf-8")
+    patch_substrate["scope"] = _ScriptedScope(
+        [
+            _stale_report(
+                ("a", "docs/a.md", "hash_changed", "src/a.py"),
+                ("b", "docs/b.md", "hash_changed", "src/b.py"),
+                ("c", "docs/c.md", "hash_changed", "src/c.py"),
+            ),
+            _CLEAN,
+        ]
+    )
+    cfg = HarnessConfig(max_parallel=1, max_total_turns=1)
+    agent = FakeAgentRunner(project_root=project, model="qwen-test")
+    result = run_harness(
+        project, agent=agent, publisher=FakePublisher(), now_ts=NOW, config=cfg, sleep=_no_sleep
+    )
+    # The gate stopped submissions after the first doc: only `a` was edited.
+    assert result.docs_refreshed == ["docs/a.md"]  # type: ignore[attr-defined]
+    # Verdict preserved: a runaway budget is a real "needs human" flag, and
+    # tokens were produced -> classified `flagged`, not `infra`.
+    assert result.flagged is True  # type: ignore[attr-defined]
+    assert "budget exceeded before repairing b" in result.flagged_reasons  # type: ignore[attr-defined]
+    assert result.input_tokens > 0  # type: ignore[attr-defined]
+    assert runner.classify_verdict(result) == runner.VERDICT_FLAGGED  # type: ignore[arg-type]
+
+
+# --------------------------------------------------------------------------- #
 # max_parallel cap respected
 # --------------------------------------------------------------------------- #
 
