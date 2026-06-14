@@ -1,0 +1,17 @@
+<!-- overlay:vuejs — Vue 3 SFC / composition API / pinia idioms. -->
+## STACK (Vue.js)
+
+- **Single-File Components** (`.vue`) with `<script setup lang="ts">` — the Composition API by default; keep `<template>` declarative, logic in composables.
+- Reactivity: `ref` / `reactive` / `computed` / `watch`; never mutate props (events up via `defineEmits`, data down via `defineProps`); type props with the generic `defineProps<T>()`.
+- Extract reusable logic into **composables** (`useXxx()` in `composables/` or the slice's `model` segment); keep components thin.
+- State management with **Pinia** stores (`defineStore`) for cross-component state; one store per domain; actions for async, getters for derived state.
+- Scoped styles (`<style scoped>`); no business logic in templates.
+
+### Tooling commands
+```bash
+npm install
+npx vue-tsc --noEmit   # type-check SFCs (strict)
+npm run lint           # eslint (eslint-plugin-vue)
+npx vitest run         # component/unit tests (@vue/test-utils + vitest)
+beadloom reindex && beadloom sync-check && beadloom lint --strict
+```

@@ -71,24 +71,36 @@ This is the signal the review + tech-writer roles rely on — `sync-check` can r
 ### Return contract (when launched by the coordinator)
 Return ONLY a 2-3 line summary: `"BEAD-XX done. N tests added. Files: <list>."` Write all detail to bead comments. Do NOT return diffs or verbose test output.
 
-<!-- overlay:python — extracted to the `python` stack overlay in S3; everything below is Python/Beadloom-specific. -->
-## STACK (Python — this repo)
+<!-- overlay:ddd — Domain-Driven Design layer/boundary rules + the beadloom annotation vocabulary. -->
+## ARCHITECTURE (Domain-Driven Design)
 
-This repo is Python 3.10+, SQLite, Click, Rich, tree-sitter; DDD packages (`ai_agents/`, `application/`, `context_oracle/`, `doc_sync/`, `graph/`, `infrastructure/`, `onboarding/`, `services/`, `tui/`).
+This project follows **DDD packages** — discover the live layer map with `beadloom graph` / `beadloom ctx`, never hardcode it.
 
-### DDD layers (verify with `beadloom graph`)
+### Layers + dependency direction
 ```
-Services (cli/mcp/tui) → application → Domains (context_oracle, graph, doc_sync, onboarding, ai_agents) → infrastructure
+Services (cli / mcp / tui) → application → Domains → infrastructure
 ```
-- ✅ services → domains; domains → infrastructure
-- ❌ domain → domain; domain → services; infrastructure → domain
-- `ai_agents` is a **leaf consumer**: core domains/services + application must NOT import it (forbid_import, BDL-051). `tui` + `onboarding` must not import infrastructure directly.
-- Annotations here are `# beadloom:domain=…` / `# beadloom:feature=…` / `# beadloom:component=…`. coverage-lint is **error** — a new module must be a classified node with a doc.
+- ✅ services → application → domains; domains → infrastructure.
+- ❌ domain → domain (no peer-to-peer); domain → services / application (no inward→outward); infrastructure → domain.
+- A **leaf-consumer** domain (e.g. an AI-agent harness) may be imported by no core domain/service — it only consumes the read APIs. Discover such `forbid_import` boundaries from the rules (`beadloom lint --strict`).
+- Boundaries are machine-enforced: `no-dependency-cycles` + `architecture-layers` are `severity: error`, so a green `lint --strict` genuinely enforces direction; `module-coverage` is error too.
+
+### Annotation vocabulary (DDD)
+Emit on every new/changed module so it maps to its graph node:
+- `# beadloom:domain=<ref>` — the module belongs to a domain (a bounded context).
+- `# beadloom:feature=<ref>` — a feature/use-case within a domain.
+- `# beadloom:component=<ref>` — a finer-grained component of a domain/service.
+A new module with no annotation (and no matching node `source`) is invisible to the graph and fails `module-coverage` (error) — classify it as a node with a doc.
+
+<!-- overlay:python — Python stack idioms + lint/type/test commands. -->
+## STACK (Python)
+
+Python 3.10+. Models, exceptions, and IO follow these idioms.
 
 ### Code patterns (Python)
 - **Dataclasses** for models (`@dataclass(frozen=True)` for immutable nodes/edges).
-- **Exceptions** inherit from `BeadloomError` (e.g. `NodeNotFoundError`, `StaleIndexError`).
-- **`pathlib.Path`, never `os.path`.** `project_root / ".beadloom" / "_graph"`.
+- **Exceptions** inherit from a project base error (e.g. `BeadloomError` → `NodeNotFoundError`, `StaleIndexError`).
+- **`pathlib.Path`, never `os.path`.** Build paths by joining (`project_root / ".beadloom" / "_graph"`).
 - **Parameterized SQL only** (`cursor.execute("… WHERE ref_id = ?", (ref_id,))`) — **never f-strings in SQL**.
 - **`yaml.safe_load`**, never `yaml.load(...)`.
 - No bare `except:` (catch the specific error); no `import *`; no mutable default args (`x: list | None = None`); `str | None` not `Optional[str]`; no unjustified `Any` / `# type: ignore` (annotate the reason if truly needed).

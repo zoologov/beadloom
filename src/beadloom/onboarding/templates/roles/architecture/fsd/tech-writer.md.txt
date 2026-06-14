@@ -1,0 +1,5 @@
+<!-- overlay:fsd — FSD doc layout (layer + slice). -->
+## ARCHITECTURE (Feature-Sliced Design)
+
+Docs mirror the FSD graph: one doc per **layer** (or per major **slice**), with the slice's public API + segments described. A doc's `beadloom:` ref ties it to its node, so `sync-check` can tell when the slice's symbols drifted from its prose. When a new slice appears, add its doc; when a module moves layer/slice, move its doc to match.
+

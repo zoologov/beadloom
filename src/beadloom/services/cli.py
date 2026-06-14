@@ -2102,26 +2102,85 @@ def setup_ai_techwriter(*, platform: str, project: Path | None) -> None:
     default=False,
     help="Overwrite hand-edited scaffolded flow files (default: preserve them).",
 )
-def setup_agentic_flow(*, project: Path | None, force: bool) -> None:
-    """Scaffold Beadloom's proven multi-agent dev flow into this repo (BDL-048).
+@click.option(
+    "--tool",
+    "tools",
+    multiple=True,
+    type=click.Choice(["claude", "cursor"]),
+    help="Tool adapter set(s) to generate (repeatable). Default: flow.yml or claude.",
+)
+@click.option(
+    "--architecture",
+    "architecture",
+    type=click.Choice(["ddd", "fsd"]),
+    default=None,
+    help="Architecture methodology overlay. Default: flow.yml or ddd.",
+)
+@click.option(
+    "--stack",
+    "stack",
+    default=None,
+    help=(
+        "Comma-separated stack overlays "
+        "(python,fastapi,javascript,typescript,vuejs). Default: flow.yml or "
+        "auto-detected."
+    ),
+)
+def setup_agentic_flow(
+    *,
+    project: Path | None,
+    force: bool,
+    tools: tuple[str, ...],
+    architecture: str | None,
+    stack: str | None,
+) -> None:
+    """Scaffold Beadloom's proven multi-agent dev flow into this repo (BDL-048/052).
 
-    In the setup-* family (alongside setup-rules / setup-mcp). Idempotently
-    drops the role subagents (``.claude/agents/{dev,test,review,tech-writer}.md``)
-    and slash skills (``.claude/commands/{coordinator,task-init,checkpoint,
-    templates}.md``) — vendored byte-identical to Beadloom's own proven flow —
-    plus a ``.claude/CLAUDE.md`` whose auto-regions are generated for THIS
-    project (name / stack / version / packages). User prose outside the
-    auto-regions is never touched; --force overwrites hand-edited flow files.
+    In the setup-* family (alongside setup-rules / setup-mcp). Composes the role
+    subagents from CORE + the selected architecture overlay (``ddd``/``fsd``) +
+    the selected stack overlays, then writes the per-tool adapter set(s) — for
+    ``claude`` to ``.claude/agents/*`` (+ ``.claude/commands/*`` + a per-project
+    ``.claude/CLAUDE.md``), for ``cursor`` to ``.cursor/agents/*`` (+ a Cursor
+    orchestrator pointer). Selection comes from ``.beadloom/flow.yml`` (or the
+    ``--tool``/``--architecture``/``--stack`` flags, which override it; defaults
+    are ``claude`` / ``ddd`` / auto-detected stack). A drift-guard test keeps
+    every generated adapter byte-identical to its composition. User prose
+    outside CLAUDE.md auto-regions is never touched; --force overwrites
+    hand-edited Claude flow files.
     """
     from beadloom.onboarding.agentic_flow_setup import scaffold
+    from beadloom.onboarding.flow_config import FlowConfigError, resolve_flow_config
+    from beadloom.onboarding.role_adapters import generate_adapters
 
     project_root = project or Path.cwd()
-    result = scaffold(project_root, force=force)
+    stack_tuple = (
+        tuple(s.strip() for s in stack.split(",") if s.strip())
+        if stack is not None
+        else ()
+    )
+    try:
+        config = resolve_flow_config(
+            project_root,
+            tools=tools,
+            architecture=architecture,
+            stack=stack_tuple,
+        )
+    except FlowConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
 
-    for name in result.agents_written:
-        click.echo(f"Wrote .claude/agents/{name}.md")
-    for name in result.agents_skipped:
-        click.echo(f"Skipped .claude/agents/{name}.md (hand-edited; use --force)")
+    click.echo(
+        f"Composing roles: architecture={config.architecture}, "
+        f"stack={','.join(config.stack)}, tools={','.join(config.tools)}"
+    )
+    adapters = generate_adapters(config, project_root)
+    for tool, files in adapters.agents.items():
+        for rel in files:
+            click.echo(f"Wrote {rel} ({tool})")
+    for rel in adapters.extra:
+        click.echo(f"Wrote {rel}")
+
+    result = scaffold(project_root, force=force, include_agents=False)
+
     for name in result.commands_written:
         click.echo(f"Wrote .claude/commands/{name}.md")
     for name in result.commands_skipped:
@@ -2279,9 +2338,16 @@ def config_check(*, fix: bool, project: Path | None) -> None:
         # never force the flow onto a repo that did not adopt it). Restores the
         # vendored agents/commands; CLAUDE.md regions are already refreshed
         # above, so user prose outside the auto-regions is preserved.
-        from beadloom.onboarding.config_sync import refresh_agentic_flow_files
+        from beadloom.onboarding.config_sync import (
+            refresh_agentic_flow_files,
+            refresh_composed_adapters,
+        )
 
         refresh_agentic_flow_files(project_root)
+        # Recompose the per-tool role adapters from .beadloom/flow.yml (no-op
+        # when flow.yml is absent/invalid). The composer owns .claude/agents/*
+        # + .cursor/agents/* once a flow.yml exists.
+        refresh_composed_adapters(project_root)
 
     db_path = project_root / ".beadloom" / "beadloom.db"
     conn = open_db(db_path)

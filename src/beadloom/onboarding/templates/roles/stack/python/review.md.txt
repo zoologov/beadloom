@@ -1,0 +1,10 @@
+<!-- overlay:python — Python idioms + validation commands to check (read-only). -->
+## STACK (Python)
+
+Beadloom validation to run (read-only): `beadloom sync-check`, `beadloom lint --strict`, `beadloom doctor`, `beadloom diff --since <base>`.
+
+### Python idioms to check
+- `dataclass(frozen=True)` for immutable models; context managers for resources (`with`).
+- `pathlib.Path` not `os.path`; `str | None` not `Optional[str]`.
+- Parameterized SQL (`?`, never f-strings); `yaml.safe_load` not `yaml.load`; no bare `except:`; custom exceptions inherit the project base error.
+- `mypy --strict` clean; `ruff check src/ tests/` clean; no unjustified `Any` / `# type: ignore`.

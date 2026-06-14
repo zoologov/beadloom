@@ -45,8 +45,13 @@ Designed for parallel deployment: the coordinator assigns each agent a disjoint 
 ### Return contract (coordinator)
 Return ONLY: `"BEAD-XX: updated <ref_ids>, stale N→M."` Detail → bead comments.
 
-<!-- overlay:python — extracted to the `python` stack overlay in S3; everything below is Python/Beadloom-specific. -->
-## STACK (Python — this repo)
+<!-- overlay:ddd — DDD doc layout (domain README + feature SPEC). -->
+## ARCHITECTURE (Domain-Driven Design)
+
+Docs mirror the DDD graph: one README per **domain**, one SPEC per **feature/component**. A doc's `# beadloom:` ref ties it to its node, so `sync-check` can tell when the domain/feature's symbols drifted from its prose. When a new domain/feature node appears, add its doc; when a module moves layer, move/retitle its doc to match.
+
+<!-- overlay:python — Python doc-format reference + sync commands. -->
+## STACK (Python)
 
 ### Doc-format reference
 ```markdown
@@ -64,7 +69,7 @@ Return ONLY: `"BEAD-XX: updated <ref_ids>, stale N→M."` Detail → bead commen
 - <Key guarantees / constraints that must hold>
 
 ## API
-Module `src/beadloom/<package>/<module>.py`:
+Module `src/<pkg>/<package>/<module>.py`:
 - `function_name(args)` → `ReturnType` — description
 - `ClassName` — description
 

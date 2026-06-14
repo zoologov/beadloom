@@ -48,16 +48,23 @@ One behavior per test; a clear Arrange / Act / Assert shape; a name that states 
 ### Return contract (coordinator)
 Return ONLY 2-3 lines: `"BEAD-XX: N tests, coverage Z%."` Detail → bead comments.
 
-<!-- overlay:python — extracted to the `python` stack overlay in S3; everything below is Python/Beadloom-specific. -->
-## STACK (Python — this repo)
+<!-- overlay:ddd — DDD test placement + boundary-aware mocking. -->
+## ARCHITECTURE (Domain-Driven Design)
 
-Tests live in `tests/` (flat, no subdirs). Naming: `src/beadloom/<domain>/<module>.py` → `tests/test_<module>.py`; CLI → `tests/test_cli_<command>.py`; integration → `tests/test_integration*.py`.
+- Test at the right **layer**: a domain's logic with its dependencies stubbed at the boundary; a service end-to-end through application → domain → store.
+- Mock at the **layer boundary** (infrastructure / external services), not across a domain→domain edge that should not exist anyway.
+- A new module the bead introduces must already be a classified graph node with a doc (`module-coverage` is error) — your tests reference it by its `# beadloom:` ref, keeping the graph honest.
+
+<!-- overlay:python — pytest layout, commands, and fixtures. -->
+## STACK (Python)
+
+Tests live in `tests/` (flat, no subdirs). Naming: `src/<pkg>/<domain>/<module>.py` → `tests/test_<module>.py`; CLI → `tests/test_cli_<command>.py`; integration → `tests/test_integration*.py`.
 
 ### Tools + commands
 ```bash
 uv run pytest                                                   # all tests
-uv run pytest --cov=src/beadloom --cov-report=term-missing      # with coverage
-uv run pytest --cov=src/beadloom --cov-fail-under=80            # enforce the floor
+uv run pytest --cov=src --cov-report=term-missing               # with coverage
+uv run pytest --cov=src --cov-fail-under=80                     # enforce the floor
 uv run pytest tests/test_graph_loader.py -v                     # single file, verbose
 ```
 

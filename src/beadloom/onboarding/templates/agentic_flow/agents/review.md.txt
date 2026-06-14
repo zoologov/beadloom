@@ -47,16 +47,24 @@ Per finding: **File + line · Severity · Issue (what's wrong) · Recommendation
 ### Return contract (coordinator)
 Return ONLY: `"Review BEAD-XX = OK"` or `"Review BEAD-XX = ISSUES: <n> critical, <n> major"`. Detail → bead comments.
 
-<!-- overlay:python — extracted to the `python` stack overlay in S3; everything below is Python/Beadloom-specific. -->
-## STACK (Python — this repo)
+<!-- overlay:ddd — DDD boundary review checklist + annotation vocabulary. -->
+## ARCHITECTURE (Domain-Driven Design)
+
+Verify the change respects the DDD layering:
+```
+Services (cli / mcp / tui) → application → Domains → infrastructure
+```
+- No domain→domain (peer), no domain→services/application (inward→outward), no infrastructure→domain, no new dependency cycle.
+- A **leaf-consumer** domain must not be imported by any core domain/service (a `forbid_import` boundary).
+- Every new module is placed in the right layer **and** carries the correct `# beadloom:domain` / `# beadloom:feature` / `# beadloom:component` annotation, and a new domain/feature has a doc — else `module-coverage` (error) and `lint --strict` go red. Stale/missing annotation or doc → **Major**.
+
+<!-- overlay:python — Python idioms + validation commands to check (read-only). -->
+## STACK (Python)
 
 Beadloom validation to run (read-only): `beadloom sync-check`, `beadloom lint --strict`, `beadloom doctor`, `beadloom diff --since <base>`.
 
-### DDD boundaries (this repo)
-Services (cli/mcp/tui) → application → Domains (context_oracle, graph, doc_sync, onboarding, ai_agents) → infrastructure. No domain→domain, domain→services, infrastructure→domain. `ai_agents` is a leaf consumer (core domains/services + application must not import it). `tui`/`onboarding` must not import infrastructure directly. Since BDL-036 `no-dependency-cycles` + `architecture-layers` are `severity: error`, so a green `lint --strict` genuinely enforces boundaries; coverage-lint is error too (new module ⇒ classified node + doc).
-
 ### Python idioms to check
 - `dataclass(frozen=True)` for immutable models; context managers for resources (`with`).
-- `pathlib.Path` not `os.path`; `str | None` not `Optional[str]`; no needless `from __future__ import annotations` (3.10+).
-- Parameterized SQL (`?`, never f-strings); `yaml.safe_load` not `yaml.load`; no bare `except:`; custom exceptions inherit `BeadloomError`.
+- `pathlib.Path` not `os.path`; `str | None` not `Optional[str]`.
+- Parameterized SQL (`?`, never f-strings); `yaml.safe_load` not `yaml.load`; no bare `except:`; custom exceptions inherit the project base error.
 - `mypy --strict` clean; `ruff check src/ tests/` clean; no unjustified `Any` / `# type: ignore`.

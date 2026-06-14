@@ -1,0 +1,16 @@
+<!-- overlay:typescript — TypeScript idioms + eslint/tsc/vitest. -->
+## STACK (TypeScript)
+
+- **`strict` mode on** (`strict: true` in `tsconfig`); no `any` without a documented reason (prefer `unknown` + narrowing); avoid non-null `!` assertions.
+- Model domain data with `interface` / `type`; discriminated unions for variants; `readonly` for immutable fields; `as const` for literal tuples.
+- Type the public surface explicitly (params + return); let inference handle locals; no implicit `any` on callbacks.
+- Errors: typed error classes; never `throw` a bare string; narrow caught `unknown` before use.
+
+### Tooling commands
+```bash
+npm install
+npx tsc --noEmit       # type-check (strict)
+npm run lint           # eslint (@typescript-eslint)
+npx vitest run         # tests (vitest)
+beadloom reindex && beadloom sync-check && beadloom lint --strict
+```

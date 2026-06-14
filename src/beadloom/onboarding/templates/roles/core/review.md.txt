@@ -47,24 +47,3 @@ Per finding: **File + line · Severity · Issue (what's wrong) · Recommendation
 ### Return contract (coordinator)
 Return ONLY: `"Review BEAD-XX = OK"` or `"Review BEAD-XX = ISSUES: <n> critical, <n> major"`. Detail → bead comments.
 
-<!-- overlay:ddd — DDD boundary review checklist + annotation vocabulary. -->
-## ARCHITECTURE (Domain-Driven Design)
-
-Verify the change respects the DDD layering:
-```
-Services (cli / mcp / tui) → application → Domains → infrastructure
-```
-- No domain→domain (peer), no domain→services/application (inward→outward), no infrastructure→domain, no new dependency cycle.
-- A **leaf-consumer** domain must not be imported by any core domain/service (a `forbid_import` boundary).
-- Every new module is placed in the right layer **and** carries the correct `# beadloom:domain` / `# beadloom:feature` / `# beadloom:component` annotation, and a new domain/feature has a doc — else `module-coverage` (error) and `lint --strict` go red. Stale/missing annotation or doc → **Major**.
-
-<!-- overlay:python — Python idioms + validation commands to check (read-only). -->
-## STACK (Python)
-
-Beadloom validation to run (read-only): `beadloom sync-check`, `beadloom lint --strict`, `beadloom doctor`, `beadloom diff --since <base>`.
-
-### Python idioms to check
-- `dataclass(frozen=True)` for immutable models; context managers for resources (`with`).
-- `pathlib.Path` not `os.path`; `str | None` not `Optional[str]`.
-- Parameterized SQL (`?`, never f-strings); `yaml.safe_load` not `yaml.load`; no bare `except:`; custom exceptions inherit the project base error.
-- `mypy --strict` clean; `ruff check src/ tests/` clean; no unjustified `Any` / `# type: ignore`.

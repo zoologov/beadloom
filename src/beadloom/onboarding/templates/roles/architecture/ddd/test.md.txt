@@ -1,0 +1,7 @@
+<!-- overlay:ddd — DDD test placement + boundary-aware mocking. -->
+## ARCHITECTURE (Domain-Driven Design)
+
+- Test at the right **layer**: a domain's logic with its dependencies stubbed at the boundary; a service end-to-end through application → domain → store.
+- Mock at the **layer boundary** (infrastructure / external services), not across a domain→domain edge that should not exist anyway.
+- A new module the bead introduces must already be a classified graph node with a doc (`module-coverage` is error) — your tests reference it by its `# beadloom:` ref, keeping the graph honest.
+

@@ -370,24 +370,38 @@ class TestCli:
         result = _run(project, "--force")
         assert result.exit_code == 0, result.output
 
-    def test_cli_reports_skipped_hand_edited_file(self, tmp_path: Path) -> None:
-        """Without --force, a hand-edited flow file is reported as skipped with
-        the actionable hint, and is left untouched."""
+    def test_cli_recomposes_hand_edited_agent_file(self, tmp_path: Path) -> None:
+        """BDL-052 S3: role files (.claude/agents/*) are now COMPOSED from
+        CORE+overlays — the composer is their source of truth, so a hand-edit is
+        recomposed away on the next run (drift-guard semantics), not preserved.
+        Hand-edit preservation now applies only to the vendored commands/CLAUDE.md."""
         project = _make_project(tmp_path)
         _run(project)
         agent = project / ".claude" / "agents" / "dev.md"
         agent.write_text("HAND EDITED", encoding="utf-8")
         result = _run(project)
         assert result.exit_code == 0, result.output
-        assert "Skipped .claude/agents/dev.md" in result.output
-        assert "--force" in result.output
-        assert agent.read_text(encoding="utf-8") == "HAND EDITED"
+        assert "HAND EDITED" not in agent.read_text(encoding="utf-8")
+        # The composed body is back.
+        assert "## CORE" in agent.read_text(encoding="utf-8")
 
-    def test_cli_force_overwrites_via_command(self, tmp_path: Path) -> None:
+    def test_cli_hand_edited_command_still_skipped(self, tmp_path: Path) -> None:
+        """Without --force, a hand-edited vendored command file is left untouched."""
         project = _make_project(tmp_path)
         _run(project)
-        agent = project / ".claude" / "agents" / "dev.md"
-        agent.write_text("HAND EDITED", encoding="utf-8")
+        cmd = project / ".claude" / "commands" / "coordinator.md"
+        cmd.write_text("HAND EDITED", encoding="utf-8")
+        result = _run(project)
+        assert result.exit_code == 0, result.output
+        assert "Skipped .claude/commands/coordinator.md" in result.output
+        assert "--force" in result.output
+        assert cmd.read_text(encoding="utf-8") == "HAND EDITED"
+
+    def test_cli_force_overwrites_command_via_flag(self, tmp_path: Path) -> None:
+        project = _make_project(tmp_path)
+        _run(project)
+        cmd = project / ".claude" / "commands" / "coordinator.md"
+        cmd.write_text("HAND EDITED", encoding="utf-8")
         result = _run(project, "--force")
         assert result.exit_code == 0, result.output
-        assert "HAND EDITED" not in agent.read_text(encoding="utf-8")
+        assert "HAND EDITED" not in cmd.read_text(encoding="utf-8")

@@ -1,0 +1,21 @@
+<!-- overlay:ddd — Domain-Driven Design layer/boundary rules + the beadloom annotation vocabulary. -->
+## ARCHITECTURE (Domain-Driven Design)
+
+This project follows **DDD packages** — discover the live layer map with `beadloom graph` / `beadloom ctx`, never hardcode it.
+
+### Layers + dependency direction
+```
+Services (cli / mcp / tui) → application → Domains → infrastructure
+```
+- ✅ services → application → domains; domains → infrastructure.
+- ❌ domain → domain (no peer-to-peer); domain → services / application (no inward→outward); infrastructure → domain.
+- A **leaf-consumer** domain (e.g. an AI-agent harness) may be imported by no core domain/service — it only consumes the read APIs. Discover such `forbid_import` boundaries from the rules (`beadloom lint --strict`).
+- Boundaries are machine-enforced: `no-dependency-cycles` + `architecture-layers` are `severity: error`, so a green `lint --strict` genuinely enforces direction; `module-coverage` is error too.
+
+### Annotation vocabulary (DDD)
+Emit on every new/changed module so it maps to its graph node:
+- `# beadloom:domain=<ref>` — the module belongs to a domain (a bounded context).
+- `# beadloom:feature=<ref>` — a feature/use-case within a domain.
+- `# beadloom:component=<ref>` — a finer-grained component of a domain/service.
+A new module with no annotation (and no matching node `source`) is invisible to the graph and fails `module-coverage` (error) — classify it as a node with a doc.
+

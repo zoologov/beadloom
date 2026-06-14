@@ -1,0 +1,7 @@
+<!-- overlay:fsd — FSD test placement + slice isolation. -->
+## ARCHITECTURE (Feature-Sliced Design)
+
+- Test a **slice** through its public API (`index.ts`), not its internal segments — co-locate `*.test.ts` / `*.spec.ts` beside the slice (`features/auth/model/*.spec.ts`).
+- Mock at the **layer boundary** (a higher slice depending on a lower one) and at IO (`api` segment); never reach across same-layer slices in a test (that import is illegal anyway).
+- A new module the bead introduces must already be a classified graph node with a doc (`module-coverage` is error) — tests reference it by its `beadloom:` ref.
+

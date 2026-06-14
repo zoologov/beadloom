@@ -6,7 +6,7 @@
 
 ## Current Focus
 
-- **Phase:** S1 committed. Next: S2 (CORE roles) on critical path; then S4/S5/S6 dev in parallel (worktrees).
+- **Phase:** S1+S2 committed. S3 (configurator) in progress. Then S4/S5/S6 — parallel via worktrees.
 - **Branch:** `features/BDL-052` (one branch; commit per slice; ONE PR at the end).
 - **Coordinator:** main loop (multi-agent; independent dev beads run in parallel).
 - **Parent:** `beadloom-3m2d`
@@ -21,9 +21,9 @@
 | beadloom-3m2d.4 | dev — S2 CORE roles (restore+modernize) | ✓ done |
 | beadloom-3m2d.5 | test — S2 | ✓ done |
 | beadloom-3m2d.6 | review — S2 | ✓ done (PASS; conftest nit fixed) |
-| beadloom-3m2d.7 | dev — S3 configurator (flow.yml + ddd/fsd + overlays + adapters) | blocked ← 6 |
-| beadloom-3m2d.8 | test — S3 | blocked ← 7 |
-| beadloom-3m2d.9 | review — S3 | blocked ← 8 |
+| beadloom-3m2d.7 | dev — S3 configurator (flow.yml + ddd/fsd + overlays + adapters) | ✓ done (impl; +47 tests; ci rc0) |
+| beadloom-3m2d.8 | test — S3 | ✓ done |
+| beadloom-3m2d.9 | review — S3 | ✓ done (PASS; orphaned-adapter minor→followup/.19) |
 | beadloom-3m2d.10 | dev — S4 symbol-scope | blocked ← 1 |
 | beadloom-3m2d.11 | test — S4 | blocked ← 10 |
 | beadloom-3m2d.12 | review — S4 | blocked ← 11 |
@@ -49,3 +49,4 @@ W1 S1(.1→.2→.3) → W2 S2(.4→.5→.6) → W3 S3(.7→.8→.9) → W4 S4(.1
 ## Progress Log
 
 - 2026-06-14: PRD/RFC(+Addendum)/CONTEXT/PLAN approved; epic `beadloom-3m2d` + 19 beads + DAG; branch `features/BDL-052`. W1 (S1) launched (.1 dev). Owner additions folded: restore lost agent rules (point 2), role configurator core+overlays (point 3), FSD first-class with DDD, explicit parallelism (point 1).
+- 2026-06-14: BEAD-07 (S3 dev) implemented. `.beadloom/flow.yml` + `flow_config.py` (FlowConfig, strict validation, resolve/detect-stack); overlays under `onboarding/templates/roles/` (core/{4 roles} extracted from S2; architecture/{ddd,fsd} at parity + annotation vocab; stack/{python,fastapi,javascript,typescript,vuejs}); `role_composer.compose_role` (CORE+arch+sorted-stack, deterministic); `role_adapters.generate_adapters` (.claude/agents/* + .cursor/agents/* + .cursor/rules orchestrator); `setup-agentic-flow --tool/--stack/--architecture`; drift-guard (live .claude/agents/* == compose(ddd,python), catches hand-edit + CORE-change); config-check covers flow.yml + composed drift. 3 new modules classified (features part_of onboarding) + SPEC docs (coverage-lint 0). +47 tests; suite 4129 green; ruff+mypy clean; `beadloom ci` rc 0. NOT committed — hand to .8 (test).

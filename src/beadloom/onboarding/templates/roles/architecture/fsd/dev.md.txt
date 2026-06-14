@@ -1,0 +1,20 @@
+<!-- overlay:fsd — Feature-Sliced Design layer/slice rules + the beadloom annotation vocabulary. -->
+## ARCHITECTURE (Feature-Sliced Design)
+
+This project follows **Feature-Sliced Design (FSD)** — discover the live layer/slice map with `beadloom graph` / `beadloom ctx`, never hardcode it.
+
+### Layers + import direction
+```
+app → processes → pages → widgets → features → entities → shared
+```
+- A module may import only from layers **below** it; **a lower layer can never import a higher one** (`shared` imports nothing above it; `app` may import anything). No cross-imports between slices of the SAME layer — go through `shared`/`entities` or lift to a higher layer.
+- Each layer is split into **slices** (a business domain, e.g. `features/auth`), and each slice into **segments** (`ui`, `model`, `api`, `lib`, `config`). Cross-slice access uses the slice's public API (its `index.ts`), never deep imports.
+- Boundaries are machine-enforced (`beadloom lint --strict`); a new shadow module fails `module-coverage` (error).
+
+### Annotation vocabulary (FSD)
+Emit on every new/changed module so it maps to its graph node:
+- `# beadloom:domain=<layer>` — the FSD layer (`features`, `entities`, `shared`, …).
+- `# beadloom:feature=<slice>` — the slice within the layer (`features/auth`).
+- `# beadloom:component=<segment>` — a segment of a slice (`ui`, `model`, `api`).
+(Use the language's comment syntax, e.g. `// beadloom:feature=...` in JS/TS.) A new module with no annotation (and no matching node `source`) is invisible to the graph and fails `module-coverage` (error) — classify it as a node with a doc.
+

@@ -1,0 +1,22 @@
+<!-- overlay:python — Python stack idioms + lint/type/test commands. -->
+## STACK (Python)
+
+Python 3.10+. Models, exceptions, and IO follow these idioms.
+
+### Code patterns (Python)
+- **Dataclasses** for models (`@dataclass(frozen=True)` for immutable nodes/edges).
+- **Exceptions** inherit from a project base error (e.g. `BeadloomError` → `NodeNotFoundError`, `StaleIndexError`).
+- **`pathlib.Path`, never `os.path`.** Build paths by joining (`project_root / ".beadloom" / "_graph"`).
+- **Parameterized SQL only** (`cursor.execute("… WHERE ref_id = ?", (ref_id,))`) — **never f-strings in SQL**.
+- **`yaml.safe_load`**, never `yaml.load(...)`.
+- No bare `except:` (catch the specific error); no `import *`; no mutable default args (`x: list | None = None`); `str | None` not `Optional[str]`; no unjustified `Any` / `# type: ignore` (annotate the reason if truly needed).
+
+### Tooling commands
+```bash
+uv run pytest                                  # tests
+uv run ruff check src/ tests/                  # lint
+uv run mypy src/                               # types (strict)
+beadloom reindex && beadloom sync-check && beadloom lint --strict && beadloom doctor
+beadloom ci                                    # the full pre-push Gate (rc 0 required)
+```
+Shell: always pass `-f` to `cp`/`mv`/`rm` (avoid interactive hangs).
