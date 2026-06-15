@@ -1,8 +1,8 @@
-# Agentic development in Beadloom 2.0.0: architecture
+# Agentic development in Beadloom: architecture
 
 > Read this in other languages: [Русский](./multi-agent-development.ru.md)
 
-> This document describes **where each part runs**, **who is responsible for what**, and **how the parts interact** — in the current, released state (version 2.0.0).
+> This document describes **where each part runs**, **who is responsible for what**, and **how the parts interact** — in the current, released state.
 >
 > Change history: BDL-047 (the first AI tech-writer in CI) → BDL-048 (packaging the multi-agent workflow and the MCP tools) → BDL-049 (the move to trunk-based and pull-request triggering) → BDL-050 (consolidating CI into a single `ci.yml` and the verdict system) → BDL-051 ("Beadloom governs itself") → BDL-053 (tracker / `ACTIVE.md` coherence) → BDL-052 (the configurable, tool-agnostic agentic workflow and the pre-push Gate).
 

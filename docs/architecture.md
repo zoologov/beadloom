@@ -8,7 +8,7 @@ Beadloom turns Architecture as Code into Architectural Intelligence — structur
 
 ## System Design
 
-The system is organized into seven DDD domain packages, an application (use-case orchestration) layer, and two interface layers:
+The system is organized into six DDD domain packages, an application (use-case orchestration) layer, and two interface layers:
 
 **Domains:**
 1. **Context Oracle** (`context_oracle/`) — BFS graph traversal, context bundle assembly, code indexing, two-tier caching, FTS5 search, `why` impact analysis

@@ -49,7 +49,7 @@ beadloom init --bootstrap     # scan code → generate an initial graph
 ```
 
 `--bootstrap` scans your code structure and proposes domains, services, and
-features. Use `--yes` (or `--non-interactive`) to skip prompts (CI / automation).
+features. Use `--yes` (`-y`) to skip prompts (CI / automation).
 `init` creates:
 
 - `.beadloom/_graph/services.yml` — the architecture graph (nodes + edges)

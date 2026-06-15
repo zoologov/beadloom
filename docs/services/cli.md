@@ -402,7 +402,7 @@ Save the current graph state as a snapshot.
 beadloom snapshot save [--label LABEL] [--project DIR]
 ```
 
-- `--label` -- optional label for the snapshot (e.g. `2.0.0`).
+- `--label` -- optional label for the snapshot (e.g. `pre-refactor`).
 
 #### beadloom snapshot list
 
