@@ -393,6 +393,52 @@ class TestTwoPhaseSyncMigration:
         c.close()
 
 
+class TestReferenceStateMigration:
+    """BDL-057.6: ``reference_state`` is created on an old DB via the migration path."""
+
+    def test_table_created_on_old_db(self, tmp_path: Path) -> None:
+        """An old DB without ``reference_state`` gains it via ensure_schema_migrations."""
+        db_path = tmp_path / "test.db"
+        c = open_db(db_path)
+        # Minimal pre-BDL-057 schema: a sync_state, no reference_state.
+        c.executescript(
+            "CREATE TABLE IF NOT EXISTS sync_state ("
+            "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "  doc_path TEXT NOT NULL,"
+            "  code_path TEXT NOT NULL,"
+            "  ref_id TEXT NOT NULL,"
+            "  code_hash_at_sync TEXT NOT NULL,"
+            "  doc_hash_at_sync TEXT NOT NULL,"
+            "  synced_at TEXT NOT NULL,"
+            "  status TEXT NOT NULL DEFAULT 'ok',"
+            "  UNIQUE(doc_path, code_path)"
+            ");"
+        )
+        from beadloom.infrastructure.db import _table_exists, ensure_schema_migrations
+
+        assert not _table_exists(c, "reference_state")
+
+        ensure_schema_migrations(c)
+
+        assert _table_exists(c, "reference_state")
+        # Columns match the canonical schema.
+        cols = {row[1] for row in c.execute("PRAGMA table_info(reference_state)").fetchall()}
+        assert {"doc_path", "watches", "aggregate_hash", "status"} <= cols
+        c.close()
+
+    def test_migration_idempotent(self, tmp_path: Path) -> None:
+        """Running the migration twice on a DB that already has the table is safe."""
+        db_path = tmp_path / "test.db"
+        c = open_db(db_path)
+        create_schema(c)
+        from beadloom.infrastructure.db import _table_exists, ensure_schema_migrations
+
+        ensure_schema_migrations(c)
+        ensure_schema_migrations(c)
+        assert _table_exists(c, "reference_state")
+        c.close()
+
+
 class TestKindCheckDropMigration:
     """BDL-038 U1: legacy DDD-only ``kind`` CHECK is dropped on existing DBs."""
 

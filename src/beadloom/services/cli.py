@@ -1914,7 +1914,17 @@ def sync_update(
     filtered = [r for r in results if r["ref_id"] == ref_id]
 
     if not filtered:
-        click.echo(f"No sync pairs found for {ref_id}.")
+        # No symbol pair matched. The id may instead be a reference doc
+        # (BDL-057 Layer 2) addressed by its doc_path — re-baseline it through
+        # the same path `--yes` uses, so `sync-update docs/architecture.md`
+        # clears surface drift instead of printing "No sync pairs found".
+        from beadloom.doc_sync.engine import mark_reference_synced
+
+        ref_docs = mark_reference_synced(conn, ref_id, project_root)
+        if ref_docs:
+            click.echo(f"Re-baselined reference doc {ref_id}.")
+        else:
+            click.echo(f"No sync pairs found for {ref_id}.")
         conn.close()
         return
 

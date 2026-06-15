@@ -674,3 +674,65 @@ class TestSyncCheckJsonAdditiveShape:
             assert "surface_drift" not in data["summary"]
         else:
             assert result.exit_code == 1
+
+
+# ===========================================================================
+# 4. Interactive sync-update on a reference doc (BDL-057.6, review .4 fix).
+# ===========================================================================
+
+
+class TestInteractiveSyncUpdateReferenceDoc:
+    """`sync-update <doc>` without `--yes`, run on a drifted reference doc, must
+    re-baseline it (route through ``mark_reference_synced``) rather than print
+    the misleading "No sync pairs found" with no hint."""
+
+    def _drifted_reference_project(self, tmp_path: Path) -> Path:
+        project = tmp_path / "interactive_ref"
+        _scaffold(project)
+        _write_pyproject(project, version="2.0.0")
+        _write_graph(project, ["F1"])
+        (project / "docs" / "architecture.md").write_text(
+            "<!-- beadloom:watches=graph -->\n# Architecture\nProse.\n",
+            encoding="utf-8",
+        )
+        reindex(project)  # baseline the reference doc
+        _write_graph(project, ["F1", "F2"])  # graph surface drifts
+        incremental_reindex(project)
+        return project
+
+    def test_interactive_sync_update_rebaselines_reference_doc(
+        self, tmp_path: Path
+    ) -> None:
+        # Arrange: a reference doc whose watched graph surface has drifted.
+        project = self._drifted_reference_project(tmp_path)
+        conn = open_db(project / ".beadloom" / "beadloom.db")
+        assert check_reference_drift(conn, project)[0]["status"] == "surface_drift"
+        conn.close()
+
+        # Act: interactive sync-update (no --yes) addressed by the doc path.
+        result = CliRunner().invoke(
+            main,
+            ["sync-update", "docs/architecture.md", "--project", str(project)],
+        )
+
+        # Assert: it did NOT print the misleading "No sync pairs found", and the
+        # drift is cleared (re-baselined through the reference path).
+        assert result.exit_code == 0
+        assert "No sync pairs found" not in result.output
+        conn = open_db(project / ".beadloom" / "beadloom.db")
+        assert check_reference_drift(conn, project)[0]["status"] == "ok"
+        conn.close()
+
+    def test_interactive_sync_update_unknown_ref_still_reports_no_pairs(
+        self, tmp_path: Path
+    ) -> None:
+        # Arrange: a clean watching repo; an id that is neither a symbol pair
+        # nor a reference doc.
+        project = _watching_project(tmp_path, watches="graph")
+        # Act
+        result = CliRunner().invoke(
+            main,
+            ["sync-update", "does/not/exist.md", "--project", str(project)],
+        )
+        # Assert: the original message is preserved for a genuine no-match.
+        assert "No sync pairs found" in result.output

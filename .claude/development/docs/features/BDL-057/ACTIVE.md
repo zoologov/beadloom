@@ -21,7 +21,7 @@
 | beadloom-sq4a.2 | dev | open (ready) | — |
 | beadloom-sq4a.3 | test | in progress | .1, .2 |
 | beadloom-sq4a.4 | review | blocked | .3 |
-| beadloom-sq4a.5 | tech-writer | blocked | .4 |
+| beadloom-sq4a.5 | tech-writer | ready | .4 |
 
 ## Plan notes
 

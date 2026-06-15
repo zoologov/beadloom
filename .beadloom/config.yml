@@ -4,3 +4,21 @@ scan_paths:
 - src
 sync:
   hook_mode: warn
+docs_audit:
+  # Targeted false-positive suppressions (BDL-057.6). Each {path, fact, value}
+  # triple silences exactly one keyword-proximity false match — it does NOT mask
+  # genuine stale facts of the same type elsewhere (those stay flagged). Confirmed
+  # false positives by review (BDL-057.4):
+  #  - context-oracle/README: "12 supported languages" / "12 frameworks" describe
+  #    parser breadth, not the in-repo language_count(1)/framework_count(53).
+  #  - vitepress-site: "404" is an HTTP status, not a CLI command count.
+  ignore:
+    - path: docs/domains/context-oracle/README.md
+      fact: language_count
+      value: 12
+    - path: docs/domains/context-oracle/README.md
+      fact: framework_count
+      value: 12
+    - path: docs/guides/vitepress-site.md
+      fact: cli_command_count
+      value: 404

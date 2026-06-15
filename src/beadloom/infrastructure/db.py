@@ -22,6 +22,25 @@ SCHEMA_VERSION = "4"
 # with ``graph.loader.VALID_LIFECYCLES``.
 _LIFECYCLE_CHECK = "CHECK(lifecycle IN ('active','planned','deprecated','dead','external'))"
 
+# Reference doc surface-drift state (BDL-057 Layer 2). Single source of truth for
+# the DDL — reused by both fresh-schema creation (``_SCHEMA_SQL``) and the
+# migration guard (``_ensure_reference_state_table``) so an old DB upgrades.
+# Parallel to ``sync_state`` but for *reference / overview* docs that opt in with
+# an in-doc ``<!-- beadloom:watches=cli,graph,flow.yml -->`` annotation.
+# ``aggregate_hash`` is a coarse identity-set hash over the watched surfaces; a
+# mismatch on ``sync-check`` yields ``status='surface_drift'`` (a WARNING, never
+# a hard failure). Kept separate so the symbol-pair logic + reason-masking
+# invariant in ``sync_state`` stay untouched.
+_REFERENCE_STATE_SQL = """\
+CREATE TABLE IF NOT EXISTS reference_state (
+    doc_path        TEXT PRIMARY KEY,
+    watches         TEXT NOT NULL,
+    aggregate_hash  TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'ok'
+        CHECK(status IN ('ok','surface_drift'))
+);
+"""
+
 _SCHEMA_SQL = """\
 -- Graph nodes
 -- ``kind`` is a free-form string (paradigm-agnostic, BDL-038 U1): the DDD preset
@@ -123,20 +142,8 @@ CREATE TABLE IF NOT EXISTS sync_state (
     UNIQUE(doc_path, code_path)
 );
 
--- Reference doc surface-drift state (BDL-057 Layer 2).
--- Parallel to ``sync_state`` but for *reference / overview* docs that opt in
--- with an in-doc ``<!-- beadloom:watches=cli,graph,flow.yml -->`` annotation.
--- ``aggregate_hash`` is a coarse identity-set hash over the watched surfaces;
--- a mismatch on ``sync-check`` yields ``status='surface_drift'`` (a WARNING,
--- never a hard failure). Kept separate so the symbol-pair logic + reason-masking
--- invariant in ``sync_state`` stay untouched.
-CREATE TABLE IF NOT EXISTS reference_state (
-    doc_path        TEXT PRIMARY KEY,
-    watches         TEXT NOT NULL,
-    aggregate_hash  TEXT NOT NULL,
-    status          TEXT NOT NULL DEFAULT 'ok'
-        CHECK(status IN ('ok','surface_drift'))
-);
+-- Reference doc surface-drift state (BDL-057 Layer 2) — see ``_REFERENCE_STATE_SQL``
+-- (appended to this schema below; single source of truth for the DDL).
 
 -- Index metadata
 CREATE TABLE IF NOT EXISTS meta (
@@ -301,8 +308,22 @@ def ensure_schema_migrations(conn: sqlite3.Connection) -> None:
 
     _migrate_edges_contract_kinds(conn)
     _ensure_foreign_edges_table(conn)
+    _ensure_reference_state_table(conn)
     _migrate_drop_kind_checks(conn)
     _migrate_lifecycle_external(conn)
+
+
+def _ensure_reference_state_table(conn: sqlite3.Connection) -> None:
+    """Create the ``reference_state`` table on a pre-BDL-057 DB (idempotent).
+
+    The table is also declared in :data:`_SCHEMA_SQL` (fresh schema), but a DB
+    created before BDL-057 and never reindexed-from-scratch would lack it,
+    raising ``no such table: reference_state`` on the first ``sync-check``.
+    ``CREATE TABLE IF NOT EXISTS`` upgrades such a DB cleanly and is a no-op
+    once the table exists.
+    """
+    conn.execute(_REFERENCE_STATE_SQL)
+    conn.commit()
 
 
 def _migrate_edges_contract_kinds(conn: sqlite3.Connection) -> None:
