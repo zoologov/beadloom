@@ -1,79 +1,81 @@
-# Агентная разработка в Beadloom 2.0.0: архитектура
+# Agentic development in Beadloom 2.0.0: architecture
 
-> Документ описывает, **где что разворачивается**, **кто за что отвечает** и **как части системы взаимодействуют между собой** — в текущем, выпущенном состоянии (версия 2.0.0).
+> Read this in other languages: [Русский](./multi-agent-development.ru.md)
+
+> This document describes **where each part runs**, **who is responsible for what**, and **how the parts interact** — in the current, released state (version 2.0.0).
 >
-> Хронология изменений: [BDL-047](./features/BDL-047/RFC.md) (первый AI tech-writer в CI) → BDL-048 (упаковка многоагентного процесса и инструменты для MCP) → [BDL-049](./features/BDL-049/RFC.md) (переход на trunk-based и запуск по pull request) → [BDL-050](./features/BDL-050/RFC.md) (сведение CI в единый `ci.yml` и система вердиктов) → BDL-051 («Beadloom управляет сам собой») → BDL-053 (когерентность трекера и файла `ACTIVE.md`) → BDL-052 (настраиваемый, не привязанный к инструменту агентный процесс и pre-push Gate).
+> Change history: BDL-047 (the first AI tech-writer in CI) → BDL-048 (packaging the multi-agent workflow and the MCP tools) → BDL-049 (the move to trunk-based and pull-request triggering) → BDL-050 (consolidating CI into a single `ci.yml` and the verdict system) → BDL-051 ("Beadloom governs itself") → BDL-053 (tracker / `ACTIVE.md` coherence) → BDL-052 (the configurable, tool-agnostic agentic workflow and the pre-push Gate).
 
 ---
 
-## Зачем это всё нужно
+## Why this exists
 
-Beadloom держит в одном графе и архитектуру проекта, и его документацию, и следит за тем, чтобы они не расходились. Когда код меняется, команда `sync-check` честно говорит: «вот этот раздел документации больше не соответствует коду». Но дальше кто-то должен сесть и переписать раздел — а это ровно тот шаг, который в реальной жизни откладывают, и документация сильно устаревает.
+Beadloom keeps a project's architecture and its documentation in a single graph and watches that the two don't drift apart. When the code changes, `sync-check` says plainly: "this documentation section no longer matches the code." But then someone has to sit down and rewrite the section — and that is exactly the step that gets put off in real life, so the documentation falls badly out of date.
 
-Beadloom 2.0.0 закрывает этот разрыв: обновление документации становится частью обычного процесса разработки.
+Beadloom 2.0.0 closes that gap: updating the documentation becomes part of the ordinary development workflow.
 
-Главный принцип:
-**В `main` не попадает код без актуальной документации.** Это не вопрос дисциплины — за этим следят инструменты: детерминированный Beadloom Gate перед push и на стороне CI. Забыть обновить документацию нельзя — Gate просто не пропустит изменение дальше.
-
----
-
-## Главный принцип 2.0.0: два слоя, один инвариант
-
-Документация пишется в двух местах, но проверяется одним и тем же детерминированным барьером.
-
-**Слой первый, основной — локально, на агенте самого разработчика.** Упакованный агентный процесс Beadloom (`/task-init` → `/coordinator` → роли dev / test / review / tech-writer → push → Beadloom Gate) исполняется тем инструментом, который у разработчика уже открыт: Claude Code, Cursor и так далее. Роль tech-writer пишет документацию прямо здесь, рядом с кодом. Никакой второй языковой модели локально поднимать не нужно — связка Goose + Qwen остаётся исключительно серверной.
-
-**Барьер — pre-push Beadloom Gate.** Перед каждым push команда `beadloom ci` (полный набор детерминированных проверок) запускается как блокирующий git-хук. Если Gate красный — например, документация разошлась с кодом — push останавливается. Тогда координатор запускает роль tech-writer, прогоняет Gate заново и пропускает изменение к pull request только после того, как тот стал зелёным.
-
-**Слой второй, резервный — на стороне CI.** Серверный AI tech-writer на связке Goose + Qwen (наследие BDL-049/050) никуда не делся, но теперь он включается редко — только когда pull request всё-таки пришёл без свежей документации, не пройдя локальный Gate (например, от внешнего участника или от того, кто обошёл процесс). Тогда он обязан привести документацию в порядок. А поскольку локальный Gate делает такие случаи редкими, его пятнадцатиминутный прогон больше не задерживает каждое слияние.
-
-Одна фраза, которую стоит держать в голове:
-
-**Всё в этом цикле детерминировано, кроме одного шага — написания самого текста документации. И даже этот шаг ограничен Beadloom Gate и человеческим ревью pull request-а.**
+The core principle:
+**No code reaches `main` without up-to-date documentation.** This isn't a matter of discipline — tools watch for it: the deterministic Beadloom Gate before push and on the CI side. You can't forget to update the documentation — the Gate simply won't let the change through.
 
 ---
 
-## Участники: кто есть кто
+## The core principle of 2.0.0: two layers, one invariant
 
-Система намеренно разделена на части: Beadloom остаётся ядром — поставщиком инструментов и данных — и не привязан к конкретному агентному инструменту.
+Documentation is written in two places, but it is checked by the same deterministic barrier.
 
-| Участник | Где живёт в репозитории | Что делает |
+**The first, primary layer — locally, on the developer's own agent.** Beadloom's packaged agentic workflow (`/task-init` → `/coordinator` → the dev / test / review / tech-writer roles → push → Beadloom Gate) runs in the tool the developer already has open: Claude Code, Cursor, and so on. The tech-writer role writes documentation right here, next to the code. There is no need to bring up a second language model locally — the Goose + Qwen pair stays server-side only.
+
+**The barrier — the pre-push Beadloom Gate.** Before every push, `beadloom ci` (the full set of deterministic checks) runs as a blocking git hook. If the Gate is red — for example, the documentation has drifted from the code — the push is stopped. Then the coordinator runs the tech-writer role, runs the Gate again, and only lets the change reach a pull request once it is green.
+
+**The second, fallback layer — on the CI side.** The server-side AI tech-writer on the Goose + Qwen pair (inherited from BDL-049/050) hasn't gone anywhere, but it now kicks in rarely — only when a pull request did arrive without fresh documentation, having skipped the local Gate (for example, from an external contributor or from someone who bypassed the workflow). Then it must bring the documentation into order. And because the local Gate makes such cases rare, its fifteen-minute run no longer holds up every merge.
+
+One sentence worth keeping in mind:
+
+**Everything in this loop is deterministic except one step — writing the documentation text itself. And even that step is bounded by the Beadloom Gate and human pull-request review.**
+
+---
+
+## The participants: who's who
+
+The system is split into parts on purpose: Beadloom stays the core — a supplier of tools and data — and is not tied to any particular agentic tool.
+
+| Participant | Where it lives in the repo | What it does |
 |------|-------------------------|------------|
-| **Beadloom** | `src/beadloom/` | Граф архитектуры, `sync-check`, `ctx` / `why`, `beadloom ci`, конфигуратор ролей. Про Goose ничего не знает. |
-| **Локальный агент** | инструмент разработчика (Claude Code, Cursor) | Исполняет упакованный процесс: координатор и роли dev / test / review / tech-writer. Пишет документацию рядом с кодом. |
-| **Оркестратор (harness)** | `src/beadloom/ai_agents/ai_techwriter/` | Детерминированный цикл серверного AI tech-writer: поиск устаревших разделов → починка → схождение к нулю → Gate → вердикт → публикация. |
-| **Goose** | на self-hosted runner; recipe (`recipe.yaml`) поставляется в составе пакета `beadloom` | Серверный агент: читает контекст, переписывает по одному разделу документации за раз. |
-| **Qwen3.7-Plus** | внешний API (DashScope, совместимый с OpenAI) | Модель (`model = qwen3.7-plus`). Ключ хранится только в секрете CI. |
+| **Beadloom** | `src/beadloom/` | The architecture graph, `sync-check`, `ctx` / `why`, `beadloom ci`, the role configurator. Knows nothing about Goose. |
+| **Local agent** | the developer's tool (Claude Code, Cursor) | Runs the packaged workflow: the coordinator and the dev / test / review / tech-writer roles. Writes documentation next to the code. |
+| **Orchestrator (harness)** | `src/beadloom/ai_agents/ai_techwriter/` | The deterministic loop of the server-side AI tech-writer: find stale sections → fix → converge to zero → Gate → verdict → publish. |
+| **Goose** | on a self-hosted runner; the recipe (`recipe.yaml`) ships inside the `beadloom` package | The server-side agent: reads context, rewrites one documentation section at a time. |
+| **Qwen3.7-Plus** | an external API (DashScope, OpenAI-compatible) | The model (`model = qwen3.7-plus`). The key lives only in a CI secret. |
 
-Beadloom **поставляет примитивы**. Оркестратор **собирает из них цикл**. Goose **занимается только написанием документации** — и только в тех границах, которые ему задал оркестратор.
+Beadloom **supplies the primitives**. The orchestrator **assembles them into a loop**. Goose **only writes documentation** — and only within the bounds the orchestrator gives it.
 
-Важное изменение в версии 2.0.0: оркестратор серверного AI tech-writer переехал из служебного каталога `tools/` прямо в пакет — в домен `ai_agents`. Теперь это полноценный, отслеживаемый графом компонент Beadloom (со своим узлом, символами, проверкой `sync-check` и архитектурными границами), а не внешняя пристройка. Вызывается он как `python -m beadloom.ai_agents.ai_techwriter` и поставляется в составе устанавливаемого пакета — никакого копирования исходников в чужой репозиторий больше не происходит.
+An important change in 2.0.0: the server-side AI tech-writer orchestrator moved out of the utility `tools/` directory and straight into the package — into the `ai_agents` domain. It is now a full, graph-tracked component of Beadloom (with its own node, symbols, `sync-check`, and architectural boundaries), not an external add-on. It is invoked as `python -m beadloom.ai_agents.ai_techwriter` and ships inside the installable package — no more copying sources into someone else's repository.
 
-**Инструменты процесса для MCP (BDL-048).** Отдельно от AI tech-writer Beadloom отдаёт детерминированные шаги процесса как инструменты MCP (`services/mcp_server.py`): `task_init`, `bead_context`, `complete_bead`, `checkpoint`. Это **не оркестрация** — подробнее в разделе [«Ограничения»](#ограничения).
+**Process tools for MCP (BDL-048).** Separately from the AI tech-writer, Beadloom exposes the deterministic process steps as MCP tools (`services/mcp_server.py`): `task_init`, `bead_context`, `complete_bead`, `checkpoint`. This is **not orchestration** — see the [Limitations](#limitations) section.
 
 ---
 
-## Настраиваемый агентный процесс: конфигуратор ролей (BDL-052)
+## The configurable agentic workflow: the role configurator (BDL-052)
 
-Главное новшество версии 2.0.0 для команд — упакованный процесс перестал быть привязан и к одному языку программирования, и к одному инструменту. Теперь роли собираются из частей по конфигурации.
+The main 2.0.0 advance for teams is that the packaged workflow is no longer tied to one programming language or one tool. Roles are now composed from parts according to configuration.
 
 ```mermaid
 flowchart TB
-  subgraph CANON["Единый источник правды"]
-    CORE["CORE — общие правила ролей<br/>(TDD, аннотации # beadloom:, чистый код,<br/>петля Gate, журнал изменений API)"]
-    ARCH["Архитектурные overlay<br/>ddd · fsd (равноправны)"]
-    STACK["Stack overlay<br/>python · fastapi · javascript · typescript · vuejs"]
+  subgraph CANON["Single source of truth"]
+    CORE["CORE — shared role rules<br/>(TDD, # beadloom: annotations, clean code,<br/>Gate loop, API change log)"]
+    ARCH["Architecture overlays<br/>ddd · fsd (peers)"]
+    STACK["Stack overlays<br/>python · fastapi · javascript · typescript · vuejs"]
   end
 
   FLOW[".beadloom/flow.yml<br/>tools · architecture · stack · quality"]
   COMPOSE["beadloom setup-agentic-flow<br/>compose(CORE + architecture + stack)"]
 
-  subgraph ADAPTERS["Адаптеры под инструмент (генерируются)"]
+  subgraph ADAPTERS["Per-tool adapters (generated)"]
     CLAUDE[".claude/agents/* + .claude/commands/*"]
-    CURSOR[".cursor/agents/* + правила Cursor"]
+    CURSOR[".cursor/agents/* + Cursor rules"]
   end
 
-  GUARD["drift-guard: адаптер ≡ компоновке из CORE+overlay"]
+  GUARD["drift-guard: adapter ≡ composition of CORE+overlay"]
 
   CORE --> COMPOSE
   ARCH --> COMPOSE
@@ -85,108 +87,108 @@ flowchart TB
   CURSOR -.-> GUARD
 ```
 
-Устроено так:
+How it works:
 
-- **CORE** — универсальное ядро ролей, не зависящее ни от языка, ни от инструмента: разработка через тесты, дисциплина аннотаций (роль dev сама проставляет в коде пометки `# beadloom:domain=…` / `feature=…` / `component=…`, чтобы граф оставался честным), принципы чистого кода, петля Beadloom Gate, журнал изменений публичного API для ролей review и tech-writer.
-- **Архитектурные overlay** — **ddd** (Domain-Driven Design для бэкенда) и **fsd** (Feature-Sliced Design для фронтенда) на равных правах: каждый добавляет к роли свои правила слоёв и границ и свой словарь аннотаций.
-- **Stack overlay** — конкретика языка и фреймворка: `python`, `fastapi`, `javascript`, `typescript`, `vuejs` (каждый приносит свои образцы кода и команды линтинга, типизации и тестов).
-- **Конфигурация** `.beadloom/flow.yml` описывает, что собрать: какие инструменты (Claude Code, Cursor), какая архитектура (ddd или fsd), какой стек. Команда `beadloom setup-agentic-flow --tool/--stack/--architecture` компонует CORE с выбранными overlay и пишет адаптеры под каждый инструмент. **Drift-guard** (отдельный тест) следит, чтобы сгенерированные адаптеры всегда соответствовали компоновке. Это значит, что роли не правят вручную: их всегда пересобирает компоновщик, и ручная правка адаптера будет затёрта при следующей сборке.
+- **CORE** — the universal role core, independent of both language and tool: test-driven development, annotation discipline (the dev role itself places `# beadloom:domain=…` / `feature=…` / `component=…` markers in the code so the graph stays honest), clean-code principles, the Beadloom Gate loop, and the public-API change log for the review and tech-writer roles.
+- **Architecture overlays** — **ddd** (Domain-Driven Design for the backend) and **fsd** (Feature-Sliced Design for the frontend) as peers: each adds its own layer and boundary rules and its own annotation vocabulary to a role.
+- **Stack overlays** — the language and framework specifics: `python`, `fastapi`, `javascript`, `typescript`, `vuejs` (each brings its own code samples and lint, type-check, and test commands).
+- **The configuration** `.beadloom/flow.yml` describes what to compose: which tools (Claude Code, Cursor), which architecture (ddd or fsd), which stack. `beadloom setup-agentic-flow --tool/--stack/--architecture` composes CORE with the chosen overlays and writes the per-tool adapters. A **drift-guard** (a dedicated test) ensures the generated adapters always match the composition. This means roles are not edited by hand: the composer always regenerates them, and a hand-edit to an adapter is overwritten on the next build.
 
-У самого Beadloom конфигурация скромная — `tools: [claude]`, `architecture: [ddd]`, `stack: [python]`. Команде, которая работает, скажем, над фронтендом на Vue с TypeScript по Feature-Sliced Design в Cursor, достаётся тот же качественный CORE и нужные ей overlay — всё это включается одной строкой в `flow.yml`.
+Beadloom's own configuration is modest — `tools: [claude]`, `architecture: [ddd]`, `stack: [python]`. A team working on, say, a Vue frontend in TypeScript following Feature-Sliced Design in Cursor gets the same quality CORE plus the overlays it needs — all of it turned on by a single line in `flow.yml`.
 
-Возможности Cursor по части агентов (собственные субагенты, оркестрация с передачей результата, фоновые задачи, worktree) на сегодня сопоставимы с Claude Code, поэтому полный процесс — координатор плюс роли — идёт на обоих инструментах одинаково. Для инструмента, у которого субагентов нет, предусмотрен запасной режим: тот же процесс выполняется последовательно, по описанию из `AGENTS.md`. Корректность при этом не страдает — за неё отвечает Gate, — теряется только параллельность.
+Cursor's agent capabilities (its own subagents, orchestration with result hand-off, background tasks, worktrees) are today on par with Claude Code, so the full workflow — coordinator plus roles — runs the same on both tools. For a tool with no subagents there is a fallback: the same workflow runs sequentially, following the description in `AGENTS.md`. Correctness doesn't suffer — the Gate is responsible for it — only parallelism is lost.
 
 ---
 
-## Pre-push Beadloom Gate и петля координатора (BDL-052)
+## The pre-push Beadloom Gate and the coordinator loop (BDL-052)
 
-Локальный барьер — это обычный git-хук, который ставится командой `beadloom install-hooks`.
+The local barrier is an ordinary git hook installed by `beadloom install-hooks`.
 
 ```mermaid
 flowchart TB
-  WORK["Координатор гонит волну:<br/>dev → test → review → tech-writer"]
+  WORK["Coordinator runs a wave:<br/>dev → test → review → tech-writer"]
   PUSH["git push"]
-  GATE["pre-push хук: beadloom ci"]
-  RED{"Gate зелёный?"}
-  FIX["Координатор запускает tech-writer<br/>на разошедшихся разделах"]
-  PR["pull request в main"]
+  GATE["pre-push hook: beadloom ci"]
+  RED{"Gate green?"}
+  FIX["Coordinator runs tech-writer<br/>on the drifted sections"]
+  PR["pull request to main"]
 
   WORK --> PUSH --> GATE --> RED
-  RED -->|нет| FIX --> GATE
-  RED -->|да| PR
+  RED -->|no| FIX --> GATE
+  RED -->|yes| PR
 ```
 
-Сам цикл описан в `/coordinator` как явная последовательность шагов, а не как пожелание, которое агент должен «не забыть»: запустить `beadloom ci`, посмотреть код возврата, и если он красный — запустить роль tech-writer на разошедшихся разделах и прогнать Gate заново (с ограничением на число повторов, чтобы не зациклиться). Только зелёный Gate открывает дорогу к pull request.
+The loop itself is described in `/coordinator` as an explicit sequence of steps, not as a wish the agent should "remember": run `beadloom ci`, look at the exit code, and if it is red — run the tech-writer role on the drifted sections and run the Gate again (with a cap on retries so it can't loop forever). Only a green Gate opens the way to a pull request.
 
-`pre-commit` остаётся лёгкой проверкой (линтинг и быстрый `sync-check`), а **`pre-push` — это и есть авторитетный блокирующий Gate**. Аварийный выход описан честно: `git push --no-verify` хук обойдёт, но это осознанное исключение, а не норма. В репозитории без Beadloom хук просто ничего не делает и ничего не блокирует.
-
----
-
-## Beadloom управляет сам собой (BDL-051)
-
-Контекст, без которого двухслойная модель не имела бы смысла: в версии 2.0.0 Beadloom применил собственный тезис к самому себе.
-
-- Появился вид узла **component** (внутренний строительный блок рядом с feature) и проверка **module-coverage** в режиме **ошибки**: каждый модуль в `src/` — это либо узел графа (feature или component), либо явно перечисленное исключение. Никакого «теневого» кода, о котором граф не знает: новый неучтённый модуль роняет `beadloom ci`.
-- Серверный AI tech-writer стал первоклассным доменом `ai_agents` внутри пакета (а не внешним каталогом), со своими границами импорта.
-- Все модули проекта классифицированы и документированы.
-
-Именно поэтому Beadloom — первый и самый строгий потребитель собственного процесса: правило «нет кода без документации» распространяется и на его собственный код.
+`pre-commit` stays a light check (linting and a quick `sync-check`), while **`pre-push` is the authoritative blocking Gate**. The emergency exit is documented honestly: `git push --no-verify` will bypass the hook, but that is a deliberate exception, not the norm. In a repository without Beadloom the hook simply does nothing and blocks nothing.
 
 ---
 
-## Где что физически работает
+## Beadloom governs itself (BDL-051)
 
-Частый вопрос: «это в облаке GitHub/GitLab или у нас на сервере?»
+The context without which the two-layer model would make no sense: in 2.0.0 Beadloom applied its own thesis to itself.
+
+- A **component** node kind appeared (an internal building block alongside feature) and a **module-coverage** check in **error** mode: every module in `src/` is either a graph node (feature or component) or an explicitly listed exemption. No "shadow" code the graph doesn't know about: a new untracked module fails `beadloom ci`.
+- The server-side AI tech-writer became a first-class `ai_agents` domain inside the package (rather than an external directory), with its own import boundaries.
+- Every module in the project is classified and documented.
+
+This is exactly why Beadloom is the first and strictest consumer of its own workflow: the "no code without documentation" rule applies to its own code too.
+
+---
+
+## Where each part physically runs
+
+A frequent question: "is this in the GitHub/GitLab cloud or on our server?"
 
 ```mermaid
 flowchart TB
-  subgraph LOCAL["Машина разработчика"]
-    AGENT["Агент пользователя<br/>Claude Code / Cursor"]
+  subgraph LOCAL["Developer machine"]
+    AGENT["User agent<br/>Claude Code / Cursor"]
     PREPUSH["pre-push Beadloom Gate"]
   end
 
   subgraph GITHUB["GitHub"]
-    GH_REPO["Git-репозиторий"]
-    GH_SECRET["Секрет: QWEN_API_KEY"]
-    GH_PAT["Секрет: AI_TW_PAT"]
+    GH_REPO["Git repository"]
+    GH_SECRET["Secret: QWEN_API_KEY"]
+    GH_PAT["Secret: AI_TW_PAT"]
     GH_CI["GitHub Actions: ci.yml<br/>on pull_request to main"]
     GH_DEPLOY["GitHub Actions: deploy-site.yml<br/>on push to main"]
     GH_PR["Pull request"]
   end
 
-  subgraph CLOUD_RUN["Облачные runner-ы GitHub/GitLab"]
-    JOB_GATE["задание gate"]
-    JOB_TESTS["задание tests 3.10–3.13"]
-    JOB_SITE["задание site-build (VitePress)"]
+  subgraph CLOUD_RUN["GitHub/GitLab cloud runners"]
+    JOB_GATE["gate job"]
+    JOB_TESTS["tests job 3.10–3.13"]
+    JOB_SITE["site-build job (VitePress)"]
   end
 
   subgraph VPS["Self-hosted VPS runner"]
-    AITW["задание ai-techwriter<br/>needs: gate, tests, site-build"]
-    subgraph RUNTIME["Установлено на runner, версии зафиксированы"]
+    AITW["ai-techwriter job<br/>needs: gate, tests, site-build"]
+    subgraph RUNTIME["Installed on the runner, versions pinned"]
       UV["uv + Python"]
       BL_CLI["beadloom CLI"]
       GOOSE_RT["Goose"]
     end
-    ORCH["beadloom.ai_agents.ai_techwriter<br/>оркестратор"]
-    RECIPE["Goose recipe<br/>инструкции + список разрешений"]
+    ORCH["beadloom.ai_agents.ai_techwriter<br/>orchestrator"]
+    RECIPE["Goose recipe<br/>instructions + allowlist"]
   end
 
-  subgraph EXTERNAL["Внешний сервис"]
-    QWEN["Qwen3.7-Plus API<br/>DashScope, совместим с OpenAI"]
+  subgraph EXTERNAL["External service"]
+    QWEN["Qwen3.7-Plus API<br/>DashScope, OpenAI-compatible"]
   end
 
-  subgraph DEV["Команда"]
-    REVIEW["ревью pull request-а"]
-    MERGE["слияние человеком"]
+  subgraph DEV["Team"]
+    REVIEW["pull request review"]
+    MERGE["human merge"]
   end
 
   AGENT --> PREPUSH
-  PREPUSH -->|"зелёный Gate → push"| GH_REPO
+  PREPUSH -->|"green Gate → push"| GH_REPO
   GH_REPO --> GH_PR --> GH_CI
   GH_CI --> JOB_GATE
   GH_CI --> JOB_TESTS
   GH_CI --> JOB_SITE
-  GH_CI -->|"needs: все зелёные"| AITW
+  GH_CI -->|"needs: all green"| AITW
   GH_SECRET --> AITW
   GH_PAT --> AITW
   AITW --> ORCH
@@ -194,73 +196,73 @@ flowchart TB
   ORCH --> GOOSE_RT
   GOOSE_RT --> RECIPE
   GOOSE_RT -->|HTTPS| QWEN
-  ORCH -->|"commit + push (AI_TW_PAT) в ветку pull request-а"| GH_REPO
-  ORCH -->|"комментарий в pull request"| GH_PR
+  ORCH -->|"commit + push (AI_TW_PAT) to the pull-request branch"| GH_REPO
+  ORCH -->|"comment on the pull request"| GH_PR
   GH_PR --> REVIEW --> MERGE --> GH_REPO
   MERGE -->|"push: main"| GH_DEPLOY
 ```
 
-**Локально** живёт основной слой: агент разработчика и pre-push Gate. В облако приходит уже согласованная пара — код и документация вместе.
+**Locally** lives the primary layer: the developer's agent and the pre-push Gate. What reaches the cloud is an already-consistent pair — code and documentation together.
 
-**В облаке GitHub/GitLab** лежат код, каталог `docs/**`, каталог `.beadloom/`, описание конвейера CI и открытые pull request-ы. Единый `ci.yml` запускается на каждый pull request в `main`: задания `gate` (вердикт `beadloom ci`), `tests` (матрица версий Python 3.10–3.13) и `site-build` (сборка сайта на VitePress) идут **параллельно** на облачных runner-ах. Задание `ai-techwriter` объявлено через `needs: [gate, tests, site-build]` и стартует **только если все три зелёные** — сломанный pull request не тратит токены Qwen. Отдельный `deploy-site.yml` — **единственное**, что запускается на `push: main` и публикует сайт на GitHub Pages. При строгом trunk-based ветка `main` зелёная по построению.
+**In the GitHub/GitLab cloud** live the code, the `docs/**` directory, the `.beadloom/` directory, the CI pipeline definition, and the open pull requests. The single `ci.yml` runs on every pull request to `main`: the `gate` job (the `beadloom ci` verdict), `tests` (a matrix of Python 3.10–3.13), and `site-build` (the VitePress build) run **in parallel** on cloud runners. The `ai-techwriter` job is declared via `needs: [gate, tests, site-build]` and starts **only if all three are green** — a broken pull request doesn't spend Qwen tokens. A separate `deploy-site.yml` is **the only** thing that runs on `push: main` and publishes the site to GitHub Pages. With strict trunk-based, the `main` branch is green by construction.
 
-**Self-hosted VPS runner** — единственное место, где одновременно живут Goose, оркестратор и доступ к ключу модели. Каждый прогон начинается с чистого checkout.
+**The self-hosted VPS runner** is the only place where Goose, the orchestrator, and access to the model key live at the same time. Each run starts from a clean checkout.
 
-**Qwen3.7-Plus** — облачный API. Локальной модели на сервере нет.
+**Qwen3.7-Plus** is a cloud API. There is no local model on the server.
 
-**Beadloom CLI** ставится на runner, но его исходники — часть репозитория в `src/beadloom/`. Это продукт, а не инфраструктура CI.
+**The Beadloom CLI** is installed on the runner, but its sources are part of the repository in `src/beadloom/`. It is the product, not CI infrastructure.
 
 ---
 
-## Trunk-based и защита ветки (BDL-049 / BDL-050)
+## Trunk-based and branch protection (BDL-049 / BDL-050)
 
-`main` — точка интеграции и **защищённая ветка**: прямой push запрещён, всё едет через pull request. Каждая задача — короткоживущая ветка `features/<KEY>` → один pull request в `main` → слияние, когда проверки зелёные.
+`main` is the integration point and a **protected branch**: direct push is forbidden, everything travels through a pull request. Each task is a short-lived `features/<KEY>` branch → one pull request to `main` → merge when the checks are green.
 
-Защиту настраивает `onboarding/branch_protection.py`: набор обязательных проверок консолидированного `ci.yml` —
+Protection is configured by `onboarding/branch_protection.py`: the set of required checks of the consolidated `ci.yml` —
 
 ```
 gate · tests (3.10) · tests (3.11) · tests (3.12) · tests (3.13) · site-build · ai-techwriter
 ```
 
-Флаг `enforce_admins: true` означает, что даже владелец интегрируется через pull request (строгий trunk-based), а 0 обязательных ревью оставляют одиночному сопровождающему возможность самому выполнить слияние — но ветку `main` при этом обойти нельзя. Применяется идемпотентно командой `beadloom setup-branch-protection`.
+The `enforce_admins: true` flag means even the owner integrates through a pull request (strict trunk-based), and 0 required reviews leave a solo maintainer able to merge themselves — but the `main` branch still can't be bypassed. Applied idempotently by `beadloom setup-branch-protection`.
 
-Тонкость поведения GitHub: пропущенную обязательную проверку он считает нейтральной, то есть проходной. Поэтому при красном `gate`, `tests` или `site-build` задание `ai-techwriter` оказывается пропущенным, и pull request блокируют именно красные верхние проверки, а не пропущенный `ai-techwriter`. Когда верхние три зелёные, `ai-techwriter` запускается по-настоящему, и его вердикт становится барьером.
+A GitHub behavior subtlety: it treats a skipped required check as neutral, that is, as passing. So when `gate`, `tests`, or `site-build` is red, the `ai-techwriter` job ends up skipped, and the pull request is blocked precisely by the red upstream checks, not by the skipped `ai-techwriter`. When the upstream three are green, `ai-techwriter` runs for real, and its verdict becomes the barrier.
 
 ---
 
-## Что лежит в репозитории
+## What's in the repository
 
 ```mermaid
 flowchart LR
-  subgraph CORE["src/beadloom/ — ядро"]
+  subgraph CORE["src/beadloom/ — the core"]
     SYNC["sync-check --json --since"]
     CTX["ctx / why"]
     CI_GATE["beadloom ci"]
     MARK["sync-update --yes"]
-    ACTIVE["active-sync (когерентность ACTIVE.md + трекера)"]
+    ACTIVE["active-sync (ACTIVE.md + tracker coherence)"]
     SETUP["setup-agentic-flow / setup-ai-techwriter"]
     HOOKS["install-hooks (pre-commit + pre-push Gate)"]
-    BP["branch_protection.py (7 обязательных проверок)"]
-    MCP["mcp_server.py (инструменты процесса, BDL-048)"]
+    BP["branch_protection.py (7 required checks)"]
+    MCP["mcp_server.py (process tools, BDL-048)"]
   end
 
-  subgraph AIAGENTS["src/beadloom/ai_agents/ai_techwriter/ — оркестратор"]
-    H_SCOPE["scope + symbol_scope: что устарело и из-за каких символов"]
+  subgraph AIAGENTS["src/beadloom/ai_agents/ai_techwriter/ — orchestrator"]
+    H_SCOPE["scope + symbol_scope: what's stale and which symbols caused it"]
     H_PKT["context packet"]
-    H_LOOP["sync-update + схождение к нулю"]
-    H_RUN["runner: параллельные сессии + backoff"]
+    H_LOOP["sync-update + converge to zero"]
+    H_RUN["runner: parallel sessions + backoff"]
     H_VERDICT["classify_verdict: ok / flagged / infra"]
-    H_PUB["публикация: pr-branch / branch-pr"]
+    H_PUB["publish: pr-branch / branch-pr"]
     H_RECIPE["recipe.yaml + provision-runner.sh (package data)"]
   end
 
-  subgraph FLOWCFG["Конфигуратор ролей (BDL-052)"]
+  subgraph FLOWCFG["Role configurator (BDL-052)"]
     FLOW[".beadloom/flow.yml"]
     OVERLAYS["overlays: ddd/fsd + python/fastapi/js/ts/vue"]
-    ADAPT[".claude/agents · .cursor/agents (генерируются)"]
+    ADAPT[".claude/agents · .cursor/agents (generated)"]
   end
 
-  subgraph CI["Конфигурация CI"]
+  subgraph CI["CI configuration"]
     GH_YML[".github/workflows/ci.yml<br/>gate∥tests∥site-build → ai-techwriter"]
     GH_DEPLOY[".github/workflows/deploy-site.yml (push: main)"]
   end
@@ -268,44 +270,44 @@ flowchart LR
   GH_YML --> AIAGENTS
   AIAGENTS --> CORE
   FLOW --> OVERLAYS --> ADAPT
-  SETUP -.->|генерирует| GH_YML
-  SETUP -.->|генерирует| ADAPT
-  SETUP -.->|генерирует| H_RECIPE
+  SETUP -.->|generates| GH_YML
+  SETUP -.->|generates| ADAPT
+  SETUP -.->|generates| H_RECIPE
 ```
 
-Важный принцип сохранился: **цикл «починка → схождение → вердикт → публикация» не попадает в ядро Beadloom**. В `src/beadloom/` живут только примитивы (`sync-check --since`, неинтерактивный `sync-update --yes`, `ci`, `ctx` / `why`, защита ветки, семейство команд `setup-*`, конфигуратор ролей). Сам оркестратор лежит в домене `ai_agents` и не привязан к платформе: один и тот же код (`python -m beadloom.ai_agents.ai_techwriter`) вызывается и из GitHub Actions, и из GitLab CI — отличаются только триггер, имена секретов и флаг `--platform`.
+An important principle holds: **the "fix → converge → verdict → publish" loop does not enter the Beadloom core**. Only primitives live in `src/beadloom/` (`sync-check --since`, the non-interactive `sync-update --yes`, `ci`, `ctx` / `why`, branch protection, the `setup-*` command family, the role configurator). The orchestrator itself lives in the `ai_agents` domain and is platform-agnostic: the same code (`python -m beadloom.ai_agents.ai_techwriter`) is invoked from both GitHub Actions and GitLab CI — only the trigger, the secret names, and the `--platform` flag differ.
 
 ---
 
-## Границы ответственности: оркестратор и Goose
+## Responsibility boundaries: the orchestrator and Goose
 
-Goose — агент, но роль у него намеренно узкая. Всё механическое делает оркестратор, агенту достаётся только то, где нужно суждение.
+Goose is an agent, but its role is intentionally narrow. The orchestrator does everything mechanical; the agent gets only what needs judgment.
 
 ```mermaid
 flowchart TB
-  subgraph DETERMINISTIC["Оркестратор — детерминированно"]
-    D1["Найти устаревшие разделы<br/>sync-check --json --since merge-base"]
-    D1b["Сузить по изменённым символам<br/>(symbol_scope)"]
-    D2["Собрать context packet<br/>ctx + why + содержимое раздела"]
-    D3["sync-update --yes после правки"]
-    D4["Схождение: пока sync-check --since не 0"]
+  subgraph DETERMINISTIC["Orchestrator — deterministic"]
+    D1["Find stale sections<br/>sync-check --json --since merge-base"]
+    D1b["Narrow by changed symbols<br/>(symbol_scope)"]
+    D2["Assemble a context packet<br/>ctx + why + section content"]
+    D3["sync-update --yes after the edit"]
+    D4["Convergence: until sync-check --since is 0"]
     D5["Gate: beadloom ci"]
     D6["classify_verdict: ok / flagged / infra"]
-    D7["Публикация: commit в ветку pull request-а + комментарий"]
-    D8["Повторы, бюджеты, жёсткие лимиты"]
+    D7["Publish: commit to the pull-request branch + comment"]
+    D8["Retries, budgets, hard limits"]
   end
 
-  subgraph NONDET["Goose — единственный недетерминированный шаг"]
-    N1["Прочитать код, diff, контекст"]
-    N2["Переписать один устаревший раздел"]
-    N3["Вернуть предложение — не истину"]
+  subgraph NONDET["Goose — the only non-deterministic step"]
+    N1["Read the code, the diff, the context"]
+    N2["Rewrite one stale section"]
+    N3["Return a proposal — not the truth"]
   end
 
-  subgraph NEVER["Goose никогда не делает"]
-    X1["не выбирает, что чинить"]
-    X2["не вызывает sync-update"]
-    X3["не сливает pull request"]
-    X4["не пишет в src/"]
+  subgraph NEVER["Goose never"]
+    X1["doesn't choose what to fix"]
+    X2["doesn't call sync-update"]
+    X3["doesn't merge the pull request"]
+    X4["doesn't write to src/"]
   end
 
   D1 --> D1b --> D2 --> N1
@@ -314,128 +316,128 @@ flowchart TB
   D8 -.-> D6
 ```
 
-Так цикл остаётся воспроизводимым: Goose можно заменить другим агентным инструментом, не трогая ядро Beadloom.
+This keeps the loop reproducible: Goose can be swapped for another agentic tool without touching the Beadloom core.
 
 ---
 
-## Полный прогон CI — шаг за шагом
+## A full CI run — step by step
 
-Это резервный путь — он отрабатывает, когда pull request пришёл без свежей документации. Сценарий одинаков для GitHub Actions и GitLab CI и отличается только триггером, секретами и способом публикации правки.
+This is the fallback path — it runs when a pull request arrived without fresh documentation. The scenario is the same for GitHub Actions and GitLab CI and differs only in the trigger, the secrets, and how the edit is published.
 
 ```mermaid
 sequenceDiagram
   autonumber
-  participant Dev as Разработчик
-  participant CI as ci.yml (pull request в main)
+  participant Dev as Developer
+  participant CI as ci.yml (pull request to main)
   participant V as gate ∥ tests ∥ site-build
   participant R as VPS runner (ai-techwriter)
-  participant O as Оркестратор
+  participant O as Orchestrator
   participant BL as Beadloom CLI
   participant G as Goose + Qwen
-  participant Repo as ветка pull request-а
+  participant Repo as pull-request branch
 
-  Dev->>CI: открыть / обновить pull request в main
-  CI->>V: gate, tests (3.10–3.13), site-build (параллельно)
+  Dev->>CI: open / update a pull request to main
+  CI->>V: gate, tests (3.10–3.13), site-build (in parallel)
 
-  alt какая-то из трёх проверок красная
-    V-->>CI: красная проверка → pull request заблокирован
-    Note over R: ai-techwriter пропущен (токены Qwen не тратятся)
-  else все три зелёные
-    CI->>R: ai-techwriter (needs выполнен)
-    R->>Repo: checkout головы ветки (token: AI_TW_PAT)
-    R->>O: защита от петли (пропуск, если голова — правка самого агента)
+  alt one of the three checks is red
+    V-->>CI: red check → pull request blocked
+    Note over R: ai-techwriter skipped (no Qwen tokens spent)
+  else all three green
+    CI->>R: ai-techwriter (needs satisfied)
+    R->>Repo: checkout branch head (token: AI_TW_PAT)
+    R->>O: loop guard (skip if the head is the agent's own edit)
     O->>BL: beadloom reindex
     O->>BL: since = git merge-base origin/base HEAD
-    O->>BL: sync-check --json --since (+ сужение по символам)
+    O->>BL: sync-check --json --since (+ narrow by symbols)
 
-    alt устаревших разделов нет
-      O-->>CI: ничего не делаем, вердикт ok (exit 0)
-    else есть устаревшая документация
-      loop по каждому устаревшему разделу (параллельно, ограниченно)
-        O->>BL: ctx + why + содержимое раздела
+    alt no stale sections
+      O-->>CI: do nothing, verdict ok (exit 0)
+    else there is stale documentation
+      loop for each stale section (parallel, bounded)
+        O->>BL: ctx + why + section content
         O->>G: context packet
-        G-->>O: переписанный текст (предложение)
+        G-->>O: rewritten text (a proposal)
         O->>BL: sync-update --yes (ref)
-        O->>BL: перепроверка --since (повтор ≤ 2)
+        O->>BL: re-check --since (retry ≤ 2)
       end
-      O->>BL: общее схождение (пока sync-check --since = 0)
+      O->>BL: overall convergence (until sync-check --since = 0)
       O->>BL: beadloom ci
       O->>Repo: commit "[skip ai-techwriter] …" + push (AI_TW_PAT)
-      O->>CI: комментарий в pull request
-      Note over O,CI: вердикт — ok (exit 0) / flagged (exit 1) / infra (exit 0 + предупреждение)
+      O->>CI: comment on the pull request
+      Note over O,CI: verdict — ok (exit 0) / flagged (exit 1) / infra (exit 0 + warning)
     end
   end
 
-  Dev->>Repo: слияние человеком, когда CI зелёный
+  Dev->>Repo: human merge when CI is green
 ```
 
-**Начало.** Pull request в `main` запускает `ci.yml`. Сначала параллельно идут `gate`, `tests` и `site-build`. Если что-то красное — `ai-techwriter` не стартует, токены Qwen не тратятся, а pull request блокируют красные проверки.
+**The start.** A pull request to `main` launches `ci.yml`. First, `gate`, `tests`, and `site-build` run in parallel. If something is red, `ai-techwriter` doesn't start, no Qwen tokens are spent, and the pull request is blocked by the red checks.
 
-Когда все три зелёные, на VPS-runner-е стартует `ai-techwriter`. Первым делом — **защита от петли**: если голова ветки — это коммит самого агента (автор `beadloom-ai-techwriter` или сообщение содержит `[skip ai-techwriter]`), задание пропускается, чтобы push агента не запускал второй прогон. Иначе — `reindex`, вычисление базовой точки `since = git merge-base origin/<base> HEAD`, затем `sync-check --json --since` с сужением области по изменённым символам.
+When all three are green, `ai-techwriter` starts on the VPS runner. First — the **loop guard**: if the branch head is the agent's own commit (author `beadloom-ai-techwriter`, or the message contains `[skip ai-techwriter]`), the job is skipped, so the agent's push doesn't trigger a second run. Otherwise — `reindex`, computing the base point `since = git merge-base origin/<base> HEAD`, then `sync-check --json --since` narrowed by the changed symbols.
 
-**Сужение по символам (BDL-052).** Раньше изменение одного «толстого» файла помечало устаревшими все связанные с ним разделы — правка одной строки в `cli.py` тянула за собой полтора десятка разделов. Теперь оркестратор смотрит, какие именно символы реально изменились в файле, и сверяет их с теми символами, на которые ссылается раздел документации. Если раздел не зависит ни от одного изменившегося символа, его исключают из работы и молча переаттестовывают, чтобы `sync-check` сошёлся к нулю без переписывания. Правило при этом осторожное: при любой неоднозначности раздел остаётся в работе — лучше переписать лишнее, чем пропустить нужное. Учтён и редкий случай удалённого или переименованного символа: раздел, который ссылается на исчезнувшее имя, тоже остаётся в работе.
+**Narrowing by symbols (BDL-052).** Previously a change to one "fat" file marked all sections related to it as stale — editing a single line in `cli.py` dragged in a dozen-and-a-half sections. Now the orchestrator looks at which symbols actually changed in the file and matches them against the symbols a documentation section references. If a section depends on no changed symbol, it is excluded from the work and silently re-attested so that `sync-check` converges to zero without a rewrite. The rule is cautious: on any ambiguity, the section stays in the work — better to rewrite something extra than to miss what's needed. The rare case of a removed or renamed symbol is handled too: a section that references a vanished name also stays in the work.
 
-**Если дрейф есть.** Оркестратор идёт по устаревшим разделам — теперь ограниченным пулом параллельных сессий (по умолчанию три, с экспоненциальной задержкой при ответах 429/5xx, чтобы не упереться в лимиты тарифа). Для каждого раздела собирается context packet, Goose переписывает текст, оркестратор вызывает `sync-update --yes` и перепроверяет против `--since`. После всех разделов — **общее схождение**: повторять `sync-check --since` и переаттестацию для новых разошедшихся пар, пока не установится устойчивый ноль (правка одного доменного раздела может «задеть» соседние пары — известный инвариант ещё с BDL-047). В конце — `beadloom ci`, коммит правки прямо в ветку pull request-а (сообщение `[skip ai-techwriter] …`, автор `beadloom-ai-techwriter`, push через `AI_TW_PAT`, чтобы коммит запускал проверку `gate`) и комментарий в pull request.
+**If there is drift.** The orchestrator goes through the stale sections — now with a bounded pool of parallel sessions (three by default, with exponential backoff on 429/5xx responses so as not to hit the plan limits). For each section a context packet is assembled, Goose rewrites the text, the orchestrator calls `sync-update --yes` and re-checks against `--since`. After all sections — **overall convergence**: repeat `sync-check --since` and re-attestation for newly drifted pairs until a stable zero settles (editing one domain section can "touch" neighboring pairs — a known invariant ever since BDL-047). At the end — `beadloom ci`, a commit of the edit straight to the pull-request branch (message `[skip ai-techwriter] …`, author `beadloom-ai-techwriter`, pushed via `AI_TW_PAT` so the commit triggers the `gate` check), and a comment on the pull request.
 
 ---
 
-## Вердикт: `ok` / `flagged` / `infra` (BDL-050)
+## The verdict: `ok` / `flagged` / `infra` (BDL-050)
 
-`ai-techwriter` — обязательная проверка, которая краснеет **только** при реальной нерешённой проблеме с документацией, но не при сбое инфраструктуры. Оркестратор (`runner.py::classify_verdict`) классифицирует прогон, а `cli.py` переводит вердикт в код возврата. Отличить проблему документации от сбоя инфраструктуры просто: достаточно посмотреть, **дала ли модель хоть какой-то вывод** (`input_tokens + output_tokens > 0`).
+`ai-techwriter` is a required check that goes red **only** on a real, unresolved documentation problem, not on an infrastructure failure. The orchestrator (`runner.py::classify_verdict`) classifies the run, and `cli.py` maps the verdict to an exit code. Telling a documentation problem from an infrastructure failure is simple: just look at **whether the model produced any output at all** (`input_tokens + output_tokens > 0`).
 
 ```mermaid
 flowchart TB
-  RUN["Прогон завершён"] --> Q1{"result.flagged?"}
-  Q1 -->|нет| OK["вердикт = ok<br/>(ничего не делали или чистая правка)"]
-  Q1 -->|да| Q2{"токены > 0?"}
-  Q2 -->|да| FLAG["вердикт = flagged<br/>модель работала,<br/>но документация не чистая"]
-  Q2 -->|нет| INFRA["вердикт = infra<br/>агент не дал ни токена:<br/>мёртвый runner / 5xx / квота"]
+  RUN["Run finished"] --> Q1{"result.flagged?"}
+  Q1 -->|no| OK["verdict = ok<br/>(did nothing, or a clean edit)"]
+  Q1 -->|yes| Q2{"tokens > 0?"}
+  Q2 -->|yes| FLAG["verdict = flagged<br/>the model worked,<br/>but the docs aren't clean"]
+  Q2 -->|no| INFRA["verdict = infra<br/>the agent produced no token:<br/>dead runner / 5xx / quota"]
 
-  OK --> E0a["exit 0 — проверка зелёная"]
-  INFRA --> E0b["exit 0 — проверка зелёная<br/>+ ::warning:: (предупреждение) + комментарий в pull request"]
-  FLAG --> E1["exit 1 — обязательная проверка красная<br/>pull request заблокирован"]
+  OK --> E0a["exit 0 — check green"]
+  INFRA --> E0b["exit 0 — check green<br/>+ ::warning:: + comment on the pull request"]
+  FLAG --> E1["exit 1 — required check red<br/>pull request blocked"]
 ```
 
-| Вердикт | Когда | Код возврата | Эффект |
-|---------|-------|--------------|--------|
-| **ok** | устаревших разделов нет, либо правка прошла чисто | `0` | проверка зелёная |
-| **flagged** | модель работала (`tokens > 0`), но документация всё ещё расходится с кодом: после правки `beadloom ci` красный, схождение не достигнуто или превышен бюджет | `1` | **проверка красная → pull request заблокирован** («нужен человек») |
-| **infra** | агент не дал ни одного токена (`tokens == 0`): мёртвый self-hosted runner, ответ 5xx или таймаут провайдера, исчерпана квота — он *не смог запуститься* | `0` | проверка зелёная + явный `::warning::` (предупреждение) + по возможности комментарий в pull request («документация НЕ проверена — перезапустите») |
+| Verdict | When | Exit code | Effect |
+|---------|------|-----------|--------|
+| **ok** | no stale sections, or the edit went through cleanly | `0` | check green |
+| **flagged** | the model worked (`tokens > 0`), but the documentation still drifts from the code: after the edit `beadloom ci` is red, convergence wasn't reached, or the budget was exceeded | `1` | **check red → pull request blocked** ("a human is needed") |
+| **infra** | the agent produced not a single token (`tokens == 0`): a dead self-hosted runner, a 5xx response or a provider timeout, an exhausted quota — it *couldn't start* | `0` | check green + an explicit `::warning::` + a comment on the pull request where possible ("documentation NOT checked — re-run") |
 
-Вывод простой. Мёртвый VPS или исчерпанная квота тарифа **не** замораживают слияния. А вот реальный нерешённый дрейф — замораживает. Классификация намеренно осторожна: ноль токенов всегда трактуется как `infra`. И даже ошибочный `infra` не теряется — его подсвечивает предупреждение в CI, чтобы человек перезапустил прогон, а не молча отгрузил устаревшую документацию.
-
----
-
-## Когерентность трекера и файла ACTIVE.md (BDL-053)
-
-Эта возможность решает похожую проблему, только уже не для кода и документации, а для состояния задач. Процесс ведёт его в двух местах — в трекере `bd` и в таблице статусов внутри `ACTIVE.md`. Раньше оба поддерживались вручную и постепенно расходились с реальностью. Beadloom 2.0.0 делает их согласованными по построению.
-
-Команда `beadloom active-sync` берёт `bd` за источник истины. Она перечитывает идентификаторы задач прямо из таблицы в `ACTIVE.md`, спрашивает у `bd` их настоящий статус и переписывает только ячейку статуса. Делает это бережно: заголовки, прозу и журнал прогресса не трогает, а осмысленную пометку сопровождающего сохраняет. Заодно она экспортирует состояние трекера в отслеживаемый файл `.beads/issues.jsonl`, чтобы закрытия задач переживали слияние веток. Всё это встроено в pre-commit хук как автоисправление — то есть устаревшую таблицу статусов просто нельзя закоммитить. В репозитории без трекера или без файлов `ACTIVE.md` команда ничего не делает.
+The takeaway is simple. A dead VPS or an exhausted plan quota does **not** freeze merges. But real, unresolved drift does. The classification is deliberately cautious: zero tokens is always treated as `infra`. And even a mistaken `infra` is not lost — a CI warning highlights it so a human re-runs, rather than silently shipping stale documentation.
 
 ---
 
-## Что Goose может, а что нет
+## Tracker / ACTIVE.md coherence (BDL-053)
 
-Ограничение набора инструментов — часть безопасности. Даже если агент ошибётся, радиус поражения мал.
+This feature solves a similar problem, only now for task state rather than code and documentation. The workflow tracks it in two places — the `bd` tracker and a status table inside `ACTIVE.md`. Previously both were maintained by hand and gradually drifted from reality. Beadloom 2.0.0 makes them coherent by construction.
+
+`beadloom active-sync` takes `bd` as the source of truth. It re-reads the task identifiers straight from the table in `ACTIVE.md`, asks `bd` for their real status, and rewrites only the status cell. It does so carefully: it doesn't touch headings, prose, or the progress log, and it preserves a meaningful maintainer note. It also exports the tracker state into the tracked `.beads/issues.jsonl` file so that task closures survive a branch merge. All of this is wired into the pre-commit hook as an auto-fix — so a stale status table simply can't be committed. In a repository without the tracker or without `ACTIVE.md` files, the command does nothing.
+
+---
+
+## What Goose can and can't do
+
+Restricting the tool set is part of the safety. Even if the agent errs, the blast radius is small.
 
 ```mermaid
 flowchart TB
-  GOOSE["Агент Goose"]
+  GOOSE["Goose agent"]
 
-  subgraph ALLOWED["Разрешено"]
-    R1["чтение файловой системы: код, diff"]
-    R2["чтение через Beadloom: ctx, why, search, sync-check"]
-    R3["чтение через git: diff, log, show"]
-    R4["запись: только docs/**"]
-    R5["сеть: только endpoint модели"]
+  subgraph ALLOWED["Allowed"]
+    R1["filesystem reads: code, diff"]
+    R2["reads via Beadloom: ctx, why, search, sync-check"]
+    R3["reads via git: diff, log, show"]
+    R4["writes: docs/** only"]
+    R5["network: the model endpoint only"]
   end
 
-  subgraph FORBIDDEN["Запрещено"]
-    F1["запись в src/"]
-    F2["произвольные команды оболочки"]
-    F3["произвольная сеть"]
-    F4["sync-update и слияние"]
-    F5["выбор области починки"]
+  subgraph FORBIDDEN["Forbidden"]
+    F1["writing to src/"]
+    F2["arbitrary shell commands"]
+    F3["arbitrary network"]
+    F4["sync-update and merging"]
+    F5["choosing the fix scope"]
   end
 
   GOOSE --> ALLOWED
@@ -444,9 +446,9 @@ flowchart TB
 
 ---
 
-## Gate `beadloom ci` — детерминированная проверка
+## The `beadloom ci` Gate — a deterministic check
 
-Перед `classify_verdict` оркестратор прогоняет полный Gate. Тот же набор проверок стоит и в pre-push хуке, и отдельным заданием `gate` в `ci.yml`.
+Before `classify_verdict` the orchestrator runs the full Gate. The same set of checks sits in the pre-push hook and as the standalone `gate` job in `ci.yml`.
 
 ```mermaid
 flowchart LR
@@ -456,104 +458,103 @@ flowchart LR
   S --> C["config-check"]
   C --> D["doctor"]
 
-  D --> GREEN{"всё зелёное?"}
-  GREEN -->|да| OK["вклад в вердикт: ok"]
-  GREEN -->|нет| FLAG["вклад в вердикт: flagged"]
+  D --> GREEN{"all green?"}
+  GREEN -->|yes| OK["contributes verdict: ok"]
+  GREEN -->|no| FLAG["contributes verdict: flagged"]
 ```
 
-`sync-check = 0` доказывает **свежесть** — раздел документации ссылается на актуальные символы кода. Это не проверка качества текста: за корректность формулировок отвечает человек на ревью pull request-а. А `lint --strict` теперь проверяет не только границы архитектуры, но и отсутствие «теневого» кода (проверка `module-coverage` в режиме ошибки).
+`sync-check = 0` proves **freshness** — a documentation section references current code symbols. It is not a text-quality check: a human on the pull-request review is responsible for the wording being correct. And `lint --strict` now checks not only architectural boundaries but also the absence of "shadow" code (the `module-coverage` check in error mode).
 
 ---
 
-## Сценарий для разработчика и ревьюера
+## The developer-and-reviewer scenario
 
 ```mermaid
 flowchart TD
-  A["Разработчик: ветка features/<KEY><br/>координатор + роли, документация пишется рядом с кодом"] --> PP["git push → pre-push Beadloom Gate"]
-  PP --> PPRED{"Gate зелёный?"}
-  PPRED -->|нет| PPFIX["координатор запускает tech-writer → Gate заново"]
+  A["Developer: features/<KEY> branch<br/>coordinator + roles, docs written next to the code"] --> PP["git push → pre-push Beadloom Gate"]
+  PP --> PPRED{"Gate green?"}
+  PPRED -->|no| PPFIX["coordinator runs tech-writer → Gate again"]
   PPFIX --> PP
-  PPRED -->|да| B["Открыть один pull request в main"]
+  PPRED -->|yes| B["Open one pull request to main"]
   B --> C["ci.yml: gate ∥ tests ∥ site-build"]
 
-  C --> D{"все три зелёные?"}
-  D -->|нет| Z["pull request заблокирован<br/>ai-techwriter пропущен"]
-  D -->|да| E["ai-techwriter: обычно ничего не делает<br/>(документацию уже написали локально)"]
+  C --> D{"all three green?"}
+  D -->|no| Z["pull request blocked<br/>ai-techwriter skipped"]
+  D -->|yes| E["ai-techwriter: usually does nothing<br/>(the docs were already written locally)"]
 
-  E --> F{"вердикт?"}
-  F -->|ok / infra| G["проверка зелёная (infra — с предупреждением)"]
-  F -->|flagged| H["проверка красная — нужен человек"]
+  E --> F{"verdict?"}
+  F -->|ok / infra| G["check green (infra — with a warning)"]
+  F -->|flagged| H["check red — a human is needed"]
 
-  G --> I["Сопровождающий: ревью diff"]
+  G --> I["Maintainer: review the diff"]
   H --> I
 
-  I --> J{"текст в порядке?"}
-  J -->|да| K["слияние человеком"]
-  J -->|нет| L["правки вручную или закрыть pull request"]
+  I --> J{"is the text ok?"}
+  J -->|yes| K["human merge"]
+  J -->|no| L["fix by hand or close the pull request"]
 
-  K --> M["push: main → deploy-site.yml<br/>публикует VitePress; база знаний свежая"]
+  K --> M["push: main → deploy-site.yml<br/>publishes VitePress; the knowledge base is fresh"]
 ```
 
-Типичный сценарий в 2.0.0 выглядит так. На ветке задачи документацию пишут локально, вместе с кодом. Перед push её проверяет Beadloom Gate. Дальше — один pull request в `main`, и CI гоняет `gate`, `tests` и `site-build`. Серверный `ai-techwriter` при этом, как правило, ничего не делает: документация уже свежая, и он завершается мгновенно. По-настоящему он включается лишь тогда, когда обновить документацию локально забыли. Слияние в `main` запускает `deploy-site.yml` — единственное, что работает на `push: main`.
+The typical 2.0.0 scenario looks like this. On the task branch the documentation is written locally, together with the code. Before push the Beadloom Gate checks it. Then — one pull request to `main`, and CI runs `gate`, `tests`, and `site-build`. The server-side `ai-techwriter` usually does nothing here: the documentation is already fresh, and it finishes instantly. It really kicks in only when updating the documentation locally was forgotten. A merge to `main` triggers `deploy-site.yml` — the only thing that runs on `push: main`.
 
 ---
 
-## Ограничения
+## Limitations
 
-- **Оркестрация остаётся в инструменте разработчика.** Сервер MCP (BDL-048) отдаёт *инструменты* (`task_init`, `bead_context`, `complete_bead`, `checkpoint`), а **не** оркестрацию — он не умеет порождать субагентов и крутить главный цикл. Координатор и волны субагентов остаются нативными для агента пользователя (Claude Code, Cursor). Конфигуратор лишь собирает под них роли. Инструменты процесса для MCP — это детерминированный субстрат, который процесс *вызывает*, а не замена оркестрации.
-- **Документация пишется агентом разработчика, а не серверной моделью.** Связка Goose + Qwen работает только на сервере и служит подстраховкой. Она включается редко — лишь когда локальный Gate обошли. На машине разработчика никакой второй модели не поднимают.
-- **`complete_bead` — сильная рекомендация, но не источник истины.** Модель сама решает его вызвать. Он строже текстовых инструкций — действительно отказывается закрывать задачу при красном Gate, — но слабее CI.
-- **Истинное принуждение — это Gate, и он в двух местах.** Локально — pre-push хук, на сервере — обязательные проверки `ci.yml`. Оба гоняют один и тот же `beadloom ci`. Ничто их не обходит (кроме осознанного `--no-verify`, который виден в истории).
-- **Переход на ty отложен.** Быстрый проверщик типов `ty` от Astral пока в стадии беты и по точности уступает `mypy`, поэтому проект сознательно остаётся на `mypy --strict` и вернётся к вопросу, когда у `ty` выйдет стабильный релиз.
-
----
-
-## Безопасность
-
-**Ключ модели** (`QWEN_API_KEY`) и токен для push (`AI_TW_PAT`) живут в секретах CI (GitHub Secrets, переменные GitLab CI/CD) и доступны только заданию на self-hosted runner. В логах и репозитории их нет.
-
-**Runner** привязан к проекту. На каждый прогон создаётся отдельное временное рабочее пространство.
-
-**Goose** пишет только в `docs/**`. Исходники не трогает.
-
-**Автоматического слияния нет**: `sync-check = 0` доказывает свежесть, но не качество текста. Pull request сливает человек.
-
-**`sync-update` вне цикла** — та же операция, что и интерактивный `sync-update`. Ею можно случайно «озеленить» плохой раздел, поэтому ревью pull request-а и обоснование в его описании — обязательная часть процесса.
+- **Orchestration stays in the developer's tool.** The MCP server (BDL-048) exposes *tools* (`task_init`, `bead_context`, `complete_bead`, `checkpoint`), **not** orchestration — it can't spawn subagents or run the main loop. The coordinator and the waves of subagents stay native to the user's agent (Claude Code, Cursor). The configurator only composes the roles for them. The MCP process tools are a deterministic substrate the workflow *calls*, not a replacement for orchestration.
+- **Documentation is written by the developer's agent, not by a server-side model.** The Goose + Qwen pair runs on the server only and serves as a backstop. It kicks in rarely — only when the local Gate was bypassed. No second model is brought up on the developer's machine.
+- **`complete_bead` is a strong recommendation, not a source of truth.** The model decides to call it itself. It is stricter than text instructions — it really does refuse to close a task while the Gate is red — but weaker than CI.
+- **The true enforcement is the Gate, and it is in two places.** Locally — the pre-push hook; on the server — the required `ci.yml` checks. Both run the same `beadloom ci`. Nothing bypasses them (except the deliberate `--no-verify`, which is visible in the history).
+- **The move to ty is deferred.** Astral's fast type checker `ty` is still in beta and less accurate than `mypy`, so the project consciously stays on `mypy --strict` and will revisit the question once `ty` ships a stable release.
 
 ---
 
-## Шпаргалка на одну страницу
+## Security
 
-| Вопрос | Ответ |
-|--------|-------|
-| Кто пишет документацию в обычном сценарии? | Агент разработчика (Claude Code, Cursor) — локально, рядом с кодом |
-| Что не пускает код без документации? | Beadloom Gate: pre-push хук локально + обязательная проверка в CI |
-| Зачем тогда серверный ai-techwriter? | Страховка: включается, когда pull request пришёл без свежей документации |
-| Где крутится gate / tests / site-build? | Облачные runner-ы GitHub/GitLab |
-| Где крутится ai-techwriter? | Self-hosted runner на VPS (Goose + ключ модели) |
-| Где живёт оркестратор? | `src/beadloom/ai_agents/ai_techwriter/` (домен пакета, не каталог `tools/`) |
-| Как вызывается | `python -m beadloom.ai_agents.ai_techwriter` |
-| Чем настраивается процесс? | `.beadloom/flow.yml`: tools (claude/cursor) · architecture (ddd/fsd) · stack |
-| Триггер CI | `on: pull_request → main` (единый `ci.yml`); `deploy-site.yml` — единственное на `push: main` |
-| Порядок заданий | `gate ∥ tests ∥ site-build` → `ai-techwriter` (`needs:`) |
-| Базовая точка дрейфа | `git merge-base origin/<base> HEAD` (`--since`), область сужается по изменённым символам |
-| Куда кладётся правка | commit в ветку **того же** pull request-а (push через `AI_TW_PAT`) |
-| Вердикт | `ok` / `infra` → exit 0; `flagged` → exit 1 (блокирует только реальный дрейф) |
-| Обязательные проверки | 7: `gate`, `tests (3.10..3.13)`, `site-build`, `ai-techwriter` |
-| Защита ветки | `enforce_admins: true`, 0 ревью (строгий trunk-based) |
-| Как попадает в main | pull request + слияние человеком (автоматического слияния нет) |
-| Что пишет серверный агент | только `docs/**` |
+**The model key** (`QWEN_API_KEY`) and the push token (`AI_TW_PAT`) live in CI secrets (GitHub Secrets, GitLab CI/CD variables) and are available only to the job on the self-hosted runner. They are not in the logs or the repository.
+
+**The runner** is bound to the project. A separate temporary workspace is created for each run.
+
+**Goose** writes only to `docs/**`. It doesn't touch the sources.
+
+**There is no automatic merge**: `sync-check = 0` proves freshness, but not text quality. A human merges the pull request.
+
+**`sync-update` outside the loop** is the same operation as the interactive `sync-update`. It can accidentally "green" a bad section, so pull-request review and a rationale in its description are a mandatory part of the workflow.
 
 ---
 
-## Связанные документы
+## One-page cheat sheet
 
-- [RFC BDL-052](./features/BDL-052/RFC.md) — настраиваемый агентный процесс, конфигуратор ролей, pre-push Gate (текущая модель)
-- [RFC BDL-053](./features/BDL-053/RFC.md) — когерентность трекера и `ACTIVE.md` (`active-sync`)
-- [RFC BDL-051](./features/BDL-051/RFC.md) — «Beadloom управляет сам собой»: вид узла component, проверка без теневого кода, домен `ai_agents`
-- [RFC BDL-050](./features/BDL-050/RFC.md) — консолидация CI и система вердиктов
-- [RFC BDL-049](./features/BDL-049/RFC.md) — trunk-based и запуск по pull request
-- [RFC BDL-047](./features/BDL-047/RFC.md) — первичная архитектура оркестратора
-- [`docs/guides/agentic-flow.md`](../../../docs/guides/agentic-flow.md) — руководство по упакованному процессу и конфигуратору ролей
-- [`docs/guides/ai-techwriter.md`](../../../docs/guides/ai-techwriter.md) — руководство оператора по серверному AI tech-writer
-- [ROADMAP](../ROADMAP.md) — место этих возможностей в дорожной карте
+| Question | Answer |
+|----------|--------|
+| Who writes the documentation in the normal scenario? | The developer's agent (Claude Code, Cursor) — locally, next to the code |
+| What keeps code out without documentation? | The Beadloom Gate: the pre-push hook locally + a required check in CI |
+| Then why the server-side ai-techwriter? | A backstop: it kicks in when a pull request arrived without fresh documentation |
+| Where do gate / tests / site-build run? | GitHub/GitLab cloud runners |
+| Where does ai-techwriter run? | A self-hosted VPS runner (Goose + the model key) |
+| Where does the orchestrator live? | `src/beadloom/ai_agents/ai_techwriter/` (a package domain, not the `tools/` directory) |
+| How it's invoked | `python -m beadloom.ai_agents.ai_techwriter` |
+| What configures the workflow? | `.beadloom/flow.yml`: tools (claude/cursor) · architecture (ddd/fsd) · stack |
+| CI trigger | `on: pull_request → main` (the single `ci.yml`); `deploy-site.yml` is the only thing on `push: main` |
+| Job order | `gate ∥ tests ∥ site-build` → `ai-techwriter` (`needs:`) |
+| Drift base point | `git merge-base origin/<base> HEAD` (`--since`), scope narrowed by changed symbols |
+| Where the edit lands | a commit to the **same** pull request's branch (pushed via `AI_TW_PAT`) |
+| Verdict | `ok` / `infra` → exit 0; `flagged` → exit 1 (only real drift blocks) |
+| Required checks | 7: `gate`, `tests (3.10..3.13)`, `site-build`, `ai-techwriter` |
+| Branch protection | `enforce_admins: true`, 0 reviews (strict trunk-based) |
+| How it reaches main | pull request + human merge (no automatic merge) |
+| What the server-side agent writes | `docs/**` only |
+
+---
+
+## Related documents
+
+- **RFC BDL-052** — the configurable agentic workflow, the role configurator, the pre-push Gate (the current model)
+- **RFC BDL-053** — tracker / `ACTIVE.md` coherence (`active-sync`)
+- **RFC BDL-051** — "Beadloom governs itself": the component node kind, the no-shadow-code check, the `ai_agents` domain
+- **RFC BDL-050** — CI consolidation and the verdict system
+- **RFC BDL-049** — trunk-based and pull-request triggering
+- **RFC BDL-047** — the initial orchestrator architecture
+- [`agentic-flow.md`](./agentic-flow.md) — the guide to the packaged workflow and the role configurator
+- [`ai-techwriter.md`](./ai-techwriter.md) — the operator's guide to the server-side AI tech-writer

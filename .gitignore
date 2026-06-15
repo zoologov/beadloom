@@ -40,6 +40,20 @@ site/.vitepress/dist/
 site/.vitepress/cache/
 site/node_modules/
 
+# BDL-056: the generated VitePress content tree is a build artifact, regenerated
+# by `beadloom docs site` in both the site-build CI job and deploy-site.yml, so it
+# is no longer committed (avoids per-PR regeneration churn). Only the hand-authored
+# shell stays tracked: .vitepress/config.mjs, .vitepress/theme/**, package*.json.
+site/*.md
+site/.vitepress/config.generated.mjs
+site/docs/
+site/domains/
+site/features/
+site/services/
+site/other/
+site/public/
+site/ru/
+
 # BDL-047 agent credentials (never committed)
 .claude/development/docs/features/BDL-047/credentials.md
 # Agent tool worktrees (isolation: worktree) — never commit

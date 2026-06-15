@@ -224,6 +224,18 @@ def test_documentation_group_skips_dotfiles_and_dotdirs(tmp_path: Path) -> None:
     assert "Hidden" not in js
 
 
+def test_documentation_group_skips_localized_ru_counterparts(tmp_path: Path) -> None:
+    """``*.ru.md`` files stay out of the sidebar (reached via the in-page language
+    cross-link, like the bilingual About toggle); the base page is still listed."""
+    (tmp_path / "docs" / "guides").mkdir(parents=True)
+    (tmp_path / "docs" / "guides" / "flow.md").write_text("# Flow\n", encoding="utf-8")
+    (tmp_path / "docs" / "guides" / "flow.ru.md").write_text("# Поток\n", encoding="utf-8")
+    js = render_documentation_group(tmp_path)
+    assert 'link: "/docs/guides/flow"' in js
+    assert "flow.ru" not in js
+    assert ".ru" not in js
+
+
 def test_documentation_links_resolve_to_existing_docs(tmp_path: Path) -> None:
     """Every emitted doc nav link maps to a real ``.md`` under docs/ (no dead nav)."""
     _seed_docs(tmp_path)
