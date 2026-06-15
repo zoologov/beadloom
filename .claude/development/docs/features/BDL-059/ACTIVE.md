@@ -8,7 +8,7 @@
 
 ## Current focus
 
-**S0 DONE** — cohesion-driven principle codified in CORE dev+review roles (+ recomposed, drift-guard green); `.1`+`.2` closed; `beadloom ci` rc0, 4316 tests. **Next: S1 (`.3`) — test decoupling + hygiene** (the keystone for safe refactor). Recompose lesson: use `setup-agentic-flow` WITHOUT `--force` in this repo (force corrupts the vendored CLAUDE.md placeholder, #132); re-vendor `agentic_flow/agents/*.md.txt` by copying live→vendored.
+**S0 DONE** (PR #20 merged, `68e53ff`) — cohesion-driven principle in CORE roles. **S1 DONE** (PR pending) — `.3`+`.4` closed: ~112 prod-internal test couplings decoupled to read-only accessors/observable behavior (review PASS, behavior-preserving), db yield/finally fixtures (ResourceWarnings 64→0), pytest-randomly, grammar-guard (fails-not-skips); 4317 passed, ci rc0. **Next: S2 (`.5`∥`.6`) — repository seam + N+1.** Recompose lesson: `setup-agentic-flow` WITHOUT `--force` (#132); re-vendor snapshots by copying live→vendored.
 
 ## Slice status
 
