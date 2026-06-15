@@ -1,7 +1,8 @@
 # BDL UX Feedback Log
 
 > Collected during development and dogfooding.
-> Total: 131 issues | Open: 24 | Improvements: 16 | Excluded: 7 | Closed: 84
+> Total: 133 issues | Open: 23 | Improvements: 16 | Excluded: 7 | Closed: 87
+> 2026-06-15 (BDL-056/057 + v2.1.0 release): CLOSED #130 (rule-type dataclass names fixed in `architecture.md`, BDL-057 SPEC-fill), #131 (all sub-items fixed in v2.1.0: `--non-interactive` removed from getting-started, DDD domain count corrected, CONTRIBUTING `your-org`→`zoologov` + release section added), #121 (RU `docs audit` false positive now suppressed via `.beadloom/config.yml` `docs_audit.ignore` — BDL-057.6; root-cause classifier weakness tracked in ROADMAP P3 "Semantic docs audit"). Opened #132 (`setup-agentic-flow --force` in Beadloom's own repo corrupts the vendored `CLAUDE.md` `__BEADLOOM_PROJECT_NAME__` placeholder) and #133 (per-worktree `beadloom.db` baseline → mass false re-baseline when integrating parallel worktree waves; relates #118). Total 131→133, Open 24→23, Closed 84→87.
 > 2026-06-10 (BDL-047 / F4.1 AI tech-writer): CLOSED #106 (non-interactive `sync-update --yes`/`--all` — the F4.1 fixpoint primitive, W1), #112 (incremental reindex `symbols_indexed` now backfilled to the live DB total per #88), and #127 (the `doc_generator.py` `except sqlite3.OperationalError: pass` swallows are gone — note `git_activity.py:251` `except ValueError: pass` + the broader onboarding `Any` concentration remain, deferred). Total 131, Open 27→24, Closed 81→84.
 > 2026-06-04 (post-v1.10.0 ROADMAP revision): Opened #122–#131 — engineering/test/doc debt from the comprehensive product review (`archive/REVIEW-2.md` §2/§3/§4), spot-verified at HEAD. Tracked here; cross-referenced from `ROADMAP.md` (Technical debt section). Total 121→131, Open 17→27.
 > 2026-06-02 (BDL-045): Opened #121 (LOW — `docs audit` metric classification is English-keyword-based, so it mislabels numbers in non-English docs: `README.ru.md` "14 инструментов" (MCP) is reported as `cli_command_count 14→34`, a false positive — the English README's same "14" is correctly `mcp_tool_count` OK. The number is right; the classifier just can't read Russian. Either localize the keyword map or skip non-English files in the audit). Total 120→121, Open 16→17.
@@ -43,6 +44,24 @@
 ## Open Issues
 
 > Issues awaiting code fixes in Beadloom.
+
+132. [2026-06-15] [MEDIUM] `setup-agentic-flow --force` corrupts the vendored `CLAUDE.md` placeholder when run in Beadloom's own repo
+
+    **Severity:** medium
+    **Command:** `beadloom setup-agentic-flow --force`
+    **Context:** Observed during BDL-056 while recomposing the role adapters after editing the CORE tech-writer role.
+    **Issue:** Running `--force` inside the Beadloom repo re-vendors the flow snapshot FROM the live composition. The live `.claude/CLAUDE.md` §0.1 has Beadloom's concrete project facts substituted in, so the re-vendor wrote `## 0.1 Project: beadloom` into the packaged `src/beadloom/onboarding/templates/agentic_flow/CLAUDE.md.txt`, **replacing the `__BEADLOOM_PROJECT_NAME__` placeholder**. That breaks the project-name substitution for every downstream adopter (the `TestClaudeMdRegionsPerProject` tests fail). It is a self-referential footgun: Beadloom is the source of the vendored template, so `--force` overwrites the template with the substituted instance.
+    **Expected:** Re-vendoring should preserve the `__BEADLOOM_PROJECT_NAME__` placeholder (re-tokenize the project name on re-vendor), or `--force` should refuse to re-vendor the CLAUDE.md asset from a substituted live copy. Until fixed, do NOT run `setup-agentic-flow --force` in the Beadloom repo to recompose only role adapters — recompose the adapter files without re-vendoring CLAUDE.md, or revert the CLAUDE.md asset afterward.
+    **Workaround:** After `--force`, `git checkout` the vendored `agentic_flow/CLAUDE.md.txt` (and the live `.claude/CLAUDE.md`) to restore the placeholder (done in BDL-056).
+
+133. [2026-06-15] [LOW] Per-worktree `beadloom.db` baseline causes mass false re-baseline when integrating parallel worktree waves
+
+    **Severity:** low
+    **Command:** `beadloom sync-check` (after integrating worktree-isolated dev beads)
+    **Context:** BDL-057 coordinator integration. Two dev beads ran in isolated git worktrees (`isolation: worktree`); each has its OWN `.beadloom/beadloom.db` (a working-tree path). After file-checkout-integrating their code into the main branch, the main repo's `beadloom.db` still held pre-change baselines, so `sync-check` reported ~38 stale pairs (incl. modules the integration didn't touch) until a `sync-update --yes --all` + reindex fixpoint re-baselined.
+    **Issue:** The doc-freshness baseline (`sync_state`) lives in the per-worktree DB, so it does not travel with the file-checkout integration. The integrator must re-run the mark-synced→reindex fixpoint to reconcile — extra friction, and a risk of masking genuine drift if done blindly. Relates to #118 (parallel-dev tree friction).
+    **Expected:** Either document the "re-baseline after worktree integration" step in the coordinator merge flow, or make the baseline reconcilable from the integrated code state without a blanket `--all` (e.g. recompute only the pairs whose code actually changed in the integration diff).
+    **Workaround:** After integrating worktree branches, run `beadloom sync-update --yes --all && beadloom reindex` to a stable `sync-check` 0 (the F4.1 fixpoint loop), then verify no genuine prose drift via the dev beads' API-CHANGE notes.
 
 122. [2026-06-04] [HIGH] No data-access layer + `open_db` without context-managers (connection leaks)
 
@@ -100,14 +119,14 @@
     **Issue:** (a) ResourceWarnings from unclosed SQLite connections — suite goes red under `filterwarnings=error::ResourceWarning`; (b) tree-sitter grammars are silently skipped if absent → TS/Go/Rust can pass CI untested; (c) almost no parametrization (10 across 3211 tests); (d) **372** private-attribute (`._x`) couplings block refactors; (e) TUI smoke tests without asserts; (f) no `pytest-randomly` (order-dependence undetected).
     **Expected:** conftest yield+finally db fixtures; make grammars mandatory in CI (or a guard test); parametrize hotspots (rule_engine, language suites); de-couple from private attrs before large refactors; add asserts to TUI tests; add `pytest-randomly`.
 
-130. [2026-06-04] [HIGH] Docs list rule types as dataclass names, not real YAML keys (internal contradiction)
+130. ~~[2026-06-04] [HIGH] Docs list rule types as dataclass names, not real YAML keys (internal contradiction)~~ **CLOSED (BDL-057)** — the SPEC-fill rewrote `architecture.md` to a correct YAML-key table (`deny, require, forbid, layers, forbid_cycles, forbid_import, check`), matching the dispatch (`rule_engine.py`); `getting-started.md` no longer lists rule types; `README.md` was already correct. No `forbid_edge`/`cycle_detection`/`import_boundary`/`cardinality` strings remain in `docs/`.
 
     **Severity:** high
     **Source:** REVIEW-2 §4 #1 (verified) · ROADMAP Technical-debt
     **Issue:** `getting-started.md:127` and `architecture.md` (×4: L83,113-119,153,253) list rule types as `require, deny, forbid_edge, layer, cycle_detection, import_boundary, cardinality` — these are **dataclass names**, not YAML keys. Real keys (dispatch `rule_engine.py:662-724`): `deny, require, forbid, forbid_cycles, forbid_import, layers, check`. `README.md:186` has the CORRECT list — an internal contradiction. A user who copies `forbid_edge:` gets a rule that silently never fires.
     **Expected:** Single source of truth for rule-type keys; fix getting-started.md + architecture.md to match the dispatch (and README).
 
-131. [2026-06-04] [LOW] Doc accuracy nits: non-existent flag, miscount, placeholders
+131. ~~[2026-06-04] [LOW] Doc accuracy nits: non-existent flag, miscount, placeholders~~ **CLOSED (v2.1.0 release)** — all three fixed: `getting-started.md` drops the non-existent `--non-interactive` flag (now `--yes`/`-y` only); `architecture.md` DDD domain count corrected (six domains + application + two interface layers); `CONTRIBUTING.md` `your-org`→`zoologov` placeholder fixed + a Release Process section added.
 
     **Severity:** low
     **Source:** REVIEW-2 §4 #2/#3/#4 (verified) · ROADMAP Technical-debt

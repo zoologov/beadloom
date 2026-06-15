@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-06-15
+
+**Reference-documentation freshness + positioning refresh.** A minor, backward-compatible
+release: Beadloom now guards the freshness of overview/reference docs (READMEs, guides)
+that aren't paired to a code symbol, and the public docs lead with the data-core positioning.
+
+### Added
+- **`docs audit` in the Gate (BDL-057).** `beadloom docs audit` is promoted out of
+  `[experimental]` and runs inside `beadloom ci` as a blocking step (fails on `stale>0`):
+  stale numeric/version facts in prose (version, node/edge counts, MCP-tool/CLI-command
+  counts) are caught before merge.
+- **`reference` doc kind with `watches:` (BDL-057).** A doc opts in with
+  `<!-- beadloom:watches=cli,graph,flow.yml -->`; `sync-check` computes a coarse aggregate
+  hash over the watched surface and reports an advisory `surface_drift` (warn-only — never
+  blocks), cleared by `sync-update`. New `reference_state` table; the symbol-pair
+  `sync_state` logic and the reason-masking/fixpoint invariant are untouched.
+- **`docs_audit.ignore` config key (BDL-057).** Targeted suppression of false-positive fact
+  matches in `.beadloom/config.yml` (`{path, fact, value}` triples) plus per-fact tolerances.
+- The multi-agent development process is now documented bilingually at
+  `docs/guides/multi-agent-development.md` (+ `.ru`), on the VitePress portal.
+
+### Changed
+- **Positioning (BDL-056).** README (en/ru) rewritten to "the source of truth about your
+  code — its architecture, contracts, and documentation," with a single Gate enforcing it
+  the same way for people and agents.
+- **Writing-quality standard** added to the CORE tech-writer role, so documentation quality
+  is reproducible by the agent rather than ad hoc.
+- The 11 remaining skeleton SPECs are filled with code-accurate prose.
+- Doc fixes: `getting-started` drops the non-existent `--non-interactive` flag; the
+  architecture domain count is corrected; `CONTRIBUTING` gains a release-process section.
+
+### Removed
+- The generated VitePress `site/` content tree is **no longer committed** — it is regenerated
+  by CI and the deploy workflow (`beadloom docs site`). Only the hand-authored shell
+  (`.vitepress/config.mjs`, `.vitepress/theme/**`, `package*.json`) stays tracked.
+- The accidentally-committed team presentation deck (`docs/presentations/`).
+
+Backward-compatible (MINOR): repositories without `watches` annotations and with
+audit-clean docs are unaffected; `reference_state` ships with a migration guard.
+
 ## [2.0.0] - 2026-06-14
 
 **Beadloom 2.0 — the self-governing, configurable, tool-agnostic agentic dev loop.**

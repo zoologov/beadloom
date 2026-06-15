@@ -14,7 +14,7 @@ Thank you for your interest in contributing to Beadloom! This document provides 
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/beadloom
+git clone https://github.com/zoologov/beadloom
 cd beadloom
 
 # Install in development mode with all dev dependencies
@@ -240,6 +240,24 @@ SELECT * FROM sync_state WHERE status = 'stale';
 # Run the MCP server for testing
 uv run beadloom mcp-serve
 ```
+
+## Release Process
+
+Releases are cut by a maintainer (trunk-based; `main` is always green):
+
+1. **Bump the version** in `src/beadloom/__init__.py` (`__version__`) — the single
+   source of truth, read by `[tool.hatch.version]` and `beadloom --version`. Update
+   the `Current version` line in `.claude/CLAUDE.md` to match. Follow
+   [Semantic Versioning](https://semver.org): MAJOR for breaking changes, MINOR for
+   backward-compatible features, PATCH for fixes.
+2. **Update `CHANGELOG.md`** — move `[Unreleased]` into a dated `[X.Y.Z]` section.
+3. **Open one PR to `main`** and merge when `beadloom ci` (the required check) is green.
+4. **Create a GitHub Release** tagged `vX.Y.Z` — this triggers `.github/workflows/pypi-publish.yml`
+   (build → TestPyPI → PyPI). The version is read from `__version__`.
+5. **The portal** redeploys from `main` via `deploy-site.yml` (`beadloom docs site` + VitePress).
+
+When removing a top-level directory, grep every `.github/workflows/*` and `.gitlab-ci.yml`
+for stale path references before releasing.
 
 ## License
 

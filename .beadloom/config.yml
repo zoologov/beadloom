@@ -62,3 +62,13 @@ docs_audit:
     - path: SECURITY.md
       fact: mcp_tool_count
       value: 12
+    # multi-agent-development guide (EN/RU): a narrative architecture doc whose
+    # "2.0.0" mentions are historical ("feature X shipped in 2.0.0", corroborated
+    # by the BDL-### chronology), not a current-version claim. The title + intro
+    # are version-neutral; these suppress the historical body references.
+    - path: docs/guides/multi-agent-development.md
+      fact: version
+      value: "2.0.0"
+    - path: docs/guides/multi-agent-development.ru.md
+      fact: version
+      value: "2.0.0"
