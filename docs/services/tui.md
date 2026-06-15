@@ -288,4 +288,4 @@ TUI tests use Textual's headless pilot framework (`app.run_test()`).
 uv run pytest tests/test_tui.py -v
 ```
 
-Tests cover all 7 data providers, app shell instantiation, screen switching, CLI commands (`tui` and `ui`), all dashboard and explorer widgets, file watcher integration, overlays, keyboard actions, and status bar notifications. Total: 252 tests.
+Tests cover all 7 data providers, app shell instantiation, screen switching, CLI commands (`tui` and `ui`), all dashboard and explorer widgets, file watcher integration, overlays, keyboard actions, and status bar notifications.

@@ -198,6 +198,24 @@ Human-readable output includes reason-aware formatting:
 - `missing_modules` reason: displays list of missing modules in `details`.
 - Other stale reasons (e.g. `symbols_changed`, `content_changed`): displays `reason` next to the code path.
 
+**Reference surface drift (advisory).** A high-traffic overview doc can opt in to
+freshness against a coarse interface surface with an in-doc annotation near its
+top:
+
+```markdown
+<!-- beadloom:watches=cli,graph,flow.yml -->
+```
+
+The watched surfaces are `cli` (the Click command + flag tree), `graph` (the
+node + edge identity set), and `flow.yml` (the normalized `.beadloom/flow.yml`).
+`reindex` baselines the aggregate hash of the declared surfaces; `sync-check`
+recomputes it and, when the surface changed, emits a pair with `reason =
+surface_drift` and **severity warning**. In `--json`, `summary.surface_drift`
+and a `references[]` array carry these pairs (stored-baseline mode only; the
+`--since` shape is unchanged). Surface drift is advisory — it never changes the
+exit code or fails `beadloom ci`; it asks a human to re-read the overview and
+clear it with `sync-update`.
+
 ### beadloom sync-update
 
 Review and update stale documentation.
@@ -222,6 +240,11 @@ exits 0 — no editor, no prompt. This is the primitive a CI/script fixpoint loo
 uses to re-baseline freshness after a doc is rewritten; it is the same operation
 the interactive path performs after an edit. `--all` re-baselines every ref
 `sync-check` currently flags stale (deterministic; requires `--yes`).
+
+`REF_ID` also accepts the **path of a reference doc** (one carrying a
+`watches:` annotation). In that case `sync-update` recomputes and stores the
+doc's aggregate surface hash, clearing a `surface_drift` warning — the same
+re-attestation as a symbol pair.
 
 For automated doc updates, use your AI agent (Claude Code, Cursor, etc.) with Beadloom's MCP tools. See `.beadloom/AGENTS.md` for agent instructions.
 
@@ -258,7 +281,7 @@ or without ACTIVE tables — the block is a complete no-op (see
 **Pre-push hook (Beadloom Gate)** is the authoritative blocking enforcement of
 the hard invariant *"no code in `main` without current docs."* On every push it
 runs the full Gate (`beadloom ci` — incremental reindex → `lint --strict`
-(module-coverage included) → sync-check → config-check → doctor) and **exits
+(module-coverage included) → sync-check → docs-audit → config-check → doctor) and **exits
 non-zero to block the push** on red, printing an
 actionable message ("Beadloom Gate failed … run the tech-writer (or
 `/coordinator`) then re-push; `git push --no-verify` to override"). It is
@@ -379,7 +402,7 @@ Save the current graph state as a snapshot.
 beadloom snapshot save [--label LABEL] [--project DIR]
 ```
 
-- `--label` -- optional label for the snapshot (e.g. `v1.6.0`).
+- `--label` -- optional label for the snapshot (e.g. `2.0.0`).
 
 #### beadloom snapshot list
 
@@ -511,7 +534,7 @@ Detect stale numeric facts in project documentation.
 beadloom docs audit [--json] [--fail-if EXPR] [--stale-only] [--verbose] [--path GLOB]... [--project DIR]
 ```
 
-Scans markdown documentation for numeric mentions (version strings, counts) and compares them against ground-truth facts collected from the project infrastructure (manifest files, graph DB, MCP tools, CLI commands).
+Scans markdown documentation for numeric mentions (version strings, counts) and compares them against ground-truth facts collected from the project infrastructure (manifest files, graph DB, MCP tools, CLI commands). The audit is stable and runs as the **docs-audit step inside `beadloom ci`**, where it blocks the gate on `stale>0`.
 
 - `--json` -- structured JSON output with facts, findings, and unmatched mentions.
 - `--fail-if` -- CI gate expression. Supported format: `stale>N` or `stale>=N`. Exits with code 1 when condition is met.
@@ -520,6 +543,20 @@ Scans markdown documentation for numeric mentions (version strings, counts) and 
 - `--path` -- override default scan paths with custom glob patterns (can be specified multiple times).
 
 Exit codes: 0 = no issues (or below threshold), 1 = `--fail-if` condition met.
+
+**Tuning false positives.** The audit masks dates, hex, issue IDs, line refs, and version pins, and applies per-fact tolerances. Two `.beadloom/config.yml` keys handle the rest:
+
+```yaml
+docs_audit:
+  tolerances:
+    node_count: 0.1          # accept counts within 10% of ground truth
+  ignore:                    # suppress one {path, fact, value} false match each
+    - path: docs/guides/vitepress-site.md
+      fact: cli_command_count
+      value: 404
+```
+
+`docs_audit.ignore` is a list of `{path, fact, value}` triples. Each suppresses exactly one keyword-proximity false positive — for example a subset count stated next to the correct total, or an HTTP status code matched as a command count — **without** rewording correct prose and **without** masking a genuine stale fact of the same type elsewhere. Use it only for confirmed false positives; genuine stale facts must be corrected in the doc.
 
 Examples:
 
@@ -787,7 +824,7 @@ Module `src/beadloom/services/cli.py`:
 - `setup_ai_techwriter` -- scaffold the AI tech-writer (vendored harness + recipe + chosen platform CI wrapper + getting-started guide) for one-command opt-in; delegates to `onboarding/ai_techwriter_setup.py:scaffold()`
 - `setup_agentic_flow` -- scaffold the packaged multi-agent dev flow (`.claude/agents/*` + `commands/*` vendored byte-identical + CLAUDE.md auto-regions per-project); idempotent, `--force` overwrites hand-edited flow files; delegates to `onboarding/agentic_flow_setup.py:scaffold()`
 - `config_check` -- AgentConfigAsCode drift gate (`--fix` regenerates); reuses the `setup-rules --refresh` generator; also drift-checks/restores the scaffolded agentic-flow files when the flow is present
-- `ci` -- unified enforcement gate composing reindex -> lint -> sync-check -> config-check -> doctor -> (optional `--hub`) federate into one exit code; honest per-step PASS/FAIL/SKIP; uniform `--format {rich,json,github}` (github = valid `::error file=,line=` annotations); delegates to `application/gate.py:run_ci_gate()`
+- `ci` -- unified enforcement gate composing reindex -> lint -> sync-check -> docs-audit -> config-check -> doctor -> (optional `--hub`) federate into one exit code; the docs-audit step blocks on stale facts (`stale>0`); honest per-step PASS/FAIL/SKIP; uniform `--format {rich,json,github}` (github = valid `::error file=,line=` annotations); delegates to `application/gate.py:run_ci_gate()`
 - `mcp_serve` -- run MCP stdio server
 - `docs` -- Click group for doc commands (`generate`, `polish`, `audit`)
 - `tui` -- launch TUI dashboard (primary command, multi-screen with `--no-watch`)
