@@ -45,10 +45,12 @@ class SyncPair:
 | `symbols_changed` | Code symbols (function/class signatures) changed while doc hash remained the same |
 | `untracked_files` | Python files in the node's source directory are not tracked in sync_state or code_symbols |
 | `missing_modules` | The linked documentation does not mention one or more module names from the source directory |
+| `surface_drift` | **Advisory warning** (severity `warning`, never a hard failure / exit 2). A reference / overview doc that declared `<!-- beadloom:watches=... -->` has had a watched surface (`cli` / `graph` / `flow.yml`) change since its baseline. Stored in the separate `reference_state` table; cleared with `beadloom sync-update <doc> --yes`. |
 
 ### Modules
 
-- **engine.py** -- Core sync engine: sync state building, multi-phase sync checking, hash computation, coverage analysis
+- **engine.py** -- Core sync engine: sync state building, multi-phase sync checking, hash computation, coverage analysis, and reference-doc surface-drift state (build/check/clear)
+- **surface.py** -- Layer 2 reference surface-drift: parses the in-doc `<!-- beadloom:watches=cli,graph,flow.yml -->` annotation and computes coarse, deterministic per-surface signatures (`cli` command+flag tree, `graph` node+edge identity set, normalized `flow.yml`) plus the order-sensitive aggregate hash
 - **doc_indexer.py** -- Markdown scanning, chunking by H2 headings, section classification, and SQLite population
 - **audit.py** -- Documentation audit: fact registry, comparator, and audit facade for detecting stale numeric facts
 - **scanner.py** -- Document scanner: keyword-proximity extraction of numeric fact mentions from markdown files
@@ -97,6 +99,19 @@ beadloom install-hooks --mode block
 - `_validate_git_ref(project_root: Path, ref: str) -> bool` -- `git rev-parse --verify <ref>`; an all-zero SHA (force-push / first-push sentinel) never resolves so it is rejected. Mirrors `graph.diff._validate_git_ref`.
 - `check_source_coverage(conn: sqlite3.Connection, project_root: Path) -> list[dict[str, Any]]` -- Check if all source files in a node's directory are tracked. Returns list of dicts with `ref_id`, `doc_path`, `untracked_files`.
 - `check_doc_coverage(conn: sqlite3.Connection, project_root: Path) -> list[dict[str, Any]]` -- Check if documentation mentions module names from the source directory. Returns list of dicts with `ref_id`, `doc_path`, `missing_modules`.
+- `build_reference_state(conn: sqlite3.Connection, project_root: Path) -> int` -- (BDL-057 Layer 2) Discover `watches`-annotated reference docs and baseline each one's aggregate surface hash into the `reference_state` table. The baseline is **preserved across reindex** for docs already tracked with the same `watches` set (so accrued surface drift survives a routine reindex, mirroring the symbol-pair fixpoint concern); a fresh baseline is taken only for newly-discovered docs or when the declared `watches` set changes. Docs whose annotation was removed are dropped. Idempotent. Returns the number of reference docs recorded.
+- `check_reference_drift(conn: sqlite3.Connection, project_root: Path) -> list[dict[str, Any]]` -- (BDL-057 Layer 2) Recompute each reference doc's aggregate hash and report drift. Returns one dict per reference doc with `doc_path`, `watches`, `status` (`ok`/`surface_drift`), `reason`, and `severity` (always `warning`). Persists the new status; never affects the `sync-check` exit code.
+- `mark_reference_synced(conn: sqlite3.Connection, doc_path: str | None, project_root: Path, *, all_docs: bool = False) -> int` -- (BDL-057 Layer 2) Re-baseline a reference doc's aggregate hash (or every reference doc when `all_docs`), clearing surface drift. Returns the number of rows re-baselined. (Backs `beadloom sync-update <doc> --yes` / `--all`.)
+
+### Module `src/beadloom/doc_sync/surface.py`
+
+- `VALID_SURFACES: tuple[str, ...]` -- The known coarse surfaces: `("cli", "graph", "flow.yml")`.
+- `parse_watches(text: str) -> list[str] | None` -- Parse the `<!-- beadloom:watches=cli,graph,flow.yml -->` annotation; returns the ordered, de-duplicated list of *known* surfaces in declared order, or `None` when absent / no known surface (unknown tokens are silently dropped).
+- `cli_signature() -> str` -- SHA-256 of the sorted Click command + option-flag tree (command paths + flag names), so adding/removing a command or flag moves it but help-text edits do not.
+- `graph_signature(conn: sqlite3.Connection) -> str` -- SHA-256 of the sorted node `ref_id|kind` set plus the sorted edge `src|dst|kind|contract_key` set (a coarse identity set, not node content).
+- `flow_signature(project_root: Path) -> str` -- SHA-256 of `.beadloom/flow.yml` re-serialized canonically (sorted keys), or `""` when absent/invalid; comments and key order do not move it.
+- `surface_signature(surface: str, conn: sqlite3.Connection, project_root: Path) -> str` -- Dispatch to the per-surface signature; raises `ValueError` for an unknown surface.
+- `aggregate_hash(watches: list[str], conn: sqlite3.Connection, project_root: Path) -> str` -- SHA-256 of the watched surfaces' signatures concatenated in declared order (order-sensitive by design).
 
 ### Module `src/beadloom/doc_sync/doc_indexer.py`
 
@@ -113,7 +128,7 @@ beadloom sync-check [--porcelain] [--json] [--report] [--ref REF_ID] [--since GI
 | Flag | Description |
 |------|----------|
 | `--porcelain` | TAB-separated machine-readable output |
-| `--json` | Structured JSON output with summary and pairs |
+| `--json` | Structured JSON output: `summary` (incl. advisory `surface_drift` count), the symbol-pair `pairs` array (unchanged), and an additive `references` array for reference-doc surface drift |
 | `--report` | Markdown report for CI posting |
 | `--ref` | Filter results by ref_id |
 | `--since` | Baseline = code state at this git ref (e.g. the push's parent) instead of the stored `sync_state`; reports pairs whose code drifted since the ref while the doc was not correspondingly updated. Delegates to `check_sync_since`; invalid/zero refs are rejected via `_validate_git_ref`. |
@@ -131,7 +146,7 @@ Show sync status and update docs for a ref_id. In interactive mode (default), di
 
 | Argument/Flag | Description |
 |---------------|----------|
-| `REF_ID` | Optional positional argument; the ref to update. Required unless `--all` is used. |
+| `REF_ID` | Optional positional argument; the symbol-pair ref to update, **or** a reference doc's path (e.g. `docs/architecture.md`) to clear its surface drift. Required unless `--all` is used. |
 | `--check` | Only show status, don't open editor. |
 | `--yes` / `-y` | Non-interactive: re-baseline freshness without an editor or prompt. |
 | `--all` | With `--yes`: re-baseline every currently-stale ref (for the fixpoint loop). Requires `--yes`; mutually exclusive with an explicit `REF_ID`. |
@@ -147,4 +162,4 @@ Installs or removes a pre-commit hook that runs `beadloom sync-check` automatica
 
 ## Testing
 
-Tests: `tests/test_sync_engine.py`, `tests/test_cli_sync_check.py`, `tests/test_cli_sync_update.py`, `tests/test_source_coverage.py`, `tests/test_doc_coverage.py`
+Tests: `tests/test_sync_engine.py`, `tests/test_cli_sync_check.py`, `tests/test_cli_sync_update.py`, `tests/test_source_coverage.py`, `tests/test_doc_coverage.py`, `tests/test_surface.py`, `tests/test_reference_drift.py`, `tests/test_cli_reference_drift.py`

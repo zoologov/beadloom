@@ -850,6 +850,11 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
         preserved_pairs=preserved_pairs,
     )
 
+    # 4b. Baseline reference-doc surface hashes (BDL-057 Layer 2; advisory).
+    from beadloom.doc_sync.engine import build_reference_state
+
+    build_reference_state(conn, project_root)
+
     # 5. Populate FTS5 search index.
     from beadloom.context_oracle.search import populate_search_index
 
@@ -1320,6 +1325,14 @@ def incremental_reindex(
         preserved_symbols=old_symbols or None,
         preserved_pairs=old_pairs or None,
     )
+
+    # Re-baseline reference-doc surface hashes, preserving existing baselines
+    # (BDL-057 Layer 2; advisory). Unlike sync_state this is NOT deleted first —
+    # build_reference_state preserves the prior aggregate_hash so accrued surface
+    # drift survives a routine incremental reindex.
+    from beadloom.doc_sync.engine import build_reference_state
+
+    build_reference_state(conn, project_root)
 
     # Rebuild FTS5 search index.
     from beadloom.context_oracle.search import populate_search_index

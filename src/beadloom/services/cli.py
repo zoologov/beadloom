@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     import sqlite3
     from collections.abc import Sequence
     from types import ModuleType
+    from typing import Any
 
     from beadloom.application.active_table import ReconcileResult
     from beadloom.application.gate import GateResult
@@ -100,7 +101,7 @@ def _warn_missing_parsers(project_root: Path) -> None:
 # beadloom:domain=context-oracle
 def _format_markdown(bundle: dict[str, object]) -> str:
     """Format a context bundle as human-readable Markdown."""
-    from typing import Any, cast
+    from typing import cast
 
     focus = cast("dict[str, str]", bundle["focus"])
     graph = cast("dict[str, list[dict[str, str]]]", bundle["graph"])
@@ -1103,7 +1104,12 @@ def sync_check(
 
     Exit codes: 0 = all ok, 1 = error, 2 = stale pairs found.
     """
-    from beadloom.doc_sync.engine import _validate_git_ref, check_sync, check_sync_since
+    from beadloom.doc_sync.engine import (
+        _validate_git_ref,
+        check_reference_drift,
+        check_sync,
+        check_sync_since,
+    )
     from beadloom.infrastructure.db import open_db
 
     project_root = project or Path.cwd()
@@ -1122,24 +1128,31 @@ def sync_check(
     conn = open_db(db_path)
     if since_ref is not None:
         results = check_sync_since(conn, project_root=project_root, since=since_ref)
+        # `--since` is a ref-relative symbol-pair view; reference surfaces have no
+        # git-ref baseline, so they are not evaluated in that mode.
+        references: list[dict[str, Any]] = []
     else:
         results = check_sync(conn, project_root=project_root)
+        references = check_reference_drift(conn, project_root)
     conn.close()
 
     if ref_filter:
         results = [r for r in results if r["ref_id"] == ref_filter]
 
     has_stale = any(r["status"] == "stale" for r in results)
+    # Surface drift is advisory (warning) — it NEVER affects the exit code.
+    drifted_refs = [r for r in references if r["status"] == "surface_drift"]
 
     if output_json:
         ok_count = sum(1 for r in results if r["status"] == "ok")
         stale_count = sum(1 for r in results if r["status"] == "stale")
-        data = {
-            "summary": {
-                "total": len(results),
-                "ok": ok_count,
-                "stale": stale_count,
-            },
+        summary: dict[str, Any] = {
+            "total": len(results),
+            "ok": ok_count,
+            "stale": stale_count,
+        }
+        data: dict[str, Any] = {
+            "summary": summary,
             "pairs": [
                 {
                     "status": r["status"],
@@ -1152,6 +1165,22 @@ def sync_check(
                 for r in results
             ],
         }
+        # Reference-doc surface drift (BDL-057 Layer 2) is additive and only
+        # applies to the stored-baseline mode — `--since` is a ref-relative
+        # symbol-pair view with no reference baseline, so its JSON shape is left
+        # untouched (the `pairs` array above is unchanged in both modes).
+        if since_ref is None:
+            summary["surface_drift"] = len(drifted_refs)
+            data["references"] = [
+                {
+                    "status": r["status"],
+                    "doc_path": r["doc_path"],
+                    "watches": r["watches"],
+                    "reason": r["reason"],
+                    "severity": r["severity"],
+                }
+                for r in references
+            ]
         click.echo(json.dumps(data, ensure_ascii=False, indent=2))
     elif output_report:
         click.echo(_build_sync_report(results))
@@ -1161,8 +1190,11 @@ def sync_check(
             click.echo(
                 f"{r['status']}\t{r['ref_id']}\t{r['doc_path']}\t{r['code_path']}\t{reason}"
             )
+        for r in references:
+            # ref_id/code_path columns are empty for a reference doc (no pairing).
+            click.echo(f"{r['status']}\t\t{r['doc_path']}\t\t{r['reason']}")
     else:
-        if not results:
+        if not results and not references:
             click.echo("No sync pairs found.")
         else:
             for r in results:
@@ -1187,6 +1219,16 @@ def sync_check(
                     )
                 else:
                     click.echo(f"  {marker} {r['ref_id']}: {r['doc_path']} <-> {r['code_path']}")
+
+            for r in references:
+                marker = "[warn]" if r["status"] == "surface_drift" else "[ok]"
+                if r["status"] == "surface_drift":
+                    click.echo(
+                        f"  {marker} {r['doc_path']} (surface drift: watches="
+                        f"{r['watches']}; run `beadloom sync-update {r['doc_path']}`)"
+                    )
+                else:
+                    click.echo(f"  {marker} {r['doc_path']} (watches={r['watches']})")
 
     if has_stale:
         sys.exit(2)
@@ -1763,23 +1805,39 @@ def _mark_synced_noninteractive(
     Wraps ``mark_synced_by_ref``: recomputes hashes + symbols_hash and records
     ``status='ok'``. Prints a concise, deterministic summary and exits 0.
     """
-    from beadloom.doc_sync.engine import check_sync, mark_synced_by_ref
+    from beadloom.doc_sync.engine import (
+        check_sync,
+        mark_reference_synced,
+        mark_synced_by_ref,
+    )
 
     if all_refs:
         results = check_sync(conn, project_root=project_root)
         stale_refs = sorted({r["ref_id"] for r in results if r["status"] == "stale"})
-        if not stale_refs:
-            click.echo("No stale refs to re-baseline.")
-            return
         total = 0
         for ref in stale_refs:
             rows = mark_synced_by_ref(conn, ref, project_root)
             total += rows
             click.echo(f"Re-baselined {ref}: {rows} pair(s).")
-        click.echo(f"Marked {len(stale_refs)} ref(s) synced ({total} pair(s) total).")
+        # Also clear any reference-doc surface drift (BDL-057 Layer 2; advisory).
+        ref_docs = mark_reference_synced(conn, None, project_root, all_docs=True)
+        if not stale_refs and not ref_docs:
+            click.echo("No stale refs to re-baseline.")
+            return
+        if stale_refs:
+            click.echo(f"Marked {len(stale_refs)} ref(s) synced ({total} pair(s) total).")
+        if ref_docs:
+            click.echo(f"Re-baselined {ref_docs} reference doc(s).")
         return
 
     assert ref_id is not None  # guaranteed by the command-level validation
+    # A reference doc (watches annotation) is addressed by its doc_path; try that
+    # first so `sync-update docs/architecture.md --yes` clears surface drift.
+    ref_docs = mark_reference_synced(conn, ref_id, project_root)
+    if ref_docs:
+        click.echo(f"Re-baselined reference doc {ref_id}.")
+        return
+
     rows = mark_synced_by_ref(conn, ref_id, project_root)
     if rows == 0:
         click.echo(f"No sync pairs found for {ref_id}; nothing to re-baseline.")
@@ -2832,7 +2890,7 @@ def docs_audit(
     project: Path | None,
     fail_if_expr: str | None,
 ) -> None:
-    """Detect stale facts in project documentation. [experimental]"""
+    """Detect stale facts in project documentation."""
     from beadloom.doc_sync.audit import parse_fail_condition, run_audit
     from beadloom.infrastructure.db import open_db
 
@@ -3012,7 +3070,7 @@ def _docs_audit_rich(
 
     # Title
     console.print()
-    console.print("Documentation Audit [dim]experimental[/dim]", style="bold")
+    console.print("Documentation Audit", style="bold")
     console.print("[bold]" + "=" * 50 + "[/bold]")
     console.print()
 

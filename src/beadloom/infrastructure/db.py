@@ -123,6 +123,21 @@ CREATE TABLE IF NOT EXISTS sync_state (
     UNIQUE(doc_path, code_path)
 );
 
+-- Reference doc surface-drift state (BDL-057 Layer 2).
+-- Parallel to ``sync_state`` but for *reference / overview* docs that opt in
+-- with an in-doc ``<!-- beadloom:watches=cli,graph,flow.yml -->`` annotation.
+-- ``aggregate_hash`` is a coarse identity-set hash over the watched surfaces;
+-- a mismatch on ``sync-check`` yields ``status='surface_drift'`` (a WARNING,
+-- never a hard failure). Kept separate so the symbol-pair logic + reason-masking
+-- invariant in ``sync_state`` stay untouched.
+CREATE TABLE IF NOT EXISTS reference_state (
+    doc_path        TEXT PRIMARY KEY,
+    watches         TEXT NOT NULL,
+    aggregate_hash  TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'ok'
+        CHECK(status IN ('ok','surface_drift'))
+);
+
 -- Index metadata
 CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,

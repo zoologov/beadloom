@@ -6,8 +6,6 @@ tools, CLI commands) for comparison against doc mentions.
 
 Also provides ``AuditFinding``, ``AuditResult``, ``compare_facts()`` for
 comparing mentions against ground truth, and ``run_audit()`` facade.
-
-Experimental — API may change in v1.9.
 """
 
 # beadloom:feature=docs-audit
