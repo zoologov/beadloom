@@ -514,9 +514,13 @@ class TestRealRepoCoveragePromoted:
     def test_live_repo_has_zero_module_coverage_findings(self) -> None:
         """`module-coverage` reports ZERO findings over the live src tree (no shadow code)."""
         runner = CliRunner()
+        # Reindex first (no --no-reindex): these live-repo assertions must be
+        # self-contained / order-independent — they cannot rely on the ambient
+        # state of the shared .beadloom/beadloom.db (which another test, under a
+        # random order, may have mutated). Surfaced by pytest-randomly in S1.
         result = runner.invoke(
             main,
-            ["lint", "--format", "json", "--project", str(Path.cwd()), "--no-reindex"],
+            ["lint", "--format", "json", "--project", str(Path.cwd())],
         )
         assert result.exit_code in (0, 1), result.output
         payload = json.loads(result.output)
@@ -527,8 +531,9 @@ class TestRealRepoCoveragePromoted:
     def test_real_repo_lint_strict_exits_zero(self) -> None:
         """`lint --strict` over the live repo exits 0 — coverage clean despite error severity."""
         runner = CliRunner()
+        # Reindex first (self-contained / order-independent — see the note above).
         result = runner.invoke(
-            main, ["lint", "--strict", "--project", str(Path.cwd()), "--no-reindex"]
+            main, ["lint", "--strict", "--project", str(Path.cwd())]
         )
         assert result.exit_code == 0, result.output
 
