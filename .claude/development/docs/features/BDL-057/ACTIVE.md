@@ -9,9 +9,9 @@
 
 ## Current focus
 
-**Wave 2 next: `.3` test.** Wave 1 DONE + integrated (commit `65821e3`): `.1` (docs audit → Gate, block `stale>0`) + `.2` (reference `watches` surface-drift mechanism) merged via file-checkout + 3-way on `cli.py`; ruff/mypy clean, full suite green, sync-check 151 fresh. Dev agents already shipped 58 tests (7 + 51).
+**ALL BEADS DONE — branch ready for one PR to `main`.** Waves: `.1`+`.2` (dev, integrated `65821e3`) → `.3` (test `50a79ff`, +26 cross-cutting) → `.4` (review PASS, 3 minor) → `.6` (dev fixes `95c637d`: reference_state migration guard + interactive sync-update reference handling + `docs_audit.ignore` for false positives) → `.5` (tech-writer `51ee89c`: 11 skeleton SPECs filled, genuine facts fixed, `watches` declared on README en/ru + getting-started + architecture, feature docs). Coordinator gate check: `beadloom ci` rc 0 (docs-audit 0 stale, sync-check 151 fresh + 0 surface_drift), pytest 4316 passed, ruff/mypy clean.
 
-**Dogfood finding (wave 1):** the new `docs-audit` Gate step is active and FAILs on **18 stale facts** in Beadloom's own docs. Genuine (fix in .5): README `node_count` 20→53, `mcp_tool_count` 14→18, README.ru `cli_command_count` 14→38, SECURITY/architecture. **False positives** (need `.beadloom/config.yml` tolerances/exclusions, NOT prose — outside tech-writer's docs/-only remit): context-oracle README `language_count` 12→1, `framework_count` 12→53. → resolve before the Gate can go green; decide who owns the config tuning (coordinator/dev vs fold into .5).
+**Dogfood finding (resolved):** the new `docs-audit` Gate step caught 18 stale facts in the repo's own docs — 13 genuine (reworded in `.5`) + 5 false positives (suppressed via `.beadloom/config.yml` `docs_audit.ignore` added in `.6`). The feature paid for itself on first run.
 
 ## Bead status
 
