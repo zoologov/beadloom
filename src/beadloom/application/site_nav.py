@@ -192,6 +192,12 @@ def _doc_children_js(directory: Path, base: Path, depth: int) -> list[str]:
     for md in sorted(p for p in directory.iterdir() if p.is_file() and p.suffix == ".md"):
         if md.name.startswith("."):
             continue
+        if md.name.endswith(".ru.md"):
+            # Localized counterpart (e.g. ``multi-agent-development.ru.md``):
+            # published and reachable via the in-page language cross-link, but
+            # kept out of the sidebar — mirrors the bilingual About toggle, which
+            # is an in-page link rather than a separate menu entry.
+            continue
         rel = md.relative_to(base)
         label = _js_str(human_label(md.stem))
         link = _js_str(_doc_link(rel))
