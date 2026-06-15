@@ -539,6 +539,7 @@ class TestHonestGate:
         "reindex",
         "lint",
         "sync-check",
+        "docs-audit",
         "config-check",
         "doctor",
     }
@@ -568,6 +569,7 @@ class TestHonestGate:
             "reindex",
             "lint",
             "sync-check",
+            "docs-audit",
             "config-check",
             "doctor",
             "federate",

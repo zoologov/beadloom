@@ -1,5 +1,7 @@
 # Beadloom Architecture
 
+<!-- beadloom:watches=graph,cli -->
+
 > 📘 **reference** — overview/deep-dive, not tied to a single code symbol. It aligns with (does not replace) the generated [`/architecture` C4 overview](../services/cli.md#beadloom-docs-site) on the published portal.
 
 Beadloom turns Architecture as Code into Architectural Intelligence — structured, queryable knowledge about your system that humans and AI agents consume in <20ms.

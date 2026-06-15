@@ -1,5 +1,7 @@
 # Beadloom
 
+<!-- beadloom:watches=cli,graph,flow.yml -->
+
 > Read this in other languages: [English](README.md)
 
 **Beadloom — это источник правды о вашем коде: его архитектуре, контрактах и документации.**

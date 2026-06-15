@@ -471,6 +471,208 @@ def mark_synced_by_ref(
     return count
 
 
+# ---------------------------------------------------------------------------
+# BDL-057 Layer 2 — reference doc surface-drift (advisory / warning)
+#
+# Reference / overview docs opt in with an in-doc annotation
+# ``<!-- beadloom:watches=cli,graph,flow.yml -->``. Their coarse aggregate hash
+# is baselined on reindex (:func:`build_reference_state`), re-checked on
+# sync-check (:func:`check_reference_drift`, severity *warning*), and re-baselined
+# on sync-update (:func:`mark_reference_synced`). This lives in the separate
+# ``reference_state`` table and never touches the symbol-pair ``sync_state``
+# logic or its reason-masking / fixpoint invariant.
+# ---------------------------------------------------------------------------
+
+
+def _resolve_reference_docs_dir(project_root: Path) -> Path:
+    """Return the docs directory, honoring ``.beadloom/config.yml`` ``docs_dir``.
+
+    Mirrors the application-layer resolver without importing upward: reads the
+    optional ``docs_dir`` key from config, falling back to ``<root>/docs``.
+    """
+    import yaml
+
+    config_path = project_root / ".beadloom" / "config.yml"
+    if config_path.is_file():
+        try:
+            config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError):
+            config = {}
+        docs_path = config.get("docs_dir") if isinstance(config, dict) else None
+        if docs_path:
+            return project_root / str(docs_path)
+    return project_root / "docs"
+
+
+def _discover_reference_docs(project_root: Path) -> list[tuple[str, list[str]]]:
+    """Find markdown docs declaring a ``watches:`` annotation.
+
+    Scans the top-level ``*.md`` files (e.g. ``README.md``, ``README.ru.md``)
+    and every ``*.md`` under the docs directory. Returns a sorted list of
+    ``(project-root-relative doc_path, watched surfaces)`` for docs whose
+    annotation names at least one known surface.
+    """
+    from beadloom.doc_sync.surface import parse_watches
+
+    candidates: list[Path] = sorted(project_root.glob("*.md"))
+    docs_dir = _resolve_reference_docs_dir(project_root)
+    if docs_dir.is_dir():
+        candidates += sorted(docs_dir.rglob("*.md"))
+
+    found: list[tuple[str, list[str]]] = []
+    for path in candidates:
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        watches = parse_watches(text)
+        if watches:
+            rel = str(path.relative_to(project_root))
+            found.append((rel, watches))
+    return found
+
+
+def build_reference_state(conn: sqlite3.Connection, project_root: Path) -> int:
+    """Baseline the aggregate hash of every ``watches``-annotated reference doc.
+
+    Discovers reference docs and records a ``reference_state`` row for each.
+
+    The stored ``aggregate_hash`` baseline is **preserved across reindex** for
+    docs already tracked with the *same* ``watches`` set — otherwise a routine
+    reindex after a surface change would silently re-baseline and never warn (the
+    same fixpoint concern as the symbol-pair ``sync_state``). A fresh baseline at
+    the current hash is computed only for newly-discovered docs, or when the
+    declared ``watches`` set itself changed (the old baseline no longer applies).
+    Docs whose annotation was removed are dropped. Idempotent. Returns the number
+    of reference docs recorded.
+    """
+    from beadloom.doc_sync.surface import aggregate_hash
+
+    discovered = _discover_reference_docs(project_root)
+    keep = {doc_path for doc_path, _ in discovered}
+
+    prior: dict[str, tuple[str, str]] = {
+        row["doc_path"]: (row["watches"], row["aggregate_hash"])
+        for row in conn.execute(
+            "SELECT doc_path, watches, aggregate_hash FROM reference_state"
+        ).fetchall()
+    }
+
+    # Forget docs that no longer declare a watches annotation.
+    for doc_path in prior:
+        if doc_path not in keep:
+            conn.execute(
+                "DELETE FROM reference_state WHERE doc_path = ?", (doc_path,)
+            )
+
+    for doc_path, watches in discovered:
+        watches_csv = ",".join(watches)
+        prior_entry = prior.get(doc_path)
+        if prior_entry is not None and prior_entry[0] == watches_csv:
+            # Already tracked with the same surfaces — keep the existing baseline
+            # so a later sync-check still sees drift accrued since it was set.
+            continue
+        agg = aggregate_hash(watches, conn, project_root)
+        conn.execute(
+            "INSERT INTO reference_state (doc_path, watches, aggregate_hash, status) "
+            "VALUES (?, ?, ?, 'ok') "
+            "ON CONFLICT(doc_path) DO UPDATE SET "
+            "watches = excluded.watches, aggregate_hash = excluded.aggregate_hash, "
+            "status = 'ok'",
+            (doc_path, watches_csv, agg),
+        )
+    conn.commit()
+    return len(discovered)
+
+
+def check_reference_drift(
+    conn: sqlite3.Connection,
+    project_root: Path,
+) -> list[dict[str, Any]]:
+    """Recompute each reference doc's aggregate hash and report drift (warning).
+
+    For every ``reference_state`` row, compares the stored baseline against the
+    current aggregate hash of its watched surfaces. A mismatch yields
+    ``status='surface_drift'`` with ``reason='surface_drift'`` and
+    ``severity='warning'`` (never a hard failure); a match yields ``'ok'``. The
+    new status is persisted. Returns one result dict per reference doc.
+    """
+    from beadloom.doc_sync.surface import aggregate_hash
+
+    rows = conn.execute(
+        "SELECT doc_path, watches, aggregate_hash FROM reference_state ORDER BY doc_path"
+    ).fetchall()
+    if not rows:
+        return []
+
+    results: list[dict[str, Any]] = []
+    for row in rows:
+        doc_path = row["doc_path"]
+        watches = [s for s in row["watches"].split(",") if s]
+        baseline = row["aggregate_hash"]
+
+        current = aggregate_hash(watches, conn, project_root)
+        drifted = current != baseline
+        status = "surface_drift" if drifted else "ok"
+
+        conn.execute(
+            "UPDATE reference_state SET status = ? WHERE doc_path = ?",
+            (status, doc_path),
+        )
+        results.append(
+            {
+                "doc_path": doc_path,
+                "watches": row["watches"],
+                "status": status,
+                "reason": "surface_drift" if drifted else "ok",
+                "severity": "warning",
+            }
+        )
+
+    conn.commit()
+    return results
+
+
+def mark_reference_synced(
+    conn: sqlite3.Connection,
+    doc_path: str | None,
+    project_root: Path,
+    *,
+    all_docs: bool = False,
+) -> int:
+    """Re-baseline a reference doc's aggregate hash, clearing surface drift.
+
+    Recomputes the current aggregate hash for *doc_path* (or every reference doc
+    when *all_docs* is set) and stores it with ``status='ok'``. Returns the
+    number of rows re-baselined (0 when the doc is not a tracked reference doc).
+    """
+    from beadloom.doc_sync.surface import aggregate_hash
+
+    if all_docs:
+        rows = conn.execute("SELECT doc_path, watches FROM reference_state").fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT doc_path, watches FROM reference_state WHERE doc_path = ?",
+            (doc_path,),
+        ).fetchall()
+
+    count = 0
+    for row in rows:
+        watches = [s for s in row["watches"].split(",") if s]
+        agg = aggregate_hash(watches, conn, project_root)
+        conn.execute(
+            "UPDATE reference_state SET aggregate_hash = ?, status = 'ok' "
+            "WHERE doc_path = ?",
+            (agg, row["doc_path"]),
+        )
+        count += 1
+
+    conn.commit()
+    return count
+
+
 # Excluded filenames — boilerplate, not doc-worthy
 _COVERAGE_EXCLUDE = frozenset({"__init__.py", "conftest.py", "__main__.py"})
 

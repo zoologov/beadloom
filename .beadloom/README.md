@@ -50,9 +50,10 @@ Beadloom exposes tools via Model Context Protocol (MCP):
     beadloom mcp-serve             # start MCP server (stdio)
     beadloom setup-mcp             # configure your editor
 
-MCP tools (14): `get_context`, `get_graph`, `list_nodes`, `sync_check`, `get_status`,
-`search`, `update_node`, `mark_synced`, `generate_docs`, `prime`, `why`, `diff`, `lint`,
-`get_debt_report`.
+MCP tools (18): 14 over the graph — `get_context`, `get_graph`, `list_nodes`, `sync_check`,
+`get_status`, `search`, `update_node`, `mark_synced`, `generate_docs`, `prime`, `why`, `diff`,
+`lint`, `get_debt_report` — plus four process tools: `task_init`, `bead_context`,
+`complete_bead`, `checkpoint`.
 
 ## Directory Contents
 

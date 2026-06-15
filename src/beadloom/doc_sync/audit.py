@@ -6,8 +6,6 @@ tools, CLI commands) for comparison against doc mentions.
 
 Also provides ``AuditFinding``, ``AuditResult``, ``compare_facts()`` for
 comparing mentions against ground truth, and ``run_audit()`` facade.
-
-Experimental — API may change in v1.9.
 """
 
 # beadloom:feature=docs-audit
@@ -130,6 +128,41 @@ class AuditResult:
     unmatched: list[Mention]
 
 
+@dataclass(frozen=True)
+class IgnoreRule:
+    """A targeted false-positive suppression rule (BDL-057.6).
+
+    Suppresses exactly one ``{path, fact, value}`` mention triple so a known
+    keyword-proximity false positive (e.g. "12 supported languages" matched
+    against the in-repo ``language_count``, or an HTTP status "404" matched as a
+    ``cli_command_count``) can be silenced WITHOUT rewording correct prose and
+    WITHOUT masking genuine stale facts of the same type elsewhere.
+
+    Attributes
+    ----------
+    path:
+        Doc path the mention occurs in. Matched as a suffix of the mention's
+        file path (so a repo-relative path in config matches the absolute path
+        the scanner records).
+    fact:
+        The ``fact_name`` of the mention (e.g. ``"language_count"``).
+    value:
+        The mentioned value, compared as a string (e.g. ``"12"``, ``"404"``).
+    """
+
+    path: str
+    fact: str
+    value: str
+
+    def matches(self, mention: Mention) -> bool:
+        """True when *mention* is exactly the suppressed triple."""
+        if mention.fact_name != self.fact:
+            return False
+        if str(mention.value) != self.value:
+            return False
+        return str(mention.file).replace("\\", "/").endswith(self.path)
+
+
 _SUPPORTED_METRICS = frozenset({"stale"})
 _SUPPORTED_OPS = frozenset({">", ">="})
 _FAIL_IF_RE = re.compile(r"^\s*(\w+)\s*(>=?)\s*(\d+)\s*$")
@@ -184,6 +217,7 @@ def compare_facts(
     facts: dict[str, Fact],
     mentions: list[Mention],
     tolerances: dict[str, float] | None = None,
+    ignore: list[IgnoreRule] | None = None,
 ) -> AuditResult:
     """Compare mentions against ground-truth facts.
 
@@ -201,6 +235,11 @@ def compare_facts(
     tolerances:
         Optional per-fact tolerance overrides.  Merged on top of
         ``DEFAULT_TOLERANCES`` (user values win).
+    ignore:
+        Optional targeted false-positive suppressions (BDL-057.6). A mention
+        matching any rule's ``{path, fact, value}`` triple is dropped entirely
+        (neither a finding nor unmatched) — this silences a known false match
+        without masking genuine stale facts of the same type elsewhere.
 
     Returns
     -------
@@ -212,10 +251,14 @@ def compare_facts(
     if tolerances:
         merged.update(tolerances)
 
+    rules = ignore or []
     findings: list[AuditFinding] = []
     unmatched: list[Mention] = []
 
     for mention in mentions:
+        if any(rule.matches(mention) for rule in rules):
+            continue  # suppressed false positive — not a finding, not unmatched
+
         fact = facts.get(mention.fact_name)
         if fact is None:
             unmatched.append(mention)
@@ -334,6 +377,60 @@ def _load_tolerances_from_config(project_root: Path) -> dict[str, float] | None:
     return result if result else None
 
 
+def _load_ignore_from_config(project_root: Path) -> list[IgnoreRule]:
+    """Load targeted false-positive suppressions from ``.beadloom/config.yml``.
+
+    Expected format (each entry is a ``{path, fact, value}`` triple)::
+
+        docs_audit:
+          ignore:
+            - path: docs/domains/context-oracle/README.md
+              fact: language_count
+              value: 12
+            - path: docs/guides/vitepress-site.md
+              fact: cli_command_count
+              value: 404
+
+    Returns an empty list when none are configured. Malformed entries (not a
+    mapping, or missing any of the three keys) are skipped with a warning.
+    """
+    config_path = project_root / ".beadloom" / "config.yml"
+    if not config_path.is_file():
+        return []
+
+    try:
+        import yaml
+
+        data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    except Exception:
+        logger.warning("Failed to read .beadloom/config.yml for audit ignores")
+        return []
+
+    if not isinstance(data, dict):
+        return []
+    audit_section = data.get("docs_audit")
+    if not isinstance(audit_section, dict):
+        return []
+    raw = audit_section.get("ignore")
+    if not isinstance(raw, list):
+        return []
+
+    rules: list[IgnoreRule] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            logger.warning("Skipping non-mapping docs_audit.ignore entry: %r", entry)
+            continue
+        path = entry.get("path")
+        fact = entry.get("fact")
+        value = entry.get("value")
+        if path is None or fact is None or value is None:
+            logger.warning("Skipping incomplete docs_audit.ignore entry: %r", entry)
+            continue
+        rules.append(IgnoreRule(path=str(path), fact=str(fact), value=str(value)))
+
+    return rules
+
+
 def run_audit(
     project_root: Path,
     db: sqlite3.Connection,
@@ -342,8 +439,10 @@ def run_audit(
 ) -> AuditResult:
     """Run full documentation audit: collect facts, scan docs, compare.
 
-    Loads tolerance overrides from ``.beadloom/config.yml`` if present
-    and passes them to :func:`compare_facts`.
+    Loads tolerance overrides and targeted false-positive suppressions
+    (``docs_audit.tolerances`` / ``docs_audit.ignore``) from
+    ``.beadloom/config.yml`` if present and passes them to
+    :func:`compare_facts`.
 
     Parameters
     ----------
@@ -367,7 +466,8 @@ def run_audit(
     mentions = scanner.scan(paths)
 
     tolerances = _load_tolerances_from_config(project_root)
-    return compare_facts(facts, mentions, tolerances=tolerances)
+    ignore = _load_ignore_from_config(project_root)
+    return compare_facts(facts, mentions, tolerances=tolerances, ignore=ignore)
 
 
 class FactRegistry:

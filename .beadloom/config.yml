@@ -4,3 +4,61 @@ scan_paths:
 - src
 sync:
   hook_mode: warn
+docs_audit:
+  # Targeted false-positive suppressions (BDL-057.6). Each {path, fact, value}
+  # triple silences exactly one keyword-proximity false match — it does NOT mask
+  # genuine stale facts of the same type elsewhere (those stay flagged). Confirmed
+  # false positives by review (BDL-057.4):
+  #  - context-oracle/README: "12 supported languages" / "12 frameworks" describe
+  #    parser breadth, not the in-repo language_count(1)/framework_count(53).
+  #  - vitepress-site: "404" is an HTTP status, not a CLI command count.
+  #  - "14 graph read/write tools" is the graph subset of the 18 MCP tools
+  #    (the full 18 is stated in the same sentence) — not a stale total.
+  #  - README "20 ms" is a latency figure, not the node_count.
+  #  - agentic-flow "(was 14)" is a deliberate historical reference.
+  #  - ai-techwriter "3.10-3.13 test matrix" cites Python versions, not test counts.
+  #  - SECURITY "14 graph tools" / "12 read tools" are subsets of the 18 MCP tools
+  #    (the full 18 is stated alongside), not stale totals.
+  ignore:
+    - path: docs/domains/context-oracle/README.md
+      fact: language_count
+      value: 12
+    - path: docs/domains/context-oracle/README.md
+      fact: framework_count
+      value: 12
+    - path: docs/guides/vitepress-site.md
+      fact: cli_command_count
+      value: 404
+    - path: README.md
+      fact: node_count
+      value: 20
+    - path: README.md
+      fact: mcp_tool_count
+      value: 14
+    - path: README.ru.md
+      fact: cli_command_count
+      value: 14
+    - path: docs/architecture.md
+      fact: mcp_tool_count
+      value: 14
+    - path: docs/getting-started.md
+      fact: mcp_tool_count
+      value: 14
+    - path: docs/guides/agentic-flow.md
+      fact: mcp_tool_count
+      value: 14
+    - path: docs/services/mcp.md
+      fact: mcp_tool_count
+      value: 14
+    - path: docs/guides/ai-techwriter.md
+      fact: test_count
+      value: 10
+    - path: docs/guides/ai-techwriter.md
+      fact: test_count
+      value: 13
+    - path: SECURITY.md
+      fact: mcp_tool_count
+      value: 14
+    - path: SECURITY.md
+      fact: mcp_tool_count
+      value: 12

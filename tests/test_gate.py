@@ -120,12 +120,107 @@ class TestRunCiGate:
         result = run_ci_gate(tmp_path, fail_on=None, hub_exports=[], no_reindex=False)
         assert isinstance(result, GateResult)
         assert result.ok is True
-        # reindex, lint, sync-check, config-check, doctor all ran and passed.
+        # reindex, lint, sync-check, docs-audit, config-check, doctor all ran.
         names = [s.name for s in result.steps]
-        assert names == ["reindex", "lint", "sync-check", "config-check", "doctor"]
+        assert names == [
+            "reindex",
+            "lint",
+            "sync-check",
+            "docs-audit",
+            "config-check",
+            "doctor",
+        ]
         assert all(s.passed for s in result.steps)
         assert all(s.status == "PASS" for s in result.steps)
         assert result.findings == []
+
+    def test_docs_audit_step_runs_directly_after_sync_check(
+        self, tmp_path: Path
+    ) -> None:
+        """The gate MUST run docs-audit immediately after sync-check."""
+        _clean_project(tmp_path)
+        result = run_ci_gate(tmp_path, fail_on=None, hub_exports=[], no_reindex=False)
+        names = [s.name for s in result.steps]
+        assert "docs-audit" in names
+        assert names.index("docs-audit") == names.index("sync-check") + 1
+
+    def test_docs_audit_clean_passes(self, tmp_path: Path) -> None:
+        """A repo with no stale doc facts passes the docs-audit step."""
+        _clean_project(tmp_path)
+        result = run_ci_gate(tmp_path, fail_on=None, hub_exports=[], no_reindex=False)
+        audit_step = next(s for s in result.steps if s.name == "docs-audit")
+        assert audit_step.passed is True
+        assert audit_step.status == "PASS"
+        assert audit_step.findings == []
+
+    def test_docs_audit_stale_fact_fails_gate(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A single stale doc fact (stale>0) fails the docs-audit step and the gate."""
+        import beadloom.application.gate as gate_mod
+        from beadloom.doc_sync.audit import AuditFinding, AuditResult, Fact
+        from beadloom.doc_sync.scanner import Mention
+
+        def _fake_run_audit(
+            project_root: object, db: object, *, scan_paths: object = None
+        ) -> AuditResult:
+            fact = Fact(name="version", value="2.0.0", source="pyproject.toml")
+            mention = Mention(
+                fact_name="version",
+                value="1.0.0",
+                file=tmp_path / "README.md",
+                line=3,
+                context="version line",
+            )
+            stale = AuditFinding(
+                mention=mention, fact=fact, status="stale", tolerance=0.0
+            )
+            return AuditResult(facts={"version": fact}, findings=[stale], unmatched=[])
+
+        monkeypatch.setattr(gate_mod, "_run_audit", _fake_run_audit)
+        _clean_project(tmp_path)
+        result = run_ci_gate(tmp_path, fail_on=None, hub_exports=[], no_reindex=False)
+        audit_step = next(s for s in result.steps if s.name == "docs-audit")
+        assert audit_step.passed is False
+        assert audit_step.status == "FAIL"
+        assert result.ok is False
+        # The failing step carries a finding in the shared shape.
+        assert any(f.get("rule") for f in audit_step.findings)
+        assert all(
+            {"kind", "rule", "severity", "locations", "why", "remediation"} <= set(f)
+            for f in audit_step.findings
+        )
+
+    def test_docs_audit_fresh_fact_does_not_fail_gate(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Fresh findings (no stale) keep the docs-audit step green."""
+        import beadloom.application.gate as gate_mod
+        from beadloom.doc_sync.audit import AuditFinding, AuditResult, Fact
+        from beadloom.doc_sync.scanner import Mention
+
+        def _fake_run_audit(
+            project_root: object, db: object, *, scan_paths: object = None
+        ) -> AuditResult:
+            fact = Fact(name="version", value="2.0.0", source="pyproject.toml")
+            mention = Mention(
+                fact_name="version",
+                value="2.0.0",
+                file=tmp_path / "README.md",
+                line=3,
+                context="version line",
+            )
+            fresh = AuditFinding(
+                mention=mention, fact=fact, status="fresh", tolerance=0.0
+            )
+            return AuditResult(facts={"version": fact}, findings=[fresh], unmatched=[])
+
+        monkeypatch.setattr(gate_mod, "_run_audit", _fake_run_audit)
+        _clean_project(tmp_path)
+        result = run_ci_gate(tmp_path, fail_on=None, hub_exports=[], no_reindex=False)
+        audit_step = next(s for s in result.steps if s.name == "docs-audit")
+        assert audit_step.passed is True
+        assert audit_step.findings == []
 
     def test_doctor_step_runs(self, tmp_path: Path) -> None:
         """The gate MUST run beadloom doctor (graph integrity) as a step."""

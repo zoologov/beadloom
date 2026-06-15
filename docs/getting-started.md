@@ -1,5 +1,7 @@
 # Getting Started
 
+<!-- beadloom:watches=cli,flow.yml -->
+
 This guide takes you from zero to a working Beadloom setup — including the
 configurable, multi-agent dev flow.
 
@@ -112,7 +114,7 @@ beadloom install-hooks
 Installs **both** hooks by default:
 
 - **pre-commit** (lighter) — runs `sync-check`, lint, and the ACTIVE/tracker coherence step (`warn` or `block` via `--mode`).
-- **pre-push Beadloom Gate** (authoritative) — runs the full `beadloom ci` (reindex → `lint --strict` → sync-check → config-check → doctor) and **blocks the push on red**. It is fail-safe (a no-op when `beadloom` isn't on `PATH`); `git push --no-verify` is the documented escape hatch.
+- **pre-push Beadloom Gate** (authoritative) — runs the full `beadloom ci` (reindex → `lint --strict` → sync-check → docs-audit → config-check → doctor) and **blocks the push on red**. It is fail-safe (a no-op when `beadloom` isn't on `PATH`); `git push --no-verify` is the documented escape hatch.
 
 Select one with `--pre-commit` / `--pre-push`; remove with `--remove`.
 
@@ -154,6 +156,7 @@ $ beadloom ci               # the unified gate, one exit code
 reindex        PASS
 lint           PASS
 sync-check     PASS
+docs-audit     PASS
 config-check   PASS
 doctor         PASS
 ✓ CI gate passed
@@ -236,7 +239,7 @@ source `docs/` tree.
 ```bash
 beadloom sync-check          # doc↔code freshness (exit 2 = stale)
 beadloom sync-update <ref>   # review/apply the fix for a node (--yes to auto-apply)
-beadloom docs audit          # detect stale cross-references in prose docs (--stale-only, --json)
+beadloom docs audit          # detect stale numeric/version facts in prose docs (--stale-only, --json); also the docs-audit gate step
 ```
 
 ## Limits

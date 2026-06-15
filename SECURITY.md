@@ -30,9 +30,10 @@ Beadloom stores index data locally in:
 ### MCP Server Security
 
 - The MCP server runs over **stdio** transport only (no network exposure)
-- It provides both read and write access to the architecture graph:
-  - **Read operations** (12 tools): `get_context`, `get_graph`, `list_nodes`, `sync_check`, `get_status`, `search`, `generate_docs`, `prime`, `why`, `diff`, `lint`, `get_debt_report`
-  - **Write operations** (2 tools): `update_node` (modifies node summary/source in YAML and SQLite), `mark_synced` (updates sync state)
+- It exposes 18 tools: 14 over the architecture graph (read and write) plus four process tools that drive the multi-agent development flow:
+  - **Graph read operations** (12 tools): `get_context`, `get_graph`, `list_nodes`, `sync_check`, `get_status`, `search`, `generate_docs`, `prime`, `why`, `diff`, `lint`, `get_debt_report`
+  - **Graph write operations** (2 tools): `update_node` (modifies node summary/source in YAML and SQLite), `mark_synced` (updates sync state)
+  - **Process tools** (4 tools): `task_init`, `bead_context`, `complete_bead`, `checkpoint` — deterministic single steps that read or append to local development state, never spawning subprocesses
 - Write operations modify local files only (YAML graph + SQLite index)
 - The server opens the SQLite database in WAL mode
 

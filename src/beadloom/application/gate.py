@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from beadloom.application.doctor import Check
+    from beadloom.doc_sync.audit import AuditResult
 
 
 # A single finding in the shared, agent-actionable shape (see linter._finding).
@@ -53,6 +54,20 @@ def _run_doctor_checks(
     from beadloom.application.doctor import run_checks
 
     return run_checks(conn, project_root=project_root)
+
+
+def _run_audit(
+    project_root: Path, conn: sqlite3.Connection
+) -> AuditResult:
+    """Indirection over :func:`beadloom.doc_sync.audit.run_audit`.
+
+    Defined as a module-level seam so the gate's docs-audit step reuses the
+    exact same fact-freshness detection as ``beadloom docs audit`` (no parallel
+    reimplementation), while staying patchable in tests.
+    """
+    from beadloom.doc_sync.audit import run_audit
+
+    return run_audit(project_root, conn)
 
 
 @dataclass
@@ -114,8 +129,9 @@ def run_ci_gate(
     """Run every gate step in order, collecting all findings; never short-circuit.
 
     Order: (1) reindex unless *no_reindex*; (2) ``lint --strict``;
-    (3) ``sync-check``; (4) ``config-check``; (5) ``doctor`` (graph integrity);
-    (6) ``federate --fail-on`` when *hub_exports* is non-empty. Returns a
+    (3) ``sync-check``; (4) ``docs-audit`` (fact freshness, blocks on
+    ``stale>0``); (5) ``config-check``; (6) ``doctor`` (graph integrity);
+    (7) ``federate --fail-on`` when *hub_exports* is non-empty. Returns a
     :class:`GateResult` whose ``ok`` is True only when every step passed.
 
     *fail_on* is the federate fail-set; ``None`` selects the safe default set
@@ -126,6 +142,7 @@ def run_ci_gate(
         _step_reindex(project_root, no_reindex=no_reindex),
         _step_lint(project_root),
         _step_sync_check(project_root),
+        _step_docs_audit(project_root),
         _step_config_check(project_root),
         _step_doctor(project_root),
     ]
@@ -210,6 +227,48 @@ def _step_sync_check(project_root: Path) -> GateStep:
     passed = not stale
     summary = f"{len(stale)} stale doc(s)" if stale else f"{len(results)} pair(s) fresh"
     return GateStep("sync-check", passed=passed, findings=findings, summary=summary)
+
+
+def _step_docs_audit(project_root: Path) -> GateStep:
+    """``docs audit`` — numeric/version fact freshness; blocks on ``stale>0``.
+
+    Reuses :func:`beadloom.doc_sync.audit.run_audit` (the exact path
+    ``beadloom docs audit`` calls — no reimplementation) and fails the step when
+    any documentation mention disagrees with a ground-truth fact. The audit's
+    false-positive masking + per-fact tolerances already keep this honest.
+    """
+    from beadloom.infrastructure.db import open_db
+
+    db_path = project_root / ".beadloom" / "beadloom.db"
+    if not db_path.exists():
+        return GateStep(
+            "docs-audit",
+            passed=False,
+            findings=[
+                _simple_finding(
+                    "docs-audit",
+                    "error",
+                    "database not found",
+                    "run `beadloom reindex` first",
+                )
+            ],
+            summary="database missing",
+        )
+    conn = open_db(db_path)
+    try:
+        result = _run_audit(project_root, conn)
+    finally:
+        conn.close()
+
+    stale = [f for f in result.findings if f.status == "stale"]
+    findings = [_audit_finding(f) for f in stale]
+    passed = not stale
+    summary = (
+        f"{len(stale)} stale fact(s)"
+        if stale
+        else f"{len(result.findings)} mention(s) fresh"
+    )
+    return GateStep("docs-audit", passed=passed, findings=findings, summary=summary)
 
 
 def _step_config_check(project_root: Path) -> GateStep:
@@ -359,6 +418,41 @@ def _sync_finding(row: dict[str, object]) -> Finding:
         "locations": locations,
         "why": f"{ref_id}: doc out of sync with code ({reason})",
         "remediation": f"run `beadloom sync-update {ref_id}` to review and re-attest",
+    }
+
+
+def _audit_finding(finding: object) -> Finding:
+    """Project a stale :class:`~beadloom.doc_sync.audit.AuditFinding` onto the shape.
+
+    Uses ``getattr`` so the gate has no hard structural dependency on the audit
+    dataclass internals beyond the documented ``mention`` / ``fact`` / ``status``
+    surface.
+    """
+    mention = getattr(finding, "mention", None)
+    fact = getattr(finding, "fact", None)
+    fact_name = getattr(fact, "name", "")
+    expected = getattr(fact, "value", "")
+    found = getattr(mention, "value", "")
+    file_path = str(getattr(mention, "file", ""))
+    line = getattr(mention, "line", None)
+    location: Finding = {}
+    if file_path:
+        location["file"] = file_path
+    if isinstance(line, int):
+        location["line"] = line
+    locations: list[Finding] = [location] if location else []
+    return {
+        "kind": "docs-audit",
+        "rule": "doc-fact-stale",
+        "severity": "error",
+        "locations": locations,
+        "why": (
+            f"{fact_name}: doc says {found!r} but project state is {expected!r}"
+        ),
+        "remediation": (
+            "update the doc to the current value, or add a tolerance / extra "
+            "fact under `docs_audit` in `.beadloom/config.yml`"
+        ),
     }
 
 
