@@ -2623,9 +2623,9 @@ def _render_project_info_section(project_root: Path) -> str:
     The returned string does NOT include the marker comments — only
     the bullet-list content that goes between markers.
     """
-    from beadloom.application.doctor import _get_actual_packages, _get_actual_version
+    from beadloom.application.doctor import _get_actual_packages, get_actual_version
 
-    version = _get_actual_version()
+    version = get_actual_version()
 
     # Discover DDD packages under src/<project_name>/.
     # We look for any subdirectory under src/ that has __init__.py children.

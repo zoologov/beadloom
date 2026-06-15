@@ -64,6 +64,11 @@ class ExplorerScreen(Screen[None]):
         self._mode = MODE_UPSTREAM
         self._prev_dep_mode = MODE_UPSTREAM
 
+    @property
+    def ref_id(self) -> str:
+        """Read-only view of the ref_id this screen is exploring (observable state)."""
+        return self._ref_id
+
     def compose(self) -> ComposeResult:
         """Compose the explorer layout."""
         with Vertical(id="explorer-container"):
@@ -111,7 +116,7 @@ class ExplorerScreen(Screen[None]):
         if app is None:
             return
 
-        pending = app._selected_ref_id
+        pending = app.selected_ref_id
         if pending and pending != self._ref_id:
             self.set_ref_id(pending)
 

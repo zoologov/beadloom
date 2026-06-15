@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
 # Skip all TUI tests if textual is not installed
@@ -63,12 +64,19 @@ def populated_db(tmp_path: Path) -> tuple[Path, Path]:
 
 
 @pytest.fixture()
-def ro_conn(populated_db: tuple[Path, Path]) -> sqlite3.Connection:
-    """Return a read-only connection to the populated test DB."""
+def ro_conn(populated_db: tuple[Path, Path]) -> Iterator[sqlite3.Connection]:
+    """Yield a read-only connection to the populated test DB, closed on teardown.
+
+    The ``yield``/``finally`` shape guarantees the connection is closed even if
+    the test fails, so the suite is clean under ``-W error::ResourceWarning``.
+    """
     db_path, _project_root = populated_db
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -1015,7 +1023,7 @@ class TestStatusBarWidget:
         from beadloom.tui.widgets.status_bar import StatusBarWidget
 
         widget = StatusBarWidget()
-        widget._last_action = "Reindex complete"
+        widget.set_last_action("Reindex complete")
         text = widget.render()
 
         assert "Reindex complete" in text.plain
@@ -1025,15 +1033,12 @@ class TestStatusBarWidget:
         from beadloom.tui.widgets.status_bar import StatusBarWidget
 
         widget = StatusBarWidget()
-        widget._last_action = "old action"
-        widget._node_count = 5
-        widget._edge_count = 3
-        widget._doc_count = 2
-        widget._stale_count = 0
+        widget.set_last_action("old action")
+        assert widget.last_action == "old action"
 
-        # Simulating refresh_data without calling refresh() (no app context)
-        widget._last_action = ""
-        assert widget._last_action == ""
+        # refresh_data() clears the transient action message (observable).
+        widget.refresh_data(node_count=5, edge_count=3, doc_count=2, stale_count=0)
+        assert widget.last_action == ""
 
     def test_set_watcher_active(self) -> None:
         """set_watcher_active() updates watcher flag."""
@@ -1050,9 +1055,9 @@ class TestStatusBarWidget:
         from beadloom.tui.widgets.status_bar import StatusBarWidget
 
         widget = StatusBarWidget()
-        widget._last_action = "Test message"
+        widget.set_last_action("Test message")
 
-        assert widget._last_action == "Test message"
+        assert widget.last_action == "Test message"
 
     def test_stale_count_red_when_positive(self) -> None:
         """StatusBarWidget shows stale in red style when count > 0."""
@@ -2332,12 +2337,12 @@ class TestAppFileWatcherIntegration:
     def test_app_has_file_watcher_attribute(
         self, populated_db: tuple[Path, Path]
     ) -> None:
-        """App has _file_watcher_worker attribute."""
+        """App exposes file_watcher_worker (None before mount)."""
         db_path, project_root = populated_db
         from beadloom.tui.app import BeadloomApp
 
         app = BeadloomApp(db_path=db_path, project_root=project_root)
-        assert app._file_watcher_worker is None
+        assert app.file_watcher_worker is None
 
     @pytest.mark.asyncio()
     async def test_no_watch_prevents_watcher_start(
@@ -2350,7 +2355,7 @@ class TestAppFileWatcherIntegration:
         app = BeadloomApp(db_path=db_path, project_root=project_root, no_watch=True)
         async with app.run_test() as pilot:
             # With no_watch=True, file watcher worker should not be started
-            assert app._file_watcher_worker is None
+            assert app.file_watcher_worker is None
             await pilot.press("q")
 
     @pytest.mark.asyncio()
@@ -2450,7 +2455,7 @@ class TestNodeDetailPanel:
         from beadloom.tui.widgets.node_detail_panel import NodeDetailPanel
 
         widget = NodeDetailPanel()
-        text = widget._build_text()
+        text = widget.rendered_text
         plain = text.plain
 
         assert "Node Detail" in plain
@@ -2470,7 +2475,7 @@ class TestNodeDetailPanel:
             graph_provider=provider,
             ref_id="auth",
         )
-        text = widget._build_text()
+        text = widget.rendered_text
         plain = text.plain
 
         assert "auth" in plain
@@ -2492,7 +2497,7 @@ class TestNodeDetailPanel:
             graph_provider=provider,
             ref_id="nonexistent",
         )
-        text = widget._build_text()
+        text = widget.rendered_text
         plain = text.plain
 
         assert "not found" in plain
@@ -2502,7 +2507,7 @@ class TestNodeDetailPanel:
         from beadloom.tui.widgets.node_detail_panel import NodeDetailPanel
 
         widget = NodeDetailPanel(ref_id="auth")
-        text = widget._build_text()
+        text = widget.rendered_text
         plain = text.plain
 
         assert "No data provider" in plain
@@ -2521,7 +2526,7 @@ class TestNodeDetailPanel:
             graph_provider=provider,
             ref_id="auth",
         )
-        text = widget._build_text()
+        text = widget.rendered_text
         plain = text.plain
 
         assert "Connections" in plain
@@ -2541,7 +2546,7 @@ class TestNodeDetailPanel:
             graph_provider=provider,
             ref_id="auth-login",
         )
-        text = widget._build_text()
+        text = widget.rendered_text
         plain = text.plain
 
         assert "documented" in plain
@@ -2560,7 +2565,7 @@ class TestNodeDetailPanel:
             graph_provider=provider,
             ref_id="payments",
         )
-        text = widget._build_text()
+        text = widget.rendered_text
         plain = text.plain
 
         assert "missing" in plain
@@ -2570,10 +2575,10 @@ class TestNodeDetailPanel:
         from beadloom.tui.widgets.node_detail_panel import NodeDetailPanel
 
         widget = NodeDetailPanel()
-        assert widget._ref_id == ""
+        assert widget.ref_id == ""
 
         widget.set_node("auth")
-        assert widget._ref_id == "auth"
+        assert widget.ref_id == "auth"
 
     def test_set_provider(
         self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
@@ -2605,7 +2610,7 @@ class TestNodeDetailPanel:
             graph_provider=provider,
             ref_id="auth-login",
         )
-        text = widget._build_text()
+        text = widget.rendered_text
         plain = text.plain
 
         assert "no source path" in plain
@@ -2624,7 +2629,7 @@ class TestDependencyPathWidget:
         from beadloom.tui.widgets.dependency_path import DependencyPathWidget
 
         widget = DependencyPathWidget()
-        text = widget._build_text()
+        text = widget.rendered_text
         plain = text.plain
 
         assert "Downstream Dependents" in plain
@@ -2635,7 +2640,7 @@ class TestDependencyPathWidget:
         from beadloom.tui.widgets.dependency_path import DependencyPathWidget
 
         widget = DependencyPathWidget(direction="upstream")
-        text = widget._build_text()
+        text = widget.rendered_text
         plain = text.plain
 
         assert "Upstream Dependencies" in plain
@@ -2656,7 +2661,7 @@ class TestDependencyPathWidget:
             ref_id="auth",
             direction="downstream",
         )
-        text = widget._build_text()
+        text = widget.rendered_text
         plain = text.plain
 
         assert "Downstream Dependents" in plain
@@ -2683,12 +2688,12 @@ class TestDependencyPathWidget:
             ref_id="auth",
             direction="upstream",
         )
-        text = widget._build_text()
+        text = widget.rendered_text
         assert "Upstream Dependencies" in text.plain
 
         # Switch to downstream — auth has downstream dependent auth-login
         widget.show_downstream("auth")
-        text = widget._build_text()
+        text = widget.rendered_text
         plain = text.plain
 
         assert "Downstream Dependents" in plain
@@ -2710,7 +2715,7 @@ class TestDependencyPathWidget:
             ref_id="auth-login",
             direction="upstream",
         )
-        text = widget._build_text()
+        text = widget.rendered_text
         plain = text.plain
 
         assert "Upstream Dependencies" in plain
@@ -2729,7 +2734,7 @@ class TestDependencyPathWidget:
             why_provider=provider,
             ref_id="nonexistent",
         )
-        text = widget._build_text()
+        text = widget.rendered_text
         plain = text.plain
 
         assert "not found" in plain
@@ -2739,7 +2744,7 @@ class TestDependencyPathWidget:
         from beadloom.tui.widgets.dependency_path import DependencyPathWidget
 
         widget = DependencyPathWidget(ref_id="auth")
-        text = widget._build_text()
+        text = widget.rendered_text
         plain = text.plain
 
         assert "No data provider" in plain
@@ -2750,7 +2755,7 @@ class TestDependencyPathWidget:
 
         widget = DependencyPathWidget()
         widget.show_upstream("auth")
-        assert widget._ref_id == "auth"
+        assert widget.ref_id == "auth"
         assert widget._direction == "upstream"
 
     def test_show_downstream_method(self) -> None:
@@ -2759,7 +2764,7 @@ class TestDependencyPathWidget:
 
         widget = DependencyPathWidget(direction="upstream")
         widget.show_downstream("auth")
-        assert widget._ref_id == "auth"
+        assert widget.ref_id == "auth"
         assert widget._direction == "downstream"
 
     def test_set_provider(
@@ -2794,7 +2799,7 @@ class TestDependencyPathWidget:
             ref_id="payments",
             direction="downstream",
         )
-        text = widget._build_text()
+        text = widget.rendered_text
         plain = text.plain
 
         assert "Downstream Dependents" in plain
@@ -2815,7 +2820,7 @@ class TestContextPreviewWidget:
         from beadloom.tui.widgets.context_preview import ContextPreviewWidget
 
         widget = ContextPreviewWidget()
-        text = widget._build_text()
+        text = widget.rendered_text
         plain = text.plain
 
         assert "Context Preview" in plain
@@ -2835,7 +2840,7 @@ class TestContextPreviewWidget:
             context_provider=provider,
             ref_id="auth",
         )
-        text = widget._build_text()
+        text = widget.rendered_text
         plain = text.plain
 
         assert "Context Preview" in plain
@@ -2856,7 +2861,7 @@ class TestContextPreviewWidget:
             context_provider=provider,
             ref_id="auth",
         )
-        text = widget._build_text()
+        text = widget.rendered_text
         plain = text.plain
 
         # Should contain a token count (tilde + number)
@@ -2877,7 +2882,7 @@ class TestContextPreviewWidget:
             context_provider=provider,
             ref_id="nonexistent",
         )
-        text = widget._build_text()
+        text = widget.rendered_text
         plain = text.plain
 
         assert "not available" in plain
@@ -2887,7 +2892,7 @@ class TestContextPreviewWidget:
         from beadloom.tui.widgets.context_preview import ContextPreviewWidget
 
         widget = ContextPreviewWidget(ref_id="auth")
-        text = widget._build_text()
+        text = widget.rendered_text
         plain = text.plain
 
         assert "No data provider" in plain
@@ -2897,10 +2902,10 @@ class TestContextPreviewWidget:
         from beadloom.tui.widgets.context_preview import ContextPreviewWidget
 
         widget = ContextPreviewWidget()
-        assert widget._ref_id == ""
+        assert widget.ref_id == ""
 
         widget.show_context("auth")
-        assert widget._ref_id == "auth"
+        assert widget.ref_id == "auth"
 
     def test_set_provider(
         self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
@@ -2932,7 +2937,7 @@ class TestContextPreviewWidget:
             context_provider=provider,
             ref_id="auth",
         )
-        text = widget._build_text()
+        text = widget.rendered_text
         plain = text.plain
 
         assert "Keys:" in plain
@@ -3221,7 +3226,7 @@ class TestExplorerScreen:
             assert isinstance(app.screen, ExplorerScreen)
 
             # Should not crash with no ref_id
-            assert app.screen._ref_id == ""
+            assert app.screen.ref_id == ""
 
             await pilot.press("q")
 
@@ -3243,7 +3248,7 @@ class TestExplorerScreen:
             screen.set_ref_id("auth")
             await pilot.pause()
 
-            assert screen._ref_id == "auth"
+            assert screen.ref_id == "auth"
 
             from textual.widgets import Label
 
@@ -3323,7 +3328,7 @@ class TestExplorerScreen:
             await pilot.pause()
 
             assert isinstance(app.screen, ExplorerScreen)
-            assert app._selected_ref_id == "auth"
+            assert app.selected_ref_id == "auth"
 
             await pilot.press("q")
 
@@ -3338,12 +3343,12 @@ class TestExplorerScreen:
 
         app = BeadloomApp(db_path=db_path, project_root=project_root)
         async with app.run_test() as pilot:
-            assert app._selected_ref_id == ""
+            assert app.selected_ref_id == ""
 
             app.post_message(NodeSelected("payments"))
             await pilot.pause()
 
-            assert app._selected_ref_id == "payments"
+            assert app.selected_ref_id == "payments"
 
             await pilot.press("q")
 
@@ -3629,7 +3634,7 @@ class TestSearchOverlay:
 
         app = BeadloomApp(db_path=db_path, project_root=project_root)
         async with app.run_test() as pilot:
-            app.push_screen(SearchOverlay(conn=app._conn))
+            app.push_screen(SearchOverlay(conn=app.connection))
             await pilot.pause()
 
             from textual.widgets import Input
@@ -3651,7 +3656,7 @@ class TestSearchOverlay:
 
         app = BeadloomApp(db_path=db_path, project_root=project_root)
         async with app.run_test() as pilot:
-            app.push_screen(SearchOverlay(conn=app._conn))
+            app.push_screen(SearchOverlay(conn=app.connection))
             await pilot.pause()
             assert isinstance(app.screen, SearchOverlay)
 
@@ -3671,23 +3676,25 @@ class TestStatusBarNotification:
     """Tests for StatusBarWidget.show_notification auto-dismiss."""
 
     def test_show_notification_sets_message(self) -> None:
-        """show_notification() sets _last_action to the message."""
+        """A set action message renders in the status bar (observable)."""
         from beadloom.tui.widgets.status_bar import StatusBarWidget
 
         widget = StatusBarWidget()
-        # Cannot call set_timer without being mounted, so test the attribute directly
-        widget._last_action = "Test notification"
+        # set_timer needs a mounted widget; set_last_action exercises the same
+        # rendering path observably.
+        widget.set_last_action("Test notification")
         text = widget.render()
         assert "Test notification" in text.plain
+        assert widget.last_action == "Test notification"
 
     def test_clear_notification_clears_message(self) -> None:
         """_clear_notification() clears the last action message."""
         from beadloom.tui.widgets.status_bar import StatusBarWidget
 
         widget = StatusBarWidget()
-        widget._last_action = "Old message"
+        widget.set_last_action("Old message")
         widget._clear_notification()
-        assert widget._last_action == ""
+        assert widget.last_action == ""
         text = widget.render()
         assert "Old message" not in text.plain
 
@@ -3706,7 +3713,7 @@ class TestStatusBarNotification:
 
             # Show notification with short duration
             status_bar.show_notification("Auto-dismiss test", duration=0.1)
-            assert status_bar._last_action == "Auto-dismiss test"
+            assert status_bar.last_action == "Auto-dismiss test"
 
             # Wait for auto-dismiss
             import asyncio
@@ -3715,7 +3722,7 @@ class TestStatusBarNotification:
             await pilot.pause()
 
             # Should be cleared
-            assert status_bar._last_action == ""
+            assert status_bar.last_action == ""
 
             await pilot.press("q")
 
@@ -4325,7 +4332,7 @@ class TestSearchOverlayExtended:
 
         app = BeadloomApp(db_path=db_path, project_root=project_root)
         async with app.run_test() as pilot:
-            app.push_screen(SearchOverlay(conn=app._conn))
+            app.push_screen(SearchOverlay(conn=app.connection))
             await pilot.pause()
             assert isinstance(app.screen, SearchOverlay)
 
@@ -4539,7 +4546,7 @@ class TestFullNavigationFlow:
             # Select a node
             app.post_message(NodeSelected("auth"))
             await pilot.pause()
-            assert app._selected_ref_id == "auth"
+            assert app.selected_ref_id == "auth"
 
             # Navigate to explorer
             await pilot.press("2")
@@ -4678,11 +4685,11 @@ class TestFullNavigationFlow:
             await pilot.pause()
 
             assert isinstance(app.screen, ExplorerScreen)
-            assert app._selected_ref_id == "auth-login"
+            assert app.selected_ref_id == "auth-login"
 
             # Verify the detail panel shows the right node
             detail = app.screen.query_one("#node-detail-panel", NodeDetailPanel)
-            assert detail._ref_id == "auth-login"
+            assert detail.ref_id == "auth-login"
 
             await pilot.press("q")
 
@@ -4696,7 +4703,7 @@ class TestFullNavigationFlow:
         1. Launch TUI -> Dashboard
         2. Press "2" to visit Explorer (no node selected yet)
         3. Press "1" to go back to Dashboard
-        4. Select a node on Dashboard (app._selected_ref_id set)
+        4. Select a node on Dashboard (app.selected_ref_id set)
         5. Press "2" to visit Explorer again
         Expected: Explorer's NodeDetailPanel shows the selected node.
         """
@@ -4716,19 +4723,19 @@ class TestFullNavigationFlow:
             await pilot.pause()
             assert isinstance(app.screen, ExplorerScreen)
             detail = app.screen.query_one("#node-detail-panel", NodeDetailPanel)
-            assert detail._ref_id == ""  # No node yet
+            assert detail.ref_id == ""  # No node yet
 
             # 3. Go back to dashboard
             await pilot.press("1")
             await pilot.pause()
             assert isinstance(app.screen, DashboardScreen)
 
-            # 4. Select a node (simulated via app._selected_ref_id)
+            # 4. Select a node (observed via app.selected_ref_id)
             from beadloom.tui.widgets.graph_tree import NodeSelected
 
             app.post_message(NodeSelected("auth"))
             await pilot.pause()
-            assert app._selected_ref_id == "auth"
+            assert app.selected_ref_id == "auth"
 
             # 5. Visit explorer again — should show selected node
             await pilot.press("2")
@@ -4736,19 +4743,19 @@ class TestFullNavigationFlow:
             assert isinstance(app.screen, ExplorerScreen)
 
             detail = app.screen.query_one("#node-detail-panel", NodeDetailPanel)
-            assert detail._ref_id == "auth"
+            assert detail.ref_id == "auth"
 
             # 6. Verify subsequent updates work too
             await pilot.press("1")
             await pilot.pause()
             app.post_message(NodeSelected("payments"))
             await pilot.pause()
-            assert app._selected_ref_id == "payments"
+            assert app.selected_ref_id == "payments"
 
             await pilot.press("2")
             await pilot.pause()
             detail = app.screen.query_one("#node-detail-panel", NodeDetailPanel)
-            assert detail._ref_id == "payments"
+            assert detail.ref_id == "payments"
 
             await pilot.press("q")
 
@@ -4949,16 +4956,16 @@ class TestStatusBarWidgetAdditional:
 
         widget = StatusBarWidget()
         widget.set_last_action("Lint complete")
-        assert widget._last_action == "Lint complete"
+        assert widget.last_action == "Lint complete"
 
     def test_refresh_data_clears_last_action(self) -> None:
         """refresh_data() clears the last action message."""
         from beadloom.tui.widgets.status_bar import StatusBarWidget
 
         widget = StatusBarWidget()
-        widget._last_action = "Old action"
+        widget.set_last_action("Old action")
         widget.refresh_data(node_count=5, edge_count=3, doc_count=2, stale_count=1)
-        assert widget._last_action == ""
+        assert widget.last_action == ""
         assert widget._node_count == 5
         assert widget._edge_count == 3
         assert widget._doc_count == 2
@@ -5030,32 +5037,34 @@ class TestDocHealthTableStale:
 class TestAppLifecycle:
     """Tests for app lifecycle events."""
 
-    def test_app_on_unmount_closes_connection(
+    @pytest.mark.asyncio()
+    async def test_app_on_unmount_closes_connection(
         self, populated_db: tuple[Path, Path]
     ) -> None:
-        """on_unmount() closes DB connection and cancels watcher."""
+        """on_unmount() closes DB connection and cancels watcher (observable)."""
         from beadloom.tui.app import BeadloomApp
 
         db_path, project_root = populated_db
-        app = BeadloomApp(db_path=db_path, project_root=project_root)
+        app = BeadloomApp(db_path=db_path, project_root=project_root, no_watch=True)
 
-        # Manually set up mock state
-        app._conn = sqlite3.connect(str(db_path))
-        app._file_watcher_worker = None
+        # Drive the real lifecycle: on_mount opens the connection.
+        async with app.run_test() as pilot:
+            assert app.connection is not None
+            await pilot.press("q")
 
-        app.on_unmount()
-        assert app._conn is None
-        assert app._file_watcher_worker is None
+        # Exiting run_test triggers on_unmount, which closes the connection.
+        assert app.connection is None
+        assert app.file_watcher_worker is None
 
     def test_app_init_providers_noop_without_conn(
         self, populated_db: tuple[Path, Path]
     ) -> None:
-        """_init_providers() is a no-op when _conn is None."""
+        """_init_providers() is a no-op when no connection is open."""
         from beadloom.tui.app import BeadloomApp
 
         db_path, project_root = populated_db
         app = BeadloomApp(db_path=db_path, project_root=project_root)
-        assert app._conn is None
+        assert app.connection is None
         app._init_providers()
         assert app.graph_provider is None
 
@@ -5419,7 +5428,7 @@ class TestSearchOverlayInputSubmission:
 
         app = BeadloomApp(db_path=db_path, project_root=project_root)
         async with app.run_test() as pilot:
-            app.push_screen(SearchOverlay(conn=app._conn))
+            app.push_screen(SearchOverlay(conn=app.connection))
             await pilot.pause()
 
             # Submit empty query
@@ -5585,7 +5594,7 @@ class TestFileWatcherShutdownFlag:
         db_path, project_root = populated_db
         app = BeadloomApp(db_path=db_path, project_root=project_root)
 
-        # Manually set up mock state
+        # Inject a test-double watcher worker so on_unmount has one to cancel.
         app._conn = sqlite3.connect(str(db_path))
         mock_worker = MagicMock()
         app._file_watcher_worker = mock_worker
@@ -5594,6 +5603,9 @@ class TestFileWatcherShutdownFlag:
         app.on_unmount()
         assert app._shutting_down is True  # Set during unmount
         mock_worker.cancel.assert_called_once()
+        # Connection and worker released (observable via public accessors).
+        assert app.connection is None
+        assert app.file_watcher_worker is None
 
     def test_app_has_shutting_down_flag_default_false(
         self, populated_db: tuple[Path, Path]
@@ -5680,15 +5692,15 @@ class TestFileWatcherShutdownFlag:
         db_path, project_root = populated_db
         app = BeadloomApp(db_path=db_path, project_root=project_root)
 
-        # Both are None — should not raise
-        app._conn = None
-        app._file_watcher_worker = None
+        # A freshly constructed app has no connection and no watcher worker.
+        assert app.connection is None
+        assert app.file_watcher_worker is None
 
-        app.on_unmount()
+        app.on_unmount()  # Should not raise.
 
         assert app._shutting_down is True
-        assert app._conn is None
-        assert app._file_watcher_worker is None
+        assert app.connection is None
+        assert app.file_watcher_worker is None
 
     def test_watch_loop_skips_empty_filtered_batch(self, tmp_path: Path) -> None:
         """_watch_loop continues when _filter_paths returns empty list."""
@@ -5748,12 +5760,12 @@ class TestDependencyPathDirectionSwitching:
 
         # First: downstream
         widget.show_downstream("auth")
-        text_down = widget._build_text()
+        text_down = widget.rendered_text
         assert "Downstream Dependents" in text_down.plain
 
         # Second: switch to upstream
         widget.show_upstream("auth-login")
-        text_up = widget._build_text()
+        text_up = widget.rendered_text
         assert "Upstream Dependencies" in text_up.plain
         assert "Downstream Dependents" not in text_up.plain
 
@@ -5771,8 +5783,8 @@ class TestDependencyPathDirectionSwitching:
         widget.show_downstream("auth")
 
         assert widget._direction == "downstream"
-        assert widget._ref_id == "auth"
-        text = widget._build_text()
+        assert widget.ref_id == "auth"
+        text = widget.rendered_text
         assert "Downstream Dependents" in text.plain
         assert "auth-login" in text.plain
 
@@ -5796,11 +5808,11 @@ class TestDependencyPathDirectionSwitching:
         widget.show_downstream("payments")
 
         # Final state: downstream for "payments"
-        text = widget._build_text()
+        text = widget.rendered_text
         plain = text.plain
         assert "Downstream Dependents" in plain
         assert widget._direction == "downstream"
-        assert widget._ref_id == "payments"
+        assert widget.ref_id == "payments"
 
     def test_show_downstream_empty_node_no_dependents(
         self, ro_conn: sqlite3.Connection, populated_db: tuple[Path, Path]
@@ -5815,7 +5827,7 @@ class TestDependencyPathDirectionSwitching:
         widget = DependencyPathWidget(why_provider=provider)
         widget.show_downstream("payments")  # payments has no dependents
 
-        text = widget._build_text()
+        text = widget.rendered_text
         plain = text.plain
         assert "Downstream Dependents" in plain
         # Should show "No dependencies" rather than crash
@@ -5834,8 +5846,8 @@ class TestDependencyPathDirectionSwitching:
         widget = DependencyPathWidget(why_provider=provider)
         widget.show_upstream("auth-login")
 
-        r1 = widget._build_text()
-        r2 = widget._build_text()
+        r1 = widget.rendered_text
+        r2 = widget.rendered_text
         assert r1.plain == r2.plain
 
 
@@ -5851,7 +5863,7 @@ class TestExplorerScreenResume:
     async def test_screen_resume_noop_when_selected_ref_empty(
         self, populated_db: tuple[Path, Path]
     ) -> None:
-        """on_screen_resume does nothing when app._selected_ref_id is empty."""
+        """on_screen_resume does nothing when app.selected_ref_id is empty."""
         db_path, project_root = populated_db
         from beadloom.tui.app import BeadloomApp
         from beadloom.tui.screens.explorer import ExplorerScreen
@@ -5862,7 +5874,7 @@ class TestExplorerScreenResume:
             await pilot.press("2")
             await pilot.pause()
             assert isinstance(app.screen, ExplorerScreen)
-            assert app.screen._ref_id == ""
+            assert app.screen.ref_id == ""
 
             # Go back, don't select anything
             await pilot.press("1")
@@ -5872,7 +5884,7 @@ class TestExplorerScreenResume:
             await pilot.press("2")
             await pilot.pause()
             assert isinstance(app.screen, ExplorerScreen)
-            assert app.screen._ref_id == ""  # Still empty, no update
+            assert app.screen.ref_id == ""  # Still empty, no update
 
             await pilot.press("q")
 
@@ -5894,7 +5906,7 @@ class TestExplorerScreenResume:
             await pilot.press("2")
             await pilot.pause()
             assert isinstance(app.screen, ExplorerScreen)
-            assert app.screen._ref_id == "auth"
+            assert app.screen.ref_id == "auth"
 
             # Go back, same node still selected
             await pilot.press("1")
@@ -5904,7 +5916,7 @@ class TestExplorerScreenResume:
             await pilot.press("2")
             await pilot.pause()
             assert isinstance(app.screen, ExplorerScreen)
-            assert app.screen._ref_id == "auth"  # No change
+            assert app.screen.ref_id == "auth"  # No change
 
             await pilot.press("q")
 
@@ -5929,7 +5941,7 @@ class TestExplorerScreenResume:
             await pilot.pause()
             assert isinstance(app.screen, ExplorerScreen)
             detail = app.screen.query_one("#node-detail-panel", NodeDetailPanel)
-            assert detail._ref_id == "auth"
+            assert detail.ref_id == "auth"
 
             # Round 2: back to dashboard, select payments -> explorer
             await pilot.press("1")
@@ -5941,7 +5953,7 @@ class TestExplorerScreenResume:
             await pilot.pause()
             assert isinstance(app.screen, ExplorerScreen)
             detail = app.screen.query_one("#node-detail-panel", NodeDetailPanel)
-            assert detail._ref_id == "payments"
+            assert detail.ref_id == "payments"
 
             # Round 3: back to dashboard, select auth-login -> explorer
             await pilot.press("1")
@@ -5952,7 +5964,7 @@ class TestExplorerScreenResume:
             await pilot.pause()
             assert isinstance(app.screen, ExplorerScreen)
             detail = app.screen.query_one("#node-detail-panel", NodeDetailPanel)
-            assert detail._ref_id == "auth-login"
+            assert detail.ref_id == "auth-login"
 
             await pilot.press("q")
 
@@ -5984,6 +5996,6 @@ class TestExplorerScreenResume:
             await pilot.pause()
             assert isinstance(app.screen, ExplorerScreen)
             detail = app.screen.query_one("#node-detail-panel", NodeDetailPanel)
-            assert detail._ref_id == "auth"
+            assert detail.ref_id == "auth"
 
             await pilot.press("q")

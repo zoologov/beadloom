@@ -96,12 +96,12 @@ class TestShowContextUpdate:
     """show_context() must update _ref_id and call refresh."""
 
     def test_show_context_updates_ref_id(self) -> None:
-        """Calling show_context sets the internal _ref_id."""
+        """Calling show_context updates the observable ref_id."""
         widget = ContextPreviewWidget()
-        assert widget._ref_id == ""
+        assert widget.ref_id == ""
 
         widget.show_context("new-node")
-        assert widget._ref_id == "new-node"
+        assert widget.ref_id == "new-node"
 
     def test_show_context_calls_push_content(self) -> None:
         """show_context() calls _push_content() to update the widget."""
@@ -178,9 +178,9 @@ class TestRenderContextPreviewEdgeCases:
         assert "not available" in plain
 
     def test_render_empty_ref_id_widget(self) -> None:
-        """Widget _build_text returns placeholder text when no ref_id is set."""
+        """Widget rendered_text returns placeholder text when no ref_id is set."""
         widget = ContextPreviewWidget()
-        text: Text = widget._build_text()
+        text: Text = widget.rendered_text
         plain = text.plain
 
         assert "Select a node to see context preview" in plain
@@ -190,10 +190,10 @@ class TestRenderContextPreviewEdgeCases:
         widget = ContextPreviewWidget()
 
         widget.show_context("node-a")
-        assert widget._ref_id == "node-a"
+        assert widget.ref_id == "node-a"
 
         widget.show_context("node-b")
-        assert widget._ref_id == "node-b"
+        assert widget.ref_id == "node-b"
 
     def test_render_bundle_with_nested_structure(self) -> None:
         """Bundle with nested dicts/lists renders fully without error."""

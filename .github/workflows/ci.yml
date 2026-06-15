@@ -83,6 +83,12 @@ jobs:
         run: uv run mypy src/
 
       - name: Tests with coverage
+        # BEADLOOM_REQUIRE_LANGUAGE_GRAMMARS makes the grammar guard
+        # (tests/test_grammar_guard.py) FAIL — not skip — if any tree-sitter
+        # grammar from the `languages` extra is missing, so the TS/Go/Rust/…
+        # language tests can never silently skip-and-pass in CI (BDL-059 S1).
+        env:
+          BEADLOOM_REQUIRE_LANGUAGE_GRAMMARS: "1"
         run: uv run pytest --cov=beadloom --cov-report=term-missing --cov-fail-under=80
 
   # ---------------------------------------------------------------------- #
