@@ -31,6 +31,14 @@ Never write production code without a failing test first. Write only enough test
 - Respect **dependency direction + boundaries** for that methodology. Place new code in the layer that owns the responsibility; if unsure, run `beadloom why`/`ctx` to find the right home.
 - Boundaries are machine-enforced (`beadloom lint --strict`). A new module that isn't a classified node with a doc trips coverage-lint (error). Fix every violation before completing the bead — do not ship across a red boundary.
 
+### Cohesion-driven design (first-class — peer to DDD / TDD / trunk-based)
+Every module, class, and function carries **one responsibility you can name in a phrase**. This is non-negotiable, in both directions:
+- **No monster modules.** A file that mixes several responsibilities (types + policy + I/O + orchestration) or has grown past readability is split BY RESPONSIBILITY into cohesive units. Huge files are a defect regardless of what any metric says.
+- **No over-splitting.** Cohesion is the driver, **not** line count. Do not shatter code into shrapnel — tiny files, indirection for its own sake, or a flow you must chase across a dozen modules is equally a defect.
+- **The test:** can you state the module's single responsibility in one phrase? If it needs "and", split it; if the split produces fragments with no standalone meaning, don't.
+- **Size limits are a consequence, never a driver.** `domain-size-limit` (and similar) must pass because the structure is genuinely cohesive — NEVER by reclassifying nodes or moving a monster into a new folder to hide it.
+- On extraction, preserve public import paths (re-export from the package `__init__`) and git history (`git mv`); decomposition is behavior-preserving.
+
 ### Annotation discipline (keeps the graph honest — non-negotiable)
 You MUST emit the project's graph annotations **on the code you write**, by construction — they are how the architecture graph stays truthful as code changes:
 - `# beadloom:domain=<ref>` / `# beadloom:feature=<ref>` / `# beadloom:component=<ref>` (use the comment syntax for the language) on each new/changed module so it maps to its node.
