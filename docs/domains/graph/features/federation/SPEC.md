@@ -2,7 +2,7 @@
 
 Cross-repo architecture federation: stable cross-repo node identity, a `lifecycle` field on nodes and edges, a deterministic satellite **export** artifact, a hub **federate** aggregation that composes the per-repo graphs into one federated graph, and — the F2 moat — a **first-class cross-service contract graph** with contract-level intent-vs-reality verdicts (drift, breaking-change, orphaned-consumer detection) across a multi-paradigm, multi-language, product- and company-scoped microservices landscape.
 
-**Source:** `src/beadloom/graph/federation.py` (identity + export + hub aggregation), `src/beadloom/graph/contracts.py` (first-class `Contract` model, language-neutral `contract_key`, `classify`/`reconcile_contracts`), `src/beadloom/graph/sdl.py` (GraphQL SDL surface extraction), `src/beadloom/graph/loader.py` (foreign-ref parsing, `lifecycle` load, `foreign_edges`, contract-key unification), `src/beadloom/infrastructure/db.py` (`lifecycle` columns, `foreign_edges` table, paradigm-agnostic kinds), `src/beadloom/services/cli.py` (`export` / `federate` commands).
+**Source:** `src/beadloom/graph/federation/` (the `federation/` package — decomposed by responsibility in BDL-059 S3: `refs.py` identity model, `export.py` satellite export, `reconcile.py` hub aggregation + verdicts, `gate.py` landscape gate; `__init__.py` re-exports the full public surface so `from beadloom.graph.federation import X` is unchanged), `src/beadloom/graph/contracts.py` (first-class `Contract` model, language-neutral `contract_key`, `classify`/`reconcile_contracts`), `src/beadloom/graph/sdl.py` (GraphQL SDL surface extraction), `src/beadloom/graph/loader.py` (foreign-ref parsing, `lifecycle` load, `foreign_edges`, contract-key unification), `src/beadloom/infrastructure/db.py` (`lifecycle` columns, `foreign_edges` table, paradigm-agnostic kinds), `src/beadloom/services/cli.py` (`export` / `federate` commands).
 
 This SPEC covers two delivered slices:
 
@@ -79,7 +79,7 @@ Loading rules (`graph/loader.py`):
 - An invalid value is recorded loudly in `GraphLoadResult.errors` and falls back to `active` (never silently dropped).
 - `lifecycle` is excluded from the `extra` JSON (no duplication).
 
-Rule-engine awareness (`graph/rule_engine.py`): only `active` edges are counted as "live" for the `no-dependency-cycles` and `architecture-layers` rules. `planned` / `deprecated` / `dead` edges are not counted as live cycle/layer violations. If the `lifecycle` column is absent (an older DB), the engine degrades gracefully and treats all edges as live.
+Rule-engine awareness (`graph/rules/cycles.py` — the edge-liveness SQL helpers): only `active` edges are counted as "live" for the `no-dependency-cycles` and `architecture-layers` rules. `planned` / `deprecated` / `dead` edges are not counted as live cycle/layer violations. If the `lifecycle` column is absent (an older DB), the engine degrades gracefully and treats all edges as live.
 
 Migration (`infrastructure/db.py`): the `lifecycle TEXT NOT NULL DEFAULT 'active' CHECK(...)` column is added to both `nodes` and `edges`, in the fresh schema and via an idempotent `ALTER TABLE ADD COLUMN` migration. Existing rows default to `active` (no regression). BDL-038 G7 adds `external` to the CHECK on `nodes` / `edges` / `foreign_edges`; since SQLite cannot ALTER a CHECK in place, the migration **rebuilds** each table (table-rebuild pattern, `DB SCHEMA_VERSION` 3 → 4 — additive, idempotent, no data loss, composes with the dropped DDD-only `kind` CHECK).
 
@@ -125,7 +125,7 @@ The hub cannot know a satellite's live HEAD, so the export records its own prove
 
 The CLI exits `1` with an error if the database is not found (`beadloom reindex` first).
 
-#### Public API (`graph/federation.py`)
+#### Public API (`graph/federation/export.py`, re-exported from `graph.federation`)
 
 ```python
 EXPORT_SCHEMA_VERSION: int  # = 2  (GraphQL SDL `contract` meta on edges; v1 still ingested by federate)
@@ -231,7 +231,7 @@ upload even when the gate blocks. `beadloom ci` composes the landscape gate as
 its final step (after reindex → lint → sync-check → config-check → doctor); see
 `docs/guides/ci-setup.md`.
 
-#### Public API (`graph/federation.py`)
+#### Public API (`graph/federation/reconcile.py` + `gate.py`, re-exported from `graph.federation`)
 
 ```python
 FEDERATION_SCHEMA_VERSION: int  # = 2  (independent of EXPORT_SCHEMA_VERSION = 2)

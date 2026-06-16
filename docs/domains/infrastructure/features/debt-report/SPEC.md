@@ -133,7 +133,7 @@ Raw counts aggregated from all data sources.
 
 | Category | Source | Module |
 |----------|--------|--------|
-| Rule violations | `evaluate_all(conn, rules)` | `graph/rule_engine.py` |
+| Rule violations | `evaluate_all(conn, rules)` | `graph/rules/` (re-exported via the `graph.rule_engine` shim) |
 | Doc gaps -- undocumented | Nodes without docs (LEFT JOIN) | `application/debt_report.py` |
 | Doc gaps -- stale | `sync_state` entries with `status='stale'` | `application/debt_report.py` |
 | Doc gaps -- untracked | Nodes with source but no sync_state | `application/debt_report.py` |

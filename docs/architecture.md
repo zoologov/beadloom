@@ -123,7 +123,7 @@ Default parameters:
 
 Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3) and enforce boundaries between graph nodes. The YAML key on each rule selects its type.
 
-**Rule types** (7, parsed by `graph/rule_engine.py`, evaluated by `graph/linter.py`):
+**Rule types** (7, parsed and evaluated by the `graph/rules/` package, orchestrated by `graph/linter.py`):
 
 | YAML key | Semantics | Example |
 |----------|-----------|---------|
@@ -133,7 +133,7 @@ Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3
 | `layers` | Enforce layered architecture direction | Top-down: services → domains → infrastructure |
 | `forbid_cycles` | Detect circular dependencies in the graph | No cycles on `uses`/`depends_on` edges |
 | `forbid_import` | Control file-level import boundaries | Files in `src/beadloom/tui/**` must not import from `src/beadloom/infrastructure/**` |
-| `check` | Enforce complexity / coverage limits per node | `max_symbols: 200` per domain; `module-coverage` (every src module tracked) |
+| `check` | Enforce complexity / coverage limits per node | `max_symbols` per domain (Beadloom's `domain-size-limit`; see the recalibration note below); `module-coverage` (every src module tracked) |
 
 > Internally each parsed rule carries a `rule_type` string (`deny` / `require` / `forbid` / `layer` / `forbid_import` / `cardinality` / …) used by the evaluators; the **authoring key** in `rules.yml` is the column above.
 
@@ -144,7 +144,7 @@ Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3
 - `unless_edge` exemptions allow otherwise-forbidden imports when a specific edge kind exists between the nodes
 - `forbid` rules check edge patterns between nodes matching tag selectors
 - `layers` rules verify dependency direction across ordered architectural layers
-- `forbid_cycles` uses BFS/DFS to find circular dependency paths
+- `forbid_cycles` uses an iterative WHITE/GREY/BLACK colored DFS (in `graph/rules/cycles.py`) to find circular dependency paths, reporting each unique cycle once
 - `forbid_import` rules query the `code_imports` table for forbidden cross-boundary imports
 - `check` rules count symbols/files per node (cardinality) and verify module coverage; `module-coverage` is `severity: error`
 
@@ -156,6 +156,8 @@ Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3
 **CLI:** `beadloom lint [--strict] [--format rich|json|porcelain] [--no-reindex]`
 
 The `--strict` flag exits with code 1 on `error`-severity violations (for CI/CD). Rules support `error` and `warn` severity levels.
+
+> **`domain-size-limit` recalibrated 200 → 280 (BDL-059 S3).** Cohesion-driven decomposition split the monster files (`rule_engine.py`, `federation.py`) into cohesive same-domain packages, but an in-domain split does not change a domain's symbol count — `graph` and `application` are legitimately large bounded contexts. Dodging the count by reclassifying nodes would be metric-gaming; recalibrating the threshold for this codebase's largest contexts is the honest, documented alternative. The limit stays a `warn` signal for genuine re-scoping (a domain over 280), never a target.
 
 ### Node Tags
 

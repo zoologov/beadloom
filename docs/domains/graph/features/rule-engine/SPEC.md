@@ -257,7 +257,7 @@ rules:
     severity: warn
     check:
       for: { kind: domain }                    # NodeMatcher
-      max_symbols: 200                         # optional
+      max_symbols: 280                         # optional (Beadloom's domain-size-limit; recalibrated 200->280 in BDL-059 S3)
       max_files: 50                            # optional
       min_doc_coverage: 0.8                    # optional
 ```
@@ -324,10 +324,10 @@ Algorithm:
 #### Combined Evaluation
 
 ```python
-def evaluate_all(conn: sqlite3.Connection, rules: list[Rule]) -> list[Violation]
+def evaluate_all(conn: sqlite3.Connection, rules: list[Rule], *, project_root: Path | None = None) -> list[Violation]
 ```
 
-Partitions rules by type into `DenyRule`, `RequireRule`, `CycleRule`, `ImportBoundaryRule`, `ForbidEdgeRule`, `LayerRule`, and `CardinalityRule` lists. Calls the corresponding `evaluate_*` function for each type. Concatenates results and sorts by `(rule_name, file_path or "")`.
+Owned by `rules/__init__.py`. Partitions rules by type into `DenyRule`, `RequireRule`, `CycleRule`, `ImportBoundaryRule`, `ForbidEdgeRule`, `LayerRule`, `CardinalityRule`, `UnregisteredFeatureCandidateRule`, and `ModuleCoverageRule` lists. Calls the corresponding `evaluate_*` function for each type. Enriches each `Violation` with a deterministic `remediation` hint (via `_remediation_for`, a post-pass), then concatenates and sorts by `(rule_name, file_path or "")`. `project_root` (default: cwd) roots the on-disk module enumeration the `module-coverage` rule uses.
 
 ### Internal Helpers
 
@@ -362,7 +362,7 @@ def evaluate_import_boundary_rules(conn: sqlite3.Connection, rules: list[ImportB
 def evaluate_forbid_edge_rules(conn: sqlite3.Connection, rules: list[ForbidEdgeRule]) -> list[Violation]: ...
 def evaluate_layer_rules(conn: sqlite3.Connection, rules: list[LayerRule]) -> list[Violation]: ...
 def evaluate_cardinality_rules(conn: sqlite3.Connection, rules: list[CardinalityRule]) -> list[Violation]: ...
-def evaluate_all(conn: sqlite3.Connection, rules: list[Rule]) -> list[Violation]: ...
+def evaluate_all(conn: sqlite3.Connection, rules: list[Rule], *, project_root: Path | None = None) -> list[Violation]: ...
 ```
 
 ### Public Classes
