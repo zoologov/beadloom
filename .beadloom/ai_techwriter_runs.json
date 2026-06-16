@@ -59,5 +59,26 @@
     "model": "qwen3.7-plus",
     "gate": "green",
     "pr_url": ""
+  },
+  {
+    "ts": "2026-06-16T12:30:26.500485+00:00",
+    "platform": "github",
+    "docs_refreshed": [
+      "domains/application/components/active-table/DOC.md",
+      "domains/context-oracle/README.md",
+      "domains/context-oracle/features/search/SPEC.md",
+      "domains/doc-sync/README.md",
+      "domains/graph/README.md",
+      "domains/graph/features/graph-diff/SPEC.md",
+      "domains/infrastructure/features/doctor/SPEC.md",
+      "domains/infrastructure/features/watcher/SPEC.md",
+      "services/mcp.md",
+      "services/tui.md"
+    ],
+    "input_tokens": 462000,
+    "output_tokens": 38300,
+    "model": "qwen3.7-plus",
+    "gate": "green",
+    "pr_url": ""
   }
 ]

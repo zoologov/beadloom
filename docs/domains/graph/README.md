@@ -164,7 +164,7 @@ Decomposed by responsibility (BDL-059 S3); see the [rule-engine SPEC](features/r
 
 ### Module `src/beadloom/graph/linter.py`
 
-- `lint(project_root: Path, *, rules_path: Path | None = None, reindex_before: bool = True) -> LintResult` -- Run the full lint process: optional reindex, load rules, evaluate, return results. Raises `LintError` on invalid configuration.
+- `lint(project_root: Path, *, rules_path: Path | None = None, reindex: Callable[[Path], object] | None = None) -> LintResult` -- Run the full lint process: load rules, evaluate, return results. `reindex` is an optional callback (e.g. `application.reindex.incremental_reindex`) invoked before evaluation so the graph-layer linter stays pure; the CLI injects the application reindex as an orchestration concern. Raises `LintError` on invalid configuration.
 - `format_rich(result: LintResult) -> str` -- Format a `LintResult` as human-readable text with violation markers.
 - `format_json(result: LintResult) -> str` -- Format a `LintResult` as structured JSON with violations array and summary.
 - `format_porcelain(result: LintResult) -> str` -- Format a `LintResult` as machine-readable one-line-per-violation output.

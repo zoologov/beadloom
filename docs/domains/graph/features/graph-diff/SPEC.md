@@ -2,7 +2,7 @@
 
 Compare the current on-disk graph YAML against the state at a given git ref.
 
-**Source:** `src/beadloom/graph/diff.py`
+**Source:** `src/beadloom/graph/diff.py`, `src/beadloom/services/commands/index_ops.py`
 
 ---
 
@@ -44,7 +44,7 @@ def compute_diff_from_snapshot(conn: sqlite3.Connection, snapshot_id: int) -> Gr
 
 **Raises:** `ValueError` if the snapshot ID is not found.
 
-Unlike `compute_diff`, this function compares a saved snapshot (loaded via `_load_snapshot_data` from `beadloom.graph.snapshot`) with the current live state in the `nodes` and `edges` database tables. The same comparison logic applies: nodes are compared by `kind`, `summary`, `source`, and `tags`; edges by `(src, dst, kind)` set difference.
+Unlike `compute_diff`, this function compares a saved snapshot (loaded via `_load_snapshot_data` from `beadloom.graph.snapshot`) with the current live state in the `nodes` and `edges` database tables. The same comparison logic applies: nodes are compared by `kind`, `summary`, `source`, and `tags`; edges by `(src_ref_id, dst_ref_id, kind)` set difference.
 
 ### Data Structures
 
@@ -138,13 +138,19 @@ Serializes a `GraphDiff` to a JSON-compatible dictionary. Produces a dict with k
 ### Public Functions
 
 ```python
+# src/beadloom/graph/diff.py
 def compute_diff(project_root: Path, since: str = "HEAD") -> GraphDiff: ...
 def compute_diff_from_snapshot(conn: sqlite3.Connection, snapshot_id: int) -> GraphDiff: ...
 def render_diff(diff: GraphDiff, console: Console) -> None: ...
 def diff_to_dict(diff: GraphDiff) -> dict[str, object]: ...
+
+# src/beadloom/services/commands/index_ops.py
+def diff_cmd(*, since: str, as_json: bool, project: Path | None) -> None: ...
 ```
 
-All functions are defined in `src/beadloom/graph/diff.py`. `Console` is from `rich.console`.
+`compute_diff`, `compute_diff_from_snapshot`, `render_diff`, and `diff_to_dict` are defined in `src/beadloom/graph/diff.py`. `Console` is from `rich.console`.
+
+`diff_cmd` is the Click command handler registered as `beadloom diff` in `src/beadloom/services/commands/index_ops.py`. It imports from `beadloom.graph.diff` at call time, resolves the project root, validates the graph directory exists, and delegates to `compute_diff`. On success it either renders via `render_diff` (Rich console) or emits JSON via `diff_to_dict` (when `--json` is passed). It exits with code 1 when changes are detected, when the graph directory is missing, or when the git ref is invalid; code 0 when no changes are found.
 
 ### Public Classes
 

@@ -495,13 +495,15 @@ Serialize a WhyResult to a JSON-compatible dict.
 
 ### CLI Integration
 
-The context-oracle domain exposes functionality through several CLI commands in `cli.py`:
+The context-oracle domain exposes functionality through CLI commands registered in the `services/commands/` package:
 
-- `beadloom ctx REF_IDS... [--json] [--markdown] [--depth N] [--max-nodes N] [--max-chunks N] [--project DIR]` -- Build and display context bundle
-- `beadloom search QUERY [--kind KIND] [--limit N] [--json] [--project DIR]` -- FTS5 search with LIKE fallback
-- `beadloom why REF_ID [--depth N] [--reverse] [--format panel|tree] [--json] [--project DIR]` -- Impact analysis
-- `beadloom graph [REF_IDS...] [--json] [--depth N] [--format mermaid|c4|c4-plantuml] [--level context|container|component] [--scope REF_ID] [--project DIR]` -- Architecture graph (Mermaid, C4-Mermaid, C4-PlantUML, or JSON). C4 formats use `--level` for diagram granularity and `--scope` to show internals of one container (only with `--level=component`).
-- `beadloom lint [--strict] [--fail-on-warn] [--no-reindex] [--format rich|json|porcelain|github] [--project DIR]` -- Architecture lint rules. The `github` format emits GitHub Actions `::error` annotations for CI integration.
+- **`services/commands/query.py`** — read-only context/graph query commands:
+  - `beadloom ctx REF_IDS... [--json] [--markdown] [--depth N] [--max-nodes N] [--max-chunks N] [--project DIR]` -- Build and display context bundle
+  - `beadloom search QUERY [--kind KIND] [--limit N] [--json] [--project DIR]` -- FTS5 search with LIKE fallback
+  - `beadloom why REF_ID [--depth N] [--reverse] [--format panel|tree] [--json] [--project DIR]` -- Impact analysis
+  - `beadloom graph [REF_IDS...] [--json] [--depth N] [--format mermaid|c4|c4-plantuml] [--level context|container|component] [--scope REF_ID] [--project DIR]` -- Architecture graph (Mermaid, C4-Mermaid, C4-PlantUML, or JSON). C4 formats use `--level` for diagram granularity and `--scope` to show internals of one container (only with `--level=component`).
+- **`services/commands/federation.py`** — federation, gate, and lint commands:
+  - `beadloom lint [--strict] [--fail-on-warn] [--no-reindex] [--format rich|json|porcelain|github] [--project DIR]` -- Architecture lint rules. The `github` format emits GitHub Actions `::error` annotations for CI integration.
 
 ## Testing
 
@@ -516,4 +518,4 @@ Tests are located in:
 | `tests/test_test_mapper.py` | `test_mapper.py` | Framework detection, test file discovery, mapping strategies, coverage estimation |
 | `tests/test_search.py` | `search.py` | FTS5 search, kind filtering, limit, empty query, escaping, snippets, index rebuild |
 | `tests/test_why.py` | `why.py` | Impact analysis, upstream/downstream trees, reverse mode, render functions |
-| `tests/test_cli_why.py` | `cli.py` (why) | CLI why command, --reverse flag, --format tree, --json output |
+| `tests/test_cli_why.py` | `services/commands/query.py` (why) | CLI why command, --reverse flag, --format tree, --json output |

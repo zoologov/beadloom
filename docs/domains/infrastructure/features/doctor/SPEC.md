@@ -116,16 +116,18 @@ This check runs **only when `project_root` is provided** to `run_checks`. It per
 
 ### Agent Instructions Freshness Helpers
 
-Private helper functions supporting `_check_agent_instructions`:
+Helper functions supporting `_check_agent_instructions`:
 
-| Function | Purpose |
-|----------|---------|
-| `_extract_version_claim(text)` | Extract version from `**Current version:** X.Y.Z` pattern |
-| `_extract_package_claims(text)` | Extract backtick-wrapped package names from Architecture/DDD lines |
-| `_get_actual_version()` | Read `beadloom.__version__` (in-tree), fallback to `importlib.metadata` |
-| `_get_actual_cli_commands()` | Introspect Click `main.commands` for registered command names |
-| `_get_actual_mcp_tool_count()` | Count tools from `mcp_server._TOOLS` list |
-| `_get_actual_packages(project_root)` | Scan `src/beadloom/` for directories with `__init__.py` |
+| Function | Visibility | Purpose |
+|----------|------------|---------|
+| `_extract_version_claim(text)` | private | Extract version from `**Current version:** X.Y.Z` pattern |
+| `_extract_package_claims(text)` | private | Extract backtick-wrapped package names from Architecture/DDD lines |
+| `get_actual_version()` | **public** | Read `beadloom.__version__` (in-tree), fallback to `importlib.metadata` |
+| `_get_actual_cli_commands()` | private | Introspect Click `main.commands` for registered command names |
+| `_get_actual_mcp_tool_count()` | private | Count tools from `mcp_server._TOOLS` list |
+| `_get_actual_packages(project_root)` | private | Scan `src/beadloom/` for directories with `__init__.py` |
+
+`get_actual_version()` is the public version-resolution entry point. Callers and tests depend on this name (not a private symbol), so version resolution is assertable through a stable public API. The in-tree `beadloom.__version__` is the source of truth; installed package metadata (`importlib.metadata`) is deliberately *not* consulted first because editable installs frequently carry stale metadata.
 
 Regex patterns used for extraction:
 
@@ -156,8 +158,9 @@ Regex patterns used for extraction:
 beadloom doctor [--project DIR]
 ```
 
+- **Command source**: `src/beadloom/services/commands/index_ops.py` (registered on the shared `main` Click group from `beadloom.services.commands._root`; BDL-059 S4 split from the former monolithic `services/cli.py`).
 - `--project DIR`: Path to the project root (defaults to current directory).
-- The CLI passes `project_root` to `run_checks`, enabling the agent instructions check (check 8).
+- The CLI opens the database via `open_db` from `beadloom.infrastructure.db` and passes `project_root` to `run_checks`, enabling the agent instructions check (check 8).
 - Output: Formatted list of checks with severity markers (`[ok]`, `[info]`, `[warn]`, `[ERR]`) via `click.echo`.
 - Exits with error if the database file is not found at `<project>/.beadloom/beadloom.db`.
 
@@ -174,6 +177,12 @@ def run_checks(
 ```
 
 Run all validation checks against the database and return the combined list of `Check` results. The connection must point to a populated beadloom database (i.e., after `beadloom reindex` has been run). When `project_root` is provided, the agent instructions freshness check (check 8) is also executed.
+
+```python
+def get_actual_version() -> str
+```
+
+Public version-resolution entry point. Returns the in-tree `beadloom.__version__`, falling back to `importlib.metadata.version("beadloom")` only if the source version is unavailable.
 
 ### Public Classes
 
@@ -213,7 +222,7 @@ class Check:
 - `_check_symbol_drift` depends on `doc_sync.engine._compute_symbols_hash` being available; it imports the function at call time.
 - `_check_source_coverage` depends on `doc_sync.engine.check_source_coverage` and derives `project_root` from the database path via `PRAGMA database_list`.
 - `_check_agent_instructions` depends on `beadloom.__version__` being defined in the package `__init__.py`, and on `beadloom.services.cli.main` being a Click group with a `.commands` dict.
-- `_get_actual_version` prefers the in-tree `beadloom.__version__` over `importlib.metadata` to avoid false drift from stale editable-install metadata.
+- `get_actual_version` prefers the in-tree `beadloom.__version__` over `importlib.metadata` to avoid false drift from stale editable-install metadata.
 
 ## Testing
 

@@ -257,6 +257,12 @@ src/beadloom/tui/
 
 ## API
 
+Module `src/beadloom/services/commands/dashboard.py` (CLI command layer):
+
+- `_launch_tui(*, project, no_watch)` -- shared implementation for `tui`/`ui` Click commands; resolves `project_root`, validates that `.beadloom/beadloom.db` exists, then calls `beadloom.tui.launch()`. Exits with an error message if the `textual` optional dependency is missing or the database has not been created.
+- `tui(*, project, no_watch)` -- Click command registered on the root CLI group; launches the interactive terminal dashboard.
+- `ui(*, project, no_watch)` -- Click command alias for `tui`; identical behaviour, preserved for backward compatibility.
+
 Module `src/beadloom/tui/__init__.py`:
 
 - `launch(db_path, project_root, *, no_watch=False)` -- entry point
