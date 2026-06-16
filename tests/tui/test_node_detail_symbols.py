@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
 # Skip all TUI tests if textual is not installed
@@ -77,12 +78,19 @@ def populated_db(tmp_path: Path) -> tuple[Path, Path]:
 
 
 @pytest.fixture()
-def ro_conn(populated_db: tuple[Path, Path]) -> sqlite3.Connection:
-    """Return a read-only connection to the populated test DB."""
+def ro_conn(populated_db: tuple[Path, Path]) -> Iterator[sqlite3.Connection]:
+    """Yield a read-only connection to the populated test DB, closed on teardown.
+
+    The ``yield``/``finally`` shape guarantees the connection is closed even if
+    the test fails, so the suite is clean under ``-W error::ResourceWarning``.
+    """
     db_path, _project_root = populated_db
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from unittest.mock import patch
 
+from beadloom.application.doctor import get_actual_version
 from beadloom.onboarding.scanner import (
     _auto_insert_markers,
     _parse_markers,
@@ -137,12 +137,12 @@ class TestRenderProjectInfoSection:
         src_dir.mkdir(parents=True)
         (src_dir / "__init__.py").write_text("")
 
-        with patch("beadloom.application.doctor._get_actual_version", return_value="1.0.0"):
-            result = _render_project_info_section(tmp_path)
+        result = _render_project_info_section(tmp_path)
 
         assert isinstance(result, str)
         assert len(result) > 0
-        assert "**Current version:**" in result
+        # Version comes from the public resolver — assert the observable line.
+        assert f"**Current version:** {get_actual_version()}" in result
 
     def test_includes_packages(self, tmp_path: Path) -> None:
         (tmp_path / "pyproject.toml").write_text(
@@ -156,8 +156,7 @@ class TestRenderProjectInfoSection:
         pkg.mkdir()
         (pkg / "__init__.py").write_text("")
 
-        with patch("beadloom.application.doctor._get_actual_version", return_value="1.0.0"):
-            result = _render_project_info_section(tmp_path)
+        result = _render_project_info_section(tmp_path)
 
         # Should mention the package name
         assert "mypkg" in result
@@ -178,12 +177,12 @@ class TestRefreshClaudeMd:
 
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"\nversion = "2.0.0"\n')
 
-        with patch("beadloom.application.doctor._get_actual_version", return_value="2.0.0"):
-            changed = refresh_claude_md(tmp_path)
+        changed = refresh_claude_md(tmp_path)
 
         assert "project-info" in changed
         updated = claude_md.read_text()
-        assert "2.0.0" in updated
+        # The rendered section carries the real resolved version (observable).
+        assert get_actual_version() in updated
         # Markers preserved
         assert "<!-- beadloom:auto-start project-info -->" in updated
         assert "<!-- beadloom:auto-end -->" in updated
@@ -200,8 +199,7 @@ class TestRefreshClaudeMd:
 
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"\nversion = "9.9.9"\n')
 
-        with patch("beadloom.application.doctor._get_actual_version", return_value="9.9.9"):
-            changed = refresh_claude_md(tmp_path, dry_run=True)
+        changed = refresh_claude_md(tmp_path, dry_run=True)
 
         assert "project-info" in changed
         # File should be unchanged
@@ -216,8 +214,7 @@ class TestRefreshClaudeMd:
 
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"\nversion = "3.0.0"\n')
 
-        with patch("beadloom.application.doctor._get_actual_version", return_value="3.0.0"):
-            changed = refresh_claude_md(tmp_path)
+        changed = refresh_claude_md(tmp_path)
 
         updated = claude_md.read_text()
         assert "<!-- beadloom:auto-start project-info -->" in updated
@@ -234,9 +231,8 @@ class TestRefreshClaudeMd:
 
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"\nversion = "1.0.0"\n')
 
-        # Pre-render the section content so it matches
-        with patch("beadloom.application.doctor._get_actual_version", return_value="1.0.0"):
-            rendered = _render_project_info_section(tmp_path)
+        # Pre-render the section content so it matches the refresh output.
+        rendered = _render_project_info_section(tmp_path)
 
         content = (
             "# CLAUDE.md\n\n## 0.1 Project: Test\n\n"
@@ -245,8 +241,7 @@ class TestRefreshClaudeMd:
         )
         claude_md.write_text(content)
 
-        with patch("beadloom.application.doctor._get_actual_version", return_value="1.0.0"):
-            changed = refresh_claude_md(tmp_path)
+        changed = refresh_claude_md(tmp_path)
 
         assert changed == []
 
@@ -272,8 +267,7 @@ class TestRefreshClaudeMd:
 
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"\nversion = "1.0.0"\n')
 
-        with patch("beadloom.application.doctor._get_actual_version", return_value="1.0.0"):
-            refresh_claude_md(tmp_path)
+        refresh_claude_md(tmp_path)
 
         updated = claude_md.read_text()
         assert "# Title" in updated

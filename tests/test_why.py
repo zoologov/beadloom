@@ -18,16 +18,24 @@ from beadloom.infrastructure.db import create_schema, open_db
 
 if TYPE_CHECKING:
     import sqlite3
+    from collections.abc import Iterator
     from pathlib import Path
 
 
 @pytest.fixture()
-def conn(tmp_path: Path) -> sqlite3.Connection:
-    """Create a DB with schema for testing."""
+def conn(tmp_path: Path) -> Iterator[sqlite3.Connection]:
+    """Yield a schema-initialized DB connection, closed on teardown.
+
+    The ``yield``/``finally`` shape guarantees the connection is closed even if
+    the test fails, so the suite is clean under ``-W error::ResourceWarning``.
+    """
     db_path = tmp_path / "test.db"
     c = open_db(db_path)
     create_schema(c)
-    return c
+    try:
+        yield c
+    finally:
+        c.close()
 
 
 def _insert_node(conn: sqlite3.Connection, ref_id: str, kind: str, summary: str) -> None:

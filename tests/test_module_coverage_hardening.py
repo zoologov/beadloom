@@ -511,12 +511,18 @@ class TestRealRepoCoveragePromoted:
         assert len(mc) == 1
         assert mc[0].severity == "error"
 
-    def test_live_repo_has_zero_module_coverage_findings(self) -> None:
+    def test_live_repo_has_zero_module_coverage_findings(
+        self, live_repo_reindexed: Path
+    ) -> None:
         """`module-coverage` reports ZERO findings over the live src tree (no shadow code)."""
         runner = CliRunner()
+        # The `live_repo_reindexed` fixture guarantees the shared on-disk DB
+        # reflects current source, so we read it (--no-reindex) without
+        # re-mutating it for other tests. This keeps the assertion
+        # order-independent (surfaced by pytest-randomly in S1).
         result = runner.invoke(
             main,
-            ["lint", "--format", "json", "--project", str(Path.cwd()), "--no-reindex"],
+            ["lint", "--format", "json", "--project", str(live_repo_reindexed), "--no-reindex"],
         )
         assert result.exit_code in (0, 1), result.output
         payload = json.loads(result.output)
@@ -524,11 +530,12 @@ class TestRealRepoCoveragePromoted:
         coverage = [f for f in findings if f.get("rule_name") == "module-coverage"]
         assert coverage == [], coverage
 
-    def test_real_repo_lint_strict_exits_zero(self) -> None:
+    def test_real_repo_lint_strict_exits_zero(self, live_repo_reindexed: Path) -> None:
         """`lint --strict` over the live repo exits 0 — coverage clean despite error severity."""
         runner = CliRunner()
+        # Reads the fixture-reindexed shared DB (see the note above).
         result = runner.invoke(
-            main, ["lint", "--strict", "--project", str(Path.cwd()), "--no-reindex"]
+            main, ["lint", "--strict", "--project", str(live_repo_reindexed), "--no-reindex"]
         )
         assert result.exit_code == 0, result.output
 
@@ -668,11 +675,13 @@ class TestRealRepoCoverageGuard:
     """Post-S3b (BEAD-14): every module is classified, so the live tree has ZERO
     coverage findings. The formerly-shadow modules are now covered by a node."""
 
-    def _real_coverage_findings(self) -> set[str]:
+    def _real_coverage_findings(self, repo_root: Path) -> set[str]:
         runner = CliRunner()
+        # --no-reindex: the `live_repo_reindexed` fixture has already brought the
+        # shared on-disk DB up to date, so we read it without re-mutating it.
         result = runner.invoke(
             main,
-            ["lint", "--format", "porcelain", "--project", str(Path.cwd()), "--no-reindex"],
+            ["lint", "--format", "porcelain", "--project", str(repo_root), "--no-reindex"],
         )
         assert result.exit_code == 0, result.output
         flagged: set[str] = set()
@@ -682,9 +691,9 @@ class TestRealRepoCoverageGuard:
                 flagged.add(parts[3])
         return flagged
 
-    def test_formerly_shadow_modules_now_covered(self) -> None:
+    def test_formerly_shadow_modules_now_covered(self, live_repo_reindexed: Path) -> None:
         """The modules classified in S3b are no longer flagged (they have nodes now)."""
-        flagged = self._real_coverage_findings()
+        flagged = self._real_coverage_findings(live_repo_reindexed)
         for covered in (
             "src/beadloom/graph/loader.py",
             "src/beadloom/infrastructure/db.py",
@@ -692,7 +701,7 @@ class TestRealRepoCoverageGuard:
         ):
             assert covered not in flagged, f"{covered} should be covered post-S3b"
 
-    def test_coverage_lint_reports_no_findings(self) -> None:
+    def test_coverage_lint_reports_no_findings(self, live_repo_reindexed: Path) -> None:
         """Every src module is classified — the coverage lint reports zero findings."""
-        flagged = self._real_coverage_findings()
+        flagged = self._real_coverage_findings(live_repo_reindexed)
         assert flagged == set(), flagged

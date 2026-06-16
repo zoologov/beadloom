@@ -271,8 +271,12 @@ def _extract_package_claims(text: str) -> set[str]:
     return packages
 
 
-def _get_actual_version() -> str:
+def get_actual_version() -> str:
     """Get actual beadloom version from the in-tree ``__version__``.
+
+    Public version-resolution entry point — callers and tests depend on this
+    name (not a private symbol), so version resolution is assertable through a
+    stable public API.
 
     The in-tree ``beadloom.__version__`` is the source of truth. Installed
     package metadata (``importlib.metadata``) is deliberately *not* consulted
@@ -354,7 +358,7 @@ def _check_agent_instructions(project_root: Path) -> list[Check]:
     # --- 1. Version check (from CLAUDE.md) ---
     claimed_version = _extract_version_claim(claude_text)
     if claimed_version is not None:
-        actual_version = _get_actual_version()
+        actual_version = get_actual_version()
         if claimed_version == actual_version:
             results.append(
                 Check(

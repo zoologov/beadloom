@@ -14,7 +14,7 @@ from beadloom.application.doctor import (
     _get_actual_cli_commands,
     _get_actual_mcp_tool_count,
     _get_actual_packages,
-    _get_actual_version,
+    get_actual_version,
 )
 
 if TYPE_CHECKING:
@@ -99,7 +99,7 @@ class TestExtractPackageClaims:
 
 
 # ---------------------------------------------------------------------------
-# _get_actual_version
+# get_actual_version
 # ---------------------------------------------------------------------------
 
 
@@ -107,7 +107,7 @@ class TestGetActualVersion:
     def test_returns_version_string(self) -> None:
         """Returns a non-empty version string."""
         # Act
-        result = _get_actual_version()
+        result = get_actual_version()
 
         # Assert
         assert result
@@ -127,7 +127,7 @@ class TestGetActualVersion:
         from beadloom import __version__
 
         # Act
-        result = _get_actual_version()
+        result = get_actual_version()
 
         # Assert
         assert result == __version__
@@ -147,7 +147,7 @@ class TestGetActualVersion:
         monkeypatch.setattr(importlib.metadata, "version", _stale)
 
         # Act
-        result = _get_actual_version()
+        result = get_actual_version()
 
         # Assert
         assert result == __version__
@@ -277,7 +277,7 @@ class TestCheckAgentInstructions:
     def test_version_match_produces_ok(self, tmp_path: Path) -> None:
         """Version claim matching actual version -> OK."""
         # Arrange
-        actual_version = _get_actual_version()
+        actual_version = get_actual_version()
         claude_dir = tmp_path / ".claude"
         claude_dir.mkdir()
         claude_md = claude_dir / "CLAUDE.md"

@@ -49,6 +49,11 @@ class StatusBarWidget(Static):
         self._change_count: int = 0
         self._last_action: str = ""
 
+    @property
+    def last_action(self) -> str:
+        """Read-only view of the current transient action message."""
+        return self._last_action
+
     def render(self) -> Text:
         """Render the status bar as Rich Text."""
         text = Text()

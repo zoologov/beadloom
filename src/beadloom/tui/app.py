@@ -89,6 +89,21 @@ class BeadloomApp(App[None]):
         # Track last selected node ref_id for explorer navigation
         self._selected_ref_id: str = ""
 
+    @property
+    def selected_ref_id(self) -> str:
+        """Read-only view of the last node ref_id selected for explorer navigation."""
+        return self._selected_ref_id
+
+    @property
+    def connection(self) -> sqlite3.Connection | None:
+        """Read-only view of the live SQLite connection (``None`` before mount/after unmount)."""
+        return self._conn
+
+    @property
+    def file_watcher_worker(self) -> Worker[None] | None:
+        """Read-only view of the file-watcher Worker (``None`` when watching is disabled)."""
+        return self._file_watcher_worker
+
     def _open_db(self) -> sqlite3.Connection:
         """Open SQLite connection (WAL mode — safe for concurrent access).
 

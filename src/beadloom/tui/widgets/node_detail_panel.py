@@ -154,6 +154,16 @@ class NodeDetailPanel(Static):
         self._graph_provider = graph_provider
         self._ref_id = ref_id
 
+    @property
+    def ref_id(self) -> str:
+        """Read-only view of the ref_id currently displayed (observable state)."""
+        return self._ref_id
+
+    @property
+    def rendered_text(self) -> Text:
+        """Read-only view of the Rich Text this panel renders for its state."""
+        return self._build_text()
+
     def _build_text(self) -> Text:
         """Build the Rich Text for the current state."""
         if not self._ref_id:

@@ -471,7 +471,7 @@ def _beadloom_ctx_json(ref_id: str) -> dict[str, object]:
 
 
 class TestGraphResolution:
-    def test_ai_techwriter_feature_resolves(self) -> None:
+    def test_ai_techwriter_feature_resolves(self, live_repo_reindexed: Path) -> None:
         bundle = _beadloom_ctx_json("ai-techwriter")
         focus = bundle["focus"]
         assert isinstance(focus, dict)
@@ -482,7 +482,7 @@ class TestGraphResolution:
         assert "ai_agents" in node_ids
         assert "ai-techwriter" in node_ids
 
-    def test_feature_is_part_of_ai_agents_domain(self) -> None:
+    def test_feature_is_part_of_ai_agents_domain(self, live_repo_reindexed: Path) -> None:
         graph = _beadloom_ctx_json("ai-techwriter")["graph"]
         assert isinstance(graph, dict)
         edges = graph["edges"]
