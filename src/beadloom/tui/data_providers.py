@@ -31,17 +31,15 @@ class GraphDataProvider:
 
     def refresh(self) -> None:
         """Reload nodes and edges from the database."""
+        from beadloom.application import graph_reads
+
         self._nodes = [
-            {"ref_id": r["ref_id"], "kind": r["kind"], "summary": r["summary"]}
-            for r in self.conn.execute(
-                "SELECT ref_id, kind, summary FROM nodes ORDER BY kind, ref_id"
-            ).fetchall()
+            {"ref_id": n.ref_id, "kind": n.kind, "summary": n.summary}
+            for n in graph_reads.get_all_nodes(self.conn)
         ]
         self._edges = [
-            {"src": r["src_ref_id"], "dst": r["dst_ref_id"], "kind": r["kind"]}
-            for r in self.conn.execute(
-                "SELECT src_ref_id, dst_ref_id, kind FROM edges ORDER BY src_ref_id"
-            ).fetchall()
+            {"src": e.src_ref_id, "dst": e.dst_ref_id, "kind": e.kind}
+            for e in graph_reads.get_all_edges(self.conn)
         ]
 
     def get_nodes(self) -> list[dict[str, str]]:
@@ -58,38 +56,37 @@ class GraphDataProvider:
 
     def get_node(self, ref_id: str) -> dict[str, str] | None:
         """Return a single node by ref_id, or None if not found."""
-        row = self.conn.execute(
-            "SELECT ref_id, kind, summary FROM nodes WHERE ref_id = ?",
-            (ref_id,),
-        ).fetchone()
-        if row is None:
+        from beadloom.application import graph_reads
+
+        node = graph_reads.get_node(self.conn, ref_id)
+        if node is None:
             return None
-        return {"ref_id": row["ref_id"], "kind": row["kind"], "summary": row["summary"]}
+        return {"ref_id": node.ref_id, "kind": node.kind, "summary": node.summary}
 
     def get_node_with_source(self, ref_id: str) -> dict[str, str | None] | None:
         """Return a node with source path by ref_id, or None if not found."""
-        row = self.conn.execute(
-            "SELECT ref_id, kind, summary, source FROM nodes WHERE ref_id = ?",
-            (ref_id,),
-        ).fetchone()
-        if row is None:
+        from beadloom.application import graph_reads
+
+        node = graph_reads.get_node_with_source(self.conn, ref_id)
+        if node is None:
             return None
         return {
-            "ref_id": row["ref_id"],
-            "kind": row["kind"],
-            "summary": row["summary"],
-            "source": row["source"],
+            "ref_id": node.ref_id,
+            "kind": node.kind,
+            "summary": node.summary,
+            "source": node.source,
         }
 
     def get_hierarchy(self) -> dict[str, list[str]]:
         """Return parent->children mapping via part_of edges."""
-        rows = self.conn.execute(
-            "SELECT src_ref_id, dst_ref_id FROM edges WHERE kind = 'part_of'"
-        ).fetchall()
+        from beadloom.application import graph_reads
+
         hierarchy: dict[str, list[str]] = {}
-        for row in rows:
-            parent = row["dst_ref_id"]
-            child = row["src_ref_id"]
+        for edge in graph_reads.get_all_edges(self.conn):
+            if edge.kind != "part_of":
+                continue
+            parent = edge.dst_ref_id
+            child = edge.src_ref_id
             if child != parent:  # skip self-referencing edges
                 hierarchy.setdefault(parent, []).append(child)
         return hierarchy
@@ -107,17 +104,15 @@ class GraphDataProvider:
 
     def get_doc_ref_ids(self) -> set[str]:
         """Return set of ref_ids that have associated docs."""
-        rows = self.conn.execute(
-            "SELECT DISTINCT ref_id FROM docs WHERE ref_id IS NOT NULL"
-        ).fetchall()
-        return {str(row["ref_id"]) for row in rows}
+        from beadloom.application import graph_reads
+
+        return graph_reads.get_doc_ref_ids(self.conn)
 
     def get_source_paths(self) -> list[str]:
         """Return list of non-empty source paths from all nodes."""
-        rows = self.conn.execute(
-            "SELECT source FROM nodes WHERE source IS NOT NULL AND source != ''"
-        ).fetchall()
-        return [str(row["source"]) for row in rows]
+        from beadloom.application import graph_reads
+
+        return graph_reads.get_source_paths(self.conn)
 
     def get_symbols(self, ref_id: str) -> list[dict[str, object]]:
         """Return symbols for a node from the SQLite ``code_symbols`` table.
@@ -129,6 +124,8 @@ class GraphDataProvider:
         Returns a list of dicts with keys ``symbol_name``, ``kind``,
         ``line_start``.
         """
+        from beadloom.application import graph_reads
+
         node = self.get_node_with_source(ref_id)
         if node is None:
             return []
@@ -136,22 +133,14 @@ class GraphDataProvider:
         if not source:
             return []
 
-        source_str = str(source)
-        # LIKE prefix match: "src/tui/" -> "src/tui/%", "src/cli.py" -> "src/cli.py"
-        pattern = source_str + "%" if source_str.endswith("/") else source_str
-
-        rows = self.conn.execute(
-            "SELECT symbol_name, kind, line_start FROM code_symbols"
-            " WHERE file_path LIKE ? ORDER BY file_path, line_start",
-            (pattern,),
-        ).fetchall()
+        symbols = graph_reads.get_symbols_for_source(self.conn, str(source))
         return [
             {
-                "symbol_name": row["symbol_name"],
-                "kind": row["kind"],
-                "line_start": row["line_start"],
+                "symbol_name": s.symbol_name,
+                "kind": s.kind,
+                "line_start": s.line_start,
             }
-            for row in rows
+            for s in symbols
         ]
 
 
@@ -291,17 +280,11 @@ class ActivityDataProvider:
 
     def refresh(self) -> None:
         """Re-analyze git activity and cache results."""
+        from beadloom.application import graph_reads
         from beadloom.infrastructure.git_activity import analyze_git_activity
 
-        # Build source_dirs from nodes table
-        rows = self.conn.execute(
-            "SELECT ref_id, source FROM nodes WHERE source IS NOT NULL"
-        ).fetchall()
-        source_dirs: dict[str, str] = {}
-        for row in rows:
-            src = str(row["source"])
-            if src.strip():
-                source_dirs[str(row["ref_id"])] = src
+        # Build source_dirs from the graph index via the application facade.
+        source_dirs = graph_reads.get_node_sources(self.conn)
 
         if not source_dirs:
             self._activities = {}

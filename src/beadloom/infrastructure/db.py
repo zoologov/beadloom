@@ -6,9 +6,11 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing, contextmanager
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
 # Schema version — increment on breaking changes
@@ -254,6 +256,26 @@ def open_db(db_path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
+
+
+@contextmanager
+def connection(db_path: Path) -> Iterator[sqlite3.Connection]:
+    """Open a SQLite connection as a context manager, closed on exit.
+
+    Wraps :func:`open_db` in :func:`contextlib.closing` so callers use ``with``
+    and the connection is always released — even on an exception — without a
+    leaked handle or a ``ResourceWarning``::
+
+        with connection(db_path) as conn:
+            ...
+
+    Prefer this over a bare :func:`open_db` at every call site that owns the
+    connection lifetime; :func:`open_db` stays the low-level factory for the few
+    callers that manage the handle themselves (e.g. the long-lived TUI app
+    connection and test fixtures).
+    """
+    with closing(open_db(db_path)) as conn:
+        yield conn
 
 
 def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:

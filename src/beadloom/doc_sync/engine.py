@@ -731,6 +731,67 @@ def _tracked_paths_from_doc(doc_file: Path, project_root: Path) -> set[str]:
     return tracked
 
 
+def _doc_paths_by_ref_id(conn: sqlite3.Connection) -> dict[str, str]:
+    """Prefetch one ``doc_path`` per ref_id, sync_state taking precedence.
+
+    Replaces the per-node ``sync_state``-then-``docs`` lookup with two
+    set-based scans. Mirrors the old ``LIMIT 1`` behavior: a ref_id present in
+    ``sync_state`` resolves to its sync_state ``doc_path``; otherwise it falls
+    back to the ``docs`` table. Within each source, the *first* row by rowid
+    wins — the same row SQLite returned for the old unordered ``LIMIT 1``.
+    """
+    doc_paths: dict[str, str] = {}
+    # docs first, so sync_state can overwrite (sync_state has precedence).
+    for row in conn.execute(
+        "SELECT ref_id, path AS doc_path FROM docs "
+        "WHERE ref_id IS NOT NULL ORDER BY id DESC"
+    ):
+        doc_paths[row["ref_id"]] = row["doc_path"]
+    for row in conn.execute(
+        "SELECT ref_id, doc_path FROM sync_state ORDER BY id DESC"
+    ):
+        doc_paths[row["ref_id"]] = row["doc_path"]
+    return doc_paths
+
+
+def _children_by_parent(conn: sqlite3.Connection) -> dict[str, list[str]]:
+    """Prefetch ``part_of`` child ref_ids grouped by their parent ref_id."""
+    children: dict[str, list[str]] = {}
+    for row in conn.execute(
+        "SELECT src_ref_id, dst_ref_id FROM edges WHERE kind = 'part_of'"
+    ):
+        children.setdefault(row["dst_ref_id"], []).append(row["src_ref_id"])
+    return children
+
+
+def _sync_paths_by_ref_id(conn: sqlite3.Connection) -> dict[str, set[str]]:
+    """Prefetch tracked ``code_path`` sets from ``sync_state`` per ref_id."""
+    sync_paths: dict[str, set[str]] = {}
+    for row in conn.execute("SELECT ref_id, code_path FROM sync_state"):
+        sync_paths.setdefault(row["ref_id"], set()).add(row["code_path"])
+    return sync_paths
+
+
+def _symbol_paths_by_ref_id(conn: sqlite3.Connection) -> dict[str, set[str]]:
+    """Prefetch ``code_symbols`` file_paths grouped by their annotated ref_id.
+
+    Uses ``json_each`` to fan out the ``annotations`` JSON object and match on
+    its keys/values — an indexable, parse-driven lookup that is byte-identical
+    to the old per-ref_id ``annotations LIKE '%"ref_id"%'`` substring scan
+    (the quoted form only ever matched a JSON key or value), but runs as a
+    single set-based query instead of one ``LIKE`` per ref_id.
+    """
+    symbol_paths: dict[str, set[str]] = {}
+    for row in conn.execute(
+        "SELECT cs.file_path AS file_path, je.value AS ref_value, je.key AS ref_key "
+        "FROM code_symbols cs, json_each(cs.annotations) je"
+    ):
+        for rid in (row["ref_value"], row["ref_key"]):
+            if rid is not None:
+                symbol_paths.setdefault(rid, set()).add(row["file_path"])
+    return symbol_paths
+
+
 def check_source_coverage(
     conn: sqlite3.Connection,
     project_root: Path,
@@ -752,6 +813,14 @@ def check_source_coverage(
     if not node_rows:
         return []
 
+    # Set-based prefetch of all per-node lookups (#123): replaces the former
+    # ~5N per-node queries (doc lookup, sync_state, edges, child sync_state,
+    # per-ref_id symbol LIKE) with a small fixed number of scans.
+    doc_paths = _doc_paths_by_ref_id(conn)
+    children_by_parent = _children_by_parent(conn)
+    sync_paths_by_ref = _sync_paths_by_ref_id(conn)
+    symbol_paths_by_ref = _symbol_paths_by_ref_id(conn)
+
     results: list[dict[str, Any]] = []
 
     for node in node_rows:
@@ -763,24 +832,11 @@ def check_source_coverage(
         if not source_dir.is_dir():
             continue
 
-        # 3. Find doc_path for this ref_id (from sync_state first, then docs table)
-        doc_row = conn.execute(
-            "SELECT doc_path FROM sync_state WHERE ref_id = ? LIMIT 1",
-            (ref_id,),
-        ).fetchone()
-
-        if doc_row is None:
-            # Fallback to docs table
-            doc_row = conn.execute(
-                "SELECT path AS doc_path FROM docs WHERE ref_id = ? LIMIT 1",
-                (ref_id,),
-            ).fetchone()
-
-        if doc_row is None:
+        # 3. Find doc_path for this ref_id (sync_state precedence, then docs)
+        doc_path = doc_paths.get(ref_id)
+        if doc_path is None:
             # No linked doc — skip, nothing to mark stale
             continue
-
-        doc_path: str = doc_row["doc_path"]
 
         # 4. List *.py files on disk (non-recursive), excluding boilerplate
         disk_files: set[str] = set()
@@ -793,40 +849,17 @@ def check_source_coverage(
         if not disk_files:
             continue
 
-        # 5. Collect tracked code_paths from sync_state for this ref_id
-        tracked: set[str] = set()
-        sync_rows = conn.execute(
-            "SELECT code_path FROM sync_state WHERE ref_id = ?",
-            (ref_id,),
-        ).fetchall()
-        for row in sync_rows:
-            tracked.add(row["code_path"])
-
-        # 5b. Also include files tracked under child nodes (part_of this ref_id)
-        child_rows = conn.execute(
-            "SELECT src_ref_id FROM edges WHERE dst_ref_id = ? AND kind = 'part_of'",
-            (ref_id,),
-        ).fetchall()
-        child_ref_ids = [r["src_ref_id"] for r in child_rows]
-
-        for child_id in child_ref_ids:
-            child_sync = conn.execute(
-                "SELECT code_path FROM sync_state WHERE ref_id = ?",
-                (child_id,),
-            ).fetchall()
-            for r in child_sync:
-                tracked.add(r["code_path"])
-
-        # 6. Also collect file_paths from code_symbols annotated with this ref_id
-        #    OR any child ref_id
+        # 5. Collect tracked code_paths from sync_state for this ref_id and
+        #    its part_of children.
+        child_ref_ids = children_by_parent.get(ref_id, [])
         all_ref_ids = [ref_id, *child_ref_ids]
+
+        tracked: set[str] = set()
         for rid in all_ref_ids:
-            sym_rows = conn.execute(
-                "SELECT file_path FROM code_symbols WHERE annotations LIKE ?",
-                (f'%"{rid}"%',),
-            ).fetchall()
-            for row in sym_rows:
-                tracked.add(row["file_path"])
+            tracked |= sync_paths_by_ref.get(rid, set())
+            # 6. Also include files from code_symbols annotated with this
+            #    ref_id OR any child ref_id.
+            tracked |= symbol_paths_by_ref.get(rid, set())
 
         # 6b. (#90) Honor explicit `beadloom:track=path` markers in the doc.
         owned_ref_ids = set(all_ref_ids)

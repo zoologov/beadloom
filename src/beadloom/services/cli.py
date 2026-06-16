@@ -2434,7 +2434,7 @@ def config_check(*, fix: bool, project: Path | None) -> None:
     0 when clean.  With --fix, regenerates via ``setup-rules --refresh``
     and re-checks.
     """
-    from beadloom.infrastructure.db import open_db
+    from beadloom.infrastructure.db import connection
     from beadloom.onboarding import check_config_drift
     from beadloom.onboarding.scanner import generate_agents_md, refresh_claude_md
 
@@ -2464,11 +2464,8 @@ def config_check(*, fix: bool, project: Path | None) -> None:
         refresh_composed_adapters(project_root)
 
     db_path = project_root / ".beadloom" / "beadloom.db"
-    conn = open_db(db_path)
-    try:
+    with connection(db_path) as conn:
         drifts = check_config_drift(project_root, conn)
-    finally:
-        conn.close()
 
     if not drifts:
         click.echo("Agent-config in sync — no drift.")
@@ -2850,7 +2847,7 @@ def docs_site(
     (default site/). Never writes into the source docs/ tree.
     """
     from beadloom.application.site import generate_site
-    from beadloom.infrastructure.db import open_db
+    from beadloom.infrastructure.db import connection
 
     project_root = project or Path.cwd()
     db_path = project_root / ".beadloom" / "beadloom.db"
@@ -2859,11 +2856,8 @@ def docs_site(
         sys.exit(1)
 
     out = out_dir if out_dir is not None else project_root / "site"
-    conn = open_db(db_path)
-    try:
+    with connection(db_path) as conn:
         result = generate_site(conn, out, project_root=project_root, federated=federated)
-    finally:
-        conn.close()
     click.echo(f"Generated {len(result.written)} files under {out}")
 
 
@@ -2902,7 +2896,7 @@ def docs_audit(
 ) -> None:
     """Detect stale facts in project documentation."""
     from beadloom.doc_sync.audit import parse_fail_condition, run_audit
-    from beadloom.infrastructure.db import open_db
+    from beadloom.infrastructure.db import connection
 
     # Validate --fail-if early (before doing any work)
     fail_condition: tuple[str, str, int] | None = None
@@ -2916,15 +2910,12 @@ def docs_audit(
         click.echo("Error: database not found. Run `beadloom reindex` first.", err=True)
         sys.exit(1)
 
-    conn = open_db(db_path)
-    try:
+    with connection(db_path) as conn:
         result = run_audit(
             project_root,
             conn,
             scan_paths=list(scan_paths) if scan_paths else None,
         )
-    finally:
-        conn.close()
 
     stale = [f for f in result.findings if f.status == "stale"]
     fresh = [f for f in result.findings if f.status == "fresh"]

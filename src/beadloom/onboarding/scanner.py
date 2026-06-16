@@ -1322,10 +1322,9 @@ def prime_context(
     dynamic: dict[str, Any] = {}
 
     if db_path.exists():
-        from beadloom.infrastructure.db import get_meta, open_db
+        from beadloom.infrastructure.db import connection, get_meta
 
-        conn = open_db(db_path)
-        try:
+        with connection(db_path) as conn:
             # Node counts by kind
             kind_rows = conn.execute(
                 "SELECT kind, count(*) AS cnt FROM nodes GROUP BY kind"
@@ -1371,8 +1370,6 @@ def prime_context(
                 "violations": violations,
                 "last_reindex": last_reindex,
             }
-        finally:
-            conn.close()
 
     # 3. Format output
     if fmt == "json":

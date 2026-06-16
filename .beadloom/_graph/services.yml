@@ -273,6 +273,13 @@ nodes:
     docs:
       - docs/domains/application/features/ci-gate/SPEC.md
 
+  - ref_id: graph-reads
+    kind: feature
+    summary: "Application read facade over the infrastructure repository — lets the TUI read the graph index without a presentation->infrastructure import"
+    source: src/beadloom/application/graph_reads.py
+    docs:
+      - docs/domains/application/features/graph-reads/SPEC.md
+
   - ref_id: config-check
     kind: feature
     summary: "AgentConfigAsCode — drift detection (and --fix) for generated agent-config artifacts (AGENTS.md, CLAUDE.md auto-blocks, IDE adapters)"
@@ -372,6 +379,13 @@ nodes:
     source: src/beadloom/infrastructure/db.py
     docs:
       - docs/domains/infrastructure/components/db/DOC.md
+
+  - ref_id: repository
+    kind: component
+    summary: "Centralized typed read queries over the graph-index tables (nodes/edges/docs/sync_state/code_symbols)"
+    source: src/beadloom/infrastructure/repository.py
+    docs:
+      - docs/domains/infrastructure/components/repository/DOC.md
 
   - ref_id: git-activity
     kind: component
@@ -528,6 +542,9 @@ edges:
   - src: ci-gate
     dst: application
     kind: part_of
+  - src: graph-reads
+    dst: application
+    kind: part_of
   - src: site-generation
     dst: application
     kind: part_of
@@ -570,6 +587,9 @@ edges:
     dst: doc-sync
     kind: part_of
   - src: db
+    dst: infrastructure
+    kind: part_of
+  - src: repository
     dst: infrastructure
     kind: part_of
   - src: git-activity

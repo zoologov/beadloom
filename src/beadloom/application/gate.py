@@ -199,7 +199,7 @@ def _step_lint(project_root: Path) -> GateStep:
 def _step_sync_check(project_root: Path) -> GateStep:
     """``sync-check`` — doc<->code freshness; stale pairs fail the gate."""
     from beadloom.doc_sync.engine import check_sync
-    from beadloom.infrastructure.db import open_db
+    from beadloom.infrastructure.db import connection
 
     db_path = project_root / ".beadloom" / "beadloom.db"
     if not db_path.exists():
@@ -216,11 +216,8 @@ def _step_sync_check(project_root: Path) -> GateStep:
             ],
             summary="database missing",
         )
-    conn = open_db(db_path)
-    try:
+    with connection(db_path) as conn:
         results = check_sync(conn, project_root=project_root)
-    finally:
-        conn.close()
 
     stale = [r for r in results if r.get("status") == "stale"]
     findings = [_sync_finding(r) for r in stale]
@@ -237,7 +234,7 @@ def _step_docs_audit(project_root: Path) -> GateStep:
     any documentation mention disagrees with a ground-truth fact. The audit's
     false-positive masking + per-fact tolerances already keep this honest.
     """
-    from beadloom.infrastructure.db import open_db
+    from beadloom.infrastructure.db import connection
 
     db_path = project_root / ".beadloom" / "beadloom.db"
     if not db_path.exists():
@@ -254,11 +251,8 @@ def _step_docs_audit(project_root: Path) -> GateStep:
             ],
             summary="database missing",
         )
-    conn = open_db(db_path)
-    try:
+    with connection(db_path) as conn:
         result = _run_audit(project_root, conn)
-    finally:
-        conn.close()
 
     stale = [f for f in result.findings if f.status == "stale"]
     findings = [_audit_finding(f) for f in stale]
@@ -273,15 +267,12 @@ def _step_docs_audit(project_root: Path) -> GateStep:
 
 def _step_config_check(project_root: Path) -> GateStep:
     """``config-check`` (AgentConfigAsCode) — generated agent-config freshness."""
-    from beadloom.infrastructure.db import open_db
+    from beadloom.infrastructure.db import connection
     from beadloom.onboarding import check_config_drift
 
     db_path = project_root / ".beadloom" / "beadloom.db"
-    conn = open_db(db_path)
-    try:
+    with connection(db_path) as conn:
         drifts = check_config_drift(project_root, conn)
-    finally:
-        conn.close()
 
     findings = [_config_finding(d.file, d.reason) for d in drifts]
     passed = not drifts
@@ -300,7 +291,7 @@ def _step_doctor(project_root: Path) -> GateStep:
     carries non-error advisories and MUST still exit 0.
     """
     from beadloom.application.doctor import Severity
-    from beadloom.infrastructure.db import open_db
+    from beadloom.infrastructure.db import connection
 
     db_path = project_root / ".beadloom" / "beadloom.db"
     if not db_path.exists():
@@ -314,11 +305,8 @@ def _step_doctor(project_root: Path) -> GateStep:
             ],
             summary="database missing",
         )
-    conn = open_db(db_path)
-    try:
+    with connection(db_path) as conn:
         checks = _run_doctor_checks(conn, project_root=project_root)
-    finally:
-        conn.close()
 
     errors = [c for c in checks if c.severity is Severity.ERROR]
     findings = [_doctor_finding(c) for c in errors]

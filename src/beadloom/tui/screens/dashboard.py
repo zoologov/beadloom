@@ -206,12 +206,12 @@ class DashboardScreen(Screen[None]):
             except Exception:
                 logger.debug("Failed to load stale count", exc_info=True)
 
-        # Doc count from graph provider nodes (approximation via DB)
+        # Doc count via the application read facade (no raw SQLite in tui).
         if app.graph_provider is not None and app._conn is not None:
             try:
-                row = app._conn.execute("SELECT count(*) FROM docs").fetchone()
-                if row is not None:
-                    doc_count = int(row[0])
+                from beadloom.application import graph_reads
+
+                doc_count = graph_reads.count_docs(app._conn)
             except Exception:
                 logger.debug("Failed to load doc count", exc_info=True)
 

@@ -8,7 +8,7 @@
 
 ## Current focus
 
-**S0 DONE** (PR #20 merged, `68e53ff`) — cohesion-driven principle in CORE roles. **S1 DONE** (PR pending) — `.3`+`.4` closed: ~112 prod-internal test couplings decoupled to read-only accessors/observable behavior (review PASS, behavior-preserving), db yield/finally fixtures (ResourceWarnings 64→0), pytest-randomly, grammar-guard (fails-not-skips); 4317 passed, ci rc0. **Next: S2 (`.5`∥`.6`) — repository seam + N+1.** Recompose lesson: `setup-agentic-flow` WITHOUT `--force` (#132); re-vendor snapshots by copying live→vendored.
+**S0 DONE** (#20 merged) · **S1 DONE** (#21 merged) · **S2 DONE** (`.5`–`.8` closed; PR pending) — data-access seam (`connection()` CM + `infrastructure/repository.py` + `application/graph_reads.py` facade, TUI re-layered) + de-N+1 `check_source_coverage` (json_each, golden parity). Review PASS, behavior-preserving, 4372 passed under seeds, ci rc0. Follow-ups: `beadloom-2qwb` (centralize remaining same-layer node-reads), `beadloom-g0c5` (test_tui GC leak). **Next: S3 (`.9`∥`.10`∥`.11`) — decompose `graph/` (rules/+federation/) + layering fix + WHITE/GREY/BLACK cycles** (heavy slice — pause before it per owner). Lessons: recompose WITHOUT `--force` (#132); after worktree integration re-baseline sync + document new modules in domain README (#105); verify refactors under multiple `--randomly-seed`s.
 
 ## Slice status
 
