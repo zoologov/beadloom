@@ -18,6 +18,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from beadloom.services.cli import (
@@ -147,6 +148,36 @@ class TestGoldenHelp:
     def test_link_help(self) -> None:
         out = self._help("link")
         assert "Manage external tracker links on graph nodes." in out
+
+
+# Every command + documented subcommand, so the parametrized --help stability
+# test below exercises the WHOLE registered surface (not just the 5 spot-checks
+# above). A command whose module failed to wire up cleanly after the S4 split
+# fails its --help render here even if it still appears in ``main.commands``.
+_SUBGROUPS = {
+    "docs": ("generate", "polish", "site", "audit"),
+    "snapshot": ("save", "list", "compare"),
+}
+_ALL_HELP_INVOCATIONS = sorted(
+    [(cmd,) for cmd in EXPECTED_COMMANDS]
+    + [(group, sub) for group, subs in _SUBGROUPS.items() for sub in subs]
+)
+
+
+class TestEveryCommandHelpStable:
+    """Each command's (and subcommand's) ``--help`` renders cleanly (exit 0)."""
+
+    @pytest.mark.parametrize(
+        "invocation", _ALL_HELP_INVOCATIONS, ids=lambda inv: " ".join(inv)
+    )
+    def test_help_renders_for_every_command(
+        self, invocation: tuple[str, ...]
+    ) -> None:
+        result = CliRunner().invoke(main, [*invocation, "--help"])
+        assert result.exit_code == 0, result.output
+        # A rendered Click help always carries a Usage line naming the command.
+        assert "Usage:" in result.output
+        assert invocation[-1] in result.output
 
 
 class TestStatusLogicLayering:
