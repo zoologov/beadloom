@@ -390,7 +390,7 @@ def handle_lint(
     dict
         ``{"violations": [...], "summary": {...}}``
     """
-    result: LintResult = lint(project_root, reindex_before=False)
+    result: LintResult = lint(project_root)
 
     # Apply severity filter
     filtered = result.violations

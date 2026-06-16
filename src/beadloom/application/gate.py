@@ -178,7 +178,7 @@ def _step_lint(project_root: Path) -> GateStep:
 
     try:
         # reindex already ran (or was intentionally skipped); do not redo it.
-        result = run_lint(project_root, reindex_before=False)
+        result = run_lint(project_root)
     except LintError as exc:
         return GateStep(
             "lint",

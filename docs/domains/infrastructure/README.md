@@ -14,6 +14,7 @@ Internal building blocks, each with a `DOC.md`:
 - **[Health](components/health/DOC.md)** — health snapshots + trend computation.
 - **[Git Activity](components/git-activity/DOC.md)** — per-node `git log` activity metrics.
 - **[MCP Tools](components/mcp-tools/DOC.md)** — the canonical MCP tool-name catalog.
+- **[Scan Paths](components/scan-paths/DOC.md)** — resolves source scan directories from `config.yml` so domains do not import `application`.
 
 ## Specification
 
@@ -23,6 +24,7 @@ Internal building blocks, each with a `DOC.md`:
 - **health.py** — `take_snapshot()` captures current index statistics (node/edge/doc counts, coverage percentage, stale docs, isolated nodes) and persists them to the `health_snapshots` table. `get_latest_snapshots()` retrieves history for trend comparison. `compute_trend()` computes trend indicators (arrows and deltas) between two snapshots.
 - **git_activity.py** — `GitActivity` frozen dataclass holds per-node metrics: `commits_30d`, `commits_90d`, `last_commit_date`, `top_contributors`, `activity_level`. `analyze_git_activity()` runs `git log --since=90 days ago`, parses output, maps changed files to nodes via longest source-prefix match, and classifies activity (hot: >20 commits/30d, warm: 5-20, cold: 1-4, dormant: 0 commits/90d).
 - **mcp_tools.py** — single-source catalog of MCP tool metadata used by AGENTS.md generation. `McpToolDoc` describes one tool; `mcp_tool_names()` returns the canonical tool-name list (pinned to the live MCP `_TOOLS` registry by a drift-guard test) so the documented tool count cannot drift.
+- **scan_paths.py** — `resolve_scan_paths()` reads `scan_paths` from `.beadloom/config.yml`, falling back to `("src", "lib", "app")`. A domain-agnostic config reader at the lowest layer so `graph` (import resolution) and `application` (reindex) resolve scan directories without a domain importing `application` (closes the BDL-059 S3 layering inversion).
 
 ### Database Schema
 

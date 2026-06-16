@@ -1136,7 +1136,7 @@ def _get_lint_violations(project_root: Path) -> list[dict[str, str]]:
     try:
         from beadloom.graph.linter import lint as run_lint
 
-        result = run_lint(project_root, reindex_before=False)
+        result = run_lint(project_root)
         return [
             {
                 "rule": v.rule_name,

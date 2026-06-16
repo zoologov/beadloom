@@ -149,7 +149,7 @@ class TestE2EPipeline:
 
         from beadloom.graph.linter import lint
 
-        result = lint(tmp_path, reindex_before=False)
+        result = lint(tmp_path)
         # With a valid graph, there should be 0 violations
         assert isinstance(result.violations, list)
 

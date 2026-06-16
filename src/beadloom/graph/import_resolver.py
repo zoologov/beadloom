@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from tree_sitter import Parser
 
 from beadloom.context_oracle.code_indexer import get_lang_config
+from beadloom.infrastructure.scan_paths import resolve_scan_paths
 
 if TYPE_CHECKING:
     import sqlite3
@@ -817,7 +818,6 @@ def resolve_import_to_node(
 
 def _collect_source_files(project_root: Path) -> list[Path]:
     """Collect all supported source files from configured scan directories."""
-    from beadloom.application.reindex import resolve_scan_paths
     from beadloom.context_oracle.code_indexer import supported_extensions
 
     exts = supported_extensions()
@@ -880,8 +880,6 @@ def index_imports(project_root: Path, conn: sqlite3.Connection) -> int:
     After indexing, creates ``depends_on`` edges from resolved imports.
     Returns the count of imports indexed.
     """
-    from beadloom.application.reindex import resolve_scan_paths
-
     scan_paths = resolve_scan_paths(project_root)
     source_files = _collect_source_files(project_root)
     total = 0
