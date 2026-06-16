@@ -681,3 +681,170 @@ class TestCycleRuleViolationMessage:
         assert v.severity == "warn"
         assert v.file_path is None  # cycles are graph-level, no file
         assert v.line_number is None
+
+
+# ---------------------------------------------------------------------------
+# TestCycleGoldenParity (BDL-059 S3 / #124)
+# ---------------------------------------------------------------------------
+
+
+def _build_rich_cycle_graph(conn: sqlite3.Connection) -> None:
+    """Insert a rich multi-cycle graph that exercises overlapping/nested cycles.
+
+    Structure (edge kind ``uses`` unless noted):
+
+    - Two-node cycle:        ``a <-> b``
+    - Triangle:              ``c -> d -> e -> c``
+    - Self-loop:             ``f -> f``
+    - Shared-node figure-8:  ``g <-> h`` and ``h <-> i`` (``h`` in two cycles)
+    - Diamond w/ two cycles: ``j -> k -> m -> j`` and ``j -> l -> m -> j``
+      (distinct normalized cycles ``j,k,m`` and ``j,l,m``)
+    - Non-live edge cycle:   ``p <-> q`` via a ``deprecated`` lifecycle edge
+      (must NOT be reported — only ``active`` edges are live)
+    - A different edge kind:  ``r -> s -> r`` via ``depends_on`` (filtered out by
+      a ``uses``-only rule)
+    """
+    for ref in "abcdefghijklmpqrs":
+        _insert_node(conn, ref)
+    # a <-> b
+    _insert_edge(conn, "a", "b", "uses")
+    _insert_edge(conn, "b", "a", "uses")
+    # c -> d -> e -> c
+    _insert_edge(conn, "c", "d", "uses")
+    _insert_edge(conn, "d", "e", "uses")
+    _insert_edge(conn, "e", "c", "uses")
+    # f -> f
+    _insert_edge(conn, "f", "f", "uses")
+    # g <-> h, h <-> i (shared node h)
+    _insert_edge(conn, "g", "h", "uses")
+    _insert_edge(conn, "h", "g", "uses")
+    _insert_edge(conn, "h", "i", "uses")
+    _insert_edge(conn, "i", "h", "uses")
+    # j -> k -> m -> j ; j -> l -> m -> j (diamond, two distinct cycles)
+    _insert_edge(conn, "j", "k", "uses")
+    _insert_edge(conn, "k", "m", "uses")
+    _insert_edge(conn, "m", "j", "uses")
+    _insert_edge(conn, "j", "l", "uses")
+    _insert_edge(conn, "l", "m", "uses")
+    # p <-> q via deprecated lifecycle (not live)
+    conn.execute(
+        "INSERT INTO edges (src_ref_id, dst_ref_id, kind, lifecycle) VALUES (?, ?, ?, ?)",
+        ("p", "q", "uses", "deprecated"),
+    )
+    conn.execute(
+        "INSERT INTO edges (src_ref_id, dst_ref_id, kind, lifecycle) VALUES (?, ?, ?, ?)",
+        ("q", "p", "uses", "deprecated"),
+    )
+    # r -> s -> r via depends_on
+    _insert_edge(conn, "r", "s", "depends_on")
+    _insert_edge(conn, "s", "r", "depends_on")
+    conn.commit()
+
+
+# Golden snapshot of the CURRENT evaluate_cycle_rules output on the rich graph,
+# captured BEFORE the WHITE/GREY/BLACK rewrite (#124). The rewrite must
+# reproduce these exact violations (fields + messages) — only the unique
+# normalized cycle set, representative rotation, and ``max_depth`` are pinned;
+# the deprecated ``p<->q`` edge and the ``depends_on`` ``r<->s`` cycle are
+# correctly absent under a live, ``uses``-only rule.
+_GOLDEN_RICH_CYCLES: list[tuple[str, str, str | None, str | None, str]] = [
+    (
+        "no-cycles",
+        "cycle",
+        "a",
+        "b",
+        "Circular dependency detected: a → b → a (rule 'no-cycles')",
+    ),
+    (
+        "no-cycles",
+        "cycle",
+        "c",
+        "e",
+        "Circular dependency detected: c → d → e → c (rule 'no-cycles')",
+    ),
+    (
+        "no-cycles",
+        "cycle",
+        "f",
+        "f",
+        "Circular dependency detected: f → f (rule 'no-cycles')",
+    ),
+    (
+        "no-cycles",
+        "cycle",
+        "g",
+        "h",
+        "Circular dependency detected: g → h → g (rule 'no-cycles')",
+    ),
+    (
+        "no-cycles",
+        "cycle",
+        "h",
+        "i",
+        "Circular dependency detected: h → i → h (rule 'no-cycles')",
+    ),
+    (
+        "no-cycles",
+        "cycle",
+        "j",
+        "m",
+        "Circular dependency detected: j → k → m → j (rule 'no-cycles')",
+    ),
+    (
+        "no-cycles",
+        "cycle",
+        "j",
+        "m",
+        "Circular dependency detected: j → l → m → j (rule 'no-cycles')",
+    ),
+]
+
+
+class TestCycleGoldenParity:
+    """Pin the exact cycle-detection output across the algorithm rewrite (#124)."""
+
+    def test_rich_graph_golden_output(self, db_conn: sqlite3.Connection) -> None:
+        _build_rich_cycle_graph(db_conn)
+        rules = [
+            CycleRule(
+                name="no-cycles",
+                description="No circular deps",
+                edge_kind="uses",
+            ),
+        ]
+        violations = evaluate_cycle_rules(db_conn, rules)
+        actual = [
+            (v.rule_name, v.rule_type, v.from_ref_id, v.to_ref_id, v.message)
+            for v in violations
+        ]
+        # Compare as multisets: discovery order is an implementation detail, but
+        # the exact set of representative violations must be reproduced.
+        assert sorted(actual) == sorted(_GOLDEN_RICH_CYCLES)
+        assert len(violations) == len(_GOLDEN_RICH_CYCLES)
+        for v in violations:
+            assert v.severity == "error"
+            assert v.file_path is None
+            assert v.line_number is None
+
+    def test_max_depth_bounds_rewrite(self, db_conn: sqlite3.Connection) -> None:
+        """The rewrite preserves max_depth: a deep cycle past the bound is unseen."""
+        for ref in "ABCDE":
+            _insert_node(db_conn, ref)
+        # A -> B -> C -> D -> E -> A : a 5-cycle.
+        _insert_edge(db_conn, "A", "B", "uses")
+        _insert_edge(db_conn, "B", "C", "uses")
+        _insert_edge(db_conn, "C", "D", "uses")
+        _insert_edge(db_conn, "D", "E", "uses")
+        _insert_edge(db_conn, "E", "A", "uses")
+        db_conn.commit()
+
+        shallow = evaluate_cycle_rules(
+            db_conn,
+            [CycleRule(name="nc", description="d", edge_kind="uses", max_depth=3)],
+        )
+        assert shallow == []
+        deep = evaluate_cycle_rules(
+            db_conn,
+            [CycleRule(name="nc", description="d", edge_kind="uses", max_depth=5)],
+        )
+        assert len(deep) == 1

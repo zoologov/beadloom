@@ -2,7 +2,15 @@
 
 Architecture-as-Code rule engine: parse `rules.yml`, validate rule definitions, and evaluate them against the architecture graph and code imports.
 
-**Source:** `src/beadloom/graph/rule_engine.py`
+**Source:** `src/beadloom/graph/rules/` (the `rules/` package). `src/beadloom/graph/rule_engine.py` is a thin backwards-compatible re-export shim; new code imports from `beadloom.graph.rules`.
+
+The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
+
+- `rules/types.py` — constants, rule dataclasses, `NodeMatcher`, `Violation` (the model).
+- `rules/loader.py` — `load_rules` / `load_rules_with_tags` / `validate_rules` (YAML → typed rules + DB validation).
+- `rules/evaluators.py` — per-rule-type evaluation (deny / require / import-boundary / forbid-edge / layer / cardinality / unregistered-feature / module-coverage) + shared node/edge lookup helpers.
+- `rules/cycles.py` — cycle detection (WHITE/GREY/BLACK colored DFS, path-as-set membership) + edge-liveness SQL helpers.
+- `rules/__init__.py` — `evaluate_all` orchestration + the remediation post-pass + stable public re-exports.
 
 ---
 
@@ -85,7 +93,7 @@ Requires that matched nodes have at least one outgoing edge to a target node.
 
 #### `CycleRule`
 
-Detects circular dependencies in the graph using iterative DFS.
+Detects circular dependencies in the graph using an iterative WHITE/GREY/BLACK colored DFS: each search frame holds its live path as a set (GREY membership) for O(1) cycle-closing tests, and reports each unique normalized cycle once (`max_depth`-bounded).
 
 | Field         | Type                       | Description                                        |
 |---------------|----------------------------|----------------------------------------------------|
