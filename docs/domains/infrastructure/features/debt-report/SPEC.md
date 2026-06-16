@@ -2,7 +2,9 @@
 
 Architecture debt aggregation, scoring, and trend tracking.
 
-Source: `src/beadloom/application/debt_report.py`
+Source: `src/beadloom/application/debt_report/` (package — `models`, `config`,
+`collect`, `scoring`, `trend`, `render`; `__init__.py` re-exports the stable
+public surface). Decomposed by cohesion in BDL-059 S4; import paths unchanged.
 
 ## Specification
 

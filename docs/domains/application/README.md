@@ -56,7 +56,7 @@ Module `src/beadloom/application/doctor.py`:
 - `Check` — dataclass: `name`, `severity`, `description`
 - `run_checks(conn, *, project_root=None)` -> `list[Check]` — runs DB validation checks plus optional agent instructions freshness check when `project_root` is provided
 
-Module `src/beadloom/application/debt_report.py`:
+Module `src/beadloom/application/debt_report/` (package; public surface re-exported from `__init__`):
 - `DebtReport` — frozen dataclass: `debt_score` (0-100), `severity`, `categories`, `top_offenders`, `trend`
 - `load_debt_weights(project_root)` -> `DebtWeights`
 - `collect_debt_data(conn, project_root, weights=None)` -> `DebtData`
@@ -79,7 +79,7 @@ Module `src/beadloom/application/site_mermaid_guard.py`:
 - `MermaidIssue` — frozen dataclass: `kind` (`reserved-id`/`charset`/`c4-rel-undeclared`), `message`
 - `validate_mermaid(text)` -> `list[MermaidIssue]` — targeted structural guard for flowchart reserved-id/charset + C4 Rel integrity (extensible, deterministic)
 
-Module `src/beadloom/application/site_dashboard.py`:
+Module `src/beadloom/application/site_dashboard/` (package; public surface re-exported from `__init__`):
 
 - `build_dashboard_data(conn, *, project_root, federated=None)` -> `dict` — deterministic dashboard data (lint/debt/docs/doctor + optional federated rollup + critical-first `alerts` + threshold-colored `status_cards` + `trends` time-series + prioritized `recommendations`); honest by construction (reuses each gate's code path; trends are exactly the recorded points)
 - `render_dashboard_md(data)` -> `str` — render `dashboard.md` from the data dict: the page title + a short intro + the `<ClientOnly>` block mounting the banner + status cards (`<AlertBanner/>`/`<StatusCards/>`) and the committed ECharts widgets (`<HealthGauges/>`/`<CategoryChart/>`/`<TrendCharts/>`/`<Recommendations/>`, theme-registered, reading `dashboard.data.json`). No per-metric text dump, no `<noscript>` fallback — the widgets are the single presentation surface (data honesty lives in `dashboard.data.json`)

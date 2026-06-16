@@ -350,12 +350,19 @@ class TestSiteGenerationCluster:
     """The 9 application/site*.py modules are covered by the single site-generation node."""
 
     def test_all_nine_site_modules_exist_on_disk(self) -> None:
-        """Sanity: exactly the expected site*.py cluster lives under application/."""
-        site_files = sorted((REPO_ROOT / "src" / "beadloom" / "application").glob("site*.py"))
+        """Sanity: the expected site* cluster lives under application/.
+
+        BDL-059 S4 decomposed the former ``site_dashboard.py`` into the
+        cohesive ``site_dashboard/`` package, so the cluster is now 8 ``site*.py``
+        modules plus the ``site_dashboard/`` package directory — 9 members total,
+        all covered by the single ``site-generation`` node.
+        """
+        app_dir = REPO_ROOT / "src" / "beadloom" / "application"
+        site_files = sorted(app_dir.glob("site*.py"))
         names = {p.name for p in site_files}
         assert "site.py" in names
-        # The cluster is the 9 modules the dev classified as one node.
-        assert len(site_files) == 9, names
+        assert len(site_files) == 8, names
+        assert (app_dir / "site_dashboard").is_dir()
 
     def test_no_site_module_is_flagged_by_coverage(self) -> None:
         """None of the 9 site*.py modules appear as a module-coverage finding (live repo)."""
