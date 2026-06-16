@@ -795,7 +795,24 @@ beadloom mcp-serve [--project DIR]
 
 ## API
 
-Module `src/beadloom/services/cli.py`:
+As of BDL-059 S4, `src/beadloom/services/cli.py` is a thin registration shell:
+it imports each command module for its registration side effects and
+re-exports `main` (plus the private helpers tests import) so
+`beadloom.services.cli.main` stays the stable entry point. The command
+implementations live in the `src/beadloom/services/commands/` package — one
+cohesive module per command group: `_root` (the `main` group + global options),
+`query` (`ctx`/`search`/`why`/`graph`/`diff`), `index_ops` (`reindex`/`link`),
+`status` (`status` + `--debt-report` rendering), `docsync`
+(`sync-check`/`sync-update`/`install-hooks`/`active-sync`/`ci`), `federation`
+(`export`/`federate`), `docs` (the `docs` group: `generate`/`site`/`audit`/`polish`),
+`setup` (the `init`/`setup-*`/`mcp` commands), `dashboard` (`tui`/`ui`/`watch`),
+and `snapshot` (the `snapshot` group). The `status` command's data-gathering was
+moved DOWN to the application layer (`application/status.py`:
+`gather_status`/`compute_context_metrics`/`StatusData`); the command keeps only
+the Rich/JSON presentation. The CLI surface (every command, option, help text,
+output, and exit code) is unchanged by the split.
+
+Commands (re-exported from the package via the registration shell):
 
 - `main` -- Click group: `beadloom [--verbose|-v] [--quiet|-q] [--version] COMMAND`
 - `reindex` -- rebuild SQLite index (incremental by default, `--full` for complete rebuild)
@@ -804,7 +821,7 @@ Module `src/beadloom/services/cli.py`:
 - `export` -- export the indexed graph as a deterministic federation artifact (JSON, schema v1) with `--out`
 - `federate` -- aggregate >=2 satellite export artifacts into one federated graph (drift verdicts + staleness)
 - `doctor` -- run validation checks
-- `status` -- show index statistics with health trends and context metrics; `--debt-report` mode with `--fail-if`, `--category` flags
+- `status` -- show index statistics with health trends and context metrics (data gathered by `application/status.py:gather_status`); `--debt-report` mode with `--fail-if`, `--category` flags
 - `sync_check` -- check doc-code sync with reason/details (reason-aware output for `untracked_files`, `missing_modules`, `symbols_changed`); `--since GIT_REF` measures drift against a git ref instead of the stored baseline (fresh-checkout / per-push drift detection)
 - `sync_update` -- review and update stale docs interactively; `--check` for status-only; `--yes`/`-y` for a non-interactive re-baseline; `--all` (with `--yes`) re-baselines every stale ref
 - `install_hooks` -- install/remove the pre-commit hook (lint -> mypy -> sync-check -> guarded ACTIVE/tracker-coherence auto-fix step) AND/OR the pre-push Beadloom Gate hook (`beadloom ci`, blocks the push on red; `command -v beadloom` guard -> safe no-op outside a flow repo); `--pre-commit`/`--pre-push` selectors (default both), `--remove`, idempotent

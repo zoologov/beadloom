@@ -136,11 +136,11 @@ Raw counts aggregated from all data sources.
 | Category | Source | Module |
 |----------|--------|--------|
 | Rule violations | `evaluate_all(conn, rules)` | `graph/rules/` (re-exported via the `graph.rule_engine` shim) |
-| Doc gaps -- undocumented | Nodes without docs (LEFT JOIN) | `application/debt_report.py` |
-| Doc gaps -- stale | `sync_state` entries with `status='stale'` | `application/debt_report.py` |
-| Doc gaps -- untracked | Nodes with source but no sync_state | `application/debt_report.py` |
-| Complexity -- oversized | Symbol count per node vs threshold | `application/debt_report.py` |
-| Complexity -- fan-out | Edge count per node vs threshold | `application/debt_report.py` |
+| Doc gaps -- undocumented | Nodes without docs (LEFT JOIN) | `application/debt_report/collect.py` |
+| Doc gaps -- stale | `sync_state` entries with `status='stale'` | `application/debt_report/collect.py` |
+| Doc gaps -- untracked | Nodes with source but no sync_state | `application/debt_report/collect.py` |
+| Complexity -- oversized | Symbol count per node vs threshold | `application/debt_report/collect.py` |
+| Complexity -- fan-out | Edge count per node vs threshold | `application/debt_report/collect.py` |
 | Complexity -- dormant | `analyze_git_activity()` with dormant level | `infrastructure/git_activity.py` |
 | Test gaps | `map_tests()` with coverage_estimate=none | `context_oracle/test_mapper.py` |
 

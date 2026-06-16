@@ -23,7 +23,7 @@ One feature node covers nine cooperating modules (all annotated
 
 - `site.py` — orchestrator / use-case entry point (`generate_site`)
 - `site_about.py` — README → About page transform (link-rebased)
-- `site_dashboard.py` — metrics dashboard data + page
+- `site_dashboard/` — metrics dashboard data + page (package, decomposed by cohesion in BDL-059 S4 into `_common`, `gate_metrics`, `ai_activity`, `recommendations`, `alerts`, `status_cards`, `assemble`; the package `__init__` re-exports the public surface)
 - `site_landscape.py` — cross-repo landscape map
 - `site_mermaid_guard.py` — generation-time Mermaid validity guard
 - `site_metrics_history.py` — append-only metrics-history store
