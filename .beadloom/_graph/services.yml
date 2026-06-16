@@ -91,11 +91,19 @@ nodes:
   # Service: CLI
   - ref_id: cli
     kind: service
-    summary: "Click-based CLI with 21 commands"
+    summary: "Click-based CLI — registration shell wiring the services/commands/ groups"
     source: src/beadloom/services/cli.py
     tags: [layer-service]
     docs:
       - docs/services/cli.md
+
+  # Component: CLI command groups (BDL-059 S4 cohesion split of the cli monolith).
+  # Dir-source covers every module under services/commands/ for module-coverage.
+  - ref_id: cli-commands
+    kind: component
+    summary: "Cohesive Click command groups: query, index_ops, status, docsync, federation, docs, setup, dashboard, snapshot"
+    source: src/beadloom/services/commands/__init__.py
+    tags: [layer-service]
 
   # Service: MCP Server
   - ref_id: mcp-server
@@ -138,6 +146,12 @@ nodes:
     source: src/beadloom/application/watcher.py
     docs:
       - docs/domains/infrastructure/features/watcher/SPEC.md
+
+  # Feature: Status (data-gathering for `beadloom status`; BDL-059 S4)
+  - ref_id: status
+    kind: feature
+    summary: "Status data-gathering — index/coverage/health/trend counts + context-bundle metrics for the status command"
+    source: src/beadloom/application/status.py
 
   # Feature: Search
   - ref_id: search
@@ -201,23 +215,27 @@ nodes:
   - ref_id: agent-prime
     kind: feature
     summary: "Cross-IDE context injection via prime CLI/MCP + AGENTS.md + IDE adapters"
-    source: src/beadloom/onboarding/scanner.py
+    source: src/beadloom/onboarding/scanner/__init__.py
     docs:
       - docs/domains/onboarding/features/agent-prime/SPEC.md
 
-  # Feature: Debt Report
+  # Feature: Debt Report (debt_report/ package — see SPEC; __init__.py is the
+  # back-compat re-export hub and remains this node's nominal source file).
   - ref_id: debt-report
     kind: feature
-    summary: "Architecture debt aggregation, scoring, trend tracking, and CI gating"
-    source: src/beadloom/application/debt_report.py
+    summary: "Architecture debt aggregation, scoring, trend tracking, and CI gating (debt_report/ package: models, config, collect, scoring, trend, render)"
+    source: src/beadloom/application/debt_report/__init__.py
     docs:
       - docs/domains/infrastructure/features/debt-report/SPEC.md
 
-  # Feature: Reindex
+  # Feature: Reindex (reindex/ package — decomposed by cohesion in BDL-059 S4:
+  # models / rules_loader / indexing / enrichment / sync_state / change_detection
+  # / full / incremental. The package __init__ is this node's source and re-exports
+  # the stable public + back-compat surface.)
   - ref_id: reindex
     kind: feature
-    summary: "Full reindex pipeline — drop, recreate, reload graph/docs/code/sync"
-    source: src/beadloom/application/reindex.py
+    summary: "Full + incremental reindex pipeline (reindex/ package: models, indexing, enrichment, sync-state, change-detection, full, incremental)"
+    source: src/beadloom/application/reindex/__init__.py
     docs:
       - docs/domains/infrastructure/features/reindex/SPEC.md
 
@@ -485,6 +503,12 @@ edges:
     kind: part_of
   - src: watcher
     dst: application
+    kind: part_of
+  - src: status
+    dst: application
+    kind: part_of
+  - src: cli-commands
+    dst: cli
     kind: part_of
 
   - src: doc-generator
