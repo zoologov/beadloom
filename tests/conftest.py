@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -11,7 +12,28 @@ from beadloom.infrastructure.db import create_schema, open_db
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
-    from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+@pytest.fixture(scope="session")
+def live_repo_reindexed() -> Path:
+    """Reindex the live repo's shared DB once per session, returning the repo root.
+
+    A handful of tests assert against the *live* repo's graph (via ``beadloom
+    ctx`` subprocesses or ``lint --no-reindex --project <repo>``). They read the
+    shared on-disk ``.beadloom/beadloom.db``, so their result depends on its
+    ambient state — and ``pytest-randomly`` exposed that any test reindexing the
+    live DB into a divergent state (or a stale checkout in CI) breaks them under
+    a different order. This session-scoped fixture guarantees the on-disk live
+    DB reflects the current source tree before any such assertion runs, making
+    those tests order-independent. It runs at most once per session and is
+    idempotent on an unchanged source tree.
+    """
+    from beadloom.application.reindex import reindex
+
+    reindex(_REPO_ROOT)
+    return _REPO_ROOT
 
 
 @pytest.fixture()
