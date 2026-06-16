@@ -17,6 +17,7 @@ from beadloom.graph.loader import load_graph
 from beadloom.infrastructure.db import SCHEMA_VERSION, create_schema, open_db, set_meta
 from beadloom.infrastructure.git_activity import analyze_git_activity
 from beadloom.infrastructure.health import take_snapshot
+from beadloom.infrastructure.scan_paths import resolve_scan_paths
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -88,9 +89,6 @@ _CODE_EXTENSIONS = frozenset(
         ".hpp",
     }
 )
-
-# Default scan directories when config.yml has no scan_paths.
-_DEFAULT_SCAN_DIRS = ("src", "lib", "app")
 
 
 @dataclass
@@ -523,23 +521,6 @@ def _resolve_docs_dir(project_root: Path) -> Path:
         if isinstance(docs_path, str) and docs_path:
             return project_root / docs_path
     return project_root / "docs"
-
-
-def resolve_scan_paths(project_root: Path) -> list[str]:
-    """Resolve source scan directories from config.yml.
-
-    Reads ``scan_paths`` from ``.beadloom/config.yml``.  Falls back to
-    ``["src", "lib", "app"]`` when config is absent or has no scan_paths.
-    """
-    config_path = project_root / ".beadloom" / "config.yml"
-    if config_path.exists():
-        import yaml
-
-        config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-        paths = config.get("scan_paths")
-        if isinstance(paths, list) and paths:
-            return [str(p) for p in paths]
-    return list(_DEFAULT_SCAN_DIRS)
 
 
 def _store_test_mappings(

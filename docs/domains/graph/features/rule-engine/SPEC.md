@@ -2,7 +2,15 @@
 
 Architecture-as-Code rule engine: parse `rules.yml`, validate rule definitions, and evaluate them against the architecture graph and code imports.
 
-**Source:** `src/beadloom/graph/rule_engine.py`
+**Source:** `src/beadloom/graph/rules/` (the `rules/` package). `src/beadloom/graph/rule_engine.py` is a thin backwards-compatible re-export shim; new code imports from `beadloom.graph.rules`.
+
+The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
+
+- `rules/types.py` — constants, rule dataclasses, `NodeMatcher`, `Violation` (the model).
+- `rules/loader.py` — `load_rules` / `load_rules_with_tags` / `validate_rules` (YAML → typed rules + DB validation).
+- `rules/evaluators.py` — per-rule-type evaluation (deny / require / import-boundary / forbid-edge / layer / cardinality / unregistered-feature / module-coverage) + shared node/edge lookup helpers.
+- `rules/cycles.py` — cycle detection (WHITE/GREY/BLACK colored DFS, path-as-set membership) + edge-liveness SQL helpers.
+- `rules/__init__.py` — `evaluate_all` orchestration + the remediation post-pass + stable public re-exports.
 
 ---
 
@@ -85,7 +93,7 @@ Requires that matched nodes have at least one outgoing edge to a target node.
 
 #### `CycleRule`
 
-Detects circular dependencies in the graph using iterative DFS.
+Detects circular dependencies in the graph using an iterative WHITE/GREY/BLACK colored DFS: each search frame holds its live path as a set (GREY membership) for O(1) cycle-closing tests, and reports each unique normalized cycle once (`max_depth`-bounded).
 
 | Field         | Type                       | Description                                        |
 |---------------|----------------------------|----------------------------------------------------|
@@ -249,7 +257,7 @@ rules:
     severity: warn
     check:
       for: { kind: domain }                    # NodeMatcher
-      max_symbols: 200                         # optional
+      max_symbols: 280                         # optional (Beadloom's domain-size-limit; recalibrated 200->280 in BDL-059 S3)
       max_files: 50                            # optional
       min_doc_coverage: 0.8                    # optional
 ```
@@ -316,10 +324,10 @@ Algorithm:
 #### Combined Evaluation
 
 ```python
-def evaluate_all(conn: sqlite3.Connection, rules: list[Rule]) -> list[Violation]
+def evaluate_all(conn: sqlite3.Connection, rules: list[Rule], *, project_root: Path | None = None) -> list[Violation]
 ```
 
-Partitions rules by type into `DenyRule`, `RequireRule`, `CycleRule`, `ImportBoundaryRule`, `ForbidEdgeRule`, `LayerRule`, and `CardinalityRule` lists. Calls the corresponding `evaluate_*` function for each type. Concatenates results and sorts by `(rule_name, file_path or "")`.
+Owned by `rules/__init__.py`. Partitions rules by type into `DenyRule`, `RequireRule`, `CycleRule`, `ImportBoundaryRule`, `ForbidEdgeRule`, `LayerRule`, `CardinalityRule`, `UnregisteredFeatureCandidateRule`, and `ModuleCoverageRule` lists. Calls the corresponding `evaluate_*` function for each type. Enriches each `Violation` with a deterministic `remediation` hint (via `_remediation_for`, a post-pass), then concatenates and sorts by `(rule_name, file_path or "")`. `project_root` (default: cwd) roots the on-disk module enumeration the `module-coverage` rule uses.
 
 ### Internal Helpers
 
@@ -354,7 +362,7 @@ def evaluate_import_boundary_rules(conn: sqlite3.Connection, rules: list[ImportB
 def evaluate_forbid_edge_rules(conn: sqlite3.Connection, rules: list[ForbidEdgeRule]) -> list[Violation]: ...
 def evaluate_layer_rules(conn: sqlite3.Connection, rules: list[LayerRule]) -> list[Violation]: ...
 def evaluate_cardinality_rules(conn: sqlite3.Connection, rules: list[CardinalityRule]) -> list[Violation]: ...
-def evaluate_all(conn: sqlite3.Connection, rules: list[Rule]) -> list[Violation]: ...
+def evaluate_all(conn: sqlite3.Connection, rules: list[Rule], *, project_root: Path | None = None) -> list[Violation]: ...
 ```
 
 ### Public Classes

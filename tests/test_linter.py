@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from beadloom.application.reindex import incremental_reindex
 from beadloom.graph.linter import (
     LintError,
     LintResult,
@@ -188,7 +189,7 @@ class TestLint:
         from beadloom.infrastructure.db import open_db as _open_db
 
         # First reindex to populate the DB with nodes, symbols, etc.
-        result = lint(lint_project, reindex_before=True)
+        result = lint(lint_project, reindex=incremental_reindex)
         assert result.rules_evaluated >= 1
 
         # Inject a resolved import record into the DB so rule evaluation
@@ -205,7 +206,7 @@ class TestLint:
         conn.close()
 
         # Now re-lint without reindex to pick up the injected import.
-        result = lint(lint_project, reindex_before=False)
+        result = lint(lint_project)
         assert result.rules_evaluated >= 1
         assert len(result.violations) >= 1
         assert any(v.rule_name == "billing-no-auth" for v in result.violations)
@@ -213,7 +214,7 @@ class TestLint:
 
     def test_lint_clean(self, clean_lint_project: Path) -> None:
         """Lint on a clean project returns 0 violations."""
-        result = lint(clean_lint_project, reindex_before=True)
+        result = lint(clean_lint_project, reindex=incremental_reindex)
         assert result.rules_evaluated >= 1
         assert len(result.violations) == 0
         assert result.elapsed_ms >= 0
@@ -231,7 +232,7 @@ class TestLint:
             "edges: []\n"
         )
         (tmp_path / "docs").mkdir()
-        result = lint(tmp_path, reindex_before=True)
+        result = lint(tmp_path, reindex=incremental_reindex)
         assert result.violations == []
         assert result.rules_evaluated == 0
 
@@ -256,32 +257,25 @@ class TestLint:
         )
         (tmp_path / "docs").mkdir()
         with pytest.raises(LintError, match="version"):
-            lint(tmp_path, reindex_before=True)
+            lint(tmp_path, reindex=incremental_reindex)
 
-    def test_lint_reindex_before_false(
-        self, lint_project: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """reindex_before=False skips reindex call."""
-        reindex_called = False
-        original_incremental = None
+    def test_lint_no_reindex_callback_skips_reindex(self, lint_project: Path) -> None:
+        """With no injected reindex callback, lint does not reindex."""
+        # Prepare the DB once via an explicit reindex.
+        lint(lint_project, reindex=incremental_reindex)
 
-        # First do a real reindex so the DB exists
-        lint(lint_project, reindex_before=True)
+        calls: list[Path] = []
 
-        import beadloom.application.reindex as reindex_mod
+        def spy(project_root: Path) -> None:
+            calls.append(project_root)
 
-        original_incremental = reindex_mod.incremental_reindex
+        # Default (no reindex kwarg) must NOT invoke any reindex.
+        result = lint(lint_project)
+        assert isinstance(result, LintResult)
 
-        def mock_reindex(project_root: Path) -> None:
-            nonlocal reindex_called
-            reindex_called = True
-            return original_incremental(project_root)
-
-        monkeypatch.setattr(reindex_mod, "incremental_reindex", mock_reindex)
-
-        result = lint(lint_project, reindex_before=False)
-        assert not reindex_called
-        # Should still produce a valid result from the already-existing DB
+        # Injected callback IS invoked exactly once with the project root.
+        result = lint(lint_project, reindex=spy)
+        assert calls == [lint_project]
         assert isinstance(result, LintResult)
 
     def test_lint_custom_rules_path(self, lint_project: Path) -> None:
@@ -297,7 +291,7 @@ class TestLint:
             "      for: { kind: service }\n"
             "      has_edge_to: { kind: domain }\n"
         )
-        result = lint(lint_project, rules_path=custom_rules, reindex_before=True)
+        result = lint(lint_project, rules_path=custom_rules, reindex=incremental_reindex)
         assert result.rules_evaluated == 1
         # No services in this project, so no require violations
         assert len(result.violations) == 0
@@ -312,7 +306,7 @@ class TestLint:
         from beadloom.infrastructure.db import open_db as _open_db
 
         # First lint to create the DB
-        lint(lint_project, reindex_before=True)
+        lint(lint_project, reindex=incremental_reindex)
 
         # Inject import records
         db_path = lint_project / ".beadloom" / "beadloom.db"
@@ -344,7 +338,7 @@ class TestLint:
         conn.close()
 
         # Re-lint without reindex to preserve injected data
-        result = lint(lint_project, reindex_before=False)
+        result = lint(lint_project)
         assert result.files_scanned >= 1
         assert result.imports_resolved >= 1
 

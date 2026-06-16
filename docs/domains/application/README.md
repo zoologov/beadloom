@@ -49,7 +49,7 @@ Module `src/beadloom/application/reindex.py`:
 - `ReindexResult` — dataclass with counts, `nothing_changed` flag, `errors`, and `warnings`
 - `reindex(project_root, *, docs_dir=None)` -> `ReindexResult` — full reindex with sync baseline preservation
 - `incremental_reindex(project_root, *, docs_dir=None)` -> `ReindexResult` — incremental reindex with parser fingerprint and graph YAML change detection
-- `resolve_scan_paths(project_root)` -> `list[str]` — resolves source scan directories from config
+- `resolve_scan_paths(project_root)` -> `list[str]` — resolves source scan directories from config (defined in `infrastructure/scan_paths.py`; re-exported here for backward-compatible import paths)
 
 Module `src/beadloom/application/doctor.py`:
 - `Severity` — enum: `OK`, `INFO`, `WARNING`, `ERROR`

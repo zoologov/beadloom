@@ -155,10 +155,11 @@ nodes:
     docs:
       - docs/domains/graph/features/graph-diff/SPEC.md
 
-  # Feature: Rule Engine
+  # Feature: Rule Engine (rules/ package — see SPEC; rule_engine.py is the
+  # back-compat re-export shim and remains this node's nominal source file).
   - ref_id: rule-engine
     kind: feature
-    summary: "Architecture-as-Code rule engine with require/deny rules"
+    summary: "Architecture-as-Code rule engine (rules/ package: types, loader, evaluators, cycles)"
     source: src/beadloom/graph/rule_engine.py
     docs:
       - docs/domains/graph/features/rule-engine/SPEC.md
@@ -179,11 +180,12 @@ nodes:
     docs:
       - docs/domains/graph/features/c4-diagrams/SPEC.md
 
-  # Feature: Federation (cross-repo node identity + satellite export)
+  # Feature: Federation (federation/ package — see SPEC; __init__.py is the
+  # back-compat re-export hub and remains this node's nominal source file).
   - ref_id: federation
     kind: feature
-    summary: "Cross-repo node identity (@repo:ref) and deterministic satellite export"
-    source: src/beadloom/graph/federation.py
+    summary: "Cross-repo federation (federation/ package: refs, export, reconcile, gate)"
+    source: src/beadloom/graph/federation/__init__.py
     docs:
       - docs/domains/graph/features/federation/SPEC.md
 
@@ -408,6 +410,13 @@ nodes:
     docs:
       - docs/domains/infrastructure/components/mcp-tools/DOC.md
 
+  - ref_id: scan-paths
+    kind: component
+    summary: "Scan-path resolution — reads source scan directories from config.yml so domains resolve them without importing application"
+    source: src/beadloom/infrastructure/scan_paths.py
+    docs:
+      - docs/domains/infrastructure/components/scan-paths/DOC.md
+
   - ref_id: bd-seam
     kind: component
     summary: "Mockable seam over the `bd` (beads) CLI — funnels every bd invocation through one testable function"
@@ -599,6 +608,9 @@ edges:
     dst: infrastructure
     kind: part_of
   - src: mcp-tools
+    dst: infrastructure
+    kind: part_of
+  - src: scan-paths
     dst: infrastructure
     kind: part_of
   - src: bd-seam

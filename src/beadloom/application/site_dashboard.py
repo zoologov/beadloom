@@ -83,7 +83,7 @@ _DEBT_ALERT_SEVERITY: dict[str, str] = {"high": "error", "critical": "critical"}
 def _lint_metrics(result: LintResult) -> dict[str, object]:
     """Lint count + severity breakdown from a precomputed ``beadloom lint`` result.
 
-    The result is computed once (``reindex_before=False`` — read-only over the
+    The result is computed once (no reindex — read-only over the
     already-indexed DB) and shared with the recommendation panel so the dashboard
     figure and the lint hotspots can never disagree.
     """
@@ -760,7 +760,7 @@ def build_dashboard_data(
         trends and AI-activity series are exactly the recorded points (no
         fabrication).
     """
-    lint_result = lint(project_root, reindex_before=False)
+    lint_result = lint(project_root)
     report = _debt_report(conn, project_root)
     federated_payload = (
         _read_federated_payload(federated) if federated is not None else None

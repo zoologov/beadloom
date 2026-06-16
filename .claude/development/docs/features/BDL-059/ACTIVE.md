@@ -8,16 +8,16 @@
 
 ## Current focus
 
-**S0 DONE** (#20 merged) · **S1 DONE** (#21 merged) · **S2 DONE** (`.5`–`.8` closed; PR pending) — data-access seam (`connection()` CM + `infrastructure/repository.py` + `application/graph_reads.py` facade, TUI re-layered) + de-N+1 `check_source_coverage` (json_each, golden parity). Review PASS, behavior-preserving, 4372 passed under seeds, ci rc0. Follow-ups: `beadloom-2qwb` (centralize remaining same-layer node-reads), `beadloom-g0c5` (test_tui GC leak). **Next: S3 (`.9`∥`.10`∥`.11`) — decompose `graph/` (rules/+federation/) + layering fix + WHITE/GREY/BLACK cycles** (heavy slice — pause before it per owner). Lessons: recompose WITHOUT `--force` (#132); after worktree integration re-baseline sync + document new modules in domain README (#105); verify refactors under multiple `--randomly-seed`s.
+**S0 DONE** (#20) · **S1 DONE** (#21) · **S2 DONE** (#22). **S3 dev DONE** (`.9/.10/.11` closed): `rule_engine.py` 2249→`graph/rules/` (types/loader/evaluators/cycles + WHITE/GREY/BLACK #124, golden parity); `federation.py` 1000→`graph/federation/` (refs/export/reconcile/gate; `.10` done inline — subagent bash-blocked); `graph→application` layering inversion fixed (`resolve_scan_paths`→infra, `linter.lint` reindex-callback). All public import paths byte-stable; 4375 passed ×3 seeds; ci rc0. **domain-size-limit recalibrated 200→280** (owner decision: cohesion-driven in-domain split can't lower the count; `graph` 216 / `application` 251 are legit-large bounded contexts; documented in rules.yml — recalibration, NOT gaming). **Principle codified in flow**: dev+review roles (recalibration-vs-gaming) + `/coordinator` (autonomy + command-hygiene). **Next S3: `.12` test → `.13` review → `.14` tech-writer → PR.** Lessons: file-checkout integration + 3-way only the shared yml; re-baseline sync to fixpoint after integration (#133); recompose WITHOUT `--force` (#132) + cp live→vendored.
 
 ## Slice status
 
 | Slice | Beads | State |
 |-------|-------|-------|
-| S0 principle | .1 dev, .2 review | in progress |
-| S1 test-decouple | .3, .4 | blocked → S0 |
-| S2 repo + N+1 | .5, .6, .7, .8 | blocked → S1 |
-| S3 graph decomp | .9–.14 | blocked → S2 |
+| S0 principle | .1 dev, .2 review | ✓ done (#20) |
+| S1 test-decouple | .3, .4 | ✓ done (#21) |
+| S2 repo + N+1 | .5, .6, .7, .8 | ✓ done (#22) |
+| S3 graph decomp | .9–.14 | dev ✓ (.9/.10/.11 closed) · .12 test → .13 review → .14 tw → PR |
 | S4 services/app decomp | .15–.21 | blocked → S3 |
 | S5 cache + types | .22–.24 | blocked → S4 |
 
@@ -31,3 +31,4 @@
 ## Progress log
 
 - 2026-06-15 — PRD/RFC/CONTEXT/PLAN approved (RFC v2 cohesion-driven after owner pushback on metric-gaming). Epic + 24 beads created (beadloom-fm3u.1–.24), DAG S0→S1→S2→S3→S4→S5. Starting S0.
+- 2026-06-16 — S3 dev wave integrated (file-checkout + 3-way on services.yml; `.10` federation done inline after subagent bash-block). `.9/.10/.11` closed; 5 commits on `features/BDL-059-s3`. Owner decided domain-size-limit **recalibrate 200→280** (vs gaming); codified recalibration-vs-gaming in dev/review roles + autonomy/command-hygiene in `/coordinator`. ci rc0, lint 0 violations, 4375×3 seeds. Permissions: `dontAsk` + destructive deny-net + broad allow + `/tmp` dirs. Next: `.12` test.

@@ -3582,6 +3582,7 @@ def lint(
     1 = violations with --strict (errors only) or --fail-on-warn (any),
     2 = configuration error.
     """
+    from beadloom.application.reindex import incremental_reindex
     from beadloom.graph.linter import LintError
     from beadloom.graph.linter import format_github as _format_github
     from beadloom.graph.linter import format_json as _format_json
@@ -3595,8 +3596,12 @@ def lint(
     if fmt is None:
         fmt = "rich" if sys.stdout.isatty() else "porcelain"
 
+    # The reindex-before-lint is a services-layer orchestration concern: the CLI
+    # injects the application reindex so the graph-layer linter stays pure.
+    reindex_cb = None if no_reindex else incremental_reindex
+
     try:
-        result = run_lint(project_root, reindex_before=not no_reindex)
+        result = run_lint(project_root, reindex=reindex_cb)
     except LintError as exc:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(2)

@@ -52,6 +52,38 @@ When the RFC needs technical context: delegate to an Explore sub-agent in the ba
 
 ---
 
+## Autonomy: permissions & command hygiene (frictionless flow)
+
+A multi-agent flow stalls if every `git`/`bd`/`beadloom`/test command waits on a
+human allow/deny click. Run the loop autonomously, surfacing to the human ONLY at
+control points (slice/wave boundaries, approvals, reports) — never for routine
+command permission.
+
+**Permission posture (one-time, per operator — `.claude/settings.local.json`, gitignored):**
+- A broad `allow` for project tooling families (`Bash(git:*)`, `Bash(bd:*)`,
+  `Bash(beadloom:*)`, `Bash(uv:*)`, `Bash(pytest:*)`, `Bash(ruff:*)`, `Bash(mypy:*)`,
+  read-only text utils `grep/awk/sed/sort/jq/...`, `Read`), plus
+  `defaultMode: "dontAsk"` for genuinely frictionless operation.
+- A small **destructive deny-net that always wins over dontAsk**: `rm -rf /`/`~`
+  variants, force-push to `main`. Server-side branch protection backs the latter.
+- Subagents inherit these settings. Keep the deny-net tight and the allow broad.
+
+**Command hygiene (avoid the hard structural safety gates — these fire regardless
+of any allow/deny/dontAsk setting, because the parser can't verify the command):**
+- **No `cd` inside a compound command** — use absolute paths; the shell cwd
+  persists between calls. `cd /x && cmd > f` trips a path-bypass gate.
+- **No output redirection to paths OUTSIDE the project** (`> /tmp/...`) — write
+  scratch inside the workspace, or pre-authorize the dir in `additionalDirectories`.
+- **No `for`/`while` loops with `$var` expansion** — run explicit separate commands
+  (the "simple_expansion" gate blocks variable-expanded loop bodies).
+- Need an exit code without pipe-masking? append `; echo EXIT:$?` (no redirect);
+  pipe long output through `| tail`. Keep each command simple and parser-safe.
+
+These are operator/Claude-Code-adapter conventions; the orchestration logic below
+is tool-agnostic.
+
+---
+
 ## Agent roles = first-class subagents
 
 Roles are defined canonically in `.claude/agents/{dev,test,review,tech-writer}.md` (each carries its own protocol + tools). The coordinator launches them via the **`Agent` tool** — it does NOT re-inject the role protocol.

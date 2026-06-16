@@ -118,7 +118,7 @@ def test_lint_count_matches_linter(tmp_path: Path) -> None:
         data = build_dashboard_data(conn, project_root=project)
     finally:
         conn.close()
-    expected = lint(project, reindex_before=False)
+    expected = lint(project)
     assert data["lint"]["violations"] == len(expected.violations)
     assert data["lint"]["errors"] == expected.error_count
     assert data["lint"]["warnings"] == expected.warning_count
@@ -547,7 +547,7 @@ def test_lint_recommendations_match_linter(tmp_path: Path) -> None:
         data = build_dashboard_data(conn, project_root=project)
     finally:
         conn.close()
-    expected = lint(project, reindex_before=False)
+    expected = lint(project)
     lint_recs = [r for r in data["recommendations"] if r["kind"] == "lint"]
     # One lint recommendation per real violation — honest, no invented hotspots.
     assert len(lint_recs) == len(expected.violations)

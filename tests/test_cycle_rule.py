@@ -681,3 +681,364 @@ class TestCycleRuleViolationMessage:
         assert v.severity == "warn"
         assert v.file_path is None  # cycles are graph-level, no file
         assert v.line_number is None
+
+
+# ---------------------------------------------------------------------------
+# TestCycleGoldenParity (BDL-059 S3 / #124)
+# ---------------------------------------------------------------------------
+
+
+def _build_rich_cycle_graph(conn: sqlite3.Connection) -> None:
+    """Insert a rich multi-cycle graph that exercises overlapping/nested cycles.
+
+    Structure (edge kind ``uses`` unless noted):
+
+    - Two-node cycle:        ``a <-> b``
+    - Triangle:              ``c -> d -> e -> c``
+    - Self-loop:             ``f -> f``
+    - Shared-node figure-8:  ``g <-> h`` and ``h <-> i`` (``h`` in two cycles)
+    - Diamond w/ two cycles: ``j -> k -> m -> j`` and ``j -> l -> m -> j``
+      (distinct normalized cycles ``j,k,m`` and ``j,l,m``)
+    - Non-live edge cycle:   ``p <-> q`` via a ``deprecated`` lifecycle edge
+      (must NOT be reported — only ``active`` edges are live)
+    - A different edge kind:  ``r -> s -> r`` via ``depends_on`` (filtered out by
+      a ``uses``-only rule)
+    """
+    for ref in "abcdefghijklmpqrs":
+        _insert_node(conn, ref)
+    # a <-> b
+    _insert_edge(conn, "a", "b", "uses")
+    _insert_edge(conn, "b", "a", "uses")
+    # c -> d -> e -> c
+    _insert_edge(conn, "c", "d", "uses")
+    _insert_edge(conn, "d", "e", "uses")
+    _insert_edge(conn, "e", "c", "uses")
+    # f -> f
+    _insert_edge(conn, "f", "f", "uses")
+    # g <-> h, h <-> i (shared node h)
+    _insert_edge(conn, "g", "h", "uses")
+    _insert_edge(conn, "h", "g", "uses")
+    _insert_edge(conn, "h", "i", "uses")
+    _insert_edge(conn, "i", "h", "uses")
+    # j -> k -> m -> j ; j -> l -> m -> j (diamond, two distinct cycles)
+    _insert_edge(conn, "j", "k", "uses")
+    _insert_edge(conn, "k", "m", "uses")
+    _insert_edge(conn, "m", "j", "uses")
+    _insert_edge(conn, "j", "l", "uses")
+    _insert_edge(conn, "l", "m", "uses")
+    # p <-> q via deprecated lifecycle (not live)
+    conn.execute(
+        "INSERT INTO edges (src_ref_id, dst_ref_id, kind, lifecycle) VALUES (?, ?, ?, ?)",
+        ("p", "q", "uses", "deprecated"),
+    )
+    conn.execute(
+        "INSERT INTO edges (src_ref_id, dst_ref_id, kind, lifecycle) VALUES (?, ?, ?, ?)",
+        ("q", "p", "uses", "deprecated"),
+    )
+    # r -> s -> r via depends_on
+    _insert_edge(conn, "r", "s", "depends_on")
+    _insert_edge(conn, "s", "r", "depends_on")
+    conn.commit()
+
+
+# Golden snapshot of the CURRENT evaluate_cycle_rules output on the rich graph,
+# captured BEFORE the WHITE/GREY/BLACK rewrite (#124). The rewrite must
+# reproduce these exact violations (fields + messages) — only the unique
+# normalized cycle set, representative rotation, and ``max_depth`` are pinned;
+# the deprecated ``p<->q`` edge and the ``depends_on`` ``r<->s`` cycle are
+# correctly absent under a live, ``uses``-only rule.
+_GOLDEN_RICH_CYCLES: list[tuple[str, str, str | None, str | None, str]] = [
+    (
+        "no-cycles",
+        "cycle",
+        "a",
+        "b",
+        "Circular dependency detected: a → b → a (rule 'no-cycles')",
+    ),
+    (
+        "no-cycles",
+        "cycle",
+        "c",
+        "e",
+        "Circular dependency detected: c → d → e → c (rule 'no-cycles')",
+    ),
+    (
+        "no-cycles",
+        "cycle",
+        "f",
+        "f",
+        "Circular dependency detected: f → f (rule 'no-cycles')",
+    ),
+    (
+        "no-cycles",
+        "cycle",
+        "g",
+        "h",
+        "Circular dependency detected: g → h → g (rule 'no-cycles')",
+    ),
+    (
+        "no-cycles",
+        "cycle",
+        "h",
+        "i",
+        "Circular dependency detected: h → i → h (rule 'no-cycles')",
+    ),
+    (
+        "no-cycles",
+        "cycle",
+        "j",
+        "m",
+        "Circular dependency detected: j → k → m → j (rule 'no-cycles')",
+    ),
+    (
+        "no-cycles",
+        "cycle",
+        "j",
+        "m",
+        "Circular dependency detected: j → l → m → j (rule 'no-cycles')",
+    ),
+]
+
+
+class TestCycleGoldenParity:
+    """Pin the exact cycle-detection output across the algorithm rewrite (#124)."""
+
+    def test_rich_graph_golden_output(self, db_conn: sqlite3.Connection) -> None:
+        _build_rich_cycle_graph(db_conn)
+        rules = [
+            CycleRule(
+                name="no-cycles",
+                description="No circular deps",
+                edge_kind="uses",
+            ),
+        ]
+        violations = evaluate_cycle_rules(db_conn, rules)
+        actual = [
+            (v.rule_name, v.rule_type, v.from_ref_id, v.to_ref_id, v.message)
+            for v in violations
+        ]
+        # Compare as multisets: discovery order is an implementation detail, but
+        # the exact set of representative violations must be reproduced.
+        assert sorted(actual) == sorted(_GOLDEN_RICH_CYCLES)
+        assert len(violations) == len(_GOLDEN_RICH_CYCLES)
+        for v in violations:
+            assert v.severity == "error"
+            assert v.file_path is None
+            assert v.line_number is None
+
+    def test_max_depth_bounds_rewrite(self, db_conn: sqlite3.Connection) -> None:
+        """The rewrite preserves max_depth: a deep cycle past the bound is unseen."""
+        for ref in "ABCDE":
+            _insert_node(db_conn, ref)
+        # A -> B -> C -> D -> E -> A : a 5-cycle.
+        _insert_edge(db_conn, "A", "B", "uses")
+        _insert_edge(db_conn, "B", "C", "uses")
+        _insert_edge(db_conn, "C", "D", "uses")
+        _insert_edge(db_conn, "D", "E", "uses")
+        _insert_edge(db_conn, "E", "A", "uses")
+        db_conn.commit()
+
+        shallow = evaluate_cycle_rules(
+            db_conn,
+            [CycleRule(name="nc", description="d", edge_kind="uses", max_depth=3)],
+        )
+        assert shallow == []
+        deep = evaluate_cycle_rules(
+            db_conn,
+            [CycleRule(name="nc", description="d", edge_kind="uses", max_depth=5)],
+        )
+        assert len(deep) == 1
+
+
+# ---------------------------------------------------------------------------
+# TestCycleTopologies (BDL-059 S3 / #124 — WHITE/GREY/BLACK rewrite coverage)
+# ---------------------------------------------------------------------------
+
+
+def _uses_rule(max_depth: int = 10) -> CycleRule:
+    """A live, ``uses``-only forbid-cycles rule (the common shape in these tests)."""
+    return CycleRule(
+        name="no-cycles",
+        description="No circular deps",
+        edge_kind="uses",
+        max_depth=max_depth,
+    )
+
+
+def _cycle_node_sets(violations: list) -> set[frozenset[str]]:  # type: ignore[type-arg]
+    """Reduce each cycle message to the *set* of its nodes (rotation-invariant).
+
+    A message is ``"Circular dependency detected: a → b → a (rule '...')"``. We
+    extract the arrow-joined path and drop the duplicated closing node, so two
+    rotations of the same cycle collapse to one entry. This lets a test assert
+    *which* cycles were found without pinning the representative rotation.
+    """
+    out: set[frozenset[str]] = set()
+    for v in violations:
+        # message prefix up to the first ':' is boilerplate; the path follows.
+        path_part = v.message.split(": ", 1)[1].split(" (rule", 1)[0]
+        nodes = [n.strip() for n in path_part.split("→")]
+        # drop the closing node (== the opening one for a real cycle)
+        if len(nodes) > 1 and nodes[0] == nodes[-1]:
+            nodes = nodes[:-1]
+        out.add(frozenset(nodes))
+    return out
+
+
+class TestCycleTopologies:
+    """Per-topology coverage of the WHITE/GREY/BLACK rewrite (#124).
+
+    The golden parity test pins exact byte output on one combined graph; these
+    isolate each topology so a regression points at the specific shape that
+    broke (nested, self-loop, disjoint multi-cycle, deprecated-edge exclusion).
+    """
+
+    def test_nested_cycles_inner_and_outer_both_reported(
+        self, db_conn: sqlite3.Connection
+    ) -> None:
+        """A small cycle nested inside a larger one yields BOTH distinct cycles.
+
+        Edges: A→B→C→A (outer triangle) plus a chord B→A (inner 2-cycle A↔B).
+        The colored DFS must surface the inner {A,B} cycle and the outer
+        {A,B,C} cycle as two separate normalized violations.
+        """
+        for ref in "ABC":
+            _insert_node(db_conn, ref)
+        _insert_edge(db_conn, "A", "B", "uses")
+        _insert_edge(db_conn, "B", "C", "uses")
+        _insert_edge(db_conn, "C", "A", "uses")
+        _insert_edge(db_conn, "B", "A", "uses")  # chord -> inner 2-cycle
+        db_conn.commit()
+
+        violations = evaluate_cycle_rules(db_conn, [_uses_rule()])
+        node_sets = _cycle_node_sets(violations)
+        assert frozenset({"A", "B"}) in node_sets
+        assert frozenset({"A", "B", "C"}) in node_sets
+
+    def test_self_loop_only_one_node_in_path(
+        self, db_conn: sqlite3.Connection
+    ) -> None:
+        """A→A is a length-1 cycle: exactly one violation over a single node."""
+        _insert_node(db_conn, "solo")
+        _insert_edge(db_conn, "solo", "solo", "uses")
+        db_conn.commit()
+
+        violations = evaluate_cycle_rules(db_conn, [_uses_rule()])
+        assert len(violations) == 1
+        assert violations[0].from_ref_id == "solo"
+        assert violations[0].to_ref_id == "solo"
+        assert _cycle_node_sets(violations) == {frozenset({"solo"})}
+
+    def test_disjoint_multi_cycle_each_reported_once(
+        self, db_conn: sqlite3.Connection
+    ) -> None:
+        """Three disjoint cycles (a 2-cycle, a triangle, a self-loop) -> 3 violations.
+
+        Disjoint components must each be discovered independently — the
+        WHITE/GREY/BLACK sweep restarts from every still-WHITE node.
+        """
+        for ref in "ABCDEF":
+            _insert_node(db_conn, ref)
+        # A <-> B
+        _insert_edge(db_conn, "A", "B", "uses")
+        _insert_edge(db_conn, "B", "A", "uses")
+        # C -> D -> E -> C
+        _insert_edge(db_conn, "C", "D", "uses")
+        _insert_edge(db_conn, "D", "E", "uses")
+        _insert_edge(db_conn, "E", "C", "uses")
+        # F -> F
+        _insert_edge(db_conn, "F", "F", "uses")
+        db_conn.commit()
+
+        violations = evaluate_cycle_rules(db_conn, [_uses_rule()])
+        assert len(violations) == 3
+        assert _cycle_node_sets(violations) == {
+            frozenset({"A", "B"}),
+            frozenset({"C", "D", "E"}),
+            frozenset({"F"}),
+        }
+
+    def test_deprecated_edge_cycle_excluded(
+        self, db_conn: sqlite3.Connection
+    ) -> None:
+        """A cycle formed only by a non-live (deprecated) edge is NOT reported.
+
+        Only ``active`` lifecycle edges are live; a ``deprecated`` edge closing
+        the loop means the cycle does not exist in the live graph.
+        """
+        _insert_node(db_conn, "x")
+        _insert_node(db_conn, "y")
+        _insert_edge(db_conn, "x", "y", "uses")  # live
+        db_conn.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind, lifecycle) "
+            "VALUES (?, ?, ?, ?)",
+            ("y", "x", "uses", "deprecated"),  # non-live closing edge
+        )
+        db_conn.commit()
+
+        violations = evaluate_cycle_rules(db_conn, [_uses_rule()])
+        assert violations == []
+
+    def test_live_cycle_reported_alongside_excluded_deprecated_cycle(
+        self, db_conn: sqlite3.Connection
+    ) -> None:
+        """A live cycle is reported while a separate deprecated-only cycle is not.
+
+        x↔y is a live 2-cycle; p↔q is closed only by a deprecated edge. The
+        per-edge liveness filter must keep {x,y} and drop {p,q} — proving
+        exclusion is scoped to the non-live edge, not a global suppression.
+        """
+        for ref in ("x", "y", "p", "q"):
+            _insert_node(db_conn, ref)
+        _insert_edge(db_conn, "x", "y", "uses")  # live
+        _insert_edge(db_conn, "y", "x", "uses")  # live -> closes a live cycle
+        _insert_edge(db_conn, "p", "q", "uses")  # live half
+        db_conn.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind, lifecycle) "
+            "VALUES (?, ?, ?, ?)",
+            ("q", "p", "uses", "deprecated"),  # non-live closing edge for p,q
+        )
+        db_conn.commit()
+
+        violations = evaluate_cycle_rules(db_conn, [_uses_rule()])
+        assert _cycle_node_sets(violations) == {frozenset({"x", "y"})}
+
+    def test_shared_node_two_cycles_both_reported(
+        self, db_conn: sqlite3.Connection
+    ) -> None:
+        """A node shared by two cycles (figure-8) yields both, not a merged blob.
+
+        g↔h and h↔i share node h; the rewrite must report {g,h} and {h,i}
+        separately rather than collapsing them through the shared vertex.
+        """
+        for ref in "ghi":
+            _insert_node(db_conn, ref)
+        _insert_edge(db_conn, "g", "h", "uses")
+        _insert_edge(db_conn, "h", "g", "uses")
+        _insert_edge(db_conn, "h", "i", "uses")
+        _insert_edge(db_conn, "i", "h", "uses")
+        db_conn.commit()
+
+        violations = evaluate_cycle_rules(db_conn, [_uses_rule()])
+        assert _cycle_node_sets(violations) == {
+            frozenset({"g", "h"}),
+            frozenset({"h", "i"}),
+        }
+
+    def test_dag_with_diamond_no_false_cycle(
+        self, db_conn: sqlite3.Connection
+    ) -> None:
+        """A diamond DAG (two paths to a sink, no back-edge) reports no cycle.
+
+        A→B→D and A→C→D re-converge at D but never loop back: a node reached on
+        two forward paths (GREY-then-BLACK) must not be mistaken for a cycle.
+        """
+        for ref in "ABCD":
+            _insert_node(db_conn, ref)
+        _insert_edge(db_conn, "A", "B", "uses")
+        _insert_edge(db_conn, "A", "C", "uses")
+        _insert_edge(db_conn, "B", "D", "uses")
+        _insert_edge(db_conn, "C", "D", "uses")
+        db_conn.commit()
+
+        assert evaluate_cycle_rules(db_conn, [_uses_rule()]) == []

@@ -13,6 +13,7 @@ from beadloom.graph.rule_engine import Violation, evaluate_all, load_rules, vali
 from beadloom.infrastructure.db import connection, create_schema
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
 
@@ -65,9 +66,9 @@ def lint(
     project_root: Path,
     *,
     rules_path: Path | None = None,
-    reindex_before: bool = True,
+    reindex: Callable[[Path], object] | None = None,
 ) -> LintResult:
-    """Run the lint process: reindex, load rules, evaluate, and return results.
+    """Run the lint process: (optionally) reindex, load rules, evaluate, return.
 
     Parameters
     ----------
@@ -76,9 +77,13 @@ def lint(
     rules_path:
         Optional explicit path to ``rules.yml``.  When *None* the default
         location ``<project_root>/.beadloom/_graph/rules.yml`` is used.
-    reindex_before:
-        When *True* (the default), runs an incremental reindex before
-        evaluating rules to ensure the database is fresh.
+    reindex:
+        Optional reindex callback invoked with ``project_root`` before rules are
+        evaluated, to ensure the database is fresh.  Injected by the caller so
+        that this (domain-layer) module does not depend on the application-layer
+        reindex orchestrator — the dependency points DOWN/IN, never UP.  When
+        *None* (the default) no reindex is performed and the existing index is
+        used as-is.
 
     Returns
     -------
@@ -92,13 +97,9 @@ def lint(
     """
     start = time.monotonic()
 
-    # Step a: Incremental reindex (if requested).
-    # Lazy import to avoid circular dependency:
-    # graph/__init__ → linter → infra.reindex → graph.loader → graph/__init__
-    if reindex_before:
-        from beadloom.application.reindex import incremental_reindex
-
-        incremental_reindex(project_root)
+    # Step a: Refresh the index, if the caller injected a reindex callback.
+    if reindex is not None:
+        reindex(project_root)
 
     # Step b: Open the database.
     db_path = project_root / ".beadloom" / "beadloom.db"

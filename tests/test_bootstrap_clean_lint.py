@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from beadloom.application.reindex import incremental_reindex
 from beadloom.graph.linter import lint
 from beadloom.onboarding.scanner import bootstrap_project
 
@@ -54,7 +55,7 @@ class TestCleanBootstrapLint:
 
         bootstrap_project(tmp_path, preset_name="monolith")
 
-        result = lint(tmp_path, reindex_before=True)
+        result = lint(tmp_path, reindex=incremental_reindex)
 
         # The whole point of #71: no error-severity violations means
         # `lint --strict` would exit 0.
