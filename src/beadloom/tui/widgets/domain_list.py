@@ -31,30 +31,14 @@ class DomainList(OptionList):
 
     def load_domains(self, conn: sqlite3.Connection) -> None:
         """Load domains from database."""
+        from beadloom.application import graph_reads
+
         self.clear_options()
 
-        # Get all domains
-        rows = conn.execute(
-            "SELECT ref_id, summary FROM nodes WHERE kind = 'domain' ORDER BY ref_id"
-        ).fetchall()
-
-        for row in rows:
-            ref_id: str = row["ref_id"]
-
-            # Count edges involving this domain
-            child_count: int = conn.execute(
-                "SELECT count(*) FROM edges WHERE src_ref_id = ? OR dst_ref_id = ?",
-                (ref_id, ref_id),
-            ).fetchone()[0]
-
-            # Check doc coverage
-            has_docs: bool = (
-                conn.execute(
-                    "SELECT count(*) FROM docs WHERE ref_id = ?",
-                    (ref_id,),
-                ).fetchone()[0]
-                > 0
-            )
+        for node in graph_reads.get_nodes_by_kind(conn, "domain"):
+            ref_id = node.ref_id
+            child_count = graph_reads.count_edges_touching(conn, ref_id)
+            has_docs = graph_reads.count_docs_for_ref(conn, ref_id) > 0
 
             indicator = "\u25cf" if has_docs else "\u25cb"
             label = f"{indicator} {ref_id} [{child_count}]"

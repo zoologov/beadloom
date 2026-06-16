@@ -41,6 +41,7 @@ def _search_nodes(
     list[dict[str, str]]:
         List of dicts with ref_id, kind, summary keys.
     """
+    from beadloom.application import graph_reads
     from beadloom.context_oracle.search import has_fts5, search_fts5
 
     if has_fts5(conn):
@@ -54,21 +55,14 @@ def _search_nodes(
             for r in results
         ]
 
-    # Fallback to SQL LIKE on nodes table
-    like_pattern = f"%{query}%"
-    rows = conn.execute(
-        "SELECT ref_id, kind, summary FROM nodes "
-        "WHERE ref_id LIKE ? OR summary LIKE ? "
-        "ORDER BY ref_id LIMIT ?",
-        (like_pattern, like_pattern, limit),
-    ).fetchall()
+    # Fallback to SQL LIKE on the nodes table (via the application facade).
     return [
         {
-            "ref_id": str(row["ref_id"]),
-            "kind": str(row["kind"]),
-            "snippet": str(row["summary"] or ""),
+            "ref_id": node.ref_id,
+            "kind": node.kind,
+            "snippet": node.summary or "",
         }
-        for row in rows
+        for node in graph_reads.search_nodes_like(conn, query, limit=limit)
     ]
 
 

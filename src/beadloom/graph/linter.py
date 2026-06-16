@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from beadloom.graph.rule_engine import Violation, evaluate_all, load_rules, validate_rules
-from beadloom.infrastructure.db import create_schema, open_db
+from beadloom.infrastructure.db import connection, create_schema
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -103,10 +103,9 @@ def lint(
     # Step b: Open the database.
     db_path = project_root / ".beadloom" / "beadloom.db"
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = open_db(db_path)
-    create_schema(conn)
+    with connection(db_path) as conn:
+        create_schema(conn)
 
-    try:
         # Step c: Resolve rules path.
         if rules_path is None:
             rules_path = project_root / ".beadloom" / "_graph" / "rules.yml"
@@ -150,8 +149,6 @@ def lint(
             imports_resolved=imports_resolved,
             elapsed_ms=elapsed,
         )
-    finally:
-        conn.close()
 
 
 # ---------------------------------------------------------------------------

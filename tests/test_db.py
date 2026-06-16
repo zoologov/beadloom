@@ -7,10 +7,58 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.infrastructure.db import create_schema, get_meta, open_db, set_meta
+from beadloom.infrastructure.db import (
+    connection,
+    create_schema,
+    get_meta,
+    open_db,
+    set_meta,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+class TestConnection:
+    """Tests for connection() — the closing context-manager around open_db."""
+
+    def test_yields_open_connection(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "test.db"
+        with connection(db_path) as conn:
+            result = conn.execute("PRAGMA journal_mode").fetchone()
+            assert result is not None
+            assert result[0] == "wal"
+
+    def test_closes_on_exit(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "test.db"
+        with connection(db_path) as conn:
+            held = conn
+        # Using a closed connection raises ProgrammingError.
+        with pytest.raises(sqlite3.ProgrammingError):
+            held.execute("SELECT 1")
+
+    def test_closes_on_exception(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "test.db"
+        held: sqlite3.Connection | None = None
+        with pytest.raises(ValueError, match="boom"), connection(db_path) as conn:
+            held = conn
+            raise ValueError("boom")
+        assert held is not None
+        with pytest.raises(sqlite3.ProgrammingError):
+            held.execute("SELECT 1")
+
+    def test_no_resource_warning(self, tmp_path: Path) -> None:
+        import gc
+        import warnings
+
+        db_path = tmp_path / "test.db"
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", ResourceWarning)
+            with connection(db_path) as conn:
+                create_schema(conn)
+            # Force finalization: a leaked, unclosed connection would raise the
+            # promoted ResourceWarning here. The CM closed it, so this is clean.
+            gc.collect()
 
 
 class TestOpenDb:
