@@ -133,7 +133,7 @@ Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3
 | `layers` | Enforce layered architecture direction | Top-down: services → domains → infrastructure |
 | `forbid_cycles` | Detect circular dependencies in the graph | No cycles on `uses`/`depends_on` edges |
 | `forbid_import` | Control file-level import boundaries | Files in `src/beadloom/tui/**` must not import from `src/beadloom/infrastructure/**` |
-| `check` | Enforce complexity / coverage limits per node | `max_symbols` per domain (Beadloom's `domain-size-limit`; see the recalibration note below); `module-coverage` (every src module tracked) |
+| `check` | Enforce complexity / coverage limits per node | `max_symbols: 280` per domain (Beadloom's `domain-size-limit`; see the recalibration note below); `module-coverage` (every src module tracked) |
 
 > Internally each parsed rule carries a `rule_type` string (`deny` / `require` / `forbid` / `layer` / `forbid_import` / `cardinality` / …) used by the evaluators; the **authoring key** in `rules.yml` is the column above.
 
