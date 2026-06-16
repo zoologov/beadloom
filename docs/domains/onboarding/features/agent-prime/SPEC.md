@@ -38,6 +38,6 @@ Generates `.beadloom/AGENTS.md` with v2 template. Injects rules from `rules.yml`
 
 ## Source
 
-- `src/beadloom/onboarding/scanner.py` — `prime_context()`, `setup_rules_auto()`, `generate_agents_md()`
+- `src/beadloom/onboarding/scanner/` — cohesion-split package; `prime.py` (`prime_context()`), `agents_md.py` (`setup_rules_auto()`, `generate_agents_md()`), plus `bootstrap.py` / `init_flow.py` / `project_scan.py` / `summary.py` / `entry_points.py` / `import_scan.py` / `readme.py` / `doc_classify.py` / `rules_gen.py` / `claude_md.py` / `constants.py`; the package `__init__.py` re-exports the full public surface
 - `src/beadloom/services/cli.py` — `prime` and `setup-rules` commands
 - `src/beadloom/services/mcp_server.py` — `prime` MCP tool
