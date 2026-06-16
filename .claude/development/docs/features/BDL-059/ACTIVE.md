@@ -18,8 +18,8 @@
 | S1 test-decouple | .3, .4 | ✓ done (#21) |
 | S2 repo + N+1 | .5, .6, .7, .8 | ✓ done (#22) |
 | S3 graph decomp | .9–.14 | dev ✓ (.9/.10/.11 closed) · .12 test → .13 review → .14 tw → PR |
-| S4 services/app decomp | .15–.21 | blocked → S3 |
-| S5 cache + types | .22–.24 | blocked → S4 |
+| S4 services/app decomp | .15–.21 | ✓ dev+test+review+tw done (.15–.21 closed) · PR next |
+| S5 cache + types | .22–.24 | ready (.22 dev unblocked) |
 
 ## Plan notes
 
@@ -31,4 +31,5 @@
 ## Progress log
 
 - 2026-06-15 — PRD/RFC/CONTEXT/PLAN approved (RFC v2 cohesion-driven after owner pushback on metric-gaming). Epic + 24 beads created (beadloom-fm3u.1–.24), DAG S0→S1→S2→S3→S4→S5. Starting S0.
-- 2026-06-16 — S3 dev wave integrated (file-checkout + 3-way on services.yml; `.10` federation done inline after subagent bash-block). `.9/.10/.11` closed; 5 commits on `features/BDL-059-s3`. Owner decided domain-size-limit **recalibrate 200→280** (vs gaming); codified recalibration-vs-gaming in dev/review roles + autonomy/command-hygiene in `/coordinator`. ci rc0, lint 0 violations, 4375×3 seeds. Permissions: `dontAsk` + destructive deny-net + broad allow + `/tmp` dirs. Next: `.12` test.
+- 2026-06-16 — S3 dev wave integrated (file-checkout + 3-way on services.yml; `.10` federation done inline after subagent bash-block). `.9/.10/.11` closed; 5 commits on `features/BDL-059-s3`. Owner decided domain-size-limit **recalibrate 200→280** (vs gaming); codified recalibration-vs-gaming in dev/review roles + autonomy/command-hygiene in `/coordinator`. ci rc0, lint 0 violations, 4375×3 seeds. Permissions: `dontAsk` + destructive deny-net + broad allow + `/tmp` dirs.
+- 2026-06-16 — **S3 MERGED (PR #23, squash, faa83bc).** S4 ran: 4 dev beads in parallel worktrees (cli→services/commands/+status; reindex/; scanner/; debt_report/+site_dashboard/), integrated file-checkout + 4-way services.yml merge (all clean), `.15`–`.21` closed (dev→test→review OK→tw), 6 commits on `features/BDL-059-s4`. 4458 passed; ci rc0; lint 0; no over-split/gaming (review OK). Logged UX #134 (surface_drift never fixpoints, warn-only). Next: PR S4 → main, then S5 (.22–.24: cache + types).
