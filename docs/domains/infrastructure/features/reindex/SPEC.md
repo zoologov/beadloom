@@ -2,7 +2,7 @@
 
 Full and incremental reindex pipeline for rebuilding the architecture graph database.
 
-Source: `src/beadloom/application/reindex.py`
+Source: `src/beadloom/application/reindex/` (package; decomposed by cohesion in BDL-059 S4 into `models`, `rules_loader`, `indexing`, `enrichment`, `sync_state`, `change_detection`, `full`, `incremental`, with the package `__init__` re-exporting the stable public + back-compat surface)
 
 ## Specification
 
