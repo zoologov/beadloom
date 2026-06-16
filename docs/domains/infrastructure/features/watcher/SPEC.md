@@ -104,7 +104,7 @@ beadloom watch [--debounce MS] [--project DIR]
 | `--debounce` | `int` | `500` | Debounce delay in ms |
 | `--project` | `Path` | `None` (current directory) | Path to the project root |
 
-The CLI command (`watch_cmd` in `cli.py`) performs two pre-flight checks before invoking `watch()`:
+The CLI command (`watch_cmd` in `src/beadloom/services/commands/dashboard.py`) performs two pre-flight checks before invoking `watch()`:
 1. Verifies that `watchfiles` is importable; exits with error and install instructions if missing.
 2. Verifies that the `.beadloom/_graph/` directory exists; exits with error suggesting `beadloom init` if missing.
 

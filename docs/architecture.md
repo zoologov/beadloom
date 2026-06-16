@@ -19,15 +19,16 @@ The system is organized into six DDD domain packages, an application (use-case o
 6. **AI Agents** (`ai_agents/`) — governed AI-agent harnesses that ship inside the wheel; hosts the deterministic, seam-isolated **AI tech-writer** (`ai_agents/ai_techwriter/`, run via `python -m beadloom.ai_agents.ai_techwriter`). A **leaf consumer**: it may read `application`/`context_oracle`/`graph`/`doc_sync` APIs but must never be imported by the core domains or services (enforced by the `core-no-import-ai-agents` / `application-no-import-ai-agents` `forbid_import` rules).
 
 **Application (use-case orchestration)** (`application/`) — composes the domains into end-to-end use cases. It owns:
-- `reindex.py` — the full + incremental reindex pipeline (drop → recreate → reload graph/docs/code/sync; SHA-256 `file_index` for incremental runs)
+- `reindex/` — the full + incremental reindex pipeline (drop → recreate → reload graph/docs/code/sync; SHA-256 `file_index` for incremental runs), a cohesion-split package
 - `doctor.py` — graph + data integrity checks
-- `debt_report.py` — architecture-debt aggregation, scoring, trend tracking, CI gating
+- `status.py` — the read-side of `beadloom status` (index/coverage/health/trend counts + context-bundle metrics)
+- `debt_report/` — architecture-debt aggregation, scoring, trend tracking, CI gating, a cohesion-split package
 - `watcher.py` — file watcher for auto-reindex on change
 - `gate.py` — the unified `beadloom ci` gate (reindex → lint → sync-check → config-check → doctor → optional federate)
-- the VitePress site generators — `site.py` (orchestrator), `site_pages.py`, `site_nav.py`, `site_about.py`, `site_dashboard.py`, `site_landscape.py`, `site_published.py`, `site_mermaid_guard.py`, `site_metrics_history.py`
+- the VitePress site generators — `site.py` (orchestrator), `site_pages.py`, `site_nav.py`, `site_about.py`, `site_dashboard/` (a cohesion-split package), `site_landscape.py`, `site_published.py`, `site_mermaid_guard.py`, `site_metrics_history.py`
 
 **Interface layers:**
-- **Services** (`services/`) — **CLI** (`services/cli.py`, Click-based) and **MCP Server** (`services/mcp_server.py`, stdio server with 18 tools for AI agents — 14 graph read/write tools + four BDL-048 process-tools). Both call into the application layer and Context Oracle; the CLI never reaches past those layers.
+- **Services** (`services/`) — **CLI** (`services/cli.py` is a thin Click registration shell; the command implementations live in the `services/commands/` package, one cohesive module per command group) and **MCP Server** (`services/mcp_server.py`, stdio server with 18 tools for AI agents — 14 graph read/write tools + four BDL-048 process-tools). Both call into the application layer and Context Oracle; the CLI never reaches past those layers.
 - **TUI** (`tui/`) — interactive terminal architecture workstation (Textual): dashboard, explorer, doc-status screens.
 
 A `layers` rule in `.beadloom/_graph/rules.yml` enforces the direction `services / tui → application → domains` (the interface layers depend inward; domains never depend on the application or service layers).
@@ -52,14 +53,14 @@ The **`component` kind** (BDL-051) and the **`module-coverage` lint** (promoted 
 
 ### Data Flow
 
-The `application/reindex.py` orchestrator drives the indexing pipeline, calling
+The `application/reindex/` orchestrator drives the indexing pipeline, calling
 each domain in order; the resulting SQLite index is then read back by Context
 Oracle for sub-20ms context bundles.
 
 ```
 YAML Graph Files (.beadloom/_graph/*.yml)
        ↓
-   application/reindex.py  (orchestrates the pipeline below)
+   application/reindex/  (orchestrates the pipeline below)
        │
        ├─ graph/loader.py            → SQLite (nodes, edges, rules)
        ├─ graph/import_resolver.py   → SQLite (code_imports)

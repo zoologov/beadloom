@@ -3,6 +3,7 @@
 FTS5 full-text search over architecture graph nodes and their associated documentation chunks.
 
 Source: `src/beadloom/context_oracle/search.py`
+CLI command: `src/beadloom/services/commands/query.py`
 
 ## Specification
 
@@ -147,7 +148,7 @@ beadloom search QUERY [--kind KIND] [--limit N] [--json] [--project DIR]
 | `--json` | flag | `False` | Output results as JSON array |
 | `--project` | `Path` | current directory | Project root |
 
-The CLI command calls `search_fts5` when `has_fts5()` returns `True`. Otherwise, it falls back to a SQL `LIKE` query against both `nodes.ref_id` and `nodes.summary`.
+The CLI `search` command is defined in `src/beadloom/services/commands/query.py`. It calls `search_fts5` when `has_fts5()` returns `True`. Otherwise, it falls back to a SQL `LIKE` query against both `nodes.ref_id` and `nodes.summary`.
 
 LIKE fallback behavior:
 - Without `kind`: `WHERE ref_id LIKE ? OR summary LIKE ? LIMIT ?`
@@ -227,3 +228,4 @@ Tests are located in `tests/test_search.py` (20 test cases). Key scenarios:
 - **Snippet content**: Verify that snippets contain `<b>`/`</b>` markers around matched terms.
 - **`has_fts5` true/false**: Verify correct detection of populated vs. empty/missing index.
 - **`populate_search_index` rebuild**: Verify that calling it twice produces the same row count (idempotent rebuild).
+- **CLI integration**: Verify the `beadloom search` command finds results, outputs JSON, handles no-results, filters by kind, and fails gracefully when no database exists.

@@ -54,7 +54,7 @@ class SyncPair:
 - **doc_indexer.py** -- Markdown scanning, chunking by H2 headings, section classification, and SQLite population
 - **audit.py** -- Documentation audit: fact registry, comparator, and audit facade for detecting stale numeric facts
 - **scanner.py** -- Document scanner: keyword-proximity extraction of numeric fact mentions from markdown files
-- **cli.py** (in `services/cli.py`) -- `beadloom sync-check` CLI command with `--porcelain`, `--json`, `--report`, `--ref`, `--since GIT_REF` options; `beadloom sync-update` for non-interactive re-baselining; `beadloom install-hooks` for pre-commit hook installation
+- **docsync.py** (in `services/commands/`) -- CLI commands: `beadloom sync-check`, `beadloom sync-update`, `beadloom install-hooks`, and `beadloom active-sync` (the ACTIVE-table reconcile command; annotated as `component=active-table` but housed in this module after the BDL-059 split of `services/cli.py` into `services/commands/`)
 
 ### Features
 
@@ -67,15 +67,34 @@ class SyncPair:
 
 ### Git Hook Integration
 
-Beadloom can install a pre-commit hook for automatic checking:
+Beadloom installs **two** git hooks by default: a pre-commit hook (lighter check) and a pre-push hook (the authoritative blocking Beadloom Gate). Use `--pre-commit` or `--pre-push` to select one.
 
 ```bash
-# Warning mode (does not block commit)
+# Install both hooks in warning mode (default)
 beadloom install-hooks --mode warn
 
-# Blocking mode (blocks commit on stale docs)
+# Install both hooks in blocking mode
 beadloom install-hooks --mode block
+
+# Install only the pre-commit hook
+beadloom install-hooks --pre-commit
+
+# Install only the pre-push Gate hook
+beadloom install-hooks --pre-push
+
+# Remove the installed hook(s)
+beadloom install-hooks --remove
 ```
+
+**Pre-commit hook** runs:
+- Ruff lint check (via `uv run ruff check`)
+- Mypy type check (via `uv run mypy`)
+- `beadloom sync-check --porcelain` (stale doc detection)
+- `beadloom active-sync --stage` (ACTIVE/table coherence; guarded no-op when `bd` is unavailable)
+
+In `warn` mode, violations print warnings but do not block the commit. In `block` mode, ruff/mypy/sync-check violations exit non-zero and prevent the commit.
+
+**Pre-push hook** runs the full Beadloom Gate (`beadloom ci`): incremental reindex → lint → coverage-lint → sync-check → doctor. This is the authoritative blocking gate; it exits non-zero on any failure, preventing the push. Fail-safe: if `beadloom` is not on PATH, the hook is a no-op.
 
 ## Invariants
 
@@ -119,6 +138,15 @@ beadloom install-hooks --mode block
 - `chunk_markdown(text: str) -> list[dict[str, Any]]` -- Split Markdown text into chunks by H2 headings. Each chunk contains `heading`, `section`, `content`, `chunk_index`. Chunks exceeding `MAX_CHUNK_SIZE` (2000 chars) are split by paragraphs.
 - `index_docs(docs_dir: Path, conn: sqlite3.Connection, *, ref_id_map: dict[str, str] | None = None) -> DocIndexResult` -- Scan a directory for `.md` files, chunk them, and insert into SQLite.
 
+### Module `src/beadloom/services/commands/docsync.py`
+
+CLI commands for doc-sync operations. This module was split from `services/cli.py` in BDL-059.
+
+- `sync_check(*, porcelain: bool, output_json: bool, output_report: bool, ref_filter: str | None, since_ref: str | None, project: Path | None) -> None` -- Check doc-code synchronization status. Exit codes: 0 = all ok, 1 = error, 2 = stale pairs found.
+- `install_hooks(*, mode: str, remove: bool, pre_commit: bool, pre_push: bool, project: Path | None) -> None` -- Install or remove beadloom git hooks. By default installs BOTH pre-commit and pre-push hooks. Use `--pre-commit` / `--pre-push` to select one.
+- `active_sync(*, epic: str | None, check_only: bool, output_json: bool, no_export: bool, stage: bool, project: Path | None) -> None` -- Reconcile ACTIVE.md bead-status tables from `bd` (the source of truth). No-op when `bd` is unavailable or no ACTIVE table exists.
+- `sync_update(ref_id: str | None, *, check_only: bool, assume_yes: bool, all_refs: bool, project: Path | None) -> None` -- Show sync status and update docs for a ref_id. Supports interactive editor mode, non-interactive re-baseline (`--yes`), and batch re-baseline (`--all`).
+
 ### CLI (`beadloom sync-check`)
 
 ```
@@ -155,10 +183,37 @@ Show sync status and update docs for a ref_id. In interactive mode (default), di
 ### CLI (`beadloom install-hooks`)
 
 ```
-beadloom install-hooks [--mode {warn,block}] [--remove] [--project DIR]
+beadloom install-hooks [--mode {warn,block}] [--remove] [--pre-commit] [--pre-push] [--project DIR]
 ```
 
-Installs or removes a pre-commit hook that runs `beadloom sync-check` automatically. In `warn` mode (default), the hook prints stale status but does not block the commit. In `block` mode, the hook exits non-zero on stale docs, preventing the commit. The `--remove` flag deletes the installed hook.
+Installs or removes beadloom git hooks. By default installs **both** the pre-commit hook (lighter warn/block check) and the pre-push hook (the authoritative blocking Beadloom Gate). Use `--pre-commit` or `--pre-push` to select one. The `--remove` flag deletes the selected hook(s).
+
+| Flag | Description |
+|------|----------|
+| `--mode` | Hook mode: `warn` (default) or `block`. In warn mode, violations print warnings but do not block. In block mode, violations exit non-zero and prevent the commit/push. |
+| `--remove` | Remove the selected hook(s). |
+| `--pre-commit` | Operate on the pre-commit hook only. |
+| `--pre-push` | Operate on the pre-push Gate hook only. |
+| `--project` | Project root (default: current directory). |
+
+### CLI (`beadloom active-sync`)
+
+```
+beadloom active-sync [--epic EPIC] [--check] [--json] [--no-export] [--stage] [--project DIR]
+```
+
+Reconcile ACTIVE.md bead-status tables from `bd` (the source of truth). For each epic's ACTIVE.md, rewrites the bead-status table's Status cells to match `bd` (rich coordinator notes are preserved when the state agrees). Default = fix mode (writes + syncs the tracked `.beads/issues.jsonl` via `bd export`); `--check` reports drift without writing (exit 1 on drift).
+
+No-op contract: if `bd` is unavailable OR there is no ACTIVE file with a bead-status table, this exits 0 and writes nothing (a non-flow repo is never affected). With `--stage` (fix mode), `git add` is run on EXACTLY the reconciled ACTIVE.md paths + the exported jsonl — nothing else.
+
+| Flag | Description |
+|------|----------|
+| `--epic` | Reconcile only this epic's ACTIVE.md. |
+| `--check` | Report drift without writing; exit 1 if any drift, 0 if clean. |
+| `--json` | Machine-readable JSON output. |
+| `--no-export` | Skip the `bd export` jsonl sync (fix mode only). |
+| `--stage` | `git add` EXACTLY the reconciled ACTIVE.md(s) + the exported jsonl (fix mode only); never stages unrelated files. Best-effort (no git → skip). |
+| `--project` | Project root (default: current directory). |
 
 ## Testing
 

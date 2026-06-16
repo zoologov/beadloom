@@ -27,7 +27,7 @@ This closes the historic `graph -> application.reindex` layering inversion
 
 ## Collaborators
 
-- `application/reindex.py` uses it for the full/incremental scan and re-exports
+- `application/reindex/` uses it for the full/incremental scan and re-exports
   it for backward-compatible import paths.
 - `graph/import_resolver.py` uses it to enumerate source files for import
   indexing.

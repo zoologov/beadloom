@@ -11,8 +11,8 @@ Internal building block of the application layer.
 Single source of truth for the **ACTIVE.md bead-status table** format used by the
 packaged agentic flow. Extracted from the MCP S4 helpers (BDL-051) so the MCP
 process-tools (`checkpoint` / `complete_bead`, in `services/mcp_server.py`) and
-the `active-sync` command (BDL-053, in `services/cli.py`) share one tolerant,
-fail-safe parser/updater rather than each carrying its own copy.
+the `active-sync` command (BDL-053, in `services/commands/docsync.py`) share one
+tolerant, fail-safe parser/updater rather than each carrying its own copy.
 
 The module is deliberately **pure with respect to `bd`**: it never shells out to
 the beads CLI. Callers query `bd` and inject the resulting status map; this layer
@@ -66,13 +66,18 @@ headings, the Progress Log, and non-Status columns are always left untouched.
 
 ## Collaborators
 
-- **`services/cli.py` — `active-sync` command (and helpers).** Queries `bd list
-  --json` (via the mockable `services/bd_seam.run_bd` seam), maps it to a
-  `{bead_id → status}` dict (`_bd_statuses_from_list`, which injects `"blocked"`
-  for an `open` bead with an open `blocks` dependency on a non-closed target),
-  then calls `reconcile_active_tables`. After a fix it best-effort runs
-  `bd export -o .beads/issues.jsonl` (only when that file is git-tracked) so the
-  tracker artifact stays honest across branch/squash-merge.
+- **`services/commands/docsync.py` — `active-sync` command (and helpers).**
+  Queries `bd list --json` (via the mockable `services/bd_seam.run_bd` seam),
+  maps it to a `{bead_id → status}` dict (`_bd_statuses_from_list`, which injects
+  `"blocked"` for an `open` bead with an open `blocks` dependency on a
+  non-closed target), then calls `reconcile_active_tables`. After a fix it
+  best-effort runs `bd export -o .beads/issues.jsonl` (only when that file is
+  git-tracked) so the tracker artifact stays honest across branch/squash-merge.
+  The `--stage` flag runs `git add` on EXACTLY the reconciled ACTIVE.md paths
+  plus the exported jsonl (via `_stage_reconciled`), never staging unrelated
+  files. The `--check` mode runs reconcile on a throwaway sandbox copy
+  (`_active_sync_check`) so it never writes to the real tree; it exits 1 on
+  drift, 0 when clean.
 - **`services/mcp_server.py` — S4 process-tools.** `checkpoint` and
   `complete_bead` flip a single bead's row via the re-exported
   `set_active_table_status`.

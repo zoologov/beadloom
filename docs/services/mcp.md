@@ -391,6 +391,16 @@ Process-tool handlers (BDL-048; the three bead-touching ones drive `bd` via the 
 
 The `bd` seam lives in `src/beadloom/services/bd_seam.py`: `run_bd(args, *, cwd=None)` returns a `BdResult(returncode, stdout, stderr)` (with `.ok`), and raises `BdUnavailableError` with a clear message when the `bd` binary is not on PATH. Tests patch this seam so the process-tools run without a real `bd` binary.
 
+Setup and configuration commands are in `src/beadloom/services/commands/setup.py`:
+- `setup_mcp(*, remove, tool_name, project)` -- create or update MCP config for supported editors
+- `setup_rules(*, tool_name, project)` -- generate architecture rules for IDE integration
+- `setup_ai_techwriter(*, project)` -- scaffold AI techwriter harness configuration
+- `setup_agentic_flow(*, project)` -- scaffold agentic dev flow files and adapters
+- `setup_branch_protection(*, project, repo)` -- apply branch protection rules via GitHub API
+- `config_check(*, project)` -- check for configuration drift
+- `mcp_serve(*, project)` -- launch the MCP server
+- `init(*, bootstrap, import_docs, yes, mode, force, preset, project)` -- project initialization
+
 ## Testing
 
 Tests in `tests/test_mcp_server.py` and `tests/test_mcp_new_tools.py` verify each read/write handler directly (without MCP transport). The process-tools are tested in `tests/test_mcp_process_tools.py` (with the `bd` seam + gate mocked — `complete_bead` is asserted to REFUSE on a red gate and to close on green) and the seam itself in `tests/test_bd_seam.py`.
