@@ -155,6 +155,14 @@ ignore_missing_imports = true
 module = ["tomli"]
 ignore_missing_imports = true
 
+# graphql-core is an OPTIONAL extra (beadloom[graphql]); the runtime import is
+# guarded (try/except ImportError -> honest name-level fallback). Declare it
+# ignore_missing_imports so `mypy --strict` stays clean in a minimal env without
+# the extra; CI's tests job installs --extra graphql so the typed path is checked.
+[[tool.mypy.overrides]]
+module = ["graphql", "graphql.*"]
+ignore_missing_imports = true
+
 [tool.coverage.run]
 source = ["beadloom"]
 branch = true
