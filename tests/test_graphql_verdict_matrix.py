@@ -18,13 +18,12 @@ new nullable arg, widened nullability (``T`` -> ``T!``), exact match.
 Subscriptions are first-class — a subscription-field break is in the SAME table,
 and a subscription-only producer/consumer pair is verified to verdict correctly.
 
-KNOWN LIMITATION (documented honestly, not papered over): the comparator unwraps
-``!`` and ``[]`` to the underlying NAMED type, so a pure list-wrapping change
-(``[T]`` <-> ``T``, ``[T]`` <-> ``[T!]``) is NOT currently caught — the inner
-named type is identical and the OUTER nullability is unchanged. These cases are
-pinned as ``xfail(strict=True)`` so the day the comparator gains list-structure
-awareness, the guard flips RED and forces this matrix to be updated (it never
-silently rots into a false pass). See ``TestListWrappingLimitation``.
+LIST-STRUCTURE FIDELITY (BDL-060 S2 fix .25): the comparator models each type as
+a structured wrapping (``NAMED`` leaf with list levels + per-level non-null), so a
+pure list-wrapping change is caught at FULL depth — ``[T]`` <-> ``T`` (list vs
+scalar), ``[T]`` <-> ``[T!]`` (inner-element nullability), ``[T]`` <-> ``[[T]]``
+(nesting depth) all verdict BREAKING; an identical wrapping (``[T]`` <-> ``[T]``)
+stays benign. See ``TestListWrappingFidelity``.
 """
 
 from __future__ import annotations
@@ -121,6 +120,30 @@ _BREAKING_CASES: list[
         {"planUpdated": _field("Plan!")},
         "planUpdated",
     ),
+    (
+        "list_to_scalar",  # consumer expects [Plan]; producer now scalar Plan
+        {"plan": _field("Plan")},
+        {"plan": _field("[Plan]")},
+        "plan",
+    ),
+    (
+        "list_inner_nullability_narrowed",  # consumer relied on [Plan!]; producer [Plan]
+        {"plan": _field("[Plan]")},
+        {"plan": _field("[Plan!]")},
+        "plan",
+    ),
+    (
+        "list_nesting_depth_changed",  # consumer expects [Plan]; producer [[Plan]]
+        {"plan": _field("[[Plan]]")},
+        {"plan": _field("[Plan]")},
+        "plan",
+    ),
+    (
+        "supplied_list_arg_depth_changed",  # list-typed arg gains a nesting level
+        {"plan": _field("Plan", ids="[[ID]]")},
+        {"plan": _field("Plan", ids="[ID]")},
+        "plan(ids)",
+    ),
 ]
 
 
@@ -164,6 +187,16 @@ _BENIGN_CASES: list[
         "consumer_subset_of_producer",  # consumer references fewer fields
         {"a": _field("A"), "b": _field("B"), "c": _field("C")},
         {"a": _field("A")},
+    ),
+    (
+        "identical_list_wrapping",  # same wrapping on both sides is benign
+        {"plan": _field("[Plan!]!")},
+        {"plan": _field("[Plan!]!")},
+    ),
+    (
+        "list_outer_nullability_widened",  # producer [Plan]! vs consumer [Plan]: more guarantees
+        {"plan": _field("[Plan]!")},
+        {"plan": _field("[Plan]")},
     ),
 ]
 
@@ -304,37 +337,45 @@ class TestLifecycleDominatesVerdict:
         assert classify(contract) is expected
 
 
-class TestListWrappingLimitation:
-    """KNOWN LIMITATION: pure list-wrapping changes are not yet detected.
+class TestListWrappingFidelity:
+    """List-wrapping changes are detected at FULL depth (BDL-060 S2 fix .25).
 
-    The comparator ``_unwrap`` strips ``[]`` to the underlying named type, so a
-    ``[T]`` <-> ``T`` or ``[T]`` <-> ``[T!]`` shape change has an identical named
-    type and unchanged OUTER nullability — it is NOT flagged. These are pinned
-    ``xfail(strict=True)``: list-structure awareness landing in the comparator
-    flips them RED and forces this matrix to be revisited (no silent rot).
+    The comparator models each type as a structured wrapping (``NAMED`` leaf with
+    list levels + per-level non-null), so a ``[T]`` <-> ``T`` (list vs scalar),
+    ``[T]`` <-> ``[T!]`` (inner nullability), or ``[T]`` <-> ``[[T]]`` (depth)
+    shape change is correctly flagged, while an identical wrapping stays benign.
     """
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="list-structure not modelled: [T]<->T flattens to the same named "
-        "type with unchanged outer nullability (BDL-060 S2 known limitation)",
-    )
-    def test_list_to_scalar_should_break(self) -> None:
+    def test_list_to_scalar_breaks(self) -> None:
         # Consumer expects a list ``[Plan]``; producer now returns scalar ``Plan``.
         exposed = {"plan": _field("Plan")}
         referenced = {"plan": _field("[Plan]")}
         assert breaking_field_descriptors(exposed, referenced) == ["plan"]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="list inner-nullability not modelled: [T] vs [T!] share the same "
-        "named type + outer nullability (BDL-060 S2 known limitation)",
-    )
-    def test_list_inner_nullability_should_break(self) -> None:
+    def test_list_inner_nullability_breaks(self) -> None:
         # Consumer relied on ``[Plan!]`` (no nulls inside); producer now ``[Plan]``.
         exposed = {"plan": _field("[Plan]")}
         referenced = {"plan": _field("[Plan!]")}
         assert breaking_field_descriptors(exposed, referenced) == ["plan"]
+
+    def test_list_nesting_depth_breaks(self) -> None:
+        # Consumer expects ``[Plan]``; producer now nests one level deeper.
+        exposed = {"plan": _field("[[Plan]]")}
+        referenced = {"plan": _field("[Plan]")}
+        assert breaking_field_descriptors(exposed, referenced) == ["plan"]
+
+    def test_identical_list_wrapping_is_benign(self) -> None:
+        # Same wrapping on both sides introduces NO false break.
+        exposed = {"plan": _field("[Plan!]!")}
+        referenced = {"plan": _field("[Plan!]!")}
+        assert breaking_field_descriptors(exposed, referenced) == []
+
+    def test_list_inner_nullability_widening_is_benign(self) -> None:
+        # Producer widens inner nullability ``[Plan]`` -> ``[Plan!]``: more
+        # guarantees, no false break.
+        exposed = {"plan": _field("[Plan!]")}
+        referenced = {"plan": _field("[Plan]")}
+        assert breaking_field_descriptors(exposed, referenced) == []
 
     def test_outer_list_nullability_narrowing_is_caught(self) -> None:
         # The OUTER nullability IS modelled: ``[Plan]!`` -> ``[Plan]`` narrows the

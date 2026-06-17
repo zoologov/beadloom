@@ -16,14 +16,21 @@ the verdict itself; it does not delegate to an external GraphQL registry/tool.
 A consumer reference breaks when, vs the producer surface, it is:
 
 - **absent** — the producer no longer exposes the field;
-- **type-incompatible** — the producer's return type changed (a different named
-  type, or a nullability *narrowing*: producer became nullable where the consumer
-  relied on non-null);
+- **type-incompatible** — the producer's return type changed. Types are compared
+  as a STRUCTURED wrapping (a named leaf wrapped in zero or more list levels, each
+  level carrying its own nullability), so the comparison is rigorous at full
+  depth: a different leaf named type, a differing list-nesting depth, a
+  list-vs-scalar mismatch, or a nullability *narrowing* at ANY level (outer or any
+  list level) all break;
 - **arg-broken** — the producer requires a non-null arg the consumer does not
-  supply, or narrowed a supplied arg to non-null / a different named type.
+  supply, or narrowed a supplied arg (named type, list depth, or per-level
+  nullability). Args are CONTRAVARIANT — the consumer's supplied value must
+  satisfy the producer's input requirement — but go through the SAME structured
+  comparison as return types, so list-typed args inherit the rigor.
 
 Purely additive producer changes are benign: a new unreferenced field, a new
-*nullable* arg, or *widening* a return type from nullable to non-null.
+*nullable* arg, *widening* a return type from nullable to non-null at any level,
+or an identical wrapping on both sides.
 
 ## Public surface
 
