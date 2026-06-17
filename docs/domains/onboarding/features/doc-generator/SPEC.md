@@ -46,7 +46,7 @@ After creating skeleton files, `generate_skeletons()` writes `docs:` field back 
 - Collects `{ref_id: relative_doc_path}` for all **newly created** files only
 - Reads each `.yml` in graph directory (skips `rules.yml`)
 - Adds `docs: [path]` to nodes that don't already have the field
-- Uses `yaml.dump(sort_keys=False)` to preserve key ordering
+- Writes each `.yml` atomically via `write_yaml_atomic(yml, data, sort_keys=False, allow_unicode=True)` (the [atomic-io](../../../infrastructure/components/atomic-io/DOC.md) primitive — temp file + `fsync` + `os.replace`), so an interrupted writeback never leaves a truncated `services.yml`. `sort_keys=False` preserves key ordering; output bytes are identical to the prior direct `yaml.dump`.
 
 This ensures `_build_doc_ref_map()` in reindex links docs to nodes correctly, so `doctor` reports real coverage.
 

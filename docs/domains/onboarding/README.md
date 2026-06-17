@@ -75,6 +75,8 @@ Module `src/beadloom/onboarding/scanner/` (package; public surface re-exported f
 - `interactive_init(project_root)` -- interactive wizard with re-init detection, mode selection, review table, auto-reindex
 - `non_interactive_init(project_root, *, mode="bootstrap", force=False)` -- non-interactive init for CI/scripts; supports bootstrap/import/both modes, force-deletes existing .beadloom/ when force=True, auto-links docs, generates skeletons, runs reindex
 - `auto_link_docs(project_root, nodes)` -- fuzzy-match existing docs/ files to graph nodes by ref_id (exact path, stem, partial match); patches docs: field in services.yml via _patch_docs_field; returns count of linked docs
+
+> All scanner YAML writes (`services.yml` / `config.yml` from `bootstrap_project()`, `imported.yml` from doc classification, `rules.yml` from rule generation, and the `_patch_docs_field` writeback) go through the [atomic-io](../infrastructure/components/atomic-io/DOC.md) primitive (`write_yaml_atomic`: temp file + `fsync` + atomic `os.replace`), so an interrupted scaffold never truncates a source-of-truth `*.yml`. Integrity is guaranteed; the last write may be lost (never corrupted) across an OS/power crash — see the atomic-io durability boundary.
 - `refresh_claude_md(project_root, *, dry_run=False)` -> `list[str]` -- refresh auto-managed sections in `.claude/CLAUDE.md` between marker pairs; returns list of change descriptions; supports dry_run for preview without writing
 
 Module `src/beadloom/onboarding/scanner/project_scan.py`:
