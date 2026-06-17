@@ -218,6 +218,8 @@ def link(
     """
     import yaml
 
+    from beadloom.infrastructure.atomic_io import write_yaml_atomic
+
     project_root = project or Path.cwd()
     graph_dir = project_root / ".beadloom" / "_graph"
 
@@ -275,9 +277,8 @@ def link(
         node["links"] = links if links else None
         if not links and "links" in node:
             del node["links"]
-        target_file.write_text(
-            yaml.dump(target_data, default_flow_style=False, sort_keys=False),
-            encoding="utf-8",
+        write_yaml_atomic(
+            target_file, target_data, default_flow_style=False, sort_keys=False
         )
         click.echo(f"Removed link from {ref_id}.")
         return
@@ -292,8 +293,7 @@ def link(
 
     links.append({"url": url, "label": detected_label})
     node["links"] = links
-    target_file.write_text(
-        yaml.dump(target_data, default_flow_style=False, sort_keys=False),
-        encoding="utf-8",
+    write_yaml_atomic(
+        target_file, target_data, default_flow_style=False, sort_keys=False
     )
     click.echo(f"Added [{detected_label}] {url} to {ref_id}.")

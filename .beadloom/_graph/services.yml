@@ -393,6 +393,13 @@ nodes:
     docs:
       - docs/domains/doc-sync/components/doc-indexer/DOC.md
 
+  - ref_id: atomic-io
+    kind: component
+    summary: "Atomic YAML writes — temp-file + os.replace so a crash mid-write never corrupts the source-of-truth graph YAML"
+    source: src/beadloom/infrastructure/atomic_io.py
+    docs:
+      - docs/domains/infrastructure/components/atomic-io/DOC.md
+
   - ref_id: db
     kind: component
     summary: "SQLite database layer — connection management, schema creation, meta helpers"
@@ -618,6 +625,9 @@ edges:
     kind: part_of
   - src: doc-indexer
     dst: doc-sync
+    kind: part_of
+  - src: atomic-io
+    dst: infrastructure
     kind: part_of
   - src: db
     dst: infrastructure

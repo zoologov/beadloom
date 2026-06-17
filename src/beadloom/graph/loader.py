@@ -19,6 +19,7 @@ import yaml
 from beadloom.graph.contracts import contract_key
 from beadloom.graph.federation import FederationRefError, parse_ref
 from beadloom.graph.sdl import extract_surface
+from beadloom.infrastructure.atomic_io import write_yaml_atomic
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -194,10 +195,9 @@ def update_node_in_yaml(
             if source is not None:
                 node["source"] = source
 
-            # Write YAML back to disk.
-            yml_path.write_text(
-                yaml.dump(data, default_flow_style=False, allow_unicode=True),
-                encoding="utf-8",
+            # Write YAML back to disk (atomic — crash-safe; same bytes).
+            write_yaml_atomic(
+                yml_path, data, default_flow_style=False, allow_unicode=True
             )
 
             # Update SQLite.

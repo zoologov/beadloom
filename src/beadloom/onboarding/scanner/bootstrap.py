@@ -8,8 +8,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
-import yaml
-
+from beadloom.infrastructure.atomic_io import write_yaml_atomic
 from beadloom.onboarding.scanner.agents_md import (
     generate_agents_md,
     setup_mcp_auto,
@@ -233,13 +232,11 @@ def bootstrap_project(
         graph_data: dict[str, Any] = {"nodes": nodes}
         if edges:
             graph_data["edges"] = edges
-        (graph_dir / "services.yml").write_text(
-            yaml.dump(
-                graph_data,
-                default_flow_style=False,
-                allow_unicode=True,
-            ),
-            encoding="utf-8",
+        write_yaml_atomic(
+            graph_dir / "services.yml",
+            graph_data,
+            default_flow_style=False,
+            allow_unicode=True,
         )
 
     # Generate rules.yml (only if it doesn't already exist).
@@ -262,9 +259,11 @@ def bootstrap_project(
     }
     if not has_docs:
         config["docs_dir"] = None
-    (beadloom_dir / "config.yml").write_text(
-        yaml.dump(config, default_flow_style=False, allow_unicode=True),
-        encoding="utf-8",
+    write_yaml_atomic(
+        beadloom_dir / "config.yml",
+        config,
+        default_flow_style=False,
+        allow_unicode=True,
     )
 
     # Generate AGENTS.md.
