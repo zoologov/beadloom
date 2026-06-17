@@ -393,6 +393,20 @@ nodes:
     docs:
       - docs/domains/graph/components/graphql_breaking/DOC.md
 
+  - ref_id: amqp_body
+    kind: component
+    summary: "Strict AMQP message-body JSON-Schema model + native body-diff — names consumer-read fields the producer body breaks (absent / type-incompatible / required-narrowed / nested+array); additive changes benign"
+    source: src/beadloom/graph/amqp_body.py
+    docs:
+      - docs/domains/graph/components/amqp_body/DOC.md
+
+  - ref_id: asyncapi
+    kind: component
+    summary: "Source-only AsyncAPI ingestion adapter — extracts a message payload JSON-Schema (2.x/3.x) into the internal AMQP body model; honest degradation to None when absent"
+    source: src/beadloom/graph/asyncapi.py
+    docs:
+      - docs/domains/graph/components/asyncapi/DOC.md
+
   - ref_id: context-builder
     kind: component
     summary: "Context bundle builder — BFS subgraph traversal + bundle assembly for ctx/prime"
@@ -638,6 +652,12 @@ edges:
     dst: graph
     kind: part_of
   - src: graphql_breaking
+    dst: graph
+    kind: part_of
+  - src: amqp_body
+    dst: graph
+    kind: part_of
+  - src: asyncapi
     dst: graph
     kind: part_of
   - src: context-builder

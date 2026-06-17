@@ -17,7 +17,7 @@
 |-------|-------|-------|
 | S1 atomic YAML | .1–.4 | ready (.1 dev) |
 | S2 GraphQL Tier-A | .5–.8 | blocked → S1 |
-| S3 AMQP body | .9–.12 | blocked → S2 |
+| S3 AMQP body | .9–.12 | .9 dev DONE (amqp_body + asyncapi + contract.body body-diff verdict; ci rc0; 3 seeds green); .10–.12 next |
 | S4 viz (Cytoscape+ELK) | .13–.16 | blocked → S3 |
 | S5 cross-repo ctx | .17–.20 | blocked → S4 |
 | S6 sweep + unverified | .21–.24 | blocked → S5 |
