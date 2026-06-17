@@ -72,56 +72,56 @@
     **Expected:** `sync-update --all` should re-attest `reference` docs so a subsequent `sync-check`/`sync-update` reports them fresh (0 re-baselined on the second pass), matching symbol-pair behavior.
     **Workaround:** None needed for the Gate (warn-only, exit 0). Ignore the repeated count; confirm `beadloom ci` rc0 + the `TestSyncCheckNewPairs` test green as the real signal.
 
-122. [2026-06-04] [HIGH] No data-access layer + `open_db` without context-managers (connection leaks)
+122. ~~[2026-06-04] [HIGH] No data-access layer + `open_db` without context-managers (connection leaks)~~ **CLOSED (BDL-059 S2, #22)** — `infrastructure/repository.py` (typed graph-index reads; centralizes the 16× `SELECT ref_id, kind, summary FROM nodes`) + `infrastructure/db.py::connection()` context-manager; `tui/` now reads through the `application/graph_reads.py` facade (no raw SQLite in presentation). Leaks/ResourceWarnings addressed via the CM + S1 conftest yield/finally fixtures.
 
     **Severity:** high
     **Source:** REVIEW-2 §2 #1/#2 (verified at HEAD) · ROADMAP Technical-debt
     **Issue:** Raw `conn.execute("SELECT…")` is spread across **36 files** in all domains incl. `tui/data_providers.py` (presentation reads SQLite directly — a layer leak); the exact `SELECT ref_id, kind, summary FROM nodes` is hardcoded **16×**. `open_db` is called with **no `with`/`contextlib.closing` anywhere** → connection leaks on exceptions (SQLite write-lock risk) + ResourceWarnings in tests.
     **Expected:** Introduce `infrastructure/repository.py` (one place for queries); `tui` goes through the application layer only; wrap connections in a context-manager. Fixes both HIGHs at once. _(Note: the review's "53 open_db" figure is off — 27 in src / 232 total; the leak pattern is real.)_
 
-123. [2026-06-04] [HIGH] N+1 + non-indexable LIKE in `doc_sync/engine.py` `check_source_coverage`
+123. ~~[2026-06-04] [HIGH] N+1 + non-indexable LIKE in `doc_sync/engine.py` `check_source_coverage`~~ **CLOSED (BDL-059 S2, #22)** — `check_source_coverage` de-N+1'd: ~5N per-node/child queries + `LIKE '%…%'` replaced by 5 set-based prefetch queries + an indexable `json_each` match; golden parity (frozen oracle + AST guard).
 
     **Severity:** high
     **Source:** REVIEW-2 §2 #3 (verified, `engine.py:451-525`) · ROADMAP Technical-debt
     **Issue:** Nested per-node and per-child queries plus `LIKE '%…%'` (cannot use an index) → quadratic on a large graph.
     **Expected:** Prefetch with a single JOIN / `IN (...)`; consider a normalized annotations table.
 
-124. [2026-06-04] [MEDIUM] Cycle detection re-explores from every node (no global visited)
+124. ~~[2026-06-04] [MEDIUM] Cycle detection re-explores from every node (no global visited)~~ **CLOSED (BDL-059 S3, #23)** — cycle detection rewritten WHITE/GREY/BLACK with path-as-set O(1) membership (`graph/rules/cycles.py`); golden-parity test reproduces the pre-refactor output byte-identically.
 
     **Severity:** medium
     **Source:** REVIEW-2 §2 #4 (verified, `rule_engine.py:1141-1209`) · ROADMAP Technical-debt
     **Issue:** `evaluate_cycle_rules` runs DFS from each node with no global `visited`; `neighbor in path` is O(n) list membership; bounded only by `max_depth=10`. Exponential risk on a dense microservice graph. (A per-rule `seen_cycles` dedup exists, but no global visited.)
     **Expected:** Tarjan/Johnson SCC, or DFS with WHITE/GREY/BLACK + a shared visited set; `path` as a set.
 
-125. [2026-06-04] [MEDIUM] God-domain `graph/` should split out `federation` + `rules`
+125. ~~[2026-06-04] [MEDIUM] God-domain `graph/` should split out `federation` + `rules`~~ **CLOSED (BDL-059 S3, #23)** — `rule_engine.py` (2249)→`graph/rules/` package + `federation.py` (1000)→`graph/federation/` package, by cohesion (public import paths byte-stable). The `domain-size-limit` graph warning (was #119) was resolved by the owner-decided recalibration 200→280 (documented in `rules.yml`) — recalibration, NOT gaming (an in-domain split can't lower a domain's symbol count).
 
     **Severity:** medium
     **Source:** REVIEW-2 §2 #5 (verified) · extends #119 · ROADMAP Technical-debt
     **Issue:** `graph/` is 6439 lines (rule_engine 1743 + federation 1000 + import_resolver 929) and mixes several concerns; `application/` is 233 symbols. Both trip the `domain-size-limit` warning (graph 202, application 233 vs 200).
     **Expected:** Extract `federation` and `rules` into their own packages (clears the graph-202 warning of #119); reduce `application/`.
 
-126. [2026-06-04] [MEDIUM] God-functions carry business logic in the wrong layer
+126. ~~[2026-06-04] [MEDIUM] God-functions carry business logic in the wrong layer~~ **CLOSED (BDL-059 S4, #24)** — `cli.py:status` data-gathering moved to `application/status.py` (presentation/logic split); `cli.py` (3985)→`services/commands/` package; `scanner.py` (2770)→`onboarding/scanner/` package; `reindex.py` (1352)→`application/reindex/` package — the god-functions decomposed by responsibility.
 
     **Severity:** medium
     **Source:** REVIEW-2 §2 #6 (verified) · ROADMAP Technical-debt
     **Issue:** `cli.py:status` ~283 lines (business logic in the CLI layer); `scanner.bootstrap_project` ~260; `reindex.incremental_reindex` ~216; `scanner.interactive_init` ~203.
     **Expected:** Extract `cli.py:status` → `application/status.py`; decompose the scanner/reindex god-functions.
 
-127. ~~[2026-06-04] [LOW] `Any` concentration + exception swallowing in onboarding~~ **CLOSED (BDL-047)** — the `doc_generator.py` `except sqlite3.OperationalError: pass` swallows are gone (the handlers now bind `as exc` and surface/raise the error instead of silently passing). **Remaining (out of this epic's scope):** `infrastructure/git_activity.py:251` still has an `except ValueError: pass` on date parsing, and the broader `Any` concentration in onboarding is the larger type-safety item — both deferred to a dedicated type-hardening pass.
+127. ~~[2026-06-04] [LOW] `Any` concentration + exception swallowing in onboarding~~ **CLOSED (BDL-047)** — the `doc_generator.py` `except sqlite3.OperationalError: pass` swallows are gone (the handlers now bind `as exc` and surface/raise the error instead of silently passing). **Remaining (out of this epic's scope):** `infrastructure/git_activity.py:251` still has an `except ValueError: pass` on date parsing, and the broader `Any` concentration in onboarding is the larger type-safety item — both now **CLOSED (BDL-059 S5, #25)** — `git_activity.py` broad except narrowed to specific types (subprocess/`OSError`/`TimeoutExpired`); onboarding scanner dicts → `TypedDict` (new `onboarding/scanner/types.py`), a net `Any` reduction, mypy --strict clean.
 
     **Severity:** low
     **Source:** REVIEW-2 §2 #7/#8 (verified) · ROADMAP Technical-debt
     **Issue:** 172 `Any` total, concentrated in onboarding (`doc_generator.py` 49, `scanner.py` 25, `config_reader.py` 19) — disables type-safety in the most error-prone layer. 7 spots of `except…: pass` (incl. `doc_generator.py:274,311` `except sqlite3.OperationalError: pass`) hide real DB errors.
     **Expected:** TypedDict/dataclass for parsed structures; narrow the exceptions and/or log at debug.
 
-128. [2026-06-04] [MEDIUM] L2 context cache not wired into `build_context`
+128. ~~[2026-06-04] [MEDIUM] L2 context cache not wired into `build_context`~~ **CLOSED (BDL-059 S5, #25)** — `build_context` now routes through the `SqliteCache` (transparent ETag cache; identical bundle on hit vs miss, proven by golden + HIT-never-recomputes tests).
 
     **Severity:** medium
     **Source:** REVIEW §4.4 (verified `builder.py`) · ROADMAP Technical-debt
     **Issue:** `build_context` issues `SELECT * FROM code_symbols` per bundle and never calls the existing L2 `bundle_cache` (`cache.py`) → latency risk on 50K-symbol monorepos.
     **Expected:** Wire `build_context` through the L2 cache; avoid the per-bundle full symbol scan.
 
-129. [2026-06-04] [MEDIUM] Test-suite hygiene gaps
+129. ~~[2026-06-04] [MEDIUM] Test-suite hygiene gaps~~ **CLOSED (BDL-059 S1, #21)** — `pytest-randomly` added (immediately exposed + fixed a latent live-DB order-dependence via a session-scoped `live_repo_reindexed` conftest fixture); conftest yield/finally db fixtures (ResourceWarnings); a grammar-guard test that FAILS-not-skips when tree-sitter grammars are absent (gated `BEADLOOM_REQUIRE_LANGUAGE_GRAMMARS=1` in CI); tests decoupled from production internals (the private-attribute coupling reduced ahead of the S2–S5 refactors).
 
     **Severity:** medium
     **Source:** REVIEW-2 §3 + REVIEW §4.3 (verified) · ROADMAP Technical-debt
