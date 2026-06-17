@@ -10,7 +10,10 @@
     "docs:preview": "vitepress preview ."
   },
   "dependencies": {
+    "cytoscape": "3.30.2",
+    "cytoscape-elk": "2.2.0",
     "echarts": "5.5.1",
+    "elkjs": "0.9.3",
     "svg-pan-zoom": "3.6.2",
     "vue-echarts": "7.0.3"
   },

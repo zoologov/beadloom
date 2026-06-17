@@ -24,6 +24,7 @@ import CategoryChart from "./components/CategoryChart.vue";
 import TrendCharts from "./components/TrendCharts.vue";
 import AiTechwriterActivity from "./components/AiTechwriterActivity.vue";
 import Recommendations from "./components/Recommendations.vue";
+import LandscapeMap from "./components/LandscapeMap.vue";
 import "./custom.css";
 
 /** @type {import('vitepress').Theme} */
@@ -54,5 +55,9 @@ export default {
     // spend (tokens fact, $ labeled estimate). SSR-safe under <ClientOnly>.
     app.component("AiTechwriterActivity", AiTechwriterActivity);
     app.component("Recommendations", Recommendations);
+    // Interactive landscape (BDL-060 S4, G2): Cytoscape + ELK map mounted by the
+    // generated `landscape.md`. Reads `landscape.data.json`; SSR-safe under
+    // <ClientOnly> (the static summary in the page is the JS-off fallback).
+    app.component("LandscapeMap", LandscapeMap);
   },
 };

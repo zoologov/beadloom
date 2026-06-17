@@ -43,6 +43,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from beadloom.application.landscape_view import (
+    build_landscape_view_data,
+    render_landscape_view_md,
+    serialize_landscape_view,
+)
 from beadloom.application.site_about import render_about
 from beadloom.application.site_dashboard import (
     build_dashboard_data,
@@ -460,12 +465,29 @@ def generate_site(
     )
     _write(out_dir / "dashboard.md", render_dashboard_md(dashboard_data), written)
 
-    # Showcase B — the 🌟 cross-repo landscape map (Mermaid, generated from the
-    # federate hub output when given, else a degenerate single-repo map).
-    landscape_data = build_landscape_data(conn, federated=federated)
+    # Showcase B — the 🌟 cross-service landscape map. The PRIMARY view is now
+    # interactive (Cytoscape + ELK, BDL-060 S4 G2): a renderer-agnostic
+    # `landscape.data.json` (nodes/edges/contracts + the GraphQL typed fields and
+    # AMQP body surface) emitted under `public/` (so VitePress copies it to the
+    # dist root for the runtime `withBase("/landscape.data.json")` fetch), and
+    # `landscape.md` mounts the client-side <LandscapeMap>. The original Mermaid
+    # diagram stays as a static fallback at `landscape-diagram.md` (no dead link;
+    # the federated map still flows through it when `--federated` is given).
     landscape_pages = existing_page_urls(conn)
+    view_data = build_landscape_view_data(conn, pages=landscape_pages)
+    _write(
+        out_dir / "public" / "landscape.data.json",
+        serialize_landscape_view(view_data),
+        written,
+    )
     _write(
         out_dir / "landscape.md",
+        render_landscape_view_md(view_data),
+        written,
+    )
+    landscape_data = build_landscape_data(conn, federated=federated)
+    _write(
+        out_dir / "landscape-diagram.md",
         render_landscape_md(landscape_data, pages=landscape_pages),
         written,
     )
