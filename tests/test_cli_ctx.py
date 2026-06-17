@@ -142,6 +142,69 @@ class TestCtxCommand:
         assert "### Specification (spec)" not in result.output
 
 
+class TestCtxCacheTransparency:
+    """`beadloom ctx` now routes through SqliteCache (S5 .22).
+
+    The cache must be invisible at the CLI boundary: the same invocation
+    must yield a semantically-identical bundle whether freshly built (first
+    call, cache miss) or served from the persisted L2 cache (second call,
+    hit). Note the *bundle* is identical; the L2 hit path round-trips through
+    canonical (sort_keys) JSON, so the pretty-printed CLI key ORDER may differ
+    while the parsed object and its etag are stable — that is the transparency
+    contract being asserted.
+    """
+
+    def test_repeated_json_invocations_yield_equal_bundles(
+        self, tmp_path: Path
+    ) -> None:
+        from beadloom.context_oracle.cache import compute_etag
+
+        project = _setup_project(tmp_path)
+        runner = CliRunner()
+
+        first = runner.invoke(
+            main, ["ctx", "PROJ-1", "--json", "--project", str(project)]
+        )
+        assert first.exit_code == 0, first.output
+
+        # Second call hits the L2 cache populated by the first.
+        second = runner.invoke(
+            main, ["ctx", "PROJ-1", "--json", "--project", str(project)]
+        )
+        assert second.exit_code == 0, second.output
+
+        first_bundle = json.loads(first.output)
+        second_bundle = json.loads(second.output)
+        # Parsed bundles are equal (transparent cache).
+        assert second_bundle == first_bundle
+        # Etag (canonical serialization) is identical → byte-stable payload.
+        assert compute_etag(second_bundle) == compute_etag(first_bundle)
+
+    def test_cache_hit_persisted_in_bundle_cache_table(
+        self, tmp_path: Path
+    ) -> None:
+        """After a ctx call the L2 bundle_cache table holds the bundle."""
+        from beadloom.context_oracle.cache import bundle_cache_key
+        from beadloom.infrastructure.db import open_db
+
+        project = _setup_project(tmp_path)
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["ctx", "PROJ-1", "--json", "--project", str(project)]
+        )
+        assert result.exit_code == 0, result.output
+
+        conn = open_db(project / ".beadloom" / "beadloom.db")
+        try:
+            row = conn.execute(
+                "SELECT cache_key FROM bundle_cache WHERE cache_key = ?",
+                (bundle_cache_key(["PROJ-1"], 2, 20, 10),),
+            ).fetchone()
+        finally:
+            conn.close()
+        assert row is not None
+
+
 class TestFormatMarkdownUnit:
     """Unit tests for _format_markdown chunk separator format."""
 

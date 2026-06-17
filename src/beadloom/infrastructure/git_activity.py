@@ -194,7 +194,11 @@ def analyze_git_activity(
             text=True,
             timeout=30,
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.SubprocessError):
+        # OSError covers git-missing (FileNotFoundError), permission denied,
+        # and an invalid cwd (NotADirectoryError); SubprocessError covers
+        # TimeoutExpired and other subprocess failures. Git being unavailable
+        # for any of these reasons degrades gracefully to "no activity".
         return {}
 
     if result.returncode != 0:

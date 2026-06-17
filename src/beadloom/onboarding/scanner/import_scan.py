@@ -5,12 +5,14 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from beadloom.onboarding.scanner.constants import _sanitize_ref_id
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from beadloom.onboarding.scanner.types import ClusterEntry
 
 # Maximum number of import-based edges to avoid overwhelming the graph.
 _MAX_IMPORT_EDGES = 50
@@ -18,7 +20,7 @@ _MAX_IMPORT_EDGES = 50
 
 def _quick_import_scan(
     project_root: Path,
-    clusters: dict[str, dict[str, Any]],
+    clusters: dict[str, ClusterEntry],
     seen_ref_ids: set[str],
 ) -> list[dict[str, str]]:
     """Quick import scan to infer depends_on edges between clusters.

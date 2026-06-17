@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import yaml
 
@@ -63,6 +63,40 @@ def _make_src_tree(tmp_path: Path) -> Path:
 
 
 class TestScanProject:
+    def test_result_has_typed_dict_shape(self, tmp_path: Path) -> None:
+        """scan_project returns exactly the ScanResult TypedDict keys/types."""
+        (tmp_path / "pyproject.toml").write_text("[project]\nname='test'\n")
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "main.py").write_text("print('hi')")
+        result = scan_project(tmp_path)
+        assert set(result.keys()) == {
+            "manifests",
+            "source_dirs",
+            "file_count",
+            "languages",
+        }
+        assert isinstance(result["manifests"], list)
+        assert isinstance(result["source_dirs"], list)
+        assert isinstance(result["file_count"], int)
+        assert isinstance(result["languages"], list)
+
+    def test_cluster_entry_typed_dict_shape(self, tmp_path: Path) -> None:
+        """_cluster_with_children entries match the ClusterEntry TypedDict."""
+        from beadloom.onboarding.scanner import _cluster_with_children
+
+        src = tmp_path / "src"
+        pkg = src / "auth"
+        pkg.mkdir(parents=True)
+        (pkg / "login.py").write_text("pass")
+        clusters = _cluster_with_children(tmp_path, source_dirs=["src"])
+        assert clusters
+        entry = clusters["auth"]
+        assert set(entry.keys()) == {"files", "children", "source_dir"}
+        assert isinstance(entry["files"], list)
+        assert isinstance(entry["children"], dict)
+        assert entry["source_dir"] == "src"
+
     def test_detects_pyproject(self, tmp_path: Path) -> None:
         (tmp_path / "pyproject.toml").write_text("[project]\nname='test'\n")
         (tmp_path / "src").mkdir()
@@ -2756,3 +2790,106 @@ class TestDetectRuleType:
         assert "(cardinality)" in content
         assert "(forbid_import)" in content
         assert "(forbid_edge)" in content
+
+
+# ---------------------------------------------------------------------------
+# Scanner TypedDict shape contracts (S5 .22 dict -> TypedDict)
+# ---------------------------------------------------------------------------
+
+
+class TestScannerTypedDictShapes:
+    """The TypedDict migration must preserve the runtime dict shape exactly.
+
+    ``ScanResult`` / ``ClusterEntry`` are TypedDicts whose only job is to
+    sharpen static typing; the produced mappings must still carry exactly the
+    declared keys with the declared value types. These tests assert the runtime
+    contract so a future field rename in the TypedDict (without a producer
+    change, or vice-versa) is caught.
+    """
+
+    _SCAN_KEYS: ClassVar[set[str]] = {
+        "manifests",
+        "source_dirs",
+        "file_count",
+        "languages",
+    }
+    _CLUSTER_KEYS: ClassVar[set[str]] = {"files", "children", "source_dir"}
+
+    def test_scanresult_keys_match_typeddict_annotations(self) -> None:
+        """ScanResult producer keys == declared __annotations__ keys."""
+        from beadloom.onboarding.scanner.types import ScanResult
+
+        assert set(ScanResult.__annotations__) == self._SCAN_KEYS
+
+    def test_clusterentry_keys_match_typeddict_annotations(self) -> None:
+        from beadloom.onboarding.scanner.types import ClusterEntry
+
+        assert set(ClusterEntry.__annotations__) == self._CLUSTER_KEYS
+
+    def test_representative_scan_populates_all_scanresult_fields(
+        self, tmp_path: Path
+    ) -> None:
+        """A representative multi-language project fills every ScanResult field."""
+        (tmp_path / "pyproject.toml").write_text("[project]\nname='rep'\n")
+        (tmp_path / "package.json").write_text('{"name": "rep"}')
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "main.py").write_text("print('hi')\n")
+        web = tmp_path / "frontend"
+        web.mkdir()
+        (web / "app.ts").write_text("export const x = 1\n")
+
+        result = scan_project(tmp_path)
+
+        # Exact key set (no missing, no extra).
+        assert set(result.keys()) == self._SCAN_KEYS
+        # Declared value types, all non-empty for this representative tree.
+        assert isinstance(result["manifests"], list)
+        assert all(isinstance(m, str) for m in result["manifests"])
+        assert {"pyproject.toml", "package.json"} <= set(result["manifests"])
+        assert isinstance(result["source_dirs"], list)
+        assert all(isinstance(d, str) for d in result["source_dirs"])
+        assert "src" in result["source_dirs"]
+        assert isinstance(result["file_count"], int)
+        assert result["file_count"] >= 2
+        assert isinstance(result["languages"], list)
+        assert all(isinstance(lang, str) for lang in result["languages"])
+
+    def test_clusterentry_children_map_value_types(self, tmp_path: Path) -> None:
+        """ClusterEntry.children is dict[str, list[str]] at runtime."""
+        from beadloom.onboarding.scanner import _cluster_with_children
+
+        src = tmp_path / "src"
+        pkg = src / "auth"
+        pkg.mkdir(parents=True)
+        (pkg / "login.py").write_text("pass\n")
+        child = pkg / "models"
+        child.mkdir()
+        (child / "user.py").write_text("class User: pass\n")
+
+        clusters = _cluster_with_children(tmp_path, source_dirs=["src"])
+        entry = clusters["auth"]
+        assert set(entry.keys()) == self._CLUSTER_KEYS
+        assert isinstance(entry["files"], list)
+        assert all(isinstance(f, str) for f in entry["files"])
+        assert isinstance(entry["children"], dict)
+        for name, files in entry["children"].items():
+            assert isinstance(name, str)
+            assert isinstance(files, list)
+            assert all(isinstance(f, str) for f in files)
+        assert isinstance(entry["source_dir"], str)
+
+    def test_live_repo_scan_has_typeddict_shape(
+        self, live_repo_reindexed: Path
+    ) -> None:
+        """A real-repo scan (read-only) still yields the exact ScanResult shape.
+
+        scan_project only reads the filesystem, so this does not mutate the
+        shared live DB; the fixture is reused per the bead's instruction.
+        """
+        result = scan_project(live_repo_reindexed)
+        assert set(result.keys()) == self._SCAN_KEYS
+        assert isinstance(result["file_count"], int)
+        assert result["file_count"] > 0
+        assert "src" in result["source_dirs"]
+        assert "pyproject.toml" in result["manifests"]

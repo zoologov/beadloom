@@ -175,7 +175,11 @@ def ctx(
     project: Path | None,
 ) -> None:
     """Get context bundle for one or more ref_ids."""
-    from beadloom.context_oracle.builder import build_context
+    from beadloom.context_oracle.cache import (
+        SqliteCache,
+        build_context_cached,
+        compute_bundle_mtimes,
+    )
     from beadloom.infrastructure.db import open_db
 
     project_root = project or Path.cwd()
@@ -186,13 +190,17 @@ def ctx(
         sys.exit(1)
 
     conn = open_db(db_path)
+    graph_mtime, docs_mtime = compute_bundle_mtimes(project_root)
     try:
-        bundle = build_context(
+        bundle = build_context_cached(
             conn,
+            SqliteCache(conn),
             list(ref_ids),
             depth=depth,
             max_nodes=max_nodes,
             max_chunks=max_chunks,
+            graph_mtime=graph_mtime,
+            docs_mtime=docs_mtime,
         )
     except LookupError as exc:
         click.echo(f"Error: {exc}", err=True)

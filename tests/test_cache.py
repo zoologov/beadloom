@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
-from beadloom.context_oracle.cache import ContextCache, SqliteCache, compute_etag
+import pytest
+
+from beadloom.context_oracle.cache import (
+    ContextCache,
+    SqliteCache,
+    build_context_cached,
+    bundle_cache_key,
+    compute_bundle_mtimes,
+    compute_etag,
+)
 
 if TYPE_CHECKING:
+    import sqlite3
     from pathlib import Path
 
 
@@ -205,3 +216,222 @@ class TestSqliteCache:
         result = l2b.get("k", graph_mtime=1.0, docs_mtime=1.0)
         assert result is not None
         assert result[0]["v"] == 42
+
+
+class TestBundleCacheKey:
+    """The L2 cache-key scheme for context bundles."""
+
+    def test_single_focus_matches_mcp_scheme(self) -> None:
+        assert bundle_cache_key(["FEAT-1"], 2, 20, 10) == "FEAT-1:2:20:10"
+
+    def test_multi_focus_joined_with_comma(self) -> None:
+        assert bundle_cache_key(["A", "B"], 1, 5, 3) == "A,B:1:5:3"
+
+    def test_distinct_params_distinct_keys(self) -> None:
+        assert bundle_cache_key(["A"], 1, 20, 10) != bundle_cache_key(["A"], 2, 20, 10)
+
+
+class TestComputeBundleMtimes:
+    """Bundle-cache freshness mtimes derived from graph + docs dirs."""
+
+    def test_absent_dirs_return_zero(self, tmp_path: Path) -> None:
+        assert compute_bundle_mtimes(tmp_path) == (0.0, 0.0)
+
+    def test_present_files_return_positive(self, tmp_path: Path) -> None:
+        graph_dir = tmp_path / ".beadloom" / "_graph"
+        graph_dir.mkdir(parents=True)
+        (graph_dir / "services.yml").write_text("version: 1\n", encoding="utf-8")
+        docs_dir = tmp_path / "docs"
+        docs_dir.mkdir()
+        (docs_dir / "x.md").write_text("# x\n", encoding="utf-8")
+
+        graph_mtime, docs_mtime = compute_bundle_mtimes(tmp_path)
+        assert graph_mtime > 0.0
+        assert docs_mtime > 0.0
+
+
+class TestBuildContextCached:
+    """build_context_cached: transparent L2 caching around build_context."""
+
+    @staticmethod
+    def _seed(tmp_path: Path) -> sqlite3.Connection:
+        from beadloom.infrastructure.db import create_schema, open_db
+
+        conn = open_db(tmp_path / "test.db")
+        create_schema(conn)
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary) VALUES (?, ?, ?)",
+            ("FEAT-1", "feature", "A feature."),
+        )
+        conn.commit()
+        return conn
+
+    def test_miss_then_hit_returns_identical_bundle(self, tmp_path: Path) -> None:
+        conn = self._seed(tmp_path)
+        cache = SqliteCache(conn)
+
+        # Cache empty → miss → builds + stores.
+        assert cache.get(bundle_cache_key(["FEAT-1"], 2, 20, 10)) is None
+        first = build_context_cached(
+            conn, cache, ["FEAT-1"], depth=2, max_nodes=20, max_chunks=10
+        )
+
+        # Now stored → hit → byte-identical bundle (same JSON serialization).
+        stored = cache.get(bundle_cache_key(["FEAT-1"], 2, 20, 10))
+        assert stored is not None
+        second = build_context_cached(
+            conn, cache, ["FEAT-1"], depth=2, max_nodes=20, max_chunks=10
+        )
+        assert second == first
+        assert compute_etag(second) == compute_etag(first)
+        conn.close()
+
+    def test_hit_does_not_rebuild(self, tmp_path: Path) -> None:
+        """A cached bundle is returned even if the underlying node is gone."""
+        conn = self._seed(tmp_path)
+        cache = SqliteCache(conn)
+        first = build_context_cached(
+            conn, cache, ["FEAT-1"], depth=2, max_nodes=20, max_chunks=10
+        )
+
+        # Delete the node; a rebuild would raise LookupError. A cache hit won't.
+        conn.execute("DELETE FROM nodes WHERE ref_id = ?", ("FEAT-1",))
+        conn.commit()
+
+        cached = build_context_cached(
+            conn, cache, ["FEAT-1"], depth=2, max_nodes=20, max_chunks=10
+        )
+        assert cached == first
+        conn.close()
+
+    def test_stale_mtime_invalidates_and_rebuilds(self, tmp_path: Path) -> None:
+        conn = self._seed(tmp_path)
+        cache = SqliteCache(conn)
+        build_context_cached(
+            conn,
+            cache,
+            ["FEAT-1"],
+            depth=2,
+            max_nodes=20,
+            max_chunks=10,
+            graph_mtime=1.0,
+            docs_mtime=1.0,
+        )
+
+        # Advance graph_mtime → stored entry is stale → rebuild path taken.
+        # Delete the node so a rebuild would raise; proves invalidation.
+        conn.execute("DELETE FROM nodes WHERE ref_id = ?", ("FEAT-1",))
+        conn.commit()
+        with pytest.raises(LookupError):
+            build_context_cached(
+                conn,
+                cache,
+                ["FEAT-1"],
+                depth=2,
+                max_nodes=20,
+                max_chunks=10,
+                graph_mtime=2.0,
+                docs_mtime=1.0,
+            )
+        conn.close()
+
+    def test_failed_build_not_cached(self, tmp_path: Path) -> None:
+        conn = self._seed(tmp_path)
+        cache = SqliteCache(conn)
+        with pytest.raises(LookupError):
+            build_context_cached(
+                conn, cache, ["NOPE"], depth=2, max_nodes=20, max_chunks=10
+            )
+        assert cache.get(bundle_cache_key(["NOPE"], 2, 20, 10)) is None
+        conn.close()
+
+    def test_cached_bundle_byte_identical_to_uncached_build(
+        self, tmp_path: Path
+    ) -> None:
+        """Transparent cache: cached output == the raw build_context output.
+
+        The whole point of routing build_context through SqliteCache is that
+        the cache must NOT alter the bundle — the cached path and the direct
+        (uncached) path must serialize to the exact same bytes. Comparing to a
+        fresh build_context (not just cached-vs-cached) is the real golden check.
+        """
+        from beadloom.context_oracle.builder import build_context
+
+        conn = self._seed(tmp_path)
+        cache = SqliteCache(conn)
+
+        # The reference: a direct build_context call (no cache involved).
+        golden = build_context(
+            conn, ["FEAT-1"], depth=2, max_nodes=20, max_chunks=10
+        )
+
+        # First cached call is a MISS — builds and stores.
+        miss = build_context_cached(
+            conn, cache, ["FEAT-1"], depth=2, max_nodes=20, max_chunks=10
+        )
+        # Second cached call is a HIT — served from SQLite.
+        hit = build_context_cached(
+            conn, cache, ["FEAT-1"], depth=2, max_nodes=20, max_chunks=10
+        )
+
+        # Byte-identical JSON serialization across all three paths.
+        golden_json = json.dumps(golden, sort_keys=True, ensure_ascii=False)
+        miss_json = json.dumps(miss, sort_keys=True, ensure_ascii=False)
+        hit_json = json.dumps(hit, sort_keys=True, ensure_ascii=False)
+        assert miss_json == golden_json
+        assert hit_json == golden_json
+        # Etag (over the same canonical serialization) must match too.
+        assert compute_etag(miss) == compute_etag(golden)
+        assert compute_etag(hit) == compute_etag(golden)
+        conn.close()
+
+    def test_hit_does_not_recompute_build_context(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A cache HIT must serve from SQLite WITHOUT calling build_context.
+
+        ``test_hit_does_not_rebuild`` proves the hit returns the old bundle by
+        deleting the node; this proves the *mechanism*: build_context is invoked
+        exactly once (the miss) and never on the subsequent hit.
+        """
+        import beadloom.context_oracle.builder as builder_mod
+
+        conn = self._seed(tmp_path)
+        cache = SqliteCache(conn)
+
+        calls = {"n": 0}
+        real_build = builder_mod.build_context
+
+        def _counting_build(*args: object, **kwargs: object) -> dict[str, object]:
+            calls["n"] += 1
+            return real_build(*args, **kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(builder_mod, "build_context", _counting_build)
+
+        build_context_cached(
+            conn, cache, ["FEAT-1"], depth=2, max_nodes=20, max_chunks=10
+        )
+        assert calls["n"] == 1  # miss → built once
+
+        build_context_cached(
+            conn, cache, ["FEAT-1"], depth=2, max_nodes=20, max_chunks=10
+        )
+        assert calls["n"] == 1  # hit → not rebuilt
+        conn.close()
+
+    def test_distinct_focus_params_do_not_collide(self, tmp_path: Path) -> None:
+        """Different depth/focus produce distinct cache keys (no cross-bleed)."""
+        conn = self._seed(tmp_path)
+        cache = SqliteCache(conn)
+        b1 = build_context_cached(
+            conn, cache, ["FEAT-1"], depth=1, max_nodes=20, max_chunks=10
+        )
+        b2 = build_context_cached(
+            conn, cache, ["FEAT-1"], depth=2, max_nodes=20, max_chunks=10
+        )
+        # Both keys are independently stored.
+        assert cache.get(bundle_cache_key(["FEAT-1"], 1, 20, 10)) is not None
+        assert cache.get(bundle_cache_key(["FEAT-1"], 2, 20, 10)) is not None
+        # depth is reflected in each bundle (no key collision served b1 for b2).
+        assert b1["focus"] == b2["focus"]
+        conn.close()

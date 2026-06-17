@@ -27,7 +27,12 @@ from beadloom.application.active_table import (
 from beadloom.application.gate import run_ci_gate
 from beadloom.application.reindex import incremental_reindex
 from beadloom.context_oracle.builder import bfs_subgraph, build_context
-from beadloom.context_oracle.cache import ContextCache, SqliteCache, compute_etag
+from beadloom.context_oracle.cache import (
+    ContextCache,
+    SqliteCache,
+    compute_bundle_mtimes,
+    compute_etag,
+)
 from beadloom.doc_sync.engine import check_sync, mark_synced_by_ref
 from beadloom.graph.diff import compute_diff
 from beadloom.graph.linter import LintResult, lint
@@ -50,27 +55,13 @@ __all__ = [
 # --- Mtime helpers for cache invalidation ---
 
 
-def _compute_dir_mtime(directory: Path) -> float:
-    """Return the max mtime of all files under *directory*."""
-    max_mtime = 0.0
-    if not directory.exists():
-        return max_mtime
-    for f in directory.rglob("*"):
-        if f.is_file():
-            try:
-                mt = f.stat().st_mtime
-                if mt > max_mtime:
-                    max_mtime = mt
-            except OSError:
-                continue
-    return max_mtime
-
-
 def _compute_mtimes(project_root: Path) -> tuple[float, float]:
-    """Compute (graph_mtime, docs_mtime) for a project."""
-    graph_dir = project_root / ".beadloom" / "_graph"
-    docs_dir = project_root / "docs"
-    return _compute_dir_mtime(graph_dir), _compute_dir_mtime(docs_dir)
+    """Compute (graph_mtime, docs_mtime) for a project.
+
+    Delegates to the context-oracle domain helper so the MCP server and the
+    CLI share one definition of bundle-cache freshness.
+    """
+    return compute_bundle_mtimes(project_root)
 
 
 # --- Auto-reindex ---
