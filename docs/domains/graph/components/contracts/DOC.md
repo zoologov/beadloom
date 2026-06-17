@@ -18,8 +18,13 @@ derivation, the `ContractVerdict` enum, and `reconcile_contracts` (which
 
 - `reconcile_contracts(edges)` — group AMQP + GraphQL contract-bearing edges
   into first-class `Contract`s by key, attaching the producer `exposed` surface
-  and consumer `references`.
-- `classify(contract)` — derive the contract-level `ContractVerdict`.
+  and consumer `references` (GraphQL), the typed `exposed_fields` /
+  `referenced_fields` (GraphQL Tier-A, BDL-060 S2), and the `exposed_body` /
+  `referenced_body` JSON-Schema (AMQP, BDL-060 S3).
+- `classify(contract)` — derive the contract-level `ContractVerdict`. The
+  `BREAKING` verdict is computed natively from depth on both sides: the typed
+  GraphQL surface (`graphql_breaking`) or the AMQP body JSON-Schema (`amqp_body`,
+  via `Contract.body_breaking_fields`), else the BDL-038 name-presence check.
 - `contract_key(payload)` — the protocol-prefixed, language-neutral key
   (`amqp:<exchange>/<routing>:<message_type>`, `graphql:<schema>`).
 - `cross_landscape_keys(edges)` / `edge_group_key(...)` — grouping helpers for

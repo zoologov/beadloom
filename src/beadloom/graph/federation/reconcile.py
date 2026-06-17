@@ -17,6 +17,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from beadloom.graph.amqp_body import serialize_body
 from beadloom.graph.contracts import (
     cross_landscape_keys,
     edge_group_key,
@@ -285,9 +286,11 @@ def _normalize_contract_surface(contract: dict[str, object]) -> dict[str, object
     mirror — breaking the byte-identical determinism invariant that the
     reconciled ``contracts[]`` section already upholds. Sort + dedupe those
     lists; likewise canonicalize the TYPED ``fields`` block (BDL-060 S2): sort
-    fields by name and each field's args by name. Leave every other field (and
-    AMQP contracts, which carry none of these) untouched. Shallow-copies so the
-    input edge/contract dict is never mutated.
+    fields by name and each field's args by name. The AMQP ``body`` JSON-Schema
+    (BDL-060 S3) is canonicalized the same way (properties + ``required`` sorted,
+    recursively, via :func:`beadloom.graph.amqp_body.serialize_body`). Leave every
+    other field untouched. Shallow-copies so the input edge/contract dict is never
+    mutated.
     """
     normalized = dict(contract)
     for key in ("exposed", "references"):
@@ -297,6 +300,9 @@ def _normalize_contract_surface(contract: dict[str, object]) -> dict[str, object
     fields = normalized.get("fields")
     if isinstance(fields, list):
         normalized["fields"] = _normalize_typed_fields(fields)
+    body = normalized.get("body")
+    if isinstance(body, dict) and body:
+        normalized["body"] = serialize_body(body)
     return normalized
 
 

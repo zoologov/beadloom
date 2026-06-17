@@ -23,6 +23,7 @@ from __future__ import annotations
 import enum
 from dataclasses import dataclass, field
 
+from beadloom.graph.amqp_body import breaking_body_descriptors, serialize_body
 from beadloom.graph.graphql_breaking import breaking_field_descriptors
 
 _AMQP = "amqp"
@@ -114,6 +115,14 @@ class Contract:
     # the verdict then degrades to the presence-based ``missing_references`` check.
     exposed_fields: dict[str, dict[str, object]] = field(default_factory=dict)
     referenced_fields: dict[str, dict[str, object]] = field(default_factory=dict)
+    # AMQP message-body JSON-Schema (BDL-060 S3, G1b). ``exposed_body`` is the
+    # producer's declared body schema; ``referenced_body`` is the consumer's read
+    # body. Each is a minimal JSON-Schema (type/properties/required/enum/nested) —
+    # the serialized shape of ``amqp_body.BodySchema.to_payload()``. Empty when no
+    # ``body`` was declared (honest name-level fallback) or for GraphQL — the
+    # verdict then degrades to the presence-based both-sides check.
+    exposed_body: dict[str, object] = field(default_factory=dict)
+    referenced_body: dict[str, object] = field(default_factory=dict)
 
     @property
     def producers(self) -> list[ContractEndpoint]:
@@ -139,6 +148,36 @@ class Contract:
         )
 
     @property
+    def _has_typed_body(self) -> bool:
+        """True when BOTH sides carry an AMQP body JSON-Schema (BDL-060 S3).
+
+        The body-diff verdict may only reason about body fields/types when both
+        the producer and the consumer declared a ``body``. Absent that depth, the
+        verdict honestly degrades to the both-sides name-presence check (DATA-
+        STRICTNESS — a verdict only as strong as the data behind it).
+        """
+        return (
+            self.protocol == _AMQP
+            and bool(self.exposed_body)
+            and bool(self.referenced_body)
+        )
+
+    @property
+    def body_breaking_fields(self) -> list[str]:
+        """Body break paths: consumer-read fields the producer body breaks (S3).
+
+        When both sides carry a body schema, names every consumer-read field path
+        that is absent, type-incompatible, required-but-now-optional, or nested/
+        array-broken in the producer body (``field`` / ``parent.child`` /
+        ``field[]`` / ``field[].child``). Empty when not both-sided (use the
+        presence check), for GraphQL, or when every read field is satisfied
+        (additive producer changes benign). Sorted + deduped.
+        """
+        if not self._has_typed_body:
+            return []
+        return breaking_body_descriptors(self.exposed_body, self.referenced_body)
+
+    @property
     def breaking_fields(self) -> list[str]:
         """Typed break descriptors: field/arg refs the producer breaks (S2, G1a).
 
@@ -157,12 +196,17 @@ class Contract:
         """Consumer-referenced surface the producer breaks (G5 / S2 G1a).
 
         The ``BREAKING`` signal: a non-empty result means a consumer relies on a
-        field/arg the producer no longer satisfies. When both sides are typed
-        (BDL-060 S2) this is the typed analysis (absence + type-narrowing +
-        nullability + arg breaks, naming the offending field/arg); otherwise it
-        degrades to the name-presence check (BDL-038). Sorted + deduped. Always
-        empty for AMQP (no GraphQL surface).
+        field/arg the producer no longer satisfies. For GraphQL, when both sides
+        are typed (BDL-060 S2) this is the typed analysis (absence + type-
+        narrowing + nullability + arg breaks); otherwise it degrades to the
+        name-presence check (BDL-038). For AMQP, when both sides carry a ``body``
+        JSON-Schema (BDL-060 S3) this is the body-diff (absence + type +
+        required-narrowing + nested/array breaks, naming the field path);
+        otherwise empty (name-level AMQP has no field surface to break). Sorted +
+        deduped.
         """
+        if self.protocol == _AMQP:
+            return self.body_breaking_fields
         if self.protocol != _GRAPHQL:
             return []
         if self._has_typed_surface:
@@ -198,6 +242,14 @@ class Contract:
             report["exposed"] = list(self.exposed)
             report["references"] = list(self.references)
             report["missing"] = self.missing_references
+        elif self.protocol == _AMQP and (
+            self.exposed_body or self.referenced_body
+        ):
+            # Surface the AMQP body-diff break paths so the report/gate name the
+            # offending field — mirrors the GraphQL ``missing`` (S3, G1b). Only
+            # emitted when a body was declared (additive: name-level AMQP reports
+            # keep their byte-identical F1 shape with no ``missing`` key).
+            report["missing"] = self.missing_references
         return report
 
 
@@ -212,7 +264,8 @@ def classify(contract: Contract) -> ContractVerdict:
     2. lifecycle ``dead``     -> ``DEAD``.
     3. lifecycle ``planned``  -> ``EXPECTED`` (intentional, not built yet).
     4. lifecycle ``deprecated`` -> ``EXPECTED`` (intentional retirement).
-    5. GraphQL with producers ∧ consumers and ``references ⊄ exposed`` -> ``BREAKING``.
+    5. GraphQL/AMQP with producers ∧ consumers and a non-empty
+       ``missing_references`` (GraphQL surface break or AMQP body break) -> ``BREAKING``.
     6. producers ∧ consumers (compatible) -> ``CONFIRMED``.
     7. consumers, no producers -> ``ORPHANED_CONSUMER``.
     8. producers, no consumers -> ``UNDECLARED_PRODUCER``.
@@ -227,7 +280,10 @@ def classify(contract: Contract) -> ContractVerdict:
     has_producers = bool(contract.producers)
     has_consumers = bool(contract.consumers)
     if has_producers and has_consumers:
-        if contract.protocol == _GRAPHQL and contract.missing_references:
+        if (
+            contract.protocol in (_GRAPHQL, _AMQP)
+            and contract.missing_references
+        ):
             return ContractVerdict.BREAKING
         return ContractVerdict.CONFIRMED
     if has_consumers:
@@ -444,6 +500,26 @@ def _accumulate_surface(contract: Contract, payload: dict[str, object]) -> None:
             else contract.referenced_fields
         )
         target.update(typed)
+    _accumulate_body(contract, payload)
+
+
+def _accumulate_body(contract: Contract, payload: dict[str, object]) -> None:
+    """Fold an AMQP edge's body JSON-Schema into the Contract (S3, G1b).
+
+    A producer edge's ``body`` lands in ``exposed_body``; a consumer edge's in
+    ``referenced_body`` — normalized to a deterministic, sorted payload so an
+    equivalent body declared in a different property order folds identically.
+    Edges with no ``body`` (GraphQL, name-level AMQP) are a no-op.
+    """
+    raw_body = payload.get("body")
+    if not isinstance(raw_body, dict) or not raw_body:
+        return
+    direction = str(payload.get("direction", ""))
+    normalized = serialize_body(raw_body)
+    if direction == "produces":
+        contract.exposed_body = normalized
+    else:
+        contract.referenced_body = normalized
 
 
 def _typed_fields(raw: object) -> dict[str, dict[str, object]]:
