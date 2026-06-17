@@ -23,6 +23,8 @@ from __future__ import annotations
 import enum
 from dataclasses import dataclass, field
 
+from beadloom.graph.graphql_breaking import breaking_field_descriptors
+
 _AMQP = "amqp"
 _GRAPHQL = "graphql"
 _WILDCARD = "*"
@@ -104,6 +106,14 @@ class Contract:
     # presence-based ``BREAKING`` check that consumes them lands in BEAD-04.
     exposed: list[str] = field(default_factory=list)
     references: list[str] = field(default_factory=list)
+    # Typed GraphQL Tier-A surface (BDL-060 S2, G1a). ``exposed_fields`` is the
+    # producer's typed operation surface; ``referenced_fields`` is the consumer's.
+    # Each maps an operation field name to ``{"type": str, "args": {name: type}}``
+    # (the serialized shape of ``graphql_surface.FieldType``). Empty when the
+    # ``graphql-core`` extra was absent (honest name-level fallback) or for AMQP —
+    # the verdict then degrades to the presence-based ``missing_references`` check.
+    exposed_fields: dict[str, dict[str, object]] = field(default_factory=dict)
+    referenced_fields: dict[str, dict[str, object]] = field(default_factory=dict)
 
     @property
     def producers(self) -> list[ContractEndpoint]:
@@ -114,14 +124,50 @@ class Contract:
         return [e for e in self.endpoints if e.direction == "consumes"]
 
     @property
-    def missing_references(self) -> list[str]:
-        """Consumer-referenced surface absent from the producer's ``exposed`` (G5).
+    def _has_typed_surface(self) -> bool:
+        """True when BOTH sides carry a typed GraphQL surface (BDL-060 S2).
 
-        The presence-based ``BREAKING`` signal: a non-empty result means a
-        consumer relies on a name the producer's current SDL no longer offers.
-        Sorted + deduped (determinism). Always empty for AMQP (no surface).
+        The typed verdict may only reason about field/arg types when both the
+        producer and the consumer parsed their SDL (the ``graphql-core`` extra was
+        present on both). Absent that depth, the verdict honestly degrades to the
+        name-presence check (DATA-STRICTNESS — a verdict only as strong as data).
         """
-        if self.protocol != _GRAPHQL or not self.references:
+        return (
+            self.protocol == _GRAPHQL
+            and bool(self.exposed_fields)
+            and bool(self.referenced_fields)
+        )
+
+    @property
+    def breaking_fields(self) -> list[str]:
+        """Typed break descriptors: field/arg refs the producer breaks (S2, G1a).
+
+        When both sides are typed, names every consumer reference that is absent,
+        type-narrowed, nullability-broken, or has a broken arg (``"<field>"`` or
+        ``"<field>(<arg>)"``). Empty when not typed (use ``missing_references``),
+        for AMQP, or when every reference is satisfied (additive changes benign).
+        Sorted + deduped.
+        """
+        if not self._has_typed_surface:
+            return []
+        return breaking_field_descriptors(self.exposed_fields, self.referenced_fields)
+
+    @property
+    def missing_references(self) -> list[str]:
+        """Consumer-referenced surface the producer breaks (G5 / S2 G1a).
+
+        The ``BREAKING`` signal: a non-empty result means a consumer relies on a
+        field/arg the producer no longer satisfies. When both sides are typed
+        (BDL-060 S2) this is the typed analysis (absence + type-narrowing +
+        nullability + arg breaks, naming the offending field/arg); otherwise it
+        degrades to the name-presence check (BDL-038). Sorted + deduped. Always
+        empty for AMQP (no GraphQL surface).
+        """
+        if self.protocol != _GRAPHQL:
+            return []
+        if self._has_typed_surface:
+            return self.breaking_fields
+        if not self.references:
             return []
         return sorted(set(self.references) - set(self.exposed))
 
@@ -375,11 +421,13 @@ def _contract_name(protocol: str, payload: dict[str, object]) -> str:
 
 
 def _accumulate_surface(contract: Contract, payload: dict[str, object]) -> None:
-    """Fold a GraphQL edge's ``exposed`` / ``references`` into the Contract.
+    """Fold a GraphQL edge's surface (name-level + typed) into the Contract.
 
-    Both are kept sorted + deduped so identical input serializes byte-identically
-    (the F2 determinism invariant). AMQP payloads carry neither, so this is a
-    no-op for them.
+    Name-level ``exposed`` / ``references`` are kept sorted + deduped (the F2
+    determinism invariant). The typed ``fields`` block (BDL-060 S2), when present,
+    is folded into ``exposed_fields`` (producer edges) / ``referenced_fields``
+    (consumer edges) keyed by operation field name. AMQP payloads carry none of
+    these, so this is a no-op for them.
     """
     exposed = _str_list(payload.get("exposed"))
     if exposed:
@@ -387,6 +435,44 @@ def _accumulate_surface(contract: Contract, payload: dict[str, object]) -> None:
     references = _str_list(payload.get("references"))
     if references:
         contract.references = sorted(set(contract.references) | set(references))
+    typed = _typed_fields(payload.get("fields"))
+    if typed:
+        direction = str(payload.get("direction", ""))
+        target = (
+            contract.exposed_fields
+            if direction == "produces"
+            else contract.referenced_fields
+        )
+        target.update(typed)
+
+
+def _typed_fields(raw: object) -> dict[str, dict[str, object]]:
+    """Coerce a serialized typed-``fields`` block into ``{name: {type,args}}``.
+
+    Tolerant of older/foreign payloads (a list of ``{name,type,args}`` entries):
+    a malformed entry is dropped (honest), never fabricated. Empty for anything
+    that isn't the expected list-of-dicts shape.
+    """
+    if not isinstance(raw, list):
+        return {}
+    fields: dict[str, dict[str, object]] = {}
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("name")
+        if not isinstance(name, str) or not name:
+            continue
+        args = {
+            str(a.get("name")): str(a.get("type", ""))
+            for a in entry.get("args", [])
+            if isinstance(a, dict) and isinstance(a.get("name"), str) and a.get("name")
+        }
+        field_type = entry.get("type")
+        fields[name] = {
+            "type": field_type if isinstance(field_type, str) else "",
+            "args": args,
+        }
+    return fields
 
 
 def _str_list(raw: object) -> list[str]:

@@ -54,6 +54,12 @@ search = [
 watch = [
     "watchfiles>=0.20",
 ]
+graphql = [
+    # Optional: enables the TYPED GraphQL Tier-A surface (field types +
+    # nullability/list wrapping + args). Absent -> honest name-level fallback
+    # (the regex scanner in graph/sdl.py). Never a hard dependency.
+    "graphql-core>=3.2",
+]
 tui = [
     "textual>=0.80",
 ]
@@ -68,7 +74,7 @@ dev = [
     "types-PyYAML>=6.0",
 ]
 all = [
-    "beadloom[languages,dev,tui,watch]",
+    "beadloom[languages,dev,tui,watch,graphql]",
 ]
 
 [project.scripts]

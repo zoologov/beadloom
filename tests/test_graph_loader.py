@@ -894,4 +894,76 @@ class TestGraphQLSDLFolding:
         row = db.execute("SELECT extra FROM edges WHERE src_ref_id = 'svc'").fetchone()
         contract = json.loads(row["extra"])["contract"]
         assert "exposed" not in contract
+        assert "fields" not in contract
         assert contract["message_type"] == "m1"
+
+    def test_producer_typed_fields_folded_from_sdl(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        """A produces graphql contract folds the TYPED surface (S2, G1a).
+
+        When ``graphql-core`` is installed the producer edge gains a sorted,
+        typed ``fields`` block (field name + return type + args). Skipped when the
+        extra is absent (honest name-level-only fallback).
+        """
+        pytest.importorskip("graphql")
+        sdl = (
+            "type Query {\n"
+            "  plan(id: ID!): Plan\n"
+            "  plans: [Plan!]!\n"
+            "}\n"
+            "type Subscription {\n  planUpdated: Plan!\n}\n"
+            "type Plan {\n  id: ID!\n}\n"
+        )
+        (graph_dir.parent.parent / "schema.graphql").write_text(sdl, encoding="utf-8")
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: backend\n    kind: service\n    summary: B\n"
+            "  - ref_id: api\n    kind: feature\n    summary: A\n"
+            "edges:\n"
+            "  - src: backend\n"
+            "    dst: api\n"
+            "    kind: produces\n"
+            "    contract:\n"
+            "      protocol: graphql\n"
+            "      schema: PublicAPI\n"
+            "      source_file: schema.graphql\n"
+        )
+        load_graph(graph_dir, db)
+        row = db.execute("SELECT extra FROM edges WHERE src_ref_id = 'backend'").fetchone()
+        contract = json.loads(row["extra"])["contract"]
+        fields = {entry["name"]: entry for entry in contract["fields"]}
+        # Field names sorted; subscription field first-class.
+        assert [e["name"] for e in contract["fields"]] == sorted(fields)
+        assert fields["plan"]["type"] == "Plan"
+        assert fields["plans"]["type"] == "[Plan!]!"
+        assert fields["planUpdated"]["type"] == "Plan!"
+        plan_args = {a["name"]: a["type"] for a in fields["plan"]["args"]}
+        assert plan_args == {"id": "ID!"}
+
+    def test_consumer_typed_fields_carried_verbatim(
+        self, db: sqlite3.Connection, graph_dir: Path
+    ) -> None:
+        """A consumer-declared typed ``fields`` block is carried through verbatim."""
+        (graph_dir / "g.yml").write_text(
+            "nodes:\n"
+            "  - ref_id: client\n    kind: feature\n    summary: C\n"
+            "  - ref_id: schema\n    kind: feature\n    summary: S\n"
+            "edges:\n"
+            "  - src: client\n"
+            "    dst: schema\n"
+            "    kind: consumes\n"
+            "    contract:\n"
+            "      protocol: graphql\n"
+            "      schema: PublicAPI\n"
+            "      fields:\n"
+            "        - name: plan\n"
+            "          type: Plan\n"
+            "          args: []\n"
+        )
+        load_graph(graph_dir, db)
+        row = db.execute("SELECT extra FROM edges WHERE src_ref_id = 'client'").fetchone()
+        contract = json.loads(row["extra"])["contract"]
+        assert contract["fields"] == [{"name": "plan", "type": "Plan", "args": []}]
+        # A consumer is never given a producer exposed surface.
+        assert "exposed" not in contract

@@ -1,0 +1,156 @@
+{
+  "contracts": [
+    {
+      "confirmed": true,
+      "contract_key": "graphql:PublicCatalogAPI",
+      "directions": [
+        "consumes",
+        "produces"
+      ],
+      "exposed": [
+        "account",
+        "plan",
+        "planUpdated"
+      ],
+      "lifecycle": "active",
+      "message_type": "PublicCatalogAPI",
+      "missing": [
+        "accountUpdated",
+        "planUpdated"
+      ],
+      "protocol": "graphql",
+      "references": [
+        "accountUpdated",
+        "plan",
+        "planUpdated"
+      ],
+      "repos": [
+        "catalog-service",
+        "storefront-web"
+      ],
+      "verdict": "breaking"
+    }
+  ],
+  "edges": [
+    {
+      "contract": {
+        "direction": "produces",
+        "exposed": [
+          "account",
+          "plan",
+          "planUpdated"
+        ],
+        "fields": [
+          {
+            "args": [],
+            "name": "account",
+            "type": "Account"
+          },
+          {
+            "args": [
+              {
+                "name": "id",
+                "type": "ID!"
+              }
+            ],
+            "name": "plan",
+            "type": "Plan"
+          },
+          {
+            "args": [],
+            "name": "planUpdated",
+            "type": "Plan"
+          }
+        ],
+        "protocol": "graphql",
+        "schema": "PublicCatalogAPI"
+      },
+      "dst": "@catalog-service:catalog-api",
+      "kind": "produces",
+      "landscape": "commerce-platform",
+      "lifecycle": "active",
+      "repo": "catalog-service",
+      "src": "@catalog-service:catalog-api",
+      "verdict": "ok"
+    },
+    {
+      "contract": {
+        "direction": "consumes",
+        "fields": [
+          {
+            "args": [],
+            "name": "accountUpdated",
+            "type": "Account!"
+          },
+          {
+            "args": [
+              {
+                "name": "id",
+                "type": "ID!"
+              }
+            ],
+            "name": "plan",
+            "type": "Plan"
+          },
+          {
+            "args": [],
+            "name": "planUpdated",
+            "type": "Plan!"
+          }
+        ],
+        "protocol": "graphql",
+        "references": [
+          "accountUpdated",
+          "plan",
+          "planUpdated"
+        ],
+        "schema": "PublicCatalogAPI"
+      },
+      "dst": "@storefront-web:storefront-page",
+      "kind": "consumes",
+      "landscape": "commerce-platform",
+      "lifecycle": "active",
+      "repo": "storefront-web",
+      "src": "@storefront-web:storefront-page",
+      "verdict": "ok"
+    }
+  ],
+  "nodes": [
+    {
+      "kind": "schema",
+      "lifecycle": "active",
+      "ref_id": "@catalog-service:catalog-api",
+      "repo": "catalog-service",
+      "source": null,
+      "summary": "Public GraphQL schema exposed by the catalog service"
+    },
+    {
+      "kind": "page",
+      "lifecycle": "active",
+      "ref_id": "@storefront-web:storefront-page",
+      "repo": "storefront-web",
+      "source": null,
+      "summary": "Storefront page consuming the catalog GraphQL schema"
+    }
+  ],
+  "repos": [
+    {
+      "age_seconds": 0,
+      "commit_sha": "a1b2c3d",
+      "exported_at": "2026-06-01T00:00:00+00:00",
+      "landscape": "commerce-platform",
+      "repo": "catalog-service",
+      "schema_version": 2
+    },
+    {
+      "age_seconds": 0,
+      "commit_sha": "e5f6a7b",
+      "exported_at": "2026-06-01T00:00:00+00:00",
+      "landscape": "commerce-platform",
+      "repo": "storefront-web",
+      "schema_version": 2
+    }
+  ],
+  "schema_version": 2,
+  "unresolved_refs": []
+}

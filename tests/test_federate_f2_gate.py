@@ -375,6 +375,67 @@ class TestDeterminismAcrossFreshRuns:
         # Assert: edge-payload surface is order-independent.
         assert a == b
 
+    @staticmethod
+    def _typed_gql_exports(
+        producer_fields: list[dict[str, object]],
+        consumer_fields: list[dict[str, object]],
+    ) -> list[dict[str, object]]:
+        p = {"protocol": "graphql", "schema": "API", "direction": "produces",
+             "fields": producer_fields}
+        c = {"protocol": "graphql", "schema": "API", "direction": "consumes",
+             "fields": consumer_fields}
+        return [
+            _export("backend", nodes=[_node("api", kind="schema")],
+                    edges=[_edge("api", "api", kind="produces", contract=p)]),
+            _export("client", nodes=[_node("page", kind="page")],
+                    edges=[_edge("page", "page", kind="consumes", contract=c)]),
+        ]
+
+    def test_typed_breaking_verdict_end_to_end(self) -> None:
+        # Producer dropped a subscription field the consumer references -> BREAKING.
+        producer = [{"name": "plan", "type": "Plan", "args": []}]
+        consumer = [
+            {"name": "plan", "type": "Plan", "args": []},
+            {"name": "planUpdated", "type": "Plan!", "args": []},
+        ]
+        fed = aggregate_exports(self._typed_gql_exports(producer, consumer), now=_T0)
+        contract = next(c for c in fed.contracts if c["contract_key"] == "graphql:API")
+        assert contract["verdict"] == ContractVerdict.BREAKING.value
+        assert "planUpdated" in contract["missing"]  # type: ignore[operator]
+
+    def test_typed_additive_verdict_is_confirmed_end_to_end(self) -> None:
+        # Producer added a new optional field -> additive, benign.
+        producer = [
+            {"name": "plan", "type": "Plan", "args": []},
+            {"name": "newField", "type": "Thing", "args": []},
+        ]
+        consumer = [{"name": "plan", "type": "Plan", "args": []}]
+        fed = aggregate_exports(self._typed_gql_exports(producer, consumer), now=_T0)
+        contract = next(c for c in fed.contracts if c["contract_key"] == "graphql:API")
+        assert contract["verdict"] == ContractVerdict.CONFIRMED.value
+
+    def test_typed_fields_edge_payload_order_independent(self) -> None:
+        # The per-edge contract mirror's `fields` block is sorted/deduped, so the
+        # FULL federated JSON is byte-identical regardless of field/arg ordering.
+        a_p = [
+            {"name": "b", "type": "B", "args": [{"name": "y", "type": "Int"},
+                                                 {"name": "x", "type": "ID!"}]},
+            {"name": "a", "type": "A", "args": []},
+        ]
+        b_p = [
+            {"name": "a", "type": "A", "args": []},
+            {"name": "b", "type": "B", "args": [{"name": "x", "type": "ID!"},
+                                                 {"name": "y", "type": "Int"}]},
+        ]
+        cons = [{"name": "a", "type": "A", "args": []}]
+        a = serialize_federation(
+            aggregate_exports(self._typed_gql_exports(a_p, cons), now=_T0)
+        )
+        b = serialize_federation(
+            aggregate_exports(self._typed_gql_exports(b_p, cons), now=_T0)
+        )
+        assert a == b
+
     def test_build_export_byte_identical_across_two_runs(self, tmp_path: Path) -> None:
         # Arrange: a populated DB.
         conn = open_db(tmp_path / "g.db")
