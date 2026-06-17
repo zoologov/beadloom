@@ -112,7 +112,7 @@ Reads the indexed graph from SQLite (read-only) and emits a deterministic, self-
 
 - Nodes are sorted by `ref_id`; edges by `(src, dst, kind)`; JSON keys are sorted (`sort_keys=True`, 2-space indent) — so identical graphs serialize **byte-identically** (reviewable diffs).
 - The `edges` array unions the local `edges` table **and** the `foreign_edges` table, so declared cross-repo `@repo:` links reach the artifact.
-- An edge's optional `contract` metadata (carried under the `contract` key of the edge's `extra` JSON) is surfaced as a top-level `contract` field; edges without it omit the key entirely. Two protocols are carried: AMQP (`protocol: amqp` + `exchange` / `routing_key` / `message_type` / `direction`) and GraphQL (`protocol: graphql` + `schema` + the producer's `exposed` SDL surface / a consumer's `references`). The protocol-prefixed `contract_key` is derived at the hub.
+- An edge's optional `contract` metadata (carried under the `contract` key of the edge's `extra` JSON) is surfaced as a top-level `contract` field; edges without it omit the key entirely. Two protocols are carried: AMQP (`protocol: amqp` + `exchange` / `routing_key` / `message_type` / `direction`) and GraphQL (`protocol: graphql` + `schema` + the producer's `exposed` SDL surface / a consumer's `references` — and, when the optional `graphql-core` extra is installed, an additive **typed `fields` block**, see §5). The protocol-prefixed `contract_key` is derived at the hub.
 
 #### Provenance fields (`commit_sha`, `exported_at`)
 
@@ -179,12 +179,12 @@ Aggregation (`aggregate_exports`):
   | lifecycle `external` | `EXTERNAL` | Target declared present-but-not-ours (a native bridge); the `external` edge `lifecycle` folds onto the contract (`external` is the most-significant lifecycle) → `EXTERNAL`, never DRIFT (BDL-038 G7). |
   | lifecycle `dead` | `DEAD` | Declared dead; not live. |
   | lifecycle `planned` / `deprecated` | `EXPECTED` | Intentional — not built yet / retiring. Not drift. |
-  | producers ∧ consumers; GraphQL `references ⊄ exposed` | `BREAKING` | A consumer relies on a name the producer's current SDL no longer exposes — caught before it ships (presence-based, not version-diff). |
+  | producers ∧ consumers; GraphQL consumer ref the producer breaks | `BREAKING` | A consumer relies on a field/arg the producer's current SDL no longer satisfies — caught before it ships (not a version-diff). **Typed** (field/type-level) when both sides carry a typed surface, else name-presence (`references ⊄ exposed`). See §5. |
   | producers ∧ consumers (compatible) | `CONFIRMED` | Both sides present and compatible (F1's "confirmed both-sides"). |
   | consumers, no producers | `ORPHANED_CONSUMER` | Consumes a contract nobody produces (F1 "one-sided", consumer side). |
   | producers, no consumers | `UNDECLARED_PRODUCER` | Produces a contract nobody consumes (F1 "one-sided", producer side). |
 
-  The contract-level `UNDECLARED_PRODUCER` is **complementary** to F1's edge-level `EdgeVerdict.UNDECLARED` (an additional projection over the same fact, not a replacement); both stay intact and never contradict. For GraphQL, a contract dict also carries `exposed` / `references` / `missing` (the names that triggered `BREAKING`).
+  The contract-level `UNDECLARED_PRODUCER` is **complementary** to F1's edge-level `EdgeVerdict.UNDECLARED` (an additional projection over the same fact, not a replacement); both stay intact and never contradict. For GraphQL, a contract dict also carries `exposed` / `references` / `missing` (the field/arg descriptors that triggered `BREAKING` — typed `"<field>"` / `"<field>(<arg>)"` when the typed verdict ran, else bare missing names).
 - **Landscape scoping — product vs company (BDL-038 / U5).** An optional `landscape` provenance (resolved like `repo`: config `landscape:` key > repo name) names the *product* a satellite belongs to. `reconcile_contracts` groups by `(landscape, contract_key)`, so **implicit** same-key matching is scoped *within* a landscape: two unrelated products that happen to share a coincidental `message_type` / schema name reconcile in separate groups → **zero** mutual DRIFT / UNDECLARED / false-CONFIRMED. A **genuine** cross-product contract is declared with an explicit `@otherrepo:<ref>` consumer edge — its `contract_key` is promoted *cross-landscape* (one shared, landscape-agnostic group via `cross_landscape_keys` / `edge_group_key`) and resolves with a both-sides verdict regardless of landscape. An export with no declared landscape (or one equal to its repo) shares a single default group, so a single-product run is byte-identical to F1. The hub's edge-level UNDECLARED sweep (`_mark_undeclared`) uses the same `(landscape, contract_key)` group scope, so a producer is UNDECLARED only when *its own* landscape has no consumer (honest per-product signal, never silenced by an unrelated product's coincidental consumer). `federate` composes either one product-landscape (all satellites share/omit a landscape) or a company-landscape (several); the text report groups satellites by landscape with a `product`/`company`-landscape label.
 - **Per-satellite staleness** (`_repo_provenance`). For each satellite: `repo`, `commit_sha`, `exported_at`, `schema_version`, and `age_seconds` = `now − exported_at` in whole seconds. An unparseable/missing timestamp yields `None` (honest unknown); a missing `commit_sha` is reported, never faked. `now` is injectable for deterministic tests; the CLI passes wall-clock UTC.
 
@@ -255,6 +255,59 @@ The federated JSON envelope: `{ schema_version, repos, nodes, edges, contracts, 
 
 **Schema v2 (BDL-038 / BEAD-04):** each `contracts` entry gains a contract-level `verdict` (`ContractVerdict`) plus `protocol` / `contract_key` / `lifecycle` and, for GraphQL, `exposed` / `references` / `missing`. F1's flat keys are kept as a subset. The bump is on the hub OUTPUT only — `federate` still ingests v1 AND v2 satellite *exports* (`FEDERATION_SCHEMA_VERSION` and `EXPORT_SCHEMA_VERSION` are independent).
 
+### 5. Typed GraphQL Tier-A surface + native breaking verdict (BDL-060 / S2, G1a)
+
+Beadloom's GraphQL contract check has two depths. The BDL-038 baseline is **name-presence** (a consumer `reference` absent from the producer's `exposed` SDL surface → `BREAKING`). BDL-060 S2 adds a **typed Tier-A** depth on top, gated on whether the data is actually present.
+
+#### Positioning — native rigor, not a schema registry
+
+This is **native** GraphQL rigor *inside* Beadloom's multi-transport federated landscape: the same `federate` run reconciles AMQP and GraphQL contracts side by side and computes the GraphQL breaking verdict itself — it does not call out to, or replace, an external GraphQL schema registry (e.g. Hive / the Guild). The goal is honest cross-repo intent-vs-reality across paradigms, not a full SDL-registry / composition / breaking-change-policy engine. Where a satellite needs that depth of schema governance, a dedicated registry remains the right tool — Beadloom checks the producer↔consumer surface it can see in the graph, with a verdict only ever as strong as the data behind it.
+
+#### The typed `contract.fields` block
+
+When the optional `graphql-core` extra (`beadloom[graphql]`) is installed, the loader (`_fold_graphql_surface`) parses a producer's referenced SDL into a **typed operation surface** and folds it into the edge's `contract` payload as a deterministic `fields` block, additive alongside the existing `exposed` names. Each operation field — across **queries, mutations, AND subscriptions** (subscriptions are first-class) — carries:
+
+- `type` — the canonical GraphQL return type **with full wrapping preserved**: the leaf named type, every `[]` list level, and per-level `!` non-null (e.g. `[Plan!]!`).
+- `args` — `{name → type}`, each arg type carrying the same full wrapping.
+
+The block is sorted (fields by name, args by name) and deduped so an equivalent surface emitted in a different traversal order serializes byte-identically (the federation determinism invariant; the hub re-canonicalizes via `_normalize_contract_surface` / `_normalize_typed_fields`). A consumer edge may declare its own typed `fields` block (carried verbatim, then canonicalized at the hub).
+
+When the extra is **absent**, or the SDL is malformed/empty, extraction **degrades honestly** to the name-level surface: operation field names with empty type/args and `typed=False`. No `fields` block is fabricated and no type is invented — the verdict then stays name-presence (identical to BDL-038). This is the DATA-STRICTNESS invariant: a verdict is only as strong as the data behind it.
+
+#### The native breaking verdict (`graphql_breaking`)
+
+When **both** the producer and the consumer carry a real typed surface (both parsed their SDL via the extra — `Contract._has_typed_surface`), `Contract.breaking_fields` delegates to `graphql_breaking.breaking_field_descriptors`, which compares the two typed surfaces at full depth and names each broken consumer reference (`"<field>"` for an absent/retyped field, `"<field>(<arg>)"` for an arg break; sorted + deduped).
+
+A consumer reference is **BREAKING** when, vs the producer surface, it is:
+
+- **absent** — the producer no longer exposes the field (subscriptions included);
+- **type-incompatible** — the return type changed in a way that no longer satisfies the consumer. Types are compared as a structured wrapping (a named leaf inside zero or more list levels, each level carrying its own nullability), so a break is any of: a different leaf named type, a differing list-nesting depth, a list-vs-scalar mismatch, or a nullability **narrowing** at *any* level (producer became nullable where the consumer relied on non-null);
+- **arg-broken** — the producer requires a non-null arg the consumer does not supply, or narrowed a supplied arg (named type, list depth, or per-level nullability). Args are **contravariant** (the consumer's supplied value must satisfy the producer's input requirement), but go through the same structured comparison, so list-typed args inherit the rigor.
+
+Purely additive / widening producer changes are **benign**: a new unreferenced field, a new *nullable* arg, *widening* a return type from nullable to non-null at any level, or an identical wrapping on both sides.
+
+#### Public API (`graph/graphql_surface.py`, `graph/graphql_breaking.py`)
+
+```python
+# graphql_surface.py — typed Tier-A extraction
+@dataclass(frozen=True)
+class FieldType:    ...   # type: str, args: dict[str, str]
+@dataclass(frozen=True)
+class TypedSurface: ...   # fields: dict[str, FieldType], typed: bool
+
+def extract_typed_surface(sdl_text: str) -> TypedSurface          # graphql-core; honest name-level fallback
+def serialize_typed_surface(surface: TypedSurface) -> SerializedSurface  # deterministic sorted/deduped wire dict
+def parse_typed_surface(payload: object) -> TypedSurface          # read a serialized surface back (tolerant)
+
+# graphql_breaking.py — native verdict
+def breaking_field_descriptors(
+    exposed_fields: Mapping[str, TypedField],
+    referenced_fields: Mapping[str, TypedField],
+) -> list[str]   # sorted descriptors of broken consumer references; empty when all satisfied
+```
+
+`contracts.Contract` carries the typed surfaces as `exposed_fields` / `referenced_fields` (the serialized `{name → {type, args}}` shape), exposes `breaking_fields` (typed) and `missing_references` (typed when both sides are typed, else name-presence), and `_has_typed_surface` gates which path runs.
+
 ---
 
 ## Invariants
@@ -268,6 +321,8 @@ The federated JSON envelope: `{ schema_version, repos, nodes, edges, contracts, 
 - `EXPORT_SCHEMA_VERSION` and `FEDERATION_SCHEMA_VERSION` are independent; each is bumped only on a breaking shape change. F2 bumps EXPORT `1 → 2`, FEDERATION `1 → 2`, DB SCHEMA `3 → 4` — all backward-compatible: `federate` ingests v1 **and** v2 exports, and an older DB migrates idempotently (no data loss).
 - `contract_key` is language-neutral: contracts resolve on the contract name (AMQP exchange/routing/message_type, GraphQL schema), never a code symbol — so a cross-language edge (TS client ↔ backend) reconciles across the boundary.
 - Contract-level `DRIFT` is subsumed by `ORPHANED_CONSUMER` / `UNDECLARED_PRODUCER`; `DRIFT` is the edge-level `EdgeVerdict` only.
+- **DATA-STRICTNESS (BDL-060 S2).** The typed GraphQL breaking verdict runs ONLY when both sides carry a real typed surface (the `graphql-core` extra parsed both SDLs). Absent that depth on either side, the verdict degrades to the BDL-038 name-presence check — never fabricating a field, a type, or a stronger verdict than the data supports. The typed `fields` block is additive: an older reader (or a no-extra satellite) that carries no `fields` still federates.
+- The typed `fields` block is deterministic: fields sorted by name, args by name, deduped — the hub re-canonicalizes a satellite's block so the per-edge mirror is byte-identical to a freshly serialized surface.
 
 ---
 
@@ -275,7 +330,7 @@ The federated JSON envelope: `{ schema_version, repos, nodes, edges, contracts, 
 
 **Delivered in F2 (BDL-038):**
 
-- **AMQP + GraphQL contracts.** AMQP reconciles on full exchange identity (`amqp:<exchange>/<routing>:<mt>`, not just `message_type`); GraphQL reconciles on `graphql:<schema>` with a **presence-based** `BREAKING` check (consumer `references ⊄` producer `exposed` SDL surface — caught before it ships, not a version diff).
+- **AMQP + GraphQL contracts.** AMQP reconciles on full exchange identity (`amqp:<exchange>/<routing>:<mt>`, not just `message_type`); GraphQL reconciles on `graphql:<schema>` with a `BREAKING` check caught before it ships (not a version diff). The GraphQL check has two depths (BDL-060 S2, §5): a **typed** field/type-level verdict (absence + structured type / list / nullability narrowing + arg breaks, subscriptions first-class) when the optional `graphql-core` extra parsed both sides, and a **name-presence** fallback (consumer `references ⊄` producer `exposed`) otherwise. Native rigor inside the federated landscape — not a GraphQL schema-registry replacement.
 - **Paradigm-agnostic.** Arbitrary node/edge `kind` round-trips through `export`/`federate` without loss or rejection (DDD `domain/service` *and* FSD `page/feature/entity/repository`; the DDD-only DB CHECK was dropped, U1).
 - **Nested landscapes.** A single product-landscape *or* a company-landscape composing several products; contract-less products never cross-pollute verdicts (U5).
 - **`external` / `unmapped` lifecycle.** Present-but-not-ours (native bridges) and present-but-undescribed nodes are honest categories, never silent DRIFT (U4).
@@ -291,7 +346,7 @@ The federated JSON envelope: `{ schema_version, repos, nodes, edges, contracts, 
 
 ## Testing
 
-Test files: `tests/test_graph_federation.py` (`FederatedRef` + `parse_ref` local/foreign/malformed), `tests/test_graph_contracts.py` (first-class `Contract`, protocol-prefixed `contract_key`, `classify` truth table incl. GraphQL `BREAKING`, lifecycle folding, landscape-scoped `reconcile_contracts`), `tests/test_graph_sdl.py` (GraphQL SDL surface extraction — `exposed` / `references`), `tests/test_graph_loader.py` (foreign-edge recording, `lifecycle` load/default/invalid, contract-key unification), `tests/test_lifecycle_rules.py` (cycle/layer rule lifecycle-awareness), `tests/test_db.py` (`lifecycle` column + `foreign_edges` migrations + paradigm-agnostic kinds + schema 3→4 rebuild, additive + idempotent), `tests/test_export.py` (envelope fields, sorting, lifecycle + AMQP/GraphQL contract carry, deterministic byte-identical output, `resolve_repo_name` precedence, CLI stdout/`--out`/no-db error), `tests/test_federate.py` (namespacing, foreign-ref resolution + unresolved reporting, every `EdgeVerdict`, both-sides confirmed vs one-sided, contract-level verdicts, staleness incl. unknown sha / unparseable date, serialization determinism, report content, CLI ≥2 requirement + DRIFT in stdout), `tests/test_federate_f2_gate.py` (contract-level verdicts + nested-landscape scoping + `external`/`unmapped` integration), `tests/test_federate_dogfood_amqp.py` + `tests/test_federate_roundtrip_db.py` (real YAML → reindex → export → federate path through the DB).
+Test files: `tests/test_graph_federation.py` (`FederatedRef` + `parse_ref` local/foreign/malformed), `tests/test_graph_contracts.py` (first-class `Contract`, protocol-prefixed `contract_key`, `classify` truth table incl. GraphQL `BREAKING`, lifecycle folding, landscape-scoped `reconcile_contracts`), `tests/test_graph_sdl.py` (GraphQL SDL surface extraction — `exposed` / `references`), `tests/test_graphql_surface.py` + `tests/test_graphql_surface_fidelity.py` (typed Tier-A extraction incl. subscriptions, full type/list/nullability wrapping, `graphql-core` present vs honest name-level fallback), `tests/test_graphql_typed_verdict.py` + `tests/test_graphql_verdict_matrix.py` (the native breaking verdict matrix — absence / type-narrow / per-level nullability / list-depth / list↔scalar / required-arg breaks vs additive-benign), `tests/test_graphql_federation_determinism.py` (typed `fields` block byte-stability through export → federate), `tests/test_graph_loader.py` (foreign-edge recording, `lifecycle` load/default/invalid, contract-key unification), `tests/test_lifecycle_rules.py` (cycle/layer rule lifecycle-awareness), `tests/test_db.py` (`lifecycle` column + `foreign_edges` migrations + paradigm-agnostic kinds + schema 3→4 rebuild, additive + idempotent), `tests/test_export.py` (envelope fields, sorting, lifecycle + AMQP/GraphQL contract carry, deterministic byte-identical output, `resolve_repo_name` precedence, CLI stdout/`--out`/no-db error), `tests/test_federate.py` (namespacing, foreign-ref resolution + unresolved reporting, every `EdgeVerdict`, both-sides confirmed vs one-sided, contract-level verdicts, staleness incl. unknown sha / unparseable date, serialization determinism, report content, CLI ≥2 requirement + DRIFT in stdout), `tests/test_federate_f2_gate.py` (contract-level verdicts + nested-landscape scoping + `external`/`unmapped` integration), `tests/test_federate_dogfood_amqp.py` + `tests/test_federate_roundtrip_db.py` (real YAML → reindex → export → federate path through the DB).
 
 ### Key cases
 

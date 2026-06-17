@@ -38,6 +38,7 @@ Optional extras (language parsers, TUI, file watcher):
 uv tool install "beadloom[languages]"   # TS/JS, Go, Rust, Kotlin, Java, Swift, C/C++, Objective-C
 uv tool install "beadloom[tui]"         # interactive terminal dashboard
 uv tool install "beadloom[watch]"       # file watcher for auto-reindex
+uv tool install "beadloom[graphql]"     # typed GraphQL contract checking (graphql-core)
 uv tool install "beadloom[all]"         # everything
 ```
 
