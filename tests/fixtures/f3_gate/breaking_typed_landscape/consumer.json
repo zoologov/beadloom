@@ -1,0 +1,36 @@
+{
+  "schema_version": 2,
+  "repo": "storefront-web",
+  "commit_sha": "e5f6a7b",
+  "exported_at": "2026-06-01T00:00:00+00:00",
+  "generator": "beadloom f3-dogfood-fixture",
+  "landscape": "commerce-platform",
+  "nodes": [
+    {
+      "ref_id": "storefront-page",
+      "kind": "page",
+      "summary": "Storefront page consuming the catalog GraphQL schema",
+      "lifecycle": "active",
+      "source": null
+    }
+  ],
+  "edges": [
+    {
+      "src": "storefront-page",
+      "dst": "storefront-page",
+      "kind": "consumes",
+      "lifecycle": "active",
+      "contract": {
+        "protocol": "graphql",
+        "schema": "PublicCatalogAPI",
+        "direction": "consumes",
+        "references": ["plan", "planUpdated", "accountUpdated"],
+        "fields": [
+          {"name": "plan", "type": "Plan", "args": [{"name": "id", "type": "ID!"}]},
+          {"name": "planUpdated", "type": "Plan!", "args": []},
+          {"name": "accountUpdated", "type": "Account!", "args": []}
+        ]
+      }
+    }
+  ]
+}

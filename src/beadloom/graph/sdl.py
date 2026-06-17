@@ -48,7 +48,27 @@ def extract_surface(sdl_text: str) -> set[str]:
     faked). The result is a ``set`` so callers must sort it for deterministic
     serialization.
     """
-    surface: set[str] = set()
+    type_names, operation_fields = _scan(sdl_text)
+    return type_names | operation_fields
+
+
+def operation_field_names(sdl_text: str) -> set[str]:
+    """Extract ONLY the Query/Mutation/Subscription operation field names.
+
+    The name-level fallback substrate for the typed surface
+    (:mod:`beadloom.graph.graphql_surface`): consumer ``references`` are operation
+    field names, so the fallback keys its ``fields`` on these (not the top-level
+    type names that :func:`extract_surface` also returns). Honest empty set for
+    empty/malformed input.
+    """
+    _type_names, operation_fields = _scan(sdl_text)
+    return operation_fields
+
+
+def _scan(sdl_text: str) -> tuple[set[str], set[str]]:
+    """Single-pass scan: ``(top-level type names, operation field names)``."""
+    type_names: set[str] = set()
+    operation_fields: set[str] = set()
     lines = sdl_text.splitlines()
     i = 0
     while i < len(lines):
@@ -57,11 +77,11 @@ def extract_surface(sdl_text: str) -> set[str]:
             i += 1
             continue
         name = match.group("name")
-        surface.add(name)
+        type_names.add(name)
         body, i = _consume_body(lines, i)
         if name in _OPERATION_TYPES:
-            surface.update(_field_names(body))
-    return surface
+            operation_fields.update(_field_names(body))
+    return type_names, operation_fields
 
 
 def _consume_body(lines: list[str], start: int) -> tuple[list[str], int]:

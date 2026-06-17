@@ -159,6 +159,43 @@ class TestGateBlocksCrossServiceBreaking:
         assert "federate" in result.output
 
 
+def _load_breaking_typed_exports() -> list[dict[str, object]]:
+    """Load the typed (Tier-A) BREAKING landscape exports (BDL-060 S2, G1a)."""
+    base = _FIXTURES / "breaking_typed_landscape"
+    producer = json.loads((base / "producer.json").read_text(encoding="utf-8"))
+    consumer = json.loads((base / "consumer.json").read_text(encoding="utf-8"))
+    return [producer, consumer]
+
+
+class TestGateBlocksTypedGraphQLBreak:
+    """The NATIVE typed verdict catches a subscription drop + a nullability break.
+
+    The consumer references a NON-NULL subscription ``planUpdated: Plan!`` that the
+    producer made nullable (a nullability break) AND ``accountUpdated`` that the
+    producer never exposes (a dropped subscription field). The exactly-matching
+    ``plan`` field is benign — the verdict is only as strong as the typed data.
+    """
+
+    def test_typed_break_names_subscription_fields(self) -> None:
+        exports = _load_breaking_typed_exports()
+        fed = aggregate_exports(exports, now=_T0)
+        failures = gate_failures(fed, {"breaking"})
+        breaking = [f for f in failures if f.verdict == "breaking"]
+        assert len(breaking) == 1
+        # A dropped subscription field AND a nullability-broken subscription field.
+        assert "accountUpdated" in breaking[0].missing
+        assert "planUpdated" in breaking[0].missing
+        # The exactly-matching `plan` field is NOT a break (additive-safe).
+        assert "plan" not in breaking[0].missing
+
+    def test_typed_break_remediation_is_actionable(self) -> None:
+        fed = aggregate_exports(_load_breaking_typed_exports(), now=_T0)
+        breaking = [f for f in gate_failures(fed, {"breaking"}) if f.verdict == "breaking"]
+        hint = gate_failure_remediation(breaking[0])
+        assert hint is not None
+        assert "accountUpdated" in hint
+
+
 # ---------------------------------------------------------------------------
 # (c) Drifted agent-config — config-check blocks + names which file.
 # ---------------------------------------------------------------------------

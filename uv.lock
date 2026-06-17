@@ -73,6 +73,7 @@ dependencies = [
 
 [package.optional-dependencies]
 all = [
+    { name = "graphql-core" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -101,6 +102,9 @@ dev = [
     { name = "ruff" },
     { name = "types-pyyaml" },
 ]
+graphql = [
+    { name = "graphql-core" },
+]
 languages = [
     { name = "tree-sitter-c" },
     { name = "tree-sitter-cpp" },
@@ -127,6 +131,8 @@ watch = [
 requires-dist = [
     { name = "click", specifier = ">=8.1" },
     { name = "fastembed", marker = "extra == 'search'", specifier = ">=0.4" },
+    { name = "graphql-core", marker = "extra == 'all'", specifier = ">=3.2" },
+    { name = "graphql-core", marker = "extra == 'graphql'", specifier = ">=3.2" },
     { name = "mcp", specifier = ">=1.0" },
     { name = "mypy", marker = "extra == 'all'", specifier = ">=1.13" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.13" },
@@ -170,7 +176,7 @@ requires-dist = [
     { name = "watchfiles", marker = "extra == 'all'", specifier = ">=0.20" },
     { name = "watchfiles", marker = "extra == 'watch'", specifier = ">=0.20" },
 ]
-provides-extras = ["all", "dev", "languages", "search", "tui", "watch"]
+provides-extras = ["all", "dev", "graphql", "languages", "search", "tui", "watch"]
 
 [[package]]
 name = "certifi"
@@ -595,6 +601,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/51/7c/f60c259dcbf4f0c47cc4ddb8f7720d2dcdc8888c8e5ad84c73ea4531cc5b/fsspec-2026.2.0.tar.gz", hash = "sha256:6544e34b16869f5aacd5b90bdf1a71acb37792ea3ddf6125ee69a22a53fb8bff", size = 313441, upload-time = "2026-02-05T21:50:53.743Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e6/ab/fb21f4c939bb440104cc2b396d3be1d9b7a9fd3c6c2a53d98c45b3d7c954/fsspec-2026.2.0-py3-none-any.whl", hash = "sha256:98de475b5cb3bd66bedd5c4679e87b4fdfe1a3bf4d707b151b3c07e58c9a2437", size = 202505, upload-time = "2026-02-05T21:50:51.819Z" },
+]
+
+[[package]]
+name = "graphql-core"
+version = "3.2.11"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/4d/90/f2aff026ab4aebd80eb71905106a0885f4cfde85dcf965543f45bed0d9ee/graphql_core-3.2.11.tar.gz", hash = "sha256:e7e156d10beb127cab5c89ff0da71416fc73d27c484a4757d3b2d35633774802", size = 528407, upload-time = "2026-06-05T13:45:22.915Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/00/15/b92b4e1d88d02c6eff9733c9eea21846ab435cc4d813d84ccc5d335955df/graphql_core-3.2.11-py3-none-any.whl", hash = "sha256:0b3e35ff41e9adba53021ab0cef475eb18f57c7f53f0f2ca55567fbf3c537ea0", size = 214879, upload-time = "2026-06-05T13:45:21.245Z" },
 ]
 
 [[package]]

@@ -18,6 +18,10 @@ import yaml
 
 from beadloom.graph.contracts import contract_key
 from beadloom.graph.federation import FederationRefError, parse_ref
+from beadloom.graph.graphql_surface import (
+    extract_typed_surface,
+    serialize_typed_surface,
+)
 from beadloom.graph.sdl import extract_surface
 from beadloom.infrastructure.atomic_io import write_yaml_atomic
 
@@ -396,10 +400,13 @@ def _fold_graphql_surface(
     For a ``produces`` edge declaring ``contract.protocol == graphql`` with a
     ``source_file``, parse the referenced SDL (relative to *project_root*) and
     store the sorted exposed names under ``contract.exposed`` (BDL-038 BEAD-03,
-    G2). A missing/unreadable file records ``exposed: []`` plus a warning — an
-    honest empty surface, never a faked confirmation. Consumer ``references``
-    are carried through verbatim by ``_edge_extra`` (no folding needed). AMQP and
-    plain edges are untouched.
+    G2) PLUS the TYPED Tier-A ``fields`` block (BDL-060 S2, G1a) when
+    ``graphql-core`` is installed (absent the extra, the typed surface degrades to
+    name-level and no ``fields`` block is emitted — honest). A missing/unreadable
+    file records ``exposed: []`` plus a warning — an honest empty surface, never a
+    faked confirmation. Consumer ``references`` / consumer-declared ``fields`` are
+    carried through verbatim by ``_edge_extra`` (no folding needed). AMQP and plain
+    edges are untouched.
     """
     contract = edge_extra.get("contract")
     if not isinstance(contract, dict) or contract.get("protocol") != _GRAPHQL:
@@ -421,6 +428,11 @@ def _fold_graphql_surface(
         contract["exposed"] = []
         return
     contract["exposed"] = sorted(extract_surface(sdl_text))
+    typed = extract_typed_surface(sdl_text)
+    if typed.typed:
+        # Only emit the typed `fields` block when the parse really had depth
+        # (graphql-core present + parseable) — never fabricate a typed surface.
+        contract["fields"] = serialize_typed_surface(typed)["fields"]
 
 
 def _contract_key(edge_extra: dict[str, Any]) -> str:

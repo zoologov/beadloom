@@ -54,6 +54,12 @@ search = [
 watch = [
     "watchfiles>=0.20",
 ]
+graphql = [
+    # Optional: enables the TYPED GraphQL Tier-A surface (field types +
+    # nullability/list wrapping + args). Absent -> honest name-level fallback
+    # (the regex scanner in graph/sdl.py). Never a hard dependency.
+    "graphql-core>=3.2",
+]
 tui = [
     "textual>=0.80",
 ]
@@ -68,7 +74,7 @@ dev = [
     "types-PyYAML>=6.0",
 ]
 all = [
-    "beadloom[languages,dev,tui,watch]",
+    "beadloom[languages,dev,tui,watch,graphql]",
 ]
 
 [project.scripts]
@@ -147,6 +153,14 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["tomli"]
+ignore_missing_imports = true
+
+# graphql-core is an OPTIONAL extra (beadloom[graphql]); the runtime import is
+# guarded (try/except ImportError -> honest name-level fallback). Declare it
+# ignore_missing_imports so `mypy --strict` stays clean in a minimal env without
+# the extra; CI's tests job installs --extra graphql so the typed path is checked.
+[[tool.mypy.overrides]]
+module = ["graphql", "graphql.*"]
 ignore_missing_imports = true
 
 [tool.coverage.run]

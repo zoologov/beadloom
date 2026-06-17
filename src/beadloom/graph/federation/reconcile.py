@@ -277,23 +277,56 @@ def _resolve_edge(
 
 
 def _normalize_contract_surface(contract: dict[str, object]) -> dict[str, object]:
-    """Return a copy of *contract* with its GraphQL surface lists made canonical.
+    """Return a copy of *contract* with its GraphQL surface made canonical.
 
     ``exposed`` / ``references`` are carried verbatim from the satellite export,
     so a producer (or consumer) emitting an equivalent surface in a different
     order would otherwise serialize differently in the per-edge ``contract``
     mirror — breaking the byte-identical determinism invariant that the
     reconciled ``contracts[]`` section already upholds. Sort + dedupe those
-    lists (matching :mod:`beadloom.graph.contracts`); leave every other field
-    (and AMQP contracts, which carry neither list) untouched. Shallow-copies so
-    the input edge/contract dict is never mutated.
+    lists; likewise canonicalize the TYPED ``fields`` block (BDL-060 S2): sort
+    fields by name and each field's args by name. Leave every other field (and
+    AMQP contracts, which carry none of these) untouched. Shallow-copies so the
+    input edge/contract dict is never mutated.
     """
     normalized = dict(contract)
     for key in ("exposed", "references"):
         value = normalized.get(key)
         if isinstance(value, list):
             normalized[key] = sorted({str(item) for item in value})
+    fields = normalized.get("fields")
+    if isinstance(fields, list):
+        normalized["fields"] = _normalize_typed_fields(fields)
     return normalized
+
+
+def _normalize_typed_fields(fields: list[object]) -> list[dict[str, object]]:
+    """Sort a typed ``fields`` block (fields by name, args by name) — deduped.
+
+    Mirrors :func:`beadloom.graph.graphql_surface.serialize_typed_surface` so the
+    federated per-edge mirror is byte-identical to a freshly serialized surface,
+    regardless of the satellite's field/arg ordering. A malformed entry is
+    dropped (honest), never fabricated.
+    """
+    normalized: dict[str, dict[str, object]] = {}
+    for entry in fields:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("name")
+        if not isinstance(name, str) or not name:
+            continue
+        raw_args = entry.get("args")
+        args = (
+            [a for a in raw_args if isinstance(a, dict) and a.get("name")]
+            if isinstance(raw_args, list)
+            else []
+        )
+        normalized[name] = {
+            "name": name,
+            "type": entry.get("type", ""),
+            "args": sorted(args, key=lambda a: str(a.get("name", ""))),
+        }
+    return [normalized[name] for name in sorted(normalized)]
 
 
 def _assign_verdicts(fed: FederatedGraph, present_ids: set[str]) -> None:
