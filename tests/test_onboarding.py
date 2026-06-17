@@ -63,6 +63,40 @@ def _make_src_tree(tmp_path: Path) -> Path:
 
 
 class TestScanProject:
+    def test_result_has_typed_dict_shape(self, tmp_path: Path) -> None:
+        """scan_project returns exactly the ScanResult TypedDict keys/types."""
+        (tmp_path / "pyproject.toml").write_text("[project]\nname='test'\n")
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "main.py").write_text("print('hi')")
+        result = scan_project(tmp_path)
+        assert set(result.keys()) == {
+            "manifests",
+            "source_dirs",
+            "file_count",
+            "languages",
+        }
+        assert isinstance(result["manifests"], list)
+        assert isinstance(result["source_dirs"], list)
+        assert isinstance(result["file_count"], int)
+        assert isinstance(result["languages"], list)
+
+    def test_cluster_entry_typed_dict_shape(self, tmp_path: Path) -> None:
+        """_cluster_with_children entries match the ClusterEntry TypedDict."""
+        from beadloom.onboarding.scanner import _cluster_with_children
+
+        src = tmp_path / "src"
+        pkg = src / "auth"
+        pkg.mkdir(parents=True)
+        (pkg / "login.py").write_text("pass")
+        clusters = _cluster_with_children(tmp_path, source_dirs=["src"])
+        assert clusters
+        entry = clusters["auth"]
+        assert set(entry.keys()) == {"files", "children", "source_dir"}
+        assert isinstance(entry["files"], list)
+        assert isinstance(entry["children"], dict)
+        assert entry["source_dir"] == "src"
+
     def test_detects_pyproject(self, tmp_path: Path) -> None:
         (tmp_path / "pyproject.toml").write_text("[project]\nname='test'\n")
         (tmp_path / "src").mkdir()

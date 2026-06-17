@@ -304,6 +304,33 @@ class TestGracefulDegradation:
             )
         assert result == {}
 
+    def test_git_permission_denied(self, tmp_path: Path) -> None:
+        """A PermissionError (OSError subclass) degrades to empty dict."""
+        with patch(
+            "beadloom.infrastructure.git_activity.subprocess.run",
+            side_effect=PermissionError("permission denied"),
+        ):
+            result = analyze_git_activity(tmp_path, {"auth": "src/auth"})
+        assert result == {}
+
+    def test_git_invalid_cwd(self, tmp_path: Path) -> None:
+        """A NotADirectoryError (OSError subclass) degrades to empty dict."""
+        with patch(
+            "beadloom.infrastructure.git_activity.subprocess.run",
+            side_effect=NotADirectoryError("bad cwd"),
+        ):
+            result = analyze_git_activity(tmp_path, {"auth": "src/auth"})
+        assert result == {}
+
+    def test_git_subprocess_error(self, tmp_path: Path) -> None:
+        """A generic SubprocessError degrades to empty dict."""
+        with patch(
+            "beadloom.infrastructure.git_activity.subprocess.run",
+            side_effect=subprocess.SubprocessError("boom"),
+        ):
+            result = analyze_git_activity(tmp_path, {"auth": "src/auth"})
+        assert result == {}
+
 
 class TestMultipleSourceDirs:
     def test_maps_files_to_correct_nodes(self, tmp_path: Path) -> None:

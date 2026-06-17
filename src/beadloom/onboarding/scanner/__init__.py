@@ -70,6 +70,7 @@ from beadloom.onboarding.scanner.summary import (
     _build_contextual_summary,
     _detect_framework_summary,
 )
+from beadloom.onboarding.scanner.types import ClusterEntry, ScanResult
 
 # The public surface is the un-underscored names. The underscore-prefixed
 # entries are internal helpers re-exported only to preserve the historical
@@ -83,6 +84,8 @@ __all__ = [
     "_RULES_ADAPTER_TEMPLATE",
     "_RULES_CONFIGS",
     "_SOURCE_DIRS",
+    "ClusterEntry",
+    "ScanResult",
     "_auto_insert_markers",
     "_build_contextual_summary",
     "_build_mcp_tools_section",

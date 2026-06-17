@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import sqlite3
+    from pathlib import Path
 
 # Cache key: (ref_id, depth, max_nodes, max_chunks)
 CacheKey = tuple[str, int, int, int]
@@ -211,3 +212,83 @@ class SqliteCache:
             (f"%{ref_id}%",),
         )
         self._conn.commit()
+
+
+def _dir_mtime(directory: Path) -> float:
+    """Return the max mtime of all files under *directory* (0.0 if absent)."""
+    max_mtime = 0.0
+    if not directory.exists():
+        return max_mtime
+    for f in directory.rglob("*"):
+        if f.is_file():
+            try:
+                mt = f.stat().st_mtime
+            except OSError:
+                continue
+            max_mtime = max(max_mtime, mt)
+    return max_mtime
+
+
+def compute_bundle_mtimes(project_root: Path) -> tuple[float, float]:
+    """Compute ``(graph_mtime, docs_mtime)`` used for bundle-cache freshness."""
+    graph_dir = project_root / ".beadloom" / "_graph"
+    docs_dir = project_root / "docs"
+    return _dir_mtime(graph_dir), _dir_mtime(docs_dir)
+
+
+def bundle_cache_key(
+    ref_ids: list[str],
+    depth: int,
+    max_nodes: int,
+    max_chunks: int,
+) -> str:
+    """Build the canonical L2 cache key for a context bundle.
+
+    Matches the ``ref_id:depth:max_nodes:max_chunks`` scheme the MCP server
+    already uses for single-focus bundles; for multi-focus requests the focus
+    ref_ids are joined with ``,`` so distinct focus sets never collide.
+    """
+    focus = ",".join(ref_ids)
+    return f"{focus}:{depth}:{max_nodes}:{max_chunks}"
+
+
+def build_context_cached(
+    conn: sqlite3.Connection,
+    cache: SqliteCache,
+    ref_ids: list[str],
+    *,
+    depth: int,
+    max_nodes: int,
+    max_chunks: int,
+    graph_mtime: float = 0.0,
+    docs_mtime: float = 0.0,
+) -> dict[str, Any]:
+    """Build a context bundle, going through the L2 :class:`SqliteCache`.
+
+    Transparent cache: returns byte-identical bundles whether served from
+    cache (hit) or freshly built (miss).  On a miss the freshly built bundle
+    is written back so repeated builds for the same focus/params hit the
+    cache.  Stale entries (mtime advanced) are invalidated by the cache.
+
+    Raises :class:`LookupError` (from :func:`build_context`) for unknown
+    focus ref_ids; misses are never written for failed builds.
+    """
+    # Imported lazily to keep this module free of a hard builder dependency
+    # at import time (builder imports remain one-directional).
+    from beadloom.context_oracle.builder import build_context
+
+    cache_key = bundle_cache_key(ref_ids, depth, max_nodes, max_chunks)
+
+    cached = cache.get(cache_key, graph_mtime=graph_mtime, docs_mtime=docs_mtime)
+    if cached is not None:
+        return cached[0]
+
+    bundle = build_context(
+        conn,
+        ref_ids,
+        depth=depth,
+        max_nodes=max_nodes,
+        max_chunks=max_chunks,
+    )
+    cache.put(cache_key, bundle, graph_mtime=graph_mtime, docs_mtime=docs_mtime)
+    return bundle

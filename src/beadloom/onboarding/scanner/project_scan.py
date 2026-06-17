@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from beadloom.onboarding.scanner.constants import (
     _CLUSTER_SKIP,
@@ -22,8 +22,10 @@ from beadloom.onboarding.scanner.constants import (
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from beadloom.onboarding.scanner.types import ClusterEntry, ScanResult
 
-def scan_project(project_root: Path) -> dict[str, Any]:
+
+def scan_project(project_root: Path) -> ScanResult:
     """Scan project structure and return summary.
 
     Returns dict with manifests, source_dirs, file_count, languages.
@@ -133,7 +135,7 @@ def _cluster_by_dirs(
 def _cluster_with_children(
     project_root: Path,
     source_dirs: list[str] | None = None,
-) -> dict[str, dict[str, Any]]:
+) -> dict[str, ClusterEntry]:
     """Two-level directory scan for preset-aware bootstrap.
 
     Parameters
@@ -147,7 +149,7 @@ def _cluster_with_children(
     Returns dict of dir_name -> {files, children, source_dir} where
     children is a dict of child_name -> {files}.
     """
-    result: dict[str, dict[str, Any]] = {}
+    result: dict[str, ClusterEntry] = {}
     dirs_to_scan = source_dirs if source_dirs is not None else list(_SOURCE_DIRS)
 
     for src_dir_name in dirs_to_scan:
