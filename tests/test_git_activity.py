@@ -331,6 +331,29 @@ class TestGracefulDegradation:
             result = analyze_git_activity(tmp_path, {"auth": "src/auth"})
         assert result == {}
 
+    def test_git_timeout_expired(self, tmp_path: Path) -> None:
+        """TimeoutExpired (SubprocessError subclass) degrades to empty dict.
+
+        The git call uses ``timeout=30``; this proves the narrowed except
+        (``OSError, subprocess.SubprocessError``) still catches the timeout
+        path the way the prior explicit ``TimeoutExpired`` clause did.
+        """
+        with patch(
+            "beadloom.infrastructure.git_activity.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd="git log", timeout=30),
+        ):
+            result = analyze_git_activity(tmp_path, {"auth": "src/auth"})
+        assert result == {}
+
+    def test_git_oserror_base(self, tmp_path: Path) -> None:
+        """A bare OSError (the narrowed base) degrades to empty dict."""
+        with patch(
+            "beadloom.infrastructure.git_activity.subprocess.run",
+            side_effect=OSError("generic io failure"),
+        ):
+            result = analyze_git_activity(tmp_path, {"auth": "src/auth"})
+        assert result == {}
+
 
 class TestMultipleSourceDirs:
     def test_maps_files_to_correct_nodes(self, tmp_path: Path) -> None:

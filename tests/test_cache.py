@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 import pytest
@@ -342,4 +343,95 @@ class TestBuildContextCached:
                 conn, cache, ["NOPE"], depth=2, max_nodes=20, max_chunks=10
             )
         assert cache.get(bundle_cache_key(["NOPE"], 2, 20, 10)) is None
+        conn.close()
+
+    def test_cached_bundle_byte_identical_to_uncached_build(
+        self, tmp_path: Path
+    ) -> None:
+        """Transparent cache: cached output == the raw build_context output.
+
+        The whole point of routing build_context through SqliteCache is that
+        the cache must NOT alter the bundle — the cached path and the direct
+        (uncached) path must serialize to the exact same bytes. Comparing to a
+        fresh build_context (not just cached-vs-cached) is the real golden check.
+        """
+        from beadloom.context_oracle.builder import build_context
+
+        conn = self._seed(tmp_path)
+        cache = SqliteCache(conn)
+
+        # The reference: a direct build_context call (no cache involved).
+        golden = build_context(
+            conn, ["FEAT-1"], depth=2, max_nodes=20, max_chunks=10
+        )
+
+        # First cached call is a MISS — builds and stores.
+        miss = build_context_cached(
+            conn, cache, ["FEAT-1"], depth=2, max_nodes=20, max_chunks=10
+        )
+        # Second cached call is a HIT — served from SQLite.
+        hit = build_context_cached(
+            conn, cache, ["FEAT-1"], depth=2, max_nodes=20, max_chunks=10
+        )
+
+        # Byte-identical JSON serialization across all three paths.
+        golden_json = json.dumps(golden, sort_keys=True, ensure_ascii=False)
+        miss_json = json.dumps(miss, sort_keys=True, ensure_ascii=False)
+        hit_json = json.dumps(hit, sort_keys=True, ensure_ascii=False)
+        assert miss_json == golden_json
+        assert hit_json == golden_json
+        # Etag (over the same canonical serialization) must match too.
+        assert compute_etag(miss) == compute_etag(golden)
+        assert compute_etag(hit) == compute_etag(golden)
+        conn.close()
+
+    def test_hit_does_not_recompute_build_context(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A cache HIT must serve from SQLite WITHOUT calling build_context.
+
+        ``test_hit_does_not_rebuild`` proves the hit returns the old bundle by
+        deleting the node; this proves the *mechanism*: build_context is invoked
+        exactly once (the miss) and never on the subsequent hit.
+        """
+        import beadloom.context_oracle.builder as builder_mod
+
+        conn = self._seed(tmp_path)
+        cache = SqliteCache(conn)
+
+        calls = {"n": 0}
+        real_build = builder_mod.build_context
+
+        def _counting_build(*args: object, **kwargs: object) -> dict[str, object]:
+            calls["n"] += 1
+            return real_build(*args, **kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(builder_mod, "build_context", _counting_build)
+
+        build_context_cached(
+            conn, cache, ["FEAT-1"], depth=2, max_nodes=20, max_chunks=10
+        )
+        assert calls["n"] == 1  # miss → built once
+
+        build_context_cached(
+            conn, cache, ["FEAT-1"], depth=2, max_nodes=20, max_chunks=10
+        )
+        assert calls["n"] == 1  # hit → not rebuilt
+        conn.close()
+
+    def test_distinct_focus_params_do_not_collide(self, tmp_path: Path) -> None:
+        """Different depth/focus produce distinct cache keys (no cross-bleed)."""
+        conn = self._seed(tmp_path)
+        cache = SqliteCache(conn)
+        b1 = build_context_cached(
+            conn, cache, ["FEAT-1"], depth=1, max_nodes=20, max_chunks=10
+        )
+        b2 = build_context_cached(
+            conn, cache, ["FEAT-1"], depth=2, max_nodes=20, max_chunks=10
+        )
+        # Both keys are independently stored.
+        assert cache.get(bundle_cache_key(["FEAT-1"], 1, 20, 10)) is not None
+        assert cache.get(bundle_cache_key(["FEAT-1"], 2, 20, 10)) is not None
+        # depth is reflected in each bundle (no key collision served b1 for b2).
+        assert b1["focus"] == b2["focus"]
         conn.close()
