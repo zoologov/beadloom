@@ -6,6 +6,7 @@ project.  The cross-domain orchestrators (``reindex``, ``doctor``, ``debt_report
 never imports a domain (the DDD Dependency Rule).
 """
 
+from beadloom.infrastructure.atomic_io import write_yaml_atomic
 from beadloom.infrastructure.db import (
     SCHEMA_VERSION,
     create_schema,
@@ -30,4 +31,5 @@ __all__ = [
     "open_db",
     "set_meta",
     "take_snapshot",
+    "write_yaml_atomic",
 ]

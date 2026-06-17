@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from beadloom.infrastructure.atomic_io import write_yaml_atomic
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -72,10 +74,7 @@ def generate_rules(
         return 0
 
     data: dict[str, Any] = {"version": 1, "rules": rules}
-    rules_path.write_text(
-        yaml.dump(data, default_flow_style=False, allow_unicode=True),
-        encoding="utf-8",
-    )
+    write_yaml_atomic(rules_path, data, default_flow_style=False, allow_unicode=True)
     return len(rules)
 
 

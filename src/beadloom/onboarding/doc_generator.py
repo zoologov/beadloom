@@ -550,6 +550,8 @@ def _patch_docs_field(graph_dir: Path, docs_map: dict[str, str]) -> None:
     """
     import yaml
 
+    from beadloom.infrastructure.atomic_io import write_yaml_atomic
+
     if not docs_map:
         return
 
@@ -569,10 +571,7 @@ def _patch_docs_field(graph_dir: Path, docs_map: dict[str, str]) -> None:
                 modified = True
 
         if modified:
-            yml.write_text(
-                yaml.dump(data, sort_keys=False, allow_unicode=True),
-                encoding="utf-8",
-            )
+            write_yaml_atomic(yml, data, sort_keys=False, allow_unicode=True)
             logger.info("Patched docs: field in %s", yml)
 
 

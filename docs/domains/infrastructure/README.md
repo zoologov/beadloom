@@ -15,6 +15,7 @@ Internal building blocks, each with a `DOC.md`:
 - **[Git Activity](components/git-activity/DOC.md)** — per-node `git log` activity metrics.
 - **[MCP Tools](components/mcp-tools/DOC.md)** — the canonical MCP tool-name catalog.
 - **[Scan Paths](components/scan-paths/DOC.md)** — resolves source scan directories from `config.yml` so domains do not import `application`.
+- **[Atomic IO](components/atomic-io/DOC.md)** — atomic YAML writes (temp-file + `os.replace`) so a crash mid-write never corrupts the source-of-truth graph YAML.
 
 ## Specification
 
@@ -25,6 +26,7 @@ Internal building blocks, each with a `DOC.md`:
 - **git_activity.py** — `GitActivity` frozen dataclass holds per-node metrics: `commits_30d`, `commits_90d`, `last_commit_date`, `top_contributors`, `activity_level`. `analyze_git_activity()` runs `git log --since=90 days ago`, parses output, maps changed files to nodes via longest source-prefix match, and classifies activity (hot: >20 commits/30d, warm: 5-20, cold: 1-4, dormant: 0 commits/90d).
 - **mcp_tools.py** — single-source catalog of MCP tool metadata used by AGENTS.md generation. `McpToolDoc` describes one tool; `mcp_tool_names()` returns the canonical tool-name list (pinned to the live MCP `_TOOLS` registry by a drift-guard test) so the documented tool count cannot drift.
 - **scan_paths.py** — `resolve_scan_paths()` reads `scan_paths` from `.beadloom/config.yml`, falling back to `("src", "lib", "app")`. A domain-agnostic config reader at the lowest layer so `graph` (import resolution) and `application` (reindex) resolve scan directories without a domain importing `application` (closes the BDL-059 S3 layering inversion).
+- **atomic_io.py** — `write_yaml_atomic(path, data, **dump_kwargs)` serializes with `yaml.dump(**dump_kwargs)`, writes to a temp file in the same directory, `fsync`s it, then commits with `Path.replace` (atomic on POSIX). Every graph-YAML writer (`graph` loader/patcher, `services` link patcher, `onboarding` scaffolders) routes through it so a crash mid-write cannot corrupt the source-of-truth graph YAML; dump options pass through verbatim so output bytes are unchanged (BDL-060 S1 / G6).
 
 ### Database Schema
 

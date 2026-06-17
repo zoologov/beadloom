@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any
 
-import yaml
+from beadloom.infrastructure.atomic_io import write_yaml_atomic
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -66,9 +66,11 @@ def import_docs(
 
     if nodes:
         graph_data: dict[str, Any] = {"nodes": nodes}
-        (graph_dir / "imported.yml").write_text(
-            yaml.dump(graph_data, default_flow_style=False, allow_unicode=True),
-            encoding="utf-8",
+        write_yaml_atomic(
+            graph_dir / "imported.yml",
+            graph_data,
+            default_flow_style=False,
+            allow_unicode=True,
         )
 
     return results
