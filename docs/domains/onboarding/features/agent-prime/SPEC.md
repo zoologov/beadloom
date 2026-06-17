@@ -27,10 +27,40 @@ Auto-detects IDEs by marker files and creates adapter files. Returns list of cre
 
 Generates `.beadloom/AGENTS.md` with v2 template. Injects rules from `rules.yml`. Preserves user content below `## Custom`.
 
+### `setup_mcp_auto(project_root)`
+
+Auto-detects editor (claude-code, cursor, windsurf) by marker files and creates MCP config. Returns editor name on success, or `None` if config already exists.
+
+## Data Types
+
+### `ScanResult` (TypedDict)
+
+Result of `scan_project()` — discovered project structure.
+
+```python
+class ScanResult(TypedDict):
+    manifests: list[str]      # Found manifest files (pyproject.toml, package.json, etc.)
+    source_dirs: list[str]    # Discovered source directories
+    file_count: int           # Total code file count
+    languages: list[str]      # Detected file extensions
+```
+
+### `ClusterEntry` (TypedDict)
+
+A two-level directory cluster produced by `_cluster_with_children()`.
+
+```python
+class ClusterEntry(TypedDict):
+    files: list[str]                    # All code files in the cluster
+    children: dict[str, list[str]]      # Child dir name → code files
+    source_dir: str                     # Owning top-level source directory
+```
+
 ## CLI
 
 - `beadloom prime [--json] [--update] [--project PATH]`
 - `beadloom setup-rules [--tool cursor|windsurf|cline] [--project PATH]`
+- `beadloom setup-mcp [--tool claude-code|cursor|windsurf] [--remove] [--project PATH]`
 
 ## MCP
 
@@ -38,6 +68,7 @@ Generates `.beadloom/AGENTS.md` with v2 template. Injects rules from `rules.yml`
 
 ## Source
 
-- `src/beadloom/onboarding/scanner/` — cohesion-split package; `prime.py` (`prime_context()`), `agents_md.py` (`setup_rules_auto()`, `generate_agents_md()`), plus `bootstrap.py` / `init_flow.py` / `project_scan.py` / `summary.py` / `entry_points.py` / `import_scan.py` / `readme.py` / `doc_classify.py` / `rules_gen.py` / `claude_md.py` / `constants.py`; the package `__init__.py` re-exports the full public surface
-- `src/beadloom/services/cli.py` — `prime` and `setup-rules` commands
+- `src/beadloom/onboarding/scanner/` — cohesion-split package; `prime.py` (`prime_context()`), `agents_md.py` (`setup_rules_auto()`, `generate_agents_md()`, `setup_mcp_auto()`), `types.py` (`ScanResult`, `ClusterEntry`), plus `bootstrap.py` / `init_flow.py` / `project_scan.py` / `summary.py` / `entry_points.py` / `import_scan.py` / `readme.py` / `doc_classify.py` / `rules_gen.py` / `claude_md.py` / `constants.py`; the package `__init__.py` re-exports the full public surface
+- `src/beadloom/services/commands/query.py` — `prime` CLI command
+- `src/beadloom/services/commands/setup.py` — `setup-rules` and `setup-mcp` CLI commands
 - `src/beadloom/services/mcp_server.py` — `prime` MCP tool

@@ -80,5 +80,18 @@
     "model": "qwen3.7-plus",
     "gate": "green",
     "pr_url": ""
+  },
+  {
+    "ts": "2026-06-17T16:53:00.900933+00:00",
+    "platform": "github",
+    "docs_refreshed": [
+      "domains/onboarding/README.md",
+      "domains/onboarding/features/agent-prime/SPEC.md"
+    ],
+    "input_tokens": 104000,
+    "output_tokens": 10000,
+    "model": "qwen3.7-plus",
+    "gate": "green",
+    "pr_url": ""
   }
 ]
