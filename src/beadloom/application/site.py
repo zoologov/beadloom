@@ -43,6 +43,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from beadloom.application.architecture_view import (
+    build_architecture_view_data,
+    render_architecture_view_md,
+    serialize_architecture_view,
+)
 from beadloom.application.landscape_view import (
     build_landscape_view_data,
     render_landscape_view_md,
@@ -153,6 +158,23 @@ def _top_level_diagram(conn: sqlite3.Connection) -> str:
     nodes, rels = map_to_c4(conn)
     nodes, rels = filter_c4_nodes(nodes, rels, level="container")
     return render_c4_mermaid(nodes, rels)
+
+
+def _lint_violation_refs(project_root: Path) -> set[str] | None:
+    """The set of node ``ref_id``s carrying a lint violation, or ``None``.
+
+    Runs the SAME ``beadloom lint`` gate the dashboard/CI use, then projects the
+    violations to their source node (``from_ref_id``). Returns ``None`` (honest
+    degradation — the view OMITS the per-node lint-clean flag rather than fake a
+    "clean" verdict) when lint cannot run (e.g. no project graph in a test root).
+    """
+    from beadloom.graph.linter import lint
+
+    try:
+        result = lint(project_root)
+    except (OSError, ValueError):
+        return None
+    return {v.from_ref_id for v in result.violations if v.from_ref_id is not None}
 
 
 def _render_index(conn: sqlite3.Connection, nodes: list[NodeRow]) -> str:
@@ -435,7 +457,27 @@ def generate_site(
     overview = _render_index(conn, nodes)
     about_en = _render_about_page(project_root / "README.md", slugs)
     _write(out_dir / "index.md", about_en if about_en is not None else overview, written)
-    _write(out_dir / "architecture.md", overview, written)
+
+    # Architecture: the PRIMARY page is now the interactive Cytoscape+ELK
+    # compound graph (BDL-060 S4 ext) — a renderer-agnostic
+    # `architecture.data.json` (nodes with kind/layer/summary/symbols/doc-status/
+    # deps + part_of containment) emitted under `public/` (so VitePress copies it
+    # to the dist root for the runtime `withBase("/architecture.data.json")`
+    # fetch), and `architecture.md` mounts the client-side <ArchitectureMap>. The
+    # original Mermaid overview is demoted to a static fallback at
+    # `architecture-diagram.md` (no dead link; readable Mermaid was the problem).
+    arch_pages = existing_page_urls(conn)
+    lint_refs = _lint_violation_refs(project_root)
+    arch_data = build_architecture_view_data(
+        conn, pages=arch_pages, lint_violation_refs=lint_refs
+    )
+    _write(
+        out_dir / "public" / "architecture.data.json",
+        serialize_architecture_view(arch_data),
+        written,
+    )
+    _write(out_dir / "architecture.md", render_architecture_view_md(arch_data), written)
+    _write(out_dir / "architecture-diagram.md", overview, written)
 
     # RU About (locale root) from README.ru.md — skipped if absent (no failure).
     about_ru = _render_about_page(project_root / "README.ru.md", slugs)

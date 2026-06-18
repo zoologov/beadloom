@@ -16,6 +16,7 @@
 // chrome follows the VitePress portal (auto light/dark via --vp-* CSS vars).
 
 import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
+import { withBase } from "vitepress";
 import { useLandscapeData } from "../composables/useLandscapeData.js";
 import {
   bucketOf,
@@ -342,7 +343,7 @@ function amqpProps(body) {
             </li>
           </ul>
           <p v-if="selected.url">
-            <a :href="selected.url">Open page →</a>
+            <a :href="withBase(selected.url)">Open page →</a>
           </p>
         </template>
 
