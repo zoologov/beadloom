@@ -213,15 +213,146 @@ def test_node_doc_links_only_when_doc_exists() -> None:
     try:
         _seed_arch(conn)
         conn.commit()
+        # published_doc_slugs gates the link to a doc that is actually published.
+        data = build_architecture_view_data(
+            conn,
+            pages=_pages(),
+            published_doc_slugs={"domains/application/README"},
+        )
+    finally:
+        conn.close()
+    by_id = {n["id"]: n for n in data["nodes"]}
+    # application has a real, PUBLISHED doc → the served `.html` link (NOT `.md`,
+    # which 404s — VitePress has no cleanUrls here), no fabrication.
+    app_docs = by_id["application"]["doc_links"]
+    assert app_docs == ["/docs/domains/application/README.html"]
+    # infrastructure has NO doc → empty doc_links (honest, no dead link).
+    assert by_id["infrastructure"]["doc_links"] == []
+
+
+def test_node_doc_links_omitted_when_doc_not_published() -> None:
+    conn = _open()
+    try:
+        _seed_arch(conn)
+        conn.commit()
+        # graph has a doc row but it is NOT in the published-slug set → the link
+        # would 404, so it is honestly omitted (never a dead link).
+        data = build_architecture_view_data(
+            conn,
+            pages=_pages(),
+            published_doc_slugs={"domains/application/README"},
+        )
+    finally:
+        conn.close()
+    by_id = {n["id"]: n for n in data["nodes"]}
+    assert by_id["graph"]["doc_links"] == []
+
+
+def test_node_doc_links_default_when_slugs_unknown() -> None:
+    """When the published-slug set is not supplied, emit the served link for any
+    doc row (honest degradation — the slug gate is opt-in, not a silent drop)."""
+    conn = _open()
+    try:
+        _seed_arch(conn)
+        conn.commit()
         data = _build(conn)
     finally:
         conn.close()
     by_id = {n["id"]: n for n in data["nodes"]}
-    # application has a real doc → a published /docs/ link, no fabrication.
-    app_docs = by_id["application"]["doc_links"]
-    assert app_docs == ["/docs/domains/application/README.md"]
-    # infrastructure has NO doc → empty doc_links (honest, no dead link).
-    assert by_id["infrastructure"]["doc_links"] == []
+    assert by_id["application"]["doc_links"] == ["/docs/domains/application/README.html"]
+
+
+# ---------------------------------------------------------------------------
+# Layer rank / partition (the canonical layered-lanes layout)
+# ---------------------------------------------------------------------------
+
+
+def test_nodes_carry_layer_rank_by_layer() -> None:
+    conn = _open()
+    try:
+        _seed_arch(conn)
+        conn.commit()
+        data = _build(conn)
+    finally:
+        conn.close()
+    by_id = {n["id"]: n for n in data["nodes"]}
+    # service=0, application=1, domain=2, infra=3 (top→bottom dependency order).
+    assert by_id["beadloom"]["layer_rank"] == 0
+    assert by_id["application"]["layer_rank"] == 1
+    assert by_id["graph"]["layer_rank"] == 2
+    assert by_id["infrastructure"]["layer_rank"] == 3
+
+
+def test_unlayered_node_inherits_parent_layer_rank() -> None:
+    """A feature/component carries no layer tag → it inherits its container's
+    rank so it sits in the domain's lane (stable lanes regardless of topology)."""
+    conn = _open()
+    try:
+        _seed_arch(conn)
+        conn.commit()
+        data = _build(conn)
+    finally:
+        conn.close()
+    by_id = {n["id"]: n for n in data["nodes"]}
+    # site-generation is part_of application (rank 1) → inherits rank 1.
+    assert by_id["site-generation"]["layer_rank"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Edge layering-violation flag (dogfood our own layering rule visually)
+# ---------------------------------------------------------------------------
+
+
+def test_depends_on_edges_carry_violation_flag() -> None:
+    conn = _open()
+    try:
+        _seed_arch(conn)
+        conn.commit()
+        data = _build(conn)
+    finally:
+        conn.close()
+    deps = {
+        (e["src"], e["dst"]): e
+        for e in data["edges"]
+        if e["kind"] == "depends_on"
+    }
+    # application(1) → graph(2): DOWN the layers → healthy, not a violation.
+    assert deps[("application", "graph")]["violation"] is False
+    # graph(2) → infrastructure(3): DOWN the layers → healthy.
+    assert deps[("graph", "infrastructure")]["violation"] is False
+
+
+def test_upward_depends_on_edge_is_a_violation() -> None:
+    conn = _open()
+    try:
+        _seed_arch(conn)
+        # graph(2) depends_on application(1): UP the layers → a layering concern.
+        _add_edge(conn, "graph", "application", "depends_on")
+        conn.commit()
+        data = _build(conn)
+    finally:
+        conn.close()
+    deps = {
+        (e["src"], e["dst"]): e
+        for e in data["edges"]
+        if e["kind"] == "depends_on"
+    }
+    assert deps[("graph", "application")]["violation"] is True
+
+
+def test_part_of_edge_has_no_violation_flag() -> None:
+    """Containment is not a flow arrow → it carries no violation verdict."""
+    conn = _open()
+    try:
+        _seed_arch(conn)
+        conn.commit()
+        data = _build(conn)
+    finally:
+        conn.close()
+    part_of = [e for e in data["edges"] if e["kind"] == "part_of"]
+    assert part_of
+    for e in part_of:
+        assert "violation" not in e
 
 
 def test_node_page_url_only_when_page_exists() -> None:

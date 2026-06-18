@@ -469,7 +469,10 @@ def generate_site(
     arch_pages = existing_page_urls(conn)
     lint_refs = _lint_violation_refs(project_root)
     arch_data = build_architecture_view_data(
-        conn, pages=arch_pages, lint_violation_refs=lint_refs
+        conn,
+        pages=arch_pages,
+        lint_violation_refs=lint_refs,
+        published_doc_slugs=slugs,
     )
     _write(
         out_dir / "public" / "architecture.data.json",

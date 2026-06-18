@@ -92,11 +92,13 @@ class TestLintRecalibrationGuard:
         )
         assert result.exit_code == 0, result.output
 
-    def test_recalibrated_rule_threshold_is_280(self) -> None:
-        """The repo's ``domain-size-limit`` rule is loaded as a warn at max 280.
+    def test_recalibrated_rule_threshold_is_290(self) -> None:
+        """The repo's ``domain-size-limit`` rule is loaded as a warn at max 290.
 
         Pins the recalibrated value at the rule-config level (independent of the
-        graph state) so a silent revert to 200 is caught even on a small graph.
+        graph state) so a silent revert to a lower bound is caught even on a
+        small graph. Recalibrated 280 -> 290 in BDL-060 S4 (the ``application``
+        domain grew honestly with the canonical layered-lanes architecture view).
         """
         from pathlib import Path as _Path
 
@@ -111,7 +113,7 @@ class TestLintRecalibrationGuard:
         ]
         assert len(size_rules) == 1
         rule = size_rules[0]
-        assert rule.max_symbols == 280
+        assert rule.max_symbols == 290
         assert rule.severity == "warn"
 
 

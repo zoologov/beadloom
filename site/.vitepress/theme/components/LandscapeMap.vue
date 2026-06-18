@@ -137,8 +137,18 @@ function selectEdge(edge) {
   selected.value = {
     kind: "edge",
     verdict: edge.data("verdict"),
+    src: edge.data("source"),
+    dst: edge.data("target"),
     contract: contractByKey.value[key] || null,
   };
+}
+
+// A REAL contract edge is one whose contract declares a known transport protocol
+// (amqp / graphql). A plain build/data dependency has no such protocol → it gets
+// the simpler "Dependency" card (honest: never a "Protocol: unknown" line).
+const CONTRACT_PROTOCOLS = ["amqp", "graphql"];
+function isContractEdge(contract) {
+  return Boolean(contract) && CONTRACT_PROTOCOLS.includes(String(contract.protocol || ""));
 }
 
 function selectNode(node) {
@@ -260,11 +270,12 @@ function amqpProps(body) {
       <aside v-if="selected" class="bl-ls-card">
         <button class="bl-ls-close" @click="selected = null" aria-label="Close">×</button>
 
-        <template v-if="selected.kind === 'edge' && selected.contract">
+        <!-- A REAL contract edge (amqp / graphql): the full protocol card. -->
+        <template v-if="selected.kind === 'edge' && isContractEdge(selected.contract)">
           <h3>{{ selected.contract.name || selected.contract.contract_key }}</h3>
           <dl>
             <dt>Protocol</dt>
-            <dd>{{ selected.contract.protocol || "unknown" }}</dd>
+            <dd>{{ selected.contract.protocol }}</dd>
             <dt>Verdict</dt>
             <dd :class="`bl-v-${bucketOf(selected.contract.verdict)}`">
               {{ String(selected.contract.verdict).toUpperCase() }}
@@ -324,6 +335,25 @@ function amqpProps(body) {
               <li v-for="m in selected.contract.missing" :key="m"><code>{{ m }}</code></li>
             </ul>
           </template>
+        </template>
+
+        <!-- A plain build/data dependency (NOT a real amqp/graphql contract): a
+             simpler card with NO Protocol field — honest, never "unknown". -->
+        <template v-else-if="selected.kind === 'edge'">
+          <h3>Dependency</h3>
+          <dl>
+            <dt>From → To</dt>
+            <dd><code>{{ selected.src }}</code> → <code>{{ selected.dst }}</code></dd>
+            <template v-if="selected.verdict">
+              <dt>Verdict</dt>
+              <dd :class="`bl-v-${bucketOf(selected.verdict)}`">
+                {{ String(selected.verdict).toUpperCase() }}
+              </dd>
+            </template>
+          </dl>
+          <p class="bl-ls-undeclared">
+            A plain dependency, not a declared contract — no protocol surface.
+          </p>
         </template>
 
         <template v-else-if="selected.kind === 'node'">

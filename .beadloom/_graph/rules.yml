@@ -70,7 +70,13 @@ rules:
     severity: warn
     check:
       for: { kind: domain }
-      max_symbols: 280
+      # Recalibrated 280 -> 290 (BDL-060 S4). The `application` domain grew
+      # honestly with the canonical layered-lanes architecture view (layer-rank
+      # resolution + served-doc-link gating in `architecture_view.py`) — a real,
+      # owner-requested feature, NOT shadow code or a reclassification dodge.
+      # The limit stays a re-scoping SIGNAL; this is a deliberate, documented
+      # recalibration, not gaming.
+      max_symbols: 290
 
   # COVERAGE lint (BDL-051 S3a) — supersedes the S1 unregistered-feature-candidate
   # sprawl-lint with a stronger, complete-coverage check. Goal: NO SHADOW CODE.

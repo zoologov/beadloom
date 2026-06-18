@@ -42,9 +42,13 @@ export const GEOMETRY = {
 };
 
 // ELK layout — FIXED + seedless so the layout is deterministic given the same
-// data (no view-time randomness). `nodePlacement.strategy` + hierarchyHandling
-// INCLUDE_CHILDREN make ELK lay out the COMPOUND parents (domains as boxes
-// containing their features/components) with orthogonal edge routing.
+// data (no view-time randomness). The canonical view is LAYER LANES: each node
+// is assigned a `partition` = its layer rank (service=0 … infra=3), and ELK
+// `partitioning.activate` pins every node into its rank's band, top→bottom
+// (`elk.direction: DOWN`). The lanes are therefore STABLE regardless of graph
+// topology (NOT topology-derived layering). hierarchyHandling INCLUDE_CHILDREN
+// lays out the COMPOUND parents (domains as boxes holding their features/
+// components) with orthogonal edge routing.
 export const ELK_OPTIONS = {
   name: "elk",
   elk: {
@@ -52,6 +56,7 @@ export const ELK_OPTIONS = {
     "elk.direction": "DOWN",
     "elk.edgeRouting": "ORTHOGONAL",
     "elk.hierarchyHandling": "INCLUDE_CHILDREN",
+    "elk.partitioning.activate": "true",
     "elk.layered.spacing.nodeNodeBetweenLayers": "70",
     "elk.spacing.nodeNode": "45",
     "elk.padding": "[top=36,left=24,bottom=24,right=24]",
@@ -61,6 +66,27 @@ export const ELK_OPTIONS = {
   padding: 40,
   animate: false,
 };
+
+// The canonical layer lanes (rank → human name), top→bottom by dependency
+// direction. Drives the legend + the per-node `partition` the view assigns.
+export const LAYER_LANES = [
+  { rank: 0, layer: "service", label: "service / interface" },
+  { rank: 1, layer: "application", label: "application" },
+  { rank: 2, layer: "domain", label: "domain" },
+  { rank: 3, layer: "infra", label: "infrastructure" },
+];
+
+// Edge meaning (for the legend): a healthy/neutral dependency goes DOWN the
+// layers; one that points UP or cross-cuts the layer order is a layering
+// concern (distinct color + dash). Containment is subtle, not a flow arrow.
+export const EDGE_LEGEND = [
+  { cls: "healthy", label: "depends on (down a layer — healthy)" },
+  { cls: "violation", label: "depends on (up / cross-cut — layering concern)" },
+  { cls: "containment", label: "part of (containment)" },
+];
+
+// The layering-violation accent (an up/cross-cut depends_on edge).
+export const VIOLATION_EDGE_COLOR = "#e45649"; // red — dogfood our own rule
 
 // The Cytoscape stylesheet. Neutral chrome follows the portal (CSS vars);
 // layer/status colors are explicit. `data(...)` mappers read the per-element
@@ -123,6 +149,18 @@ export function buildStylesheet() {
         "target-arrow-shape": "triangle",
         "curve-style": "taxi",
         "taxi-direction": "vertical",
+      },
+    },
+    {
+      // A layering-concern edge: a depends_on that points UP or cross-cuts the
+      // canonical layer order (red + dashed). We dogfood our own layering rule.
+      selector: "edge.violation",
+      style: {
+        "line-color": VIOLATION_EDGE_COLOR,
+        "target-arrow-color": VIOLATION_EDGE_COLOR,
+        "line-style": "dashed",
+        width: GEOMETRY.edgeWidth + 1,
+        "z-index": 8,
       },
     },
     {

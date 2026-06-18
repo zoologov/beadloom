@@ -31,7 +31,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
-from beadloom.application.site_pages import _KIND_DIR, _published_doc_link
+from beadloom.application.site_pages import _KIND_DIR
 
 if TYPE_CHECKING:
     import sqlite3
@@ -48,6 +48,25 @@ _LAYER_TAGS = {
     "layer-domain": "domain",
     "layer-infra": "infra",
 }
+
+# Layer name -> its rank (its partition index in the canonical top→bottom
+# stratification: service on top, infra at the bottom). Drives the ELK
+# partitioning the view uses to lay the graph out as STABLE horizontal layer
+# lanes (NOT topology-derived layering) and the edge layering-violation verdict.
+_LAYER_RANK = {
+    "service": 0,
+    "application": 1,
+    "domain": 2,
+    "infra": 3,
+}
+
+# Served extension for a published doc page. The site is built WITHOUT VitePress
+# ``cleanUrls``, so a doc README is served at ``…/README.html`` — a ``.md`` link
+# is a 404. (The Markdown node pages keep ``.md`` because VitePress rewrites
+# in-page Markdown links; the JSON artifact is read by client JS with no such
+# rewrite, so it must carry the served ``.html`` path.)
+_SERVED_DOC_EXT = ".html"
+_MD_EXT = ".md"
 
 _DOC_FRESH = "fresh"
 _DOC_STALE = "stale"
@@ -117,12 +136,50 @@ def _doc_status(conn: sqlite3.Connection, ref_id: str) -> str:
     return _DOC_STALE if stale is not None else _DOC_FRESH
 
 
-def _doc_links(conn: sqlite3.Connection, ref_id: str) -> list[str]:
-    """Published ``/docs/`` links for the node's docs, sorted (empty when none)."""
+def _doc_slug(path: str) -> str:
+    """The ``docs/``-relative slug for a doc path (``.md`` stripped), normalised.
+
+    Mirrors :func:`beadloom.application.site._published_doc_slugs` so a node's
+    doc link can be gated against the SAME published-slug set (link-safe by
+    construction — a doc with no published page is omitted, never a dead link).
+    """
+    rel = path[len("docs/") :] if path.startswith("docs/") else path
+    rel = rel.replace("\\", "/")
+    return rel[: -len(_MD_EXT)] if rel.endswith(_MD_EXT) else rel
+
+
+def _served_doc_link(path: str) -> str:
+    """The browser-resolvable site link for a doc (served ``.html``, base-less).
+
+    The component wraps this in VitePress ``withBase()``; we emit the ``/docs/``
+    rooted, ``.html``-suffixed path (no ``cleanUrls`` → a ``.md`` URL 404s).
+    """
+    return f"/docs/{_doc_slug(path)}{_SERVED_DOC_EXT}"
+
+
+def _doc_links(
+    conn: sqlite3.Connection,
+    ref_id: str,
+    *,
+    published_doc_slugs: set[str] | None,
+) -> list[str]:
+    """Served ``/docs/…html`` links for the node's PUBLISHED docs, sorted.
+
+    Honest degradation: a doc whose slug is not in *published_doc_slugs* would
+    404, so it is omitted (never a dead link). When *published_doc_slugs* is
+    ``None`` the gate is not applied (the caller did not supply the published
+    set), and every doc row yields its served link.
+    """
     rows = conn.execute(
         "SELECT path FROM docs WHERE ref_id = ? ORDER BY path", (ref_id,)
     ).fetchall()
-    return [_published_doc_link(str(r["path"])) for r in rows]
+    links: list[str] = []
+    for r in rows:
+        path = str(r["path"])
+        if published_doc_slugs is not None and _doc_slug(path) not in published_doc_slugs:
+            continue
+        links.append(_served_doc_link(path))
+    return links
 
 
 # ---------------------------------------------------------------------------
@@ -130,17 +187,51 @@ def _doc_links(conn: sqlite3.Connection, ref_id: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def _own_layers(conn: sqlite3.Connection) -> dict[str, str]:
+    """Each node's OWN layer name (from its ``layer-*`` tag), empty when untagged."""
+    rows = conn.execute("SELECT ref_id, extra FROM nodes").fetchall()
+    return {str(r["ref_id"]): _layer_of(str(r["extra"] or "")) for r in rows}
+
+
+def _layer_rank(
+    ref_id: str,
+    own_layers: dict[str, str],
+    parent: dict[str, str],
+) -> int | None:
+    """The node's layer rank — its own, else its nearest layered ancestor's.
+
+    A feature/component carries no ``layer-*`` tag; it inherits the rank of its
+    ``part_of`` container so it sits in that container's lane (stable lanes,
+    independent of graph topology). ``None`` when no layered ancestor exists
+    (honest — an unlayered node with no layered container has no lane).
+    """
+    seen: set[str] = set()
+    current: str | None = ref_id
+    while current is not None and current not in seen:
+        seen.add(current)
+        rank = _LAYER_RANK.get(own_layers.get(current, ""))
+        if rank is not None:
+            return rank
+        nxt = parent.get(current, "")
+        current = nxt or None
+    return None
+
+
 def _arch_edges(
     conn: sqlite3.Connection,
-) -> tuple[list[dict[str, str]], dict[str, str], dict[str, list[str]], dict[str, list[str]]]:
-    """Build the architecture edges + the derived per-node relationships.
+    own_layers: dict[str, str],
+    parent: dict[str, str],
+) -> tuple[list[dict[str, object]], dict[str, list[str]], dict[str, list[str]]]:
+    """Build the architecture edges + the derived ``why`` dependency lists.
 
-    Returns ``(edges, parent_by_id, depends_on_by_id, depended_on_by_by_id)``:
+    Returns ``(edges, depends_on_by_id, depended_on_by_by_id)``:
 
-    - ``edges``: one ``{src, dst, kind}`` per ``part_of`` / ``depends_on`` edge,
-      sorted (so the view's compound containment + dependency arrows are stable).
-    - ``parent_by_id``: each node's ``part_of`` container (its ELK compound
-      parent); a node with no container maps to ``""``.
+    - ``edges``: one entry per ``part_of`` / ``depends_on`` edge, sorted. A
+      ``depends_on`` edge also carries a ``violation`` flag — ``True`` when it
+      points UP or cross-cuts the canonical layer order (``dst`` rank ``<=``
+      ``src`` rank), ``False`` when it points DOWN (healthy). ``part_of`` is
+      subtle containment and carries NO ``violation`` (not a flow arrow). The
+      flag is honestly omitted when either endpoint has no resolvable rank.
     - ``depends_on_by_id`` / ``depended_on_by_by_id``: the ``beadloom why`` lists
       (what a node depends on / who depends on it), sorted + de-duplicated.
     """
@@ -149,25 +240,34 @@ def _arch_edges(
         "WHERE kind IN ('part_of', 'depends_on') "
         "ORDER BY kind, src_ref_id, dst_ref_id"
     ).fetchall()
-    edges: list[dict[str, str]] = []
-    parent: dict[str, str] = {}
+    edges: list[dict[str, object]] = []
     depends_on: dict[str, set[str]] = {}
     depended_on_by: dict[str, set[str]] = {}
     for row in rows:
         src, dst, kind = str(row["src_ref_id"]), str(row["dst_ref_id"]), str(row["kind"])
-        edges.append({"src": src, "dst": dst, "kind": kind})
-        if kind == "part_of":
-            parent[src] = dst
-        else:  # depends_on
+        edge: dict[str, object] = {"src": src, "dst": dst, "kind": kind}
+        if kind == "depends_on":
             depends_on.setdefault(src, set()).add(dst)
             depended_on_by.setdefault(dst, set()).add(src)
-    edges.sort(key=lambda e: (e["src"], e["dst"], e["kind"]))
+            src_rank = _layer_rank(src, own_layers, parent)
+            dst_rank = _layer_rank(dst, own_layers, parent)
+            if src_rank is not None and dst_rank is not None:
+                edge["violation"] = dst_rank <= src_rank
+        edges.append(edge)
+    edges.sort(key=lambda e: (str(e["src"]), str(e["dst"]), str(e["kind"])))
     return (
         edges,
-        parent,
         {k: sorted(v) for k, v in depends_on.items()},
         {k: sorted(v) for k, v in depended_on_by.items()},
     )
+
+
+def _parent_map(conn: sqlite3.Connection) -> dict[str, str]:
+    """Each node's ``part_of`` container (its ELK compound parent); ``""`` if none."""
+    rows = conn.execute(
+        "SELECT src_ref_id, dst_ref_id FROM edges WHERE kind = 'part_of'"
+    ).fetchall()
+    return {str(r["src_ref_id"]): str(r["dst_ref_id"]) for r in rows}
 
 
 # ---------------------------------------------------------------------------
@@ -185,9 +285,11 @@ def _node_dict(
     *,
     pages: dict[str, str],
     parent: dict[str, str],
+    own_layers: dict[str, str],
     depends_on: dict[str, list[str]],
     depended_on_by: dict[str, list[str]],
     lint_violation_refs: set[str] | None,
+    published_doc_slugs: set[str] | None,
 ) -> dict[str, object]:
     """Project one graph node to its JSON-safe architecture-view payload."""
     node: dict[str, object] = {
@@ -196,10 +298,11 @@ def _node_dict(
         "kind": kind,
         "summary": summary,
         "layer": _layer_of(extra_raw),
+        "layer_rank": _layer_rank(ref_id, own_layers, parent),
         "group": _KIND_DIR.get(kind, "other"),
         "symbols": _symbol_count(conn, source),
         "doc_status": _doc_status(conn, ref_id),
-        "doc_links": _doc_links(conn, ref_id),
+        "doc_links": _doc_links(conn, ref_id, published_doc_slugs=published_doc_slugs),
         "url": pages.get(ref_id, ""),
         "parent": parent.get(ref_id, ""),
         "depends_on": depends_on.get(ref_id, []),
@@ -216,6 +319,7 @@ def build_architecture_view_data(
     *,
     pages: dict[str, str] | None = None,
     lint_violation_refs: set[str] | None = None,
+    published_doc_slugs: set[str] | None = None,
 ) -> dict[str, object]:
     """Build the deterministic interactive-architecture data model.
 
@@ -226,13 +330,21 @@ def build_architecture_view_data(
         lint_violation_refs: The set of ``ref_id``s with a lint violation, or
             ``None`` when lint was not computed. When ``None`` the per-node
             ``lint_clean`` flag is OMITTED (honest — never a fabricated "clean").
+        published_doc_slugs: The set of ``docs/``-relative slugs (``.md``
+            stripped) that actually got a published page. A node's doc link is
+            emitted only when its slug is in this set (honest — never a 404).
+            ``None`` skips the gate (every doc row yields its served link).
 
     Returns:
         A JSON-safe dict ``{schema_version, scope, nodes, edges}`` with every
-        section sorted for byte-stable serialization.
+        section sorted for byte-stable serialization. Each node carries its
+        ``layer_rank`` (the partition index for the layered-lanes layout) and
+        each ``depends_on`` edge a ``violation`` flag (it points up/cross-cuts).
     """
     page_map = pages or {}
-    edges, parent, depends_on, depended_on_by = _arch_edges(conn)
+    parent = _parent_map(conn)
+    own_layers = _own_layers(conn)
+    edges, depends_on, depended_on_by = _arch_edges(conn, own_layers, parent)
     rows = conn.execute(
         "SELECT ref_id, kind, summary, source, extra FROM nodes ORDER BY ref_id"
     ).fetchall()
@@ -246,9 +358,11 @@ def build_architecture_view_data(
             str(r["extra"] or ""),
             pages=page_map,
             parent=parent,
+            own_layers=own_layers,
             depends_on=depends_on,
             depended_on_by=depended_on_by,
             lint_violation_refs=lint_violation_refs,
+            published_doc_slugs=published_doc_slugs,
         )
         for r in rows
     ]
