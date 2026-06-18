@@ -15,7 +15,8 @@
     "echarts": "5.5.1",
     "elkjs": "0.9.3",
     "svg-pan-zoom": "3.6.2",
-    "vue-echarts": "7.0.3"
+    "vue-echarts": "7.0.3",
+    "web-worker": "^1.5.0"
   },
   "devDependencies": {
     "mermaid": "11.4.1",
