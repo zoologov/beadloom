@@ -92,13 +92,15 @@ class TestLintRecalibrationGuard:
         )
         assert result.exit_code == 0, result.output
 
-    def test_recalibrated_rule_threshold_is_290(self) -> None:
-        """The repo's ``domain-size-limit`` rule is loaded as a warn at max 290.
+    def test_recalibrated_rule_threshold_is_180(self) -> None:
+        """The repo's ``domain-size-limit`` rule is loaded as a warn at max 180.
 
-        Pins the recalibrated value at the rule-config level (independent of the
-        graph state) so a silent revert to a lower bound is caught even on a
-        small graph. Recalibrated 280 -> 290 in BDL-060 S4 (the ``application``
-        domain grew honestly with the canonical layered-lanes architecture view).
+        Pins the threshold at the rule-config level (independent of the graph
+        state) so a silent revert is caught even on a small graph. Recalibrated
+        290 -> 180 because the METRIC CHANGED MEANING (BDL-UX #144):
+        ``max_symbols`` now counts the symbols a node OWNS rather than every
+        file under its path prefix, so the observed maximum fell from 284 to
+        150 and 290 could never fire again.
         """
         from pathlib import Path as _Path
 
@@ -113,7 +115,7 @@ class TestLintRecalibrationGuard:
         ]
         assert len(size_rules) == 1
         rule = size_rules[0]
-        assert rule.max_symbols == 290
+        assert rule.max_symbols == 180
         assert rule.severity == "warn"
 
 

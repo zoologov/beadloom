@@ -244,6 +244,168 @@ def get_symbols_for_source(
     ]
 
 
+# --- Node file ownership ----------------------------------------------------
+#
+# A node's ``source`` is a path PREFIX, and graphs nest: ``src/pkg/`` (a domain)
+# holds ``src/pkg/feature/`` (a feature) holds ``src/pkg/feature/impl.py``.
+# Attributing by raw prefix counts a child's files against its parent too, so
+# carving a subpackage into its own node never relieves the parent — the exact
+# remedy a size limit exists to prompt (BDL-UX #144). The rule below is the
+# single answer every counter, sizer and linker must share:
+#
+#   **a file belongs to exactly one node — the most specific one whose source
+#   covers it.**
+
+
+_FACADE_FILENAME = "__init__.py"
+
+
+def _covering_prefix(source: str) -> str:
+    """The path prefix a node *source* covers, normalised to end with ``/``.
+
+    A directory source covers everything beneath it. A package façade
+    (``pkg/__init__.py``) covers its PACKAGE: the façade only re-exports, so
+    treating it as a lone file reports an empty node for a package full of code
+    (BDL-UX #157). Any other file source covers only itself, which
+    :func:`_covers` handles separately.
+    """
+    if source.endswith("/"):
+        return source
+    if source.endswith(f"/{_FACADE_FILENAME}"):
+        return source[: -len(_FACADE_FILENAME)]
+    return source
+
+
+def _covers(source: str, file_path: str) -> bool:
+    """Whether a node *source* covers *file_path* at all (ignoring specificity)."""
+    prefix = _covering_prefix(source)
+    if prefix.endswith("/"):
+        return file_path.startswith(prefix)
+    return file_path == source
+
+
+def get_owning_ref_id(
+    conn: sqlite3.Connection, file_path: str
+) -> str | None:
+    """Return the ref_id of the node that OWNS *file_path*, or ``None``.
+
+    Ownership is most-specific-wins: among the nodes whose source covers the
+    file, the one with the longest covering prefix. Ties cannot occur — two
+    nodes with the same source would be the same scope.
+    """
+    rows = conn.execute(
+        "SELECT ref_id, source FROM nodes WHERE source IS NOT NULL AND source != ''"
+    ).fetchall()
+    best: tuple[int, str] | None = None
+    for row in rows:
+        source = str(row["source"])
+        if not _covers(source, file_path):
+            continue
+        specificity = len(_covering_prefix(source))
+        if best is None or specificity > best[0]:
+            best = (specificity, str(row["ref_id"]))
+    return best[1] if best is not None else None
+
+
+def owns_file(conn: sqlite3.Connection, ref_id: str, file_path: str) -> bool:
+    """Whether *ref_id* is the node that owns *file_path* (most specific wins)."""
+    return get_owning_ref_id(conn, file_path) == ref_id
+
+
+def _owned_file_clause(
+    conn: sqlite3.Connection, source: str
+) -> tuple[str, tuple[str, ...]]:
+    """SQL fragment + params selecting the files a node with *source* owns.
+
+    Built as "under my prefix, and not under any strictly-more-specific node's
+    prefix" so the exclusion happens in SQL rather than by post-filtering every
+    symbol row.
+    """
+    prefix = _covering_prefix(source)
+    if prefix.endswith("/"):
+        clause = "file_path LIKE ?"
+        params: list[str] = [f"{prefix}%"]
+    else:
+        clause = "file_path = ?"
+        params = [source]
+
+    rows = conn.execute(
+        "SELECT source FROM nodes WHERE source IS NOT NULL AND source != ''"
+    ).fetchall()
+    for row in rows:
+        other = str(row["source"])
+        other_prefix = _covering_prefix(other)
+        if other_prefix == prefix:
+            continue
+        # Strictly more specific: covered by me, and longer than my prefix.
+        if not other_prefix.startswith(prefix):
+            continue
+        if other_prefix.endswith("/"):
+            clause += " AND file_path NOT LIKE ?"
+            params.append(f"{other_prefix}%")
+        else:
+            clause += " AND file_path != ?"
+            params.append(other)
+    return clause, tuple(params)
+
+
+def count_symbols_owned_by_node(conn: sqlite3.Connection, ref_id: str) -> int:
+    """Count the symbols in the files *ref_id* owns (nested nodes excluded).
+
+    This is what a size limit must measure: the code the node itself holds, so
+    that splitting a subpackage out genuinely relieves it.
+    """
+    row = conn.execute(
+        "SELECT source FROM nodes WHERE ref_id = ?", (ref_id,)
+    ).fetchone()
+    if row is None or not row["source"]:
+        return 0
+    clause, params = _owned_file_clause(conn, str(row["source"]))
+    count = conn.execute(
+        f"SELECT count(*) FROM code_symbols WHERE {clause}",  # noqa: S608
+        params,
+    ).fetchone()
+    return int(count[0])
+
+
+def count_files_owned_by_node(conn: sqlite3.Connection, ref_id: str) -> int:
+    """Count the indexed FILES *ref_id* owns (nested nodes excluded).
+
+    The file-count sibling of :func:`count_symbols_owned_by_node`, over
+    ``file_index`` rather than ``code_symbols``.
+    """
+    row = conn.execute(
+        "SELECT source FROM nodes WHERE ref_id = ?", (ref_id,)
+    ).fetchone()
+    if row is None or not row["source"]:
+        return 0
+    clause, params = _owned_file_clause(conn, str(row["source"]))
+    count = conn.execute(
+        f"SELECT count(*) FROM file_index WHERE {clause.replace('file_path', 'path')}",  # noqa: S608
+        params,
+    ).fetchone()
+    return int(count[0])
+
+
+def get_owned_symbols(conn: sqlite3.Connection, ref_id: str) -> list[SymbolRow]:
+    """Return the symbols in the files *ref_id* owns (nested nodes excluded)."""
+    row = conn.execute(
+        "SELECT source FROM nodes WHERE ref_id = ?", (ref_id,)
+    ).fetchone()
+    if row is None or not row["source"]:
+        return []
+    clause, params = _owned_file_clause(conn, str(row["source"]))
+    rows = conn.execute(
+        "SELECT symbol_name, kind, line_start FROM code_symbols "  # noqa: S608
+        f"WHERE {clause} ORDER BY file_path, line_start",
+        params,
+    ).fetchall()
+    return [
+        SymbolRow(str(r["symbol_name"]), str(r["kind"]), int(r["line_start"]))
+        for r in rows
+    ]
+
+
 # --- Search fallback --------------------------------------------------------
 
 

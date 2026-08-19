@@ -70,13 +70,20 @@ rules:
     severity: warn
     check:
       for: { kind: domain }
-      # Recalibrated 280 -> 290 (BDL-060 S4). The `application` domain grew
-      # honestly with the canonical layered-lanes architecture view (layer-rank
-      # resolution + served-doc-link gating in `architecture_view.py`) — a real,
-      # owner-requested feature, NOT shadow code or a reclassification dodge.
-      # The limit stays a re-scoping SIGNAL; this is a deliberate, documented
-      # recalibration, not gaming.
-      max_symbols: 290
+      # RECALIBRATED 290 -> 180 because the METRIC CHANGED MEANING (BDL-UX
+      # #144): `max_symbols` now counts the symbols a node OWNS — files under
+      # its source minus files owned by a more specific node — instead of every
+      # file under its path prefix. That is what makes the rule's own remedy
+      # work: carving a subpackage into its own node now genuinely relieves the
+      # parent. Under the new metric the observed maximum is `application` at
+      # 150 (it was 284 under prefix counting), so 290 would never fire again.
+      # 180 restores the signal with ~20% headroom.
+      #
+      # NOTE: this measures a node's OWN code, not its bounded context's total
+      # size. A domain carved into many features owns little and will not trip
+      # this rule however large the subtree is — that is a separate signal,
+      # tracked as BDL-UX #158, deliberately NOT smuggled into this threshold.
+      max_symbols: 180
 
   # COVERAGE lint (BDL-051 S3a) — supersedes the S1 unregistered-feature-candidate
   # sprawl-lint with a stronger, complete-coverage check. Goal: NO SHADOW CODE.

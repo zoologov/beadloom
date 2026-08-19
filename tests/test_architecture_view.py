@@ -173,8 +173,13 @@ def test_nodes_carry_kind_layer_summary_symbols() -> None:
     assert app["kind"] == "domain"
     assert app["layer"] == "application"
     assert app["summary"] == "application summary."
-    # Symbol count counts ALL symbols under the node source (public + private).
-    assert app["symbols"] == 2
+    # Symbol count follows OWNERSHIP, not the raw path prefix: the two symbols
+    # in `application/site.py` belong to the `site-generation` node whose source
+    # IS that file, so the domain that merely contains it owns none of them
+    # (BDL-UX #144). A compound view drawing the child inside the parent must
+    # not also count the child against the parent.
+    assert app["symbols"] == 0
+    assert by_id["site-generation"]["symbols"] == 2
     graph = by_id["graph"]
     assert graph["layer"] == "domain"
     assert graph["symbols"] == 1

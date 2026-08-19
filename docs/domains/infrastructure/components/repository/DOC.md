@@ -40,7 +40,29 @@ Doc reads: `get_doc_ref_ids`, `count_docs`, `count_docs_for_ref`,
 
 Sync-state reads: `get_stale_pairs_for_ref`.
 
-Code-symbol reads: `get_symbols_for_source` (LIKE prefix for directory sources).
+Code-symbol reads: `get_symbols_for_source` (raw LIKE prefix for directory
+sources — kept for callers that genuinely want the whole subtree).
+
+**Node file ownership** — the single answer every counter, sizer and linker
+shares: **a file belongs to exactly one node, the most specific one whose
+`source` covers it.** A `source` is a path prefix and graphs nest, so raw prefix
+attribution counts a child's files against its parent too — which is why carving
+a subpackage into its own node used to leave the parent's size unchanged, the
+very remedy a size limit exists to prompt (BDL-UX #144). A source that names a
+package's `__init__.py` covers its PACKAGE, not just that file: the facade only
+re-exports, so treating it as a lone file reported an empty node for a package
+full of code (BDL-UX #157).
+
+- `get_owning_ref_id(conn, file_path)` -> `str | None` — the node that owns a file
+- `owns_file(conn, ref_id, file_path)` -> `bool`
+- `count_symbols_owned_by_node(conn, ref_id)` -> `int` — what `max_symbols` measures
+- `count_files_owned_by_node(conn, ref_id)` -> `int` — what `max_files` measures
+- `get_owned_symbols(conn, ref_id)` -> `list[SymbolRow]` — what a node page lists
+
+Consumers: the `max_symbols` / `max_files` cardinality rules, the architecture
+view's symbol badge, node-page symbol listings, and `import_resolver`'s
+file-to-node attribution — so no two surfaces can report different numbers for
+the same node.
 
 Search fallback: `search_nodes_like` (the non-FTS5 LIKE path).
 

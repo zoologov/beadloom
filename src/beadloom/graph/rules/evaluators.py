@@ -28,6 +28,10 @@ from beadloom.graph.rules.types import (
     UnregisteredFeatureCandidateRule,
     Violation,
 )
+from beadloom.infrastructure.repository import (
+    count_files_owned_by_node,
+    count_symbols_owned_by_node,
+)
 
 if TYPE_CHECKING:
     import sqlite3
@@ -643,12 +647,11 @@ def evaluate_cardinality_rules(
 
             # --- max_symbols check ---
             if rule.max_symbols is not None and node_source is not None:
-                prefix = node_source.rstrip("/") + "/"
-                row = conn.execute(
-                    "SELECT COUNT(*) FROM code_symbols WHERE file_path LIKE ?",
-                    (prefix + "%",),
-                ).fetchone()
-                symbol_count = int(row[0]) if row is not None else 0
+                # Count what the node OWNS, not everything under its path
+                # prefix: a nested node's files belong to that node, so carving
+                # a subpackage out genuinely relieves the parent — which is the
+                # remedy this limit exists to prompt (BDL-UX #144).
+                symbol_count = count_symbols_owned_by_node(conn, node_ref_id)
 
                 if symbol_count > rule.max_symbols:
                     violations.append(
@@ -671,12 +674,9 @@ def evaluate_cardinality_rules(
 
             # --- max_files check ---
             if rule.max_files is not None and node_source is not None:
-                prefix = node_source.rstrip("/") + "/"
-                row = conn.execute(
-                    "SELECT COUNT(*) FROM file_index WHERE path LIKE ?",
-                    (prefix + "%",),
-                ).fetchone()
-                file_count = int(row[0]) if row is not None else 0
+                # Same ownership rule as max_symbols: a nested node's files are
+                # not the parent's, so a split relieves the parent.
+                file_count = count_files_owned_by_node(conn, node_ref_id)
 
                 if file_count > rule.max_files:
                     violations.append(

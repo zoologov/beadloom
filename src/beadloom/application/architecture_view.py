@@ -32,6 +32,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from beadloom.application.site_pages import _KIND_DIR
+from beadloom.infrastructure.repository import count_symbols_owned_by_node
 
 if TYPE_CHECKING:
     import sqlite3
@@ -102,20 +103,15 @@ def _layer_of(extra_raw: str) -> str:
     return ""
 
 
-def _symbol_count(conn: sqlite3.Connection, source: str | None) -> int:
-    """Count code symbols whose file lives under the node *source*.
+def _symbol_count(conn: sqlite3.Connection, ref_id: str) -> int:
+    """Count the code symbols the node OWNS.
 
-    A directory source (``src/dom/``) matches every file beneath it via a LIKE
-    prefix; a file source matches exactly. Mirrors the repository symbol read so
-    the count agrees with the per-node page. ``0`` when the node has no source.
+    Delegates to the single ownership rule in ``infrastructure/repository``
+    (most specific source wins), so this compound view never counts a child's
+    symbols against the parent that visually contains it, and a package façade
+    source does not report an empty node (BDL-UX #144/#157).
     """
-    if not source:
-        return 0
-    pattern = source + "%" if source.endswith("/") else source
-    row = conn.execute(
-        "SELECT count(*) FROM code_symbols WHERE file_path LIKE ?", (pattern,)
-    ).fetchone()
-    return int(row[0])
+    return count_symbols_owned_by_node(conn, ref_id)
 
 
 def _doc_status(conn: sqlite3.Connection, ref_id: str) -> str:
@@ -300,7 +296,7 @@ def _node_dict(
         "layer": _layer_of(extra_raw),
         "layer_rank": _layer_rank(ref_id, own_layers, parent),
         "group": _KIND_DIR.get(kind, "other"),
-        "symbols": _symbol_count(conn, source),
+        "symbols": _symbol_count(conn, ref_id),
         "doc_status": _doc_status(conn, ref_id),
         "doc_links": _doc_links(conn, ref_id, published_doc_slugs=published_doc_slugs),
         "url": pages.get(ref_id, ""),

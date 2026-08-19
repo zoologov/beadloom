@@ -319,68 +319,6 @@ def _get_actual_packages(project_root: Path) -> set[str]:
     return packages
 
 
-_FACADE_FILENAME = "__init__.py"
-
-
-def _check_facade_sources(conn: sqlite3.Connection) -> list[Check]:
-    """Nodes sourced at a package façade that hides the package's own symbols.
-
-    After a cohesion-driven decomposition the natural place for a
-    ``# beadloom:feature=`` annotation is the package's ``__init__.py``, and the
-    node's ``source`` follows it there. The façade only re-exports, so every
-    symbol read — the node page, the architecture pop-up, the debt report's
-    complexity signal, and the ``max_symbols`` rule — sees an empty node. They
-    all agree, which is exactly why nothing surfaces the gap: a size rule
-    reporting clean because it is looking at nothing (BDL-UX #157).
-
-    Reported as a WARNING, never an ERROR: the condition is pre-existing in any
-    project that decomposed a module into a package, and only ERROR-severity
-    checks fail the gate — an upgrade must not turn a green project red.
-    """
-    rows = conn.execute(
-        "SELECT ref_id, source FROM nodes WHERE source LIKE ? ORDER BY ref_id",
-        (f"%/{_FACADE_FILENAME}",),
-    ).fetchall()
-    findings: list[Check] = []
-    for row in rows:
-        source = str(row["source"])
-        package = source[: -len(_FACADE_FILENAME)]
-        own = int(
-            conn.execute(
-                "SELECT count(*) FROM code_symbols WHERE file_path = ?", (source,)
-            ).fetchone()[0]
-        )
-        total = int(
-            conn.execute(
-                "SELECT count(*) FROM code_symbols WHERE file_path LIKE ?",
-                (f"{package}%",),
-            ).fetchone()[0]
-        )
-        hidden = total - own
-        if hidden <= 0:
-            continue
-        findings.append(
-            Check(
-                "facade_sources",
-                Severity.WARNING,
-                f"Node '{row['ref_id']}' is sourced at the package facade "
-                f"'{source}', hiding {hidden} of {total} symbols from every "
-                f"symbol read (node page, architecture view, debt report, "
-                f"max_symbols). Point its source at the package directory "
-                f"'{package}' instead.",
-            )
-        )
-    if not findings:
-        return [
-            Check(
-                "facade_sources",
-                Severity.OK,
-                "No node source hides its package's symbols.",
-            )
-        ]
-    return findings
-
-
 def _check_agent_instructions(project_root: Path) -> list[Check]:
     """Check agent instruction files for factual drift.
 
@@ -576,7 +514,6 @@ def run_checks(
     results.extend(_check_symbol_drift(conn))
     results.extend(_check_stale_sync(conn))
     results.extend(_check_source_coverage(conn))
-    results.extend(_check_facade_sources(conn))
     if project_root is not None:
         results.extend(_check_agent_instructions(project_root))
     return results

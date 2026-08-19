@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from tree_sitter import Parser
 
 from beadloom.context_oracle.code_indexer import get_lang_config
+from beadloom.infrastructure.repository import get_owning_ref_id
 from beadloom.infrastructure.scan_paths import resolve_scan_paths
 
 if TYPE_CHECKING:
@@ -743,20 +744,12 @@ def _find_node_for_file(
 ) -> str | None:
     """Find the graph node that *owns* a file by its relative path.
 
-    Walks up the directory hierarchy, matching against ``nodes.source``.
+    Delegates to the single ownership rule in ``infrastructure/repository``
+    (most specific source wins). This previously walked up from the file's
+    PARENT directory, so a node whose source IS a file never owned that file —
+    its imports were attributed to the enclosing directory's node instead.
     """
-    parts = rel_path.split("/")
-    # Skip the filename itself — start from its parent directory.
-    for i in range(len(parts) - 1, 0, -1):
-        segment = "/".join(parts[:i])
-        for source in (f"{segment}/", segment):
-            row = conn.execute(
-                "SELECT ref_id FROM nodes WHERE source = ?",
-                (source,),
-            ).fetchone()
-            if row is not None:
-                return str(row[0])
-    return None
+    return get_owning_ref_id(conn, rel_path)
 
 
 def resolve_import_to_node(
@@ -833,11 +826,47 @@ def _collect_source_files(project_root: Path) -> list[Path]:
     return sorted(files)
 
 
+def _part_of_ancestors(conn: sqlite3.Connection) -> dict[str, set[str]]:
+    """Map each node to the set of nodes it is (transitively) ``part_of``."""
+    parents: dict[str, set[str]] = {}
+    for row in conn.execute(
+        "SELECT src_ref_id, dst_ref_id FROM edges WHERE kind = 'part_of'"
+    ).fetchall():
+        child, parent = str(row[0]), str(row[1])
+        if child != parent:  # the root service is part_of itself by convention
+            parents.setdefault(child, set()).add(parent)
+
+    resolved: dict[str, set[str]] = {}
+
+    def walk(node: str, seen: set[str]) -> set[str]:
+        if node in resolved:
+            return resolved[node]
+        out: set[str] = set()
+        for parent in parents.get(node, ()):
+            if parent in seen:
+                continue
+            out.add(parent)
+            out |= walk(parent, seen | {parent})
+        resolved[node] = out
+        return out
+
+    for node in parents:
+        walk(node, {node})
+    return resolved
+
+
 def create_import_edges(conn: sqlite3.Connection) -> int:
     """Create ``depends_on`` edges from resolved code imports.
 
     For each resolved import, finds the importing file's owning node
     and creates a ``depends_on`` edge to the target node (if different).
+
+    Containment is skipped: an edge between a node and its ``part_of`` ancestor
+    is a category error, not a dependency. The parent already CONTAINS the
+    child, so "the domain depends on its own feature" says nothing the
+    containment edge did not, and — because a parent's files and its child's
+    files import each other freely in healthy package layout — it manufactures
+    node-level cycles that do not exist at the module level (BDL-UX #144).
 
     Returns the number of edges created.
     """
@@ -846,6 +875,7 @@ def create_import_edges(conn: sqlite3.Connection) -> int:
         "FROM code_imports WHERE resolved_ref_id IS NOT NULL"
     ).fetchall()
 
+    ancestors = _part_of_ancestors(conn)
     edges_created = 0
     seen: set[tuple[str, str]] = set()
 
@@ -855,6 +885,10 @@ def create_import_edges(conn: sqlite3.Connection) -> int:
 
         source_ref_id = _find_node_for_file(rel_path, conn)
         if not source_ref_id or source_ref_id == target_ref_id:
+            continue
+        if target_ref_id in ancestors.get(source_ref_id, ()) or source_ref_id in (
+            ancestors.get(target_ref_id, ())
+        ):
             continue
 
         edge_key = (source_ref_id, target_ref_id)

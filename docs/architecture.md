@@ -134,7 +134,7 @@ Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3
 | `layers` | Enforce layered architecture direction | Top-down: services → domains → infrastructure |
 | `forbid_cycles` | Detect circular dependencies in the graph | No cycles on `uses`/`depends_on` edges |
 | `forbid_import` | Control file-level import boundaries | Files in `src/beadloom/tui/**` must not import from `src/beadloom/infrastructure/**` |
-| `check` | Enforce complexity / coverage limits per node | `max_symbols: 280` per domain (Beadloom's `domain-size-limit`; see the recalibration note below); `module-coverage` (every src module tracked) |
+| `check` | Enforce complexity / coverage limits per node | `max_symbols: 180` per domain — counting the symbols a node OWNS, nested nodes excluded (Beadloom's `domain-size-limit`; see the recalibration note below); `module-coverage` (every src module tracked) |
 
 > Internally each parsed rule carries a `rule_type` string (`deny` / `require` / `forbid` / `layer` / `forbid_import` / `cardinality` / …) used by the evaluators; the **authoring key** in `rules.yml` is the column above.
 
@@ -158,7 +158,11 @@ Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3
 
 The `--strict` flag exits with code 1 on `error`-severity violations (for CI/CD). Rules support `error` and `warn` severity levels.
 
-> **`domain-size-limit` recalibrated 200 → 280 (BDL-059 S3).** Cohesion-driven decomposition split the monster files (`rule_engine.py`, `federation.py`) into cohesive same-domain packages, but an in-domain split does not change a domain's symbol count — `graph` and `application` are legitimately large bounded contexts. Dodging the count by reclassifying nodes would be metric-gaming; recalibrating the threshold for this codebase's largest contexts is the honest, documented alternative. The limit stays a `warn` signal for genuine re-scoping (a domain over 280), never a target.
+> **`domain-size-limit`: 200 → 280 (BDL-059 S3) → 290 (BDL-060 S4) → 180 (BDL-UX #144).** The first two moves were threshold recalibrations under the OLD metric, where `max_symbols` counted every file under a node's path prefix — so an in-domain split changed nothing and the honest option was to raise the bar for legitimately large bounded contexts.
+>
+> The last move is different in kind: the **metric changed meaning**. `max_symbols` now counts the symbols a node OWNS — files under its source minus files owned by a more specific node — which is what makes the rule's own remedy work: carving a subpackage into its own node genuinely relieves the parent. Under the new metric this repo's largest owner is `application` at 150 (it was 284 under prefix counting), so 290 could never fire again; 180 restores the signal with ~20% headroom.
+>
+> One consequence is stated openly: this measures a node's OWN code, not its bounded context's total size. A domain carved into many features owns little and will not trip the rule however large its subtree grows. That is a genuinely different signal, tracked as BDL-UX #158 rather than smuggled into this threshold. The limit stays a `warn` signal for re-scoping, never a target.
 
 ### Node Tags
 
