@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 import pytest
@@ -841,7 +842,7 @@ class TestGetDebtReportTool:
         from beadloom.services.mcp_server import _TOOLS
 
         tool = next(t for t in _TOOLS if t.name == "get_debt_report")
-        props = tool.inputSchema["properties"]
+        props = tool.input_schema["properties"]
         assert "trend" in props
         assert props["trend"]["type"] == "boolean"
         assert "category" in props
@@ -949,3 +950,63 @@ class TestGetDebtReportTool:
 
         with pytest.raises(ValueError, match="get_debt_report requires project_root"):
             _dispatch_tool(db_conn, "get_debt_report", {})
+
+
+class TestMcpProtocolHandlers:
+    """The configured server must actually answer tools/list and tools/call.
+
+    ``create_server`` used to be covered only by ``assert server is not None``,
+    which stayed green through the mcp 1.x -> 2.0 handler-registration change
+    even though the server answered nothing. These drive the registered
+    handlers the way the runner does.
+    """
+
+    @pytest.mark.asyncio()
+    async def test_list_tools_handler_returns_the_catalog(self, project: Path) -> None:
+        import mcp.types as types
+
+        from beadloom.services.mcp_server import _TOOLS, create_server
+
+        server = create_server(project)
+        entry = server.get_request_handler("tools/list")
+        assert entry is not None, "tools/list is not registered"
+
+        result = await entry.handler(None, None)  # type: ignore[arg-type]
+
+        assert isinstance(result, types.ListToolsResult)
+        assert [t.name for t in result.tools] == [t.name for t in _TOOLS]
+
+    @pytest.mark.asyncio()
+    async def test_call_tool_handler_returns_json_content(self, project: Path) -> None:
+        import mcp.types as types
+
+        from beadloom.services.mcp_server import create_server
+
+        server = create_server(project)
+        entry = server.get_request_handler("tools/call")
+        assert entry is not None, "tools/call is not registered"
+
+        params = types.CallToolRequestParams(name="get_status", arguments={})
+        result = await entry.handler(None, params)  # type: ignore[arg-type]
+
+        assert isinstance(result, types.CallToolResult)
+        assert result.is_error is not True
+        payload = json.loads(result.content[0].text)  # type: ignore[union-attr]
+        assert "nodes_count" in payload
+
+    @pytest.mark.asyncio()
+    async def test_unknown_tool_is_an_in_band_error(self, project: Path) -> None:
+        """An unknown tool reports a tool-level failure, not a protocol crash."""
+        import mcp.types as types
+
+        from beadloom.services.mcp_server import create_server
+
+        server = create_server(project)
+        entry = server.get_request_handler("tools/call")
+        assert entry is not None
+
+        params = types.CallToolRequestParams(name="no_such_tool", arguments={})
+        result = await entry.handler(None, params)  # type: ignore[arg-type]
+
+        assert result.is_error is True
+        assert "Error:" in result.content[0].text  # type: ignore[union-attr]

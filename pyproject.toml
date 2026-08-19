@@ -30,9 +30,17 @@ dependencies = [
     "click>=8.1",
     "rich>=13.0",
     "pyyaml>=6.0",
-    "tree-sitter>=0.23",
-    "tree-sitter-python>=0.23",
-    "mcp>=1.0",
+    # BOUNDED on purpose (BDL-UX #150): tree-sitter is the ABI host that loads
+    # every grammar wheel, and the grammars only declare their core requirement
+    # under their `core` extra — which a normal install never activates. An
+    # unbounded pin therefore let a fresh install pair core 0.26 with the
+    # current grammar wheels, which SEGFAULTS partway through a real reindex
+    # (small parses survive; the crash needs volume, which is why it reached
+    # users). Widen the ceiling only after a full-repo reindex has been run
+    # against the new core — loading the grammars is not enough evidence.
+    "tree-sitter>=0.25,<0.26",
+    "tree-sitter-python>=0.25",
+    "mcp>=2.0",
 ]
 
 [project.optional-dependencies]
@@ -42,10 +50,10 @@ languages = [
     "tree-sitter-rust>=0.23",
     "tree-sitter-kotlin>=1.1",
     "tree-sitter-java>=0.23",
-    "tree-sitter-swift>=0.0.1",
+    "tree-sitter-swift>=0.7",
     "tree-sitter-objc>=3.0",
-    "tree-sitter-c>=0.21",
-    "tree-sitter-cpp>=0.22",
+    "tree-sitter-c>=0.24",
+    "tree-sitter-cpp>=0.23",
 ]
 search = [
     "sqlite-vec>=0.1",

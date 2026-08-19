@@ -364,6 +364,16 @@ The bead-status table updater (`_set_active_table_status`) is deterministic and 
 MCP server is implemented in `src/beadloom/services/mcp_server.py`:
 
 - `create_server(project_root)` -- creates an MCP Server with registered handlers, auto-reindex, and two-level caching
+
+Beadloom requires **mcp >= 2.0**. The 2.0 low-level API takes its handlers as
+constructor arguments (`Server(on_list_tools=..., on_call_tool=...)`) instead of
+the `@server.list_tools()` / `@server.call_tool()` decorators of 1.x, and the
+handlers exchange protocol result models (`ListToolsResult`, `CallToolResult`)
+rather than bare lists. One behavioural consequence is explicit here: 1.x
+wrapped an exception raised by a tool handler into an error result, while 2.0
+hands it to the runner, so `create_server` classifies a dispatch failure
+(unknown tool, missing `ref_id`) itself and returns `CallToolResult(is_error=True)`
+— the agent gets a correctable in-band message instead of a protocol error.
 - `_dispatch_tool(conn, name, args, project_root?, cache?, l2_cache?)` -- routes calls to handlers with cache management
 - `_ensure_fresh_index(project_root, conn)` -- auto-reindex if stale (compares file mtimes with `last_reindex_at`)
 - `_is_index_stale(project_root, conn)` -- check staleness by comparing graph/docs mtimes
@@ -403,4 +413,4 @@ Setup and configuration commands are in `src/beadloom/services/commands/setup.py
 
 ## Testing
 
-Tests in `tests/test_mcp_server.py` and `tests/test_mcp_new_tools.py` verify each read/write handler directly (without MCP transport). The process-tools are tested in `tests/test_mcp_process_tools.py` (with the `bd` seam + gate mocked — `complete_bead` is asserted to REFUSE on a red gate and to close on green) and the seam itself in `tests/test_bd_seam.py`.
+Tests in `tests/test_mcp_server.py` and `tests/test_mcp_new_tools.py` verify each read/write handler directly (without MCP transport). `TestMcpProtocolHandlers` additionally drives the registered `tools/list` and `tools/call` entries the way the runner does — including the unknown-tool in-band error — so a protocol-layer change cannot pass on `create_server` merely returning an object. The process-tools are tested in `tests/test_mcp_process_tools.py` (with the `bd` seam + gate mocked — `complete_bead` is asserted to REFUSE on a red gate and to close on green) and the seam itself in `tests/test_bd_seam.py`.
