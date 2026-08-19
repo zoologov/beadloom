@@ -1,7 +1,8 @@
 # BDL UX Feedback Log
 
 > Collected during development and dogfooding.
-> Total: 156 issues | Open: 42 | Improvements: 20 | Excluded: 7 | Closed: 87
+> Total: 156 issues | Open: 41 | Improvements: 20 | Excluded: 7 | Closed: 88
+> 2026-08-19 (dependency currency pass): CLOSED #150 — REPRODUCED on Beadloom's own tree and FIXED. The reporter's minimal case does not reproduce today (core 0.26.0 loads all ten grammar wheels and parses small files cleanly through `get_lang_config`/`extract_symbols`, and a fresh `pip install beadloom[languages]==2.1.0` resolves a pair that survives `beadloom init` + `reindex` on a 5-file project) — the crash needs VOLUME: the full test suite segfaulted inside `_index_code_files` partway through a real repo-wide reindex. That sharpens the issue rather than softening it: **loading a grammar is not evidence that the pairing is safe**, which is exactly why it survived a gate. Fixed by `tree-sitter>=0.25,<0.26` plus two guards in `tests/test_grammar_guard.py` (the declared pin must carry an upper bound; the INSTALLED core must fall inside it, so a local upgrade cannot pass the suite while claiming an untested range). Still open from #150's ask: the from-scratch-resolver CI job. Open 42->41, Closed 87->88.
 > 2026-08-19 (design input): Opened #156 — 🔴 **context rot** gives #153 a measurable root: recall of a long instruction file DEGRADES as context fills, i.e. exactly when a long session needs the rules most, so shrinking the scaffolded `CLAUDE.md` is mechanism and not tidiness; the design target is *"the smallest possible set of high-signal tokens"* at the *"right altitude"* between brittle hardcoding and vague guidance. Also: role agents should return a bounded distilled result (~1-2k tokens) as a stated contract; and 🔴 **selective escalation is a second graph-derived feature** — blast radius, boundary crossings and invariant-bearing nodes decide what must stop for a human, turning "escalate when unsure" into a harness rule. Improvements 19->20, Total 155->156.
 > 2026-08-19 (design input): Opened #155 — multi-agent failure modes and long-running-harness patterns from three current Anthropic publications. 🔴 Headline: **wave shape should be DERIVED FROM THE GRAPH** — parallel agents pay off on independent subgraphs (266 vs 21 vulnerabilities found) and rot on shared code with rich interdependencies; only Beadloom holds the code-level interdependence needed to decide. Also: conformity cascades (18/30 agents chose the same branch name; identical context ⇒ identical mistakes, and shared state is the vector); a review role fed the author's summary converges on it (hidden-profile groups scored 17–36% vs ~100%), so the reviewer must see diff+spec BEFORE advocacy; named long-running failure modes led by *premature victory declaration*; and state files in JSON because agents corrupt Markdown. Improvements 18→19, Total 154→155.
 > 2026-08-19 (design input): Opened #154 — oversight patterns for the #153 enforcement epic, drawn from Anthropic's public *Risk Report: August 2026*: separate asynchronous monitoring from blocking interventions and label which is which; claim raised DETECTABILITY rather than prevention; ship a machine-readable "does not cover" note with every gate; make "diff vs its own stated purpose" a check type (Beadloom holds the stated purpose); 🔴 spawning must narrow authority, never widen it (their incident: legacy instructions propagated `--dangerously-skip-permissions` to child agents, detected only by the damage); 🔴 shared agent context propagates DECISIONS — one agent's silent scope-narrowing spread to later agents while metrics looked green, found 3 days later by a human; 🔴 gates need a LIVENESS proof — their filter ran misconfigured for several model generations "without anyone noticing", the same defect as #61. Improvements 17→18, Total 153→154.
@@ -76,23 +77,6 @@
     **🔴 The remedy is destructive here:** `config-check --fix` would rewrite the files back to the **older** templates — measured at **42 deletions, 0 insertions** in a sandbox clone — silently deleting a standing engineering paradigm the project relies on. The remedy string (`run `beadloom setup-agentic-flow` to recompose`) reads like a safe re-sync, so the operator is steered straight at it.
     **Expected:** cut a release containing BDL-059 (and bump the version so source-installs and released installs are distinguishable); make `config-check` name the template-set version it compared against, so a drift report can be read as "your files are newer than my templates" rather than "your files are wrong"; and have `--fix` show the diff before deleting hand-authored content.
     **Workaround adopted downstream:** run the gate as `beadloom ci` **minus** `config-check` (`reindex`/`lint --strict`/`sync-check`/`docs audit`/`doctor` as blocking steps), with `config-check` kept as a separate informational step whose comment names both the cause and an explicit **exit condition** — it rejoins the blocking gate as soon as a release containing BDL-059 exists.
-
-150. [2026-08-18] [HIGH] 🔴 `tree-sitter` has no upper bound → a fresh install pairs core 0.26 with 0.25 grammars and every command SEGFAULTS with zero output
-
-    **Severity:** high (a fresh install of the tool is dead on arrival; the failure is a native crash with no message, so it reads as an environment problem rather than a dependency one)
-    **Command:** `beadloom reindex` (any command touching the parser)
-    **Context:** Dogfood on a downstream project wiring `beadloom ci` into GitHub Actions. The step died with `Segmentation fault (core dumped) beadloom reindex`, exit 139, ~1s in, no output at all. It had been dismissed in the workflow comment as "native sqlite-vec/dolt segfaults on the runner — an environment problem, not a logical one" and silenced with `continue-on-error`, which is exactly the wrong conclusion and cost the project a day and a half of a gate that verified nothing.
-    **Issue:** `pyproject.toml` pins `tree-sitter>=0.23` with **no upper bound**, while the grammar wheels (`tree-sitter-python` 0.25.0, and the nine other `tree-sitter-*` grammars) are built against the 0.25 language ABI. A fresh resolve now picks core **0.26.0**, and loading a grammar built for the older ABI crashes natively.
-    **Measured** (two isolated venvs, Python 3.12, one factor changed):
-
-    | `tree-sitter` | `tree-sitter-python` | result |
-    |---|---|---|
-    | 0.26.0 | 0.25.0 | **exit 138** (SIGBUS, macOS) / **139** (SIGSEGV, Linux) — zero output |
-    | 0.25.2 | 0.25.0 | **exit 0** — `Symbols: 1620`, `Imports: 1477` |
-
-    Note this is NOT platform-specific: it reproduces on macOS as SIGBUS. The "works on my machine, crashes on CI" impression came purely from **install date** — an environment installed before 0.26.0 was published still holds a matching pair, so every existing user keeps working and only new installs break. That makes the regression invisible to anyone who does not reinstall, including maintainers.
-    **Expected:** cap the core to the ABI the shipped grammars target (`tree-sitter>=0.23,<0.26`) and add a CI job that installs the tool **from scratch** with a fresh resolver (no lockfile, no cache) and runs `reindex` on a fixture — the existing suite cannot catch this because it runs in an environment that already has a compatible pair pinned. Optionally, catch the load failure and emit a diagnostic naming the two versions instead of letting the process die silently.
-    **Workaround adopted downstream:** `uv tool install beadloom --with "tree-sitter<0.26"`.
 
 147. [2026-08-05] [HIGH] 🔴 `beadloom lint` MUTATES the index — a read-only-sounding verb writes to `beadloom.db`, and there is no read-only mode without `--no-reindex`
 
@@ -1064,6 +1048,31 @@
 ---
 
 ## Closed Issues
+
+### Dependency currency pass (2026-08-19)
+
+- 150. ~~[HIGH] 🔴 `tree-sitter` has no upper bound → a fresh install pairs a newer core with the shipped grammars and SEGFAULTS with zero output~~ **FIXED** — pinned `tree-sitter>=0.25,<0.26` in `pyproject.toml` with the reasoning in-line, and guarded in `tests/test_grammar_guard.py`: `test_tree_sitter_core_requirement_is_bounded_above` fails if the pin ever loses its ceiling, `test_installed_tree_sitter_satisfies_the_declared_bound` fails if the environment running the suite sits outside the declared range. **Reproduction note (matters for the fix's shape):** the small case no longer crashes — under core 0.26.0 all ten grammars load through the production loader, `extract_symbols` parses TS/Swift/Obj-C/Kotlin/C++ fine, and a fresh `beadloom[languages]==2.1.0` install completes `init` + `reindex --full` on a 5-file project. The segfault appeared only under the full suite, inside `_index_code_files` during a repo-wide reindex. So the honest rule is **a grammar that loads proves nothing; only a full reindex does** — which is why the pin, not a load-time check, is the fix. Not done, carried forward: the from-scratch-resolver CI job (`uv venv` + install with no lockfile/cache + reindex a fixture) that #150 asked for — the existing suite runs in an environment that already holds a compatible pair.
+
+  <details><summary>Original report (2026-08-18)</summary>
+
+  150. [2026-08-18] [HIGH] 🔴 `tree-sitter` has no upper bound → a fresh install pairs core 0.26 with 0.25 grammars and every command SEGFAULTS with zero output
+
+      **Severity:** high (a fresh install of the tool is dead on arrival; the failure is a native crash with no message, so it reads as an environment problem rather than a dependency one)
+      **Command:** `beadloom reindex` (any command touching the parser)
+      **Context:** Dogfood on a downstream project wiring `beadloom ci` into GitHub Actions. The step died with `Segmentation fault (core dumped) beadloom reindex`, exit 139, ~1s in, no output at all. It had been dismissed in the workflow comment as "native sqlite-vec/dolt segfaults on the runner — an environment problem, not a logical one" and silenced with `continue-on-error`, which is exactly the wrong conclusion and cost the project a day and a half of a gate that verified nothing.
+      **Issue:** `pyproject.toml` pins `tree-sitter>=0.23` with **no upper bound**, while the grammar wheels (`tree-sitter-python` 0.25.0, and the nine other `tree-sitter-*` grammars) are built against the 0.25 language ABI. A fresh resolve now picks core **0.26.0**, and loading a grammar built for the older ABI crashes natively.
+      **Measured** (two isolated venvs, Python 3.12, one factor changed):
+
+      | `tree-sitter` | `tree-sitter-python` | result |
+      |---|---|---|
+      | 0.26.0 | 0.25.0 | **exit 138** (SIGBUS, macOS) / **139** (SIGSEGV, Linux) — zero output |
+      | 0.25.2 | 0.25.0 | **exit 0** — `Symbols: 1620`, `Imports: 1477` |
+
+      Note this is NOT platform-specific: it reproduces on macOS as SIGBUS. The "works on my machine, crashes on CI" impression came purely from **install date** — an environment installed before 0.26.0 was published still holds a matching pair, so every existing user keeps working and only new installs break. That makes the regression invisible to anyone who does not reinstall, including maintainers.
+      **Expected:** cap the core to the ABI the shipped grammars target (`tree-sitter>=0.23,<0.26`) and add a CI job that installs the tool **from scratch** with a fresh resolver (no lockfile, no cache) and runs `reindex` on a fixture — the existing suite cannot catch this because it runs in an environment that already has a compatible pair pinned. Optionally, catch the load failure and emit a diagnostic naming the two versions instead of letting the process die silently.
+      **Workaround adopted downstream:** `uv tool install beadloom --with "tree-sitter<0.26"`.
+
+  </details>
 
 ### BDL-040 — F4: Living Knowledge Base + Visual Landscape (2026-06-02)
 

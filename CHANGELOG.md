@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Atomic graph-YAML writes (BDL-060 S1).** Every write to `.beadloom/_graph/*.yml`
+  goes through `write_yaml_atomic`, so an interrupted command can no longer leave a
+  half-written graph behind.
+- **Typed GraphQL contract surface (BDL-060 S2).** Tier-A extraction of field types,
+  nullability/list wrapping, arguments and subscriptions, with a native breaking-change
+  verdict. `graphql-core` is optional: without it the scanner falls back to the honest
+  name-level surface rather than pretending to type information it does not have.
+- **AMQP message-body contracts (BDL-060 S3).** JSON-Schema bodies with a native
+  body-diff verdict, plus optional AsyncAPI ingestion.
+
+### Changed
+- **Requires `mcp >= 2.0`.** The MCP server was migrated to the 2.0 low-level API:
+  handlers are supplied at construction (`Server(on_list_tools=…, on_call_tool=…)`)
+  rather than through the 1.x `@server.list_tools()` decorators, results are protocol
+  models (`ListToolsResult` / `CallToolResult`), and `Tool.inputSchema` is now
+  `input_schema`. Because 2.0 no longer wraps handler exceptions, the server classifies
+  dispatch failures itself — an unknown tool or missing `ref_id` comes back as
+  `CallToolResult(is_error=True)` with a correctable message instead of a protocol error.
+- **The TUI dashboard paints immediately.** The debt score and git activity moved to a
+  background worker with their own SQLite connection; the gauge shows `Debt: computing…`
+  and the activity panel `Analyzing git history…` until real values arrive, instead of
+  holding a blank terminal for seconds on a large repository.
+- **Test mapping walks the project once.** `map_tests` replaced a recursive glob per
+  framework pattern with a single pruned walk that skips dependency, VCS, cache and build
+  trees (`node_modules`, `.venv`, `vendor`, `.git`, `dist`, `build`, …) — those hold no
+  first-party tests and could previously be attributed to project nodes.
+- **Dependency refresh.** mypy 1.19→2.3, textual 7.5→8.2, rich 14→15, ruff 0.15→0.16,
+  pytest 9.0→9.1; site: echarts 5→6 with vue-echarts 7→8, elkjs 0.9→0.12,
+  cytoscape 3.30→3.34, mermaid 11.4→11.17.
+
+### Fixed
+- **A fresh install could segfault mid-reindex (BDL-UX #150).** `tree-sitter` carried no
+  upper bound, so a new install paired a newer core with grammar wheels built against an
+  older ABI — grammar wheels only declare their core requirement under a `core` extra that
+  a normal install never activates. The pairing survives loading and small parses and
+  crashes partway through a real repo-wide reindex, which is how it reached users without
+  tripping a gate. Pinned `tree-sitter>=0.25,<0.26`, and `tests/test_grammar_guard.py` now
+  fails both if the pin loses its ceiling and if the environment running the suite falls
+  outside the declared range.
+
 ## [2.1.0] - 2026-06-15
 
 **Reference-documentation freshness + positioning refresh.** A minor, backward-compatible
