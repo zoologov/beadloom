@@ -763,16 +763,37 @@ def resolve_import_to_node(
     """Map an import path to a graph node ref_id.
 
     Strategy (in order):
-    1. Code-symbols annotation lookup (``# beadloom:domain=X``).
-    2. Hierarchical source-prefix matching against ``nodes.source``.
+    1. Ownership of the imported FILE — the most specific node whose source
+       covers it. This is the same rule the importing side uses, so an edge
+       always connects the two nodes that actually own the two files.
+    2. Code-symbols annotation lookup (``# beadloom:domain=X``).
+    3. Hierarchical source-prefix matching against ``nodes.source``.
+
+    Strategy 1 exists because 3 resolves a dotted path to an EXTENSION-LESS
+    directory path, which can never match a node whose source is a file — so
+    every import used to land on the nearest enclosing directory node, silently
+    collapsing feature/component dependencies into their domain (BDL-UX #144).
 
     Returns ``None`` if no mapping found.
     """
     effective_scan = scan_paths or ["src", "lib", "app"]
 
-    # Strategy 1: code_symbols annotation match.
     possible_files = _import_path_to_file_paths(import_path, scan_paths)
 
+    # Strategy 1: the node that owns the imported file.
+    for candidate in possible_files:
+        indexed = conn.execute(
+            "SELECT 1 FROM code_symbols WHERE file_path = ? "
+            "UNION ALL SELECT 1 FROM file_index WHERE path = ? LIMIT 1",
+            (candidate, candidate),
+        ).fetchone()
+        if indexed is None:
+            continue
+        owner = get_owning_ref_id(conn, candidate)
+        if owner is not None:
+            return owner
+
+    # Strategy 2: code_symbols annotation match.
     for candidate in possible_files:
         rows = conn.execute(
             "SELECT annotations FROM code_symbols WHERE file_path = ? LIMIT 1",
@@ -797,7 +818,7 @@ def resolve_import_to_node(
                     if node_row is not None:
                         return str(node_row[0])
 
-    # Strategy 2: hierarchical source-prefix matching.
+    # Strategy 3: hierarchical source-prefix matching.
     if is_ts:
         normalized = _normalize_ts_import(import_path)
         if normalized is None:

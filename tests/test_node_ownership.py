@@ -180,3 +180,69 @@ class TestGetOwnedSymbols:
             assert count_symbols_owned_by_node(conn, ref_id) == len(
                 get_owned_symbols(conn, ref_id)
             )
+
+
+class TestImportTargetOwnership:
+    """An import must resolve to the node that OWNS the imported file.
+
+    Target resolution used to convert the dotted import path to an
+    extension-less directory path, so a node whose `source` is a FILE could
+    never match and every import landed on the nearest enclosing DIRECTORY node
+    — collapsing feature/component-level dependencies into their domain.
+    """
+
+    def test_import_resolves_to_the_file_owning_node_not_its_domain(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        from beadloom.graph.import_resolver import resolve_import_to_node
+
+        _node(conn, "context-oracle", "src/beadloom/context_oracle/")
+        _node(conn, "context-builder", "src/beadloom/context_oracle/builder.py")
+        _symbol(conn, "src/beadloom/context_oracle/builder.py", "build_context")
+        conn.commit()
+
+        resolved = resolve_import_to_node(
+            "beadloom.context_oracle.builder",
+            __import__("pathlib").Path("src/beadloom/context_oracle/why.py"),
+            conn,
+            scan_paths=["src"],
+        )
+
+        assert resolved == "context-builder"
+
+    def test_import_of_an_unowned_file_falls_back_to_the_enclosing_node(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        """A module with no node of its own still resolves to its container."""
+        from beadloom.graph.import_resolver import resolve_import_to_node
+
+        _node(conn, "context-oracle", "src/beadloom/context_oracle/")
+        _symbol(conn, "src/beadloom/context_oracle/search.py", "search")
+        conn.commit()
+
+        resolved = resolve_import_to_node(
+            "beadloom.context_oracle.search",
+            __import__("pathlib").Path("src/beadloom/other.py"),
+            conn,
+            scan_paths=["src"],
+        )
+
+        assert resolved == "context-oracle"
+
+    def test_unindexed_import_resolves_to_nothing_specific(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        """A third-party import must not be attributed to a project node."""
+        from beadloom.graph.import_resolver import resolve_import_to_node
+
+        _node(conn, "context-oracle", "src/beadloom/context_oracle/")
+        conn.commit()
+
+        resolved = resolve_import_to_node(
+            "requests",
+            __import__("pathlib").Path("src/beadloom/context_oracle/why.py"),
+            conn,
+            scan_paths=["src"],
+        )
+
+        assert resolved is None
