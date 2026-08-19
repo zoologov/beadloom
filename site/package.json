@@ -11,17 +11,17 @@
     "dev-check": "node scripts/dev-optimize-check.mjs"
   },
   "dependencies": {
-    "cytoscape": "3.30.2",
-    "cytoscape-elk": "2.2.0",
-    "echarts": "5.5.1",
-    "elkjs": "0.9.3",
+    "cytoscape": "3.34.1",
+    "cytoscape-elk": "2.3.0",
+    "echarts": "6.1.0",
+    "elkjs": "0.12.0",
     "svg-pan-zoom": "3.6.2",
-    "vue-echarts": "7.0.3",
+    "vue-echarts": "8.1.0",
     "web-worker": "^1.5.0"
   },
   "devDependencies": {
-    "mermaid": "11.4.1",
-    "vitepress": "1.6.3",
+    "mermaid": "11.17.0",
+    "vitepress": "1.6.4",
     "vitepress-plugin-mermaid": "2.0.17"
   }
 }
