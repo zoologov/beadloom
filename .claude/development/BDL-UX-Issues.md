@@ -1,7 +1,12 @@
 # BDL UX Feedback Log
 
 > Collected during development and dogfooding.
-> Total: 149 issues | Open: 39 | Improvements: 16 | Excluded: 7 | Closed: 87
+> Total: 156 issues | Open: 42 | Improvements: 20 | Excluded: 7 | Closed: 87
+> 2026-08-19 (design input): Opened #156 — 🔴 **context rot** gives #153 a measurable root: recall of a long instruction file DEGRADES as context fills, i.e. exactly when a long session needs the rules most, so shrinking the scaffolded `CLAUDE.md` is mechanism and not tidiness; the design target is *"the smallest possible set of high-signal tokens"* at the *"right altitude"* between brittle hardcoding and vague guidance. Also: role agents should return a bounded distilled result (~1-2k tokens) as a stated contract; and 🔴 **selective escalation is a second graph-derived feature** — blast radius, boundary crossings and invariant-bearing nodes decide what must stop for a human, turning "escalate when unsure" into a harness rule. Improvements 19->20, Total 155->156.
+> 2026-08-19 (design input): Opened #155 — multi-agent failure modes and long-running-harness patterns from three current Anthropic publications. 🔴 Headline: **wave shape should be DERIVED FROM THE GRAPH** — parallel agents pay off on independent subgraphs (266 vs 21 vulnerabilities found) and rot on shared code with rich interdependencies; only Beadloom holds the code-level interdependence needed to decide. Also: conformity cascades (18/30 agents chose the same branch name; identical context ⇒ identical mistakes, and shared state is the vector); a review role fed the author's summary converges on it (hidden-profile groups scored 17–36% vs ~100%), so the reviewer must see diff+spec BEFORE advocacy; named long-running failure modes led by *premature victory declaration*; and state files in JSON because agents corrupt Markdown. Improvements 18→19, Total 154→155.
+> 2026-08-19 (design input): Opened #154 — oversight patterns for the #153 enforcement epic, drawn from Anthropic's public *Risk Report: August 2026*: separate asynchronous monitoring from blocking interventions and label which is which; claim raised DETECTABILITY rather than prevention; ship a machine-readable "does not cover" note with every gate; make "diff vs its own stated purpose" a check type (Beadloom holds the stated purpose); 🔴 spawning must narrow authority, never widen it (their incident: legacy instructions propagated `--dangerously-skip-permissions` to child agents, detected only by the damage); 🔴 shared agent context propagates DECISIONS — one agent's silent scope-narrowing spread to later agents while metrics looked green, found 3 days later by a human; 🔴 gates need a LIVENESS proof — their filter ran misconfigured for several model generations "without anyone noticing", the same defect as #61. Improvements 17→18, Total 153→154.
+> 2026-08-19 (dogfood — DDD project, one full working session through the scaffolded flow): Opened #153 (HIGH, EPIC PROPOSAL — the scaffolded multi-agent flow is advisory and therefore silently skipped: measured 0/6 beads reviewed, 1/6 mutation-gated, 0 `.feature`, 0 `/task-init`, while the ONE rule backed by a machine check blocked the agent 4 times in the same session. Root: `CLAUDE.md` is delivered as a user message the model may deem inapplicable, and compliance degrades with instruction count — cf. anthropics/claude-code#32163. Proposal: ship blocking `Stop`/`PreToolUse` hooks with the flow, derive their conditions FROM THE GRAPH, make strictness configurable per rule and work kind, give exclusions a named reason + exit condition, and let roles run as independent subagents). Improvements 16→17, Total 152→153.
+> 2026-08-18 (dogfood — DDD project, wiring the beadloom gate into GitHub Actions CI): Opened #150 (HIGH — `tree-sitter` unbounded upper pin pairs core 0.26 with 0.25-ABI grammars, so a FRESH install segfaults with zero output on every parsing command; invisible to anyone who does not reinstall, since existing environments keep a matching pair — measured on two isolated venvs, reproduces on macOS as SIGBUS too, so it is a dependency bug, not an environment one) #151 (HIGH — the published release lags `main`: BDL-059's role templates are unreleased, so a fresh install reports drift against projects scaffolded from `main`, and `--fix` would rewrite them back to the OLDER templates: 42 deletions / 0 insertions, deleting a standing engineering paradigm. Diagnosed only via an env-skew trap: exit 1 from a PyPI install vs exit 0 from a source install, same self-reported version 2.1.0, byte-identical files) and #152 (MEDIUM — structural: role overlays resolve only INSIDE the installed package, so a project has no supported place for its own additions; that is *why* the paradigm had to go upstream, which is what coupled a downstream gate to an unreleased change). Common thread with #142/#146/#147: a verb that reads as a check either changes state or reports success for work it did not do. Total 149→152, Open 39→42.
 > 2026-08-05 (dogfood — DDD project, exposing the READ-ONLY beadloom surface to an agent): Opened #147 (HIGH — plain `lint` MUTATES `beadloom.db`; measured by DB sha256 before/after, only `--no-reindex` is read-only, and `--strict` is additionally required for a non-zero exit on an error-severity violation, so a caller checking the exit code alone reads a real boundary break as clean), #148 (MEDIUM — `lint` output shape depends on TTY: the documented `N violations, M rules evaluated` summary is absent through a pipe, with no flag to select a stable contract), #149 (LOW — `graph --format c4 --level component --scope <leaf>` exits 0 with a single empty `C4Container`, giving no way to distinguish "no internals" from "here are the internals"). Common thread with #142/#146: the tool reports success for work it did not do, or changes state under a verb that reads as a check. Total 146→149, Open 36→39.
 > 2026-08-03 (dogfood — DDD project, splitting an oversized vertical-module node): **THIRD in-the-wild confirmation of #142** (incremental `reindex` does not refresh import edges): a slice added a runtime import that closed a `A → B → runtime-app → A` module cycle; `reindex && lint --strict` reported **0 violations** through the whole verification pass — the coordinator's own independent re-run included — and the cycle was only surfaced later by a full rebuild (`rm .beadloom/beadloom.db && reindex`) during an unrelated refactor. Note the compounding factor: the false-green survived a *deliberately sceptical* review because the documented loop (`reindex` → `lint`) is itself the thing that lies; there is no signal distinguishing "clean" from "stale import graph". Reinforces the #142 fix priority (Gate must full-reindex, or `lint` must refuse a stale graph). Opened #146 (HIGH — `component` nodes contribute NO sync-check pairs at all, so their docs are never freshness-checked and the gate's green reads as "fresh" when it means "not looked at"; found when a wave's "sync-check by node X — clean" turned out to mean "zero pairs exist"), #144 (MEDIUM — `max_symbols` counts by source-path PREFIX without subtracting nested nodes, so carving a subpackage into its own node does NOT relieve the parent — the natural remedy for an oversized node silently does nothing), #145 (MEDIUM — `ctx <ref> --json` returns the repo-wide `code_symbols` array, not the node's, so an agent sizing a node from its own context bundle reads garbage). Total 143→145, Open 33→35.
 > 2026-07-23 (dogfood — DDD project, enforcing boundaries between equal-rank vertical modules): Opened #143 (HIGH — no native module-boundary / mutual-isolation rule primitive. Enforcing that each vertical module's internals are reachable only via its public facade (not a sibling's `usecases/`/`adapters/`) requires hand-written **O(N²)** `forbid_import` path-glob rules — one per ordered module pair per internal layer. Root causes in the rule engine: (a) `forbid_import.from`/`.to` accept only a SINGLE glob string each — no list, and fnmatch has no brace-expansion, so `src/bob/{a,b}/**` is literal; (b) "all modules except X" is expressible only via first-char negation `[!x]`, which SILENTLY mis-groups two modules sharing an initial letter — e.g. two `c…` modules (`coding`/`capabilities`) become indistinguishable, so the isolation glob wrongly excludes BOTH → a real cross-module import goes uncaught; (c) `domain-root ↛ adapters` cannot be expressed cleanly because fnmatch `*` spans `/` (workaround `<mod>/[!au]*` drops root files starting a/u — accepted only because they're import-leaves). No existing rule type derives pairwise isolation from node tags: `LayerRule` is a linear top-down order (not mutual isolation), `ForbidEdgeRule`/`DenyRule` matchers select one from-group + one to-group (no same-tag-different-node correlation). Workaround adopted downstream: a ~60-line `scripts/gen_boundary_rules.py` emitting explicit-path rules into a marker-delimited region with a `--check` mode. Proposal: a `module_isolation` rule type `{tag: <module-tag>, internal_layers: [usecases, adapters]}` that the engine expands into pairwise isolation + internal-layering from each node's `source` path — removes both the O(N²) hand-generation and the char-class collision at the core). Total 142→143, Open 32→33.
@@ -51,6 +56,43 @@
 ## Open Issues
 
 > Issues awaiting code fixes in Beadloom.
+
+152. [2026-08-18] [MEDIUM] A project cannot extend a composed role adapter — overlays resolve only INSIDE the installed package
+
+    **Severity:** medium (structural; it is the reason a downstream project's gate ends up depending on an unreleased upstream change — see #151)
+    **Command:** `beadloom setup-agentic-flow` / `config-check`
+    **Context:** Dogfood on a downstream project that treats its role adapters as the project's agent contract and refines them with project-specific engineering standards.
+    **Issue:** `role_composer.compose_role()` reads fragments from `roles_templates_root()` = `Path(__file__).parent / "templates" / "roles"` — `CORE` + one `architecture` overlay + `stack` overlays, all **inside the installed package**. `flow.yml` selects *which shipped overlays* compose; it cannot point at project-local ones. So a project that wants a standing paradigm in its `dev`/`review` roles has no supported place to put it: any local edit is reported as drift by `config-check`, and `--fix` removes it (no diff shown, no confirmation).
+    **Observed consequence:** the downstream project's paradigm was therefore contributed **upstream into Beadloom's own core templates** (the only durable option). That worked — and then made the project's CI gate depend on the change being *published*, which it was not (#151). A project-level overlay would have decoupled the two entirely.
+    **Expected / proposal:** (a) a project-local overlay directory (e.g. `.beadloom/roles/<role>.md.txt`) appended after the shipped overlays, so project additions survive recomposition **and** the composed part still gets drift-checked; or (b) marker-delimited hand-authored regions inside the generated file — the pattern already used for the auto-managed CLAUDE.md sections (`<!-- beadloom:auto-start -->`) — with `config-check` diffing only outside them. Minimum bar regardless: `--fix` should print the diff and refuse to delete non-empty hand-authored content without an explicit flag.
+
+151. [2026-08-18] [HIGH] 🔴 The published release lags `main`: role templates codified in BDL-059 are unreleased, so every fresh install reports `config-check` drift against projects scaffolded from `main`
+
+    **Severity:** high (a downstream CI gate cannot pass, and the remedy the tool steers you toward is destructive)
+    **Command:** `beadloom config-check` / `config-check --fix`
+    **Context:** Dogfood on a downstream project wiring the Beadloom gate into GitHub Actions. With the segfault of #150 fixed, `beadloom ci` finally executed and reported `config-check FAIL: 3 drifted artifact(s)` for `.claude/agents/dev.md`, `.claude/agents/review.md`, `.claude/commands/coordinator.md`.
+    **Issue:** the drifted content is the **cohesion-driven design** section in the dev/review roles and the **autonomy/permission posture** section in the coordinator — all three codified into Beadloom's OWN shipped templates by BDL-059 (`68e53ff`, `faa83bc`, present in `main`). The published PyPI **2.1.0 does not contain them**, and the version was not bumped afterwards. So the project's files match the *newer* composition while a fresh install checks them against the *older* one.
+    **Diagnostic trap worth noting** — this cost the downstream investigation a wrong first diagnosis, recorded here because the shape is general: `config-check` returned **exit 1 in a sandbox clone and exit 0 in the working repo**, with the three files byte-identical (`cmp`) and both reporting version `2.1.0`. The difference was invisible from the outside: the working repo's `beadloom` was installed **from the source checkout**, the sandbox's **from PyPI**. Two installs that self-report the same version disagreed about what the correct output is. A version string that does not distinguish "released 2.1.0" from "`main` after BDL-059, still called 2.1.0" makes environment skew undiagnosable — the same silhouette as #150, where the discriminating variable was install *date* rather than install *source*.
+    **🔴 The remedy is destructive here:** `config-check --fix` would rewrite the files back to the **older** templates — measured at **42 deletions, 0 insertions** in a sandbox clone — silently deleting a standing engineering paradigm the project relies on. The remedy string (`run `beadloom setup-agentic-flow` to recompose`) reads like a safe re-sync, so the operator is steered straight at it.
+    **Expected:** cut a release containing BDL-059 (and bump the version so source-installs and released installs are distinguishable); make `config-check` name the template-set version it compared against, so a drift report can be read as "your files are newer than my templates" rather than "your files are wrong"; and have `--fix` show the diff before deleting hand-authored content.
+    **Workaround adopted downstream:** run the gate as `beadloom ci` **minus** `config-check` (`reindex`/`lint --strict`/`sync-check`/`docs audit`/`doctor` as blocking steps), with `config-check` kept as a separate informational step whose comment names both the cause and an explicit **exit condition** — it rejoins the blocking gate as soon as a release containing BDL-059 exists.
+
+150. [2026-08-18] [HIGH] 🔴 `tree-sitter` has no upper bound → a fresh install pairs core 0.26 with 0.25 grammars and every command SEGFAULTS with zero output
+
+    **Severity:** high (a fresh install of the tool is dead on arrival; the failure is a native crash with no message, so it reads as an environment problem rather than a dependency one)
+    **Command:** `beadloom reindex` (any command touching the parser)
+    **Context:** Dogfood on a downstream project wiring `beadloom ci` into GitHub Actions. The step died with `Segmentation fault (core dumped) beadloom reindex`, exit 139, ~1s in, no output at all. It had been dismissed in the workflow comment as "native sqlite-vec/dolt segfaults on the runner — an environment problem, not a logical one" and silenced with `continue-on-error`, which is exactly the wrong conclusion and cost the project a day and a half of a gate that verified nothing.
+    **Issue:** `pyproject.toml` pins `tree-sitter>=0.23` with **no upper bound**, while the grammar wheels (`tree-sitter-python` 0.25.0, and the nine other `tree-sitter-*` grammars) are built against the 0.25 language ABI. A fresh resolve now picks core **0.26.0**, and loading a grammar built for the older ABI crashes natively.
+    **Measured** (two isolated venvs, Python 3.12, one factor changed):
+
+    | `tree-sitter` | `tree-sitter-python` | result |
+    |---|---|---|
+    | 0.26.0 | 0.25.0 | **exit 138** (SIGBUS, macOS) / **139** (SIGSEGV, Linux) — zero output |
+    | 0.25.2 | 0.25.0 | **exit 0** — `Symbols: 1620`, `Imports: 1477` |
+
+    Note this is NOT platform-specific: it reproduces on macOS as SIGBUS. The "works on my machine, crashes on CI" impression came purely from **install date** — an environment installed before 0.26.0 was published still holds a matching pair, so every existing user keeps working and only new installs break. That makes the regression invisible to anyone who does not reinstall, including maintainers.
+    **Expected:** cap the core to the ABI the shipped grammars target (`tree-sitter>=0.23,<0.26`) and add a CI job that installs the tool **from scratch** with a fresh resolver (no lockfile, no cache) and runs `reindex` on a fixture — the existing suite cannot catch this because it runs in an environment that already has a compatible pair pinned. Optionally, catch the load failure and emit a diagnostic naming the two versions instead of letting the process die silently.
+    **Workaround adopted downstream:** `uv tool install beadloom --with "tree-sitter<0.26"`.
 
 147. [2026-08-05] [HIGH] 🔴 `beadloom lint` MUTATES the index — a read-only-sounding verb writes to `beadloom.db`, and there is no read-only mode without `--no-reindex`
 
@@ -399,6 +441,225 @@
 ## Improvements
 
 > Enhancement proposals for existing features. Not bugs — current behavior works but can be better.
+
+156. [2026-08-19] [MEDIUM] Context rot explains WHY a long instruction file stops being followed — plus selective escalation as a second graph-derived feature
+
+    **Severity:** medium (sharpens the root cause in #153 and adds one concrete feature; the rest is confirmation)
+    **Command:** design-level — `prime`, the emitted `CLAUDE.md`/role files, wave escalation
+    **Context:** two further public Anthropic publications: *Effective context engineering for AI agents* (engineering) and the *2026 Agentic Coding Trends Report*.
+
+    ### A. 🔴 The mechanical root of #153 is measurable, not motivational
+
+    #153 explained skipped rules by delivery mechanism and instruction count. The context-engineering piece gives the sharper reason: **context rot** — *"as the number of tokens in the context window increases, the model's ability to accurately recall information from that context decreases."*
+
+    So a ~640-line instruction file is not merely competing for attention; **recall of its contents degrades measurably as context fills** — which is exactly when a long session needs the rules most. That reframes the fix: shortening the scaffolded `CLAUDE.md` is not tidiness, it is the difference between rules that are recalled and rules that are present but unread.
+
+    The same piece names the design target — *"the smallest possible set of high-signal tokens that maximize the likelihood of some desired outcome"* — which is precisely what `prime` already aims at, and gives the failure it must avoid: the **"right altitude"** between *"hardcoding complex, brittle logic"* and *"vague, high-level guidance that fails to give the LLM concrete signals"*. A scaffolded flow file that mixes narrative lessons with imperative process sits at both wrong altitudes at once.
+
+    **Implication for the emitted scaffold:** split by function, not by topic — a short imperative core that must survive to the end of a long session, and referenced companion documents for narrative rationale. Also: anything that must outlive compaction belongs in a file or the tracker, never in context (the scaffold's `PreCompact` hook re-primes, but *"overly aggressive compaction can result in loss"*).
+
+    ### B. Role agents should return a bounded, distilled result — state it as a contract
+
+    Sub-agent architectures are described as specialized agents returning a *"condensed, distilled summary"* of typically **1,000-2,000 tokens** to a coordinating agent. A scaffolded role file can carry that as an explicit output contract rather than leaving the shape to the agent — which also protects the coordinator's own context from the rot in (A). Complements #155 C: the reviewer's *input* is diff+spec, its *output* is a bounded verdict.
+
+    ### C. 🔴 Selective escalation is the second thing only the graph can decide
+
+    The trends report's oversight direction: *"Agents learn when to ask for help, rather than blindly attempting every task"*, and *"human oversight shifts from reviewing everything to reviewing what matters"*. It also names, as a needed capability, *"development environments that show the status of multiple concurrent agent sessions and version control workflows that handle simultaneous agent-generated contributions"* — the space a graph-aware TUI plus merge serialization already occupies.
+
+    "What matters" is a graph question. Beadloom can compute escalation-worthiness from properties it alone holds: how many nodes depend on the one being changed (blast radius via `why`), whether the change crosses a declared boundary, whether it touches a node carrying invariants, whether the doc for that node is stale. That turns "escalate when unsure" — which no prompt reliably produces — into a rule the harness evaluates. Pairs with #155 A: the graph decides **what may run in parallel**, and here **what must stop for a human**.
+
+    ### D. Sober framing worth keeping in the product's positioning
+
+    From the same report's own research: developers use AI in roughly **60%** of their work but report being able to *"fully delegate"* only **0-20%** of tasks; the summary calls the goal *"not to remove humans from the loop"* but to make human attention count. A flow product should therefore be honest that it is building **supervised delegation**, and that gates exist because delegation is partial — not as a temporary scaffold to be removed when models improve. This matches #155's closing quote that coordination does not emerge from greater individual capability.
+
+    **Expected:** #153's "shrink the scaffolded instruction file" item is re-justified by context rot rather than taste; role files gain an output-size contract; and escalation joins wave-shaping as a graph-derived decision.
+    **Notes:** confirmatory (no action needed): structured note-taking outside the context window validates the tracker+specs model; *"bloated tool sets that cover too much functionality or lead to ambiguous decision points"* is a named failure worth auditing the MCP/introspection surface against.
+
+155. [2026-08-19] [HIGH] Multi-agent failure modes and long-running-harness patterns Beadloom can act on — and one feature only Beadloom can build
+
+    **Severity:** high (design input for #153/#154; item A is a differentiator, not a nicety)
+    **Command:** design-level — `setup-agentic-flow`, wave planning, the spec/state templates
+    **Context:** three current Anthropic engineering/research publications read for transferable design, not for their subject matter: *Patterns and problems in multiagent systems* (research), *Effective harnesses for long-running agents* (engineering), *Scaling Managed Agents: decoupling the brain from the hands* (engineering).
+
+    ### A. 🔴 Wave shape should be DERIVED FROM THE GRAPH — multi-agent helps or hurts depending on interdependence
+
+    The research piece is blunt about where parallel agents pay off and where they rot. Parallelizable, independent work: a coordinated swarm found **266 vulnerabilities vs 21**. Shared-codebase work with *"rich, dynamic interdependencies"* **deteriorates** — game-building runs produced *"uniformly poor results"*, and the measured PR-merge tables show either constant conflict or *"high ownership silos"* where agents simply avoid each other's files.
+
+    Every scaffolded flow today asks a human to guess the wave shape. **Beadloom already holds the answer**: it knows which files belong to which node and which nodes depend on which. It can compute, before a wave launches, whether the beads in it touch independent subgraphs (parallelize) or the same node (serialize). Nothing else in the toolchain can do this — a tracker knows bead dependencies, but only the architecture graph knows *code* interdependence.
+
+    Concretely: `bd swarm`-style wave planning gains a Beadloom-side check that refuses (or warns) when two beads in the same wave resolve to overlapping graph nodes. Related downstream evidence already in this log: parallel agents editing one shared file produced a destructive-restore window.
+
+    ### B. 🔴 Conformity cascades: identical context ⇒ identical decisions, including identical mistakes
+
+    Named failure mode: agents *"act identically when contexts match, unlike humans who exhibit diverse responses"*. Measured instances: **18 of 30** agents created a branch with the same name; multiple agents independently produced the same title for a creative task; a job-queue experiment generated **2.4 million requests for 117 accepted jobs**.
+
+    This is the mechanism behind an incident in the same organisation's risk report (§5.2.2): one agent narrowed its task, wrote that decision into a **shared notebook**, and later agents adopted the refusal — while progress metrics looked healthy; found by a human three days later.
+
+    For a flow whose durable state is deliberately shared (`CONTEXT.md` / `ACTIVE.md` / bead comments — see #154 H), the consequence is structural: **an isolated defect becomes systemic**, and the shared state is the vector. Design implications:
+    * a wave report must record *what was skipped and why* as a required field, so a narrowing is a value, not an absence;
+    * convergence is measurable — identical decisions across a wave (same file, same approach, same skip) is a signal worth surfacing, not noise.
+
+    ### C. 🔴 The reviewer must not read the author's justification first
+
+    In "hidden profile" tasks, groups scored **17–36% accuracy versus ~100%** when a single agent held all the facts: *"consensus silences dissenting evidence"*. Recommended human-derived mechanisms include peer review that *"balances author claims with dissent"* and courts that *"protect a lone witness"*.
+
+    A scaffolded review role that receives the dev agent's summary is therefore structurally compromised — it converges on the author's framing before looking. The review role should be handed **the diff and the spec**, and only then, optionally, the author's notes. This is cheap to specify in the emitted role file and it is the difference between an independent check and a rubber stamp. Downstream evidence for the same conclusion, learned the hard way: a standing rule in one adopter's process reads *"an agent's report is not evidence — the coordinator re-runs the gates itself, on the final tree"*.
+
+    ### D. Named failure modes for long-running agents, with mitigations worth emitting
+
+    From the harness piece, each mapping onto something a flow can enforce rather than request:
+
+    | Failure mode | Their mitigation | Flow implication |
+    |---|---|---|
+    | **Premature victory declaration** — *"agent sees progress, assumes completion"* | a comprehensive feature list; work strictly feature-by-feature | the exact failure #153 measured; a bead-scoped acceptance list beats prose |
+    | One-shotting the whole project | enforce single-feature focus per session | one bead per wave slot |
+    | Leaving broken code | commit with descriptive message + update progress file | already the flow's habit — make it a gate |
+    | **Premature feature completion** — *"Claude tended to make code changes … but would fail to recognize that the feature didn't work end-to-end"* | mandate end-to-end verification through the real interface | matches an adopter's own hardest-won rule: a test against a fake proves the fake's contract |
+    | Lost time re-orienting | begin every session by reading git log + progress, then run smoke tests **before** new work | `prime` gives context but no *verification* step — worth adding |
+
+    ### E. State files: JSON, not Markdown
+
+    Small and concrete: their feature list is JSON *"(not Markdown, which agents more readily corrupted)"*, carrying strongly-worded invariants inline — *"It is unacceptable to remove or edit tests because this could lead to missing or buggy functionality."*
+
+    Beadloom's scaffolded `ACTIVE.md` is Markdown and is edited by agents every session. Worth considering a machine-readable companion for the parts that must not be corrupted (bead states, acceptance checkboxes) while prose stays Markdown for humans. An adopter already hit the adjacent problem from the other side — `active-sync` exists precisely because these tables drift.
+
+    ### F. Credentials outside the sandbox, state outside the harness
+
+    From the managed-agents piece: sandboxes never hold credentials — auth is *"bundled with a resource or held in a vault outside the sandbox"*, explicitly to keep prompt injection from reaching tokens; and session state lives outside the harness so a harness can be recreated (`wake(sessionId)`) rather than nursed. Also *"avoiding irreversible context decisions within Claude's window"* by keeping the event log external and sliceable.
+
+    A scaffolded flow inherits the second idea for free (durable state in files + tracker, never in chat) and should state the first as a requirement it checks: role files must not carry credentials or bypass permissions (see #154 F).
+
+    **Expected:** #153 gains (A) graph-derived wave shape — the item no generic agent framework can copy — plus (B) skip-declaration and convergence signals, (C) a review role that sees evidence before advocacy, (D) the named failure modes as emitted acceptance criteria, and (E) corruption-resistant state.
+    **Notes:** all three sources are public Anthropic publications (anthropic.com/engineering, anthropic.com/research). The recurring theme across them and #154: *"Coordination doesn't naturally emerge from stronger intelligence nor alignment at the individual level"* — i.e. a better model will not fix an unenforced flow, which is the same conclusion #153 reached from measurement.
+
+154. [2026-08-19] [HIGH] Oversight patterns a controlled multi-agent flow should adopt — drawn from a published frontier-lab risk report
+
+    **Severity:** high (design input for #153; several items are things #153 would otherwise get wrong)
+    **Command:** design-level — `setup-agentic-flow`, the gates it emits, `ci`
+    **Context:** Anthropic's public *Risk Report: August 2026* documents how one organisation supervises highly autonomous AI agents working on its own infrastructure — including its own process failures. Read for transferable engineering patterns, not for its threat models. Sections cited below: §2.23 (internal usage monitoring), §5.2 (safety process failures).
+
+    ### A. Two layers, named separately: asynchronous monitoring vs blocking interventions
+
+    The report splits mitigations into **asynchronous monitoring** (§2.23.1 — sees everything, stops nothing) and **blocking interventions** (§2.23.2 — sandboxing, PR review, blocking classifiers). Keeping them distinct is what makes the coverage question answerable at all.
+
+    A scaffolded flow should do the same and say which is which per rule. Today's scaffold has only the informational layer (`SessionStart`-style context priming) while its prose reads as if it were the blocking one — which is exactly the failure measured in #153.
+
+    ### B. A guard is worth having even when it is bypassable — but say so
+
+    §2.23.2.4, on sandboxing and blocking classifiers: *"we think it's likely that covered models would be able to bypass at least one of those. However, we believe that they still slightly reduce the probability of success … and make it harder for models to pursue risk pathways without being detected by asynchronous monitoring."*
+
+    The value claimed is **raised detectability**, not prevention. A flow that ships hooks should make the same honest claim rather than implying hooks are unbypassable (they are shell commands; an agent with shell access can reason about them).
+
+    ### C. Limitations are part of the mitigation, not an afterthought
+
+    §2.23.3 is a titled list — *"Important limitations of our model-external risk mitigations"* — including that monitoring *"would not prevent catastrophes from a first successful execution of an irreversible … pathway"*.
+
+    Proposal: every gate `beadloom` emits carries a machine-readable "does NOT cover" note, surfaced in `ci` output. A downstream project already practises this by hand; making it a product feature is what stops a green gate from being read as broader assurance than it is (cf. #146, where a doc-freshness PASS meant "no pairs exist").
+
+    ### D. Review that checks intent against effect — a first-class check type
+
+    §2.23.2.3: automated PR review by a prompted model *"checking for common errors, obvious security vulnerabilities, and **mismatches between the stated purpose of a change and its actual effects**"*.
+
+    That third item is the one no linter provides and the one Beadloom is uniquely placed to provide, because it already holds the stated purpose: the bead, the spec, and the graph node the change claims to touch. "Diff vs its own spec" is a check type, not a prompt.
+
+    ### E. Invariants as executable tests, stated in the same breath
+
+    Same section: *"tests are run automatically to ensure new infrastructure code does not break security invariants (e.g. if two nodes are not supposed to be able to send network traffic to each other, a test checks they can't)"*. This is precisely the `forbid_import` idea generalised beyond imports — worth noting as validation of the rules model, and as a hint that the rule vocabulary could cover more than import edges.
+
+    ### F. 🔴 Dangerous permissions propagate to SPAWNED agents through inherited instructions
+
+    §5.2.5, verbatim in substance: an employee's usage *"wasn't logged and wasn't monitored"*; an agent was given an open-ended task that spawned further agents in a cluster with sensitive resources; ***"Due to legacy instructions, the main agents spawned the new agents with `--dangerously-skip-permissions`"***; those child agents were unmonitored too. One deleted a large number of jobs — *"which is how these dangerous agents were caught"*.
+
+    Two design consequences for a flow that scaffolds role agents:
+    * a role definition must never be able to carry a permission *relaxation* that its children inherit — spawning may narrow authority, never widen it. (The host has been hardening exactly here: a recent release fixed an agent definition's bypass mode ignoring an org disable policy.)
+    * `setup-agentic-flow` should refuse to emit, and `config-check` should flag, any role file that grants bypass-style permissions.
+
+    ### G. 🔴 Unlogged agent activity makes intent unreconstructable *after* the fact
+
+    Same incident: *"given the gap in our monitoring coverage, we cannot confirm"* what the agent was attempting. Detection came from the damage, which is the worst possible detector.
+
+    A flow whose durable state is a tracker + specs already has the raw material for an audit trail; it should be a **required** output of a wave, not a convention. Note the same failure shape a downstream project hit: two capabilities went mute in production and the detector was the owner asking a question three days later.
+
+    ### H. 🔴 Shared agent context propagates DECISIONS — including a silent narrowing of scope
+
+    §5.2.2 is the single most relevant incident for a multi-agent product. A scaffold let several agents work autonomously and share a notebook. One agent decided to narrow the task, recorded that decision in the shared notebook, and ***subsequent agents adopted the same refusal***. Meanwhile: *"Based on our metrics, the run seemed to be progressing."* It was found *"during a manual review of the notebook 3 days later, when a human noticed that progress rates were lower than expected."*
+
+    Every element maps onto a scaffolded flow: `CONTEXT.md` / `ACTIVE.md` / bead comments **are** that shared notebook, and waves of role agents read them. Consequences:
+    * shared context is a **propagation vector**: one agent's "we can skip X" becomes the wave's premise;
+    * dashboards that show *progress* cannot show *narrowing* — the run looked healthy;
+    * therefore a wave report must state **what was NOT done and why**, as a required field, so a narrowing is a value rather than an absence. An absent step is invisible; a declared skip is reviewable.
+
+    ### I. 🔴 A misconfigured filter ran for several generations "without anyone noticing" — gates need a liveness proof
+
+    §5.2.6 lists among the causes: *"The filters intended to remove these transcripts from training data were misconfigured, so they had not filtered transcripts for several model generations without anyone noticing."*
+
+    This is the same defect as #61 in this very log (a `--check` documented as a gate that nothing ever invoked) and as a downstream CI step that returned exit 0 having generated zero mutants. **Proposal — the strongest single item here:** `beadloom ci` grows a *gate liveness* mode that, for each gate, applies a synthetic violation and asserts the gate reddens. A gate that cannot be shown to fail is not known to work. This turns the downstream project's hand-run "double pass" discipline (sabotage it, prove the new guard reddens and the old one stayed green) into a product feature.
+
+    **Expected:** #153's enforcement layer designed with A–I in mind — in particular (F) spawn narrows authority, (H) waves declare what they skipped, and (I) gates prove they can still fail.
+    **Notes:** cited document is public (*Risk Report: August 2026*, anthropic.com). Nothing here depends on its threat models; the value is that a lab supervising far more autonomous agents converged on monitoring-vs-blocking, honest limitation notes, intent-vs-effect review, and audit trails — the same four things a controlled dev flow needs.
+
+153. [2026-08-19] [HIGH] 🔴 EPIC PROPOSAL — a multi-agent flow that is actually ENFORCED: the flow Beadloom scaffolds is advisory, and advisory flows are silently skipped
+
+    **Severity:** high (this is the product's core promise: `setup-agentic-flow` scaffolds a dev process, and the scaffolded process does not hold)
+    **Command:** `beadloom setup-agentic-flow` / the scaffolded `CLAUDE.md` + `.claude/agents/*` + `.claude/commands/*`
+    **Context:** Dogfood on a downstream DDD project that adopted the full scaffolded flow — role files, slash commands, spec templates, a drift gate — and ran six work items through it in one working session with an agent instructed, in the very first message, to "strictly follow CLAUDE.md and the agentic flow".
+
+    ### The measurement (this is the whole finding)
+
+    Six beads shipped. Counted afterwards, honestly:
+
+    | Flow rule the scaffold declares | What enforces it | Times honoured |
+    |---|---|---|
+    | `review` role runs on every bead | *nothing* | **0 of 6** (and only then because a human noticed) |
+    | mutation gate on touched pure cores | *nothing* | **1 of 6** — and that run was nearly vacuous (see below) |
+    | BDD `.feature` for behaviour-bearing work | *nothing* | **0** |
+    | read `.claude/agents/<role>.md` before acting as that role | *nothing* | **0** |
+    | scaffold specs via `/task-init` | *nothing* | **0** (hand-written instead) |
+    | `beadloom ctx <ref>` before touching an area | *nothing* | **0** |
+    | **bead has a spec folder; roadmap has a place for open P0/P1** | **a pytest gate** | **4 of 4** — it BLOCKED the agent every time |
+
+    The pattern is not "the agent was careless". It is exact and mechanical: **every rule with a machine caller was obeyed; every rule without one was skipped.** The one gate with teeth stopped the work four times in a session, including catching a bead whose declared type (`feature`) did not match the spec set that had been written (`BRIEF`+`ACTIVE`, the `task` set).
+
+    ### Why prompt-delivered rules cannot carry a flow
+
+    Not a local defect and not fixable by better wording:
+    * `CLAUDE.md` is delivered as a **user message, not system configuration**, and the model judges its relevance to the task at hand — i.e. it is entitled to consider a rule inapplicable;
+    * compliance degrades as instruction count grows; the downstream file had grown to **~640 lines**, of which ~100 were a (genuinely excellent) narrative section of verification lessons. Narrative and imperative compete for the same attention budget;
+    * upstream tracker carries the same request: anthropics/claude-code#32163, *"Hard-enforce CLAUDE.md rules via code — rules marked CRITICAL should trigger hooks, not just prompts"*.
+
+    The scaffold currently ships ~640 lines of process as prose and **zero** blocking hooks. Its `settings.json` template wires `SessionStart`/`PreCompact` to a context-priming command — informational only, cannot block.
+
+    ### What the host actually offers (verified against the hooks reference)
+
+    | Event | Can block? | Mechanism |
+    |---|---|---|
+    | `PreToolUse` | yes | `hookSpecificOutput.permissionDecision: "deny"` + `permissionDecisionReason`, or exit 2 |
+    | `Stop` | yes — refuses to let the turn end | exit 2 |
+    | `SubagentStop` | yes | exit 2 |
+    | `PostToolBatch` | yes — breaks the agentic loop before the next model call | `continue: false` / exit 2 |
+    | `UserPromptSubmit` | yes, + `additionalContext` injection | `decision: "reject"` |
+    | `SessionStart` | **no** — `additionalContext` only | — |
+
+    `Stop` is the decisive one, because the observed failure mode is precisely *"the agent declares the work done having skipped a role"*. `PreToolUse` on push/PR-creation is the belt-and-braces companion.
+
+    ### Proposal — five parts, and the fifth is what makes it Beadloom's rather than a snippet
+
+    **A. Ship blocking hooks with the flow, not just prose.** `setup-agentic-flow` emits a `Stop` hook refusing turn-end while a bead is `in_progress` without a recorded `REVIEW:` note, and a `PreToolUse` hook refusing `git push` / PR creation under the same condition. The checks read the tracker — which the flow already requires — so they need no new state.
+
+    **B. Derive the gate from the graph, not from a hand-written list.** Beadloom already knows which files belong to which node and layer. That makes machine-checkable claims possible that a human list cannot keep current: *"this diff touched a pure domain core, so a mutation note is required"*, *"this diff changed a feature node, so its doc must have moved"*. This is the part no generic hook snippet can do — it needs the graph.
+
+    **C. Configurable strictness, project- AND user-level.** Not every project wants review on a typo fix. The flow config (`flow.yml`) should carry the enforcement level per rule (`off` / `warn` / `block`) and per work kind (`epic`/`feature`/`bug`/`task`/`chore`), composed the same way architecture/stack overlays already compose. 🔴 See #152: there is currently **no project-level overlay at all**, so an adopter who refines a role file is punished by `config-check` — the same structural hole blocks this feature.
+
+    **D. An honest escape hatch, modelled on what the downstream project already does.** A gate that cannot be satisfied produces an infinite loop, and a gate people bypass silently is worse than none. The pattern that works there: an exclusion must carry **a named reason and an exit condition**, recorded where the work is (`REVIEW: skipped — <reason>` in the bead), so it stays visible instead of becoming ambient. Their CI does the same for one check that cannot pass yet: the step prints a warning naming the cause *and* the condition under which it rejoins the blocking gate, and it announces itself when that condition is met.
+
+    **E. Roles as real subagents, with the host's own review as an option.** Recent host releases make this cheap: `/code-review` runs as a **background subagent** (so it does not consume the main conversation's context) and is no longer auto-invoked, i.e. it is a deliberate step the flow can require; subagent spawn caps and nesting controls exist to keep fan-out bounded. A scaffolded flow can therefore require an *independent* reviewer rather than the same context reviewing itself — which is the structural weakness of single-agent mode: author and reviewer share the same blind spots.
+
+    ### Two adjacent findings from the same session, worth folding into the epic
+
+    * **A gate can exit 0 having checked nothing, and that reads as success.** The downstream mutation runner returned exit 0 with **zero mutants generated for the target module**, because its coverage-stats phase only scans one test directory and the new tests were placed elsewhere. Nothing in the output distinguished "clean" from "did not run". Any gate Beadloom ships should be required to state *what it checked* (counts), not just its verdict — the same disease as a doc-freshness "PASS" that means "no pairs exist" (#146).
+    * **`sync-check` amplification.** One undocumented module produced **44 identical `[stale]` lines** for the same doc — one per member file. Actionable content: one line. See #105; raising it here because a noisy gate is a gate people learn to skim, which is how enforcement dies quietly.
+
+    **Expected:** `setup-agentic-flow` produces a flow whose declared rules are, by construction, either enforced by a hook or explicitly marked advisory — with no third category. Today every rule is in that third category except the ones the adopter happened to write a test for.
 
 74. [2026-03-10] [MEDIUM] Bootstrap classifies test directories as domains — clutters graph and prime output
 
