@@ -31,6 +31,17 @@ One feature node covers the cooperating modules below (all annotated
   so a link never 404s), and the `beadloom why` dependency lists; each
   `depends_on` edge carries a `violation` flag (true when it points up or
   cross-cuts the layer order). Honest degradation throughout.
+
+  It also carries **declared runtime coupling** (`uses` edges) — a subprocess
+  call or a file-format contract — as `uses` / `used_by`, kept SEPARATE from the
+  import lists and drawn dotted, never flagged as a violation: crossing a
+  process boundary to call a published interface is not a layering break the way
+  an import is, and folding it into `depends_on` would assert a binding that
+  does not exist. The view previously filtered these edges out entirely, so
+  authored architectural intent already present in the graph — every
+  `cli uses <domain>` among them — was silently absent from the picture,
+  and a node coupled only that way (`ai-techwriter`, which shells out to the CLI
+  and hands the dashboard a run-record file) read as an island.
 - `landscape_view.py` — the interactive cross-service **landscape** data model
   (`landscape.data.json`): contract edges with their reconciled verdict +
   typed/body surface; plain (non-contract) dependencies carry no protocol.

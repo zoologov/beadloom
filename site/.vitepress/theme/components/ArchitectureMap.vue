@@ -110,12 +110,17 @@ function buildElements() {
   }
   for (let i = 0; i < edges.value.length; i++) {
     const e = edges.value[i];
-    // part_of containment is expressed via `parent`; only depends_on is drawn.
-    if (e.kind !== "depends_on") continue;
+    // part_of containment is expressed via `parent`. Two flow kinds are drawn:
+    // `depends_on` (an import) solid, and `uses` (a DECLARED runtime coupling —
+    // a subprocess call, a file-format contract) dashed. `uses` is never
+    // flagged as a violation: crossing a process boundary to call a published
+    // interface is not a layering break the way an import is.
+    if (e.kind !== "depends_on" && e.kind !== "uses") continue;
+    const runtime = e.kind === "uses";
     els.push({
       group: "edges",
       data: { id: `e${i}:${e.src}->${e.dst}`, source: e.src, target: e.dst },
-      classes: e.violation === true ? "violation" : "",
+      classes: runtime ? "runtime" : e.violation === true ? "violation" : "",
     });
   }
   return els;
@@ -363,6 +368,24 @@ onBeforeUnmount(() => {
         </ul>
         <p v-else class="bl-arch-none">nothing</p>
 
+        <!-- Declared runtime coupling. Shown only when it exists, and never
+             merged into the import lists above: a subprocess call or a file
+             contract is real, but calling it a dependency would assert an
+             import binding that is not there. -->
+        <template v-if="(selected.uses || []).length">
+          <h4>Uses at runtime <span class="bl-arch-hint">(declared)</span></h4>
+          <ul>
+            <li v-for="d in selected.uses" :key="d"><code>{{ d }}</code></li>
+          </ul>
+        </template>
+
+        <template v-if="(selected.used_by || []).length">
+          <h4>Used at runtime by <span class="bl-arch-hint">(declared)</span></h4>
+          <ul>
+            <li v-for="d in selected.used_by" :key="d"><code>{{ d }}</code></li>
+          </ul>
+        </template>
+
         <template v-if="(selected.doc_links || []).length">
           <h4>Docs</h4>
           <ul>
@@ -460,6 +483,15 @@ onBeforeUnmount(() => {
 }
 .bl-arch-line-containment {
   border-top: 2px dotted var(--vp-c-text-3);
+}
+.bl-arch-line-runtime {
+  border-top: 2px dotted var(--vp-c-text-3);
+  opacity: 0.75;
+}
+.bl-arch-hint {
+  font-weight: 400;
+  color: var(--vp-c-text-3);
+  font-size: 0.85em;
 }
 .bl-arch-stage {
   position: relative;

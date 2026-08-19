@@ -770,6 +770,30 @@ edges:
   - src: vitepress-site
     dst: beadloom
     kind: part_of
+  # --- Non-import coupling, declared because derivation cannot see it -------
+  #
+  # Import edges are DERIVED from code. These two relations are real and are
+  # invisible to that derivation, so they are AUTHORED here — otherwise the
+  # `ai-techwriter` node reads as an island while it is the hub of a workflow.
+  #
+  # `uses`, not `depends_on`, on purpose: `depends_on` is import-time coupling
+  # (the module cannot load without the other), which is what the layer and
+  # cycle rules judge. These are RUNTIME couplings between separate processes —
+  # the harness runs as `python -m beadloom.ai_agents.ai_techwriter` in CI and
+  # shells out to the published `beadloom` CLI exactly as any external client
+  # would. Calling a public interface across a process boundary is not a
+  # layering break, and recording it as `depends_on` would assert a binding
+  # that does not exist.
+  - src: ai-techwriter
+    dst: cli
+    kind: uses
+  # The harness writes the append-only run record `.beadloom/ai_techwriter_runs.json`;
+  # `application/site_dashboard/ai_activity.py` reads it. A file-format contract
+  # between them, with no import in either direction.
+  - src: application
+    dst: ai-techwriter
+    kind: uses
+
   - src: beadloom
     dst: vitepress-site
     kind: produces

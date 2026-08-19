@@ -507,3 +507,80 @@ def test_generator_architecture_data_byte_identical_on_regenerate(tmp_path: Path
     finally:
         conn.close()
     assert first == second
+
+
+# ---------------------------------------------------------------------------
+# Declared non-import coupling (`uses`)
+# ---------------------------------------------------------------------------
+
+
+def _seed_uses(conn: sqlite3.Connection) -> None:
+    """A harness that shells out to the CLI, and a reader of the file it writes."""
+    _seed_arch(conn)
+    _add_node(conn, "harness", "feature", "src/beadloom/harness/")
+    _add_edge(conn, "harness", "beadloom", "part_of")
+    _add_edge(conn, "harness", "graph", "uses")
+    _add_edge(conn, "application", "harness", "uses")
+    conn.commit()
+
+
+def test_uses_edges_are_carried_separately_from_depends_on() -> None:
+    """Runtime coupling is real, and it is NOT an import dependency.
+
+    A subprocess call or a file-format contract binds two nodes as surely as an
+    import, but derivation cannot see it — it is declared in the graph YAML. It
+    must reach the view, or such a node reads as an island; and it must stay
+    distinct, because reporting a process boundary as `depends_on` would assert
+    a binding that does not exist.
+    """
+    conn = _open()
+    try:
+        _seed_uses(conn)
+        data = _build(conn)
+    finally:
+        conn.close()
+
+    kinds = {str(e["kind"]) for e in data["edges"]}  # type: ignore[index,union-attr]
+    assert "uses" in kinds
+
+    by_id = {n["id"]: n for n in data["nodes"]}  # type: ignore[index,union-attr]
+    harness = by_id["harness"]
+    assert harness["uses"] == ["graph"]
+    assert harness["used_by"] == ["application"]
+    # The distinction is the point: this is not an import dependency.
+    assert harness["depends_on"] == []
+    assert harness["depended_on_by"] == []
+
+
+def test_uses_edge_carries_no_layer_violation_flag() -> None:
+    """A process boundary cannot break layering, so it is never flagged.
+
+    `violation` marks an import that points the wrong way through the layers.
+    Calling a published interface from another process is not that, and marking
+    it would manufacture a false architecture breach.
+    """
+    conn = _open()
+    try:
+        _seed_uses(conn)
+        data = _build(conn)
+    finally:
+        conn.close()
+
+    uses = [e for e in data["edges"] if e["kind"] == "uses"]  # type: ignore[index,union-attr]
+    assert uses
+    assert all("violation" not in e for e in uses)
+
+
+def test_node_without_uses_edges_reports_empty_lists() -> None:
+    """Every node carries the keys, so the front-end never guesses."""
+    conn = _open()
+    try:
+        _seed_arch(conn)
+        conn.commit()
+        data = _build(conn)
+    finally:
+        conn.close()
+
+    for node in data["nodes"]:  # type: ignore[union-attr]
+        assert node["uses"] == []
+        assert node["used_by"] == []

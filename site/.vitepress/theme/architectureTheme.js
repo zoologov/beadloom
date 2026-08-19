@@ -83,6 +83,7 @@ export const EDGE_LEGEND = [
   { cls: "healthy", label: "depends on (down a layer — healthy)" },
   { cls: "violation", label: "depends on (up / cross-cut — layering concern)" },
   { cls: "containment", label: "part of (containment)" },
+  { cls: "runtime", label: "uses at runtime (declared — subprocess / file contract)" },
 ];
 
 // The layering-violation accent (an up/cross-cut depends_on edge).
@@ -161,6 +162,21 @@ export function buildStylesheet() {
         "line-style": "dashed",
         width: GEOMETRY.edgeWidth + 1,
         "z-index": 8,
+      },
+    },
+    {
+      // A DECLARED runtime coupling (`uses`): a subprocess call or a
+      // file-format contract. Dotted and muted so it reads as a weaker,
+      // non-import binding, and deliberately NOT styled as a violation —
+      // crossing a process boundary to call a published interface is not a
+      // layering break.
+      selector: "edge.runtime",
+      style: {
+        "line-style": "dotted",
+        "line-color": "var(--vp-c-text-3)",
+        "target-arrow-color": "var(--vp-c-text-3)",
+        "target-arrow-shape": "vee",
+        opacity: 0.75,
       },
     },
     {
