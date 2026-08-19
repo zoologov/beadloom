@@ -1,7 +1,8 @@
 # BDL UX Feedback Log
 
 > Collected during development and dogfooding.
-> Total: 156 issues | Open: 41 | Improvements: 20 | Excluded: 7 | Closed: 88
+> Total: 157 issues | Open: 42 | Improvements: 20 | Excluded: 7 | Closed: 88
+> 2026-08-19 (BDL-060.15 review): Opened #157 (HIGH — a package that carries its `# beadloom:feature=` annotation in `__init__.py` (the natural place after BDL-059's decomposition) gets its node `source` recorded as that FILE, so every symbol read sees an empty façade: **5 nodes, 228 symbols invisible** on Beadloom's own graph. All five readers agree on 0, so it must be fixed at the source, not in a reader. Consequence in the #146 family: `max_symbols` can never fire on those nodes — a size rule reporting clean because it is looking at nothing — which also distorts the very `domain-size-limit` recalibration the S4 review was assessing). Total 156→157, Open 41→42.
 > 2026-08-19 (dependency currency pass): CLOSED #150 — REPRODUCED on Beadloom's own tree and FIXED. The reporter's minimal case does not reproduce today (core 0.26.0 loads all ten grammar wheels and parses small files cleanly through `get_lang_config`/`extract_symbols`, and a fresh `pip install beadloom[languages]==2.1.0` resolves a pair that survives `beadloom init` + `reindex` on a 5-file project) — the crash needs VOLUME: the full test suite segfaulted inside `_index_code_files` partway through a real repo-wide reindex. That sharpens the issue rather than softening it: **loading a grammar is not evidence that the pairing is safe**, which is exactly why it survived a gate. Fixed by `tree-sitter>=0.25,<0.26` plus two guards in `tests/test_grammar_guard.py` (the declared pin must carry an upper bound; the INSTALLED core must fall inside it, so a local upgrade cannot pass the suite while claiming an untested range). Still open from #150's ask: the from-scratch-resolver CI job. Open 42->41, Closed 87->88.
 > 2026-08-19 (design input): Opened #156 — 🔴 **context rot** gives #153 a measurable root: recall of a long instruction file DEGRADES as context fills, i.e. exactly when a long session needs the rules most, so shrinking the scaffolded `CLAUDE.md` is mechanism and not tidiness; the design target is *"the smallest possible set of high-signal tokens"* at the *"right altitude"* between brittle hardcoding and vague guidance. Also: role agents should return a bounded distilled result (~1-2k tokens) as a stated contract; and 🔴 **selective escalation is a second graph-derived feature** — blast radius, boundary crossings and invariant-bearing nodes decide what must stop for a human, turning "escalate when unsure" into a harness rule. Improvements 19->20, Total 155->156.
 > 2026-08-19 (design input): Opened #155 — multi-agent failure modes and long-running-harness patterns from three current Anthropic publications. 🔴 Headline: **wave shape should be DERIVED FROM THE GRAPH** — parallel agents pay off on independent subgraphs (266 vs 21 vulnerabilities found) and rot on shared code with rich interdependencies; only Beadloom holds the code-level interdependence needed to decide. Also: conformity cascades (18/30 agents chose the same branch name; identical context ⇒ identical mistakes, and shared state is the vector); a review role fed the author's summary converges on it (hidden-profile groups scored 17–36% vs ~100%), so the reviewer must see diff+spec BEFORE advocacy; named long-running failure modes led by *premature victory declaration*; and state files in JSON because agents corrupt Markdown. Improvements 18→19, Total 154→155.
@@ -55,6 +56,27 @@
 ---
 
 ## Open Issues
+
+157. [2026-08-19] [HIGH] 🔴 A package annotated in `__init__.py` gets a FILE source, so 5 nodes report 0 symbols and `max_symbols` can never fire on them
+
+    **Severity:** high (a size rule that cannot fire reads as clean; three user-facing surfaces under-report real code to zero)
+    **Command:** `beadloom lint --strict`, `beadloom docs site` (node page + architecture pop-up), `beadloom status`
+    **Context:** Found while reviewing BDL-060.15 (S4 viz). The interactive architecture pop-up showed `debt-report: 0 symbols`. The viz was the messenger, not the cause: after BDL-059's cohesion-driven decomposition a package carries its `# beadloom:feature=` / `# beadloom:component=` annotation in `__init__.py` — the natural place — and the indexer records the node's `source` as that FILE. The façade only re-exports, so it has no top-level symbols.
+    **Measured** (Beadloom's own graph, 5 nodes / 228 symbols invisible):
+
+    | node | kind | shown | actual |
+    |---|---|---|---|
+    | `cli-commands` | component | 0 | 71 |
+    | `federation` | feature | 0 | 57 |
+    | `agent-prime` | feature | 0 | 43 |
+    | `reindex` | feature | 0 | 31 |
+    | `debt-report` | feature | 0 | 26 |
+
+    **Issue:** all five symbol readers independently agree on 0 — `repository.get_symbols_for_source` (exact match), `architecture_view._symbol_count` (exact match), `site_pages._load_symbols` (`file_path = src OR LIKE src/%`), `graph/rules/evaluators` `max_symbols` (`src.rstrip("/") + "/%"`), and `debt_report/collect` (`src + "%"`). Consistency is why it is invisible: no surface contradicts another. A per-reader patch would be worse than the bug (the architecture pop-up would start disagreeing with the node page).
+    **Impact:** the architecture pop-up and the node page's "Public symbols" section report real packages as empty; the debt report reads them as zero-cost complexity; and `max_symbols` can never fire on them — the #146 shape, a check whose green means "nothing was looked at". It also distorts size governance: `application` measures 283/290 against `domain-size-limit` while 57 of its own symbols (`federation`) belong to no node's count, so the 280→290 recalibration was argued against a number that is short.
+    **Expected:** when an annotation is found in a package's `__init__.py`, resolve the node `source` to the package DIRECTORY (trailing slash) rather than the file — fixing all five readers at once. Add a regression test seeding a façade + sibling modules and asserting the node's count equals the package total, plus a graph guard that no node `source` ends in `__init__.py`.
+    > Tracked as bead `beadloom-nfw0` (P1).
+
 
 > Issues awaiting code fixes in Beadloom.
 
