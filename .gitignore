@@ -58,3 +58,6 @@ site/ru/
 .claude/development/docs/features/BDL-047/credentials.md
 # Agent tool worktrees (isolation: worktree) — never commit
 .claude/worktrees/
+
+# dev-server logs from local dogfooding
+.vitepress-dev.log

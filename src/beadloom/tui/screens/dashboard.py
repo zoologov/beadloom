@@ -4,8 +4,9 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
+from textual import work
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
@@ -82,6 +83,16 @@ class DashboardScreen(Screen[None]):
         """Load data from providers when the screen mounts."""
         self._load_data()
 
+    def _load_data(self) -> None:
+        """Paint the cheap panels now and kick off the expensive ones.
+
+        Everything here reads the graph index and returns in milliseconds. Debt
+        and activity are handed to a background worker so the terminal is never
+        left blank waiting for them.
+        """
+        self._load_fast_data()
+        self._load_slow_data()
+
     def on_node_selected(self, event: NodeSelected) -> None:
         """Handle node selection from the graph tree — update summary bar.
 
@@ -140,8 +151,8 @@ class DashboardScreen(Screen[None]):
 
         app.open_explorer(ref_id)
 
-    def _load_data(self) -> None:
-        """Load data from all providers and push to widgets."""
+    def _load_fast_data(self) -> None:
+        """Load the graph index data — all cheap SQLite reads."""
         app = self._get_app()
         if app is None:
             return
@@ -156,23 +167,12 @@ class DashboardScreen(Screen[None]):
         except Exception:
             logger.debug("Failed to load graph tree data", exc_info=True)
 
-        # Debt gauge
-        if app.debt_provider is not None:
-            try:
-                score = app.debt_provider.get_score()
-                debt_gauge = self.query_one("#debt-gauge", DebtGaugeWidget)
-                debt_gauge.refresh_data(score)
-            except Exception:
-                logger.debug("Failed to load debt data", exc_info=True)
-
-        # Activity
-        if app.activity_provider is not None:
-            try:
-                activities = app.activity_provider.get_activity()
-                activity_widget = self.query_one("#activity-widget", ActivityWidget)
-                activity_widget.refresh_data(activities)
-            except Exception:
-                logger.debug("Failed to load activity data", exc_info=True)
+        # Debt and activity arrive later from the background worker
+        try:
+            self.query_one("#debt-gauge", DebtGaugeWidget).set_pending()
+            self.query_one("#activity-widget", ActivityWidget).set_pending()
+        except Exception:
+            logger.debug("Failed to set loading placeholders", exc_info=True)
 
         # Lint
         if app.lint_provider is not None:
@@ -185,6 +185,59 @@ class DashboardScreen(Screen[None]):
 
         # Status bar counts
         self._load_status_bar(app)
+
+    @work(thread=True, exclusive=True, group="dashboard-slow")
+    def _load_slow_data(self) -> None:
+        """Compute the debt score and git activity off the event loop.
+
+        Both walk the working tree and shell out to git, which takes seconds on
+        a real repository. Textual has already switched the terminal to the
+        alternate screen by this point, so running them inline would show the
+        user nothing but a black screen until they finished.
+
+        Runs on a worker thread against the app's worker connection, holding
+        ``worker_conn_lock`` so a re-triggered load cannot overlap this one.
+        """
+        app = self._get_app()
+        if app is None:
+            return
+
+        score: float | None = None
+        activities: dict[str, Any] = {}
+
+        with app.worker_conn_lock:
+            if app.is_shutting_down:
+                return
+
+            if app.debt_provider is not None:
+                try:
+                    app.debt_provider.refresh()
+                    score = app.debt_provider.get_score()
+                except Exception:
+                    logger.debug("Failed to load debt data", exc_info=True)
+
+            if app.activity_provider is not None:
+                try:
+                    app.activity_provider.refresh()
+                    activities = app.activity_provider.get_activity()
+                except Exception:
+                    logger.debug("Failed to load activity data", exc_info=True)
+
+        if app.is_shutting_down:
+            return
+
+        try:
+            app.call_from_thread(self._apply_slow_data, score, activities)
+        except Exception:
+            logger.debug("Failed to deliver background data", exc_info=True)
+
+    def _apply_slow_data(self, score: float | None, activities: dict[str, Any]) -> None:
+        """Push background-loaded debt and activity data into their widgets."""
+        try:
+            self.query_one("#debt-gauge", DebtGaugeWidget).refresh_data(score)
+            self.query_one("#activity-widget", ActivityWidget).refresh_data(activities)
+        except Exception:
+            logger.debug("Failed to apply background data", exc_info=True)
 
     def _load_status_bar(self, app: BeadloomApp) -> None:
         """Load counts into the status bar from graph and sync providers."""

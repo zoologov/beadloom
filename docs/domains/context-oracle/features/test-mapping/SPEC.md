@@ -24,6 +24,13 @@ name/path proximity. The result is a `TestMapping` per source node carrying the
 framework, the relevant test files, the test count, and a coarse coverage
 estimate (`high` / `medium` / `low` / `none`).
 
+The project tree is walked once per call and the collected listing is matched in
+memory, rather than issuing a recursive glob per framework pattern. Dependency
+trees, VCS metadata, tool caches and build output (`node_modules`, `.venv`,
+`vendor`, `.git`, `__pycache__`, `dist`, `build`, `target`, and similar) are
+pruned from that walk: they contain no first-party tests but would otherwise
+dominate its cost.
+
 `aggregate_parent_tests(mappings, parent_children)` rolls child test counts up
 to parent nodes that have no direct tests of their own — typically following the
 `part_of` edges — so a domain node reflects the coverage of its features.
@@ -34,6 +41,8 @@ to parent nodes that have no direct tests of their own — typically following t
   conventions); it is best-effort, not exhaustive.
 - A project with no detectable tests yields empty mappings rather than an
   error — test mapping never fails the index.
+- Discovery never descends into dependency, VCS, cache or build directories, so
+  third-party tests vendored under them are never attributed to project nodes.
 - Parent aggregation only fills in parents that have no direct test files of
   their own.
 

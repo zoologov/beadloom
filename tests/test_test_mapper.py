@@ -487,3 +487,89 @@ class TestParentAggregation:
         }
         result = aggregate_parent_tests(mappings, parent_children)
         assert result["parent-domain"].test_count == 0
+
+
+# ---------------------------------------------------------------------------
+# Vendor / build directory pruning
+# ---------------------------------------------------------------------------
+
+
+class TestVendorPruning:
+    """Discovery walks the project once and never descends into vendored trees.
+
+    Dependency trees, VCS metadata, caches and build output hold no first-party
+    tests but dominate the cost of the walk, so they are skipped outright.
+    """
+
+    def test_node_modules_tests_are_not_attributed(self, tmp_path: Path) -> None:
+        """A dependency's own test files never count as the project's."""
+        _write_file(tmp_path / "jest.config.js", "")
+        _write_file(
+            tmp_path / "node_modules" / "leftpad" / "auth.test.ts",
+            "test('vendor', () => {});\n",
+        )
+        _write_file(
+            tmp_path / "src" / "auth" / "auth.test.ts",
+            "test('own', () => {});\n",
+        )
+        result = map_tests(tmp_path, {"auth": "src/auth"})
+        assert result["auth"].test_files == ["src/auth/auth.test.ts"]
+
+    def test_virtualenv_tests_are_not_attributed(self, tmp_path: Path) -> None:
+        """Installed packages under .venv are invisible to discovery."""
+        _write_file(tmp_path / "conftest.py", "")
+        _write_file(
+            tmp_path / ".venv" / "lib" / "site-packages" / "dep" / "test_auth.py",
+            "def test_vendor():\n    pass\n",
+        )
+        _write_file(
+            tmp_path / "tests" / "test_auth.py",
+            "def test_own():\n    pass\n",
+        )
+        result = map_tests(tmp_path, {"auth": "src/auth"})
+        assert result["auth"].test_files == ["tests/test_auth.py"]
+
+    def test_vendored_tests_alone_do_not_detect_a_framework(
+        self, tmp_path: Path
+    ) -> None:
+        """A project whose only *_test.go lives in vendor/ has no Go tests."""
+        _write_file(
+            tmp_path / "vendor" / "github.com" / "x" / "y" / "y_test.go",
+            "func TestVendor(t *testing.T) {}\n",
+        )
+        result = map_tests(tmp_path, {"auth": "src/auth"})
+        assert result["auth"].test_files == []
+        assert result["auth"].coverage_estimate == "none"
+
+    def test_build_output_is_skipped(self, tmp_path: Path) -> None:
+        """Copies of tests under dist/ or build/ are not double-counted."""
+        _write_file(tmp_path / "conftest.py", "")
+        _write_file(
+            tmp_path / "tests" / "test_auth.py",
+            "def test_login():\n    pass\n",
+        )
+        _write_file(
+            tmp_path / "build" / "lib" / "tests" / "test_auth.py",
+            "def test_login():\n    pass\n",
+        )
+        _write_file(
+            tmp_path / "dist" / "tests" / "test_auth.py",
+            "def test_login():\n    pass\n",
+        )
+        result = map_tests(tmp_path, {"auth": "src/auth"})
+        assert result["auth"].test_files == ["tests/test_auth.py"]
+        assert result["auth"].test_count == 1
+
+    def test_scan_skips_configured_directories(self, tmp_path: Path) -> None:
+        """The single walk itself excludes the pruned directories."""
+        from beadloom.context_oracle.test_mapper import _ProjectScan
+
+        _write_file(tmp_path / "src" / "auth" / "auth.py", "")
+        _write_file(tmp_path / "node_modules" / "leftpad" / "index.js", "")
+        _write_file(tmp_path / ".git" / "config", "")
+
+        scan = _ProjectScan.build(tmp_path)
+
+        assert "src/auth/auth.py" in scan.files
+        assert not [f for f in scan.files if f.startswith(("node_modules/", ".git/"))]
+        assert not [d for d in scan.dirs if d.startswith(("node_modules", ".git"))]

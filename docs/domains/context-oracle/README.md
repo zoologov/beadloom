@@ -399,6 +399,8 @@ def map_tests(
 
 Map test files to source nodes. `source_dirs` maps `ref_id -> source_path` (relative). Returns a `TestMapping` for each source node.
 
+The project tree is walked once per call, skipping dependency trees, VCS metadata, tool caches and build output (`node_modules`, `.venv`, `vendor`, `.git`, `__pycache__`, `dist`, `build`, `target`, and similar). Those directories hold no first-party tests but otherwise dominate the walk — pruning them keeps `map_tests` fast enough to run interactively, which the TUI debt gauge relies on.
+
 ```python
 def aggregate_parent_tests(
     mappings: dict[str, TestMapping],
