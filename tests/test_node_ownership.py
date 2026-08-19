@@ -246,3 +246,98 @@ class TestImportTargetOwnership:
         )
 
         assert resolved is None
+
+
+class TestContainmentEdgeDirection:
+    """Containment flows ONE way: a container does not depend on its own parts.
+
+    A parent's `__init__.py` re-exporting its children produces `parent -> child`
+    edges that say nothing the `part_of` edge did not — pure noise, and paired
+    with a child's normal upward import it manufactures a node-level cycle that
+    has no module-level counterpart.
+
+    The reverse is NOT noise. A feature reaching into shared code that lives in
+    its domain but belongs to no child node is a real dependency, and dropping
+    it made the node read "Depends on: nothing" — false, and exactly the kind of
+    confident-but-wrong answer that costs trust in the tool.
+    """
+
+    def _graph(self, conn: sqlite3.Connection) -> None:
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) "
+            "VALUES ('domain', 'domain', 's', 'src/pkg/')"
+        )
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, source) "
+            "VALUES ('feature', 'feature', 's', 'src/pkg/feature.py')"
+        )
+        conn.execute(
+            "INSERT INTO edges (src_ref_id, dst_ref_id, kind) "
+            "VALUES ('feature', 'domain', 'part_of')"
+        )
+
+    def _import(self, conn: sqlite3.Connection, file_path: str, target: str) -> None:
+        conn.execute(
+            "INSERT INTO code_imports "
+            "(file_path, line_number, import_path, resolved_ref_id, file_hash) "
+            "VALUES (?, 1, ?, ?, 'h')",
+            (file_path, "irrelevant", target),
+        )
+
+    def test_child_to_parent_edge_is_kept(self, conn: sqlite3.Connection) -> None:
+        from beadloom.graph.import_resolver import create_import_edges
+
+        self._graph(conn)
+        # The feature imports shared code that belongs to the domain itself.
+        self._import(conn, "src/pkg/feature.py", "domain")
+        conn.commit()
+
+        create_import_edges(conn)
+
+        edges = {
+            (r[0], r[1])
+            for r in conn.execute(
+                "SELECT src_ref_id, dst_ref_id FROM edges WHERE kind = 'depends_on'"
+            )
+        }
+        assert ("feature", "domain") in edges
+
+    def test_parent_to_child_edge_is_dropped(self, conn: sqlite3.Connection) -> None:
+        from beadloom.graph.import_resolver import create_import_edges
+
+        self._graph(conn)
+        # The domain's package facade re-exports its own feature.
+        self._import(conn, "src/pkg/__init__.py", "feature")
+        conn.commit()
+
+        create_import_edges(conn)
+
+        edges = {
+            (r[0], r[1])
+            for r in conn.execute(
+                "SELECT src_ref_id, dst_ref_id FROM edges WHERE kind = 'depends_on'"
+            )
+        }
+        assert ("domain", "feature") not in edges
+
+    def test_both_directions_do_not_produce_a_cycle(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        """Only one direction survives, so containment can never close a cycle."""
+        from beadloom.graph.import_resolver import create_import_edges
+
+        self._graph(conn)
+        self._import(conn, "src/pkg/feature.py", "domain")
+        self._import(conn, "src/pkg/__init__.py", "feature")
+        conn.commit()
+
+        create_import_edges(conn)
+
+        edges = {
+            (r[0], r[1])
+            for r in conn.execute(
+                "SELECT src_ref_id, dst_ref_id FROM edges WHERE kind = 'depends_on'"
+            )
+        }
+        assert ("feature", "domain") in edges
+        assert ("domain", "feature") not in edges

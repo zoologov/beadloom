@@ -907,12 +907,16 @@ def create_import_edges(conn: sqlite3.Connection) -> int:
     For each resolved import, finds the importing file's owning node
     and creates a ``depends_on`` edge to the target node (if different).
 
-    Containment is skipped: an edge between a node and its ``part_of`` ancestor
-    is a category error, not a dependency. The parent already CONTAINS the
-    child, so "the domain depends on its own feature" says nothing the
-    containment edge did not, and — because a parent's files and its child's
-    files import each other freely in healthy package layout — it manufactures
-    node-level cycles that do not exist at the module level (BDL-UX #144).
+    Containment is skipped in ONE direction only. A node does not "depend on"
+    its own parts: a package facade re-exporting its children says nothing the
+    ``part_of`` edge did not, and paired with a child's ordinary upward import
+    it manufactures a node-level cycle with no module-level counterpart
+    (BDL-UX #144).
+
+    The reverse is kept. A child reaching into shared code that lives in its
+    container but belongs to no other node is a REAL dependency; dropping it
+    made such a node report "depends on nothing", which is false — and a
+    confidently wrong answer is worse than a coarse one.
 
     Returns the number of edges created.
     """
@@ -932,9 +936,8 @@ def create_import_edges(conn: sqlite3.Connection) -> int:
         source_ref_id = _find_node_for_file(rel_path, conn)
         if not source_ref_id or source_ref_id == target_ref_id:
             continue
-        if target_ref_id in ancestors.get(source_ref_id, ()) or source_ref_id in (
-            ancestors.get(target_ref_id, ())
-        ):
+        # Drop only parent -> child (the container depending on its own part).
+        if source_ref_id in ancestors.get(target_ref_id, ()):
             continue
 
         edge_key = (source_ref_id, target_ref_id)

@@ -9,6 +9,16 @@ tests reference by name (``_remediation_for``) — so existing
 ``from beadloom.graph.rule_engine import X`` imports keep working unchanged.
 
 New code should import from :mod:`beadloom.graph.rules` directly.
+
+Note the deliberate split between ANNOTATION and OWNERSHIP here. The annotation
+says this file belongs to the ``rule-engine`` feature — it is that feature's
+back-compat public surface, and ``module-coverage`` is right to see it claimed.
+The node's ``source`` is the ``rules/`` PACKAGE, because that is where the
+engine's code actually lives; sourcing the node at this 84-line shim made every
+symbol count, node page and size limit describe the shim instead of the engine
+(the BDL-UX #157 shape). So ownership attributes this file's symbols to
+``graph`` while the annotation records its feature membership — two different
+questions, answered separately and on purpose.
 """
 
 from __future__ import annotations

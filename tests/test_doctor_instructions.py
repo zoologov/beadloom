@@ -161,9 +161,18 @@ class TestGetActualVersion:
 
 class TestGetActualCliCommands:
     def test_returns_set_of_commands_when_the_surface_is_provided(self) -> None:
-        """With the CLI loaded (as in any real CLI process) the names are read."""
-        # Arrange — importing the services layer registers its own surface.
-        import beadloom.services.cli  # noqa: F401
+        """With the CLI surface provided (as in any real CLI process) names are read.
+
+        Registers explicitly rather than relying on the import side effect: the
+        module is already in ``sys.modules`` by the time this runs, so importing
+        it again would not re-register and the test would depend on which other
+        test ran first.
+        """
+        # Arrange
+        import beadloom.services.cli as cli_module
+        from beadloom.infrastructure.surface_registry import register_cli_group
+
+        register_cli_group(lambda: cli_module.main)
 
         # Act
         result = _get_actual_cli_commands()

@@ -27,10 +27,18 @@ from beadloom.infrastructure.surface_registry import (
 
 @pytest.fixture(autouse=True)
 def _clean_registry() -> object:
-    """Each test starts and ends with an empty registry (no cross-test bleed)."""
+    """Each test starts empty and RESTORES what was there afterwards.
+
+    The registry is process-wide, so merely clearing it would leak into every
+    later test that expects the real CLI surface (doctor's command count,
+    sync-check's `watches=cli` signature). Save and restore instead.
+    """
+    import beadloom.infrastructure.surface_registry as registry
+
+    saved = registry._cli_group_provider
     reset_surface_providers()
     yield
-    reset_surface_providers()
+    registry._cli_group_provider = saved
 
 
 class TestUnregisteredSurface:

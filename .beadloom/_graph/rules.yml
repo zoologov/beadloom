@@ -105,6 +105,13 @@ rules:
         - "**/__main__.py"
         - "**/onboarding/config_reader.py"
         - "**/onboarding/presets.py"
+        # Pure back-compat re-export shim (0 own symbols). The `rule-engine`
+        # node is sourced at the `rules/` PACKAGE, where the engine actually
+        # lives — sourcing it at this shim made every symbol count, node page
+        # and size limit describe the shim instead of the engine (BDL-UX #157).
+        # The file keeps its `# beadloom:feature=rule-engine` annotation to
+        # record membership; exemption covers only its lack of own code.
+        - "**/graph/rule_engine.py"
 
   - name: tui-no-direct-infra
     description: "TUI must not import infrastructure directly"
