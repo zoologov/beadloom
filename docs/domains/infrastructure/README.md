@@ -16,11 +16,13 @@ Internal building blocks, each with a `DOC.md`:
 - **[MCP Tools](components/mcp-tools/DOC.md)** — the canonical MCP tool-name catalog.
 - **[Scan Paths](components/scan-paths/DOC.md)** — resolves source scan directories from `config.yml` so domains do not import `application`.
 - **[Atomic IO](components/atomic-io/DOC.md)** — atomic YAML writes (temp-file + `os.replace`) so a crash mid-write never corrupts the source-of-truth graph YAML.
+- **[Surface Registry](components/surface-registry/DOC.md)** — the port through which the services layer hands its live CLI/MCP surface to the checks below it, so `doctor` / `docs audit` / `sync-check` can compare a documented claim against runtime truth without importing upward.
 
 ## Specification
 
 ### Modules
 
+- **surface_registry.py** — the CLI/MCP surface port. `register_cli_group(provider)` / `register_mcp_tools(provider)` are called by `services/cli.py` and `services/mcp_server.py` on import; `get_cli_group()` / `get_mcp_tools()` are read by `application/doctor.py`, `doc_sync/audit.py` and `doc_sync/surface.py`. Providers are stored as callables and invoked per read, and a provider that raises degrades to `None`. **Unknown is not zero:** the getters return `None` when nothing is registered — distinct from an empty surface — so a caller reports "not verified" rather than announcing a count it never looked at (BDL-UX #159).
 - **db.py** — `open_db()` opens a SQLite connection with WAL mode and foreign keys enabled, returning a connection with `sqlite3.Row` row factory. `create_schema()` creates all tables and applies incremental migrations via `ensure_schema_migrations()`. `get_meta()`/`set_meta()` for key-value metadata. Exports `SCHEMA_VERSION` constant (currently `"4"` — BDL-038 G7 added `external` to the `nodes`/`edges`/`foreign_edges` `lifecycle` CHECK). The `rules` table CHECK constraint covers all 7 rule types: `deny`, `require`, `forbid_cycles`, `layers`, `cardinality`, `forbid_import`, `forbid_edge`.
 - **health.py** — `take_snapshot()` captures current index statistics (node/edge/doc counts, coverage percentage, stale docs, isolated nodes) and persists them to the `health_snapshots` table. `get_latest_snapshots()` retrieves history for trend comparison. `compute_trend()` computes trend indicators (arrows and deltas) between two snapshots.
 - **git_activity.py** — `GitActivity` frozen dataclass holds per-node metrics: `commits_30d`, `commits_90d`, `last_commit_date`, `top_contributors`, `activity_level`. `analyze_git_activity()` runs `git log --since=90 days ago`, parses output, maps changed files to nodes via longest source-prefix match, and classifies activity (hot: >20 commits/30d, warm: 5-20, cold: 1-4, dormant: 0 commits/90d).
@@ -50,6 +52,13 @@ Stored in `.beadloom/beadloom.db` (WAL mode):
 `incremental_reindex()` tracks available tree-sitter parsers via a fingerprint (sorted comma-separated `supported_extensions()`). Stored as a sentinel row in `file_index` with `path='__parser_fingerprint__'`. When the fingerprint changes (e.g. after `uv tool install "beadloom[languages]"`), a full code reindex is triggered automatically, ensuring new language parsers are used without requiring `--full`.
 
 ## API
+
+Module `src/beadloom/infrastructure/surface_registry.py`:
+- `register_cli_group(provider: Callable[[], Any])` — services register the root Click group
+- `register_mcp_tools(provider: Callable[[], Sequence[Any]])` — services register the MCP tool list
+- `get_cli_group()` -> `Any | None` — the group, or `None` when the surface is unknown
+- `get_mcp_tools()` -> `Sequence[Any] | None` — the tools, or `None` when the surface is unknown
+- `reset_surface_providers()` — clears both providers (tests only)
 
 Module `src/beadloom/infrastructure/db.py`:
 - `SCHEMA_VERSION` — schema version constant (currently `"4"`; v3 → v4 rebuilt the `lifecycle` CHECK to admit `external`)

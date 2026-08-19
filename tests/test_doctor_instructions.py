@@ -160,8 +160,11 @@ class TestGetActualVersion:
 
 
 class TestGetActualCliCommands:
-    def test_returns_set_of_commands(self) -> None:
-        """Returns a non-empty set of CLI command names."""
+    def test_returns_set_of_commands_when_the_surface_is_provided(self) -> None:
+        """With the CLI loaded (as in any real CLI process) the names are read."""
+        # Arrange — importing the services layer registers its own surface.
+        import beadloom.services.cli  # noqa: F401
+
         # Act
         result = _get_actual_cli_commands()
 
@@ -171,6 +174,27 @@ class TestGetActualCliCommands:
         # Some known commands should be present
         assert "doctor" in result
         assert "reindex" in result or "status" in result
+
+    def test_returns_none_when_the_surface_was_never_provided(self) -> None:
+        """Unknown must stay unknown — never an empty set read as "no commands".
+
+        The application layer no longer imports `services.cli` to find out; it
+        reads the port. If nothing registered a surface, the honest answer is
+        "not verified", which the caller reports as an INFO check rather than
+        announcing a command count it never looked at (BDL-UX #159).
+        """
+        from beadloom.infrastructure.surface_registry import (
+            register_cli_group,
+            reset_surface_providers,
+        )
+
+        reset_surface_providers()
+        try:
+            assert _get_actual_cli_commands() is None
+        finally:
+            import beadloom.services.cli as cli_module
+
+            register_cli_group(lambda: cli_module.main)
 
 
 # ---------------------------------------------------------------------------

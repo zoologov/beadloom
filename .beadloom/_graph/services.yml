@@ -442,6 +442,13 @@ nodes:
     docs:
       - docs/domains/infrastructure/components/repository/DOC.md
 
+  - ref_id: surface-registry
+    kind: component
+    summary: "Port for the live CLI/MCP surface: services register it, lower-layer checks read it without importing upward"
+    source: src/beadloom/infrastructure/surface_registry.py
+    docs:
+      - docs/domains/infrastructure/components/surface-registry/DOC.md
+
   - ref_id: git-activity
     kind: component
     summary: "Git history analysis — per-node commit activity, contributors, and activity classification"
@@ -673,6 +680,10 @@ edges:
     dst: infrastructure
     kind: part_of
   - src: repository
+    dst: infrastructure
+    kind: part_of
+
+  - src: surface-registry
     dst: infrastructure
     kind: part_of
   - src: git-activity

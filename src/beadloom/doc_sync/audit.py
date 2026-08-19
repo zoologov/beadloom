@@ -20,6 +20,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from beadloom.doc_sync.scanner import DocScanner, Mention
+from beadloom.infrastructure.mcp_tools import MCP_TOOL_CATALOG
+from beadloom.infrastructure.surface_registry import get_cli_group
 
 if TYPE_CHECKING:
     import sqlite3
@@ -787,16 +789,14 @@ class FactRegistry:
         facts: dict[str, Fact],
     ) -> None:
         """Count MCP tools from the server definition module."""
-        try:
-            from beadloom.services.mcp_server import _TOOLS
-
-            facts["mcp_tool_count"] = Fact(
-                name="mcp_tool_count",
-                value=len(_TOOLS),
-                source="MCP server",
-            )
-        except Exception:
-            logger.warning("Cannot introspect MCP tools")
+        # The canonical catalog lives in infrastructure and is pinned equal to
+        # the server's live registry by a test, so this fact never depends on
+        # whether the server module happens to be imported in this process.
+        facts["mcp_tool_count"] = Fact(
+            name="mcp_tool_count",
+            value=len(MCP_TOOL_CATALOG),
+            source="MCP tool catalog",
+        )
 
     # ------------------------------------------------------------------
     # CLI command count
@@ -807,17 +807,15 @@ class FactRegistry:
         facts: dict[str, Fact],
     ) -> None:
         """Count CLI commands from the Click main group."""
-        try:
-            from beadloom.services.cli import main
-
-            count = self._count_click_commands(main)
-            facts["cli_command_count"] = Fact(
-                name="cli_command_count",
-                value=count,
-                source="CLI",
-            )
-        except Exception:
-            logger.warning("Cannot introspect CLI commands")
+        group = get_cli_group()
+        if group is None:
+            logger.warning("CLI surface unavailable — command count not audited")
+            return
+        facts["cli_command_count"] = Fact(
+            name="cli_command_count",
+            value=self._count_click_commands(group),
+            source="CLI",
+        )
 
     @staticmethod
     def _count_click_commands(group: object) -> int:

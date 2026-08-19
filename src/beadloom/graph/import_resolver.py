@@ -18,6 +18,7 @@ from beadloom.infrastructure.scan_paths import resolve_scan_paths
 
 if TYPE_CHECKING:
     import sqlite3
+    from collections.abc import Iterator
     from pathlib import Path
 
     from tree_sitter import Node as TSNode
@@ -51,11 +52,35 @@ class ImportInfo:
 # ---------------------------------------------------------------------------
 
 
+def _walk(root: TSNode) -> Iterator[TSNode]:
+    """Yield every node in the tree, pre-order (the root's descendants).
+
+    Extraction used to consider only ``root.children`` — the file's TOP-LEVEL
+    statements — so an import inside a function, a class body, an
+    ``if TYPE_CHECKING:`` guard or a ``try:`` block was invisible to the
+    dependency graph. Those are precisely the places an import is put to defer
+    cost or to break a cycle, so the graph was blind to the very edges the
+    cycle and boundary rules exist to judge (BDL-UX #159). Measured on this
+    repo when the walk was introduced: 460 nested imports, 231 of them
+    first-party — about a third of all imports.
+
+    Statement types the extractors match do not nest inside themselves, so a
+    full walk cannot double-count a single statement.
+    """
+    # Document order (pre-order): imports must be reported in the order they
+    # appear, so line numbers read naturally and extraction is deterministic.
+    stack = list(reversed(root.children))
+    while stack:
+        node = stack.pop()
+        yield node
+        stack.extend(reversed(node.children))
+
+
 def _extract_python_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
     """Extract imports from a Python AST root node."""
     results: list[ImportInfo] = []
 
-    for child in root.children:
+    for child in _walk(root):
         if child.type == "import_statement":
             # `import X` or `import X.Y.Z`
             for sub in child.children:
@@ -116,7 +141,7 @@ def _extract_ts_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
     """Extract imports from a TypeScript/JavaScript AST root node."""
     results: list[ImportInfo] = []
 
-    for child in root.children:
+    for child in _walk(root):
         if child.type != "import_statement":
             continue
 
@@ -167,7 +192,7 @@ def _extract_go_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
     """Extract imports from a Go AST root node."""
     results: list[ImportInfo] = []
 
-    for child in root.children:
+    for child in _walk(root):
         if child.type != "import_declaration":
             continue
 
@@ -204,7 +229,7 @@ def _extract_rust_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
     """Extract imports from a Rust AST root node."""
     results: list[ImportInfo] = []
 
-    for child in root.children:
+    for child in _walk(root):
         if child.type != "use_declaration":
             continue
 
@@ -245,7 +270,7 @@ _KOTLIN_STDLIB_PREFIXES: tuple[str, ...] = ("kotlin.", "kotlinx.", "java.", "jav
 def _extract_kotlin_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
     """Extract imports from a Kotlin AST root node."""
     results: list[ImportInfo] = []
-    for child in root.children:
+    for child in _walk(root):
         if child.type == "import":
             # Find the qualified_identifier (dotted path)
             for sub in child.children:
@@ -271,7 +296,7 @@ _JAVA_STDLIB_PREFIXES: tuple[str, ...] = ("java.", "javax.", "android.", "sun.",
 def _extract_java_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
     """Extract imports from Java files."""
     results: list[ImportInfo] = []
-    for child in root.children:
+    for child in _walk(root):
         if child.type != "import_declaration":
             continue
 
@@ -350,7 +375,7 @@ _SWIFT_STDLIB_MODULES: frozenset[str] = frozenset(
 def _extract_swift_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
     """Extract imports from a Swift AST root node."""
     results: list[ImportInfo] = []
-    for child in root.children:
+    for child in _walk(root):
         if child.type != "import_declaration":
             continue
 
@@ -469,7 +494,7 @@ def _extract_c_cpp_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
     Skips well-known C/C++ standard library headers.
     """
     results: list[ImportInfo] = []
-    for node in root.children:
+    for node in _walk(root):
         if node.type != "preproc_include":
             continue
         path_node = node.child_by_field_name("path")
@@ -552,7 +577,7 @@ def _extract_objc_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
     Skips well-known Apple/system frameworks.
     """
     results: list[ImportInfo] = []
-    for node in root.children:
+    for node in _walk(root):
         if node.type == "preproc_include":
             # #import <Framework/Header.h> or #import "Header.h"
             # In tree-sitter-objc, #import uses preproc_include with:
