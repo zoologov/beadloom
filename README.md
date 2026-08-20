@@ -20,7 +20,7 @@ It is one free, MIT-licensed tool, with no cloud: a single CLI and a single SQLi
 [![coverage: 80%+](https://img.shields.io/badge/coverage-80%25%2B-green)](pyproject.toml)
 [![Docs portal](https://img.shields.io/badge/docs-portal-8A2BE2)](https://zoologov.github.io/beadloom/)
 
-📖 **Documentation portal:** [zoologov.github.io/beadloom](https://zoologov.github.io/beadloom/) — interactive architecture, metrics dashboard, and up-to-date documentation.
+📖 **Documentation portal:** [zoologov.github.io/beadloom](https://zoologov.github.io/beadloom/) — the architecture and the cross-service landscape as clickable graphs (click a node for its card and blast radius; filter by kind, layer or health), a metrics dashboard, and documentation tagged with its freshness. Every page is generated from the indexed graph, never hand-drawn.
 
 **Platforms:** macOS, Linux, Windows &nbsp;|&nbsp; **Python:** 3.10+
 
@@ -53,7 +53,7 @@ On that same graph Beadloom builds tools that work across the whole system:
 
 - **Cross-service federation.** The graphs of individual repositories combine into one landscape, where Beadloom checks what each service promises to provide against what its consumers actually use.
 - **A configurable, tool-agnostic agentic workflow.** `beadloom setup-agentic-flow` composes a multi-agent workflow (dev → test → review → tech-writer) and writes adapters for Claude Code and Cursor at parity.
-- **A published knowledge base.** `beadloom docs site` builds a portal (VitePress) — a metrics dashboard, interactive architecture, a landscape map, and documentation tagged with its freshness.
+- **A published knowledge base.** `beadloom docs site` builds a portal (VitePress) — a metrics dashboard, the architecture and the cross-service landscape as interactive graphs with per-node and per-contract cards, and documentation tagged with its freshness. A static Mermaid fallback of each graph is generated alongside, so the pages still read with JavaScript disabled.
 
 ## A single Gate
 

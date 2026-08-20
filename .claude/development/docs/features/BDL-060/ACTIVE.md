@@ -3,13 +3,13 @@
 > **Type:** epic
 > **Parent bead:** beadloom-8qqp
 > **Branch:** features/BDL-060-s4
-> **Updated:** 2026-08-19
+> **Updated:** 2026-08-20
 
 ---
 
 ## Current focus
 
-**S1–S3 merged to main** (PRs #27/#28/#29). **S4 dev DONE** on `features/BDL-060-s4` (`.13` + follow-ups `.26`/`.27`): landscape + architecture graphs via Cytoscape+ELK, compound domains, doc-links, impact, filters, canonical layered lanes. **Next: `.14` [test]** — byte-stable regeneration + pop-up data + dead-link guard, then `.15` [review] and `.16` [tech-writer], then ONE PR for S4.
+**S1–S3 merged to main** (PRs #27/#28/#29). **S4 dev DONE** on `features/BDL-060-s4` (`.13` + follow-ups `.26`/`.27`): landscape + architecture graphs via Cytoscape+ELK, compound domains, doc-links, impact, filters, canonical layered lanes. **S4 is complete** (.13–.16 closed). **Next: the S4 PR to main, then release 2.2.0.**
 
 **Target after S4: release 2.2.0** (owner decision 2026-08-19). It is overdue and now load-bearing: `main` carries S1–S3 unreleased, which is the mechanism behind BDL-UX #151 (a fresh install reports `config-check` drift against projects scaffolded from `main`, and `--fix` would rewrite them back to older templates). The release is also breaking-by-dependency — Beadloom now requires `mcp >= 2.0` — so it is a MINOR bump, not a patch.
 
@@ -22,7 +22,7 @@ Scope refocused (owner): GraphQL (incl. subscriptions) + AMQP done maximally; ex
 | S1 atomic YAML | .1–.4 | **DONE** — merged to main (PR #27) |
 | S2 GraphQL Tier-A | .5–.8 | **DONE** — merged to main (PR #28) |
 | S3 AMQP body | .9–.12 | **DONE** — merged to main (PR #29) |
-| S4 viz (Cytoscape+ELK) | .13–.16 | .13 (+ .26/.27) dev DONE; **.14 test NEXT**, then .15 review, .16 tech-writer |
+| S4 viz (Cytoscape+ELK) | .13–.16 | **DONE** — .13 (+.26/.27) dev, .14 test, .15 review (owner visual verdict OK), .16 tech-writer. Ready for the S4 PR |
 | S5 cross-repo ctx | .17–.20 | blocked → S4 |
 | S6 sweep + unverified | .21–.24 | blocked → S5 |
 
