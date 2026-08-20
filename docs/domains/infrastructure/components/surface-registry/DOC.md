@@ -26,12 +26,17 @@ surfaced as six violations at once — two layering breaks, three
 
 ```python
 register_cli_group(provider)      # services/cli.py, on import
-register_mcp_tools(provider)      # services/mcp_server.py, on import
 
 get_cli_group()  -> group | None  # None = surface unknown
-get_mcp_tools()  -> tools | None  # None = surface unknown
 reset_surface_providers()         # tests only
 ```
+
+Only the CLI needs a port. The MCP tool list already has a canonical lower-layer
+source — `infrastructure/mcp_tools.MCP_TOOL_CATALOG`, pinned equal to the
+server's live registry by a test — so its consumers read that directly and no
+registration is involved. The CLI's command/option tree has no such static
+mirror: `sync-check` hashes the LIVE Click group to detect surface drift, so it
+must be handed the real thing.
 
 Providers are stored as callables and invoked on each read, so a surface built
 after registration is still seen. A provider that raises degrades to `None`
@@ -39,9 +44,9 @@ rather than propagating into a check.
 
 ## Unknown is not zero
 
-The getters return `None` when nothing is registered, which is deliberately
-**distinct from an empty surface**. A caller must choose explicitly between
-reporting "not verified" and reporting a number:
+`get_cli_group()` returns `None` when nothing is registered, which is
+deliberately **distinct from a real but empty surface**. A caller must choose
+explicitly between reporting "not verified" and reporting a number:
 
 - `doctor` emits an `INFO` check saying the surface was not available, instead
   of announcing "0 commands registered".
@@ -55,6 +60,6 @@ failure mode this codebase exists to prevent — the same shape as #146 and #157
 
 ## Collaborators
 
-Registered by `services/cli.py` and `services/mcp_server.py`. Read by
-`application/doctor.py`, `doc_sync/audit.py` and `doc_sync/surface.py`. Nothing
-here imports `beadloom.services`.
+Registered by `services/cli.py`. Read by `application/doctor.py`,
+`doc_sync/audit.py` and `doc_sync/surface.py`. Nothing here imports
+`beadloom.services`.
