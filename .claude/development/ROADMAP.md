@@ -78,18 +78,65 @@ Beadloom is an **honest, effective tool**, not a marketing product. Market / hyp
 
 ---
 
-## P1 — Integration map with data (serves north-star "b": team / microservices) — 🚧 NOW ACTIVE (next epic, post-BDL-059)
+## P1 — Integration map with data (serves north-star "b": team / microservices) — 🚧 IN FLIGHT as BDL-060 (S1–S3 merged, S4 in review)
 
 > One coherent epic cluster: "see your microservices product and what flows in it." **Field/type pop-ups technically require semantic extraction** — so the viz carries Tier A + AsyncAPI with it (an AMQP message body is not in the code).
 >
 > **Being scaffolded as ONE big epic (post-BDL-059, the growth-gating debt is cleared).** Per sequencing principle 1 (one thread at a time, no parallel fronts), it runs as dependency-ordered slices, NOT 6 parallel items. Proposed spine: **(1) field-level contract data — Tier-A GraphQL SDL→fields/types + AMQP AsyncAPI/JSON-Schema extraction** (the data the pop-ups show; also kills the worst false-CONFIRMED of presence-check) → **(2) richer landscape viz (Cytoscape/D3) + clickable contract pop-ups** (consumes the Tier-A data) → **(3) live cross-repo `ctx`** (F1 honesty debt — an agent on service A sees `@repo-B:CONTRACT`) → **(4) UNDECLARED sweep + `unverified` lifecycle + review-gated bootstrap** (landscape accuracy) → **(5) Tier-C verdict federation** (buf/graphql-inspector/Pact → `ContractVerdict`, PoC one protocol) → **(6) atomic YAML writes** (safety). Exact scope/DAG to be set + owner-approved in `/task-init`.
 
 - **[P1] Richer landscape viz (Cytoscape/D3) + clickable contracts.** Interactive landscape replacing Mermaid: clickable nodes/edges, **contract pop-up card** (type/routing/protocol/verdict/producer-consumer). The team is actively asking for a good graph view; Mermaid can't do rich pop-ups — that's the argument for D3. _Source: REVIEW-2 §5, BDL-040; team request._
-- **[P1] Field-level contract data (what "flows" between services).** The pop-up shows real **fields and types** of the payload: GraphQL **Tier A** (parse SDL to fields/types/args via `graphql-core` behind an optional extra) + AMQP **AsyncAPI/JSON-Schema** body declaration. This is the data-flow / interface map (DFD) the team wants — to understand what data moves between services and systems. Also removes the worst false-CONFIRMED of presence-check. _Source: team request + REVIEW-2 §6.1 (Tier A)._
+- **[P1] Field-level contract data (what "flows" between services).** — **PARTIALLY DELIVERED (BDL-060 S2 + S3).** Shipped: GraphQL **Tier A** (SDL → fields/types/args/nullability incl. subscriptions, via `graphql-core` behind an optional extra, honest name-level fallback without it) and the AMQP **JSON-Schema body** with a native strict body-diff verdict (absence / type-incompatible / required-narrowed / enum-narrowed / nested + array breaks). **Not delivered: the AsyncAPI ingestion PATH** — see the deferred item below. _Source: team request + REVIEW-2 §6.1 (Tier A)._
 - **[P1] Live cross-repo `ctx` (F1 honesty debt).** The claimed F1 metric is not actually met: `ctx AUTH` should show `@repo-B:BILLING`, but cross-repo identity lives only in `export/federate`, not in bundles. Directly serves (b): an agent on service A sees the contract with service B. _Source: STRATEGY-2 Ph13.1 / STRATEGY-3 F1-metric._
 - **[P1] UNDECLARED sweep + `unverified` lifecycle + review-gated bootstrap.** Accuracy of the team's shared landscape: an automated pass over real-but-undeclared integrations; code-inferred nodes start `unverified`, conflicts flagged (anti-"MySQL-mistake"). The F2 accuracy moat. _Source: F1 §4bis/§8, STRATEGY-3 OQ#4._
 - **[P1] Tier C — verdict federation** (`buf breaking` / `graphql-inspector` / Pact `can-i-deploy` → `ContractVerdict`). The real moat: Beadloom unifies Pact+Buf+GraphOS+AMQP into ONE landscape with ONE gate. PoC on one protocol. _Source: REVIEW-2 §6.1/§6.3._
 - **[P1] Atomic YAML writes** (temp + `os.replace`). Safety of the graph the whole flow depends on. _Source: STRATEGY-2 Ph15.1._
+
+### ⏸ Deferred (planned, not scheduled) — wire the AsyncAPI ingestion path
+
+> **BDL-UX #160 · bead `beadloom-g79p` · deferred by owner 2026-08-20** — real, but
+> outranked. Recorded here so the gap stays visible instead of resurfacing as a
+> surprise.
+
+**State.** `graph/asyncapi.extract_payload_body(document, channel=None)` exists,
+works and is well tested (AsyncAPI 2.x `channels.<c>.{publish,subscribe}.message.payload`
+and 3.x `channels.<c>.messages.<m>.payload` with a one-hop local `$ref`; YAML or
+JSON via the core loader, no optional extra; unparseable / payload-less / remote-`$ref`
+degrades to `None`). **Nothing calls it.** The loader never reads an AsyncAPI
+document, so a team that already describes its messages in AsyncAPI still has to
+retype the schema as an authored `contract.body` — or stay on name-level AMQP.
+Found by the honest dependency graph during the BDL-060 S4 dogfood: the node has
+no first-party coupling in either direction, and `grep` confirms zero references
+under `src/`.
+
+**Why it matters.** The federation SPEC states that *"teams on AsyncAPI ingest the
+payload schema via the source-only adapter"*. Until this is wired that sentence
+describes a capability the product does not perform — the house failure mode one
+level up, and it passed dev + test + review + tech-writer beads plus a green gate
+because each verified the FUNCTION and none asked whether anything calls it.
+
+**Plan when picked up:**
+1. **Declaration.** A contract may name its schema source instead of inlining it —
+   `body_from: <path>` (+ optional `channel:`) beside the existing `body:`,
+   resolved relative to the graph file. Inline `body:` stays authoritative when
+   both are present; declaring both is a lint warning, not a silent precedence.
+2. **Resolution at index time.** The loader reads the referenced document and
+   feeds it through `extract_payload_body` into the SAME internal body model, so
+   every downstream consumer (body diff, export, federate, landscape pop-up) is
+   untouched — one source, one model.
+3. **No silent no-op.** A declared source that yields nothing must be VISIBLE:
+   the contract falls back to name-level AMQP (never a fabricated body, keeping
+   DATA-STRICTNESS) *and* a check reports that a declared source resolved empty.
+   A source that quietly produces nothing is exactly the class this project exists to
+   catch.
+4. **Determinism.** An extracted body serializes byte-stably through
+   export → federate, like an authored one.
+5. **Tests.** End-to-end golden: AsyncAPI document → contract body → BREAKING
+   verdict; a payload-less document keeps name-level; determinism across two
+   runs; and a guard that the adapter is reachable from a code path, so it
+   cannot become an island again.
+6. **Docs.** The federation SPEC claim becomes true; the `asyncapi` component DOC
+   gains the wiring. Until then, the claim should read "unwired building block"
+   if this slips much further.
 
 ---
 
