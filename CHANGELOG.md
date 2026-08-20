@@ -7,7 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-08-20
+
+**Interactive architecture + a graph that stops lying.** The portal renders both the
+repository's architecture and the cross-service landscape as interactive graphs — and
+dogfooding that view exposed four defects in how the graph was built, each of which made
+it report something untrue with a straight face. Those are fixed at the root.
+
+**Requires `mcp >= 2.0`** — breaking by dependency, not by API.
+
 ### Added
+- **Interactive architecture and landscape views (BDL-060 S4).** `beadloom docs site`
+  now renders both the repository's own architecture and the cross-service landscape
+  as Cytoscape + ELK graphs, each fed by a deterministic `public/*.data.json`
+  artifact, with the previous Mermaid versions kept as `*-diagram.md` fallbacks.
+  Domains are compound boxes holding their features and components; nodes sit in
+  canonical layer lanes, so a healthy dependency points down and one that points up
+  or cross-cuts is drawn as a layering concern. Clicking a node opens its card
+  (kind, summary, layer, symbol count, doc freshness, lint status, dependency lists,
+  documentation links) and highlights its blast radius; clicking a landscape edge
+  opens the contract behind it — protocol, routing identity, producer and consumer,
+  verdict, and the GraphQL field surface or AMQP JSON-Schema body, rendering
+  `undeclared` rather than an empty-looking success when a surface was never
+  declared. Filters narrow by kind, domain, layer, protocol and health.
+- **Declared runtime coupling reaches the architecture view.** A `uses` edge — a
+  component that shells out to the published CLI, or one that reads a file another
+  writes — is coupling no import analysis can see, so it is authored in the graph.
+  Nodes now carry `uses` / `used_by` beside their import lists, kept separate and
+  drawn dotted, and never flagged as a layering concern: crossing a process boundary
+  to call a published interface is not the same as binding to a module at import
+  time. The view previously discarded these edges entirely, so authored
+  architectural intent already in the graph never reached the picture.
 - **Atomic graph-YAML writes (BDL-060 S1).** Every write to `.beadloom/_graph/*.yml`
   goes through `write_yaml_atomic`, so an interrupted command can no longer leave a
   half-written graph behind.
@@ -39,6 +69,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cytoscape 3.30→3.34, mermaid 11.4→11.17.
 
 ### Fixed
+- **Symbols and dependencies were attributed by raw path prefix (BDL-UX #144, #157).**
+  A node's `source` is a prefix and graphs nest, so a child's files counted against
+  its parent too — which is why carving a subpackage into its own node never
+  relieved the parent, the very remedy a size limit exists to prompt. A source
+  naming a package's `__init__.py` was read as a lone file, so five nodes reported
+  **0 symbols** while their packages held 228. Both had one root and are fixed once:
+  a file belongs to exactly one node — the most specific whose `source` covers it —
+  shared by `max_symbols`, `max_files`, the architecture view, node pages and import
+  attribution, so no two surfaces can disagree. That unanimity of five wrong readers
+  is exactly what kept it invisible. Measured here: `application` 284 → 150, `graph`
+  257 → 61. `domain-size-limit` is recalibrated 290 → 180 as a consequence of the
+  metric changing meaning, with the signal the new one does not carry (bounded-context
+  size by subtree) filed as #158 rather than folded into the threshold.
+- **An import resolved to the enclosing directory's node, not the file's owner.**
+  Target resolution converted a dotted path to an extension-less directory path, which
+  can never match a node whose source is a file — so feature- and component-level
+  dependencies were collapsed into their domain.
+- **Imports below a file's top level were never extracted (BDL-UX #159).** All nine
+  language extractors walked only the module's top-level statements, so an import
+  inside a function, a class body, an `if TYPE_CHECKING:` guard or a `try:` block was
+  invisible — precisely where an import is placed to defer cost or to break a cycle.
+  On this repository that hid **460 nested imports, 231 of them first-party**, about a
+  third of the total, leaving `no-dependency-cycles` and `forbid_import` blind to the
+  edges they exist to judge. Making them visible surfaced six real boundary violations
+  at once, all one pattern: domain and application code reaching up into `services` to
+  introspect the live CLI surface. Fixed by inverting that through a new
+  `infrastructure/surface_registry` port whose contract is **unknown is not zero** — a
+  surface nobody provided reports "not verified", never a plausible count.
+- **The architecture view discarded every declared `uses` edge**, so authored
+  architectural intent already present in the graph never reached the picture.
+
+  Together these took the dependency graph from 14 to 156 derived edges. Every node
+  still reporting no dependency was then audited and cross-checked independently:
+  all explained, none unexplained.
 - **A fresh install could segfault mid-reindex (BDL-UX #150).** `tree-sitter` carried no
   upper bound, so a new install paired a newer core with grammar wheels built against an
   older ABI — grammar wheels only declare their core requirement under a `core` extra that
