@@ -1,7 +1,8 @@
 # BDL UX Feedback Log
 
 > Collected during development and dogfooding.
-> Total: 161 issues | Open: 43 | Improvements: 20 | Excluded: 7 | Closed: 91
+> Total: 164 issues | Open: 46 | Improvements: 20 | Excluded: 7 | Closed: 91
+> 2026-08-20 (post-2.2.0, turning the release's lessons into checks): Opened #162 (🔴 **doctor should audit the PRODUCED graph, not just the code** — island / unexplained-leaf / claim-without-evidence. The four defects this release fixed all shipped past dev+test+review+tech-writer and a 6/6 gate because every test verified a FUNCTION and none verified the CLAIM the graph makes; the audits that found them were written by hand in ten lines each), #163 (`sync-update` can re-attest a doc nobody read — a re-baseline silences `sync-check` with no evidence the prose still describes reality; plus prose that no symbol pair anchors can never go stale at all) and #164 (LOW — the beads git-hook prints `bd import -i`, a flag that does not exist, on a warning that was itself a false alarm; the #140 shape). Total 161→164, Open 43→46.
 > 2026-08-20 (v2.2.0 release): Opened #161 — `docs audit` verifies numeric FACTS but never checks that a documented identifier still EXISTS, so documentation can name a function the code no longer has and the gate stays green. Found the hard way: two functions removed while narrowing the `surface_registry` port stayed documented in this very release's branch, past a 6/6 gate, and were caught by a hand-written ten-line grep during an unrelated question. Also: #160 (AsyncAPI ingestion) deferred with its plan recorded in ROADMAP. Total 160→161, Open 42→43.
 > 2026-08-19 (BDL-060 S4 dogfood — the owner clicking nodes in the architecture map): CLOSED #159 (imports below a file's top level were never extracted — 460 nested, 231 first-party, about a third of all imports; making them visible took `depends_on` from 51 to 146 edges and surfaced SIX real boundary violations at once, all one pattern: domain/application code reaching UP into `services` to introspect the live CLI/MCP surface, fixed by inverting it through a `surface_registry` port). Opened #160 (🔴 **AsyncAPI ingestion is documented as a capability but wired to nothing** — `extract_payload_body` is called by ZERO code paths in `src/`; the function works and is tested, but no document ever reaches it, so the SPEC's "teams on AsyncAPI ingest the payload schema via…" describes a capability the product does not deliver. It survived dev + test + review + tech-writer beads and a green gate because each verified the FUNCTION and none asked whether anything calls it). Total 158→160, Closed 90→91.
 > 2026-08-19 (BDL-UX #144/#157 fixed together): CLOSED #144 and #157. Both had the SAME root — attribution by raw path prefix — so they were fixed once, in one place: **a file belongs to exactly one node, the most specific one whose `source` covers it** (`infrastructure/repository`), now shared by `max_symbols`/`max_files`, the architecture view's symbol badge, node-page symbol listings and `import_resolver`'s file→node attribution. Three things fell out that no single-surface patch would have reached: (1) a node whose source IS a file never owned that file, so its imports were credited to the enclosing directory's node; (2) derived `depends_on` edges between a node and its `part_of` ancestor are a category error and are no longer emitted — 5 of 14 edges were this noise, and they were manufacturing node-level cycles that do not exist at module level; (3) with honest ownership the dependency graph went 14 → 24 edges, surfacing real feature-level dependencies (`graph-loader → federation`, `mcp-server → reindex`, `site-generation → graph`) that prefix attribution had collapsed into their parents. Opened #158 (the subtree-size signal the new metric no longer carries). Total 157→158, Open 42→41, Closed 88→90.
@@ -59,6 +60,38 @@
 ---
 
 ## Open Issues
+
+164. [2026-08-20] [LOW] The beads git-hook prints a remediation command that does not exist (`bd import -i`)
+
+    **Severity:** low (small blast radius, but the shape is the one this log keeps recording — advice that reads authoritative and does not work)
+    **Command:** any merge that changes `.beads/issues.jsonl`
+    **Context:** the hook printed `Warning: Failed to import bd changes after merge / Run 'bd import -i .beads/issues.jsonl' manually to see the error`. Running it prints help: bd 1.0.4 takes the file positionally (defaulting to `.beads/issues.jsonl`) and has no `-i`. Observed on the 2.2.0 release merge, where the state was in fact consistent — the tracked jsonl held 15 open + 1 deferred and `bd list` agreed — so the warning was also a false alarm, which makes the wrong command doubly misleading.
+    **Expected:** correct the message to the real invocation, and warn only when the import genuinely failed. Verify the flag set against the pinned bd version rather than assuming it. Same family as #140.
+    > Tracked as a bead (P3).
+
+163. [2026-08-20] [MEDIUM] `sync-update` can re-attest a doc nobody read — re-baselining silences `sync-check` without evidence
+
+    **Severity:** medium (the freshness guarantee quietly weakens to "the hashes were reset", which is not what a green sync-check is read to mean)
+    **Command:** `beadloom sync-update <ref>`, `beadloom sync-check`
+    **Context:** `sync-check` compares hashes and `sync-update` resets them; nothing records whether the DOC was read or revised. During BDL-060 S4 this happened repeatedly — a dev change re-stales a domain doc, the baseline is reset to keep the gate moving, and the prose drifts silently. Concretely: the `vitepress-site` guide still described the landscape as "an interactive Mermaid diagram" and called Cytoscape "a follow-up" **after** the slice that shipped Cytoscape, while `sync-check` read 0 stale throughout.
+    **Two distinct holes, needing different answers:**
+    - **Prose with no pair.** A guide anchored to no symbol can never go stale. The only signal today is the opt-in, coarse `reference`/`watches` mechanism (BDL-057). Either make `watches` discoverable (warn when a `docs/guides/*.md` declares none) or let a doc watch a NODE rather than a symbol surface.
+    - **Blind re-baseline.** Re-attesting without touching the doc is *sometimes* legitimate (an internal rename the doc never mentions), so it cannot be forbidden. Instead RECORD it: per pair, count re-baselines where the code symbols changed and the doc file did not. A high count means "attested but never revised" — a staleness SUSPICION the gate can surface as advisory. That is honest: it does not claim the prose is wrong, it says nobody has looked while the code moved underneath.
+    **Related:** #161 catches a phantom symbol name; this catches prose that stopped being true while every number in it stayed correct.
+    > Tracked as a bead (P2).
+
+162. [2026-08-20] [HIGH] 🔴 `doctor` should audit the PRODUCED graph, not just the code — island / unexplained-leaf / claim-without-evidence
+
+    **Severity:** high (this is the generalization of four defects that shipped past a full role cycle and a green gate)
+    **Command:** `beadloom doctor`, `beadloom ci`
+    **Context:** #144, #157, #159 and the dropped `uses` edges all survived dev + test + review + tech-writer beads and a 6/6 gate. They share one shape: **every test verified a FUNCTION, and none verified the CLAIM the produced graph makes.** The graph asserted "this node depends on nothing" and nothing asked whether that was true. All four were found by a human clicking a node and asking exactly that; the audits that confirmed them were written by hand, ad hoc, at roughly ten lines each.
+    **Proposed checks** (each measured on this repo during the S4 dogfood):
+    1. **Code island** — a node with no first-party dependency in either direction whose files nothing references. `doctor`'s `isolated_nodes` cannot catch it, because `part_of` makes such a node look connected. Would have caught #160. Measured: exactly one true island, so the check must respect declared `uses` edges and non-code sources or it cries wolf.
+    2. **Unexplained leaf** — a node reporting no outgoing dependency while its own files DO contain first-party imports. Every legitimate case is explainable (a true leaf imports nothing first-party; a container's only such imports are its `__init__` re-exporting its own parts). Anything else is an attribution bug. Measured: 30 of 64 nodes empty, all explained, zero unexplained.
+    3. **Claim without evidence** — the inverse: a node claiming a dependency with no first-party import behind it.
+    **Design notes:** these assert things about the ARTIFACT, so they belong in `doctor` (graph integrity), not `lint` (architecture rules). Ship as WARNING first — on an unfamiliar graph the island check will produce false positives until `uses` declarations catch up, and turning an existing project red on upgrade is the failure mode this log keeps recording against us. **The audits must not reuse the attribution helper they are auditing**, or a bug hides in both; the manual cross-check during the session used `grep` for exactly that reason.
+    > Tracked as bead `beadloom-uxqc` (P1).
+
 
 161. [2026-08-20] [MEDIUM] `docs audit` checks numeric facts but never checks that a documented identifier still exists
 
