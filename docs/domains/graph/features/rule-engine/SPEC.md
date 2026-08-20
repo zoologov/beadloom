@@ -160,7 +160,7 @@ Enforces complexity limits per node (architectural smell detection).
 | `name`             | `str`             | Unique rule name.                              |
 | `description`      | `str`             | Human-readable description.                    |
 | `for_matcher`      | `NodeMatcher`     | Matches nodes to check.                        |
-| `max_symbols`      | `int \| None`     | Maximum symbols per node.                      |
+| `max_symbols`      | `int \| None`     | Maximum symbols a node OWNS (nested nodes excluded). |
 | `max_files`        | `int \| None`     | Maximum files per node.                        |
 | `min_doc_coverage` | `float \| None`   | Minimum documentation coverage percentage.     |
 | `severity`         | `str`             | `"error"` or `"warn"` (default `"warn"`).      |
@@ -257,7 +257,7 @@ rules:
     severity: warn
     check:
       for: { kind: domain }                    # NodeMatcher
-      max_symbols: 280                         # optional (Beadloom's domain-size-limit; recalibrated 200->280 in BDL-059 S3)
+      max_symbols: 180                         # optional (Beadloom's domain-size-limit; counts OWNED symbols since BDL-UX #144)
       max_files: 50                            # optional
       min_doc_coverage: 0.8                    # optional
 ```

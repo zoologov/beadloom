@@ -18,6 +18,8 @@ from __future__ import annotations
 # command modules use (the patch target survived the S4 split).
 import click
 
+from beadloom.infrastructure.surface_registry import register_cli_group
+
 # Import command modules with no re-exported symbol purely for their
 # registration side effects (decorators attach commands onto ``main`` / its
 # sub-groups at import time).
@@ -55,3 +57,10 @@ __all__ = [
     "tui",
     "ui",
 ]
+
+
+# The services layer OWNS its surface, so it provides it to the lower layers
+# that must compare a documented claim against runtime truth (doctor, docs
+# audit, sync-check's `watches=cli`). Registering here keeps the dependency
+# pointing inward: nothing under `services/` is imported by those checks.
+register_cli_group(lambda: main)

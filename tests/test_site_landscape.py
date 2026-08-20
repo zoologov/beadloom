@@ -317,7 +317,8 @@ def test_generator_landscape_uses_federated(tmp_path: Path) -> None:
         generate_site(conn, out, project_root=tmp_path, federated=fed)
     finally:
         conn.close()
-    md = (out / "landscape.md").read_text(encoding="utf-8")
+    # The federated Mermaid map is now the secondary `landscape-diagram.md`.
+    md = (out / "landscape-diagram.md").read_text(encoding="utf-8")
     assert "svc-a" in md
     assert "DRIFT" in md
 
@@ -349,7 +350,7 @@ def test_no_click_targets_a_missing_page(tmp_path: Path) -> None:
         generate_site(conn, out, project_root=tmp_path)
     finally:
         conn.close()
-    md = (out / "landscape.md").read_text(encoding="utf-8")
+    md = (out / "landscape-diagram.md").read_text(encoding="utf-8")
     targets = _emitted_click_targets(md)
     for url in targets:
         # A click URL ``/domains/graph`` must map to a real ``graph.md`` page.
@@ -367,7 +368,7 @@ def test_site_node_without_page_has_no_click(tmp_path: Path) -> None:
         generate_site(conn, out, project_root=tmp_path)
     finally:
         conn.close()
-    md = (out / "landscape.md").read_text(encoding="utf-8")
+    md = (out / "landscape-diagram.md").read_text(encoding="utf-8")
     # ``vitepress-site`` (kind=site) has no /services or /domains page → no click.
     assert "vitepress-site" in md  # the node still renders + carries its edge
     assert 'click n_vitepress_site' not in md
@@ -384,7 +385,7 @@ def test_federated_foreign_node_has_no_dead_click(tmp_path: Path) -> None:
         generate_site(conn, out, project_root=tmp_path, federated=fed)
     finally:
         conn.close()
-    md = (out / "landscape.md").read_text(encoding="utf-8")
+    md = (out / "landscape-diagram.md").read_text(encoding="utf-8")
     for url in _emitted_click_targets(md):
         rel = url.lstrip("/") + ".md"
         assert (out / rel).exists(), f"dead click target: {url} (no {rel})"

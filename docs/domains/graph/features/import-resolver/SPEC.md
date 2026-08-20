@@ -56,15 +56,31 @@ def extract_imports(file_path: Path) -> list[ImportInfo]
 3. Parse content with `tree_sitter.Parser` using the detected language grammar.
 4. Dispatch to language-specific extractor based on extension.
 
+#### AST traversal
+
+Every extractor iterates `_walk(root)` — the **whole** tree in document order —
+not just the root's children. Extraction used to consider only a file's
+top-level statements, so an import inside a function, a class body, an
+`if TYPE_CHECKING:` guard or a `try:` block was invisible to the dependency
+graph. Those are exactly the places an import is put to defer cost or to break a
+cycle, so the graph was blind to the very edges the cycle and boundary rules
+exist to judge (BDL-UX #159). Measured on Beadloom when the walk was introduced:
+460 nested imports, 231 of them first-party — about a third of all imports; the
+`depends_on` edge count went from 51 to 146, and six real boundary violations
+surfaced that had been hidden behind nested imports.
+
+The statement types the extractors match never nest inside themselves, so a full
+walk cannot double-count a single statement.
+
 #### Language-Specific Extractors
 
 **Python** (`_extract_python_imports`):
-- Walks top-level children of the AST root.
+- Walks every `import_statement` / `import_from_statement` in the tree.
 - `import_statement`: extracts the `dotted_name` child as the import path.
 - `import_from_statement`: checks for `relative_import` child; if present, skips. Otherwise extracts the first `dotted_name` as the module path.
 
 **TypeScript/JavaScript** (`_extract_ts_imports`):
-- Walks top-level `import_statement` nodes.
+- Walks every `import_statement` node in the tree.
 - Extracts the string source via `_get_ts_import_source` (looks for `string` -> `string_fragment` children).
 - Skips imports starting with `"."` or `".."` (relative).
 
@@ -126,7 +142,8 @@ def resolve_import_to_node(
 | `_import_path_to_file_paths`  | Convert dotted import path to candidate file paths with scan_path prefixes. Generates `.py` and `__init__.py` variants. |
 | `_normalize_ts_import`        | Resolve `@/` and `~/` aliases to `src/`. Returns `None` for npm packages.                                  |
 | `_find_node_by_source_prefix` | Walk path hierarchy from deepest to shallowest, query `nodes.source` with and without trailing `/`.         |
-| `_find_node_for_file`         | Walk up directory hierarchy of a relative file path, matching against `nodes.source`. Used by `create_import_edges`. |
+| `_find_node_for_file`         | The node that OWNS a file — delegates to `infrastructure/repository.get_owning_ref_id` (most specific `source` wins). Used by `create_import_edges`. Previously walked up from the file's PARENT directory, so a node whose source IS a file never owned that file and its imports were credited to the enclosing directory's node. |
+| `_walk`                       | Pre-order traversal of the whole AST in document order; every extractor iterates it so imports below the top level are seen. |
 
 ### Edge Generation
 
@@ -135,11 +152,19 @@ def create_import_edges(conn: sqlite3.Connection) -> int
 ```
 
 1. Query all distinct `(file_path, resolved_ref_id)` from `code_imports` where `resolved_ref_id IS NOT NULL`.
-2. For each row, determine the source node via `_find_node_for_file(rel_path, conn)`.
+2. For each row, determine the source node via `_find_node_for_file(rel_path, conn)` (file ownership).
 3. Skip if no source node is found or if `source_ref_id == target_ref_id` (self-reference).
-4. Deduplicate `(source, target)` pairs via a `seen` set.
-5. Insert `depends_on` edge with `INSERT OR IGNORE`.
-6. Commit and return the count of edges created.
+4. Skip **containment in one direction only** — an edge from a node to a node it
+   is `part_of` (a container depending on its own part). A package façade
+   re-exporting its children says nothing the `part_of` edge did not, and paired
+   with a child's ordinary upward import it manufactures a node-level cycle with
+   no module-level counterpart. The reverse is KEPT: a child reaching into
+   shared code that lives in its container but belongs to no other node is a
+   real dependency, and dropping it made such a node report "depends on
+   nothing" — false, and worse than a coarse answer.
+5. Deduplicate `(source, target)` pairs via a `seen` set.
+6. Insert `depends_on` edge with `INSERT OR IGNORE`.
+7. Commit and return the count of edges created.
 
 ### Full Indexing Pipeline
 

@@ -46,21 +46,28 @@ class DebtGaugeWidget(Static):
     }
     """
 
-    def __init__(self, *, score: float = 0.0, widget_id: str | None = None) -> None:
+    def __init__(self, *, score: float | None = 0.0, widget_id: str | None = None) -> None:
         super().__init__(id=widget_id)
         self._score = score
 
     def render(self) -> Text:
         """Render the debt gauge as a Rich Text object."""
+        text = Text()
+        text.append("Debt: ", style="bold")
+        if self._score is None:
+            text.append("computing\u2026", style="dim")
+            return text
         style = _severity_style(self._score)
         label = _severity_label(self._score)
         arrow = "\u25b2" if self._score > _THRESHOLD_LOW else "\u25bc"
-        text = Text()
-        text.append("Debt: ", style="bold")
         text.append(f"{self._score:.0f} {arrow} {label}", style=f"bold {style}")
         return text
 
-    def refresh_data(self, score: float) -> None:
+    def refresh_data(self, score: float | None) -> None:
         """Update the displayed debt score and re-render."""
         self._score = score
         self.refresh()
+
+    def set_pending(self) -> None:
+        """Show a placeholder while the score is computed in the background."""
+        self.refresh_data(None)

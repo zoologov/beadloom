@@ -69,11 +69,16 @@ class ActivityWidget(Static):
     ) -> None:
         super().__init__(id=widget_id)
         self._activities: dict[str, Any] = activities or {}
+        self._pending = False
 
     def render(self) -> Text:
         """Render per-domain activity bars as Rich Text."""
         text = Text()
         text.append("Activity", style="bold underline")
+
+        if self._pending:
+            text.append("\n  Analyzing git history\u2026", style="dim")
+            return text
 
         if not self._activities:
             text.append("\n  No activity data")
@@ -95,4 +100,10 @@ class ActivityWidget(Static):
     def refresh_data(self, activities: dict[str, Any]) -> None:
         """Update the activities data and re-render."""
         self._activities = dict(activities)
+        self._pending = False
+        self.refresh()
+
+    def set_pending(self) -> None:
+        """Show a placeholder while git history is analyzed in the background."""
+        self._pending = True
         self.refresh()

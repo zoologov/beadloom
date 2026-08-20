@@ -230,8 +230,9 @@ def test_generate_site_passes_on_real_graph(tmp_path: Path) -> None:
     finally:
         conn.close()
     assert (out / "landscape.md") in result.written
-    # The `graph` domain landscape id is prefixed; never the bare keyword.
-    landscape = (out / "landscape.md").read_text(encoding="utf-8")
+    # The Mermaid diagram is now the secondary fallback page; the `graph` domain
+    # landscape id is prefixed there; never the bare keyword.
+    landscape = (out / "landscape-diagram.md").read_text(encoding="utf-8")
     assert "n_graph" in landscape
 
 

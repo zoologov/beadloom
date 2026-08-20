@@ -15,6 +15,9 @@ if TYPE_CHECKING:
     import sqlite3
     from pathlib import Path
 
+from beadloom.infrastructure.mcp_tools import MCP_TOOL_CATALOG
+from beadloom.infrastructure.surface_registry import get_cli_group
+
 logger = logging.getLogger(__name__)
 
 
@@ -292,19 +295,31 @@ def get_actual_version() -> str:
         return importlib.metadata.version("beadloom")
 
 
-def _get_actual_cli_commands() -> set[str]:
-    """Get CLI commands via Click group introspection."""
-    from beadloom.services.cli import main
+def _get_actual_cli_commands() -> set[str] | None:
+    """Registered CLI command names, or ``None`` when the surface is unknown.
 
-    commands: dict[str, object] = getattr(main, "commands", {})
+    Read through the ``surface_registry`` port rather than importing
+    ``services.cli``: this is the application layer, and reaching up into
+    services inverted the dependency direction (BDL-UX #159). ``None`` means
+    nobody provided the surface — the caller reports that as unverified, never
+    as "no commands".
+    """
+    group = get_cli_group()
+    if group is None:
+        return None
+    commands: dict[str, object] = getattr(group, "commands", {})
     return set(commands.keys())
 
 
 def _get_actual_mcp_tool_count() -> int:
-    """Count MCP tools from the ``_TOOLS`` list."""
-    from beadloom.services.mcp_server import _TOOLS
+    """Number of MCP tools, from the canonical lower-layer catalog.
 
-    return len(_TOOLS)
+    Reads ``infrastructure/mcp_tools.MCP_TOOL_CATALOG`` rather than importing
+    the server: the catalog is pinned equal to the server's live registry by a
+    test, and unlike the CLI group it is available in every process — so this
+    count is never "unknown" (BDL-UX #159).
+    """
+    return len(MCP_TOOL_CATALOG)
 
 
 def _get_actual_packages(project_root: Path) -> set[str]:
@@ -406,18 +421,26 @@ def _check_agent_instructions(project_root: Path) -> list[Check]:
             )
 
     # --- 3. CLI command count check ---
+    # An unknown surface is reported as unknown: claiming "0 commands" because
+    # nobody provided the CLI would be a check announcing a result it never
+    # looked at.
     actual_cli_commands = _get_actual_cli_commands()
-    cli_count = len(actual_cli_commands)
-    # We don't extract a CLI count claim from docs; we just report the actual count
-    # as an informational check. If CLAUDE.md contains command references, we verify
-    # they exist.
-    results.append(
-        Check(
-            "agent_instructions_cli_commands",
-            Severity.OK,
-            f"CLI has {cli_count} commands registered.",
+    if actual_cli_commands is None:
+        results.append(
+            Check(
+                "agent_instructions_cli_commands",
+                Severity.INFO,
+                "CLI surface not available in this process — command count not verified.",
+            )
         )
-    )
+    else:
+        results.append(
+            Check(
+                "agent_instructions_cli_commands",
+                Severity.OK,
+                f"CLI has {len(actual_cli_commands)} commands registered.",
+            )
+        )
 
     # --- 4. MCP tool count check (from AGENTS.md) ---
     actual_mcp_count = _get_actual_mcp_tool_count()

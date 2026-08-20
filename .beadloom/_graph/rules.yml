@@ -70,7 +70,20 @@ rules:
     severity: warn
     check:
       for: { kind: domain }
-      max_symbols: 280
+      # RECALIBRATED 290 -> 180 because the METRIC CHANGED MEANING (BDL-UX
+      # #144): `max_symbols` now counts the symbols a node OWNS — files under
+      # its source minus files owned by a more specific node — instead of every
+      # file under its path prefix. That is what makes the rule's own remedy
+      # work: carving a subpackage into its own node now genuinely relieves the
+      # parent. Under the new metric the observed maximum is `application` at
+      # 150 (it was 284 under prefix counting), so 290 would never fire again.
+      # 180 restores the signal with ~20% headroom.
+      #
+      # NOTE: this measures a node's OWN code, not its bounded context's total
+      # size. A domain carved into many features owns little and will not trip
+      # this rule however large the subtree is — that is a separate signal,
+      # tracked as BDL-UX #158, deliberately NOT smuggled into this threshold.
+      max_symbols: 180
 
   # COVERAGE lint (BDL-051 S3a) — supersedes the S1 unregistered-feature-candidate
   # sprawl-lint with a stronger, complete-coverage check. Goal: NO SHADOW CODE.
@@ -92,6 +105,13 @@ rules:
         - "**/__main__.py"
         - "**/onboarding/config_reader.py"
         - "**/onboarding/presets.py"
+        # Pure back-compat re-export shim (0 own symbols). The `rule-engine`
+        # node is sourced at the `rules/` PACKAGE, where the engine actually
+        # lives — sourcing it at this shim made every symbol count, node page
+        # and size limit describe the shim instead of the engine (BDL-UX #157).
+        # The file keeps its `# beadloom:feature=rule-engine` annotation to
+        # record membership; exemption covers only its lack of own code.
+        - "**/graph/rule_engine.py"
 
   - name: tui-no-direct-infra
     description: "TUI must not import infrastructure directly"

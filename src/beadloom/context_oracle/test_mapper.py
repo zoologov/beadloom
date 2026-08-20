@@ -5,13 +5,15 @@
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
+from fnmatch import fnmatch
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-    from pathlib import Path
+    from collections.abc import Callable, Iterable
 
 
 @dataclass(frozen=True)
@@ -40,21 +42,110 @@ _IMPORT_MODULE_RE = re.compile(r"^\s*import\s+([\w.]+)", re.MULTILINE)
 
 
 # ---------------------------------------------------------------------------
+# Project scan
+# ---------------------------------------------------------------------------
+
+# Dependency trees, VCS metadata, tool caches and build output. These hold no
+# first-party tests but dominate the cost of walking a project: a single
+# ``node_modules`` or ``.venv`` easily adds hundreds of thousands of entries.
+_SCAN_SKIP_DIRS = frozenset(
+    {
+        ".git",
+        ".hg",
+        ".svn",
+        "node_modules",
+        "bower_components",
+        "vendor",
+        "site-packages",
+        ".venv",
+        "venv",
+        "__pycache__",
+        ".mypy_cache",
+        ".ruff_cache",
+        ".pytest_cache",
+        ".tox",
+        ".nox",
+        ".gradle",
+        ".next",
+        ".nuxt",
+        ".svelte-kit",
+        ".cache",
+        ".parcel-cache",
+        "dist",
+        "build",
+        "target",
+        "htmlcov",
+        ".beadloom",
+    }
+)
+
+
+@dataclass(frozen=True)
+class _ProjectScan:
+    """A single pruned walk of the project tree, matched against in memory.
+
+    Framework detection and per-framework discovery together need a dozen
+    recursive glob passes; doing them against one cached listing keeps the cost
+    proportional to the project rather than to the number of patterns.
+    """
+
+    root: Path
+    files: tuple[str, ...]
+    dirs: tuple[str, ...]
+
+    @classmethod
+    def build(cls, root: Path) -> _ProjectScan:
+        """Walk *root* once, skipping vendor/VCS/build directories."""
+        files: list[str] = []
+        dirs: list[str] = []
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [d for d in dirnames if d not in _SCAN_SKIP_DIRS]
+            rel = Path(dirpath).relative_to(root)
+            prefix = "" if rel == Path() else f"{rel.as_posix()}/"
+            dirs.extend(f"{prefix}{d}" for d in dirnames)
+            files.extend(f"{prefix}{f}" for f in filenames)
+        return cls(root=root, files=tuple(files), dirs=tuple(dirs))
+
+    def match_files(self, patterns: Iterable[str]) -> list[str]:
+        """Return relative paths whose filename matches any of *patterns*."""
+        pats = tuple(patterns)
+        return [f for f in self.files if any(fnmatch(f.rsplit("/", 1)[-1], p) for p in pats)]
+
+    def match_dirs(self, name: str, *, suffix: bool = False) -> list[str]:
+        """Return relative paths of directories named *name* (or ending with it)."""
+        return [
+            d
+            for d in self.dirs
+            if (d.rsplit("/", 1)[-1].endswith(name) if suffix else d.rsplit("/", 1)[-1] == name)
+        ]
+
+    def files_under(self, directory: str, suffixes: tuple[str, ...]) -> list[str]:
+        """Return relative paths under *directory* having one of *suffixes*."""
+        prefix = f"{directory}/"
+        return [
+            f
+            for f in self.files
+            if f.startswith(prefix) and PurePosixPath(f).suffix in suffixes
+        ]
+
+
+# ---------------------------------------------------------------------------
 # Framework detection
 # ---------------------------------------------------------------------------
 
 
-def _detect_frameworks(project_root: Path) -> list[str]:
+def _detect_frameworks(scan: _ProjectScan) -> list[str]:
     """Detect test frameworks present in the project.
 
     Returns a list of framework names found (may be multiple).
     """
+    project_root = scan.root
     frameworks: list[str] = []
 
     # pytest: conftest.py at root, or test_*.py / *_test.py files
     if (project_root / "conftest.py").exists() or (
         ((project_root / "setup.cfg").exists() or (project_root / "pyproject.toml").exists())
-        and _find_files_by_patterns(project_root, ["test_*.py", "*_test.py"])
+        and scan.match_files(["test_*.py", "*_test.py"])
     ):
         frameworks.append("pytest")
 
@@ -67,52 +158,26 @@ def _detect_frameworks(project_root: Path) -> list[str]:
     ]
     if (
         list(project_root.glob("jest.config.*"))
-        or _find_files_by_patterns(project_root, jest_patterns)
-        or _find_dirs_by_name(project_root, "__tests__")
+        or scan.match_files(jest_patterns)
+        or scan.match_dirs("__tests__")
     ):
         frameworks.append("jest")
 
     # go test: *_test.go files
-    if _find_files_by_patterns(project_root, ["*_test.go"]):
+    if scan.match_files(["*_test.go"]):
         frameworks.append("go_test")
 
     # JUnit: src/test/ directory, or *Test.java / *Test.kt files
-    if (project_root / "src" / "test").exists() or _find_files_by_patterns(
-        project_root, ["*Test.java", "*Test.kt"]
+    if (project_root / "src" / "test").exists() or scan.match_files(
+        ["*Test.java", "*Test.kt"]
     ):
         frameworks.append("junit")
 
     # XCTest: *Tests.swift files, or *Tests/ directories
-    if _find_files_by_patterns(project_root, ["*Tests.swift"]) or _find_dirs_by_name(
-        project_root, "Tests", suffix=True
-    ):
+    if scan.match_files(["*Tests.swift"]) or scan.match_dirs("Tests", suffix=True):
         frameworks.append("xctest")
 
     return frameworks
-
-
-def _find_files_by_patterns(root: Path, patterns: list[str]) -> list[Path]:
-    """Find files matching any of the glob patterns recursively."""
-    results: list[Path] = []
-    for pattern in patterns:
-        results.extend(root.rglob(pattern))
-    return results
-
-
-def _find_dirs_by_name(
-    root: Path,
-    name: str,
-    *,
-    suffix: bool = False,
-) -> list[Path]:
-    """Find directories by exact name or name ending."""
-    results: list[Path] = []
-    for item in root.rglob("*"):
-        if item.is_dir() and (
-            (suffix and item.name.endswith(name)) or (not suffix and item.name == name)
-        ):
-            results.append(item)
-    return results
 
 
 # ---------------------------------------------------------------------------
@@ -120,21 +185,19 @@ def _find_dirs_by_name(
 # ---------------------------------------------------------------------------
 
 
-def _find_pytest_test_files(project_root: Path) -> list[str]:
+def _find_pytest_test_files(scan: _ProjectScan) -> list[str]:
     """Find all pytest test files."""
-    files: list[str] = []
-    for pattern in ["test_*.py", "*_test.py"]:
-        for f in project_root.rglob(pattern):
-            if f.is_file() and "conftest" not in f.name:
-                rel = str(f.relative_to(project_root))
-                if rel not in files:
-                    files.append(rel)
-    return sorted(files)
+    return sorted(
+        {
+            f
+            for f in scan.match_files(["test_*.py", "*_test.py"])
+            if "conftest" not in f.rsplit("/", 1)[-1]
+        }
+    )
 
 
-def _find_jest_test_files(project_root: Path) -> list[str]:
+def _find_jest_test_files(scan: _ProjectScan) -> list[str]:
     """Find all jest test files."""
-    files: list[str] = []
     jest_patterns = [
         "*.test.ts",
         "*.spec.ts",
@@ -143,72 +206,42 @@ def _find_jest_test_files(project_root: Path) -> list[str]:
         "*.test.tsx",
         "*.spec.tsx",
     ]
-    for pattern in jest_patterns:
-        for f in project_root.rglob(pattern):
-            if f.is_file():
-                rel = str(f.relative_to(project_root))
-                if rel not in files:
-                    files.append(rel)
+    files = set(scan.match_files(jest_patterns))
     # Also check __tests__/ directories
-    for tests_dir in _find_dirs_by_name(project_root, "__tests__"):
-        for f in tests_dir.rglob("*"):
-            if f.is_file() and f.suffix in (".ts", ".tsx", ".js", ".jsx"):
-                rel = str(f.relative_to(project_root))
-                if rel not in files:
-                    files.append(rel)
+    for tests_dir in scan.match_dirs("__tests__"):
+        files.update(scan.files_under(tests_dir, (".ts", ".tsx", ".js", ".jsx")))
     return sorted(files)
 
 
-def _find_go_test_files(project_root: Path) -> list[str]:
+def _find_go_test_files(scan: _ProjectScan) -> list[str]:
     """Find all Go test files."""
-    files: list[str] = []
-    for f in project_root.rglob("*_test.go"):
-        if f.is_file():
-            files.append(str(f.relative_to(project_root)))
-    return sorted(files)
+    return sorted(set(scan.match_files(["*_test.go"])))
 
 
-def _find_junit_test_files(project_root: Path) -> list[str]:
+def _find_junit_test_files(scan: _ProjectScan) -> list[str]:
     """Find all JUnit test files."""
-    files: list[str] = []
     # Standard Maven/Gradle test directory
-    test_dir = project_root / "src" / "test"
-    if test_dir.exists():
-        for f in test_dir.rglob("*"):
-            if f.is_file() and f.suffix in (".java", ".kt"):
-                files.append(str(f.relative_to(project_root)))
+    files = set(scan.files_under("src/test", (".java", ".kt")))
     # Also look for *Test.java / *Test.kt anywhere
-    for pattern in ["*Test.java", "*Test.kt"]:
-        for f in project_root.rglob(pattern):
-            if f.is_file():
-                rel = str(f.relative_to(project_root))
-                if rel not in files:
-                    files.append(rel)
+    files.update(scan.match_files(["*Test.java", "*Test.kt"]))
     return sorted(files)
 
 
-def _find_xctest_test_files(project_root: Path) -> list[str]:
+def _find_xctest_test_files(scan: _ProjectScan) -> list[str]:
     """Find all XCTest test files."""
-    files: list[str] = []
-    for f in project_root.rglob("*Tests.swift"):
-        if f.is_file():
-            files.append(str(f.relative_to(project_root)))
+    files = set(scan.match_files(["*Tests.swift"]))
     # Also check *Tests/ directories
-    for tests_dir in _find_dirs_by_name(project_root, "Tests", suffix=True):
-        for f in tests_dir.rglob("*.swift"):
-            if f.is_file():
-                rel = str(f.relative_to(project_root))
-                if rel not in files:
-                    files.append(rel)
+    for tests_dir in scan.match_dirs("Tests", suffix=True):
+        files.update(scan.files_under(tests_dir, (".swift",)))
     return sorted(files)
 
 
 def _get_test_files_for_framework(
-    project_root: Path,
+    scan: _ProjectScan,
     framework: str,
 ) -> list[str]:
     """Get test files for a specific framework."""
-    finders: dict[str, Callable[[Path], list[str]]] = {
+    finders: dict[str, Callable[[_ProjectScan], list[str]]] = {
         "pytest": _find_pytest_test_files,
         "jest": _find_jest_test_files,
         "go_test": _find_go_test_files,
@@ -218,7 +251,7 @@ def _get_test_files_for_framework(
     finder = finders.get(framework)
     if finder is None:
         return []
-    return finder(project_root)
+    return finder(scan)
 
 
 # ---------------------------------------------------------------------------
@@ -463,14 +496,16 @@ def map_tests(
     if not source_dirs:
         return {}
 
+    scan = _ProjectScan.build(project_root)
+
     # Step 1: Detect frameworks
-    frameworks = _detect_frameworks(project_root)
+    frameworks = _detect_frameworks(scan)
     framework_detected = len(frameworks) > 0
 
     # Step 2: Collect all test files per framework
     framework_files: dict[str, list[str]] = {}
     for fw in frameworks:
-        framework_files[fw] = _get_test_files_for_framework(project_root, fw)
+        framework_files[fw] = _get_test_files_for_framework(scan, fw)
 
     # Step 3: Map test files to source nodes
     # node_ref_id -> {framework -> [test_file, ...]}

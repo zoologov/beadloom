@@ -338,7 +338,7 @@ class TestInstalledHarnessIsRunnable:
         project = tmp_path / "fresh-repo"
         project.mkdir()
         scaffold(project, platform="github")
-        proc = subprocess.run(  # noqa: S603 - fixed argv (no untrusted input)
+        proc = subprocess.run(
             [
                 sys.executable,
                 "-m",

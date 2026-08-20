@@ -13,10 +13,12 @@ from typing import TYPE_CHECKING
 from tree_sitter import Parser
 
 from beadloom.context_oracle.code_indexer import get_lang_config
+from beadloom.infrastructure.repository import get_owning_ref_id
 from beadloom.infrastructure.scan_paths import resolve_scan_paths
 
 if TYPE_CHECKING:
     import sqlite3
+    from collections.abc import Iterator
     from pathlib import Path
 
     from tree_sitter import Node as TSNode
@@ -50,11 +52,35 @@ class ImportInfo:
 # ---------------------------------------------------------------------------
 
 
+def _walk(root: TSNode) -> Iterator[TSNode]:
+    """Yield every node in the tree, pre-order (the root's descendants).
+
+    Extraction used to consider only ``root.children`` — the file's TOP-LEVEL
+    statements — so an import inside a function, a class body, an
+    ``if TYPE_CHECKING:`` guard or a ``try:`` block was invisible to the
+    dependency graph. Those are precisely the places an import is put to defer
+    cost or to break a cycle, so the graph was blind to the very edges the
+    cycle and boundary rules exist to judge (BDL-UX #159). Measured on this
+    repo when the walk was introduced: 460 nested imports, 231 of them
+    first-party — about a third of all imports.
+
+    Statement types the extractors match do not nest inside themselves, so a
+    full walk cannot double-count a single statement.
+    """
+    # Document order (pre-order): imports must be reported in the order they
+    # appear, so line numbers read naturally and extraction is deterministic.
+    stack = list(reversed(root.children))
+    while stack:
+        node = stack.pop()
+        yield node
+        stack.extend(reversed(node.children))
+
+
 def _extract_python_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
     """Extract imports from a Python AST root node."""
     results: list[ImportInfo] = []
 
-    for child in root.children:
+    for child in _walk(root):
         if child.type == "import_statement":
             # `import X` or `import X.Y.Z`
             for sub in child.children:
@@ -115,7 +141,7 @@ def _extract_ts_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
     """Extract imports from a TypeScript/JavaScript AST root node."""
     results: list[ImportInfo] = []
 
-    for child in root.children:
+    for child in _walk(root):
         if child.type != "import_statement":
             continue
 
@@ -166,7 +192,7 @@ def _extract_go_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
     """Extract imports from a Go AST root node."""
     results: list[ImportInfo] = []
 
-    for child in root.children:
+    for child in _walk(root):
         if child.type != "import_declaration":
             continue
 
@@ -203,7 +229,7 @@ def _extract_rust_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
     """Extract imports from a Rust AST root node."""
     results: list[ImportInfo] = []
 
-    for child in root.children:
+    for child in _walk(root):
         if child.type != "use_declaration":
             continue
 
@@ -244,7 +270,7 @@ _KOTLIN_STDLIB_PREFIXES: tuple[str, ...] = ("kotlin.", "kotlinx.", "java.", "jav
 def _extract_kotlin_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
     """Extract imports from a Kotlin AST root node."""
     results: list[ImportInfo] = []
-    for child in root.children:
+    for child in _walk(root):
         if child.type == "import":
             # Find the qualified_identifier (dotted path)
             for sub in child.children:
@@ -270,7 +296,7 @@ _JAVA_STDLIB_PREFIXES: tuple[str, ...] = ("java.", "javax.", "android.", "sun.",
 def _extract_java_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
     """Extract imports from Java files."""
     results: list[ImportInfo] = []
-    for child in root.children:
+    for child in _walk(root):
         if child.type != "import_declaration":
             continue
 
@@ -349,7 +375,7 @@ _SWIFT_STDLIB_MODULES: frozenset[str] = frozenset(
 def _extract_swift_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
     """Extract imports from a Swift AST root node."""
     results: list[ImportInfo] = []
-    for child in root.children:
+    for child in _walk(root):
         if child.type != "import_declaration":
             continue
 
@@ -468,7 +494,7 @@ def _extract_c_cpp_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
     Skips well-known C/C++ standard library headers.
     """
     results: list[ImportInfo] = []
-    for node in root.children:
+    for node in _walk(root):
         if node.type != "preproc_include":
             continue
         path_node = node.child_by_field_name("path")
@@ -551,7 +577,7 @@ def _extract_objc_imports(root: TSNode, file_path: str) -> list[ImportInfo]:
     Skips well-known Apple/system frameworks.
     """
     results: list[ImportInfo] = []
-    for node in root.children:
+    for node in _walk(root):
         if node.type == "preproc_include":
             # #import <Framework/Header.h> or #import "Header.h"
             # In tree-sitter-objc, #import uses preproc_include with:
@@ -743,20 +769,12 @@ def _find_node_for_file(
 ) -> str | None:
     """Find the graph node that *owns* a file by its relative path.
 
-    Walks up the directory hierarchy, matching against ``nodes.source``.
+    Delegates to the single ownership rule in ``infrastructure/repository``
+    (most specific source wins). This previously walked up from the file's
+    PARENT directory, so a node whose source IS a file never owned that file —
+    its imports were attributed to the enclosing directory's node instead.
     """
-    parts = rel_path.split("/")
-    # Skip the filename itself — start from its parent directory.
-    for i in range(len(parts) - 1, 0, -1):
-        segment = "/".join(parts[:i])
-        for source in (f"{segment}/", segment):
-            row = conn.execute(
-                "SELECT ref_id FROM nodes WHERE source = ?",
-                (source,),
-            ).fetchone()
-            if row is not None:
-                return str(row[0])
-    return None
+    return get_owning_ref_id(conn, rel_path)
 
 
 def resolve_import_to_node(
@@ -770,16 +788,37 @@ def resolve_import_to_node(
     """Map an import path to a graph node ref_id.
 
     Strategy (in order):
-    1. Code-symbols annotation lookup (``# beadloom:domain=X``).
-    2. Hierarchical source-prefix matching against ``nodes.source``.
+    1. Ownership of the imported FILE — the most specific node whose source
+       covers it. This is the same rule the importing side uses, so an edge
+       always connects the two nodes that actually own the two files.
+    2. Code-symbols annotation lookup (``# beadloom:domain=X``).
+    3. Hierarchical source-prefix matching against ``nodes.source``.
+
+    Strategy 1 exists because 3 resolves a dotted path to an EXTENSION-LESS
+    directory path, which can never match a node whose source is a file — so
+    every import used to land on the nearest enclosing directory node, silently
+    collapsing feature/component dependencies into their domain (BDL-UX #144).
 
     Returns ``None`` if no mapping found.
     """
     effective_scan = scan_paths or ["src", "lib", "app"]
 
-    # Strategy 1: code_symbols annotation match.
     possible_files = _import_path_to_file_paths(import_path, scan_paths)
 
+    # Strategy 1: the node that owns the imported file.
+    for candidate in possible_files:
+        indexed = conn.execute(
+            "SELECT 1 FROM code_symbols WHERE file_path = ? "
+            "UNION ALL SELECT 1 FROM file_index WHERE path = ? LIMIT 1",
+            (candidate, candidate),
+        ).fetchone()
+        if indexed is None:
+            continue
+        owner = get_owning_ref_id(conn, candidate)
+        if owner is not None:
+            return owner
+
+    # Strategy 2: code_symbols annotation match.
     for candidate in possible_files:
         rows = conn.execute(
             "SELECT annotations FROM code_symbols WHERE file_path = ? LIMIT 1",
@@ -804,7 +843,7 @@ def resolve_import_to_node(
                     if node_row is not None:
                         return str(node_row[0])
 
-    # Strategy 2: hierarchical source-prefix matching.
+    # Strategy 3: hierarchical source-prefix matching.
     if is_ts:
         normalized = _normalize_ts_import(import_path)
         if normalized is None:
@@ -833,11 +872,51 @@ def _collect_source_files(project_root: Path) -> list[Path]:
     return sorted(files)
 
 
+def _part_of_ancestors(conn: sqlite3.Connection) -> dict[str, set[str]]:
+    """Map each node to the set of nodes it is (transitively) ``part_of``."""
+    parents: dict[str, set[str]] = {}
+    for row in conn.execute(
+        "SELECT src_ref_id, dst_ref_id FROM edges WHERE kind = 'part_of'"
+    ).fetchall():
+        child, parent = str(row[0]), str(row[1])
+        if child != parent:  # the root service is part_of itself by convention
+            parents.setdefault(child, set()).add(parent)
+
+    resolved: dict[str, set[str]] = {}
+
+    def walk(node: str, seen: set[str]) -> set[str]:
+        if node in resolved:
+            return resolved[node]
+        out: set[str] = set()
+        for parent in parents.get(node, ()):
+            if parent in seen:
+                continue
+            out.add(parent)
+            out |= walk(parent, seen | {parent})
+        resolved[node] = out
+        return out
+
+    for node in parents:
+        walk(node, {node})
+    return resolved
+
+
 def create_import_edges(conn: sqlite3.Connection) -> int:
     """Create ``depends_on`` edges from resolved code imports.
 
     For each resolved import, finds the importing file's owning node
     and creates a ``depends_on`` edge to the target node (if different).
+
+    Containment is skipped in ONE direction only. A node does not "depend on"
+    its own parts: a package facade re-exporting its children says nothing the
+    ``part_of`` edge did not, and paired with a child's ordinary upward import
+    it manufactures a node-level cycle with no module-level counterpart
+    (BDL-UX #144).
+
+    The reverse is kept. A child reaching into shared code that lives in its
+    container but belongs to no other node is a REAL dependency; dropping it
+    made such a node report "depends on nothing", which is false — and a
+    confidently wrong answer is worse than a coarse one.
 
     Returns the number of edges created.
     """
@@ -846,6 +925,7 @@ def create_import_edges(conn: sqlite3.Connection) -> int:
         "FROM code_imports WHERE resolved_ref_id IS NOT NULL"
     ).fetchall()
 
+    ancestors = _part_of_ancestors(conn)
     edges_created = 0
     seen: set[tuple[str, str]] = set()
 
@@ -855,6 +935,9 @@ def create_import_edges(conn: sqlite3.Connection) -> int:
 
         source_ref_id = _find_node_for_file(rel_path, conn)
         if not source_ref_id or source_ref_id == target_ref_id:
+            continue
+        # Drop only parent -> child (the container depending on its own part).
+        if source_ref_id in ancestors.get(target_ref_id, ()):
             continue
 
         edge_key = (source_ref_id, target_ref_id)

@@ -349,11 +349,11 @@ class TestMcpLintTool:
         assert "lint" in tool_names
 
     def test_lint_tool_schema(self) -> None:
-        """Verify lint tool has correct inputSchema with severity enum."""
+        """Verify lint tool has correct input_schema with severity enum."""
         from beadloom.services.mcp_server import _TOOLS
 
         lint_tool = next(t for t in _TOOLS if t.name == "lint")
-        props = lint_tool.inputSchema["properties"]
+        props = lint_tool.input_schema["properties"]
         assert "severity" in props
         assert props["severity"]["enum"] == ["all", "error", "warn"]
 

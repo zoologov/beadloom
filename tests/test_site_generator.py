@@ -114,18 +114,26 @@ def test_architecture_page_has_counts_and_diagram_and_health(
     conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
     # BDL-046: the architecture overview moved off the landing to /architecture.
+    # BDL-060 S4 ext: the PRIMARY /architecture page is now the interactive
+    # Cytoscape+ELK graph; the Mermaid counts/diagram/health overview is demoted
+    # to the /architecture-diagram fallback (no dead link, Mermaid data kept).
     out = tmp_path / "site"
     generate_site(conn, out, project_root=tmp_path)
-    text = (out / "architecture.md").read_text(encoding="utf-8")
+    primary = (out / "architecture.md").read_text(encoding="utf-8")
+    assert "<ArchitectureMap" in primary
+    assert "/architecture-diagram" in primary  # links to the Mermaid fallback
+    text = (out / "architecture-diagram.md").read_text(encoding="utf-8")
     assert "1 service" in text or "1 services" in text
     assert "2 domains" in text
     assert "1 feature" in text or "1 features" in text
-    # Embedded top-level diagram (mermaid C4).
+    # Embedded top-level diagram (mermaid C4) lives on the fallback page.
     assert "```mermaid" in text
     assert "C4Container" in text
     # Health summary line (coverage).
     assert "coverage" in text.lower()
-    assert (out / "architecture.md") in result_written(conn, out, tmp_path)
+    written = result_written(conn, out, tmp_path)
+    assert (out / "architecture.md") in written
+    assert (out / "architecture-diagram.md") in written
 
 
 def result_written(
@@ -212,7 +220,12 @@ def test_docs_index_loose_docs_under_general_section(
 def test_architecture_page_is_not_the_about_home(
     conn: sqlite3.Connection, tmp_path: Path
 ) -> None:
-    """With a README, the overview lives ONLY at /architecture, not at /index."""
+    """With a README, the architecture page is NOT the About home.
+
+    BDL-060 S4 ext: the primary /architecture page is the interactive map; the
+    Mermaid "Architecture overview" lives at /architecture-diagram. The About
+    home stays the README. Neither architecture page is the About.
+    """
     (tmp_path / "README.md").write_text(
         "# Beadloom\n\nABOUT_MARKER body.\n", encoding="utf-8"
     )
@@ -220,10 +233,14 @@ def test_architecture_page_is_not_the_about_home(
     generate_site(conn, out, project_root=tmp_path)
     index = (out / "index.md").read_text(encoding="utf-8")
     arch = (out / "architecture.md").read_text(encoding="utf-8")
+    diagram = (out / "architecture-diagram.md").read_text(encoding="utf-8")
     assert "ABOUT_MARKER body." in index
     assert "Architecture overview" not in index
-    assert "Architecture overview" in arch
+    # The interactive page mounts the map; the Mermaid overview is the fallback.
+    assert "<ArchitectureMap" in arch
+    assert "Architecture overview" in diagram
     assert "ABOUT_MARKER" not in arch
+    assert "ABOUT_MARKER" not in diagram
 
 
 def test_written_tuple_is_sorted_and_contains_new_paths(

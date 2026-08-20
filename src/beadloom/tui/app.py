@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+import threading
 from typing import TYPE_CHECKING, ClassVar
 
 from textual.app import App, ComposeResult
@@ -74,6 +75,10 @@ class BeadloomApp(App[None]):
         self.project_root = project_root
         self.no_watch = no_watch
         self._conn: sqlite3.Connection | None = None
+        self._worker_conn: sqlite3.Connection | None = None
+        # Textual cannot pre-empt a thread worker, so a re-triggered slow load
+        # can overlap the previous one; serialize their DB access explicitly.
+        self._worker_conn_lock = threading.Lock()
         self._file_watcher_worker: Worker[None] | None = None
         self._shutting_down: bool = False
 
@@ -100,23 +105,37 @@ class BeadloomApp(App[None]):
         return self._conn
 
     @property
+    def worker_conn_lock(self) -> threading.Lock:
+        """Guard held by background workers while they use the worker connection."""
+        return self._worker_conn_lock
+
+    @property
+    def is_shutting_down(self) -> bool:
+        """Whether the app has begun unmounting (workers must stop touching it)."""
+        return self._shutting_down
+
+    @property
     def file_watcher_worker(self) -> Worker[None] | None:
         """Read-only view of the file-watcher Worker (``None`` when watching is disabled)."""
         return self._file_watcher_worker
 
-    def _open_db(self) -> sqlite3.Connection:
+    def _open_db(self, *, cross_thread: bool = False) -> sqlite3.Connection:
         """Open SQLite connection (WAL mode — safe for concurrent access).
 
         Read-write is needed because check_sync updates doc hashes.
+
+        ``cross_thread`` disables sqlite3's owning-thread guard for the
+        connection handed to the slow data providers: it is opened on the event
+        loop but only ever used from the dashboard's background worker.
         """
-        conn = sqlite3.connect(str(self.db_path))
+        conn = sqlite3.connect(str(self.db_path), check_same_thread=not cross_thread)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         return conn
 
     def _init_providers(self) -> None:
-        """Initialize all data providers with the open DB connection."""
-        if self._conn is None:
+        """Initialize all data providers with the open DB connections."""
+        if self._conn is None or self._worker_conn is None:
             return
         self.graph_provider = GraphDataProvider(
             conn=self._conn, project_root=self.project_root
@@ -127,11 +146,13 @@ class BeadloomApp(App[None]):
         self.sync_provider = SyncDataProvider(
             conn=self._conn, project_root=self.project_root
         )
+        # Debt and activity scan the filesystem and shell out to git, so they
+        # run on a background worker and get their own connection.
         self.debt_provider = DebtDataProvider(
-            conn=self._conn, project_root=self.project_root
+            conn=self._worker_conn, project_root=self.project_root
         )
         self.activity_provider = ActivityDataProvider(
-            conn=self._conn, project_root=self.project_root
+            conn=self._worker_conn, project_root=self.project_root
         )
         self.why_provider = WhyDataProvider(
             conn=self._conn, project_root=self.project_root
@@ -147,6 +168,7 @@ class BeadloomApp(App[None]):
     def on_mount(self) -> None:
         """Open DB, initialize providers, install screens, push default, start watcher."""
         self._conn = self._open_db()
+        self._worker_conn = self._open_db(cross_thread=True)
         self._init_providers()
         # Install named screens for keyboard switching
         self.install_screen(DashboardScreen(), name=SCREEN_DASHBOARD)
@@ -213,6 +235,16 @@ class BeadloomApp(App[None]):
         if self._conn is not None:
             self._conn.close()
             self._conn = None
+        if self._worker_conn is not None:
+            # A thread worker may still be mid-query. Closing under it would
+            # raise there, and waiting would stall quit, so leave the handle to
+            # be reclaimed when the interpreter drops it.
+            if self._worker_conn_lock.acquire(blocking=False):
+                try:
+                    self._worker_conn.close()
+                finally:
+                    self._worker_conn_lock.release()
+            self._worker_conn = None
 
     _VALID_SCREENS: ClassVar[frozenset[str]] = frozenset({
         SCREEN_DASHBOARD,
@@ -338,17 +370,17 @@ class BeadloomApp(App[None]):
         )
 
     def _refresh_providers(self) -> None:
-        """Refresh all data providers after reindex."""
+        """Refresh the event-loop data providers after reindex.
+
+        Debt and activity are deliberately left out: they are refreshed by the
+        dashboard's background worker, since doing it here would block the UI.
+        """
         if self.graph_provider is not None:
             self.graph_provider.refresh()
         if self.lint_provider is not None:
             self.lint_provider.refresh()
         if self.sync_provider is not None:
             self.sync_provider.refresh()
-        if self.debt_provider is not None:
-            self.debt_provider.refresh()
-        if self.activity_provider is not None:
-            self.activity_provider.refresh()
 
     def _refresh_screen_widgets(self) -> None:
         """Refresh widgets on the currently active screen."""

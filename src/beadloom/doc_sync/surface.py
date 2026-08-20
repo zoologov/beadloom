@@ -28,6 +28,8 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+from beadloom.infrastructure.surface_registry import get_cli_group
+
 if TYPE_CHECKING:
     import sqlite3
     from pathlib import Path
@@ -60,6 +62,9 @@ def parse_watches(text: str) -> list[str] | None:
     return surfaces or None
 
 
+_UNKNOWN_SURFACE = "<cli-surface-unavailable>"
+
+
 def cli_signature() -> str:
     """Coarse signature of the Click command + option tree.
 
@@ -68,9 +73,14 @@ def cli_signature() -> str:
     reordering or re-wording help text does not. The actual SHA-256 digest of
     that canonical text is returned.
     """
-    from beadloom.services.cli import main
+    group = get_cli_group()
+    if group is None:
+        # Unknown surface: hashing "nothing" would silently re-baseline every
+        # `watches=cli` doc against an empty CLI and report them all fresh.
+        # A stable sentinel keeps the signature comparable and honest.
+        return _digest(_UNKNOWN_SURFACE)
 
-    entries = sorted(_walk_click(main, prefix=""))
+    entries = sorted(_walk_click(group, prefix=""))
     return _digest("\n".join(entries))
 
 

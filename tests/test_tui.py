@@ -5999,3 +5999,159 @@ class TestExplorerScreenResume:
             assert detail.ref_id == "auth"
 
             await pilot.press("q")
+
+
+class TestDashboardBackgroundLoad:
+    """Debt and activity are computed off the event loop (startup responsiveness).
+
+    Both providers walk the working tree and shell out to git, so the dashboard
+    paints placeholders first and fills them in from a thread worker.
+    """
+
+    def test_debt_gauge_renders_pending_for_none_score(self) -> None:
+        """A ``None`` score renders as 'computing', not as a severity label."""
+        from beadloom.tui.widgets.debt_gauge import DebtGaugeWidget
+
+        plain = DebtGaugeWidget(score=None).render().plain
+
+        assert "Debt:" in plain
+        assert "computing" in plain
+        assert "low" not in plain
+
+    def test_activity_renders_pending_placeholder(self) -> None:
+        """A pending ActivityWidget says it is working, not that there is no data."""
+        from beadloom.tui.widgets.activity import ActivityWidget
+
+        widget = ActivityWidget(activities={})
+        widget._pending = True
+        plain = widget.render().plain
+
+        assert "Analyzing git history" in plain
+        assert "No activity data" not in plain
+
+    def test_activity_pending_cleared_by_data(self) -> None:
+        """Delivered data replaces the placeholder rather than stacking with it."""
+        from beadloom.tui.widgets.activity import ActivityWidget
+
+        widget = ActivityWidget(activities={})
+        widget._pending = True
+        widget._activities = {"graph": {"commits_30d": 12}}
+        widget._pending = False
+        plain = widget.render().plain
+
+        assert "graph" in plain
+        assert "Analyzing git history" not in plain
+
+    @pytest.mark.asyncio()
+    async def test_slow_providers_use_a_separate_connection(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Debt/activity get their own cross-thread connection, not the UI one."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root, no_watch=True)
+        async with app.run_test() as pilot:
+            assert app.debt_provider is not None
+            assert app.activity_provider is not None
+            assert app.debt_provider.conn is not app.connection
+            assert app.activity_provider.conn is app.debt_provider.conn
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_refresh_providers_skips_the_slow_ones(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Reindex refreshes event-loop providers only; the worker owns the rest."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+
+        calls: list[str] = []
+
+        class _Recorder:
+            def __init__(self, name: str) -> None:
+                self._name = name
+
+            def refresh(self) -> None:
+                calls.append(self._name)
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root, no_watch=True)
+        async with app.run_test() as pilot:
+            app.graph_provider = _Recorder("graph")  # type: ignore[assignment]
+            app.lint_provider = _Recorder("lint")  # type: ignore[assignment]
+            app.sync_provider = _Recorder("sync")  # type: ignore[assignment]
+            app.debt_provider = _Recorder("debt")  # type: ignore[assignment]
+            app.activity_provider = _Recorder("activity")  # type: ignore[assignment]
+
+            app._refresh_providers()
+
+            assert calls == ["graph", "lint", "sync"]
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_fast_load_marks_slow_widgets_pending(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """The synchronous pass leaves debt/activity showing their placeholders."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.dashboard import DashboardScreen
+        from beadloom.tui.widgets.activity import ActivityWidget
+        from beadloom.tui.widgets.debt_gauge import DebtGaugeWidget
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root, no_watch=True)
+        async with app.run_test() as pilot:
+            screen = app.screen
+            assert isinstance(screen, DashboardScreen)
+
+            screen._load_fast_data()
+
+            assert screen.query_one("#debt-gauge", DebtGaugeWidget)._score is None
+            assert screen.query_one("#activity-widget", ActivityWidget)._pending is True
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_apply_slow_data_fills_both_widgets(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Worker results land in the gauge and the activity panel."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+        from beadloom.tui.screens.dashboard import DashboardScreen
+        from beadloom.tui.widgets.activity import ActivityWidget
+        from beadloom.tui.widgets.debt_gauge import DebtGaugeWidget
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root, no_watch=True)
+        async with app.run_test() as pilot:
+            screen = app.screen
+            assert isinstance(screen, DashboardScreen)
+
+            screen._load_fast_data()
+            screen._apply_slow_data(42.0, {"graph": {"commits_30d": 7}})
+
+            gauge = screen.query_one("#debt-gauge", DebtGaugeWidget).render().plain
+            activity = screen.query_one("#activity-widget", ActivityWidget).render().plain
+
+            assert "42" in gauge
+            assert "computing" not in gauge
+            assert "graph" in activity
+            assert "Analyzing git history" not in activity
+            await pilot.press("q")
+
+    @pytest.mark.asyncio()
+    async def test_shutdown_does_not_block_on_a_busy_worker(
+        self, populated_db: tuple[Path, Path]
+    ) -> None:
+        """Unmount leaves the worker connection alone while a thread holds the lock."""
+        db_path, project_root = populated_db
+        from beadloom.tui.app import BeadloomApp
+
+        app = BeadloomApp(db_path=db_path, project_root=project_root, no_watch=True)
+        async with app.run_test() as pilot:
+            app.worker_conn_lock.acquire()
+            try:
+                await pilot.press("q")
+            finally:
+                app.worker_conn_lock.release()
+
+        assert app.is_shutting_down is True

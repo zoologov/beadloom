@@ -842,3 +842,108 @@ class TestCreateImportEdges:
         assert len(edges) == 1
         assert edges[0]["src_ref_id"] == "api"
         assert edges[0]["dst_ref_id"] == "auth"
+
+
+class TestExtractImportsNested:
+    """Imports below the top level of a file are still dependencies.
+
+    Extraction used to walk only the module's top-level children, so anything
+    inside a function, a class body, `if TYPE_CHECKING:` or a `try:` block was
+    invisible to the dependency graph. That is the pattern used precisely to
+    defer cost or break an import cycle — so the graph was blind to exactly the
+    edges the cycle and boundary rules exist to judge.
+    """
+
+    def test_function_local_import_is_extracted(self, tmp_path: Path) -> None:
+        from beadloom.graph.import_resolver import extract_imports
+
+        py = tmp_path / "module.py"
+        py.write_text(
+            "def handler():\n"
+            "    from beadloom.context_oracle.why import analyze_node\n"
+            "    return analyze_node\n"
+        )
+        results = extract_imports(py)
+        assert [r.import_path for r in results] == ["beadloom.context_oracle.why"]
+        assert results[0].line_number == 2
+
+    def test_class_body_import_is_extracted(self, tmp_path: Path) -> None:
+        from beadloom.graph.import_resolver import extract_imports
+
+        py = tmp_path / "module.py"
+        py.write_text("class C:\n    import beadloom.graph.linter\n")
+        results = extract_imports(py)
+        assert [r.import_path for r in results] == ["beadloom.graph.linter"]
+
+    def test_type_checking_block_import_is_extracted(self, tmp_path: Path) -> None:
+        """A TYPE_CHECKING import is a real compile-time dependency."""
+        from beadloom.graph.import_resolver import extract_imports
+
+        py = tmp_path / "module.py"
+        py.write_text(
+            "from typing import TYPE_CHECKING\n"
+            "\n"
+            "if TYPE_CHECKING:\n"
+            "    from beadloom.infrastructure.db import open_db\n"
+        )
+        results = extract_imports(py)
+        paths = [r.import_path for r in results]
+        assert "beadloom.infrastructure.db" in paths
+        assert "typing" in paths
+
+    def test_try_except_import_is_extracted(self, tmp_path: Path) -> None:
+        """The optional-dependency idiom is still a declared dependency."""
+        from beadloom.graph.import_resolver import extract_imports
+
+        py = tmp_path / "module.py"
+        py.write_text(
+            "try:\n"
+            "    import watchfiles\n"
+            "except ImportError:\n"
+            "    watchfiles = None\n"
+        )
+        results = extract_imports(py)
+        assert [r.import_path for r in results] == ["watchfiles"]
+
+    def test_deeply_nested_import_is_extracted(self, tmp_path: Path) -> None:
+        from beadloom.graph.import_resolver import extract_imports
+
+        py = tmp_path / "module.py"
+        py.write_text(
+            "def outer():\n"
+            "    def inner():\n"
+            "        if True:\n"
+            "            from beadloom.application.gate import run_ci_gate\n"
+            "            return run_ci_gate\n"
+            "    return inner\n"
+        )
+        results = extract_imports(py)
+        assert [r.import_path for r in results] == ["beadloom.application.gate"]
+
+    def test_top_level_and_nested_of_the_same_module_both_recorded(
+        self, tmp_path: Path
+    ) -> None:
+        """Both occurrences are real; de-duplication belongs to edge building."""
+        from beadloom.graph.import_resolver import extract_imports
+
+        py = tmp_path / "module.py"
+        py.write_text(
+            "import beadloom.graph.linter\n"
+            "\n"
+            "def later():\n"
+            "    import beadloom.graph.linter\n"
+        )
+        results = extract_imports(py)
+        assert [r.import_path for r in results] == [
+            "beadloom.graph.linter",
+            "beadloom.graph.linter",
+        ]
+        assert [r.line_number for r in results] == [1, 4]
+
+    def test_relative_nested_import_is_still_skipped(self, tmp_path: Path) -> None:
+        """Walking deeper must not start emitting relative imports."""
+        from beadloom.graph.import_resolver import extract_imports
+
+        py = tmp_path / "module.py"
+        py.write_text("def f():\n    from . import sibling\n")
+        assert extract_imports(py) == []

@@ -623,10 +623,24 @@ class TestSyncCheckNewPairs:
 
 
 class TestExemptMinimal:
-    """No new module was hidden via the exempt list — it stays the minimal 4 globs."""
+    """No new module was hidden via the exempt list — every entry is named and argued."""
 
-    def test_exempt_is_exactly_the_four_seeded_globs(self) -> None:
-        """The live module-coverage exempt list is exactly the 4 honest globs."""
+    def test_exempt_is_exactly_the_seeded_globs(self) -> None:
+        """The live module-coverage exempt list is exactly the honest entries.
+
+        This guard exists to catch a module being quietly excused rather than
+        classified. Any change here must be a deliberate edit with a written
+        reason in `rules.yml`, which is why the set is pinned literally.
+
+        `**/graph/rule_engine.py` was added when the `rule-engine` node was
+        repointed from that 84-line back-compat shim to the `rules/` PACKAGE
+        where the engine actually lives — sourcing the node at the shim made
+        every symbol count, node page and size limit describe the shim instead
+        of the engine (BDL-UX #157). The shim keeps its
+        `# beadloom:feature=rule-engine` annotation, so its MEMBERSHIP is still
+        recorded; the exemption covers only the fact that it has no code of its
+        own (0 symbols).
+        """
         rules = [r for r in load_rules(RULES_PATH) if isinstance(r, ModuleCoverageRule)]
         assert len(rules) == 1
         exempt = set(rules[0].exempt)
@@ -635,7 +649,36 @@ class TestExemptMinimal:
             "**/__main__.py",
             "**/onboarding/config_reader.py",
             "**/onboarding/presets.py",
+            "**/graph/rule_engine.py",
         }, exempt
+
+    def test_the_shim_exemption_stays_true_to_its_reason(
+        self, live_repo_reindexed: Path
+    ) -> None:
+        """`rule_engine.py` is exempt BECAUSE it is a pure re-export shim.
+
+        The other named exemptions were argued on the seeded criterion (few
+        symbols, internal-only glue) and are left to it. This one was argued on
+        a stronger claim — that the file holds no code of its own — so the claim
+        is pinned: if anyone ever adds a symbol to the shim, the exemption stops
+        being honest and this fails rather than silently hiding real code.
+        """
+        import sqlite3
+
+        conn = sqlite3.connect(live_repo_reindexed / ".beadloom" / "beadloom.db")
+        try:
+            count = conn.execute(
+                "SELECT count(*) FROM code_symbols WHERE file_path = ?",
+                ("src/beadloom/graph/rule_engine.py",),
+            ).fetchone()[0]
+        finally:
+            conn.close()
+
+        assert count == 0, (
+            f"src/beadloom/graph/rule_engine.py holds {count} symbols but is "
+            "exempt as a pure re-export shim — either move that code into the "
+            "`rules/` package or drop the exemption"
+        )
 
     def test_no_real_module_glob_added_to_exempt(self) -> None:
         """The exempt list adds NO broad real-module glob (no silent shadow hideout).

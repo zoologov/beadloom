@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from beadloom.graph.c4 import filter_c4_nodes, map_to_c4, render_c4_mermaid
+from beadloom.infrastructure.repository import get_owned_symbols
 
 if TYPE_CHECKING:
     import sqlite3
@@ -154,21 +155,20 @@ def _load_incoming_for(
     return incoming
 
 
-def _load_symbols(conn: sqlite3.Connection, source: str | None) -> list[str]:
-    """Public symbol names whose file lives under *source*, sorted + de-duped."""
-    if not source:
-        return []
-    rows = conn.execute(
-        "SELECT DISTINCT symbol_name FROM code_symbols "
-        "WHERE file_path = ? OR file_path LIKE ? "
-        "ORDER BY symbol_name",
-        (source, f"{source.rstrip('/')}/%"),
-    ).fetchall()
-    return [
-        str(row["symbol_name"])
-        for row in rows
-        if not str(row["symbol_name"]).startswith("_")
-    ]
+def _load_symbols(conn: sqlite3.Connection, ref_id: str) -> list[str]:
+    """Public symbol names in the files the node OWNS, sorted + de-duped.
+
+    Ownership (most specific source wins) is resolved in
+    ``infrastructure/repository``, so a node page lists its own surface rather
+    than its children's, and a package façade source still lists the package
+    (BDL-UX #144/#157).
+    """
+    names = {
+        symbol.symbol_name
+        for symbol in get_owned_symbols(conn, ref_id)
+        if not symbol.symbol_name.startswith("_")
+    }
+    return sorted(names)
 
 
 def _load_docs(conn: sqlite3.Connection, ref_id: str) -> list[str]:
@@ -272,7 +272,7 @@ def render_node_page(conn: sqlite3.Connection, node: NodeRow, kinds: dict[str, s
     """Render one node's Markdown page (deterministic)."""
     grouped = _load_edges_for(conn, node.ref_id, kinds)
     incoming = _load_incoming_for(conn, node.ref_id, kinds)
-    symbols = _load_symbols(conn, node.source)
+    symbols = _load_symbols(conn, node.ref_id)
     docs = _load_docs(conn, node.ref_id)
     diagram = _scoped_diagram(conn, node.ref_id)
 

@@ -26,7 +26,7 @@ beadloom ui  [--project DIR] [--no-watch]    # backward-compatible alias
 | `--project DIR` | Project root directory (default: current directory) |
 | `--no-watch` | Disable the file watcher (useful for CI or testing) |
 
-The TUI opens the SQLite database in read-only mode and initializes 7 data providers before displaying the Dashboard screen.
+The TUI opens the SQLite database and initializes 7 data providers before displaying the Dashboard screen. The screen paints immediately; the debt score and git activity are filled in by a background worker (see [Startup Responsiveness](#startup-responsiveness)).
 
 ## Screens
 
@@ -56,10 +56,10 @@ Main overview showing architecture health at a glance.
 
 **Widgets:**
 
-- **DebtGaugeWidget** -- Debt score with severity coloring (green 0-20, yellow 21-50, red 51+) and direction arrow.
+- **DebtGaugeWidget** -- Debt score with severity coloring (green 0-20, yellow 21-50, red 51+) and direction arrow. Shows `Debt: computing…` until the background worker reports a score.
 - **Screen description** -- A label describing the screen purpose ("Architecture overview: graph structure, git activity, lint & debt health").
 - **GraphTreeWidget** -- Interactive tree built from `part_of` edges showing the architecture hierarchy. Each node label includes a doc status indicator (green circle = fresh, yellow triangle = stale, red X = missing) and an edge count badge. Nodes are sorted by kind (service > domain > feature) then alphabetically. Selecting a node emits a `NodeSelected` message that updates the summary bar.
-- **ActivityWidget** -- Per-domain git activity displayed as colored progress bars (green >=70%, yellow >=30%, dim <30%).
+- **ActivityWidget** -- Per-domain git activity displayed as colored progress bars (green >=70%, yellow >=30%, dim <30%). Shows `Analyzing git history…` until the background worker reports results.
 - **LintPanelWidget** -- Violation counts with severity icons (error, warning, info) and individual violation details (rule name, affected node, description).
 - **StatusBarWidget** -- Node count, edge count, doc count, stale count, watcher status indicator, and last action message. Supports auto-dismissing notifications.
 - **Action bar** -- Keybinding hints at the bottom of the screen showing available actions: `[Enter]explore`, `[r]eindex`, `[l]int`, `[s]ync-check`, `[S]napshot`, `[?]help`.
@@ -129,7 +129,7 @@ Documentation health overview with per-node status tracking.
 | `q` | Quit |
 | `?` | Help overlay (keybinding reference) |
 | `/` | Search overlay (FTS5 search) |
-| `r` | Trigger reindex (runs `incremental_reindex`, refreshes all providers) |
+| `r` | Trigger reindex (runs `incremental_reindex`, refreshes providers -- debt and activity on a background thread) |
 | `l` | Run lint check (shows violation count notification) |
 | `s` | Run sync-check (shows stale count notification) |
 | `S` | Save snapshot (placeholder) |
@@ -182,7 +182,7 @@ The TUI includes a background file watcher powered by `watchfiles` (optional dep
 - Skips temporary files (`~` prefix, `.tmp` suffix) and hidden directories (except `.beadloom`)
 - Posts `ReindexNeeded` message with changed paths to the app
 - Status bar shows "changes detected (N)" badge when files change
-- Pressing `r` triggers reindex, refreshes all providers, and clears the badge
+- Pressing `r` triggers reindex, refreshes providers (debt and activity on a background thread), and clears the badge
 
 **Disable:** Use `--no-watch` to run without the file watcher. If `watchfiles` is not installed, the watcher is disabled gracefully with a log warning.
 
@@ -192,10 +192,10 @@ The TUI includes a background file watcher powered by `watchfiles` (optional dep
 
 ```
 BeadloomApp
-  |-- on_mount: open DB -> init providers -> install screens -> push Dashboard -> start watcher
+  |-- on_mount: open DBs -> init providers -> install screens -> push Dashboard -> start watcher
   |
   Screens
-  |-- DashboardScreen.on_mount -> load debt, activity, lint, graph, status bar
+  |-- DashboardScreen.on_mount -> load graph, lint, status bar; queue debt + activity
   |-- ExplorerScreen.set_ref_id -> load node detail, dependencies, context
   |-- DocStatusScreen.on_mount -> compute doc rows, coverage stats
   |
@@ -208,11 +208,41 @@ BeadloomApp
   |-- WhyDataProvider      -> why.analyze_node() (on-demand per ref_id)
   |-- ContextDataProvider  -> builder.build_context() + estimate_tokens() (on-demand)
   |
+  DashboardSlowWorker (threaded Textual Worker)
+  |-- refreshes DebtDataProvider + ActivityDataProvider
+  |-- posts results back via call_from_thread
+  |
   FileWatcherWorker (threaded Textual Worker)
   |-- watches source dirs from graph
   |-- debounce 500ms
   |-- posts ReindexNeeded -> StatusBar badge
 ```
+
+### Startup Responsiveness
+
+Textual switches the terminal to the alternate screen buffer as soon as the app
+starts, so anything the first paint waits on is time the user spends looking at
+a blank terminal. The Dashboard therefore splits its load in two:
+
+- **On the event loop** — the graph tree, lint panel and status bar counts. These
+  are graph-index reads and return in milliseconds.
+- **On a background thread** — `DebtDataProvider` and `ActivityDataProvider`.
+  Debt walks the working tree (via test mapping) and activity shells out to
+  `git log`; together they can take seconds on a large repository. The gauge
+  shows `Debt: computing…` and the activity panel `Analyzing git history…`
+  until the worker delivers real values through `call_from_thread`.
+
+Pressing `r` (reindex) follows the same split: `BeadloomApp._refresh_providers()`
+refreshes only the event-loop providers, and the Dashboard re-queues the worker
+for debt and activity.
+
+Because a thread worker cannot be pre-empted, a re-queued slow load can overlap
+the one still running. The two slow providers therefore use a second SQLite
+connection opened with `check_same_thread=False`, and every worker holds
+`BeadloomApp.worker_conn_lock` while using it, so only one thread touches that
+connection at a time. Workers also check `BeadloomApp.is_shutting_down` before
+publishing results, and unmount skips closing the worker connection if a thread
+still holds the lock rather than stalling quit.
 
 ### Module Structure
 

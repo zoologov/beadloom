@@ -44,6 +44,8 @@ if TYPE_CHECKING:
     import sqlite3
     from pathlib import Path
 
+    from mcp.server.context import ServerRequestContext
+
 # Back-compat re-exports of the S4 table primitives (moved to active_table).
 __all__ = [
     "_is_separator_cells",
@@ -885,7 +887,7 @@ _TOOLS = [
             "by ref_id. Returns graph, relevant documentation chunks, and code "
             "symbols. Includes sync status and stale index warnings."
         ),
-        inputSchema={
+        input_schema={
             "type": "object",
             "properties": {
                 "ref_id": {
@@ -914,7 +916,7 @@ _TOOLS = [
     mcp.Tool(
         name="get_graph",
         description="Get a subgraph around a node. Returns nodes and edges as JSON.",
-        inputSchema={
+        input_schema={
             "type": "object",
             "properties": {
                 "ref_id": {"type": "string"},
@@ -929,7 +931,7 @@ _TOOLS = [
             "List all graph nodes, optionally filtered by kind. "
             "Returns ref_id, kind, and summary for each node."
         ),
-        inputSchema={
+        input_schema={
             "type": "object",
             "properties": {
                 "kind": {
@@ -945,7 +947,7 @@ _TOOLS = [
             "Check if documentation is up-to-date with code. "
             "Returns list of stale docs with changed code paths."
         ),
-        inputSchema={
+        input_schema={
             "type": "object",
             "properties": {
                 "ref_id": {
@@ -961,7 +963,7 @@ _TOOLS = [
             "Get project documentation coverage and index status. "
             "Returns coverage percentages and stale doc count."
         ),
-        inputSchema={"type": "object", "properties": {}},
+        input_schema={"type": "object", "properties": {}},
     ),
     mcp.Tool(
         name="update_node",
@@ -970,7 +972,7 @@ _TOOLS = [
             "(source of truth) and SQLite index. Use after reading context to "
             "improve node descriptions."
         ),
-        inputSchema={
+        input_schema={
             "type": "object",
             "properties": {
                 "ref_id": {
@@ -995,7 +997,7 @@ _TOOLS = [
             "Mark documentation as synchronized with code for a ref_id. "
             "Call this after updating stale documentation to reset sync state."
         ),
-        inputSchema={
+        input_schema={
             "type": "object",
             "properties": {
                 "ref_id": {
@@ -1012,7 +1014,7 @@ _TOOLS = [
             "Search for nodes, documents, and code symbols by keyword. "
             "Returns ranked results with ref_ids and summaries."
         ),
-        inputSchema={
+        input_schema={
             "type": "object",
             "properties": {
                 "query": {
@@ -1041,7 +1043,7 @@ _TOOLS = [
             "for writing human-readable documentation. After generating, use update_node "
             "to save improved summaries. Call without ref_id for all nodes."
         ),
-        inputSchema={
+        input_schema={
             "type": "object",
             "properties": {
                 "ref_id": {
@@ -1059,14 +1061,14 @@ _TOOLS = [
             "lint violations, stale docs, and agent instructions. "
             "Call this at the beginning of every session."
         ),
-        inputSchema={"type": "object", "properties": {}},
+        input_schema={"type": "object", "properties": {}},
     ),
     mcp.Tool(
         name="why",
         description=(
             "Impact analysis: show upstream dependencies and downstream dependents for a node."
         ),
-        inputSchema={
+        input_schema={
             "type": "object",
             "properties": {
                 "ref_id": {
@@ -1080,7 +1082,7 @@ _TOOLS = [
     mcp.Tool(
         name="diff",
         description="Show graph changes since a git ref (commit, branch, tag).",
-        inputSchema={
+        input_schema={
             "type": "object",
             "properties": {
                 "since": {
@@ -1093,7 +1095,7 @@ _TOOLS = [
     mcp.Tool(
         name="lint",
         description="Run architecture lint rules. Returns violations as JSON.",
-        inputSchema={
+        input_schema={
             "type": "object",
             "properties": {
                 "severity": {
@@ -1111,7 +1113,7 @@ _TOOLS = [
             "Returns a JSON object with debt_score (0-100), severity, category "
             "breakdown, top offending nodes, and optional trend vs last snapshot."
         ),
-        inputSchema={
+        input_schema={
             "type": "object",
             "properties": {
                 "trend": {
@@ -1138,7 +1140,7 @@ _TOOLS = [
             "the `bd` CLI. Returns created bead ids + doc paths. This is a single "
             "deterministic operation: it does NOT orchestrate or spawn sub-agents."
         ),
-        inputSchema={
+        input_schema={
             "type": "object",
             "properties": {
                 "type": {
@@ -1162,7 +1164,7 @@ _TOOLS = [
             "architecture rules for the bead's area. Resolves the bead's graph ref "
             "from `bd show`. Read-only and deterministic."
         ),
-        inputSchema={
+        input_schema={
             "type": "object",
             "properties": {
                 "bead": {
@@ -1182,7 +1184,7 @@ _TOOLS = [
             "On FAIL: do NOT close — return the findings so the agent must fix them. "
             "Advisory-strong only: the true enforcement point remains `beadloom ci` in CI."
         ),
-        inputSchema={
+        input_schema={
             "type": "object",
             "properties": {
                 "bead": {
@@ -1207,7 +1209,7 @@ _TOOLS = [
             "`status` (default 'in progress') so the table stays current. "
             "Deterministic; no orchestration."
         ),
-        inputSchema={
+        input_schema={
             "type": "object",
             "properties": {
                 "bead": {
@@ -1235,25 +1237,20 @@ _TOOLS = [
 
 def create_server(project_root: Path) -> Server:
     """Create and configure the MCP server for a project."""
-    server = Server(
-        name="beadloom",
-        version=__version__,
-        instructions="Beadloom Context Oracle — architecture graph for AI-assisted development.",
-    )
-
     db_path = project_root / ".beadloom" / "beadloom.db"
     cache = ContextCache()
 
-    @server.list_tools()  # type: ignore[no-untyped-call,untyped-decorator]
-    async def _list_tools() -> list[mcp.Tool]:
-        return _TOOLS
+    async def _list_tools(
+        _ctx: ServerRequestContext[Any],
+        _params: mcp.types.PaginatedRequestParams | None,
+    ) -> mcp.types.ListToolsResult:
+        return mcp.types.ListToolsResult(tools=_TOOLS)
 
-    @server.call_tool()  # type: ignore[untyped-decorator]
     async def _call_tool(
-        name: str,
-        arguments: dict[str, Any] | None,
-    ) -> list[TextContent]:
-        args = arguments or {}
+        _ctx: ServerRequestContext[Any],
+        params: mcp.types.CallToolRequestParams,
+    ) -> mcp.types.CallToolResult:
+        args = params.arguments or {}
         conn = open_db(db_path)
         try:
             # Auto-reindex if stale (4.3).
@@ -1267,24 +1264,43 @@ def create_server(project_root: Path) -> Server:
             l2 = SqliteCache(conn)
             result = _dispatch_tool(
                 conn,
-                name,
+                params.name,
                 args,
                 project_root=project_root,
                 cache=cache,
                 l2_cache=l2,
             )
-            return [
-                TextContent(
-                    type="text",
-                    text=json.dumps(result, ensure_ascii=False, indent=2),
-                )
-            ]
-        except LookupError as exc:
-            return [TextContent(type="text", text=f"Error: {exc}")]
+            return mcp.types.CallToolResult(
+                content=[
+                    TextContent(
+                        type="text",
+                        text=json.dumps(result, ensure_ascii=False, indent=2),
+                    )
+                ]
+            )
+        except (LookupError, ValueError) as exc:
+            # An unknown tool (ValueError from the dispatcher) or a missing
+            # ref_id (LookupError) is a tool-level failure, not a protocol
+            # error: report it in-band so the agent can correct itself. mcp 1.x
+            # got this for free — its `@call_tool()` decorator wrapped handler
+            # exceptions — while 2.0 hands them to the runner, so the server
+            # must classify them itself.
+            return mcp.types.CallToolResult(
+                content=[TextContent(type="text", text=f"Error: {exc}")],
+                is_error=True,
+            )
         finally:
             conn.close()
 
-    return server
+    # mcp 2.0 replaced the `@server.list_tools()` / `@server.call_tool()`
+    # decorators of 1.x with handlers supplied at construction time.
+    return Server(
+        name="beadloom",
+        version=__version__,
+        instructions="Beadloom Context Oracle — architecture graph for AI-assisted development.",
+        on_list_tools=_list_tools,
+        on_call_tool=_call_tool,
+    )
 
 
 def _dispatch_tool(
@@ -1573,3 +1589,4 @@ def _dispatch_tool(
 
     msg = f"Unknown tool: {name}"
     raise ValueError(msg)
+
