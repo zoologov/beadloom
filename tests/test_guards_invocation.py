@@ -25,7 +25,12 @@ Four kinds of test, in this order:
    in the guards package (discovered, not listed), terminators are recognised
    by measured effect rather than by name, and a generated matrix run in a
    subprocess asserts that every result carries the witness that the recording
-   step ran.
+   step ran. BDL-061.32 did the same for the step BEFORE the boundary: what
+   Click converts on the way in is quantified over every parameter of the
+   dispatched command and of the group above it, measured through Click's own
+   parse, instead of one constructor name being matched in the source — which
+   is how ``click.Path``'s default ``readable=True`` had been a validator on
+   ``--project`` all along.
 3. **The injection.** A failure that nobody enumerated — an exception, a
    ``sys.exit`` inside a check, an unreadable stdin, an unwritable record — is
    still a verdict the reader sees.
@@ -43,12 +48,16 @@ property of the process and not of Click's dispatch.
 from __future__ import annotations
 
 import ast
+import functools
 import json
+import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
+import click
 import pytest
 from click.testing import CliRunner
 
@@ -567,18 +576,194 @@ def terminators_on_the_boundary_path() -> list[tuple[str, str]]:
 THE_ONE_WAY_OUT = ("guard.py", "sys.exit(result.exit_code)")
 
 
-def click_path_keywords(source: str) -> list[list[str]]:
-    """The keyword names of every ``click.Path(...)`` in *source*, call by call.
+# --------------------------------------------------------------------------
+# What Click converts before the callback runs (BDL-061.32).
+# --------------------------------------------------------------------------
 
-    An allowlist rather than ``"exists=True" not in source``: *any* ``click.Path``
-    validator — ``dir_okay=False`` as much as ``exists=True`` — makes Click exit
-    before the callback runs, and therefore before the boundary (``.30``, B5).
+#: The subcommand under test, spelled the way an operator types it.
+_GUARD = "guard"
+
+
+def parameters_click_converts() -> list[tuple[str, click.Command, click.Parameter]]:
+    """``(where, command, parameter)`` for everything Click parses on the way in.
+
+    Read from the command Click will DISPATCH for ``beadloom guard`` rather than
+    from a symbol this module imports, so a parameter added through a shared
+    decorator, an ``add_command`` or a plugin is inside the pin on the day it
+    lands. The group's own options are here too, because a validator on
+    ``beadloom --x`` exits before this callback exactly as one on
+    ``beadloom guard --x`` does.
     """
+    command = main.commands[_GUARD]
     return [
-        [keyword.arg or "**" for keyword in node.keywords]
-        for node in ast.walk(ast.parse(source))
-        if isinstance(node, ast.Call) and ast.unparse(node.func) == "click.Path"
+        *(("beadloom", main, param) for param in main.params),
+        *((f"beadloom {_GUARD}", command, param) for param in command.params),
     ]
+
+
+def parses_an_argv_value(param: click.Parameter) -> bool:
+    """Whether Click ever runs an argv string through *param*'s conversion.
+
+    A flag's value is a constant Click supplies itself, so no argv string
+    reaches its type. Everything else is probed — fail-closed, so a parameter
+    kind nobody anticipated is probed rather than excused.
+    """
+    return not getattr(param, "is_flag", False)
+
+
+def _option_spelling(param: click.Parameter) -> str:
+    """The long spelling if there is one: ``--opt=value`` cannot be mistaken for
+    a second option when the value itself begins with a dash."""
+    return next((opt for opt in param.opts if opt.startswith("--")), param.opts[0])
+
+
+def click_refuses(
+    command: click.Command,
+    param: click.Parameter,
+    value: str,
+    *,
+    subcommand: str | None = None,
+) -> str | None:
+    """How Click ended the invocation instead of reaching the callback, if it did.
+
+    ``make_context`` is exactly the parse Click performs before ``invoke``: it
+    converts every parameter and runs their callbacks, and it does *not* call
+    the command's own callback. So "this returned" is precisely "control got as
+    far as the boundary", measured through Click's own machinery rather than
+    inferred from the name of a type.
+    """
+    if isinstance(param, click.Argument):
+        argv = ["--", value]
+    elif _option_spelling(param).startswith("--"):
+        argv = [f"{_option_spelling(param)}={value}"]
+    else:  # pragma: no cover — no short-only option exists today
+        argv = [_option_spelling(param), value]
+    if subcommand is not None:
+        argv.append(subcommand)
+
+    context = None
+    try:
+        context = command.make_context(command.name or "?", argv)
+    except BaseException as exc:  # a usage error, an exit, a raising converter
+        return f"{type(exc).__name__}: {exc}"
+    finally:
+        if context is not None:
+            context.close()
+    return None
+
+
+def refusals_of(
+    command: click.Command,
+    param: click.Parameter,
+    values: list[tuple[str, str]],
+    *,
+    subcommand: str | None = None,
+) -> list[tuple[str, str]]:
+    """``(what the value was, how Click refused it)`` over a corpus of argv strings."""
+    return [
+        (what, refusal)
+        for what, value in values
+        if (refusal := click_refuses(command, param, value, subcommand=subcommand))
+    ]
+
+
+def declared_conversion(param: click.Parameter) -> str:
+    """The conversion *param* declares, read from the runtime object.
+
+    From the object and not from the source, so a type built through an alias,
+    a helper or a variable is described as what it IS. A ``click.Path`` is
+    written out as the refusals it can make, because that — not the constructor
+    name — is what decides whether Click exits before the callback.
+    """
+    kind = param.type
+    if isinstance(kind, click.Path):
+        refusals = [
+            name
+            for name, applies in (
+                ("exists", kind.exists),
+                ("file_okay=False", not kind.file_okay),
+                ("dir_okay=False", not kind.dir_okay),
+                ("readable", getattr(kind, "readable", False)),
+                ("writable", getattr(kind, "writable", False)),
+                ("executable", getattr(kind, "executable", False)),
+            )
+            if applies
+        ]
+        path_type = getattr(kind.type, "__name__", repr(kind.type))
+        return (
+            f"click.Path({', '.join(refusals) or 'nothing it can refuse'}, "
+            f"path_type={path_type})"
+        )
+    return repr(kind)
+
+
+def declared_conversions() -> dict[str, str]:
+    """Every conversion an argv string can meet on the way to the callback."""
+    return {
+        f"{where} {param.name}": declared_conversion(param)
+        for where, _command, param in parameters_click_converts()
+        if parses_an_argv_value(param)
+    }
+
+
+#: The conversion each value-taking parameter is allowed to declare. Written out
+#: in full rather than as "no forbidden keyword", because the keywords are not
+#: where the refusals live: ``type=click.Choice(["a"])`` carries no keyword at
+#: all and ``type=int`` is not even a call, so a keyword allowlist is satisfied
+#: by both. An exact table means a conversion added tomorrow reddens tomorrow,
+#: whether or not this round thought of it.
+CONVERSIONS_THAT_REFUSE_NOTHING = {
+    "beadloom guard name": "STRING",
+    "beadloom guard project": "click.Path(nothing it can refuse, path_type=Path)",
+    "beadloom guard context_pairs": "STRING",
+    "beadloom guard harness": "STRING",
+}
+
+#: The parameters no argv string is ever converted for. Every one is a flag, and
+#: the set is pinned so a parameter cannot leave the probe's scope in silence.
+PARAMETERS_THAT_PARSE_NO_VALUE = {
+    "beadloom version",
+    "beadloom verbose",
+    "beadloom quiet",
+    "beadloom guard output_json",
+    "beadloom guard liveness",
+}
+
+#: Validators a later option would plausibly reach for — ``--work-kind`` as a
+#: ``click.Choice`` is the one BDL-061.3 named, since strictness is already per
+#: work kind. Each must be REFUSED by the probe above, or the probe is a pin
+#: that cannot fail. The last row is the conversion this command shipped with.
+_VALIDATORS_A_NEW_OPTION_WOULD_REACH_FOR = (
+    ("a choice", click.Choice(["feature", "bugfix"]), False),
+    ("a whole number", int, False),
+    ("a number", float, False),
+    ("a bounded number", click.IntRange(1, 3), False),
+    ("a path that must exist", click.Path(exists=True), False),
+    ("a path that may not be a directory", click.Path(dir_okay=False), False),
+    ("a path that may not be a file", click.Path(file_okay=False), False),
+    ("a timestamp", click.DateTime(), False),
+    ("a uuid", click.UUID, False),
+    ("a path that must be readable", click.Path(readable=True), True),
+)
+
+
+@functools.lru_cache(maxsize=1)
+def access_can_be_refused() -> bool:
+    """Whether a mode of ``000`` actually refuses THIS process — measured, not assumed.
+
+    ``os.access`` answers yes to everything for root, and some filesystems do
+    not carry permissions at all; on either, a corpus row that is meant to be
+    unreadable proves nothing. Measuring it means the rows that depend on it
+    skip with a reason instead of passing in silence (standing rule 4).
+    """
+    with tempfile.TemporaryDirectory() as where:
+        refused = Path(where) / "refused"
+        refused.mkdir()
+        refused.chmod(0o000)
+        try:
+            return not os.access(refused, os.R_OK)
+        finally:
+            refused.chmod(0o755)
 
 
 def _source_modules() -> tuple[Path, ...]:
@@ -699,16 +884,165 @@ class TestControlLeavesTheBoundaryPathInExactlyOnePlace:
             "application/guards/invocation.py",
         ], record_firing_importers()
 
-    def test_the_command_does_no_validation_click_would_exit_on(self) -> None:
+    @pytest.fixture()
+    def hostile_argv(self, tmp_path):
+        """``(what it is, the value)`` — argv strings a conversion might refuse.
+
+        A NUL is deliberately absent: ``execve`` takes NUL-terminated strings,
+        so no argv value can carry one, and this rule is about what Click does
+        with argv. (Measured while writing this, and worth knowing for anyone
+        who calls the CLI in-process: a NUL in ``--project`` leaves
+        ``click.Path`` as ``ValueError``, which is not the ``UsageError`` Click
+        turns into a usage message.)
+        """
+        a_file = tmp_path / "a-file"
+        a_file.write_text("x", encoding="utf-8")
+        a_dir = tmp_path / "a-dir"
+        a_dir.mkdir()
+        unreadable = tmp_path / "unreadable"
+        unreadable.mkdir()
+        unreadable.chmod(0o000)
+
+        values = [
+            ("an empty string", ""),
+            ("whitespace", "   "),
+            ("a word outside any plausible choice list", "epci"),
+            ("not a number", "not-a-number"),
+            ("a negative number", "-1"),
+            ("a number no machine integer holds", "9" * 400),
+            ("a lone dash", "-"),
+            ("a newline", "\n"),
+            ("4 KiB of text", "x" * 4096),
+            ("a non-ascii name", "日本語-ø"),
+            ("an existing file", str(a_file)),
+            ("an existing directory", str(a_dir)),
+            ("a path that does not exist", str(tmp_path / "nowhere")),
+        ]
+        if not os.access(unreadable, os.R_OK):
+            values.append(("an existing directory nothing may read", str(unreadable)))
+        try:
+            yield values
+        finally:  # a mode of 000 would defeat the temporary directory's own cleanup
+            unreadable.chmod(0o755)
+
+    def test_no_parameter_of_the_command_does_validation_click_would_exit_on(
+        self, hostile_argv
+    ) -> None:
         """An option Click validates exits before the callback — and the boundary.
 
         That is how ``--project <missing>`` came to exit on the block code with
-        no verdict and no record (``.28``, m1). Pinned as an allowlist of
-        keywords rather than as the absence of one substring.
-        """
-        keywords = click_path_keywords(_COMMAND_MODULE.read_text(encoding="utf-8"))
+        no verdict and no record (``.28``, m1). ``.3`` then found the pin that
+        replaced it narrower than this very sentence: it walked the AST for
+        calls spelling ``click.Path`` exactly, so ``type=click.Choice([...])``
+        — the shape ``--work-kind`` will plausibly take, strictness being per
+        work kind already — was invisible to it, as was ``type=int``.
 
-        assert keywords == [["path_type"]], keywords
+        WHY THIS FORM, AND NOT EITHER OF THE TWO PROPOSED. "No keyword outside
+        an allowlist" is the same defect a third time: ``click.Choice(["a"])``
+        carries no keyword at all and ``type=int`` is not even a call, so a
+        keyword allowlist is *satisfied* by both of the constructors that
+        prompted it. "No option whose type is a Click validator instance" names
+        the wrong property: ``click.STRING`` is a ``ParamType`` instance too,
+        and so is the ``click.Path`` this command needs to take a path at all —
+        instance-hood is not what exits 2. What exits 2 is a conversion that can
+        REFUSE an argv string. So that is what this quantifies over: every
+        parameter Click converts on the way to this callback — the group's
+        options as well as the command's, discovered from the command Click
+        dispatches — each fed a corpus, asserting Click got as far as the
+        callback every time.
+
+        Measured rather than named: the corpus goes through
+        ``Command.make_context``, which is the parse Click runs before
+        ``invoke``, so a refusal here is a refusal in production whatever the
+        type is called. A corpus is a sample, though, and a sample cannot prove
+        totality — hence the companion test that pins the conversions
+        themselves, and the one below that proves this probe can fail at all.
+
+        It found one on its first run. ``click.Path``'s default
+        ``readable=True`` refuses an existing directory this process cannot
+        read, so ``--project`` — "the only typed option, and it carries no
+        validator" — carried one: ``guard --project <unreadable dir>`` was
+        Click's usage exit 2, no verdict, no record, nothing on stdout for
+        ``--json`` to parse. Declaring ``readable=False`` hands that directory
+        to the boundary, which answers it the way it answers every other
+        project it cannot use.
+        """
+        refused = [
+            (where, param.name, what, refusal)
+            for where, command, param in parameters_click_converts()
+            if parses_an_argv_value(param)
+            for what, refusal in refusals_of(
+                command,
+                param,
+                hostile_argv,
+                subcommand=_GUARD if command is main else None,
+            )
+        ]
+
+        assert refused == [], refused
+
+    def test_every_conversion_is_one_that_can_refuse_nothing(self) -> None:
+        """The sample the corpus is cannot prove totality; this closes it.
+
+        An exact table over every value-taking parameter, so a conversion added
+        later reddens whether or not the corpus happens to hold a string it
+        refuses. Residual, stated: a refusal a future Click adds under a new
+        attribute name would be described here as absent — the probe above is
+        the mechanism that would still see it.
+        """
+        assert declared_conversions() == CONVERSIONS_THAT_REFUSE_NOTHING
+
+    def test_every_parameter_is_either_probed_or_parses_no_value_at_all(self) -> None:
+        """Nothing falls out of the pin's scope quietly — the two sets are the whole.
+
+        The parameters left unprobed are pinned by name, and each is checked to
+        be a flag, whose value Click supplies itself; so an option that takes a
+        value cannot join the command by being overlooked here.
+        """
+        probed = {
+            f"{where} {param.name}"
+            for where, _command, param in parameters_click_converts()
+            if parses_an_argv_value(param)
+        }
+        valueless = {
+            f"{where} {param.name}": param
+            for where, _command, param in parameters_click_converts()
+            if not parses_an_argv_value(param)
+        }
+
+        assert probed == set(CONVERSIONS_THAT_REFUSE_NOTHING)
+        assert set(valueless) == PARAMETERS_THAT_PARSE_NO_VALUE
+        assert all(param.is_flag for param in valueless.values())
+        assert probed | set(valueless) == {
+            f"{where} {param.name}" for where, _c, param in parameters_click_converts()
+        }
+
+    @pytest.mark.parametrize(
+        ("what", "kind", "needs_refused_access"),
+        _VALIDATORS_A_NEW_OPTION_WOULD_REACH_FOR,
+        ids=[row[0] for row in _VALIDATORS_A_NEW_OPTION_WOULD_REACH_FOR],
+    )
+    def test_the_probe_refuses_the_validators_a_new_option_would_reach_for(
+        self, what: str, kind, needs_refused_access: bool, hostile_argv
+    ) -> None:
+        """The probe bites: the same corpus, on the option a later slice might write.
+
+        Without this, an emptied corpus or a ``make_context`` that stopped
+        raising would leave the test above green and meaningless. Each row is a
+        validator someone would plausibly declare, and the last is the one this
+        command actually shipped with.
+        """
+        if needs_refused_access and not access_can_be_refused():
+            pytest.skip("this process is refused nothing, so `readable` refuses nothing")
+        sample = click.Command(
+            "sample",
+            params=[click.Option(["--sample"], type=kind)],
+            callback=lambda **_: None,
+        )
+
+        refusals = refusals_of(sample, sample.params[0], hostile_argv)
+
+        assert refusals, f"{what} refused nothing in the corpus"
 
 
 #: Run in a child process, one JSON row per invocation, so a construct that ends
@@ -1077,6 +1411,37 @@ class TestAGuardThatCannotFindTheProjectBlocksAndCreatesNothing:
         assert result.returncode == 2, result.stderr
         assert b"ERROR" in result.stderr, result.stderr
         assert list(outside.iterdir()) == []
+
+    def test_a_project_directory_the_process_may_not_read_is_the_same_answer(
+        self, tmp_path
+    ) -> None:
+        """``click.Path`` defaults ``readable=True``, and that check runs in Click.
+
+        BDL-061.32, found by widening the Click-validation pin from one
+        constructor to every conversion: ``--project <a directory nothing may
+        read>`` was Click's usage exit 2 — the blocking code, but with no
+        verdict, no record, and nothing on stdout for ``--json`` to read. It is
+        the boundary's answer now, like every other project that cannot be used.
+        """
+        if not access_can_be_refused():
+            pytest.skip("this process is refused nothing, so a mode of 000 still reads")
+        outside = tmp_path / "not-a-project"
+        outside.mkdir()
+        unreadable = tmp_path / "unreadable"
+        (unreadable / ".beadloom").mkdir(parents=True)
+        unreadable.chmod(0o000)
+
+        try:
+            result = _run_real(
+                outside,
+                ["guard", "bead-claimed", "--project", str(unreadable), "--json"],
+            )
+        finally:  # a mode of 000 would defeat the temporary directory's cleanup
+            unreadable.chmod(0o755)
+
+        assert result.returncode == 2, result.stderr
+        assert b"Usage:" not in result.stderr, result.stderr
+        assert json.loads(result.stdout)["outcome"] == "error", result.stdout
 
     def test_the_liveness_report_says_so_too(self, tmp_path) -> None:
         outside = tmp_path / "not-a-project"

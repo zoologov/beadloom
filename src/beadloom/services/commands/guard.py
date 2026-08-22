@@ -155,7 +155,12 @@ def _emit(result: InvocationResult, *, output_json: bool) -> None:
 @click.argument("name", required=False)
 @click.option(
     "--project",
-    type=click.Path(path_type=Path),
+    # `readable=False` because `click.Path` defaults it to True, and that check
+    # runs in Click, before the callback: a directory this process may not read
+    # was a usage error at exit 2 with no verdict and no record (BDL-061.32).
+    # The conversion here must refuse nothing, so that every reason a declared
+    # project cannot be used is answered by the boundary as a verdict.
+    type=click.Path(path_type=Path, readable=False),
     default=None,
     help="Project root (default: the nearest directory above with .beadloom/).",
 )
@@ -202,7 +207,9 @@ def guard(
 
     ``--project`` is deliberately not validated by Click: an option Click
     rejects exits before this callback, and therefore before the boundary that
-    guarantees a verdict and a record.
+    guarantees a verdict and a record. That covers the keywords nobody typed as
+    well — ``click.Path`` defaults ``readable=True``, so a directory this
+    process may not read was a usage error with no verdict until BDL-061.32.
     """
     from beadloom.application.guards.invocation import GuardInvocation, run_invocation
 

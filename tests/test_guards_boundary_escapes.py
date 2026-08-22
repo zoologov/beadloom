@@ -51,6 +51,7 @@ import sys
 import textwrap
 from pathlib import Path
 
+import click
 import pytest
 from click.testing import CliRunner
 
@@ -62,7 +63,9 @@ from beadloom.services.cli import main
 from tests.test_guards_invocation import (
     THE_ONE_WAY_OUT,
     boundary_path_modules,
-    click_path_keywords,
+    click_refuses,
+    declared_conversion,
+    declared_conversions,
     process_terminators,
     record_firing_sites,
     terminators_on_the_boundary_path,
@@ -378,6 +381,19 @@ def _run(source: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _retired_click_path_pin(source: str) -> list[list[str]]:
+    """The pin ``.3`` retired: the keywords of every call spelling ``click.Path``.
+
+    Kept only as the thing the sabotage below is measured against — a retired
+    pin that nobody can run is a claim about a pin, not a measurement of one.
+    """
+    return [
+        [keyword.arg or "**" for keyword in node.keywords]
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Call) and ast.unparse(node.func) == "click.Path"
+    ]
+
+
 def _sabotaged(module: Path, anchor: str, replacement: str) -> ast.Module:
     """*module*'s real source with one edit applied, parsed — never written to disk."""
     source = module.read_text(encoding="utf-8")
@@ -481,17 +497,45 @@ class TestControlLeavesTheBoundaryPathInExactlyOnePlace:
         assert _SRC / "application" / "guards" / "firing.py" in scope
         assert terminators_on_the_boundary_path() == [THE_ONE_WAY_OUT]
 
-    def test_the_click_path_pin_is_an_allowlist_and_not_a_substring(self) -> None:
-        """``"exists=True" not in source`` is satisfied by ``dir_okay=False`` (``.30``, B5).
+    def test_the_retired_pin_is_blind_to_the_validator_a_later_option_would_use(
+        self,
+    ) -> None:
+        """``.3``'s N2, made a test rather than a memory (BDL-061.32).
 
-        Both make Click exit before the callback; the allowlist rejects the
-        second as readily as the first.
+        Two pins have now been retired here. ``"exists=True" not in source``
+        fell to ``dir_okay=False`` (``.30``, B5); the allowlist over
+        ``click.Path`` keywords that replaced it falls to anything that is not a
+        ``click.Path`` — and ``--work-kind`` as a ``click.Choice`` is the option
+        S2/S3 will plausibly write, strictness being per work kind already. The
+        sabotage below is that option, added to the real command source: the
+        retired pin reads the file and finds it unchanged, because a
+        ``click.Choice`` is not a ``click.Path`` call and carries no keyword for
+        an allowlist to see. What replaced it does not ask what the constructor
+        is called; it asks whether the conversion can refuse an argv string.
+
+        A keyword allowlist has a second blindness, and it is the one that cost
+        something: it can only see keywords somebody TYPED. ``click.Path``
+        defaults ``readable=True``, so the shipped ``--project`` refused an
+        unreadable directory in Click, before the callback — under a pin that
+        read ``[["path_type"]]`` and was satisfied (BDL-061.32).
         """
-        sabotaged = "type=click.Path(path_type=Path, dir_okay=False)\n"
+        sabotaged = _sabotaged(
+            _COMMAND_MODULE,
+            '@click.option("--json", "output_json", is_flag=True',
+            '@click.option("--work-kind", type=click.Choice(["feature", "bugfix"]))\n'
+            '@click.option("--json", "output_json", is_flag=True',
+        )
+        work_kind = click.Option(["--work-kind"], type=click.Choice(["feature", "bugfix"]))
+        command = click.Command(
+            "guard", params=[work_kind], callback=lambda **_: None
+        )
 
-        assert "exists=True" not in sabotaged, "the substring pin would pass this"
-        assert click_path_keywords(sabotaged) == [["path_type", "dir_okay"]]
-        assert click_path_keywords(_COMMAND_MODULE.read_text()) == [["path_type"]]
+        assert _retired_click_path_pin(ast.unparse(sabotaged)) == _retired_click_path_pin(
+            _COMMAND_MODULE.read_text(encoding="utf-8")
+        )
+        assert declared_conversion(work_kind) == "Choice(['feature', 'bugfix'])"
+        assert declared_conversion(work_kind) not in declared_conversions().values()
+        assert click_refuses(command, work_kind, "epci") is not None
 
     def test_the_one_writer_pin_reads_the_whole_source_tree(self) -> None:
         """``.30``, B4: a ``record_firing`` elsewhere in ``services/`` was not counted."""

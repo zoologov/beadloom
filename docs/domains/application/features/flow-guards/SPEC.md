@@ -146,6 +146,14 @@ which is also the refusal the discovery path gives, not a separate spelling of
 it. This removes the case where Click's own validation exited on the block code
 with no verdict at all.
 
+A directory the process **may not read** is that same refusal (BDL-061.32).
+`click.Path` defaults `readable=True`, and that check runs in Click, so
+`--project <an unreadable directory>` was a usage error at exit 2 with no
+verdict, no record, and nothing on stdout for `--json` to parse. The option now
+declares `readable=False`, which is not a relaxation: the directory is refused
+by the boundary, as a verdict a reader and a harness can both act on, instead of
+by the argument parser.
+
 The cost, stated because it is real: `--project` can no longer point at a
 directory before `beadloom init` has run there. That is the intended reading —
 there is no `flow.yml` in such a directory to answer from, so any verdict it
@@ -245,9 +253,20 @@ carries the reason the record is missing.
 What remains outside the boundary, named rather than implied: an argv **Click
 itself** cannot parse — an unknown option — never reaches the callback, so it
 exits 2 with Click's usage message and no record. It is fail-closed (the harness
-blocks), it fails identically on every invocation, and the reachable case that
-used to hide there (`--project` pointing at a missing directory) has been moved
-inside.
+blocks), it fails identically on every invocation, and the reachable cases that
+used to hide there (`--project` pointing at a missing directory, and at one this
+process may not read) have been moved inside.
+
+**No parameter of the command declares a conversion that can refuse an argv
+string** (BDL-061.32) — that is what keeps the paragraph above true as options
+are added. A conversion Click can fail is applied *before* the callback, so an
+option typed `click.Choice([...])` (the shape `--work-kind` would plausibly
+take) would answer a typo with a usage message rather than a verdict. The rule
+is therefore quantified over every parameter Click converts on the way in, the
+group's options as well as the command's, and is measured through Click's own
+parse rather than matched by constructor name — the narrower form of this pin
+was blind to `click.Choice`, to `int`, and to the `readable=True` default it
+never had to type.
 
 ### The path a guard is asked about
 
