@@ -1,44 +1,18 @@
 # BDL UX Feedback Log
 
-> Collected during development and dogfooding.
-> Total: 164 issues | Open: 46 | Improvements: 20 | Excluded: 7 | Closed: 91
-> 2026-08-20 (post-2.2.0, turning the release's lessons into checks): Opened #162 (🔴 **doctor should audit the PRODUCED graph, not just the code** — island / unexplained-leaf / claim-without-evidence. The four defects this release fixed all shipped past dev+test+review+tech-writer and a 6/6 gate because every test verified a FUNCTION and none verified the CLAIM the graph makes; the audits that found them were written by hand in ten lines each), #163 (`sync-update` can re-attest a doc nobody read — a re-baseline silences `sync-check` with no evidence the prose still describes reality; plus prose that no symbol pair anchors can never go stale at all) and #164 (LOW — the beads git-hook prints `bd import -i`, a flag that does not exist, on a warning that was itself a false alarm; the #140 shape). Total 161→164, Open 43→46.
-> 2026-08-20 (v2.2.0 release): Opened #161 — `docs audit` verifies numeric FACTS but never checks that a documented identifier still EXISTS, so documentation can name a function the code no longer has and the gate stays green. Found the hard way: two functions removed while narrowing the `surface_registry` port stayed documented in this very release's branch, past a 6/6 gate, and were caught by a hand-written ten-line grep during an unrelated question. Also: #160 (AsyncAPI ingestion) deferred with its plan recorded in ROADMAP. Total 160→161, Open 42→43.
-> 2026-08-19 (BDL-060 S4 dogfood — the owner clicking nodes in the architecture map): CLOSED #159 (imports below a file's top level were never extracted — 460 nested, 231 first-party, about a third of all imports; making them visible took `depends_on` from 51 to 146 edges and surfaced SIX real boundary violations at once, all one pattern: domain/application code reaching UP into `services` to introspect the live CLI/MCP surface, fixed by inverting it through a `surface_registry` port). Opened #160 (🔴 **AsyncAPI ingestion is documented as a capability but wired to nothing** — `extract_payload_body` is called by ZERO code paths in `src/`; the function works and is tested, but no document ever reaches it, so the SPEC's "teams on AsyncAPI ingest the payload schema via…" describes a capability the product does not deliver. It survived dev + test + review + tech-writer beads and a green gate because each verified the FUNCTION and none asked whether anything calls it). Total 158→160, Closed 90→91.
-> 2026-08-19 (BDL-UX #144/#157 fixed together): CLOSED #144 and #157. Both had the SAME root — attribution by raw path prefix — so they were fixed once, in one place: **a file belongs to exactly one node, the most specific one whose `source` covers it** (`infrastructure/repository`), now shared by `max_symbols`/`max_files`, the architecture view's symbol badge, node-page symbol listings and `import_resolver`'s file→node attribution. Three things fell out that no single-surface patch would have reached: (1) a node whose source IS a file never owned that file, so its imports were credited to the enclosing directory's node; (2) derived `depends_on` edges between a node and its `part_of` ancestor are a category error and are no longer emitted — 5 of 14 edges were this noise, and they were manufacturing node-level cycles that do not exist at module level; (3) with honest ownership the dependency graph went 14 → 24 edges, surfacing real feature-level dependencies (`graph-loader → federation`, `mcp-server → reindex`, `site-generation → graph`) that prefix attribution had collapsed into their parents. Opened #158 (the subtree-size signal the new metric no longer carries). Total 157→158, Open 42→41, Closed 88→90.
-> 2026-08-19 (BDL-060.15 review): Opened #157 (HIGH — a package that carries its `# beadloom:feature=` annotation in `__init__.py` (the natural place after BDL-059's decomposition) gets its node `source` recorded as that FILE, so every symbol read sees an empty façade: **5 nodes, 228 symbols invisible** on Beadloom's own graph. All five readers agree on 0, so it must be fixed at the source, not in a reader. Consequence in the #146 family: `max_symbols` can never fire on those nodes — a size rule reporting clean because it is looking at nothing — which also distorts the very `domain-size-limit` recalibration the S4 review was assessing). Total 156→157, Open 41→42.
-> 2026-08-19 (dependency currency pass): CLOSED #150 — REPRODUCED on Beadloom's own tree and FIXED. The reporter's minimal case does not reproduce today (core 0.26.0 loads all ten grammar wheels and parses small files cleanly through `get_lang_config`/`extract_symbols`, and a fresh `pip install beadloom[languages]==2.1.0` resolves a pair that survives `beadloom init` + `reindex` on a 5-file project) — the crash needs VOLUME: the full test suite segfaulted inside `_index_code_files` partway through a real repo-wide reindex. That sharpens the issue rather than softening it: **loading a grammar is not evidence that the pairing is safe**, which is exactly why it survived a gate. Fixed by `tree-sitter>=0.25,<0.26` plus two guards in `tests/test_grammar_guard.py` (the declared pin must carry an upper bound; the INSTALLED core must fall inside it, so a local upgrade cannot pass the suite while claiming an untested range). Still open from #150's ask: the from-scratch-resolver CI job. Open 42->41, Closed 87->88.
-> 2026-08-19 (design input): Opened #156 — 🔴 **context rot** gives #153 a measurable root: recall of a long instruction file DEGRADES as context fills, i.e. exactly when a long session needs the rules most, so shrinking the scaffolded `CLAUDE.md` is mechanism and not tidiness; the design target is *"the smallest possible set of high-signal tokens"* at the *"right altitude"* between brittle hardcoding and vague guidance. Also: role agents should return a bounded distilled result (~1-2k tokens) as a stated contract; and 🔴 **selective escalation is a second graph-derived feature** — blast radius, boundary crossings and invariant-bearing nodes decide what must stop for a human, turning "escalate when unsure" into a harness rule. Improvements 19->20, Total 155->156.
-> 2026-08-19 (design input): Opened #155 — multi-agent failure modes and long-running-harness patterns from three current Anthropic publications. 🔴 Headline: **wave shape should be DERIVED FROM THE GRAPH** — parallel agents pay off on independent subgraphs (266 vs 21 vulnerabilities found) and rot on shared code with rich interdependencies; only Beadloom holds the code-level interdependence needed to decide. Also: conformity cascades (18/30 agents chose the same branch name; identical context ⇒ identical mistakes, and shared state is the vector); a review role fed the author's summary converges on it (hidden-profile groups scored 17–36% vs ~100%), so the reviewer must see diff+spec BEFORE advocacy; named long-running failure modes led by *premature victory declaration*; and state files in JSON because agents corrupt Markdown. Improvements 18→19, Total 154→155.
-> 2026-08-19 (design input): Opened #154 — oversight patterns for the #153 enforcement epic, drawn from Anthropic's public *Risk Report: August 2026*: separate asynchronous monitoring from blocking interventions and label which is which; claim raised DETECTABILITY rather than prevention; ship a machine-readable "does not cover" note with every gate; make "diff vs its own stated purpose" a check type (Beadloom holds the stated purpose); 🔴 spawning must narrow authority, never widen it (their incident: legacy instructions propagated `--dangerously-skip-permissions` to child agents, detected only by the damage); 🔴 shared agent context propagates DECISIONS — one agent's silent scope-narrowing spread to later agents while metrics looked green, found 3 days later by a human; 🔴 gates need a LIVENESS proof — their filter ran misconfigured for several model generations "without anyone noticing", the same defect as #61. Improvements 17→18, Total 153→154.
-> 2026-08-19 (dogfood — DDD project, one full working session through the scaffolded flow): Opened #153 (HIGH, EPIC PROPOSAL — the scaffolded multi-agent flow is advisory and therefore silently skipped: measured 0/6 beads reviewed, 1/6 mutation-gated, 0 `.feature`, 0 `/task-init`, while the ONE rule backed by a machine check blocked the agent 4 times in the same session. Root: `CLAUDE.md` is delivered as a user message the model may deem inapplicable, and compliance degrades with instruction count — cf. anthropics/claude-code#32163. Proposal: ship blocking `Stop`/`PreToolUse` hooks with the flow, derive their conditions FROM THE GRAPH, make strictness configurable per rule and work kind, give exclusions a named reason + exit condition, and let roles run as independent subagents). Improvements 16→17, Total 152→153.
-> 2026-08-18 (dogfood — DDD project, wiring the beadloom gate into GitHub Actions CI): Opened #150 (HIGH — `tree-sitter` unbounded upper pin pairs core 0.26 with 0.25-ABI grammars, so a FRESH install segfaults with zero output on every parsing command; invisible to anyone who does not reinstall, since existing environments keep a matching pair — measured on two isolated venvs, reproduces on macOS as SIGBUS too, so it is a dependency bug, not an environment one) #151 (HIGH — the published release lags `main`: BDL-059's role templates are unreleased, so a fresh install reports drift against projects scaffolded from `main`, and `--fix` would rewrite them back to the OLDER templates: 42 deletions / 0 insertions, deleting a standing engineering paradigm. Diagnosed only via an env-skew trap: exit 1 from a PyPI install vs exit 0 from a source install, same self-reported version 2.1.0, byte-identical files) and #152 (MEDIUM — structural: role overlays resolve only INSIDE the installed package, so a project has no supported place for its own additions; that is *why* the paradigm had to go upstream, which is what coupled a downstream gate to an unreleased change). Common thread with #142/#146/#147: a verb that reads as a check either changes state or reports success for work it did not do. Total 149→152, Open 39→42.
-> 2026-08-05 (dogfood — DDD project, exposing the READ-ONLY beadloom surface to an agent): Opened #147 (HIGH — plain `lint` MUTATES `beadloom.db`; measured by DB sha256 before/after, only `--no-reindex` is read-only, and `--strict` is additionally required for a non-zero exit on an error-severity violation, so a caller checking the exit code alone reads a real boundary break as clean), #148 (MEDIUM — `lint` output shape depends on TTY: the documented `N violations, M rules evaluated` summary is absent through a pipe, with no flag to select a stable contract), #149 (LOW — `graph --format c4 --level component --scope <leaf>` exits 0 with a single empty `C4Container`, giving no way to distinguish "no internals" from "here are the internals"). Common thread with #142/#146: the tool reports success for work it did not do, or changes state under a verb that reads as a check. Total 146→149, Open 36→39.
-> 2026-08-03 (dogfood — DDD project, splitting an oversized vertical-module node): **THIRD in-the-wild confirmation of #142** (incremental `reindex` does not refresh import edges): a slice added a runtime import that closed a `A → B → runtime-app → A` module cycle; `reindex && lint --strict` reported **0 violations** through the whole verification pass — the coordinator's own independent re-run included — and the cycle was only surfaced later by a full rebuild (`rm .beadloom/beadloom.db && reindex`) during an unrelated refactor. Note the compounding factor: the false-green survived a *deliberately sceptical* review because the documented loop (`reindex` → `lint`) is itself the thing that lies; there is no signal distinguishing "clean" from "stale import graph". Reinforces the #142 fix priority (Gate must full-reindex, or `lint` must refuse a stale graph). Opened #146 (HIGH — `component` nodes contribute NO sync-check pairs at all, so their docs are never freshness-checked and the gate's green reads as "fresh" when it means "not looked at"; found when a wave's "sync-check by node X — clean" turned out to mean "zero pairs exist"), #144 (MEDIUM — `max_symbols` counts by source-path PREFIX without subtracting nested nodes, so carving a subpackage into its own node does NOT relieve the parent — the natural remedy for an oversized node silently does nothing), #145 (MEDIUM — `ctx <ref> --json` returns the repo-wide `code_symbols` array, not the node's, so an agent sizing a node from its own context bundle reads garbage). Total 143→145, Open 33→35.
-> 2026-07-23 (dogfood — DDD project, enforcing boundaries between equal-rank vertical modules): Opened #143 (HIGH — no native module-boundary / mutual-isolation rule primitive. Enforcing that each vertical module's internals are reachable only via its public facade (not a sibling's `usecases/`/`adapters/`) requires hand-written **O(N²)** `forbid_import` path-glob rules — one per ordered module pair per internal layer. Root causes in the rule engine: (a) `forbid_import.from`/`.to` accept only a SINGLE glob string each — no list, and fnmatch has no brace-expansion, so `src/bob/{a,b}/**` is literal; (b) "all modules except X" is expressible only via first-char negation `[!x]`, which SILENTLY mis-groups two modules sharing an initial letter — e.g. two `c…` modules (`coding`/`capabilities`) become indistinguishable, so the isolation glob wrongly excludes BOTH → a real cross-module import goes uncaught; (c) `domain-root ↛ adapters` cannot be expressed cleanly because fnmatch `*` spans `/` (workaround `<mod>/[!au]*` drops root files starting a/u — accepted only because they're import-leaves). No existing rule type derives pairwise isolation from node tags: `LayerRule` is a linear top-down order (not mutual isolation), `ForbidEdgeRule`/`DenyRule` matchers select one from-group + one to-group (no same-tag-different-node correlation). Workaround adopted downstream: a ~60-line `scripts/gen_boundary_rules.py` emitting explicit-path rules into a marker-delimited region with a `--check` mode. Proposal: a `module_isolation` rule type `{tag: <module-tag>, internal_layers: [usecases, adapters]}` that the engine expands into pairwise isolation + internal-layering from each node's `source` path — removes both the O(N²) hand-generation and the char-class collision at the core). Total 142→143, Open 32→33.
-> 2026-07-23 (dogfood — DDD project, domain-first vertical-module migration): Opened #142 (MEDIUM — incremental `beadloom reindex` does NOT refresh import edges: after moving a file and adding a boundary-violating import, `reindex` prints "Imports: 0" and the `code_imports`/`depends_on` edges are stale, so `beadloom lint --strict` does NOT catch the fresh violation — the documented `reindex && lint` loop silently passes a real boundary break. `reindex --full` is required to re-derive import edges; only the full CI build catches it. Sibling of #112 (incremental `Symbols: 0`). Impact: `forbid_import`/layer rules give false-green during iterative dev; a boundary violation can slip through local pre-commit and only surface in CI. Fix: incremental reindex should re-extract imports for changed files, or `lint` should warn when import edges are staler than the working tree. **🔴 SEVERITY UPGRADE MEDIUM→HIGH (2026-07-28, confirmed in the wild): if pre-commit AND pre-push AND CI all run the INCREMENTAL path, a real `no-dependency-cycles`/`forbid_import` violation reaches the protected main branch with a fully GREEN gate — observed a module-cycle merged undetected across a whole PR, surfaced only later by a manual `reindex --full` on a downstream branch. The "green CI" guarantee is unsound while any gate stage uses incremental reindex. Fix priority: the Gate (`ci`) MUST full-reindex before `lint`, or lint must refuse to pass on a stale import graph.**). Total 141→142, Open 31→32.
-> 2026-07-02 (dogfood — DDD project, detailed-graph + AaC-rules foundation): Opened #139 (MEDIUM — `docs generate` writes STRAY files to the project ROOT: running it produced a root-level `architecture.md` + a root `domains/` dir with layer READMEs, alongside the correct `docs/**` output — a cwd/base-path bug that pollutes the repo root and shadows the real `docs/architecture.md`), #140 (HIGH — misleading remediation for `untracked_files` staleness: `sync-check`/`ci` tells the operator to run `beadloom sync-update <ref>`, but for a directory-source node with a freshly-generated skeleton there is no `sync_state` pair, so `sync-update` returns "No sync pairs found; nothing to re-baseline" and CANNOT clear it — `untracked_files` is a per-file coverage gap, not hash drift; the only fixes are file-level `# beadloom:feature=` annotations or `<!-- beadloom:track= -->` doc markers, which the remediation string never mentions → operator dead-end. Also: a linked EMPTY skeleton then fails on `missing_modules`, so `docs generate`'d skeletons cannot pass `beadloom ci` until hand-filled — generating+linking a skeleton makes the Gate RED with no green intermediate state), #141 (LOW — `docs generate` re-serializes/patches `.beadloom/_graph/services.yml` as an unprompted side-effect, writing outside its docs output dir). Total 138→141, Open 28→31.
-> 2026-07-02 (dogfood — DDD project docs audit): Opened #138 (MEDIUM — `docs generate` silently no-ops on a coarse graph: a project accumulated a ~4000-line `architecture.md` / ~100 sections because its graph had few nodes w/ blanket `beadloom:domain=` tags → 0 feature/component nodes → nothing to emit, exit 0, no warning; + `component`→`DOC.md` not generated (parity gap w/ feature SPEC); + no monolith-drift detector). Total 137→138, Open 27→28.
-> 2026-06-18 (dogfood — adopter flow re-init on a binary-asset, non-English project): Opened #135 (HIGH — `init` crashes with `UnicodeDecodeError` on binary/venv files), #136 (MEDIUM — scaffolded flow is English-only + templates not overlay-aware), #137 (LOW — cross-major flow re-init leaves orphaned/skipped command files). Total 134→137, Open 24→27.
-> 2026-06-15 (BDL-056/057 + v2.1.0 release): CLOSED #130 (rule-type dataclass names fixed in `architecture.md`, BDL-057 SPEC-fill), #131 (all sub-items fixed in v2.1.0: `--non-interactive` removed from getting-started, DDD domain count corrected, CONTRIBUTING `your-org`→`zoologov` + release section added), #121 (RU `docs audit` false positive now suppressed via `.beadloom/config.yml` `docs_audit.ignore` — BDL-057.6; root-cause classifier weakness tracked in ROADMAP P3 "Semantic docs audit"). Opened #132 (`setup-agentic-flow --force` in Beadloom's own repo corrupts the vendored `CLAUDE.md` `__BEADLOOM_PROJECT_NAME__` placeholder) and #133 (per-worktree `beadloom.db` baseline → mass false re-baseline when integrating parallel worktree waves; relates #118). Total 131→133, Open 24→23, Closed 84→87.
-> 2026-06-10 (BDL-047 / F4.1 AI tech-writer): CLOSED #106 (non-interactive `sync-update --yes`/`--all` — the F4.1 fixpoint primitive, W1), #112 (incremental reindex `symbols_indexed` now backfilled to the live DB total per #88), and #127 (the `doc_generator.py` `except sqlite3.OperationalError: pass` swallows are gone — note `git_activity.py:251` `except ValueError: pass` + the broader onboarding `Any` concentration remain, deferred). Total 131, Open 27→24, Closed 81→84.
-> 2026-06-04 (post-v1.10.0 ROADMAP revision): Opened #122–#131 — engineering/test/doc debt from the comprehensive product review (`archive/REVIEW-2.md` §2/§3/§4), spot-verified at HEAD. Tracked here; cross-referenced from `ROADMAP.md` (Technical debt section). Total 121→131, Open 17→27.
-> 2026-06-02 (BDL-045): Opened #121 (LOW — `docs audit` metric classification is English-keyword-based, so it mislabels numbers in non-English docs: `README.ru.md` "14 инструментов" (MCP) is reported as `cli_command_count 14→34`, a false positive — the English README's same "14" is correctly `mcp_tool_count` OK. The number is right; the classifier just can't read Russian. Either localize the keyword map or skip non-English files in the audit). Total 120→121, Open 16→17.
-> 2026-06-02 (BDL-043 fix): CLOSED #120 — `dashboard.data.json` 404'd on GitHub Pages (widgets blank): the generator wrote it to the VitePress srcDir root (`site/`), which VitePress does NOT copy to the built `dist/` (only `site/public/` is copied verbatim); the dev server masked it by serving srcDir. FIXED: emit to `site/public/dashboard.data.json` → copied to dist root → the widgets' `withBase("/dashboard.data.json")` fetch resolves in the static build. Another "works in dev, breaks in the static build" class (cf. the F4 dead-links + F4.4 mermaid render) — the dogfood must hit the DEPLOYED/built site, not just `docs:dev`. Total 119→120, Closed 80→81.
-> 2026-06-02 (BDL-041 F4.4 BEAD-05): VERIFIED #117 (dogfood SUCCESS — F4.4 render fixes: the two F4 Mermaid bugs are fixed and the generation-time guard passes the real 26-diagram site with 0 issues; `npm run docs:build` exit 0; dashboard mounts the 4 ECharts widgets via `<ClientOnly>` with honest text fallback; `dashboard.data.json` carries `trends` (2 real points, sparse-honest) + 7 `recommendations`; automated render-validation green (build exit 0, no page-HTML error markers), live UX pan/zoom + charts PENDING owner re-check in-browser on the fixed site). Opened #118 (process: parallel dev subagents in a SHARED working tree don't conflict on disjoint *files* but DO collide on the pre-commit *hook* — it lints the whole tree, so one agent's commit catches the other's in-progress WIP; BEAD-02 had to `--no-verify` staging only its `site/**`. Mitigation: use git-worktree isolation for true parallel, or run dev beads sequentially; `merge-slot` serializes *who* commits but does not isolate tree state). Opened #119 (LOW: `graph` domain now 202 symbols > 200 `domain-size-limit` — non-blocking warning; F2/F3/F4 grew it via contracts.py/sdl.py/site_mermaid_guard.py etc.; candidate future split). Total 116→119, Open 14→16, Closed 79→80.
-> 2026-06-02 (BDL-040 F4 BEAD-05): Dogfood — generated + built Beadloom's own VitePress site. CLOSED #113 (generator bug: `publish_docs` copied hidden/OS-junk like `docs/.DS_Store` into `site/docs/` — non-deterministic + pollution; FIXED: skip dot-prefixed path parts; RED→GREEN regression test). CLOSED #114 (lockfile: `site/package-lock.json` now committed → `npm ci` reproducible). CLOSED #116 (generator bug surfaced by the dogfood build: node-page doc links + `/docs/` nav target were dead in the built site — FIXED by rooting doc links at `/docs/` + emitting a generated `site/docs/index.md` landing page; node-free dead-link guards added; `npm run docs:build` now exit 0, no `ignoreDeadLinks`). VERIFIED #115 (dogfood SUCCESS — 57 files, honest-by-construction dashboard matched `beadloom ci`, build green). Total 115→116, Open 15→14, Closed 77→79.
-> 2026-06-02 (BDL-039 F3 BEAD-09): Opened #112 (incremental reindex displays `Symbols: 0` — per-run delta, not backfilled like nodes/edges per #88; cosmetic, zero gate impact). Total 111→112, Open 12→13.
-> 2026-06-02 (BDL-039 F3 BEAD-06): VERIFIED #109 #110 #111 (dogfood SUCCESS — the F3 gate BLOCKS all three break-classes: boundary violation, cross-service BREAKING, drifted agent-config — each with a non-zero exit + agent-actionable output). Committed anonymized fixtures under `tests/fixtures/f3_gate/`. See Closed §BDL-039. Total 108→111, Closed 73→76.
-> 2026-06-01 (BDL-038 F2 BEAD-08): VERIFIED #107 (live GraphQL contract mismatch caught before ship — the F2 success criterion) + #108 (paradigm-agnostic FSD round-trip + external native modules + nested company-landscape). See Closed §BDL-038. Closed 71→73.
-> 2026-06-01 (BDL-038 F2 BEAD-01): Opened #105 (domain doc re-stales against all member files when one file is added) + #106 (no non-interactive `mark_synced` CLI). Open 10→12.
-> Last reviewed: BDL-037 (F1: Federation Foundation)
-> 2026-06-01 (BDL-037 F1): CLOSED #100 #101 #102 #103 (federation dogfood findings — FIXED in BEAD-09, commit d48bfeb) and #104 (federation dogfood SUCCESS — VERIFIED, BEAD-05). See Closed §BDL-037. Open 15→10, Closed 66→71.
-> 2026-05-30 (BDL-036 Phase 0): CLOSED #91 #88 #92 #93 #94 #86 #89 #90 #71 #98 (honesty gate — see Closed §BDL-036). Opened #99 (repo-wide doc refresh — sync-check has ~30 pre-existing stale doc pairs unrelated to Phase 0; the sync-check *mechanism* is now honest, the doc *content* needs a dedicated pass). Still open: #72, #73, #95, #97 (external), #99. Exact category recount folded into #99.
-> 2026-05-28: added #91–#96 from the comprehensive architecture/code review (see `.claude/development/REVIEW.md`); refined #88 root cause.
+> Collected during development and dogfooding on Beadloom itself and on an anonymised
+> downstream project. Open items are listed under **Open Issues**; recurring observations
+> that are not defects live under **Improvements**.
+>
+> **No hand-written tally.** The counts that used to sit here were maintained by hand and
+> were wrong (they claimed 46 open against 34 actual). This log becomes a shipped *kind*
+> with computed facts in BDL-061 — until then a number here would be a claim nobody checks,
+> which is the exact defect this log exists to record.
+
 
 # Beadloom UX Issues
 
-> Dogfooding feedback: issues, friction points, and improvement ideas collected while using Beadloom in the Bob project.
+> Dogfooding feedback: issues, friction points, and improvement ideas collected while using Beadloom on a downstream project.
 >
 > **How to use:** Add entries during development. Each entry should include date, context, and severity.
 
@@ -92,7 +66,6 @@
     **Design notes:** these assert things about the ARTIFACT, so they belong in `doctor` (graph integrity), not `lint` (architecture rules). Ship as WARNING first — on an unfamiliar graph the island check will produce false positives until `uses` declarations catch up, and turning an existing project red on upgrade is the failure mode this log keeps recording against us. **The audits must not reuse the attribution helper they are auditing**, or a bug hides in both; the manual cross-check during the session used `grep` for exactly that reason.
     > Tracked as bead `beadloom-uxqc` (P1).
 
-
 161. [2026-08-20] [MEDIUM] `docs audit` checks numeric facts but never checks that a documented identifier still exists
 
     **Severity:** medium (documentation can name a function the code no longer has, and every gate stays green — the failure mode this project exists to catch, in the gate's own blind spot)
@@ -101,7 +74,6 @@
     **Issue:** the audit answers "is this number still true?" but not "does this name still exist?". The second question is cheaper to answer and catches a strictly worse class of error: a stale number misleads, a phantom symbol sends the reader — or an agent — after something that is not there.
     **Expected:** extend `docs audit` with an identifier check — for each backticked `name(` in a tracked doc, verify a matching `def`/`class` (or a documented external API) exists in the indexed symbols, reporting the doc, the name and the node. Care is needed for legitimate references to framework APIs (`pop_screen` from Textual) and to prose that mentions a removed symbol deliberately, so the check likely wants the same `docs_audit.ignore` escape hatch, with a named reason.
     **Measured:** an ad-hoc version of this check over the release branch's 13 changed docs produced exactly one hit, and it was a correct reference to a framework API — so the false-positive rate on a real tree looks workable.
-
 
 160. [2026-08-19] [HIGH] 🔴 AsyncAPI ingestion is documented as a capability but wired to nothing — `extract_payload_body` is reachable from no code path
 
@@ -114,7 +86,6 @@
     **Related:** worth a machine check of its own — a **code island**: a node with no first-party dependency in either direction whose files nothing references. `doctor`'s `isolated_nodes` does not catch it, because `part_of` makes the node look connected. Measured here, `asyncapi` is the only true island (`ai_agents`/`ai-techwriter` are reached by subprocess, `vitepress-site` is not Python).
     > Tracked as bead `beadloom-g79p`. **DEFERRED by owner 2026-08-20** (P1→P2) — real but outranked; the adapter is inert, so nothing regresses while it waits. The implementation plan is recorded in `ROADMAP.md` under P1 → *"⏸ Deferred (planned, not scheduled) — wire the AsyncAPI ingestion path"* (`body_from:` declaration → loader resolution into the same body model → no silent no-op → determinism → end-to-end golden + an island guard → docs). What is NOT deferred is the honesty of the claim: if this slips much further, the federation SPEC sentence should be downgraded to "unwired building block".
 
-
 158. [2026-08-19] [MEDIUM] No signal for a bounded context that is too large by SUBTREE — `max_symbols` now measures a node's own code only
 
     **Severity:** medium (a governance signal that used to exist is now unmeasured; recorded openly rather than papered over with a threshold)
@@ -124,8 +95,1004 @@
     **Expected:** a separate cardinality key for the second question rather than overloading `max_symbols` — e.g. `max_subtree_symbols` (all symbols under the node's source, the old semantics) and/or `max_children` (how many nodes are `part_of` it). Keeping them distinct is the point: a threshold that silently answers whichever question happens to be convenient is how a metric stops meaning anything.
     > Deliberately NOT folded into the `domain-size-limit` threshold when it was recalibrated 290 → 180.
 
+152. [2026-08-18] [MEDIUM] A project cannot extend a composed role adapter — overlays resolve only INSIDE the installed package
 
-150. [2026-08-18] [HIGH] 🔴 `tree-sitter` has no upper bound → a fresh install pairs core 0.26 with 0.25 grammars and every command SEGFAULTS with zero output
+    **Severity:** medium (structural; it is the reason a downstream project's gate ends up depending on an unreleased upstream change — see #151)
+    **Command:** `beadloom setup-agentic-flow` / `config-check`
+    **Context:** Dogfood on a downstream project that treats its role adapters as the project's agent contract and refines them with project-specific engineering standards.
+    **Issue:** `role_composer.compose_role()` reads fragments from `roles_templates_root()` = `Path(__file__).parent / "templates" / "roles"` — `CORE` + one `architecture` overlay + `stack` overlays, all **inside the installed package**. `flow.yml` selects *which shipped overlays* compose; it cannot point at project-local ones. So a project that wants a standing paradigm in its `dev`/`review` roles has no supported place to put it: any local edit is reported as drift by `config-check`, and `--fix` removes it (no diff shown, no confirmation).
+    **Observed consequence:** the downstream project's paradigm was therefore contributed **upstream into Beadloom's own core templates** (the only durable option). That worked — and then made the project's CI gate depend on the change being *published*, which it was not (#151). A project-level overlay would have decoupled the two entirely.
+    **Expected / proposal:** (a) a project-local overlay directory (e.g. `.beadloom/roles/<role>.md.txt`) appended after the shipped overlays, so project additions survive recomposition **and** the composed part still gets drift-checked; or (b) marker-delimited hand-authored regions inside the generated file — the pattern already used for the auto-managed CLAUDE.md sections (`<!-- beadloom:auto-start -->`) — with `config-check` diffing only outside them. Minimum bar regardless: `--fix` should print the diff and refuse to delete non-empty hand-authored content without an explicit flag.
+
+151. [2026-08-18] [HIGH] 🔴 The published release lags `main`: role templates codified in BDL-059 are unreleased, so every fresh install reports `config-check` drift against projects scaffolded from `main`
+
+    **Severity:** high (a downstream CI gate cannot pass, and the remedy the tool steers you toward is destructive)
+    **Command:** `beadloom config-check` / `config-check --fix`
+    **Context:** Dogfood on a downstream project wiring the Beadloom gate into GitHub Actions. With the segfault of #150 fixed, `beadloom ci` finally executed and reported `config-check FAIL: 3 drifted artifact(s)` for `.claude/agents/dev.md`, `.claude/agents/review.md`, `.claude/commands/coordinator.md`.
+    **Issue:** the drifted content is the **cohesion-driven design** section in the dev/review roles and the **autonomy/permission posture** section in the coordinator — all three codified into Beadloom's OWN shipped templates by BDL-059 (`68e53ff`, `faa83bc`, present in `main`). The published PyPI **2.1.0 does not contain them**, and the version was not bumped afterwards. So the project's files match the *newer* composition while a fresh install checks them against the *older* one.
+    **Diagnostic trap worth noting** — this cost the downstream investigation a wrong first diagnosis, recorded here because the shape is general: `config-check` returned **exit 1 in a sandbox clone and exit 0 in the working repo**, with the three files byte-identical (`cmp`) and both reporting version `2.1.0`. The difference was invisible from the outside: the working repo's `beadloom` was installed **from the source checkout**, the sandbox's **from PyPI**. Two installs that self-report the same version disagreed about what the correct output is. A version string that does not distinguish "released 2.1.0" from "`main` after BDL-059, still called 2.1.0" makes environment skew undiagnosable — the same silhouette as #150, where the discriminating variable was install *date* rather than install *source*.
+    **🔴 The remedy is destructive here:** `config-check --fix` would rewrite the files back to the **older** templates — measured at **42 deletions, 0 insertions** in a sandbox clone — silently deleting a standing engineering paradigm the project relies on. The remedy string (`run `beadloom setup-agentic-flow` to recompose`) reads like a safe re-sync, so the operator is steered straight at it.
+    **Expected:** cut a release containing BDL-059 (and bump the version so source-installs and released installs are distinguishable); make `config-check` name the template-set version it compared against, so a drift report can be read as "your files are newer than my templates" rather than "your files are wrong"; and have `--fix` show the diff before deleting hand-authored content.
+    **Workaround adopted downstream:** run the gate as `beadloom ci` **minus** `config-check` (`reindex`/`lint --strict`/`sync-check`/`docs audit`/`doctor` as blocking steps), with `config-check` kept as a separate informational step whose comment names both the cause and an explicit **exit condition** — it rejoins the blocking gate as soon as a release containing BDL-059 exists.
+
+147. [2026-08-05] [HIGH] 🔴 `beadloom lint` MUTATES the index — a read-only-sounding verb writes to `beadloom.db`, and there is no read-only mode without `--no-reindex`
+
+    **Severity:** high (a verification verb has a side effect on the artifact it verifies; blocks any least-privilege/read-only integration)
+    **Command:** `beadloom lint` (vs `beadloom lint --no-reindex`)
+    **Context:** Dogfood on a downstream project wiring a STRICTLY read-only introspection seam (an agent may run a fixed allowlist of read subcommands and must not mutate repository state). `lint` was assumed read-only — it *reports* violations.
+    **Issue:** plain `lint` performs an implicit reindex and rewrites `.beadloom/beadloom.db`. Measured by sha256 of the DB file: before `2cfb…`, after `beadloom lint` `15cd…` (changed), after `beadloom lint --no-reindex --strict` unchanged. So the only read-only form is `--no-reindex`, and nothing in `lint --help` marks the default as state-mutating. A read-only integration that trusted the verb would silently mutate the index — and, worse, would mutate it under a concurrently-running gate.
+    **Compounding:** `--strict` is also required for a non-zero exit on an `error`-severity violation; plain `lint` exits 0 while printing the violation. A caller checking only the exit code reads a real boundary break as clean (same false-green family as #142/#146).
+    **Expected:** make `lint` read-only by default (reindex only on an explicit `--reindex`), or at minimum document the write in `--help` and warn when the index is written by a verb the user invoked to *check* something. Ideally `--no-reindex` becomes the default and the docs name the trade-off (possibly stale graph) explicitly.
+    **Workaround:** downstream pinned the argv form to `lint --no-reindex --strict` and added a test asserting the DB hash is unchanged across the call.
+
+148. [2026-08-05] [MEDIUM] `lint` prints machine porcelain when stdout is not a TTY — the human summary line vanishes in a pipe, so the documented output is not what a program receives
+
+    **Severity:** medium (contract differs by TTY; parsers written against the documented/human output silently see nothing to parse)
+    **Command:** `beadloom lint` / `beadloom lint --strict`
+    **Context:** Dogfood: an integration captures `lint` output to summarise it for a chat reader.
+    **Issue:** interactively `lint` ends with `N violations, M rules evaluated`; through a pipe that summary line is absent and the output switches to a porcelain form. Nothing in `--help` mentions a TTY-dependent format, and there is no `--porcelain`/`--json` flag to select the shape deliberately, so a caller cannot ask for a stable contract — it just gets a different one depending on how it was invoked.
+    **Expected:** keep one shape by default and gate the machine form behind an explicit flag (`--porcelain`/`--json`), or emit the summary line in both modes. TTY-dependent output shape should never be the only way to get the documented text.
+    **Workaround:** downstream reconstructs the verdict from the porcelain lines and appends its own summary.
+
+149. [2026-08-05] [LOW] `graph --format c4 --level component --scope <ref>` on a node with no internals prints a single useless `C4Container` instead of saying so
+
+    **Severity:** low (silently useless output rather than an error — reads as a rendered diagram)
+    **Command:** `beadloom graph --format c4 --level component --scope <ref_id>`
+    **Context:** Dogfood: an integration offers a "detailed diagram of one container" view and passes whatever node the user names.
+    **Issue:** when `<ref>` is a leaf (no nested nodes), the command exits 0 and emits a valid-but-empty C4 diagram — one `C4Container` block, no internals. Rendered, it is a single box. There is no signal distinguishing "this node has no internals" from "here are its internals", so a caller cannot tell the user the truth without pre-checking the graph itself.
+    **Expected:** exit non-zero (or print an explicit note) when `--scope` resolves to a node with no contained nodes, so the caller can fall back to a neighbourhood view and say why.
+    **Workaround:** downstream detects the degenerate output and falls back to the node's neighbourhood diagram plus an honest note to the reader.
+
+146. [2026-08-03] [HIGH] `component` nodes are absent from `sync-check` pairs entirely — their docs are NEVER checked for staleness, and the green result reads as "docs fresh" when it means "nothing was looked at"
+
+    **Severity:** high (false-green on a freshness gate; same class as #142 — the gate reports success for a check it never performed)
+    **Command:** `beadloom sync-check` / `beadloom ci`
+    **Context:** Dogfood on a downstream DDD project. A slice landed a new capability inside a `kind: component` node whose `services.yml` entry declares `docs:` and whose SPEC carries `<!-- beadloom:track= -->` markers. The dev wave reported "sync-check by node `<component>` — clean" and the coordinator accepted it. A later tech-writer wave discovered the node is not in the sync set **at all**: `sync-check --json` returns pairs for every `kind: feature` node plus the top `service`, and for **none** of the four `kind: component` nodes in the graph. "Clean" meant "zero pairs exist", not "docs match code".
+    **Issue:** Pair construction appears to be keyed on node kind (feature/service) rather than on "node declares `docs:`". A component's docs can therefore rot indefinitely with a permanently green gate — and, worse, the operator/agent is actively misled, because the same command prints an OK line for feature nodes right next to the silent gap. There is no "N nodes declare docs but contribute no pairs" warning anywhere in `sync-check`, `doctor`, or `ci`.
+    **Expected:** Build sync pairs for ANY node that declares `docs:` (kind-independent), or — if components are deliberately out of scope — say so explicitly in the output (`skipped: 4 component nodes`) and flag it in `doctor`. A freshness gate must never return green for files it did not examine.
+    **Workaround:** Verify component docs by reading the code; do not trust `sync-check` for them. Detect the gap with `sync-check --json` and compare the set of `ref_id`s against the nodes that declare `docs:` in `services.yml`.
+
+145. [2026-08-03] [MEDIUM] `ctx <ref> --json` returns the REPO-WIDE `code_symbols` array, not the focused node's — an agent sizing/inspecting a node from its own context bundle reads every other package's symbols
+
+    **Severity:** medium (agent-facing correctness; silently wrong data, not an error)
+    **Command:** `beadloom ctx <ref-id> --json`
+    **Context:** Dogfood on a downstream DDD project. An orchestrator wanted to verify a `max_symbols` rule independently ("how big is this node really?") and did the obvious thing: `beadloom ctx <node> --json` → count `code_symbols`. The node held **172** symbols; the bundle returned **1342** — every symbol in the repository, spanning all 12 top-level packages, while `focus.ref_id` correctly named the single node.
+    **Issue:** The JSON bundle's `code_symbols` is not scoped to the focused subgraph. `focus`/`graph` are node-scoped, so the payload *looks* node-scoped — the mismatch is invisible without cross-checking against the DB. Any consumer that treats the bundle as "this node's context" (an agent budgeting tokens, counting symbols, or reasoning about what the node contains) is silently wrong, and wrong in the direction of "everything looks huge and entangled". Related to #95, which describes the same query as a **performance** problem and states the result is "then filter[ed] to the subgraph in Python" — in the `--json` output that filtering is not observable, so either it does not happen on this path or it is applied to other fields only.
+    **Expected:** `code_symbols` scoped to the focused node's `source` (plus explicitly-included neighbours), or — if repo-wide is deliberate for context-priming — a distinct field name (`repo_symbols`) and a `focus_symbols` counterpart, so consumers cannot mistake one for the other.
+    **Workaround:** Query the index directly: `SELECT COUNT(*) FROM code_symbols WHERE file_path LIKE '<source>%'`.
+
+140. [2026-07-29] [LOW] `ci`/`sync-check` doc-stale output is one line PER stale symbol occurrence — a wide signature change floods the summary with hundreds of near-duplicate `::error` lines
+
+    **Severity:** low (correctness fine; scannability poor)
+    **Command:** `beadloom ci` / `beadloom sync-check`
+    **Context:** A single refactor that threads a new parameter through many collaborators (one signature change rippling into ~a dozen call-sites + one new package) produced **216 stale symbol/hash pairs**. `beadloom ci` emitted a `::error ... doc-stale ...` line for **each** occurrence — dozens of visually-identical lines for the same doc — so the human/agent scanning the CI failure can't quickly see WHICH docs need a `sync-update`, only that "many" do.
+    **Issue:** Stale output is per-(symbol,occurrence), not grouped per-doc/per-ref. There is no rolled-up summary ("N stale across M refs: <ref-list>"). Also fires on **test-only** commits (a test signature touch), which is noisy for a test wave that legitimately defers docs to a later tech-writer step.
+    **Expected:** Group the stale report by ref/doc with a count (`conversation: 41 stale`, `application: 118 stale`, …) + a one-line total, so the fix target (`sync-update <ref>`) is obvious at a glance. Optionally a `--summary` mode. Per-occurrence detail behind `--verbose`.
+    **Workaround:** `beadloom sync-check --json` and group client-side; defer to the tech-writer `sync-update` wave regardless of the noise.
+
+139. [2026-07-29] [MEDIUM] Composed role adapters are byte-identical drift-guarded with no methodology/quality overlay slot — a team cannot add standing practices (e.g. BDD, mutation testing) to `.claude/agents/*.md` without tripping `config-check`
+
+    **Severity:** medium (blocks `beadloom ci` → blocks merge on a PR-gated main; forces a standing team practice OUT of the role adapters)
+    **Command:** `beadloom config-check` / `beadloom setup-agentic-flow` / `beadloom ci`
+    **Context:** A team adopting the vendored multi-agent flow wanted extra engineering paradigms to be **standing across all development** — BDD acceptance (Gherkin) and mutation testing — by hand-editing the four composed role adapters (`dev`/`test`/`review`/`tech-writer`) so each role's protocol carries the added discipline.
+    **Issue:** The role adapters are drift-guarded **byte-identical** against `CORE + <arch> + <stack>` composition, and the overlay set is a fixed enum (architecture `ddd`/`fsd` × stack `python`/…). There is **no project-local "extra"/"append" overlay slot** for role adapters. So ANY hand-edit trips `config-check` → `beadloom ci` goes red. The only offered remedy (`config-check --fix` / `setup-agentic-flow`) **destructively recomposes to canonical**, stripping the added methodology. Net: a standing team practice cannot live in the role adapters at all — it can only sit in `CLAUDE.md` user-prose, so the role subagents' own system prompts never carry it (it reaches them only if the orchestrator injects it per-launch or the agent happens to read a project doc).
+    **Expected:** A project-local, drift-**tolerated** extension point for role adapters — e.g. a `flow.yml` `overlays.custom:` / per-role `append:` slot (analogous to `CLAUDE.md`'s preserved user-prose regions), composed INTO the adapter and INCLUDED in the drift baseline — so a team can add standing practices to `dev`/`test`/`review`/`tech-writer` protocols without tripping `config-check`.
+    **Workaround:** Keep the methodology in `CLAUDE.md` preserved user-prose (outside auto-regions — not drift-checked) + have the orchestrator inject the extra discipline into each subagent's launch prompt; revert the adapters to canonical (`git checkout <pre-edit> -- .claude/agents/*.md`) to restore a green `config-check`.
+
+138. [2026-07-02] [MEDIUM] `docs generate` silently no-ops on a coarse graph; no monolith-drift guard; `component`→`DOC.md` not generated
+
+    **Severity:** medium (product docs rot silently; no signal to the agent)
+    **Command:** `beadloom docs generate` / `beadloom reindex` / `beadloom doctor`
+    **Context:** Dogfood on the downstream project. Its graph = 4 nodes (1 service + 3 domain), all source tagged blanket `beadloom:domain=bob` (186 files, 0 feature/component). `docs/architecture.md` had grown to **4095 lines / ~110 hand-appended feature sections**, while Beadloom's own tree (65 nodes → 32 SPEC + 19 DOC) is the target. The tech-writer kept appending to the monolith because the graph never grew a node to anchor a per-feature SPEC.
+    **Issue:**
+    1. `generate_skeletons()` (`onboarding/doc_generator.py`) is purely node-driven (`kind in {domain,service,feature}`). On a coarse graph it emits nothing and exits 0 — **no warning** that doc granularity is far below code granularity. The failure mode is invisible: a project can accumulate a 4k-line `architecture.md` and the tool never flags it.
+    2. **No monolith-drift detector:** no `sync-check`/`doctor`/`lint` signal that `architecture.md` line-count ≫ per-node docs, or that a domain has N source subpackages/skills but 0 feature/component nodes, or that all `beadloom:` tags are one coarse domain.
+    3. `component` nodes are **excluded** from generation, yet the recommended tree uses `components/<c>/DOC.md`. Every component DOC must be hand-authored — no skeleton, unlike feature `SPEC.md` (parity gap).
+    **Expected:**
+    - `docs generate`/`doctor` warns when a domain's source subpackages/skill files outnumber its feature/component nodes (a granularity-coverage metric), and when `architecture.md` size vastly exceeds generated per-node docs.
+    - Optionally: during reindex, SUGGEST feature/component nodes from directory structure (`src/<domain>/<subpkg>/`, per-skill files) even without explicit `beadloom:feature=` tags.
+    - Generate a `DOC.md` skeleton for `kind: component` (parity with feature SPEC).
+    **Workaround (the downstream project-side):** re-annotate source with granular `beadloom:feature=`/`component=` tags + rebuild `services.yml` with feature/component nodes, then `docs generate` + migrate `architecture.md` sections (tracked as the downstream project-Issues #1–#4).
+
+132. [2026-06-15] [MEDIUM] `setup-agentic-flow --force` corrupts the vendored `CLAUDE.md` placeholder when run in Beadloom's own repo
+
+    **Severity:** medium
+    **Command:** `beadloom setup-agentic-flow --force`
+    **Context:** Observed during BDL-056 while recomposing the role adapters after editing the CORE tech-writer role.
+    **Issue:** Running `--force` inside the Beadloom repo re-vendors the flow snapshot FROM the live composition. The live `.claude/CLAUDE.md` §0.1 has Beadloom's concrete project facts substituted in, so the re-vendor wrote `## 0.1 Project: beadloom` into the packaged `src/beadloom/onboarding/templates/agentic_flow/CLAUDE.md.txt`, **replacing the `__BEADLOOM_PROJECT_NAME__` placeholder**. That breaks the project-name substitution for every downstream adopter (the `TestClaudeMdRegionsPerProject` tests fail). It is a self-referential footgun: Beadloom is the source of the vendored template, so `--force` overwrites the template with the substituted instance.
+    **Expected:** Re-vendoring should preserve the `__BEADLOOM_PROJECT_NAME__` placeholder (re-tokenize the project name on re-vendor), or `--force` should refuse to re-vendor the CLAUDE.md asset from a substituted live copy. Until fixed, do NOT run `setup-agentic-flow --force` in the Beadloom repo to recompose only role adapters — recompose the adapter files without re-vendoring CLAUDE.md, or revert the CLAUDE.md asset afterward.
+    **Workaround:** After `--force`, `git checkout` the vendored `agentic_flow/CLAUDE.md.txt` (and the live `.claude/CLAUDE.md`) to restore the placeholder (done in BDL-056).
+
+133. [2026-06-15] [LOW] Per-worktree `beadloom.db` baseline causes mass false re-baseline when integrating parallel worktree waves
+
+    **Severity:** low
+    **Command:** `beadloom sync-check` (after integrating worktree-isolated dev beads)
+    **Context:** BDL-057 coordinator integration. Two dev beads ran in isolated git worktrees (`isolation: worktree`); each has its OWN `.beadloom/beadloom.db` (a working-tree path). After file-checkout-integrating their code into the main branch, the main repo's `beadloom.db` still held pre-change baselines, so `sync-check` reported ~38 stale pairs (incl. modules the integration didn't touch) until a `sync-update --yes --all` + reindex fixpoint re-baselined.
+    **Issue:** The doc-freshness baseline (`sync_state`) lives in the per-worktree DB, so it does not travel with the file-checkout integration. The integrator must re-run the mark-synced→reindex fixpoint to reconcile — extra friction, and a risk of masking genuine drift if done blindly. Relates to #118 (parallel-dev tree friction).
+    **Expected:** Either document the "re-baseline after worktree integration" step in the coordinator merge flow, or make the baseline reconcilable from the integrated code state without a blanket `--all` (e.g. recompute only the pairs whose code actually changed in the integration diff).
+    **Workaround:** After integrating worktree branches, run `beadloom sync-update --yes --all && beadloom reindex` to a stable `sync-check` 0 (the F4.1 fixpoint loop), then verify no genuine prose drift via the dev beads' API-CHANGE notes.
+
+134. [2026-06-16] [LOW] `sync-update --yes --all` never reaches fixpoint for `reference` (`watches=`) docs — surface_drift re-flagged every run
+
+    **Severity:** low (warn-only — does NOT block the Gate or `sync-check` exit code)
+    **Command:** `beadloom sync-update --yes --all` (repeated)
+    **Context:** BDL-059 S4 integration. After decomposing graph/cli into packages, the 7 `reference` docs (`watches=cli,graph,flow.yml` — README/CHANGELOG/architecture/cli.md/sync-check SPEC) showed `surface_drift`. Each `sync-update --yes --all` printed `Re-baselined 7 reference doc(s)`, but the very next call re-baselined the SAME 7 — never converging to 0, unlike the symbol-pair `sync_state` which fixpoints in one pass.
+    **Issue:** The `reference_state` surface signature does not "stick" after `sync-update` (re-computed signature differs from the just-stored one, or `--all` doesn't persist the reference-doc re-attestation the way it persists symbol pairs). Because `surface_drift` is warn-only, `beadloom ci` and `sync-check` still exit 0 — so it is cosmetic, but it breaks the fixpoint invariant the F4.1 loop relies on and is noisy on every integration.
+    **Expected:** `sync-update --all` should re-attest `reference` docs so a subsequent `sync-check`/`sync-update` reports them fresh (0 re-baselined on the second pass), matching symbol-pair behavior.
+    **Workaround:** None needed for the Gate (warn-only, exit 0). Ignore the repeated count; confirm `beadloom ci` rc0 + the `TestSyncCheckNewPairs` test green as the real signal.
+
+135. [2026-06-18] [HIGH] `beadloom init` crashes with `UnicodeDecodeError` on a repo containing binary assets / a stray virtualenv
+
+    **Severity:** high (hard crash — "broken out of the box" on any repo with binary assets or a stray venv)
+    **Command:** `beadloom init -y`
+    **Context:** Dogfood on an adopter repo that contains a large binary-asset directory (image/model files — PNG, `.safetensors`, ~2 GB) with a stray virtualenv left inside it (`<assets>/tools/.venv*`).
+    **Issue:** Auto-detect added the binary-asset directory to `scan_paths` (alongside `src`) because it found a few `.py` files under it (including inside the stray venv). The reindex code-indexer then called `file_path.read_text(encoding="utf-8")` on a non-UTF-8/binary file and raised `UnicodeDecodeError: 'utf-8' codec can't decode byte 0xa4 in position 64` → full traceback, and `init` aborted half-done (`.beadloom/` was created, but the reindex step crashed). Call chain: `application/reindex/full.py:149` → `application/reindex/indexing.py:122` `_index_code_files` → `context_oracle/code_indexer.py:373` `extract_symbols` (`read_text(encoding="utf-8")` with no guard).
+    **Expected:** (a) the indexer must **skip non-UTF-8/binary files gracefully** (try/except → warn + skip; never abort the whole `init` over one file); (b) auto-detect should exclude virtualenvs (`.venv*`, `site-packages`) and binary-asset directories from `scan_paths`; (c) support `exclude_paths` (overlaps the existing `exclude_paths` improvement request). A single binary file must never abort `init`.
+    **Workaround:** manually narrow `.beadloom/config.yml` `scan_paths` to source-only, delete the stray venv(s), then `beadloom reindex`.
+
+136. [2026-06-18] [MEDIUM] Scaffolded flow is English-only and not overlay-aware: no `language` config; templates hardcode "Python 3.10+" and "CLI → Core → Storage"
+
+    **Severity:** medium
+    **Command:** `beadloom setup-agentic-flow` / `/templates` / `/task-init`
+    **Context:** Adopting the flow on a non-CLI async-service project with DDD architecture whose documentation is maintained in a non-English language.
+    **Issue:** The vendored `templates.md` + `task-init.md` hardcode: (a) **English** doc language ("ALL documents MUST be written in English") — `flow.yml` has `tools`/`architecture`/`stack`/`quality` but **no `language`** field; (b) **"Python 3.10+"** in the CONTEXT/RFC templates regardless of the project's actual Python version; (c) **"Modular architecture | CLI → Core → Storage"** in the CONTEXT template — that is Beadloom's OWN architecture, not derived from the project's `architecture: ddd|fsd` overlay. Because these files are drift-guarded byte-identical to upstream, an adopter cannot edit them without turning `beadloom ci` red, so they must override the defaults in CLAUDE.md prose. Same root cause as #77 (CLAUDE.md not adapted to the target stack), but for the vendored commands/templates after the BDL-052 configurator split.
+    **Expected:** (a) add a `language` field to `flow.yml` (a peer of `architecture`/`stack`), threaded into the composed/vendored docs so docs scaffold in the project's language; (b) make the templates' architecture/stack facts overlay-derived (DDD/FSD layer names; the project's Python from `pyproject.toml`) instead of the hardcoded "CLI → Core → Storage" / "3.10+"; or at minimum (c) make the templates composable (CORE + overlays) like the role agents, so they adapt per-project without breaking the drift-guard.
+    **Workaround:** override the defaults at project level in CLAUDE.md (a project-level rule beats the vendored default).
+
+137. [2026-06-18] [LOW] Cross-major flow re-init leaves orphaned command files and skips changed vendored commands as "hand-edited"
+
+    **Severity:** low
+    **Command:** `beadloom setup-agentic-flow` (on a repo scaffolded by an older major flow version)
+    **Context:** Re-initializing the agentic flow on a repo whose `.claude/` was scaffolded by an older layout (roles were slash commands in `commands/`); the current layout puts roles in `agents/`.
+    **Issue:** `setup-agentic-flow` wrote the new `agents/*` and re-vendored `templates.md`, but (a) **left the old role files orphaned** in `.claude/commands/` (`dev.md`/`test.md`/`review.md`/`tech-writer.md` + the deprecated `epic-init.md`) — it does not remove files from a previous layout; and (b) **skipped** `coordinator`/`task-init`/`checkpoint` as "hand-edited; use --force" because their old-version content differed from the new canonical (a safety refusal). The adopter had to manually delete the orphans and delete+regenerate the changed commands — and `--force` also overwrites the base CLAUDE.md, so a surgical migration needs manual glue. Broader than the documented "orphaned adapters" limitation (which is about a dropped *tool*); this is a changed *role layout* across a major version.
+    **Expected:** a migration path — e.g. `setup-agentic-flow --migrate` that removes superseded command files from a prior layout and re-vendors changed commands without clobbering the CLAUDE.md body; or at least a printed warning listing the orphaned/skipped files with the exact cleanup commands.
+    **Workaround:** manually `rm` the orphaned `commands/*` role files + `epic-init.md`, delete the 3 skipped command files, then re-run `setup-agentic-flow` (so they are written fresh) — avoiding `--force` to preserve a customized CLAUDE.md.
+
+122. ~~[2026-06-04] [HIGH] No data-access layer + `open_db` without context-managers (connection leaks)~~ **CLOSED (BDL-059 S2, #22)** — `infrastructure/repository.py` (typed graph-index reads; centralizes the 16× `SELECT ref_id, kind, summary FROM nodes`) + `infrastructure/db.py::connection()` context-manager; `tui/` now reads through the `application/graph_reads.py` facade (no raw SQLite in presentation). Leaks/ResourceWarnings addressed via the CM + S1 conftest yield/finally fixtures.
+
+    **Severity:** high
+    **Source:** REVIEW-2 §2 #1/#2 (verified at HEAD) · ROADMAP Technical-debt
+    **Issue:** Raw `conn.execute("SELECT…")` is spread across **36 files** in all domains incl. `tui/data_providers.py` (presentation reads SQLite directly — a layer leak); the exact `SELECT ref_id, kind, summary FROM nodes` is hardcoded **16×**. `open_db` is called with **no `with`/`contextlib.closing` anywhere** → connection leaks on exceptions (SQLite write-lock risk) + ResourceWarnings in tests.
+    **Expected:** Introduce `infrastructure/repository.py` (one place for queries); `tui` goes through the application layer only; wrap connections in a context-manager. Fixes both HIGHs at once. _(Note: the review's "53 open_db" figure is off — 27 in src / 232 total; the leak pattern is real.)_
+
+123. ~~[2026-06-04] [HIGH] N+1 + non-indexable LIKE in `doc_sync/engine.py` `check_source_coverage`~~ **CLOSED (BDL-059 S2, #22)** — `check_source_coverage` de-N+1'd: ~5N per-node/child queries + `LIKE '%…%'` replaced by 5 set-based prefetch queries + an indexable `json_each` match; golden parity (frozen oracle + AST guard).
+
+    **Severity:** high
+    **Source:** REVIEW-2 §2 #3 (verified, `engine.py:451-525`) · ROADMAP Technical-debt
+    **Issue:** Nested per-node and per-child queries plus `LIKE '%…%'` (cannot use an index) → quadratic on a large graph.
+    **Expected:** Prefetch with a single JOIN / `IN (...)`; consider a normalized annotations table.
+
+124. ~~[2026-06-04] [MEDIUM] Cycle detection re-explores from every node (no global visited)~~ **CLOSED (BDL-059 S3, #23)** — cycle detection rewritten WHITE/GREY/BLACK with path-as-set O(1) membership (`graph/rules/cycles.py`); golden-parity test reproduces the pre-refactor output byte-identically.
+
+    **Severity:** medium
+    **Source:** REVIEW-2 §2 #4 (verified, `rule_engine.py:1141-1209`) · ROADMAP Technical-debt
+    **Issue:** `evaluate_cycle_rules` runs DFS from each node with no global `visited`; `neighbor in path` is O(n) list membership; bounded only by `max_depth=10`. Exponential risk on a dense microservice graph. (A per-rule `seen_cycles` dedup exists, but no global visited.)
+    **Expected:** Tarjan/Johnson SCC, or DFS with WHITE/GREY/BLACK + a shared visited set; `path` as a set.
+
+125. ~~[2026-06-04] [MEDIUM] God-domain `graph/` should split out `federation` + `rules`~~ **CLOSED (BDL-059 S3, #23)** — `rule_engine.py` (2249)→`graph/rules/` package + `federation.py` (1000)→`graph/federation/` package, by cohesion (public import paths byte-stable). The `domain-size-limit` graph warning (was #119) was resolved by the owner-decided recalibration 200→280 (documented in `rules.yml`) — recalibration, NOT gaming (an in-domain split can't lower a domain's symbol count).
+
+    **Severity:** medium
+    **Source:** REVIEW-2 §2 #5 (verified) · extends #119 · ROADMAP Technical-debt
+    **Issue:** `graph/` is 6439 lines (rule_engine 1743 + federation 1000 + import_resolver 929) and mixes several concerns; `application/` is 233 symbols. Both trip the `domain-size-limit` warning (graph 202, application 233 vs 200).
+    **Expected:** Extract `federation` and `rules` into their own packages (clears the graph-202 warning of #119); reduce `application/`.
+
+126. ~~[2026-06-04] [MEDIUM] God-functions carry business logic in the wrong layer~~ **CLOSED (BDL-059 S4, #24)** — `cli.py:status` data-gathering moved to `application/status.py` (presentation/logic split); `cli.py` (3985)→`services/commands/` package; `scanner.py` (2770)→`onboarding/scanner/` package; `reindex.py` (1352)→`application/reindex/` package — the god-functions decomposed by responsibility.
+
+    **Severity:** medium
+    **Source:** REVIEW-2 §2 #6 (verified) · ROADMAP Technical-debt
+    **Issue:** `cli.py:status` ~283 lines (business logic in the CLI layer); `scanner.bootstrap_project` ~260; `reindex.incremental_reindex` ~216; `scanner.interactive_init` ~203.
+    **Expected:** Extract `cli.py:status` → `application/status.py`; decompose the scanner/reindex god-functions.
+
+127. ~~[2026-06-04] [LOW] `Any` concentration + exception swallowing in onboarding~~ **CLOSED (BDL-047)** — the `doc_generator.py` `except sqlite3.OperationalError: pass` swallows are gone (the handlers now bind `as exc` and surface/raise the error instead of silently passing). **Remaining (out of this epic's scope):** `infrastructure/git_activity.py:251` still has an `except ValueError: pass` on date parsing, and the broader `Any` concentration in onboarding is the larger type-safety item — both now **CLOSED (BDL-059 S5, #25)** — `git_activity.py` broad except narrowed to specific types (subprocess/`OSError`/`TimeoutExpired`); onboarding scanner dicts → `TypedDict` (new `onboarding/scanner/types.py`), a net `Any` reduction, mypy --strict clean.
+
+    **Severity:** low
+    **Source:** REVIEW-2 §2 #7/#8 (verified) · ROADMAP Technical-debt
+    **Issue:** 172 `Any` total, concentrated in onboarding (`doc_generator.py` 49, `scanner.py` 25, `config_reader.py` 19) — disables type-safety in the most error-prone layer. 7 spots of `except…: pass` (incl. `doc_generator.py:274,311` `except sqlite3.OperationalError: pass`) hide real DB errors.
+    **Expected:** TypedDict/dataclass for parsed structures; narrow the exceptions and/or log at debug.
+
+128. ~~[2026-06-04] [MEDIUM] L2 context cache not wired into `build_context`~~ **CLOSED (BDL-059 S5, #25)** — `build_context` now routes through the `SqliteCache` (transparent ETag cache; identical bundle on hit vs miss, proven by golden + HIT-never-recomputes tests).
+
+    **Severity:** medium
+    **Source:** REVIEW §4.4 (verified `builder.py`) · ROADMAP Technical-debt
+    **Issue:** `build_context` issues `SELECT * FROM code_symbols` per bundle and never calls the existing L2 `bundle_cache` (`cache.py`) → latency risk on 50K-symbol monorepos.
+    **Expected:** Wire `build_context` through the L2 cache; avoid the per-bundle full symbol scan.
+
+129. ~~[2026-06-04] [MEDIUM] Test-suite hygiene gaps~~ **CLOSED (BDL-059 S1, #21)** — `pytest-randomly` added (immediately exposed + fixed a latent live-DB order-dependence via a session-scoped `live_repo_reindexed` conftest fixture); conftest yield/finally db fixtures (ResourceWarnings); a grammar-guard test that FAILS-not-skips when tree-sitter grammars are absent (gated `BEADLOOM_REQUIRE_LANGUAGE_GRAMMARS=1` in CI); tests decoupled from production internals (the private-attribute coupling reduced ahead of the S2–S5 refactors).
+
+    **Severity:** medium
+    **Source:** REVIEW-2 §3 + REVIEW §4.3 (verified) · ROADMAP Technical-debt
+    **Issue:** (a) ResourceWarnings from unclosed SQLite connections — suite goes red under `filterwarnings=error::ResourceWarning`; (b) tree-sitter grammars are silently skipped if absent → TS/Go/Rust can pass CI untested; (c) almost no parametrization (10 across 3211 tests); (d) **372** private-attribute (`._x`) couplings block refactors; (e) TUI smoke tests without asserts; (f) no `pytest-randomly` (order-dependence undetected).
+    **Expected:** conftest yield+finally db fixtures; make grammars mandatory in CI (or a guard test); parametrize hotspots (rule_engine, language suites); de-couple from private attrs before large refactors; add asserts to TUI tests; add `pytest-randomly`.
+
+130. ~~[2026-06-04] [HIGH] Docs list rule types as dataclass names, not real YAML keys (internal contradiction)~~ **CLOSED (BDL-057)** — the SPEC-fill rewrote `architecture.md` to a correct YAML-key table (`deny, require, forbid, layers, forbid_cycles, forbid_import, check`), matching the dispatch (`rule_engine.py`); `getting-started.md` no longer lists rule types; `README.md` was already correct. No `forbid_edge`/`cycle_detection`/`import_boundary`/`cardinality` strings remain in `docs/`.
+
+    **Severity:** high
+    **Source:** REVIEW-2 §4 #1 (verified) · ROADMAP Technical-debt
+    **Issue:** `getting-started.md:127` and `architecture.md` (×4: L83,113-119,153,253) list rule types as `require, deny, forbid_edge, layer, cycle_detection, import_boundary, cardinality` — these are **dataclass names**, not YAML keys. Real keys (dispatch `rule_engine.py:662-724`): `deny, require, forbid, forbid_cycles, forbid_import, layers, check`. `README.md:186` has the CORRECT list — an internal contradiction. A user who copies `forbid_edge:` gets a rule that silently never fires.
+    **Expected:** Single source of truth for rule-type keys; fix getting-started.md + architecture.md to match the dispatch (and README).
+
+131. ~~[2026-06-04] [LOW] Doc accuracy nits: non-existent flag, miscount, placeholders~~ **CLOSED (v2.1.0 release)** — all three fixed: `getting-started.md` drops the non-existent `--non-interactive` flag (now `--yes`/`-y` only); `architecture.md` DDD domain count corrected (six domains + application + two interface layers); `CONTRIBUTING.md` `your-org`→`zoologov` placeholder fixed + a Release Process section added.
+
+    **Severity:** low
+    **Source:** REVIEW-2 §4 #2/#3/#4 (verified) · ROADMAP Technical-debt
+    **Issue:** `getting-started.md:29` documents a non-existent flag `--non-interactive` (only `-y/--yes` exists); `architecture.md:9` says "six DDD domains" but lists five; `CONTRIBUTING.md` has `your-org` placeholders and no release-process section (PyPI/versioning/tag).
+    **Expected:** Drop `--non-interactive`; fix the domain count; replace placeholders with `zoologov/beadloom` + add a release section.
+
+114. [2026-06-02] [LOW] Committed VitePress scaffold ships no `package-lock.json` — `npm ci` cannot run on a fresh checkout
+
+    **Severity:** low
+    **Command:** `cd site && npm ci`
+    **Context:** BDL-040 F4 BEAD-05 dogfood. The BEAD-01 scaffold committed `site/package.json` (pinned deps) but no `site/package-lock.json`. The bead instructions (and the scaffold's own header comment) say to run `npm ci && npm run docs:build`, but `npm ci` hard-requires a lockfile and errors out without one — so the very first build must use `npm install` (which then generates the lockfile).
+    **Issue:** Mismatch between the documented build command (`npm ci`) and what a fresh checkout actually supports (`npm install` only, until a lockfile is committed).
+    **Expected:** Either commit a `package-lock.json` alongside `package.json` (so `npm ci` works + the build is reproducible/pinned), or change the documented first-run command to `npm install`. Committing the lockfile is preferable — it pins the transitive dep tree for a deterministic dogfood/CI build.
+    **Workaround:** Use `npm install` for the first build; commit the resulting `package-lock.json` so subsequent `npm ci` works.
+    **Resolution (BEAD-05 follow-up):** `site/package-lock.json` is now committed (generated by `npm install`), so `npm ci` works on a fresh checkout and the dogfood build is reproducible/pinned. `site/node_modules` + `site/.vitepress/dist` stay gitignored.
+
+112. ~~[2026-06-02] [INFO/LOW] Incremental reindex displays `Symbols: 0` — per-run delta, not backfilled to the live total~~ **CLOSED (BDL-047)** — the incremental path now backfills `symbols_indexed` to the true live-DB symbol total (`SELECT count(*) FROM code_symbols`), mirroring the #88 nodes/edges fix, so a docs-only reindex no longer prints "Symbols: 0" on an intact index (`application/reindex.py:1330-1334`, comment cites #112).
+
+    **Severity:** info / low (cosmetic display only — zero gate impact)
+    **Command:** `beadloom reindex` (incremental path)
+    **Context:** Observed during BDL-039 F3 tech-writer doc edits. After #88 was fixed, the incremental reindex now backfills `nodes`/`edges` to the true live-DB totals on the docs/code-only path. The `symbols_indexed` counter, however, still reports only the **per-run delta** (symbols touched this run), so a CLI run that changes only docs can print "Symbols: 0" while the DB actually holds all indexed symbols.
+    **Issue:** Inconsistent reporting semantics between counters: `nodes`/`edges` show the live total (per #88), but `symbols_indexed` shows the run delta. A reader can misread "Symbols: 0" as "no symbols indexed."
+    **Expected:** Either backfill `symbols_indexed` to the live DB symbol total on the incremental path (consistent with nodes/edges per #88), or label it explicitly as a delta ("Symbols indexed this run: 0").
+    **Impact:** None on correctness or any gate — `sync-check` / `lint` / `doctor` / `beadloom ci` all read the DB, not this counter. Purely a cosmetic CLI-display artifact.
+
+105. [2026-06-01] [MEDIUM] Adding a new source file to a domain re-stales the domain doc against ALL its member files
+
+    **Severity:** medium
+    **Command:** `beadloom reindex && beadloom sync-check`
+    **Context:** BDL-038 BEAD-01 added one new module (`src/beadloom/graph/contracts.py`) to the `graph` domain and edited one sibling (`federation.py`). Before the change `sync-check` was honest 0; after, it reported **8 stale pairs** for `domains/graph/README.md` — including files I never touched (`diff.py`, `snapshot.py`, `linter.py`, `rule_engine.py`, `import_resolver.py`, `cli.py`), all with reason `symbols_changed`. Verified by stashing the change: at HEAD the same pairs are clean.
+    **Issue:** The domain doc's symbol-drift baseline appears to be keyed on the domain's **aggregate** symbol set, so adding any symbol anywhere in the domain invalidates the `symbols_hash` for **every** doc↔file pair in that node — not just the pair whose code actually changed. One new file → N false `symbols_changed` pairs.
+    **Expected:** `symbols_changed` should fire only for the pair(s) whose own code symbols changed. A genuinely-new module should surface as a single `untracked_files` signal on the doc, not re-stale every unrelated sibling pair. (Compare #89: per-file granularity was the fix there too.)
+    **Workaround:** Document the new module in the domain README, then `mark_synced_by_ref(conn, '<domain>', root)` to re-baseline all pairs, then re-run to fixpoint (see #106).
+
+106. ~~[2026-06-01] [LOW] No non-interactive CLI to attest sync baseline (`mark_synced`) — only the interactive `sync-update`~~ **CLOSED (BDL-047 W1)** — `beadloom sync-update [REF] --yes` (and `--all` with `--yes`) now re-baselines freshness non-interactively (recomputes hashes + `symbols_hash`, sets `status='ok'`, no editor/prompt), wrapping `mark_synced_by_ref`. This is the primitive the F4.1 AI-tech-writer fixpoint loop uses; agents no longer reach past the CLI into the engine.
+
+    **Severity:** low
+    **Command:** `beadloom sync-update <ref>` (interactive: `click.confirm` + `click.edit`)
+    **Context:** After a doc refresh, re-baselining the sync state requires `mark_synced` / `mark_synced_by_ref` (`doc_sync.engine`). The only CLI surface is `sync-update`, which opens an editor and prompts — unusable in an agent/CI flow. BEAD-01 had to call the engine directly via `uv run python -c "...mark_synced_by_ref..."`.
+    **Issue:** There is no `beadloom sync-update <ref> --mark-synced` (or `beadloom sync-mark <ref>`) for non-interactive attestation. Agents must reach past the CLI into the engine.
+    **Expected:** A non-interactive attest flag/command, e.g. `beadloom sync-update <ref> --mark-synced` or `beadloom sync-mark [--ref R | --all]`, that recomputes hashes + `symbols_hash` and sets `status='ok'` without an editor. Pairs with the F4.1 AI-tech-writer loop (STRATEGY-3) which must attest non-interactively. Re-running `reindex && sync-check` after attest to a stable 0 is mandatory (F4.1 loop invariant — clearing `symbols_changed` surfaces masked `untracked_files`, as it did for `contracts.py` here).
+
+71. [2026-03-10] [MEDIUM] `beadloom init --bootstrap` generates rules that immediately produce lint violations
+
+    **Severity:** medium
+    **Command:** `beadloom init --bootstrap -y` → `beadloom lint --strict`
+    **Context:** Bootstrapping Beadloom on a production FastAPI monolith project provided for field-testing. The project has a clean architecture with domain packages containing `graphql/` sub-packages.
+    **Issue:** The auto-generated `rules.yml` includes a `feature-needs-domain` rule that requires every feature to be `part_of` a domain. However, the bootstrap classifier creates features inside services too (e.g., `core-rest` feature → `part_of` core service; `tasks-graphql` feature → `part_of` tasks service). Running `beadloom lint --strict` immediately after init exits with 2 violations — a "broken out of the box" experience.
+    **Expected:** Either (a) the default rule should accept features inside both domains and services (`has_edge_to: {}`), or (b) the bootstrap classifier should only classify nodes as `feature` when they are inside a `domain`-kind parent (not `service`-kind). Zero violations should be the norm after a clean bootstrap.
+    **Workaround:** Manually edit `.beadloom/_graph/rules.yml`: change `has_edge_to: { kind: domain }` to `has_edge_to: {}` and rename the rule to `feature-needs-parent`.
+
+72. [2026-03-10] [LOW] `beadloom setup-rules` doesn't detect IDE when marker directory is gitignored
+
+    **Severity:** low
+    **Command:** `beadloom setup-rules`
+    **Context:** The project has `.cursor/` listed in `.gitignore`, so the directory doesn't exist on a fresh clone, but does exist in the working tree.
+    **Issue:** `setup-rules` outputs `No IDE markers detected` and creates no files. The `.cursor/` directory was present in the filesystem but gitignored. Auto-detection apparently checks for marker files but the detection logic may miss directories that exist but are in `.gitignore`.
+    **Expected:** If marker directories exist on disk (regardless of gitignore), they should be detected. Alternatively, if no markers are found, print a helpful hint: `"No IDE markers detected. Use --tool cursor|windsurf|cline to specify."` so the user doesn't have to run `--help` to discover the flag.
+    **Workaround:** Explicitly pass `--tool cursor`.
+
+73. [2026-03-10] [LOW] `beadloom doctor` reports "Version drift" and "Package drift" by checking `.claude/CLAUDE.md`
+
+    **Severity:** low
+    **Command:** `beadloom doctor`
+    **Context:** After bootstrapping on an external project, the existing `.claude/CLAUDE.md` contained content from a previous project (Beadloom itself) with `Version: 1.9.0` and DDD package references (`context_oracle/`, `doc_sync/`, etc.).
+    **Issue:** `doctor` checks `.claude/CLAUDE.md` for version and package claims, finding `CLAUDE.md claims 1.9.0, actual is 1.7.0` and `Package drift: claimed but missing: context_oracle, doc_sync, graph, infrastructure, onboarding, services, tui`. These are false positives — CLAUDE.md is a user-maintained file that may describe the project in custom terms, not necessarily matching Beadloom's internal structure.
+    **Expected:** `doctor` should validate `.beadloom/AGENTS.md` (which Beadloom generates and controls) rather than `.claude/CLAUDE.md` (which is user-authored and project-specific). If CLAUDE.md is checked at all, it should be limited to `<!-- beadloom:auto-start -->` / `<!-- beadloom:auto-end -->` sections.
+    **Workaround:** Ignore the warnings; they're false positives caused by stale CLAUDE.md content from another project.
+
+88. [2026-03-11] [HIGH] Incremental `beadloom reindex` returns 0 nodes after doc enrichment
+
+    **Severity:** high
+    **Command:** `beadloom reindex`
+    **Context:** After enriching 18 documentation files (replacing skeleton content with detailed descriptions), an incremental `beadloom reindex` was run to update the index.
+    **Issue:** Incremental reindex returned `Nodes: 0, Edges: 0, Symbols: 0, Imports: 0` — completely empty index. The `services.yml` was verified to be intact (18 nodes, 34 edges, correct YAML block format). Running `beadloom reindex --full` immediately after returned `Nodes: 18, Edges: 34, Symbols: 272` — completely normal.
+    **Root cause hypothesis:** Incremental reindex likely detects that many files changed (18 doc files + potentially cached state) and incorrectly drops the entire index instead of updating it. The SQLite cache may have become inconsistent after bulk doc writes by parallel agents.
+    **Expected:** Incremental reindex should never return 0 nodes when `services.yml` is valid. If the incremental path detects inconsistency, it should auto-fallback to `--full` reindex rather than returning an empty result. At minimum, print a warning: `"Incremental reindex returned 0 nodes — possible cache inconsistency. Retry with --full."`.
+    **Workaround:** Always use `beadloom reindex --full` after bulk changes. Do not rely on incremental reindex after modifying many files simultaneously.
+    **Root cause (confirmed 2026-05-28 code review):** NOT cache inconsistency. `incremental_reindex` (`infrastructure/reindex.py:1088-1296`) never assigns `result.nodes_loaded`/`edges_loaded` on the docs/code-only path — they keep their `ReindexResult` default of `0`, and the CLI prints them verbatim (`services/cli.py:288-289`). The index is intact; this is a **display bug**, not data loss. Trivial fix: query live DB totals (as the `nothing_changed` branch already does at `cli.py:274-279`). Note this is a recurrence — the same symptom (#21) was "fixed" in v1.5.0.
+
+86. [2026-03-10] [HIGH] YAML flow-style edges silently produce 0 nodes on reindex
+
+    **Severity:** high
+    **Command:** `beadloom reindex`
+    **Context:** During manual graph editing of `services.yml`, edges were written in YAML inline/flow format: `- { src: houses, dst: core-external-inspection-system, kind: depends_on }`. This is perfectly valid YAML per the spec. Nodes were written in block format.
+    **Issue:** After saving `services.yml` with flow-style edges, `beadloom reindex` returned `Nodes: 0, Edges: 0` — a complete silent failure. No error, no warning. The YAML parser appears to not handle inline mapping syntax for edge entries. Rewriting all edges in block format (`- src: X\n  dst: Y\n  kind: Z`) fixed the issue immediately (18 nodes returned).
+    **Expected:** Either (a) the YAML parser should correctly handle flow-style mappings (they are valid YAML), or (b) if the parser has limitations, it should detect the issue and emit a clear error: `"Error: edges at line N use unsupported inline format. Use block format instead."` Silent 0-node results are the worst possible failure mode — the user thinks the graph is empty.
+    **Workaround:** Always use YAML block format for edges. Never use `- { key: value }` inline format in `services.yml`.
+
+91. [2026-05-28] [CRITICAL] Beadloom violates its own architecture rules; `lint --strict` is configured to pass anyway
+
+    **Severity:** critical
+    **Command:** `beadloom lint --strict` (exits 0) vs. actual graph state
+    **Context:** Self-audit during the comprehensive architecture/code review (2026-05-28). The product's core value proposition is enforcing architecture boundaries and catching dependency cycles.
+    **Issue:** `beadloom lint --strict` exits **0** on Beadloom itself despite **12 real violations** (verified live). Two compounding problems:
+    - (1) **The coupling is real.** `infrastructure` is a god-package: `infrastructure/reindex.py` (~1296 LOC) orchestrates every domain and imports them at module level (`infrastructure/reindex.py:14-16` → `context_oracle`, `doc_sync`, `graph`). Meanwhile `graph/linter.py:98` and `graph/import_resolver.py:820,882` import back into `infrastructure.reindex`, creating cycles. The cycle is openly acknowledged in a code comment (`graph/linter.py:95-96`: *"Lazy import to avoid circular dependency…"*) and worked around with function-local lazy imports instead of being fixed. Per the layer rule, `infrastructure` sits BELOW domains yet imports all of them.
+    - (2) **The alarm is silenced.** In `.beadloom/_graph/rules.yml`, `no-dependency-cycles` (line 39) and `architecture-layers` (line 45) are set `severity: warn`. `--strict` only fails on `error`-severity, so a graph full of cycles passes green.
+    **Expected:** A tool that sells architecture enforcement must pass its own enforcement. (a) Break the `infrastructure` god-package — extract reindex orchestration into a `services`-layer module, or invert the dependency so `infrastructure` stops importing domains; (b) restore `no-dependency-cycles`/`architecture-layers` to `severity: error`. Until then this is a credibility hole reproducible by any skeptic in two commands.
+    **Workaround:** None — structural issue, not a usage issue.
+
+92. [2026-05-28] [HIGH] `doctor` reports false "Version drift" on Beadloom itself (reads stale `importlib.metadata`, not `__version__`)
+
+    **Severity:** high
+    **Command:** `beadloom doctor`
+    **Context:** Self-audit (2026-05-28). Distinct from #73 (which is about doctor reading the user-authored `.claude/CLAUDE.md` on an *external* project). This is about doctor's notion of the "actual" version being wrong even on Beadloom's own repo.
+    **Issue:** `doctor` reports *"Version drift: CLAUDE.md claims 1.9.0, actual is 1.7.0"* while `src/beadloom/__init__.py:3` is `__version__ = "1.9.0"` and `status` shows 1.9.0. Root cause: `_get_actual_version()` (`infrastructure/doctor.py:274-281`) returns `importlib.metadata.version("beadloom")` first — stale editable-install metadata — and only falls back to source `__version__` on `PackageNotFoundError`. A diagnostic that confidently emits a wrong diagnosis erodes trust in all of doctor's output.
+    **Expected:** Treat the in-tree `__version__` as the source of truth for "actual version" (or compare directly against it). Installed-package metadata must not override the source version.
+    **Workaround:** Reinstall the package to refresh metadata; ignore the warning.
+
+93. [2026-05-28] [LOW] `AGENTS.md` MCP tool list is stale (documents 13 tools, actual is 14)
+
+    **Severity:** low
+    **Command:** `beadloom doctor`
+    **Context:** Self-audit (2026-05-28). doctor reports *"MCP tool drift: AGENTS.md documents 13 tools, actual is 14"*.
+    **Issue:** The generated `AGENTS.md` lists 13 MCP tools but 14 are registered. Unlike the won't-fix README case (#20), `AGENTS.md` IS agent-facing and HAS a `generate_agents_md()` regeneration path — so this is a real regeneration/sync gap that should never drift.
+    **Expected:** `generate_agents_md()` should enumerate MCP tools from the live registry so the count can't drift; `setup-rules --refresh` (or a doctor `--fix`) should bring it back in sync.
+    **Workaround:** Regenerate `AGENTS.md`.
+
+94. [2026-05-28] [MEDIUM] Over-broad `except Exception` for "table missing" can swallow real errors silently
+
+    **Severity:** medium
+    **Command:** internal (reindex / metadata reads)
+    **Context:** Self-audit (2026-05-28). Same silent-failure class as #86 / #88.
+    **Issue:** `infrastructure/reindex.py:125`, `:863`, `:926` use bare `except Exception` to mean "table doesn't exist on first run" and then return `{}` / skip. As written they also swallow genuine `sqlite3` corruption, IO errors, and programming errors — silently returning empty and masking real failures behind a "first run" assumption.
+    **Expected:** Catch the specific `sqlite3.OperationalError` (and verify it's a missing-table case, e.g. via `PRAGMA table_info`) so only the intended condition is handled; let all other exceptions propagate.
+    **Workaround:** None.
+
+95. [2026-05-28] [MEDIUM] Per-bundle full table scan of `code_symbols` won't scale; L2 `bundle_cache` is not on the build path
+
+    **Severity:** medium
+    **Command:** `beadloom prime` / `beadloom ctx <id>`
+    **Context:** Self-audit (2026-05-28). Invisible on this repo (506 symbols); a latent scale problem for the large monorepos a "context oracle" targets.
+    **Issue:** `build_context` (`context_oracle/builder.py:377`) calls `_collect_code_symbols` (`:256`), which runs `SELECT * FROM code_symbols` (`:267`) and `json.loads(row["annotations"])` per row (`:268`) on EVERY bundle build, then filters to the subgraph in Python — O(total symbols in repo) per `prime`/`ctx` call. A SQLite L2 cache exists (`context_oracle/cache.py` → `bundle_cache` table) but `build_context` does not consult it on the hot path.
+    **Expected:** Filter symbols in SQL by the subgraph's ref_ids (indexed join), avoid per-row JSON parsing of non-matching rows (e.g. a `symbol_annotations(ref_id, symbol_id)` table or an indexed `ref_id` column), and/or wire `build_context` through the existing `bundle_cache`.
+    **Workaround:** None needed at small scale.
+
+---
+
+## Improvements
+
+> Enhancement proposals for existing features. Not bugs — current behavior works but can be better.
+
+156. [2026-08-19] [MEDIUM] Context rot explains WHY a long instruction file stops being followed — plus selective escalation as a second graph-derived feature
+
+    **Severity:** medium (sharpens the root cause in #153 and adds one concrete feature; the rest is confirmation)
+    **Command:** design-level — `prime`, the emitted `CLAUDE.md`/role files, wave escalation
+    **Context:** two further public Anthropic publications: *Effective context engineering for AI agents* (engineering) and the *2026 Agentic Coding Trends Report*.
+
+    ### A. 🔴 The mechanical root of #153 is measurable, not motivational
+
+    #153 explained skipped rules by delivery mechanism and instruction count. The context-engineering piece gives the sharper reason: **context rot** — *"as the number of tokens in the context window increases, the model's ability to accurately recall information from that context decreases."*
+
+    So a ~640-line instruction file is not merely competing for attention; **recall of its contents degrades measurably as context fills** — which is exactly when a long session needs the rules most. That reframes the fix: shortening the scaffolded `CLAUDE.md` is not tidiness, it is the difference between rules that are recalled and rules that are present but unread.
+
+    The same piece names the design target — *"the smallest possible set of high-signal tokens that maximize the likelihood of some desired outcome"* — which is precisely what `prime` already aims at, and gives the failure it must avoid: the **"right altitude"** between *"hardcoding complex, brittle logic"* and *"vague, high-level guidance that fails to give the LLM concrete signals"*. A scaffolded flow file that mixes narrative lessons with imperative process sits at both wrong altitudes at once.
+
+    **Implication for the emitted scaffold:** split by function, not by topic — a short imperative core that must survive to the end of a long session, and referenced companion documents for narrative rationale. Also: anything that must outlive compaction belongs in a file or the tracker, never in context (the scaffold's `PreCompact` hook re-primes, but *"overly aggressive compaction can result in loss"*).
+
+    ### B. Role agents should return a bounded, distilled result — state it as a contract
+
+    Sub-agent architectures are described as specialized agents returning a *"condensed, distilled summary"* of typically **1,000-2,000 tokens** to a coordinating agent. A scaffolded role file can carry that as an explicit output contract rather than leaving the shape to the agent — which also protects the coordinator's own context from the rot in (A). Complements #155 C: the reviewer's *input* is diff+spec, its *output* is a bounded verdict.
+
+    ### C. 🔴 Selective escalation is the second thing only the graph can decide
+
+    The trends report's oversight direction: *"Agents learn when to ask for help, rather than blindly attempting every task"*, and *"human oversight shifts from reviewing everything to reviewing what matters"*. It also names, as a needed capability, *"development environments that show the status of multiple concurrent agent sessions and version control workflows that handle simultaneous agent-generated contributions"* — the space a graph-aware TUI plus merge serialization already occupies.
+
+    "What matters" is a graph question. Beadloom can compute escalation-worthiness from properties it alone holds: how many nodes depend on the one being changed (blast radius via `why`), whether the change crosses a declared boundary, whether it touches a node carrying invariants, whether the doc for that node is stale. That turns "escalate when unsure" — which no prompt reliably produces — into a rule the harness evaluates. Pairs with #155 A: the graph decides **what may run in parallel**, and here **what must stop for a human**.
+
+    ### D. Sober framing worth keeping in the product's positioning
+
+    From the same report's own research: developers use AI in roughly **60%** of their work but report being able to *"fully delegate"* only **0-20%** of tasks; the summary calls the goal *"not to remove humans from the loop"* but to make human attention count. A flow product should therefore be honest that it is building **supervised delegation**, and that gates exist because delegation is partial — not as a temporary scaffold to be removed when models improve. This matches #155's closing quote that coordination does not emerge from greater individual capability.
+
+    **Expected:** #153's "shrink the scaffolded instruction file" item is re-justified by context rot rather than taste; role files gain an output-size contract; and escalation joins wave-shaping as a graph-derived decision.
+    **Notes:** confirmatory (no action needed): structured note-taking outside the context window validates the tracker+specs model; *"bloated tool sets that cover too much functionality or lead to ambiguous decision points"* is a named failure worth auditing the MCP/introspection surface against.
+
+155. [2026-08-19] [HIGH] Multi-agent failure modes and long-running-harness patterns Beadloom can act on — and one feature only Beadloom can build
+
+    **Severity:** high (design input for #153/#154; item A is a differentiator, not a nicety)
+    **Command:** design-level — `setup-agentic-flow`, wave planning, the spec/state templates
+    **Context:** three current Anthropic engineering/research publications read for transferable design, not for their subject matter: *Patterns and problems in multiagent systems* (research), *Effective harnesses for long-running agents* (engineering), *Scaling Managed Agents: decoupling the brain from the hands* (engineering).
+
+    ### A. 🔴 Wave shape should be DERIVED FROM THE GRAPH — multi-agent helps or hurts depending on interdependence
+
+    The research piece is blunt about where parallel agents pay off and where they rot. Parallelizable, independent work: a coordinated swarm found **266 vulnerabilities vs 21**. Shared-codebase work with *"rich, dynamic interdependencies"* **deteriorates** — game-building runs produced *"uniformly poor results"*, and the measured PR-merge tables show either constant conflict or *"high ownership silos"* where agents simply avoid each other's files.
+
+    Every scaffolded flow today asks a human to guess the wave shape. **Beadloom already holds the answer**: it knows which files belong to which node and which nodes depend on which. It can compute, before a wave launches, whether the beads in it touch independent subgraphs (parallelize) or the same node (serialize). Nothing else in the toolchain can do this — a tracker knows bead dependencies, but only the architecture graph knows *code* interdependence.
+
+    Concretely: `bd swarm`-style wave planning gains a Beadloom-side check that refuses (or warns) when two beads in the same wave resolve to overlapping graph nodes. Related downstream evidence already in this log: parallel agents editing one shared file produced a destructive-restore window.
+
+    ### B. 🔴 Conformity cascades: identical context ⇒ identical decisions, including identical mistakes
+
+    Named failure mode: agents *"act identically when contexts match, unlike humans who exhibit diverse responses"*. Measured instances: **18 of 30** agents created a branch with the same name; multiple agents independently produced the same title for a creative task; a job-queue experiment generated **2.4 million requests for 117 accepted jobs**.
+
+    This is the mechanism behind an incident in the same organisation's risk report (§5.2.2): one agent narrowed its task, wrote that decision into a **shared notebook**, and later agents adopted the refusal — while progress metrics looked healthy; found by a human three days later.
+
+    For a flow whose durable state is deliberately shared (`CONTEXT.md` / `ACTIVE.md` / bead comments — see #154 H), the consequence is structural: **an isolated defect becomes systemic**, and the shared state is the vector. Design implications:
+    * a wave report must record *what was skipped and why* as a required field, so a narrowing is a value, not an absence;
+    * convergence is measurable — identical decisions across a wave (same file, same approach, same skip) is a signal worth surfacing, not noise.
+
+    ### C. 🔴 The reviewer must not read the author's justification first
+
+    In "hidden profile" tasks, groups scored **17–36% accuracy versus ~100%** when a single agent held all the facts: *"consensus silences dissenting evidence"*. Recommended human-derived mechanisms include peer review that *"balances author claims with dissent"* and courts that *"protect a lone witness"*.
+
+    A scaffolded review role that receives the dev agent's summary is therefore structurally compromised — it converges on the author's framing before looking. The review role should be handed **the diff and the spec**, and only then, optionally, the author's notes. This is cheap to specify in the emitted role file and it is the difference between an independent check and a rubber stamp. Downstream evidence for the same conclusion, learned the hard way: a standing rule in one adopter's process reads *"an agent's report is not evidence — the coordinator re-runs the gates itself, on the final tree"*.
+
+    ### D. Named failure modes for long-running agents, with mitigations worth emitting
+
+    From the harness piece, each mapping onto something a flow can enforce rather than request:
+
+    | Failure mode | Their mitigation | Flow implication |
+    |---|---|---|
+    | **Premature victory declaration** — *"agent sees progress, assumes completion"* | a comprehensive feature list; work strictly feature-by-feature | the exact failure #153 measured; a bead-scoped acceptance list beats prose |
+    | One-shotting the whole project | enforce single-feature focus per session | one bead per wave slot |
+    | Leaving broken code | commit with descriptive message + update progress file | already the flow's habit — make it a gate |
+    | **Premature feature completion** — *"Claude tended to make code changes … but would fail to recognize that the feature didn't work end-to-end"* | mandate end-to-end verification through the real interface | matches an adopter's own hardest-won rule: a test against a fake proves the fake's contract |
+    | Lost time re-orienting | begin every session by reading git log + progress, then run smoke tests **before** new work | `prime` gives context but no *verification* step — worth adding |
+
+    ### E. State files: JSON, not Markdown
+
+    Small and concrete: their feature list is JSON *"(not Markdown, which agents more readily corrupted)"*, carrying strongly-worded invariants inline — *"It is unacceptable to remove or edit tests because this could lead to missing or buggy functionality."*
+
+    Beadloom's scaffolded `ACTIVE.md` is Markdown and is edited by agents every session. Worth considering a machine-readable companion for the parts that must not be corrupted (bead states, acceptance checkboxes) while prose stays Markdown for humans. An adopter already hit the adjacent problem from the other side — `active-sync` exists precisely because these tables drift.
+
+    ### F. Credentials outside the sandbox, state outside the harness
+
+    From the managed-agents piece: sandboxes never hold credentials — auth is *"bundled with a resource or held in a vault outside the sandbox"*, explicitly to keep prompt injection from reaching tokens; and session state lives outside the harness so a harness can be recreated (`wake(sessionId)`) rather than nursed. Also *"avoiding irreversible context decisions within Claude's window"* by keeping the event log external and sliceable.
+
+    A scaffolded flow inherits the second idea for free (durable state in files + tracker, never in chat) and should state the first as a requirement it checks: role files must not carry credentials or bypass permissions (see #154 F).
+
+    **Expected:** #153 gains (A) graph-derived wave shape — the item no generic agent framework can copy — plus (B) skip-declaration and convergence signals, (C) a review role that sees evidence before advocacy, (D) the named failure modes as emitted acceptance criteria, and (E) corruption-resistant state.
+    **Notes:** all three sources are public Anthropic publications (anthropic.com/engineering, anthropic.com/research). The recurring theme across them and #154: *"Coordination doesn't naturally emerge from stronger intelligence nor alignment at the individual level"* — i.e. a better model will not fix an unenforced flow, which is the same conclusion #153 reached from measurement.
+
+154. [2026-08-19] [HIGH] Oversight patterns a controlled multi-agent flow should adopt — drawn from a published frontier-lab risk report
+
+    **Severity:** high (design input for #153; several items are things #153 would otherwise get wrong)
+    **Command:** design-level — `setup-agentic-flow`, the gates it emits, `ci`
+    **Context:** Anthropic's public *Risk Report: August 2026* documents how one organisation supervises highly autonomous AI agents working on its own infrastructure — including its own process failures. Read for transferable engineering patterns, not for its threat models. Sections cited below: §2.23 (internal usage monitoring), §5.2 (safety process failures).
+
+    ### A. Two layers, named separately: asynchronous monitoring vs blocking interventions
+
+    The report splits mitigations into **asynchronous monitoring** (§2.23.1 — sees everything, stops nothing) and **blocking interventions** (§2.23.2 — sandboxing, PR review, blocking classifiers). Keeping them distinct is what makes the coverage question answerable at all.
+
+    A scaffolded flow should do the same and say which is which per rule. Today's scaffold has only the informational layer (`SessionStart`-style context priming) while its prose reads as if it were the blocking one — which is exactly the failure measured in #153.
+
+    ### B. A guard is worth having even when it is bypassable — but say so
+
+    §2.23.2.4, on sandboxing and blocking classifiers: *"we think it's likely that covered models would be able to bypass at least one of those. However, we believe that they still slightly reduce the probability of success … and make it harder for models to pursue risk pathways without being detected by asynchronous monitoring."*
+
+    The value claimed is **raised detectability**, not prevention. A flow that ships hooks should make the same honest claim rather than implying hooks are unbypassable (they are shell commands; an agent with shell access can reason about them).
+
+    ### C. Limitations are part of the mitigation, not an afterthought
+
+    §2.23.3 is a titled list — *"Important limitations of our model-external risk mitigations"* — including that monitoring *"would not prevent catastrophes from a first successful execution of an irreversible … pathway"*.
+
+    Proposal: every gate `beadloom` emits carries a machine-readable "does NOT cover" note, surfaced in `ci` output. A downstream project already practises this by hand; making it a product feature is what stops a green gate from being read as broader assurance than it is (cf. #146, where a doc-freshness PASS meant "no pairs exist").
+
+    ### D. Review that checks intent against effect — a first-class check type
+
+    §2.23.2.3: automated PR review by a prompted model *"checking for common errors, obvious security vulnerabilities, and **mismatches between the stated purpose of a change and its actual effects**"*.
+
+    That third item is the one no linter provides and the one Beadloom is uniquely placed to provide, because it already holds the stated purpose: the bead, the spec, and the graph node the change claims to touch. "Diff vs its own spec" is a check type, not a prompt.
+
+    ### E. Invariants as executable tests, stated in the same breath
+
+    Same section: *"tests are run automatically to ensure new infrastructure code does not break security invariants (e.g. if two nodes are not supposed to be able to send network traffic to each other, a test checks they can't)"*. This is precisely the `forbid_import` idea generalised beyond imports — worth noting as validation of the rules model, and as a hint that the rule vocabulary could cover more than import edges.
+
+    ### F. 🔴 Dangerous permissions propagate to SPAWNED agents through inherited instructions
+
+    §5.2.5, verbatim in substance: an employee's usage *"wasn't logged and wasn't monitored"*; an agent was given an open-ended task that spawned further agents in a cluster with sensitive resources; ***"Due to legacy instructions, the main agents spawned the new agents with `--dangerously-skip-permissions`"***; those child agents were unmonitored too. One deleted a large number of jobs — *"which is how these dangerous agents were caught"*.
+
+    Two design consequences for a flow that scaffolds role agents:
+    * a role definition must never be able to carry a permission *relaxation* that its children inherit — spawning may narrow authority, never widen it. (The host has been hardening exactly here: a recent release fixed an agent definition's bypass mode ignoring an org disable policy.)
+    * `setup-agentic-flow` should refuse to emit, and `config-check` should flag, any role file that grants bypass-style permissions.
+
+    ### G. 🔴 Unlogged agent activity makes intent unreconstructable *after* the fact
+
+    Same incident: *"given the gap in our monitoring coverage, we cannot confirm"* what the agent was attempting. Detection came from the damage, which is the worst possible detector.
+
+    A flow whose durable state is a tracker + specs already has the raw material for an audit trail; it should be a **required** output of a wave, not a convention. Note the same failure shape a downstream project hit: two capabilities went mute in production and the detector was the owner asking a question three days later.
+
+    ### H. 🔴 Shared agent context propagates DECISIONS — including a silent narrowing of scope
+
+    §5.2.2 is the single most relevant incident for a multi-agent product. A scaffold let several agents work autonomously and share a notebook. One agent decided to narrow the task, recorded that decision in the shared notebook, and ***subsequent agents adopted the same refusal***. Meanwhile: *"Based on our metrics, the run seemed to be progressing."* It was found *"during a manual review of the notebook 3 days later, when a human noticed that progress rates were lower than expected."*
+
+    Every element maps onto a scaffolded flow: `CONTEXT.md` / `ACTIVE.md` / bead comments **are** that shared notebook, and waves of role agents read them. Consequences:
+    * shared context is a **propagation vector**: one agent's "we can skip X" becomes the wave's premise;
+    * dashboards that show *progress* cannot show *narrowing* — the run looked healthy;
+    * therefore a wave report must state **what was NOT done and why**, as a required field, so a narrowing is a value rather than an absence. An absent step is invisible; a declared skip is reviewable.
+
+    ### I. 🔴 A misconfigured filter ran for several generations "without anyone noticing" — gates need a liveness proof
+
+    §5.2.6 lists among the causes: *"The filters intended to remove these transcripts from training data were misconfigured, so they had not filtered transcripts for several model generations without anyone noticing."*
+
+    This is the same defect as #61 in this very log (a `--check` documented as a gate that nothing ever invoked) and as a downstream CI step that returned exit 0 having generated zero mutants. **Proposal — the strongest single item here:** `beadloom ci` grows a *gate liveness* mode that, for each gate, applies a synthetic violation and asserts the gate reddens. A gate that cannot be shown to fail is not known to work. This turns the downstream project's hand-run "double pass" discipline (sabotage it, prove the new guard reddens and the old one stayed green) into a product feature.
+
+    **Expected:** #153's enforcement layer designed with A–I in mind — in particular (F) spawn narrows authority, (H) waves declare what they skipped, and (I) gates prove they can still fail.
+    **Notes:** cited document is public (*Risk Report: August 2026*, anthropic.com). Nothing here depends on its threat models; the value is that a lab supervising far more autonomous agents converged on monitoring-vs-blocking, honest limitation notes, intent-vs-effect review, and audit trails — the same four things a controlled dev flow needs.
+
+153. [2026-08-19] [HIGH] 🔴 EPIC PROPOSAL — a multi-agent flow that is actually ENFORCED: the flow Beadloom scaffolds is advisory, and advisory flows are silently skipped
+
+    **Severity:** high (this is the product's core promise: `setup-agentic-flow` scaffolds a dev process, and the scaffolded process does not hold)
+    **Command:** `beadloom setup-agentic-flow` / the scaffolded `CLAUDE.md` + `.claude/agents/*` + `.claude/commands/*`
+    **Context:** Dogfood on a downstream DDD project that adopted the full scaffolded flow — role files, slash commands, spec templates, a drift gate — and ran six work items through it in one working session with an agent instructed, in the very first message, to "strictly follow CLAUDE.md and the agentic flow".
+
+    ### The measurement (this is the whole finding)
+
+    Six beads shipped. Counted afterwards, honestly:
+
+    | Flow rule the scaffold declares | What enforces it | Times honoured |
+    |---|---|---|
+    | `review` role runs on every bead | *nothing* | **0 of 6** (and only then because a human noticed) |
+    | mutation gate on touched pure cores | *nothing* | **1 of 6** — and that run was nearly vacuous (see below) |
+    | BDD `.feature` for behaviour-bearing work | *nothing* | **0** |
+    | read `.claude/agents/<role>.md` before acting as that role | *nothing* | **0** |
+    | scaffold specs via `/task-init` | *nothing* | **0** (hand-written instead) |
+    | `beadloom ctx <ref>` before touching an area | *nothing* | **0** |
+    | **bead has a spec folder; roadmap has a place for open P0/P1** | **a pytest gate** | **4 of 4** — it BLOCKED the agent every time |
+
+    The pattern is not "the agent was careless". It is exact and mechanical: **every rule with a machine caller was obeyed; every rule without one was skipped.** The one gate with teeth stopped the work four times in a session, including catching a bead whose declared type (`feature`) did not match the spec set that had been written (`BRIEF`+`ACTIVE`, the `task` set).
+
+    ### Why prompt-delivered rules cannot carry a flow
+
+    Not a local defect and not fixable by better wording:
+    * `CLAUDE.md` is delivered as a **user message, not system configuration**, and the model judges its relevance to the task at hand — i.e. it is entitled to consider a rule inapplicable;
+    * compliance degrades as instruction count grows; the downstream file had grown to **~640 lines**, of which ~100 were a (genuinely excellent) narrative section of verification lessons. Narrative and imperative compete for the same attention budget;
+    * upstream tracker carries the same request: anthropics/claude-code#32163, *"Hard-enforce CLAUDE.md rules via code — rules marked CRITICAL should trigger hooks, not just prompts"*.
+
+    The scaffold currently ships ~640 lines of process as prose and **zero** blocking hooks. Its `settings.json` template wires `SessionStart`/`PreCompact` to a context-priming command — informational only, cannot block.
+
+    ### What the host actually offers (verified against the hooks reference)
+
+    | Event | Can block? | Mechanism |
+    |---|---|---|
+    | `PreToolUse` | yes | `hookSpecificOutput.permissionDecision: "deny"` + `permissionDecisionReason`, or exit 2 |
+    | `Stop` | yes — refuses to let the turn end | exit 2 |
+    | `SubagentStop` | yes | exit 2 |
+    | `PostToolBatch` | yes — breaks the agentic loop before the next model call | `continue: false` / exit 2 |
+    | `UserPromptSubmit` | yes, + `additionalContext` injection | `decision: "reject"` |
+    | `SessionStart` | **no** — `additionalContext` only | — |
+
+    `Stop` is the decisive one, because the observed failure mode is precisely *"the agent declares the work done having skipped a role"*. `PreToolUse` on push/PR-creation is the belt-and-braces companion.
+
+    ### Proposal — five parts, and the fifth is what makes it Beadloom's rather than a snippet
+
+    **A. Ship blocking hooks with the flow, not just prose.** `setup-agentic-flow` emits a `Stop` hook refusing turn-end while a bead is `in_progress` without a recorded `REVIEW:` note, and a `PreToolUse` hook refusing `git push` / PR creation under the same condition. The checks read the tracker — which the flow already requires — so they need no new state.
+
+    **B. Derive the gate from the graph, not from a hand-written list.** Beadloom already knows which files belong to which node and layer. That makes machine-checkable claims possible that a human list cannot keep current: *"this diff touched a pure domain core, so a mutation note is required"*, *"this diff changed a feature node, so its doc must have moved"*. This is the part no generic hook snippet can do — it needs the graph.
+
+    **C. Configurable strictness, project- AND user-level.** Not every project wants review on a typo fix. The flow config (`flow.yml`) should carry the enforcement level per rule (`off` / `warn` / `block`) and per work kind (`epic`/`feature`/`bug`/`task`/`chore`), composed the same way architecture/stack overlays already compose. 🔴 See #152: there is currently **no project-level overlay at all**, so an adopter who refines a role file is punished by `config-check` — the same structural hole blocks this feature.
+
+    **D. An honest escape hatch, modelled on what the downstream project already does.** A gate that cannot be satisfied produces an infinite loop, and a gate people bypass silently is worse than none. The pattern that works there: an exclusion must carry **a named reason and an exit condition**, recorded where the work is (`REVIEW: skipped — <reason>` in the bead), so it stays visible instead of becoming ambient. Their CI does the same for one check that cannot pass yet: the step prints a warning naming the cause *and* the condition under which it rejoins the blocking gate, and it announces itself when that condition is met.
+
+    **E. Roles as real subagents, with the host's own review as an option.** Recent host releases make this cheap: `/code-review` runs as a **background subagent** (so it does not consume the main conversation's context) and is no longer auto-invoked, i.e. it is a deliberate step the flow can require; subagent spawn caps and nesting controls exist to keep fan-out bounded. A scaffolded flow can therefore require an *independent* reviewer rather than the same context reviewing itself — which is the structural weakness of single-agent mode: author and reviewer share the same blind spots.
+
+    ### Two adjacent findings from the same session, worth folding into the epic
+
+    * **A gate can exit 0 having checked nothing, and that reads as success.** The downstream mutation runner returned exit 0 with **zero mutants generated for the target module**, because its coverage-stats phase only scans one test directory and the new tests were placed elsewhere. Nothing in the output distinguished "clean" from "did not run". Any gate Beadloom ships should be required to state *what it checked* (counts), not just its verdict — the same disease as a doc-freshness "PASS" that means "no pairs exist" (#146).
+    * **`sync-check` amplification.** One undocumented module produced **44 identical `[stale]` lines** for the same doc — one per member file. Actionable content: one line. See #105; raising it here because a noisy gate is a gate people learn to skim, which is how enforcement dies quietly.
+
+    **Expected:** `setup-agentic-flow` produces a flow whose declared rules are, by construction, either enforced by a hook or explicitly marked advisory — with no third category. Today every rule is in that third category except the ones the adopter happened to write a test for.
+
+74. [2026-03-10] [MEDIUM] Bootstrap classifies test directories as domains — clutters graph and prime output
+
+    **Severity:** medium
+    **Command:** `beadloom init --bootstrap`
+    **Context:** Field-testing on a production project with `app/tests/` containing subdirectories per domain (`tests/houses/`, `tests/pdf/`, `tests/plans/`, `tests/users/`, `tests/integrations/`).
+    **Issue:** Bootstrap creates 7 test-related nodes (`tests`, `tests-houses`, `tests-pdf`, `tests-plans`, `tests-users`, `tests-integrations`, `tests-core`) classified as domains. These nodes:
+    - Clutter `beadloom prime` output (7 of 17 "domains" are actually test suites)
+    - Inflate the graph (30 nodes → ~23 without tests)
+    - Add noise to `beadloom graph` Mermaid diagram
+    - Create spurious `depends_on` edges (tests naturally import everything)
+    **Expected:** Option to exclude test directories from the architecture graph: `beadloom init --bootstrap --exclude-tests` or a `config.yml` setting like `exclude_paths: [app/tests/]`. Alternatively, classify test directories as a separate `kind: test-suite` that can be filtered in `prime`/`graph` output.
+
+75. [2026-03-10] [MEDIUM] Auto-generated node summaries are mechanical and don't convey purpose
+
+    **Severity:** medium
+    **Command:** `beadloom init --bootstrap`
+    **Context:** Project has README.md with a clear description of each domain's purpose, plus `__init__.py` files with module docstrings.
+    **Issue:** Generated summaries are purely structural: `"Domain: configs — 1 class, 2 fns"`, `"Domain: houses — 2 classes, 6 fns"`. These tell an AI agent nothing about what the domain does. The information needed is available in:
+    - Project README.md (describes each domain conceptually)
+    - `__init__.py` module docstrings
+    - Existing documentation in `doc/` directory
+    **Expected:** During bootstrap, attempt to extract meaningful summaries from:
+    1. `__init__.py` docstring of the package (highest priority)
+    2. README.md sections that mention the domain name
+    3. Existing docs in the project's `doc/` or `docs/` directory
+    Fall back to the mechanical format only if no semantic source is available.
+
+76. [2026-03-10] [LOW] `beadloom init` doesn't support combined bootstrap + import mode in one step
+
+    **Severity:** low
+    **Command:** `beadloom init --bootstrap --import doc/`
+    **Context:** The project has both source code in `app/` and existing documentation in `doc/` (API specs, integration guides). The user wants to bootstrap from code AND import existing docs.
+    **Issue:** `--bootstrap` and `--import` are mutually exclusive on the CLI. The user must run two commands: `beadloom init --bootstrap -y` then `beadloom init --import doc/`. The `--mode both` flag exists in help but it's unclear how it interacts with `--import DIRECTORY`.
+    **Expected:** `beadloom init --bootstrap --import doc/ -y` should work in a single invocation: bootstrap the graph from code, then import and classify docs from the specified directory.
+
+77. [2026-03-10] [MEDIUM] No automated CLAUDE.md adaptation for target project stack
+
+    **Severity:** medium
+    **Command:** `beadloom setup-rules --refresh`
+    **Context:** After bootstrapping on a new project, the `.claude/CLAUDE.md` file contained a generic template (from a previous project) with wrong stack references (Python 3.10 instead of 3.13, `mypy` instead of `ty`, `src/beadloom/` paths instead of `app/`, etc.). Manual adaptation required ~30 minutes of an AI agent's time to:
+    - Analyze the project stack (pyproject.toml, CI config, pre-commit)
+    - Rewrite the Project Info section
+    - Rewrite the Architecture section
+    - Update all quality gate commands
+    - Update all `.claude/commands/*.md` files (dev, review, test, templates, coordinator, checkpoint)
+    **Issue:** Beadloom bootstraps the architecture graph automatically but doesn't help with adapting the AI agent instruction files. The `setup-rules --refresh` only updates `<!-- beadloom:auto-start -->` sections, which cover a small fraction of CLAUDE.md.
+    **Expected:** A new command or flag like `beadloom setup-rules --adapt-claude` that:
+    1. Reads `pyproject.toml`, CI configs, pre-commit config to detect the project's stack
+    2. Updates `CLAUDE.md` section `0.1 Project` with detected stack, tooling, architecture
+    3. Updates quality gate commands (test runner, linter, type checker) throughout CLAUDE.md
+    4. Optionally adapts `.claude/commands/dev.md` code patterns section with project-appropriate examples
+    This would make Beadloom initialization a truly one-command experience for AI-assisted projects.
+
+78. [2026-03-10] [LOW] Bootstrap should auto-validate generated rules and warn on immediate violations — see also #71
+
+    **Severity:** low
+    **Command:** `beadloom init --bootstrap -y`
+    **Context:** After bootstrap, user expects a clean state but `beadloom lint --strict` fails (see issue #71).
+    **Issue:** Bootstrap generates `rules.yml` and `services.yml` independently. It doesn't validate that the generated rules are satisfied by the generated graph. The user discovers violations only when they manually run `lint`.
+    **Expected:** At the end of bootstrap, automatically run `lint` internally. If violations are found, either:
+    - (a) Auto-fix the rules to match the generated graph (preferred), or
+    - (b) Print a warning: `"⚠ 2 lint violations detected in the generated graph. Run 'beadloom lint' to see details and fix .beadloom/_graph/rules.yml"`
+
+79. [2026-03-10] [INFO] Field-testing metrics: Beadloom bootstrap on a production FastAPI monolith
+
+    **Severity:** info
+    **Command:** `beadloom init --bootstrap -y`
+    **Context:** Field-testing on a production Python 3.13 FastAPI + Strawberry GraphQL monolith with 6 business domains, ~50 Python source files, ~30 test files, Docker + k8s deployment, GitLab CI.
+    **Results:**
+    - **Bootstrap time:** ~3 seconds
+    - **Auto-detected:** preset=monolith, language=.py, scan_paths=[app]
+    - **Generated graph:** 30 nodes, 47 raw edges (95 after reindex with import analysis), 272 symbols
+    - **Classification accuracy:** ~80% — correctly identified 6 business domains, 6 features (graphql sub-packages), root service. Misclassified: test dirs as domains (7 nodes), some service/domain kind swaps.
+    - **Lint violations:** 2 out of the box (rules-vs-graph mismatch, see #71)
+    - **Doc coverage:** 97% (29/30 nodes had auto-generated docs)
+    - **beadloom prime:** correct and useful output after rules fix — 0 stale docs, 0 lint violations
+    - **Total time to fully operational state (bootstrap + rules fix + .claude adaptation + .gitignore + verify):** ~15 minutes with AI agent assistance
+    - **Improvement vs. previous field test (#37):** Bootstrap quality improved from ~35% to ~80% architecture capture. The main remaining gap is test-directory noise and dry summaries.
+
+80. [2026-03-10] [HIGH] Bootstrap graph accuracy: comprehensive improvement plan for all supported languages
+
+    **Severity:** high
+    **Command:** `beadloom init --bootstrap`
+    **Context:** Field-testing on a production project revealed that the bootstrapped graph is ~80% accurate but has systematic misclassifications. These are NOT project-specific — they stem from heuristics that apply across all 12 supported languages. This issue consolidates the root causes and proposes a phased improvement plan.
+
+    **Root causes identified:**
+
+    **A. Test directories inside scan_paths are not excluded.**
+    `_SKIP_DIRS` in `scanner.py` includes `"test", "tests"` but only for top-level directory detection in `detect_source_dirs()`. Once a scan_path is chosen (e.g., `app/`), subdirectories like `app/tests/`, `app/__tests__/`, `app/spec/` are scanned and classified as domains. This affects:
+    - Python: `app/tests/`, `tests/` inside packages
+    - TypeScript/JavaScript: `__tests__/`, `*.test.ts` collocated files
+    - Go: `*_test.go` files (collocated by convention)
+    - Java/Kotlin: `src/test/` mirroring `src/main/`
+    - Swift: `*Tests/` directories
+    - Rust: `tests/` directory, inline `#[cfg(test)]` modules
+
+    **B. `_SERVICE_DIRS` regex over-matches internal domain layers.**
+    The regex `^(services?|core|engine|workers?|jobs?|tasks?|processors?)$` matches both:
+    - Top-level packages that ARE architectural services (correct: `services/`, `core/`)
+    - Sub-packages within a domain that are internal layers (incorrect: `app/pdf/services/`, `app/pdf/tasks/`)
+    The classifier doesn't distinguish depth — a `services/` directory 2 levels deep inside a domain should NOT create a standalone service node.
+
+    **C. No composition root detection.**
+    Files that import from ALL or most domains (e.g., `schema.py`, `urls.py`, `routes/index.ts`, `main.go`) are not recognized as composition roots. This creates inverted dependency edges: the composition root's parent gets `depends_on` edges pointing toward every domain, when architecturally the domains are independent and the root just wires them together. Affected patterns across languages:
+    - Python: `schema.py` (GraphQL), `urls.py` (Django), `main.py` (FastAPI)
+    - TypeScript: `routes/index.ts`, `app.module.ts` (NestJS)
+    - Go: `cmd/server/main.go`, `wire.go`
+    - Java/Kotlin: `@Configuration` classes, `Application.java`
+    - Rust: `main.rs`, `lib.rs`
+
+    **D. Framework-detected metadata is not used for classification tuning.**
+    `_detect_framework()` in `scanner.py` correctly identifies 11+ frameworks (FastAPI, Django, NestJS, Spring Boot, Express, etc.) but the result is only stored as metadata on the root node. It is NOT used to:
+    - Adjust which directories become features vs. domains (e.g., Django `apps.py` = domain, FastAPI `graphql/` = transport layer within domain)
+    - Set framework-specific layer rules
+    - Choose appropriate `rules.yml` templates
+
+    **Proposed solution — phased approach:**
+
+    **Phase 1: Test exclusion (LOW effort, HIGH impact)**
+    - Add `exclude_paths` to `config.yml` schema (list of glob patterns)
+    - Auto-populate with detected test directories during bootstrap using existing `test_mapper.py` patterns:
+      - Python: `**/tests/`, `**/test/`, `**/__tests__/`
+      - JS/TS: `**/__tests__/`, `**/*.test.*`, `**/*.spec.*`
+      - Go: skip `*_test.go` from node creation (they're collocated)
+      - Java/Kotlin: `**/src/test/`
+      - Swift: `**/*Tests/`
+      - Rust: `**/tests/` (integration tests dir)
+    - Bootstrap output: `"Excluded 7 test directories (override in config.yml)"`
+    - Estimated impact: removes 20-30% of graph noise across all languages.
+
+    **Phase 2: Depth-aware kind classification (MEDIUM effort, HIGH impact)**
+    - Change `_SERVICE_DIRS` / `_FEATURE_DIRS` matching to consider directory depth relative to scan_path root.
+    - Rule: directories matching `_SERVICE_DIRS` or `_FEATURE_DIRS` at depth ≥ 2 inside an already-classified domain should be **absorbed into the parent** (not create separate nodes), unless they have 5+ files of their own.
+    - Examples:
+      - `app/pdf/services/` (depth 2 inside `app/`) → part of `pdf` domain, NOT a separate `pdf-services` service node
+      - `app/core/redis/` (depth 2 inside `app/`) → sub-domain of `core`, keep as-is (has its own distinct responsibility)
+      - `services/` at top level (depth 0) → standalone service node (correct)
+    - This fixes: `pdf-services`, `pdf-tasks`, `users-services`, `tests-core` misclassifications.
+    - Language-specific depth thresholds may be needed:
+      - Python: depth 2+ = internal
+      - Java/Kotlin: depth 3+ (due to `src/main/java/com/...` convention)
+      - Go: depth 1+ (flat package convention)
+
+    **Phase 3: Composition root detection (MEDIUM effort, MEDIUM impact)**
+    - After import-graph construction, identify files with fan-out ≥ 70% of all domains:
+      ```
+      composition_root = file where (imported_domains / total_domains) >= 0.7
+      ```
+    - For composition root files:
+      - Do NOT create `depends_on` edges from the root's parent to imported domains
+      - Instead, mark the file with `# composition-root` annotation in graph metadata
+      - Optionally create `wires` edges (a new edge kind) for documentation purposes
+    - Language-specific patterns to aid detection:
+      - Python: file imports `strawberry.Schema`, `urlpatterns`, `FastAPI()` + imports from 3+ domains
+      - TypeScript: file contains `@Module({ imports: [...] })` (NestJS) or `createApp()` (Vue)
+      - Go: `main.go` in `cmd/` importing 3+ internal packages
+      - Java: class annotated `@SpringBootApplication` or `@Configuration`
+      - Rust: `main.rs` or `lib.rs` with `mod` declarations for 3+ modules
+
+    **Phase 4: Framework-specific classification rules (MEDIUM effort, HIGH impact)**
+    - Use detected framework to apply classification overrides:
+
+    | Framework | Rule |
+    |-----------|------|
+    | **FastAPI** | `graphql/`, `api/`, `routers/` inside domain → transport layer (feature), not separate domain |
+    | **Django** | Directory with `apps.py` → domain; `urls.py` → composition root; `admin.py` → skip |
+    | **NestJS** | `*.module.ts` → domain boundary; `*.controller.ts` → transport; `*.service.ts` → absorbed |
+    | **Spring Boot** | `@Controller`/`@RestController` → transport; `@Service` → absorbed; `@Repository` → adapter |
+    | **Express** | `routes/` → transport; `middleware/` → infrastructure; `controllers/` → absorbed |
+    | **Go (stdlib)** | `cmd/` → entry points; `internal/` → domains; `pkg/` → shared |
+    | **Rust (Actix)** | `handlers/` → transport; `models/` → entities; `services/` → domains |
+    | **React/Vue** | `components/` → features; `hooks/`/`composables/` → shared; `pages/`/`views/` → transport |
+
+    - Store active framework in `config.yml`:
+      ```yaml
+      framework: fastapi   # auto-detected, user can override
+      ```
+
+    **Phase 5: Docstring/README mining for summaries (LOW effort, MEDIUM impact)**
+    - During bootstrap, for each classified node:
+      1. Read entry-point file's module docstring (language-specific):
+         - Python: `__init__.py` or `module.py` top-level docstring
+         - Go: package comment in first `.go` file
+         - Rust: `//!` doc comments in `lib.rs` / `mod.rs`
+         - Java/Kotlin: Javadoc on main class
+         - TypeScript: JSDoc on default export or `/** @module */`
+      2. Search project README.md for sections mentioning the directory name
+      3. Search `doc/` or `docs/` for files named after the domain
+      4. Fallback: current mechanical format `"Domain: X — N classes, M fns"`
+
+    **Phase 6: AI-assisted graph refinement via MCP (HIGH effort, HIGHEST impact)**
+    - New command: `beadloom refine` (or `beadloom init --bootstrap --refine`)
+    - After mechanical bootstrap, invoke an AI agent (via MCP or direct prompt) with:
+      - Generated graph (nodes + edges as JSON)
+      - README.md content
+      - Import-graph summary (top-10 highest fan-out files)
+      - Detected framework + entry points
+    - Agent reviews and returns corrections:
+      - kind reclassification
+      - edge direction fixes
+      - summary enrichment
+      - nodes to merge or exclude
+    - Agent output written as `services.yml` patch → user confirms → apply
+    - Requires: MCP write tools (`update_node`) already exist; need a "review prompt" template
+
+    **Priority and impact matrix:**
+
+    | Phase | Effort | Impact | Fixes |
+    |-------|--------|--------|-------|
+    | 1. Test exclusion | Low | High | #74, ~25% noise reduction |
+    | 2. Depth-aware kinds | Medium | High | service/domain misclassification |
+    | 3. Composition roots | Medium | Medium | inverted dependencies |
+    | 4. Framework rules | Medium | High | language-specific accuracy |
+    | 5. Summary mining | Low | Medium | #75, useless summaries |
+    | 6. AI refinement | High | Highest | remaining ~10% gap |
+
+    Phases 1-3 are language-agnostic and fix structural issues. Phase 4 is the largest effort but delivers per-language accuracy. Phase 5 is a quick win. Phase 6 is the endgame for "perfect out of the box" but depends on LLM availability.
+
+81. [2026-03-10] [HIGH] Import-graph based dependency direction validation
+
+    **Severity:** high
+    **Command:** `beadloom init --bootstrap` → `beadloom reindex`
+    **Context:** After reindex, import analysis produces 305 import edges. These are used for `forbid_import` rules but NOT for validating bootstrap-generated `depends_on` edge directions.
+    **Issue:** Bootstrap generates `depends_on` edges based on import analysis, but doesn't distinguish between:
+    - **Real architectural dependency**: domain A's business logic imports from domain B's public API
+    - **Composition wiring**: a top-level file (schema.py, urls.py, main.go) imports from all domains to wire them together
+    - **Test imports**: test files import from production code (not a real architectural dependency)
+    The result: `core` appears to depend on `houses`, `pdf`, `plans`, `tasks`, `users` — when the real dependency is the reverse.
+    **Expected:** After import-graph construction:
+    1. Identify composition-root files (fan-out ≥ 70% of domains) and exclude their imports from `depends_on` edge generation
+    2. Identify test files and exclude their imports from `depends_on` edge generation
+    3. For remaining imports, determine dependency direction by counting: if A imports B more than B imports A, then A depends_on B
+    4. Flag bidirectional dependencies for user review (potential circular dependency or misclassification)
+
+82. [2026-03-10] [MEDIUM] Bootstrap `config.yml` should support `exclude_paths` for user-controlled noise reduction
+
+    **Severity:** medium
+    **Command:** `beadloom init --bootstrap` → `beadloom reindex`
+    **Context:** After bootstrap, the user wants to exclude test directories, migration directories, or generated code from the architecture graph without manually editing `services.yml`.
+    **Issue:** `config.yml` only supports `scan_paths` (what to include) but not `exclude_paths` (what to skip within scan_paths). The user must manually delete nodes from `services.yml` and re-run `reindex` — fragile and lost on next bootstrap.
+    **Expected:** Add `exclude_paths` to `config.yml`:
+    ```yaml
+    scan_paths:
+    - app
+    exclude_paths:
+    - "app/tests/"
+    - "app/migrations/"
+    - "**/generated/"
+    ```
+    The exclude list should support glob patterns and be respected by both `init --bootstrap` and `reindex`. Auto-populated during bootstrap with detected test directories (per-language patterns from `test_mapper.py`).
+
+83. [2026-03-10] [MEDIUM] Two-phase bootstrap: draft → review → commit
+
+    **Severity:** medium
+    **Command:** `beadloom init --bootstrap`
+    **Context:** Bootstrap generates a final graph in one step. The user discovers issues only after running `lint`, `doctor`, or manually inspecting `services.yml`. By then, they're editing YAML by hand — defeating the purpose of automation.
+    **Issue:** No review step between graph generation and commit. The user can't validate or correct the graph before it's written to disk. This is especially problematic for large projects where manual YAML editing is tedious.
+    **Expected:** Two-phase bootstrap:
+    ```bash
+    # Phase 1: Generate draft graph (write to .beadloom/_graph/services.draft.yml)
+    beadloom init --bootstrap --draft
+
+    # Phase 2: Interactive review (or AI-assisted)
+    beadloom review-graph              # shows draft, asks questions, accepts corrections
+    beadloom review-graph --auto-fix   # auto-fix known issues (test exclusion, depth-aware kinds)
+
+    # Phase 3: Apply (rename draft to final)
+    beadloom apply-graph
+    ```
+    In non-interactive mode (`-y`), Phase 2 applies `--auto-fix` automatically. In interactive mode, it presents a summary and asks for confirmation.
+    For AI agents via MCP: expose a `review_bootstrap_graph` tool that returns the draft graph + suggested fixes as JSON, and an `apply_bootstrap_fixes` tool that applies corrections.
+
+84. [2026-03-10] [MEDIUM] Framework-specific preset rules: use detected framework to tune classification
+
+    **Severity:** medium
+    **Command:** `beadloom init --bootstrap`
+    **Context:** `_detect_framework()` in `scanner.py` correctly identifies 11+ frameworks (FastAPI, Django, NestJS, Spring Boot, Express, Vue, React, Actix, Flask, Next.js, Gatsby). The detected framework is stored as metadata on the root node's `extra.tech_stack` — but NOT used to adjust classification heuristics.
+    **Issue:** Framework detection is "fire and forget" — the information exists but doesn't influence how nodes are classified. Each framework has known conventions:
+    - Django: directory with `apps.py` = domain boundary, `urls.py` = composition root
+    - NestJS: `*.module.ts` = domain boundary, `*.controller.ts` = transport layer
+    - Spring Boot: `@Service` annotated classes = domain services (not standalone service nodes)
+    - FastAPI: `graphql/`, `routers/` inside domain = transport layer, not separate domains
+    - Go: `cmd/` = entry points, `internal/` = domains, `pkg/` = shared library
+    **Expected:** After framework detection, apply framework-specific classification overrides:
+    1. Store detected framework in `config.yml` (user-overridable): `framework: fastapi`
+    2. Load framework-specific rules from a built-in registry (e.g., `src/beadloom/onboarding/frameworks/`)
+    3. Rules override default `_SERVICE_DIRS` / `_FEATURE_DIRS` / `_ENTITY_DIRS` regex patterns
+    4. Rules define composition root patterns, test directory patterns, and layer conventions
+    5. Users can extend with custom rules in `config.yml`:
+       ```yaml
+       framework: fastapi
+       classification_overrides:
+         - pattern: "*/graphql/"
+           kind: feature
+           absorb_into_parent: true
+       ```
+
+87. [2026-03-10] [LOW] No automated cleanup of orphaned docs after node deletion from graph
+
+    **Severity:** low
+    **Command:** `beadloom doctor`
+    **Context:** During manual graph refinement, 12 nodes were deleted from `services.yml` (test directories, internal layers). After `beadloom reindex`, the auto-generated doc skeletons for those deleted nodes remained on disk.
+    **Issue:** `beadloom doctor` correctly reports orphaned docs as "unlinked from graph" — but the user must manually `rm` each file. For 12 deleted nodes, this means 12 manual deletions across the `docs/` tree. There is no `beadloom docs cleanup` or `beadloom docs prune` command.
+    **Expected:** Either:
+    - (a) `beadloom docs prune` command that deletes doc files not linked to any graph node (with `--dry-run` preview)
+    - (b) `beadloom reindex --prune-docs` flag that auto-cleans orphaned docs during reindex
+    - (c) `beadloom doctor --fix` that offers to delete orphaned docs interactively
+    For AI agents via MCP: a `prune_orphaned_docs` tool that returns the list of files to delete and accepts confirmation.
+    **Workaround:** Manually delete each orphaned doc file reported by `beadloom doctor`.
+
+89. [2026-03-11] [MEDIUM] `sync-check` reports `untracked_files` for annotated and documented files
+
+    **Severity:** medium
+    **Command:** `beadloom sync-check`
+    **Context:** After adding `# beadloom:domain=` / `# beadloom:feature=` annotations to ALL 55 source files AND enriching all 18 docs with detailed content mentioning every module, `sync-check` still reports 19 of 48 pairs as stale with reason `untracked_files`.
+    **Issue:** Files like `app/core/broker.py` have both:
+    - Code annotation: `# beadloom:domain=core`
+    - Doc mention: `docs/services/core.md` describes `broker.py` in detail
+    - Doc marker: `<!-- beadloom:track=app/core/broker.py -->`
+    Yet sync-check reports: `core: untracked_files - broker.py` and marks ALL other pairs in the same node as stale (6 stale entries for one untracked file).
+    **Pattern:** The affected files are always the ones listed in `beadloom doctor` as "untracked source files". These are files inside the node's `source` directory that exist on disk but apparently aren't indexed as individual tracked items. The multiplier effect (1 untracked file → N stale pairs) inflates the stale count significantly.
+    **Expected:** If a file has a `# beadloom:domain=X` annotation AND the doc mentions it (or has a `beadloom:track` marker), sync-check should mark it as OK, not `untracked_files`. The annotation is an explicit signal that the file belongs to node X and should be tracked.
+    **Impact:** On the field-tested project, this prevents reaching 100% sync-check OK even with comprehensive annotations and documentation. Max achievable: 60% (29/48).
+    **Workaround:** None. Accept the stale warnings as false positives.
+
+90. [2026-03-11] [MEDIUM] `<!-- beadloom:track=... -->` HTML comments in docs have no effect on sync-check
+
+    **Severity:** medium
+    **Command:** `beadloom sync-check`
+    **Context:** During documentation enrichment, `<!-- beadloom:track=app/core/broker.py -->` HTML comments were added to docs following the convention observed in the `beadloom prime` output hint: `"New features: add # beadloom:feature=REF_ID annotations"`. AI agents naturally extend this to docs with `<!-- beadloom:track=... -->`.
+    **Issue:** These HTML comments have no effect on the sync engine. Adding `<!-- beadloom:track=app/core/external-inspection-system/constants.py -->` before a section describing `constants.py` does NOT make sync-check recognize the file as tracked. The comments are inert — they don't participate in staleness detection, freshness tracking, or coverage calculation.
+    **Expected:** Either:
+    - (a) Recognize `<!-- beadloom:track=<path> -->` in docs as an explicit file-to-doc binding. When present, sync-check should create a tracked pair and monitor both the doc section and the source file for changes.
+    - (b) If this convention is not supported, document it clearly in `beadloom prime` / `AGENTS.md` / `docs generate` output so AI agents don't waste effort adding markers that do nothing.
+    Option (a) would be a powerful feature: it creates a lightweight, explicit doc-code binding without requiring the full annotation + reindex workflow. AI agents writing docs could simply add `<!-- beadloom:track=... -->` and sync-check would start monitoring.
+    **Workaround:** Do not use `<!-- beadloom:track=... -->` comments. They have no functional effect.
+
+85. [2026-03-10] [INFO] Bootstrap accuracy target: 95%+ across all supported languages
+
+    **Severity:** info
+    **Context:** Consolidation of all bootstrap accuracy improvements (#74, #75, #77, #78, #80, #81, #82, #83, #84) into a measurable quality target.
+    **Current state (measured on 2 field tests):**
+    - Field test #37 (React Native / Expo): ~35% accuracy → improved to ~94% after manual refinement
+    - Field test #79 (Python / FastAPI): ~80% accuracy → improved to ~95% after rules fix + manual refinement
+    **Target:** Bootstrap should produce a graph that is ≥95% accurate (measured as: nodes with correct `kind` + edges with correct direction / total nodes + edges) WITHOUT manual intervention, for projects using any of the 12 supported languages.
+    **Measurement plan:**
+    - Create a test suite of reference projects (1 per supported language/framework combination)
+    - Each reference project has a manually curated `services.golden.yml` (ground truth)
+    - CI job: `beadloom init --bootstrap -y` → compare generated graph vs golden → report accuracy %
+    - Track accuracy over time as heuristics improve
+    **Reference projects needed:**
+    | Language | Framework | Project type |
+    |----------|-----------|-------------|
+    | Python | FastAPI | Monolith API |
+    | Python | Django | Monolith web app |
+    | TypeScript | NestJS | Monolith API |
+    | TypeScript | React + Next.js | Frontend monolith |
+    | Go | stdlib net/http | Microservice |
+    | Rust | Actix | Microservice |
+    | Java | Spring Boot | Monolith API |
+    | Kotlin | Spring Boot | Monolith API |
+    | Swift | Vapor or SwiftUI | iOS app |
+    | TypeScript | Express | Microservices |
+    | TypeScript | React Native/Expo | Mobile app |
+    | Multi-language | — | Monorepo |
+
+96. [2026-05-28] [MEDIUM] Test suite is volume-heavy but brittle: implementation-coupled and rarely parametrized
+
+    **Severity:** medium
+    **Context:** Self-audit (2026-05-28). Test:source ratio ≈1.9:1 (~48K test LOC / ~25K src LOC), 2576 test functions.
+    **Issue:** The volume reflects breadth, not depth: only ~4 uses of `@pytest.mark.parametrize` (test bodies are copy-pasted instead of data-driven), and ~193 accesses to private attributes (`._foo`) in tests — assertions welded to current internals that will break on refactor. `test_tui.py` alone is ~5989 LOC for a low-value surface. This brittleness will make the #91 architecture refactor far more painful than necessary.
+    **Expected:** Before the #91 refactor: (a) convert copy-pasted test groups to `parametrize`; (b) replace private-attribute assertions with behavior / public-API assertions; (c) reassess whether the TUI warrants ~6K LOC of tests. Treat coverage as a means, not the `fail_under=80` number as the goal.
+
+---
+
+## Excluded Issues
+
+> Issues excluded from the backlog with justification. Not planned for implementation.
+
+20. [2026-02-14] [LOW] `.beadloom/README.md` MCP tools list stale after BDL-014 — Listed 8 tools, missing `get_status` and `prime`. The file is generated once by BDL-013 but never auto-updated. Unlike AGENTS.md which has `generate_agents_md()`, README.md has no regeneration mechanism.
+    > **Won't fix.** Static guide, not agent-facing. Low severity, manual update sufficient.
+
+31. [2026-02-16] [LOW] `bd dep remove` reports success but dependency persists — Running `bd dep remove beadloom-3v0 beadloom-53o` reports success, but `bd show beadloom-3v0` still shows the dependency. Workaround: `bd update --status in_progress --claim` ignores blocks.
+    > **External.** Bug in `steveyegge/beads` CLI, not in beadloom.
+
+35. [2026-02-17] [MEDIUM] Init doesn't offer `docs generate` — doc coverage 0% after bootstrap — After `beadloom init`, user must run `beadloom docs generate` + `beadloom reindex` separately. The init flow could offer doc skeleton generation as a final step.
+    > **Deferred.** Enhancement to onboarding workflow. Current workaround exists. Planned for future init improvements.
+
+36. [2026-02-17] [LOW] Existing docs not auto-linked to graph nodes — Target project had 20 existing docs in `docs/`. All reported as "unlinked from graph" by `doctor`. No auto-discovery mechanism to match existing docs to nodes by path or content similarity.
+    > **Deferred.** Requires fuzzy doc-to-node matching — a standalone feature. Deferred to Phase 14+ (semantic analysis).
+
+37. [2026-02-17] [INFO] `beadloom init` bootstrap quality metrics — Auto-generated graph captures ~35% of real architecture (Nodes 6→17, Edges 8→49, Symbols 23→380, Doc Coverage 0%→94% after manual improvement).
+    > **Tracking.** Observation, not a bug. Baseline metric for future onboarding quality improvements.
+
+97. [2026-05-29] [LOW] `bd close --suggest-next` reports still-blocked beads as "Newly unblocked" — During BDL-035, closing `beadloom-ji9.4` printed `Newly unblocked: beadloom-ji9.6`, but `bd ready` / `bd dep tree` show ji9.6 is still BLOCKED by ji9.2/.3/.5. `--suggest-next` appears to list beads where the closed issue was *a* blocker without checking whether *other* blockers remain — a false "ready" signal. Workaround: treat `--suggest-next` as candidates only; `bd ready` is authoritative.
+    > **External.** Bug in `steveyegge/beads` CLI (1.0.4), not in beadloom. Captured during dogfooding; report upstream if desired.
+
+98. [2026-05-30] [LOW] `test_git_activity.py` date-relative flake + internally inconsistent assertions — `_SAMPLE_GIT_LOG` hardcodes Feb-2026 commit dates, so `test_maps_files_to_correct_nodes` fails once "today" is >30 days later (`commits_30d` 3→0). Same class as the `test_hot_activity` flake fixed in commit a4c88fa. While investigating, the test also looks internally inconsistent (comment references "mno345 from Jan 10" absent from the sample; `core.commits_90d==3` with only 2 core-touching commits) — needs the 30d/90d semantics clarified, not a blind date swap. Found during BDL-036 Wave 1 assembly; pre-existing, unrelated to the wave's changes. Tracked as BDL-036 BEAD-10.
+    > **Internal.** Beadloom test debt. Scoped as a follow-up bead within BDL-036 (blocks the test/exit-criterion bead).
+
+---
+
+## Closed Issues
+
+### Import extraction depth — #159 (2026-08-20)
+
+- 159. ~~[HIGH] Imports below a file's top level were never extracted, so a third of the dependency graph was missing~~ **FIXED (2.2.0)** — all nine language extractors walked only `root.children`, so an import inside a function, a class body, an `if TYPE_CHECKING:` guard or a `try:` block was invisible. Those are exactly where an import is placed to defer cost or to break a cycle, so `no-dependency-cycles` and `forbid_import` were blind to the edges they exist to judge (the #142 family, one level deeper). Measured: **460 nested imports, 231 first-party** — about a third of the total; `depends_on` went 51 → 146 edges. Turning the lights on surfaced **six real violations at once**, all one pattern: `application/doctor.py`, `doc_sync/audit.py` and `doc_sync/surface.py` reaching UP into `beadloom.services` to introspect the live CLI/MCP surface. Fixed by inverting that through a new `infrastructure/surface_registry` port (services register their surface; lower layers read it) with **"unknown is not zero"** as the contract, so a missing surface reports "not verified" instead of a plausible count. The first attempt routed the MCP tool count through the port too, and the gate caught it immediately: `docs audit` lost its tool-count fact because the CLI process never imports the server. That consumer now reads the canonical `MCP_TOOL_CATALOG`.
+
+### Prefix attribution — #144 + #157 (2026-08-20)
+
+- 144. ~~[MEDIUM] `max_symbols` counts by source-path PREFIX without subtracting nested nodes — carving a subpackage into its own node does NOT relieve the parent~~ **FIXED (2.2.0)** — attribution is now ownership-based: a file belongs to exactly one node, the most specific one whose `source` covers it. Implemented once in `infrastructure/repository` (`get_owning_ref_id` / `owns_file` / `count_symbols_owned_by_node` / `count_files_owned_by_node` / `get_owned_symbols`) and consumed by `max_symbols`, `max_files`, the architecture view, node pages and `import_resolver`, so no two surfaces can disagree. Measured effect on this repo: `application` 284 → 150, `graph` 257 → 61, the root service 1154 → 0. Threshold recalibrated 290 → 180 because the METRIC changed meaning (see `docs/architecture.md`). The subtree-size signal the old metric also carried is tracked separately as #158 rather than folded into the new threshold.
+- 157. ~~[HIGH] A package annotated in `__init__.py` gets a FILE source, so 5 nodes report 0 symbols and `max_symbols` can never fire on them~~ **FIXED (2.2.0)** — same root, same fix: a source naming a package's `__init__.py` covers its PACKAGE, since the façade only re-exports. The 228 previously-invisible symbols (cli-commands 71, federation 57, agent-prime 43, reindex 31, debt-report 26) are attributed again, and this repo's five façade sources were repointed at their package directories for clarity. A `doctor` check added mid-fix to *warn* about the condition was removed once ownership made it structurally impossible — a check that can never fire is worse than none.
+
+### Dependency currency pass (2026-08-19)
+
+- 150. ~~[HIGH] 🔴 `tree-sitter` has no upper bound → a fresh install pairs a newer core with the shipped grammars and SEGFAULTS with zero output~~ **FIXED** — pinned `tree-sitter>=0.25,<0.26` in `pyproject.toml` with the reasoning in-line, and guarded in `tests/test_grammar_guard.py`: `test_tree_sitter_core_requirement_is_bounded_above` fails if the pin ever loses its ceiling, `test_installed_tree_sitter_satisfies_the_declared_bound` fails if the environment running the suite sits outside the declared range. **Reproduction note (matters for the fix's shape):** the small case no longer crashes — under core 0.26.0 all ten grammars load through the production loader, `extract_symbols` parses TS/Swift/Obj-C/Kotlin/C++ fine, and a fresh `beadloom[languages]==2.1.0` install completes `init` + `reindex --full` on a 5-file project. The segfault appeared only under the full suite, inside `_index_code_files` during a repo-wide reindex. So the honest rule is **a grammar that loads proves nothing; only a full reindex does** — which is why the pin, not a load-time check, is the fix. Not done, carried forward: the from-scratch-resolver CI job (`uv venv` + install with no lockfile/cache + reindex a fixture) that #150 asked for — the existing suite runs in an environment that already holds a compatible pair.
+
+  <details><summary>Original report (2026-08-18)</summary>
+
+  150. [2026-08-18] [HIGH] 🔴 `tree-sitter` has no upper bound → a fresh install pairs core 0.26 with 0.25 grammars and every command SEGFAULTS with zero output
 
       **Severity:** high (a fresh install of the tool is dead on arrival; the failure is a native crash with no message, so it reads as an environment problem rather than a dependency one)
       **Command:** `beadloom reindex` (any command touching the parser)
@@ -352,3 +1319,79 @@
 13. ~~[2026-02-13] [INFO] Bootstrap skeleton count includes pre-existing files~~ **FIXED (BDL-012 BEAD-06)** — CLI shows "N created, M skipped (pre-existing)".
 
 14. ~~[2026-02-13] [MEDIUM] Preset misclassifies mobile apps as microservices~~ **FIXED (BDL-012 BEAD-04)** — `detect_preset()` checks for React Native/Expo and Flutter before `services/` heuristic.
+
+---
+
+## Chronology (historical)
+
+The dated record of what was opened, closed or verified. Kept at the end on purpose:
+an agent reading this file needs the OPEN items, not the history, and preamble is the
+part of a long document that is read least usefully (BDL-UX #156).
+
+<summary><strong>Chronology</strong> — what was opened, closed or verified, newest first</summary>
+
+- **2026-08-20** — (post-2.2.0, turning the release's lessons into checks): Opened #162 (🔴 **doctor should audit the PRODUCED graph, not just the code** — island / unexplained-leaf / claim-without-evidence. The four defects this release fixed all shipped past dev+test+review+tech-writer and a 6/6 gate because every test verified a FUNCTION and none verified the CLAIM the graph makes; the audits that found them were written by hand in ten lines each), #163 (`sync-update` can re-attest a doc nobody read — a re-baseline silences `sync-check` with no evidence the prose still describes reality; plus prose that no symbol pair anchors can never go stale at all) and #164 (LOW — the beads git-hook prints `bd import -i`, a flag that does not exist, on a warning that was itself a false alarm; the #140 shape). Total 161→164, Open 43→46.
+
+- **2026-08-20** — (v2.2.0 release): Opened #161 — `docs audit` verifies numeric FACTS but never checks that a documented identifier still EXISTS, so documentation can name a function the code no longer has and the gate stays green. Found the hard way: two functions removed while narrowing the `surface_registry` port stayed documented in this very release's branch, past a 6/6 gate, and were caught by a hand-written ten-line grep during an unrelated question. Also: #160 (AsyncAPI ingestion) deferred with its plan recorded in ROADMAP. Total 160→161, Open 42→43.
+
+- **2026-08-19** — (BDL-060 S4 dogfood — the owner clicking nodes in the architecture map): CLOSED #159 (imports below a file's top level were never extracted — 460 nested, 231 first-party, about a third of all imports; making them visible took `depends_on` from 51 to 146 edges and surfaced SIX real boundary violations at once, all one pattern: domain/application code reaching UP into `services` to introspect the live CLI/MCP surface, fixed by inverting it through a `surface_registry` port). Opened #160 (🔴 **AsyncAPI ingestion is documented as a capability but wired to nothing** — `extract_payload_body` is called by ZERO code paths in `src/`; the function works and is tested, but no document ever reaches it, so the SPEC's "teams on AsyncAPI ingest the payload schema via…" describes a capability the product does not deliver. It survived dev + test + review + tech-writer beads and a green gate because each verified the FUNCTION and none asked whether anything calls it). Total 158→160, Closed 90→91.
+
+- **2026-08-19** — (BDL-UX #144/#157 fixed together): CLOSED #144 and #157. Both had the SAME root — attribution by raw path prefix — so they were fixed once, in one place: **a file belongs to exactly one node, the most specific one whose `source` covers it** (`infrastructure/repository`), now shared by `max_symbols`/`max_files`, the architecture view's symbol badge, node-page symbol listings and `import_resolver`'s file→node attribution. Three things fell out that no single-surface patch would have reached: (1) a node whose source IS a file never owned that file, so its imports were credited to the enclosing directory's node; (2) derived `depends_on` edges between a node and its `part_of` ancestor are a category error and are no longer emitted — 5 of 14 edges were this noise, and they were manufacturing node-level cycles that do not exist at module level; (3) with honest ownership the dependency graph went 14 → 24 edges, surfacing real feature-level dependencies (`graph-loader → federation`, `mcp-server → reindex`, `site-generation → graph`) that prefix attribution had collapsed into their parents. Opened #158 (the subtree-size signal the new metric no longer carries). Total 157→158, Open 42→41, Closed 88→90.
+
+- **2026-08-19** — (BDL-060.15 review): Opened #157 (HIGH — a package that carries its `# beadloom:feature=` annotation in `__init__.py` (the natural place after BDL-059's decomposition) gets its node `source` recorded as that FILE, so every symbol read sees an empty façade: **5 nodes, 228 symbols invisible** on Beadloom's own graph. All five readers agree on 0, so it must be fixed at the source, not in a reader. Consequence in the #146 family: `max_symbols` can never fire on those nodes — a size rule reporting clean because it is looking at nothing — which also distorts the very `domain-size-limit` recalibration the S4 review was assessing). Total 156→157, Open 41→42.
+
+- **2026-08-19** — (dependency currency pass): CLOSED #150 — REPRODUCED on Beadloom's own tree and FIXED. The reporter's minimal case does not reproduce today (core 0.26.0 loads all ten grammar wheels and parses small files cleanly through `get_lang_config`/`extract_symbols`, and a fresh `pip install beadloom[languages]==2.1.0` resolves a pair that survives `beadloom init` + `reindex` on a 5-file project) — the crash needs VOLUME: the full test suite segfaulted inside `_index_code_files` partway through a real repo-wide reindex. That sharpens the issue rather than softening it: **loading a grammar is not evidence that the pairing is safe**, which is exactly why it survived a gate. Fixed by `tree-sitter>=0.25,<0.26` plus two guards in `tests/test_grammar_guard.py` (the declared pin must carry an upper bound; the INSTALLED core must fall inside it, so a local upgrade cannot pass the suite while claiming an untested range). Still open from #150's ask: the from-scratch-resolver CI job. Open 42->41, Closed 87->88.
+
+- **2026-08-19** — (design input): Opened #156 — 🔴 **context rot** gives #153 a measurable root: recall of a long instruction file DEGRADES as context fills, i.e. exactly when a long session needs the rules most, so shrinking the scaffolded `CLAUDE.md` is mechanism and not tidiness; the design target is *"the smallest possible set of high-signal tokens"* at the *"right altitude"* between brittle hardcoding and vague guidance. Also: role agents should return a bounded distilled result (~1-2k tokens) as a stated contract; and 🔴 **selective escalation is a second graph-derived feature** — blast radius, boundary crossings and invariant-bearing nodes decide what must stop for a human, turning "escalate when unsure" into a harness rule. Improvements 19->20, Total 155->156.
+
+- **2026-08-19** — (design input): Opened #155 — multi-agent failure modes and long-running-harness patterns from three current Anthropic publications. 🔴 Headline: **wave shape should be DERIVED FROM THE GRAPH** — parallel agents pay off on independent subgraphs (266 vs 21 vulnerabilities found) and rot on shared code with rich interdependencies; only Beadloom holds the code-level interdependence needed to decide. Also: conformity cascades (18/30 agents chose the same branch name; identical context ⇒ identical mistakes, and shared state is the vector); a review role fed the author's summary converges on it (hidden-profile groups scored 17–36% vs ~100%), so the reviewer must see diff+spec BEFORE advocacy; named long-running failure modes led by *premature victory declaration*; and state files in JSON because agents corrupt Markdown. Improvements 18→19, Total 154→155.
+
+- **2026-08-19** — (design input): Opened #154 — oversight patterns for the #153 enforcement epic, drawn from Anthropic's public *Risk Report: August 2026*: separate asynchronous monitoring from blocking interventions and label which is which; claim raised DETECTABILITY rather than prevention; ship a machine-readable "does not cover" note with every gate; make "diff vs its own stated purpose" a check type (Beadloom holds the stated purpose); 🔴 spawning must narrow authority, never widen it (their incident: legacy instructions propagated `--dangerously-skip-permissions` to child agents, detected only by the damage); 🔴 shared agent context propagates DECISIONS — one agent's silent scope-narrowing spread to later agents while metrics looked green, found 3 days later by a human; 🔴 gates need a LIVENESS proof — their filter ran misconfigured for several model generations "without anyone noticing", the same defect as #61. Improvements 17→18, Total 153→154.
+
+- **2026-08-19** — (dogfood — DDD project, one full working session through the scaffolded flow): Opened #153 (HIGH, EPIC PROPOSAL — the scaffolded multi-agent flow is advisory and therefore silently skipped: measured 0/6 beads reviewed, 1/6 mutation-gated, 0 `.feature`, 0 `/task-init`, while the ONE rule backed by a machine check blocked the agent 4 times in the same session. Root: `CLAUDE.md` is delivered as a user message the model may deem inapplicable, and compliance degrades with instruction count — cf. anthropics/claude-code#32163. Proposal: ship blocking `Stop`/`PreToolUse` hooks with the flow, derive their conditions FROM THE GRAPH, make strictness configurable per rule and work kind, give exclusions a named reason + exit condition, and let roles run as independent subagents). Improvements 16→17, Total 152→153.
+
+- **2026-08-18** — (dogfood — DDD project, wiring the beadloom gate into GitHub Actions CI): Opened #150 (HIGH — `tree-sitter` unbounded upper pin pairs core 0.26 with 0.25-ABI grammars, so a FRESH install segfaults with zero output on every parsing command; invisible to anyone who does not reinstall, since existing environments keep a matching pair — measured on two isolated venvs, reproduces on macOS as SIGBUS too, so it is a dependency bug, not an environment one) #151 (HIGH — the published release lags `main`: BDL-059's role templates are unreleased, so a fresh install reports drift against projects scaffolded from `main`, and `--fix` would rewrite them back to the OLDER templates: 42 deletions / 0 insertions, deleting a standing engineering paradigm. Diagnosed only via an env-skew trap: exit 1 from a PyPI install vs exit 0 from a source install, same self-reported version 2.1.0, byte-identical files) and #152 (MEDIUM — structural: role overlays resolve only INSIDE the installed package, so a project has no supported place for its own additions; that is *why* the paradigm had to go upstream, which is what coupled a downstream gate to an unreleased change). Common thread with #142/#146/#147: a verb that reads as a check either changes state or reports success for work it did not do. Total 149→152, Open 39→42.
+
+- **2026-08-05** — (dogfood — DDD project, exposing the READ-ONLY beadloom surface to an agent): Opened #147 (HIGH — plain `lint` MUTATES `beadloom.db`; measured by DB sha256 before/after, only `--no-reindex` is read-only, and `--strict` is additionally required for a non-zero exit on an error-severity violation, so a caller checking the exit code alone reads a real boundary break as clean), #148 (MEDIUM — `lint` output shape depends on TTY: the documented `N violations, M rules evaluated` summary is absent through a pipe, with no flag to select a stable contract), #149 (LOW — `graph --format c4 --level component --scope <leaf>` exits 0 with a single empty `C4Container`, giving no way to distinguish "no internals" from "here are the internals"). Common thread with #142/#146: the tool reports success for work it did not do, or changes state under a verb that reads as a check. Total 146→149, Open 36→39.
+
+- **2026-08-03** — (dogfood — DDD project, splitting an oversized vertical-module node): **THIRD in-the-wild confirmation of #142** (incremental `reindex` does not refresh import edges): a slice added a runtime import that closed a `A → B → runtime-app → A` module cycle; `reindex && lint --strict` reported **0 violations** through the whole verification pass — the coordinator's own independent re-run included — and the cycle was only surfaced later by a full rebuild (`rm .beadloom/beadloom.db && reindex`) during an unrelated refactor. Note the compounding factor: the false-green survived a *deliberately sceptical* review because the documented loop (`reindex` → `lint`) is itself the thing that lies; there is no signal distinguishing "clean" from "stale import graph". Reinforces the #142 fix priority (Gate must full-reindex, or `lint` must refuse a stale graph). Opened #146 (HIGH — `component` nodes contribute NO sync-check pairs at all, so their docs are never freshness-checked and the gate's green reads as "fresh" when it means "not looked at"; found when a wave's "sync-check by node X — clean" turned out to mean "zero pairs exist"), #144 (MEDIUM — `max_symbols` counts by source-path PREFIX without subtracting nested nodes, so carving a subpackage into its own node does NOT relieve the parent — the natural remedy for an oversized node silently does nothing), #145 (MEDIUM — `ctx <ref> --json` returns the repo-wide `code_symbols` array, not the node's, so an agent sizing a node from its own context bundle reads garbage). Total 143→145, Open 33→35.
+
+- **2026-07-23** — (dogfood — DDD project, enforcing boundaries between equal-rank vertical modules): Opened #143 (HIGH — no native module-boundary / mutual-isolation rule primitive. Enforcing that each vertical module's internals are reachable only via its public facade (not a sibling's `usecases/`/`adapters/`) requires hand-written **O(N²)** `forbid_import` path-glob rules — one per ordered module pair per internal layer. Root causes in the rule engine: (a) `forbid_import.from`/`.to` accept only a SINGLE glob string each — no list, and fnmatch has no brace-expansion, so `src/bob/{a,b}/**` is literal; (b) "all modules except X" is expressible only via first-char negation `[!x]`, which SILENTLY mis-groups two modules sharing an initial letter — e.g. two `c…` modules (`coding`/`capabilities`) become indistinguishable, so the isolation glob wrongly excludes BOTH → a real cross-module import goes uncaught; (c) `domain-root ↛ adapters` cannot be expressed cleanly because fnmatch `*` spans `/` (workaround `<mod>/[!au]*` drops root files starting a/u — accepted only because they're import-leaves). No existing rule type derives pairwise isolation from node tags: `LayerRule` is a linear top-down order (not mutual isolation), `ForbidEdgeRule`/`DenyRule` matchers select one from-group + one to-group (no same-tag-different-node correlation). Workaround adopted downstream: a ~60-line `scripts/gen_boundary_rules.py` emitting explicit-path rules into a marker-delimited region with a `--check` mode. Proposal: a `module_isolation` rule type `{tag: <module-tag>, internal_layers: [usecases, adapters]}` that the engine expands into pairwise isolation + internal-layering from each node's `source` path — removes both the O(N²) hand-generation and the char-class collision at the core). Total 142→143, Open 32→33.
+
+- **2026-07-23** — (dogfood — DDD project, domain-first vertical-module migration): Opened #142 (MEDIUM — incremental `beadloom reindex` does NOT refresh import edges: after moving a file and adding a boundary-violating import, `reindex` prints "Imports: 0" and the `code_imports`/`depends_on` edges are stale, so `beadloom lint --strict` does NOT catch the fresh violation — the documented `reindex && lint` loop silently passes a real boundary break. `reindex --full` is required to re-derive import edges; only the full CI build catches it. Sibling of #112 (incremental `Symbols: 0`). Impact: `forbid_import`/layer rules give false-green during iterative dev; a boundary violation can slip through local pre-commit and only surface in CI. Fix: incremental reindex should re-extract imports for changed files, or `lint` should warn when import edges are staler than the working tree. **🔴 SEVERITY UPGRADE MEDIUM→HIGH (2026-07-28, confirmed in the wild): if pre-commit AND pre-push AND CI all run the INCREMENTAL path, a real `no-dependency-cycles`/`forbid_import` violation reaches the protected main branch with a fully GREEN gate — observed a module-cycle merged undetected across a whole PR, surfaced only later by a manual `reindex --full` on a downstream branch. The "green CI" guarantee is unsound while any gate stage uses incremental reindex. Fix priority: the Gate (`ci`) MUST full-reindex before `lint`, or lint must refuse to pass on a stale import graph.**). Total 141→142, Open 31→32.
+
+- **2026-07-02** — (dogfood — DDD project, detailed-graph + AaC-rules foundation): Opened #139 (MEDIUM — `docs generate` writes STRAY files to the project ROOT: running it produced a root-level `architecture.md` + a root `domains/` dir with layer READMEs, alongside the correct `docs/**` output — a cwd/base-path bug that pollutes the repo root and shadows the real `docs/architecture.md`), #140 (HIGH — misleading remediation for `untracked_files` staleness: `sync-check`/`ci` tells the operator to run `beadloom sync-update <ref>`, but for a directory-source node with a freshly-generated skeleton there is no `sync_state` pair, so `sync-update` returns "No sync pairs found; nothing to re-baseline" and CANNOT clear it — `untracked_files` is a per-file coverage gap, not hash drift; the only fixes are file-level `# beadloom:feature=` annotations or `<!-- beadloom:track= -->` doc markers, which the remediation string never mentions → operator dead-end. Also: a linked EMPTY skeleton then fails on `missing_modules`, so `docs generate`'d skeletons cannot pass `beadloom ci` until hand-filled — generating+linking a skeleton makes the Gate RED with no green intermediate state), #141 (LOW — `docs generate` re-serializes/patches `.beadloom/_graph/services.yml` as an unprompted side-effect, writing outside its docs output dir). Total 138→141, Open 28→31.
+
+- **2026-07-02** — (dogfood — DDD project docs audit): Opened #138 (MEDIUM — `docs generate` silently no-ops on a coarse graph: a project accumulated a ~4000-line `architecture.md` / ~100 sections because its graph had few nodes w/ blanket `beadloom:domain=` tags → 0 feature/component nodes → nothing to emit, exit 0, no warning; + `component`→`DOC.md` not generated (parity gap w/ feature SPEC); + no monolith-drift detector). Total 137→138, Open 27→28.
+
+- **2026-06-18** — (dogfood — adopter flow re-init on a binary-asset, non-English project): Opened #135 (HIGH — `init` crashes with `UnicodeDecodeError` on binary/venv files), #136 (MEDIUM — scaffolded flow is English-only + templates not overlay-aware), #137 (LOW — cross-major flow re-init leaves orphaned/skipped command files). Total 134→137, Open 24→27.
+
+- **2026-06-15** — (BDL-056/057 + v2.1.0 release): CLOSED #130 (rule-type dataclass names fixed in `architecture.md`, BDL-057 SPEC-fill), #131 (all sub-items fixed in v2.1.0: `--non-interactive` removed from getting-started, DDD domain count corrected, CONTRIBUTING `your-org`→`zoologov` + release section added), #121 (RU `docs audit` false positive now suppressed via `.beadloom/config.yml` `docs_audit.ignore` — BDL-057.6; root-cause classifier weakness tracked in ROADMAP P3 "Semantic docs audit"). Opened #132 (`setup-agentic-flow --force` in Beadloom's own repo corrupts the vendored `CLAUDE.md` `__BEADLOOM_PROJECT_NAME__` placeholder) and #133 (per-worktree `beadloom.db` baseline → mass false re-baseline when integrating parallel worktree waves; relates #118). Total 131→133, Open 24→23, Closed 84→87.
+
+- **2026-06-10** — (BDL-047 / F4.1 AI tech-writer): CLOSED #106 (non-interactive `sync-update --yes`/`--all` — the F4.1 fixpoint primitive, W1), #112 (incremental reindex `symbols_indexed` now backfilled to the live DB total per #88), and #127 (the `doc_generator.py` `except sqlite3.OperationalError: pass` swallows are gone — note `git_activity.py:251` `except ValueError: pass` + the broader onboarding `Any` concentration remain, deferred). Total 131, Open 27→24, Closed 81→84.
+
+- **2026-06-04** — (post-v1.10.0 ROADMAP revision): Opened #122–#131 — engineering/test/doc debt from the comprehensive product review (`archive/REVIEW-2.md` §2/§3/§4), spot-verified at HEAD. Tracked here; cross-referenced from `ROADMAP.md` (Technical debt section). Total 121→131, Open 17→27.
+
+- **2026-06-02** — (BDL-045): Opened #121 (LOW — `docs audit` metric classification is English-keyword-based, so it mislabels numbers in non-English docs: `README.ru.md` "14 инструментов" (MCP) is reported as `cli_command_count 14→34`, a false positive — the English README's same "14" is correctly `mcp_tool_count` OK. The number is right; the classifier just can't read Russian. Either localize the keyword map or skip non-English files in the audit). Total 120→121, Open 16→17.
+
+- **2026-06-02** — (BDL-043 fix): CLOSED #120 — `dashboard.data.json` 404'd on GitHub Pages (widgets blank): the generator wrote it to the VitePress srcDir root (`site/`), which VitePress does NOT copy to the built `dist/` (only `site/public/` is copied verbatim); the dev server masked it by serving srcDir. FIXED: emit to `site/public/dashboard.data.json` → copied to dist root → the widgets' `withBase("/dashboard.data.json")` fetch resolves in the static build. Another "works in dev, breaks in the static build" class (cf. the F4 dead-links + F4.4 mermaid render) — the dogfood must hit the DEPLOYED/built site, not just `docs:dev`. Total 119→120, Closed 80→81.
+
+- **2026-06-02** — (BDL-041 F4.4 BEAD-05): VERIFIED #117 (dogfood SUCCESS — F4.4 render fixes: the two F4 Mermaid bugs are fixed and the generation-time guard passes the real 26-diagram site with 0 issues; `npm run docs:build` exit 0; dashboard mounts the 4 ECharts widgets via `<ClientOnly>` with honest text fallback; `dashboard.data.json` carries `trends` (2 real points, sparse-honest) + 7 `recommendations`; automated render-validation green (build exit 0, no page-HTML error markers), live UX pan/zoom + charts PENDING owner re-check in-browser on the fixed site). Opened #118 (process: parallel dev subagents in a SHARED working tree don't conflict on disjoint *files* but DO collide on the pre-commit *hook* — it lints the whole tree, so one agent's commit catches the other's in-progress WIP; BEAD-02 had to `--no-verify` staging only its `site/**`. Mitigation: use git-worktree isolation for true parallel, or run dev beads sequentially; `merge-slot` serializes *who* commits but does not isolate tree state). Opened #119 (LOW: `graph` domain now 202 symbols > 200 `domain-size-limit` — non-blocking warning; F2/F3/F4 grew it via contracts.py/sdl.py/site_mermaid_guard.py etc.; candidate future split). Total 116→119, Open 14→16, Closed 79→80.
+
+- **2026-06-02** — (BDL-040 F4 BEAD-05): Dogfood — generated + built Beadloom's own VitePress site. CLOSED #113 (generator bug: `publish_docs` copied hidden/OS-junk like `docs/.DS_Store` into `site/docs/` — non-deterministic + pollution; FIXED: skip dot-prefixed path parts; RED→GREEN regression test). CLOSED #114 (lockfile: `site/package-lock.json` now committed → `npm ci` reproducible). CLOSED #116 (generator bug surfaced by the dogfood build: node-page doc links + `/docs/` nav target were dead in the built site — FIXED by rooting doc links at `/docs/` + emitting a generated `site/docs/index.md` landing page; node-free dead-link guards added; `npm run docs:build` now exit 0, no `ignoreDeadLinks`). VERIFIED #115 (dogfood SUCCESS — 57 files, honest-by-construction dashboard matched `beadloom ci`, build green). Total 115→116, Open 15→14, Closed 77→79.
+
+- **2026-06-02** — (BDL-039 F3 BEAD-09): Opened #112 (incremental reindex displays `Symbols: 0` — per-run delta, not backfilled like nodes/edges per #88; cosmetic, zero gate impact). Total 111→112, Open 12→13.
+
+- **2026-06-02** — (BDL-039 F3 BEAD-06): VERIFIED #109 #110 #111 (dogfood SUCCESS — the F3 gate BLOCKS all three break-classes: boundary violation, cross-service BREAKING, drifted agent-config — each with a non-zero exit + agent-actionable output). Committed anonymized fixtures under `tests/fixtures/f3_gate/`. See Closed §BDL-039. Total 108→111, Closed 73→76.
+
+- **2026-06-01** — (BDL-038 F2 BEAD-08): VERIFIED #107 (live GraphQL contract mismatch caught before ship — the F2 success criterion) + #108 (paradigm-agnostic FSD round-trip + external native modules + nested company-landscape). See Closed §BDL-038. Closed 71→73.
+
+- **2026-06-01** — (BDL-038 F2 BEAD-01): Opened #105 (domain doc re-stales against all member files when one file is added) + #106 (no non-interactive `mark_synced` CLI). Open 10→12.
+
+- **2026-06-01** — (BDL-037 F1): CLOSED #100 #101 #102 #103 (federation dogfood findings — FIXED in BEAD-09, commit d48bfeb) and #104 (federation dogfood SUCCESS — VERIFIED, BEAD-05). See Closed §BDL-037. Open 15→10, Closed 66→71.
+
+- **2026-05-30** — (BDL-036 Phase 0): CLOSED #91 #88 #92 #93 #94 #86 #89 #90 #71 #98 (honesty gate — see Closed §BDL-036). Opened #99 (repo-wide doc refresh — sync-check has ~30 pre-existing stale doc pairs unrelated to Phase 0; the sync-check *mechanism* is now honest, the doc *content* needs a dedicated pass). Still open: #72, #73, #95, #97 (external), #99. Exact category recount folded into #99.
+
+- **2026-05-28** — : added #91–#96 from the comprehensive architecture/code review (see `.claude/development/REVIEW.md`); refined #88 root cause.
+
+</details>
