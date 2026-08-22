@@ -203,17 +203,26 @@ class TestVerdictParityAcrossEveryOutcome:
         assert payload["context"]["tool"] == "Edit"
 
     @pytest.mark.parametrize("raw", ["[]", '"a string"', "3", "null", "not json", "{"])
-    def test_a_payload_that_is_not_an_event_object_is_a_config_error_not_a_verdict(
+    def test_a_payload_that_is_not_an_event_object_blocks_and_is_recorded(
         self, tmp_path, guard_cli, raw
     ) -> None:
-        """Exit 3, never 0: a hook Beadloom cannot read must not read as "nothing to check"."""
+        """Exit 2, never 0: a hook Beadloom cannot read must not read as "nothing to check".
+
+        It was exit 3 until BDL-061.29. Both codes are non-zero, but only 2
+        blocks in the shipped adapter, and this input comes from the harness at
+        edit time — so it is the guard failing to answer about *this* edit, not
+        a defect in the project's declared configuration.
+        """
+        from beadloom.application.guards.firing import read_firings
+
         result = guard_cli(
             ["guard", "bead-claimed", "--project", str(tmp_path), "--hook", "claude-code"],
             beads=(),
             stdin=raw,
         )
 
-        assert result.exit_code == 3, result.output
+        assert result.exit_code == 2, result.output
+        assert [record.outcome for record in read_firings(tmp_path)] == ["error"]
 
     def test_a_config_error_never_borrows_the_warn_or_block_code(
         self, tmp_path, write_flow_yml, guard_cli
@@ -240,11 +249,19 @@ class TestTheEmittedAdapterAgreesWithTheCli:
 
     @pytest.fixture()
     def repo_on_trunk(self, tmp_path) -> Path:
+        """A git working copy that is also a Beadloom project.
+
+        The marker directory is not decoration: since BDL-061.29 the project
+        root is discovered by walking up for ``.beadloom/`` rather than taken
+        from the working directory, and a guard that finds no project answers
+        ``error`` instead of guessing that ``cwd`` is one.
+        """
         subprocess.run(  # noqa: S603 — fixed argv, no shell
             ["git", "init", "-b", "main", str(tmp_path)],  # noqa: S607
             check=True,
             capture_output=True,
         )
+        (tmp_path / ".beadloom").mkdir(exist_ok=True)
         return tmp_path
 
     def test_the_generated_hook_script_and_a_direct_call_agree_byte_for_byte(

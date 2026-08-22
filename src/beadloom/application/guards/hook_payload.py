@@ -30,6 +30,17 @@ class HookPayloadError(ValueError):
     """A hook payload that is not readable as the named harness's event."""
 
 
+class UnknownHarnessError(HookPayloadError):
+    """A ``--hook`` naming a harness Beadloom cannot translate.
+
+    Separate from its base because the two fail for different reasons and the
+    caller owes them different exit codes: an unsupported harness is a *wiring*
+    defect that fails identically on every invocation until a human edits the
+    adapter, while an unreadable payload is runtime data about one edit, from a
+    harness that is supported (BDL-061.29).
+    """
+
+
 def _claude_code_context(payload: Mapping[str, object]) -> dict[str, str]:
     """Context from a Claude Code hook event (``PreToolUse`` and friends).
 
@@ -65,15 +76,16 @@ SUPPORTED_HARNESSES: tuple[str, ...] = tuple(sorted(HOOK_CONTEXT_BUILDERS))
 def context_from_hook_payload(harness: str, raw: str) -> dict[str, str]:
     """Translate *raw* JSON from *harness* into guard context.
 
-    Raises :class:`HookPayloadError` for an unknown harness or unreadable JSON —
-    a hook that cannot be understood must not read as "nothing to check".
+    Raises :class:`UnknownHarnessError` for a harness with no translator and
+    :class:`HookPayloadError` for unreadable JSON — a hook that cannot be
+    understood must not read as "nothing to check".
     """
     builder = HOOK_CONTEXT_BUILDERS.get(harness)
     if builder is None:
         msg = (
             f"unknown harness {harness!r} — supported: {list(SUPPORTED_HARNESSES)}"
         )
-        raise HookPayloadError(msg)
+        raise UnknownHarnessError(msg)
     try:
         payload = json.loads(raw or "{}")
     except json.JSONDecodeError as exc:

@@ -188,13 +188,27 @@ def _malformed(label: str, rejection: str) -> ResolvedEditPath:
 def resolve_edit_path(raw: str | None, project_root: Path) -> ResolvedEditPath:
     """Resolve *raw* against *project_root* and classify where it landed.
 
-    Whitespace at either end is stripped as a transport artifact before the
-    shape is judged. The cost is named rather than hidden: a file whose name
-    genuinely ends in a space is guarded as though it did not.
+    **Nothing is removed before the shape is judged.** An earlier version
+    stripped surrounding whitespace as "a transport artifact", and
+    :meth:`str.strip` removes every character Python calls whitespace — which
+    includes nine code points (``\t \n \v \f \r`` and ``U+001C``-``U+001F``)
+    inside the C0 range this same module refuses, so the strip decided them in
+    the ACCEPTING direction. Measured with ``src/*.py`` excluded and strictness
+    ``block``: ``'src/app.py\n'`` skipped, quoting an exclusion that does not
+    cover the file the writer would create (BDL-061.28, F10). Every stripped
+    character is a legal file-name character on this platform, so removing any
+    of them is the same guess the shape gate exists to stop making: the guard
+    must be told the name the writer will use.
+
+    The cost, named rather than implied: a target that arrives with a stray
+    trailing newline is refused instead of evaluated — the over-guarding
+    direction, with a stated reason and a way out, and no caller in this repo
+    sends one (a JSON string carries no trailing newline, and shell command
+    substitution removes it).
     """
-    if raw is None or not raw.strip():
+    if not raw:
         return ResolvedEditPath(scope=PathScope.ABSENT)
-    supplied = raw.strip()
+    supplied = raw
     label = _echo(supplied)
     rejection = rejection_reason(supplied)
     if rejection:

@@ -7,15 +7,18 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-mr2l.27` — [dev] S1 fix-2: narrow the guard's path input instead of
-normalising it (test `.26` returned F1–F6; two bypasses reproduced through the real CLI)
-**Goal:** stop generating path cases — define the accepted shape of an edit target, refuse
-everything outside it with a recorded verdict, and never end an invocation without a firing
-record.
-**Done when (met):** a backslash spelling no longer exempts a file (F1); a NUL reaches a verdict
-instead of a traceback on the warn code (F2); a malformed path blocks and is recorded; the SPEC
-states the shape and the reasoning for `error` over `skip`/`warn`/exit 3; F3–F6 fixed or
-recorded with a measured reason.
+**Bead:** `beadloom-mr2l.29` — [dev] S1 fix-3: make "no invocation without a verdict and a
+record" structural (test `.28` returned F7–F10 + m1–m3; three cycles each found a different
+forgotten entry path)
+**Goal:** one boundary around every invocation, so that a failure anywhere — argument parsing,
+the stdin read, project discovery, the evaluation — produces a verdict and a record, and so
+that a new failure mode shows up in `--liveness` instead of in a traceback.
+**Done when (met):** every enumerated exit path produces a verdict and a record; no path exits 1
+unless the verdict is genuinely `warn`; F7 (undecodable stdin), F8 (six unrecorded
+invocations), F9 (the subdirectory), F10 (the strip) and m1/m2 closed with tests that fail on
+`d4bb618`; an enumeration test exists that reddens when an exit is added without a record; the
+SPEC states the project-discovery decision *and its reasoning*; `not_covered` is truthful and
+what remains is named.
 
 ## Progress
 
@@ -35,6 +38,13 @@ recorded with a measured reason.
 - [x] S1 `.27` dev fix-2 (2026-08-22) — accepted path shape + `error` outcome + a firing
       record for every named-guard invocation; F1, F2, F3, F4, F5, F6 closed, the whole-tree
       liveness flag judged and left out with a measured reason; guard tests 335 → 377
+- [x] S1 `.28` test — adversarial re-verification: F7–F10 + m1–m3, 151 new tests, suite
+      5225 → 5376, no `src/` change (commit `d4bb618`)
+- [x] S1 `.29` dev fix-3 (2026-08-22) — ONE invocation boundary (`application/guards/
+      invocation.py`) + project discovery (`project_root.py`); F7, F8, F9, F10, m1, m2 closed
+      as consequences of it; the strip deleted, the glob anchored, the project located by
+      walking up for `.beadloom/` and never manufactured; guard tests 528 → 627, suite
+      5376 → 5475, 15 sabotages all FAILED
 
 ## Results
 
@@ -46,6 +56,8 @@ recorded with a measured reason.
 | .25 | Done | S1 fix: traversal bypass, probe limit, liveness honesty, `on:` deleted |
 | .26 | Done | S1 test: re-verification — F1 backslash bypass, F2 NUL crash, F3–F6 recorded |
 | .27 | Done | S1 fix-2: path shape narrowed, `error` outcome, no invocation without a record |
+| .28 | Done | S1 test: adversarial re-verification — F7 stdin bytes, F8 six unrecorded, F9 cwd-as-root, F10 the strip |
+| .29 | Done | S1 fix-3: one invocation boundary + project discovery; the four symptoms closed as consequences |
 | .4 | Pending | S1 tech-writer |
 | .5–.8 | Pending | S2 stop the lying checks (#142, #146, #147) |
 | .9–.12 | Pending | S3 composition + project overlay (#139, #152, #132, #136, #137) |

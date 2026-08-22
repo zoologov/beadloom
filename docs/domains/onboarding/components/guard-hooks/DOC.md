@@ -28,6 +28,12 @@ decision happens in the CLI, which is why a hook and a shell cannot disagree.
   register one `PreToolUse` entry per guard; returns a `GuardHookResult`.
 - `hook_command(guard_name)` — the settings command string (rooted at
   `$CLAUDE_PROJECT_DIR`, so it does not depend on the shell's working directory).
+  The adapter passes no `--project`, because `beadloom guard` now discovers the
+  project root itself — walking up from the working directory to the nearest
+  ancestor holding `.beadloom/` — so the script anchor and the decision root
+  agree without the adapter having to know anything. It used to take `cwd` as the root, which
+  silently downgraded a declared `block` to a non-blocking `warn` for any
+  invocation from a subdirectory.
 - `GUARD_HOOK_RELPATH`, `SETTINGS_RELPATH`, `HOOK_EVENT`, `EDIT_MATCHER`.
 
 ## Invariants

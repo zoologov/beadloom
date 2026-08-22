@@ -89,6 +89,12 @@ def _glob_to_regex(pattern: str) -> re.Pattern[str]:
     own and a pattern that quietly stops exempting anything is how an author
     discovers their exclusion moved.
 
+    The tail anchor is ``\\Z`` and not ``$``: Python's ``$`` also matches
+    *before* a trailing newline, so ``src/*.py`` covered ``'src/app.py\\n'`` —
+    a second lock with the same hole as the one above it (BDL-061.28, m2). It
+    was latent only because the resolver stripped the newline first, and that
+    strip is gone.
+
     Cached because the liveness report matches every declared pattern against
     every file in the project; there are a handful of distinct patterns and
     thousands of paths.
@@ -114,7 +120,7 @@ def _glob_to_regex(pattern: str) -> re.Pattern[str]:
         else:
             out.append(re.escape(char))
         i += 1
-    out.append("$")
+    out.append(r"\Z")
     return re.compile("".join(out))
 
 

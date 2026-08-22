@@ -168,10 +168,13 @@ class TestOutput:
         )
         payload = json.loads(result.stdout)
         assert set(payload) == {
-            "guard", "outcome", "why", "not_covered", "remediation", "context"
+            "guard", "outcome", "why", "not_covered", "remediation", "context",
+            "recorded", "not_recorded_because",
         }
         assert payload["outcome"] == "warn"
         assert payload["not_covered"]
+        assert payload["recorded"] is True
+        assert payload["not_recorded_because"] == ""
 
     def test_warning_names_what_it_did_not_check(self, tmp_path, stub_probes) -> None:
         stub_probes(beads=())
@@ -217,14 +220,25 @@ class TestHookParity:
         assert via_hook.exit_code == via_cli.exit_code
         assert json.loads(via_hook.stdout) == json.loads(via_cli.stdout)
 
-    def test_unparseable_hook_payload_exits_three(self, tmp_path, stub_probes) -> None:
+    def test_unparseable_hook_payload_is_a_blocking_error_verdict(
+        self, tmp_path, stub_probes
+    ) -> None:
+        """The payload is what the harness said about THIS edit (BDL-061.29).
+
+        It used to exit 3 — the configuration code, which the harness treats as
+        non-blocking — so a truncated pipe or a schema change disabled the gate
+        while looking like an error. A payload that cannot be read is the guard
+        being unable to answer about the edit in flight, which is an ``error``
+        verdict on the one code the adapter blocks on. Exit 3 stays for what it
+        was reserved for: a defect in the project's own declared configuration.
+        """
         stub_probes(beads=())
         result = CliRunner().invoke(
             main,
             ["guard", "bead-claimed", "--project", str(tmp_path), "--hook", "claude-code"],
             input="not json",
         )
-        assert result.exit_code == 3, result.output
+        assert result.exit_code == 2, result.output
 
 
 class TestLiveness:

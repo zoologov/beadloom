@@ -1,28 +1,32 @@
 """The ``guard`` command — evaluate one flow guard, or report guard liveness.
 
-Presentation only: the decision lives in
-:mod:`beadloom.application.guards.evaluation`, which is what makes a harness
-hook and a human shell produce the same verdict. This module maps the verdict
-onto a stream and an exit code, and records the firing.
+Presentation only, and now literally so: the whole decision — locating the
+project, parsing the arguments, reading the harness payload, evaluating, and
+recording the firing — happens inside
+:func:`beadloom.application.guards.invocation.run_invocation`, which returns a
+result and never raises and never exits. This module turns that result into
+lines on a stream and calls :func:`sys.exit` **once**.
+
+That shape is the fix for a defect three cycles could not close by patching:
+each entry path (argument parsing, the stdin read, project discovery, the
+evaluation) used to decide for itself whether to record a firing, and each new
+one was a fresh place to forget. There is now one boundary, so "does this exit
+path leave a record" is a question about one function rather than about every
+branch of this one.
 
 Streams and codes (the adapter contract):
 
 * ``pass`` / ``skip`` -> stdout, exit 0
 * ``warn`` -> stderr, exit 1 (visible, never blocking)
 * ``block`` / ``error`` -> stderr, exit 2
-* usage / configuration error -> stderr, exit 3
+* configuration or command-line error -> stderr, exit 3
 
 ``warn``/``block``/``error`` go to **stderr** because that is the stream a hook
-harness shows to the agent; ``3`` is used for usage and configuration errors so
-a genuine ``block`` stays distinguishable from Click's own usage exit code (2).
-
-**Nothing that named a registered guard leaves without a firing record.** An
-evaluation that raises is turned into an ``error`` verdict here and recorded like
-any other, because an unrecorded failure is invisible to ``guard --liveness``,
-which is the one report that must not lie — a crashing guard previously exited 1
-(the *warn* code, i.e. non-blocking) and wrote nothing at all (BDL-061.27, F2).
-An unregistered name is the single exception: there is no guard to record a
-firing against, and the caller's shell already carries the error.
+harness shows to the agent. ``3`` is kept for a defect in the project's declared
+configuration and for a command line that could not be used at all, so a genuine
+``block`` stays distinguishable from Click's own usage exit code (2); which
+failures earn ``3`` rather than ``2`` is decided — with the reason — in the
+boundary module.
 """
 
 # beadloom:component=cli-commands
@@ -40,31 +44,9 @@ from beadloom.services.commands._root import main
 
 if TYPE_CHECKING:
     from beadloom.application.guards.contract import GuardProbes
+    from beadloom.application.guards.invocation import InvocationResult
+    from beadloom.application.guards.liveness import GuardLiveness
     from beadloom.application.guards.models import GuardVerdict
-
-
-def _unanswerable(name: str, context: dict[str, str], detail: str) -> GuardVerdict:
-    """The verdict for "this guard could not answer" — recorded like any other.
-
-    ``block`` would claim the guarded condition was violated, which is not what
-    was observed; ``warn`` exits 1, which a harness treats as non-blocking, and
-    that is exactly how a crash used to let an edit through.
-    """
-    from beadloom.application.guards.models import GuardOutcome, GuardVerdict
-
-    return GuardVerdict(
-        guard=name,
-        outcome=GuardOutcome.ERROR,
-        why=f"the guard could not be evaluated: {detail}",
-        not_covered=(
-            f"everything guard {name!r} checks: the evaluation did not complete",
-        ),
-        remediation=(
-            "fix the reported error, then re-run `beadloom guard "
-            f"{name}`; the edit is blocked until the guard can answer"
-        ),
-        context=context,
-    )
 
 
 def _probes(project_root: Path) -> GuardProbes:
@@ -74,30 +56,19 @@ def _probes(project_root: Path) -> GuardProbes:
     return build_probes(project_root)
 
 
-def _fail(message: str) -> None:
-    """Report a usage/configuration error on the reserved exit code."""
-    from beadloom.application.guards.models import EXIT_CODE_CONFIG_ERROR
+def _read_stdin() -> str:
+    """The harness payload, read lazily so a decoding failure happens inside the boundary.
 
-    click.echo(f"guard: {message}", err=True)
-    sys.exit(EXIT_CODE_CONFIG_ERROR)
-
-
-def _parse_context(pairs: tuple[str, ...]) -> dict[str, str]:
-    """Parse repeated ``--context k=v`` flags into a mapping."""
-    context: dict[str, str] = {}
-    for pair in pairs:
-        key, sep, value = pair.partition("=")
-        if not sep or not key.strip():
-            _fail(f"--context expects KEY=VALUE, got {pair!r}")
-        context[key.strip()] = value
-    return context
+    A non-UTF-8 byte on the hook's stdin used to raise ``UnicodeDecodeError``
+    here, before anything could turn it into a verdict: exit 1 — the *warn*
+    code, which the harness reads as non-blocking — a raw traceback, and no
+    firing record (BDL-061.28, F7).
+    """
+    return sys.stdin.read()
 
 
-def _emit_liveness(project_root: Path, *, output_json: bool) -> None:
+def _emit_liveness(rows: tuple[GuardLiveness, ...], *, output_json: bool) -> None:
     """Print the liveness report for every registered guard."""
-    from beadloom.application.guards.liveness import build_liveness
-
-    rows = build_liveness(project_root)
     if output_json:
         click.echo(json.dumps([row.to_dict() for row in rows], indent=2))
         return
@@ -118,12 +89,17 @@ def _emit_liveness(project_root: Path, *, output_json: bool) -> None:
         )
 
 
-def _emit_verdict(verdict: GuardVerdict, *, output_json: bool) -> None:
-    """Print *verdict* on the stream its outcome dictates."""
+def _emit_verdict(result: InvocationResult, verdict: GuardVerdict, *, output_json: bool) -> None:
+    """Print *verdict* on the stream its outcome dictates, and say if it went unrecorded."""
     from beadloom.application.guards.models import GuardOutcome
 
     if output_json:
-        click.echo(json.dumps(verdict.to_dict(), indent=2))
+        payload: dict[str, object] = {
+            **verdict.to_dict(),
+            "recorded": result.recorded,
+            "not_recorded_because": result.not_recorded_because,
+        }
+        click.echo(json.dumps(payload, indent=2))
         return
     to_stderr = verdict.outcome in (
         GuardOutcome.WARN,
@@ -137,15 +113,25 @@ def _emit_verdict(verdict: GuardVerdict, *, output_json: bool) -> None:
         click.echo(f"  not checked: {item}", err=to_stderr)
     if verdict.remediation:
         click.echo(f"  fix: {verdict.remediation}", err=to_stderr)
+    if not result.recorded:
+        click.echo(f"  not recorded: {result.not_recorded_because}", err=True)
+
+
+def _emit(result: InvocationResult, *, output_json: bool) -> None:
+    """Render whatever the invocation produced: a verdict, or the report it asked for."""
+    if result.verdict is None:
+        _emit_liveness(result.liveness, output_json=output_json)
+        return
+    _emit_verdict(result, result.verdict, output_json=output_json)
 
 
 @main.command()
 @click.argument("name", required=False)
 @click.option(
     "--project",
-    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    type=click.Path(path_type=Path),
     default=None,
-    help="Project root (default: current directory).",
+    help="Project root (default: the nearest directory above with .beadloom/).",
 )
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON.")
 @click.option(
@@ -181,61 +167,27 @@ def guard(
     Guards are declared in ``.beadloom/flow.yml`` (strictness per work kind,
     exclusions that must carry a reason and an expiry). A harness hook calls
     this same command, so the hook and the shell can never disagree.
+
+    With no ``--project``, the project root is the nearest directory at or above
+    the working directory that contains ``.beadloom/`` — the firing record
+    belongs to the project, not to wherever the process was started.
+
+    ``--project`` is deliberately not validated by Click: an option Click
+    rejects exits before this callback, and therefore before the boundary that
+    guarantees a verdict and a record.
     """
-    from beadloom.application.guards.config import GuardConfigError
-    from beadloom.application.guards.evaluation import UnknownGuardError, evaluate_guard
-    from beadloom.application.guards.firing import record_firing
-    from beadloom.application.guards.hook_payload import (
-        HookPayloadError,
-        context_from_hook_payload,
-    )
-    from beadloom.application.guards.models import EXIT_CODE_CONFIG_ERROR
+    from beadloom.application.guards.invocation import GuardInvocation, run_invocation
 
-    project_root = project or Path.cwd()
-
-    if liveness:
-        if name is not None:
-            _fail("--liveness reports every guard; do not name one")
-        try:
-            _emit_liveness(project_root, output_json=output_json)
-        except GuardConfigError as exc:
-            _fail(str(exc))
-        return
-
-    if name is None:
-        _fail("name a guard to evaluate, or pass --liveness")
-        return
-
-    context = _parse_context(context_pairs)
-    if harness is not None:
-        try:
-            hook_context = context_from_hook_payload(harness, sys.stdin.read())
-        except HookPayloadError as exc:
-            _fail(str(exc))
-            return
-        context = {**hook_context, **context}
-
-    exit_code: int | None = None
-    try:
-        verdict = evaluate_guard(
-            name,
-            project_root=project_root,
-            context=context,
-            probes=_probes(project_root),
+    result = run_invocation(
+        GuardInvocation(
+            name=name,
+            declared_project=project,
+            context_pairs=context_pairs,
+            harness=harness,
+            liveness=liveness,
+            read_payload=_read_stdin,
+            probes_for=_probes,
         )
-    except UnknownGuardError as exc:
-        _fail(str(exc))
-        return
-    except GuardConfigError as exc:
-        # A broken `guards:` block keeps exit 3 (BDL-061.2: a configuration
-        # defect must not be mistaken for a guard that fired) — but it is now
-        # recorded, so the liveness report cannot show the guard as having
-        # answered when it never did.
-        verdict = _unanswerable(name, context, str(exc))
-        exit_code = EXIT_CODE_CONFIG_ERROR
-    except Exception as exc:  # the last resort; see the module docstring
-        verdict = _unanswerable(name, context, f"{type(exc).__name__}: {exc}")
-
-    record_firing(project_root, verdict)
-    _emit_verdict(verdict, output_json=output_json)
-    sys.exit(verdict.exit_code if exit_code is None else exit_code)
+    )
+    _emit(result, output_json=output_json)
+    sys.exit(result.exit_code)

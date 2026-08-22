@@ -340,21 +340,19 @@ class TestTheAcceptedShapeAgreesWithTheSpec:
 
 
 class TestTheStripHappensBeforeTheShapeIsJudged:
-    """GAP. Nine C0 control characters are stripped at the ends, not refused.
+    """CLOSED by BDL-061.29: nothing is removed before the shape is judged.
 
-    ``resolve_edit_path`` strips before it judges, and ``str.strip()`` removes
-    every character Python calls whitespace — which includes ``\\t \\n \\v \\f
-    \\r`` and ``U+001C``-``U+001F``, all inside the ``U+0000``-``U+001F`` range
-    the same SPEC paragraph says is refused. Two sentences of the SPEC disagree
-    and the code resolves the disagreement in the ACCEPTING direction.
+    The gap this class pinned: ``resolve_edit_path`` stripped and *then* judged,
+    and :meth:`str.strip` removes every character Python calls whitespace —
+    including ``\\t \\n \\v \\f \\r`` and ``U+001C``-``U+001F``, nine code points
+    inside the ``U+0000``-``U+001F`` range the same SPEC paragraph says is
+    refused. Two sentences of the SPEC disagreed and the code resolved the
+    disagreement in the ACCEPTING direction, which turned a ``block`` into a
+    ``skip`` whose printed reason named a pattern that does not cover the file
+    the writer would create.
 
-    That is not the harmless residual ``.27`` records ("a file whose name
-    genuinely ends in whitespace is guarded as though it did not"): the
-    consequence below is a ``block`` turning into a ``skip`` whose printed reason
-    names a pattern that does not cover the file the writer will create.
-
-    Pins today's behaviour so that judging the shape BEFORE stripping — or
-    restricting the strip to ``' '`` — reddens these tests.
+    The tests are kept, inverted: each one now asserts the closed behaviour, so
+    re-introducing any strip reddens the same rows that were red before the fix.
     """
 
     @pytest.mark.parametrize(
@@ -371,15 +369,15 @@ class TestTheStripHappensBeforeTheShapeIsJudged:
             ("unit separator", "\x1f"),
         ],
     )
-    def test_a_control_character_at_either_end_is_accepted_not_refused(
+    def test_a_control_character_at_either_end_is_refused_like_any_other(
         self, tmp_path, label, char
     ) -> None:
         trailing = resolve_edit_path(f"src/app.py{char}", tmp_path)
         leading = resolve_edit_path(f"{char}src/app.py", tmp_path)
 
-        assert trailing.scope is PathScope.INSIDE, f"trailing {label}: {trailing}"
-        assert trailing.relative == "src/app.py", label
-        assert leading.scope is PathScope.INSIDE, f"leading {label}: {leading}"
+        assert trailing.scope is PathScope.MALFORMED, f"trailing {label}: {trailing}"
+        assert trailing.relative is None, label
+        assert leading.scope is PathScope.MALFORMED, f"leading {label}: {leading}"
 
     @pytest.mark.parametrize(
         ("label", "char"),
@@ -391,70 +389,90 @@ class TestTheStripHappensBeforeTheShapeIsJudged:
             ("ideographic space", "\u3000"),
         ],
     )
-    def test_unicode_whitespace_is_stripped_too_so_a_different_file_is_guarded(
+    def test_unicode_whitespace_names_the_file_it_actually_names(
         self, tmp_path, label, char
     ) -> None:
         """These name real, creatable files that differ from the stripped one."""
         resolved = resolve_edit_path(f"src/app.py{char}", tmp_path)
 
         assert resolved.scope is PathScope.INSIDE, label
-        assert resolved.relative == "src/app.py", f"{label}: {resolved.relative!r}"
+        assert resolved.relative == f"src/app.py{char}", f"{label}: {resolved.relative!r}"
 
     @pytest.mark.parametrize(
-        ("label", "suffix"),
+        ("label", "suffix", "outcome", "exit_code"),
         [
-            ("a trailing newline", "\n"),
-            ("a trailing tab", "\t"),
-            ("a trailing no-break space", "\xa0"),
-            ("a trailing space", " "),
+            ("a trailing newline", "\n", GuardOutcome.ERROR, 2),
+            ("a trailing tab", "\t", GuardOutcome.ERROR, 2),
+            ("a trailing no-break space", "\xa0", GuardOutcome.BLOCK, 2),
+            ("a trailing space", " ", GuardOutcome.BLOCK, 2),
         ],
     )
-    def test_the_strip_turns_a_block_into_a_skip_the_exclusion_does_not_cover(
-        self, tmp_path, label, suffix
+    def test_the_exclusion_no_longer_covers_a_file_its_pattern_does_not_name(
+        self, tmp_path, label, suffix, outcome, exit_code
     ) -> None:
-        """The consequence, measured: F1's shape with a different character.
+        """The consequence, measured: no row reaches ``skip`` any more.
 
-        ``src/app.py`` + a stripped character is a DIFFERENT file on this
-        filesystem, and ``src/*.py`` does not name it — yet the guard reports it
-        as excluded by that pattern and exits 0.
+        A control character is refused (the shape gate), and a whitespace
+        character names a different file that ``src/*.py`` does not cover, so it
+        is guarded. Both are the over-guarding direction, with a stated reason.
         """
         root = _project(tmp_path, _BLOCKING_EXCLUDING_TOP_LEVEL_PY)
 
         verdict = _verdict(root, f"src/app.py{suffix}")
 
-        assert verdict.outcome is GuardOutcome.SKIP, f"{label}: {verdict.why}"
-        assert "src/*.py" in verdict.why, label
-        assert verdict.exit_code == 0, label
+        assert verdict.outcome is outcome, f"{label}: {verdict.why}"
+        assert verdict.exit_code == exit_code, label
+        assert "src/*.py" not in verdict.why, label
 
-    def test_the_file_the_guard_exempted_is_not_the_file_the_pattern_names(
+    def test_the_file_the_guard_exempted_is_the_file_the_pattern_names(
         self, tmp_path
     ) -> None:
-        """Stated as the property, not as the spelling: the two disagree."""
+        """Stated as the property, not as the spelling: the two now agree."""
         exclusion = GuardExclusion(path="src/*.py", reason="r", until="u")
+        root = _project(tmp_path, _BLOCKING_EXCLUDING_TOP_LEVEL_PY)
 
         assert exclusion.matches("src/app.py") is True
         assert exclusion.matches("src/app.py\xa0") is False
+        assert _verdict(root, "src/app.py").outcome is GuardOutcome.SKIP
 
 
-class TestAnEmptyTargetIsAbsentThoughTheSpecCallsItMalformed:
-    """GAP (documentation). The SPEC's shape opens with "a non-empty string".
+class TestAnEmptyTargetIsAbsentAndTheSpecNowSaysSo:
+    """CLOSED by BDL-061.29, in the document — which is where the defect was.
 
-    "Anything else is refused, unresolved, with a stated reason" — so by the
-    document an empty or whitespace-only target is an ``error``. The code
-    classifies it :attr:`PathScope.ABSENT` instead and the guard runs normally,
-    which is the safe direction and arguably the better behaviour ("no path
-    supplied" is not "a malformed path"). The finding is that the two do not
-    say the same thing, which is exactly the class F6 belonged to.
+    The SPEC's shape sentence opened with "a non-empty string", so by the
+    document an empty target was an ``error``; the code classified it
+    :attr:`PathScope.ABSENT` and the guard ran normally, naming the missing path
+    in ``not_covered``. The code had the better behaviour ("no path supplied" is
+    not "a malformed path"), so the SPEC was corrected to it — F6's class.
+
+    A whitespace-only target is no longer absent, because nothing is stripped
+    before the judgement: ``'   '`` names a file called three spaces and
+    ``'\\t'`` carries a control character.
     """
 
-    @pytest.mark.parametrize("raw", ["", "   ", "\t", "\n", None])
-    def test_an_empty_target_does_not_produce_the_documented_refusal(
+    @pytest.mark.parametrize("raw", ["", None])
+    def test_an_empty_target_is_absent_as_the_spec_now_states(
         self, tmp_path, raw
     ) -> None:
         resolved = resolve_edit_path(raw, tmp_path)
 
         assert resolved.scope is PathScope.ABSENT, resolved
         assert resolved.rejection == ""
+
+    def test_the_spec_no_longer_calls_an_empty_target_malformed(self) -> None:
+        """The two artifacts are read together, so they cannot drift apart again."""
+        spec = _SPEC.read_text(encoding="utf-8")
+
+        assert "absent or empty target is not a refusal" in spec
+
+    @pytest.mark.parametrize(
+        ("raw", "scope"),
+        [("   ", PathScope.INSIDE), ("\t", PathScope.MALFORMED), ("\n", PathScope.MALFORMED)],
+    )
+    def test_a_whitespace_only_target_is_judged_as_the_name_it_is(
+        self, tmp_path, raw, scope
+    ) -> None:
+        assert resolve_edit_path(raw, tmp_path).scope is scope
 
     def test_the_guard_still_answers_and_says_no_path_was_supplied(self, tmp_path) -> None:
         root = _project(tmp_path, _BLOCKING_WITH_EXCLUSION)
@@ -467,29 +485,26 @@ class TestAnEmptyTargetIsAbsentThoughTheSpecCallsItMalformed:
         )
 
 
-class TestTheExclusionMatcherIsNotFullyAnchored:
-    """GAP (latent). ``$`` also matches before a trailing newline; ``\\Z`` does not.
+class TestTheExclusionMatcherIsAnchoredAtBothEnds:
+    """CLOSED by BDL-061.29: ``\\Z`` where ``$`` was.
 
-    ``_glob_to_regex`` ends its pattern with ``$`` and calls ``.match``, so
-    ``src/*.py`` covers ``'src/app.py\\n'`` — a different file. Today the shape
-    gate's strip hides this (the newline never reaches the matcher), so the
-    module has two locks with the same hole and the outer one is what is
-    holding. Reachable through the public :meth:`GuardExclusion.matches` and
-    through the liveness walk, which matches patterns against real file names.
-
-    Pins the behaviour so that switching to ``fullmatch``/``\\Z`` reddens it,
-    and so that removing the strip does not silently leave the gap open.
+    ``_glob_to_regex`` ended its pattern with ``$`` and called ``.match``, and
+    Python's ``$`` also matches *before* a trailing newline — so ``src/*.py``
+    covered ``'src/app.py\\n'``, a different file. It was latent only because the
+    resolver stripped the newline first: two locks with the same hole, and the
+    outer one was what held. Both are closed, and this pin is what proves the
+    inner one was not left open behind the fix to the outer one.
     """
 
-    def test_a_pattern_covers_a_path_that_only_differs_by_a_trailing_newline(
+    def test_a_pattern_does_not_cover_a_path_that_differs_by_a_trailing_newline(
         self,
     ) -> None:
         exclusion = GuardExclusion(path="src/*.py", reason="r", until="u")
 
-        assert exclusion.matches("src/app.py\n") is True
+        assert exclusion.matches("src/app.py\n") is False
+        assert exclusion.matches("src/app.py") is True
 
-    def test_it_stops_at_one_trailing_newline_and_no_further_text(self) -> None:
-        """Bounding the gap honestly: it is one trailing newline, not any suffix."""
+    def test_it_still_matches_nothing_with_further_text_after_the_newline(self) -> None:
         exclusion = GuardExclusion(path="src/*.py", reason="r", until="u")
 
         assert exclusion.matches("src/app.py\nevil.sh") is False
@@ -508,9 +523,13 @@ class TestEveryWayTheCommandCanTerminate:
     that names a registered guard ends without a firing record. The single
     exception is a name that is not a registered guard."
 
-    The rows below with ``records=False`` and a registered guard name are
-    therefore undocumented breaches of that invariant, not design. They are
-    pinned so that recording them reddens exactly those rows.
+    Six rows breached it when this class was written (BDL-061.28, F8) — every
+    argument-parsing and hook-payload failure exited through ``_fail()``, which
+    called :func:`sys.exit` before the record was reached. BDL-061.29 put one
+    boundary around the whole invocation, and the ``records`` column below now
+    reads ``True`` for every row that names a registered guard. The enumeration
+    that keeps it that way lives in ``tests/test_guards_invocation.py``; this
+    table stays as the independent measurement it was.
     """
 
     @pytest.mark.parametrize(
@@ -570,7 +589,7 @@ class TestEveryWayTheCommandCanTerminate:
                 "",
                 _BLOCKING_WITH_EXCLUSION,
                 3,
-                False,
+                True,
             ),
             (
                 "a --context pair with an empty key",
@@ -578,7 +597,7 @@ class TestEveryWayTheCommandCanTerminate:
                 "",
                 _BLOCKING_WITH_EXCLUSION,
                 3,
-                False,
+                True,
             ),
             (
                 "a harness nobody supports",
@@ -586,23 +605,23 @@ class TestEveryWayTheCommandCanTerminate:
                 "",
                 _BLOCKING_WITH_EXCLUSION,
                 3,
-                False,
+                True,
             ),
             (
                 "a hook payload that is not JSON",
                 ["guard", "bead-claimed", "--hook", "claude-code"],
                 "{not json",
                 _BLOCKING_WITH_EXCLUSION,
-                3,
-                False,
+                2,
+                True,
             ),
             (
                 "a hook payload that is not an object",
                 ["guard", "bead-claimed", "--hook", "claude-code"],
                 "[1, 2]",
                 _BLOCKING_WITH_EXCLUSION,
-                3,
-                False,
+                2,
+                True,
             ),
         ],
     )
@@ -620,24 +639,25 @@ class TestEveryWayTheCommandCanTerminate:
         assert bool(_outcomes(root)) is records, f"{label}: {_outcomes(root)}"
 
     @pytest.mark.parametrize(
-        ("label", "args", "stdin"),
+        ("label", "args", "stdin", "exit_code"),
         [
-            ("a malformed --context pair", ["--context", "nonsense"], ""),
-            ("a harness nobody supports", ["--hook", "no-such-harness"], ""),
-            ("a hook payload that is not JSON", ["--hook", "claude-code"], "{not json"),
+            ("a malformed --context pair", ["--context", "nonsense"], "", 3),
+            ("a harness nobody supports", ["--hook", "no-such-harness"], "", 3),
+            ("a hook payload that is not JSON", ["--hook", "claude-code"], "{not json", 2),
         ],
     )
-    def test_a_registered_guard_can_still_end_without_a_record(
-        self, tmp_path, monkeypatch, label, args, stdin
+    def test_a_registered_guard_no_longer_ends_without_a_record(
+        self, tmp_path, monkeypatch, label, args, stdin, exit_code
     ) -> None:
-        """GAP, stated as the invariant it breaks rather than as a code path.
+        """CLOSED by BDL-061.29 — the gap this test was written to pin.
 
-        Each of these names ``bead-claimed`` — a registered guard — and leaves
-        ``guard-firings.jsonl`` untouched, so ``--liveness`` goes on reporting
-        whatever the previous run said. The hook-payload row is the one that
-        matters: that payload comes from the harness, so it is the F2 shape
-        (model-controlled input, no verdict, no record) with a different
-        spelling.
+        Each of these names ``bead-claimed`` — a registered guard — and used to
+        leave ``guard-firings.jsonl`` untouched, so ``--liveness`` went on
+        reporting whatever the previous run said. The hook-payload row was the
+        one that mattered: that string comes from the harness, so it was the F2
+        shape (model-controlled input, no verdict, no record) with a different
+        spelling. It now also blocks rather than exiting on the configuration
+        code, because the input describes the edit in flight.
         """
         from beadloom.services.commands import guard as guard_cmd
 
@@ -648,13 +668,18 @@ class TestEveryWayTheCommandCanTerminate:
             ["guard", "bead-claimed", "--project", str(root), *args], stdin=stdin
         )
 
-        assert result.exit_code == 3, f"{label}: {result.output}"
-        assert read_firings(root) == (), label
+        assert result.exit_code == exit_code, f"{label}: {result.output}"
+        assert _outcomes(root) == ["error"], label
 
-    def test_liveness_does_not_show_an_invocation_that_left_no_record(
+    def test_liveness_shows_the_invocation_that_could_not_answer(
         self, tmp_path, monkeypatch
     ) -> None:
-        """The consequence: the report reads healthy through an unguarded edit."""
+        """The consequence, inverted: the report can no longer read healthy through it.
+
+        It used to be byte-identical before and after an unrecorded invocation,
+        so yesterday's verdict was still on the screen while today's edit went
+        unguarded.
+        """
         from beadloom.services.commands import guard as guard_cmd
 
         monkeypatch.setattr(guard_cmd, "_probes", lambda _root: GuardProbes())
@@ -668,7 +693,12 @@ class TestEveryWayTheCommandCanTerminate:
         )
         after = _cli(["guard", "--liveness", "--project", str(root), "--json"]).output
 
-        assert json.loads(before) == json.loads(after)
+        rows_before = {row["guard"]: row for row in json.loads(before)}
+        rows_after = {row["guard"]: row for row in json.loads(after)}
+        assert rows_after["bead-claimed"]["fired_count"] == (
+            rows_before["bead-claimed"]["fired_count"] + 1
+        )
+        assert rows_after["bead-claimed"]["last_outcome"] == "error"
 
     def test_an_exception_inside_a_check_becomes_a_recorded_verdict(
         self, tmp_path, monkeypatch
@@ -809,7 +839,7 @@ class TestEveryRefusalNamesWhatItDidNotCheck:
 
         monkeypatch.setattr(guard_cmd, "_probes", lambda _root: GuardProbes())
         monkeypatch.setattr(
-            "beadloom.application.guards.evaluation.evaluate_guard", explode
+            "beadloom.application.guards.invocation.evaluate_guard", explode
         )
         root = _project(tmp_path, _BLOCKING_WITH_EXCLUSION)
 
@@ -950,47 +980,48 @@ class TestTheExitCodeContractThroughTheRealBinary:
 
         assert _outcomes(root) == ["block", "error"]
 
-    def test_a_usage_error_borrows_the_blocking_exit_code(self, tmp_path) -> None:
-        """GAP. Click's own usage exit is 2 — the code the SPEC reserves for a block.
+    def test_a_missing_project_directory_is_a_verdict_and_not_clicks_usage_exit(
+        self, tmp_path
+    ) -> None:
+        """CLOSED by BDL-061.29 (m1): the option is no longer validated by Click.
 
-        The SPEC reserves 3 for usage errors "deliberately not 2, which is
-        Click's own usage code and would otherwise be indistinguishable from a
-        genuine block". The command's own ``--project`` validation is exactly
-        that case: a directory that does not exist produces Click's exit 2, no
-        verdict, and no firing record. The direction is fail-CLOSED (the harness
-        blocks), so it costs work rather than safety — but it is the collision
-        the SPEC says was designed out, and it is unrecorded.
+        ``--project`` used to carry ``exists=True``, so a directory that does not
+        exist produced Click's own exit 2 — the code the SPEC reserves for a
+        block — with no verdict and no firing record: a usage error wearing a
+        block's clothes. Validation now happens inside the boundary, so the same
+        argv produces an ``error`` verdict that says the project could not be
+        located. It still exits 2, and that is the point: the guard genuinely
+        cannot answer, so the edit must stop. Nothing is recorded, because
+        recording would require inventing the project this invocation could not
+        find — the one exception the SPEC names for exactly this reason.
         """
         root = _project(tmp_path, _BLOCKING_WITH_EXCLUSION, branch="main")
 
         result = _run_real(root, ["guard", "working-branch", "--project", str(root / "gone")])
 
         assert result.returncode == 2, result.stderr
-        assert b"Invalid value" in result.stderr
+        assert b"Invalid value" not in result.stderr
+        assert b"working-branch: ERROR" in result.stderr
+        assert not (root / "gone").exists()
         assert read_firings(root) == ()
 
 
 @real_binary
 class TestAHookPayloadTheProcessCannotDecode:
-    """GAP, and the one that matters: F2's exact failure mode is still reachable.
+    """CLOSED by BDL-061.29: the stdin read moved inside the boundary.
 
-    ``--hook`` reads ``sys.stdin.read()``, which decodes with the process's
-    encoding and ``errors='strict'``. A payload carrying a byte that is not
-    valid UTF-8 raises ``UnicodeDecodeError`` OUTSIDE both the
+    The gap: ``--hook`` read ``sys.stdin.read()``, which decodes with the
+    process's encoding and ``errors='strict'``. A payload carrying a byte that
+    is not valid UTF-8 raised ``UnicodeDecodeError`` OUTSIDE both the
     ``HookPayloadError`` handler (it is not one) and the ``except Exception``
-    around ``evaluate_guard`` (it happens before it), so the invocation ends in
+    around ``evaluate_guard`` (it happened before it), so the invocation ended
+    in a raw traceback, exit 1 — the WARN code, which the shipped adapter's own
+    comment calls "shown, never blocking" — no verdict, and no firing record.
+    Four properties, identical to F2's, from the same input class.
 
-      * a raw traceback,
-      * exit code 1 — the WARN code, which the shipped adapter's own comment
-        calls "shown, never blocking",
-      * no verdict, and
-      * no firing record.
-
-    That is the same four properties F2 had, from the same kind of input — the
-    harness's stdin — reached by a different byte. The accepted shape explicitly
-    admits non-UTF-8 file names (``.27`` added ``'src/\\udcff.py'`` to its
-    accepted list, "a real non-UTF-8 byte ... so it names a file that can
-    actually exist"), so the transport refuses a name the guard says it accepts.
+    The accepted shape explicitly admits non-UTF-8 file names, so the transport
+    was refusing, with a crash, a name the shape gate one layer down accepts.
+    Both halves are asserted side by side below.
 
     Must run as a real process: a ``CliRunner`` supplies an already-decoded
     string and cannot reproduce a decoding failure at all.
@@ -1007,7 +1038,7 @@ class TestAHookPayloadTheProcessCannotDecode:
             ("a stray continuation byte", b'{"tool_name": "\x80"}'),
         ],
     )
-    def test_an_undecodable_payload_still_crashes_and_leaves_no_record(
+    def test_an_undecodable_payload_is_a_recorded_verdict_on_the_blocking_code(
         self, tmp_path, label, payload
     ) -> None:
         root = _project(tmp_path, _BLOCKING_WITH_EXCLUSION)
@@ -1016,38 +1047,35 @@ class TestAHookPayloadTheProcessCannotDecode:
             root, ["guard", "bead-claimed", "--hook", "claude-code"], stdin=payload
         )
 
-        assert result.returncode == 1, f"{label}: {result.stderr!r}"
-        assert b"Traceback" in result.stderr, label
-        assert b"UnicodeDecodeError" in result.stderr, label
-        assert read_firings(root) == (), label
+        assert result.returncode == 2, f"{label}: {result.stderr!r}"
+        assert b"Traceback" not in result.stderr, label
+        assert b"UnicodeDecodeError" not in result.stderr, label
+        assert _outcomes(root) == ["error"], label
 
     def test_the_same_file_name_is_accepted_when_it_reaches_the_shape_gate(
         self, tmp_path
     ) -> None:
-        """The other half of the contradiction: the shape admits what stdin refuses."""
+        """The other half: the shape admits what the transport used to crash on."""
         resolved = resolve_edit_path("src/\udcff.py", tmp_path)
 
         assert resolved.scope is PathScope.INSIDE, resolved
 
 
 @real_binary
-class TestTheProjectRootIsWhereverTheShellIs:
-    """GAP. The shipped adapter passes no ``--project``, so the root is ``cwd``.
+class TestTheProjectIsDiscoveredNotTakenFromTheShell:
+    """CLOSED by BDL-061.29: the root is the nearest ancestor holding ``.beadloom/``.
 
-    ``hook_command`` anchors the SCRIPT with ``$CLAUDE_PROJECT_DIR`` and its
-    docstring gives the reason — cwd "is not the project root for every tool
-    invocation" — but the emitted script then runs ``beadloom guard "$1" --hook
-    claude-code`` with no ``--project``, so the DECISION root stays cwd, and
-    ``load_guards_config`` does not walk upwards. Measured from a subdirectory
-    of a project whose ``flow.yml`` declares ``block``:
-
-      * the declared strictness is gone: ``block`` (exit 2, blocking) becomes
-        the shipped default ``warn`` (exit 1, non-blocking);
-      * declared exclusions are gone with it;
-      * the firing is written to ``<subdir>/.beadloom/guard-firings.jsonl``, a
-        file ``--liveness`` at the project root never reads — so the report
-        shows the last real verdict while the edit that just happened was
-        neither blocked nor recorded where anyone will look.
+    The gap: the shipped adapter passes no ``--project``, so the decision root
+    was ``Path.cwd()`` and ``load_guards_config`` did not walk upwards.
+    ``hook_command`` anchored the SCRIPT with ``$CLAUDE_PROJECT_DIR`` and its
+    docstring gave the reason — cwd "is not the project root for every tool
+    invocation" — then left the decision on cwd anyway. Measured from a
+    subdirectory of a project whose ``flow.yml`` declares ``block``: the
+    declared strictness was gone (block, exit 2 → warn, exit 1, non-blocking),
+    the declared exclusions were gone with it, and the firing was written to a
+    NEW ``<subdir>/.beadloom/`` that ``--liveness`` at the root never reads —
+    which also manufactured a second project root inside the first, so the next
+    invocation from there would find the stray marker and entrench the reading.
     """
 
     @pytest.fixture()
@@ -1067,7 +1095,7 @@ class TestTheProjectRootIsWhereverTheShellIs:
         sub.mkdir(parents=True)
         return root, sub
 
-    def test_a_declared_block_degrades_to_a_non_blocking_warn(
+    def test_a_declared_block_stays_a_block_from_a_subdirectory(
         self, project_with_a_subdirectory
     ) -> None:
         root, sub = project_with_a_subdirectory
@@ -1076,19 +1104,19 @@ class TestTheProjectRootIsWhereverTheShellIs:
         at_sub = _run_real(sub, ["guard", "working-branch"])
 
         assert at_root.returncode == 2, at_root.stderr
-        assert at_sub.returncode == 1, at_sub.stderr
+        assert at_sub.returncode == 2, at_sub.stderr
 
-    def test_the_firing_lands_where_the_liveness_report_will_not_read_it(
+    def test_the_firing_lands_where_the_liveness_report_reads_it(
         self, project_with_a_subdirectory
     ) -> None:
         root, sub = project_with_a_subdirectory
 
         _run_real(sub, ["guard", "working-branch"])
 
-        assert _outcomes(sub) == ["warn"]
-        assert read_firings(root) == ()
+        assert _outcomes(root) == ["block"]
+        assert read_firings(sub) == ()
 
-    def test_the_liveness_report_at_the_root_reports_the_guard_as_never_fired(
+    def test_the_liveness_report_at_the_root_shows_the_subdirectory_firing(
         self, project_with_a_subdirectory
     ) -> None:
         root, sub = project_with_a_subdirectory
@@ -1097,18 +1125,18 @@ class TestTheProjectRootIsWhereverTheShellIs:
         report = _run_real(root, ["guard", "--liveness", "--json"])
         rows = {row["guard"]: row for row in json.loads(report.stdout)}
 
-        assert rows["working-branch"]["never_fired"] is True
-        assert rows["working-branch"]["fired_count"] == 0
+        assert rows["working-branch"]["never_fired"] is False
+        assert rows["working-branch"]["fired_count"] == 1
 
-    def test_it_creates_a_beadloom_directory_outside_the_project_root(
+    def test_it_creates_no_beadloom_directory_outside_the_project_root(
         self, project_with_a_subdirectory
     ) -> None:
-        """A guard's only write should be the project's own firing record."""
+        """A guard's only write is the PROJECT's firing record — never a new root."""
         _root, sub = project_with_a_subdirectory
 
         _run_real(sub, ["guard", "working-branch"])
 
-        assert (sub / ".beadloom" / "guard-firings.jsonl").is_file()
+        assert not (sub / ".beadloom").exists()
 
 
 # ==========================================================================
@@ -1215,24 +1243,25 @@ class TestTheResidualsTheFixNamed:
         assert resolved.scope is PathScope.INSIDE, label
         assert resolved.relative == raw, label
 
-    def test_the_whitespace_residual_is_wider_than_the_spec_states(
+    def test_the_whitespace_residual_is_gone_rather_than_narrowed(
         self, tmp_path
     ) -> None:
-        """Residual 1, NOT narrow — the counter-example, kept next to the claims.
+        """Residual 1 was NOT narrow, and BDL-061.29 removed it instead of rewording it.
 
-        The SPEC states the cost as "a file whose name genuinely ends in
+        The SPEC stated the cost as "a file whose name genuinely ends in
         whitespace is guarded as though it did not". Measured, the same strip
-        also swallows nine C0 control characters the paragraph above says are
-        refused.
+        also swallowed nine C0 control characters the paragraph above said were
+        refused. There is no strip now: each of those nine is refused, and a
+        name that really ends in whitespace is guarded as the name it is.
         """
-        control_characters_stripped = [
+        control_characters_accepted = [
             char
             for char in "\t\n\v\f\r\x1c\x1d\x1e\x1f"
-            if resolve_edit_path(f"src/app.py{char}", tmp_path).scope is PathScope.INSIDE
+            if resolve_edit_path(f"src/app.py{char}", tmp_path).scope is not PathScope.MALFORMED
         ]
 
-        assert len(control_characters_stripped) == 9
-        assert all(ord(char) <= 0x1F for char in control_characters_stripped)
+        assert control_characters_accepted == []
+        assert resolve_edit_path("src/app.py ", tmp_path).relative == "src/app.py "
 
 
 class TestTheAdversarialTable:
@@ -1269,7 +1298,7 @@ class TestTheAdversarialTable:
             ("an excluded path reached by traversal", "docs/../src/app.py", "skip", 0),
             ("the excluded directory itself", "src/", "block", 2),
             # -- rows nobody has named before ---------------------------------
-            ("a trailing newline on an excluded path", "src/app.py\n", "skip", 0),
+            ("a trailing newline on an excluded path", "src/app.py\n", "error", 2),
             ("a trailing no-break space", "src/app.py\xa0", "skip", 0),
             ("a zero-width space inside an excluded path", "src/ap\u200bp.py", "skip", 0),
             ("a right-to-left override", "src/\u202egpj.txt", "skip", 0),

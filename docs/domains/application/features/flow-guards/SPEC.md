@@ -36,6 +36,20 @@ Exit codes carry the outcome, so a shell adapter needs no parsing: `0` for
 configuration error — deliberately not `2`, which is Click's own usage code and
 would otherwise be indistinguishable from a genuine block.
 
+**Which failures earn `3` rather than `2`** is one line, not a list of cases: `3`
+is for a defect in the project's *declared configuration* (a `guards:` block that
+will not parse, an exclusion with no reason, a guard name nobody registered) and
+for a command line that could not be used at all (no guard named, `--liveness`
+with a name, a malformed `--context` pair, an unsupported `--hook` harness). Both
+are stable defects that fail identically on every invocation until a human edits
+a file, and neither is about a particular edit. Everything that goes wrong while
+trying to answer about *this* edit — a hook payload that cannot be decoded or
+parsed, a project that cannot be located, an exception anywhere — is an `error`
+verdict at exit `2`. That is a change of position for the payload cases, and its
+reason is that the payload comes from the harness at edit time: a truncated pipe
+or a schema change used to exit `3`, which the harness treats as non-blocking, so
+the gate switched itself off loudly while failing open.
+
 `error` is the outcome for **the guard could not answer** — a refused path, a
 `guards:` block that will not parse, or any failure inside the evaluation. It is
 a verdict rather than an exception because a verdict is recorded, and an
@@ -80,6 +94,92 @@ it was deleted rather than quoted: a documented key with no consumer teaches an
 incantation that has never done anything. It returns, wired to a selector, in S3
 when composition and adapters are reworked.
 
+### The project a guard answers about
+
+With no `--project`, the project root is the **nearest directory at or above the
+working directory that contains `.beadloom/`**. With `--project`, that directory
+is the root and no search happens.
+
+This is a decision with a live alternative, so both sides are stated. Until
+BDL-061.29 the root was `Path.cwd()`, and the shipped adapter passes no
+`--project`, so the root was wherever the harness happened to have chdir'd.
+Measured from `<root>/src/beadloom` in a project whose `flow.yml` declares
+`block`: the declared strictness was gone (`block`, exit 2 → the shipped default
+`warn`, exit 1, non-blocking), every declared exclusion was gone with it, and the
+firing was written to a new `src/beadloom/.beadloom/` that `--liveness` at the
+real root never reads — the report showed the guard as never having fired *after
+a real evaluation had happened*. It also manufactured a second project root
+inside the first, so the next invocation from that directory would find the stray
+marker and keep using it: self-entrenching, not one-shot.
+
+**Walking up** was chosen over **refusing to run outside a project root**, which
+would have been the consistent extension of "narrow the input" one section below.
+The trade-off is what each failure costs. Refusing turns an agent that merely
+changed directory into an agent that cannot edit anything, for a reason it cannot
+fix from inside the harness; and it does not remove the "cannot locate the
+project" path, it only makes it the common case. Walking up is also not the kind
+of guess this feature removed elsewhere: that was about repairing a
+*model-supplied string*, where every normalisation is a bet on what the harness
+will write. A directory tree is not model-supplied, `.beadloom/` is evidence
+rather than an inference, and there is exactly one nearest ancestor carrying it.
+
+The marker is `.beadloom/` and not `.git/`, because it is the directory the
+guard's own configuration and its own record live in — so the directory that
+answers "where does this firing belong" is the one that answers "which `flow.yml`
+governs this edit". `.git/` nests (submodules, worktrees) and would name a root
+Beadloom knows nothing about.
+
+**A guard that cannot locate a project answers `error`, which blocks, and writes
+nothing.** It does not create `.beadloom/` where it stands: a silent `skip` at
+exit 0 was the shape of this defect, and manufacturing the directory was its
+self-entrenching half. `--project` naming something that is not a directory is
+the same refusal, not a separate spelling of it — which also removes the case
+where Click's own validation exited on the block code with no verdict at all.
+
+The residual, named: a **nested** `.beadloom/` — a fixture project checked into a
+tree — makes the inner directory the root for every invocation beneath it. That
+is what a nested project is, and the verdict names the root it used.
+
+### One boundary per invocation
+
+Every invocation of `beadloom guard` — however it arrives, however it fails —
+returns through one function, which produces a verdict and, where there is one to
+write, a firing record. A failure anywhere inside it, including in argument
+parsing and in the stdin read (i.e. before a guard name is even known), becomes a
+recorded verdict of "I could not tell" rather than a traceback. New failure modes
+will still appear; the requirement is that they appear in `--liveness` instead of
+in a traceback.
+
+The boundary exists because the invariant below was, for three fix cycles,
+honoured case by case: each entry path decided for itself whether to record, and
+each new one was a fresh place to forget — one of the holes was introduced by the
+fix that closed the previous one. The CLI now terminates the process in exactly
+one place, and the boundary returns in exactly one statement, which is the step
+that records.
+
+**A firing is written when the invocation produced a verdict, a project was
+located, and the verdict names a registered guard.** The three exceptions are
+intrinsic rather than convenient, and each is *reported* on the result (and shown
+as `not recorded: <reason>` on stderr, or as `recorded` / `not_recorded_because`
+under `--json`) instead of being left to be inferred from a missing line:
+
+| Exception | Why it cannot be otherwise |
+|---|---|
+| a successful `--liveness` report | it evaluates nothing, so there is no verdict to record, and recording one would inflate the count it prints |
+| no project could be located | there is nowhere to write it, and creating a project root is the failure this rule exists to prevent |
+| the name is not a registered guard (including no name at all) | there is nothing to attribute the row to, and an invented row is a lie in the one report whose product is honesty |
+
+A fourth case is a failure rather than an exception: if the record cannot be
+written (a read-only filesystem, say), the verdict still reaches the reader and
+carries the reason the record is missing.
+
+What remains outside the boundary, named rather than implied: an argv **Click
+itself** cannot parse — an unknown option — never reaches the callback, so it
+exits 2 with Click's usage message and no record. It is fail-closed (the harness
+blocks), it fails identically on every invocation, and the reachable case that
+used to hide there (`--project` pointing at a missing directory) has been moved
+inside.
+
 ### The path a guard is asked about
 
 The evaluation context carries `path` from the harness (`tool_input.file_path`),
@@ -92,12 +192,15 @@ false about the file.
 
 #### The accepted shape, and what happens outside it
 
-**A well-formed edit target is a non-empty string that contains no C0 control
-character and no `DEL` (`U+0000`–`U+001F`, `U+007F`), contains no backslash, does
-not begin with `~`, and can be encoded for this filesystem (`os.fsencode`);
-whitespace at either end is stripped as a transport artifact before it is
-judged.** Anything else is refused, unresolved, with a stated reason. Each rule
-removes a spelling that means one file to this guard and a different one to
+**A well-formed edit target is a string that contains no C0 control character
+and no `DEL` (`U+0000`–`U+001F`, `U+007F`), contains no backslash, does not begin
+with `~`, and can be encoded for this filesystem (`os.fsencode`); it is judged
+exactly as supplied, with nothing removed first.** Anything else is refused,
+unresolved, with a stated reason. (An absent or empty target is not a refusal at
+all: it is "the harness supplied no path", which the guard states in
+`not_covered` — "no path supplied" and "a malformed path" are different facts and
+the verdict says which one it saw.) Each rule removes a spelling that means one
+file to this guard and a different one to
 whoever performs the write: a NUL ends the name in the C layer beneath the
 writer, a backslash separates directories on the harness's platform and is an
 ordinary character on this one, `~` is expanded by a shell and not here, and a
@@ -112,6 +215,20 @@ NUL crash, and each new normalisation is another guess about what the harness
 will write. Refusing is cheaper to reason about than guessing, and it is the
 version that stops generating cases.
 
+**Nothing is stripped before the judgement, and that is a correction.** An
+earlier version removed surrounding whitespace as "a transport artifact", and
+`str.strip()` removes every character Python calls whitespace — which includes
+nine code points (`\t \n \v \f \r` and `U+001C`–`U+001F`) inside the C0 range
+this same paragraph refuses. Two sentences of this document disagreed and the
+code resolved the disagreement in the accepting direction: measured with
+`src/*.py` excluded and strictness `block`, `'src/app.py\n'` reached `skip`,
+quoting an exclusion that does not cover the file the writer would create. Every
+character the strip removed is a legal file-name character on this platform, so
+removing any of them was the same guess the shape exists to stop making. The
+cost, named: a target that arrives with a stray trailing newline is refused
+rather than evaluated — the over-guarding direction, with a stated reason and a
+way out.
+
 A refused path produces an **`error` verdict**, which blocks — never a `skip`
 ("not applicable", and the edit proceeds), never a `warn` (exit 1, which the
 harness reads as non-blocking), and never a traceback. It is decided *after*
@@ -123,8 +240,7 @@ target (escaped and bounded at 120 characters), and states the way out: spell th
 path POSIX-style, or set the guard's strictness to `off` if such a name is
 legitimate in this project.
 
-What remains outside the shape check, named rather than implied: a file whose
-name genuinely ends in whitespace is guarded as though it did not; a bare drive
+What remains outside the shape check, named rather than implied: a bare drive
 letter (`C:/Users/...`) is well-formed POSIX and is read as a relative directory
 called `C:`, because this build of Beadloom resolves paths with POSIX semantics;
 and a homoglyph or a Unicode look-alike names a *different* file, which the guard
@@ -187,8 +303,10 @@ never louder.
 
 ## Invariants
 
-- **Read-only.** No guard writes to the index it inspects; the firing record is
-  the only file guards write, and it is not the index.
+- **Read-only with respect to the index.** No guard writes to the index it
+  inspects. The firing record is the one deliberate write, it is not the index,
+  and it goes to the project's own `.beadloom/` — a guard never creates a project
+  root as a side effect of recording.
 - **`skip` always carries a reason.** A guard that silently does not apply is
   indistinguishable from one that passed.
 - **A `warn` always names what it did not check** (`not_covered` is never empty).
@@ -206,11 +324,16 @@ never louder.
 - **An exclusion is matched against a resolved path** that is inside the
   accepted shape and inside the project root — never against a refused string
   and never against a target elsewhere on the machine.
-- **No invocation that names a registered guard ends without a firing record.**
-  A failure that leaves no record is invisible to the one report whose whole
-  product is honesty about dead gates. The single exception is a name that is not
-  a registered guard: there is nothing to record it against, and the caller's
-  shell already carries the error.
+- **No invocation ends without a verdict, and none that names a registered guard
+  in a located project ends without a firing record.** A failure that leaves no
+  record is invisible to the one report whose whole product is honesty about dead
+  gates. Held by one boundary rather than case by case — see *One boundary per
+  invocation* for the three exceptions, each reported on the result rather than
+  inferred from its absence.
+- **The record is the project's.** The root is discovered by walking up for
+  `.beadloom/`, never taken from the working directory and never created: a
+  firing written somewhere `--liveness` does not read is indistinguishable from
+  no firing at all.
 - **A guard that cannot answer says so and blocks.** "I could not tell" is a
   verdict (`error`), not an exception, and it never borrows the `warn` code.
 - **One decision point.** The CLI, the hook adapter and (from S2) the Gate all
@@ -224,6 +347,8 @@ never louder.
 | `contract.py` | what a check receives (request, probes) and returns (finding) |
 | `config.py` | the `guards:` block of `flow.yml` — parsing and validation |
 | `evaluation.py` | check outcome + strictness + exclusions → verdict |
+| `invocation.py` | one invocation end to end: decide, then record or say why not |
+| `project_root.py` | locating the project a guard answers about and records into |
 | `paths.py` | the accepted shape of an edit path, and resolving it against the project root |
 | `firing.py` | the append-only firing record |
 | `liveness.py` | which guards are actually protecting something |

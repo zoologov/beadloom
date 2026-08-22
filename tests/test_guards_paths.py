@@ -183,8 +183,20 @@ class TestResolveEditPath:
         assert resolved.scope is PathScope.ABSENT
         assert resolved.relative is None
 
-    def test_a_blank_path_is_absent(self, tmp_path) -> None:
-        assert resolve_edit_path("   ", tmp_path).scope is PathScope.ABSENT
+    def test_an_empty_path_is_absent(self, tmp_path) -> None:
+        assert resolve_edit_path("", tmp_path).scope is PathScope.ABSENT
+
+    def test_a_whitespace_only_path_is_judged_as_the_name_it_is(self, tmp_path) -> None:
+        """Nothing is stripped before the shape is judged (BDL-061.29, F10).
+
+        ``'   '`` names a file called three spaces, which is legal on this
+        platform; ``'\n'`` carries a control character and is refused. Treating
+        either as "the harness supplied no path" was a guess, and the guess ran
+        BEFORE the shape gate — which is how nine C0 characters the SPEC refuses
+        were silently accepted.
+        """
+        assert resolve_edit_path("   ", tmp_path).scope is PathScope.INSIDE
+        assert resolve_edit_path("\n", tmp_path).scope is PathScope.MALFORMED
 
     def test_an_inside_path_is_relative_posix(self, tmp_path) -> None:
         resolved = resolve_edit_path("src/./a/../a/b.py", tmp_path)
@@ -648,7 +660,7 @@ class TestNoInvocationEndsWithoutARecord:
 
         write_flow_yml(_EXCLUDED_SCRIPTS)
         monkeypatch.setattr(
-            "beadloom.application.guards.evaluation.evaluate_guard", explode
+            "beadloom.application.guards.invocation.evaluate_guard", explode
         )
         payload = json.dumps(
             {"hook_event_name": "PreToolUse", "tool_input": {"file_path": "src/app.py"}}
