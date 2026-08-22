@@ -35,6 +35,32 @@
 
 ## Open Issues
 
+174. [2026-08-22] [CRITICAL] 🔴 The documentation gate is defeated by deleting documentation — `beadloom ci` exits 0 with every step PASS
+
+    **Severity:** critical (the product's central promise — "no code reaches `main` without current docs" — is satisfiable by removing the docs)
+    **Command:** `beadloom ci`, `beadloom sync-check`, `beadloom doctor`
+    **Context:** found by the S2 verification bead and reproduced by the coordinator through the real CLI before filing. Delete one SPEC that the graph declares, run the gate on a clean DB:
+
+    ```
+    rm docs/domains/graph/features/rule-engine/SPEC.md
+    beadloom ci
+      lint         PASS: 12 rules, 0 violations
+      sync-check   PASS: 269 pair(s) fresh     ← was 275
+      docs-audit   PASS: 13 mention(s) fresh
+      doctor       PASS: 21 check(s) clean     ← was 20
+      exit 0
+    ```
+
+    **Issue:** six declared pairs vanished and the gate called the result fresh. The `doctor` check count *rose* while a file was being deleted. Nothing anywhere reported that the declared surface had shrunk.
+    **Why it outranks every other false-green in this log:** the others make a check unreliable about what it examined. This one lets the thing being examined disappear. The cheapest way to pass the gate is now to delete the document rather than update it — and an agent under time pressure, a careless rebase, or a merge that drops a file all produce green.
+    **It is the exact shape of the `component`-node defect (#146), one level up.** That one said "clean" means "no pairs exist" rather than "docs are fresh", for a node kind. The same equation survives for whole DOCUMENTS. A pair whose doc is gone is not fresh — it is unverifiable, and those two must not print the same word. `sync-check` calling a pair `ok` when the file is gone is the same defect from the other side.
+    **Expected — the third item is the one that makes it durable:**
+    - A declared doc that does not exist is a failure, not an absence; *missing* and *stale* are different facts and should read differently.
+    - The declared-pair **count** is part of the contract. A run whose count fell since the last run must say so — the silent 275 → 269 was the available signal and it was discarded.
+    - **Nothing may pass by having less to check.** Audit every gate step against that sentence, not only `sync-check`: `doctor` reported 21 clean while a file vanished, and its `20 check(s) clean` separately counts 9 warnings and 1 "not verified". A count that grows when the tree shrinks is not a count of anything.
+    **Related:** #146 (same equation, node kind), #172 (a rule that cannot match reads clean), #173 (the audit affirms one fact thirteen times). Together these four are one theme: *a green result that describes the checker's ignorance rather than the code's health.*
+    > Tracked as a bead (P0, `beadloom-mr2l.46`).
+
 173. [2026-08-23] [HIGH] 🔴 `docs audit` reports green about facts it never checked — three measured false-negative classes, and one of them printed a false claim as *verified*
 
     **Severity:** high (a false positive fails the Gate and gets fixed; every one of these is silent, and the audit's own output reads as a clean bill of health)
