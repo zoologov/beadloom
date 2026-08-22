@@ -114,24 +114,50 @@ and the new `flow-guards`.
 ## Standing Verification Rules
 
 Carried from the dogfood project's hard-won section, because they apply to every role here and
-each one is an incident, not a theory. Items 1–3 are **temporary** — S2 exists to delete them.
+each one is an incident, not a theory.
 
-1. **`beadloom lint` only on a clean database** until #142 lands: incremental reindex does not
+**Cite these by NAME, never by number.** Numbers are not stable: three rules are being retired
+in this epic, and every citation to a number would silently shift onto a different rule. The
+coordinator has already sent briefs citing "rule 9" — which does not exist — where CLEAN-ROOM
+REVERT (7) was meant; at least one agent reported the mismatch instead of guessing, which is the
+only reason it was caught. Same defect as BDL-UX #171: one identifier, two sources of truth.
+
+1. **CLEAN-DB LINT** — `beadloom lint` only on a clean database: incremental reindex does not
    refresh import edges, so `lint --strict` on a stale index lies.
-2. **`sync-check` does not see `component` nodes** until #146 lands: "clean" there means "no
-   pairs exist", not "docs are fresh".
-3. **`lint` mutates the index** until #147 lands: measure DB state before/after if it matters.
-4. **A test on a fake proves the fake's contract.** Transport, git and subprocess need a test
-   against the real thing.
-5. **Check that tests bite** — sabotage the fix and confirm the test reddens; and check the
-   harness itself, because `ERROR` / `no tests ran` is not `FAILED`. Compare collected/passed
-   NUMBERS, not colour, and name the tests that reddened.
-6. **An agent's report is not evidence.** The coordinator re-verifies gates itself, on the
-   final tree state.
-7. **Remove sabotage by reverse edit, never `git checkout <file>`** — in a parallel wave, only
-   pointwise: restoring a whole file next to a neighbour's active work erases it.
-8. **A permission without a caller is not a capability** — an allowlist entry, or a function
-   nothing calls, reads as "the feature exists" (#160).
+   *Retired by `.5` and verified: an injected `tui → infrastructure` import is caught by the
+   incremental path with a violation set identical to a full rebuild. Deleted from the prose
+   in `.8`.*
+2. **COMPONENT BLINDNESS** — `sync-check` does not see `component` nodes: "clean" there means
+   "no pairs exist", not "docs are fresh".
+   *Retired by `.5`, with the wording corrected: the defect was never kind-specific — pairing
+   read annotations only. 272 → 275 pairs; 4 nodes now reported as not-checked with a reason.
+   Deleted in `.8`.*
+3. **LINT WRITES** — `lint` mutates the index: measure DB state before/after if it matters.
+   *Retired by `.5` for the read-only path (`lint --no-reindex` leaves the DB byte-identical).
+   Not a rule but a sentence for the CLI reference: plain `lint` still reindexes by design, so
+   it never lints a stale graph. Deleted in `.8`.*
+4. **FAKES PROVE FAKES** — a test on a fake proves the fake's contract. Transport, git and
+   subprocess need a test against the real thing.
+5. **TESTS MUST BITE** — sabotage the fix and confirm the test reddens; and check the harness
+   itself, because `ERROR` / `no tests ran` is not `FAILED`. Compare collected/passed NUMBERS,
+   not colour, and name the tests that reddened. A sabotage that does NOT redden is data about
+   the test, not reassurance about the code.
+6. **REPORTS ARE NOT EVIDENCE** — an agent's report is not evidence. The coordinator
+   re-verifies gates itself, on the final tree state.
+7. **CLEAN-ROOM REVERT** — remove sabotage by reverse edit, never `git checkout <file>`; verify
+   byte-identity by sha256. In a parallel wave, only pointwise: restoring a whole file next to a
+   neighbour's active work erases it.
+8. **NO CALLER, NO CAPABILITY** — a permission without a caller is not a capability. An
+   allowlist entry, or a function nothing calls, reads as "the feature exists" (#160).
+9. **ONE PLATFORM IS NOT VERIFIED** — a claim measured on one OS, one Python and one locale is
+   true there and unknown everywhere else. CI caught two defects (`.36`) that a 5574-test local
+   suite could not see, because the local suite varied coverage and not ENVIRONMENT. Where the
+   environment cannot be arranged, construct the failure instead (`.37`'s ambient-codec double)
+   rather than concluding it is absent.
+10. **A GREEN COUNT IS NOT A CHECKED COUNT** — `12 rules, 0 violations` and `13 mentions fresh`
+    were both partly vacuous while being literally true (#172, #173). Ask what fraction of the
+    declared surface a green result actually covered, and make anything that cannot fire report
+    itself.
 
 ## Current Phase
 
