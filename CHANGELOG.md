@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Flow guards — the enforcement primitive (BDL-061 S1).** `beadloom guard NAME`
+  evaluates one named guard and returns a verdict
+  `{guard, outcome, why, not_covered[], remediation, context}` where the outcome is
+  `pass` / `warn` / `block` / `skip`. **Exit codes carry the outcome** (`0` pass/skip,
+  `1` warn, `2` block, `3` usage/config error) so a shell adapter needs no parsing.
+  Guards are declared in `.beadloom/flow.yml` with strictness per work kind and path
+  exclusions; **an exclusion must carry both `reason` and `until`**, and a guard name
+  with no implementation is a configuration error rather than a silently dead gate.
+  Two guards ship: `bead-claimed` (an edit happens under a claimed work item) and
+  `working-branch` (work happens off the protected trunk). `beadloom guard --liveness`
+  reports which guards have never fired or are excluded everywhere, from an append-only
+  firing record — a gate that cannot demonstrate it ran is treated as not having run.
+  `beadloom setup-agentic-flow` now emits `.claude/hooks/beadloom-guard.sh`, a hook
+  adapter containing **no logic**: it forwards the harness event to the CLI, so a hook
+  and a shell cannot produce different verdicts. Defaults are `warn`, and a warning
+  always names what it did not check, so no green project turns red on upgrade.
+
 ## [2.2.0] - 2026-08-20
 
 **Interactive architecture + a graph that stops lying.** The portal renders both the

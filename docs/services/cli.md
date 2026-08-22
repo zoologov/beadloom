@@ -628,6 +628,39 @@ As of BDL-048, when a repo has the agentic flow scaffolded (`beadloom setup-agen
 
 As of **BDL-052 S3**, when a valid `.beadloom/flow.yml` is present `config-check` also: (a) validates `flow.yml` itself (an invalid config is reported as drift; an absent one is not); and (b) byte-compares each **composed role adapter** (`<tool>/agents/<role>.md` for every tool the config names) against the freshly recomposed body (`compose_role(...)` for the configured architecture + stack overlays) — `config_sync._composed_adapter_drifts`. When a `flow.yml` is present the role agents are composer-owned, so the byte-vendor compare is skipped for `agents` (it would false-positive on a non-Python stack). `--fix` recomposes the per-tool adapter sets (`config_sync.refresh_composed_adapters`). **Known limitation:** the composed-adapter check iterates only the tools named in `flow.yml`, so adapters left behind by a tool dropped from a narrowed `flow.yml` (e.g. orphaned `.cursor/agents/*`) are neither flagged nor recomposed; a follow-up bead tracks an orphaned-adapter lint.
 
+### beadloom guard
+
+Evaluate one flow guard — the enforcement primitive the agentic flow binds to (BDL-061 S1).
+
+```bash
+beadloom guard NAME [--context KEY=VALUE ...] [--json] [--project DIR]
+beadloom guard NAME --hook claude-code            # harness event as JSON on stdin
+beadloom guard --liveness [--json] [--project DIR]
+```
+
+Returns a verdict `{guard, outcome, why, not_covered[], remediation, context}` where `outcome` is `pass` / `warn` / `block` / `skip`. **Exit codes carry the outcome** so a shell adapter needs no parsing: `0` for `pass`/`skip`, `1` for `warn` (shown, never blocking), `2` for `block`, and `3` for a usage or configuration error — deliberately not `2`, which is Click's own usage code and would otherwise be indistinguishable from a genuine block. `warn` and `block` are written to **stderr** (the stream a hook harness shows the agent); `pass` and `skip` go to stdout, as does `--json` in every case.
+
+Shipped guards: `bead-claimed` (an edit happens under a claimed work item) and `working-branch` (work happens off the protected trunk; `options.trunk`, default `main`). Both skip — with a stated reason — when their evidence is unavailable (`bd` not present, no branch checked out), because a guard that silently does not apply is indistinguishable from one that passed.
+
+Guards are declared in `.beadloom/flow.yml`; an absent `guards:` block means every guard runs at the shipped default (`warn`), so an upgrade never turns a green project red:
+
+```yaml
+guards:
+  bead-claimed:
+    on: [edit]
+    strictness: { default: warn, epic: block, chore: off }
+    exclusions:
+      - path: "scripts/**"
+        reason: "operational scripts are not bead-scoped"
+        until: "BDL-0xx introduces a scripts node"
+```
+
+Strictness resolves per work kind (`--context work_kind=epic`) with a `default` fallback. **An exclusion must carry both `reason` and `until`** — one without either is a configuration error (exit 3), because an unnamed, undated exclusion disables a gate permanently by accident. A `guards:` key naming an unregistered guard is likewise an error, not a no-op.
+
+`--hook HARNESS` reads the harness's own hook event as JSON on stdin and derives the context from it (`claude-code`: `tool_input.file_path`, `tool_name`, `hook_event_name`). The emitted adapter (`.claude/hooks/beadloom-guard.sh`, written by `beadloom setup-agentic-flow`) contains no logic — it is one `exec beadloom guard "$1" --hook claude-code` — so a hook and a shell cannot produce different verdicts.
+
+`--liveness` reports, per guard, its effective strictness, how many times it fired, its last outcome, and whether it is `never-fired` or `excluded-everywhere`: a gate that cannot demonstrate it ran is treated as not having run. Every CLI evaluation appends one line to `.beadloom/guard-firings.jsonl`, which is the only file guards write — never the index they inspect. Decision logic lives in `application/guards/evaluation.py`; the CLI only renders it.
+
 ### beadloom ci
 
 The unified enforcement gate — the single CI convergence point (principle 7: identical for Cursor / Claude Code / human authors).

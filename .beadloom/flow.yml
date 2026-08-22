@@ -7,3 +7,18 @@ stack:
 quality:
 - clean-code
 - tdd
+guards:
+  # Dogfooded at the shipped default (BDL-061 S1): both guards warn and name what
+  # they did not check. Raising `bead-claimed` to `block` waits until a bead's
+  # node scope is bindable (S6) — blocking on a claim we cannot scope-check would
+  # assert a coverage the guard does not have.
+  bead-claimed:
+    on: [edit]
+    strictness:
+      default: warn
+  working-branch:
+    on: [edit]
+    strictness:
+      default: warn
+    options:
+      trunk: main

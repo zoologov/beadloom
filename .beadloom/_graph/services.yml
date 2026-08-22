@@ -105,6 +105,17 @@ nodes:
     source: src/beadloom/services/commands/
     tags: [layer-service]
 
+  # Component: the concrete read-only probes the flow guards read the world
+  # through (bd + git). In the SERVICES layer because the bd seam is, and the
+  # application layer must not import services.
+  - ref_id: guard-probes
+    kind: component
+    summary: "Concrete read-only guard probes over the real bd (claimed beads) and git (current branch)"
+    source: src/beadloom/services/guard_probes.py
+    tags: [layer-service]
+    docs:
+      - docs/services/components/guard-probes/DOC.md
+
   # Service: MCP Server
   - ref_id: mcp-server
     kind: service
@@ -292,6 +303,13 @@ nodes:
     source: src/beadloom/application/gate.py
     docs:
       - docs/domains/application/features/ci-gate/SPEC.md
+
+  - ref_id: flow-guards
+    kind: feature
+    summary: "Named-guard primitive: registry, verdict {pass|warn|block|skip}, strictness + exclusions from flow.yml, firing record + liveness"
+    source: src/beadloom/application/guards/
+    docs:
+      - docs/domains/application/features/flow-guards/SPEC.md
 
   - ref_id: graph-reads
     kind: feature
@@ -483,6 +501,13 @@ nodes:
     source: src/beadloom/services/bd_seam.py
     docs:
       - docs/services/components/bd-seam/DOC.md
+
+  - ref_id: guard-hooks
+    kind: component
+    summary: "Emits the logic-free Claude Code hook adapter for the guard CLI and merges it into .claude/settings.json"
+    source: src/beadloom/onboarding/guard_hooks.py
+    docs:
+      - docs/domains/onboarding/components/guard-hooks/DOC.md
 
   - ref_id: active-table
     kind: component
@@ -703,6 +728,15 @@ edges:
     kind: part_of
   - src: active-table
     dst: application
+    kind: part_of
+  - src: flow-guards
+    dst: application
+    kind: part_of
+  - src: guard-probes
+    dst: cli
+    kind: part_of
+  - src: guard-hooks
+    dst: onboarding
     kind: part_of
 
   # Service → domain usage edges

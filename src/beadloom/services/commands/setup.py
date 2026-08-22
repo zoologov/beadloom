@@ -304,8 +304,10 @@ def setup_agentic_flow(
     outside CLAUDE.md auto-regions is never touched; --force overwrites
     hand-edited Claude flow files.
     """
+    from beadloom.application.guards.checks import GUARD_NAMES
     from beadloom.onboarding.agentic_flow_setup import scaffold
     from beadloom.onboarding.flow_config import FlowConfigError, resolve_flow_config
+    from beadloom.onboarding.guard_hooks import scaffold_guard_hooks
     from beadloom.onboarding.role_adapters import generate_adapters
 
     project_root = project or Path.cwd()
@@ -341,6 +343,17 @@ def setup_agentic_flow(
         click.echo(f"Skipped .claude/commands/{name}.md (hand-edited; use --force)")
     if result.claude_md is not None:
         click.echo(f"Wrote {result.claude_md.relative_to(project_root)}")
+
+    # The guard hook adapter: the harness binding for the tool-agnostic
+    # `beadloom guard` primitive. The names come from the registry, so a guard
+    # shipped by a later release is wired by re-running this command.
+    hooks = scaffold_guard_hooks(project_root, guard_names=GUARD_NAMES)
+    if hooks.script is not None:
+        click.echo(f"Wrote {hooks.script.relative_to(project_root)} (guard hook adapter)")
+    for name in hooks.guards_registered:
+        click.echo(f"Registered guard hook: {name}")
+    if hooks.settings_skipped_reason:
+        click.echo(f"Skipped guard-hook registration: {hooks.settings_skipped_reason}")
 
     click.echo(
         "\nHonest boundary: the coordinator + Agent-spawn are Claude-Code-native "

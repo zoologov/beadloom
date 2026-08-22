@@ -7,13 +7,17 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-mr2l.1` — [dev] S1: guard primitive — registry, verdict model, CLI, liveness
-**Goal:** the portable primitive everything else binds to — a named guard, declared in
-`flow.yml`, evaluated by Beadloom, returning a verdict a harness can act on.
-**Done when:** CLI and hook adapter produce identical verdicts; an exclusion without `reason`
-or `until` is a configuration error; `skip` always carries a reason; `--liveness` reports
-guards that never fired or are excluded everywhere; no guard writes to the index; every guard
-has a test proving it FAILS on the condition it guards.
+**Bead:** `beadloom-mr2l.2` — [test] S1: verdict matrix, exclusion validation, liveness
+(`.1` dev closed 2026-08-22)
+**Goal:** harden the primitive `.1` shipped — widen the verdict matrix (strictness x exclusion
+x check outcome), the exclusion-validation cases, and the liveness report beyond the 68 tests
+the dev wave wrote.
+**Done when (`.1`, met):** CLI and hook adapter produce identical verdicts (asserted on the
+JSON payload); an exclusion without `reason` or `until` is a configuration error (exit 3);
+`skip` always carries a reason (enforced at verdict construction); `--liveness` reports
+never-fired and excluded-everywhere guards; no guard writes to the index (the firing record
+is a separate JSONL); both shipped guards have a test proving they FAIL on the condition they
+guard, each re-verified by sabotage.
 
 ## Progress
 
@@ -21,13 +25,15 @@ has a test proving it FAILS on the condition it guards.
 - [x] RFC → Approved (2026-08-22)
 - [x] CONTEXT + PLAN → Approved (2026-08-22)
 - [x] Epic `beadloom-mr2l` + 24 sub-beads created, linear `.1 → .24` chain wired
-- [ ] S1 `.1` dev — not started
+- [x] S1 `.1` dev — guard primitive shipped (2026-08-22): `application/guards/` +
+      `beadloom guard` + logic-free Claude hook adapter + 2 guards; 68 tests, Gate green
 
 ## Results
 
 | Bead | Status | Details |
 |------|--------|---------|
-| .1–.4 | Pending | S1 guard primitive |
+| .1 | Done | Guard primitive: registry, verdict, CLI, hook adapter, liveness (68 tests) |
+| .2–.4 | Pending | S1 test / review / tech-writer |
 | .5–.8 | Pending | S2 stop the lying checks (#142, #146, #147) |
 | .9–.12 | Pending | S3 composition + project overlay (#139, #152, #132, #136, #137) |
 | .13–.16 | Pending | S4 BDD, mutation, doc shape + quality, shared writing standard |

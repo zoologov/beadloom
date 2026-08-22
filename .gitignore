@@ -28,6 +28,8 @@ htmlcov/
 
 # Beadloom (auto-generated SQLite databases + WAL files)
 .beadloom/**/*.db
+# Guard firing record: local evidence that a gate ran, not shared state.
+.beadloom/guard-firings.jsonl
 .beadloom/**/*.db-shm
 .beadloom/**/*.db-wal
 
