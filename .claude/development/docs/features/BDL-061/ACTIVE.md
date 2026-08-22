@@ -7,16 +7,11 @@
 
 ## Current Bead
 
-**Bead:** none — `.31` closed. Next in the chain: `beadloom-mr2l.3` [review] S1 —
-portability, read-only, honest skip.
-**Handover for `.3`:** the enumeration, the structural pin and the recording-witness
-matrix live in `tests/test_guards_invocation.py` (section 2 states the invariant the
-pin is about); the evidence that the pin bites — the measured terminator table, the
-two sabotage shapes `.30` walked past, and the quantified "manufactures no root"
-claim — is in `tests/test_guards_boundary_escapes.py`. The recording rule and its
-three exceptions, the interrupt decision with both sides, the `--project` marker
-requirement and the named residuals are in
-`docs/domains/application/features/flow-guards/SPEC.md`.
+**Bead:** `beadloom-mr2l.3` — [review] S1: portability, read-only, honest `skip`
+**Goal:** re-review the S1 guard primitive after five fix cycles, on the final tree state.
+**Done when:** the 1 critical + 5 majors from the first review are judged closed or carried with
+a measured reason; the deferred minors are re-checked; and the review says whether S1 is
+shippable rather than whether it improved.
 
 ## Progress
 
@@ -36,6 +31,21 @@ requirement and the named residuals are in
 - [x] S1 `.27` dev fix-2 (2026-08-22) — accepted path shape + `error` outcome + a firing
       record for every named-guard invocation; F1, F2, F3, F4, F5, F6 closed, the whole-tree
       liveness flag judged and left out with a measured reason; guard tests 335 → 377
+- [x] S1 `.28` test — fourth round: F2 closed for one spelling only (non-UTF-8 stdin still
+      crashed on the warn code), six record-less invocations, a subdirectory silently skipping
+      at exit 0, strip-before-shape ordering
+- [x] S1 `.29` dev fix-3 (2026-08-22) — **structural**: one boundary per invocation
+      (`run_invocation` = `_record(_answer(...))`, one return, `SystemExit` caught), project
+      discovery by walk-up, recording as one stated predicate with three reported exceptions;
+      17 sabotages, all FAILED; suite 5376 → 5476
+- [x] S1 `.30` test — the boundary is real at runtime but **was not load-bearing**: an
+      interrupt escaped as `BaseException`, `--project` at a non-project skipped at exit 0 and
+      manufactured a root, and the structural pins checked SPELLING — a `sys.exit(0)` inside
+      `run_invocation` shipped 628/628 green; suite 5476 → 5501
+- [x] S1 `.31` dev fix-4 (2026-08-22) — the pin made as wide as its invariant (package-wide AST
+      scan, terminators by effect not spelling, recording-witness matrix), `--project` required
+      to name a project, `KeyboardInterrupt` given its own handler; all 25 characterization
+      tests rewritten to assert correct behaviour; suite 5501 → 5561
 - [x] S1 `.28` test — adversarial re-verification: F7–F10 + m1–m3, 151 new tests, suite
       5225 → 5376, no `src/` change (commit `d4bb618`)
 - [x] S1 `.29` dev fix-3 (2026-08-22) — ONE invocation boundary (`application/guards/
@@ -65,6 +75,10 @@ requirement and the named residuals are in
 | .25 | Done | S1 fix: traversal bypass, probe limit, liveness honesty, `on:` deleted |
 | .26 | Done | S1 test: re-verification — F1 backslash bypass, F2 NUL crash, F3–F6 recorded |
 | .27 | Done | S1 fix-2: path shape narrowed, `error` outcome, no invocation without a record |
+| .28 | Done | S1 test: F2 closed for one spelling; six record-less invocations; silent subdirectory skip |
+| .29 | Done | S1 fix-3: ONE boundary per invocation; discovery by walk-up; recording as one predicate |
+| .30 | Done | S1 test: boundary not load-bearing — interrupt escape, `--project` bypass, pins check spelling |
+| .31 | Done | S1 fix-4: pin as wide as its invariant; `--project` must name a project; interrupt handled |
 | .28 | Done | S1 test: adversarial re-verification — F7 stdin bytes, F8 six unrecorded, F9 cwd-as-root, F10 the strip |
 | .29 | Done | S1 fix-3: one invocation boundary + project discovery; the four symptoms closed as consequences |
 | .30 | Done | S1 test: three escapes past the boundary's edges — the interrupt, the spelling-deep pins, `--project` |
