@@ -62,6 +62,22 @@ let an edit through (BDL-061.27, F2). A configuration error additionally keeps
 exit `3` at the CLI boundary, so a broken `flow.yml` is still not mistaken for a
 guard that fired.
 
+**Exit `3` does not block, and that is a gap rather than a decision.** The
+adapter this project emits binds to a harness that stops the tool call on exit
+`2` and on nothing else, so everything the paragraph above keeps at `3` is loud
+on stderr and lets the edit through. Measured through the real binary, five
+cases answer `error` at `3`: an unregistered guard name, a `guards:` block that
+will not parse, `--liveness` given a name, a malformed `--context` pair, and an
+unsupported `--hook` harness. The second is the one an adopter meets, because
+`.beadloom/flow.yml` is the one file of this feature edited by hand: a mistyped
+line there disables every bound guard while each invocation prints that it could
+not answer. The distinction `3` draws — a defect in the declared configuration
+against a failure to answer about this edit — is worth keeping, so the two ways
+out are to map the class to `2` at the CLI or to have the adapter map it, and
+neither is decided here. **BDL-061.33 owns that choice.** Until it lands, this
+document states `3` as fail-open, and the invariant it contradicts is marked
+where it appears.
+
 ### Configuration
 
 ```yaml
@@ -93,6 +109,42 @@ happened. An `on:` key was shipped in the S1 schema and read by no code path, so
 it was deleted rather than quoted: a documented key with no consumer teaches an
 incantation that has never done anything. It returns, wired to a selector, in S3
 when composition and adapters are reworked.
+
+### The enforcement surface
+
+A guard answers about the events the harness sends it, so what the harness never
+sends is what the guard never guards. The emitted adapter is registered on
+`PreToolUse` with the matcher `Edit|Write|MultiEdit|NotebookEdit`, one entry per
+guard name: those four tool calls are the whole surface.
+
+**A write that reaches the filesystem any other way fires no guard.** A file
+edited through `Bash` — `sed -i`, a heredoc, `python3 - <<EOF` — matches nothing
+in that list, so no guard is asked about it, no verdict exists, and no firing is
+recorded. It was found by dogfooding S1 on this repository, where a session
+working under an instruction to prefer `Bash` for edits left a whole class of
+writes to this very tree unguarded (BDL-UX #170).
+
+**`--liveness` cannot tell that apart from compliance.** The report is computed
+from the firing record, the configuration and the project's files, and an edit
+nobody was asked about leaves nothing in any of the three. A session that edited
+only through `Bash` produces the same report as a session that routed every edit
+through `Edit` and had nothing to warn about — and as a session that made no
+edits at all.
+
+This is a property of the **binding**, not of a verdict, which is why it is
+written here and not widened into `not_covered`. `not_covered` states what one
+evaluation did not check. An unguarded write has no evaluation to attach a note
+to, and a verdict that mentioned edits it was never told about would be
+inventing knowledge in the one field whose whole product is honesty. The rule
+this feature applies to every verdict — unknown is not zero — applies to its own
+surface, and the honest form of it is this paragraph.
+
+Two pieces are named rather than promised. Making Beadloom own an event
+vocabulary, so the adapter forwards *what happened* instead of *which guard to
+run*, is S3's work — the same gap the review recorded as M3, seen from the other
+end. And BDL-UX #170 asks `--liveness` to report the share of write paths a
+binding could have seen, which is what would turn this section from a statement
+into a measurement.
 
 ### The project a guard answers about
 
@@ -441,8 +493,19 @@ never louder.
   code the harness reads.
 - **A guard that cannot answer says so and blocks.** "I could not tell" is a
   verdict (`error`), not an exception, and it never borrows the `warn` code.
+  **It says so. It does not always block.** The `warn` code is never borrowed, so
+  no `error` exits `1`. But the configuration and command-line class exits `3`,
+  which the harness the emitted adapter binds to does not block on, and five
+  cases were measured in it — the one an adopter meets is a `flow.yml` that will
+  not parse. The sentence stands as the target rather than as a description, and
+  **BDL-061.33** owns closing the gap. See *Verdict* for the cases and the two
+  ways out.
 - **One decision point.** The CLI, the hook adapter and (from S2) the Gate all
   call `evaluate_guard`, so their verdicts cannot diverge.
+- **The surface is bounded by the harness, and the bound is stated.** Guards see
+  the tool calls the adapter's matcher names and nothing else, and no report
+  distinguishes an unguarded write from a compliant session — see *The
+  enforcement surface*.
 
 ## Structure
 

@@ -34,7 +34,43 @@ decision happens in the CLI, which is why a hook and a shell cannot disagree.
   agree without the adapter having to know anything. It used to take `cwd` as the root, which
   silently downgraded a declared `block` to a non-blocking `warn` for any
   invocation from a subdirectory.
-- `GUARD_HOOK_RELPATH`, `SETTINGS_RELPATH`, `HOOK_EVENT`, `EDIT_MATCHER`.
+- `GUARD_HOOK_RELPATH`, `SETTINGS_RELPATH`, `HOOK_EVENT` (`PreToolUse`),
+  `EDIT_MATCHER` (`Edit|Write|MultiEdit|NotebookEdit`) — the matcher is the
+  enforcement surface, so its value belongs in the reference rather than behind
+  its name. See below for what it leaves out.
+
+## The enforcement surface
+
+The registered entry pairs `EDIT_MATCHER` with one command per guard, so the
+guards see exactly four tool calls: `Edit`, `Write`, `MultiEdit`, `NotebookEdit`.
+
+**A file written through any other tool is unguarded.** `Bash` is the one that
+matters — `sed -i`, a heredoc, `python3 - <<EOF` all reach the filesystem without
+matching, so no guard is invoked and no firing is written. **`--liveness` cannot
+see the difference:** it reads the firing record, and an edit no guard was asked
+about leaves no record, so a session that wrote everything through `Bash` reports
+exactly like a session that complied. That is not a verdict the guard can qualify
+— nothing evaluated — which is why the limit is documented at the binding
+(BDL-UX #170 — review finding M3 is the same gap seen from the routing side, and
+both are S3 work).
+
+Two facts about the exit codes the adapter forwards, because the script's own
+comment does not carry the second one yet:
+
+- The harness stops the tool call on exit `2` and on nothing else, so `block` and
+  `error` are what actually block.
+- Exit `3` — a defect in the declared configuration, or a command line that could
+  not be used — is therefore **loud and non-blocking**. A `.beadloom/flow.yml`
+  that will not parse leaves every bound guard reporting that it could not answer
+  while the edits proceed. **BDL-061.33** owns the fix, and the emitted comment
+  changes with it. The [flow-guards SPEC](../../../application/features/flow-guards/SPEC.md)
+  states the cases and the trade-off.
+
+This repository is not currently bound through the emitted script: its
+`.claude/settings.json` registers the `beadloom guard` command directly, with a
+narrower matcher. So the artifact adopters receive has not been exercised here —
+recorded as review minor n1, and carried with M3 into S3 rather than patched in
+one place.
 
 ## Invariants
 
