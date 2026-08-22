@@ -33,16 +33,36 @@ directory that answers "where does this firing belong" is the same one that
 answers "which flow.yml governs this edit". ``.git/`` nests (submodules,
 worktrees) and would name a root Beadloom knows nothing about.
 
-**An explicit ``--project`` is honoured verbatim** — no walking up. The caller
-has stated where the project is, and searching past that statement would make an
-explicit argument mean something other than what it says. It must name an
-existing directory; anything else is "the project could not be located", which
-is the same refusal as the discovery failure and not a separate spelling of it.
+**An explicit ``--project`` is honoured verbatim** — no walking up, and no
+walking *down* into it either. The caller has stated where the project is, and
+searching past that statement would make an explicit argument mean something
+other than what it says. **It must name a directory that carries the marker**:
+the flag names a *project*, and a directory is not one. Anything else —
+missing, a file, or an ordinary directory with no ``.beadloom/`` — is "the
+project could not be located", which is the same refusal as the discovery
+failure and not a separate spelling of it.
 
-What is deliberately NOT done: manufacturing a root. A guard that cannot find a
-project answers ``error`` (which blocks) and writes nothing — it does not create
-``.beadloom/`` where it stands. A silent ``skip`` at exit 0 was the shape of this
-defect, and creating the directory was its self-entrenching half.
+That requirement is BDL-061.31, and it closes a hole the discovery path never
+had. Any ``is_dir()`` used to be accepted, so ``--project <an ordinary
+directory>`` found no ``flow.yml``, silently traded the project's declared
+``block`` for the shipped default ``warn`` — a non-blocking exit 1 — and then
+manufactured ``.beadloom/`` there when the firing was written, which is the
+self-entrenching failure below reached through an explicit flag rather than
+through the working directory. The cost of requiring the marker is that
+``--project`` cannot be used to point at a directory before ``beadloom init``
+has run in it; that is the intended reading, because there is no ``flow.yml``
+there to answer from.
+
+What is deliberately NOT done: manufacturing a root — by ANY route, **including
+through ``--project``**. A guard that cannot find a project answers ``error``
+(which blocks) and writes nothing; it does not create ``.beadloom/`` where it
+stands, and it does not create one where it was pointed. A silent ``skip`` at
+exit 0 was the shape of this defect, and creating the directory was its
+self-entrenching half. The claim is quantified over every way a root can be
+named — discovery inside a project, discovery outside one, and ``--project``
+naming the project, a plain directory, a subdirectory, a missing path or a file
+— in ``tests/test_guards_boundary_escapes.py``, because stating it about the
+walk alone is exactly how it stayed false through the flag for three cycles.
 
 The residual, named rather than implied: a **nested** ``.beadloom/`` — a fixture
 project checked into a tree, say — makes the inner directory the root for every
@@ -68,6 +88,13 @@ NO_PROJECT_FOUND = (
 #: Refusal when ``--project`` names something that is not a directory.
 DECLARED_PROJECT_MISSING = (
     "the project directory named by --project does not exist: {declared}"
+)
+
+#: Refusal when ``--project`` names a directory that is not a Beadloom project.
+DECLARED_PROJECT_UNMARKED = (
+    "the directory named by --project is not a Beadloom project: {declared} "
+    "does not contain {marker}/, so there is no flow.yml to read and no firing "
+    "record to write"
 )
 
 #: Refusal when the working directory itself cannot be read.
@@ -97,11 +124,7 @@ def locate_project_root(
     it into a verdict either way.
     """
     if declared is not None:
-        if declared.is_dir():
-            return ProjectLocation(root=declared, declared=True)
-        return ProjectLocation(
-            refusal=DECLARED_PROJECT_MISSING.format(declared=declared)
-        )
+        return _declared_project(declared)
     try:
         origin = (start or Path.cwd()).resolve()
     except OSError as exc:
@@ -112,3 +135,18 @@ def locate_project_root(
     return ProjectLocation(
         refusal=NO_PROJECT_FOUND.format(start=origin, marker=PROJECT_MARKER.as_posix())
     )
+
+
+def _declared_project(declared: Path) -> ProjectLocation:
+    """Honour *declared* as stated, provided what it names is actually a project."""
+    if not declared.is_dir():
+        return ProjectLocation(
+            refusal=DECLARED_PROJECT_MISSING.format(declared=declared)
+        )
+    if not (declared / PROJECT_MARKER).is_dir():
+        return ProjectLocation(
+            refusal=DECLARED_PROJECT_UNMARKED.format(
+                declared=declared, marker=PROJECT_MARKER.as_posix()
+            )
+        )
+    return ProjectLocation(root=declared, declared=True)

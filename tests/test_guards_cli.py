@@ -105,6 +105,15 @@ def bd_project_past_the_page(tmp_path_factory):
     return root, beyond
 
 
+@pytest.fixture(autouse=True)
+def _tmp_path_is_the_project_under_test(guard_project):
+    """Every test in this module points ``--project`` at ``tmp_path``.
+
+    ``--project`` requires the marker since BDL-061.31, so the directory the
+    tests treat as the project has to actually be one.
+    """
+
+
 class TestExitCodeContract:
     def test_pass_exits_zero(self, tmp_path, stub_probes) -> None:
         stub_probes(beads=(ClaimedBead(id="bd-1"),))
@@ -119,7 +128,7 @@ class TestExitCodeContract:
         assert result.exit_code == 1, result.output
 
     def test_block_exits_two(self, tmp_path, stub_probes) -> None:
-        (tmp_path / ".beadloom").mkdir()
+        (tmp_path / ".beadloom").mkdir(exist_ok=True)
         (tmp_path / ".beadloom" / "flow.yml").write_text(
             "guards:\n  bead-claimed:\n    strictness: {default: block}\n"
         )
@@ -148,7 +157,7 @@ class TestExitCodeContract:
         assert result.exit_code == 3, result.output
 
     def test_config_error_exits_three(self, tmp_path, stub_probes) -> None:
-        (tmp_path / ".beadloom").mkdir()
+        (tmp_path / ".beadloom").mkdir(exist_ok=True)
         (tmp_path / ".beadloom" / "flow.yml").write_text(
             "guards:\n  bead-claimed:\n    exclusions:\n      - path: 'x/**'\n"
         )
@@ -262,7 +271,7 @@ class TestLiveness:
         assert rows["bead-claimed"]["last_outcome"] == "warn"
 
     def test_liveness_flags_a_guard_excluded_everywhere(self, tmp_path) -> None:
-        (tmp_path / ".beadloom").mkdir()
+        (tmp_path / ".beadloom").mkdir(exist_ok=True)
         (tmp_path / ".beadloom" / "flow.yml").write_text(
             "guards:\n  working-branch:\n    strictness: {default: 'off'}\n"
         )

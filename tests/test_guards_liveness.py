@@ -390,7 +390,9 @@ class TestMisconfigured:
 
 
 class TestLivenessOutput:
-    def test_the_json_row_carries_every_field_the_report_promises(self, tmp_path) -> None:
+    def test_the_json_row_carries_every_field_the_report_promises(
+        self, tmp_path, guard_project
+    ) -> None:
         result = CliRunner().invoke(
             main, ["guard", "--liveness", "--project", str(tmp_path), "--json"]
         )
@@ -432,7 +434,9 @@ class TestLivenessOutput:
         assert "working-branch: " in result.output
         assert result.output.count("matches no file in the project") == 1
 
-    def test_the_text_report_flags_a_guard_that_never_fired(self, tmp_path) -> None:
+    def test_the_text_report_flags_a_guard_that_never_fired(
+        self, tmp_path, guard_project
+    ) -> None:
         result = CliRunner().invoke(main, ["guard", "--liveness", "--project", str(tmp_path)])
 
         assert result.exit_code == 0, result.output
@@ -462,8 +466,15 @@ class TestLivenessOutput:
         assert "last block at 2026-01-02T03:04:05+00:00" in result.output
         assert "never-fired" not in result.output.splitlines()[0]
 
-    def test_liveness_exits_zero_even_when_every_guard_is_idle(self, tmp_path) -> None:
-        """A fresh clone is legitimately idle; failing here would be a false gate."""
+    def test_liveness_exits_zero_even_when_every_guard_is_idle(
+        self, tmp_path, guard_project
+    ) -> None:
+        """A fresh clone is legitimately idle; failing here would be a false gate.
+
+        A fresh clone still carries ``.beadloom/`` — that is what makes it a
+        clone of a Beadloom project — so ``guard_project`` is the arrangement,
+        not a workaround.
+        """
         result = CliRunner().invoke(main, ["guard", "--liveness", "--project", str(tmp_path)])
 
         assert result.exit_code == 0

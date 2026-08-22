@@ -698,7 +698,7 @@ class TestNoInvocationEndsWithoutARecord:
         assert [record.outcome for record in self._records(tmp_path)] == ["error"]
 
     def test_an_unregistered_guard_name_records_nothing(
-        self, tmp_path, monkeypatch
+        self, tmp_path, monkeypatch, guard_project
     ) -> None:
         """The one invocation with nothing to record: there is no such guard.
 

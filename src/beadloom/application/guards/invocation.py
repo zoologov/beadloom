@@ -41,6 +41,23 @@ from an absent line:
 * **``--liveness``** — a report evaluates nothing; recording one would inflate
   the very count it prints.
 
+**The handler of last resort is ``BaseException``, and that has a price.**
+``SystemExit`` was caught from the first version because a lower layer that
+terminates the process without a verdict is the shape of every hole this module
+closed; ``KeyboardInterrupt`` is the other ``BaseException`` a running guard
+actually meets, and catching only the first left it escaping to Click, which
+turns it into exit ``1`` — the *warn* code the shipped adapter carries on past —
+with no verdict and no record (BDL-061.30, finding A). The price of closing it,
+stated because it is not free: an interrupt is now a recorded ``error`` at exit
+``2``, so Ctrl-C during a guarded edit BLOCKS that edit rather than waving it
+through. That is the right side to fail on. SIGINT is delivered to the whole
+foreground process group, so the harness's own tool call is interrupted along
+with the guard and there is usually no edit left to block; and where there is,
+"the guard did not answer" must never be readable as "the guard passed" — which
+is the one sentence this whole slice exists to keep true. The two named clauses
+above it exist only to give a reader a cause they can act on; the wide one
+exists so that the class nobody thought of is a verdict rather than an escape.
+
 **Exit codes.** The code follows the verdict (``pass``/``skip`` 0, ``warn`` 1,
 ``block``/``error`` 2). ``3`` is overridden onto two classes and no others: a
 defect in the project's own declared configuration (a ``guards:`` block that
@@ -140,6 +157,10 @@ _PAYLOAD_REMEDIATION = (
     "--context path=... to evaluate the edit directly"
 )
 _EXITED_WHY = "the evaluation terminated the process instead of answering (exit {code})"
+_INTERRUPTED_WHY = (
+    "the evaluation was interrupted before it could answer, so this edit is "
+    "not covered by the guard"
+)
 _CRASHED_WHY = "the guard could not be evaluated: {detail}"
 _CRASHED_REMEDIATION = (
     "fix the reported error, then re-run `beadloom guard {name}`; the edit is "
@@ -233,9 +254,12 @@ def _answer(invocation: GuardInvocation) -> InvocationResult:
         return _unanswerable(
             invocation, location, _EXITED_WHY.format(code=exc.code)
         )
-    except Exception as exc:  # the last resort; see the module docstring
-        detail = f"{type(exc).__name__}: {exc}"
-        return _unanswerable(invocation, location, _CRASHED_WHY.format(detail=detail))
+    except KeyboardInterrupt:
+        return _unanswerable(invocation, location, _INTERRUPTED_WHY)
+    except BaseException as exc:  # the last resort; see the module docstring
+        return _unanswerable(
+            invocation, location, _CRASHED_WHY.format(detail=_detail(exc))
+        )
 
 
 def _record(result: InvocationResult) -> InvocationResult:
@@ -253,12 +277,18 @@ def _record(result: InvocationResult) -> InvocationResult:
         )
     try:
         written = record_firing(result.project_root, result.verdict)
-    except Exception as exc:  # see the comment below
+    except BaseException as exc:  # see the comment below
         # Writing the record is the last thing that can fail, and a failure to
         # record must not become a failure to answer: the verdict still reaches
-        # the reader, carrying the reason the record is missing.
+        # the reader, carrying the reason the record is missing. The handler is
+        # as wide as ``_answer``'s for the same reason it is wide there — an
+        # interrupt landing on the write is a missing record either way, and the
+        # difference is whether the reader is told (BDL-061.31, .30's asymmetry).
         return replace(
-            result, not_recorded_because=NOT_RECORDED_WRITE_FAILED.format(detail=exc)
+            result,
+            not_recorded_because=NOT_RECORDED_WRITE_FAILED.format(
+                detail=_detail(exc)
+            ),
         )
     return replace(result, recorded_at=written)
 
@@ -387,7 +417,7 @@ def _unanswerable(
     invocation: GuardInvocation, location: ProjectLocation, why: str
 ) -> InvocationResult:
     """The verdict for a failure nobody enumerated — recorded like any other."""
-    name = invocation.name or UNNAMED_GUARD
+    name = _named(invocation.name)
     return _failed(
         invocation.name,
         root=location.root,
@@ -427,6 +457,23 @@ def _usage(
     )
 
 
+def _named(name: str | None) -> str:
+    """How a guard name reads back — including when the caller typed an empty one.
+
+    ``name or UNNAMED_GUARD`` folded ``""`` into ``None``, so ``beadloom guard ""``
+    reported "(no guard named)" as the guard it would not record, quoting a name
+    the caller never typed while its own ``why`` said ``unknown guard ''``
+    (BDL-061.30, section 4).
+    """
+    return UNNAMED_GUARD if name is None else name
+
+
+def _detail(exc: BaseException) -> str:
+    """An exception as one readable clause, with no empty tail when it carries none."""
+    message = str(exc)
+    return f"{type(exc).__name__}: {message}" if message else type(exc).__name__
+
+
 def _error_verdict(
     name: str | None,
     *,
@@ -436,9 +483,11 @@ def _error_verdict(
     context: Mapping[str, str] | None = None,
 ) -> GuardVerdict:
     """The one verdict shape every failure takes, so none of them is silent."""
-    scope = SCOPE_ONE_GUARD.format(name=name) if name else SCOPE_EVERY_GUARD
+    scope = (
+        SCOPE_EVERY_GUARD if name is None else SCOPE_ONE_GUARD.format(name=name)
+    )
     return GuardVerdict(
-        guard=name or UNNAMED_GUARD,
+        guard=_named(name),
         outcome=GuardOutcome.ERROR,
         why=why,
         not_covered=(UNANSWERED_NOT_COVERED.format(scope=scope, because=because),),

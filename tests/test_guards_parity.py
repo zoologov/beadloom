@@ -68,6 +68,15 @@ _CELLS = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _tmp_path_is_the_project_under_test(guard_project):
+    """Every test in this module points ``--project`` at ``tmp_path``.
+
+    ``--project`` requires the marker since BDL-061.31, so the directory the
+    tests treat as the project has to actually be one.
+    """
+
+
 class TestVerdictParityAcrossEveryOutcome:
     """Identical verdicts, not merely identical success."""
 

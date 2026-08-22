@@ -98,7 +98,7 @@ when composition and adapters are reworked.
 
 With no `--project`, the project root is the **nearest directory at or above the
 working directory that contains `.beadloom/`**. With `--project`, that directory
-is the root and no search happens.
+is the root and no search happens — and it must carry the marker itself.
 
 This is a decision with a live alternative, so both sides are stated. Until
 BDL-061.29 the root was `Path.cwd()`, and the shipped adapter passes no
@@ -130,11 +130,34 @@ governs this edit". `.git/` nests (submodules, worktrees) and would name a root
 Beadloom knows nothing about.
 
 **A guard that cannot locate a project answers `error`, which blocks, and writes
-nothing.** It does not create `.beadloom/` where it stands: a silent `skip` at
-exit 0 was the shape of this defect, and manufacturing the directory was its
-self-entrenching half. `--project` naming something that is not a directory is
-the same refusal, not a separate spelling of it — which also removes the case
-where Click's own validation exited on the block code with no verdict at all.
+nothing.** It does not create `.beadloom/` where it stands, and it does not
+create one where it was pointed: a silent `skip` at exit 0 was the shape of this
+defect, and manufacturing the directory was its self-entrenching half.
+
+**`--project` must name a directory that carries the marker** (BDL-061.31).
+Until then any `is_dir()` was honoured, and that made the flag a second route to
+the failure this section exists to close: measured through the real binary,
+`--project <an ordinary directory>` found no `flow.yml`, silently traded the
+project's declared `block` for the shipped default `warn` — a non-blocking exit
+1 — and then created `.beadloom/` there when the firing was written, while the
+real project's record stayed empty. A missing path, a file, and a directory
+with no `.beadloom/` are now one refusal — "the project could not be located" —
+which is also the refusal the discovery path gives, not a separate spelling of
+it. This removes the case where Click's own validation exited on the block code
+with no verdict at all.
+
+The cost, stated because it is real: `--project` can no longer point at a
+directory before `beadloom init` has run there. That is the intended reading —
+there is no `flow.yml` in such a directory to answer from, so any verdict it
+produced would be about the shipped defaults rather than about that project.
+
+This sentence — "the guard manufactures no root" — has now been an understated
+honesty note three times in this slice, true of the walk and false through the
+flag on each of them. It is therefore quantified rather than asserted: the
+claim is checked over **every** way a root can be named (discovery from inside a
+project, discovery from outside one, and `--project` naming the project, an
+ordinary directory, a subdirectory of the project, a missing path, or a file),
+and no row may leave a `.beadloom/` behind that did not already exist.
 
 The residual, named: a **nested** `.beadloom/` — a fixture project checked into a
 tree — makes the inner directory the root for every invocation beneath it. That
@@ -156,6 +179,52 @@ each new one was a fresh place to forget — one of the holes was introduced by 
 fix that closed the previous one. The CLI now terminates the process in exactly
 one place, and the boundary returns in exactly one statement, which is the step
 that records.
+
+**Nothing raised inside the boundary leaves it — the last-resort handler is
+`BaseException`, and that has a price** (BDL-061.31). `SystemExit` was caught
+from the first version, because a lower layer that terminates the process
+without a verdict is the shape of every hole this feature closed.
+`KeyboardInterrupt` is the other `BaseException` a running guard actually meets,
+and it was not caught: measured, an interrupt during an evaluation escaped to
+Click, which turned it into exit **1** — the *warn* code the shipped adapter
+reads as "carry on" — with no verdict and no record. That is the one combination
+this slice exists to prevent, in a different exception class.
+
+Both sides, because the fix is not free. Catching it means **Ctrl-C during a
+guarded edit now BLOCKS that edit**: the interrupt becomes a recorded `error` at
+exit 2, not a silent pass at exit 1. Against catching it: an interrupt is the
+operator's escape hatch, and turning it into a blocking verdict takes an escape
+hatch away and writes a firing the operator did not ask for. For catching it,
+which is the decision: SIGINT is delivered to the whole foreground process
+group, so the harness's own tool call is interrupted along with the guard and
+there is usually no edit left to let through; the verdict is the *honest* one,
+because an interrupted guard genuinely did not check anything; and the
+alternative makes an interrupt indistinguishable from a passing `warn`, which is
+the failure mode every fix cycle in this slice has been about. `_record`'s
+handler is as wide, for the same reason: an interrupt landing on the write is a
+missing record either way, and the difference is only whether the reader is told.
+
+**The render step cannot choose the exit code.** Printing the verdict happens
+after the boundary has decided and recorded, so it is wrapped: a failure there
+is reported on stderr and the process still exits on the verdict's code. This
+was previously a claim resting on one round's failure to break it — attacked
+with a non-UTF-8 stream, a lone surrogate, a closed `fd 1` and a truncated pipe,
+none of which reached a raising case — and a claim nobody could break is not a
+guarantee.
+
+**The structural pin is as wide as the invariant it is about.** "An exit added
+without a record is a diff that reddens" was pinned as calls *named* `exit` in
+*one* module, and that is not the same sentence: measured, `sys.exit(0)` placed
+inside the boundary function shipped the entire guard suite and all four pins
+green while `beadloom guard ""` exited 0, printed nothing and recorded nothing.
+The pin now (a) derives its scope from the package rather than listing modules,
+so a new module is covered on the day it is added, (b) recognises terminators by
+measured effect — every construct it flags is run in a real subprocess and shown
+to end one — rather than by name, and (c) asserts, over a generated matrix run
+in a subprocess, that every result carries the witness that the recording step
+ran: exactly one of `recorded` / `not_recorded_because` is set on every result
+the boundary returns.
+
 
 **A firing is written when the invocation produced a verdict, a project was
 located, and the verdict names a registered guard.** The three exceptions are
@@ -181,6 +250,12 @@ used to hide there (`--project` pointing at a missing directory) has been moved
 inside.
 
 ### The path a guard is asked about
+
+`--context KEY=VALUE` is repeatable, and where the same key is supplied more
+than once **the last occurrence wins** — the ordinary shell reading of a
+repeated scalar flag. It is stated rather than left to be discovered because
+"which `path` was the guard actually asked about" is the question every verdict
+in this feature is an answer to.
 
 The evaluation context carries `path` from the harness (`tool_input.file_path`),
 which means it is model-supplied. It is **resolved** — `..` collapsed and
@@ -333,7 +408,18 @@ never louder.
 - **The record is the project's.** The root is discovered by walking up for
   `.beadloom/`, never taken from the working directory and never created: a
   firing written somewhere `--liveness` does not read is indistinguishable from
-  no firing at all.
+  no firing at all. `--project` states the root instead of searching for it, and
+  must name a directory that carries the marker — a guard manufactures no root
+  by any route.
+- **Every result carries the witness that the recording step ran.** Exactly one
+  of `recorded` / `not_recorded_because` is set on every result the boundary
+  returns, so "did this path record?" is a fact about the returned object rather
+  than an inference from a line that is not there.
+- **Nothing raised inside the boundary leaves it, and nothing after it chooses
+  the exit code.** The last-resort handler is `BaseException`, so an interrupt
+  is a recorded `error` that blocks rather than an escape at the `warn` code;
+  and the render step is wrapped, so a failure while printing cannot move the
+  code the harness reads.
 - **A guard that cannot answer says so and blocks.** "I could not tell" is a
   verdict (`error`), not an exception, and it never borrows the `warn` code.
 - **One decision point.** The CLI, the hook adapter and (from S2) the Gate all

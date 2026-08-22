@@ -17,10 +17,15 @@ Four kinds of test, in this order:
    ``records`` expectation *derived from the stated rule* rather than written
    into the row, so a new exit path cannot be added with a hand-written
    ``False``.
-2. **The structure.** The process is terminated in exactly one place, the
-   boundary returns through exactly one statement, and the firing record is
+2. **The structure.** Control leaves the boundary path in exactly one place,
+   the boundary returns through exactly one statement, and the firing record is
    written from exactly one call site — so an exit added without a record is a
-   diff that reddens rather than a hole that passes.
+   diff that reddens rather than a hole that passes. BDL-061.31 widened these
+   from a spelling to the invariant they are about: the scope is every module
+   in the guards package (discovered, not listed), terminators are recognised
+   by measured effect rather than by name, and a generated matrix run in a
+   subprocess asserts that every result carries the witness that the recording
+   step ran.
 3. **The injection.** A failure that nobody enumerated — an exception, a
    ``sys.exit`` inside a check, an unreadable stdin, an unwritable record — is
    still a verdict the reader sees.
@@ -55,7 +60,9 @@ from beadloom.services.cli import main
 
 _SRC = Path(__file__).resolve().parents[1] / "src" / "beadloom"
 _COMMAND_MODULE = _SRC / "services" / "commands" / "guard.py"
-_BOUNDARY_MODULE = _SRC / "application" / "guards" / "invocation.py"
+_GUARDS_PACKAGE = _SRC / "application" / "guards"
+_BOUNDARY_MODULE = _GUARDS_PACKAGE / "invocation.py"
+_DISCOVERY_MODULE = _GUARDS_PACKAGE / "project_root.py"
 
 #: A guard declared blocking, with one ordinary exclusion over ``src/``.
 _BLOCKING_WITH_EXCLUSION = (
@@ -85,6 +92,20 @@ def _project(tmp_path: Path, flow: str = _BLOCKING_WITH_EXCLUSION) -> Path:
 
 def _cli(args: list[str], *, stdin: str = ""):
     return CliRunner().invoke(main, args, input=stdin)
+
+
+def _must_not_escape(call):
+    """Run *call*, turning an escape from the boundary into a FAILED, not an abort.
+
+    An uncaught ``KeyboardInterrupt`` interrupts the whole pytest session, and
+    "the run stopped" is not "the test failed" — standing rule 5 asks for FAILED
+    and for countable numbers. This makes an escape a countable failure of the
+    test that asserts it cannot happen.
+    """
+    try:
+        return call()
+    except BaseException as exc:
+        pytest.fail(f"control escaped the boundary as {type(exc).__name__}")
 
 
 def _outcomes(root: Path) -> list[str]:
@@ -154,6 +175,29 @@ def _should_record(
 def _produced_a_verdict(*, rest: list[str], exit_code: int) -> bool:
     """A liveness report that succeeded is the one exit path with no verdict."""
     return not ("--liveness" in rest and exit_code == 0)
+
+
+#: Stands in, inside a row's argv, for a directory that exists and is not a project.
+NOT_A_PROJECT = "{not_a_project}"
+
+
+def _row_argv(
+    root: Path, elsewhere: Path, name: str | None, rest: list[str]
+) -> list[str]:
+    """The command line for one row, with the row's placeholder resolved.
+
+    ``name`` is compared against ``None`` rather than tested for truth. An empty
+    guard name is a name the caller typed, and folding it into "no name at all"
+    is exactly why ``beadloom guard ""`` went unenumerated for four cycles
+    (BDL-061.30, section 4).
+    """
+    filled = [item.format(not_a_project=str(elsewhere)) for item in rest]
+    return ["guard", *([] if name is None else [name]), "--project", str(root), *filled]
+
+
+def _row_locates_a_project(rest: list[str]) -> bool:
+    """A row that points ``--project`` at something that is not one locates none."""
+    return NOT_A_PROJECT not in rest
 
 
 #: (label, argv-after-the-name, stdin, flow.yml, guard name, exit code).
@@ -252,6 +296,35 @@ _EXIT_PATHS: tuple[tuple[str, str | None, list[str], str, str, int], ...] = (
         "",
         3,
     ),
+    # Rows BDL-061.30 derived from the code and the CLI surface, which this
+    # table did not carry. Four are argv-reachable and live here; the fifth (an
+    # interrupt during the evaluation) is injected, and is a row of
+    # :data:`_INJECTED_FAILURES` instead.
+    ("an empty guard name", "", [], _BLOCKING_WITH_EXCLUSION, "", 3),
+    (
+        "a --project that is not a project",
+        "bead-claimed",
+        ["--project", NOT_A_PROJECT, "--context", "path=app.py"],
+        _BLOCKING_WITH_EXCLUSION,
+        "",
+        2,
+    ),
+    (
+        "a hook payload of zero bytes",
+        "bead-claimed",
+        ["--hook", "claude-code"],
+        _BLOCKING_WITH_EXCLUSION,
+        "",
+        2,
+    ),
+    (
+        "a --context key supplied twice",
+        "bead-claimed",
+        ["--context", "path=src/a.py", "--context", "path=app.py"],
+        _BLOCKING_WITH_EXCLUSION,
+        "",
+        2,
+    ),
 )
 
 
@@ -279,18 +352,20 @@ class TestEveryExitPathEndsWithAVerdictAndARecord:
     def test_the_row_records_exactly_when_the_rule_says_it_does(
         self, tmp_path, stub_probes, label, name, rest, flow, stdin, exit_code
     ) -> None:
-        root = _project(tmp_path, flow)
-        args = ["guard", *( [name] if name else []), "--project", str(root), *rest]
+        root, elsewhere = _project(tmp_path, flow), tmp_path / "elsewhere"
+        elsewhere.mkdir(exist_ok=True)
+        args = _row_argv(root, elsewhere, name, rest)
 
         result = _cli(args, stdin=stdin)
 
         assert result.exit_code == exit_code, f"{label}: {result.output}"
         expected = _should_record(
             name=name,
-            project_located=True,
+            project_located=_row_locates_a_project(rest),
             produced_a_verdict=_produced_a_verdict(rest=rest, exit_code=exit_code),
         )
         assert bool(_outcomes(root)) is expected, f"{label}: {_outcomes(root)}"
+        assert not (elsewhere / ".beadloom").exists(), label
 
     @pytest.mark.parametrize(
         ("label", "name", "rest", "flow", "stdin", "exit_code"),
@@ -301,8 +376,9 @@ class TestEveryExitPathEndsWithAVerdictAndARecord:
         self, tmp_path, stub_probes, label, name, rest, flow, stdin, exit_code
     ) -> None:
         """No exit path is silent, and none of them is a traceback."""
-        root = _project(tmp_path, flow)
-        args = ["guard", *([name] if name else []), "--project", str(root), *rest]
+        root, elsewhere = _project(tmp_path, flow), tmp_path / "elsewhere"
+        elsewhere.mkdir(exist_ok=True)
+        args = _row_argv(root, elsewhere, name, rest)
 
         result = _cli(args, stdin=stdin)
 
@@ -318,8 +394,9 @@ class TestEveryExitPathEndsWithAVerdictAndARecord:
         self, tmp_path, stub_probes, label, name, rest, flow, stdin, exit_code
     ) -> None:
         """Exit 1 is the WARN code, which a harness reads as "carry on"."""
-        root = _project(tmp_path, flow)
-        args = ["guard", *([name] if name else []), "--project", str(root), *rest, "--json"]
+        root, elsewhere = _project(tmp_path, flow), tmp_path / "elsewhere"
+        elsewhere.mkdir(exist_ok=True)
+        args = [*_row_argv(root, elsewhere, name, rest), "--json"]
 
         result = _cli(args, stdin=stdin)
 
@@ -349,13 +426,43 @@ class TestEveryExitPathEndsWithAVerdictAndARecord:
 
     def test_every_enumerated_row_is_reachable_through_the_real_binary(self) -> None:
         """The table is not allowed to shrink quietly."""
-        assert len(_EXIT_PATHS) >= 16
+        assert len(_EXIT_PATHS) >= 20
         assert len({row[0] for row in _EXIT_PATHS}) == len(_EXIT_PATHS)
 
 
 # ==========================================================================
-# 2. THE STRUCTURE — an exit added without a record is a diff that reddens
+# 2. THE STRUCTURE — control leaves the boundary path in exactly one place
 # ==========================================================================
+#
+# The sentence these pins are about, stated once so a pin can be checked
+# against it rather than against a habit:
+#
+#     CONTROL LEAVES THE GUARD'S BOUNDARY PATH IN EXACTLY ONE PLACE, AND ONLY
+#     AFTER THE RECORDING STEP HAS RUN.
+#
+# ``.29`` pinned a *spelling* of that sentence — calls named ``exit``, inside
+# ``services/commands/guard.py`` — and ``.30`` measured what the difference
+# between a spelling and an invariant costs: ``if invocation.name == "":
+# sys.exit(0)``, placed inside ``run_invocation``, shipped 628/628 green across
+# the whole guard suite and all four pins while ``beadloom guard ""`` exited 0,
+# printed nothing and recorded nothing. A pin narrower than its invariant is
+# not a weaker guarantee; it is the absence of one.
+#
+# The three axes that sabotage walked through, and how each is closed here:
+#
+# * SCOPE is derived, not listed. :func:`boundary_path_modules` is the command
+#   module plus *every* module in the guards package, so a module added to the
+#   package is inside the scope on the day it is added.
+# * TERMINATORS are recognised by effect, not by name. The table of constructs
+#   this predicate flags is itself measured: ``test_guards_boundary_escapes.py``
+#   runs every entry in a real subprocess and shows the process does not
+#   continue past it — and, for the uncatchable ones, does not continue past it
+#   from inside an ``except BaseException`` handler either.
+# * The RECORDING STEP leaves a WITNESS. ``_record`` sets exactly one of
+#   ``recorded_at`` / ``not_recorded_because`` on every result it returns, so a
+#   result that skipped it carries neither. The matrix asserting that runs in a
+#   subprocess, so a construct that ends the process is a named row that never
+#   arrived rather than a dead test session (standing rule 5).
 
 
 def _module_ast(path: Path) -> ast.Module:
@@ -374,29 +481,172 @@ def _calls_named(tree: ast.AST, name: str) -> list[ast.Call]:
     ]
 
 
-class TestTheCommandHasOneWayOut:
-    """Structural pins. A behaviour table cannot see an exit path nobody wrote a row for.
+def _function(tree: ast.AST, name: str) -> ast.FunctionDef:
+    return next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == name
+    )
 
-    These three assertions are what make the enumeration above hard to defeat:
-    adding a new way out of the command, or a new return from the boundary that
-    skips the recording step, changes one of these counts.
+
+def _terminal_name(node: ast.expr | None) -> str:
+    """The last component of a dotted expression: ``os._exit`` -> ``_exit``."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return ""
+
+
+#: Call targets that end the process, matched on their LAST component so the
+#: module they are reached through cannot disguise them: ``sys.exit``,
+#: ``ctx.exit``, ``os._exit`` and a bare ``exit`` are one behaviour.
+TERMINATING_CALL_NAMES = frozenset({"exit", "_exit", "quit"})
+
+#: Call targets whose last component is too ordinary to match on its own, so
+#: these are matched on the whole dotted target instead.
+TERMINATING_CALL_TARGETS = frozenset(
+    {
+        "os.abort",
+        "os.kill",
+        "os.execl",
+        "os.execlp",
+        "os.execv",
+        "os.execve",
+        "os.execvp",
+        "signal.raise_signal",
+    }
+)
+
+#: Exceptions that end the process rather than being handled by it: ``SystemExit``
+#: is not an ``Exception``, and Click turns ``Abort``/``Exit`` into an exit code.
+TERMINATING_EXCEPTIONS = frozenset({"SystemExit", "Abort", "Exit"})
+
+
+def process_terminators(tree: ast.AST) -> list[str]:
+    """Every construct in *tree* that can end the process, however it is spelled.
+
+    A ``raise`` is read from its exception *node* rather than from a call, so a
+    bare ``raise SystemExit`` counts like the rest — ``.29``'s pin could not see
+    one, because there ``node.exc`` is a ``Name`` and not a ``Call``.
+    """
+    found: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            if (
+                _terminal_name(node.func) in TERMINATING_CALL_NAMES
+                or ast.unparse(node.func) in TERMINATING_CALL_TARGETS
+            ):
+                found.append(ast.unparse(node))
+        elif isinstance(node, ast.Raise) and node.exc is not None:
+            raised = node.exc.func if isinstance(node.exc, ast.Call) else node.exc
+            if _terminal_name(raised) in TERMINATING_EXCEPTIONS:
+                found.append(ast.unparse(node))
+    return found
+
+
+def boundary_path_modules() -> tuple[Path, ...]:
+    """Every module one guard invocation passes control through.
+
+    Discovered from the package rather than listed, because a listed scope is
+    what ``.30`` walked past: the boundary module itself was never read.
+    """
+    return (_COMMAND_MODULE, *sorted(_GUARDS_PACKAGE.rglob("*.py")))
+
+
+def terminators_on_the_boundary_path() -> list[tuple[str, str]]:
+    """``(module, spelling)`` for every way control can leave that path."""
+    return [
+        (path.name, spelling)
+        for path in boundary_path_modules()
+        for spelling in process_terminators(_module_ast(path))
+    ]
+
+
+#: The one place control is allowed to leave: module, and the statement itself.
+THE_ONE_WAY_OUT = ("guard.py", "sys.exit(result.exit_code)")
+
+
+def click_path_keywords(source: str) -> list[list[str]]:
+    """The keyword names of every ``click.Path(...)`` in *source*, call by call.
+
+    An allowlist rather than ``"exists=True" not in source``: *any* ``click.Path``
+    validator — ``dir_okay=False`` as much as ``exists=True`` — makes Click exit
+    before the callback runs, and therefore before the boundary (``.30``, B5).
+    """
+    return [
+        [keyword.arg or "**" for keyword in node.keywords]
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Call) and ast.unparse(node.func) == "click.Path"
+    ]
+
+
+def _source_modules() -> tuple[Path, ...]:
+    """Every module in the package — the scope of the "one writer" pin."""
+    return tuple(sorted(_SRC.rglob("*.py")))
+
+
+def record_firing_sites() -> list[tuple[str, str]]:
+    """Every call of the recorder, anywhere in the source tree."""
+    return [
+        (path.relative_to(_SRC).as_posix(), ast.unparse(call))
+        for path in _source_modules()
+        for call in _calls_named(_module_ast(path), "record_firing")
+    ]
+
+
+def record_firing_importers() -> list[str]:
+    """Every module that imports the recorder — an alias would hide a call site."""
+    return [
+        path.relative_to(_SRC).as_posix()
+        for path in _source_modules()
+        if any(
+            isinstance(node, ast.ImportFrom)
+            and any(alias.name == "record_firing" for alias in node.names)
+            for node in ast.walk(_module_ast(path))
+        )
+    ]
+
+
+class TestControlLeavesTheBoundaryPathInExactlyOnePlace:
+    """The structural pin, at the width of the invariant it is about.
+
+    Renamed from ``TestTheCommandHasOneWayOut``: the old name said what the pin
+    read (one module) rather than what the guarantee was (one path).
     """
 
-    def test_the_process_is_terminated_in_exactly_one_place(self) -> None:
-        tree = _module_ast(_COMMAND_MODULE)
+    def test_the_scope_is_every_module_control_passes_through(self) -> None:
+        """A module added to the guards package is in scope the day it is added."""
+        scope = boundary_path_modules()
 
-        exits = _calls_named(tree, "exit")
-        raises = [
-            node
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Raise)
-            and isinstance(node.exc, ast.Call)
-            and isinstance(node.exc.func, ast.Name)
-            and node.exc.func.id == "SystemExit"
-        ]
+        assert set(scope) == {_COMMAND_MODULE, *_GUARDS_PACKAGE.rglob("*.py")}
+        assert _BOUNDARY_MODULE in scope, "the boundary module itself must be read"
+        assert _DISCOVERY_MODULE in scope
+        assert len(scope) >= 15, [path.name for path in scope]
 
-        assert len(exits) == 1, [ast.unparse(node) for node in exits]
-        assert raises == []
+    def test_control_leaves_the_boundary_path_in_exactly_one_place(self) -> None:
+        """The pin ``.30`` measured missing: every module, every spelling, one exit."""
+        found = terminators_on_the_boundary_path()
+
+        assert found == [THE_ONE_WAY_OUT], found
+
+    def test_only_the_seams_the_boundary_calls_may_raise_in_the_command_module(
+        self,
+    ) -> None:
+        """Outside the boundary's handlers, a raise is an exit code Click picks.
+
+        ``_read_stdin`` and ``_probes`` are handed to the invocation as
+        *callables* precisely so that they run inside its ``try`` (``.28``, F7);
+        anything else in this module that raises has only Click above it.
+        """
+        raising = {
+            node.name
+            for node in ast.walk(_module_ast(_COMMAND_MODULE))
+            if isinstance(node, ast.FunctionDef)
+            and any(isinstance(child, ast.Raise) for child in ast.walk(node))
+        }
+
+        assert raising <= {"_read_stdin", "_probes"}, raising
 
     def test_the_boundary_returns_through_the_recording_step_and_nowhere_else(
         self,
@@ -404,48 +654,206 @@ class TestTheCommandHasOneWayOut:
         """One return, and it is the step that writes (or explains) the record."""
         from beadloom.application.guards.invocation import run_invocation
 
-        tree = _module_ast(_BOUNDARY_MODULE)
-        entry = next(
-            node
-            for node in ast.walk(tree)
-            if isinstance(node, ast.FunctionDef) and node.name == run_invocation.__name__
-        )
+        entry = _function(_module_ast(_BOUNDARY_MODULE), run_invocation.__name__)
         returns = [node for node in ast.walk(entry) if isinstance(node, ast.Return)]
 
         assert len(returns) == 1, [ast.unparse(node) for node in returns]
         assert isinstance(returns[0].value, ast.Call)
         assert ast.unparse(returns[0].value).startswith("_record(")
 
-    def test_the_firing_record_is_written_from_exactly_one_call_site(self) -> None:
-        """One writer, so "did this path record?" is a question about one branch."""
-        modules = [
-            *sorted((_SRC / "application" / "guards").rglob("*.py")),
-            _COMMAND_MODULE,
-        ]
-        sites = [
-            (path, ast.unparse(call))
-            for path in modules
-            for call in _calls_named(_module_ast(path), "record_firing")
-        ]
+    def test_the_render_step_cannot_choose_the_code_the_command_exits_on(self) -> None:
+        """The render runs after the boundary returns, so it is wrapped, not trusted.
 
-        assert len(sites) == 1, sites
+        ``.30`` attacked ``_emit`` and could not reach a raising case, and said
+        so — which left "rendering cannot fail" resting on one round's failure
+        to break it. It is a mechanism instead: the render is the body of a
+        ``try`` whose handler is ``BaseException``, and the exit sits *outside*
+        that ``try``, so the code is the verdict's whatever rendering does.
+        """
+        callback = _function(_module_ast(_COMMAND_MODULE), "guard")
+        tries = [node for node in ast.walk(callback) if isinstance(node, ast.Try)]
+
+        assert len(tries) == 1, [ast.unparse(node) for node in tries]
+        assert [_terminal_name(handler.type) for handler in tries[0].handlers] == [
+            "BaseException"
+        ]
+        assert "_emit(" in ast.unparse(tries[0].body[0])
+        assert process_terminators(ast.Module(body=tries[0].body, type_ignores=[])) == []
+
+    def test_the_firing_record_is_written_from_exactly_one_call_site(self) -> None:
+        """One writer — across the WHOLE tree, not only where guards live (``.30``, B4)."""
+        assert record_firing_sites() == [
+            (
+                "application/guards/invocation.py",
+                "record_firing(result.project_root, result.verdict)",
+            )
+        ], record_firing_sites()
+        assert len(_source_modules()) > 100, len(_source_modules())
+
+    def test_the_recorder_is_imported_only_where_it_is_called_or_re_exported(
+        self,
+    ) -> None:
+        """An alias import would hide a call site from the name-based scan above."""
+        assert record_firing_importers() == [
+            "application/guards/__init__.py",
+            "application/guards/invocation.py",
+        ], record_firing_importers()
 
     def test_the_command_does_no_validation_click_would_exit_on(self) -> None:
-        """A ``click.Path(exists=True)`` exits 2 before the callback — and the boundary — runs.
+        """An option Click validates exits before the callback — and the boundary.
 
         That is how ``--project <missing>`` came to exit on the block code with
-        no verdict and no record (``.28``, m1). The pin is on the option list
-        rather than on the symptom, because any option validated by Click has
-        the same exit path.
+        no verdict and no record (``.28``, m1). Pinned as an allowlist of
+        keywords rather than as the absence of one substring.
         """
-        source = _COMMAND_MODULE.read_text(encoding="utf-8")
+        keywords = click_path_keywords(_COMMAND_MODULE.read_text(encoding="utf-8"))
 
-        assert "exists=True" not in source
+        assert keywords == [["path_type"]], keywords
+
+
+#: Run in a child process, one JSON row per invocation, so a construct that ends
+#: the process costs the rows after it rather than the whole test session.
+_WITNESS_MATRIX_CHILD = r'''
+import itertools
+import json
+import pathlib
+import sys
+
+from beadloom.application.guards.invocation import GuardInvocation, run_invocation
+
+root, elsewhere, missing, deep = (pathlib.Path(arg) for arg in sys.argv[1:5])
+
+NAMES = [None, "", "bead-claimed", "no-such-guard", "   ", "bead-claimed\n"]
+PROJECTS = [
+    ("a project", root),
+    ("not a project", elsewhere),
+    ("a missing directory", missing),
+    ("discovered from the working directory", None),
+]
+CONTEXTS = [(), ("path=app.py",), ("nonsense",)]
+HARNESSES = [None, "claude-code", "no-such-harness"]
+
+for name, project, liveness, context, harness in itertools.product(
+    NAMES, PROJECTS, [False, True], CONTEXTS, HARNESSES
+):
+    where, declared = project
+    row = {
+        "label": "name=%r project=%s liveness=%s context=%r harness=%r"
+        % (name, where, liveness, context, harness)
+    }
+    try:
+        result = run_invocation(
+            GuardInvocation(
+                name=name,
+                declared_project=declared,
+                context_pairs=context,
+                harness=harness,
+                liveness=liveness,
+                start_dir=deep,
+            )
+        )
+    except BaseException as exc:
+        row["escaped"] = type(exc).__name__
+    else:
+        row["exit_code"] = result.exit_code
+        row["recorded"] = result.recorded
+        row["because"] = result.not_recorded_because
+    print(json.dumps(row), flush=True)
+
+print(json.dumps({"label": "the matrix ran to the end", "done": True}), flush=True)
+'''
+
+
+class TestEveryResultCarriesTheWitnessThatTheRecordingStepRan:
+    """The behavioural half of the pin — the half no spelling can dodge.
+
+    ``_record`` sets exactly one of ``recorded_at`` / ``not_recorded_because``
+    on every result it returns, so a result that skipped it carries neither and
+    a result that ended the process carries nothing at all. The matrix is
+    *generated* from the argument axes rather than hand-listed, because ``.30``
+    placed its bypass on an argv for which nobody had written a row.
+    """
+
+    @pytest.fixture()
+    def matrix(self, tmp_path) -> list[dict]:
+        root = _project(tmp_path / "root")
+        elsewhere = tmp_path / "elsewhere"
+        deep = root / "src" / "deep"
+        deep.mkdir(parents=True)
+        elsewhere.mkdir()
+        script = tmp_path / "matrix.py"
+        script.write_text(_WITNESS_MATRIX_CHILD, encoding="utf-8")
+
+        completed = subprocess.run(  # noqa: S603 — fixed argv, no shell
+            [
+                sys.executable,
+                str(script),
+                str(root),
+                str(elsewhere),
+                str(tmp_path / "nowhere"),
+                str(deep),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        return [json.loads(line) for line in completed.stdout.splitlines()]
+
+    def test_the_matrix_ran_to_the_end_without_the_process_being_ended(
+        self, matrix
+    ) -> None:
+        """A terminator inside the boundary shows up here as the row it died on."""
+        reached = matrix[-1]["label"] if matrix else "(no rows at all)"
+
+        assert matrix and matrix[-1].get("done") is True, (
+            f"the process ended inside the boundary; last row reached: {reached}"
+        )
+        assert len(matrix) - 1 >= 400, len(matrix) - 1
+
+    def test_nothing_escaped_the_boundary_on_any_row(self, matrix) -> None:
+        """``run_invocation`` says it never raises. Over the whole matrix, it does not."""
+        escaped = [row for row in matrix if "escaped" in row]
+
+        assert escaped == [], escaped[:5]
+
+    def test_every_row_carries_exactly_one_of_the_two_recording_outcomes(
+        self, matrix
+    ) -> None:
+        """Recorded, or a stated reason it was not — never neither, and never both."""
+        rows = [row for row in matrix if not row.get("done")]
+        witnessless = [row for row in rows if row["recorded"] == bool(row["because"])]
+
+        assert witnessless == [], witnessless[:5]
+
+    def test_no_row_leaves_on_a_code_the_adapter_contract_does_not_define(
+        self, matrix
+    ) -> None:
+        rows = [row for row in matrix if not row.get("done")]
+        codes = {row["exit_code"] for row in rows}
+
+        assert codes <= {0, 1, 2, 3}, codes
 
 
 # ==========================================================================
 # 3. THE INJECTION — a failure nobody enumerated is still a verdict
 # ==========================================================================
+
+
+#: Failures injected at the evaluation seam, and the fragment each must explain.
+#: The third row is BDL-061.30's finding A: ``KeyboardInterrupt`` is neither an
+#: ``Exception`` nor a ``SystemExit``, so it escaped the boundary and Click
+#: turned it into exit 1 — the WARN code the shipped adapter carries on past —
+#: with no verdict and no record.
+_INJECTED_FAILURES = (
+    (
+        "an exception during the evaluation",
+        lambda: RuntimeError("the tracker probe blew up"),
+        "the tracker probe blew up",
+    ),
+    ("a process exit during the evaluation", lambda: SystemExit(7), "exit 7"),
+    ("an interrupt during the evaluation", KeyboardInterrupt, "interrupted"),
+)
 
 
 class TestAFailureNobodyEnumeratedIsStillAVerdict:
@@ -466,42 +874,36 @@ class TestAFailureNobodyEnumeratedIsStillAVerdict:
             Guard(name="bead-claimed", summary="s", check=check),
         )
 
-    def test_an_exception_inside_a_check_is_a_recorded_error(
-        self, tmp_path, monkeypatch, stub_probes
+    @pytest.mark.parametrize(
+        ("label", "failure", "fragment"),
+        _INJECTED_FAILURES,
+        ids=[row[0] for row in _INJECTED_FAILURES],
+    )
+    def test_a_failure_at_the_evaluation_seam_is_a_recorded_error(
+        self, tmp_path, monkeypatch, stub_probes, label, failure, fragment
     ) -> None:
-        def explode(_request: object) -> None:
-            msg = "the tracker probe blew up"
-            raise RuntimeError(msg)
+        """Each of the three: exit 2, one recorded ``error``, and a stated reason.
 
-        self._install(monkeypatch, explode)
-        root = _project(tmp_path)
-
-        result = _cli(["guard", "bead-claimed", "--project", str(root)])
-
-        assert result.exit_code == 2, result.output
-        assert _outcomes(root) == ["error"]
-        assert "the tracker probe blew up" in read_firings(root)[-1].why
-
-    def test_a_check_that_exits_the_process_is_a_recorded_error(
-        self, tmp_path, monkeypatch, stub_probes
-    ) -> None:
-        """``sys.exit`` deeper in the stack is the exact shape of every past hole.
-
-        A lower layer that terminates the process decides the exit code and
-        writes nothing — which is what ``_fail()`` did on six argument-parsing
-        paths. Inside the boundary it becomes "I could not tell", recorded.
+        A ``sys.exit`` deeper in the stack is the shape of every past hole — a
+        lower layer that terminates the process picks the exit code and writes
+        nothing, which is what ``_fail()`` did on six argument-parsing paths.
+        An interrupt is that same shape one exception class further out, and it
+        escaped until BDL-061.31 widened the last-resort handler.
         """
 
-        def bail(_request: object) -> None:
-            raise SystemExit(7)
+        def fail(_request: object) -> None:
+            raise failure()
 
-        self._install(monkeypatch, bail)
+        self._install(monkeypatch, fail)
         root = _project(tmp_path)
 
-        result = _cli(["guard", "bead-claimed", "--project", str(root)])
+        result = _must_not_escape(
+            lambda: _cli(["guard", "bead-claimed", "--project", str(root)])
+        )
 
-        assert result.exit_code == 2, result.output
-        assert _outcomes(root) == ["error"]
+        assert result.exit_code == 2, f"{label}: {result.output}"
+        assert _outcomes(root) == ["error"], label
+        assert fragment in read_firings(root)[-1].why, read_firings(root)[-1].why
 
     def test_a_stdin_that_cannot_be_read_is_a_recorded_error(
         self, tmp_path, monkeypatch, stub_probes
@@ -657,6 +1059,24 @@ class TestAGuardThatCannotFindTheProjectBlocksAndCreatesNothing:
         assert result.returncode == 2, result.stderr
         assert b"ERROR" in result.stderr, result.stderr
         assert not (tmp_path / "nowhere").exists()
+
+    def test_a_project_directory_that_is_not_a_project_is_the_same_answer(
+        self, tmp_path
+    ) -> None:
+        """The coordinator's reproduction of ``.30``'s finding C, through the binary.
+
+        ``--project <an existing directory with no .beadloom/>`` used to be
+        honoured verbatim: SKIP at exit 0, a manufactured ``.beadloom/`` there,
+        and the real project's record untouched.
+        """
+        outside = tmp_path / "not-a-project"
+        outside.mkdir()
+
+        result = _run_real(outside, ["guard", "bead-claimed", "--project", str(outside)])
+
+        assert result.returncode == 2, result.stderr
+        assert b"ERROR" in result.stderr, result.stderr
+        assert list(outside.iterdir()) == []
 
     def test_the_liveness_report_says_so_too(self, tmp_path) -> None:
         outside = tmp_path / "not-a-project"
@@ -853,10 +1273,31 @@ class TestLocatingTheProject:
 
         assert locate_project_root(start=deep).root == inner.resolve()
 
-    def test_a_declared_project_is_used_verbatim_without_walking_up(
+    def test_a_declared_project_that_carries_the_marker_is_used_verbatim(
         self, tmp_path
     ) -> None:
         """An explicit argument means what it says; searching past it would not."""
+        from beadloom.application.guards.project_root import locate_project_root
+
+        _outer = _project(tmp_path)
+        inner = _project(tmp_path / "vendor" / "thing")
+
+        located = locate_project_root(declared=inner)
+
+        assert located.root == inner
+        assert located.declared is True
+
+    def test_a_declared_directory_without_the_marker_is_refused_not_manufactured(
+        self, tmp_path
+    ) -> None:
+        """``--project`` names a *project*, and a directory alone is not one.
+
+        BDL-061.30's finding C: any ``is_dir()`` used to be honoured, so a
+        directory with no ``flow.yml`` silently traded the project's declared
+        ``block`` for the shipped default ``warn`` and gained a self-entrenching
+        ``.beadloom/`` when the firing was written. "The guard manufactures no
+        root" was true of discovery and false through this flag.
+        """
         from beadloom.application.guards.project_root import locate_project_root
 
         root = _project(tmp_path)
@@ -865,12 +1306,17 @@ class TestLocatingTheProject:
 
         located = locate_project_root(declared=sub)
 
-        assert located.root == sub
-        assert located.declared is True
+        assert located.root is None
+        assert "not a Beadloom project" in located.refusal
+        assert not (sub / ".beadloom").exists()
 
     @pytest.mark.parametrize(
         ("label", "kind"),
-        [("no marker anywhere above", "walk"), ("--project names nothing", "declared")],
+        [
+            ("no marker anywhere above", "walk"),
+            ("--project names nothing", "declared"),
+            ("--project names a directory that is not a project", "unmarked"),
+        ],
     )
     def test_a_project_that_cannot_be_located_refuses_and_names_the_reason(
         self, tmp_path, label, kind
@@ -880,11 +1326,12 @@ class TestLocatingTheProject:
         start = tmp_path / "plain"
         start.mkdir()
 
-        located = (
-            locate_project_root(start=start)
-            if kind == "walk"
-            else locate_project_root(declared=start / "gone")
-        )
+        if kind == "walk":
+            located = locate_project_root(start=start)
+        elif kind == "declared":
+            located = locate_project_root(declared=start / "gone")
+        else:
+            located = locate_project_root(declared=start)
 
         assert located.root is None, label
         assert located.refusal, label

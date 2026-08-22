@@ -7,11 +7,15 @@
 
 ## Current Bead
 
-**Bead:** none — `.29` closed (commit `2a82dad`). Next in the chain: `beadloom-mr2l.30`
-[test] S1 fix-3 — prove the boundary holds where three cycles did not.
-**Handover for `.30`:** the enumeration + structural pins live in
-`tests/test_guards_invocation.py`; the recording rule and its three exceptions, the
-project-discovery decision, the exit-code split and the named residuals are in
+**Bead:** none — `.31` closed. Next in the chain: `beadloom-mr2l.3` [review] S1 —
+portability, read-only, honest skip.
+**Handover for `.3`:** the enumeration, the structural pin and the recording-witness
+matrix live in `tests/test_guards_invocation.py` (section 2 states the invariant the
+pin is about); the evidence that the pin bites — the measured terminator table, the
+two sabotage shapes `.30` walked past, and the quantified "manufactures no root"
+claim — is in `tests/test_guards_boundary_escapes.py`. The recording rule and its
+three exceptions, the interrupt decision with both sides, the `--project` marker
+requirement and the named residuals are in
 `docs/domains/application/features/flow-guards/SPEC.md`.
 
 ## Progress
@@ -39,6 +43,17 @@ project-discovery decision, the exit-code split and the named residuals are in
       as consequences of it; the strip deleted, the glob anchored, the project located by
       walking up for `.beadloom/` and never manufactured; guard tests 528 → 627, suite
       5376 → 5475, 15 sabotages all FAILED
+- [x] S1 `.30` test — the boundary is present but not load-bearing: three escapes
+      (an interrupt at exit 1 with no record; the structural pins are spelling checks;
+      `--project` need not name a project); 25 tests, suite 5476 → 5501, no `src/` change
+      (commit `8bbd84c`)
+- [x] S1 `.31` dev fix-4 (2026-08-22) — the pin made as wide as its invariant (scope
+      derived from the package, terminators recognised by measured effect, a
+      recording-witness matrix run in a subprocess), the last-resort handler widened to
+      `BaseException` with the Ctrl-C-now-blocks trade-off argued in the SPEC, and
+      `--project` required to carry the marker; also: an empty guard name is no longer
+      swallowed, a closed stdin states a cause, and the render step can no longer choose
+      the exit code. Guard tests 653 → 713, suite 5501 → 5561, 9 sabotages all FAILED
 
 ## Results
 
@@ -52,6 +67,8 @@ project-discovery decision, the exit-code split and the named residuals are in
 | .27 | Done | S1 fix-2: path shape narrowed, `error` outcome, no invocation without a record |
 | .28 | Done | S1 test: adversarial re-verification — F7 stdin bytes, F8 six unrecorded, F9 cwd-as-root, F10 the strip |
 | .29 | Done | S1 fix-3: one invocation boundary + project discovery; the four symptoms closed as consequences |
+| .30 | Done | S1 test: three escapes past the boundary's edges — the interrupt, the spelling-deep pins, `--project` |
+| .31 | Done | S1 fix-4: the pin as wide as its invariant, `BaseException` last resort, `--project` must be a project |
 | .4 | Pending | S1 tech-writer |
 | .5–.8 | Pending | S2 stop the lying checks (#142, #146, #147) |
 | .9–.12 | Pending | S3 composition + project overlay (#139, #152, #132, #136, #137) |

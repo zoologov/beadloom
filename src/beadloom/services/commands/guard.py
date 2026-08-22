@@ -5,7 +5,10 @@ project, parsing the arguments, reading the harness payload, evaluating, and
 recording the firing — happens inside
 :func:`beadloom.application.guards.invocation.run_invocation`, which returns a
 result and never raises and never exits. This module turns that result into
-lines on a stream and calls :func:`sys.exit` **once**.
+lines on a stream and calls :func:`sys.exit` **once** — with the render inside a
+``try`` and that one exit outside it, so a failure while printing cannot hand
+the exit code to Click (exit 1, the non-blocking *warn* code) for a reason that
+has nothing to do with the edit.
 
 That shape is the fix for a defect three cycles could not close by patching:
 each entry path (argument parsing, the stdin read, project discovery, the
@@ -33,6 +36,7 @@ boundary module.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sys
 from pathlib import Path
@@ -49,6 +53,19 @@ if TYPE_CHECKING:
     from beadloom.application.guards.models import GuardVerdict
 
 
+#: Why a ``--hook`` read failed when the caller left this process no stdin at all.
+_NO_STDIN = (
+    "this process has no standard input to read the payload from (the caller "
+    "closed it)"
+)
+
+#: Reported when the verdict itself could not be printed. The exit code does not move.
+_RENDER_FAILED = (
+    "the verdict could not be printed ({detail}); the guard's exit code is "
+    "unchanged, and the firing record — if one was due — was already written"
+)
+
+
 def _probes(project_root: Path) -> GuardProbes:
     """Seam over the real bd/git probes (patched in tests, wired for real here)."""
     from beadloom.services.guard_probes import build_probes
@@ -63,7 +80,16 @@ def _read_stdin() -> str:
     here, before anything could turn it into a verdict: exit 1 — the *warn*
     code, which the harness reads as non-blocking — a raw traceback, and no
     firing record (BDL-061.28, F7).
+
+    A CLOSED stdin is stated rather than left to speak for itself: ``sys.stdin``
+    is ``None`` when the caller ran the guard with ``0<&-``, and the resulting
+    ``AttributeError: 'NoneType' object has no attribute 'read'`` reached the
+    reader as the reason the edit was blocked — an internal repr where a cause
+    belongs (BDL-061.30, section 4). The raise happens inside the boundary's
+    ``try`` because the invocation calls this function, not the other way round.
     """
+    if sys.stdin is None:
+        raise OSError(_NO_STDIN)
     return sys.stdin.read()
 
 
@@ -171,6 +197,8 @@ def guard(
     With no ``--project``, the project root is the nearest directory at or above
     the working directory that contains ``.beadloom/`` — the firing record
     belongs to the project, not to wherever the process was started.
+    ``--project`` is honoured verbatim, and must name a directory that carries
+    ``.beadloom/``: the flag names a project, and a guard manufactures none.
 
     ``--project`` is deliberately not validated by Click: an option Click
     rejects exits before this callback, and therefore before the boundary that
@@ -189,5 +217,15 @@ def guard(
             probes_for=_probes,
         )
     )
-    _emit(result, output_json=output_json)
+    try:
+        _emit(result, output_json=output_json)
+    except BaseException as exc:  # rendering must not get a say in the verdict
+        # The boundary has already decided and already recorded; everything left
+        # is presentation. Letting a failure here propagate would hand the exit
+        # code to Click — exit 1, the non-blocking *warn* code — for a reason
+        # that has nothing to do with the edit (BDL-061.30, section 5). The
+        # note is best-effort by design: if the streams are broken badly enough
+        # that even this cannot be said, the code is still the verdict's.
+        with contextlib.suppress(BaseException):
+            click.echo(_RENDER_FAILED.format(detail=exc), err=True)
     sys.exit(result.exit_code)

@@ -127,6 +127,18 @@ def write_flow_yml(tmp_path: Path):
 
 
 @pytest.fixture()
+def guard_project(tmp_path: Path) -> Path:
+    """``tmp_path`` as a Beadloom project: the marker exists, so a guard locates it.
+
+    ``--project`` names a *project* and not merely a directory (BDL-061.31), so a
+    test that points a guard at a bare temporary directory is exercising "the
+    project could not be located" rather than the guard it named.
+    """
+    (tmp_path / ".beadloom").mkdir(parents=True, exist_ok=True)
+    return tmp_path
+
+
+@pytest.fixture()
 def make_guard_probes():
     """Factory for stub guard probes: ``make(beads=..., branch=...)``.
 
