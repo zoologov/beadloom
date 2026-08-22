@@ -199,6 +199,8 @@
 | .37 | Done | S2: the probes decode with a stated codec, not the image's locale; handlers as wide as their sentence; sweep of every other subprocess call |
 | .40 | Done | S2: the four call sites with a measured wrong ANSWER — both sides of a comparison now decoded by the same stated rule |
 | .43 | Done | S2: two `forbid_import` rules could not match anything (`src/`-prefixed `to:`); glob liveness + named, expiring exemptions |
+| .44 | Done | S2: docs-audit token boundary (#169) — a number inside a larger token is an identifier; sweep filed 3 silent FN classes as #173 / `.45` |
+| .45 | Pending | S2 follow-up: docs-audit reports green about facts it never checked (#173) — per-fact coverage |
 | .4 | Done | S1 docs: exit-3 invariant qualified (not deleted), enforcement surface written down, `error` in both READMEs |
 | .33 | Pending | S2: the exit-3 class is fail-open — a broken `flow.yml` disables every guard |
 | .34 | Pending | S2: an unknown key in a guard body is silently ignored (`option:` → trunk `main`) |

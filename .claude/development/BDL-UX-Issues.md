@@ -35,6 +35,22 @@
 
 ## Open Issues
 
+173. [2026-08-23] [HIGH] 🔴 `docs audit` reports green about facts it never checked — three measured false-negative classes, and one of them printed a false claim as *verified*
+
+    **Severity:** high (a false positive fails the Gate and gets fixed; every one of these is silent, and the audit's own output reads as a clean bill of health)
+    **Command:** `beadloom docs audit`, `beadloom ci`
+    **Context:** the sweep asked for by `beadloom-mr2l.44` while fixing #169. #169 was found twice by the Gate going red; nobody had looked for the half that keeps the Gate green. Measured on this repo, 2026-08-23.
+    **The worst one printed a lie as a verification.** `The graph holds 1,067 nodes.` was extracted as `067`, compared equal to the project's `node_count` of 67, and listed under **Fresh (verified)** — the audit affirmed a claim that is off by a thousand. Symmetrically, the TRUE sentence `The suite has 6,390 tests.` extracted as `390` and was reported stale. One defect, both directions, and only the noisy direction was ever noticed. (Fixed in `.44`; recorded here as the proof the class is real.)
+    **Two more, unfixed and pinned as strict `xfail`s** in `tests/test_doc_scanner_tokenization.py::TestKnownBlindSpots` so they go LOUD when someone fixes them:
+    - Counts below 10 are never extracted for any `*_count` fact. `language_count` is **1** in this repo, so that fact cannot be audited at all — any claim about it, right or wrong, is invisible, and the audit reads green.
+    - A Layer-1 modifier word anywhere in the +/-3 word window suppresses a genuine count even when it modifies a different noun: `The graph holds 316 edges, one per import.` yields nothing, because of `per`.
+    **The measurement that makes the shape plain:** the audit prints a Ground Truth block of **nine** facts and then `13 mention(s) fresh` — and all 13 are the **same** fact (`mcp_tool_count`). `cli_command_count`, `edge_count`, `node_count`, `rule_type_count`, `test_count` and `version` have **zero** findings; no doc in the repo states the current version at all. A green `docs-audit` leg today means "one fact of nine was checked", and nothing in the output says so. By design but equally silent: `SPEC.md` / `CONTRIBUTING.md` suppress all count facts and `docs/**/features/*/SPEC.md` is excluded outright — 26 of the 72 `.md` files under `docs/` are never scanned.
+    **Expected — report the surface, not more heuristics:**
+    - Emit per-fact coverage: for each fact in the registry, the number of mentions found. A fact with **zero** mentions is `not_covered`, printed as such, and never counted as passing. This is "unknown is not zero" applied to the audit's own output.
+    - Name the files whose counts were suppressed by the file-type heuristic, and why.
+    - Only then revisit the `<10` threshold and the modifier window: with coverage reported, their cost is visible instead of invisible.
+    **Related:** #170's third piece ("report the surface, not just the firings") is the identical defect on the guard binding; #161 and #169 are the same audit being confident about text it misparsed. Tracked as `beadloom-mr2l.45`.
+
 172. [2026-08-22] [HIGH] 🔴 `from:` and `to:` are matched against two different vocabularies, so a `src/`-prefixed `to:` silently disables the rule — and the reference taught the broken form
 
     **Severity:** high (the architecture gate printed a green count computed over rules incapable of firing; a required CI check, both git hooks, and the review role all read that count)
@@ -82,6 +98,11 @@
     **Context:** a SPEC sentence mentioning bead `BDL-061.29` alongside the words "the CLI" was extracted as a `cli_command_count` claim; the Gate failed with "doc says 29 but project state is 39". The number was never a claim about anything — it is the tail of an identifier.
     **Expected:** do not extract a number that is part of a larger token (`BDL-061.29`, `v2.2.0`, `Python 3.10`). Tokenize before matching rather than scanning for digits near a keyword. Same family as #161: the audit is confident about text it has misparsed.
     **Workaround:** reword the sentence — which is exactly the outcome to avoid, since it trains authors to write for the checker.
+    > Fixed in BDL-061 S2 (`beadloom-mr2l.44`). The extractor now tokenizes on whitespace and
+    > accepts a number only when the token's whole core is a number, so `BDL-061.33`, `v2.2.0`,
+    > `Python 3.10`, `PR #33`, `cli.py:645` and `33/40` are identifiers again. No prose was
+    > reworded, no tolerance and no ignore entry were added — three now-dead ignore entries were
+    > RETIRED instead. Measured: 4 spurious extractions removed repo-wide, 0 genuine ones lost.
 
 168. [2026-08-22] [MEDIUM] `pytest-randomly` produces failures no seed reproduces, and nothing in the output says the order was random
 
