@@ -386,6 +386,19 @@ class TestGuardsAreReadOnly:
         ``lint`` mutates the index today (#147, standing rule 3); a guard must
         not, which is why the read-only claim is measured here rather than
         assumed from the absence of a visible write.
+
+        The ``-wal`` check is stated RELATIVE to what was there before, and the
+        reason is measured rather than defensive (BDL-061.36): the file belongs
+        to the repository, not to this test, and any earlier test in the session
+        that opened the live index can own it. Traced with a teardown hook over
+        ``pytest -k guard``, the ``-wal`` appears after
+        ``test_bead15_s3b_coverage.py::TestErrorLevelRegressionGuard::
+        test_new_uncovered_module_fails_lint_strict_at_error`` — a ``lint`` run
+        against the real repo, i.e. the very command standing rule 3 is about —
+        and outlives that test, so an absolute ``not exists()`` here fails on
+        another command's connection while saying "a guard wrote to the index".
+        What this test can honestly claim is that the evaluation below added
+        none, which is what it now asserts.
         """
         from beadloom.services.guard_probes import build_probes
 
@@ -407,6 +420,8 @@ class TestGuardsAreReadOnly:
             }
 
         before = digest()
+        wal = Path(f"{db}-wal")
+        wal_before = wal.exists()
         for name in ("bead-claimed", "working-branch"):
             verdict = evaluate_guard(
                 name,
@@ -417,7 +432,11 @@ class TestGuardsAreReadOnly:
             assert verdict.why
 
         assert digest() == before
-        assert not Path(f"{db}-wal").exists()
+        assert wal.exists() == wal_before, (
+            "the evaluation left a write-ahead log the index did not have"
+            if wal.exists()
+            else "the evaluation checkpointed another connection's log"
+        )
 
 
 class _FixedTracker:

@@ -66,6 +66,24 @@ EXIT_CODE_BY_OUTCOME: Mapping[GuardOutcome, int] = {
 EXIT_CODE_CONFIG_ERROR = 3
 
 
+def exception_detail(exc: BaseException) -> str:
+    """An exception as one readable clause that names its class.
+
+    Shared rather than written twice, because two layers phrase the same fact
+    and a reader compares them: the boundary reports "the guard could not be
+    evaluated: <detail>" and the path resolver reports "it could not be
+    resolved (<detail>)". The class belongs in the clause —
+    ``RuntimeError: Symlink loop from '/p/a'`` and
+    ``OSError: [Errno 40] Too many levels of symbolic links`` are the same
+    condition reported by the interpreter and by the filesystem, and which one
+    spoke is what tells the reader where to look. The empty-message case is
+    handled because ``str(SomeError())`` is ``""``, which would otherwise print
+    a bare colon with nothing after it.
+    """
+    message = str(exc)
+    return f"{type(exc).__name__}: {message}" if message else type(exc).__name__
+
+
 @dataclass(frozen=True)
 class GuardVerdict:
     """One guard's answer about one situation.

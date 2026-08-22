@@ -15,8 +15,10 @@ Reproduced from review .3 (C1), with a ``scripts/**`` exclusion declared:
 
 from __future__ import annotations
 
+import errno
 import json
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -50,6 +52,24 @@ def _verdict(tmp_path, probes, path: str):
         context={"path": path},
         probes=probes(beads=()),
     )
+
+
+def _fail_resolution_of(monkeypatch, segment: str, error: BaseException) -> None:
+    """Make ``Path.resolve`` raise *error* for paths through *segment*, and only those.
+
+    Injection rather than a whole-class stub, because the resolution of the
+    project root itself must keep working: a stub that raises for every path
+    would prove that the handler catches its own fixture. The real
+    ``Path.resolve`` is kept and called for everything else.
+    """
+    real = Path.resolve
+
+    def resolve(self, strict=False):  # mirrors Path.resolve's own signature
+        if segment in self.parts:
+            raise error
+        return real(self, strict=strict)
+
+    monkeypatch.setattr(Path, "resolve", resolve)
 
 
 class TestTraversalCannotBypassAnExclusion:
@@ -720,33 +740,90 @@ class TestNoInvocationEndsWithoutARecord:
         assert self._records(tmp_path) == ()
 
 
-class TestASymlinkLoopDoesNotRaise:
-    """A loop resolves; the handler that claimed otherwise no longer claims it.
+class TestASymlinkLoopEndsInAVerdictAndNeverInATraceback:
+    """A loop reaches a verdict on every interpreter — including those that raise.
 
-    ``Path.resolve()`` defaults to ``strict=False``, and since 3.6 that returns
-    the longest resolvable prefix instead of raising ``ELOOP``. Measured on
-    3.13.7: ``a -> b -> a`` resolves to ``<root>/a`` and no exception is raised,
-    for the link itself and for a path through it. The old handler's comment
-    ("e.g. a symlink loop") therefore named a case that cannot occur while
-    missing the one that did (F3, and the NUL was F2).
+    MEASURED with real interpreters (``uv run --python X``), for the link itself
+    and for a path through it, on ``a -> b -> a``::
 
-    The replacement claims no case at all: it refuses whatever the OS refuses,
-    and says so. These two tests hold the loop on the other side of that — a
-    refusal must be an OS refusal, not a shape the resolver merely dislikes.
+        3.10.1   RuntimeError("Symlink loop from '<root>/a'")
+        3.11.13  RuntimeError("Symlink loop from '<root>/a'")
+        3.12.12  RuntimeError("Symlink loop from '<root>/a'")
+        3.13.7   returns the path unresolved, raises nothing
+
+    That divergence is the whole reason this class was rewritten (BDL-061.36).
+    Its predecessor asserted ``scope is INSIDE`` and ``relative == 'a/x.py'`` —
+    the 3.13 answer — under a docstring stating as a fact that ``resolve()``
+    does not raise on a loop. On 3.10-3.12 the resolution raised ``RuntimeError``,
+    which is neither ``OSError`` nor ``ValueError`` and so escaped the handler
+    sitting directly beneath a comment calling the case unreachable. Two CI jobs
+    failed on tests that were green here, because "green on this machine" and
+    "the property holds" were the same sentence in a single-interpreter suite.
+
+    So nothing below asserts what THIS interpreter does with a loop. The
+    property is asserted instead — *a supplied path comes back as a scope, and
+    a resolution that refuses comes back as a stated refusal* — twice over:
+    once against the real filesystem, where the platform decides which branch
+    runs, and once with the exception INJECTED, so the raising branch is covered
+    on an interpreter that will not produce it. A test that can only run where
+    the bug cannot appear is not coverage of the bug.
     """
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX symlink semantics")
-    def test_a_path_through_a_loop_still_classifies_as_inside(self, tmp_path) -> None:
+    @pytest.mark.parametrize("target", ["a", "a/x.py"])
+    def test_a_real_loop_comes_back_as_a_scope_whatever_this_platform_does(
+        self, tmp_path, target
+    ) -> None:
+        """Both branches are correct; ending in an exception is not one of them."""
         (tmp_path / "a").symlink_to(tmp_path / "b")
         (tmp_path / "b").symlink_to(tmp_path / "a")
 
+        resolved = resolve_edit_path(target, tmp_path)
+
+        if resolved.scope is PathScope.MALFORMED:
+            assert resolved.rejection, resolved
+        else:
+            assert resolved.scope is PathScope.INSIDE, resolved
+            assert resolved.relative == target, resolved
+
+    @pytest.mark.parametrize(
+        ("label", "error"),
+        [
+            (
+                "3.10-3.12's RuntimeError, which no handler caught",
+                RuntimeError("Symlink loop from '/p/a'"),
+            ),
+            (
+                "the ELOOP the CI log also showed",
+                OSError(errno.ELOOP, "Too many levels of symbolic links"),
+            ),
+            ("a ValueError, as an embedded NUL once produced", ValueError("nul")),
+            (
+                "an exception class nobody has enumerated yet",
+                LookupError("something the OS layer may do next"),
+            ),
+        ],
+    )
+    def test_an_injected_refusal_becomes_a_refusal_with_a_reason(
+        self, tmp_path, monkeypatch, label, error
+    ) -> None:
+        """The raising branch, on an interpreter that does not raise.
+
+        The last row is the point of the parametrisation rather than a filler:
+        the handler is meant to be as wide as the sentence "no supplied path
+        ends in a traceback", and a handler enumerating three exception classes
+        would satisfy the first three rows and fail the fourth — which is
+        exactly how ``RuntimeError`` got out.
+        """
+        _fail_resolution_of(monkeypatch, "a", error)
+
         resolved = resolve_edit_path("a/x.py", tmp_path)
 
-        assert resolved.scope is PathScope.INSIDE
-        assert resolved.relative == "a/x.py"
+        assert resolved.scope is PathScope.MALFORMED, label
+        assert type(error).__name__ in resolved.rejection, resolved.rejection
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX symlink semantics")
-    def test_the_guard_still_reaches_a_verdict_through_a_loop(
+    def test_the_guard_reaches_a_verdict_through_a_real_loop(
         self, tmp_path, write_flow_yml, make_guard_probes
     ) -> None:
         write_flow_yml(_EXCLUDED_SCRIPTS)
@@ -755,4 +832,25 @@ class TestASymlinkLoopDoesNotRaise:
 
         verdict = _verdict(tmp_path, make_guard_probes, "a/x.py")
 
-        assert verdict.outcome is GuardOutcome.WARN, verdict.why
+        assert verdict.outcome in {GuardOutcome.WARN, GuardOutcome.ERROR}, verdict
+        assert verdict.why, verdict
+
+    def test_the_guard_reaches_a_verdict_when_resolution_raises(
+        self, tmp_path, monkeypatch, write_flow_yml, make_guard_probes
+    ) -> None:
+        """What an adopter on 3.10 gets: a blocking verdict that says why.
+
+        Stated because it is a real behaviour difference and not a detail: on an
+        interpreter that raises, a loop is an ``error`` at exit 2 — the edit is
+        refused with a reason — while on 3.13 the same edit is evaluated. The
+        divergence belongs to ``Path.resolve``; what this slice owes is that
+        neither side is a traceback and both sides say what they did.
+        """
+        write_flow_yml(_EXCLUDED_SCRIPTS)
+        _fail_resolution_of(monkeypatch, "a", RuntimeError("Symlink loop from '/p/a'"))
+
+        verdict = _verdict(tmp_path, make_guard_probes, "a/x.py")
+
+        assert verdict.outcome is GuardOutcome.ERROR, verdict
+        assert "RuntimeError" in verdict.why, verdict.why
+        assert verdict.remediation, verdict

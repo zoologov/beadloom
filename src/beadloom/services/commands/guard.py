@@ -37,6 +37,7 @@ boundary module.
 from __future__ import annotations
 
 import contextlib
+import io
 import json
 import sys
 from pathlib import Path
@@ -73,13 +74,29 @@ def _probes(project_root: Path) -> GuardProbes:
     return build_probes(project_root)
 
 
-def _read_stdin() -> str:
-    """The harness payload, read lazily so a decoding failure happens inside the boundary.
+def _read_stdin() -> bytes:
+    """The harness payload as the BYTES the harness wrote — never as decoded text.
 
-    A non-UTF-8 byte on the hook's stdin used to raise ``UnicodeDecodeError``
-    here, before anything could turn it into a verdict: exit 1 — the *warn*
-    code, which the harness reads as non-blocking — a raw traceback, and no
-    firing record (BDL-061.28, F7).
+    Read lazily, so a failure happens inside the boundary: a non-UTF-8 byte on
+    the hook's stdin used to raise ``UnicodeDecodeError`` here, before anything
+    could turn it into a verdict — exit 1, the *warn* code a harness reads as
+    non-blocking, a raw traceback, and no firing record (BDL-061.28, F7).
+
+    Returning **bytes** is BDL-061.36. ``sys.stdin.read()`` decodes with
+    whatever error handler the interpreter was started with: ``strict`` under a
+    UTF-8 locale, ``surrogateescape`` under ``LC_ALL=C`` or ``PYTHONUTF8=1``
+    (measured on 3.10.1 and 3.13.7), which is the default of most container
+    images. Under the second the refusal one layer up never fired — the bad
+    bytes became lone surrogates, the JSON parsed, and the guard evaluated a
+    file name this process had invented. The decode now happens inside the
+    boundary with a stated error handler, so this function hands over the byte
+    sequence the writer produced and decides nothing.
+
+    The binary layer is used when the stream has one — the real ``sys.stdin``
+    always does. A stream without one (an in-process double) is re-encoded with
+    ``surrogateescape``, the exact inverse of the decoding that would otherwise
+    hide the bad bytes: what the stream's decoder escaped comes back as the
+    original bytes, and text that decoded cleanly re-encodes to itself.
 
     A CLOSED stdin is stated rather than left to speak for itself: ``sys.stdin``
     is ``None`` when the caller ran the guard with ``0<&-``, and the resulting
@@ -88,9 +105,13 @@ def _read_stdin() -> str:
     belongs (BDL-061.30, section 4). The raise happens inside the boundary's
     ``try`` because the invocation calls this function, not the other way round.
     """
-    if sys.stdin is None:
+    stream = sys.stdin
+    if stream is None:
         raise OSError(_NO_STDIN)
-    return sys.stdin.read()
+    binary = getattr(stream, "buffer", None)
+    if isinstance(binary, io.BufferedIOBase):
+        return binary.read()
+    return stream.read().encode("utf-8", "surrogateescape")
 
 
 def _emit_liveness(rows: tuple[GuardLiveness, ...], *, output_json: bool) -> None:

@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import ast
 import functools
+import io
 import json
 import os
 import shutil
@@ -134,15 +135,26 @@ real_binary = pytest.mark.skipif(
 
 
 def _run_real(
-    root: Path, args: list[str], *, stdin: bytes = b""
+    root: Path,
+    args: list[str],
+    *,
+    stdin: bytes = b"",
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[bytes]:
-    """Run the installed ``beadloom`` with *root* as the working directory."""
+    """Run the installed ``beadloom`` with *root* as the working directory.
+
+    *env* is OVERLAID on the inherited environment rather than replacing it:
+    the child needs ``PATH`` and the venv to be the interpreter under test, and
+    the thing being varied is one or two ambient variables, not the whole
+    environment (BDL-061.36).
+    """
     return subprocess.run(  # noqa: S603 — fixed argv, no shell
         [_BEADLOOM, *args],
         cwd=str(root),
         input=stdin,
         capture_output=True,
         check=False,
+        env={**os.environ, **(env or {})},
     )
 
 
@@ -1458,6 +1470,17 @@ class TestAGuardThatCannotFindTheProjectBlocksAndCreatesNothing:
 # ==========================================================================
 
 
+#: Byte sequences no UTF-8 decoder can read, one per way a harness produces them.
+_UNDECODABLE_PAYLOADS = [
+    (
+        "a latin-1 byte inside the file path",
+        b'{"tool_input": {"file_path": "src/\xff.py"}}',
+    ),
+    ("a UTF-16 payload", b"\xff\xfe{\x00}\x00"),
+    ("a stray continuation byte", b'{"tool_name": "\x80"}'),
+]
+
+
 @real_binary
 class TestAHookPayloadTheProcessCannotDecode:
     """F7 closed: the stdin read is inside the boundary.
@@ -1466,17 +1489,7 @@ class TestAHookPayloadTheProcessCannotDecode:
     string and cannot reproduce a decoding failure at all.
     """
 
-    @pytest.mark.parametrize(
-        ("label", "payload"),
-        [
-            (
-                "a latin-1 byte inside the file path",
-                b'{"tool_input": {"file_path": "src/\xff.py"}}',
-            ),
-            ("a UTF-16 payload", b"\xff\xfe{\x00}\x00"),
-            ("a stray continuation byte", b'{"tool_name": "\x80"}'),
-        ],
-    )
+    @pytest.mark.parametrize(("label", "payload"), _UNDECODABLE_PAYLOADS)
     def test_an_undecodable_payload_is_a_recorded_verdict(
         self, tmp_path, label, payload
     ) -> None:
@@ -1500,6 +1513,177 @@ class TestAHookPayloadTheProcessCannotDecode:
         )
 
         assert result.returncode != 1, result.stderr
+
+
+# ==========================================================================
+# 4b-bis. THE SAME REFUSAL UNDER EVERY AMBIENT LOCALE (.36)
+# ==========================================================================
+
+
+#: Ambient environments that change how a Python process decodes its own stdin.
+#: MEASURED on 3.10.1 and 3.13.7 with ``printf 'x\xff' | python -c ...``:
+#: inherited -> ``utf-8 strict`` (the byte raises); ``LC_ALL=C`` and
+#: ``PYTHONUTF8=1`` -> ``utf-8 surrogateescape`` (the byte becomes ``\udcff``
+#: and nothing raises). ``C`` is the default locale of most container images,
+#: so the second row is the common deployment and the first is ours.
+#:
+#: The fourth row is the case a round-trip through ``surrogateescape`` alone
+#: cannot cover, and it is why the reader takes the stream's BINARY layer: a
+#: decoder that accepts every byte (any 8-bit encoding) raises nothing and
+#: escapes nothing, so ``\xff`` becomes ``'ÿ'`` — a file name the harness never
+#: sent, indistinguishable from one it did.
+_AMBIENT_DECODERS = [
+    ("the inherited environment", {}),
+    ("LC_ALL=C, the default locale of most containers", {"LC_ALL": "C"}),
+    ("PYTHONUTF8=1, UTF-8 mode asked for directly", {"PYTHONUTF8": "1"}),
+    (
+        "PYTHONIOENCODING=latin-1, a stream that decodes every byte",
+        {"PYTHONIOENCODING": "latin-1", "PYTHONUTF8": "0"},
+    ),
+]
+
+
+@real_binary
+class TestTheRefusalDoesNotDependOnTheAmbientLocale:
+    """The undecodable-payload refusal holds for every way the process was started.
+
+    The defect this class exists to keep closed (BDL-061.36): the refusal was
+    real but it belonged to ONE ambient environment. Under ``LC_ALL=C`` Python
+    turns on UTF-8 Mode, ``sys.stdin`` gets the ``surrogateescape`` error
+    handler, the undecodable bytes become lone surrogates instead of raising,
+    the JSON parses, and the guard EVALUATED a path it was built to refuse —
+    measured through the real binary as ``WARN … editing src/\\udcff\\udcfe.py``
+    at exit 1, on the same binary that refused correctly under the inherited
+    locale. Four CI tests failed on all four Python versions while the macOS
+    suite was green, because the suite only ever ran under one locale.
+
+    So the environment is a test DIMENSION here, not a precondition: the
+    assertions are the same as the class above, run under each decoder.
+    """
+
+    @pytest.mark.parametrize(("env_label", "env"), _AMBIENT_DECODERS)
+    @pytest.mark.parametrize(("label", "payload"), _UNDECODABLE_PAYLOADS)
+    def test_an_undecodable_payload_is_refused_under_every_ambient_decoder(
+        self, tmp_path, label, payload, env_label, env
+    ) -> None:
+        root = _project(tmp_path)
+
+        result = _run_real(
+            root,
+            ["guard", "bead-claimed", "--hook", "claude-code"],
+            stdin=payload,
+            env=env,
+        )
+
+        where = f"{label} under {env_label}"
+        assert result.returncode == 2, f"{where}: {result.stderr!r}"
+        assert b"Traceback" not in result.stderr, where
+        assert _outcomes(root) == ["error"], where
+
+    @pytest.mark.parametrize(("env_label", "env"), _AMBIENT_DECODERS)
+    def test_the_undecoded_target_never_reaches_a_check(
+        self, tmp_path, env_label, env
+    ) -> None:
+        """Not merely "exit 2": the refused path must not be EVALUATED at all.
+
+        Exit 2 alone would also be satisfied by a *blocking* verdict about the
+        surrogate-bearing path — i.e. by the guard doing the very thing the
+        refusal exists to prevent, and reaching the right code by accident.
+        What is asserted is the verdict: the reason names the unreadable
+        payload, and no ``bead-claimed`` finding was produced about a file name
+        this process invented.
+        """
+        root = _project(tmp_path)
+
+        result = _run_real(
+            root,
+            ["guard", "bead-claimed", "--hook", "claude-code"],
+            stdin=b'{"tool_input": {"file_path": "src/\xff\xfe.py"}}',
+            env=env,
+        )
+
+        [record] = read_firings(root)
+        assert "could not be read as text" in record.why, (env_label, record.why)
+        assert "no bead is in progress" not in record.why, (env_label, record.why)
+        assert b"\\udcff" not in result.stderr, env_label
+
+
+# ==========================================================================
+# 4b-ter. THE PAYLOAD IS JUDGED AS BYTES, NOT AS WHAT THIS PROCESS DECODED (.36)
+# ==========================================================================
+
+
+class TestThePayloadIsJudgedAsBytes:
+    """The transport reads bytes and decodes them itself, strictly.
+
+    This is the fix's structure rather than one of its symptoms, and it is
+    where the property becomes cheap to hold: while the payload was a ``str``
+    handed over by ``sys.stdin``, the only thing that could decide whether the
+    guard refused it was the interpreter's start-up configuration, and the only
+    test able to see that was a subprocess. Reading bytes moves the decision
+    into the application layer, where it is one call with ``errors='strict'``
+    and no ambient input at all.
+    """
+
+    def test_bytes_that_are_not_utf8_are_an_error_verdict_in_process(
+        self, tmp_path
+    ) -> None:
+        from beadloom.application.guards.invocation import (
+            GuardInvocation,
+            run_invocation,
+        )
+        from beadloom.application.guards.models import GuardOutcome
+
+        root = _project(tmp_path)
+
+        result = run_invocation(
+            GuardInvocation(
+                name="bead-claimed",
+                declared_project=root,
+                harness="claude-code",
+                read_payload=lambda: b'{"tool_input": {"file_path": "src/\xff.py"}}',
+                probes_for=lambda _root: GuardProbes(work_tracker=_NoBeads()),
+            )
+        )
+
+        assert result.exit_code == 2, result
+        assert result.verdict is not None
+        assert result.verdict.outcome is GuardOutcome.ERROR, result.verdict
+        assert "could not be read as text" in result.verdict.why
+
+    @pytest.mark.parametrize(
+        ("label", "stream"),
+        [
+            (
+                "a text stream whose decoder already escaped the bad bytes",
+                lambda payload: io.TextIOWrapper(
+                    io.BytesIO(payload), encoding="utf-8", errors="surrogateescape"
+                ),
+            ),
+            (
+                "a text stream with no binary layer at all",
+                lambda payload: io.StringIO(
+                    payload.decode("utf-8", "surrogateescape")
+                ),
+            ),
+        ],
+    )
+    def test_the_reader_returns_the_bytes_the_harness_wrote(
+        self, monkeypatch, label, stream
+    ) -> None:
+        """Whatever the stream did with the bytes, the boundary judges the bytes.
+
+        The second row is the case a ``.buffer`` alone would miss: an in-process
+        stream that never had a binary layer still has to yield the byte
+        sequence the writer produced, or the decoder one layer up is judging
+        this process's guesswork.
+        """
+        from beadloom.services.commands.guard import _read_stdin
+
+        payload = b'{"tool_input": {"file_path": "src/\xff.py"}}'
+        monkeypatch.setattr(sys, "stdin", stream(payload))
+
+        assert _read_stdin() == payload, label
 
 
 # ==========================================================================

@@ -93,6 +93,7 @@ from beadloom.application.guards.models import (
     EXIT_CODE_CONFIG_ERROR,
     GuardOutcome,
     GuardVerdict,
+    exception_detail,
 )
 from beadloom.application.guards.project_root import (
     ProjectLocation,
@@ -176,9 +177,9 @@ class GuardUsageError(ValueError):
     """A command line the CLI could not use — reported as a verdict, never a crash."""
 
 
-def _no_payload() -> str:
+def _no_payload() -> bytes:
     """The stdin a caller that passed no ``--hook`` supplies: none."""
-    return ""
+    return b""
 
 
 def _no_probes(_project_root: Path) -> GuardProbes:
@@ -193,6 +194,13 @@ class GuardInvocation:
     ``read_payload`` and ``probes_for`` are callables rather than values because
     both can fail, and both must fail *inside* the boundary: reading stdin was
     the last step still happening outside it (BDL-061.28, F7).
+
+    ``read_payload`` yields **bytes**, not text, and that type is the fix for
+    BDL-061.36: while it was a ``str``, the decoding had already happened in
+    ``sys.stdin`` under whatever error handler the interpreter was started with,
+    so whether the guard refused an undecodable payload or evaluated a path made
+    of lone surrogates was decided by the ambient locale. Bytes put the decision
+    in :func:`_context`, where it is one call with a stated error handler.
     """
 
     name: str | None = None
@@ -200,7 +208,7 @@ class GuardInvocation:
     context_pairs: tuple[str, ...] = ()
     harness: str | None = None
     liveness: bool = False
-    read_payload: Callable[[], str] = _no_payload
+    read_payload: Callable[[], bytes] = _no_payload
     probes_for: Callable[[Path], GuardProbes] = _no_probes
     start_dir: Path | None = None
 
@@ -258,7 +266,7 @@ def _answer(invocation: GuardInvocation) -> InvocationResult:
         return _unanswerable(invocation, location, _INTERRUPTED_WHY)
     except BaseException as exc:  # the last resort; see the module docstring
         return _unanswerable(
-            invocation, location, _CRASHED_WHY.format(detail=_detail(exc))
+            invocation, location, _CRASHED_WHY.format(detail=exception_detail(exc))
         )
 
 
@@ -287,7 +295,7 @@ def _record(result: InvocationResult) -> InvocationResult:
         return replace(
             result,
             not_recorded_because=NOT_RECORDED_WRITE_FAILED.format(
-                detail=_detail(exc)
+                detail=exception_detail(exc)
             ),
         )
     return replace(result, recorded_at=written)
@@ -390,12 +398,28 @@ def _evaluate(
 
 
 def _context(invocation: GuardInvocation) -> dict[str, str]:
-    """The evaluation context: the hook payload first, explicit ``--context`` on top."""
+    """The evaluation context: the hook payload first, explicit ``--context`` on top.
+
+    **The payload is decoded here, from bytes, with the error handler named**
+    (BDL-061.36). Reading it as text left the decode to ``sys.stdin``, whose
+    error handler is ``strict`` under a UTF-8 locale and ``surrogateescape``
+    under ``LC_ALL=C``/``PYTHONUTF8=1`` — measured on 3.10.1 and 3.13.7. So the
+    refusal below existed only for the environment we happened to develop in:
+    in a container's default ``C`` locale the same bytes became lone surrogates,
+    the JSON parsed, and the guard evaluated a path this process had invented
+    rather than refusing the payload the harness had sent.
+
+    ``errors`` is left at its default deliberately rather than passed: the
+    default IS strict, and a caller reading this line needs to know that a
+    payload which is not UTF-8 raises. JSON is defined as UTF-8 (RFC 8259 §8.1),
+    so bytes that are not UTF-8 are not a hook event at all — there is nothing
+    to interpret and nothing to guess.
+    """
     context = _parse_context(invocation.context_pairs)
     if invocation.harness is None:
         return context
     try:
-        raw = invocation.read_payload()
+        raw = invocation.read_payload().decode("utf-8")
     except (OSError, UnicodeDecodeError) as exc:
         msg = _PAYLOAD_WHY.format(harness=invocation.harness, detail=exc)
         raise HookPayloadError(msg) from exc
@@ -466,12 +490,6 @@ def _named(name: str | None) -> str:
     (BDL-061.30, section 4).
     """
     return UNNAMED_GUARD if name is None else name
-
-
-def _detail(exc: BaseException) -> str:
-    """An exception as one readable clause, with no empty tail when it carries none."""
-    message = str(exc)
-    return f"{type(exc).__name__}: {message}" if message else type(exc).__name__
 
 
 def _error_verdict(

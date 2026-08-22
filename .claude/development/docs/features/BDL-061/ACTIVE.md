@@ -7,7 +7,8 @@
 
 ## Current Bead
 
-**Bead:** none — S1 is complete and awaiting the owner's decision on the slice PR.
+**Bead:** none — `.36` (the S1 CI hotfix) is done; the branch is awaiting the owner's push and
+a re-check of PR #33.
 **Next:** S2 (`.5`–`.8`, plus `.33` and `.34` filed out of S1's review). S2 begins only after
 S1 is green on `main`, per the slice-boundary-is-a-PR-boundary rule.
 
@@ -68,6 +69,21 @@ S1 is green on `main`, per the slice-boundary-is-a-PR-boundary rule.
       the SPEC and `guard-hooks/DOC.md` (#170), and `error` added to the CLI table in both
       READMEs; plus the bead's own scope — a flow-guards section in the agentic-flow guide and
       `guards:` documented in the flow-config SPEC
+- [x] S1 `.36` dev hotfix (2026-08-22) — **CI red on PR #33 while the local suite was green,
+      and the reason it was green is the finding.** Two defects, both a refusal closed for one
+      environment: (1) the undecodable-payload refusal depended on the ambient locale — under
+      `LC_ALL=C`/`PYTHONUTF8=1` Python enables UTF-8 Mode, `sys.stdin` gets `surrogateescape`,
+      and the guard EVALUATED a surrogate-bearing path instead of refusing it (`WARN`, exit 1)
+      — fixed by reading the payload as BYTES and decoding it inside the boundary with
+      `errors='strict'`; (2) `Path.resolve()` raises `RuntimeError` on a symlink loop on
+      3.10–3.12 and raises nothing on 3.13 (measured on real interpreters), so the
+      `except (OSError, ValueError)` under a comment calling the case unreachable let a
+      traceback out on three of the four supported versions — fixed by a handler as wide as its
+      sentence (`Exception`, and not `BaseException`, with the reason). The locale is now a test
+      DIMENSION (4 ambient decoders × the payload matrix) and the loop is asserted as a property
+      with the exception INJECTED, so 3.13 coverage cannot go vacuous. Verified on a real 3.10:
+      full suite 5442 passed, 0 guard failures. Suite 5574 → 5595
+
 - [x] **S1 COMPLETE** — verified by the coordinator on the final tree: 5574 passed / 10 skipped,
       ruff and mypy --strict clean, `beadloom ci` rc 0 on a clean DB. The B2 sabotage
       (`sys.exit(0)` inside `run_invocation`), which shipped 628/628 green before `.31`, was
@@ -89,6 +105,7 @@ S1 is green on `main`, per the slice-boundary-is-a-PR-boundary rule.
 | .30 | Done | S1 test: boundary not load-bearing — interrupt escape, `--project` bypass, pins check spelling |
 | .31 | Done | S1 fix-4: pin as wide as its invariant; `--project` must name a project; interrupt handled |
 | .32 | Done | S1 test: the Click-validation pin as wide as its sentence; `--project` `readable=False` |
+| .36 | Done | S1 hotfix: the payload decoded as bytes (locale-independent); the resolve handler as wide as its sentence |
 | .4 | Done | S1 docs: exit-3 invariant qualified (not deleted), enforcement surface written down, `error` in both READMEs |
 | .33 | Pending | S2: the exit-3 class is fail-open — a broken `flow.yml` disables every guard |
 | .34 | Pending | S2: an unknown key in a guard body is silently ignored (`option:` → trunk `main`) |

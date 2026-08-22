@@ -302,6 +302,28 @@ A fourth case is a failure rather than an exception: if the record cannot be
 written (a read-only filesystem, say), the verdict still reaches the reader and
 carries the reason the record is missing.
 
+**The hook payload is read as bytes and decoded here, with the error handler
+stated** (BDL-061.36). It used to arrive as text from `sys.stdin`, which means it
+had already been decoded under whatever error handler the interpreter was
+started with — and that is ambient: measured on 3.10.1 and 3.13.7, a UTF-8
+locale gives `strict` (an undecodable byte raises, and the refusal below fires),
+while `LC_ALL=C` or `PYTHONUTF8=1` turns on UTF-8 Mode and gives
+`surrogateescape` (the bytes become lone surrogates, the JSON parses, and the
+guard evaluates a file name this process invented). `C` is the default locale of
+most container images, so the refusal held in development and not in the common
+deployment: the same binary that answered `error` at exit 2 under our locale
+answered `warn` at exit 1 under `C`, about a path built from bytes it could not
+read. JSON is defined as UTF-8 (RFC 8259 §8.1), so bytes that are not UTF-8 are
+not a hook event at all and there is nothing to interpret — the decode is one
+call with `errors='strict'` inside the boundary, and the ambient environment no
+longer participates in the decision.
+
+Note which layer this is about: a **path** that carries lone surrogates is still
+accepted (see the shape below), because on POSIX those denote a real byte
+sequence that `os.fsencode` round-trips exactly — the guard and the writer are
+then looking at the same file. A **payload** that is not UTF-8 denotes nothing;
+the two are different questions and only the second is refused here.
+
 What remains outside the boundary, named rather than implied: an argv **Click
 itself** cannot parse — an unknown option — never reaches the callback, so it
 exits 2 with Click's usage message and no record. It is fail-closed (the harness
@@ -391,6 +413,23 @@ letter (`C:/Users/...`) is well-formed POSIX and is read as a relative directory
 called `C:`, because this build of Beadloom resolves paths with POSIX semantics;
 and a homoglyph or a Unicode look-alike names a *different* file, which the guard
 then reports accurately — the over-guarding direction, and not a bypass.
+
+**A resolution that refuses is a refusal with a reason, on every interpreter**
+(BDL-061.36). `Path.resolve()` does not behave the same across the versions this
+project supports — measured on real interpreters with `a -> b -> a`: 3.10.1,
+3.11.13 and 3.12.12 raise `RuntimeError("Symlink loop from ...")`, while 3.13.7
+returns the path unresolved and raises nothing. The handler here caught
+`(OSError, ValueError)` under a comment calling the case unreachable, so on three
+of the four versions a symlink loop left the guard as a traceback; the suite ran
+on the fourth and was green. The handler is now as wide as the sentence it
+holds — *no supplied path ends in a traceback* — and catches `Exception`, not a
+list of classes that would need extending on the next surprise. It stops short of
+`BaseException` deliberately: an interrupt arriving mid-resolution is the process
+being stopped, not this path being refused, and it belongs to the invocation
+boundary, which says so. The consequence, stated because it is a real difference
+between adopters: on an interpreter that raises, an edit through a symlink loop
+is an `error` at exit 2 with the cause named; on 3.13 the same edit is evaluated
+normally. Both are verdicts.
 
 A path that resolves **outside the project root** is matched against no
 exclusion, and the verdict says so in `not_covered`, naming the resolved target.

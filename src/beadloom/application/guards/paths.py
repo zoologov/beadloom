@@ -56,6 +56,8 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+from beadloom.application.guards.models import exception_detail
+
 #: Stated in ``not_covered`` when the target resolved outside the project root.
 OUTSIDE_ROOT_NOT_COVERED = (
     "the edit target {target} resolves outside the project root, so no "
@@ -97,7 +99,7 @@ HOME_PREFIX_REJECTION = (
     "it starts with '~', a shell abbreviation this guard does not expand"
 )
 UNENCODABLE_REJECTION = "it cannot be encoded for this filesystem ({detail})"
-UNRESOLVABLE_REJECTION = "the operating system refused to resolve it ({detail})"
+UNRESOLVABLE_REJECTION = "it could not be resolved ({detail})"
 
 #: Highest code point treated as a C0 control character, and the DEL code point.
 _LAST_CONTROL = 0x1F
@@ -219,12 +221,26 @@ def resolve_edit_path(raw: str | None, project_root: Path) -> ResolvedEditPath:
     try:
         target = candidate.resolve()
         root = project_root.resolve()
-    except (OSError, ValueError) as exc:
-        # Unreachable for every input the shape gate admits today — which is
-        # exactly why it is here. The property this module exists to hold is
-        # "no supplied path ends in a traceback", and that property cannot be
-        # made to depend on having enumerated every future refusal of the OS.
-        return _malformed(label, UNRESOLVABLE_REJECTION.format(detail=exc))
+    except Exception as exc:  # as wide as the sentence it holds; see below
+        # AS WIDE AS THE SENTENCE IT HOLDS. The property is "no supplied path
+        # ends in a traceback", and the previous handler was three words
+        # narrower than that: `(OSError, ValueError)` with a comment declaring
+        # the case unreachable. MEASURED on real interpreters, `a -> b -> a`:
+        # 3.10.1 / 3.11.13 / 3.12.12 raise RuntimeError("Symlink loop from
+        # ...") — neither an OSError nor a ValueError — while 3.13.7 raises
+        # nothing at all. So the comment was false on three of the four
+        # versions this project supports, and true only on the one the suite ran
+        # on (BDL-061.36). Enumerating RuntimeError as a fourth class would fix
+        # this loop and leave the next one open; what the sentence quantifies
+        # over is every way a resolution can refuse.
+        #
+        # `Exception`, deliberately NOT `BaseException`: a KeyboardInterrupt or
+        # a SystemExit arriving mid-resolution is the process being stopped, not
+        # this path being refused, and reporting it as "the target is malformed"
+        # would be a false statement about the caller's path. Those belong to
+        # the invocation boundary, which catches BaseException and has a
+        # distinct answer for them ("the evaluation was interrupted").
+        return _malformed(label, UNRESOLVABLE_REJECTION.format(detail=exception_detail(exc)))
     try:
         relative = target.relative_to(root)
     except ValueError:
