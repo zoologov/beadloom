@@ -107,9 +107,9 @@ Detects circular dependencies in the graph using an iterative WHITE/GREY/BLACK c
 
 Controls file-level import boundaries using fnmatch glob patterns against `code_imports`.
 
-> **The two globs are matched against two different vocabularies.** `from:` is matched against the **repo-relative source file path as indexed** — `src/beadloom/tui/app.py`, source root included. `to:` is matched against the **dotted import path with dots replaced by slashes** — `beadloom.infrastructure.db` becomes `beadloom/infrastructure/db`: no source root, no file extension, because an import names a module, not a file. A `to:` written as `src/beadloom/infrastructure/**` therefore matches nothing, **ever** — the defect that left two of this project's own twelve rules (`tui-no-direct-infra`, `onboarding-no-direct-infra`) unable to fire while `lint --strict` printed `12 rules, 0 violations` (BDL-UX #150; this reference taught the broken form, which is why the fix belongs here and not only in `rules.yml`). Write `beadloom/infrastructure/**`, or `**/infrastructure/**` if the package root varies.
+> **The two globs are matched against two different vocabularies.** `from:` is matched against the **repo-relative source file path as indexed** — `src/beadloom/tui/app.py`, source root included. `to:` is matched against the **dotted import path with dots replaced by slashes** — `beadloom.infrastructure.db` becomes `beadloom/infrastructure/db`: no source root, no file extension, because an import names a module, not a file. A `to:` written as `src/beadloom/infrastructure/**` therefore matches nothing, **ever** — the defect that left two of this project's own twelve rules (`tui-no-direct-infra`, `onboarding-no-direct-infra`) unable to fire while `lint --strict` printed `12 rules, 0 violations` (BDL-UX #172; this reference taught the broken form, which is why the fix belongs here and not only in `rules.yml`). Write `beadloom/infrastructure/**`, or `**/infrastructure/**` if the package root varies.
 
-> **A `to:` glob covering a package also covers a bare import of the package itself.** `from pkg.infrastructure import db` is indexed with `import_path == "pkg.infrastructure"` — the target is the package, not the module — so `pkg/infrastructure/**` is matched against `pkg/infrastructure/` as well, and the most common Python reach-in form is caught. Sibling names are unaffected: `pkg/infrastructure_docs` still does not match. (Also BDL-UX #150: the probe injected to reproduce that bead — `from beadloom.infrastructure import db` in the TUI — fired under *no* glob form before this.)
+> **A `to:` glob covering a package also covers a bare import of the package itself.** `from pkg.infrastructure import db` is indexed with `import_path == "pkg.infrastructure"` — the target is the package, not the module — so `pkg/infrastructure/**` is matched against `pkg/infrastructure/` as well, and the most common Python reach-in form is caught. Sibling names are unaffected: `pkg/infrastructure_docs` still does not match. (Also BDL-UX #172: the probe injected to reproduce that bead — `from beadloom.infrastructure import db` in the TUI — fired under *no* glob form before this.)
 
 | Field         | Type                            | Description                                        |
 |---------------|---------------------------------|----------------------------------------------------|
@@ -253,7 +253,7 @@ rules:
   # --- forbid_import: file-level import boundaries ---
   # NOTE the two vocabularies: `from` matches the SOURCE FILE PATH (source root
   # included), `to` matches the DOTTED IMPORT PATH with dots -> slashes (no source
-  # root, no extension). A `src/`-prefixed `to` can never match (BDL-UX #150).
+  # root, no extension). A `src/`-prefixed `to` can never match (BDL-UX #172).
   - name: <unique-rule-name>
     description: "<description>"
     forbid_import:

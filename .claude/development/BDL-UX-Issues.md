@@ -35,6 +35,21 @@
 
 ## Open Issues
 
+172. [2026-08-22] [HIGH] 🔴 `from:` and `to:` are matched against two different vocabularies, so a `src/`-prefixed `to:` silently disables the rule — and the reference taught the broken form
+
+    **Severity:** high (the architecture gate printed a green count computed over rules incapable of firing; a required CI check, both git hooks, and the review role all read that count)
+    **Command:** `beadloom lint --strict`, `beadloom ci`
+    **Context:** found during BDL-061 S2 while fixing #142/#146/#147, and reproduced end-to-end through the real CLI. Two of this project's own twelve rules — `tui-no-direct-infra`, `onboarding-no-direct-infra` — could not match anything, while `lint --strict` reported `12 rules, 0 violations`.
+    **Issue:** `from:` is matched against the **repo-relative source file path as indexed** (`src/beadloom/tui/app.py`, source root included). `to:` is matched against the **dotted import path with dots replaced by slashes** (`beadloom.infrastructure.db` → `beadloom/infrastructure/db`) — no source root, no extension, because an import names a module rather than a file. A `to:` written `src/beadloom/infrastructure/**` therefore matches nothing, ever. Two engineers wrote the `src/`-prefixed form into `rules.yml` and neither noticed, because **the rules reference itself documented that form**. The defect is in the documentation as much as in the four lines of YAML.
+    **A second, independent defect in the same area:** a `to:` glob covering a package did not cover a *bare import of the package*. `from pkg.infrastructure import db` is indexed with `import_path == "pkg.infrastructure"` — the target is the package, not the module — so the most common Python reach-in form was invisible. The probe injected to reproduce this issue (`from beadloom.infrastructure import db` in the TUI) fired under **no** glob form until this was fixed, which is why the first reproduction attempt wrongly concluded all four rules were dead.
+    **Measured:** repairing rule 1 alone surfaces 1 violation (`tui/data_providers.py:284`); repairing rules 1 and 2 surfaces 7 (1 tui + 6 onboarding). The two `ai_agents` rules already carried the correct dotted `to:` and their zero was truthful — 11 of 221 indexed targets match them.
+    **Expected, and the third part is the one that matters:**
+    - State the two vocabularies in the rules reference, in one sentence, with an example of each. (Done in this fix.)
+    - Make a `to:` covering a package cover a bare import of it, while leaving sibling names (`pkg/infrastructure_docs`) unmatched.
+    - **Report a rule that cannot match.** A glob matching zero candidate imports across the whole graph is a `rule_liveness` warning, as is an exemption that suppresses nothing. This is the S1 guard lesson — *a check that can never fail is not a check* — applied to the linter, and it is what makes the fix permanent rather than a one-time correction.
+    **Related:** #142/#146/#147 make `lint` unreliable; this made a third of it inert. Same family, higher severity.
+    > Fixed in BDL-061 S2 (`beadloom-mr2l.43`).
+
 171. [2026-08-22] [MEDIUM] Concurrent `bd create` shifts the id out from under the id written in the title — and the wrong dependency edge is then perfectly valid
 
     **Severity:** medium (silent, produces a well-formed but wrong DAG, and only surfaces when someone reads the echo)
