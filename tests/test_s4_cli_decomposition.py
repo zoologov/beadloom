@@ -46,6 +46,7 @@ EXPECTED_COMMANDS = {
     "export",
     "federate",
     "graph",
+    "guard",
     "init",
     "install-hooks",
     "link",

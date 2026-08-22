@@ -628,6 +628,52 @@ As of BDL-048, when a repo has the agentic flow scaffolded (`beadloom setup-agen
 
 As of **BDL-052 S3**, when a valid `.beadloom/flow.yml` is present `config-check` also: (a) validates `flow.yml` itself (an invalid config is reported as drift; an absent one is not); and (b) byte-compares each **composed role adapter** (`<tool>/agents/<role>.md` for every tool the config names) against the freshly recomposed body (`compose_role(...)` for the configured architecture + stack overlays) — `config_sync._composed_adapter_drifts`. When a `flow.yml` is present the role agents are composer-owned, so the byte-vendor compare is skipped for `agents` (it would false-positive on a non-Python stack). `--fix` recomposes the per-tool adapter sets (`config_sync.refresh_composed_adapters`). **Known limitation:** the composed-adapter check iterates only the tools named in `flow.yml`, so adapters left behind by a tool dropped from a narrowed `flow.yml` (e.g. orphaned `.cursor/agents/*`) are neither flagged nor recomposed; a follow-up bead tracks an orphaned-adapter lint.
 
+### beadloom guard
+
+Evaluate one flow guard — the enforcement primitive the agentic flow binds to (BDL-061 S1).
+
+```bash
+beadloom guard NAME [--context KEY=VALUE ...] [--json] [--project DIR]
+beadloom guard NAME --hook claude-code            # harness event as JSON on stdin
+beadloom guard --liveness [--json] [--project DIR]
+```
+
+Returns a verdict `{guard, outcome, why, not_covered[], remediation, context}` — plus `recorded` and `not_recorded_because` under `--json` — where `outcome` is `pass` / `warn` / `block` / `skip` / `error`. **Exit codes carry the outcome** so a shell adapter needs no parsing: `0` for `pass`/`skip`, `1` for `warn` (shown, never blocking), `2` for `block`, and `3` for a usage or configuration error — deliberately not `2`, which is Click's own usage code and would otherwise be indistinguishable from a genuine block. `warn`, `block` and `error` are written to **stderr** (the stream a hook harness shows the agent); `pass` and `skip` go to stdout, as does `--json` in every case.
+
+`3` is for a defect in the project's *declared configuration* (an unparseable `guards:` block, an exclusion with no reason, a guard name nobody registered) and for a command line that could not be used at all (no guard named, `--liveness` with a name, a malformed `--context` pair, an unsupported `--hook` harness) — stable defects that fail the same way on every invocation. Anything that goes wrong while answering about *this* edit — a hook payload that cannot be decoded or parsed, a project that cannot be located, an exception anywhere — is an `error` verdict at `2`, the one code the shipped adapter blocks on.
+
+**Keeping that class at `3` is not a pure win: `3` does not block.** The harness stops the tool call on `2` and on nothing else, so all five cases above are an `error` verdict, loud on stderr, that lets the edit through. The reachable one is a `.beadloom/flow.yml` that will not parse — the one file of this feature an adopter edits by hand — and while it will not parse, every bound guard answers "could not tell" and nothing is enforced. The distinction `3` draws is worth keeping, so the choice is between mapping the class to `2` here and having the adapter map it. **BDL-061.33** owns that choice, and this reference is updated with it. Until then, treat a `3` from a hook as an unenforced edit rather than a warning.
+
+`error` means **the guard could not answer** — a refused path (see below), a `guards:` block that will not parse, a project that cannot be located, or any failure inside the evaluation. It exits `2`, because the adapter's harness blocks on 2 and on nothing else, and because `1` is the `warn` code a harness reads as "carry on". Every invocation runs inside one boundary: argument parsing, the stdin read and the evaluation all come back through it, so a failure anywhere is a recorded verdict rather than a traceback — including a **`KeyboardInterrupt`**, which since BDL-061.31 is a recorded `error` at exit 2 rather than an escape to Click's exit 1. That means Ctrl-C during a guarded edit *blocks* that edit: an interrupted guard checked nothing, and "could not answer" must never read as "passed". Rendering the verdict happens after the boundary and is wrapped, so a failure while printing is reported on stderr and the exit code stays the verdict's. Every invocation that names a registered guard in a located project is recorded, `error` included — an evaluation missing from `guard-firings.jsonl` is invisible to `--liveness`. The three invocations that leave no record say so (`not recorded: <reason>` on stderr): a successful `--liveness` report evaluated nothing, an unlocatable project has nowhere to write, and an unregistered name has nothing to attribute the row to.
+
+Shipped guards: `bead-claimed` (an edit happens under a claimed work item) and `working-branch` (work happens off the protected trunk; `options.trunk`, default `main`). Both skip — with a stated reason — when their evidence is unavailable (`bd` not present, no branch checked out), because a guard that silently does not apply is indistinguishable from one that passed.
+
+Guards are declared in `.beadloom/flow.yml`; an absent `guards:` block means every guard runs at the shipped default (`warn`), so an upgrade never turns a green project red:
+
+```yaml
+guards:
+  bead-claimed:
+    strictness: { default: warn, epic: block, chore: off }
+    exclusions:
+      - path: "scripts/**"
+        reason: "operational scripts are not bead-scoped"
+        until: "BDL-0xx introduces a scripts node"
+```
+
+Strictness resolves per work kind (`--context work_kind=epic`) with a `default` fallback. **An exclusion must carry both `reason` and `until`** — one without either is a configuration error (exit 3), because an unnamed, undated exclusion disables a gate permanently by accident. A `guards:` key naming an unregistered guard is likewise an error, not a no-op. There is **no `on:` key**: which tool invocations count as an edit, and which guards run on them, is decided by the harness adapter (in Claude Code, the matcher and the per-guard entries in `.claude/settings.json`), not by Beadloom. An `on:` key shipped in the S1 schema with no consumer and was deleted rather than quoted; it returns wired in S3.
+
+**That matcher is the enforcement surface, and it is narrower than "every edit".** The emitted adapter is registered on `PreToolUse` for `Edit|Write|MultiEdit|NotebookEdit`, so a file written through `Bash` — `sed -i`, a heredoc, `python3 - <<EOF` — invokes no guard, produces no verdict and writes no firing. `--liveness` therefore cannot distinguish a session that edited entirely outside the matcher from one that complied: both leave the same record. This is a property of the binding rather than of a verdict, so no `not_covered` note can carry it (there is no evaluation to attach one to) — see BDL-UX #170 and the [flow-guards SPEC](../domains/application/features/flow-guards/SPEC.md#the-enforcement-surface).
+
+With no `--project`, the **project root is discovered** by walking up from the working directory to the nearest ancestor containing `.beadloom/`; with `--project`, that directory is used verbatim and **must carry `.beadloom/` itself** — the flag names a project, not a directory. A missing path, a file, and an ordinary directory with no marker are one refusal: a guard that cannot locate a project answers `error` (exit 2) and creates nothing, by any route. Until BDL-061.31 any existing directory was honoured, so `--project <an ordinary directory>` found no `flow.yml`, silently traded the project's declared `block` for the shipped default `warn` (a non-blocking exit 1), and manufactured `.beadloom/` there when the firing was written — the record belongs to the project, not to wherever the process was pointed, and a firing written where `--liveness` does not read it is indistinguishable from no firing. A directory this process **may not read** is the same refusal since BDL-061.32: `click.Path` defaults `readable=True`, and that check runs in Click, so `--project <an unreadable directory>` used to be a usage error at exit 2 with no verdict, no record and nothing on stdout for `--json` to parse. No parameter of `beadloom guard` declares a conversion Click can refuse — every reason an argument cannot be used is answered by the guard, not by the argument parser.
+
+`--context KEY=VALUE` is repeatable, and where a key is given twice **the last occurrence wins**. `--context path=...` is resolved against the project root before any exclusion is matched — `..` collapsed, symlinks followed — so a declared exclusion cannot be turned into an opt-out by respelling the path (`scripts/../src/app.py` is guarded, not skipped). A path resolving outside the project root is matched against no exclusion at all, and the verdict names it in `not_covered`.
+
+The path is model-supplied, so its **shape is narrowed rather than repaired**: a well-formed target carries no C0 control character or `DEL`, no backslash, no leading `~`, and is encodable for the filesystem, and it is judged exactly as supplied — nothing is stripped first, because `str.strip()` also removes nine C0 characters the same rule refuses, which turned a `block` into a `skip` quoting a pattern that does not cover the file. Anything else is refused with an `error` verdict naming the offending rule — never normalised into a guess, and never a traceback. Each rule removes a spelling that means one file to the guard and another to the writer (`src\app.py` skipped a `*.py` exclusion while the write landed on `src/app.py`; a NUL crashed the process out on exit 1, the non-blocking code, leaving no record at all).
+
+`--hook HARNESS` reads the harness's own hook event as JSON on stdin and derives the context from it (`claude-code`: `tool_input.file_path`, `tool_name`, `hook_event_name`). The event is read as **bytes** and decoded as UTF-8 strictly, so a payload the harness could not encode is refused (`error`, exit 2) identically under every locale — reading it as text left the decode to `sys.stdin`, whose error handler is `surrogateescape` under `LC_ALL=C`/`PYTHONUTF8=1` (the default in most containers), and there the undecodable bytes silently became a file name the guard then evaluated (BDL-061.36). The emitted adapter (`.claude/hooks/beadloom-guard.sh`, written by `beadloom setup-agentic-flow`) contains no logic — it is one `exec beadloom guard "$1" --hook claude-code` — so a hook and a shell cannot produce different verdicts.
+
+`--liveness` reports, per guard, its effective strictness, how many times it fired, its last outcome, and three ways a gate stops protecting anything: `never-fired` (no firing that reached a verdict — an `error` is counted and shown, but does not clear the flag, because a guard that ran three times and answered none of them is not a live gate), `excluded-everywhere` (every strictness `off`, or nothing escapes the exclusion **list** — decided by matching the patterns against representative paths, not by comparing spellings, and asked of the list because `*` and `*/**` are each narrow and together exempt everything), and `matches no file in the project: '<pattern>'` (a declared exclusion that exempts nothing that currently exists — a typo'd `scrpits/**` is safe but was silent). A gate that cannot demonstrate it ran is treated as not having run. Every CLI evaluation appends one line to `.beadloom/guard-firings.jsonl`, which is the only file guards write — never the index they inspect. Decision logic lives in `application/guards/evaluation.py`; the CLI only renders it.
+
 ### beadloom ci
 
 The unified enforcement gate — the single CI convergence point (principle 7: identical for Cursor / Claude Code / human authors).
@@ -736,6 +782,15 @@ vendored **byte-identical** to Beadloom's own proven flow, plus a
 stack / version / packages) via the same `refresh_claude_md` machinery
 `setup-rules --refresh` uses (the CLAUDE.md version comes from Beadloom's own
 `__version__`, BDL-UX #92).
+
+It also writes the **flow-guard binding** (BDL-061 S1): `.claude/hooks/beadloom-guard.sh`
+— one `exec beadloom guard "$1" --hook claude-code` — and one `PreToolUse` entry per
+registered guard in `.claude/settings.json`, matched on `Edit|Write|MultiEdit|NotebookEdit`.
+The guard names come from the registry, so a guard added in a later release is wired by
+re-running this command. Registration is a **merge**: existing hooks survive, re-running adds
+only the missing entries, and a `settings.json` that cannot be parsed is reported and left
+untouched. Those four tool calls are the whole enforcement surface — a file written through
+`Bash` fires no guard (see [`beadloom guard`](#beadloom-guard)).
 
 A vendored command that already matches is left alone; a hand-edited command is
 **skipped** (reported as such) so user edits are not silently clobbered;

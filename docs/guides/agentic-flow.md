@@ -232,6 +232,89 @@ same `beadloom ci` that runs on the PR as a required check, so a clean push is
 almost always a clean PR. See the [CLI reference](../services/cli.md#beadloom-install-hooks)
 for both hooks.
 
+## Flow guards (BDL-061 S1)
+
+The Gate above runs at push time. **Flow guards** run at edit time. A guard
+answers one process question about one situation — "is this edit covered by a
+claimed work item?", "is this happening off the protected trunk?" — and returns a
+verdict whose exit code a harness acts on without parsing anything, so the flow's
+rules stop being prose a model may ignore.
+
+```bash
+beadloom guard bead-claimed --context path=src/app.py
+beadloom guard --liveness          # which guards are actually protecting something
+```
+
+Two guards ship: `bead-claimed` (an edit happens under a claimed work item) and
+`working-branch` (work happens off the protected trunk). Both **skip with a
+stated reason** when their evidence is unavailable — `bd` not installed, no
+branch checked out — because a guard that silently does not apply is
+indistinguishable from one that passed.
+
+### Declaring guards in `.beadloom/flow.yml`
+
+```yaml
+guards:
+  bead-claimed:
+    strictness: { default: warn, epic: block, chore: off }
+    exclusions:
+      - path: "scripts/**"
+        reason: "operational scripts are not bead-scoped"
+        until: "BDL-0xx introduces a scripts node"
+  working-branch:
+    strictness: { default: warn }
+    options: { trunk: main }
+```
+
+- **`strictness`** is resolved per work kind (`--context work_kind=epic`), falling
+  back to `default` and then to the shipped `warn`. `off` switches the guard off.
+  An absent `guards:` block is not an error — every registered guard runs at
+  `warn` — so upgrading Beadloom adds warnings that name what they did not check,
+  never a new red build.
+- **`exclusions`** must carry both `reason` and `until`. One without either is a
+  configuration error, because an unnamed, undated exclusion disables a gate
+  permanently by accident. Patterns are POSIX globs in which `**` crosses
+  directories and `*` does not, matched against the path *resolved* against the
+  project root — so respelling a path cannot turn an exclusion into an opt-out.
+- A `guards:` key naming a guard nobody registered is a configuration error too,
+  not a no-op, so a typo cannot quietly switch a gate off.
+- The `guards:` block is read by the guard evaluator. `tools` / `architecture` /
+  `stack` / `quality` are read by the role configurator. The two readers share one
+  file and nothing else.
+
+### The binding, and what it does not cover
+
+`beadloom setup-agentic-flow` writes `.claude/hooks/beadloom-guard.sh` — one
+`exec beadloom guard "$1" --hook claude-code`, with no logic of its own — and
+registers one `PreToolUse` entry per guard with the matcher
+`Edit|Write|MultiEdit|NotebookEdit`.
+
+Those four tool calls are the whole enforcement surface. **A file written through
+`Bash` — `sed -i`, a heredoc, `python3 - <<EOF` — fires no guard at all**, and
+`--liveness` cannot tell such a session apart from a compliant one: an edit no
+guard was asked about leaves nothing behind to report. The limit belongs to the
+binding rather than to any verdict, which is why it is stated here instead of
+being folded into a verdict's `not_covered` (BDL-UX #170). Giving Beadloom its
+own event vocabulary, so that the adapter forwards *what happened* rather than
+*which guard to run*, is S3 work.
+
+### Exit codes, and the one that does not block
+
+| Code | Outcome | In Claude Code |
+|---|---|---|
+| `0` | `pass` / `skip` | the edit proceeds |
+| `1` | `warn` | shown to the agent, the edit proceeds |
+| `2` | `block` / `error` | the tool call is stopped |
+| `3` | usage or configuration error | **the edit proceeds** |
+
+The harness stops a tool call on `2` and on nothing else. `3` was reserved so a
+broken `flow.yml` could never be mistaken for a guard that fired, and that
+distinction is worth keeping — but it means the class kept at `3` is loud and
+**fail-open**: while `.beadloom/flow.yml` will not parse, every bound guard
+answers "could not tell" and no edit is stopped. Bead BDL-061.33 owns the choice
+between mapping the class to `2` and having the adapter map it. Until it lands,
+read a `3` from a hook as an unenforced edit.
+
 ## Scaffold contents + idempotency
 
 `beadloom setup-agentic-flow` (in the `setup-*` family alongside
@@ -243,6 +326,11 @@ for both hooks.
   configured.
 - `.claude/commands/{coordinator,task-init,checkpoint,templates}.md` — vendored
   byte-identical.
+- `.claude/hooks/beadloom-guard.sh` plus one `PreToolUse` entry per guard in
+  `.claude/settings.json` — the [flow-guard](#flow-guards-bdl-061-s1) binding.
+  Registration is a **merge**: existing hooks survive, re-running adds only what
+  is missing, and a `settings.json` that cannot be parsed is reported and left
+  untouched.
 - `.claude/CLAUDE.md` — the base file (only when absent, or with `--force`), then
   its `project-info` auto-region is regenerated for **this** project via the same
   `refresh_claude_md` machinery `setup-rules --refresh` uses. The scaffolded
@@ -381,6 +469,11 @@ This is stated deliberately, not glossed over:
   [Beadloom Gate hook](#the-pre-push-beadloom-gate-bdl-052) blocks a red push on
   the author's machine — strong, but `git push --no-verify` can skip it, so it is
   a fast local catch, not the un-routable gate.
+- **Guards see the tool calls the matcher names, and nothing else.** A write that
+  reaches the filesystem through `Bash` fires no guard, and no report
+  distinguishes that from a compliant session. The surface is bounded by the
+  harness binding, not by the guard — see
+  [the binding](#the-binding-and-what-it-does-not-cover).
 - **CI is the single source of true enforcement.** `beadloom ci` runs
   independently in CI (reindex → lint → sync-check → config-check → doctor) as a
   required check on `main`; that is the gate nothing can route around (no
@@ -394,6 +487,8 @@ This is stated deliberately, not glossed over:
 - [MCP server](../services/mcp.md) — the full tool catalog (18 tools).
 - [Onboarding domain](../domains/onboarding/README.md) — the scaffold + config-sync internals.
 - [Flow Config SPEC](../domains/onboarding/features/flow-config/SPEC.md) — `.beadloom/flow.yml` + the `FlowConfig` loader/validator.
+- [Flow Guards SPEC](../domains/application/features/flow-guards/SPEC.md) — the guard primitive: verdicts, strictness, exclusions, liveness, and the enforcement surface.
+- [Guard Hooks component](../domains/onboarding/components/guard-hooks/DOC.md) — the emitted hook adapter and its registration.
 - [Role Composer SPEC](../domains/onboarding/features/role-composer/SPEC.md) — CORE + architecture + stack overlay composition.
 - [Role Adapters SPEC](../domains/onboarding/features/role-adapters/SPEC.md) — per-tool adapter generation + the drift-guard.
 - [CI setup guide](./ci-setup.md) — `beadloom ci` as the enforcement gate.

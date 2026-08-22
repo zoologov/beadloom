@@ -25,6 +25,7 @@ The system is organized into six DDD domain packages, an application (use-case o
 - `debt_report/` — architecture-debt aggregation, scoring, trend tracking, CI gating, a cohesion-split package
 - `watcher.py` — file watcher for auto-reindex on change
 - `gate.py` — the unified `beadloom ci` gate (reindex → lint → sync-check → config-check → doctor → optional federate)
+- `guards/` — the flow-guard primitive behind `beadloom guard` (BDL-061 S1): a verdict per named guard, the `guards:` block of `.beadloom/flow.yml`, one invocation boundary, and the firing record `--liveness` reads
 - the VitePress site generators — `site.py` (orchestrator), `site_pages.py`, `site_nav.py`, `site_about.py`, `site_dashboard/` (a cohesion-split package), `site_landscape.py`, `site_published.py`, `site_mermaid_guard.py`, `site_metrics_history.py`
 
 **Interface layers:**

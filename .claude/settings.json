@@ -1,0 +1,30 @@
+{
+  "$comment": [
+    "Flow guards, dogfooded on Beadloom itself (BDL-061 S1).",
+    "The hook carries NO logic: it pipes the harness event to `beadloom guard`,",
+    "which reads the declarations, strictness and exclusions from .beadloom/flow.yml.",
+    "Adding or retiring a guard is therefore a flow.yml edit, not a settings edit —",
+    "except for the guard NAME below, which is the one coupling still present and is",
+    "recorded as a finding for the S1 review bead.",
+    "Exit codes map to the harness by design: 0 pass/skip, 1 warn (surfaced, not",
+    "blocking), 2 block. Both guards ship at `warn`, so nothing here stops work today;",
+    "they report, and they name what they did not check."
+  ],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "beadloom guard bead-claimed --hook claude-code"
+          },
+          {
+            "type": "command",
+            "command": "beadloom guard working-branch --hook claude-code"
+          }
+        ]
+      }
+    ]
+  }
+}

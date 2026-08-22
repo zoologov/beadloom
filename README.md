@@ -264,6 +264,7 @@ Request a node's context, and Context Oracle traverses the graph breadth-first, 
 | `lint` | Check the code against the architecture rules (`--strict`, `--format rich/json/porcelain/github`) |
 | `ci` | The single Gate: reindex → lint → sync-check → config-check → doctor → the optional landscape gate |
 | `config-check` | Check (or `--fix`) that the generated agent files match the graph |
+| `guard NAME` | Evaluate one flow guard — `pass`/`warn`/`block`/`skip`/`error` in the exit code (`--liveness` reports which guards ever fired) |
 | `export` | Export the graph as a deterministic artifact for federation |
 | `federate` | Aggregate two or more artifacts into one landscape. `--fail-on` turns on the CI gate |
 | `docs generate` | Generate documentation skeletons from the graph |

@@ -26,6 +26,30 @@ quality: [clean-code, tdd]     # quality bars (informational)
 
 For Beadloom itself: `tools: [claude]`, `architecture: [ddd]`, `stack: [python]`.
 
+### The `guards:` block is a second reader of the same file
+
+`.beadloom/flow.yml` also carries the flow guards (BDL-061 S1):
+
+```yaml
+guards:
+  bead-claimed:
+    strictness: { default: warn, epic: block, chore: off }
+    exclusions:
+      - path: "scripts/**"
+        reason: "operational scripts are not bead-scoped"
+        until: "BDL-0xx introduces a scripts node"
+```
+
+`FlowConfig` neither validates nor carries it: `build_flow_config` reads the four
+keys above and ignores every other top-level key, and
+`application/guards/config.py:load_guards_config()` reads `guards:` on its own
+and ignores the configurator's keys. The two readers share a file and a path
+constant (`FLOW_CONFIG_RELPATH`) and nothing else, which is why an unparseable
+`flow.yml` reaches an adopter twice — as `config-check` drift, and as a guard
+that answers `error`. The block's schema, strictness resolution and exclusion
+rules live in the
+[flow-guards SPEC](../../../application/features/flow-guards/SPEC.md).
+
 ### Modules
 
 - **flow_config.py** — `FlowConfig` (frozen dataclass), `build_flow_config()`
@@ -43,6 +67,9 @@ For Beadloom itself: `tools: [claude]`, `architecture: [ddd]`, `stack: [python]`
   composition.
 - An absent `flow.yml` falls back to a default (resolve/or-default); a present
   but malformed one always raises (the `config-check` signal).
+- Unknown **top-level** keys are ignored rather than rejected, which is what lets
+  `guards:` live in the same file with its own reader and its own validation.
+  Unknown values inside the four configurator keys are still errors.
 
 ## API
 
