@@ -5,16 +5,20 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from beadloom.graph.rule_engine import Violation, evaluate_all, load_rules, validate_rules
-from beadloom.infrastructure.db import connection, create_schema
+from beadloom.infrastructure.db import connection, create_schema, readonly_connection
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
     from pathlib import Path
+
+    from beadloom.graph.rules import Rule
 
 
 # ---------------------------------------------------------------------------
@@ -101,55 +105,88 @@ def lint(
     if reindex is not None:
         reindex(project_root)
 
-    # Step b: Open the database.
+    # Step b: Resolve rules and return early when there are none. This happens
+    # BEFORE the database is touched: "no rules" is a truthful empty result
+    # whatever the index looks like, and it must not require an index to exist.
+    if rules_path is None:
+        rules_path = project_root / ".beadloom" / "_graph" / "rules.yml"
+    if not rules_path.is_file():
+        return LintResult(elapsed_ms=(time.monotonic() - start) * 1000)
+
+    try:
+        rules = load_rules(rules_path)
+    except ValueError as exc:
+        msg = f"Invalid rules configuration: {exc}"
+        raise LintError(msg) from exc
+
+    # Step c: Open the index. Without a reindex callback this is a pure read,
+    # so the index is opened read-only and an ABSENT one is an error rather
+    # than an empty-but-clean result: linting a database that does not exist
+    # reported "0 violations" while creating it (BDL-UX #147).
     db_path = project_root / ".beadloom" / "beadloom.db"
+    if reindex is None:
+        with _read_only_index(db_path) as conn:
+            return _evaluate(conn, rules, project_root=project_root, start=start)
+
     db_path.parent.mkdir(parents=True, exist_ok=True)
     with connection(db_path) as conn:
         create_schema(conn)
+        return _evaluate(conn, rules, project_root=project_root, start=start)
 
-        # Step c: Resolve rules path.
-        if rules_path is None:
-            rules_path = project_root / ".beadloom" / "_graph" / "rules.yml"
 
-        # Step d: If no rules file, return empty result.
-        if not rules_path.is_file():
-            elapsed = (time.monotonic() - start) * 1000
-            return LintResult(elapsed_ms=elapsed)
+@contextmanager
+def _read_only_index(db_path: Path) -> Iterator[sqlite3.Connection]:
+    """Open the index read-only, translating a missing file into a LintError."""
+    try:
+        with readonly_connection(db_path) as conn:
+            yield conn
+    except FileNotFoundError as exc:
+        msg = (
+            f"index not found at {db_path} — nothing to lint against. "
+            "Run `beadloom reindex` first, or drop --no-reindex."
+        )
+        raise LintError(msg) from exc
 
-        # Step e: Load and validate rules.
-        try:
-            rules = load_rules(rules_path)
-        except ValueError as exc:
-            msg = f"Invalid rules configuration: {exc}"
-            raise LintError(msg) from exc
 
-        _warnings = validate_rules(rules, conn)
+def _evaluate(
+    conn: sqlite3.Connection,
+    rules: list[Rule],
+    *,
+    project_root: Path,
+    start: float,
+) -> LintResult:
+    """Evaluate *rules* against an open index connection and time the run."""
+    try:
+        validate_rules(rules, conn)
 
-        # Step f: Count files_scanned (distinct file_path in code_imports).
+        # files_scanned: distinct file_path in code_imports.
         row = conn.execute("SELECT COUNT(DISTINCT file_path) FROM code_imports").fetchone()
         files_scanned: int = int(row[0]) if row is not None else 0
 
-        # Step g: Count imports_resolved (where resolved_ref_id IS NOT NULL).
+        # imports_resolved: where resolved_ref_id IS NOT NULL.
         row = conn.execute(
             "SELECT COUNT(*) FROM code_imports WHERE resolved_ref_id IS NOT NULL"
         ).fetchone()
         imports_resolved: int = int(row[0]) if row is not None else 0
 
-        # Step h: Evaluate all rules. ``project_root`` roots the on-disk module
-        # enumeration used by the module-coverage rule (closes the zero-symbol
-        # false-negative — BDL-051 S3a / BEAD-17).
+        # ``project_root`` roots the on-disk module enumeration used by the
+        # module-coverage rule (closes the zero-symbol false-negative —
+        # BDL-051 S3a / BEAD-17).
         violations = evaluate_all(conn, rules, project_root=project_root)
-
-        # Step i: Measure elapsed time.
-        elapsed = (time.monotonic() - start) * 1000
-
-        return LintResult(
-            violations=violations,
-            rules_evaluated=len(rules),
-            files_scanned=files_scanned,
-            imports_resolved=imports_resolved,
-            elapsed_ms=elapsed,
+    except sqlite3.OperationalError as exc:
+        msg = (
+            f"index cannot be read ({exc}) — it predates the current schema. "
+            "Run `beadloom reindex` to rebuild it."
         )
+        raise LintError(msg) from exc
+
+    return LintResult(
+        violations=violations,
+        rules_evaluated=len(rules),
+        files_scanned=files_scanned,
+        imports_resolved=imports_resolved,
+        elapsed_ms=(time.monotonic() - start) * 1000,
+    )
 
 
 # ---------------------------------------------------------------------------

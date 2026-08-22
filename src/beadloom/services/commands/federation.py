@@ -252,7 +252,10 @@ def _load_export_artifacts(
     "--no-reindex",
     is_flag=True,
     default=False,
-    help="Skip reindex before linting.",
+    help=(
+        "Read the index as-is. This is the READ-ONLY form: the default "
+        "reindexes first and therefore WRITES .beadloom/beadloom.db."
+    ),
 )
 @click.option(
     "--project",
@@ -271,9 +274,14 @@ def lint(
     """Run architecture lint rules against the project.
 
     Checks cross-boundary imports against rules defined in rules.yml.
+
+    By DEFAULT this command reindexes first and so WRITES the index; pass
+    --no-reindex for the read-only form, which leaves .beadloom/beadloom.db
+    byte-identical and refuses to run when there is no index to read.
+
     Exit codes: 0 = clean or violations below threshold,
     1 = violations with --strict (errors only) or --fail-on-warn (any),
-    2 = configuration error.
+    2 = configuration error or missing index.
     """
     from beadloom.application.reindex import incremental_reindex
     from beadloom.graph.linter import LintError
@@ -315,6 +323,17 @@ def lint(
         sys.exit(1)
     if strict and result.has_errors:
         sys.exit(1)
+    if result.has_errors:
+        # Without --strict the exit code stays 0 even though error-severity
+        # violations were printed, so a caller that checks only the exit code
+        # reads a real boundary break as clean (BDL-UX #147). The exit code is
+        # deliberately NOT changed — that would turn an adopter's green
+        # pipeline red on upgrade — but the omission is named.
+        click.echo(
+            f"warning: {result.error_count} error-severity violation(s) found, "
+            "but the exit code stays 0 without --strict.",
+            err=True,
+        )
 
 
 # beadloom:domain=application

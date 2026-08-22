@@ -7,10 +7,10 @@
 
 ## Current Bead
 
-**Bead:** none — `.36` (the S1 CI hotfix) is done; the branch is awaiting the owner's push and
-a re-check of PR #33.
-**Next:** S2 (`.5`–`.8`, plus `.33` and `.34` filed out of S1's review). S2 begins only after
-S1 is green on `main`, per the slice-boundary-is-a-PR-boundary rule.
+**Bead:** `.5` is done (S2 core). The S2 wave ran `.5`, `.37` and `.38` in parallel on disjoint
+surfaces.
+**Next:** `.6` (test), `.7` (review), `.8` (tech-writer — the bead that DELETES standing rules
+1–3 from this CONTEXT and from the shipped `CLAUDE.md` core), plus `.33` and `.34`.
 
 ## Progress
 
@@ -101,6 +101,30 @@ S1 is green on `main`, per the slice-boundary-is-a-PR-boundary rule.
       same pair, and the first two make `sync-check --since` and `diff --since` report changes
       that did not happen. Suite 5595 → 5633
 
+- [x] S2 `.5` dev (2026-08-22) — **the three lying checks fixed, and each fix proved by a test
+      that would have caught the false green.** #142: an incremental reindex now re-extracts
+      imports for the code files it touched and rebuilds the DERIVED `depends_on` set, which is
+      identified by a provenance marker (`extra.derived="imports"`) so a graph-declared edge is
+      never collateral damage; an index predating the marker rebuilds once. Proved on the real
+      graph, not a toy: an injected `tui → infrastructure` import is caught by the INCREMENTAL
+      path with a violation set and an edge set byte-for-byte identical to a full rebuild, and
+      both revert symmetrically. #146: sync pairs fall back to the files a node's `source`
+      OWNS when annotations yield none (kind-independent — the real cause was never the node
+      KIND, it was that pairing read only annotations), `check_sync` no longer short-circuits on
+      an empty `sync_state`, and every node that still yields no pair is NAMED with the reason.
+      Measured on this repo: 272 → 275 pairs, 4 nodes reported as not checked where the gate
+      previously printed nothing. #147: `lint` without a reindex callback opens the index
+      `mode=ro`/`query_only` and REFUSES a missing one — it used to print
+      "0 violations, N rules evaluated" against a database it created in the same breath — and
+      `beadloom ci --no-reindex` on a never-indexed project, previously a wholly green gate,
+      now fails honestly. Timing recorded: full 755 ms; incremental +29 ms (1 file) / +42 ms
+      (5 files) for the import refresh, paid for several times over by `build_sync_state`
+      170 ms → 4 ms. **Found and NOT absorbed:** all four `forbid_import` rules in this repo's
+      own `rules.yml` are dead — 0 of 1322 imports can match a `to:` glob written as
+      `src/beadloom/…/**`, because the evaluator matches the DOTTED import path
+      (`beadloom/tui/app`), which never carries `src/`. Filed for its own bead: repairing the
+      globs surfaces 7 pre-existing violations immediately. Suite 5633 → 5649
+
 - [x] **S1 COMPLETE** — verified by the coordinator on the final tree: 5574 passed / 10 skipped,
       ruff and mypy --strict clean, `beadloom ci` rc 0 on a clean DB. The B2 sabotage
       (`sys.exit(0)` inside `run_invocation`), which shipped 628/628 green before `.31`, was
@@ -128,7 +152,8 @@ S1 is green on `main`, per the slice-boundary-is-a-PR-boundary rule.
 | .33 | Pending | S2: the exit-3 class is fail-open — a broken `flow.yml` disables every guard |
 | .34 | Pending | S2: an unknown key in a guard body is silently ignored (`option:` → trunk `main`) |
 | .35 | Pending | S3: no `.gitignore` entry for the firing record; carries n1 (our dogfood never ran the shipped artifact) |
-| .5–.8 | Pending | S2 stop the lying checks (#142, #146, #147) |
+| .5 | Done | S2: #142 incremental import refresh, #146 source-owned sync pairs + unchecked accounting, #147 read-only lint that refuses a missing index |
+| .6–.8 | Pending | S2 test / review / tech-writer (the three defensive rules come out in `.8`) |
 | .9–.12 | Pending | S3 composition + project overlay (#139, #152, #132, #136, #137) |
 | .13–.16 | Pending | S4 BDD, mutation, doc shape + quality, shared writing standard |
 | .17–.20 | Pending | S5 TO-BE / AS-IS / WORKING |

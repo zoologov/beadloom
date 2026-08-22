@@ -17,11 +17,22 @@ broad interface surface. Two layers cooperate without interfering:
 - **Symbol-pair freshness** pairs a node's `docs:` entries with the source files
   attributed to that node, computes a freshness signal from the code
   `symbols_hash` (plus git state), and reports each pair as `ok` or stale.
+- **Unchecked accounting** names every node that declares a doc but contributes
+  no pair, so a green verdict can never be read as "checked" when it means
+  "nothing was looked at".
 - **Reference surface drift** (BDL-057 Layer 2) watches a few hand-declared
   overview docs against a coarse interface surface and emits an advisory warning
   when the surface changes.
 
 ### Symbol-pair freshness
+
+A node's source files are found first through symbol annotations
+(`# beadloom:<kind>=<ref>`) and, when those yield none, through the files the
+node's declared `source` **owns** (most-specific-source wins, so a container
+never claims a nested node's files). Pairing on annotations alone left any node
+whose annotation is not a comment tree-sitter reads — or which declares only
+`source:` — with no pairs at all, kind-independent, and a freshness gate with no
+pairs reported "clean" for files it never opened (BDL-UX #146).
 
 `build_sync_state` records the baseline doc and symbol hashes for each pair;
 `check_sync` re-reads files from disk to detect changes since the last sync,
@@ -51,8 +62,11 @@ warning** when it differs. `mark_reference_synced` re-baselines a reference doc
 - Symbol-pair `sync_state` logic and its reason-masking / fixpoint behaviour are
   untouched by Layer 2, which lives in its own `reference_state` table and is
   additive in output.
-- `sync-check` exits non-zero on symbol-pair staleness; `surface_drift` is a
-  warning and never changes the exit code.
+- `sync-check` exits non-zero on symbol-pair staleness; `surface_drift` and the
+  unchecked accounting are warnings and never change the exit code.
+- An empty `sync_state` is not a clean verdict: the source-coverage and
+  doc-coverage phases still run, and any node that declares a doc without
+  contributing a pair is listed with the reason it could not be checked.
 - The reference baseline survives reindex for an unchanged `watches` set, so a
   drift accrued since the last `sync-update` is still reported.
 
@@ -65,6 +79,9 @@ Module `src/beadloom/doc_sync/engine.py`:
   verdicts, plus source/doc coverage findings.
 - `check_sync_since(conn, project_root, ref) -> list[dict]` — diff-based check
   against a git ref.
+- `find_unchecked_doc_nodes(conn) -> list[dict]` — nodes that declare a doc but
+  contribute no pair, each with the reason (`no_indexed_code`,
+  `files_owned_by_nested_nodes`, `no_source`). Advisory.
 - `mark_synced(...)` / `mark_synced_by_ref(...)` — re-baseline a symbol pair.
 - `build_reference_state(conn, project_root) -> int` — baseline every
   `watches`-annotated reference doc; returns the count recorded.
@@ -87,4 +104,4 @@ Tests: `tests/test_sync_engine.py`, `tests/test_sync_since.py`,
 `tests/test_surface.py`, `tests/test_reference_drift.py`,
 `tests/test_cli_reference_drift.py`,
 `tests/test_integration_reference_freshness.py`,
-`tests/test_e2e_sync_honest.py`
+`tests/test_e2e_sync_honest.py`, `tests/test_s2_lying_checks.py`

@@ -258,6 +258,38 @@ def open_db(db_path: Path) -> sqlite3.Connection:
     return conn
 
 
+def open_db_readonly(db_path: Path) -> sqlite3.Connection:
+    """Open an EXISTING database read-only, leaving the file byte-identical.
+
+    :func:`open_db` sets ``PRAGMA journal_mode=WAL``, which rewrites the file
+    header when the database is not already in WAL — so a verb that only
+    *reads* still changed the artifact it was reporting on (BDL-UX #147,
+    measured by sha256 before/after). This factory opens the file through the
+    ``mode=ro`` URI and sets ``query_only``, so no write can be issued even by
+    mistake, and it never creates the database: an absent index is an error to
+    report, not a clean result to invent.
+
+    Raises
+    ------
+    FileNotFoundError
+        When *db_path* does not exist. The caller decides how to phrase it.
+    """
+    if not db_path.is_file():
+        msg = f"index not found: {db_path}"
+        raise FileNotFoundError(msg)
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA query_only=ON")
+    return conn
+
+
+@contextmanager
+def readonly_connection(db_path: Path) -> Iterator[sqlite3.Connection]:
+    """:func:`open_db_readonly` as a context manager (see :func:`connection`)."""
+    with closing(open_db_readonly(db_path)) as conn:
+        yield conn
+
+
 @contextmanager
 def connection(db_path: Path) -> Iterator[sqlite3.Connection]:
     """Open a SQLite connection as a context manager, closed on exit.

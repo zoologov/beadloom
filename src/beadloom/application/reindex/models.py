@@ -17,6 +17,13 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import sqlite3
 
+# Meta key recording that the index's derived ``depends_on`` edges carry their
+# provenance marker, so an incremental run can refresh them without deleting a
+# graph-declared edge. An index written before this marker existed reports a
+# different value (or none) and is rebuilt in full once.
+_IMPORT_PROVENANCE_KEY = "import_edge_provenance"
+_IMPORT_PROVENANCE_VERSION = "1"
+
 # Tables to drop on reindex (order matters for FK constraints).
 _TABLES_TO_DROP = [
     "search_index",

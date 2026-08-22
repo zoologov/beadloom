@@ -469,7 +469,7 @@ beadloom lint [--format {rich,json,porcelain}] [--strict] [--no-reindex]
 |----------------|---------|--------------------------------------------------------------------|
 | `--format`     | `rich`  | Output format: `rich` (colored tables), `json`, or `porcelain`.    |
 | `--strict`     | `False` | Exit with code `1` if any violations are found.                    |
-| `--no-reindex` | `False` | Skip import reindexing before evaluation.                          |
+| `--no-reindex` | `False` | Read the index as-is. This is the READ-ONLY form: the default reindexes first and therefore WRITES `beadloom.db`. |
 
 **Exit codes:**
 
@@ -499,6 +499,8 @@ beadloom lint [--format {rich,json,porcelain}] [--strict] [--no-reindex]
 - `rules.yml` must declare a version in `SUPPORTED_SCHEMA_VERSIONS` ({1, 2, 3}). Unsupported versions are rejected with `ValueError`.
 - `NodeMatcher` must have at least one of `ref_id`, `kind`, or `tag` in deny rules; providing none raises `ValueError`. In require rules, `has_edge_to` accepts empty `{}` for "any node" matching.
 - Deny rules depend on the `code_imports` table being populated (typically via a prior `reindex` step).
+- Without a reindex callback `lint()` opens the index **read-only** and leaves `beadloom.db` byte-identical; a missing index raises `LintError` (exit 2) instead of reporting `0 violations` against a database it had just created (BDL-UX #147). "No rules file" still returns an empty result without touching the index at all.
+- Plain `lint` keeps exit 0 when error-severity violations are found without `--strict` — the exit code is unchanged so an adopter's pipeline does not turn red on upgrade — but the omission is now named on stderr.
 - Require rules depend on the `nodes` and `edges` tables.
 - `validate_rules` is advisory: it returns warnings but does not raise exceptions.
 - The `_get_file_node` helper relies on `code_symbols.annotations` being valid JSON with keys like `domain`, `service`, or `feature` whose values correspond to `nodes.ref_id`.

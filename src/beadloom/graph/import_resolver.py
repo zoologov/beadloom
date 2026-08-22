@@ -18,7 +18,7 @@ from beadloom.infrastructure.scan_paths import resolve_scan_paths
 
 if TYPE_CHECKING:
     import sqlite3
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Sequence
     from pathlib import Path
 
     from tree_sitter import Node as TSNode
@@ -901,6 +901,41 @@ def _part_of_ancestors(conn: sqlite3.Connection) -> dict[str, set[str]]:
     return resolved
 
 
+# Provenance marker written into the ``extra`` column of every ``depends_on``
+# edge DERIVED from a code import. Edges declared in the graph YAML carry their
+# own extra and are never marked, which is what lets an incremental refresh
+# delete the derived set without touching a declared edge. ``INSERT OR IGNORE``
+# means a pair declared in YAML keeps the YAML row (and stays unmarked).
+_DERIVED_BY_IMPORTS = "imports"
+_DERIVED_EDGE_EXTRA = json.dumps({"derived": _DERIVED_BY_IMPORTS}, ensure_ascii=False)
+
+
+def delete_derived_import_edges(conn: sqlite3.Connection) -> int:
+    """Delete the ``depends_on`` edges derived from code imports.
+
+    Returns the number of rows deleted. Edges without the provenance marker —
+    i.e. declared in the graph YAML — are left alone.
+    """
+    cursor = conn.execute(
+        "DELETE FROM edges WHERE kind = 'depends_on' "
+        "AND json_extract(extra, '$.derived') = ?",
+        (_DERIVED_BY_IMPORTS,),
+    )
+    return int(cursor.rowcount or 0)
+
+
+def refresh_import_edges(conn: sqlite3.Connection) -> int:
+    """Rebuild the derived ``depends_on`` edge set from ``code_imports``.
+
+    The derived edges are a pure function of the ``code_imports`` table, so a
+    refresh is delete-then-recreate. Doing only the recreate half is how a
+    removed import kept a dependency edge alive for the cycle and layer rules
+    to trip over (the mirror image of BDL-UX #142).
+    """
+    delete_derived_import_edges(conn)
+    return create_import_edges(conn)
+
+
 def create_import_edges(conn: sqlite3.Connection) -> int:
     """Create ``depends_on`` edges from resolved code imports.
 
@@ -946,14 +981,57 @@ def create_import_edges(conn: sqlite3.Connection) -> int:
         seen.add(edge_key)
 
         conn.execute(
-            "INSERT OR IGNORE INTO edges (src_ref_id, dst_ref_id, kind) "
-            "VALUES (?, ?, 'depends_on')",
-            (source_ref_id, target_ref_id),
+            "INSERT OR IGNORE INTO edges (src_ref_id, dst_ref_id, kind, extra) "
+            "VALUES (?, ?, 'depends_on', ?)",
+            (source_ref_id, target_ref_id, _DERIVED_EDGE_EXTRA),
         )
         edges_created += 1
 
     conn.commit()
     return edges_created
+
+
+_TS_EXTENSIONS = frozenset({".ts", ".tsx", ".js", ".jsx", ".vue"})
+
+
+def _index_one_file(
+    file_path: Path,
+    project_root: Path,
+    conn: sqlite3.Connection,
+    scan_paths: list[str],
+) -> int:
+    """Index one source file's imports into ``code_imports``; return the count."""
+    imports = extract_imports(file_path)
+    if not imports:
+        return 0
+
+    try:
+        content = file_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return 0
+
+    file_hash = hashlib.sha256(content.encode()).hexdigest()
+    rel_path = str(file_path.relative_to(project_root))
+    is_ts = file_path.suffix in _TS_EXTENSIONS
+
+    for imp in imports:
+        resolved = resolve_import_to_node(
+            imp.import_path,
+            file_path,
+            conn,
+            scan_paths=scan_paths,
+            is_ts=is_ts,
+        )
+        conn.execute(
+            "INSERT INTO code_imports"
+            " (file_path, line_number, import_path, resolved_ref_id, file_hash)"
+            " VALUES (?, ?, ?, ?, ?)"
+            " ON CONFLICT(file_path, line_number, import_path)"
+            " DO UPDATE SET resolved_ref_id = excluded.resolved_ref_id,"
+            " file_hash = excluded.file_hash",
+            (rel_path, imp.line_number, imp.import_path, resolved, file_hash),
+        )
+    return len(imports)
 
 
 def index_imports(project_root: Path, conn: sqlite3.Connection) -> int:
@@ -964,47 +1042,58 @@ def index_imports(project_root: Path, conn: sqlite3.Connection) -> int:
     Returns the count of imports indexed.
     """
     scan_paths = resolve_scan_paths(project_root)
-    source_files = _collect_source_files(project_root)
-    total = 0
-
-    ts_extensions = frozenset({".ts", ".tsx", ".js", ".jsx", ".vue"})
-
-    for file_path in source_files:
-        imports = extract_imports(file_path)
-        if not imports:
-            continue
-
-        try:
-            content = file_path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            continue
-
-        file_hash = hashlib.sha256(content.encode()).hexdigest()
-        rel_path = str(file_path.relative_to(project_root))
-        is_ts = file_path.suffix in ts_extensions
-
-        for imp in imports:
-            resolved = resolve_import_to_node(
-                imp.import_path,
-                file_path,
-                conn,
-                scan_paths=scan_paths,
-                is_ts=is_ts,
-            )
-            conn.execute(
-                "INSERT INTO code_imports"
-                " (file_path, line_number, import_path, resolved_ref_id, file_hash)"
-                " VALUES (?, ?, ?, ?, ?)"
-                " ON CONFLICT(file_path, line_number, import_path)"
-                " DO UPDATE SET resolved_ref_id = excluded.resolved_ref_id,"
-                " file_hash = excluded.file_hash",
-                (rel_path, imp.line_number, imp.import_path, resolved, file_hash),
-            )
-            total += 1
-
+    total = sum(
+        _index_one_file(file_path, project_root, conn, scan_paths)
+        for file_path in _collect_source_files(project_root)
+    )
     conn.commit()
 
     # Create depends_on edges from resolved imports.
-    create_import_edges(conn)
+    refresh_import_edges(conn)
 
     return total
+
+
+def reindex_file_imports(
+    project_root: Path,
+    conn: sqlite3.Connection,
+    *,
+    touched: Sequence[str],
+    removed: Sequence[str],
+) -> int:
+    """Re-extract imports for *touched* files and forget those *removed*.
+
+    This is the incremental counterpart of :func:`index_imports`. Without it an
+    incremental reindex left ``code_imports`` — and therefore every
+    ``forbid_import`` / cycle / layer rule — describing the working tree as it
+    was at the last FULL rebuild, so the documented ``reindex && lint`` loop
+    reported a clean boundary over a real violation (BDL-UX #142). Both lists
+    are project-relative paths.
+
+    The derived ``depends_on`` edge set is rebuilt afterwards, so an import
+    that disappeared stops being a dependency instead of lingering.
+
+    Returns the number of imports indexed for the touched files.
+    """
+    for rel_path in (*touched, *removed):
+        conn.execute("DELETE FROM code_imports WHERE file_path = ?", (rel_path,))
+
+    scan_paths = resolve_scan_paths(project_root)
+    extensions = _supported_extensions()
+    total = 0
+    for rel_path in touched:
+        file_path = project_root / rel_path
+        if file_path.suffix not in extensions or not file_path.is_file():
+            continue
+        total += _index_one_file(file_path, project_root, conn, scan_paths)
+
+    conn.commit()
+    refresh_import_edges(conn)
+    return total
+
+
+def _supported_extensions() -> frozenset[str]:
+    """The source extensions the indexer can parse (lazy import, cached upstream)."""
+    from beadloom.context_oracle.code_indexer import supported_extensions
+
+    return frozenset(supported_extensions())

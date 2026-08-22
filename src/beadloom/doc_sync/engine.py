@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from beadloom.infrastructure.repository import get_owned_code_files
+
 if TYPE_CHECKING:
     import sqlite3
 
@@ -46,49 +48,111 @@ class SyncPair:
     code_hash: str
 
 
+def _annotated_files_by_ref(conn: sqlite3.Connection) -> dict[str, list[tuple[str, str]]]:
+    """Map ``ref_id -> [(file_path, file_hash)]`` from code-symbol annotations.
+
+    One pass over ``code_symbols``; the previous shape re-scanned the whole
+    table once per linked doc.
+    """
+    by_ref: dict[str, list[tuple[str, str]]] = {}
+    seen: set[tuple[str, str]] = set()
+    for sym in conn.execute("SELECT file_path, file_hash, annotations FROM code_symbols"):
+        annotations: dict[str, Any] = json.loads(sym["annotations"])
+        file_path = str(sym["file_path"])
+        for value in annotations.values():
+            if not isinstance(value, str) or (value, file_path) in seen:
+                continue
+            seen.add((value, file_path))
+            by_ref.setdefault(value, []).append((file_path, str(sym["file_hash"])))
+    return by_ref
+
+
 # beadloom:domain=doc-sync
 def build_sync_state(conn: sqlite3.Connection) -> list[SyncPair]:
-    """Build sync pairs from docs and code_symbols sharing a ref_id.
+    """Build sync pairs for every node that has a linked doc AND indexed code.
 
-    For each ref_id that has both a doc and at least one code symbol,
-    creates a SyncPair with current hashes.
+    A node's code files are found first through symbol annotations
+    (``# beadloom:<kind>=<ref>``) and, when those yield nothing, through the
+    files the node's declared ``source`` OWNS. The fallback is the fix for
+    BDL-UX #146: pairing keyed on annotations alone meant a node whose
+    annotation sat somewhere tree-sitter does not read it as a comment — or
+    which simply declared ``source:`` without annotating — contributed no pairs
+    at all, and a freshness gate with no pairs reports "clean" for files it
+    never opened.
+
+    Nodes that still yield no pair are not silently dropped: see
+    :func:`find_unchecked_doc_nodes`, which names them.
     """
-    # Find ref_ids that have linked docs.
     doc_rows = conn.execute(
         "SELECT ref_id, path, hash FROM docs WHERE ref_id IS NOT NULL"
     ).fetchall()
-
     if not doc_rows:
         return []
 
+    annotated = _annotated_files_by_ref(conn)
     pairs: list[SyncPair] = []
 
     for doc_row in doc_rows:
-        ref_id = doc_row["ref_id"]
-        doc_path = doc_row["path"]
-        doc_hash = doc_row["hash"]
-
-        # Find code symbols annotated with this ref_id.
-        sym_rows = conn.execute("SELECT * FROM code_symbols").fetchall()
-        seen_files: set[str] = set()
-
-        for sym in sym_rows:
-            annotations: dict[str, Any] = json.loads(sym["annotations"])
-            for _key, val in annotations.items():
-                if val == ref_id and sym["file_path"] not in seen_files:
-                    seen_files.add(sym["file_path"])
-                    pairs.append(
-                        SyncPair(
-                            ref_id=ref_id,
-                            doc_path=doc_path,
-                            code_path=sym["file_path"],
-                            doc_hash=doc_hash,
-                            code_hash=sym["file_hash"],
-                        )
-                    )
-                    break
+        ref_id = str(doc_row["ref_id"])
+        code_files = annotated.get(ref_id) or get_owned_code_files(conn, ref_id)
+        pairs.extend(
+            SyncPair(
+                ref_id=ref_id,
+                doc_path=str(doc_row["path"]),
+                code_path=code_path,
+                doc_hash=str(doc_row["hash"]),
+                code_hash=code_hash,
+            )
+            for code_path, code_hash in code_files
+        )
 
     return pairs
+
+
+def find_unchecked_doc_nodes(conn: sqlite3.Connection) -> list[dict[str, str]]:
+    """Nodes that declare a doc but contribute no sync pair.
+
+    A freshness gate must never let "clean" stand for "nothing was looked at"
+    (BDL-UX #146). Everything reachable is paired by :func:`build_sync_state`;
+    what remains here is the honest residue — a doc whose node has no indexed
+    code under it — and it is reported rather than dropped.
+
+    Advisory only: this never changes an exit code, so a project that is green
+    today does not turn red on upgrade.
+    """
+    paired = {str(row["ref_id"]) for row in conn.execute("SELECT DISTINCT ref_id FROM sync_state")}
+    rows = conn.execute(
+        "SELECT DISTINCT d.ref_id AS ref_id, d.path AS doc_path, n.source AS source "
+        "FROM docs d JOIN nodes n ON n.ref_id = d.ref_id "
+        "WHERE d.ref_id IS NOT NULL ORDER BY d.ref_id, d.path"
+    ).fetchall()
+    return [
+        {
+            "ref_id": str(row["ref_id"]),
+            "doc_path": str(row["doc_path"]),
+            **_unchecked_reason(conn, str(row["source"] or "")),
+        }
+        for row in rows
+        if str(row["ref_id"]) not in paired
+    ]
+
+
+def _unchecked_reason(conn: sqlite3.Connection, source: str) -> dict[str, str]:
+    """Say WHY a node contributes no pair, distinguishing the two causes.
+
+    "No indexed code under X" would be false for a container whose every file
+    belongs to a nested node — the reader would go looking for missing code
+    that is in fact indexed, just owned elsewhere. The two cases get different
+    words because they call for different action: index the code, or nothing.
+    """
+    if not source:
+        return {"reason": "no_source", "details": ""}
+    covered = conn.execute(
+        "SELECT COUNT(*) FROM code_symbols WHERE file_path LIKE ?", (f"{source}%",)
+    ).fetchone()
+    if covered is not None and int(covered[0]) > 0:
+        return {"reason": "files_owned_by_nested_nodes", "details": source}
+    return {"reason": "no_indexed_code", "details": source}
 
 
 def _file_hash(path: Path) -> str | None:
@@ -120,9 +184,11 @@ def check_sync(
     Returns list of dicts with doc_path, code_path, ref_id, status,
     reason, and optional details.
     """
+    # An empty sync_state is NOT a clean project: phases 2 and 3 below check
+    # doc coverage against files on disk and need no pairs to do it. Returning
+    # early here meant a project where nothing paired skipped every check and
+    # printed a green "No sync pairs found" (BDL-UX #146).
     sync_rows = conn.execute("SELECT * FROM sync_state").fetchall()
-    if not sync_rows:
-        return []
 
     # Infer project root from database path if not provided.
     if project_root is None:

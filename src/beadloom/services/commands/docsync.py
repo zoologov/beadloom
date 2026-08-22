@@ -61,6 +61,7 @@ def sync_check(
         check_reference_drift,
         check_sync,
         check_sync_since,
+        find_unchecked_doc_nodes,
     )
     from beadloom.infrastructure.db import open_db
 
@@ -83,13 +84,19 @@ def sync_check(
         # `--since` is a ref-relative symbol-pair view; reference surfaces have no
         # git-ref baseline, so they are not evaluated in that mode.
         references: list[dict[str, Any]] = []
+        unchecked: list[dict[str, str]] = []
     else:
         results = check_sync(conn, project_root=project_root)
         references = check_reference_drift(conn, project_root)
+        # Nodes that declare a doc but contribute no pair. Naming them is what
+        # stops a green verdict from reading as "checked" (BDL-UX #146);
+        # advisory, so the exit code is unaffected.
+        unchecked = find_unchecked_doc_nodes(conn)
     conn.close()
 
     if ref_filter:
         results = [r for r in results if r["ref_id"] == ref_filter]
+        unchecked = [u for u in unchecked if u["ref_id"] == ref_filter]
 
     has_stale = any(r["status"] == "stale" for r in results)
     # Surface drift is advisory (warning) — it NEVER affects the exit code.
@@ -122,6 +129,10 @@ def sync_check(
         # symbol-pair view with no reference baseline, so its JSON shape is left
         # untouched (the `pairs` array above is unchanged in both modes).
         if since_ref is None:
+            # Both additions belong to the stored-baseline mode only: `--since`
+            # is a ref-relative pair view whose JSON shape is a fixed contract.
+            summary["unchecked"] = len(unchecked)
+            data["unchecked"] = unchecked
             summary["surface_drift"] = len(drifted_refs)
             data["references"] = [
                 {
@@ -145,8 +156,10 @@ def sync_check(
         for r in references:
             # ref_id/code_path columns are empty for a reference doc (no pairing).
             click.echo(f"{r['status']}\t\t{r['doc_path']}\t\t{r['reason']}")
+        for u in unchecked:
+            click.echo(f"unchecked\t{u['ref_id']}\t{u['doc_path']}\t\t{u['reason']}")
     else:
-        if not results and not references:
+        if not results and not references and not unchecked:
             click.echo("No sync pairs found.")
         else:
             for r in results:
@@ -182,8 +195,22 @@ def sync_check(
                 else:
                     click.echo(f"  {marker} {r['doc_path']} (watches={r['watches']})")
 
+            for u in unchecked:
+                click.echo(
+                    f"  [warn] {u['ref_id']}: {u['doc_path']} "
+                    f"(not checked: {_UNCHECKED_WHY[u['reason']].format(source=u['details'])})"
+                )
+
     if has_stale:
         sys.exit(2)
+
+
+# Why a node that declares a doc contributes no sync pair, in the reader's terms.
+_UNCHECKED_WHY = {
+    "no_indexed_code": "no indexed code under '{source}'",
+    "files_owned_by_nested_nodes": "every file under '{source}' belongs to a nested node",
+    "no_source": "the node declares no source path",
+}
 
 
 def _build_sync_report(results: list[dict[str, str]]) -> str:

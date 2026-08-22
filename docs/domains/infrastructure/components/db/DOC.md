@@ -17,6 +17,14 @@ definitions the rest of Beadloom depends on.
 
 - `open_db(db_path)` — open a SQLite connection with WAL mode, foreign keys,
   and a `sqlite3.Row` row factory.
+- `open_db_readonly(db_path)` — open an EXISTING database through the
+  `mode=ro` URI with `query_only=ON`, leaving the file byte-identical; raises
+  `FileNotFoundError` rather than creating one. `open_db` sets
+  `journal_mode=WAL`, which rewrites the header of a database that is not
+  already in WAL — so a verb that only reads still changed the artifact it
+  reported on (BDL-UX #147).
+- `connection(db_path)` / `readonly_connection(db_path)` — context-manager
+  wrappers over the two factories.
 - `create_schema(conn)` — create all tables/indexes and run
   `ensure_schema_migrations`.
 - `ensure_schema_migrations(conn)` — apply the additive, idempotent migrations

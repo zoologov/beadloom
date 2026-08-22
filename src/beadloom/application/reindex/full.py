@@ -31,7 +31,12 @@ from beadloom.application.reindex.indexing import (
     _index_code_files,
     _resolve_docs_dir,
 )
-from beadloom.application.reindex.models import _TABLES_TO_DROP, ReindexResult
+from beadloom.application.reindex.models import (
+    _IMPORT_PROVENANCE_KEY,
+    _IMPORT_PROVENANCE_VERSION,
+    _TABLES_TO_DROP,
+    ReindexResult,
+)
 from beadloom.application.reindex.rules_loader import _load_rules_into_db
 from beadloom.application.reindex.sync_state import (
     _build_initial_sync_state,
@@ -195,6 +200,7 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
     set_meta(conn, "last_reindex_at", now)
     set_meta(conn, "beadloom_version", _beadloom_version())
     set_meta(conn, "schema_version", SCHEMA_VERSION)
+    set_meta(conn, _IMPORT_PROVENANCE_KEY, _IMPORT_PROVENANCE_VERSION)
 
     # 7. Take health snapshot for trend tracking.
     take_snapshot(conn)

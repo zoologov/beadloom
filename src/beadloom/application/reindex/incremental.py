@@ -32,12 +32,19 @@ from beadloom.application.reindex.indexing import (
     _index_single_doc,
     _resolve_docs_dir,
 )
-from beadloom.application.reindex.models import ReindexResult, _SyncPairSnapshot
+from beadloom.application.reindex.models import (
+    _IMPORT_PROVENANCE_KEY,
+    _IMPORT_PROVENANCE_VERSION,
+    ReindexResult,
+    _SyncPairSnapshot,
+)
 from beadloom.application.reindex.sync_state import _build_initial_sync_state
-from beadloom.infrastructure.db import create_schema, open_db, set_meta
+from beadloom.infrastructure.db import create_schema, get_meta, open_db, set_meta
 from beadloom.infrastructure.health import take_snapshot
 
 if TYPE_CHECKING:
+    import sqlite3
+    from collections.abc import Iterable
     from pathlib import Path
 
 
@@ -90,6 +97,13 @@ def incremental_reindex(
     current_fingerprint = _compute_parser_fingerprint()
     stored_fingerprint = _get_stored_parser_fingerprint(conn)
     if stored_fingerprint is not None and current_fingerprint != stored_fingerprint:
+        conn.close()
+        return reindex(project_root, docs_dir=docs_dir)
+
+    # An index built before derived edges carried their provenance marker
+    # cannot be refreshed surgically — the derived set is indistinguishable
+    # from the declared one — so the first run after the upgrade rebuilds.
+    if get_meta(conn, _IMPORT_PROVENANCE_KEY) != _IMPORT_PROVENANCE_VERSION:
         conn.close()
         return reindex(project_root, docs_dir=docs_dir)
 
@@ -217,6 +231,13 @@ def incremental_reindex(
                 seen_ref_ids,
             )
 
+    # Re-extract imports for the code files that moved, and rebuild the derived
+    # depends_on edges. Skipping this is what made `reindex && lint` — the
+    # documented loop — report a clean boundary over a real violation, because
+    # every import rule reads an index frozen at the last FULL rebuild
+    # (BDL-UX #142).
+    _refresh_imports(project_root, conn, current_files, changed, added, deleted)
+
     # Re-extract routes after code changes and update nodes.extra.
     _extract_and_store_routes(project_root, conn)
 
@@ -271,3 +292,27 @@ def incremental_reindex(
 
     conn.close()
     return result
+
+
+def _refresh_imports(
+    project_root: Path,
+    conn: sqlite3.Connection,
+    current_files: dict[str, tuple[str, str]],
+    changed: Iterable[str],
+    added: Iterable[str],
+    deleted: Iterable[str],
+) -> None:
+    """Re-extract imports for the code files this run touched.
+
+    Docs and graph YAML carry no imports, so only ``kind == "code"`` entries are
+    passed on; when none of them moved, the import graph is already current and
+    nothing is rebuilt.
+    """
+    from beadloom.graph.import_resolver import reindex_file_imports
+
+    touched = [p for p in (*changed, *added) if current_files.get(p, ("", ""))[1] == "code"]
+    removed = [p for p in deleted if p not in current_files]
+    if not touched and not removed:
+        return
+
+    reindex_file_imports(project_root, conn, touched=touched, removed=removed)
