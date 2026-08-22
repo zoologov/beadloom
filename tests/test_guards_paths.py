@@ -15,6 +15,7 @@ Reproduced from review .3 (C1), with a ``scripts/**`` exclusion declared:
 
 from __future__ import annotations
 
+import json
 import sys
 
 import pytest
@@ -388,124 +389,338 @@ class TestThePathThatIsTheProjectRoot:
         assert _verdict(tmp_path, make_guard_probes, ".").outcome is GuardOutcome.SKIP
 
 
-class TestAWindowsStyleSeparator:
-    """RECORDED GAP: a backslash path is read as one filename on POSIX.
+class TestTheAcceptedPathShape:
+    """What this guard accepts as an edit target, and what it refuses outright.
 
-    Measured, not reasoned about. ``src\\app.py`` supplied to a POSIX Beadloom
-    resolves to a single top-level component, because a backslash is a legal
-    character in a POSIX file name and the resolver cannot know the harness meant
-    a directory separator.
+    Two bypasses in a row — the C1 traversal, then a backslash and a NUL — came
+    from one place: an arbitrary, model-supplied string was NORMALISED, and every
+    normalisation is a guess about what the harness will actually write. So the
+    input is narrowed rather than the guessing extended.
 
-    Against ``scripts/**`` that is the safe direction (the guard runs anyway).
-    Against a single-component pattern such as ``*.py`` it is the C1 shape again:
-    the guard SKIPS, the printed reason names an exclusion that is false about the
-    file the harness will write, and ``not_covered`` says nothing about the
-    ambiguity. Reachable from Claude Code on Windows, from WSL, and from any model
-    that writes a Windows path.
-
-    Pinned rather than fixed here (this is the verification bead): the fix is a
-    ``not_covered`` note when the target contains a backslash, or normalising
-    separators before resolution. Either reddens the second test below.
+    Accepted: a non-empty string with no C0 control character or DEL, no
+    backslash, no leading ``~``, and encodable for this filesystem. Anything else
+    is REFUSED — never repaired, never resolved, never matched against an
+    exclusion.
     """
 
-    def test_a_backslash_path_does_not_bypass_a_directory_pattern(
+    @pytest.mark.parametrize(
+        ("label", "raw", "offence"),
+        [
+            ("a Windows separator", "src\\app.py", "backslash"),
+            ("a Windows absolute path", "C:\\Users\\a\\app.py", "backslash"),
+            ("a NUL byte", "src/app.py\x00", "control character"),
+            ("a newline", "src/app\n.py", "control character"),
+            ("a DEL byte", "src/app\x7f.py", "control character"),
+            ("an escape byte", "src/\x1b[31mapp.py", "control character"),
+            ("a lone surrogate", "src/\ud800.py", "cannot be encoded"),
+            ("a home-relative path", "~/secrets.env", "'~'"),
+            ("another user's home", "~root/.ssh/authorized_keys", "'~'"),
+        ],
+    )
+    def test_a_path_outside_the_shape_is_refused_and_the_reason_names_the_offence(
+        self, tmp_path, label, raw, offence
+    ) -> None:
+        resolved = resolve_edit_path(raw, tmp_path)
+
+        assert resolved.scope is PathScope.MALFORMED, f"{label}: {resolved}"
+        assert resolved.relative is None, label
+        assert offence in resolved.rejection, f"{label}: {resolved.rejection!r}"
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            "src/app.py",
+            "./src/app.py",
+            "src/../src/app.py",
+            "src/a b/c d.py",
+            "src/файл.py",
+            "src/app.py ",
+            "src/percent%20encoded.py",
+            "src/~backup.py",
+            "src/\udcff.py",
+        ],
+    )
+    def test_an_ordinary_path_is_still_accepted(self, tmp_path, raw) -> None:
+        """The shape must be narrow, not hostile.
+
+        ``%20`` is never decoded, so the pattern sees the name the writer will
+        use; ``~`` matters only as the first character; ``\\udcff`` is a real
+        non-UTF-8 byte that ``os.fsencode`` round-trips, so it names a file that
+        can actually exist.
+        """
+        resolved = resolve_edit_path(raw, tmp_path)
+
+        assert resolved.scope is PathScope.INSIDE, f"{raw!r}: {resolved}"
+
+    def test_a_resolution_the_os_refuses_becomes_a_refusal_not_a_traceback(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        """The last resort behind the shape gate, exercised deliberately.
+
+        No known input reaches it once the shape is enforced — which is exactly
+        why it is here and why it is tested with an injected failure: the
+        property being held is "an unknown input becomes a refusal", and an
+        unknown input cannot, by definition, be written down.
+        """
+        from pathlib import Path as _Path
+
+        def explode(self: _Path, *args: object, **kwargs: object) -> _Path:
+            msg = "some future libc refusal"
+            raise OSError(msg)
+
+        monkeypatch.setattr(_Path, "resolve", explode)
+
+        resolved = resolve_edit_path("src/app.py", tmp_path)
+
+        assert resolved.scope is PathScope.MALFORMED, resolved
+        assert "some future libc refusal" in resolved.rejection
+
+
+class TestARefusedPathIsAVerdictNotATraceback:
+    """A path the guard will not interpret still ends in an answer.
+
+    The answer is ``error`` and it carries the BLOCKING exit code. The reasoning,
+    written out because the choice is the whole point: ``skip`` reads as "not
+    applicable" and lets the edit through; ``warn`` exits 1, which the shipped
+    adapter's harness treats as non-blocking — that is precisely how the NUL got
+    past everything; and exit 3 is reserved for a usage or configuration error,
+    which is a defect in the project's own files rather than a statement about
+    this edit. "I cannot tell what you are about to write" must stop what is
+    about to be written, and in the harness this ships an adapter for, only 2
+    stops it.
+    """
+
+    def test_the_guard_answers_instead_of_raising(
+        self, tmp_path, write_flow_yml, make_guard_probes
+    ) -> None:
+        write_flow_yml(_EXCLUDED_TOP_LEVEL_PY)
+
+        verdict = _verdict(tmp_path, make_guard_probes, "src\\app.py")
+
+        assert verdict.outcome is GuardOutcome.ERROR, verdict.why
+        assert "backslash" in verdict.why
+
+    def test_a_nul_reaches_a_verdict_where_it_used_to_raise(
         self, tmp_path, write_flow_yml, make_guard_probes
     ) -> None:
         write_flow_yml(_EXCLUDED_SCRIPTS)
 
-        verdict = _verdict(tmp_path, make_guard_probes, "scripts\\..\\src\\app.py")
+        verdict = _verdict(tmp_path, make_guard_probes, "src/app.py\x00")
 
-        assert verdict.outcome is GuardOutcome.WARN, verdict.why
+        assert verdict.outcome is GuardOutcome.ERROR, verdict.why
 
-    def test_a_backslash_path_does_bypass_a_single_component_pattern(
+    def test_the_same_file_spelled_for_another_os_is_no_longer_exempted(
         self, tmp_path, write_flow_yml, make_guard_probes
     ) -> None:
+        """F1: ``src\\app.py`` skipped on ``*.py`` while the write landed on src/app.py."""
         write_flow_yml(_EXCLUDED_TOP_LEVEL_PY)
 
         posix = _verdict(tmp_path, make_guard_probes, "src/app.py")
         windows = _verdict(tmp_path, make_guard_probes, "src\\app.py")
 
         assert posix.outcome is GuardOutcome.WARN, posix.why
-        # The gap: the same file, spelled for a different OS, is exempted.
-        assert windows.outcome is GuardOutcome.SKIP, windows.why
-        assert "*.py" in windows.why
-        # And nothing in the verdict warns the reader that the separator was
-        # read as part of the file name. That silence is the defect.
-        assert not any("\\" in item for item in windows.not_covered), windows.not_covered
+        assert windows.outcome is GuardOutcome.ERROR, windows.why
+        assert "*.py" not in windows.why
 
+    def test_a_catch_all_exclusion_does_not_swallow_a_refused_path(
+        self, tmp_path, write_flow_yml, make_guard_probes
+    ) -> None:
+        """The refusal is decided before any exclusion is matched, on purpose."""
+        write_flow_yml(_EXCLUDE_EVERYTHING)
 
-class TestANullByteInTheSuppliedPath:
-    """RECORDED GAP: resolution raises, so the guard produces no verdict at all.
+        verdict = _verdict(tmp_path, make_guard_probes, "src/app.py\x00")
 
-    Introduced BY the traversal fix: ``Path.resolve`` calls ``lstat``, which
-    rejects an embedded NUL with ``ValueError``; the lexical matching it replaced
-    never touched the filesystem. :func:`_resolved` catches ``OSError`` only, so
-    the exception escapes ``evaluate_guard``.
+        assert verdict.outcome is GuardOutcome.ERROR, verdict.why
 
-    Cost, measured end-to-end through the CLI: the process exits **1** — the code
-    reserved for ``warn``, which a harness treats as non-blocking — so a path with
-    a NUL downgrades a ``block`` to a message, and ``record_firing`` never runs, so
-    the firing log has no evidence the edit happened. Reachable: the path comes
-    from ``tool_input.file_path`` in a JSON payload, and JSON can carry ``\\u0000``.
-
-    The fix is one exception type (``except (OSError, ValueError)``), which would
-    make both assertions below fail. That is the point of pinning them.
-    """
-
-    _NUL_PATH = "src/app.py\x00"
-
-    def test_resolution_raises_instead_of_classifying_the_target(self, tmp_path) -> None:
-        with pytest.raises(ValueError, match="null"):
-            resolve_edit_path(self._NUL_PATH, tmp_path)
-
-    def test_the_guard_produces_no_verdict_for_it(
+    def test_the_refusal_names_what_it_did_not_check_and_how_to_proceed(
         self, tmp_path, write_flow_yml, make_guard_probes
     ) -> None:
         write_flow_yml(_EXCLUDED_SCRIPTS)
 
-        with pytest.raises(ValueError, match="null"):
-            _verdict(tmp_path, make_guard_probes, self._NUL_PATH)
+        verdict = _verdict(tmp_path, make_guard_probes, "src\\app.py")
 
-    def test_the_cli_exits_on_the_warn_code_with_no_firing_recorded(
-        self, tmp_path, write_flow_yml, monkeypatch
+        assert verdict.not_covered, "an error that names nothing cannot be acted on"
+        assert any("refused" in item for item in verdict.not_covered), verdict.not_covered
+        assert verdict.remediation
+
+    def test_the_refusal_carries_the_blocking_code_not_the_warn_code(
+        self, tmp_path, write_flow_yml, make_guard_probes
     ) -> None:
-        """The reachable route: a hook payload, through the real command."""
-        import json as _json
+        """Exit 1 is the warn code, which a harness reads as "carry on"."""
+        write_flow_yml(_EXCLUDED_SCRIPTS)
 
+        verdict = _verdict(tmp_path, make_guard_probes, "src\\app.py")
+
+        assert verdict.exit_code == 2
+
+    def test_a_guard_configured_off_stays_off(
+        self, tmp_path, write_flow_yml, make_guard_probes
+    ) -> None:
+        """Refusing the input does not override a declared, deliberate opt-out.
+
+        ``off`` is a human decision recorded in flow.yml; the guard never looks
+        at the path at all, so there is nothing to be misled about.
+        """
+        write_flow_yml(
+            "guards:\n  bead-claimed:\n    strictness: {default: 'off'}\n"
+        )
+
+        verdict = _verdict(tmp_path, make_guard_probes, "src\\app.py")
+
+        assert verdict.outcome is GuardOutcome.SKIP, verdict.why
+        assert "off" in verdict.why
+
+
+class TestNoInvocationEndsWithoutARecord:
+    """Every invocation that named a guard leaves a firing record.
+
+    F2 cost two things, and the second was the worse one: the NUL produced no
+    record, so ``guard --liveness`` went on showing an older ``skip`` and the
+    event did not exist in the one report whose entire product is honesty about
+    dead gates. A crash is a verdict of "I could not tell" and is recorded as
+    one.
+    """
+
+    @staticmethod
+    def _run(tmp_path, monkeypatch, payload: str):
         from click.testing import CliRunner
 
         from beadloom.application.guards.contract import GuardProbes
         from beadloom.services.cli import main
         from beadloom.services.commands import guard as guard_cmd
 
-        write_flow_yml(_EXCLUDED_SCRIPTS)
         monkeypatch.setattr(guard_cmd, "_probes", lambda _root: GuardProbes())
-        payload = _json.dumps(
-            {"hook_event_name": "PreToolUse", "tool_input": {"file_path": self._NUL_PATH}}
-        )
-
-        result = CliRunner().invoke(
+        return CliRunner().invoke(
             main,
             ["guard", "bead-claimed", "--project", str(tmp_path), "--hook", "claude-code"],
             input=payload,
         )
 
-        assert isinstance(result.exception, ValueError), result.output
-        assert result.exit_code == 1, result.output
-        assert not (tmp_path / ".beadloom" / "guard-firings.jsonl").exists()
+    @staticmethod
+    def _records(tmp_path):
+        from beadloom.application.guards.firing import read_firings
+
+        return read_firings(tmp_path)
+
+    def test_a_nul_from_a_json_payload_blocks_and_is_recorded(
+        self, tmp_path, write_flow_yml, monkeypatch
+    ) -> None:
+        """The reachable route, verbatim: JSON carries a NUL as ``\\u0000``."""
+        write_flow_yml(_EXCLUDED_SCRIPTS)
+        payload = (
+            '{"hook_event_name": "PreToolUse", "tool_name": "Write", '
+            '"tool_input": {"file_path": "src/app.py\\u0000"}}'
+        )
+
+        result = self._run(tmp_path, monkeypatch, payload)
+        records = self._records(tmp_path)
+
+        assert result.exception is None or isinstance(result.exception, SystemExit), (
+            result.output
+        )
+        assert result.exit_code == 2, result.output
+        assert [record.outcome for record in records] == ["error"], records
+
+    def test_a_backslash_path_blocks_instead_of_skipping(
+        self, tmp_path, write_flow_yml, monkeypatch
+    ) -> None:
+        write_flow_yml(_EXCLUDED_TOP_LEVEL_PY)
+        payload = json.dumps(
+            {"hook_event_name": "PreToolUse", "tool_input": {"file_path": "src\\app.py"}}
+        )
+
+        result = self._run(tmp_path, monkeypatch, payload)
+
+        assert result.exit_code == 2, result.output
+        assert [record.outcome for record in self._records(tmp_path)] == ["error"]
+
+    def test_an_unexpected_failure_becomes_a_recorded_verdict(
+        self, tmp_path, write_flow_yml, monkeypatch
+    ) -> None:
+        """Whatever breaks inside evaluation, the invocation still ends in a record.
+
+        The shape gate closes the two failures we know about; this closes the
+        third one nobody has typed yet.
+        """
+        def explode(*_args: object, **_kwargs: object) -> None:
+            msg = "a future defect nobody has written yet"
+            raise RuntimeError(msg)
+
+        write_flow_yml(_EXCLUDED_SCRIPTS)
+        monkeypatch.setattr(
+            "beadloom.application.guards.evaluation.evaluate_guard", explode
+        )
+        payload = json.dumps(
+            {"hook_event_name": "PreToolUse", "tool_input": {"file_path": "src/app.py"}}
+        )
+
+        result = self._run(tmp_path, monkeypatch, payload)
+        records = self._records(tmp_path)
+
+        assert result.exception is None or isinstance(result.exception, SystemExit), (
+            result.output
+        )
+        assert result.exit_code == 2, result.output
+        assert [record.outcome for record in records] == ["error"], records
+        assert "a future defect nobody has written yet" in records[-1].why
+
+    def test_a_config_error_is_recorded_and_keeps_its_own_exit_code(
+        self, tmp_path, write_flow_yml, monkeypatch
+    ) -> None:
+        """A broken flow.yml is recorded, and still exits 3, not 2.
+
+        Exit 3 exists (BDL-061.2) so a configuration defect is never mistaken for
+        a guard that fired; that reasoning is unchanged. What changes is that the
+        invocation no longer disappears from the liveness report.
+        """
+        write_flow_yml(
+            "guards:\n  bead-claimed:\n    exclusions:\n      - path: 'x/**'\n"
+        )
+        payload = json.dumps(
+            {"hook_event_name": "PreToolUse", "tool_input": {"file_path": "src/app.py"}}
+        )
+
+        result = self._run(tmp_path, monkeypatch, payload)
+
+        assert result.exit_code == 3, result.output
+        assert [record.outcome for record in self._records(tmp_path)] == ["error"]
+
+    def test_an_unregistered_guard_name_records_nothing(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        """The one invocation with nothing to record: there is no such guard.
+
+        Recording it would invent a row in a report that is organised by guard,
+        and the caller's own shell already carries the error.
+        """
+        from click.testing import CliRunner
+
+        from beadloom.application.guards.contract import GuardProbes
+        from beadloom.services.cli import main
+        from beadloom.services.commands import guard as guard_cmd
+
+        monkeypatch.setattr(guard_cmd, "_probes", lambda _root: GuardProbes())
+        result = CliRunner().invoke(
+            main, ["guard", "no-such-guard", "--project", str(tmp_path)]
+        )
+
+        assert result.exit_code == 3, result.output
+        assert self._records(tmp_path) == ()
 
 
 class TestASymlinkLoopDoesNotRaise:
-    """The case :func:`_resolved`'s ``except OSError`` names cannot actually occur.
+    """A loop resolves; the handler that claimed otherwise no longer claims it.
 
     ``Path.resolve()`` defaults to ``strict=False``, and since 3.6 that returns
     the longest resolvable prefix instead of raising ``ELOOP``. Measured on
     3.13.7: ``a -> b -> a`` resolves to ``<root>/a`` and no exception is raised,
-    for the link itself and for a path through it.
+    for the link itself and for a path through it. The old handler's comment
+    ("e.g. a symlink loop") therefore named a case that cannot occur while
+    missing the one that did (F3, and the NUL was F2).
 
-    So the handler is dead for its documented reason — while the exception
-    resolution *does* raise (``ValueError`` on an embedded NUL, pinned above) is
-    the one it does not catch. Recorded as a finding rather than fixed here.
+    The replacement claims no case at all: it refuses whatever the OS refuses,
+    and says so. These two tests hold the loop on the other side of that — a
+    refusal must be an OS refusal, not a shape the resolver merely dislikes.
     """
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX symlink semantics")

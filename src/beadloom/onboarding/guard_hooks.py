@@ -57,8 +57,9 @@ _HOOK_SCRIPT = '''\
 # Beadloom CLI, which owns every decision. Configure guards, strictness per work
 # kind, and exclusions in `.beadloom/flow.yml`.
 #
-# Exit codes: 0 = pass/skip, 1 = warn (shown, never blocking), 2 = block,
-# 3 = usage or configuration error.
+# Exit codes: 0 = pass/skip, 1 = warn (shown, never blocking), 2 = block or
+# error (the guard could not answer, so the edit stops), 3 = usage or
+# configuration error.
 exec beadloom guard "$1" --hook claude-code
 '''
 

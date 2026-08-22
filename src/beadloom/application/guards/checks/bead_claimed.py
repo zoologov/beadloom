@@ -33,11 +33,11 @@ _REMEDIATION = (
 def _not_covered(request: GuardRequest) -> tuple[str, ...]:
     """What this evaluation did not verify, given what the caller supplied.
 
-    Keyed on the path *scope*, not on ``relative_path is None``: that is also
-    ``None`` for a target outside the project, and reporting "the harness
-    supplied no path" about a path the harness did supply is a false note in the
-    one field the reader is meant to trust. The outside-the-project case is
-    named by the evaluator instead.
+    Keyed on the path *scope*, not on ``resolved_path.relative is None``: that
+    is also ``None`` for a target outside the project (and for one refused as
+    malformed), and reporting "the harness supplied no path" about a path the
+    harness did supply is a false note in the one field the reader is meant to
+    trust. Those cases are named by the evaluator instead.
     """
     items = [_SCOPE_NOT_COVERED]
     if request.resolved_path.scope is PathScope.ABSENT:

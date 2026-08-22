@@ -386,29 +386,42 @@ class TestHowWideAnExclusionActuallyReaches:
 
         return GuardExclusion(path=pattern, reason="r", until="BDL-999")
 
-    def test_a_star_star_prefix_matches_a_file_it_does_not_name(self) -> None:
-        """RECORDED GAP: ``**/app.py`` also exempts ``src/myapp.py``.
+    def test_a_star_star_prefix_reaches_only_whole_directory_segments(self) -> None:
+        """F5: ``**/app.py`` exempted ``src/myapp.py`` too.
 
-        ``**`` becomes ``.*`` with no requirement that a separator follow, so the
-        pattern reads as "anything ending in app.py". An author writing
-        ``**/config.py`` silently exempts ``src/appconfig.py`` too — a wider
-        exemption than the one declared, which is the direction that switches a
-        gate off rather than the direction that over-guards.
-
-        The fix is ``(?:.*/)?`` for a ``**/`` prefix; it reddens the second
-        assertion. Pinned, not fixed, because this bead verifies.
+        ``**/`` translated to an unanchored ``.*``, so the pattern read as
+        "anything ending in app.py" and an author writing ``**/config.py``
+        silently exempted ``src/appconfig.py``. Wider than declared is the
+        direction that switches a gate off, and this module's own docstring names
+        it as the failure it exists to prevent.
         """
         exclusion = self._exclusion("**/app.py")
 
         assert exclusion.matches("src/app.py")
-        assert exclusion.matches("src/myapp.py")
+        assert exclusion.matches("app.py"), "zero directories is still a match"
+        assert not exclusion.matches("src/myapp.py")
 
-    def test_a_star_star_segment_matches_a_directory_it_does_not_name(self) -> None:
-        """Same root cause one level in: ``**/tests/**`` reaches ``src/mytests/``."""
+    def test_a_star_star_segment_reaches_only_the_directory_it_names(self) -> None:
+        """Same rule one level in: ``**/tests/**`` must not reach ``src/mytests/``."""
         exclusion = self._exclusion("**/tests/**")
 
         assert exclusion.matches("tests/unit/a.py")
-        assert exclusion.matches("src/mytests/a.py")
+        assert exclusion.matches("src/tests/unit/a.py")
+        assert not exclusion.matches("src/mytests/a.py")
+
+    def test_a_trailing_star_star_slash_is_still_a_catch_all(self) -> None:
+        """The corner the narrowing must not break.
+
+        ``**/`` with nothing after it names no file at all; read as
+        "zero or more directories and then nothing" it would match almost
+        nothing, and a pattern that silently stops exempting is how an author
+        finds out their exclusion moved. It keeps its ``.*`` reading, and
+        ``excluded_everywhere`` keeps reporting it.
+        """
+        exclusion = self._exclusion("**/")
+
+        assert exclusion.matches("README.md")
+        assert exclusion.matches("src/a/b.py")
 
     @pytest.mark.parametrize(
         ("pattern", "path", "matches"),
@@ -421,6 +434,13 @@ class TestHowWideAnExclusionActuallyReaches:
             ("*.py", "src/app.py", False),
             ("?", "a", True),
             ("?", "ab", False),
+            ("**/app.py", "app.py", True),
+            ("**/app.py", "a/b/app.py", True),
+            ("**/app.py", "a/myapp.py", False),
+            ("a/**/b.py", "a/b.py", True),
+            ("a/**/b.py", "a/x/y/b.py", True),
+            ("a/**/b.py", "ax/b.py", False),
+            ("**/**", "a/b/c.py", True),
         ],
     )
     def test_the_documented_glob_semantics_hold(self, pattern, path, matches) -> None:

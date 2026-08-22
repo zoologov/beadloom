@@ -524,20 +524,13 @@ class TestPatternsNobodyHasClassifiedYet:
 
 
 class TestTwoExclusionsThatTogetherCoverEverything:
-    """RECORDED GAP: the predicate is per-exclusion, so a union is invisible.
+    """The catch-all question is asked of the exclusion LIST, not of one pattern.
 
     ``*`` covers the top level and ``*/**`` covers every subtree. Declared
     together they exempt every path in the project — the guard cannot fire on
-    anything — yet neither pattern is a catch-all on its own, so
-    ``excluded_everywhere`` is ``False`` and the report says nothing.
-
-    Not a spelling the review named and not in the fix's stated limits, which
-    describe only the pattern-versus-project distinction. It is the same class of
-    defect the fix removed (a dead gate the honesty report calls live), reachable
-    from two ordinary-looking exclusions.
-
-    The fix is to ask whether *any* exclusion covers each probe path rather than
-    whether *one* covers all of them; it would redden the last assertion here.
+    anything — while neither is a catch-all on its own. Asking "does one pattern
+    cover everything" therefore called a dead gate healthy (F4); asking "does
+    anything escape the patterns" is the same cost and does not.
     """
 
     _UNION = (
@@ -559,7 +552,7 @@ class TestTwoExclusionsThatTogetherCoverEverything:
         for path in ("README.md", ".gitignore", "src/app.py", "a/b/c/d/e.txt"):
             assert spec.exclusion_for(path) is not None, path
 
-    def test_the_guard_is_dead_and_the_report_does_not_say_so(
+    def test_the_guard_is_dead_and_the_report_says_so(
         self, tmp_path, write_flow_yml, make_guard_probes
     ) -> None:
         from beadloom.application.guards.evaluation import evaluate_guard
@@ -579,9 +572,9 @@ class TestTwoExclusionsThatTogetherCoverEverything:
 
         assert verdict.outcome is GuardOutcome.SKIP, verdict.why
         assert row.dead_exclusions == (), "both patterns match real files"
-        # The gap: nothing can make this guard fire, and the row reads healthy.
-        assert row.excluded_everywhere is False
-        assert row.idle is True, "only because it has never fired in a fresh project"
+        # Nothing can make this guard fire, and now the row says exactly that.
+        assert row.excluded_everywhere is True
+        assert row.idle is True
 
 
 class TestAnExclusionThatSwallowsThisProject:
@@ -597,7 +590,16 @@ class TestAnExclusionThatSwallowsThisProject:
     :func:`project_files` is already walked for ``dead_exclusions`` — so the
     liveness row answers "this pattern matches nothing that exists" and never
     "this pattern matches everything that exists", though both are one pass over
-    the same list. The silence below is the measurable consequence.
+    the same list.
+
+    JUDGED AND LEFT AS IS (BDL-061.27), with the measurement that decides it:
+    the second test below has to filter ``.beadloom/`` out of the walk to make
+    its point, and that filter is the whole answer. Declaring an exclusion
+    requires a ``.beadloom/flow.yml``, which no realistic exclusion covers, so a
+    whole-tree flag would read ``False`` in every project that could set it — a
+    flag that cannot fire teaches a reader to stop reading flags. The reachable
+    half of the same gap was a genuine defect and IS fixed: two narrow patterns
+    that together exempt everything are now reported (F4, the class above).
     """
 
     def test_a_project_entirely_under_the_excluded_directory_is_not_reported(
@@ -714,3 +716,89 @@ class TestWalkingTheProjectTree:
         monkeypatch.setattr(liveness, "_MAX_FILES", 3)
 
         assert len(liveness.project_files(tmp_path)) == 3
+
+
+class TestAGuardThatOnlyEverFailedToAnswer:
+    """An ``error`` is evidence the guard RAN, and evidence it did not ANSWER.
+
+    Both halves are load-bearing. Recording it is what closes F2 — a crash that
+    wrote nothing left ``--liveness`` showing an older ``skip``, so the event did
+    not exist in the report whose whole product is honesty about dead gates.
+    Counting it as a firing that clears ``never-fired`` would replace one lie
+    with a quieter one: a gate that has never once answered would read as alive.
+    """
+
+    def test_an_error_is_counted_and_named_as_the_last_outcome(self, tmp_path) -> None:
+        _fire(tmp_path, "bead-claimed", GuardOutcome.ERROR)
+
+        row = _rows(tmp_path)["bead-claimed"]
+
+        assert row.fired_count == 1
+        assert row.last_outcome == "error"
+        assert row.last_fired_at
+
+    def test_a_guard_that_only_errored_is_not_reported_as_having_fired(
+        self, tmp_path
+    ) -> None:
+        _fire(tmp_path, "bead-claimed", GuardOutcome.ERROR)
+        _fire(tmp_path, "bead-claimed", GuardOutcome.ERROR)
+
+        row = _rows(tmp_path)["bead-claimed"]
+
+        assert row.never_fired is True, "it ran twice and answered neither time"
+        assert row.idle is True
+
+    def test_one_real_answer_clears_it(self, tmp_path) -> None:
+        _fire(tmp_path, "bead-claimed", GuardOutcome.ERROR)
+        _fire(tmp_path, "bead-claimed", GuardOutcome.WARN)
+
+        row = _rows(tmp_path)["bead-claimed"]
+
+        assert row.never_fired is False
+        assert row.fired_count == 2
+
+    def test_the_text_report_shows_both_the_count_and_the_flag(self, tmp_path) -> None:
+        _fire(tmp_path, "bead-claimed", GuardOutcome.ERROR)
+
+        result = CliRunner().invoke(
+            main, ["guard", "--liveness", "--project", str(tmp_path)]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "fired=1" in result.output
+        assert "last error" in result.output
+        assert "never-fired" in result.output
+
+
+class TestOnePatternIsStillJudgedOnItsOwn:
+    """Widening the question must not widen the answer.
+
+    Two exclusions that leave anything reachable are not a catch-all, and saying
+    they were would train a reader to ignore the flag — the failure mode a
+    liveness report cannot afford twice.
+    """
+
+    def test_two_narrow_exclusions_are_not_reported_as_a_catch_all(
+        self, tmp_path, write_flow_yml
+    ) -> None:
+        write_flow_yml(
+            "guards:\n"
+            "  bead-claimed:\n"
+            "    exclusions:\n"
+            "      - path: 'scripts/**'\n"
+            "        reason: 'operational'\n"
+            "        until: 'BDL-999'\n"
+            "      - path: '*.md'\n"
+            "        reason: 'prose'\n"
+            "        until: 'BDL-999'\n"
+        )
+
+        spec = load_guards_config(tmp_path).spec_for("bead-claimed")
+
+        assert spec.excluded_everywhere() is False
+        assert spec.exclusion_for("src/app.py") is None
+
+    def test_a_guard_with_no_exclusions_is_not_a_catch_all(self, tmp_path) -> None:
+        spec = load_guards_config(tmp_path).spec_for("bead-claimed")
+
+        assert spec.excluded_everywhere() is False

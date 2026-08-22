@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING
 from beadloom.application.guards.checks import GUARD_NAMES
 from beadloom.application.guards.config import load_guards_config
 from beadloom.application.guards.firing import read_firings
+from beadloom.application.guards.models import GuardOutcome
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -74,7 +75,7 @@ class GuardLiveness:
     declared: bool
     strictness: str
     fired_count: int
-    never_fired: bool
+    never_fired: bool  # no firing that reached a verdict; `error` records do not count
     excluded_everywhere: bool
     last_fired_at: str = ""
     last_outcome: str = ""
@@ -157,12 +158,17 @@ def _row(
     spec = config.spec_for(name)
     own = [record for record in firings if record.guard == name]
     last = own[-1] if own else None
+    # An `error` record is evidence the guard RAN and did NOT answer, so it is
+    # counted in fired_count and does not clear `never-fired`. Counting it as a
+    # firing would let a guard that has never once reached a verdict read as a
+    # live gate — the same silence the report exists to break.
+    answered = [record for record in own if record.outcome != GuardOutcome.ERROR.value]
     return GuardLiveness(
         guard=name,
         declared=spec.declared,
         strictness=spec.strictness_for(None),
         fired_count=len(own),
-        never_fired=not own,
+        never_fired=not answered,
         excluded_everywhere=spec.excluded_everywhere(),
         last_fired_at=last.at if last else "",
         last_outcome=last.outcome if last else "",

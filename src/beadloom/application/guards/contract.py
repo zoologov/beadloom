@@ -113,21 +113,18 @@ class GuardRequest:
 
         Resolution lives in :mod:`beadloom.application.guards.paths` because it
         is what exclusion matching is fed, and matching an unresolved string let
-        any caller opt out of any guard.
+        any caller opt out of any guard. That module also owns the shape a path
+        must have to be resolved at all: a target outside it is
+        :attr:`~beadloom.application.guards.paths.PathScope.MALFORMED` and the
+        evaluator refuses it before any exclusion is consulted.
+
+        There is one way to ask, on purpose: the resolution carries a
+        :class:`~beadloom.application.guards.paths.PathScope`, and a shortcut
+        returning only the relative string collapsed three different situations
+        — absent, outside the project, refused — into one ``None`` that no
+        caller could tell apart.
         """
         return resolve_edit_path(self.path, self.project_root)
-
-    @property
-    def relative_path(self) -> str | None:
-        """The project-relative POSIX path, or ``None`` if there is not one.
-
-        ``None`` covers two different situations on purpose — no path was
-        supplied, and the path resolves outside the project — because neither
-        may be matched against an exclusion. A check that needs to tell them
-        apart reads :attr:`resolved_path` and its
-        :class:`~beadloom.application.guards.paths.PathScope`.
-        """
-        return self.resolved_path.relative
 
     @property
     def work_kind(self) -> str | None:

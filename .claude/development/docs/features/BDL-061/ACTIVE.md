@@ -7,14 +7,15 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-mr2l.25` — [dev] S1 fix: path normalisation, probe limit,
-`excluded_everywhere`, dead `on:` (review `.3` returned 1 critical + 5 major; `.3` stays open)
-**Goal:** close C1 and M1–M5 from review `.3`, each proven by a test that FAILS on the shipped
-code — including the two defects that a GREEN test had pinned as correct.
-**Done when (met):** the traversal bypass is closed and proven; the tracker probe has no page
-limit and its test fails when the probe returns nothing; `excluded_everywhere` is correct in
-both directions; a dead exclusion is reported; `on:` is gone from SPEC and `flow.yml` with the
-harness-owned routing stated honestly.
+**Bead:** `beadloom-mr2l.27` — [dev] S1 fix-2: narrow the guard's path input instead of
+normalising it (test `.26` returned F1–F6; two bypasses reproduced through the real CLI)
+**Goal:** stop generating path cases — define the accepted shape of an edit target, refuse
+everything outside it with a recorded verdict, and never end an invocation without a firing
+record.
+**Done when (met):** a backslash spelling no longer exempts a file (F1); a NUL reaches a verdict
+instead of a traceback on the warn code (F2); a malformed path blocks and is recorded; the SPEC
+states the shape and the reasoning for `error` over `skip`/`warn`/exit 3; F3–F6 fixed or
+recorded with a measured reason.
 
 ## Progress
 
@@ -29,6 +30,11 @@ harness-owned routing stated honestly.
 - [x] S1 `.25` dev fix (2026-08-22) — C1 path traversal, M1 `excluded_everywhere`,
       m1 dead exclusion, M2 `on:` deleted, M4 `bd --limit 0`, M5 vacuous real-bd test;
       guard tests 242 → 280, Gate green on a clean DB
+- [x] S1 `.26` test — independent re-verification: traversal matrix + F1–F6; guard tests
+      280 → 335, no `src/` change
+- [x] S1 `.27` dev fix-2 (2026-08-22) — accepted path shape + `error` outcome + a firing
+      record for every named-guard invocation; F1, F2, F3, F4, F5, F6 closed, the whole-tree
+      liveness flag judged and left out with a measured reason; guard tests 335 → 377
 
 ## Results
 
@@ -38,7 +44,8 @@ harness-owned routing stated honestly.
 | .2 | Done | Verdict matrix, exclusion validation, liveness widened (248 tests) |
 | .3 | Open | Review: NOT PASSING — 1 critical + 5 major; re-review after `.25` |
 | .25 | Done | S1 fix: traversal bypass, probe limit, liveness honesty, `on:` deleted |
-| .26 | Pending | S1 test: independent re-verification of the bypass and the limit boundary |
+| .26 | Done | S1 test: re-verification — F1 backslash bypass, F2 NUL crash, F3–F6 recorded |
+| .27 | Done | S1 fix-2: path shape narrowed, `error` outcome, no invocation without a record |
 | .4 | Pending | S1 tech-writer |
 | .5–.8 | Pending | S2 stop the lying checks (#142, #146, #147) |
 | .9–.12 | Pending | S3 composition + project overlay (#139, #152, #132, #136, #137) |

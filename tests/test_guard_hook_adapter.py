@@ -200,11 +200,11 @@ class TestTheMatcherIsTheOnlyRouterAndItLivesInTheHarness:
     as a matcher string the scaffolder writes into the harness's settings, and no
     Beadloom code reads it back.
 
-    The second half quotes the wrong string. The scaffolder emits
-    ``Edit|Write|MultiEdit|NotebookEdit``; the three-tool spelling is what *this*
-    repo's hand-written ``.claude/settings.json`` carries (review .3, m5 — still
-    open). So the SPEC describes the dogfood rather than the product, on the one
-    sentence a reader consults to learn what an adopter gets.
+The second half used to quote the wrong string — the three-tool spelling from
+    *this* repo's hand-written ``.claude/settings.json`` (review .3, m5, still
+    open) rather than the four the scaffolder writes. The SPEC now quotes the
+    constant, and the test below asserts the two agree rather than asserting a
+    literal, so they cannot drift apart again in silence.
     """
 
     def test_the_routing_decision_exists_only_in_the_harness_settings(
@@ -221,8 +221,13 @@ class TestTheMatcherIsTheOnlyRouterAndItLivesInTheHarness:
         for tool in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
             assert tool not in _script_logic_lines(script)[0]
 
-    def test_the_spec_quotes_a_matcher_the_scaffolder_does_not_emit(self) -> None:
-        """RECORDED GAP: correcting either side reddens this, which is the point."""
+    def test_the_spec_quotes_the_matcher_the_scaffolder_actually_emits(self) -> None:
+        """F6: the SPEC quoted the three-tool spelling this repo happens to use.
+
+        The sentence a reader consults to learn what an adopter gets described the
+        dogfood instead of the product. Asserted against the constant rather than
+        against a literal, so the pair cannot drift apart again silently.
+        """
         from pathlib import Path
 
         from beadloom.onboarding.guard_hooks import EDIT_MATCHER
@@ -237,6 +242,4 @@ class TestTheMatcherIsTheOnlyRouterAndItLivesInTheHarness:
             / "SPEC.md"
         ).read_text(encoding="utf-8")
 
-        assert EDIT_MATCHER == "Edit|Write|MultiEdit|NotebookEdit"
-        assert "`Edit|Write|NotebookEdit` matcher" in spec
-        assert EDIT_MATCHER not in spec
+        assert f"`{EDIT_MATCHER}` matcher" in spec

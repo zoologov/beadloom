@@ -22,14 +22,40 @@ def _write_flow(root, body: str) -> None:
 
 
 class TestVerdictModel:
-    def test_outcomes_are_the_four_declared_names(self) -> None:
-        assert [o.value for o in GuardOutcome] == ["pass", "warn", "block", "skip"]
+    def test_outcomes_are_the_five_declared_names(self) -> None:
+        assert [o.value for o in GuardOutcome] == [
+            "pass",
+            "warn",
+            "block",
+            "skip",
+            "error",
+        ]
 
     def test_exit_codes_separate_block_from_usage_error(self) -> None:
         assert EXIT_CODE_BY_OUTCOME[GuardOutcome.PASS] == 0
         assert EXIT_CODE_BY_OUTCOME[GuardOutcome.SKIP] == 0
         assert EXIT_CODE_BY_OUTCOME[GuardOutcome.WARN] == 1
         assert EXIT_CODE_BY_OUTCOME[GuardOutcome.BLOCK] == 2
+
+    def test_an_error_blocks_because_it_is_the_only_code_that_blocks(self) -> None:
+        """"I could not tell" must stop the edit, and 2 is the code that does.
+
+        Measured against the adapter this ships (Claude Code): exit 2 is fed back
+        to the agent and blocks the tool call, every other non-zero code is shown
+        to the human and the call proceeds. 1 is the warn code, and 3 is reserved
+        for a configuration defect, which is a statement about the project's own
+        files rather than about this edit.
+        """
+        assert EXIT_CODE_BY_OUTCOME[GuardOutcome.ERROR] == 2
+
+    def test_an_error_must_name_what_it_did_not_check(self) -> None:
+        """An error is a verdict with no finding behind it — so it owes the reader one."""
+        with pytest.raises(ValueError, match="did not check"):
+            GuardVerdict(
+                guard="bead-claimed",
+                outcome=GuardOutcome.ERROR,
+                why="the guard could not be evaluated: boom",
+            )
 
     def test_verdict_serializes_every_declared_field(self) -> None:
         verdict = GuardVerdict(

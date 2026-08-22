@@ -13,9 +13,14 @@ Order of resolution, and why:
    findings".
 2. **Strictness ``off``** -> ``skip`` naming the work kind. Turning a guard off
    is legitimate; hiding that it is off is not.
-3. **Path exclusion** -> ``skip`` quoting the declared reason and ``until``, so
+3. **A malformed edit path** -> ``error``, which blocks. It is decided *after*
+   ``off`` (an opt-out is a human decision recorded in flow.yml, and a guard that
+   is off never looks at the path) and *before* exclusions (matching a pattern
+   against a string the guard has refused to interpret is the bypass this order
+   removes).
+4. **Path exclusion** -> ``skip`` quoting the declared reason and ``until``, so
    the record shows who exempted this path and when the exemption expires.
-4. **The check itself** -> ``pass``, or the configured ``warn``/``block``. A
+5. **The check itself** -> ``pass``, or the configured ``warn``/``block``. A
    check that cannot apply returns its own skip reason, which is passed through
    verbatim.
 
@@ -32,6 +37,11 @@ from beadloom.application.guards.checks import BUILTIN_GUARDS
 from beadloom.application.guards.config import GuardConfigError, load_guards_config
 from beadloom.application.guards.contract import GuardProbes, GuardRequest
 from beadloom.application.guards.models import GuardOutcome, GuardVerdict
+from beadloom.application.guards.paths import (
+    MALFORMED_REMEDIATION,
+    MALFORMED_WHY,
+    PathScope,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -94,8 +104,8 @@ def evaluate_guard(
         )
         raise UnknownGuardError(msg)
 
-    resolved = config if config is not None else load_guards_config(project_root)
-    spec = resolved.spec_for(name)
+    guards = config if config is not None else load_guards_config(project_root)
+    spec = guards.spec_for(name)
     request = GuardRequest(
         project_root=project_root,
         context=dict(context or {}),
@@ -115,7 +125,18 @@ def evaluate_guard(
             context=request.context,
         )
 
-    exclusion = spec.exclusion_for(request.relative_path)
+    resolved = request.resolved_path
+    if resolved.scope is PathScope.MALFORMED:
+        return GuardVerdict(
+            guard=name,
+            outcome=GuardOutcome.ERROR,
+            why=MALFORMED_WHY.format(rejection=resolved.rejection),
+            not_covered=(resolved.not_covered_note,),
+            remediation=MALFORMED_REMEDIATION,
+            context=request.context,
+        )
+
+    exclusion = spec.exclusion_for(resolved.relative)
     if exclusion is not None:
         return GuardVerdict(
             guard=name,

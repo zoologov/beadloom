@@ -82,6 +82,13 @@ def _glob_to_regex(pattern: str) -> re.Pattern[str]:
     would silently exclude the whole subtree. An exclusion that covers more than
     it says is exactly the failure this module exists to prevent.
 
+    ``**/`` with a pattern after it is ``(?:.*/)?`` — zero or more WHOLE
+    directory segments — and not a bare ``.*`` (F5): unanchored, ``**/app.py``
+    also exempted ``src/myapp.py``, which is that same failure by one character.
+    A trailing ``**/`` keeps the ``.*`` reading, because it names no file of its
+    own and a pattern that quietly stops exempting anything is how an author
+    discovers their exclusion moved.
+
     Cached because the liveness report matches every declared pattern against
     every file in the project; there are a handful of distinct patterns and
     thousands of paths.
@@ -92,10 +99,14 @@ def _glob_to_regex(pattern: str) -> re.Pattern[str]:
         char = pattern[i]
         if char == "*":
             if pattern.startswith("**", i):
-                out.append(".*")
                 i += 2
-                if pattern.startswith("/", i):
+                if pattern.startswith("/", i) and i + 1 < len(pattern):
+                    out.append("(?:.*/)?")
                     i += 1
+                else:
+                    out.append(".*")
+                    if pattern.startswith("/", i):
+                        i += 1
                 continue
             out.append("[^/]*")
         elif char == "?":
@@ -137,16 +148,6 @@ class GuardExclusion:
         """True when this exclusion covers *relative_path* (project-relative POSIX)."""
         return bool(_glob_to_regex(self.path).match(relative_path))
 
-    def covers_everything(self) -> bool:
-        """True when this pattern matches every path in :data:`CATCH_ALL_PROBE_PATHS`.
-
-        Asked of the matcher rather than of the pattern's spelling. Comparing the
-        literal string against a list of known catch-alls was wrong in both
-        directions (review .3, M1): it missed ``**/**`` and it called ``*`` a
-        catch-all, though ``*`` does not cross directories.
-        """
-        return all(self.matches(path) for path in CATCH_ALL_PROBE_PATHS)
-
     def describe(self) -> str:
         """One-line rendering used as the ``skip`` reason."""
         return f"excluded by {self.path!r}: {self.reason} (until {self.until})"
@@ -184,21 +185,32 @@ class GuardSpec:
     def excluded_everywhere(self) -> bool:
         """True when this guard can never fire as configured.
 
-        Either every configured strictness is ``off``, or an exclusion pattern is
-        a catch-all (:meth:`GuardExclusion.covers_everything`). Reported by
-        ``beadloom guard --liveness``.
+        Either every configured strictness is ``off``, or nothing escapes the
+        exclusions. Reported by ``beadloom guard --liveness``.
+
+        The second half is asked of the exclusion **list**, not of one pattern at
+        a time: ``*`` and ``*/**`` are each narrow, and together they exempt every
+        path there is (F4). It is asked of the matcher rather than of the
+        spelling, because comparing the literal string to a list of known
+        catch-alls was wrong in both directions (review .3, M1) — it missed
+        ``**/**`` and called ``*`` a catch-all though ``*`` does not cross
+        directories.
 
         What this does NOT claim: that no file in *this* project escapes the
         exclusions. ``src/**`` in a project whose code is entirely under ``src/``
         leaves the guard dead and is not reported here, because the answer is
-        computed from the pattern alone. The project-dependent half of the same
-        question — an exclusion matching nothing that exists — is answered by
-        the liveness report, which has the tree to look at.
+        computed from the patterns alone and an answer computed from today's
+        files would flip under an unrelated commit. The project-dependent half —
+        does anything that actually exists escape them — is answered by the
+        liveness report, which has the tree to look at.
         """
         values = set(self.strictness.values()) or {DEFAULT_STRICTNESS}
         if values == {"off"}:
             return True
-        return any(exclusion.covers_everything() for exclusion in self.exclusions)
+        return all(
+            any(exclusion.matches(path) for exclusion in self.exclusions)
+            for path in CATCH_ALL_PROBE_PATHS
+        )
 
 
 @dataclass(frozen=True)

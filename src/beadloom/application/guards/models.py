@@ -13,11 +13,21 @@ quietly dead:
 
 * a ``skip`` always carries a reason — a guard that silently does not apply is
   indistinguishable from one that passed;
-* a ``warn`` always names what it did not check — a warning nobody can act on
-  trains the reader to ignore warnings.
+* a ``warn`` or an ``error`` always names what it did not check — a warning
+  nobody can act on trains the reader to ignore warnings.
+
+``error`` is the fifth outcome and it means one thing: **the guard could not
+answer**. It exists because "I could not tell" was previously spelled as a
+traceback, which the process reported as exit 1 — the *warn* code, which a
+harness reads as non-blocking (BDL-061.27, F2). It is a verdict rather than an
+exception so that it is recorded like every other firing: an evaluation missing
+from ``guard-firings.jsonl`` is invisible to ``--liveness``, the one report whose
+whole product is honesty about dead gates.
 
 Exit codes are part of the contract so a shell adapter needs no parsing:
 ``0`` for pass/skip, ``1`` for warn (visible, non-blocking), ``2`` for block.
+``error`` also exits ``2``: the shipped Claude Code adapter blocks on 2 and on
+nothing else, so an outcome that must stop work has exactly one code available.
 ``3`` is reserved by the CLI for a usage/configuration error, deliberately NOT
 ``2`` — Click's own ``UsageError`` exits 2 and would otherwise be
 indistinguishable from a genuine block.
@@ -34,12 +44,13 @@ if TYPE_CHECKING:
 
 
 class GuardOutcome(str, Enum):
-    """The four outcomes a guard evaluation can produce."""
+    """The five outcomes a guard evaluation can produce."""
 
     PASS = "pass"  # noqa: S105 — an outcome name, not a credential
     WARN = "warn"
     BLOCK = "block"
     SKIP = "skip"
+    ERROR = "error"
 
 
 #: Outcome -> process exit code. See the module docstring for why 3 is reserved.
@@ -48,6 +59,7 @@ EXIT_CODE_BY_OUTCOME: Mapping[GuardOutcome, int] = {
     GuardOutcome.SKIP: 0,
     GuardOutcome.WARN: 1,
     GuardOutcome.BLOCK: 2,
+    GuardOutcome.ERROR: 2,
 }
 
 #: Exit code for a usage or configuration error (never a guard outcome).
@@ -63,7 +75,8 @@ class GuardVerdict:
     guard:
         Registered guard name (``bead-claimed``).
     outcome:
-        One of :class:`GuardOutcome`.
+        One of :class:`GuardOutcome`. ``error`` means the guard could not
+        answer at all — never that the guarded condition was met.
     why:
         One sentence stating what was observed — never a restatement of the
         outcome.
@@ -90,10 +103,13 @@ class GuardVerdict:
         if not self.why.strip():
             msg = f"guard {self.guard!r}: a verdict must state why (outcome={self.outcome.value})"
             raise ValueError(msg)
-        if self.outcome is GuardOutcome.WARN and not self.not_covered:
+        if (
+            self.outcome in (GuardOutcome.WARN, GuardOutcome.ERROR)
+            and not self.not_covered
+        ):
             msg = (
-                f"guard {self.guard!r}: a warn must name what it did not check "
-                "(not_covered is empty)"
+                f"guard {self.guard!r}: a {self.outcome.value} must name what it "
+                "did not check (not_covered is empty)"
             )
             raise ValueError(msg)
 

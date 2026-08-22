@@ -9,12 +9,20 @@ Streams and codes (the adapter contract):
 
 * ``pass`` / ``skip`` -> stdout, exit 0
 * ``warn`` -> stderr, exit 1 (visible, never blocking)
-* ``block`` -> stderr, exit 2
+* ``block`` / ``error`` -> stderr, exit 2
 * usage / configuration error -> stderr, exit 3
 
-``warn``/``block`` go to **stderr** because that is the stream a hook harness
-shows to the agent; ``3`` is used for errors so a genuine ``block`` stays
-distinguishable from Click's own usage exit code (2).
+``warn``/``block``/``error`` go to **stderr** because that is the stream a hook
+harness shows to the agent; ``3`` is used for usage and configuration errors so
+a genuine ``block`` stays distinguishable from Click's own usage exit code (2).
+
+**Nothing that named a registered guard leaves without a firing record.** An
+evaluation that raises is turned into an ``error`` verdict here and recorded like
+any other, because an unrecorded failure is invisible to ``guard --liveness``,
+which is the one report that must not lie — a crashing guard previously exited 1
+(the *warn* code, i.e. non-blocking) and wrote nothing at all (BDL-061.27, F2).
+An unregistered name is the single exception: there is no guard to record a
+firing against, and the caller's shell already carries the error.
 """
 
 # beadloom:component=cli-commands
@@ -33,6 +41,30 @@ from beadloom.services.commands._root import main
 if TYPE_CHECKING:
     from beadloom.application.guards.contract import GuardProbes
     from beadloom.application.guards.models import GuardVerdict
+
+
+def _unanswerable(name: str, context: dict[str, str], detail: str) -> GuardVerdict:
+    """The verdict for "this guard could not answer" — recorded like any other.
+
+    ``block`` would claim the guarded condition was violated, which is not what
+    was observed; ``warn`` exits 1, which a harness treats as non-blocking, and
+    that is exactly how a crash used to let an edit through.
+    """
+    from beadloom.application.guards.models import GuardOutcome, GuardVerdict
+
+    return GuardVerdict(
+        guard=name,
+        outcome=GuardOutcome.ERROR,
+        why=f"the guard could not be evaluated: {detail}",
+        not_covered=(
+            f"everything guard {name!r} checks: the evaluation did not complete",
+        ),
+        remediation=(
+            "fix the reported error, then re-run `beadloom guard "
+            f"{name}`; the edit is blocked until the guard can answer"
+        ),
+        context=context,
+    )
 
 
 def _probes(project_root: Path) -> GuardProbes:
@@ -93,7 +125,11 @@ def _emit_verdict(verdict: GuardVerdict, *, output_json: bool) -> None:
     if output_json:
         click.echo(json.dumps(verdict.to_dict(), indent=2))
         return
-    to_stderr = verdict.outcome in (GuardOutcome.WARN, GuardOutcome.BLOCK)
+    to_stderr = verdict.outcome in (
+        GuardOutcome.WARN,
+        GuardOutcome.BLOCK,
+        GuardOutcome.ERROR,
+    )
     click.echo(
         f"{verdict.guard}: {verdict.outcome.value.upper()} — {verdict.why}", err=to_stderr
     )
@@ -147,12 +183,13 @@ def guard(
     this same command, so the hook and the shell can never disagree.
     """
     from beadloom.application.guards.config import GuardConfigError
-    from beadloom.application.guards.evaluation import evaluate_guard
+    from beadloom.application.guards.evaluation import UnknownGuardError, evaluate_guard
     from beadloom.application.guards.firing import record_firing
     from beadloom.application.guards.hook_payload import (
         HookPayloadError,
         context_from_hook_payload,
     )
+    from beadloom.application.guards.models import EXIT_CODE_CONFIG_ERROR
 
     project_root = project or Path.cwd()
 
@@ -178,6 +215,7 @@ def guard(
             return
         context = {**hook_context, **context}
 
+    exit_code: int | None = None
     try:
         verdict = evaluate_guard(
             name,
@@ -185,10 +223,19 @@ def guard(
             context=context,
             probes=_probes(project_root),
         )
-    except GuardConfigError as exc:
+    except UnknownGuardError as exc:
         _fail(str(exc))
         return
+    except GuardConfigError as exc:
+        # A broken `guards:` block keeps exit 3 (BDL-061.2: a configuration
+        # defect must not be mistaken for a guard that fired) — but it is now
+        # recorded, so the liveness report cannot show the guard as having
+        # answered when it never did.
+        verdict = _unanswerable(name, context, str(exc))
+        exit_code = EXIT_CODE_CONFIG_ERROR
+    except Exception as exc:  # the last resort; see the module docstring
+        verdict = _unanswerable(name, context, f"{type(exc).__name__}: {exc}")
 
     record_firing(project_root, verdict)
     _emit_verdict(verdict, output_json=output_json)
-    sys.exit(verdict.exit_code)
+    sys.exit(verdict.exit_code if exit_code is None else exit_code)
