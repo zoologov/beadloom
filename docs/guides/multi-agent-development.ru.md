@@ -221,7 +221,8 @@ flowchart TB
 Защиту настраивает `onboarding/branch_protection.py`: набор обязательных проверок консолидированного `ci.yml` —
 
 ```
-gate · tests (3.10) · tests (3.11) · tests (3.12) · tests (3.13) · site-build · ai-techwriter
+gate · tests (3.10) · tests (3.11) · tests (3.12) · tests (3.13) ·
+tests-locale (C) · tests-locale (en_US.ISO-8859-1) · site-build · ai-techwriter
 ```
 
 Флаг `enforce_admins: true` означает, что даже владелец интегрируется через pull request (строгий trunk-based), а 0 обязательных ревью оставляют одиночному сопровождающему возможность самому выполнить слияние — но ветку `main` при этом обойти нельзя. Применяется идемпотентно командой `beadloom setup-branch-protection`.
@@ -541,7 +542,7 @@ flowchart TD
 | Базовая точка дрейфа | `git merge-base origin/<base> HEAD` (`--since`), область сужается по изменённым символам |
 | Куда кладётся правка | commit в ветку **того же** pull request-а (push через `AI_TW_PAT`) |
 | Вердикт | `ok` / `infra` → exit 0; `flagged` → exit 1 (блокирует только реальный дрейф) |
-| Обязательные проверки | 7: `gate`, `tests (3.10..3.13)`, `site-build`, `ai-techwriter` |
+| Обязательные проверки | 9: `gate`, `tests (3.10..3.13)`, `tests-locale (C)`, `tests-locale (en_US.ISO-8859-1)`, `site-build`, `ai-techwriter` |
 | Защита ветки | `enforce_admins: true`, 0 ревью (строгий trunk-based) |
 | Как попадает в main | pull request + слияние человеком (автоматического слияния нет) |
 | Что пишет серверный агент | только `docs/**` |

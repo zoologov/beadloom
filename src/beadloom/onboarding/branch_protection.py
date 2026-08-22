@@ -28,8 +28,9 @@ with this payload (the protection contract):
 - ``required_status_checks`` — ``strict: true`` (the branch must be up to date)
   + ``contexts`` = the **real** GitHub check-run names that run on every PR
   (default :data:`DEFAULT_STATUS_CHECK_CONTEXTS` = the consolidated ``ci.yml``
-  job check-runs ``gate`` / ``tests (3.10..3.13)`` / ``site-build`` /
-  ``ai-techwriter``; never a path-filtered workflow's check).
+  job check-runs ``gate`` / ``tests (3.10..3.13)`` / ``tests-locale (C)`` /
+  ``tests-locale (en_US.ISO-8859-1)`` / ``site-build`` / ``ai-techwriter``;
+  never a path-filtered workflow's check).
 - ``required_pull_request_reviews`` — ``{"required_approving_review_count": 0}``:
   a PR IS required, but the **solo owner can self-merge** (no human review
   needed). Team review later is a one-field bump.
@@ -62,6 +63,11 @@ from typing import Protocol
 #:
 #: * ``gate`` — the ``beadloom ci`` verdict job (was ``beadloom-gate``);
 #: * ``tests (3.10)`` ... ``tests (3.13)`` -- the un-filtered 3.10-3.13 matrix;
+#: * ``tests-locale (C)`` / ``tests-locale (en_US.ISO-8859-1)`` — the
+#:   environment DIMENSION (BDL-061.38): the same whole suite with the locale
+#:   VARIED rather than pinned. It is required for the same reason the version
+#:   matrix is — a leg that cannot block a merge is advisory, and the defect it
+#:   exists to catch (BDL-061.36) was one every UTF-8 leg agreed was fine;
 #: * ``site-build`` — the VitePress build job;
 #: * ``ai-techwriter`` — gated on ``needs: [gate, tests, site-build]``.
 #:
@@ -79,6 +85,8 @@ DEFAULT_STATUS_CHECK_CONTEXTS: tuple[str, ...] = (
     "tests (3.11)",
     "tests (3.12)",
     "tests (3.13)",
+    "tests-locale (C)",
+    "tests-locale (en_US.ISO-8859-1)",
     "site-build",
     "ai-techwriter",
 )

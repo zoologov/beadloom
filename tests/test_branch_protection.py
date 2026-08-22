@@ -54,6 +54,7 @@ class TestPayload:
     def test_default_contexts_are_the_consolidated_ci_check_runs(self) -> None:
         """BDL-050: the default required checks are the consolidated ``ci.yml``
         job check-run names — ``gate``, the four ``tests (3.x)`` matrix legs,
+        the two ``tests-locale (...)`` environment-dimension legs (BDL-061.38),
         ``site-build`` and ``ai-techwriter``. All run on EVERY PR (no ``paths:``
         filter — the matrix is un-filtered now), so requiring them under
         ``strict`` never stalls a PR. They must match ``ci.yml``'s job names +
@@ -64,6 +65,8 @@ class TestPayload:
             "tests (3.11)",
             "tests (3.12)",
             "tests (3.13)",
+            "tests-locale (C)",
+            "tests-locale (en_US.ISO-8859-1)",
             "site-build",
             "ai-techwriter",
         )
@@ -74,6 +77,8 @@ class TestPayload:
             "tests (3.11)",
             "tests (3.12)",
             "tests (3.13)",
+            "tests-locale (C)",
+            "tests-locale (en_US.ISO-8859-1)",
             "site-build",
             "ai-techwriter",
         ]
@@ -253,7 +258,8 @@ class TestCli:
     def test_dry_run_default_check_is_the_consolidated_ci_set(self) -> None:
         """BDL-050: without ``--check``, the required checks default to the
         consolidated ``ci.yml`` job set (``gate`` + the four ``tests (3.x)``
-        legs + ``site-build`` + ``ai-techwriter``) — all un-filtered, so
+        legs + the two ``tests-locale`` legs + ``site-build`` +
+        ``ai-techwriter``) — all un-filtered, so
         ``strict`` never stalls a PR."""
         result = CliRunner().invoke(
             main,
@@ -267,6 +273,8 @@ class TestCli:
             "tests (3.11)",
             "tests (3.12)",
             "tests (3.13)",
+            "tests-locale (C)",
+            "tests-locale (en_US.ISO-8859-1)",
             "site-build",
             "ai-techwriter",
         ]

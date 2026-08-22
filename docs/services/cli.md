@@ -819,7 +819,8 @@ beadloom setup-branch-protection --repo OWNER/NAME [--branch main] [--check CONT
 Idempotently sets `main` (or `--branch`) protection with a declarative
 `PUT repos/{owner}/{repo}/branches/{branch}/protection`: a **PR is required** (no
 direct push), the consolidated `ci.yml` checks — `gate`, `tests (3.10)`,
-`tests (3.11)`, `tests (3.12)`, `tests (3.13)`, `site-build`, `ai-techwriter`
+`tests (3.11)`, `tests (3.12)`, `tests (3.13)`, `tests-locale (C)`,
+`tests-locale (en_US.ISO-8859-1)`, `site-build`, `ai-techwriter`
 (ci.yml's job names + matrix legs) — are **required status checks**
 (`strict: true`), and `enforce_admins: true` + 0 required reviews so the
 **solo owner is never locked out** (can self-merge). `PUT .../protection` is

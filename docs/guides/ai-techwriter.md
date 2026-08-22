@@ -226,8 +226,10 @@ beadloom setup-branch-protection --repo OWNER/NAME    # GitHub; safe to re-run
 ```
 
 This requires a PR to `main` (no direct push) with the consolidated `ci.yml`'s
-**7 check-runs as required status checks** — `gate`, `tests (3.10)`, `tests (3.11)`,
-`tests (3.12)`, `tests (3.13)`, `site-build`, `ai-techwriter` (BDL-050). Under strict
+**9 check-runs as required status checks** — `gate`, `tests (3.10)`, `tests (3.11)`,
+`tests (3.12)`, `tests (3.13)`, `tests-locale (C)`,
+`tests-locale (en_US.ISO-8859-1)`, `site-build`, `ai-techwriter` (BDL-050 + the
+BDL-061.38 environment dimension). Under strict
 trunk-based (`enforce_admins: true`, BDL-049) even the owner integrates via a PR; with
 0 required reviews the solo maintainer still self-merges. See `docs/services/cli.md`
 for the full command + `--check`/`--branch`/`--dry-run` options.

@@ -92,6 +92,141 @@ jobs:
         run: uv run pytest --cov=beadloom --cov-report=term-missing --cov-fail-under=80
 
   # ---------------------------------------------------------------------- #
+  # tests-locale — the ENVIRONMENT DIMENSION (BDL-061.38).
+  #
+  # Runs the SAME whole suite as `tests`, changing exactly ONE thing: the
+  # locale. The value is in the DIFFERENCE between this leg and the `tests`
+  # legs, so nothing in this file may ever PIN a UTF-8 locale — pinning would
+  # have hidden BDL-061.36's defect from us while shipping it to every adopter
+  # running in a container, which is the default deployment, not an edge case.
+  # tests/test_ci_locale_dimension.py asserts that invariant so the tempting
+  # "fix" (pin UTF-8 until the leg goes green) fails the suite.
+  #
+  # WHAT IT BUYS, measured rather than argued: .36's locale defect failed on
+  # ALL FOUR python legs and was invisible to a 5574-test local suite; its
+  # symlink-loop defect was invisible because the one interpreter the owner runs
+  # (3.13) does not raise where 3.10-3.12 do. Both are DIMENSION failures — more
+  # tests along the existing axis would not have found either.
+  #
+  # WHY THE KNOBS: `LC_ALL=C` ALONE IS A VACUOUS LEG. Measured for this bead on
+  # python:3.12-slim — bare `LC_ALL=C` reports preferred=utf-8, fs=utf-8,
+  # utf8_mode=1, because PEP 540 auto-enables UTF-8 Mode under a C/POSIX
+  # LC_CTYPE (and PEP 538 coerces the C locale to C.UTF-8). Adding
+  # `PYTHONUTF8=0` gives preferred=ANSI_X3.4-1968, fs=ascii; `PYTHONCOERCECLOCALE=0`
+  # is belt-and-braces for images where the PEP 538 half is what bites. We do
+  # not have to be right about which knob does the work: the "Assert the leg is
+  # genuinely non-UTF-8" step below FAILS the leg if the image puts it back on
+  # UTF-8, so this can never become theatre silently.
+  #
+  # WHY TWO ROWS: they fail in OPPOSITE directions. Under ASCII an undecodable
+  # byte RAISES (loud, fail-closed-but-wrong); under an 8-bit codec nothing
+  # raises and the byte is SILENTLY MANGLED into a character nobody sent. .36
+  # measured this: its first sabotage passed 302/302 until a latin-1 row was
+  # added, because a decoder that accepts every byte escapes nothing.
+  #
+  # ONLY THE LOCALE VARIES: python is 3.13 (the version the owner runs locally,
+  # so a red leg is attributable to the locale and to nothing else — the version
+  # dimension is the `tests` matrix's job), the extras are byte-identical to the
+  # `tests` leg, and the locale env is applied to the SUITE step only — an
+  # install broken by the locale would confound the signal, not produce it.
+  #
+  # COST: ~4 runner-minutes per row, fanned out in parallel with the four
+  # `tests` legs, so the pipeline's WALL-CLOCK is unchanged (~4 min); the added
+  # cost is ~8 runner-minutes per PR. No `--cov`: coverage is a property of the
+  # code, not of the locale, and the `tests` legs already enforce the floor.
+  # ---------------------------------------------------------------------- #
+  tests-locale:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Single axis, so the check-run names are exactly
+        # `tests-locale (C)` / `tests-locale (en_US.ISO-8859-1)` — the names
+        # branch_protection.DEFAULT_STATUS_CHECK_CONTEXTS must match verbatim.
+        locale: ["C", "en_US.ISO-8859-1"]
+      # The rows fail in different directions; cancelling the siblings on the
+      # first red one would throw away the half of the signal we came for.
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python 3.13
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra languages --extra tui --extra watch --extra graphql
+
+      # `C` is always present; a real 8-bit locale has to be BUILT — and not
+      # with the obvious spelling. MEASURED on ubuntu:24.04:
+      # `locale-gen en_US.ISO-8859-1` is REJECTED ("not a supported language or
+      # locale") because /usr/share/i18n/SUPPORTED spells that entry
+      # `en_US ISO-8859-1`. `localedef` builds it directly in ~0.25s, `locale -a`
+      # then lists `en_US.iso88591`, and LC_ALL=en_US.ISO-8859-1 resolves to it
+      # (preferred=iso8859-1 fs=iso8859-1 utf8_mode=0, and a 'café.py' filename
+      # round-trips). The -i/-f arguments are DERIVED from the matrix value so a
+      # third row (say ru_RU.CP1251) needs no edit here.
+      - name: Build the 8-bit locale
+        if: matrix.locale != 'C'
+        run: |
+          name="${{ matrix.locale }}"
+          sudo localedef -i "${name%%.*}" -f "${name#*.}" "$name"
+          locale -a
+
+      # Anti-vacuity guard, and it guards TWO ways of asserting nothing:
+      #   VACUOUS  — the runner put the leg back on UTF-8 (see the knobs above),
+      #              so the dimension does not exist on this image at all;
+      #   DEGRADED — LC_ALL names a locale the image does not have, so glibc
+      #              silently falls back to POSIX/ASCII. The leg would still be
+      #              non-UTF-8 and still read green, while being a duplicate of
+      #              the `C` row — the 8-bit direction (bytes that MANGLE rather
+      #              than raise) would vanish and nobody would be told.
+      # This script is executed by tests/test_ci_locale_dimension.py, so its
+      # logic is covered by the suite rather than only by this file being read.
+      - name: Assert the leg is genuinely non-UTF-8
+        env:
+          LC_ALL: ${{ matrix.locale }}
+          PYTHONUTF8: "0"
+          PYTHONCOERCECLOCALE: "0"
+        run: |
+          uv run python - <<'PY'
+          import codecs, locale, os, sys
+
+          declared = os.environ["LC_ALL"]
+          preferred = codecs.lookup(locale.getpreferredencoding(False)).name
+          filesystem = codecs.lookup(sys.getfilesystemencoding()).name
+          print(f"declared={declared} preferred={preferred} "
+                f"fs={filesystem} utf8_mode={sys.flags.utf8_mode}")
+          if "utf-8" in (preferred, filesystem):
+              raise SystemExit(
+                  f"VACUOUS LEG: {declared} came back as UTF-8 "
+                  f"(preferred={preferred} fs={filesystem}), so this leg asserts "
+                  "nothing about the environment dimension."
+              )
+          if "." in declared:
+              want = codecs.lookup(declared.split(".", 1)[1]).name
+              if (preferred, filesystem) != (want, want):
+                  raise SystemExit(
+                      f"DEGRADED LEG: {declared} did not take effect (expected "
+                      f"{want}, got preferred={preferred} fs={filesystem}) — the "
+                      "locale is probably not built on this image, so this leg is "
+                      "a duplicate of the C row."
+                  )
+          PY
+
+      - name: Whole suite under ${{ matrix.locale }}
+        env:
+          LC_ALL: ${{ matrix.locale }}
+          PYTHONUTF8: "0"
+          PYTHONCOERCECLOCALE: "0"
+          # Same as the `tests` legs: a missing tree-sitter grammar must FAIL,
+          # not skip (BDL-059 S1) — otherwise the language tests could vanish
+          # from this leg and take the dimension's reach with them.
+          BEADLOOM_REQUIRE_LANGUAGE_GRAMMARS: "1"
+        run: uv run pytest
+
+  # ---------------------------------------------------------------------- #
   # site-build — regenerate + build the VitePress site on every PR (G3, closes
   # beadloom-wozp). The BUILD half of deploy-site (NO Pages deploy) — catches
   # VitePress/mermaid/interpolation breaks BEFORE they land on main.

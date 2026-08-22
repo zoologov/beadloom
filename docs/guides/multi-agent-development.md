@@ -221,7 +221,8 @@ flowchart TB
 Protection is configured by `onboarding/branch_protection.py`: the set of required checks of the consolidated `ci.yml` —
 
 ```
-gate · tests (3.10) · tests (3.11) · tests (3.12) · tests (3.13) · site-build · ai-techwriter
+gate · tests (3.10) · tests (3.11) · tests (3.12) · tests (3.13) ·
+tests-locale (C) · tests-locale (en_US.ISO-8859-1) · site-build · ai-techwriter
 ```
 
 The `enforce_admins: true` flag means even the owner integrates through a pull request (strict trunk-based), and 0 required reviews leave a solo maintainer able to merge themselves — but the `main` branch still can't be bypassed. Applied idempotently by `beadloom setup-branch-protection`.
@@ -541,7 +542,7 @@ The typical 2.0.0 scenario looks like this. On the task branch the documentation
 | Drift base point | `git merge-base origin/<base> HEAD` (`--since`), scope narrowed by changed symbols |
 | Where the edit lands | a commit to the **same** pull request's branch (pushed via `AI_TW_PAT`) |
 | Verdict | `ok` / `infra` → exit 0; `flagged` → exit 1 (only real drift blocks) |
-| Required checks | 7: `gate`, `tests (3.10..3.13)`, `site-build`, `ai-techwriter` |
+| Required checks | 9: `gate`, `tests (3.10..3.13)`, `tests-locale (C)`, `tests-locale (en_US.ISO-8859-1)`, `site-build`, `ai-techwriter` |
 | Branch protection | `enforce_admins: true`, 0 reviews (strict trunk-based) |
 | How it reaches main | pull request + human merge (no automatic merge) |
 | What the server-side agent writes | `docs/**` only |

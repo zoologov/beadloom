@@ -71,9 +71,12 @@ Protect `main` once per repo (idempotent; safe to re-run):
 beadloom setup-branch-protection --repo OWNER/NAME
 ```
 
-This requires a PR to `main` with the consolidated `ci.yml`'s **7 check-runs as
+This requires a PR to `main` with the consolidated `ci.yml`'s **9 check-runs as
 required status checks** — `gate`, `tests (3.10)`, `tests (3.11)`, `tests (3.12)`,
-`tests (3.13)`, `site-build`, `ai-techwriter` (BDL-050). Strict trunk-based keeps
+`tests (3.13)`, `tests-locale (C)`, `tests-locale (en_US.ISO-8859-1)`,
+`site-build`, `ai-techwriter` (BDL-050; the two `tests-locale` legs are the
+environment dimension added in BDL-061.38 — the same whole suite with the locale
+**varied, never pinned**). Strict trunk-based keeps
 `enforce_admins: true` (even the owner integrates via a PR) with 0 required reviews,
 so the solo maintainer self-merges but `main` is never bypassed (BDL-049). The
 vendored `.claude/CLAUDE.md` §6 (Git) and
