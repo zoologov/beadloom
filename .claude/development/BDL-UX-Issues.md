@@ -35,6 +35,56 @@
 
 ## Open Issues
 
+170. [2026-08-22] [HIGH] 🔴 A guard bound to `Edit|Write` does not see a file written through `Bash` — the enforcement surface is narrower than the promise
+
+    **Severity:** high (the guard reports it ran and passed on the edits it saw; the edits it never saw are indistinguishable from none)
+    **Command:** `beadloom guard`, `beadloom setup-agentic-flow` (the emitted `.claude/settings.json`)
+    **Context:** found while dogfooding BDL-061 S1 on this repo. The shipped hook binds `PreToolUse` with `matcher: "Edit|Write|NotebookEdit"`. An agent that edits a file with `python3 - <<EOF`, `sed -i`, or a heredoc goes through `Bash` and fires no guard at all. This is not hypothetical: the coordinator's own session was operating under an instruction to prefer `Bash` for file edits, so a whole class of edits to this very repository was unguarded while `--liveness` showed the guards healthy and firing.
+    **Why it is worse than a missing matcher:** the failure is silent and it is *shaped like success*. `bead-claimed` cannot warn about an edit it was never told about, so a session that edits exclusively through `Bash` produces a clean liveness report and zero warnings — the same output as a session that complied perfectly.
+    **Expected:** three separable pieces, and the third is the real one.
+    - Add `Bash` to the emitted matcher and derive the edit target from the command line where it can be — necessarily partial, since a shell command's write targets are not decidable in general.
+    - Because it is partial, the verdict must say so: a `Bash` invocation whose target cannot be determined is `not_covered`, not `pass`. This is the "unknown is not zero" rule applied to the enforcement surface itself.
+    - **Report the surface, not just the firings.** `--liveness` today answers "did each declared guard fire?". It should also answer "what fraction of edit events could this binding have seen?" — a guard that is healthy on a matcher covering one of three write paths is 33% of a guard, and nothing currently says so.
+    **Related:** M3 from review `.3` (the harness owns event routing *and* the guard list, so `.claude/settings.json` carries two decisions Beadloom cannot see) is the same defect from the other end and is already S3 work. This entry is the reason M3 is not cosmetic.
+
+169. [2026-08-22] [MEDIUM] `docs-audit` reads a bead reference as a numeric claim — `BDL-061.29` failed the Gate as a CLI count
+
+    **Severity:** medium (a false Gate failure, and the fix is to write around the checker)
+    **Command:** `beadloom docs-audit`, `beadloom ci`
+    **Context:** a SPEC sentence mentioning bead `BDL-061.29` alongside the words "the CLI" was extracted as a `cli_command_count` claim; the Gate failed with "doc says 29 but project state is 39". The number was never a claim about anything — it is the tail of an identifier.
+    **Expected:** do not extract a number that is part of a larger token (`BDL-061.29`, `v2.2.0`, `Python 3.10`). Tokenize before matching rather than scanning for digits near a keyword. Same family as #161: the audit is confident about text it has misparsed.
+    **Workaround:** reword the sentence — which is exactly the outcome to avoid, since it trains authors to write for the checker.
+
+168. [2026-08-22] [MEDIUM] `pytest-randomly` produces failures no seed reproduces, and nothing in the output says the order was random
+
+    **Severity:** medium (agent-facing: a ghost failure costs a full investigation cycle, and the log is the only place that would have warned)
+    **Command:** `uv run pytest`
+    **Context:** during BDL-061 S1 an adversarial run reported 30 failures; five different seeds plus `-p no:randomly` all reproduced the same 3. The 30 were an artefact of ordering interacting with on-disk state (the index DB and its `-wal`), not of the code under test.
+    **Expected:** pin a seed in CI and in the pre-push Gate so a red run is reproducible by construction, and keep randomisation for a separate scheduled job whose whole purpose is to find order dependence. A random-order failure that cannot be replayed is not a signal anyone can act on.
+    **Related:** #147 / `.29` friction 3 — a stale `beadloom.db-wal` left by an earlier command is one of the shared-state channels that makes ordering matter.
+
+167. [2026-08-22] [LOW] `sync-check` prints one `[stale]` line per pair, so a single stale doc reads as a wall of 28 identical lines
+
+    **Severity:** low (pure signal-to-noise, but it lands on every agent at every gate)
+    **Command:** `beadloom sync-check`
+    **Context:** one doc with many watched symbols emits one line per pair. The output is 28 lines that differ in no visible way, and the count of distinct DOCUMENTS needing attention — the number the reader actually wants — has to be derived by eye.
+    **Expected:** group by document: one line per doc with the pair count and the reasons, and the per-pair detail behind `--verbose` or `--json`.
+
+166. [2026-08-22] [MEDIUM] Adding one CLI command drifts six reference docs, and `sync-update --all --yes` does not cover them
+
+    **Severity:** medium (the bulk escape hatch does not cover the surface that most often drifts in bulk)
+    **Command:** `beadloom sync-update --all --yes`, `beadloom sync-check`
+    **Context:** adding a single command (`beadloom guard`) put six `watches: cli` documents into `surface_drift`. `sync-update --all --yes` re-baselines hash/symbol pairs but not the reference-doc surface-drift path, so each of the six needed an individual `sync-update <ref>` — six commands to record one fact that was already known.
+    **Expected:** `--all` should mean all, or say plainly which surfaces it does not cover. Ideally a surface change touching N reference docs is one attestation with N consequences, not N attestations.
+    **Related:** #163 — bulk re-baselining is exactly the operation that needs to be recorded rather than made frictionless, so the fix here should count these, not just make them faster.
+
+165. [2026-08-22] [LOW] External (steveyegge/beads): `bd create` costs one process per bead, so building a DAG of ~50 beads stalls
+
+    **Severity:** low (a workaround exists and is fast) — **External**
+    **Command:** `bd create`
+    **Context:** a background agent building a >50-bead fixture ran for 600s without finishing, because each `bd create` is a separate process against embedded Dolt. `bd import` created 60 issues in one process in 0.88s — roughly three orders of magnitude better.
+    **Expected:** document `bd import` as the way to build a DAG (`bd create --graph <plan.json>` is already noted in `/task-init`, and is the same insight). Ours to fix in the shipped guidance: any scaffolding path that creates more than a handful of beads should generate a JSON plan and import it once.
+
 164. [2026-08-20] [LOW] The beads git-hook prints a remediation command that does not exist (`bd import -i`)
 
     **Severity:** low (small blast radius, but the shape is the one this log keeps recording — advice that reads authoritative and does not work)
