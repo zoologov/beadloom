@@ -35,6 +35,19 @@
 
 ## Open Issues
 
+171. [2026-08-22] [MEDIUM] Concurrent `bd create` shifts the id out from under the id written in the title — and the wrong dependency edge is then perfectly valid
+
+    **Severity:** medium (silent, produces a well-formed but wrong DAG, and only surfaces when someone reads the echo)
+    **Command:** `bd create --parent <id>`, `bd dep add`
+    **Context:** observed in BDL-061 S2 wave 1, with three agents and the coordinator working the same epic. Our convention writes the bead's own number into its title (`[BDL-061.39][dev] ...`), but the number is authored **before** creation while the id is allocated **at** creation. During a concurrent wave those two diverge: the coordinator wrote two beads intending `.39` and `.40`; a subagent had meanwhile created its own bead, which took `.39`; the coordinator's two landed as `.40` and `.41` carrying `[BDL-061.39]` and `[BDL-061.40]` in their titles.
+    **The damage is not the cosmetic mismatch, it is the wiring.** The coordinator then ran `bd dep add beadloom-mr2l.39 beadloom-mr2l.5`, which made the *subagent's* Windows-CI bead depend on the S2 core — a real edge, on a real bead, accepted without complaint, and wrong. `bd dep add` cannot detect this: every id exists and the graph stays acyclic, so there is nothing malformed to reject.
+    **What caught it:** `bd dep add` echoes both beads' **full titles**, not just their ids. Reading that echo is the only reason the mis-wiring was noticed within seconds instead of surviving into the next wave. That verbosity is good design and worth keeping — the entry records it so nobody "tidies" it into id-only output.
+    **Expected:** three separable pieces.
+    - **Stop keeping the number twice.** Either drop the id from the title convention and let `bd` be the single source of it, or have the scaffolding write the title *after* creation from the id actually allocated. Two sources of truth for one number is the root cause; the concurrency only exposes it.
+    - **Make `bd create` report the id it allocated in a form a script can consume**, so an agent that must reference its own bead does not have to predict the number. (`--json` on create would be enough.)
+    - **Consider a `bd dep add --expect-title <substring>` guard**, or at minimum document that dependency wiring under a concurrent wave must be verified against `bd dep tree`, not assumed from the ids the author had in mind.
+    **Note on scope:** `/coordinator` *mandates* launching independent ready beads concurrently, so this is not an exotic mode — it is the prescribed one. The id-in-title convention is ours, not `bd`'s, which makes the first fix ours to make.
+
 170. [2026-08-22] [HIGH] 🔴 A guard bound to `Edit|Write` does not see a file written through `Bash` — the enforcement surface is narrower than the promise
 
     **Severity:** high (the guard reports it ran and passed on the edits it saw; the edits it never saw are indistinguishable from none)
