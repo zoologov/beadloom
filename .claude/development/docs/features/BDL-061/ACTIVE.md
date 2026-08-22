@@ -7,14 +7,9 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-mr2l.4` — [tech-writer] S1: guards guide + `flow.yml` reference
-**Goal:** make the shipped documents describe the enforcement the product delivers, since three
-of review `.3`'s four majors are documents that do not.
-**Done when:** the exit-3 class is qualified rather than deleted (SPEC Invariants, `cli.md`,
-with `.33` named as its owner); the enforcement surface is stated in the SPEC and in the
-guard-hooks DOC; the README outcome list names `error`; the guards guide and the `flow.yml`
-reference exist; and `reindex` → `sync-check` → `docs audit` → `beadloom ci` are clean on a
-clean database.
+**Bead:** none — S1 is complete and awaiting the owner's decision on the slice PR.
+**Next:** S2 (`.5`–`.8`, plus `.33` and `.34` filed out of S1's review). S2 begins only after
+S1 is green on `main`, per the slice-boundary-is-a-PR-boundary rule.
 
 ## Progress
 
@@ -67,6 +62,17 @@ clean database.
       validator nobody typed: `click.Path` defaults `readable=True`, so an unreadable
       `--project` was Click's usage exit with no verdict and no record. Fixed with
       `readable=False`; suite 5561 → 5574
+- [x] S1 `.4` tech-writer (2026-08-22, commit `6b9ff2f`) — the three documentary majors closed:
+      the exit-3 invariant QUALIFIED rather than deleted (it stands as the target, names the gap
+      and its owner `.33`), the enforcement surface written down as a property of the binding in
+      the SPEC and `guard-hooks/DOC.md` (#170), and `error` added to the CLI table in both
+      READMEs; plus the bead's own scope — a flow-guards section in the agentic-flow guide and
+      `guards:` documented in the flow-config SPEC
+- [x] **S1 COMPLETE** — verified by the coordinator on the final tree: 5574 passed / 10 skipped,
+      ruff and mypy --strict clean, `beadloom ci` rc 0 on a clean DB. The B2 sabotage
+      (`sys.exit(0)` inside `run_invocation`), which shipped 628/628 green before `.31`, was
+      re-run by the coordinator and reddens 9 tests through three independent mechanisms; the
+      `click.Choice` sabotage reddens 3. Both restored byte-identical by sha256.
 
 ## Results
 
@@ -83,7 +89,10 @@ clean database.
 | .30 | Done | S1 test: boundary not load-bearing — interrupt escape, `--project` bypass, pins check spelling |
 | .31 | Done | S1 fix-4: pin as wide as its invariant; `--project` must name a project; interrupt handled |
 | .32 | Done | S1 test: the Click-validation pin as wide as its sentence; `--project` `readable=False` |
-| .4 | In progress | S1 tech-writer: guards guide, `flow.yml` reference, the exit-3 and enforcement-surface gaps |
+| .4 | Done | S1 docs: exit-3 invariant qualified (not deleted), enforcement surface written down, `error` in both READMEs |
+| .33 | Pending | S2: the exit-3 class is fail-open — a broken `flow.yml` disables every guard |
+| .34 | Pending | S2: an unknown key in a guard body is silently ignored (`option:` → trunk `main`) |
+| .35 | Pending | S3: no `.gitignore` entry for the firing record; carries n1 (our dogfood never ran the shipped artifact) |
 | .5–.8 | Pending | S2 stop the lying checks (#142, #146, #147) |
 | .9–.12 | Pending | S3 composition + project overlay (#139, #152, #132, #136, #137) |
 | .13–.16 | Pending | S4 BDD, mutation, doc shape + quality, shared writing standard |
