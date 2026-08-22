@@ -281,6 +281,15 @@ guards:
   project root — so respelling a path cannot turn an exclusion into an opt-out.
 - A `guards:` key naming a guard nobody registered is a configuration error too,
   not a no-op, so a typo cannot quietly switch a gate off.
+- **A key Beadloom does not read is a configuration error as well** — a guard body
+  carries `strictness` / `exclusions` / `options`, an exclusion carries `path` /
+  `reason` / `until`, and nothing else. A dropped key is not harmless in both
+  directions: `exclude:` for `exclusions:` leaves the guard over-guarding, while
+  `option:` for `options:` drops the declared `trunk` and `working-branch` then
+  compares against `main` — measured on a project whose trunk is `develop`, an
+  edit made directly on `develop` came back `PASS` at exit 0. The verdict does
+  print the trunk it used, but a `pass` at 0 is shown to nobody, so the typo is
+  answered in the file where it was made.
 - The `guards:` block is read by the guard evaluator. `tools` / `architecture` /
   `stack` / `quality` are read by the role configurator. The two readers share one
   file and nothing else.

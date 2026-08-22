@@ -366,9 +366,9 @@ _TERMINATORS = (
 
 #: ``.30``'s finding B2, verbatim: the exact edit that shipped 628/628 green.
 _B2_SABOTAGE = (
-    "    return _record(_answer(invocation))",
+    "    return _record(invocation, _answer(invocation))",
     '    if invocation.name == "":\n        sys.exit(0)\n'
-    "    return _record(_answer(invocation))",
+    "    return _record(invocation, _answer(invocation))",
 )
 
 

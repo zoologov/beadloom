@@ -1,6 +1,6 @@
 # ACTIVE: BDL-061 — Enforced agentic flow
 
-> **Last updated:** 2026-08-22
+> **Last updated:** 2026-08-23
 > **Phase:** Development
 
 ---
@@ -10,7 +10,7 @@
 **Bead:** `.40` and `.43` are done (S2 wave 2, in parallel with `.33`). The S2 wave 1 ran `.5`,
 `.37` and `.38` in parallel on disjoint surfaces.
 **Next:** `.6` (test), `.7` (review), `.8` (tech-writer — the bead that DELETES standing rules
-1–3 from this CONTEXT and from the shipped `CLAUDE.md` core), plus `.33` and `.34`.
+1–3 from this CONTEXT and from the shipped `CLAUDE.md` core), plus `.33`. `.34` is done.
 
 ## Progress
 
@@ -123,6 +123,28 @@
       exposing two of my own gaps (the at-ref decode error and the `PermissionError` row) that
       are now covered. 23 tests; isolated tree (HEAD + only my files): 5691 passed / 0 failed,
       clean-DB lint 0 violations, sync-check rc 0, doctor rc 0.
+- [x] S2 `.34` dev (2026-08-23) — **an unknown key in a guard body is now a configuration
+      error, and one not-recorded reason stopped quoting a name nobody typed.** (b) `_build_spec`
+      dropped any key it did not read; `option:` for `options:` cost `working-branch` its
+      declared trunk — MEASURED through the real binary on a project whose trunk is `develop`:
+      an edit made directly ON `develop` answered `PASS ... (trunk is 'main')` at exit 0, and
+      after the fix the same file is an ERROR the hook blocks (rc 2) while the corrected
+      spelling BLOCKS the edit. Chosen as an **error** rather than a `warn` because the one
+      mitigation (the verdict prints the trunk) rides the stream and exit code a harness
+      discards, and because the feature is unreleased, so no published project can turn red;
+      the same rule after release would need the `warn` route. Applied at both levels of the
+      block (guard body + exclusion entry) from one helper, with the allowed set DERIVED from
+      the `body.get` literals by an AST pin — an allowed key nobody reads is the deleted `on:`
+      again. (a) `_record` routed the no-name case through the unregistered-name branch, so
+      `beadloom guard` printed `'(no guard named)' is not a registered guard` — byte-identical
+      to what `beadloom guard "(no guard named)"`, an invocation that DID name a guard,
+      printed; `_record` now takes the invocation and routes on the name the caller typed, the
+      docstring enumerates four exceptions instead of three, and the count is pinned to the
+      number of branches. Carried from `.32`: an unreadable `--project` no longer surfaces
+      `PermissionError: [Errno 13] ...` as the whole `why` — `locate_project_root` states the
+      cause on both entry paths and keeps the errno as its parenthetical detail. 16 tests
+      (11 RED first: 4 config + 7 boundary), 8 sabotages all reddening (1 caught by the
+      `.31` B2 anchor). Suite 5748 passed / 0 failed, ruff + mypy clean, `beadloom ci` rc 0.
 - [x] S2 `.43` dev (2026-08-23) — **a third of `lint --strict` could not fire, and the reference
       taught the mistake.** `forbid_import` matches `from:` against the SOURCE FILE PATH
       (`src/beadloom/tui/app.py`) and `to:` against the DOTTED IMPORT PATH with dots turned into
@@ -203,7 +225,7 @@
 | .45 | Pending | S2 follow-up: docs-audit reports green about facts it never checked (#173) — per-fact coverage |
 | .4 | Done | S1 docs: exit-3 invariant qualified (not deleted), enforcement surface written down, `error` in both READMEs |
 | .33 | Pending | S2: the exit-3 class is fail-open — a broken `flow.yml` disables every guard |
-| .34 | Pending | S2: an unknown key in a guard body is silently ignored (`option:` → trunk `main`) |
+| .34 | Done | S2: an unknown key in a guard body is a config error at both levels; the no-name record reason no longer quotes the placeholder; an unreadable `--project` states its cause |
 | .35 | Pending | S3: no `.gitignore` entry for the firing record; carries n1 (our dogfood never ran the shipped artifact) |
 | .5 | Done | S2: #142 incremental import refresh, #146 source-owned sync pairs + unchecked accounting, #147 read-only lint that refuses a missing index |
 | .6–.8 | Pending | S2 test / review / tech-writer (the three defensive rules come out in `.8`) |

@@ -23,19 +23,29 @@ Two functions, and the split is the whole design:
 * :func:`_record` writes — it is the **only** place a firing is recorded, and it
   either records or names why it did not.
 
-``run_invocation`` is ``_record(_answer(...))`` and has exactly one return, so a
-new exit path that skips the record cannot be added without changing that line.
+``run_invocation`` is ``_record(invocation, _answer(...))`` and has exactly one
+return, so a new exit path that skips the record cannot be added without
+changing that line.
 
 **Recording is one predicate, stated once**: a firing is written when a project
 was located, a *registered* guard was named, and the invocation was an
-evaluation rather than a report. Each of the three exceptions has a reason it
-cannot be otherwise, and each is reported on the result rather than inferred
-from an absent line:
+evaluation rather than a report. That predicate has **four** exceptions, one per
+clause plus the report; each has a reason it cannot be otherwise, and each is
+reported on the result rather than inferred from an absent line:
 
 * **no project** — there is nowhere to write it. Manufacturing a root was the
   measured failure (a stray ``.beadloom/`` inside the source tree that the real
   project's ``--liveness`` never reads), so the guard writes nothing and answers
   ``error``, which blocks.
+* **no name** — nothing was asked about, so there is nothing to attribute. It
+  was the fourth case folded into the third's wording until BDL-061.34:
+  :func:`_named` renders the missing name as ``(no guard named)`` for the
+  reader, ``_record`` routed on that rendering, and an invocation that named no
+  guard reported ``'(no guard named)' is not a registered guard`` — a
+  pseudo-name quoted as though the caller had typed it, and byte-identical to
+  the reason a caller who *did* type it got. The routing is on
+  :attr:`GuardInvocation.name`, which is why :func:`_record` takes the
+  invocation rather than reading the verdict's display form.
 * **an unregistered name** — there is no guard to attribute the row to, and an
   invented row is a lie in the one report whose product is honesty.
 * **``--liveness``** — a report evaluates nothing; recording one would inflate
@@ -139,6 +149,9 @@ NOT_RECORDED_LIVENESS = (
 )
 NOT_RECORDED_NO_PROJECT = (
     "no project was located, and a guard does not create one to write into"
+)
+NOT_RECORDED_NO_NAME = (
+    "no guard was named, so there is no guard to record a firing against"
 )
 NOT_RECORDED_UNREGISTERED = (
     "{name!r} is not a registered guard, so there is nothing to record it against"
@@ -250,7 +263,7 @@ def run_invocation(invocation: GuardInvocation) -> InvocationResult:
     then it records. It does not raise and it does not exit — the caller renders
     the result and exits once.
     """
-    return _record(_answer(invocation))
+    return _record(invocation, _answer(invocation))
 
 
 def _answer(invocation: GuardInvocation) -> InvocationResult:
@@ -279,17 +292,28 @@ def _answer(invocation: GuardInvocation) -> InvocationResult:
         )
 
 
-def _record(result: InvocationResult) -> InvocationResult:
-    """Write the firing, or state why this invocation could not leave one."""
+def _record(
+    invocation: GuardInvocation, result: InvocationResult
+) -> InvocationResult:
+    """Write the firing, or state why this invocation could not leave one.
+
+    The invocation is read for the name the caller actually typed, and never
+    ``result.verdict.guard``: that field is the *display* form, and for an
+    invocation that named nothing it is the placeholder :data:`UNNAMED_GUARD` —
+    a string a caller can also type. Routing on it made those two invocations
+    indistinguishable and quoted a name nobody had written (BDL-061.34).
+    """
     if result.verdict is None:
         return replace(result, not_recorded_because=NOT_RECORDED_LIVENESS)
     if result.project_root is None:
         return replace(result, not_recorded_because=NOT_RECORDED_NO_PROJECT)
-    if result.verdict.guard not in BUILTIN_GUARDS:
+    if invocation.name is None:
+        return replace(result, not_recorded_because=NOT_RECORDED_NO_NAME)
+    if invocation.name not in BUILTIN_GUARDS:
         return replace(
             result,
             not_recorded_because=NOT_RECORDED_UNREGISTERED.format(
-                name=result.verdict.guard
+                name=invocation.name
             ),
         )
     try:

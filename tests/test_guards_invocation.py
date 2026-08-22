@@ -2005,3 +2005,209 @@ class TestTheBoundaryWithoutTheCli:
         assert result.exit_code == 2
         assert "the filesystem said no" in result.verdict.why
         assert result.recorded is False
+
+
+# ---------------------------------------------------------------------------
+# 5. THE REASON NAMES THE CASE IT ACTUALLY IS
+#
+#   Every failure here is already fail-closed and already carries a reason. What
+#   these tests hold is that the reason is about what happened: a placeholder is
+#   not quoted as though the caller typed it, and an internal exception repr does
+#   not stand where a stated cause belongs (BDL-061.34, carried from .32).
+# ---------------------------------------------------------------------------
+
+
+class TestTheNotRecordedReasonNamesTheCaseItActuallyIs:
+    """Four cases leave no record, and each says which one it is.
+
+    ``beadloom guard`` with no name reported ``'(no guard named)' is not a
+    registered guard`` — the ``why`` was right, but the not-recorded reason
+    quoted a pseudo-name nobody typed, because ``_record`` routed the no-name
+    case through the unregistered-name branch. Measured before the fix: that
+    invocation and ``beadloom guard "(no guard named)"`` — one that named no
+    guard and one that named a guard — printed a byte-identical reason.
+    """
+
+    def test_an_invocation_that_named_no_guard_says_that_it_named_none(
+        self, tmp_path
+    ) -> None:
+        from beadloom.application.guards.invocation import (
+            NOT_RECORDED_NO_NAME,
+            UNNAMED_GUARD,
+            GuardInvocation,
+            run_invocation,
+        )
+
+        result = run_invocation(GuardInvocation(declared_project=_project(tmp_path)))
+
+        assert result.recorded is False
+        assert result.not_recorded_because == NOT_RECORDED_NO_NAME
+        assert UNNAMED_GUARD not in result.not_recorded_because
+        assert "registered guard" not in result.not_recorded_because
+
+    def test_a_caller_who_types_the_placeholder_gets_the_unregistered_reason(
+        self, tmp_path
+    ) -> None:
+        """The routing is on what was typed, not on how the verdict displays it.
+
+        ``(no guard named)`` is a name a caller can type, and answering it with
+        "no guard was named" would be the same defect wearing the other face.
+        """
+        from beadloom.application.guards.invocation import (
+            NOT_RECORDED_UNREGISTERED,
+            UNNAMED_GUARD,
+            GuardInvocation,
+            run_invocation,
+        )
+
+        root = _project(tmp_path)
+
+        typed = run_invocation(
+            GuardInvocation(name=UNNAMED_GUARD, declared_project=root)
+        )
+        unnamed = run_invocation(GuardInvocation(declared_project=root))
+
+        assert typed.not_recorded_because == NOT_RECORDED_UNREGISTERED.format(
+            name=UNNAMED_GUARD
+        )
+        assert typed.not_recorded_because != unnamed.not_recorded_because
+
+    def test_an_empty_name_is_still_the_unregistered_name_the_caller_typed(
+        self, tmp_path
+    ) -> None:
+        """``beadloom guard ""`` named a guard — an empty one (BDL-061.31)."""
+        from beadloom.application.guards.invocation import (
+            NOT_RECORDED_UNREGISTERED,
+            GuardInvocation,
+            run_invocation,
+        )
+
+        result = run_invocation(
+            GuardInvocation(name="", declared_project=_project(tmp_path))
+        )
+
+        assert result.not_recorded_because == NOT_RECORDED_UNREGISTERED.format(name="")
+
+    def test_the_four_unrecorded_cases_give_four_distinct_reasons(
+        self, tmp_path
+    ) -> None:
+        """One reason per case: a shared reason cannot be acted on differently."""
+        from beadloom.application.guards.invocation import GuardInvocation, run_invocation
+
+        root = _project(tmp_path / "root")
+        plain = tmp_path / "plain"
+        plain.mkdir()
+        unrecorded = [
+            run_invocation(GuardInvocation(declared_project=root, liveness=True)),
+            run_invocation(GuardInvocation(name="bead-claimed", start_dir=plain)),
+            run_invocation(GuardInvocation(declared_project=root)),
+            run_invocation(GuardInvocation(name="no-such-guard", declared_project=root)),
+        ]
+
+        assert [result.recorded for result in unrecorded] == [False] * 4
+        assert len({result.not_recorded_because for result in unrecorded}) == 4
+
+    def test_the_docstring_enumerates_one_case_per_branch_that_declines_to_record(
+        self,
+    ) -> None:
+        """The enumeration was off by one: four branches described as three.
+
+        Counted rather than read, so the next branch added to ``_record`` has to
+        arrive with its bullet — the docstring is where a reader learns the
+        recording predicate, and a predicate documented with one case missing is
+        how the missing case ends up wearing another's wording.
+        """
+        from beadloom.application.guards import invocation as boundary
+
+        tree = _module_ast(_BOUNDARY_MODULE)
+        declining = [
+            node for node in _function(tree, "_record").body if isinstance(node, ast.If)
+        ]
+        bullets = [
+            line
+            for line in (boundary.__doc__ or "").splitlines()
+            if line.startswith("* **")
+        ]
+
+        assert len(bullets) == len(declining), (len(bullets), len(declining))
+
+
+class TestAFailureStatesItsCauseRatherThanItsRepr:
+    """An internal exception repr is not a stated cause (BDL-061.32, carried).
+
+    ``--project`` naming a directory this process may not read answered
+    ``the guard could not be evaluated: PermissionError: [Errno 13] Permission
+    denied: '<dir>/.beadloom'`` — fail-closed and honest, but the reader is
+    handed the interpreter's words for a condition the code can name, and the
+    ``not_covered`` note said "the evaluation did not complete" when nothing had
+    been evaluated at all. Locating a project is not evaluating a guard.
+    """
+
+    @pytest.fixture()
+    def unreadable_dir(self, tmp_path) -> Path:
+        if hasattr(os, "geteuid") and os.geteuid() == 0:
+            pytest.skip("root reads a mode-000 directory, so there is nothing to refuse")
+        shut = tmp_path / "shut"
+        (shut / ".beadloom").mkdir(parents=True)
+        shut.chmod(0o000)
+        yield shut
+        shut.chmod(0o755)
+
+    def test_an_unreadable_project_directory_is_a_located_refusal(
+        self, unreadable_dir
+    ) -> None:
+        from beadloom.application.guards.project_root import locate_project_root
+
+        located = locate_project_root(declared=unreadable_dir)
+
+        assert located.root is None
+        assert "could not be read" in located.refusal
+        assert str(unreadable_dir) in located.refusal
+
+    def test_an_unreadable_directory_on_the_walk_up_is_a_refusal_too(
+        self, unreadable_dir
+    ) -> None:
+        """The same condition through the other entry path — fixed once, not twice."""
+        from beadloom.application.guards.project_root import locate_project_root
+
+        located = locate_project_root(start=unreadable_dir)
+
+        assert located.root is None
+        assert "could not be read" in located.refusal
+
+    def test_the_verdict_names_the_cause_and_what_it_left_unchecked(
+        self, unreadable_dir
+    ) -> None:
+        from beadloom.application.guards.invocation import (
+            NOT_RECORDED_NO_PROJECT,
+            GuardInvocation,
+            run_invocation,
+        )
+
+        result = run_invocation(
+            GuardInvocation(name="bead-claimed", declared_project=unreadable_dir)
+        )
+
+        assert result.verdict is not None
+        assert result.verdict.outcome.value == "error"
+        assert result.exit_code == 2
+        assert "could not be evaluated" not in result.verdict.why
+        assert "could not be read" in result.verdict.why
+        assert "the project could not be located" in result.verdict.not_covered[0]
+        assert "--project" in result.verdict.remediation
+        assert result.not_recorded_because == NOT_RECORDED_NO_PROJECT
+
+    def test_the_errno_detail_is_kept_beside_the_stated_cause(
+        self, unreadable_dir
+    ) -> None:
+        """Stating the cause does not mean hiding what the filesystem said.
+
+        Which layer spoke is what tells a reader where to look, so the class and
+        its message stay — as the parenthetical detail of a sentence, not as the
+        whole sentence.
+        """
+        from beadloom.application.guards.project_root import locate_project_root
+
+        refusal = locate_project_root(declared=unreadable_dir).refusal
+
+        assert "PermissionError" in refusal

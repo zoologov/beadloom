@@ -14,8 +14,12 @@ from pathlib import Path
 import pytest
 import yaml
 
+from beadloom.application.guards import config as config_module
+from beadloom.application.guards.checks import BUILTIN_GUARDS
 from beadloom.application.guards.config import (
     DEFAULT_STRICTNESS,
+    EXCLUSION_KEYS,
+    GUARD_BODY_KEYS,
     STRICTNESS_VALUES,
     GuardConfigError,
     build_guards_config,
@@ -518,3 +522,159 @@ class TestNothingRoutesOnAnEvent:
                 keys = set(declared or {})
                 assert "on" not in keys, name
                 assert True not in keys, name
+
+
+class TestAnUnknownKeyInAGuardBodyIsRejected:
+    """A key the loader does not read is a typo, and a typo here changes enforcement.
+
+    The module already refuses an unknown guard NAME and an unknown strictness
+    VALUE for one reason — a gate must not be switched off by a spelling. An
+    unknown KEY was the hole in that reasoning, and it is not symmetric:
+
+    * ``exclude:`` for ``exclusions:`` parses with zero exclusions, so the guard
+      OVER-guards — the safe direction;
+    * ``option:`` for ``options:`` drops the declared ``trunk``, and
+      ``working-branch`` then compares against the shipped default ``main``.
+      Measured through the real binary on a project whose trunk is ``develop``:
+      an edit made directly ON ``develop`` answered ``PASS — on working branch
+      'develop' (trunk is 'main')`` at exit 0, i.e. the guard passed the one
+      situation it exists to catch.
+
+    The mitigation (the verdict prints the trunk it compared against) is on the
+    stream and the exit code a hook harness discards: a ``pass`` at 0 is shown to
+    nobody. So the typo is answered where it is made, in the file, not left to an
+    attentive reader of a line that is never displayed.
+    """
+
+    def test_a_misspelt_exclusions_key_is_a_config_error(
+        self, tmp_path, write_flow_yml
+    ) -> None:
+        write_flow_yml(
+            "guards:\n"
+            "  bead-claimed:\n"
+            "    exclude:\n"
+            "      - path: 'scripts/**'\n"
+            "        reason: 'why'\n"
+            "        until: 'BDL-1'\n"
+        )
+
+        with pytest.raises(GuardConfigError) as exc:
+            load_guards_config(tmp_path)
+
+        assert "exclude" in str(exc.value)
+
+    def test_a_misspelt_options_key_is_a_config_error(
+        self, tmp_path, write_flow_yml
+    ) -> None:
+        """The unsafe direction: the declared trunk is dropped and `main` stands in."""
+        write_flow_yml(
+            "guards:\n"
+            "  working-branch:\n"
+            "    option:\n"
+            "      trunk: develop\n"
+        )
+
+        with pytest.raises(GuardConfigError) as exc:
+            load_guards_config(tmp_path)
+
+        assert "option" in str(exc.value)
+
+    def test_the_error_names_the_unknown_key_the_guard_and_the_allowed_set(
+        self, tmp_path, write_flow_yml
+    ) -> None:
+        """The message has to make the fix mechanical, like its two siblings."""
+        write_flow_yml("guards:\n  bead-claimed:\n    exclusionz: []\n")
+
+        with pytest.raises(GuardConfigError) as exc:
+            load_guards_config(tmp_path)
+
+        message = str(exc.value)
+        assert "exclusionz" in message
+        assert "bead-claimed" in message
+        for key in GUARD_BODY_KEYS:
+            assert key in message
+
+    def test_a_misspelt_key_inside_an_exclusion_entry_is_rejected_too(
+        self, tmp_path, write_flow_yml
+    ) -> None:
+        """The same rule at the other level: fixing one place and not the other is how
+        this feature has repeatedly kept an invariant that was true case by case."""
+        write_flow_yml(
+            _exclusion(path="'scripts/**'", reason="'why'", until="'BDL-1'")
+            + "        notes: 'and a stray key'\n"
+        )
+
+        with pytest.raises(GuardConfigError) as exc:
+            load_guards_config(tmp_path)
+
+        message = str(exc.value)
+        assert "notes" in message
+        for key in EXCLUSION_KEYS:
+            assert key in message
+
+    def test_every_key_the_loader_reads_is_still_accepted(
+        self, tmp_path, write_flow_yml
+    ) -> None:
+        """The negative control: a body using all three keys parses and lands its values."""
+        write_flow_yml(
+            "guards:\n"
+            "  working-branch:\n"
+            "    strictness: { default: block }\n"
+            "    options: { trunk: develop }\n"
+            "    exclusions:\n"
+            "      - path: 'docs/**'\n"
+            "        reason: 'prose is not branch-scoped'\n"
+            "        until: 'BDL-1'\n"
+        )
+
+        spec = load_guards_config(tmp_path).spec_for("working-branch")
+
+        assert spec.strictness_for(None) == "block"
+        assert spec.options["trunk"] == "develop"
+        assert [exclusion.path for exclusion in spec.exclusions] == ["docs/**"]
+
+    def test_the_allowed_set_is_exactly_the_set_of_keys_the_loader_reads(self) -> None:
+        """Derived, not listed: an allowed key nobody reads is the deleted ``on:`` again.
+
+        ``on:`` shipped in the S1 schema, was read by no code path, and taught an
+        incantation that had never done anything. A key in the allowed set with
+        no ``body.get`` behind it is that defect; a ``body.get`` with no entry in
+        the allowed set makes the loader reject what it itself reads.
+        """
+        import ast
+
+        source = Path(config_module.__file__).read_text(encoding="utf-8")
+        build_spec = next(
+            node
+            for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.FunctionDef) and node.name == "_build_spec"
+        )
+        read_keys = {
+            node.args[0].value
+            for node in ast.walk(build_spec)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "get"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "body"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+        }
+
+        assert read_keys == set(GUARD_BODY_KEYS)
+
+    def test_the_config_this_repository_ships_still_parses(self) -> None:
+        """No adopter's green project turns red on upgrade — starting with our own.
+
+        The guards feature is unreleased (CHANGELOG ``[Unreleased]``), so no
+        published ``flow.yml`` carries a ``guards:`` block at all; the one file
+        that does is this repository's, and it is checked here rather than
+        assumed.
+        """
+        repo_root = Path(__file__).resolve().parents[1]
+
+        config = load_guards_config(repo_root)
+
+        assert set(config.declared_names()) <= set(BUILTIN_GUARDS)
+        assert config.spec_for("working-branch").options["trunk"] == "main"

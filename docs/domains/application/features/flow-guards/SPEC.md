@@ -117,6 +117,28 @@ to `default` and then to `warn`. Exclusion patterns follow POSIX glob semantics
 where `**` crosses directories and `*` does not, so `src/*.py` cannot silently
 exempt a subtree.
 
+**A key this loader does not read is a configuration error** — `strictness`,
+`exclusions` and `options` in a guard body, `path`, `reason` and `until` in an
+exclusion entry, and nothing else (BDL-061.34). Unknown guard *names* and unknown
+strictness *values* were already errors for one reason: a gate must not be
+switched off by a spelling. An unknown *key* was the hole in that reasoning, and
+it is not symmetric. `exclude:` for `exclusions:` parses to zero exclusions, so
+the guard over-guards — the safe direction. `option:` for `options:` drops the
+declared `trunk`, and `working-branch` then compares against the shipped default
+`main`: measured through the real binary on a project whose trunk is `develop`,
+an edit made directly **on `develop`** answered `PASS — on working branch
+'develop' (trunk is 'main')` at exit `0`, which is the one situation that guard
+exists to catch.
+
+It is an error rather than a warning because the mitigation that exists — the
+verdict names the trunk it compared against — travels on the stream and the exit
+code a hook harness discards: a `pass` at `0` is shown to nobody, so in the case
+that matters the evidence is never read. It costs no adopter a green build: a
+block using only keys the loader reads is unaffected, `flow.yml` files with no
+`guards:` block are unaffected, and the feature is unreleased, so no published
+project has such a block at all. The same rule after release would be a breaking
+change and would need the `warn` route instead.
+
 An absent `guards:` block is not an error: every registered guard runs at the
 shipped default (`warn`), so upgrading Beadloom adds warnings that name what
 they did not check — never a new red build.
@@ -228,6 +250,22 @@ declares `readable=False`, which is not a relaxation: the directory is refused
 by the boundary, as a verdict a reader and a harness can both act on, instead of
 by the argument parser.
 
+**That refusal now states its cause instead of quoting an exception**
+(BDL-061.34). `Path.is_dir()` re-raises `EACCES` rather than answering `False`,
+so the unreadable directory reached the boundary's last-resort handler and the
+verdict read `the guard could not be evaluated: PermissionError: [Errno 13]
+Permission denied: '<dir>/.beadloom'`, with `not_covered` claiming an evaluation
+had not completed when none had been attempted. Locating a project is not
+evaluating a guard: the refusal is answered where the condition is known — *the
+directory `<dir>` could not be read (PermissionError: …), so the guard cannot
+tell whether it is a Beadloom project* — and the verdict then carries the
+project-location `not_covered` note and the `--project` remediation. The
+filesystem's own words are kept as the parenthetical detail, because which layer
+spoke is what tells a reader where to look; what is removed is an interpreter
+repr standing where a stated cause belongs. Both entry paths are covered — the
+declared directory and any directory met while walking up — because fixing this
+class in one place and not the other is how it has come back three times.
+
 The cost, stated because it is real: `--project` can no longer point at a
 directory before `beadloom init` has run there. That is the intended reading —
 there is no `flow.yml` in such a directory to answer from, so any verdict it
@@ -309,7 +347,7 @@ the boundary returns.
 
 
 **A firing is written when the invocation produced a verdict, a project was
-located, and the verdict names a registered guard.** The three exceptions are
+located, and the caller named a registered guard.** The four exceptions are
 intrinsic rather than convenient, and each is *reported* on the result (and shown
 as `not recorded: <reason>` on stderr, or as `recorded` / `not_recorded_because`
 under `--json`) instead of being left to be inferred from a missing line:
@@ -318,7 +356,16 @@ under `--json`) instead of being left to be inferred from a missing line:
 |---|---|
 | a successful `--liveness` report | it evaluates nothing, so there is no verdict to record, and recording one would inflate the count it prints |
 | no project could be located | there is nowhere to write it, and creating a project root is the failure this rule exists to prevent |
-| the name is not a registered guard (including no name at all) | there is nothing to attribute the row to, and an invented row is a lie in the one report whose product is honesty |
+| no guard was named | nothing was asked about, so there is nothing to attribute a row to |
+| the name is not a registered guard | there is nothing to attribute the row to, and an invented row is a lie in the one report whose product is honesty |
+
+The last two were **one row until BDL-061.34**, and the fold was visible in the
+output: `beadloom guard` with no name reported `'(no guard named)' is not a
+registered guard`, quoting a placeholder the caller had never typed — and
+byte-identical to what `beadloom guard "(no guard named)"`, an invocation that
+*did* name a guard, reported. The routing is now on the name the caller supplied
+rather than on the verdict's display form, so the two are distinguishable and
+neither borrows the other's words.
 
 A fourth case is a failure rather than an exception: if the record cannot be
 written (a read-only filesystem, say), the verdict still reaches the reader and
@@ -522,6 +569,9 @@ never louder.
   permanently by accident.
 - **A guard name with no implementation is a configuration error**, not a no-op,
   so a typo in `flow.yml` cannot quietly switch a gate off.
+- **A key the loader does not read is a configuration error** at either level of
+  the block, for the same reason and measured: `option:` for `options:` cost
+  `working-branch` its declared trunk and passed an edit made on it.
 - **Unavailable evidence skips, never passes.** A probe that cannot answer
   returns `None`, and the guard reports why.
 - **A probe's answer does not depend on the image it runs on** (BDL-061.37).
@@ -549,8 +599,9 @@ never louder.
   in a located project ends without a firing record.** A failure that leaves no
   record is invisible to the one report whose whole product is honesty about dead
   gates. Held by one boundary rather than case by case — see *One boundary per
-  invocation* for the three exceptions, each reported on the result rather than
-  inferred from its absence.
+  invocation* for the four exceptions, each reported on the result rather than
+  inferred from its absence, and each in its own words rather than borrowing a
+  neighbour's.
 - **The record is the project's.** The root is discovered by walking up for
   `.beadloom/`, never taken from the working directory and never created: a
   firing written somewhere `--liveness` does not read is indistinguishable from

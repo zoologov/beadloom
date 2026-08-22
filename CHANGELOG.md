@@ -14,8 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `pass` / `warn` / `block` / `skip`. **Exit codes carry the outcome** (`0` pass/skip,
   `1` warn, `2` block, `3` usage/config error) so a shell adapter needs no parsing.
   Guards are declared in `.beadloom/flow.yml` with strictness per work kind and path
-  exclusions; **an exclusion must carry both `reason` and `until`**, and a guard name
-  with no implementation is a configuration error rather than a silently dead gate.
+  exclusions; **an exclusion must carry both `reason` and `until`**, a guard name
+  with no implementation is a configuration error rather than a silently dead gate,
+  and so is **a key the loader does not read** — `option:` for `options:` used to be
+  dropped in silence, leaving `working-branch` comparing against `main` and passing an
+  edit made on the project's real trunk.
   Two guards ship: `bead-claimed` (an edit happens under a claimed work item) and
   `working-branch` (work happens off the protected trunk). `beadloom guard --liveness`
   reports which guards have never fired or are excluded everywhere, from an append-only

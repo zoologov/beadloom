@@ -75,6 +75,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from beadloom.application.guards.models import exception_detail
+
 #: The directory whose presence marks a project root.
 PROJECT_MARKER = Path(".beadloom")
 
@@ -100,6 +102,22 @@ DECLARED_PROJECT_UNMARKED = (
 #: Refusal when the working directory itself cannot be read.
 UNREADABLE_START = "the working directory could not be read ({detail})"
 
+#: Refusal when a directory that might be the project root cannot be read at all.
+#:
+#: The cause is stated and the filesystem's own words are kept as its detail
+#: (BDL-061.34, carried from .32). ``--project`` naming a directory this process
+#: may not read used to raise out of here — ``Path.is_dir()`` re-raises ``EACCES``
+#: rather than answering False — and the boundary's last-resort handler turned it
+#: into ``the guard could not be evaluated: PermissionError: [Errno 13] ...``: an
+#: interpreter repr where a cause belongs, and a ``not_covered`` note claiming an
+#: evaluation had not completed when none had been attempted. Locating a project
+#: is not evaluating a guard, and this module already answers "I could not tell
+#: where the project is" with a refusal rather than an exception.
+UNREADABLE_DIRECTORY = (
+    "the directory {directory} could not be read ({detail}), so the guard cannot "
+    "tell whether it is a Beadloom project"
+)
+
 
 @dataclass(frozen=True)
 class ProjectLocation:
@@ -124,16 +142,32 @@ def locate_project_root(
     it into a verdict either way.
     """
     if declared is not None:
-        return _declared_project(declared)
+        try:
+            return _declared_project(declared)
+        except OSError as exc:
+            return _unreadable(declared, exc)
     try:
         origin = (start or Path.cwd()).resolve()
     except OSError as exc:
         return ProjectLocation(refusal=UNREADABLE_START.format(detail=exc))
     for candidate in (origin, *origin.parents):
-        if (candidate / PROJECT_MARKER).is_dir():
+        try:
+            carries_marker = (candidate / PROJECT_MARKER).is_dir()
+        except OSError as exc:
+            return _unreadable(candidate, exc)
+        if carries_marker:
             return ProjectLocation(root=candidate)
     return ProjectLocation(
         refusal=NO_PROJECT_FOUND.format(start=origin, marker=PROJECT_MARKER.as_posix())
+    )
+
+
+def _unreadable(directory: Path, exc: OSError) -> ProjectLocation:
+    """The refusal for a directory the process may not read — stated, not raised."""
+    return ProjectLocation(
+        refusal=UNREADABLE_DIRECTORY.format(
+            directory=directory, detail=exception_detail(exc)
+        )
     )
 
 
