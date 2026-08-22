@@ -113,17 +113,68 @@ rules:
         # record membership; exemption covers only its lack of own code.
         - "**/graph/rule_engine.py"
 
+  # THE TWO SIDES ARE MATCHED AGAINST DIFFERENT THINGS (BDL-UX #150 — the defect
+  # that made these two rules inert; the two ai_agents rules below were reported
+  # dead too, but measurement shows their `to:` is already the correct dotted
+  # form and their 0 was truthful). `from:` is matched against the
+  # repo-relative SOURCE FILE PATH as indexed (`src/beadloom/tui/app.py` — it
+  # carries the source root); `to:` against the DOTTED IMPORT PATH with dots
+  # turned into slashes (`beadloom/infrastructure/db` — no source root, no
+  # extension). A `to:` written as `src/beadloom/…` therefore matches nothing,
+  # ever. Both globs are now checked for liveness: a rule that matches zero
+  # candidates anywhere in the index is reported (`warn`) instead of counting as
+  # clean, so this class of mistake cannot come back silently. A `to:` glob also
+  # covers a BARE import of the package it names (`from beadloom.infrastructure
+  # import db` is indexed as the target `beadloom/infrastructure`), which is the
+  # commonest reach-in form and used to slip through every glob spelling.
   - name: tui-no-direct-infra
     description: "TUI must not import infrastructure directly"
     forbid_import:
       from: "src/beadloom/tui/**"
-      to: "src/beadloom/infrastructure/**"
+      to: "beadloom/infrastructure/**"
 
+  # Repairing this glob surfaced 6 pre-existing crossings (measured on a clean
+  # index, 2026-08-22), all of them documented designs rather than accidents —
+  # `architecture-layers` explicitly permits domain -> infrastructure, and the
+  # domain READMEs prescribe these three targets by name. They are BASELINED,
+  # not silenced: the rule keeps its full scope, so a NEW onboarding ->
+  # infrastructure import still fails, and each exemption carries the reason it
+  # exists and the condition that retires it. An exemption that stops
+  # suppressing anything is itself reported, which is how the exit condition
+  # announces itself instead of waiting to be remembered.
   - name: onboarding-no-direct-infra
     description: "Onboarding must not import infrastructure directly"
     forbid_import:
       from: "src/beadloom/onboarding/**"
-      to: "src/beadloom/infrastructure/**"
+      to: "beadloom/infrastructure/**"
+      exempt:
+        - to: "beadloom/infrastructure/atomic_io"
+          reason: >-
+            Every graph-YAML writer routes through atomic_io by design (see the
+            infrastructure README) so a crash mid-write cannot corrupt the
+            source-of-truth YAML; the onboarding scaffolders are four of those
+            writers. A domain reaching the lowest layer for a crash-safety
+            primitive is the layering the project declares, not a breach of it.
+          until: >-
+            the rule is re-scoped to what it actually means (open no index, run
+            no git) — BDL-UX #150 follow-up
+        - to: "beadloom/infrastructure/mcp_tools"
+          reason: >-
+            MCP_TOOL_CATALOG is the single source of the tool list AGENTS.md is
+            generated from; it lives at the lowest layer precisely so onboarding
+            can read it without importing upward into services.
+          until: >-
+            the rule is re-scoped to what it actually means — BDL-UX #150
+            follow-up
+        - to: "beadloom/infrastructure/db"
+          reason: >-
+            `scanner/prime.py` answers `beadloom prime` from live index queries;
+            the read seam it should use (infrastructure/repository) is in the
+            same layer, so routing through it would satisfy the glob without
+            changing a single dependency direction.
+          until: >-
+            prime_context() reads through the repository seam and this entry
+            goes dead — BDL-UX #150 follow-up
 
   # ai_agents is a leaf consumer (BDL-051 / S2): it MAY consume application /
   # context_oracle / graph / doc_sync read APIs + the bd/beadloom shells, but it

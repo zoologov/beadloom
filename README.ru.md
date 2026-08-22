@@ -198,8 +198,9 @@ rules:
   # Не пускать TUI напрямую в слой базы данных
   - name: tui-no-direct-infra
     forbid_import:
+      # `from` сверяется с ПУТЁМ ФАЙЛА, `to` — с путём ИМПОРТА (точки -> слэши)
       from: "src/beadloom/tui/**"
-      to: "src/beadloom/infrastructure/**"
+      to: "beadloom/infrastructure/**"
 
   # Предупреждать, когда узел разрастается
   - name: domain-size-limit

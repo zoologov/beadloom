@@ -138,6 +138,8 @@ Each `Violation` carries an additive `remediation: str | None` (default `None` s
 - Rule names must be unique within `rules.yml`
 - Each rule must have exactly one of: `deny`, `require`, `forbid_cycles`, `forbid_import`, `forbid`, `layers`, or `check`
 - Rule severity must be one of: `error`, `warn`
+- `forbid_import.from` is matched against the **source file path** (`src/pkg/tui/app.py`), `forbid_import.to` against the **dotted import path with dots → slashes** (`pkg/infrastructure/db`) — two different vocabularies, so a `src/`-prefixed `to` can never match. A rule whose glob matches **zero** candidates in the whole index is reported as a `rule_liveness` finding (`warn`) instead of counting as clean (BDL-UX #150)
+- `forbid_import.exempt[]` baselines pre-existing crossings; each entry needs `from` and/or `to` plus a mandatory `reason` and `until`, and is itself reported once it suppresses nothing
 
 ## API
 
@@ -165,7 +167,7 @@ Decomposed by responsibility (BDL-059 S3); see the [rule-engine SPEC](features/r
 - `evaluate_deny_rules(conn: sqlite3.Connection, rules: list[DenyRule]) -> list[Violation]` -- Evaluate deny rules against code_imports. Supports tag-based matching via `get_node_tags()`.
 - `evaluate_require_rules(conn: sqlite3.Connection, rules: list[RequireRule]) -> list[Violation]` -- Evaluate require rules against nodes and edges. Supports tag-based matching.
 - `evaluate_cycle_rules(conn: sqlite3.Connection, rules: list[CycleRule]) -> list[Violation]` -- Evaluate cycle rules using iterative DFS over edges of specified kind(s). Reports each unique cycle once with the full path.
-- `evaluate_import_boundary_rules(conn: sqlite3.Connection, rules: list[ImportBoundaryRule]) -> list[Violation]` -- Evaluate import boundary rules against code_imports using `fnmatch` glob patterns on file paths.
+- `evaluate_import_boundary_rules(conn: sqlite3.Connection, rules: list[ImportBoundaryRule]) -> list[Violation]` -- Evaluate import boundary rules against code_imports: `from_glob` via `fnmatch` on the **source file path**, `to_glob` on the **dotted import path with dots → slashes** (a `to:` glob covering a package also covers a bare import of that package). Also returns `rule_liveness` findings (`warn`) for a rule whose glob matches nothing in the index and for an `exempt` entry that suppresses nothing (BDL-UX #150).
 - `evaluate_forbid_edge_rules(conn: sqlite3.Connection, rules: list[ForbidEdgeRule]) -> list[Violation]` -- Evaluate forbid edge rules against the `edges` table. Checks source and destination nodes against `from_matcher` and `to_matcher`, optionally restricted by `edge_kind`. Supports tag-based matching.
 - `evaluate_layer_rules(conn: sqlite3.Connection, rules: list[LayerRule]) -> list[Violation]` -- Evaluate layer rules against the edges table. For `enforce: top-down`, detects lower-to-upper layer dependencies and optional layer-skip violations when `allow_skip=False`.
 - `evaluate_cardinality_rules(conn: sqlite3.Connection, rules: list[CardinalityRule]) -> list[Violation]` -- Evaluate cardinality rules against nodes, `code_symbols`, `file_index`, and `sync_state`. Checks `max_symbols`, `max_files`, and `min_doc_coverage` thresholds for matched nodes.
@@ -244,12 +246,13 @@ Minimal, dependency-free GraphQL SDL surface extractor (F2). See the [federation
 | `DenyRule` | rules | Frozen dataclass: `name`, `description`, `from_matcher`, `to_matcher`, `unless_edge`, `severity` |
 | `RequireRule` | rules | Frozen dataclass: `name`, `description`, `for_matcher`, `has_edge_to`, `edge_kind`, `severity` |
 | `CycleRule` | rules | Frozen dataclass: `name`, `description`, `edge_kind` (str or tuple), `max_depth` (default 10), `severity` |
-| `ImportBoundaryRule` | rules | Frozen dataclass: `name`, `description`, `from_glob`, `to_glob`, `severity`. Matches file paths via fnmatch globs against `code_imports` |
+| `ImportBoundaryRule` | rules | Frozen dataclass: `name`, `description`, `from_glob`, `to_glob`, `severity`, `exempt`. `from_glob` matches the file path, `to_glob` the dotted import path (dots → slashes) — two vocabularies, so a `src/`-prefixed `to_glob` never matches |
+| `ImportExemption` | rules | Frozen dataclass: `to_glob`, `from_glob`, `reason`, `until`. One named, expiring exception to an `ImportBoundaryRule`; `reason` + `until` are mandatory (a missing one is a rules-load `ValueError`) and an exemption that suppresses nothing is reported |
 | `ForbidEdgeRule` | rules | Frozen dataclass: `name`, `description`, `from_matcher`, `to_matcher`, `edge_kind` (optional), `severity`. Forbids graph edges between matched nodes (operates on `edges` table, unlike DenyRule which checks `code_imports`) |
 | `LayerDef` | rules | Frozen dataclass: `name`, `tag`. Defines a single architecture layer for use in `LayerRule` |
 | `LayerRule` | rules | Frozen dataclass: `name`, `description`, `layers` (tuple of `LayerDef`), `enforce` (`"top-down"`), `allow_skip` (default True), `edge_kind` (default `"uses"`), `severity`. Enforces dependency direction between ordered layers |
 | `CardinalityRule` | rules | Frozen dataclass: `name`, `description`, `for_matcher`, `max_symbols`, `max_files`, `min_doc_coverage`, `severity` (default `"warn"`). Detects architectural smells via node-level cardinality checks |
-| `Violation` | rules | Frozen dataclass: `rule_name`, `rule_description`, `rule_type` (`deny`/`require`/`cycle`/`forbid_import`/`forbid`/`layer`/`cardinality`), `severity`, `file_path`, `line_number`, `from_ref_id`, `to_ref_id`, `message` |
+| `Violation` | rules | Frozen dataclass: `rule_name`, `rule_description`, `rule_type` (`deny`/`require`/`cycle`/`forbid_import`/`forbid`/`layer`/`cardinality`/`rule_liveness`), `severity`, `file_path`, `line_number`, `from_ref_id`, `to_ref_id`, `message` |
 | `SnapshotInfo` | snapshot | Frozen dataclass: `id`, `label`, `created_at`, `node_count`, `edge_count`, `symbols_count` |
 | `SnapshotDiff` | snapshot | Frozen dataclass: `old_id`, `new_id`, `added_nodes`, `removed_nodes`, `changed_nodes`, `added_edges`, `removed_edges`, property `has_changes` |
 | `ImportInfo` | import_resolver | Frozen dataclass: `file_path`, `line_number`, `import_path`, `resolved_ref_id` |

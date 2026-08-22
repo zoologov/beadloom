@@ -198,8 +198,9 @@ rules:
   # Keep the TUI out of the database layer directly
   - name: tui-no-direct-infra
     forbid_import:
+      # `from` matches the FILE path, `to` the dotted IMPORT path (dots -> slashes)
       from: "src/beadloom/tui/**"
-      to: "src/beadloom/infrastructure/**"
+      to: "beadloom/infrastructure/**"
 
   # Warn when a node grows too large
   - name: domain-size-limit

@@ -307,7 +307,7 @@ Module `src/beadloom/tui/data_providers.py`:
 - `LintDataProvider` -- `get_violations()`, `get_violation_count()`
 - `SyncDataProvider` -- `get_sync_results()`, `get_stale_count()`, `get_coverage()`
 - `DebtDataProvider` -- `get_debt_report()`, `get_score()`
-- `ActivityDataProvider` -- `get_activity()`
+- `ActivityDataProvider` -- `get_activity()`; reads git activity through `application/graph_reads.analyze_git_activity`, never `infrastructure.git_activity` directly — the `tui-no-direct-infra` boundary forbids it, and since BDL-UX #150 the rule can actually say so
 - `WhyDataProvider` -- `analyze(ref_id, reverse=False)`
 - `ContextDataProvider` -- `get_context(ref_id)`, `estimate_tokens(text)`
 

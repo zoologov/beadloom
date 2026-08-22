@@ -7,7 +7,7 @@
 
 ## Current Bead
 
-**Bead:** `.40` is done (S2 wave 2, in parallel with `.43` and `.33`). The S2 wave 1 ran `.5`,
+**Bead:** `.40` and `.43` are done (S2 wave 2, in parallel with `.33`). The S2 wave 1 ran `.5`,
 `.37` and `.38` in parallel on disjoint surfaces.
 **Next:** `.6` (test), `.7` (review), `.8` (tech-writer — the bead that DELETES standing rules
 1–3 from this CONTEXT and from the shipped `CLAUDE.md` core), plus `.33` and `.34`.
@@ -123,6 +123,33 @@
       exposing two of my own gaps (the at-ref decode error and the `PermissionError` row) that
       are now covered. 23 tests; isolated tree (HEAD + only my files): 5691 passed / 0 failed,
       clean-DB lint 0 violations, sync-check rc 0, doctor rc 0.
+- [x] S2 `.43` dev (2026-08-23) — **a third of `lint --strict` could not fire, and the reference
+      taught the mistake.** `forbid_import` matches `from:` against the SOURCE FILE PATH
+      (`src/beadloom/tui/app.py`) and `to:` against the DOTTED IMPORT PATH with dots turned into
+      slashes (`beadloom/infrastructure/db`) — two vocabularies, so the `src/`-prefixed `to:`
+      globs in `rules.yml` matched nothing, ever. MEASURED reconciliation of the two reported
+      counts: both are right at different scopes — repairing rule 1 alone surfaces 1
+      (`tui/data_providers.py:284`), repairing rules 1+2 surfaces 7 (1 tui + 6 onboarding); the
+      `**/x/**` and `beadloom/x/**` forms match identically here. CORRECTION to `.5`: only TWO
+      of the four rules were dead — the two `ai_agents` rules already carry the correct dotted
+      `to:` (it matches 11 of 221 indexed targets) and their `0` was truthful. Fixed: the tui
+      crossing routed through `application/graph_reads` (which now also passes through
+      `analyze_git_activity`); the 6 onboarding crossings BASELINED as `forbid_import.exempt`
+      entries with a mandatory `reason` + `until` — the rule keeps full scope, proved by
+      deleting one entry and watching `lint --strict` go red with 4 errors. PERMANENT, not a
+      one-time correction: a rule whose `from:`/`to:` glob matches ZERO candidates in the whole
+      index is now reported (`rule_type: rule_liveness`, always `warn`, remediation states both
+      matching forms), and so is an exemption that suppresses nothing — the exit condition
+      announcing itself. Found while verifying: a `to:` glob covering a package did NOT cover a
+      bare import OF it, so the coordinator's own injected probe (`from beadloom.infrastructure
+      import db`) fired under NO glob form; now it does. Standing rule 1 VERIFIED not assumed
+      (isolated tree copy: probe + incremental reindex → caught; probe removed → back to 0).
+      22 tests (16 red first, 6 guards green by design), 4 sabotages; final tree 5718 passed /
+      0 failed / 11 skipped (a plain delta is not attributable — `.40` and `.33` landed their own
+      test files mid-bead), clean-DB lint 0 violations / 12 rules, sync-check rc 0, doctor rc 0.
+      NOT mine, blocking the Gate: `docs audit` reads "(BDL-061.33)" in `docs/services/cli.md:645`
+      as an `mcp_tool_count` of 33 — arrived with commit 71e31eb, reproduced on a tree whose
+      cli.md is byte-identical to HEAD.
 - [x] S2 `.5` dev (2026-08-22) — **the three lying checks fixed, and each fix proved by a test
       that would have caught the false green.** #142: an incremental reindex now re-extracts
       imports for the code files it touched and rebuilds the DERIVED `depends_on` set, which is
@@ -171,6 +198,7 @@
 | .36 | Done | S1 hotfix: the payload decoded as bytes (locale-independent); the resolve handler as wide as its sentence |
 | .37 | Done | S2: the probes decode with a stated codec, not the image's locale; handlers as wide as their sentence; sweep of every other subprocess call |
 | .40 | Done | S2: the four call sites with a measured wrong ANSWER — both sides of a comparison now decoded by the same stated rule |
+| .43 | Done | S2: two `forbid_import` rules could not match anything (`src/`-prefixed `to:`); glob liveness + named, expiring exemptions |
 | .4 | Done | S1 docs: exit-3 invariant qualified (not deleted), enforcement surface written down, `error` in both READMEs |
 | .33 | Pending | S2: the exit-3 class is fail-open — a broken `flow.yml` disables every guard |
 | .34 | Pending | S2: an unknown key in a guard body is silently ignored (`option:` → trunk `main`) |

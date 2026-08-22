@@ -188,10 +188,16 @@ class TestEvaluateImportBoundaryRules:
         assert v.from_ref_id is None  # not node-based
         assert "components.features.calendar.events" in v.message
 
-    def test_no_violation_when_from_glob_does_not_match(
+    def test_from_glob_matching_no_file_is_reported_not_counted_clean(
         self, db_with_imports: sqlite3.Connection
     ) -> None:
-        """Rule's from_glob doesn't match any source files -> no violations."""
+        """No boundary breach — and the rule says it could not have found one.
+
+        Updated in BDL-UX #150: a ``from_glob`` matching zero indexed files used to
+        read as a clean rule, which is how four of this project's own rules stayed
+        inert. The breach count is still zero; the rule's inability to look is now a
+        ``warn`` finding of its own.
+        """
         rules = [
             ImportBoundaryRule(
                 name="no-admin-to-calendar",
@@ -201,12 +207,14 @@ class TestEvaluateImportBoundaryRules:
             ),
         ]
         violations = evaluate_import_boundary_rules(db_with_imports, rules)
-        assert len(violations) == 0
+        assert [v.rule_type for v in violations] == ["rule_liveness"]
+        assert violations[0].severity == "warn"
+        assert "components/features/admin/**" in violations[0].message
 
-    def test_no_violation_when_to_glob_does_not_match(
+    def test_to_glob_matching_no_import_is_reported_not_counted_clean(
         self, db_with_imports: sqlite3.Connection
     ) -> None:
-        """Rule's to_glob doesn't match import target -> no violations."""
+        """The #150 shape itself: a ``to_glob`` no indexed import can match."""
         rules = [
             ImportBoundaryRule(
                 name="no-map-to-admin",
@@ -216,7 +224,8 @@ class TestEvaluateImportBoundaryRules:
             ),
         ]
         violations = evaluate_import_boundary_rules(db_with_imports, rules)
-        assert len(violations) == 0
+        assert [v.rule_type for v in violations] == ["rule_liveness"]
+        assert "components/features/admin/**" in violations[0].message
 
     def test_empty_imports_table_no_violations(
         self, db_conn: sqlite3.Connection

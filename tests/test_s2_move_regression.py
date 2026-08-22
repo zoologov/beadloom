@@ -48,6 +48,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
+    from beadloom.graph.rules import Violation
+
 _HARNESS_PKG = "beadloom.ai_agents.ai_techwriter"
 _REPO_ROOT = __import__("pathlib").Path(__file__).resolve().parent.parent
 _CI_YML = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
@@ -315,6 +317,18 @@ def _insert_import(
     )
 
 
+def _crossings(violations: list[Violation]) -> list[Violation]:
+    """Only the boundary breaches.
+
+    Since BDL-UX #150 the evaluator also reports a rule that CANNOT match anything
+    in the index (``rule_type == "rule_liveness"``, always ``warn``). In these
+    one-import fixtures the sibling char-class rule legitimately matches nothing, so
+    that advisory is expected noise here — the subject of these tests is which
+    crossings the two globs catch.
+    """
+    return [v for v in violations if v.rule_type == "forbid_import"]
+
+
 @pytest.fixture()
 def boundary_rules() -> list[ImportBoundaryRule]:
     """Load the two real ai_agents char-class forbid_import rules from the live
@@ -366,7 +380,7 @@ class TestAiAgentsBoundaryRule:
             "beadloom.ai_agents.ai_techwriter.runner",
         )
         conn.commit()
-        violations = evaluate_import_boundary_rules(conn, boundary_rules)
+        violations = _crossings(evaluate_import_boundary_rules(conn, boundary_rules))
         assert len(violations) >= 1, f"{core_dir} -> ai_agents not flagged"
         assert violations[0].severity == "error"
 
@@ -381,7 +395,7 @@ class TestAiAgentsBoundaryRule:
             "beadloom.ai_agents.ai_techwriter.seams",
         )
         conn.commit()
-        violations = evaluate_import_boundary_rules(conn, boundary_rules)
+        violations = _crossings(evaluate_import_boundary_rules(conn, boundary_rules))
         assert violations == []
 
     def test_ai_agents_importing_application_is_allowed(
@@ -400,7 +414,7 @@ class TestAiAgentsBoundaryRule:
             "beadloom.context_oracle.builder",
         )
         conn.commit()
-        violations = evaluate_import_boundary_rules(conn, boundary_rules)
+        violations = _crossings(evaluate_import_boundary_rules(conn, boundary_rules))
         assert violations == []
 
     def test_core_importing_core_is_not_flagged(
@@ -414,7 +428,7 @@ class TestAiAgentsBoundaryRule:
             "beadloom.graph.loader",
         )
         conn.commit()
-        assert evaluate_import_boundary_rules(conn, boundary_rules) == []
+        assert _crossings(evaluate_import_boundary_rules(conn, boundary_rules)) == []
 
     def test_exactly_one_rule_fires_per_core_dir(
         self,
@@ -435,7 +449,7 @@ class TestAiAgentsBoundaryRule:
             "beadloom.ai_agents.ai_techwriter.runner",
         )
         conn.commit()
-        violations = evaluate_import_boundary_rules(conn, boundary_rules)
+        violations = _crossings(evaluate_import_boundary_rules(conn, boundary_rules))
         # one per import, never doubled by overlapping patterns.
         assert len(violations) == 2
         by_file = {v.file_path for v in violations}

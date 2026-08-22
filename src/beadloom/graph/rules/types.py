@@ -99,19 +99,54 @@ class CycleRule:
 
 
 @dataclass(frozen=True)
+class ImportExemption:
+    """One named, expiring exception to an :class:`ImportBoundaryRule`.
+
+    An exemption records a pre-existing crossing instead of narrowing the rule
+    that catches it: the boundary keeps its full scope (a NEW crossing still
+    fails), while what is tolerated today is visible, attributed and dated.
+
+    ``reason`` and ``until`` are mandatory (BDL-061 CONTEXT: *every exclusion
+    carries a reason and an exit condition; one with neither is a config
+    error*), and an exemption that suppresses nothing is reported — that report
+    IS the exit condition firing.
+    """
+
+    to_glob: str = "*"  # matched like the rule's ``to``: dotted import path, dots -> slashes
+    from_glob: str = "*"  # matched like the rule's ``from``: repo-relative source file path
+    reason: str = ""
+    until: str = ""
+
+
+@dataclass(frozen=True)
 class ImportBoundaryRule:
     """Forbid imports between file paths matched by glob patterns.
 
     Unlike DenyRule (which matches graph nodes via NodeMatcher), this rule
     operates directly on file paths using ``fnmatch`` glob patterns against
     the ``code_imports`` table.
+
+    **The two globs are matched against two different vocabularies** — the
+    single fact whose absence from the reference left four of this project's own
+    rules inert for months (BDL-UX #150):
+
+    - ``from_glob`` is matched against the **repo-relative source file path** as
+      indexed, e.g. ``src/beadloom/tui/app.py`` (it carries the source root);
+    - ``to_glob`` is matched against the **imported module path** with dots
+      replaced by slashes, e.g. ``beadloom/infrastructure/db`` (it never
+      carries a source root, and never a file extension).
+
+    So a ``to_glob`` written as ``src/pkg/infra/**`` can never match anything.
+    ``evaluate_import_boundary_rules`` reports exactly that instead of counting
+    the rule as clean.
     """
 
     name: str
     description: str
-    from_glob: str  # source file path glob (e.g. "components/features/map/**")
-    to_glob: str  # target path glob (matched against import_path after dot-to-slash)
+    from_glob: str  # source file path glob (e.g. "src/pkg/features/map/**")
+    to_glob: str  # target glob (matched against import_path after dot-to-slash)
     severity: str = "error"  # "error" | "warn"
+    exempt: tuple[ImportExemption, ...] = ()  # named, expiring pre-existing crossings
 
 
 @dataclass(frozen=True)

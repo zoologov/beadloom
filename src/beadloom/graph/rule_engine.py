@@ -25,6 +25,8 @@ from __future__ import annotations
 
 from beadloom.graph.rules import (
     LIVE_EDGE_LIFECYCLES,
+    LIVENESS_RULE_TYPE,
+    MATCHING_FORM_HINT,
     SUPPORTED_SCHEMA_VERSIONS,
     VALID_EDGE_KINDS,
     VALID_NODE_KINDS,
@@ -34,6 +36,7 @@ from beadloom.graph.rules import (
     DenyRule,
     ForbidEdgeRule,
     ImportBoundaryRule,
+    ImportExemption,
     LayerDef,
     LayerRule,
     ModuleCoverageRule,
@@ -59,7 +62,9 @@ from beadloom.graph.rules import (
 )
 
 __all__ = [
+    "LIVENESS_RULE_TYPE",
     "LIVE_EDGE_LIFECYCLES",
+    "MATCHING_FORM_HINT",
     "SUPPORTED_SCHEMA_VERSIONS",
     "VALID_EDGE_KINDS",
     "VALID_NODE_KINDS",
@@ -69,6 +74,7 @@ __all__ = [
     "DenyRule",
     "ForbidEdgeRule",
     "ImportBoundaryRule",
+    "ImportExemption",
     "LayerDef",
     "LayerRule",
     "ModuleCoverageRule",

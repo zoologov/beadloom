@@ -134,7 +134,7 @@ Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3
 | `forbid` | Forbid specific edge patterns between tagged node groups | Nodes tagged `ui-layer` must not have `uses` edges to `native-layer` |
 | `layers` | Enforce layered architecture direction | Top-down: services → domains → infrastructure |
 | `forbid_cycles` | Detect circular dependencies in the graph | No cycles on `uses`/`depends_on` edges |
-| `forbid_import` | Control file-level import boundaries | Files in `src/beadloom/tui/**` must not import from `src/beadloom/infrastructure/**` |
+| `forbid_import` | Control file-level import boundaries | Files in `src/beadloom/tui/**` must not import `beadloom/infrastructure/**` — note the two vocabularies: `from` matches the **file path**, `to` the **dotted import path with dots → slashes** (no source root). A `src/`-prefixed `to` matches nothing (BDL-UX #150) |
 | `check` | Enforce complexity / coverage limits per node | `max_symbols: 180` per domain — counting the symbols a node OWNS, nested nodes excluded (Beadloom's `domain-size-limit`; see the recalibration note below); `module-coverage` (every src module tracked) |
 
 > Internally each parsed rule carries a `rule_type` string (`deny` / `require` / `forbid` / `layer` / `forbid_import` / `cardinality` / …) used by the evaluators; the **authoring key** in `rules.yml` is the column above.
@@ -147,7 +147,7 @@ Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3
 - `forbid` rules check edge patterns between nodes matching tag selectors
 - `layers` rules verify dependency direction across ordered architectural layers
 - `forbid_cycles` uses an iterative WHITE/GREY/BLACK colored DFS (in `graph/rules/cycles.py`) to find circular dependency paths, reporting each unique cycle once
-- `forbid_import` rules query the `code_imports` table for forbidden cross-boundary imports
+- `forbid_import` rules query the `code_imports` table for forbidden cross-boundary imports; a rule whose glob matches **zero** candidates anywhere in the index is itself reported (`rule_type: rule_liveness`, `warn`) rather than counted clean, and `exempt:` entries — which baseline a pre-existing crossing and must carry `reason` + `until` — are reported the same way once they suppress nothing
 - `check` rules count symbols/files per node (cardinality) and verify module coverage; `module-coverage` is `severity: error`
 
 **Output formats:**

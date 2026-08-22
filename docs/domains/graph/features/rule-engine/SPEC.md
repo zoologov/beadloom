@@ -107,13 +107,42 @@ Detects circular dependencies in the graph using an iterative WHITE/GREY/BLACK c
 
 Controls file-level import boundaries using fnmatch glob patterns against `code_imports`.
 
-| Field         | Type           | Description                                        |
-|---------------|----------------|----------------------------------------------------|
-| `name`        | `str`          | Unique rule name.                                  |
-| `description` | `str`          | Human-readable description.                        |
-| `from_glob`   | `str`          | Glob pattern matching source file paths.           |
-| `to_glob`     | `str`          | Glob pattern matching forbidden target file paths. |
-| `severity`    | `str`          | `"error"` or `"warn"`.                             |
+> **The two globs are matched against two different vocabularies.** `from:` is matched against the **repo-relative source file path as indexed** — `src/beadloom/tui/app.py`, source root included. `to:` is matched against the **dotted import path with dots replaced by slashes** — `beadloom.infrastructure.db` becomes `beadloom/infrastructure/db`: no source root, no file extension, because an import names a module, not a file. A `to:` written as `src/beadloom/infrastructure/**` therefore matches nothing, **ever** — the defect that left two of this project's own twelve rules (`tui-no-direct-infra`, `onboarding-no-direct-infra`) unable to fire while `lint --strict` printed `12 rules, 0 violations` (BDL-UX #150; this reference taught the broken form, which is why the fix belongs here and not only in `rules.yml`). Write `beadloom/infrastructure/**`, or `**/infrastructure/**` if the package root varies.
+
+> **A `to:` glob covering a package also covers a bare import of the package itself.** `from pkg.infrastructure import db` is indexed with `import_path == "pkg.infrastructure"` — the target is the package, not the module — so `pkg/infrastructure/**` is matched against `pkg/infrastructure/` as well, and the most common Python reach-in form is caught. Sibling names are unaffected: `pkg/infrastructure_docs` still does not match. (Also BDL-UX #150: the probe injected to reproduce that bead — `from beadloom.infrastructure import db` in the TUI — fired under *no* glob form before this.)
+
+| Field         | Type                            | Description                                        |
+|---------------|---------------------------------|----------------------------------------------------|
+| `name`        | `str`                           | Unique rule name.                                  |
+| `description` | `str`                           | Human-readable description.                        |
+| `from_glob`   | `str`                           | Glob matched against the **source file path** (`src/pkg/tui/app.py`). |
+| `to_glob`     | `str`                           | Glob matched against the **dotted import path, dots → slashes** (`pkg/infrastructure/db`). |
+| `severity`    | `str`                           | `"error"` or `"warn"`.                             |
+| `exempt`      | `tuple[ImportExemption, ...]`   | Named, expiring exceptions (default empty).        |
+
+#### `ImportExemption`
+
+One recorded exception to an `ImportBoundaryRule`. An exemption baselines a pre-existing crossing instead of narrowing the rule that catches it: the boundary keeps its full scope, so a **new** crossing still fails, while what is tolerated today is visible, attributed and dated.
+
+| Field       | Type   | Description                                                                    |
+|-------------|--------|--------------------------------------------------------------------------------|
+| `to_glob`   | `str`  | Matched like the rule's `to` (dotted import path). Default `"*"` — any target.   |
+| `from_glob` | `str`  | Matched like the rule's `from` (source file path). Default `"*"` — any source.   |
+| `reason`    | `str`  | **Mandatory.** Why this crossing is tolerated.                                   |
+| `until`     | `str`  | **Mandatory.** The condition that retires the entry.                             |
+
+`load_rules` raises `ValueError` when an entry omits `reason` or `until`, or sets neither `from` nor `to` (an entry matching both would exempt the whole rule). An exemption that suppresses nothing is reported as a liveness finding — that report *is* the exit condition firing.
+
+#### Rule liveness (a rule that cannot fire)
+
+`evaluate_import_boundary_rules` reports the rule itself when it is incapable of producing a verdict, instead of counting it as clean:
+
+- a `from_glob` matching **0** indexed source files, or a `to_glob` matching **0** indexed import paths → one finding per rule, naming the side(s) at fault and both counts;
+- an `exempt` entry that suppressed nothing → one finding per entry, quoting its `until`.
+
+These findings carry `rule_type: "rule_liveness"` (distinct from `forbid_import`, so a consumer can tell "your architecture is broken" from "your check is broken") and `severity: "warn"` **regardless of the rule's own severity** — an inert rule is a configuration smell, and promoting it to `error` would turn an adopter's green pipeline red on upgrade. Their `remediation` is `MATCHING_FORM_HINT`, which states the two matching forms above.
+
+Liveness is **not** reported when the index holds no imports at all: that is a different diagnosis (lint's header already reports `0 files scanned`), and firing on it would flood every fresh clone and every project written in a language Beadloom does not extract imports from.
 
 #### `ForbidEdgeRule`
 
@@ -177,7 +206,7 @@ Rule = DenyRule | RequireRule | CycleRule | ImportBoundaryRule | ForbidEdgeRule 
 |--------------------|----------------|-------------------------------------------------|
 | `rule_name`        | `str`          | Name of the violated rule.                      |
 | `rule_description` | `str`          | Description of the violated rule.               |
-| `rule_type`        | `str`          | `"deny"`, `"require"`, `"cycle"`, `"forbid_import"`, `"forbid"`, `"layer"`, or `"cardinality"`. |
+| `rule_type`        | `str`          | `"deny"`, `"require"`, `"cycle"`, `"forbid_import"`, `"forbid"`, `"layer"`, `"cardinality"`, or `"rule_liveness"` (a rule that cannot fire — see above). |
 | `severity`         | `str`          | `"error"` or `"warn"`.                          |
 | `file_path`        | `str \| None`  | Source file path (for deny/import violations).   |
 | `line_number`      | `int \| None`  | Line number (for deny/import violations).        |
@@ -222,11 +251,18 @@ rules:
       edge_kind: depends_on                    # string or list of edge kinds
 
   # --- forbid_import: file-level import boundaries ---
+  # NOTE the two vocabularies: `from` matches the SOURCE FILE PATH (source root
+  # included), `to` matches the DOTTED IMPORT PATH with dots -> slashes (no source
+  # root, no extension). A `src/`-prefixed `to` can never match (BDL-UX #150).
   - name: <unique-rule-name>
     description: "<description>"
     forbid_import:
-      from: "src/pkg/module_a/**"              # fnmatch glob pattern
-      to: "src/pkg/module_b/**"                # fnmatch glob pattern
+      from: "src/pkg/module_a/**"              # file path glob
+      to: "pkg/module_b/**"                    # import path glob
+      exempt:                                  # optional, baselines existing crossings
+        - to: "pkg/module_b/atomic_io"         # `from` optional; at least one required
+          reason: "<why this crossing is tolerated>"   # mandatory
+          until: "<the condition that retires it>"     # mandatory
 
   # --- forbid (forbid_edge): forbid graph edges between tagged groups ---
   - name: <unique-rule-name>

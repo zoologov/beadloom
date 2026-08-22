@@ -316,55 +316,217 @@ def _import_path_to_file_path(import_path: str) -> str:
     return import_path.replace(".", "/")
 
 
+#: What each side of a ``forbid_import`` rule is matched against. Stated on every
+#: liveness finding because the mismatch it describes is invisible otherwise: a
+#: ``src/``-prefixed ``to:`` glob simply never matches, and the rule reads green
+#: forever (BDL-UX #150).
+MATCHING_FORM_HINT = (
+    "`from:` is matched against the repo-relative source file path as indexed "
+    "(e.g. `src/pkg/tui/app.py`); `to:` against the dotted import path with dots "
+    "replaced by slashes (e.g. `pkg/infrastructure/db`) — no `src/` prefix, no file "
+    "extension. Drop the source root from `to:`, or widen it to `**/infrastructure/**`"
+)
+
+#: ``rule_type`` of a finding that reports a rule which cannot fire, as opposed to
+#: code that breaks one. Kept distinct so a consumer can tell "your architecture is
+#: broken" from "your check is broken".
+LIVENESS_RULE_TYPE = "rule_liveness"
+
+
+def _matches_import_target(target_as_path: str, glob: str) -> bool:
+    """Match a ``to``-side glob against an indexed import target.
+
+    A glob covering a package covers a bare import OF that package: Python records
+    ``from pkg.infrastructure import db`` as the target ``pkg/infrastructure``, so
+    a rule written ``pkg/infrastructure/**`` would otherwise miss the single most
+    common way of reaching into the package it forbids (BDL-UX #150 — the probe
+    injected to reproduce that bead fired under no glob form at all). Matching the
+    target with a trailing slash appended covers it without widening anything else:
+    ``pkg/infrastructure_docs`` still does not match ``pkg/infrastructure/**``.
+    """
+    return fnmatch.fnmatch(target_as_path, glob) or fnmatch.fnmatch(
+        target_as_path + "/", glob
+    )
+
+
+def _import_exemption_index(
+    rule: ImportBoundaryRule, file_path: str, target_as_path: str
+) -> int | None:
+    """Return the index of the first exemption covering this crossing, if any."""
+    for index, exemption in enumerate(rule.exempt):
+        if fnmatch.fnmatch(file_path, exemption.from_glob) and _matches_import_target(
+            target_as_path, exemption.to_glob
+        ):
+            return index
+    return None
+
+
+def _liveness_finding(rule: ImportBoundaryRule, message: str) -> Violation:
+    """Build one advisory finding about *rule* being unable to do its job.
+
+    Always ``warn``, whatever the rule's own severity: an inert rule is a
+    configuration smell, not a boundary breach, and promoting it to ``error``
+    would turn an adopter's green pipeline red on upgrade (BDL-061 CONTEXT).
+    """
+    return Violation(
+        rule_name=rule.name,
+        rule_description=rule.description,
+        rule_type=LIVENESS_RULE_TYPE,
+        severity="warn",
+        file_path=None,
+        line_number=None,
+        from_ref_id=None,
+        to_ref_id=None,
+        message=message,
+        remediation=MATCHING_FORM_HINT,
+    )
+
+
+def _dead_glob_finding(
+    rule: ImportBoundaryRule,
+    *,
+    from_matched: bool,
+    to_matched: bool,
+    file_count: int,
+    target_count: int,
+) -> Violation:
+    """Report a rule whose glob matches nothing that exists — one finding per rule."""
+    parts: list[str] = []
+    if not from_matched:
+        parts.append(
+            f"its `from` glob '{rule.from_glob}' matches 0 of {file_count} indexed source files"
+        )
+    if not to_matched:
+        parts.append(
+            f"its `to` glob '{rule.to_glob}' matches 0 of {target_count} indexed import paths"
+        )
+    return _liveness_finding(
+        rule,
+        f"Rule '{rule.name}' cannot fire: " + "; ".join(parts) + ". It is counted as "
+        "evaluated but checks nothing",
+    )
+
+
+def _dead_exemption_findings(
+    rule: ImportBoundaryRule, used: set[int]
+) -> list[Violation]:
+    """Report every exemption that suppressed nothing — its exit condition firing."""
+    return [
+        _liveness_finding(
+            rule,
+            f"Rule '{rule.name}': the exemption for imports of '{exemption.to_glob}' "
+            f"from '{exemption.from_glob}' suppresses nothing — no such crossing is left "
+            f"in the code. Its exit condition ({exemption.until}) is met; delete it",
+        )
+        for index, exemption in enumerate(rule.exempt)
+        if index not in used
+    ]
+
+
+def _evaluate_one_import_rule(
+    rule: ImportBoundaryRule,
+    imports: list[tuple[str, int, str]],
+    *,
+    file_count: int,
+    target_count: int,
+) -> list[Violation]:
+    """Evaluate one rule: its crossings, or the reason it can produce none."""
+    violations: list[Violation] = []
+    used_exemptions: set[int] = set()
+    from_matched = False
+    to_matched = False
+
+    for file_path, line_number, import_path in imports:
+        target_as_path = _import_path_to_file_path(import_path)
+        matches_from = fnmatch.fnmatch(file_path, rule.from_glob)
+        matches_to = _matches_import_target(target_as_path, rule.to_glob)
+        from_matched = from_matched or matches_from
+        to_matched = to_matched or matches_to
+        if not (matches_from and matches_to):
+            continue
+
+        exemption_index = _import_exemption_index(rule, file_path, target_as_path)
+        if exemption_index is not None:
+            used_exemptions.add(exemption_index)
+            continue
+
+        violations.append(
+            Violation(
+                rule_name=rule.name,
+                rule_description=rule.description,
+                rule_type="forbid_import",
+                severity=rule.severity,
+                file_path=file_path,
+                line_number=line_number,
+                from_ref_id=None,
+                to_ref_id=None,
+                message=(
+                    f"File '{file_path}' imports '{import_path}' "
+                    f"which violates boundary rule '{rule.name}': "
+                    f"{rule.description}"
+                ),
+            )
+        )
+
+    if not (from_matched and to_matched):
+        # The rule cannot match at all, so its exemptions cannot be judged either:
+        # one finding, naming the side(s) at fault.
+        return [
+            _dead_glob_finding(
+                rule,
+                from_matched=from_matched,
+                to_matched=to_matched,
+                file_count=file_count,
+                target_count=target_count,
+            )
+        ]
+
+    return violations + _dead_exemption_findings(rule, used_exemptions)
+
+
 def evaluate_import_boundary_rules(
     conn: sqlite3.Connection, rules: list[ImportBoundaryRule]
 ) -> list[Violation]:
-    """Evaluate import boundary rules against the code_imports table.
+    """Report what the import-boundary rules find — including that one cannot look.
 
-    For each import, checks whether the source file matches ``from_glob``
-    and the import target (after dot-to-slash conversion) matches ``to_glob``
-    using ``fnmatch.fnmatch``.  If both match, a violation is produced.
+    For each import, checks whether the source file matches ``from_glob`` and the
+    import target (after dot-to-slash conversion) matches ``to_glob`` using
+    ``fnmatch.fnmatch``.  If both match — and no ``exempt`` entry covers the pair —
+    a violation is produced.
+
+    A rule whose ``from``/``to`` glob matches **nothing at all** in the index is
+    itself reported (``severity: warn``, ``rule_type`` ``rule_liveness``), and so is
+    an ``exempt`` entry that suppresses nothing. Without that, a mistyped glob is
+    indistinguishable from a clean codebase — which is exactly how four of this
+    project's own rules stayed inert while ``lint --strict`` printed
+    ``12 rules, 0 violations`` (BDL-UX #150).
+
+    Liveness is not reported when the index holds **no imports at all**: that is a
+    different diagnosis (lint's header already says ``0 files scanned``), and firing
+    on it would flood every fresh clone and every project in a language Beadloom
+    does not extract.
     """
     if not rules:
         return []
 
-    violations: list[Violation] = []
-
     # Fetch all code_imports (check ALL imports, not just resolved ones)
-    imports = conn.execute(
-        "SELECT file_path, line_number, import_path FROM code_imports"
-    ).fetchall()
+    imports = [
+        (str(row[0]), int(row[1]), str(row[2]))
+        for row in conn.execute("SELECT file_path, line_number, import_path FROM code_imports")
+    ]
+    if not imports:
+        return []
 
-    for imp in imports:
-        file_path = str(imp[0])
-        line_number = int(imp[1])
-        import_path = str(imp[2])
-        target_as_path = _import_path_to_file_path(import_path)
+    file_count = len({imp[0] for imp in imports})
+    target_count = len({imp[2] for imp in imports})
 
-        for rule in rules:
-            if not fnmatch.fnmatch(file_path, rule.from_glob):
-                continue
-            if not fnmatch.fnmatch(target_as_path, rule.to_glob):
-                continue
-
-            violations.append(
-                Violation(
-                    rule_name=rule.name,
-                    rule_description=rule.description,
-                    rule_type="forbid_import",
-                    severity=rule.severity,
-                    file_path=file_path,
-                    line_number=line_number,
-                    from_ref_id=None,
-                    to_ref_id=None,
-                    message=(
-                        f"File '{file_path}' imports '{import_path}' "
-                        f"which violates boundary rule '{rule.name}': "
-                        f"{rule.description}"
-                    ),
-                )
+    violations: list[Violation] = []
+    for rule in rules:
+        violations.extend(
+            _evaluate_one_import_rule(
+                rule, imports, file_count=file_count, target_count=target_count
             )
-
+        )
     return violations
 
 

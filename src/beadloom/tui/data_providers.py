@@ -281,7 +281,6 @@ class ActivityDataProvider:
     def refresh(self) -> None:
         """Re-analyze git activity and cache results."""
         from beadloom.application import graph_reads
-        from beadloom.infrastructure.git_activity import analyze_git_activity
 
         # Build source_dirs from the graph index via the application facade.
         source_dirs = graph_reads.get_node_sources(self.conn)
@@ -291,7 +290,12 @@ class ActivityDataProvider:
             return
 
         try:
-            self._activities = analyze_git_activity(self.project_root, source_dirs)
+            # Through the facade, not `infrastructure.git_activity` directly: the
+            # `tui-no-direct-infra` boundary forbids it — and, since BDL-UX #150,
+            # actually says so.
+            self._activities = graph_reads.analyze_git_activity(
+                self.project_root, source_dirs
+            )
         except (OSError, ValueError) as exc:
             logger.warning("Git activity analysis failed: %s", exc)
             self._activities = {}
