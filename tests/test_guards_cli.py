@@ -9,6 +9,8 @@ import pytest
 from click.testing import CliRunner
 
 from beadloom.application.guards.contract import ClaimedBead, GuardProbes
+from beadloom.application.guards.evaluation import evaluate_guard
+from beadloom.application.guards.models import GuardOutcome
 from beadloom.services.cli import main
 
 
@@ -47,6 +49,60 @@ def stub_probes(monkeypatch):
 
 def _run(args):
     return CliRunner().invoke(main, args)
+
+
+def _bd(root, *args: str) -> str:
+    """Run bd in *root*, asserting it succeeded, and return stdout."""
+    from beadloom.services.bd_seam import run_bd
+
+    result = run_bd(list(args), cwd=str(root))
+    assert result.ok, f"bd {args}: {result.stderr}"
+    return result.stdout
+
+
+@pytest.fixture(scope="module")
+def bd_project_past_the_page(tmp_path_factory):
+    """A REAL bd project with >50 issues, one claimed beyond bd's default page.
+
+    Independent re-verification of review .3 M4 (BDL-061.26). ``bd list`` caps at
+    50 rows unless told otherwise, and the shipped defect filtered that first page
+    client-side. The fake in ``tests/test_guard_probes.py`` proves bd's
+    *documented* contract; standing rule 4 wants the transport itself, and this is
+    the assertion that was missing when the defect shipped.
+
+    The claimed id is chosen at run time as one bd's own default page does NOT
+    contain, so the case bites regardless of how bd orders its answer. Seeded with
+    ``bd import`` (60 issues in one call, measured 0.9 s) rather than 60 ``bd
+    create`` invocations (~1 s each); module-scoped because the setup is ~5 s and
+    both tests want the same state. Returns ``(project_root, claimed_id)``.
+    """
+    from beadloom.services.bd_seam import BdUnavailableError, run_bd
+
+    root = tmp_path_factory.mktemp("bd-past-page")
+    try:
+        run_bd(["--version"], cwd=str(root))
+    except BdUnavailableError:
+        pytest.skip("bd binary not installed")
+
+    _bd(root, "init", "--prefix", "pg", "--non-interactive")
+    seed = root / "seed.jsonl"
+    seed.write_text(
+        "".join(
+            json.dumps({"title": f"work item {n:03d}", "issue_type": "task"}) + "\n"
+            for n in range(60)
+        ),
+        encoding="utf-8",
+    )
+    _bd(root, "import", str(seed))
+
+    first_page = {issue["id"] for issue in json.loads(_bd(root, "list", "--json"))}
+    every = json.loads(_bd(root, "list", "--json", "--limit", "0"))
+    assert len(first_page) == 50, "bd's default page is the premise of these tests"
+    assert len(every) >= 51, "the project must actually cross the boundary"
+    beyond = next(issue["id"] for issue in every if issue["id"] not in first_page)
+    _bd(root, "update", beyond, "--status", "in_progress", "--claim")
+
+    return root, beyond
 
 
 class TestExitCodeContract:
@@ -240,10 +296,11 @@ class TestRealProbes:
         held whether the probe worked, returned nothing, or silently truncated,
         which is how the ``--limit`` defect survived 248 tests (review .3, M5).
 
-        NOT covered here, deliberately: the >50 paging boundary against the real
-        binary. Creating 51 beads costs ~1 s each on the embedded Dolt backend,
-        which is not a price the default suite should pay; that boundary is
-        proved against bd's documented contract in
+        The >50 paging boundary is covered separately, against the real binary
+        too: ``bd import`` seeds 60 issues in one call, so the price the original
+        note refused (~1 s per ``bd create``) is not paid. See
+        ``test_a_bead_claimed_past_bds_default_page_is_found_by_the_real_binary``
+        (BDL-061.26) and, for bd's documented contract in isolation,
         ``tests/test_guard_probes.py::TestTrackerReadsAllOfBdsAnswer``.
         """
         from beadloom.services.bd_seam import BdUnavailableError, run_bd
@@ -272,6 +329,41 @@ class TestRealProbes:
         assert [bead.id for bead in after] == [claimed_id]
         assert idle_id not in [bead.id for bead in after]
         assert after[0].title == "claimed work"
+
+    def test_a_bead_claimed_past_bds_default_page_is_found_by_the_real_binary(
+        self, bd_project_past_the_page
+    ) -> None:
+        """The >50 boundary the fix left uncovered (BDL-061.26, review .3 M4)."""
+        from beadloom.services.guard_probes import build_probes
+
+        root, beyond = bd_project_past_the_page
+
+        claimed = build_probes(root).tracker.claimed_beads()
+
+        assert [bead.id for bead in claimed] == [beyond]
+
+    def test_a_project_past_bds_page_size_does_not_produce_a_false_violation(
+        self, bd_project_past_the_page
+    ) -> None:
+        """The same boundary as a verdict: what the adopter would actually see.
+
+        Under the ``strictness: { epic: block }`` example the docs ship, the
+        pre-fix probe turned this into a BLOCK on an edit while a bead genuinely
+        was claimed.
+        """
+        from beadloom.services.guard_probes import build_probes
+
+        root, beyond = bd_project_past_the_page
+
+        verdict = evaluate_guard(
+            "bead-claimed",
+            project_root=root,
+            context={"path": "src/app.py", "work_kind": "epic"},
+            probes=build_probes(root),
+        )
+
+        assert verdict.outcome is GuardOutcome.PASS, verdict.why
+        assert beyond in verdict.why
 
 
 class TestHookHarnessValidation:

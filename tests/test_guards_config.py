@@ -364,3 +364,137 @@ class TestEventRoutingIsNotDeclaredHere:
             assert True not in keys, name
 
 
+
+
+# ---------------------------------------------------------------------------
+# Independent re-verification of the .25 fixes (BDL-061.26).
+# ---------------------------------------------------------------------------
+
+
+class TestHowWideAnExclusionActuallyReaches:
+    """The matcher's breadth, asserted rather than assumed.
+
+    The module's own docstring states the property these tests hold it to:
+    "an exclusion that covers more than it says is exactly the failure this
+    module exists to prevent". ``**`` is translated to an unanchored ``.*``, so
+    the first case below covers more than it says.
+    """
+
+    @staticmethod
+    def _exclusion(pattern: str):
+        from beadloom.application.guards.config import GuardExclusion
+
+        return GuardExclusion(path=pattern, reason="r", until="BDL-999")
+
+    def test_a_star_star_prefix_matches_a_file_it_does_not_name(self) -> None:
+        """RECORDED GAP: ``**/app.py`` also exempts ``src/myapp.py``.
+
+        ``**`` becomes ``.*`` with no requirement that a separator follow, so the
+        pattern reads as "anything ending in app.py". An author writing
+        ``**/config.py`` silently exempts ``src/appconfig.py`` too — a wider
+        exemption than the one declared, which is the direction that switches a
+        gate off rather than the direction that over-guards.
+
+        The fix is ``(?:.*/)?`` for a ``**/`` prefix; it reddens the second
+        assertion. Pinned, not fixed, because this bead verifies.
+        """
+        exclusion = self._exclusion("**/app.py")
+
+        assert exclusion.matches("src/app.py")
+        assert exclusion.matches("src/myapp.py")
+
+    def test_a_star_star_segment_matches_a_directory_it_does_not_name(self) -> None:
+        """Same root cause one level in: ``**/tests/**`` reaches ``src/mytests/``."""
+        exclusion = self._exclusion("**/tests/**")
+
+        assert exclusion.matches("tests/unit/a.py")
+        assert exclusion.matches("src/mytests/a.py")
+
+    @pytest.mark.parametrize(
+        ("pattern", "path", "matches"),
+        [
+            ("src/**", "src/a/b.py", True),
+            ("src/**", "src", False),
+            ("src/**", "srcx/a.py", False),
+            ("src/*", "src/a/b.py", False),
+            ("*.py", "app.py", True),
+            ("*.py", "src/app.py", False),
+            ("?", "a", True),
+            ("?", "ab", False),
+        ],
+    )
+    def test_the_documented_glob_semantics_hold(self, pattern, path, matches) -> None:
+        """``**`` crosses directories and ``*`` does not — the SPEC's promise."""
+        assert self._exclusion(pattern).matches(path) is matches
+
+
+class TestNothingRoutesOnAnEvent:
+    """The SPEC's claim, checked against behaviour rather than against a grep.
+
+    SPEC.md: "event routing is not Beadloom's today ... Beadloom is told
+    'evaluate this guard for this context'; it is not told, and does not decide,
+    what happened." If any code path had quietly kept reading the event, the
+    verdicts below would differ.
+    """
+
+    @staticmethod
+    def _run(tmp_path, probes, context):
+        from beadloom.application.guards.evaluation import evaluate_guard
+
+        return evaluate_guard(
+            "bead-claimed", project_root=tmp_path, context=context, probes=probes(beads=())
+        )
+
+    def test_the_verdict_is_identical_whatever_event_delivered_it(
+        self, tmp_path, make_guard_probes
+    ) -> None:
+        edit = self._run(
+            tmp_path,
+            make_guard_probes,
+            {"path": "src/app.py", "tool": "Edit", "event": "PreToolUse"},
+        )
+        unrelated = self._run(
+            tmp_path,
+            make_guard_probes,
+            {"path": "src/app.py", "tool": "Bash", "event": "SessionStart"},
+        )
+
+        assert (edit.outcome, edit.why, edit.not_covered) == (
+            unrelated.outcome,
+            unrelated.why,
+            unrelated.not_covered,
+        )
+
+    def test_a_guard_runs_even_with_no_event_in_the_context(
+        self, tmp_path, make_guard_probes
+    ) -> None:
+        """Nothing depends on the key, so its absence cannot change the answer."""
+        bare = self._run(tmp_path, make_guard_probes, {"path": "src/app.py"})
+
+        assert bare.outcome is not None
+        assert bare.why
+
+    def test_the_spec_declares_no_on_key_in_its_schema_example(self) -> None:
+        """Parsed, not grepped: the prose says the words "no ``on:`` key"."""
+        spec_path = (
+            Path(__file__).resolve().parent.parent
+            / "docs"
+            / "domains"
+            / "application"
+            / "features"
+            / "flow-guards"
+            / "SPEC.md"
+        )
+        text = spec_path.read_text(encoding="utf-8")
+        blocks = [
+            block.split("```", 1)[0]
+            for block in text.split("```yaml")[1:]
+        ]
+
+        assert blocks, "the SPEC must still show a guards: schema example"
+        for block in blocks:
+            body = yaml.safe_load(block) or {}
+            for name, declared in (body.get("guards") or {}).items():
+                keys = set(declared or {})
+                assert "on" not in keys, name
+                assert True not in keys, name

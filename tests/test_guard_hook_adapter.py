@@ -187,3 +187,56 @@ class TestSettingsOfTheWrongShapeAreNeverRewritten:
 
         assert result.script is None
         assert list(tmp_path.iterdir()) == []
+
+
+class TestTheMatcherIsTheOnlyRouterAndItLivesInTheHarness:
+    """Independent re-verification (BDL-061.26) of the SPEC's event-routing claim.
+
+    SPEC.md, after ``on:`` was deleted: "Which tool invocations count as an edit
+    is decided entirely by the harness adapter — in Claude Code, the
+    ``Edit|Write|NotebookEdit`` matcher in ``.claude/settings.json``".
+
+    The first half is TRUE and asserted below: the routing decision exists only
+    as a matcher string the scaffolder writes into the harness's settings, and no
+    Beadloom code reads it back.
+
+    The second half quotes the wrong string. The scaffolder emits
+    ``Edit|Write|MultiEdit|NotebookEdit``; the three-tool spelling is what *this*
+    repo's hand-written ``.claude/settings.json`` carries (review .3, m5 — still
+    open). So the SPEC describes the dogfood rather than the product, on the one
+    sentence a reader consults to learn what an adopter gets.
+    """
+
+    def test_the_routing_decision_exists_only_in_the_harness_settings(
+        self, tmp_path
+    ) -> None:
+        scaffold_guard_hooks(tmp_path, guard_names=GUARDS)
+        settings = json.loads((tmp_path / SETTINGS_RELPATH).read_text(encoding="utf-8"))
+
+        matchers = {entry["matcher"] for entry in settings["hooks"]["PreToolUse"]}
+
+        assert matchers == {"Edit|Write|MultiEdit|NotebookEdit"}
+        # Nothing in the emitted adapter narrows or re-decides it.
+        script = (tmp_path / GUARD_HOOK_RELPATH).read_text(encoding="utf-8")
+        for tool in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
+            assert tool not in _script_logic_lines(script)[0]
+
+    def test_the_spec_quotes_a_matcher_the_scaffolder_does_not_emit(self) -> None:
+        """RECORDED GAP: correcting either side reddens this, which is the point."""
+        from pathlib import Path
+
+        from beadloom.onboarding.guard_hooks import EDIT_MATCHER
+
+        spec = (
+            Path(__file__).resolve().parent.parent
+            / "docs"
+            / "domains"
+            / "application"
+            / "features"
+            / "flow-guards"
+            / "SPEC.md"
+        ).read_text(encoding="utf-8")
+
+        assert EDIT_MATCHER == "Edit|Write|MultiEdit|NotebookEdit"
+        assert "`Edit|Write|NotebookEdit` matcher" in spec
+        assert EDIT_MATCHER not in spec

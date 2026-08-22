@@ -467,3 +467,250 @@ class TestLivenessOutput:
         result = CliRunner().invoke(main, ["guard", "--liveness", "--project", str(tmp_path)])
 
         assert result.exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# Independent re-verification of the .25 liveness fixes (BDL-061.26).
+#
+# ``--liveness`` is the one command whose entire product is honesty about which
+# gates are dead. The fix corrected two spellings (``*`` and ``**/**``); these
+# tests ask whether the corrected predicate is *complete*, and pin the two
+# answers where it is not.
+# ---------------------------------------------------------------------------
+
+
+def _one_exclusion(pattern: str) -> str:
+    return (
+        "guards:\n"
+        "  bead-claimed:\n"
+        "    exclusions:\n"
+        f"      - path: {pattern}\n"
+        "        reason: 'migrating'\n"
+        "        until: 'BDL-999'\n"
+    )
+
+
+class TestPatternsNobodyHasClassifiedYet:
+    """Spellings outside the ``*`` / ``**`` pair the review named."""
+
+    @pytest.mark.parametrize(
+        ("pattern", "expected"),
+        [
+            ("'**/**/**'", True),  # three of them still cross everything
+            ("'?*'", False),  # one-or-more non-separator chars: top level only
+            ("'*/**'", False),  # everything nested, but nothing at the top level
+            ("'**/*.*'", False),  # anything with a dot — a Makefile escapes it
+            ("'**/'", True),  # trailing separator is consumed by the ** rule
+            ("'*/'", False),  # matches no path at all: a false claim either way
+        ],
+    )
+    def test_the_report_agrees_with_the_matcher(
+        self, tmp_path, write_flow_yml, pattern, expected
+    ) -> None:
+        """Whatever the answer is, it must be the matcher's answer, not a guess.
+
+        Each row was measured against :meth:`GuardExclusion.matches` first and
+        the row asserts both halves, so a future rewrite of either the predicate
+        or the glob translator cannot drift them apart silently.
+        """
+        write_flow_yml(_one_exclusion(pattern))
+        exclusion = load_guards_config(tmp_path).spec_for("bead-claimed").exclusions[0]
+        probe_paths = ("README.md", "Makefile", ".gitignore", "src/a/b/c/deep.txt")
+
+        covers_all = all(exclusion.matches(path) for path in probe_paths)
+
+        assert covers_all is expected
+        assert _rows(tmp_path)["bead-claimed"].excluded_everywhere is expected
+
+
+class TestTwoExclusionsThatTogetherCoverEverything:
+    """RECORDED GAP: the predicate is per-exclusion, so a union is invisible.
+
+    ``*`` covers the top level and ``*/**`` covers every subtree. Declared
+    together they exempt every path in the project — the guard cannot fire on
+    anything — yet neither pattern is a catch-all on its own, so
+    ``excluded_everywhere`` is ``False`` and the report says nothing.
+
+    Not a spelling the review named and not in the fix's stated limits, which
+    describe only the pattern-versus-project distinction. It is the same class of
+    defect the fix removed (a dead gate the honesty report calls live), reachable
+    from two ordinary-looking exclusions.
+
+    The fix is to ask whether *any* exclusion covers each probe path rather than
+    whether *one* covers all of them; it would redden the last assertion here.
+    """
+
+    _UNION = (
+        "guards:\n"
+        "  bead-claimed:\n"
+        "    exclusions:\n"
+        "      - path: '*'\n"
+        "        reason: 'top level is scratch space'\n"
+        "        until: 'BDL-999'\n"
+        "      - path: '*/**'\n"
+        "        reason: 'everything else is vendored'\n"
+        "        until: 'BDL-999'\n"
+    )
+
+    def test_no_path_at_all_escapes_the_pair(self, tmp_path, write_flow_yml) -> None:
+        write_flow_yml(self._UNION)
+        spec = load_guards_config(tmp_path).spec_for("bead-claimed")
+
+        for path in ("README.md", ".gitignore", "src/app.py", "a/b/c/d/e.txt"):
+            assert spec.exclusion_for(path) is not None, path
+
+    def test_the_guard_is_dead_and_the_report_does_not_say_so(
+        self, tmp_path, write_flow_yml, make_guard_probes
+    ) -> None:
+        from beadloom.application.guards.evaluation import evaluate_guard
+
+        write_flow_yml(self._UNION)
+        (tmp_path / "README.md").write_text("# project\n", encoding="utf-8")
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+        verdict = evaluate_guard(
+            "bead-claimed",
+            project_root=tmp_path,
+            context={"path": "src/app.py"},
+            probes=make_guard_probes(beads=()),
+        )
+        row = _rows(tmp_path)["bead-claimed"]
+
+        assert verdict.outcome is GuardOutcome.SKIP, verdict.why
+        assert row.dead_exclusions == (), "both patterns match real files"
+        # The gap: nothing can make this guard fire, and the row reads healthy.
+        assert row.excluded_everywhere is False
+        assert row.idle is True, "only because it has never fired in a fresh project"
+
+
+class TestAnExclusionThatSwallowsThisProject:
+    """The limit the fix declared — verified, and measured against the report.
+
+    The fix's own note: ``excluded_everywhere`` reads the pattern only, so
+    ``src/**`` in a project whose code is entirely under ``src/`` is not
+    reported. That is TRUE, and defensible for a predicate on
+    :class:`GuardSpec`: an answer computed from today's files would flip under an
+    unrelated commit.
+
+    What the note does not say is that the *report* has the tree in hand —
+    :func:`project_files` is already walked for ``dead_exclusions`` — so the
+    liveness row answers "this pattern matches nothing that exists" and never
+    "this pattern matches everything that exists", though both are one pass over
+    the same list. The silence below is the measurable consequence.
+    """
+
+    def test_a_project_entirely_under_the_excluded_directory_is_not_reported(
+        self, tmp_path, write_flow_yml
+    ) -> None:
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "app.py").write_text("x = 1\n", encoding="utf-8")
+        (tmp_path / "src" / "util.py").write_text("y = 2\n", encoding="utf-8")
+        write_flow_yml(_one_exclusion("'src/**'"))
+
+        row = _rows(tmp_path)["bead-claimed"]
+
+        assert row.excluded_everywhere is False
+        assert row.dead_exclusions == ()
+
+    def test_every_file_the_report_can_see_is_in_fact_excluded(
+        self, tmp_path, write_flow_yml
+    ) -> None:
+        """The fact the row would need — computed here, not reported anywhere."""
+        from beadloom.application.guards.liveness import project_files
+
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "app.py").write_text("x = 1\n", encoding="utf-8")
+        write_flow_yml(_one_exclusion("'src/**'"))
+        spec = load_guards_config(tmp_path).spec_for("bead-claimed")
+
+        files = [f for f in project_files(tmp_path) if not f.startswith(".beadloom/")]
+
+        assert files, "the walk must see something for this to mean anything"
+        assert all(spec.exclusion_for(path) is not None for path in files), files
+
+
+class TestWalkingTheProjectTree:
+    """The tree walk behind ``dead_exclusions`` — its silent-failure corners."""
+
+    def test_an_unreadable_directory_does_not_lose_the_readable_ones(
+        self, tmp_path
+    ) -> None:
+        """A permission error must narrow the answer, never abort the report.
+
+        Direction matters: a walk that returned nothing would make every pattern
+        look dead (the report crying wolf), and one that raised would take the
+        whole liveness command down with it.
+        """
+        import os
+        import stat
+
+        from beadloom.application.guards.liveness import project_files
+
+        (tmp_path / "open").mkdir()
+        (tmp_path / "open" / "a.py").write_text("x = 1\n", encoding="utf-8")
+        shut = tmp_path / "shut"
+        shut.mkdir()
+        (shut / "b.py").write_text("y = 2\n", encoding="utf-8")
+        shut.chmod(0o000)
+        try:
+            if os.access(shut, os.R_OK):  # running as root — the case cannot arise
+                pytest.skip("directory permissions are not enforced for this user")
+
+            files = project_files(tmp_path)
+        finally:
+            shut.chmod(stat.S_IRWXU)
+
+        assert "open/a.py" in files
+        assert "shut/b.py" not in files
+
+    def test_a_vendor_directory_is_not_walked(self, tmp_path) -> None:
+        (tmp_path / "node_modules").mkdir()
+        (tmp_path / "node_modules" / "dep.js").write_text("x\n", encoding="utf-8")
+        (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+
+        from beadloom.application.guards.liveness import project_files
+
+        assert project_files(tmp_path) == ("app.py",)
+
+    def test_a_symlinked_file_is_not_a_file_the_walk_counts(self, tmp_path) -> None:
+        """Links are skipped, so an exclusion written about one reads as dead.
+
+        The other half of ``tests/test_guards_paths.py``'s symlinked-directory
+        case: resolution follows the link (so the exclusion no longer applies to
+        it), and the walk does not (so the report cannot see it either).
+        """
+        from beadloom.application.guards.liveness import project_files
+
+        (tmp_path / "real.py").write_text("x = 1\n", encoding="utf-8")
+        (tmp_path / "link.py").symlink_to(tmp_path / "real.py")
+
+        assert project_files(tmp_path) == ("real.py",)
+
+    def test_a_pattern_matching_only_vendored_files_reads_as_dead(
+        self, tmp_path, write_flow_yml
+    ) -> None:
+        """Consequence of the pruning, stated so it is a decision not a surprise.
+
+        ``node_modules/**`` matches real files, but none the walk can see, so the
+        report calls it dead. The wording ("matches no file in the project")
+        carries that: a pruned tree is not part of what an exclusion is written
+        about. It is the quiet direction — an over-report on a pattern nobody
+        needed — but it is a false statement about the disk.
+        """
+        (tmp_path / "node_modules").mkdir()
+        (tmp_path / "node_modules" / "dep.js").write_text("x\n", encoding="utf-8")
+        (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+        write_flow_yml(_one_exclusion("'node_modules/**'"))
+
+        assert _rows(tmp_path)["bead-claimed"].dead_exclusions == ("node_modules/**",)
+
+    def test_the_walk_stops_at_the_configured_cap(self, tmp_path, monkeypatch) -> None:
+        """The cap only ever makes the report quieter — asserted, not assumed."""
+        from beadloom.application.guards import liveness
+
+        for n in range(6):
+            (tmp_path / f"f{n}.py").write_text("x = 1\n", encoding="utf-8")
+        monkeypatch.setattr(liveness, "_MAX_FILES", 3)
+
+        assert len(liveness.project_files(tmp_path)) == 3
