@@ -309,8 +309,12 @@ def test_shipped_env_is_genuinely_non_utf8_on_linux() -> None:
     """The C row really is ASCII on Linux — the spelling defeats the coercion.
 
     Measured for this bead on ``python:3.12-slim``: a bare ``LC_ALL=C`` reports
-    ``preferred=utf-8`` (PEP 538 coercion + PEP 540 auto-enable); adding
-    ``PYTHONCOERCECLOCALE=0`` and ``PYTHONUTF8=0`` gives ``preferred=ascii``.
+    ``preferred=utf-8 fs=utf-8 utf8_mode=1`` — on that image it is PEP 540
+    auto-enabling UTF-8 Mode under a C/POSIX ``LC_CTYPE`` that does it, and
+    ``PYTHONUTF8=0`` alone was enough to get ``preferred=ANSI_X3.4-1968
+    fs=ascii``. ``PYTHONCOERCECLOCALE=0`` is carried as well because the PEP 538
+    half is what bites on images that do have a ``C.UTF-8`` to coerce to; the
+    in-CI probe means we do not have to be right about which one it is.
     """
     preferred, filesystem, _ = _probe("C")
     assert codecs.lookup(preferred).name != "utf-8", preferred
@@ -410,3 +414,79 @@ def test_the_8bit_row_is_built_with_localedef_not_locale_gen() -> None:
     build = next(s for s in builders if "localedef" in s or "locale-gen" in s)
     assert "locale-gen" not in build, "locale-gen cannot build en_US.ISO-8859-1"
     assert "localedef" in build
+
+
+# --------------------------------------------------------------------------- #
+# 6. The shipped DEFAULT cannot lock an adopter out.
+#
+# `DEFAULT_STATUS_CHECK_CONTEXTS` is what `beadloom setup-branch-protection`
+# PUTs in ANY repo, and the vendored template is the pipeline a scaffolded repo
+# gets. If the default names a check the template never runs, that repo's `main`
+# becomes permanently unmergeable under `strict` — the lockout the
+# branch_protection module docstring warns about, arriving from the one place
+# nobody looks: a job added to THIS repo's ci.yml only.
+# --------------------------------------------------------------------------- #
+
+TEMPLATE = (
+    REPO_ROOT
+    / "src"
+    / "beadloom"
+    / "onboarding"
+    / "templates"
+    / "ai_techwriter"
+    / "github-workflow.yml"
+)
+
+
+def _template_jobs() -> dict[str, Any]:
+    doc = yaml.safe_load(TEMPLATE.read_text(encoding="utf-8"))
+    assert isinstance(doc, dict)
+    jobs = doc["jobs"]
+    assert isinstance(jobs, dict)
+    return jobs
+
+
+def test_the_vendored_template_runs_the_locale_dimension_too() -> None:
+    """A scaffolded repo gets the dimension, not just this one.
+
+    Adopters running in a container are who .36's defect would have shipped to,
+    so the template carrying the dimension is the point rather than a courtesy.
+    """
+    assert LOCALE_JOB in _template_jobs(), (
+        f"the vendored template declares no {LOCALE_JOB!r} job, but "
+        "DEFAULT_STATUS_CHECK_CONTEXTS names its check-runs as REQUIRED — a "
+        "scaffolded repo would have required checks that never report"
+    )
+
+
+def test_every_default_required_context_is_a_check_the_template_runs() -> None:
+    """The lockout guard, stated over the TEMPLATE rather than over this repo.
+
+    tests/test_ci_consolidated_structure.py already pins
+    ``derived(ci.yml) == DEFAULT_STATUS_CHECK_CONTEXTS`` for this repo. That is
+    not enough on its own: the same constant is applied to repos whose pipeline
+    is the template, so both must render the same check-run names.
+    """
+    from beadloom.onboarding.branch_protection import DEFAULT_STATUS_CHECK_CONTEXTS
+
+    rendered: set[str] = set()
+    for key, job in _template_jobs().items():
+        base = str(job.get("name", key))
+        strategy = job.get("strategy")
+        matrix = strategy.get("matrix") if isinstance(strategy, dict) else None
+        axes = (
+            [v for v in matrix.values() if isinstance(v, list)]
+            if isinstance(matrix, dict)
+            else []
+        )
+        if axes:
+            assert len(axes) == 1, f"{key}: multi-axis matrix is not modelled"
+            rendered.update(f"{base} ({value})" for value in axes[0])
+        else:
+            rendered.add(base)
+
+    missing = set(DEFAULT_STATUS_CHECK_CONTEXTS) - rendered
+    assert not missing, (
+        "required-by-default contexts the vendored template never produces "
+        f"(a scaffolded repo would be permanently unmergeable): {sorted(missing)}"
+    )

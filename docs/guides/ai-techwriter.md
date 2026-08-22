@@ -58,6 +58,17 @@ BDL-050 runs this job as `ai-techwriter` inside the single `ci.yml`, gated on
 `needs: [gate, tests, site-build]`. The job body is the BDL-049 model verbatim — only
 the trigger moved into `ci.yml` and the exit code is now driven by the verdict.
 
+The scaffolded pipeline also carries a fifth verify job, `tests-locale`
+(BDL-061.38): the same whole suite run under `LC_ALL=C` and under
+`en_US.ISO-8859-1`, with `PYTHONUTF8=0` + `PYTHONCOERCECLOCALE=0` so PEP 538/540
+cannot quietly put it back on UTF-8. It is an environment **dimension** — the
+value is in the DIFFERENCE between it and the UTF-8 `tests` legs, so never
+"fix" a red leg by pinning a UTF-8 locale. Its two check-runs are in
+`DEFAULT_STATUS_CHECK_CONTEXTS`; if you delete the job from your pipeline, drop
+the matching contexts too, or `main` waits forever for a check that never runs.
+It does not gate `ai-techwriter` (`needs:` stays the portable three), because a
+locale-red PR is already unmergeable via the required checks.
+
 Why `--since <merge-base>`: a fresh CI checkout reindexes from scratch and
 re-baselines the stored `sync_state` to the PR's code, so a plain `sync-check`
 would see 0 stale even when the PR left a doc behind. The workflow instead computes
