@@ -7,18 +7,12 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-mr2l.29` — [dev] S1 fix-3: make "no invocation without a verdict and a
-record" structural (test `.28` returned F7–F10 + m1–m3; three cycles each found a different
-forgotten entry path)
-**Goal:** one boundary around every invocation, so that a failure anywhere — argument parsing,
-the stdin read, project discovery, the evaluation — produces a verdict and a record, and so
-that a new failure mode shows up in `--liveness` instead of in a traceback.
-**Done when (met):** every enumerated exit path produces a verdict and a record; no path exits 1
-unless the verdict is genuinely `warn`; F7 (undecodable stdin), F8 (six unrecorded
-invocations), F9 (the subdirectory), F10 (the strip) and m1/m2 closed with tests that fail on
-`d4bb618`; an enumeration test exists that reddens when an exit is added without a record; the
-SPEC states the project-discovery decision *and its reasoning*; `not_covered` is truthful and
-what remains is named.
+**Bead:** none — `.29` closed (commit `2a82dad`). Next in the chain: `beadloom-mr2l.30`
+[test] S1 fix-3 — prove the boundary holds where three cycles did not.
+**Handover for `.30`:** the enumeration + structural pins live in
+`tests/test_guards_invocation.py`; the recording rule and its three exceptions, the
+project-discovery decision, the exit-code split and the named residuals are in
+`docs/domains/application/features/flow-guards/SPEC.md`.
 
 ## Progress
 
