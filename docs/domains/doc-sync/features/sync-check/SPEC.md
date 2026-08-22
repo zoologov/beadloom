@@ -69,6 +69,18 @@ warning** when it differs. `mark_reference_synced` re-baselines a reference doc
   contributing a pair is listed with the reason it could not be checked.
 - The reference baseline survives reindex for an unchanged `watches` set, so a
   drift accrued since the last `sync-update` is still reported.
+- **Both sides of a hash comparison are decoded by the same stated rule**
+  (`utf-8` + `errors="surrogateescape"`, `_TEXT_CODEC` / `_TEXT_ERRORS`): the
+  working tree via `read_text`, the content at a ref via `git show`. Neither
+  side consults the image's locale, so a verdict cannot be an artefact of the
+  environment — MEASURED before the fix on this repo with `docs/architecture.md`
+  unchanged at `HEAD`: an ambient `latin-1` made `sync-check --since` report
+  drift in a file nobody touched, and an ambient `ascii` raised an uncaught
+  `UnicodeDecodeError` out of a command that runs inside `beadloom ci`.
+- A file whose bytes are not UTF-8 still has a digest (the bytes round-trip), so
+  one latin-1 source file cannot crash the Gate. `_file_content_at_ref` returns
+  `None` for *absent at that ref* and for nothing else: an unreachable `git` is
+  not caught into `None`, because that would report drift in an untouched file.
 
 ## API
 

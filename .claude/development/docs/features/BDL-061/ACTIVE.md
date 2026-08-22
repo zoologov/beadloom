@@ -7,8 +7,8 @@
 
 ## Current Bead
 
-**Bead:** `.5` is done (S2 core). The S2 wave ran `.5`, `.37` and `.38` in parallel on disjoint
-surfaces.
+**Bead:** `.40` is done (S2 wave 2, in parallel with `.43` and `.33`). The S2 wave 1 ran `.5`,
+`.37` and `.38` in parallel on disjoint surfaces.
 **Next:** `.6` (test), `.7` (review), `.8` (tech-writer — the bead that DELETES standing rules
 1–3 from this CONTEXT and from the shipped `CLAUDE.md` core), plus `.33` and `.34`.
 
@@ -101,6 +101,28 @@ surfaces.
       same pair, and the first two make `sync-check --since` and `diff --since` report changes
       that did not happen. Suite 5595 → 5633
 
+- [x] S2 `.40` dev (2026-08-23) — **the Gate's own instrument was lying.** Four call sites where
+      a comparison decoded its two sides by different rules: the current content with an explicit
+      `encoding="utf-8"`, the at-ref / subprocess content with whatever the image says. All four
+      of `.37`'s verdicts RE-MEASURED before any edit and all four held to the digit — an ambient
+      `latin-1` made `sync-check --since` report drift in a file nobody touched and an ambient
+      `ascii` raised out of a command that runs inside `beadloom ci`; `diff --since` (the review
+      role's instrument) crashed or fabricated; the dashboard showed a contributor who does not
+      exist; a federation export dropped its provenance while looking like an honest unknown.
+      Fixed by decoding deliberately on BOTH sides through one shared definition per site, with
+      each `errors=` chosen by direction of failure and stated in the code: `surrogateescape` for
+      the sync digest (total + injective, so no doc can crash the Gate), `strict` for graph YAML
+      (UTF-8 by definition — a refusal that names the file, never a fabricated diff), `replace`
+      for author names (MEASURED: `surrogateescape` there makes sqlite3 raise
+      `UnicodeEncodeError` inside `reindex`, turning a display defect into a Gate crash), and
+      `surrogateescape` for git paths in the export (the rule `os.fsdecode` itself uses, so the
+      toplevel comparison has the same rule on both sides). Handlers narrowed-by-analysis to
+      `OSError` with the enumeration argued, including the redundant
+      `(FileNotFoundError, OSError)` `.37` read as the tell — which was also narrow in the
+      direction that matters (`PermissionError`). 10 sabotages, and 2 of them PASSED first time,
+      exposing two of my own gaps (the at-ref decode error and the `PermissionError` row) that
+      are now covered. 23 tests; isolated tree (HEAD + only my files): 5691 passed / 0 failed,
+      clean-DB lint 0 violations, sync-check rc 0, doctor rc 0.
 - [x] S2 `.5` dev (2026-08-22) — **the three lying checks fixed, and each fix proved by a test
       that would have caught the false green.** #142: an incremental reindex now re-extracts
       imports for the code files it touched and rebuilds the DERIVED `depends_on` set, which is
@@ -148,6 +170,7 @@ surfaces.
 | .32 | Done | S1 test: the Click-validation pin as wide as its sentence; `--project` `readable=False` |
 | .36 | Done | S1 hotfix: the payload decoded as bytes (locale-independent); the resolve handler as wide as its sentence |
 | .37 | Done | S2: the probes decode with a stated codec, not the image's locale; handlers as wide as their sentence; sweep of every other subprocess call |
+| .40 | Done | S2: the four call sites with a measured wrong ANSWER — both sides of a comparison now decoded by the same stated rule |
 | .4 | Done | S1 docs: exit-3 invariant qualified (not deleted), enforcement surface written down, `error` in both READMEs |
 | .33 | Pending | S2: the exit-3 class is fail-open — a broken `flow.yml` disables every guard |
 | .34 | Pending | S2: an unknown key in a guard body is silently ignored (`option:` → trunk `main`) |

@@ -185,20 +185,41 @@ def analyze_git_activity(
     if not source_dirs:
         return {}
 
+    # The codec is stated, not inherited: this output is author NAMES and file
+    # paths, and ``text=True`` would decode them with
+    # ``locale.getpreferredencoding(False)``. MEASURED on a repo authored by
+    # "Иван Петров": an ambient latin-1 yields "Ð\x98Ð²Ð°Ð½ ..." -- a contributor
+    # who does not exist, shown in the dashboard as a real person -- and an
+    # ambient ascii raises ``UnicodeDecodeError``, which is a ``ValueError`` and
+    # so escaped the handler below.
+    #
+    # ``errors="replace"`` rather than ``surrogateescape``, and the reason is the
+    # direction of failure rather than fidelity: a name reaches sqlite through
+    # ``reindex``'s ``UPDATE nodes SET extra = ?``, and sqlite3 encodes
+    # parameters as strict UTF-8 -- MEASURED, a lone surrogate raises
+    # ``UnicodeEncodeError`` there, turning a display defect into a ``reindex``
+    # crash inside ``beadloom ci``. The cost is stated and bounded: ``replace``
+    # is not injective, so two authors differing only in a byte that is not UTF-8
+    # render as one. That loss touches names which are already not UTF-8, only
+    # their display, and never a gate, a verdict or an exit code.
     # Run git log: single invocation covering 90 days
     try:
         result = subprocess.run(
             ["git", "log", "--format=%H %aI %aN", "--name-only", "--since=90 days ago"],  # noqa: S607
             cwd=str(project_root),
             capture_output=True,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
         )
     except (OSError, subprocess.SubprocessError):
         # OSError covers git-missing (FileNotFoundError), permission denied,
         # and an invalid cwd (NotADirectoryError); SubprocessError covers
-        # TimeoutExpired and other subprocess failures. Git being unavailable
-        # for any of these reasons degrades gracefully to "no activity".
+        # TimeoutExpired (reachable: timeout=30 above) and other subprocess
+        # failures. With the codec stated below, no decode error can reach here,
+        # so this enumeration is now complete rather than merely plausible.
+        # Git being unavailable for any of these reasons degrades gracefully to
+        # "no activity".
         return {}
 
     if result.returncode != 0:

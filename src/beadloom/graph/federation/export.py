@@ -215,9 +215,10 @@ def _repo_from_git_remote(project_root: Path) -> str | None:
             ["git", "remote", "get-url", "origin"],  # noqa: S607
             cwd=project_root,
             capture_output=True,
-            text=True,
+            encoding=_GIT_CODEC,
+            errors=_GIT_ERRORS,
         )
-    except (FileNotFoundError, OSError):
+    except OSError:  # FileNotFoundError IS an OSError; see :func:`_run_git`
         return None
     if result.returncode != 0:
         return None
@@ -255,6 +256,22 @@ def _is_git_toplevel(project_root: Path) -> bool:
         return False
 
 
+#: The codec every git answer in this module is read with. Stated, because
+#: ``text=True`` decodes with ``locale.getpreferredencoding(False)`` and one of
+#: those answers -- ``rev-parse --show-toplevel`` -- is a *path* that is then
+#: COMPARED against ``project_root``. MEASURED with the repo at a path containing
+#: Cyrillic: an ambient latin-1 misdecoded the toplevel, the comparison in
+#: :func:`_is_git_toplevel` failed, and the export took the honest-unknown branch
+#: (#103) for a dishonest reason -- silently dropping its commit provenance;
+#: an ambient ascii raised ``UnicodeDecodeError`` past the handler.
+#:
+#: ``surrogateescape`` is not a default here but the *matching* rule: it is what
+#: ``os.fsdecode`` uses, so a path git prints round-trips to exactly the bytes
+#: the filesystem holds and both sides of that comparison are decoded alike.
+_GIT_CODEC = "utf-8"
+_GIT_ERRORS = "surrogateescape"
+
+
 def _run_git(cwd: Path, *args: str) -> str | None:
     """Run ``git <args>`` in *cwd*; return stripped stdout, or ``None`` on failure."""
     try:
@@ -262,9 +279,17 @@ def _run_git(cwd: Path, *args: str) -> str | None:
             ["git", *args],  # noqa: S607
             cwd=cwd,
             capture_output=True,
-            text=True,
+            encoding=_GIT_CODEC,
+            errors=_GIT_ERRORS,
         )
-    except (FileNotFoundError, OSError):
+    except OSError:
+        # ``OSError`` alone, and that is the fix rather than a tidy-up: the
+        # previous ``(FileNotFoundError, OSError)`` enumerated a subclass
+        # alongside its own base, i.e. it was written without checking the
+        # hierarchy -- and it was missing the class this call actually raised
+        # (``UnicodeDecodeError``, a ``ValueError``). Nothing is decoded
+        # unsafely now, so ``OSError`` is the complete set for a call with no
+        # ``timeout`` and no ``check=True``.
         return None
     if result.returncode != 0:
         return None

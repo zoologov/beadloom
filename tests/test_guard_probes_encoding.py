@@ -26,7 +26,7 @@ Two dimensions, and they need different instruments, so both are here:
   PYTHONCOERCECLOCALE=0`` still reports preferred encoding ``utf-8`` (PEP
   538/540 coercion), and patching ``locale.getpreferredencoding`` does **not**
   reach ``TextIOWrapper``, which resolves the locale codec below Python. So the
-  dimension is *constructed* rather than arranged: :class:`_AmbientTextMode`
+  dimension is *constructed* rather than arranged: :class:`tests.ambient_codec.AmbientTextMode`
   re-implements CPython's documented text-mode rule ("decoded using
   ``locale.getpreferredencoding(False)`` unless ``encoding`` is given") with the
   ambient codec as a parameter. Concluding the defect is absent because this
@@ -55,6 +55,7 @@ from beadloom.application.guards.models import GuardOutcome
 from beadloom.services import bd_seam, guard_probes
 from beadloom.services.bd_seam import BdUnavailableError, run_bd
 from beadloom.services.guard_probes import build_probes
+from tests.ambient_codec import under_ambient_codec
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -76,45 +77,6 @@ pytestmark = pytest.mark.skipif(
     sys.platform == "win32",
     reason="POSIX ref bytes and a shebang stub on PATH; the Windows story is untested (.36 #3)",
 )
-
-
-class _AmbientTextMode:
-    """``subprocess.run`` as it behaves on an image whose locale codec is *ambient*.
-
-    CPython's rule, quoted from the ``subprocess`` docs: the streams "will be
-    opened in text mode using the encoding and errors of the ``encoding`` and
-    ``errors`` arguments, or ``locale.getpreferredencoding(False)`` if neither is
-    given". This double implements exactly that and nothing else — the child is
-    the real one, the pipe is the real one, only the *choice of codec* is
-    injected. A call that states its own ``encoding``/``errors`` is decoded with
-    those, which is what makes the fix visible: after it, the ambient codec has
-    no say.
-    """
-
-    def __init__(self, ambient: str) -> None:
-        self._ambient = ambient
-        self._real = subprocess.run
-
-    def __call__(self, argv, **kwargs):  # signature parity with subprocess.run
-        encoding = kwargs.pop("encoding", None)
-        errors = kwargs.pop("errors", None)
-        text = kwargs.pop("text", None)
-        completed = self._real(argv, **kwargs)  # bytes: text mode is emulated here
-        if encoding is None and not text:
-            return completed
-        codec = encoding or self._ambient
-        handler = errors or "strict"
-        return subprocess.CompletedProcess(
-            completed.args,
-            completed.returncode,
-            completed.stdout.decode(codec, handler),
-            completed.stderr.decode(codec, handler),
-        )
-
-
-def _under_ambient_codec(monkeypatch, module, codec: str) -> None:
-    """Run *module*'s subprocess calls as if the image's locale codec were *codec*."""
-    monkeypatch.setattr(module.subprocess, "run", _AmbientTextMode(codec))
 
 
 def _git(repo: Path, *args: str) -> None:
@@ -189,7 +151,7 @@ class TestTheAmbientDecoderDoesNotDecideTheAnswer:
         """
         _git(repo, "branch", CYRILLIC_BRANCH)
         _git(repo, "checkout", "-q", CYRILLIC_BRANCH)
-        _under_ambient_codec(monkeypatch, guard_probes, ambient)
+        under_ambient_codec(monkeypatch, guard_probes, ambient)
 
         assert build_probes(repo).workspace.current_branch() == CYRILLIC_BRANCH
 
@@ -199,7 +161,7 @@ class TestTheAmbientDecoderDoesNotDecideTheAnswer:
     ) -> None:
         (tmp_path / ".beads").mkdir()
         _stub_bd(tmp_path, monkeypatch, _bd_payload("работа".encode()))
-        _under_ambient_codec(monkeypatch, bd_seam, ambient)
+        under_ambient_codec(monkeypatch, bd_seam, ambient)
 
         claimed = build_probes(tmp_path).tracker.claimed_beads()
 

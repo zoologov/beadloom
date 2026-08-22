@@ -59,14 +59,56 @@ class GraphDiff:
         return bool(self.nodes or self.edges)
 
 
+#: The codec by which graph YAML is read on **both** sides of this diff: the
+#: working tree and the content at the git ref. Stated, because ``text=True``
+#: would decode the at-ref side with ``locale.getpreferredencoding(False)`` while
+#: the disk side reads UTF-8, and a comparison whose two sides use different
+#: rules invents changes. MEASURED against HEAD with nothing changed: an ambient
+#: latin-1 raised ``yaml.reader.ReaderError`` ("unacceptable character #x0086")
+#: and an ambient ascii raised ``UnicodeDecodeError``, both uncaught out of
+#: ``beadloom diff --since`` -- the review role's own instrument.
+_YAML_CODEC = "utf-8"
+
+#: Paths are decoded by the *filesystem's* rule, not by YAML's: a path is bytes
+#: the OS chose, and ``surrogateescape`` is what ``os.fsdecode`` itself uses, so a
+#: name that is not UTF-8 round-trips back through ``git show``'s argv unchanged
+#: instead of raising. The two rules differ because the two things differ; each
+#: is stated where it is used.
+_PATH_ERRORS = "surrogateescape"
+
+
+def _decode_graph_yaml(raw: bytes, origin: str) -> str:
+    """Decode graph YAML bytes, or refuse with a reason that names *origin*.
+
+    ``errors="strict"``, deliberately: YAML is UTF-8 by definition, so bytes that
+    are not UTF-8 are not a graph this can compare. The one answer that must
+    never be given is a *diff* -- silently treating the side that failed to
+    decode as absent would report the whole graph as added or removed.
+    ``ValueError`` is what :func:`compute_diff` already documents and what the
+    CLI renders as an error at exit 1 (``UnicodeDecodeError`` is a ``ValueError``
+    too, but its message names no file).
+    """
+    try:
+        return raw.decode(_YAML_CODEC)
+    except UnicodeDecodeError as exc:
+        msg = f"{origin} is not valid {_YAML_CODEC}: {exc.reason} at byte {exc.start}"
+        raise ValueError(msg) from exc
+
+
 def _validate_git_ref(project_root: Path, ref: str) -> bool:
     """Check if the git ref is valid using ``git rev-parse --verify``."""
-    result = subprocess.run(  # noqa: S603
-        ["git", "rev-parse", "--verify", ref],  # noqa: S607
-        cwd=project_root,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(  # noqa: S603
+            ["git", "rev-parse", "--verify", ref],  # noqa: S607
+            cwd=project_root,
+            capture_output=True,
+        )
+    except OSError:
+        # As wide as this call can raise: nothing is decoded (no text mode), no
+        # ``timeout`` and no ``check=True``, so ``OSError`` -- git missing, not
+        # executable, bad cwd -- is the complete set. A ref that cannot be
+        # verified does not resolve, and the caller says so at exit 1.
+        return False
     return result.returncode == 0
 
 
@@ -74,17 +116,18 @@ def _read_yaml_at_ref(project_root: Path, rel_path: str, ref: str) -> str | None
     """Read a file's content at a given git ref.
 
     Returns the file content as a string, or ``None`` if the file didn't exist
-    at that ref.
+    at that ref. Bytes are captured and decoded by :func:`_decode_graph_yaml` --
+    the same call the working-tree side makes, so the two sides of the comparison
+    cannot disagree about what the bytes say.
     """
     result = subprocess.run(  # noqa: S603
         ["git", "show", f"{ref}:{rel_path}"],  # noqa: S607
         cwd=project_root,
         capture_output=True,
-        text=True,
     )
     if result.returncode != 0:
         return None
-    return result.stdout
+    return _decode_graph_yaml(result.stdout, f"{ref}:{rel_path}")
 
 
 def _parse_yaml_content(
@@ -135,7 +178,8 @@ def _list_graph_files_at_ref(project_root: Path, ref: str) -> list[str]:
         ["git", "ls-tree", "-r", "--name-only", ref, ".beadloom/_graph/"],  # noqa: S607
         cwd=project_root,
         capture_output=True,
-        text=True,
+        encoding=_YAML_CODEC,
+        errors=_PATH_ERRORS,
     )
     if result.returncode != 0:
         return []
@@ -158,7 +202,8 @@ def compute_diff(project_root: Path, since: str = "HEAD") -> GraphDiff:
         A :class:`GraphDiff` with all detected changes.
 
     Raises:
-        ValueError: If the git ref is invalid.
+        ValueError: If the git ref is invalid, or if graph YAML on either side
+            is not valid UTF-8 (a refusal that names the file, never a diff).
     """
     if not _validate_git_ref(project_root, since):
         msg = f"Invalid git ref: '{since}'"
@@ -175,7 +220,7 @@ def compute_diff(project_root: Path, since: str = "HEAD") -> GraphDiff:
         for yml_path in sorted(graph_dir.glob("*.yml")):
             rel_path = str(yml_path.relative_to(project_root))
             current_files.add(rel_path)
-            content = yml_path.read_text(encoding="utf-8")
+            content = _decode_graph_yaml(yml_path.read_bytes(), rel_path)
             nodes, edges = _parse_yaml_content(content)
             current_nodes.update(nodes)
             current_edges.update(edges)

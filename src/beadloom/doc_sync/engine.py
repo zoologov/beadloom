@@ -155,12 +155,33 @@ def _unchecked_reason(conn: sqlite3.Connection, source: str) -> dict[str, str]:
     return {"reason": "no_indexed_code", "details": source}
 
 
+#: The one rule by which **both** sides of every hash comparison in this module
+#: are decoded: the working tree and the content at a git ref.
+#:
+#: The codec is stated because the alternative is ``text=True``, which consults
+#: ``locale.getpreferredencoding(False)`` -- the image speaking, not the tool --
+#: while the working-tree side has always read UTF-8. A comparison whose two
+#: sides are decoded by different rules reports a difference that is an artefact
+#: of the environment: MEASURED on this repo with ``docs/architecture.md``
+#: unchanged at HEAD, an ambient latin-1 made ``sync-check --since`` report drift
+#: in a file nobody touched, and an ambient ascii raised an uncaught
+#: ``UnicodeDecodeError`` out of a command that runs inside ``beadloom ci``.
+#:
+#: ``surrogateescape`` rather than ``strict`` because the Gate must have an
+#: answer for every file: bytes that are not UTF-8 round-trip to exactly
+#: themselves, so the digest stays the digest of the file's own bytes and one
+#: latin-1 source file cannot crash ``sync-check``. ``replace`` is rejected here
+#: for the usual reason -- it is not injective, so two different files could
+#: hash equal, which is a comparison handed a wrong answer.
+_TEXT_CODEC = "utf-8"
+_TEXT_ERRORS = "surrogateescape"
+
+
 def _file_hash(path: Path) -> str | None:
     """Compute SHA-256 hash of a file, or None if file doesn't exist."""
     if not path.is_file():
         return None
-    content = path.read_text(encoding="utf-8")
-    return hashlib.sha256(content.encode()).hexdigest()
+    return _hash_text(path.read_text(encoding=_TEXT_CODEC, errors=_TEXT_ERRORS))
 
 
 def check_sync(
@@ -370,13 +391,20 @@ def _validate_git_ref(project_root: Path, ref: str) -> bool:
     Uses ``git rev-parse --verify <ref>``. An all-zero SHA (force-push /
     first-push sentinel) never resolves, so it is rejected here too.
     """
-    result = subprocess.run(  # noqa: S603
-        ["git", "rev-parse", "--verify", ref],  # noqa: S607
-        cwd=project_root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(  # noqa: S603
+            ["git", "rev-parse", "--verify", ref],  # noqa: S607
+            cwd=project_root,
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        # As wide as this call can raise: with no text mode, nothing is decoded,
+        # so ``OSError`` (git missing, not executable, bad cwd) is the whole set
+        # -- ``check=False`` rules out ``CalledProcessError`` and no ``timeout``
+        # is passed. A ref that cannot be verified does not resolve; the CLI
+        # turns that into "Invalid git ref" at exit 1 rather than a traceback.
+        return False
     return result.returncode == 0
 
 
@@ -385,12 +413,25 @@ def _file_content_at_ref(project_root: Path, rel_path: str, ref: str) -> str | N
 
     Non-destructive: reads from the object store, never touches the working
     tree or any beadloom DB.
+
+    Decoded by :data:`_TEXT_CODEC` / :data:`_TEXT_ERRORS` -- the same rule the
+    working-tree side uses -- so the two sides of the comparison in
+    :func:`check_sync_since` cannot disagree about what the bytes say. Text mode
+    is kept (rather than hashing raw bytes) because it also applies universal
+    newline translation on both sides, so a CRLF checkout does not read as drift.
+
+    ``None`` means *absent at that ref* and nothing else. An unreachable ``git``
+    is deliberately not caught into ``None``: that would report drift in a file
+    nobody touched, which is the defect this call site exists to have fixed. The
+    CLI validates the ref through :func:`_validate_git_ref` first, so the
+    reachable case is answered there.
     """
     result = subprocess.run(  # noqa: S603
         ["git", "show", f"{ref}:{rel_path}"],  # noqa: S607
         cwd=project_root,
         capture_output=True,
-        text=True,
+        encoding=_TEXT_CODEC,
+        errors=_TEXT_ERRORS,
         check=False,
     )
     if result.returncode != 0:
@@ -399,8 +440,12 @@ def _file_content_at_ref(project_root: Path, rel_path: str, ref: str) -> str | N
 
 
 def _hash_text(text: str) -> str:
-    """SHA-256 of *text* (UTF-8), matching :func:`_file_hash`'s digest."""
-    return hashlib.sha256(text.encode()).hexdigest()
+    """SHA-256 of *text*, and the single definition of "the digest of a file".
+
+    :func:`_file_hash` routes through here so the working-tree side and the
+    at-ref side cannot drift apart: same codec, same error handler, one place.
+    """
+    return hashlib.sha256(text.encode(_TEXT_CODEC, _TEXT_ERRORS)).hexdigest()
 
 
 def check_sync_since(
