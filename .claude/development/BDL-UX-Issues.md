@@ -226,6 +226,8 @@
 
 148. [2026-08-05] [MEDIUM] `lint` prints machine porcelain when stdout is not a TTY — the human summary line vanishes in a pipe, so the documented output is not what a program receives
 
+    **Escalated 2026-08-22 — this is not cosmetic, it produces wrong conclusions.** `sync-check` has the same TTY-dependent shape, and it corrupted the coordinator's own verification twice in one session while investigating a suspected gate defect. Counting `beadloom sync-check | grep -c '^stale'` returned **0** on a tree with genuinely stale pairs, because the piped shape omits the per-pair lines the interactive shape prints. Measured on the same tree, same moment: piped grep count **0**, exit code **2**, `--json` **2 stale pairs**. The first reading was used to conclude — wrongly — that `reindex` re-baselines sync pairs and that the gate could be turned green by running it twice. Neither is true. A monitoring surface whose shape depends on whether a human is watching will be sampled by programs and by agents, and it will silently give them the wrong number. **Any agent instruction to "count the stale lines" is unsound today**; the exit code and `--json` are the only trustworthy contracts, and that should be stated in the docs until the shape is stable.
+
     **Severity:** medium (contract differs by TTY; parsers written against the documented/human output silently see nothing to parse)
     **Command:** `beadloom lint` / `beadloom lint --strict`
     **Context:** Dogfood: an integration captures `lint` output to summarise it for a chat reader.
