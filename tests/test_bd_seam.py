@@ -88,13 +88,22 @@ def test_bd_result_is_frozen() -> None:
 
 def test_run_bd_invokes_with_capture_and_no_check() -> None:
     """The seam captures output and never raises on a non-zero exit
-    (``check=False``) so callers inspect ``returncode`` themselves."""
+    (``check=False``) so callers inspect ``returncode`` themselves.
+
+    ``text=True`` was replaced by an explicit codec: it decodes with
+    ``locale.getpreferredencoding(False)``, which made bd's answer a function of
+    the image the process happened to run on (BDL-061.37). What that shape is
+    *for* is asserted behaviourally in
+    ``tests/test_guard_probes_encoding.py``; this row only pins the keywords so
+    a future edit cannot quietly hand the decision back to the environment.
+    """
     completed = MagicMock(returncode=0, stdout="", stderr="")
     with patch("beadloom.services.bd_seam.subprocess.run", return_value=completed) as run:
         run_bd(["show", "bd-1"])
     kwargs = run.call_args.kwargs
     assert kwargs["capture_output"] is True
-    assert kwargs["text"] is True
+    assert (kwargs["encoding"], kwargs["errors"]) == ("utf-8", "surrogateescape")
+    assert "text" not in kwargs
     assert kwargs["check"] is False
     assert kwargs["timeout"] is not None
 

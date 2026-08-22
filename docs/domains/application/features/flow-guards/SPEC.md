@@ -502,6 +502,20 @@ never louder.
   so a typo in `flow.yml` cannot quietly switch a gate off.
 - **Unavailable evidence skips, never passes.** A probe that cannot answer
   returns `None`, and the guard reports why.
+- **A probe's answer does not depend on the image it runs on** (BDL-061.37).
+  Both probes run their child with `encoding="utf-8", errors="surrogateescape"`
+  instead of `text=True`, which decodes with the ambient locale: on a container
+  whose locale is not UTF-8, a branch name or a bead title carrying one non-ASCII
+  byte either raised — and a `UnicodeDecodeError` is a `ValueError`, so it was
+  caught by neither `OSError` nor `subprocess.SubprocessError` and reached the
+  boundary as `error`/exit 2, blocking the edit for a reason that is not the real
+  one — or came back as a name nobody had checked out. `surrogateescape` because
+  it is the only one of the handlers that is injective: it round-trips to the
+  bytes the tool holds, so no comparison a guard makes can be given a wrong
+  answer by an undecodable byte, and a legal-but-not-UTF-8 name does not switch a
+  guard off the way `strict` would. The probes' handlers are as wide as the
+  sentence they hold (`Exception`, deliberately never `BaseException`); the
+  reasons are in the `guard-probes` and `bd-seam` component docs.
 - **A probe reads all of its evidence.** `bd list` paginates at 50 rows by
   default; the tracker probe lifts the limit and asks bd for the claimed beads
   rather than filtering its first page, because a guard reporting a violation of

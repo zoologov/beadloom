@@ -83,6 +83,23 @@ S1 is green on `main`, per the slice-boundary-is-a-PR-boundary rule.
       DIMENSION (4 ambient decoders × the payload matrix) and the loop is asserted as a property
       with the exception INJECTED, so 3.13 coverage cannot go vacuous. Verified on a real 3.10:
       full suite 5442 passed, 0 guard failures. Suite 5574 → 5595
+- [x] S2 `.37` dev (2026-08-22) — **the third instance of `.36`'s family, and the first caught
+      before CI:** both subprocess probes ran with `text=True`, which decodes with
+      `locale.getpreferredencoding(False)`, and both handlers enumerated classes that exclude
+      `UnicodeDecodeError` (a `ValueError`), so on a non-UTF-8 image a branch name or a bead
+      title with one non-ASCII byte raised past the handler and the boundary turned it into
+      `error`/exit 2 — fail-closed but WRONG, where the designed answer is a skip that says why.
+      Fixed with a stated codec (`encoding="utf-8"`, `errors="surrogateescape"` — the only
+      handler of the three that is injective, so no comparison a guard makes can be given a
+      wrong answer by a byte) and handlers as wide as their sentence. Found en route in the same
+      call: `run_bd` caught `FileNotFoundError` ALONE, so a 60 s timeout and a real
+      non-executable `bd` on PATH also blocked the edit at exit 2. The ambient-locale dimension
+      is CONSTRUCTED, not arranged — patching `locale.getpreferredencoding` does not reach
+      `TextIOWrapper` (measured) — while the undecodable-bytes half runs against the real `git`.
+      The sweep of the other 17 subprocess call sites is a bead comment: `doc_sync/engine.py`,
+      `graph/diff.py`, `infrastructure/git_activity.py` and `federation/export.py` carry the
+      same pair, and the first two make `sync-check --since` and `diff --since` report changes
+      that did not happen. Suite 5595 → 5633
 
 - [x] **S1 COMPLETE** — verified by the coordinator on the final tree: 5574 passed / 10 skipped,
       ruff and mypy --strict clean, `beadloom ci` rc 0 on a clean DB. The B2 sabotage
@@ -106,6 +123,7 @@ S1 is green on `main`, per the slice-boundary-is-a-PR-boundary rule.
 | .31 | Done | S1 fix-4: pin as wide as its invariant; `--project` must name a project; interrupt handled |
 | .32 | Done | S1 test: the Click-validation pin as wide as its sentence; `--project` `readable=False` |
 | .36 | Done | S1 hotfix: the payload decoded as bytes (locale-independent); the resolve handler as wide as its sentence |
+| .37 | Done | S2: the probes decode with a stated codec, not the image's locale; handlers as wide as their sentence; sweep of every other subprocess call |
 | .4 | Done | S1 docs: exit-3 invariant qualified (not deleted), enforcement surface written down, `error` in both READMEs |
 | .33 | Pending | S2: the exit-3 class is fail-open — a broken `flow.yml` disables every guard |
 | .34 | Pending | S2: an unknown key in a guard body is silently ignored (`option:` → trunk `main`) |

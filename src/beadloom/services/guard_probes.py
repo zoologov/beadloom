@@ -37,6 +37,26 @@ UNLIMITED = "0"
 #: Seconds before a wedged ``git`` call is abandoned (then reported as unknown).
 _GIT_TIMEOUT_S = 10
 
+#: The codec that turns git's bytes into text, STATED rather than inherited.
+#: ``text=True`` decodes with ``locale.getpreferredencoding(False)`` — the image's
+#: locale — so the same repository answered differently on a C-locale container
+#: than on the author's UTF-8 machine: ``ascii`` raises (and the exception escaped
+#: the handler below), ``latin-1`` returns a branch name nobody checked out. git
+#: stores a ref name as bytes and prints them back unchanged, so UTF-8 is the
+#: project's decision about how to read them, not a fact about the image.
+_GIT_ENCODING = "utf-8"
+
+#: ``surrogateescape``, and the reason is which way each alternative fails.
+#: ``strict`` would make a branch name that is not valid UTF-8 unreadable, the
+#: probe would answer ``None``, and ``working-branch`` would *skip* — an exemption
+#: nobody declared, for a repository whose branch name is perfectly legal on
+#: POSIX. ``replace`` would map distinct names onto the same string, so a
+#: comparison could be given a wrong answer by a byte. ``surrogateescape`` is the
+#: only handler of the three that is injective: it round-trips to the exact bytes
+#: git holds, so ``branch == trunk`` stays truthful and the name survives into the
+#: message (escaped by ``repr``, hence still printable on an ASCII-only stdout).
+_GIT_DECODE_ERRORS = "surrogateescape"
+
 
 class BdWorkTracker:
     """:class:`~beadloom.application.guards.contract.WorkTracker` over the ``bd`` CLI."""
@@ -102,11 +122,28 @@ class GitWorkspace:
                 ["git", "branch", "--show-current"],  # noqa: S607
                 cwd=str(self._project_root),
                 capture_output=True,
-                text=True,
+                encoding=_GIT_ENCODING,
+                errors=_GIT_DECODE_ERRORS,
                 timeout=_GIT_TIMEOUT_S,
                 check=False,
             )
-        except (OSError, subprocess.SubprocessError):
+        except Exception:  # as wide as the sentence it holds; see below
+            # AS WIDE AS THE SENTENCE IT HOLDS: "a probe that cannot answer
+            # returns None". The previous handler was `(OSError,
+            # subprocess.SubprocessError)`, which is an enumeration and not that
+            # sentence — it misses `UnicodeDecodeError`, which is a `ValueError`
+            # and therefore neither. Measured: with `text=True` on this UTF-8
+            # machine, a HEAD pointing at `refs/heads/features/<0xff>-bad` raises
+            # it straight past this handler, and the invocation boundary turns
+            # that into an `error` verdict at exit 2 — a BLOCKED edit for a
+            # reason that is not the real one, where the designed answer is a
+            # skip that says why (BDL-061.37, the third instance of .36's
+            # family). Adding the class would fix this decode and leave the next
+            # one open.
+            #
+            # `Exception`, deliberately NOT `BaseException`: an interrupt while
+            # git is running is the process being stopped, not git declining to
+            # answer, and the boundary already reports that distinctly.
             return None
         if result.returncode != 0:
             return None
