@@ -59,18 +59,27 @@ above it exist only to give a reader a cause they can act on; the wide one
 exists so that the class nobody thought of is a verdict rather than an escape.
 
 **Exit codes.** The code follows the verdict (``pass``/``skip`` 0, ``warn`` 1,
-``block``/``error`` 2). ``3`` is overridden onto two classes and no others: a
-defect in the project's own declared configuration (a ``guards:`` block that
-will not parse, an exclusion with no reason, a guard name nobody registered) and
-a command line the CLI could not use at all (no guard named, ``--liveness`` with
-a name, a malformed ``--context`` pair, an unsupported ``--hook`` harness). Both
-are stable defects a human fixes once, they are not about any particular edit,
-and BDL-061.2 reserved ``3`` so that a broken ``flow.yml`` is never mistaken for
-a guard that fired. Everything that goes wrong while trying to answer about
+``block``/``error`` 2). One class is overridden and no other: a defect in the
+project's own declared configuration (a ``guards:`` block that will not parse,
+an exclusion with no reason, a guard name nobody registered) and a command line
+the CLI could not use at all (no guard named, ``--liveness`` with a name, a
+malformed ``--context`` pair, an unsupported ``--hook`` harness). Both are
+stable defects a human fixes once and neither is about any particular edit, so
+BDL-061.2 reserved ``3`` for them — a broken ``flow.yml`` is then never mistaken
+for a guard that fired. Everything that goes wrong while trying to answer about
 *this* edit — a payload that cannot be decoded or parsed, a project that cannot
 be located, an exception anywhere — is an ``error`` verdict at exit ``2``,
 because that is the one code the shipped adapter blocks on, and the harness
 supplied the input that failed.
+
+**The override is conditional on the caller (BDL-061.33).** ``3`` blocks nothing
+in the harness the emitted adapter binds to, so while it was unconditional the
+largest reachable class of "I could not tell" — a ``flow.yml`` that will not
+parse — switched every bound guard off and said so on a stream nobody stops for.
+:func:`~beadloom.application.guards.models.harness_exit_code` decides: ``3`` for
+a shell or CI caller, where the distinction is the whole point and no edit is
+waiting on the answer, and the blocking code when ``--hook`` names a harness,
+where the only question the code answers is whether the edit proceeds.
 """
 
 from __future__ import annotations
@@ -90,10 +99,10 @@ from beadloom.application.guards.hook_payload import (
 )
 from beadloom.application.guards.liveness import build_liveness
 from beadloom.application.guards.models import (
-    EXIT_CODE_CONFIG_ERROR,
     GuardOutcome,
     GuardVerdict,
     exception_detail,
+    harness_exit_code,
 )
 from beadloom.application.guards.project_root import (
     ProjectLocation,
@@ -315,7 +324,7 @@ def _decide(invocation: GuardInvocation, location: ProjectLocation) -> Invocatio
         return _report(invocation, root)
     if invocation.name is None:
         return _usage(
-            None,
+            invocation,
             root,
             why=_NO_NAME_WHY,
             because=_BECAUSE_NO_NAME,
@@ -328,7 +337,7 @@ def _report(invocation: GuardInvocation, root: Path) -> InvocationResult:
     """The liveness report: rows, or the configuration error that stopped them."""
     if invocation.name is not None:
         return _usage(
-            invocation.name,
+            invocation,
             root,
             why=_LIVENESS_WITH_NAME_WHY,
             because=_BECAUSE_INCOMPLETE,
@@ -338,7 +347,7 @@ def _report(invocation: GuardInvocation, root: Path) -> InvocationResult:
         rows = build_liveness(root)
     except GuardConfigError as exc:
         return _usage(
-            None,
+            invocation,
             root,
             why=str(exc),
             because=_BECAUSE_NO_REPORT,
@@ -355,7 +364,7 @@ def _evaluate(
         context = _context(invocation)
     except GuardUsageError as exc:
         return _usage(
-            name,
+            invocation,
             root,
             why=str(exc),
             because=_BECAUSE_INCOMPLETE,
@@ -363,7 +372,7 @@ def _evaluate(
         )
     except UnknownHarnessError as exc:
         return _usage(
-            name,
+            invocation,
             root,
             why=str(exc),
             because=_BECAUSE_INCOMPLETE,
@@ -386,7 +395,7 @@ def _evaluate(
         )
     except GuardConfigError as exc:
         return _usage(
-            name,
+            invocation,
             root,
             why=str(exc),
             because=_BECAUSE_INCOMPLETE,
@@ -467,17 +476,32 @@ def _failed(
 
 
 def _usage(
-    name: str | None,
+    invocation: GuardInvocation,
     root: Path | None,
     *,
     why: str,
     because: str,
     remediation: str,
 ) -> InvocationResult:
-    """A configuration or command-line defect: an ``error`` verdict on exit 3."""
-    verdict = _error_verdict(name, why=why, because=because, remediation=remediation)
+    """A configuration or command-line defect: an ``error`` verdict, on whose code?
+
+    The verdict is the same one every failure takes; only the code differs, and
+    it differs by *caller* rather than by cause (BDL-061.33). A shell caller
+    gets ``3``, which keeps a defect in the declared configuration
+    distinguishable from a guard that fired; an invocation bound to a harness
+    gets the blocking code, because ``3`` is a code that harness carries on
+    past. The whole invocation is taken rather than a name, because the name is
+    already ``invocation.name`` at every call site and the harness is the other
+    thing this function now needs to know — see
+    :func:`~beadloom.application.guards.models.harness_exit_code`.
+    """
+    verdict = _error_verdict(
+        invocation.name, why=why, because=because, remediation=remediation
+    )
     return InvocationResult(
-        exit_code=EXIT_CODE_CONFIG_ERROR, verdict=verdict, project_root=root
+        exit_code=harness_exit_code(invocation.harness),
+        verdict=verdict,
+        project_root=root,
     )
 
 

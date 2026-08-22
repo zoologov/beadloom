@@ -696,14 +696,17 @@ class TestNoInvocationEndsWithoutARecord:
         assert [record.outcome for record in records] == ["error"], records
         assert "a future defect nobody has written yet" in records[-1].why
 
-    def test_a_config_error_is_recorded_and_keeps_its_own_exit_code(
+    def test_a_config_error_reaching_a_hook_is_recorded_and_blocks(
         self, tmp_path, write_flow_yml, monkeypatch
     ) -> None:
-        """A broken flow.yml is recorded, and still exits 3, not 2.
+        """A broken flow.yml is recorded, and through a hook it exits 2.
 
-        Exit 3 exists (BDL-061.2) so a configuration defect is never mistaken for
-        a guard that fired; that reasoning is unchanged. What changes is that the
-        invocation no longer disappears from the liveness report.
+        It exited 3 until BDL-061.33, and 3 blocks nothing in the harness this
+        adapter binds to — so the single file of this feature an adopter edits by
+        hand could switch every bound guard off by a mistyped line. Exit 3 still
+        exists for a shell caller (BDL-061.2), where a configuration defect must
+        stay distinguishable from a guard that fired and no edit is waiting on
+        the answer; see ``tests/test_guards_fail_closed.py`` for both halves.
         """
         write_flow_yml(
             "guards:\n  bead-claimed:\n    exclusions:\n      - path: 'x/**'\n"
@@ -714,7 +717,7 @@ class TestNoInvocationEndsWithoutARecord:
 
         result = self._run(tmp_path, monkeypatch, payload)
 
-        assert result.exit_code == 3, result.output
+        assert result.exit_code == 2, result.output
         assert [record.outcome for record in self._records(tmp_path)] == ["error"]
 
     def test_an_unregistered_guard_name_records_nothing(

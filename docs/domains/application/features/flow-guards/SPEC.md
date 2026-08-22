@@ -33,8 +33,11 @@ to a tool by an adapter that contains no logic of its own.
 
 Exit codes carry the outcome, so a shell adapter needs no parsing: `0` for
 `pass`/`skip`, `1` for `warn`, `2` for `block`. `3` is reserved for a usage or
-configuration error — deliberately not `2`, which is Click's own usage code and
-would otherwise be indistinguishable from a genuine block.
+configuration error reported to a **shell** caller — deliberately not `2`, which
+is Click's own usage code and would otherwise be indistinguishable from a genuine
+block. An invocation that names a harness (`--hook`) reports that same class at
+`2`, because there the exit code answers one question only and `3` answers it
+"the edit proceeds" (BDL-061.33, below).
 
 **Which failures earn `3` rather than `2`** is one line, not a list of cases: `3`
 is for a defect in the project's *declared configuration* (a `guards:` block that
@@ -58,25 +61,44 @@ evaluation missing from the firing record is invisible to `--liveness`. It exits
 call on exit 2 and on nothing else, so an outcome that must stop work has exactly
 one code available. `1` would be worse than useless here — it is the `warn` code,
 which the harness reads as "carry on", and that is precisely how a crashing guard
-let an edit through (BDL-061.27, F2). A configuration error additionally keeps
-exit `3` at the CLI boundary, so a broken `flow.yml` is still not mistaken for a
-guard that fired.
+let an edit through (BDL-061.27, F2). A configuration error keeps exit `3` for a
+shell caller, so a broken `flow.yml` is still not mistaken for a guard that fired.
 
-**Exit `3` does not block, and that is a gap rather than a decision.** The
-adapter this project emits binds to a harness that stops the tool call on exit
-`2` and on nothing else, so everything the paragraph above keeps at `3` is loud
-on stderr and lets the edit through. Measured through the real binary, five
-cases answer `error` at `3`: an unregistered guard name, a `guards:` block that
-will not parse, `--liveness` given a name, a malformed `--context` pair, and an
-unsupported `--hook` harness. The second is the one an adopter meets, because
-`.beadloom/flow.yml` is the one file of this feature edited by hand: a mistyped
-line there disables every bound guard while each invocation prints that it could
-not answer. The distinction `3` draws — a defect in the declared configuration
-against a failure to answer about this edit — is worth keeping, so the two ways
-out are to map the class to `2` at the CLI or to have the adapter map it, and
-neither is decided here. **BDL-061.33 owns that choice.** Until it lands, this
-document states `3` as fail-open, and the invariant it contradicts is marked
-where it appears.
+**Which caller gets `3` (BDL-061.33).** The adapter this project emits binds to a
+harness that stops the tool call on exit `2` and on nothing else, so while `3`
+was unconditional everything kept at it was loud on stderr and let the edit
+through. Measured through the real binary, five cases answer `error` at `3`: an
+unregistered guard name, a `guards:` block that will not parse, `--liveness`
+given a name, a malformed `--context` pair, and an unsupported `--hook` harness.
+The second is the one an adopter meets, because `.beadloom/flow.yml` is the one
+file of this feature edited by hand: a mistyped line there disabled every bound
+guard while each invocation printed that it could not answer.
+
+The class is therefore answered at **`3` from a shell and `2` under `--hook`**,
+which keeps both true things:
+
+- the distinction `3` draws — a defect in the *declared configuration* against a
+  failure to answer about *this edit* — survives for the caller it means
+  something to, and stays out of Click's `2`;
+- nothing that cannot answer reaches a harness with a code that harness ignores.
+
+Mapping the whole class to `2` was the other candidate. It is simpler, but it
+spends the distinction on a caller that has no use for it and changes the code
+every shell and CI caller already reads. Having the *emitted script* map instead
+was the third: it puts logic in an adapter, which is the one thing this feature
+forbids, and every future harness would re-implement it — the same fail-open, one
+tool later. The adapter already declares its harness; that declaration selects
+the mapping, and the mapping stays in Beadloom where it is tested. A harness
+whose name Beadloom cannot translate blocks too: an unsupported `--hook` is a
+defect in the binding itself, and Beadloom cannot learn the exit vocabulary of a
+tool it does not support, so it uses the code it knows stops work.
+
+This is not a green project turning red on upgrade. A project whose `flow.yml`
+parses sees no change at all; a project whose `flow.yml` does not parse had no
+enforcement to lose. There is deliberately **no per-harness table**: every
+harness Beadloom supports blocks on `2`, and a one-entry table with a default
+reads as a capability that exists. The day a harness disagrees, its blocking code
+becomes an entry beside its payload translator.
 
 ### Configuration
 
@@ -545,14 +567,13 @@ never louder.
   and the render step is wrapped, so a failure while printing cannot move the
   code the harness reads.
 - **A guard that cannot answer says so and blocks.** "I could not tell" is a
-  verdict (`error`), not an exception, and it never borrows the `warn` code.
-  **It says so. It does not always block.** The `warn` code is never borrowed, so
-  no `error` exits `1`. But the configuration and command-line class exits `3`,
-  which the harness the emitted adapter binds to does not block on, and five
-  cases were measured in it — the one an adopter meets is a `flow.yml` that will
-  not parse. The sentence stands as the target rather than as a description, and
-  **BDL-061.33** owns closing the gap. See *Verdict* for the cases and the two
-  ways out.
+  verdict (`error`), not an exception; it never borrows the `warn` code; and
+  every code it can exit with, in the harness it is bound to, stops the edit.
+  The second half was not true until BDL-061.33: the configuration and
+  command-line class exited `3`, which that harness does not block on, so a
+  `flow.yml` that would not parse switched every bound guard off. That class now
+  exits the blocking code whenever `--hook` names a harness, and keeps `3` for a
+  shell caller, where nothing is waiting on the answer. See *Verdict*.
 - **One decision point.** The CLI, the hook adapter and (from S2) the Gate all
   call `evaluate_guard`, so their verdicts cannot diverge.
 - **The surface is bounded by the harness, and the bound is stated.** Guards see

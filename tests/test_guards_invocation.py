@@ -277,12 +277,17 @@ _EXIT_PATHS: tuple[tuple[str, str | None, list[str], str, str, int], ...] = (
         3,
     ),
     (
+        # Exit 2 since BDL-061.33. Every other row that answers 3 is reachable
+        # from a shell, where 3 keeps a declared-configuration defect distinct
+        # from a guard that fired; this one names a harness, and 3 does not block
+        # in one. The hooked twin of each 3-row is derived from this table in
+        # ``tests/test_guards_fail_closed.py`` rather than written out again.
         "a harness nobody supports",
         "bead-claimed",
         ["--hook", "no-such-harness"],
         _BLOCKING_WITH_EXCLUSION,
         "",
-        3,
+        2,
     ),
     (
         "a hook payload that is not JSON",

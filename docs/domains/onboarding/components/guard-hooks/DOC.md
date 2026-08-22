@@ -54,17 +54,21 @@ exactly like a session that complied. That is not a verdict the guard can qualif
 (BDL-UX #170 — review finding M3 is the same gap seen from the routing side, and
 both are S3 work).
 
-Two facts about the exit codes the adapter forwards, because the script's own
-comment does not carry the second one yet:
+Two facts about the exit codes the adapter forwards, both now carried by the
+script's own comment:
 
 - The harness stops the tool call on exit `2` and on nothing else, so `block` and
   `error` are what actually block.
-- Exit `3` — a defect in the declared configuration, or a command line that could
-  not be used — is therefore **loud and non-blocking**. A `.beadloom/flow.yml`
-  that will not parse leaves every bound guard reporting that it could not answer
-  while the edits proceed. **BDL-061.33** owns the fix, and the emitted comment
-  changes with it. The [flow-guards SPEC](../../../application/features/flow-guards/SPEC.md)
-  states the cases and the trade-off.
+- **The adapter never returns `3`** (BDL-061.33). A defect in the declared
+  configuration, or a command line that could not be used, exits `3` only for a
+  caller that ran `beadloom guard` itself; reached through `--hook` the same
+  class exits `2`. It did return `3` in S1, which stopped nothing: a
+  `.beadloom/flow.yml` that would not parse left every bound guard reporting that
+  it could not answer while the edits proceeded. The mapping lives in the CLI,
+  keyed on the harness this script already declares, rather than in the script —
+  a script that maps codes carries logic, and the next adapter would have to
+  re-derive it. The [flow-guards SPEC](../../../application/features/flow-guards/SPEC.md)
+  states the class and the reasoning.
 
 This repository is not currently bound through the emitted script: its
 `.claude/settings.json` registers the `beadloom guard` command directly, with a

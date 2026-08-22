@@ -301,22 +301,25 @@ being folded into a verdict's `not_covered` (BDL-UX #170). Giving Beadloom its
 own event vocabulary, so that the adapter forwards *what happened* rather than
 *which guard to run*, is S3 work.
 
-### Exit codes, and the one that does not block
+### Exit codes, and who is asking
 
-| Code | Outcome | In Claude Code |
-|---|---|---|
-| `0` | `pass` / `skip` | the edit proceeds |
-| `1` | `warn` | shown to the agent, the edit proceeds |
-| `2` | `block` / `error` | the tool call is stopped |
-| `3` | usage or configuration error | **the edit proceeds** |
+| Code | Outcome | From a shell | Through a hook |
+|---|---|---|---|
+| `0` | `pass` / `skip` | — | the edit proceeds |
+| `1` | `warn` | — | shown to the agent, the edit proceeds |
+| `2` | `block` / `error` | — | the tool call is stopped |
+| `3` | usage or configuration error | reported | never returned — the class exits `2` |
 
-The harness stops a tool call on `2` and on nothing else. `3` was reserved so a
-broken `flow.yml` could never be mistaken for a guard that fired, and that
-distinction is worth keeping — but it means the class kept at `3` is loud and
-**fail-open**: while `.beadloom/flow.yml` will not parse, every bound guard
-answers "could not tell" and no edit is stopped. Bead BDL-061.33 owns the choice
-between mapping the class to `2` and having the adapter map it. Until it lands,
-read a `3` from a hook as an unenforced edit.
+The harness stops a tool call on `2` and on nothing else, so `3` stopped nothing:
+until **BDL-061.33** a `.beadloom/flow.yml` that would not parse left every bound
+guard answering "could not tell" while every edit went through — fail-open on the
+one file of this feature you edit by hand. `3` still exists, because a defect in
+your declared configuration is genuinely not the same thing as a guard that
+fired, and Click's own usage errors also exit `2`. It is now answered to the
+caller it means something to: run `beadloom guard` yourself and a broken
+`flow.yml` is a `3`; the same defect reached through `--hook` is a `2` and stops
+the edit. The mapping is in the CLI rather than in the generated script, so a
+second harness inherits it instead of re-implementing it.
 
 ## Scaffold contents + idempotency
 

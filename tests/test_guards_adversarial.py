@@ -600,11 +600,13 @@ class TestEveryWayTheCommandCanTerminate:
                 True,
             ),
             (
+                # 2, not 3, since BDL-061.33: the row is only reachable through a
+                # hook, and 3 does not block there.
                 "a harness nobody supports",
                 ["guard", "bead-claimed", "--hook", "no-such-harness"],
                 "",
                 _BLOCKING_WITH_EXCLUSION,
-                3,
+                2,
                 True,
             ),
             (
@@ -642,7 +644,8 @@ class TestEveryWayTheCommandCanTerminate:
         ("label", "args", "stdin", "exit_code"),
         [
             ("a malformed --context pair", ["--context", "nonsense"], "", 3),
-            ("a harness nobody supports", ["--hook", "no-such-harness"], "", 3),
+            # 2, not 3, since BDL-061.33 — see the row above.
+            ("a harness nobody supports", ["--hook", "no-such-harness"], "", 2),
             ("a hook payload that is not JSON", ["--hook", "claude-code"], "{not json", 2),
         ],
     )
