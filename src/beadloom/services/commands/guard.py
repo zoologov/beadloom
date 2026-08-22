@@ -75,6 +75,8 @@ def _emit_liveness(project_root: Path, *, output_json: bool) -> None:
             flags.append("never-fired")
         if row.excluded_everywhere:
             flags.append("excluded-everywhere")
+        for pattern in row.dead_exclusions:
+            flags.append(f"matches no file in the project: {pattern!r}")
         source = "flow.yml" if row.declared else "default"
         suffix = f" [{', '.join(flags)}]" if flags else ""
         last = f", last {row.last_outcome} at {row.last_fired_at}" if row.last_fired_at else ""

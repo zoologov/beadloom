@@ -29,6 +29,11 @@ if TYPE_CHECKING:
 #: bd status token meaning "someone has claimed this and is working on it".
 CLAIMED_STATUS = "in_progress"
 
+#: ``bd list`` caps its answer at 50 rows unless told otherwise; ``0`` lifts it.
+#: Reading one page and filtering client-side made an in-progress bead beyond it
+#: invisible, so ``bead-claimed`` reported a violation of a condition that held.
+UNLIMITED = "0"
+
 #: Seconds before a wedged ``git`` call is abandoned (then reported as unknown).
 _GIT_TIMEOUT_S = 10
 
@@ -45,13 +50,21 @@ class BdWorkTracker:
         The tracker is queried only when the project actually has a ``.beads/``
         directory: invoking ``bd`` in an unrelated repo could initialise state
         there, and a guard must never change the project it inspects.
+
+        The query asks bd for the claimed beads rather than filtering its first
+        page: see :data:`UNLIMITED`. The client-side status check is kept as
+        belt-and-braces, so a bd whose ``--status`` filter changes meaning
+        cannot turn an unclaimed project into a passing one.
         """
         from beadloom.services.bd_seam import BdUnavailableError, run_bd
 
         if not (self._project_root / ".beads").is_dir():
             return None
         try:
-            result = run_bd(["list", "--json"], cwd=str(self._project_root))
+            result = run_bd(
+                ["list", "--status", CLAIMED_STATUS, "--json", "--limit", UNLIMITED],
+                cwd=str(self._project_root),
+            )
         except BdUnavailableError:
             return None
         if not result.ok:

@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from beadloom.application.guards.contract import Guard, GuardFinding
+from beadloom.application.guards.paths import UNNAMED_TARGET, PathScope
 
 if TYPE_CHECKING:
     from beadloom.application.guards.contract import GuardRequest
@@ -30,9 +31,16 @@ _REMEDIATION = (
 
 
 def _not_covered(request: GuardRequest) -> tuple[str, ...]:
-    """What this evaluation did not verify, given what the caller supplied."""
+    """What this evaluation did not verify, given what the caller supplied.
+
+    Keyed on the path *scope*, not on ``relative_path is None``: that is also
+    ``None`` for a target outside the project, and reporting "the harness
+    supplied no path" about a path the harness did supply is a false note in the
+    one field the reader is meant to trust. The outside-the-project case is
+    named by the evaluator instead.
+    """
     items = [_SCOPE_NOT_COVERED]
-    if request.relative_path is None:
+    if request.resolved_path.scope is PathScope.ABSENT:
         items.append(_NO_PATH_NOT_COVERED)
     return tuple(items)
 
@@ -49,7 +57,7 @@ def check_bead_claimed(request: GuardRequest) -> GuardFinding:
     if beads:
         claimed = ", ".join(bead.id for bead in beads)
         return GuardFinding.ok(f"in progress: {claimed}", not_covered=not_covered)
-    target = request.relative_path or "an unnamed file"
+    target = request.resolved_path.label or UNNAMED_TARGET
     return GuardFinding.violated(
         f"no bead is in progress while editing {target}",
         remediation=_REMEDIATION,
@@ -61,5 +69,4 @@ GUARD = Guard(
     name="bead-claimed",
     summary="An edit happens under a claimed work item, not off the record",
     check=check_bead_claimed,
-    default_events=("edit",),
 )

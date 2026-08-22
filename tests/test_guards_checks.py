@@ -98,9 +98,9 @@ class TestWorkingBranch:
         assert finding.not_covered
 
 
-def test_every_builtin_guard_declares_a_summary_and_events() -> None:
+def test_every_builtin_guard_declares_its_name_and_summary() -> None:
+    """The summary is load-bearing: the evaluator prints it as ``not_covered``."""
     assert BUILTIN_GUARDS
     for name, guard in BUILTIN_GUARDS.items():
         assert guard.name == name
         assert guard.summary.strip()
-        assert guard.default_events

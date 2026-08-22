@@ -425,12 +425,14 @@ class TestExclusionPathResolution:
     def test_an_exclusion_matching_nothing_is_accepted_and_leaves_the_guard_live(
         self, tmp_path, write_flow_yml, make_guard_probes
     ) -> None:
-        """Recorded gap: a dead exclusion is indistinguishable from no exclusion.
+        """A typo'd pattern leaves the guard LIVE — and is now reported, not silent.
 
-        Nothing validates that an exclusion pattern can ever match, and
-        ``--liveness`` reports only *excluded-everywhere*, never
-        *excludes-nothing*. The guard staying live is the safe direction, so this
-        pins the behaviour rather than the absent warning.
+        The evaluation behaviour is unchanged and is the safe direction: a
+        pattern that matches nothing exempts nothing, so the guard still fires.
+        What changed is that the silence is gone — ``--liveness`` names a pattern
+        matching no file in the project (see
+        ``tests/test_guards_liveness.py::TestExcludedEverywhere``), so an author
+        who believed ``scripts/`` was exempt finds out from the tool.
         """
         write_flow_yml(
             "guards:\n"

@@ -41,7 +41,6 @@ would otherwise be indistinguishable from a genuine block.
 ```yaml
 guards:
   bead-claimed:
-    on: [edit]
     strictness: { default: warn, epic: block, chore: off }
     exclusions:
       - path: "scripts/**"
@@ -58,6 +57,34 @@ An absent `guards:` block is not an error: every registered guard runs at the
 shipped default (`warn`), so upgrading Beadloom adds warnings that name what
 they did not check — never a new red build.
 
+**There is no `on:` key, and event routing is not Beadloom's today.** Which tool
+invocations count as an edit is decided entirely by the harness adapter — in
+Claude Code, the `Edit|Write|NotebookEdit` matcher in `.claude/settings.json` —
+and which guards run is one settings entry per guard name. Beadloom is told
+"evaluate this guard for this context"; it is not told, and does not decide, what
+happened. An `on:` key was shipped in the S1 schema and read by no code path, so
+it was deleted rather than quoted: a documented key with no consumer teaches an
+incantation that has never done anything. It returns, wired to a selector, in S3
+when composition and adapters are reworked.
+
+### The path a guard is asked about
+
+The evaluation context carries `path` from the harness (`tool_input.file_path`),
+which means it is model-supplied. It is **resolved** — `..` collapsed and
+symlinks followed — against the project root before any exclusion is matched
+against it. Unresolved, every exclusion was a skeleton key: with `scripts/**`
+declared, `scripts/../src/app.py` matched the pattern and skipped, while the
+write landed on `src/app.py` and the printed reason was true about the string and
+false about the file.
+
+A path that resolves **outside the project root** is matched against no
+exclusion, and the verdict says so in `not_covered`, naming the resolved target.
+The guard still runs on its other evidence. An exclusion is written about this
+project's tree and cannot speak for anything else, and inheriting a pattern would
+give an out-of-project write the same reassuring `skip` as an in-project one.
+What is deliberately **not** claimed: no shipped guard decides whether editing
+outside the project is acceptable at all.
+
 ### Shipped guards
 
 | Guard | Guards that… | Skips when |
@@ -69,9 +96,31 @@ they did not check — never a new red build.
 
 Every CLI evaluation appends one line to `.beadloom/guard-firings.jsonl`.
 `beadloom guard --liveness` reports, per guard, its effective strictness, how
-often it fired, its last outcome, and whether it is `never-fired` or
-`excluded-everywhere` — a gate that cannot demonstrate it ran is treated as not
-having run.
+often it fired, its last outcome, and three ways a gate stops protecting
+anything — a gate that cannot demonstrate it ran is treated as not having run.
+
+| Flag | Means | Computed from |
+|---|---|---|
+| `never-fired` | no firing recorded for this guard | the firing record |
+| `excluded-everywhere` | every strictness is `off`, or a pattern is a catch-all | the configuration alone |
+| `matches no file in the project: '<pattern>'` | a declared exclusion matches nothing that exists right now | the project's files |
+
+The two exclusion flags answer different questions and neither pretends to
+answer the other. `excluded-everywhere` asks whether the **pattern** covers
+everything, by matching it against a fixed representative set of paths rather
+than comparing its spelling to a list of known catch-alls — the spelling
+comparison was wrong in both directions, missing `**/**` and calling `*` a
+catch-all though `*` does not cross directories. Because it reads the pattern
+only, it does **not** report `src/**` in a project whose code is entirely under
+`src/`, even though that guard is dead.
+
+`matches no file in the project` is the project-dependent half: a typo'd
+`scrpits/**` exempts nothing, which is the safe direction but was silent until
+someone reread `flow.yml`. It is a statement about the tree **right now**, not a
+claim that the pattern can never match; a directory added tomorrow revives it.
+Vendor and build trees (`.git`, `.venv`, `node_modules`, `build`, `dist`, …) are
+not walked, and the walk stops at 20 000 files — both make the report quieter,
+never louder.
 
 ## Invariants
 
@@ -87,6 +136,12 @@ having run.
   so a typo in `flow.yml` cannot quietly switch a gate off.
 - **Unavailable evidence skips, never passes.** A probe that cannot answer
   returns `None`, and the guard reports why.
+- **A probe reads all of its evidence.** `bd list` paginates at 50 rows by
+  default; the tracker probe lifts the limit and asks bd for the claimed beads
+  rather than filtering its first page, because a guard reporting a violation of
+  a condition that holds is the failure this primitive exists to remove.
+- **An exclusion is matched against a resolved path**, and never against a
+  target outside the project root.
 - **One decision point.** The CLI, the hook adapter and (from S2) the Gate all
   call `evaluate_guard`, so their verdicts cannot diverge.
 
@@ -98,6 +153,7 @@ having run.
 | `contract.py` | what a check receives (request, probes) and returns (finding) |
 | `config.py` | the `guards:` block of `flow.yml` — parsing and validation |
 | `evaluation.py` | check outcome + strictness + exclusions → verdict |
+| `paths.py` | resolving the caller-supplied edit path against the project root |
 | `firing.py` | the append-only firing record |
 | `liveness.py` | which guards are actually protecting something |
 | `hook_payload.py` | translating a harness hook event into guard context |

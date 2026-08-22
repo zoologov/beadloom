@@ -13,11 +13,9 @@ guards:
   # node scope is bindable (S6) — blocking on a claim we cannot scope-check would
   # assert a coverage the guard does not have.
   bead-claimed:
-    on: [edit]
     strictness:
       default: warn
   working-branch:
-    on: [edit]
     strictness:
       default: warn
     options:

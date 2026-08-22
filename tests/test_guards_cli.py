@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import subprocess
-from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
@@ -231,18 +230,48 @@ class TestRealProbes:
         # reporting "no bead claimed" in a repo that does not use bd at all.
         assert build_probes(tmp_path).tracker.claimed_beads() is None
 
-    def test_bd_tracker_reads_the_real_binary_in_this_repo(self) -> None:
+    def test_bd_tracker_reads_a_real_bead_claimed_in_a_real_bd_project(
+        self, tmp_path
+    ) -> None:
+        """The probe against a real ``bd``, on a project built for this test.
+
+        Replaces an assertion that could not fail: it read this repo, asserted
+        ``all(bead.id for bead in claimed)``, and ``all(())`` is ``True`` — so it
+        held whether the probe worked, returned nothing, or silently truncated,
+        which is how the ``--limit`` defect survived 248 tests (review .3, M5).
+
+        NOT covered here, deliberately: the >50 paging boundary against the real
+        binary. Creating 51 beads costs ~1 s each on the embedded Dolt backend,
+        which is not a price the default suite should pay; that boundary is
+        proved against bd's documented contract in
+        ``tests/test_guard_probes.py::TestTrackerReadsAllOfBdsAnswer``.
+        """
         from beadloom.services.bd_seam import BdUnavailableError, run_bd
         from beadloom.services.guard_probes import build_probes
 
-        repo_root = Path(__file__).resolve().parent.parent
         try:
-            run_bd(["--version"], cwd=str(repo_root))
+            run_bd(["--version"], cwd=str(tmp_path))
         except BdUnavailableError:
             pytest.skip("bd binary not installed")
-        claimed = build_probes(repo_root).tracker.claimed_beads()
-        assert isinstance(claimed, tuple)
-        assert all(bead.id for bead in claimed)
+
+        def bd(*args: str) -> str:
+            result = run_bd(list(args), cwd=str(tmp_path))
+            assert result.ok, f"bd {args}: {result.stderr}"
+            return result.stdout
+
+        bd("init", "--prefix", "tt", "--non-interactive")
+        claimed_id = json.loads(bd("create", "claimed work", "--json"))["id"]
+        idle_id = json.loads(bd("create", "untouched work", "--json"))["id"]
+
+        before = build_probes(tmp_path).tracker.claimed_beads()
+        assert before == (), "nothing is claimed yet, and that is not the same as unavailable"
+
+        bd("update", claimed_id, "--status", "in_progress", "--claim")
+        after = build_probes(tmp_path).tracker.claimed_beads()
+
+        assert [bead.id for bead in after] == [claimed_id]
+        assert idle_id not in [bead.id for bead in after]
+        assert after[0].title == "claimed work"
 
 
 class TestHookHarnessValidation:

@@ -9,7 +9,10 @@ with a guard that looks configured and checks nothing.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
+import yaml
 
 from beadloom.application.guards.config import (
     DEFAULT_STRICTNESS,
@@ -321,40 +324,43 @@ class TestFileLevelShape:
         assert spec.strictness_for(None) == DEFAULT_STRICTNESS
 
 
-class TestDeclaredEvents:
-    """``on:`` is the one key in the documented schema with a YAML 1.1 trap."""
+class TestEventRoutingIsNotDeclaredHere:
+    """``on:`` is gone from the schema — deleted, not quoted (owner decision, 2026-08-22).
 
-    def test_a_quoted_on_key_declares_the_events(self, tmp_path, write_flow_yml) -> None:
-        write_flow_yml("guards:\n  bead-claimed:\n    'on': [edit, commit]\n")
+    It was a documented capability wired to nothing: ``GuardSpec.events`` was
+    written by the loader and read by no code path, while which tool calls count
+    as an edit lives in the harness matcher. Standing rule 8 — a permission
+    without a caller is not a capability — makes that a defect in the product,
+    not only in the docs, so the key is removed rather than spelled correctly.
+    Quoting it would have kept the promise and added nothing behind it.
 
-        assert load_guards_config(tmp_path).spec_for("bead-claimed").events == (
-            "edit",
-            "commit",
-        )
+    It returns, wired to a consumer, in S3 where composition and adapters are
+    reworked.
+    """
 
-    def test_a_single_event_string_is_accepted(self, tmp_path, write_flow_yml) -> None:
-        write_flow_yml("guards:\n  bead-claimed:\n    'on': commit\n")
+    def test_the_effective_spec_carries_no_event_list(self, tmp_path, write_flow_yml) -> None:
+        write_flow_yml("guards:\n  bead-claimed: {}\n")
 
-        assert load_guards_config(tmp_path).spec_for("bead-claimed").events == ("commit",)
+        spec = load_guards_config(tmp_path).spec_for("bead-claimed")
 
-    def test_a_malformed_event_list_is_rejected(self, tmp_path, write_flow_yml) -> None:
-        write_flow_yml("guards:\n  bead-claimed:\n    'on': [1, 2]\n")
+        assert not hasattr(spec, "events")
 
-        with pytest.raises(GuardConfigError, match="on"):
-            load_guards_config(tmp_path)
+    def test_a_registered_guard_declares_no_default_events(self) -> None:
+        from beadloom.application.guards.checks import BUILTIN_GUARDS
 
-    def test_an_unquoted_on_key_is_a_yaml_boolean_and_is_silently_dropped(
-        self, tmp_path, write_flow_yml
-    ) -> None:
-        """DEFECT, pinned so it cannot be fixed silently (BDL-061.2 finding).
+        for guard in BUILTIN_GUARDS.values():
+            assert not hasattr(guard, "default_events")
 
-        The shipped schema example writes ``on: [edit]``. Unquoted, YAML 1.1
-        parses that key as the boolean ``True``, so ``body.get("on")`` is
-        ``None`` and the declaration is ignored — the adopter sees a configured
-        event list that does nothing. Harmless in S1 only because ``events`` is
-        not consumed by any code path yet. Delete this test when the loader
-        either reads the boolean key or rejects it.
-        """
-        write_flow_yml("guards:\n  bead-claimed:\n    on: [commit]\n")
+    def test_the_shipped_dogfood_config_declares_no_events(self) -> None:
+        """Our own flow.yml must not teach an incantation that does nothing."""
+        repo_root = Path(__file__).resolve().parent.parent
+        body = yaml.safe_load((repo_root / ".beadloom" / "flow.yml").read_text(encoding="utf-8"))
 
-        assert load_guards_config(tmp_path).spec_for("bead-claimed").events == ("edit",)
+        for name, declared in (body.get("guards") or {}).items():
+            keys = set(declared or {})
+            assert "on" not in keys, name
+            # YAML 1.1 reads a bare `on` as the boolean True — the spelling that
+            # made the dead key invisible in the first place.
+            assert True not in keys, name
+
+

@@ -6,7 +6,6 @@
 
     guards:
       bead-claimed:
-        on: [edit]
         strictness: { default: warn, epic: block, chore: off }
         options: { }
         exclusions:
@@ -29,6 +28,12 @@ its default spec (:data:`DEFAULT_STRICTNESS` = ``warn``, no exclusions), so a
 project that upgrades Beadloom gains warnings that name what they did not check
 — never a new red build.
 
+There is deliberately no ``on:`` key. Which tool invocations count as an edit is
+the harness adapter's vocabulary (Claude Code's ``Edit|Write|NotebookEdit``
+matcher, say), and Beadloom had no consumer for an event list — the loader wrote
+``GuardSpec.events`` and nothing read it, so the schema promised routing it did
+not perform. It returns wired in S3, when composition and adapters are reworked.
+
 The file is shared with the role configurator
 (:mod:`beadloom.onboarding.flow_config`, which owns ``tools``/``architecture``/
 ``stack``). Each side parses only its own block; the path constant is imported
@@ -39,6 +44,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 import yaml
@@ -68,12 +74,17 @@ class GuardConfigError(ValueError):
     """
 
 
+@lru_cache(maxsize=256)
 def _glob_to_regex(pattern: str) -> re.Pattern[str]:
     """Compile a POSIX-ish glob where ``**`` crosses directories and ``*`` does not.
 
     ``fnmatch`` is not used: there ``*`` also matches ``/``, so ``src/*.py``
     would silently exclude the whole subtree. An exclusion that covers more than
     it says is exactly the failure this module exists to prevent.
+
+    Cached because the liveness report matches every declared pattern against
+    every file in the project; there are a handful of distinct patterns and
+    thousands of paths.
     """
     out: list[str] = ["^"]
     i = 0
@@ -96,6 +107,24 @@ def _glob_to_regex(pattern: str) -> re.Pattern[str]:
     return re.compile("".join(out))
 
 
+#: Paths a pattern is probed against to decide whether it is a catch-all.
+#:
+#: Synthetic on purpose: "is this pattern a catch-all" is a question about the
+#: PATTERN, and an answer computed from whichever files happen to exist today
+#: would change under an unrelated commit. The set spans the shapes a glob can
+#: distinguish — top level vs nested vs deeply nested, dotted vs extensionless,
+#: dotfile vs ordinary — so a pattern matching all of them cannot single out a
+#: subset of a real tree either.
+CATCH_ALL_PROBE_PATHS: tuple[str, ...] = (
+    "README.md",
+    "Makefile",
+    ".gitignore",
+    "src/app.py",
+    "src/a/b/c/deep.txt",
+    "docs/domains/graph/README.md",
+)
+
+
 @dataclass(frozen=True)
 class GuardExclusion:
     """One declared exclusion: a path pattern, why it exists, and when it ends."""
@@ -108,6 +137,16 @@ class GuardExclusion:
         """True when this exclusion covers *relative_path* (project-relative POSIX)."""
         return bool(_glob_to_regex(self.path).match(relative_path))
 
+    def covers_everything(self) -> bool:
+        """True when this pattern matches every path in :data:`CATCH_ALL_PROBE_PATHS`.
+
+        Asked of the matcher rather than of the pattern's spelling. Comparing the
+        literal string against a list of known catch-alls was wrong in both
+        directions (review .3, M1): it missed ``**/**`` and it called ``*`` a
+        catch-all, though ``*`` does not cross directories.
+        """
+        return all(self.matches(path) for path in CATCH_ALL_PROBE_PATHS)
+
     def describe(self) -> str:
         """One-line rendering used as the ``skip`` reason."""
         return f"excluded by {self.path!r}: {self.reason} (until {self.until})"
@@ -118,7 +157,6 @@ class GuardSpec:
     """The effective configuration of one guard."""
 
     name: str
-    events: tuple[str, ...] = ("edit",)
     strictness: Mapping[str, str] = field(default_factory=dict)
     exclusions: tuple[GuardExclusion, ...] = ()
     options: Mapping[str, str] = field(default_factory=dict)
@@ -146,13 +184,21 @@ class GuardSpec:
     def excluded_everywhere(self) -> bool:
         """True when this guard can never fire as configured.
 
-        Either every configured strictness is ``off``, or an exclusion pattern
-        covers every path. Reported by ``beadloom guard --liveness``.
+        Either every configured strictness is ``off``, or an exclusion pattern is
+        a catch-all (:meth:`GuardExclusion.covers_everything`). Reported by
+        ``beadloom guard --liveness``.
+
+        What this does NOT claim: that no file in *this* project escapes the
+        exclusions. ``src/**`` in a project whose code is entirely under ``src/``
+        leaves the guard dead and is not reported here, because the answer is
+        computed from the pattern alone. The project-dependent half of the same
+        question — an exclusion matching nothing that exists — is answered by
+        the liveness report, which has the tree to look at.
         """
         values = set(self.strictness.values()) or {DEFAULT_STRICTNESS}
         if values == {"off"}:
             return True
-        return any(exclusion.path in ("**", "*", "**/*") for exclusion in self.exclusions)
+        return any(exclusion.covers_everything() for exclusion in self.exclusions)
 
 
 @dataclass(frozen=True)
@@ -174,9 +220,7 @@ class GuardsConfig:
 
 def _default_spec(name: str) -> GuardSpec:
     """The spec a registered-but-undeclared guard runs under (warn, no exclusions)."""
-    guard = BUILTIN_GUARDS.get(name)
-    events = guard.default_events if guard else ("edit",)
-    return GuardSpec(name=name, events=events, declared=False)
+    return GuardSpec(name=name, declared=False)
 
 
 def _as_str_map(value: object, *, guard: str, key: str) -> dict[str, str]:
@@ -241,18 +285,6 @@ def _build_exclusion(entry: object, *, guard: str) -> GuardExclusion:
     )
 
 
-def _build_events(value: object, *, guard: str) -> tuple[str, ...]:
-    """Validate the ``on:`` event list, defaulting to the guard's own events."""
-    if value is None:
-        return _default_spec(guard).events
-    if isinstance(value, str):
-        return (value,)
-    if isinstance(value, list) and all(isinstance(v, str) for v in value):
-        return tuple(value)
-    msg = f"flow.yml: guards.{guard}.on must be a string or a list of strings"
-    raise GuardConfigError(msg)
-
-
 def _build_spec(name: str, body: object) -> GuardSpec:
     """Validate one guard's declaration block."""
     if body is None:
@@ -266,7 +298,6 @@ def _build_spec(name: str, body: object) -> GuardSpec:
         raise GuardConfigError(msg)
     return GuardSpec(
         name=name,
-        events=_build_events(body.get("on"), guard=name),
         strictness=_build_strictness(body.get("strictness"), guard=name),
         exclusions=tuple(_build_exclusion(e, guard=name) for e in raw_exclusions),
         options=_as_str_map(body.get("options"), guard=name, key="options"),

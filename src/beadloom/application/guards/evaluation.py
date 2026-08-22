@@ -51,15 +51,26 @@ class UnknownGuardError(GuardConfigError):
     """A guard name that is not registered — named, never silently ignored."""
 
 
-def _not_covered(finding: GuardFinding, guard: Guard) -> tuple[str, ...]:
+def _not_covered(
+    finding: GuardFinding, guard: Guard, request: GuardRequest
+) -> tuple[str, ...]:
     """What the evaluation did not check, never empty.
 
     A warning with nothing in this field is one the reader cannot act on, so the
     guard's own scope is stated when the check offered nothing more specific.
+
+    The path caveat is added here rather than in each check because it is a
+    property of the *evaluation* — the evaluator is what decided not to apply
+    any exclusion to a target outside the project root — and a check has no way
+    to know that decision was made.
     """
-    if finding.not_covered:
-        return finding.not_covered
-    return (f"anything beyond this guard's single condition: {guard.summary}",)
+    items = list(finding.not_covered) or [
+        f"anything beyond this guard's single condition: {guard.summary}"
+    ]
+    note = request.resolved_path.not_covered_note
+    if note:
+        items.append(note)
+    return tuple(items)
 
 
 def evaluate_guard(
@@ -115,7 +126,7 @@ def evaluate_guard(
         )
 
     finding = guard.check(request)
-    not_covered = _not_covered(finding, guard)
+    not_covered = _not_covered(finding, guard, request)
     if finding.skipped_because is not None:
         return GuardVerdict(
             guard=name,

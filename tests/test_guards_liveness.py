@@ -166,7 +166,7 @@ class TestFiredAndStopped:
 
 
 class TestExcludedEverywhere:
-    @pytest.mark.parametrize("pattern", ["'**'", "'*'", "'**/*'"])
+    @pytest.mark.parametrize("pattern", ["'**'", "'**/*'", "'**/**'", "'**/'"])
     def test_a_catch_all_exclusion_is_reported(
         self, tmp_path, write_flow_yml, pattern
     ) -> None:
@@ -199,15 +199,14 @@ class TestExcludedEverywhere:
 
         assert _rows(tmp_path)["bead-claimed"].excluded_everywhere is False
 
-    def test_a_catch_all_spelled_another_way_is_not_recognised(
+    def test_a_catch_all_spelled_another_way_is_reported_too(
         self, tmp_path, write_flow_yml
     ) -> None:
-        """Recorded gap: the check is a literal pattern list, not a coverage test.
+        """``**/**`` covers everything ``**`` does; the report must agree with the matcher.
 
-        ``**/**`` matches every path exactly as ``**`` does, but is not in the
-        recognised set — so a guard excluded everywhere can still report as live.
-        Pinned because it is a *false negative in the honesty report*, which is
-        the one number this command exists to produce.
+        Was a recorded gap (a false negative), and a gap in the one command whose
+        product is honesty about which gates are dead. The fix asks the matcher
+        instead of comparing the pattern against a list of spellings.
         """
         write_flow_yml(
             "guards:\n"
@@ -219,11 +218,102 @@ class TestExcludedEverywhere:
         )
         exclusion = load_guards_config(tmp_path).spec_for("bead-claimed").exclusions[0]
 
-        # The pattern demonstrably covers everything...
         assert exclusion.matches("src/app.py")
         assert exclusion.matches("README.md")
-        # ...and the honesty report still calls the guard live.
+        assert _rows(tmp_path)["bead-claimed"].excluded_everywhere is True
+
+    @pytest.mark.parametrize("pattern", ["'*'", "'*.py'", "'src/*'"])
+    def test_a_single_star_is_not_a_catch_all(
+        self, tmp_path, write_flow_yml, pattern
+    ) -> None:
+        """``*`` does not cross directories, so it exempts only the top level.
+
+        A green test used to assert the opposite (review .3, M1): a FALSE
+        POSITIVE in the honesty report, and one that contradicted this feature's
+        own SPEC, which says ``*`` cannot silently exempt a subtree. Reporting a
+        live guard as excluded-everywhere teaches the reader to distrust the
+        report, which costs more than the report is worth.
+        """
+        write_flow_yml(
+            "guards:\n"
+            "  bead-claimed:\n"
+            "    exclusions:\n"
+            f"      - path: {pattern}\n"
+            "        reason: 'migrating'\n"
+            "        until: 'BDL-999'\n"
+        )
+        exclusion = load_guards_config(tmp_path).spec_for("bead-claimed").exclusions[0]
+
+        assert not exclusion.matches("src/a/b/deep.py")
         assert _rows(tmp_path)["bead-claimed"].excluded_everywhere is False
+
+    def test_a_dead_exclusion_is_reported(self, tmp_path, write_flow_yml) -> None:
+        """An exclusion that protects nothing surfaces, like a guard that never fires.
+
+        The typo direction is safe (the guard stays live), but it is silent: the
+        author believes ``scripts/`` is exempt and it is not, and nothing says so
+        until someone rereads the file.
+        """
+        (tmp_path / "scripts").mkdir()
+        (tmp_path / "scripts" / "deploy.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+        write_flow_yml(
+            "guards:\n"
+            "  bead-claimed:\n"
+            "    exclusions:\n"
+            "      - path: 'scrpits/**'\n"
+            "        reason: 'typo in the pattern'\n"
+            "        until: 'BDL-999'\n"
+        )
+
+        assert _rows(tmp_path)["bead-claimed"].dead_exclusions == ("scrpits/**",)
+
+    def test_an_exclusion_that_matches_a_real_file_is_not_reported_dead(
+        self, tmp_path, write_flow_yml
+    ) -> None:
+        (tmp_path / "scripts").mkdir()
+        (tmp_path / "scripts" / "deploy.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+        write_flow_yml(
+            "guards:\n"
+            "  bead-claimed:\n"
+            "    exclusions:\n"
+            "      - path: 'scripts/**'\n"
+            "        reason: 'operational scripts'\n"
+            "        until: 'BDL-999'\n"
+        )
+
+        assert _rows(tmp_path)["bead-claimed"].dead_exclusions == ()
+
+    def test_only_the_dead_pattern_of_several_is_named(
+        self, tmp_path, write_flow_yml
+    ) -> None:
+        (tmp_path / "scripts").mkdir()
+        (tmp_path / "scripts" / "deploy.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+        write_flow_yml(
+            "guards:\n"
+            "  bead-claimed:\n"
+            "    exclusions:\n"
+            "      - path: 'scripts/**'\n"
+            "        reason: 'operational scripts'\n"
+            "        until: 'BDL-999'\n"
+            "      - path: 'vendor/**'\n"
+            "        reason: 'third-party code'\n"
+            "        until: 'BDL-999'\n"
+        )
+
+        assert _rows(tmp_path)["bead-claimed"].dead_exclusions == ("vendor/**",)
+
+    def test_nothing_is_called_dead_when_no_file_could_be_read(self) -> None:
+        """An unreadable tree makes every pattern look dead; silence beats a lie."""
+        from beadloom.application.guards.config import GuardExclusion, GuardSpec
+        from beadloom.application.guards.liveness import dead_exclusions
+
+        spec = GuardSpec(
+            name="bead-claimed",
+            exclusions=(GuardExclusion(path="scrpits/**", reason="typo", until="BDL-999"),),
+        )
+
+        assert dead_exclusions(spec, ()) == ()
+        assert dead_exclusions(spec, ("scripts/deploy.sh",)) == ("scrpits/**",)
 
     def test_off_for_every_declared_work_kind_is_excluded_everywhere(
         self, tmp_path, write_flow_yml
@@ -317,7 +407,30 @@ class TestLivenessOutput:
             "last_fired_at",
             "last_outcome",
             "idle",
+            "dead_exclusions",
         }
+
+    def test_the_text_report_names_a_dead_exclusion_and_its_pattern(
+        self, tmp_path, write_flow_yml
+    ) -> None:
+        """The pattern itself, because the fix is to correct that string."""
+        (tmp_path / "scripts").mkdir()
+        (tmp_path / "scripts" / "deploy.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+        write_flow_yml(
+            "guards:\n"
+            "  bead-claimed:\n"
+            "    exclusions:\n"
+            "      - path: 'scrpits/**'\n"
+            "        reason: 'typo in the pattern'\n"
+            "        until: 'BDL-999'\n"
+        )
+
+        result = CliRunner().invoke(main, ["guard", "--liveness", "--project", str(tmp_path)])
+
+        assert result.exit_code == 0, result.output
+        assert "matches no file in the project: 'scrpits/**'" in result.output
+        assert "working-branch: " in result.output
+        assert result.output.count("matches no file in the project") == 1
 
     def test_the_text_report_flags_a_guard_that_never_fired(self, tmp_path) -> None:
         result = CliRunner().invoke(main, ["guard", "--liveness", "--project", str(tmp_path)])

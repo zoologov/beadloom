@@ -24,11 +24,13 @@ a check that writes to the artifact it inspects cannot be trusted about it.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+from beadloom.application.guards.paths import ResolvedEditPath, resolve_edit_path
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
+    from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -106,18 +108,26 @@ class GuardRequest:
         return self.context.get("path") or None
 
     @property
+    def resolved_path(self) -> ResolvedEditPath:
+        """:attr:`path` resolved against the project root, with its scope.
+
+        Resolution lives in :mod:`beadloom.application.guards.paths` because it
+        is what exclusion matching is fed, and matching an unresolved string let
+        any caller opt out of any guard.
+        """
+        return resolve_edit_path(self.path, self.project_root)
+
+    @property
     def relative_path(self) -> str | None:
-        """:attr:`path` normalized to a project-relative POSIX path, when possible."""
-        raw = self.path
-        if raw is None:
-            return None
-        candidate = Path(raw)
-        if candidate.is_absolute():
-            try:
-                candidate = candidate.relative_to(self.project_root)
-            except ValueError:
-                return candidate.as_posix()
-        return candidate.as_posix()
+        """The project-relative POSIX path, or ``None`` if there is not one.
+
+        ``None`` covers two different situations on purpose — no path was
+        supplied, and the path resolves outside the project — because neither
+        may be matched against an exclusion. A check that needs to tell them
+        apart reads :attr:`resolved_path` and its
+        :class:`~beadloom.application.guards.paths.PathScope`.
+        """
+        return self.resolved_path.relative
 
     @property
     def work_kind(self) -> str | None:
@@ -171,4 +181,3 @@ class Guard:
     name: str
     summary: str
     check: Callable[[GuardRequest], GuardFinding]
-    default_events: tuple[str, ...] = ("edit",)

@@ -647,7 +647,6 @@ Guards are declared in `.beadloom/flow.yml`; an absent `guards:` block means eve
 ```yaml
 guards:
   bead-claimed:
-    on: [edit]
     strictness: { default: warn, epic: block, chore: off }
     exclusions:
       - path: "scripts/**"
@@ -655,11 +654,13 @@ guards:
         until: "BDL-0xx introduces a scripts node"
 ```
 
-Strictness resolves per work kind (`--context work_kind=epic`) with a `default` fallback. **An exclusion must carry both `reason` and `until`** — one without either is a configuration error (exit 3), because an unnamed, undated exclusion disables a gate permanently by accident. A `guards:` key naming an unregistered guard is likewise an error, not a no-op.
+Strictness resolves per work kind (`--context work_kind=epic`) with a `default` fallback. **An exclusion must carry both `reason` and `until`** — one without either is a configuration error (exit 3), because an unnamed, undated exclusion disables a gate permanently by accident. A `guards:` key naming an unregistered guard is likewise an error, not a no-op. There is **no `on:` key**: which tool invocations count as an edit, and which guards run on them, is decided by the harness adapter (in Claude Code, the matcher and the per-guard entries in `.claude/settings.json`), not by Beadloom. An `on:` key shipped in the S1 schema with no consumer and was deleted rather than quoted; it returns wired in S3.
+
+`--context path=...` is resolved against the project root before any exclusion is matched — `..` collapsed, symlinks followed — so a declared exclusion cannot be turned into an opt-out by respelling the path (`scripts/../src/app.py` is guarded, not skipped). A path resolving outside the project root is matched against no exclusion at all, and the verdict names it in `not_covered`.
 
 `--hook HARNESS` reads the harness's own hook event as JSON on stdin and derives the context from it (`claude-code`: `tool_input.file_path`, `tool_name`, `hook_event_name`). The emitted adapter (`.claude/hooks/beadloom-guard.sh`, written by `beadloom setup-agentic-flow`) contains no logic — it is one `exec beadloom guard "$1" --hook claude-code` — so a hook and a shell cannot produce different verdicts.
 
-`--liveness` reports, per guard, its effective strictness, how many times it fired, its last outcome, and whether it is `never-fired` or `excluded-everywhere`: a gate that cannot demonstrate it ran is treated as not having run. Every CLI evaluation appends one line to `.beadloom/guard-firings.jsonl`, which is the only file guards write — never the index they inspect. Decision logic lives in `application/guards/evaluation.py`; the CLI only renders it.
+`--liveness` reports, per guard, its effective strictness, how many times it fired, its last outcome, and three ways a gate stops protecting anything: `never-fired`, `excluded-everywhere` (every strictness `off`, or a catch-all pattern — decided by matching the pattern against representative paths, not by comparing its spelling), and `matches no file in the project: '<pattern>'` (a declared exclusion that exempts nothing that currently exists — a typo'd `scrpits/**` is safe but was silent). A gate that cannot demonstrate it ran is treated as not having run. Every CLI evaluation appends one line to `.beadloom/guard-firings.jsonl`, which is the only file guards write — never the index they inspect. Decision logic lives in `application/guards/evaluation.py`; the CLI only renders it.
 
 ### beadloom ci
 

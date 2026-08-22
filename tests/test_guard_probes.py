@@ -136,6 +136,79 @@ class TestTrackerDeclinesToAnswer:
         assert build_probes(tmp_path).tracker.claimed_beads() is None
 
 
+class TestTrackerReadsAllOfBdsAnswer:
+    """``bd list`` paginates by default — a probe that ignores that lies at scale.
+
+    ``bd list --help``: ``-n, --limit int  Limit results (default 50, use 0 for
+    unlimited)``. Filtering the first page client-side means an ``in_progress``
+    bead outside it is invisible, and ``bead-claimed`` then reports "no bead is
+    in progress" while one is — a false violation, and a false BLOCK under the
+    ``strictness: { epic: block }`` configuration the docs ship as the example.
+
+    The fake below is bd's documented paging contract, not bd itself (standing
+    rule 4); the real binary is exercised in
+    ``tests/test_guards_cli.py::TestRealProbes``.
+    """
+
+    @staticmethod
+    def _fake_bd(monkeypatch, issues):
+        """Stand in for ``bd list``, honouring ``--status`` and ``--limit`` as bd does."""
+
+        def fake_run_bd(args, *, cwd=None):  # signature parity with run_bd
+            selected = list(issues)
+            if "--status" in args:
+                wanted = args[args.index("--status") + 1]
+                selected = [i for i in selected if i["status"] == wanted]
+            limit = 50
+            for flag in ("--limit", "-n"):
+                if flag in args:
+                    limit = int(args[args.index(flag) + 1])
+            if limit:
+                selected = selected[:limit]
+            return BdResult(returncode=0, stdout=json.dumps(selected), stderr="")
+
+        monkeypatch.setattr(bd_seam, "run_bd", fake_run_bd)
+
+    def test_a_bead_claimed_beyond_the_first_page_is_still_seen(
+        self, bd_project, monkeypatch
+    ) -> None:
+        issues = [{"id": f"bd-{n}", "status": "open", "title": ""} for n in range(80)]
+        issues[63] = {"id": "bd-claimed", "status": "in_progress", "title": "far in"}
+        self._fake_bd(monkeypatch, issues)
+
+        claimed = build_probes(bd_project).tracker.claimed_beads()
+
+        assert [bead.id for bead in claimed] == ["bd-claimed"]
+
+    def test_a_project_past_the_page_size_does_not_produce_a_false_violation(
+        self, bd_project, monkeypatch
+    ) -> None:
+        issues = [{"id": f"bd-{n}", "status": "open", "title": ""} for n in range(80)]
+        issues[63] = {"id": "bd-claimed", "status": "in_progress", "title": "far in"}
+        self._fake_bd(monkeypatch, issues)
+
+        verdict = evaluate_guard(
+            "bead-claimed",
+            project_root=bd_project,
+            context={"path": "src/app.py"},
+            probes=build_probes(bd_project),
+        )
+
+        assert verdict.outcome is GuardOutcome.PASS, verdict.why
+
+    def test_every_claimed_bead_is_reported_not_just_the_first_page_of_them(
+        self, bd_project, monkeypatch
+    ) -> None:
+        issues = [
+            {"id": f"bd-{n}", "status": "in_progress", "title": ""} for n in range(60)
+        ]
+        self._fake_bd(monkeypatch, issues)
+
+        claimed = build_probes(bd_project).tracker.claimed_beads()
+
+        assert len(claimed) == 60
+
+
 class TestWorkspaceDeclinesToAnswer:
     @pytest.mark.parametrize(
         "error",

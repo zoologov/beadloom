@@ -21,9 +21,12 @@ inward.
 ## Public surface
 
 - `build_probes(project_root)` — the real probe set (`GuardProbes`).
-- `BdWorkTracker` — `claimed_beads()` from `bd list --json`, filtered to
-  `in_progress`. Returns `None` (not an empty tuple) when the project has no
-  `.beads/` directory, when `bd` is not installed, or when the call fails.
+- `BdWorkTracker` — `claimed_beads()` from
+  `bd list --status in_progress --json --limit 0`, with the status re-checked
+  client-side as belt-and-braces. Returns `None` (not an empty tuple) when the
+  project has no `.beads/` directory, when `bd` is not installed, or when the
+  call fails.
+- `UNLIMITED` — the `--limit` value that lifts bd's 50-row page.
 - `GitWorkspace` — `current_branch()` via `git branch --show-current`, which
   answers correctly on an unborn branch and prints nothing on a detached HEAD.
 - `CLAIMED_STATUS` — the bd status token meaning "claimed and in progress".
@@ -36,10 +39,18 @@ inward.
 - **Unavailable is `None`, never a default.** Nothing here falls back to a value
   that would manufacture a green verdict; `None` makes the guard skip with a
   stated reason.
+- **All of the evidence, not the first page.** `bd list` caps its answer at 50
+  rows unless told otherwise (`--limit 0`). Reading one page and filtering
+  client-side made a bead claimed beyond it invisible, so `bead-claimed` reported
+  "no bead is in progress" while one was — a false warning, and a false BLOCK
+  under the `strictness: { epic: block }` configuration the docs ship as the
+  example.
 
 ## Collaborators
 
 Used by `beadloom guard` (`services/commands/guard.py`), which passes the probe
 set into `evaluate_guard`. Tests patch the command's `_probes` seam for stubbed
-probes, and exercise these adapters against a real `git` repository and the real
-`bd` binary.
+probes, and exercise these adapters against a real `git` repository and against a
+real `bd` project built by the test (`bd init` in a temp dir, one bead claimed,
+one left alone) — a stub proves the stub's contract, so the binary boundary gets
+its own test.

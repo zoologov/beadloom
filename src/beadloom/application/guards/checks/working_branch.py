@@ -53,5 +53,4 @@ GUARD = Guard(
     name="working-branch",
     summary="Work happens on a working branch, never directly on the protected trunk",
     check=check_working_branch,
-    default_events=("edit",),
 )
