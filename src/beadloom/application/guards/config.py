@@ -189,7 +189,13 @@ def _as_str_map(value: object, *, guard: str, key: str) -> dict[str, str]:
     out: dict[str, str] = {}
     for raw_key, raw_val in value.items():
         # YAML turns a bare `off` into False; the user wrote a strictness word.
-        text = {True: "on", False: "off"}.get(raw_val, raw_val)
+        # Restricted to real booleans on purpose: a lookup keyed by the value
+        # crashed on an unhashable one (a list read as exit 1 — the *warn* code —
+        # so a malformed file was indistinguishable from a warning), and it also
+        # coerced the integers 0/1, silently switching a guard `off`.
+        text: object = raw_val
+        if isinstance(raw_val, bool):
+            text = "on" if raw_val else "off"
         if not isinstance(raw_key, str) or not isinstance(text, str):
             msg = f"flow.yml: guards.{guard}.{key} must map strings to strings"
             raise GuardConfigError(msg)

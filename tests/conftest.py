@@ -76,3 +76,69 @@ def read_only_db(schema_db: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
         yield conn
     finally:
         conn.close()
+
+
+# --------------------------------------------------------------------------- #
+# Flow guards (BDL-061 S1) — shared factories so a matrix test states only the
+# cell it is about. Kept here rather than duplicated per file because four test
+# modules need the same two things: a flow.yml body and a stub probe set.
+# --------------------------------------------------------------------------- #
+
+
+class _StubTracker:
+    """WorkTracker stub. ``None`` means "unavailable", ``()`` means "nothing claimed"."""
+
+    def __init__(self, beads) -> None:
+        self._beads = beads
+
+    def claimed_beads(self):
+        return self._beads
+
+
+class _StubWorkspace:
+    """Workspace stub. ``None`` means "no branch / not a repo"."""
+
+    def __init__(self, branch) -> None:
+        self._branch = branch
+
+    def current_branch(self):
+        return self._branch
+
+
+class _ExplodingTracker:
+    """A tracker that must never be consulted — proves a short-circuit really short-circuits."""
+
+    def claimed_beads(self):
+        msg = "the check ran even though the evaluation should have short-circuited"
+        raise AssertionError(msg)
+
+
+@pytest.fixture()
+def write_flow_yml(tmp_path: Path):
+    """Write a ``.beadloom/flow.yml`` body into ``tmp_path`` (or *root*); return its path."""
+
+    def write(body: str, *, root: Path | None = None) -> Path:
+        target = (root or tmp_path) / ".beadloom" / "flow.yml"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(body, encoding="utf-8")
+        return target
+
+    return write
+
+
+@pytest.fixture()
+def make_guard_probes():
+    """Factory for stub guard probes: ``make(beads=..., branch=...)``.
+
+    Defaults are the "nothing to complain about" corner (a bead claimed, a
+    working branch), so each test overrides only the axis it exercises.
+    """
+    from beadloom.application.guards.contract import ClaimedBead, GuardProbes
+
+    default_beads = (ClaimedBead(id="bd-1"),)
+
+    def make(*, beads=default_beads, branch="features/BDL-061", exploding=False):
+        tracker = _ExplodingTracker() if exploding else _StubTracker(beads)
+        return GuardProbes(tracker=tracker, workspace=_StubWorkspace(branch))
+
+    return make

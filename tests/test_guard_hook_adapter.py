@@ -115,3 +115,75 @@ def test_setup_agentic_flow_emits_the_hooks_for_every_shipped_guard(tmp_path) ->
     ]
     for name in GUARD_NAMES:
         assert any(command.endswith(f"beadloom-guard.sh {name}") for command in commands)
+
+
+class TestSettingsOfTheWrongShapeAreNeverRewritten:
+    """"Report and leave alone" must hold for readable-but-unexpected JSON too.
+
+    A scaffolder that eats an adopter's configuration is not worth the hook it
+    installs, and readable-but-wrong is the shape a hand-edited file actually
+    takes — a plain-JSON parse failure is the easy case.
+    """
+
+    @staticmethod
+    def _write(root, payload: object) -> str:
+        path = root / SETTINGS_RELPATH
+        path.parent.mkdir(parents=True, exist_ok=True)
+        text = json.dumps(payload)
+        path.write_text(text, encoding="utf-8")
+        return text
+
+    def test_a_hooks_key_that_is_not_an_object_is_reported_and_left_untouched(
+        self, tmp_path
+    ) -> None:
+        original = self._write(tmp_path, {"hooks": "PreToolUse"})
+
+        result = scaffold_guard_hooks(tmp_path, guard_names=GUARDS)
+
+        assert result.guards_registered == []
+        assert "not an object" in result.settings_skipped_reason
+        assert (tmp_path / SETTINGS_RELPATH).read_text(encoding="utf-8") == original
+
+    def test_a_pretooluse_key_that_is_not_a_list_is_reported_and_left_untouched(
+        self, tmp_path
+    ) -> None:
+        original = self._write(tmp_path, {"hooks": {"PreToolUse": {"matcher": "Edit"}}})
+
+        result = scaffold_guard_hooks(tmp_path, guard_names=GUARDS)
+
+        assert result.guards_registered == []
+        assert "not a list" in result.settings_skipped_reason
+        assert (tmp_path / SETTINGS_RELPATH).read_text(encoding="utf-8") == original
+
+    def test_a_settings_file_that_is_a_json_array_is_reported_and_left_untouched(
+        self, tmp_path
+    ) -> None:
+        original = self._write(tmp_path, ["not", "an", "object"])
+
+        result = scaffold_guard_hooks(tmp_path, guard_names=GUARDS)
+
+        assert result.guards_registered == []
+        assert result.settings_skipped_reason
+        assert (tmp_path / SETTINGS_RELPATH).read_text(encoding="utf-8") == original
+
+    def test_malformed_entries_beside_a_valid_one_do_not_stop_registration(
+        self, tmp_path
+    ) -> None:
+        """A foreign entry Beadloom cannot read is skipped, not treated as ours."""
+        self._write(
+            tmp_path,
+            {"hooks": {"PreToolUse": ["a bare string", {"hooks": ["not an object"]}]}},
+        )
+
+        result = scaffold_guard_hooks(tmp_path, guard_names=GUARDS)
+
+        assert sorted(result.guards_registered) == sorted(GUARDS)
+        entries = json.loads((tmp_path / SETTINGS_RELPATH).read_text(encoding="utf-8"))
+        assert entries["hooks"]["PreToolUse"][0] == "a bare string"
+
+    def test_scaffolding_no_guards_writes_nothing_at_all(self, tmp_path) -> None:
+        """An empty registry must not leave an adapter script that guards nothing."""
+        result = scaffold_guard_hooks(tmp_path, guard_names=[])
+
+        assert result.script is None
+        assert list(tmp_path.iterdir()) == []
