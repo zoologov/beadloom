@@ -35,6 +35,16 @@
 
 ## Open Issues
 
+185. [2026-08-23] [LOW] SUSPECTED: a byte-identity assertion over a WAL-mode database may accuse the wrong thing — one occurrence, not attributable
+
+    **Severity:** low, and deliberately filed as a SUSPICION rather than a defect
+    **Command:** `tests/test_guards_parity.py::test_the_live_repo_index_is_byte_identical_after_a_real_evaluation`
+    **Context:** the `.57` agent saw this fail once in three full-suite runs and refused to call it a flake and move on. Measured: it does not reproduce under identical ordering, passes 0/12 in isolation, and a stashed control gives only the usual two failures — so it is **not attributable**, and that is the honest state.
+    **The hypothesis, which is precise and testable:** the live index runs in WAL mode, and the test compares the bytes of the main `.db` file. SQLite may rewrite that file on a read-only workload (checkpointing), so the assertion can fail for a reason that has nothing to do with the thing it exists to prove — that a guard does not write to the index (#147).
+    **Why it is worth a low-severity entry rather than nothing, and rather than a bead:** a test that intermittently accuses the wrong cause is this epic's own subject, and the assertion guards a real invariant we depend on. But a bead written from one unreproducible occurrence would be a bead nobody can close. Recorded so the next occurrence has a prior, and so whoever meets it starts from the WAL hypothesis instead of re-deriving it.
+    **If it recurs:** compare against `journal_mode=delete`, or assert over the database's logical content rather than the file's bytes, and check whether the `-wal`/`-shm` files should be part of the comparison at all.
+    **Related:** #147 (the invariant this test guards), #168 (order-dependent ghosts in this suite).
+
 184. [2026-08-23] [MEDIUM] `config-check --project <dir>` crashes with a raw sqlite error on a project that has no index — exit 1 with nothing on either stream
 
     **Severity:** medium (it is indistinguishable from a verdict, and it was silently corrupting a measurement while nobody noticed)
