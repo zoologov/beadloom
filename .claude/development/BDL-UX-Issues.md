@@ -35,6 +35,19 @@
 
 ## Open Issues
 
+182. [2026-08-23] [HIGH] 🔴 `symbols_changed` is computed per node, so one changed file marks every pair of that node stale — and the only way through is bulk re-attestation
+
+    **Severity:** high (it manufactures the exact situation #163 warns about, on every doc pass, and the tool's own remediation is the unsafe act)
+    **Command:** `beadloom sync-check`, `beadloom sync-update`
+    **Context:** measured on BDL-061 S2b's doc pass. The gate reported **28 stale pairs** on `docs/domains/onboarding/README.md`. Exactly **one** of them had a changed file (`services/commands/docs.py`). The other 27 read `symbols_changed` while their files were untouched, because `symbols_hash` is stored per `ref_id` rather than per file: one file's symbols move, the node's hash moves, and every pair the node owns goes stale together.
+    **Why it is worse than noise:** the writer is handed 28 pairs, told they are stale, and given `sync-update` as the remedy. Twenty-seven of them cannot be revised, because nothing about their files changed — so the only available action is to re-attest in bulk. That is precisely the "attested but never revised" hazard #163 was filed for, and here the tool *requires* it rather than merely permitting it. The honest pass on this repo was 1 revision and 27 deliberate re-attestations, and there was no better answer available.
+    **Compounding:** because the 28 print as 28 near-identical gate lines (#167), the one pair that genuinely needed attention is indistinguishable from the 27 that did not — the signal is diluted by exactly the factor of the defect.
+    **Expected:**
+    - Compute the staleness fact at the granularity of the thing that changed. A pair is stale when *its* file's symbols moved, not when a sibling's did.
+    - If per-node hashing is deliberate (it is cheaper), then the pairs that follow from it must be reported differently — `unaffected` or `sibling_changed`, never the same word as a pair whose own file moved. This is the same distinction the rest of this slice turned on: **unverifiable, unaffected and stale are three states and they must not print one word.**
+    - Whatever the fix, `sync-update` should not be the recommended action for a pair nobody can revise.
+    **Related:** #163 (re-attesting without evidence — this is the mechanism that forces it), #167 (28 identical lines), #146/#174/#175 (one word for several states).
+
 181. [2026-08-23] [MEDIUM] Clean-room verification is the right technique and structurally cannot see a cross-bead interaction — nothing runs the combined tree until a human does
 
     **Severity:** medium (no defect ships, but every agent reports green on a tree that is red, and the discrepancy reads as a contradiction rather than as two different measurements)
