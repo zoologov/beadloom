@@ -35,6 +35,19 @@
 
 ## Open Issues
 
+183. [2026-08-23] [HIGH] 🔴 Every adopter's `CLAUDE.md` states **Beadloom's** version as the project's own — and it reads as correct on the one repo where it is
+
+    **Severity:** high (a false fact written into the file an agent treats as authoritative, in a section describing the adopter's project)
+    **Command:** `beadloom setup-agentic-flow`, `beadloom init`
+    **Context:** found by review `.11` and reproduced by the coordinator. `onboarding/scanner/claude_md.py:125` calls `application.doctor.get_actual_version()`, which returns **`beadloom.__version__`** — Beadloom's own version, correctly and deliberately so, since it exists to diagnose Beadloom's version drift (#92). That value is then rendered into the composed `CLAUDE.md` as `- **Current version:** …` inside the section describing *the adopter's project*. A JavaScript project at `0.4.1` gets `Current version: 2.2.0`.
+    **Why it survived:** on this repository the fact is *true by coincidence* — we are Beadloom, so our project version and Beadloom's version are the same string. Every check, every review and every dogfood run has read a correct line. The defect is only visible from a project that is not Beadloom, and we have never rendered one.
+    **This is the class BDL-UX #177 named, still open after #177's mechanism was fixed.** #177 was about our project-local *text* reaching adopters through a test that rewrote the shipped template; that leg is closed and now structurally prevented. This is our project-local *facts* reaching adopters through composition, and nothing prevents it. Closing #177 on the strength of the first leg was premature — the coordinator did that, and this entry is the correction.
+    **Expected:**
+    - Read the adopter's version from the adopter's project (`pyproject.toml`, `package.json`, `Cargo.toml`, a VCS tag), and render nothing rather than something false when it cannot be determined — *unknown is not zero*, the rule this epic has applied to every other reading.
+    - Audit the whole composed output the same way, not just this line: **which other rendered facts are computed about Beadloom rather than about the project?** One was found by reading; nobody has swept the rest.
+    - A test that renders `CLAUDE.md` for a **non-Beadloom** fixture project would have caught this and would catch the next one. There is no such fixture today, which is why a correct-looking line survived four slices of scrutiny.
+    **Related:** #177 (same class, different mechanism), #92 (why `get_actual_version` is right about Beadloom), #139/#152.
+
 182. [2026-08-23] [HIGH] 🔴 `symbols_changed` is computed per node, so one changed file marks every pair of that node stale — and the only way through is bulk re-attestation
 
     **Severity:** high (it manufactures the exact situation #163 warns about, on every doc pass, and the tool's own remediation is the unsafe act)
@@ -128,6 +141,7 @@
     **The lesson worth keeping is about the diagnosis, not the code:** the coordinator observed the effect at commit time and named the nearest plausible cause twice without isolating it. REPORTS ARE NOT EVIDENCE applies to the coordinator's own reports.
     **THIRD FINDING, and it closes the entry: the role leg was still live after the `CLAUDE.md` leg was fixed.** `.10` found three tests writing to four tracked files (`TestSyncAgenticFlow` → `templates/agentic_flow/agents/*.md.txt`) and proved in a clean room that an edited live role file ships after a *failing* run as well as a passing one. It was invisible to `git status` for a reason worth stating plainly: **the write is undetectable whenever it happens to be byte-identical — and it ships whatever it is not.** So "is the tree dirty afterwards?" was never a sound test for this defect, which is why two rounds of looking at `git status` missed it.
     **Now structural rather than fixed case-by-case** — the shape this epic keeps having to reach for. `tests/tracked_write_guard.py` plus a `conftest` call-phase hook fails any test that writes a git-tracked file. Verified by the coordinator: a probe test that writes and restores `README.md` fails with the guard's own explanation, and `README.md` is left clean. A fourth instance of this defect can no longer be written without the suite rejecting it.
+    **The MECHANISM is closed; the CLASS is not.** See #183: our project-local *facts* still reach adopters through composition — every adopter's `CLAUDE.md` renders Beadloom's version as the project's own. Marking this entry resolved on the strength of the test-write fix was premature.
 
 176. [2026-08-23] [LOW] An incremental `reindex` prints `Imports: 0` and `Rules: 0` on the run that refreshed them
 
