@@ -139,7 +139,7 @@ Module `src/beadloom/application/site_published.py`:
 Module `src/beadloom/application/gate.py`:
 - `GateStep` — dataclass: `name`, `passed`, `skipped`, `findings`, `summary`; `.status` -> `PASS`/`FAIL`/`SKIP`
 - `GateResult` — dataclass: `steps`; `.ok` (all steps passed), `.findings` (all findings across steps)
-- `run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex)` -> `GateResult` — composes reindex → lint → sync-check → config-check → doctor → (optional) federate; never short-circuits
+- `run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex)` -> `GateResult` — composes reindex → lint → sync-check → docs audit → config-check → doctor → (optional) federate; never short-circuits
 
 ## Testing
 

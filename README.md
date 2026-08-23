@@ -57,7 +57,7 @@ On that same graph Beadloom builds tools that work across the whole system:
 
 ## A single Gate
 
-Documentation, boundary, and contract checks converge into one Gate. `beadloom ci` runs the full set — reindex, `lint --strict`, sync-check, config-check, doctor, and the optional landscape gate — and works in three places: in a pre-push hook locally, as a required check in CI, and in the agent's hands.
+Documentation, boundary, and contract checks converge into one Gate. `beadloom ci` runs the full set — reindex, `lint --strict`, sync-check, docs audit, config-check, doctor, and the optional landscape gate — and works in three places: in a pre-push hook locally, as a required check in CI, and in the agent's hands.
 
 So the rule is simple and the same for everyone. Nothing reaches `main` that breaks architectural boundaries and rules, ships stale or missing documentation, or carries a broken cross-service contract — whether the author is a person or an AI agent. `beadloom install-hooks` installs a pre-push hook that blocks the push on a red Gate (use the documented `git push --no-verify` to bypass), and that same `beadloom ci` stays a required check in CI. There is one gate, and it is deterministic.
 
@@ -223,7 +223,7 @@ When an agent requests context for a node, the rules that apply to it come back 
 ## Key features
 
 - **Cross-service contract graph** — `export` in each repository, `federate` combines two or more services into one landscape with a per-contract verdict (`CONFIRMED` / `BREAKING` / `ORPHANED_CONSUMER` / `UNDECLARED_PRODUCER` / `EXTERNAL`) over AMQP and GraphQL, plus a per-service freshness tag. Product and company scale.
-- **A single Gate** — `beadloom ci` runs reindex → lint → sync-check → config-check → doctor → the optional landscape gate under one exit code. Ships as a ready-made GitHub Action and a pre-push hook.
+- **A single Gate** — `beadloom ci` runs reindex → lint → sync-check → docs audit → config-check → doctor → the optional landscape gate under one exit code. Ships as a ready-made GitHub Action and a pre-push hook.
 - **Context Oracle** — deterministic graph traversal, a compact JSON bundle in under 20 ms.
 - **Doc Sync Engine** — tracks the code-to-doc link, catches stale docs, hooks into git.
 - **Agent context** — `beadloom prime` (under 2K tokens), `setup-rules` for IDE adapters, an MCP server with 18 tools, and `config-check` that keeps the agent files in agreement with the graph.
@@ -263,7 +263,7 @@ Request a node's context, and Context Oracle traverses the graph breadth-first, 
 | `sync-update REF_ID` | Review and update stale documentation |
 | `why REF_ID` | Impact analysis — what it depends on and what depends on it |
 | `lint` | Check the code against the architecture rules (`--strict`, `--format rich/json/porcelain/github`) |
-| `ci` | The single Gate: reindex → lint → sync-check → config-check → doctor → the optional landscape gate |
+| `ci` | The single Gate: reindex → lint → sync-check → docs audit → config-check → doctor → the optional landscape gate |
 | `config-check` | Check (or `--fix`) that the generated agent files match the graph |
 | `guard NAME` | Evaluate one flow guard — `pass`/`warn`/`block`/`skip`/`error` in the exit code (`--liveness` reports which guards ever fired) |
 | `export` | Export the graph as a deterministic artifact for federation |

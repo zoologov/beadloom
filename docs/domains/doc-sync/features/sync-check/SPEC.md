@@ -82,6 +82,24 @@ warning** when it differs. `mark_reference_synced` re-baselines a reference doc
   `None` for *absent at that ref* and for nothing else: an unreachable `git` is
   not caught into `None`, because that would report drift in an untouched file.
 
+### Known gaps — what a green result does not yet prove
+
+Recorded here rather than in a bead comment, because both are reachable through
+the documented commands and neither is fixed:
+
+- **A rebuilt index has no prior baseline, so nothing can be stale against it.**
+  `reindex` into a fresh or deleted database records the tree it is indexing as
+  the baseline, so `sync-check` then reports every declared pair fresh, and
+  `beadloom ci` around it exits 0 (measured on one modified source file with its
+  doc untouched: incremental reindex → exit 2 with 6 stale; `rm beadloom.db*` +
+  reindex → exit 0 with 0 stale). Freshness must be verified after an incremental
+  reindex on the existing index, or against a git ref with `--since`. BDL-UX #175,
+  bead `beadloom-mr2l.47`.
+- **A pair whose file is missing reads `ok`.** `_file_hash` answers `None` for a
+  file that is not there and both comparisons are guarded by that hash's
+  truthiness, so *unverifiable* and *unchanged* print the same word — deleting a
+  declared SPEC leaves the gate green. BDL-UX #174, bead `beadloom-mr2l.46`.
+
 ## API
 
 Module `src/beadloom/doc_sync/engine.py`:

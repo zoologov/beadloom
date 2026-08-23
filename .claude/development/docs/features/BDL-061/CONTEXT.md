@@ -2,7 +2,7 @@
 
 > **Status:** Approved
 > **Created:** 2026-08-22
-> **Last updated:** 2026-08-22
+> **Last updated:** 2026-08-23
 
 ---
 
@@ -116,51 +116,58 @@ and the new `flow-guards`.
 Carried from the dogfood project's hard-won section, because they apply to every role here and
 each one is an incident, not a theory.
 
-**Cite these by NAME, never by number.** Numbers are not stable: three rules are being retired
-in this epic, and every citation to a number would silently shift onto a different rule. The
-coordinator has already sent briefs citing "rule 9" — which does not exist — where CLEAN-ROOM
-REVERT (7) was meant; at least one agent reported the mismatch instead of guessing, which is the
-only reason it was caught. Same defect as BDL-UX #171: one identifier, two sources of truth.
+**Cite these by NAME, never by number.** Numbers are not stable: S2 retired three rules, so
+every citation to a number has already shifted onto a different rule. The coordinator sent
+briefs citing "rule 9" — which did not exist — where CLEAN-ROOM REVERT was meant; at least one
+agent reported the mismatch instead of guessing, which is the only reason it was caught. Same
+defect as BDL-UX #171: one identifier, two sources of truth.
 
-1. **CLEAN-DB LINT** — `beadloom lint` only on a clean database: incremental reindex does not
-   refresh import edges, so `lint --strict` on a stale index lies.
-   *Retired by `.5` and verified: an injected `tui → infrastructure` import is caught by the
-   incremental path with a violation set identical to a full rebuild. Deleted from the prose
-   in `.8`.*
-2. **COMPONENT BLINDNESS** — `sync-check` does not see `component` nodes: "clean" there means
-   "no pairs exist", not "docs are fresh".
-   *Retired by `.5`, with the wording corrected: the defect was never kind-specific — pairing
-   read annotations only. 272 → 275 pairs; 4 nodes now reported as not-checked with a reason.
-   Deleted in `.8`.*
-3. **LINT WRITES** — `lint` mutates the index: measure DB state before/after if it matters.
-   *Retired by `.5` for the read-only path (`lint --no-reindex` leaves the DB byte-identical).
-   Not a rule but a sentence for the CLI reference: plain `lint` still reindexes by design, so
-   it never lints a stale graph. Deleted in `.8`.*
-4. **FAKES PROVE FAKES** — a test on a fake proves the fake's contract. Transport, git and
+1. **FAKES PROVE FAKES** — a test on a fake proves the fake's contract. Transport, git and
    subprocess need a test against the real thing.
-5. **TESTS MUST BITE** — sabotage the fix and confirm the test reddens; and check the harness
+2. **TESTS MUST BITE** — sabotage the fix and confirm the test reddens; and check the harness
    itself, because `ERROR` / `no tests ran` is not `FAILED`. Compare collected/passed NUMBERS,
    not colour, and name the tests that reddened. A sabotage that does NOT redden is data about
    the test, not reassurance about the code.
-6. **REPORTS ARE NOT EVIDENCE** — an agent's report is not evidence. The coordinator
+3. **REPORTS ARE NOT EVIDENCE** — an agent's report is not evidence. The coordinator
    re-verifies gates itself, on the final tree state.
-7. **CLEAN-ROOM REVERT** — remove sabotage by reverse edit, never `git checkout <file>`; verify
+4. **CLEAN-ROOM REVERT** — remove sabotage by reverse edit, never `git checkout <file>`; verify
    byte-identity by sha256. In a parallel wave, only pointwise: restoring a whole file next to a
    neighbour's active work erases it.
-8. **NO CALLER, NO CAPABILITY** — a permission without a caller is not a capability. An
+5. **NO CALLER, NO CAPABILITY** — a permission without a caller is not a capability. An
    allowlist entry, or a function nothing calls, reads as "the feature exists" (#160).
-9. **ONE PLATFORM IS NOT VERIFIED** — a claim measured on one OS, one Python and one locale is
+6. **ONE PLATFORM IS NOT VERIFIED** — a claim measured on one OS, one Python and one locale is
    true there and unknown everywhere else. CI caught two defects (`.36`) that a 5574-test local
    suite could not see, because the local suite varied coverage and not ENVIRONMENT. Where the
    environment cannot be arranged, construct the failure instead (`.37`'s ambient-codec double)
    rather than concluding it is absent.
-10. **A GREEN COUNT IS NOT A CHECKED COUNT** — `12 rules, 0 violations` and `13 mentions fresh`
-    were both partly vacuous while being literally true (#172, #173). Ask what fraction of the
-    declared surface a green result actually covered, and make anything that cannot fire report
-    itself.
+7. **A GREEN COUNT IS NOT A CHECKED COUNT** — `12 rules, 0 violations` and `13 mentions fresh`
+   were both partly vacuous while being literally true (#172, #173). Ask what fraction of the
+   declared surface a green result actually covered, and make anything that cannot fire report
+   itself. S2 fixed three NAMED checks (#142, #146, #147) and left the class open: `.6` measured
+   seven further false-greens and `.7` an eighth, filed as #173, #174, #175 and beads `.45`–`.51`.
+
+### Retired in S2
+
+CLEAN-DB LINT, COMPONENT BLINDNESS and LINT WRITES are gone. Each was a workaround for a defect
+that `.5` fixed, and each retirement was re-derived through the CLI by `.6` and again by `.7` in
+a clean room rather than accepted from a report. Two of them leave a sentence instead of a rule,
+and both sentences now live in the CLI reference (`docs/services/cli.md`, under `beadloom lint`
+and `beadloom sync-check`), where a reader meets them rather than in an epic document that dies
+with the epic: plain `beadloom lint` reindexes first and therefore writes the index, by design,
+so the default never lints a stale graph; and `sync-check` names the pairs it could not check,
+with the reason, so its count describes what was checked.
+
+**One habit outlived its rule, and it must not be carried forward.** CLEAN-DB LINT taught every
+role to verify on a freshly built database. That is right for `lint` and for the test suite, and
+it is vacuous for `sync-check`: a rebuild adopts the current tree as its own baseline, so a
+clean-DB `sync-check` — and the `beadloom ci` around it — reports every pair fresh by
+construction (measured twice, and reproduced under `main`'s own code; BDL-UX #175, bead `.47`).
+Verify doc freshness against the existing baseline with an INCREMENTAL reindex, and keep the
+clean database for lint and for tests.
 
 ## Current Phase
 
-- **Phase:** Planning
-- **Current bead:** none — beads are created after PLAN is approved
-- **Blockers:** none
+- **Phase:** Development — S1 and S2 complete, S3 next (`.9`)
+- **Current bead:** `.8`, the S2 documentation pass; live status is in ACTIVE.md and the tracker
+- **Blockers:** none. `.42` (the locale legs' first run) is open, which is why the two
+  `tests-locale` contexts are not yet part of `main`'s live protection — see ACTIVE.md

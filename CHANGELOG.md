@@ -27,6 +27,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   adapter containing **no logic**: it forwards the harness event to the CLI, so a hook
   and a shell cannot produce different verdicts. Defaults are `warn`, and a warning
   always names what it did not check, so no green project turns red on upgrade.
+- **An environment dimension in CI (BDL-061 S2).** The scaffolded pipeline gains a
+  `tests-locale` job — the same whole suite under `LC_ALL=C` and under
+  `en_US.ISO-8859-1`, with `PYTHONUTF8=0` + `PYTHONCOERCECLOCALE=0` so PEP 538/540
+  cannot put it back on UTF-8 — and its two check-runs join
+  `DEFAULT_STATUS_CHECK_CONTEXTS`. The value is the difference between this leg and
+  the UTF-8 `tests` legs, so pinning a UTF-8 locale to make it green is a change the
+  suite itself rejects.
+
+### Changed
+- **A guard that cannot answer now blocks (BDL-061 S2).** Through `--hook`, the
+  configuration/usage class (an unparseable `guards:` block, an exclusion missing
+  `reason` or `until`, an unregistered guard name, an unsupported harness) exits `2`
+  — the code the harness reads as "stop" — instead of `3`, which the harness read as
+  "proceed". From a shell the distinction survives: `3` still means "your declared
+  configuration is broken" and is separate from Click's own usage exit.
+- **`beadloom lint` says which form writes the index.** The default reindexes first
+  and therefore writes `beadloom.db`, by design, so it never lints a stale graph;
+  `--no-reindex` is the read-only form and now refuses a missing index at exit `2`
+  instead of creating one. Plain `lint` also names on stderr that its exit code stays
+  `0` over error-severity violations without `--strict`; the exit code is deliberately
+  unchanged so no adopter's pipeline turns red on upgrade.
+
+### Fixed
+- **Three checks that reported green over work they had not done (BDL-061 S2).**
+  An incremental `reindex` now re-extracts imports for the code files it touched,
+  drops those of files that disappeared and rebuilds the derived `depends_on` set
+  (marked `extra.derived='imports'`, so a graph-declared edge is never collateral
+  damage) — a boundary violation introduced between two incremental runs is caught
+  without a full rebuild. `sync-check` builds pairs for **any** node that declares
+  `docs:`, falling back to the files its `source:` owns when annotations yield none,
+  and names whatever is still uncovered with a reason instead of printing nothing
+  (275 of 279 declared pairs checked on this repository, 4 named). `lint` without a
+  reindex opens the index read-only and refuses a missing one, where it used to
+  create an empty database and report `0 violations` against it.
+- **Two lint rules could never match (#172).** `from:` is compared against the
+  indexed source path and `to:` against the dotted import path, so a `to:` written
+  `src/pkg/**` matched nothing, ever — and the rules reference taught that form. Both
+  vocabularies are now stated in the reference, a `to:` covering a package also covers
+  a bare import of it, and a glob matching zero candidates anywhere in the index is
+  reported as a `rule_liveness` warning, as is an exemption that suppresses nothing.
+  `forbid_import` gains `exempt[]` entries, each of which must carry `reason` and
+  `until`.
+- **The Gate's own instruments on a non-UTF-8 image.** `sync-check --since`,
+  `diff --since`, the contributor activity read and the federation export decoded the
+  two sides of a comparison by different rules — the current file explicitly as UTF-8,
+  the other side with whatever the image's locale said — so an ambient `latin-1`
+  reported drift in an untouched file and an ambient `ascii` raised out of a command
+  that runs inside `beadloom ci`. Each site now decodes both sides through one stated
+  codec. The digest of a valid UTF-8 file is unchanged, so no stored baseline moves.
+- **`bd` and `git` probes.** Both subprocess seams state their codec instead of
+  inheriting the ambient locale, and `bd` failing for any reason — missing, not
+  executable, wedged past its timeout, undecodable — is now a `skip` that says why
+  rather than an error that blocks the edit.
+- **`docs audit` read numbers out of identifiers (#169).** A line is tokenized on
+  whitespace and only a token whose whole core is a number is a candidate, so
+  `BDL-061.33` is no longer an `mcp_tool_count` of 33 and `6,390` is read whole.
 
 ## [2.2.0] - 2026-08-20
 

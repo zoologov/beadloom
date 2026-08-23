@@ -32,6 +32,9 @@ Within each slice: `dev → test → review → tech-writer`, gated by bead depe
 
 ## Beads
 
+This table is the plan as approved. Live bead status is in ACTIVE.md and the tracker, which also
+carry the beads filed after approval (`.25`–`.51`).
+
 | ID | Name | Priority | Depends On | Status |
 |----|------|----------|------------|--------|
 | .1 | [dev] S1: guard primitive — registry, verdict, CLI, liveness | P1 | – | Pending |
@@ -82,14 +85,33 @@ mandatory) read from `.beadloom/flow.yml`. Claude Code hook adapters emitted by
 
 **What to do:** #142 — incremental reindex re-extracts imports for changed files. #146 —
 `component` nodes produce sync pairs. #147 — a read-only lint evaluation path. Then delete the
-three defensive rules from the shipped `CLAUDE.md` core and from this epic's CONTEXT.
+three defensive rules from this epic's CONTEXT.
+
+**Correction, measured in `.7` (2026-08-23).** This criterion was originally written as "delete
+the three defensive rules from the shipped `CLAUDE.md` core and from this epic's CONTEXT". The
+three rules were never in the shipped core: `grep` over `.claude/CLAUDE.md`, `.beadloom/AGENTS.md`
+and `src/beadloom/onboarding/templates/agentic_flow/` finds no clean-DB, component-blindness or
+lint-writes rule. They lived in exactly two places — CONTEXT's Standing Verification Rules 1–3
+and their echo in ACTIVE — and that is the whole deletion `.8` performed. The criterion was
+written against an assumption nobody checked, which is why it is corrected here rather than
+reported as met. S3's own "the core `CLAUDE.md` shrinks" is a separate, real deliverable and is
+unaffected.
 
 **Done when:**
-- [ ] A boundary violation introduced after an *incremental* reindex is caught
-- [ ] A `component` node's doc freshness is genuinely checked, and "clean" means checked
-- [ ] `lint` has a path that leaves `beadloom.db` byte-identical
-- [ ] Reindex timing measured before/after and the number recorded, not described
-- [ ] **The three rules are gone from the prose** — a fix that did not let a rule go was not a fix
+- [x] A boundary violation introduced after an *incremental* reindex is caught — proved on the
+      real graph and re-derived twice: incremental and full rebuild give byte-identical JSON
+- [x] A `component` node's doc freshness is genuinely checked, and "clean" means checked — every
+      one of the 22 `component` nodes carries at least one pair; 275 of 279 declared pairs are
+      checked and the other 4 are named with a reason
+- [x] `lint` has a path that leaves `beadloom.db` byte-identical — `--no-reindex`, measured under
+      both journal modes; it creates the `-wal`/`-shm` sidecars, so the property holds for the
+      file rather than for `.beadloom/`
+- [x] Reindex timing measured before/after and the number recorded, not described — full 755 ms;
+      import refresh +29 ms (1 file) / +42 ms (5 files); `build_sync_state` 170 ms → 4 ms
+- [x] **The three rules are gone from the prose** — deleted in `.8`; two leave a replacement
+      sentence in the CLI reference rather than a rule
+- [x] The record does not claim more than the code delivers — S2 fixed three NAMED checks and
+      left the class open (#173, #174, #175; beads `.45`–`.51`), and says so in CONTEXT and ACTIVE
 
 ### S3 — Composition with a project overlay (`.9`–`.12`)
 

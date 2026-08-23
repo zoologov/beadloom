@@ -35,6 +35,15 @@
 
 ## Open Issues
 
+176. [2026-08-23] [LOW] An incremental `reindex` prints `Imports: 0` and `Rules: 0` on the run that refreshed them
+
+    **Severity:** low (cosmetic, but it is a zero printed by the command whose honesty BDL-061 S2 restored)
+    **Command:** `beadloom reindex`
+    **Context:** found by the S2 review while watching the incremental path catch an injected boundary violation — the run genuinely re-extracted imports, and its summary said it had indexed none.
+    **Issue:** `ReindexResult.imports_indexed` and `.rules_loaded` are only populated on the `--full` path (`application/reindex/full.py`), while the incremental path calls `reindex_file_imports()` without recording a count, so the CLI's `Imports:` / `Rules:` lines print the dataclass defaults. A reader cannot distinguish "no imports were touched" from "imports were refreshed and nobody counted them".
+    **Expected:** either backfill both counters to the live DB totals on the incremental path — the fix #112 already applied to `Symbols:` for exactly this reason — or label them as per-run deltas and omit them when the path does not compute one. Same shape as #148: a number whose meaning depends on which path produced it.
+    **Related:** #112 (closed, BDL-047 — the identical defect on `Symbols:`), #148.
+
 175. [2026-08-22] [CRITICAL] 🔴 A clean-database `beadloom ci` is structurally blind to doc staleness — the rebuild adopts the current tree as its own baseline
 
     **Severity:** critical (the freshness gate reports PASS for work it cannot have checked, and the blindness is *caused by* the practice this project recommends for a different defect)
@@ -271,6 +280,8 @@
     **Compounding:** `--strict` is also required for a non-zero exit on an `error`-severity violation; plain `lint` exits 0 while printing the violation. A caller checking only the exit code reads a real boundary break as clean (same false-green family as #142/#146).
     **Expected:** make `lint` read-only by default (reindex only on an explicit `--reindex`), or at minimum document the write in `--help` and warn when the index is written by a verb the user invoked to *check* something. Ideally `--no-reindex` becomes the default and the docs name the trade-off (possibly stale graph) explicitly.
     **Workaround:** downstream pinned the argv form to `lint --no-reindex --strict` and added a test asserting the DB hash is unchanged across the call.
+    > **Fixed in BDL-061 S2 (`beadloom-mr2l.5`), verified in `.6` and again in `.7`.** `lint --no-reindex` is a genuine read-only path — `beadloom.db` is byte-identical afterwards under both `journal_mode=wal` and `journal_mode=delete`, and a MISSING index is now exit 2 with `index not found … Run 'beadloom reindex' first` instead of an empty database created in the same breath and reported clean. `--help` states that the default writes, and plain `lint` names on stderr that its exit code stays 0 over error-severity violations without `--strict` (the code itself is deliberately unchanged: turning it would flip an adopter's green pipeline red).
+    > **Two residues, both measured, both unfixed.** (a) On a WAL index the read-only form still creates and leaves `beadloom.db-wal` / `beadloom.db-shm`, so byte-identity is a property of the FILE, not of `.beadloom/`. (b) **`--no-reindex` answers about the INDEX and never says so:** with a real error-severity crossing on disk and a stale index, `lint --no-reindex --strict` printed `0 violations, 12 rules evaluated` at rc 0, silent on both streams, while plain `lint --strict` on the same tree exited 1 — and `beadloom ci --no-reindex` reported `lint PASS` over that same live violation. The flag is exposed to adopters (`.github/actions/beadloom-gate` has a `no-reindex` input; `docs/guides/ci-setup.md` recommends `beadloom ci --no-reindex` in the GitLab example), so #147's fix created a second way to lint a stale graph. `file_index` already stores a sha256 per path, so "N files differ from the index" is one query. **Documented in `docs/services/cli.md` and `docs/guides/ci-setup.md`; no bead yet.**
 
 148. [2026-08-05] [MEDIUM] `lint` prints machine porcelain when stdout is not a TTY — the human summary line vanishes in a pipe, so the documented output is not what a program receives
 
@@ -300,6 +311,8 @@
     **Issue:** Pair construction appears to be keyed on node kind (feature/service) rather than on "node declares `docs:`". A component's docs can therefore rot indefinitely with a permanently green gate — and, worse, the operator/agent is actively misled, because the same command prints an OK line for feature nodes right next to the silent gap. There is no "N nodes declare docs but contribute no pairs" warning anywhere in `sync-check`, `doctor`, or `ci`.
     **Expected:** Build sync pairs for ANY node that declares `docs:` (kind-independent), or — if components are deliberately out of scope — say so explicitly in the output (`skipped: 4 component nodes`) and flag it in `doctor`. A freshness gate must never return green for files it did not examine.
     **Workaround:** Verify component docs by reading the code; do not trust `sync-check` for them. Detect the gap with `sync-check --json` and compare the set of `ref_id`s against the nodes that declare `docs:` in `services.yml`.
+    > **Fixed in BDL-061 S2 (`beadloom-mr2l.5`), verified in `.6` and `.7`.** Pairing was never keyed on node kind — it read annotations only, which is why the kinds whose sources carry no `# beadloom:` comment looked exempt. `build_sync_state` now falls back to the files a node's `source:` OWNS when annotations yield none, `check_sync` no longer short-circuits on an empty `sync_state`, and `find_unchecked_doc_nodes` NAMES every node that still contributes no pair, with a reason (`no_indexed_code`, `files_owned_by_nested_nodes`, `no_source`) — advisory, never changing the exit code. Measured on this repository: 272 → 275 pairs, all 22 `component` nodes covered, 4 nodes named as not-checked where the gate previously printed nothing.
+    > **Residue:** one of those reasons names the wrong cause. `graph-reads` is reported `no_indexed_code` for a file that IS indexed; what is absent is ANNOTATED symbols, because the module's annotations sit inside its docstring, which `extract_symbols` does not read. Bead `beadloom-mr2l.50`.
 
 145. [2026-08-03] [MEDIUM] `ctx <ref> --json` returns the REPO-WIDE `code_symbols` array, not the focused node's — an agent sizing/inspecting a node from its own context bundle reads every other package's symbols
 

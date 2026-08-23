@@ -159,6 +159,7 @@ flowchart TB
   subgraph CLOUD_RUN["Облачные runner-ы GitHub/GitLab"]
     JOB_GATE["задание gate"]
     JOB_TESTS["задание tests 3.10–3.13"]
+    JOB_LOCALE["задание tests-locale<br/>C · en_US.ISO-8859-1"]
     JOB_SITE["задание site-build (VitePress)"]
   end
 
@@ -204,7 +205,7 @@ flowchart TB
 
 **Локально** живёт основной слой: агент разработчика и pre-push Gate. В облако приходит уже согласованная пара — код и документация вместе.
 
-**В облаке GitHub/GitLab** лежат код, каталог `docs/**`, каталог `.beadloom/`, описание конвейера CI и открытые pull request-ы. Единый `ci.yml` запускается на каждый pull request в `main`: задания `gate` (вердикт `beadloom ci`), `tests` (матрица версий Python 3.10–3.13) и `site-build` (сборка сайта на VitePress) идут **параллельно** на облачных runner-ах. Задание `ai-techwriter` объявлено через `needs: [gate, tests, site-build]` и стартует **только если все три зелёные** — сломанный pull request не тратит токены Qwen. Отдельный `deploy-site.yml` — **единственное**, что запускается на `push: main` и публикует сайт на GitHub Pages. При строгом trunk-based ветка `main` зелёная по построению.
+**В облаке GitHub/GitLab** лежат код, каталог `docs/**`, каталог `.beadloom/`, описание конвейера CI и открытые pull request-ы. Единый `ci.yml` запускается на каждый pull request в `main`: задания `gate` (вердикт `beadloom ci`), `tests` (матрица версий Python 3.10–3.13), `tests-locale` (тот же полный набор тестов под `C` и под `en_US.ISO-8859-1`) и `site-build` (сборка сайта на VitePress) идут **параллельно** на облачных runner-ах. Задание `ai-techwriter` объявлено через `needs: [gate, tests, site-build]` и стартует **только если зелёные эти три** — сломанный pull request не тратит токены Qwen. Задание `tests-locale` в этот набор `needs:` намеренно не входит: это измерение среды, а не требование к работе агента, и слияние оно останавливает через защиту ветки. Отдельный `deploy-site.yml` — **единственное**, что запускается на `push: main` и публикует сайт на GitHub Pages. При строгом trunk-based ветка `main` зелёная по построению.
 
 **Self-hosted VPS runner** — единственное место, где одновременно живут Goose, оркестратор и доступ к ключу модели. Каждый прогон начинается с чистого checkout.
 
@@ -218,14 +219,16 @@ flowchart TB
 
 `main` — точка интеграции и **защищённая ветка**: прямой push запрещён, всё едет через pull request. Каждая задача — короткоживущая ветка `features/<KEY>` → один pull request в `main` → слияние, когда проверки зелёные.
 
-Защиту настраивает `onboarding/branch_protection.py`: набор обязательных проверок консолидированного `ci.yml` —
+Защиту настраивает `onboarding/branch_protection.py`. По умолчанию команда применяет `DEFAULT_STATUS_CHECK_CONTEXTS` — набор из девяти проверок консолидированного `ci.yml`, который получает любой проект, развёрнутый по нашему шаблону:
 
 ```
 gate · tests (3.10) · tests (3.11) · tests (3.12) · tests (3.13) ·
 tests-locale (C) · tests-locale (en_US.ISO-8859-1) · site-build · ai-techwriter
 ```
 
-Флаг `enforce_admins: true` означает, что даже владелец интегрируется через pull request (строгий trunk-based), а 0 обязательных ревью оставляют одиночному сопровождающему возможность самому выполнить слияние — но ветку `main` при этом обойти нельзя. Применяется идемпотентно командой `beadloom setup-branch-protection`.
+**В этом репозитории живая защита требует семь из них** — двух контекстов `tests-locale` в ней нет, и это проверено запросом `gh api repos/:owner/:repo/branches/main/protection`. Обе эти проверки заведомо красные, пока задача `beadloom-mr2l.42` не исправит вскрытый ими текстовый ввод-вывод, а красная обязательная проверка при `strict: true` сделала бы слияние в `main` невозможным. Поэтому `beadloom setup-branch-protection` идемпотентна, но перезапускать её здесь сейчас **нельзя**: она применит все девять контекстов и заблокирует любое слияние до закрытия `.42`. Запускать её следует после этой задачи — либо передавать `--check` с тем набором проверок, который конвейер действительно может выполнить.
+
+Флаг `enforce_admins: true` означает, что даже владелец интегрируется через pull request (строгий trunk-based), а 0 обязательных ревью оставляют одиночному сопровождающему возможность самому выполнить слияние — но ветку `main` при этом обойти нельзя.
 
 Тонкость поведения GitHub: пропущенную обязательную проверку он считает нейтральной, то есть проходной. Поэтому при красном `gate`, `tests` или `site-build` задание `ai-techwriter` оказывается пропущенным, и pull request блокируют именно красные верхние проверки, а не пропущенный `ai-techwriter`. Когда верхние три зелёные, `ai-techwriter` запускается по-настоящему, и его вердикт становится барьером.
 
@@ -264,7 +267,7 @@ flowchart LR
   end
 
   subgraph CI["Конфигурация CI"]
-    GH_YML[".github/workflows/ci.yml<br/>gate∥tests∥site-build → ai-techwriter"]
+    GH_YML[".github/workflows/ci.yml<br/>gate∥tests∥tests-locale∥site-build → ai-techwriter"]
     GH_DEPLOY[".github/workflows/deploy-site.yml (push: main)"]
   end
 
@@ -372,7 +375,7 @@ sequenceDiagram
   Dev->>Repo: слияние человеком, когда CI зелёный
 ```
 
-**Начало.** Pull request в `main` запускает `ci.yml`. Сначала параллельно идут `gate`, `tests` и `site-build`. Если что-то красное — `ai-techwriter` не стартует, токены Qwen не тратятся, а pull request блокируют красные проверки.
+**Начало.** Pull request в `main` запускает `ci.yml`. Сначала параллельно идут `gate`, `tests`, `tests-locale` и `site-build`. Если красным оказывается одно из трёх заданий, перечисленных в `needs:` — `gate`, `tests`, `site-build`, — `ai-techwriter` не стартует, токены Qwen не тратятся, а pull request блокируют красные проверки.
 
 Когда все три зелёные, на VPS-runner-е стартует `ai-techwriter`. Первым делом — **защита от петли**: если голова ветки — это коммит самого агента (автор `beadloom-ai-techwriter` или сообщение содержит `[skip ai-techwriter]`), задание пропускается, чтобы push агента не запускал второй прогон. Иначе — `reindex`, вычисление базовой точки `since = git merge-base origin/<base> HEAD`, затем `sync-check --json --since` с сужением области по изменённым символам.
 
@@ -477,9 +480,9 @@ flowchart TD
   PPRED -->|нет| PPFIX["координатор запускает tech-writer → Gate заново"]
   PPFIX --> PP
   PPRED -->|да| B["Открыть один pull request в main"]
-  B --> C["ci.yml: gate ∥ tests ∥ site-build"]
+  B --> C["ci.yml: gate ∥ tests ∥ tests-locale ∥ site-build"]
 
-  C --> D{"все три зелёные?"}
+  C --> D{"gate, tests и site-build зелёные?"}
   D -->|нет| Z["pull request заблокирован<br/>ai-techwriter пропущен"]
   D -->|да| E["ai-techwriter: обычно ничего не делает<br/>(документацию уже написали локально)"]
 
@@ -538,11 +541,11 @@ flowchart TD
 | Как вызывается | `python -m beadloom.ai_agents.ai_techwriter` |
 | Чем настраивается процесс? | `.beadloom/flow.yml`: tools (claude/cursor) · architecture (ddd/fsd) · stack |
 | Триггер CI | `on: pull_request → main` (единый `ci.yml`); `deploy-site.yml` — единственное на `push: main` |
-| Порядок заданий | `gate ∥ tests ∥ site-build` → `ai-techwriter` (`needs:`) |
+| Порядок заданий | `gate ∥ tests ∥ tests-locale ∥ site-build` → `ai-techwriter` (`needs: [gate, tests, site-build]`) |
 | Базовая точка дрейфа | `git merge-base origin/<base> HEAD` (`--since`), область сужается по изменённым символам |
 | Куда кладётся правка | commit в ветку **того же** pull request-а (push через `AI_TW_PAT`) |
 | Вердикт | `ok` / `infra` → exit 0; `flagged` → exit 1 (блокирует только реальный дрейф) |
-| Обязательные проверки | 9: `gate`, `tests (3.10..3.13)`, `tests-locale (C)`, `tests-locale (en_US.ISO-8859-1)`, `site-build`, `ai-techwriter` |
+| Обязательные проверки | по умолчанию 9: `gate`, `tests (3.10..3.13)`, `tests-locale (C)`, `tests-locale (en_US.ISO-8859-1)`, `site-build`, `ai-techwriter`; в этом репозитории живут 7 — без `tests-locale`, до закрытия `beadloom-mr2l.42` |
 | Защита ветки | `enforce_admins: true`, 0 ревью (строгий trunk-based) |
 | Как попадает в main | pull request + слияние человеком (автоматического слияния нет) |
 | Что пишет серверный агент | только `docs/**` |

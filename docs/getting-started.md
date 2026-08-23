@@ -241,6 +241,7 @@ source `docs/` tree.
 beadloom sync-check          # doc↔code freshness (exit 2 = stale)
 beadloom sync-update <ref>   # review/apply the fix for a node (--yes to auto-apply)
 beadloom docs audit          # detect stale numeric/version facts in prose docs (--stale-only, --json); also the docs-audit gate step
+                             # a claim is a whitespace-delimited token whose whole core is a number ("6,390" counts, "BDL-061.33" and "v2.2.0" do not)
 ```
 
 ## Limits

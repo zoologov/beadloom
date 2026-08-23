@@ -129,9 +129,11 @@ One recorded exception to an `ImportBoundaryRule`. An exemption baselines a pre-
 | `to_glob`   | `str`  | Matched like the rule's `to` (dotted import path). Default `"*"` — any target.   |
 | `from_glob` | `str`  | Matched like the rule's `from` (source file path). Default `"*"` — any source.   |
 | `reason`    | `str`  | **Mandatory.** Why this crossing is tolerated.                                   |
-| `until`     | `str`  | **Mandatory.** The condition that retires the entry.                             |
+| `until`     | `str`  | **Mandatory.** The condition that retires the entry — free text (see below).      |
 
-`load_rules` raises `ValueError` when an entry omits `reason` or `until`, or sets neither `from` nor `to` (an entry matching both would exempt the whole rule). An exemption that suppresses nothing is reported as a liveness finding — that report *is* the exit condition firing.
+`load_rules` raises `ValueError` when an entry omits `reason` or `until`, or sets neither `from` nor `to` (an entry matching both would exempt the whole rule). An exemption that suppresses nothing is reported as a liveness finding, which is how a DEAD entry announces itself.
+
+**What `until` is today, stated because the surrounding wording invites more.** It is required, it is stored, and it is quoted back in the liveness finding — and nothing parses it. A date that has passed is not a finding, and a live exemption is not reported at all: this repository's own `lint` prints `0 violations` while six onboarding crossings sit behind exemptions, and the suppressed count is never surfaced. So an exemption retires when a human reads the entry, not when the condition arrives. Reporting the suppressed count and making an expired `until` a finding is bead `beadloom-mr2l.49`.
 
 #### Rule liveness (a rule that cannot fire)
 

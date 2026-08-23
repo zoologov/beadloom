@@ -58,6 +58,7 @@ branch and integrates via a single PR:
    commit.
 4. **The PR triggers** the consolidated CI pipeline (`.github/workflows/ci.yml`,
    BDL-050): `gate` (the `beadloom ci` verdict) ∥ `tests` (the 3.10–3.13 matrix) ∥
+   `tests-locale` (the same suite under `C` and `en_US.ISO-8859-1`) ∥
    `site-build` (the VitePress build) run in parallel, then the
    [AI tech-writer](./ai-techwriter.md) job runs **only after all three are green**
    (`needs: [gate, tests, site-build]`) and commits its doc refresh **into the PR
@@ -65,7 +66,8 @@ branch and integrates via a single PR:
 5. **Merge when green** — a human merges once CI is green and any doc refresh has
    landed. No auto-merge; no direct push to `main`, so `main` stays always-green.
 
-Protect `main` once per repo (idempotent; safe to re-run):
+Protect `main` once per repo (idempotent — but read the sequencing note below
+before re-running it):
 
 ```bash
 beadloom setup-branch-protection --repo OWNER/NAME
@@ -76,7 +78,16 @@ required status checks** — `gate`, `tests (3.10)`, `tests (3.11)`, `tests (3.1
 `tests (3.13)`, `tests-locale (C)`, `tests-locale (en_US.ISO-8859-1)`,
 `site-build`, `ai-techwriter` (BDL-050; the two `tests-locale` legs are the
 environment dimension added in BDL-061.38 — the same whole suite with the locale
-**varied, never pinned**). Strict trunk-based keeps
+**varied, never pinned**).
+
+**Require only checks your pipeline can turn green.** The default set is applied
+whole, and `strict: true` blocks a merge until every context in it passes, so
+requiring a check-run that is red — or absent from your pipeline — makes the branch
+unmergeable until you fix it or narrow the set with `--check`. In this repository
+the two `tests-locale` contexts are knowingly red until bead `beadloom-mr2l.42`
+lands, so `main`'s live protection deliberately still carries the other seven.
+
+Strict trunk-based keeps
 `enforce_admins: true` (even the owner integrates via a PR) with 0 required reviews,
 so the solo maintainer self-merges but `main` is never bypassed (BDL-049). The
 vendored `.claude/CLAUDE.md` §6 (Git) and
@@ -490,7 +501,7 @@ This is stated deliberately, not glossed over:
   harness binding, not by the guard — see
   [the binding](#the-binding-and-what-it-does-not-cover).
 - **CI is the single source of true enforcement.** `beadloom ci` runs
-  independently in CI (reindex → lint → sync-check → config-check → doctor) as a
+  independently in CI (reindex → lint → sync-check → docs audit → config-check → doctor) as a
   required check on `main`; that is the gate nothing can route around (no
   `--no-verify`).
 

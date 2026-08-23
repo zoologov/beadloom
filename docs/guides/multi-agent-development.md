@@ -159,6 +159,7 @@ flowchart TB
   subgraph CLOUD_RUN["GitHub/GitLab cloud runners"]
     JOB_GATE["gate job"]
     JOB_TESTS["tests job 3.10–3.13"]
+    JOB_LOCALE["tests-locale job<br/>C · en_US.ISO-8859-1"]
     JOB_SITE["site-build job (VitePress)"]
   end
 
@@ -204,7 +205,7 @@ flowchart TB
 
 **Locally** lives the primary layer: the developer's agent and the pre-push Gate. What reaches the cloud is an already-consistent pair — code and documentation together.
 
-**In the GitHub/GitLab cloud** live the code, the `docs/**` directory, the `.beadloom/` directory, the CI pipeline definition, and the open pull requests. The single `ci.yml` runs on every pull request to `main`: the `gate` job (the `beadloom ci` verdict), `tests` (a matrix of Python 3.10–3.13), and `site-build` (the VitePress build) run **in parallel** on cloud runners. The `ai-techwriter` job is declared via `needs: [gate, tests, site-build]` and starts **only if all three are green** — a broken pull request doesn't spend Qwen tokens. A separate `deploy-site.yml` is **the only** thing that runs on `push: main` and publishes the site to GitHub Pages. With strict trunk-based, the `main` branch is green by construction.
+**In the GitHub/GitLab cloud** live the code, the `docs/**` directory, the `.beadloom/` directory, the CI pipeline definition, and the open pull requests. The single `ci.yml` runs on every pull request to `main`: the `gate` job (the `beadloom ci` verdict), `tests` (a matrix of Python 3.10–3.13), `tests-locale` (the same whole suite under `C` and under `en_US.ISO-8859-1`) and `site-build` (the VitePress build) run **in parallel** on cloud runners. The `ai-techwriter` job is declared via `needs: [gate, tests, site-build]` and starts **only if those three are green** — a broken pull request doesn't spend Qwen tokens. `tests-locale` is deliberately outside that `needs:` set: it is an environment dimension rather than a portability requirement for the agent, and it blocks a merge through branch protection instead. A separate `deploy-site.yml` is **the only** thing that runs on `push: main` and publishes the site to GitHub Pages. With strict trunk-based, the `main` branch is green by construction.
 
 **The self-hosted VPS runner** is the only place where Goose, the orchestrator, and access to the model key live at the same time. Each run starts from a clean checkout.
 
@@ -218,14 +219,16 @@ flowchart TB
 
 `main` is the integration point and a **protected branch**: direct push is forbidden, everything travels through a pull request. Each task is a short-lived `features/<KEY>` branch → one pull request to `main` → merge when the checks are green.
 
-Protection is configured by `onboarding/branch_protection.py`: the set of required checks of the consolidated `ci.yml` —
+Protection is configured by `onboarding/branch_protection.py`. The set it applies by default — `DEFAULT_STATUS_CHECK_CONTEXTS`, the scaffolded default for any adopter — is the nine check-runs of the consolidated `ci.yml`:
 
 ```
 gate · tests (3.10) · tests (3.11) · tests (3.12) · tests (3.13) ·
 tests-locale (C) · tests-locale (en_US.ISO-8859-1) · site-build · ai-techwriter
 ```
 
-The `enforce_admins: true` flag means even the owner integrates through a pull request (strict trunk-based), and 0 required reviews leave a solo maintainer able to merge themselves — but the `main` branch still can't be bypassed. Applied idempotently by `beadloom setup-branch-protection`.
+**This repository's live protection currently requires seven of them** — the two `tests-locale` contexts are not in it, verified against `gh api repos/:owner/:repo/branches/main/protection`. The legs are knowingly red until bead `beadloom-mr2l.42` fixes the text I/O they expose, and a red required check under `strict: true` would make `main` unmergeable. So `beadloom setup-branch-protection` is idempotent but **not** currently safe to re-run here: running it today would apply all nine and block every merge until `.42` closes. Re-run it after that bead, or pass `--check` for the set the pipeline can satisfy.
+
+The `enforce_admins: true` flag means even the owner integrates through a pull request (strict trunk-based), and 0 required reviews leave a solo maintainer able to merge themselves — but the `main` branch still can't be bypassed.
 
 A GitHub behavior subtlety: it treats a skipped required check as neutral, that is, as passing. So when `gate`, `tests`, or `site-build` is red, the `ai-techwriter` job ends up skipped, and the pull request is blocked precisely by the red upstream checks, not by the skipped `ai-techwriter`. When the upstream three are green, `ai-techwriter` runs for real, and its verdict becomes the barrier.
 
@@ -264,7 +267,7 @@ flowchart LR
   end
 
   subgraph CI["CI configuration"]
-    GH_YML[".github/workflows/ci.yml<br/>gate∥tests∥site-build → ai-techwriter"]
+    GH_YML[".github/workflows/ci.yml<br/>gate∥tests∥tests-locale∥site-build → ai-techwriter"]
     GH_DEPLOY[".github/workflows/deploy-site.yml (push: main)"]
   end
 
@@ -372,7 +375,7 @@ sequenceDiagram
   Dev->>Repo: human merge when CI is green
 ```
 
-**The start.** A pull request to `main` launches `ci.yml`. First, `gate`, `tests`, and `site-build` run in parallel. If something is red, `ai-techwriter` doesn't start, no Qwen tokens are spent, and the pull request is blocked by the red checks.
+**The start.** A pull request to `main` launches `ci.yml`. First, `gate`, `tests`, `tests-locale` and `site-build` run in parallel. If one of the first three named in `needs:` — `gate`, `tests`, `site-build` — is red, `ai-techwriter` doesn't start, no Qwen tokens are spent, and the pull request is blocked by the red checks.
 
 When all three are green, `ai-techwriter` starts on the VPS runner. First — the **loop guard**: if the branch head is the agent's own commit (author `beadloom-ai-techwriter`, or the message contains `[skip ai-techwriter]`), the job is skipped, so the agent's push doesn't trigger a second run. Otherwise — `reindex`, computing the base point `since = git merge-base origin/<base> HEAD`, then `sync-check --json --since` narrowed by the changed symbols.
 
@@ -477,9 +480,9 @@ flowchart TD
   PPRED -->|no| PPFIX["coordinator runs tech-writer → Gate again"]
   PPFIX --> PP
   PPRED -->|yes| B["Open one pull request to main"]
-  B --> C["ci.yml: gate ∥ tests ∥ site-build"]
+  B --> C["ci.yml: gate ∥ tests ∥ tests-locale ∥ site-build"]
 
-  C --> D{"all three green?"}
+  C --> D{"gate, tests and site-build green?"}
   D -->|no| Z["pull request blocked<br/>ai-techwriter skipped"]
   D -->|yes| E["ai-techwriter: usually does nothing<br/>(the docs were already written locally)"]
 
@@ -538,11 +541,11 @@ The typical 2.0.0 scenario looks like this. On the task branch the documentation
 | How it's invoked | `python -m beadloom.ai_agents.ai_techwriter` |
 | What configures the workflow? | `.beadloom/flow.yml`: tools (claude/cursor) · architecture (ddd/fsd) · stack |
 | CI trigger | `on: pull_request → main` (the single `ci.yml`); `deploy-site.yml` is the only thing on `push: main` |
-| Job order | `gate ∥ tests ∥ site-build` → `ai-techwriter` (`needs:`) |
+| Job order | `gate ∥ tests ∥ tests-locale ∥ site-build` → `ai-techwriter` (`needs: [gate, tests, site-build]`) |
 | Drift base point | `git merge-base origin/<base> HEAD` (`--since`), scope narrowed by changed symbols |
 | Where the edit lands | a commit to the **same** pull request's branch (pushed via `AI_TW_PAT`) |
 | Verdict | `ok` / `infra` → exit 0; `flagged` → exit 1 (only real drift blocks) |
-| Required checks | 9: `gate`, `tests (3.10..3.13)`, `tests-locale (C)`, `tests-locale (en_US.ISO-8859-1)`, `site-build`, `ai-techwriter` |
+| Required checks | scaffolded default 9: `gate`, `tests (3.10..3.13)`, `tests-locale (C)`, `tests-locale (en_US.ISO-8859-1)`, `site-build`, `ai-techwriter`; live on this repo: the 7 without `tests-locale`, until `beadloom-mr2l.42` |
 | Branch protection | `enforce_admins: true`, 0 reviews (strict trunk-based) |
 | How it reaches main | pull request + human merge (no automatic merge) |
 | What the server-side agent writes | `docs/**` only |
