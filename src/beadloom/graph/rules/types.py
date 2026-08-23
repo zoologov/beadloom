@@ -30,6 +30,15 @@ SUPPORTED_SCHEMA_VERSIONS: frozenset[int] = frozenset({1, 2, 3})
 # as live ``no-dependency-cycles`` / ``architecture-layers`` violations.
 LIVE_EDGE_LIFECYCLES: frozenset[str] = frozenset({"active"})
 
+#: ``rule_type`` of a finding that reports a rule which cannot fire, as opposed
+#: to code that breaks one. Kept distinct so a consumer can tell "your
+#: architecture is broken" from "your check is broken". It lives here, with the
+#: model, because two modules produce it: :mod:`.liveness` for the eight
+#: matcher/graph-based rule types, and :mod:`.evaluators` for ``forbid_import``
+#: (whose dead-glob and dead-exemption findings fall out of the import scan the
+#: rule evaluation already runs).
+LIVENESS_RULE_TYPE = "rule_liveness"
+
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
@@ -307,3 +316,35 @@ class Violation:
     to_ref_id: str | None  # target node
     message: str  # human-readable explanation
     remediation: str | None = None  # agent-actionable "how to fix" hint
+
+
+def liveness_finding(
+    *,
+    rule_name: str,
+    rule_description: str,
+    message: str,
+    remediation: str,
+) -> Violation:
+    """Build one advisory finding about a rule being unable to do its job.
+
+    The named constructor lives beside :class:`Violation` because **two** modules
+    produce liveness findings — :mod:`.liveness` for the eight matcher/graph-based
+    rule types and :mod:`.evaluators` for ``forbid_import`` — and the two must not
+    drift in shape.
+
+    Always ``warn``, whatever the rule's own severity: an inert rule is a
+    configuration smell, not a boundary breach, and promoting it to ``error``
+    would turn an adopter's green pipeline red on upgrade (BDL-061 CONTEXT).
+    """
+    return Violation(
+        rule_name=rule_name,
+        rule_description=rule_description,
+        rule_type=LIVENESS_RULE_TYPE,
+        severity="warn",
+        file_path=None,
+        line_number=None,
+        from_ref_id=None,
+        to_ref_id=None,
+        message=message,
+        remediation=remediation,
+    )

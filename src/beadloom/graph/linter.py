@@ -11,7 +11,12 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from beadloom.graph.rule_engine import Violation, evaluate_all, load_rules, validate_rules
+from beadloom.graph.rule_engine import (
+    Violation,
+    evaluate_all,
+    inert_rule_names,
+    load_rules,
+)
 from beadloom.infrastructure.db import connection, create_schema, readonly_connection
 
 if TYPE_CHECKING:
@@ -41,6 +46,14 @@ class LintResult:
 
     violations: list[Violation] = field(default_factory=list)
     rules_evaluated: int = 0
+    #: How many of ``rules_evaluated`` could not fire at all — an empty matcher,
+    #: an absent edge kind, a threshold nobody set, a source root with no module.
+    #: Reported next to the rule count because the two together are the honest
+    #: statement: "13 rules evaluated" alone reads the same whether the rules
+    #: passed or never looked (BDL-UX #172 / BDL-061.48). Rules whose only
+    #: liveness finding is a dead *exemption* are NOT counted here: the rule
+    #: itself fires, and that finding belongs to `beadloom-mr2l.49`.
+    rules_inert: int = 0
     files_scanned: int = 0
     imports_resolved: int = 0
     elapsed_ms: float = 0.0
@@ -157,7 +170,11 @@ def _evaluate(
 ) -> LintResult:
     """Evaluate *rules* against an open index connection and time the run."""
     try:
-        validate_rules(rules, conn)
+        # Which rules cannot fire at all. `evaluate_all` reports each one as a
+        # `rule_liveness` finding; the count is carried separately so the
+        # summary line can qualify "N rules evaluated" instead of leaving the
+        # reader to infer it from the findings (BDL-UX #172 / BDL-061.48).
+        inert = inert_rule_names(conn, rules, project_root=project_root)
 
         # files_scanned: distinct file_path in code_imports.
         row = conn.execute("SELECT COUNT(DISTINCT file_path) FROM code_imports").fetchone()
@@ -183,6 +200,7 @@ def _evaluate(
     return LintResult(
         violations=violations,
         rules_evaluated=len(rules),
+        rules_inert=len(inert),
         files_scanned=files_scanned,
         imports_resolved=imports_resolved,
         elapsed_ms=(time.monotonic() - start) * 1000,
@@ -192,6 +210,17 @@ def _evaluate(
 # ---------------------------------------------------------------------------
 # Formatters
 # ---------------------------------------------------------------------------
+
+
+def _inert_note(result: LintResult) -> str:
+    """The clause that stops the rule count from over-claiming, or "" when it does not.
+
+    Absent when every rule can fire, so the common line keeps its shape; present
+    the moment a rule is counted as evaluated while checking nothing.
+    """
+    if not result.rules_inert:
+        return ""
+    return f", {result.rules_inert} of them unable to check anything"
 
 
 def format_rich(result: LintResult) -> str:
@@ -243,11 +272,12 @@ def format_rich(result: LintResult) -> str:
 
         lines.append(
             f"Errors: {result.error_count}, Warnings: {result.warning_count} "
-            f"({result.rules_evaluated} rules evaluated, {elapsed_str})"
+            f"({result.rules_evaluated} rules evaluated{_inert_note(result)}, {elapsed_str})"
         )
     else:
         lines.append(
-            f"\u2713 No violations found ({result.rules_evaluated} rules evaluated, {elapsed_str})"
+            f"\u2713 No violations found ({result.rules_evaluated} rules evaluated"
+            f"{_inert_note(result)}, {elapsed_str})"
         )
 
     return "\n".join(lines)
@@ -309,6 +339,7 @@ def format_json(result: LintResult) -> str:
         "findings": [_finding(v) for v in result.violations],
         "summary": {
             "rules_evaluated": result.rules_evaluated,
+            "rules_inert": result.rules_inert,
             "violations_count": len(result.violations),
             "error_count": result.error_count,
             "warning_count": result.warning_count,

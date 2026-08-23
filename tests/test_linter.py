@@ -293,8 +293,15 @@ class TestLint:
         )
         result = lint(lint_project, rules_path=custom_rules, reindex=incremental_reindex)
         assert result.rules_evaluated == 1
-        # No services in this project, so no require violations
-        assert len(result.violations) == 0
+        # There are no services in this project, so the rule matches nothing.
+        # That used to read as "no require violations" — indistinguishable from a
+        # rule that passed. It is now reported as inert (BDL-UX #172 / .48), at
+        # warn severity so nothing that was green turns red.
+        assert result.rules_inert == 1
+        assert [(v.rule_type, v.severity) for v in result.violations] == [
+            ("rule_liveness", "warn")
+        ]
+        assert not result.has_errors
 
     def test_lint_counts_files_and_imports(self, lint_project: Path) -> None:
         """lint() correctly reports files_scanned and imports_resolved counts.

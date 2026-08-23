@@ -24,6 +24,7 @@ questions, answered separately and on purpose.
 from __future__ import annotations
 
 from beadloom.graph.rules import (
+    INERT_RULE_HINT,
     LIVE_EDGE_LIFECYCLES,
     LIVENESS_RULE_TYPE,
     MATCHING_FORM_HINT,
@@ -55,13 +56,16 @@ from beadloom.graph.rules import (
     evaluate_layer_rules,
     evaluate_module_coverage_rules,
     evaluate_require_rules,
+    evaluate_rule_liveness,
     evaluate_unregistered_feature_candidate_rules,
+    inert_rule_names,
     load_rules,
     load_rules_with_tags,
     validate_rules,
 )
 
 __all__ = [
+    "INERT_RULE_HINT",
     "LIVENESS_RULE_TYPE",
     "LIVE_EDGE_LIFECYCLES",
     "MATCHING_FORM_HINT",
@@ -93,7 +97,9 @@ __all__ = [
     "evaluate_layer_rules",
     "evaluate_module_coverage_rules",
     "evaluate_require_rules",
+    "evaluate_rule_liveness",
     "evaluate_unregistered_feature_candidate_rules",
+    "inert_rule_names",
     "load_rules",
     "load_rules_with_tags",
     "validate_rules",

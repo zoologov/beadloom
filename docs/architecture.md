@@ -149,6 +149,7 @@ Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3
 - `forbid_cycles` uses an iterative WHITE/GREY/BLACK colored DFS (in `graph/rules/cycles.py`) to find circular dependency paths, reporting each unique cycle once
 - `forbid_import` rules query the `code_imports` table for forbidden cross-boundary imports; a rule whose glob matches **zero** candidates anywhere in the index is itself reported (`rule_type: rule_liveness`, `warn`) rather than counted clean, and `exempt:` entries — which baseline a pre-existing crossing and must carry `reason` + `until` — are reported the same way once they suppress nothing
 - `check` rules count symbols/files per node (cardinality) and verify module coverage; `module-coverage` is `severity: error`
+- **Every** rule type reports its own inertness, not only `forbid_import`: a matcher selecting no node, an edge kind the graph does not have, a `check` with no threshold, a `source_root` with no module. A rule that cannot match is otherwise indistinguishable from one that passed, and both read as `N rules evaluated, 0 violations`. These findings are always `warn` (they describe the configuration, not the code, so nothing green turns red on upgrade) and `lint`'s summary carries `rules_inert` so the advertised rule count cannot over-claim (BDL-UX #172)
 
 **Output formats:**
 - **Rich** — human-readable with Unicode indicators (✓, ✗, ▲, ▼)

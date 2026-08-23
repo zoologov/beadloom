@@ -136,9 +136,10 @@ Each `Violation` carries an additive `remediation: str | None` (default `None` s
 - Rules file supports schema versions 1, 2, and 3
 - Schema v3 adds optional top-level `tags:` block for bulk tag assignments and tag-based matching in `NodeMatcher`
 - Rule names must be unique within `rules.yml`
-- Each rule must have exactly one of: `deny`, `require`, `forbid_cycles`, `forbid_import`, `forbid`, `layers`, or `check`
+- Each rule must have exactly one of: `deny`, `require`, `forbid_cycles`, `forbid_import`, `forbid`, `layers`, `check`, `unregistered_feature_candidate`, or `module_coverage` (nine rule types)
 - Rule severity must be one of: `error`, `warn`
 - `forbid_import.from` is matched against the **source file path** (`src/pkg/tui/app.py`), `forbid_import.to` against the **dotted import path with dots → slashes** (`pkg/infrastructure/db`) — two different vocabularies, so a `src/`-prefixed `to` can never match. A rule whose glob matches **zero** candidates in the whole index is reported as a `rule_liveness` finding (`warn`) instead of counting as clean (BDL-UX #172)
+- **Every** rule type reports its own inertness, not only `forbid_import`: an empty matcher, an absent edge kind, a `check` with no threshold, a `source_root` with no module (BDL-061.48). The per-type definition of "cannot fire" is the table in the [rule-engine SPEC](features/rule-engine/SPEC.md). Always `warn` — a liveness finding is about the configuration, not the code, so nothing green turns red on upgrade — and `LintResult.rules_inert` qualifies the rule count so a green run cannot advertise checks that never looked
 - `forbid_import.exempt[]` baselines pre-existing crossings; each entry needs `from` and/or `to` plus a mandatory `reason` and `until`, and is itself reported once it suppresses nothing. `until` is free text that nothing parses — an expired entry is not a finding and a live one is not counted anywhere (bead `beadloom-mr2l.49`)
 
 ## API
@@ -163,7 +164,9 @@ Decomposed by responsibility (BDL-059 S3); see the [rule-engine SPEC](features/r
 
 - `load_rules(rules_path: Path) -> list[Rule]` -- Parse `rules.yml` and return validated `Rule` objects (union of `DenyRule | RequireRule | CycleRule | ImportBoundaryRule | ForbidEdgeRule | LayerRule | CardinalityRule`). Raises `ValueError` on schema errors.
 - `load_rules_with_tags(rules_path: Path) -> tuple[list[Rule], dict[str, list[str]]]` -- Parse `rules.yml` returning both rules and tag assignments from the optional top-level `tags:` block (schema v3). Returns `(rules, tag_assignments)` tuple.
-- `validate_rules(rules: list[Rule], conn: sqlite3.Connection) -> list[str]` -- Validate rules against the database. Returns warning messages for ref_ids not found in nodes.
+- `validate_rules(rules: list[Rule], conn: sqlite3.Connection) -> list[str]` -- Validate rules against the database. Returns warning messages for ref_ids not found in nodes. A caller that ignores the return value has silently disabled it — that was BDL-UX #172's residue in `linter.py`.
+- `evaluate_rule_liveness(conn: sqlite3.Connection, rules: list[Rule], *, project_root: Path | None = None) -> list[Violation]` -- Report every rule that cannot fire (all types except `forbid_import`, which reports its own from the import scan). One `warn` finding per rule, naming the reason. Silent on an empty graph.
+- `inert_rule_names(conn: sqlite3.Connection, rules: list[Rule], *, project_root: Path | None = None) -> set[str]` -- The names behind `LintResult.rules_inert`.
 - `evaluate_deny_rules(conn: sqlite3.Connection, rules: list[DenyRule]) -> list[Violation]` -- Evaluate deny rules against code_imports. Supports tag-based matching via `get_node_tags()`.
 - `evaluate_require_rules(conn: sqlite3.Connection, rules: list[RequireRule]) -> list[Violation]` -- Evaluate require rules against nodes and edges. Supports tag-based matching.
 - `evaluate_cycle_rules(conn: sqlite3.Connection, rules: list[CycleRule]) -> list[Violation]` -- Evaluate cycle rules using iterative DFS over edges of specified kind(s). Reports each unique cycle once with the full path.
@@ -252,11 +255,11 @@ Minimal, dependency-free GraphQL SDL surface extractor (F2). See the [federation
 | `LayerDef` | rules | Frozen dataclass: `name`, `tag`. Defines a single architecture layer for use in `LayerRule` |
 | `LayerRule` | rules | Frozen dataclass: `name`, `description`, `layers` (tuple of `LayerDef`), `enforce` (`"top-down"`), `allow_skip` (default True), `edge_kind` (default `"uses"`), `severity`. Enforces dependency direction between ordered layers |
 | `CardinalityRule` | rules | Frozen dataclass: `name`, `description`, `for_matcher`, `max_symbols`, `max_files`, `min_doc_coverage`, `severity` (default `"warn"`). Detects architectural smells via node-level cardinality checks |
-| `Violation` | rules | Frozen dataclass: `rule_name`, `rule_description`, `rule_type` (`deny`/`require`/`cycle`/`forbid_import`/`forbid`/`layer`/`cardinality`/`rule_liveness`), `severity`, `file_path`, `line_number`, `from_ref_id`, `to_ref_id`, `message` |
+| `Violation` | rules | Frozen dataclass: `rule_name`, `rule_description`, `rule_type` (`deny`/`require`/`cycle`/`forbid_import`/`forbid`/`layer`/`cardinality`/`unregistered_feature_candidate`/`module_coverage`/`rule_liveness`), `severity`, `file_path`, `line_number`, `from_ref_id`, `to_ref_id`, `message`. Built for liveness via the shared `liveness_finding()` factory, so both channels report a dead rule identically |
 | `SnapshotInfo` | snapshot | Frozen dataclass: `id`, `label`, `created_at`, `node_count`, `edge_count`, `symbols_count` |
 | `SnapshotDiff` | snapshot | Frozen dataclass: `old_id`, `new_id`, `added_nodes`, `removed_nodes`, `changed_nodes`, `added_edges`, `removed_edges`, property `has_changes` |
 | `ImportInfo` | import_resolver | Frozen dataclass: `file_path`, `line_number`, `import_path`, `resolved_ref_id` |
-| `LintResult` | linter | Dataclass: `violations`, `rules_evaluated`, `files_scanned`, `imports_resolved`, `elapsed_ms`, properties `error_count`, `warning_count`, `has_errors` |
+| `LintResult` | linter | Dataclass: `violations`, `rules_evaluated`, `rules_inert` (how many of those rules could not fire at all), `files_scanned`, `imports_resolved`, `elapsed_ms`, properties `error_count`, `warning_count`, `has_errors` |
 | `LintError` | linter | Exception raised on invalid lint configuration |
 | `C4Node` | c4 | Frozen dataclass: `ref_id`, `label`, `c4_level` (`"System"` / `"Container"` / `"Component"`), `description`, `boundary` (parent ref_id or None), `is_external`, `is_database` |
 | `C4Relationship` | c4 | Frozen dataclass: `src`, `dst`, `label` (edge kind: `"uses"` / `"depends_on"`) |

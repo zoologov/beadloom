@@ -27,6 +27,7 @@ from beadloom.graph.rules.types import (
     RequireRule,
     UnregisteredFeatureCandidateRule,
     Violation,
+    liveness_finding,
 )
 from beadloom.infrastructure.repository import (
     count_files_owned_by_node,
@@ -327,11 +328,6 @@ MATCHING_FORM_HINT = (
     "extension. Drop the source root from `to:`, or widen it to `**/infrastructure/**`"
 )
 
-#: ``rule_type`` of a finding that reports a rule which cannot fire, as opposed to
-#: code that breaks one. Kept distinct so a consumer can tell "your architecture is
-#: broken" from "your check is broken".
-LIVENESS_RULE_TYPE = "rule_liveness"
-
 
 def _matches_import_target(target_as_path: str, glob: str) -> bool:
     """Match a ``to``-side glob against an indexed import target.
@@ -364,19 +360,15 @@ def _import_exemption_index(
 def _liveness_finding(rule: ImportBoundaryRule, message: str) -> Violation:
     """Build one advisory finding about *rule* being unable to do its job.
 
-    Always ``warn``, whatever the rule's own severity: an inert rule is a
-    configuration smell, not a boundary breach, and promoting it to ``error``
-    would turn an adopter's green pipeline red on upgrade (BDL-061 CONTEXT).
+    Shape and severity come from :func:`~beadloom.graph.rules.types.liveness_finding`,
+    which the matcher-based channel in :mod:`beadloom.graph.rules.liveness` shares —
+    the two must report a dead rule identically. Only the remediation is local: an
+    import rule's usual cause is the two matching forms, so it carries the hint that
+    states them.
     """
-    return Violation(
+    return liveness_finding(
         rule_name=rule.name,
         rule_description=rule.description,
-        rule_type=LIVENESS_RULE_TYPE,
-        severity="warn",
-        file_path=None,
-        line_number=None,
-        from_ref_id=None,
-        to_ref_id=None,
         message=message,
         remediation=MATCHING_FORM_HINT,
     )

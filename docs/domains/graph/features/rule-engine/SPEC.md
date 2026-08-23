@@ -9,6 +9,7 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 - `rules/types.py` — constants, rule dataclasses, `NodeMatcher`, `Violation` (the model).
 - `rules/loader.py` — `load_rules` / `load_rules_with_tags` / `validate_rules` (YAML → typed rules + DB validation).
 - `rules/evaluators.py` — per-rule-type evaluation (deny / require / import-boundary / forbid-edge / layer / cardinality / unregistered-feature / module-coverage) + shared node/edge lookup helpers.
+- `rules/liveness.py` — rule liveness: whether a rule *can* fire at all, for every rule type (BDL-061.48). It answers about the CONFIGURATION, never about the code.
 - `rules/cycles.py` — cycle detection (WHITE/GREY/BLACK colored DFS, path-as-set membership) + edge-liveness SQL helpers.
 - `rules/__init__.py` — `evaluate_all` orchestration + the remediation post-pass + stable public re-exports.
 
@@ -18,7 +19,7 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 
 ### Purpose
 
-Enforce architectural constraints declaratively. Rules are defined in a YAML file and evaluated against the graph database (nodes, edges, code_imports, code_symbols, file_index, and sync_state tables). Seven rule types exist:
+Enforce architectural constraints declaratively. Rules are defined in a YAML file and evaluated against the graph database (nodes, edges, code_imports, code_symbols, file_index, and sync_state tables). **Nine** rule types exist — `load_rules` has dispatched nine since BDL-051 S3a; this table listed seven until BDL-061.48 counted them against the loader:
 
 | Type | Keyword | Semantics |
 |------|---------|-----------|
@@ -29,6 +30,8 @@ Enforce architectural constraints declaratively. Rules are defined in a YAML fil
 | **forbid_edge** | `forbid` | Forbid specific edge patterns between tagged node groups |
 | **layer** | `layers` | Enforce layered architecture direction |
 | **cardinality** | `check` | Enforce complexity limits per node |
+| **unregistered_feature_candidate** | `unregistered_feature_candidate` | Flag substantial domain-only modules that model no feature |
+| **module_coverage** | `module_coverage` | Require every `src/` module to be a tracked node or explicitly exempt |
 
 ### Constants
 
@@ -137,14 +140,30 @@ One recorded exception to an `ImportBoundaryRule`. An exemption baselines a pre-
 
 #### Rule liveness (a rule that cannot fire)
 
-`evaluate_import_boundary_rules` reports the rule itself when it is incapable of producing a verdict, instead of counting it as clean:
+**A rule that cannot match is indistinguishable from a rule that passed.** Both contribute `0` violations and `1` to `N rules evaluated`. Every rule type therefore reports its own inertness instead of counting as clean — `rules/liveness.py` for the eight matcher/graph-based types, `evaluate_import_boundary_rules` for `forbid_import` (whose diagnosis falls out of the import scan it already runs).
 
-- a `from_glob` matching **0** indexed source files, or a `to_glob` matching **0** indexed import paths → one finding per rule, naming the side(s) at fault and both counts;
-- an `exempt` entry that suppressed nothing → one finding per entry, quoting its `until`.
+**What "cannot fire" means, per rule type.** This table is the contract: a liveness check narrower than the invariant it names is the defect this section exists to close (BDL-UX #172, BDL-061.48).
 
-These findings carry `rule_type: "rule_liveness"` (distinct from `forbid_import`, so a consumer can tell "your architecture is broken" from "your check is broken") and `severity: "warn"` **regardless of the rule's own severity** — an inert rule is a configuration smell, and promoting it to `error` would turn an adopter's green pipeline red on upgrade. Their `remediation` is `MATCHING_FORM_HINT`, which states the two matching forms above.
+| Rule type | Inert when | Reported by |
+|-----------|------------|-------------|
+| `deny` | its `from` or `to` matcher selects **0** nodes (an unknown `ref_id` is named as such; otherwise the tag or kind nobody carries is named) | `liveness.py` |
+| `require` | its `for` selects **0** nodes — **or** its `has_edge_to` selects 0, in which case every node it matches would fail, which is equally broken | `liveness.py` |
+| `forbid_cycles` | the graph holds **0** *live* (`active`) edges of the declared `edge_kind`(s), so there is no chain to walk | `liveness.py` |
+| `forbid_import` | its `from` glob matches **0** indexed source files, or its `to` glob matches **0** indexed import paths | `evaluators.py` |
+| `forbid` (edge) | its `from`/`to` selects **0** nodes, or the graph holds **0** edges of its `edge_kind` | `liveness.py` |
+| `layers` | fewer than **2** of its layers are populated (direction needs two layers to point between), or no live `edge_kind` edge runs between two layered nodes | `liveness.py` |
+| `check` (cardinality) | its `for` selects **0** nodes, **or** no threshold is set at all (`max_symbols`, `max_files` and `min_doc_coverage` all unset), so nothing is compared | `liveness.py` |
+| `unregistered_feature_candidate` | its `for` selects **0** nodes, or none of the nodes it selects declares a `source`, so it has no files to inspect | `liveness.py` |
+| `module_coverage` | its `source_root` holds **0** modules, on disk or in the index — "complete coverage" of nothing | `liveness.py` |
 
-Liveness is **not** reported when the index holds no imports at all: that is a different diagnosis (lint's header already reports `0 files scanned`), and firing on it would flood every fresh clone and every project written in a language Beadloom does not extract imports from.
+`forbid_import` additionally reports an `exempt` entry that suppressed nothing (one finding per entry, quoting its `until`). That is a statement about an exemption, not about the rule, so it is **not** counted in `LintResult.rules_inert`; the suppressed-count half of that question is bead `beadloom-mr2l.49`.
+
+**Severity is always `warn`, whatever the rule declares.** A liveness finding is a statement about the *configuration*, never about the code: `error` would conflate "your architecture is broken" with "your check is broken", and would turn an adopter's green pipeline red on upgrade the moment they update Beadloom (BDL-061 CONTEXT). Being `warn` is not the same as being quiet — the finding is printed by default, appears in `--json` under `kind: "rule_liveness"`, and `LintResult.rules_inert` qualifies the rule count on the summary line (`13 rules evaluated, 2 of them unable to check anything`), so a green run cannot advertise checks that never looked.
+
+**Two deliberate limits, named rather than left to be discovered:**
+
+- Liveness is **silent on an empty graph** (no nodes) and, for `forbid_import`, on an index with no imports at all. That is a fact about the index, not about the rules — lint's header already says `0 files scanned` — and firing there would flood every fresh clone and every language Beadloom does not extract imports from.
+- `deny` liveness is **matcher-based only**. An index with no *resolved* imports makes every `deny` rule inert too; that is again the index's property and lint's header states it (`0 imports resolved`).
 
 #### `ForbidEdgeRule`
 
@@ -324,7 +343,9 @@ def load_rules(rules_path: Path) -> list[Rule]
 def validate_rules(rules: list[Rule], conn: sqlite3.Connection) -> list[str]
 ```
 
-Collects all `ref_id` values from all matchers across all rules. Queries the `nodes` table for each. Returns a list of warning strings for any `ref_id` not found in the database. This is advisory (warnings, not errors).
+Collects all `ref_id` values from all matchers across all rules (deny, require, forbid_edge, cardinality and unregistered-feature-candidate). Queries the `nodes` table for each. Returns a list of warning strings for any `ref_id` not found in the database. This is advisory (warnings, not errors).
+
+**Its return value is consumed, not dropped.** Until BDL-061.48 `linter.py` called this function as a bare statement and discarded the list, so a rule naming `no-such-node-at-all` produced the exact right diagnosis and threw it away while `lint --strict` printed `13 rules evaluated, 0 violations` at exit 0. The unknown-`ref_id` question is now answered per rule by `liveness.py` (which names the ref_id in the finding, attributed to the rule that references it) and by this function for any rule kind the liveness pass does not model — one finding per rule, never two.
 
 ### Evaluation
 
@@ -393,6 +414,8 @@ Owned by `rules/__init__.py`. Partitions rules by type into `DenyRule`, `Require
 def load_rules(rules_path: Path) -> list[Rule]: ...
 def load_rules_with_tags(rules_path: Path) -> tuple[list[Rule], dict[str, list[str]]]: ...
 def validate_rules(rules: list[Rule], conn: sqlite3.Connection) -> list[str]: ...
+def evaluate_rule_liveness(conn: sqlite3.Connection, rules: list[Rule], *, project_root: Path | None = None) -> list[Violation]: ...
+def inert_rule_names(conn: sqlite3.Connection, rules: list[Rule], *, project_root: Path | None = None) -> set[str]: ...
 def evaluate_deny_rules(conn: sqlite3.Connection, rules: list[DenyRule]) -> list[Violation]: ...
 def evaluate_require_rules(conn: sqlite3.Connection, rules: list[RequireRule]) -> list[Violation]: ...
 def evaluate_cycle_rules(conn: sqlite3.Connection, rules: list[CycleRule]) -> list[Violation]: ...
@@ -540,7 +563,8 @@ beadloom lint [--format {rich,json,porcelain}] [--strict] [--no-reindex]
 - Without a reindex callback `lint()` opens the index **read-only** and leaves `beadloom.db` byte-identical; a missing index raises `LintError` (exit 2) instead of reporting `0 violations` against a database it had just created (BDL-UX #147). "No rules file" still returns an empty result without touching the index at all.
 - Plain `lint` keeps exit 0 when error-severity violations are found without `--strict` — the exit code is unchanged so an adopter's pipeline does not turn red on upgrade — but the omission is now named on stderr.
 - Require rules depend on the `nodes` and `edges` tables.
-- `validate_rules` is advisory: it returns warnings but does not raise exceptions.
+- `validate_rules` is advisory: it returns warnings but does not raise exceptions. A caller that ignores its return value has silently disabled it (BDL-UX #172).
+- Rule liveness never changes an exit code: it is `warn`-only by design, so `beadloom ci` and `lint --strict` stay green over an inert rule while naming it.
 - The `_get_file_node` helper relies on `code_symbols.annotations` being valid JSON with keys like `domain`, `service`, or `feature` whose values correspond to `nodes.ref_id`.
 
 ---
@@ -581,6 +605,16 @@ beadloom lint [--format {rich,json,porcelain}] [--strict] [--no-reindex]
 
 - **Unknown ref_id warning.** Create rules referencing a `ref_id` not in `nodes`. Assert `validate_rules` returns a warning string.
 - **All ref_ids exist.** Assert empty warning list.
+
+### Liveness Tests (`tests/test_rule_liveness_all_types.py`)
+
+One **pair** per rule type — an inert rule that must be reported, and a live rule of the same type on the same fixture that must not be. The live half is the non-vacuity guard: without it, "everything is inert" would satisfy every other assertion.
+
+- **Every rule type reports its own inertness.** Nine rules, one of each type, all inert on a populated graph. Assert the reported set equals all nine names — a gap says *which* type is missing rather than "some count differs".
+- **Exactly once.** Assert one finding per inert rule (an audit that affirms one fact twice is BDL-UX #173).
+- **Always `warn`.** Nine `severity: error` rules, all inert. Assert every finding is `warn` and `has_errors` is `False` — the adopter-safety invariant, asserted rather than assumed.
+- **Silent on an empty index.** Assert the same nine rules produce nothing against an empty schema.
+- **End to end.** Drive the reproduction from `beadloom-mr2l.7` (a `require` naming `no-such-node-at-all`) through the real CLI; assert the unknown ref_id is named, `lint --strict` exits **0**, and the JSON payload carries `kind: "rule_liveness"` and `summary.rules_inert == 1`. Exit codes and `--json` only, never piped line counts (BDL-UX #148).
 
 ### Combined Evaluation Tests
 
