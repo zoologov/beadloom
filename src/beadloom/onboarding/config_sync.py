@@ -24,6 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from beadloom.graph.rules import exit_condition_deadline
 from beadloom.onboarding.agentic_flow_setup import (
     AGENT_FILES,
     COMMAND_FILES,
@@ -35,6 +36,7 @@ from beadloom.onboarding.composer import (
     CLAUDE_ARTIFACT_NAME,
     COMPOSED_MARKER,
     PROJECT_FLOW_DIRNAME,
+    project_fragment_path,
 )
 from beadloom.onboarding.flow_config import (
     FLOW_CONFIG_RELPATH,
@@ -43,10 +45,17 @@ from beadloom.onboarding.flow_config import (
     resolve_flow_config,
 )
 from beadloom.onboarding.flow_manifest import (
+    FLOW_MANIFEST_RELPATH,
     ArtifactState,
     classify,
     load_manifest,
+    read_manifest,
     state_of,
+)
+from beadloom.onboarding.flow_suppression import (
+    composed_headings,
+    expired_suppressions,
+    suppresses_nothing,
 )
 from beadloom.onboarding.role_adapters import TOOL_AGENT_DIRS, generate_adapters
 from beadloom.onboarding.role_composer import ROLE_NAMES, compose_all_roles
@@ -63,6 +72,8 @@ from beadloom.onboarding.scanner import (
 if TYPE_CHECKING:
     import sqlite3
     from pathlib import Path
+
+    from beadloom.onboarding.flow_config import FlowConfig
 
 
 @dataclass(frozen=True)
@@ -185,12 +196,14 @@ def _claude_md_body_drift(project_root: Path) -> ConfigDrift | None:
     if not claude_md_path.is_file():
         return None
     relpath = ".claude/CLAUDE.md"
-    recorded = load_manifest(project_root).get(relpath)
+    manifest, manifest_usable = read_manifest(project_root)
+    recorded = manifest.get(relpath)
     try:
         raw = claude_md_path.read_text(encoding="utf-8")
     except OSError:
         return None
-    if recorded is None and COMPOSED_MARKER not in raw:
+    stamped = COMPOSED_MARKER in raw
+    if recorded is None and not stamped:
         # Not a Beadloom-composed CLAUDE.md — a project's own file is not ours
         # to police (the boundary `_is_beadloom_adapter` draws for IDE adapters).
         return None
@@ -211,6 +224,11 @@ def _claude_md_body_drift(project_root: Path) -> ConfigDrift | None:
         expected=expected,
         recorded=recorded,
         alternates=(shipped_only,),
+        # Two independent pieces of evidence, so deleting the generated manifest
+        # is not a way to downgrade a hand edit to a warning: the stamp is
+        # written only by a manifest-era composer, so a stamped file that no
+        # manifest accounts for was edited, not inherited (BDL-061 `.57`).
+        accounted=manifest_usable or stamped,
     )
     return _state_drift(relpath, state, kind="claude", name=CLAUDE_ARTIFACT_NAME)
 
@@ -254,13 +272,24 @@ def _state_drift(
                 "this check), then re-run `beadloom setup-agentic-flow`"
             ),
         )
+    if state is ArtifactState.MISSING:
+        return ConfigDrift(
+            file=relpath,
+            reason=(
+                "missing: Beadloom composed this file and it is gone. A deleted "
+                "role protocol and an intact one must not read the same"
+            ),
+            severity="error",
+            remediation="run `beadloom setup-agentic-flow` to restore it",
+        )
     # Warn, not error: this repo was scaffolded before the manifest existed, so
     # an upgrade cannot be told apart from a hand edit — and turning an adopter's
     # green project red on upgrade is how a check gets switched off wholesale.
     return ConfigDrift(
         file=relpath,
         reason=(
-            "differs from the composition and predates the flow manifest, so a "
+            "unverified: differs from the composition, and neither the flow "
+            "manifest nor a provenance stamp says whether Beadloom wrote it — a "
             "hand edit cannot be told apart from an upgrade"
         ),
         severity="warn",
@@ -312,18 +341,100 @@ _AGENTIC_FLOW_KINDS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
-def _agentic_flow_scaffolded(project_root: Path) -> bool:
-    """Whether the agentic flow is scaffolded into ``project_root``.
+@dataclass(frozen=True)
+class _FlowScaffold:
+    """Which canonical flow files a project has, and whether it adopted the flow.
 
-    True only when EVERY canonical ``.claude/agents/*`` + ``.claude/commands/*``
-    file is present — so a repo that never adopted the flow (or has only a
-    stray file) is never flagged, and we never force the flow on it.
+    Replaces the all-or-nothing precondition BDL-061 `.57` measured: deleting ONE
+    scaffolded file used to switch the checks off for every OTHER file, and the
+    deletion itself was reported by nothing — "the role protocol is gone" and
+    "the role protocol is intact" were the same green. The gate is not satisfied
+    by having less to check (BDL-UX #174).
     """
+
+    present: tuple[str, ...]
+    missing: tuple[str, ...]
+    adopted: bool
+
+
+def _flow_scaffold(project_root: Path, manifest: dict[str, str]) -> _FlowScaffold:
+    """Split the canonical flow files into present / missing, and decide adoption.
+
+    Adoption needs positive evidence, because a repo that never took the flow
+    must never be told it is missing eight files: the manifest names one of
+    them, or a ``flow.yml`` is present beside at least one, or the whole set is
+    there (the plain BDL-048 scaffold, which predates both signals).
+    """
+    present: list[str] = []
+    missing: list[str] = []
     for kind, names in _AGENTIC_FLOW_KINDS:
         for name in names:
-            if not (project_root / ".claude" / kind / f"{name}.md").is_file():
-                return False
-    return True
+            relpath = f".claude/{kind}/{name}.md"
+            target = present if (project_root / relpath).is_file() else missing
+            target.append(relpath)
+    adopted = bool(present) and (
+        any(relpath in manifest for relpath in (*present, *missing))
+        or (project_root / FLOW_CONFIG_RELPATH).is_file()
+        or not missing
+    )
+    return _FlowScaffold(tuple(present), tuple(missing), adopted)
+
+
+def _missing_file_drifts(
+    scaffold_state: _FlowScaffold, manifest: dict[str, str]
+) -> list[ConfigDrift]:
+    """One finding per canonical flow file that is not on disk.
+
+    ``error`` when the manifest records that Beadloom wrote it — that is a
+    deletion of our own output. ``warn`` otherwise, because a repo that adopted
+    the flow before the manifest existed cannot be shown to have had the file.
+    """
+    return [
+        ConfigDrift(
+            file=relpath,
+            reason=(
+                "missing: the agentic flow is scaffolded here and this file is "
+                "not on disk"
+                + (
+                    " — Beadloom wrote it and it is gone"
+                    if relpath in manifest
+                    else ", and no manifest entry says whether Beadloom wrote it"
+                )
+            ),
+            severity="error" if relpath in manifest else "warn",
+            remediation="run `beadloom setup-agentic-flow` to restore it",
+        )
+        for relpath in scaffold_state.missing
+    ]
+
+
+def _flow_manifest_drift(
+    scaffold_state: _FlowScaffold, *, manifest_usable: bool
+) -> ConfigDrift | None:
+    """Report an absent (or unreadable) manifest in a project that adopted the flow.
+
+    Without it every composed artifact reads ``unverified`` and the whole
+    severity ladder collapses to ``warn`` — so ``rm`` would be a way to turn a
+    blocking check green. ``sync-check``'s word is reused deliberately
+    (``.46``/``.47``): unverifiable is not clean, and it is not blocking either.
+    """
+    if not scaffold_state.adopted or manifest_usable:
+        return None
+    return ConfigDrift(
+        file=str(FLOW_MANIFEST_RELPATH),
+        reason=(
+            "unverified: the flow manifest is absent or unreadable, so an "
+            "artifact Beadloom wrote cannot be told apart from one somebody "
+            "edited. Composed artifacts are checked against their provenance "
+            "stamp alone until it is restored"
+        ),
+        severity="warn",
+        remediation=(
+            "commit `.beadloom/flow-manifest.json` — it is generated, but it is "
+            "the record of what Beadloom wrote and belongs in git. Re-run "
+            "`beadloom setup-agentic-flow` to rebuild it"
+        ),
+    )
 
 
 def _agentic_flow_drifts(project_root: Path) -> list[ConfigDrift]:
@@ -337,20 +448,27 @@ def _agentic_flow_drifts(project_root: Path) -> list[ConfigDrift]:
     to the shipped core still differs from it. Agents are the role composer's
     responsibility (:func:`_composed_adapter_drifts`).
     """
-    if not _agentic_flow_scaffolded(project_root):
+    manifest, manifest_usable = read_manifest(project_root)
+    scaffold_state = _flow_scaffold(project_root, manifest)
+    if not scaffold_state.adopted:
         return []
 
     flow_yml = (project_root / FLOW_CONFIG_RELPATH).is_file()
+    drifts: list[ConfigDrift] = _missing_file_drifts(scaffold_state, manifest)
+    manifest_drift = _flow_manifest_drift(scaffold_state, manifest_usable=manifest_usable)
+    if manifest_drift is not None:
+        drifts.append(manifest_drift)
+
     try:
         config = resolve_flow_config(project_root)
     except FlowConfigError:
         # Reported separately by :func:`_flow_config_drift`; don't double-report.
-        return []
+        return drifts
 
-    drifts: list[ConfigDrift] = []
-    manifest = load_manifest(project_root)
     for name in COMMAND_FILES:
         relpath = f".claude/commands/{name}.md"
+        if relpath in scaffold_state.missing:
+            continue  # already reported as missing; there is nothing to diff
         expected = composed_command(name, config, project_root)
         state = state_of(
             project_root,
@@ -358,6 +476,7 @@ def _agentic_flow_drifts(project_root: Path) -> list[ConfigDrift]:
             expected=expected,
             manifest=manifest,
             alternates=(composed_command(name, config, None),),
+            accounted=manifest_usable,
         )
         drift = _state_drift(relpath, state, kind="commands", name=name)
         if drift is not None:
@@ -410,6 +529,131 @@ def _flow_config_drift(project_root: Path) -> ConfigDrift | None:
     return None
 
 
+def _project_layer_drift(project_root: Path) -> ConfigDrift | None:
+    """Name the project layer that is in effect, and what it means the check did not judge.
+
+    Overlays are append-only in BYTES — nothing in ``.beadloom/flow/`` can delete
+    core text — and that is all they are. In EFFECT a fragment may contradict a
+    core rule in plain prose ("ignore section 0; do not run `beadloom ci`") with
+    no reason, no exit condition and no notice, while the DECLARED route for
+    standing a rule down (``overlays.suppress``) demands all three. So the
+    mandatory-reason mechanism guarded the one door nobody has to walk through
+    (BDL-061 `.10` finding 8, review `.11` MAJOR 4).
+
+    Prose cannot be judged, and this check does not pretend to. What it must not
+    do is stay silent: the composition ``config-check`` verifies against INCLUDES
+    this text, so a green verdict covers less than a reader would assume. CONTEXT
+    already sets the standard — "new checks ship as `warn` and name what they did
+    not verify" — and this is that sentence applied to the composer's own input.
+    """
+    fragments: list[str] = []
+    for kind, names in (
+        ("claude", (CLAUDE_ARTIFACT_NAME,)),
+        ("commands", COMMAND_FILES),
+        ("roles", ROLE_NAMES),
+    ):
+        fragments.extend(
+            str(PROJECT_FLOW_DIRNAME / kind / f"{name}.md")
+            for name in names
+            if project_fragment_path(kind, name, project_root).is_file()
+        )
+    if not fragments:
+        return None
+    return ConfigDrift(
+        file=str(PROJECT_FLOW_DIRNAME),
+        reason=(
+            f"project layer in effect ({len(fragments)} fragment(s): "
+            f"{', '.join(sorted(fragments))}). It composes AFTER the shipped core "
+            "and cannot delete core text — but its prose is not judged, so a rule "
+            "it contradicts is stood down without the reason, exit condition or "
+            "notice `overlays.suppress` requires"
+        ),
+        severity="warn",
+        remediation=(
+            "this is the supported place for a standing practice and needs no "
+            "action. If a fragment stands a CORE rule down, declare it under "
+            "`overlays.suppress` in .beadloom/flow.yml instead — that route is "
+            "reported, dated and checked"
+        ),
+    )
+
+
+def _suppression_drifts(project_root: Path) -> list[ConfigDrift]:
+    """Report suppressions that have stopped earning their place.
+
+    CONTEXT: "suppressing a core rule needs a named reason, an exit condition,
+    and is itself reported". Two of the three were kept in bytes and the third
+    was never reported at all, so a suppression naming a rule that exists
+    nowhere was rendered into every artifact as though somebody had decided it,
+    and an expired one stood the rule down forever.
+
+    Both findings are the ones ``graph.rules.exemptions`` already makes for a
+    ``forbid_import`` exemption — a dead one and an expired one — one layer up
+    (BDL-061 `.48`/`.49`). They ship as ``warn``: a declaration that stopped
+    being true is a real finding, and it is not a reason to turn an adopter's
+    green project red.
+    """
+    if not (project_root / FLOW_CONFIG_RELPATH).is_file():
+        return []
+    try:
+        config = resolve_flow_config(project_root)
+    except FlowConfigError:
+        # Reported by :func:`_flow_config_drift`; don't double-report.
+        return []
+    if not config.suppressions:
+        return []
+
+    relpath = str(FLOW_CONFIG_RELPATH)
+    drifts: list[ConfigDrift] = []
+    headings = composed_headings(_composed_corpus(config, project_root))
+    for suppression in config.suppressions:
+        if suppresses_nothing(suppression, headings):
+            drifts.append(
+                ConfigDrift(
+                    file=relpath,
+                    reason=(
+                        f"the suppression of {suppression.rule!r} matches no rule "
+                        "in the composed flow — it stands nothing down, and is "
+                        "rendered into every artifact as a decision nobody can act on"
+                    ),
+                    severity="warn",
+                    remediation=(
+                        "name the rule by its heading path (e.g. 'Anti-patterns / "
+                        "Shell'), or delete the entry from `overlays.suppress`"
+                    ),
+                )
+            )
+    for suppression in expired_suppressions(config.suppressions):
+        deadline = exit_condition_deadline(suppression.until)
+        drifts.append(
+            ConfigDrift(
+                file=relpath,
+                reason=(
+                    f"the suppression of {suppression.rule!r} expired on "
+                    f"{deadline} and is still standing the rule down"
+                ),
+                severity="warn",
+                remediation=(
+                    "renew the `until:` with a new exit condition, or remove the "
+                    "entry from `overlays.suppress` in .beadloom/flow.yml"
+                ),
+            )
+        )
+    return drifts
+
+
+def _composed_corpus(config: FlowConfig, project_root: Path) -> tuple[str, ...]:
+    """Every artifact this project composes — the text a suppression is matched against."""
+    texts = [composed_command(name, config, project_root) for name in COMMAND_FILES]
+    texts.extend(compose_all_roles(config, project_root).values())
+    texts.append(
+        composed_claude_md(
+            config, project_root, project_name=_detect_project_name(project_root)
+        )
+    )
+    return tuple(texts)
+
+
 def _composed_adapter_drifts(project_root: Path) -> list[ConfigDrift]:
     """Drift for composed role adapters vs ``compose_role`` for this flow.yml.
 
@@ -431,7 +675,7 @@ def _composed_adapter_drifts(project_root: Path) -> list[ConfigDrift]:
 
     composed = compose_all_roles(config, project_root)
     shipped_only = compose_all_roles(config)
-    manifest = load_manifest(project_root)
+    manifest, manifest_usable = read_manifest(project_root)
     drifts: list[ConfigDrift] = []
     for tool in config.tools:
         agent_dir = TOOL_AGENT_DIRS[tool]
@@ -445,6 +689,7 @@ def _composed_adapter_drifts(project_root: Path) -> list[ConfigDrift]:
                 expected=composed[role],
                 manifest=manifest,
                 alternates=(shipped_only[role],),
+                accounted=manifest_usable,
             )
             drift = _state_drift(str(rel), state, kind="roles", name=role)
             if drift is not None:
@@ -485,7 +730,7 @@ def refresh_agentic_flow_files(project_root: Path) -> list[str]:
     is the failure BDL-UX #139 and #152 were filed for; it does not do that any
     more. Returns the file names rewritten.
     """
-    if not _agentic_flow_scaffolded(project_root):
+    if not _flow_scaffold(project_root, load_manifest(project_root)).adopted:
         return []
     from beadloom.onboarding.agentic_flow_setup import scaffold
 
@@ -536,6 +781,10 @@ def check_config_drift(
     flow = _flow_config_drift(project_root)
     if flow is not None:
         drifts.append(flow)
+    layer = _project_layer_drift(project_root)
+    if layer is not None:
+        drifts.append(layer)
+    drifts.extend(_suppression_drifts(project_root))
     drifts.extend(_composed_adapter_drifts(project_root))
 
     return sorted(drifts, key=lambda d: (d.file, d.reason))

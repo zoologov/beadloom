@@ -346,13 +346,21 @@ class TestAgenticFlowDrift:
 
         assert any(d.file == f".claude/{kind}/{name}.md" for d in drifts)
 
-    def test_partial_scaffold_not_flagged(self, tmp_path: Path) -> None:
-        """A repo with SOME (but not all) flow files present is not flagged —
-        the flow is only checked when fully scaffolded."""
+    def test_partial_scaffold_checks_what_is_there_and_names_what_is_not(
+        self, tmp_path: Path
+    ) -> None:
+        """The inverse of what this test asserted before BDL-061 `.57`.
+
+        It used to pin "a repo with SOME flow files present is not flagged",
+        which measured out as: deleting ONE file switched the checks off for
+        every other one, and the deletion itself was reported by nothing. The
+        gate is not satisfied by having less to check (BDL-UX #174), so the
+        statement is now the opposite one — the remaining files are still
+        checked, and the absent file is its own finding.
+        """
         project = _make_scaffolded_project(tmp_path)
-        # Remove one command file -> the flow is no longer fully scaffolded.
-        (project / ".claude" / "commands" / f"{COMMAND_FILES[0]}.md").unlink()
-        # Diverge a remaining file; it must still NOT be flagged.
+        gone = f".claude/commands/{COMMAND_FILES[0]}.md"
+        (project / gone).unlink()
         agent = project / ".claude" / "agents" / "dev.md"
         agent.write_text("HAND EDITED\n", encoding="utf-8")
 
@@ -362,10 +370,11 @@ class TestAgenticFlowDrift:
         finally:
             conn.close()
 
-        flow_drifts = [
-            d for d in drifts if "/agents/" in d.file or "/commands/" in d.file
-        ]
-        assert flow_drifts == []
+        flow_drifts = {
+            d.file for d in drifts if "/agents/" in d.file or "/commands/" in d.file
+        }
+        assert ".claude/agents/dev.md" in flow_drifts
+        assert gone in flow_drifts
 
     def test_all_drifted_flow_files_reported(self, tmp_path: Path) -> None:
         """Every present-but-drifted flow file gets its own ConfigDrift."""
@@ -444,15 +453,25 @@ class TestRefreshAgenticFlowFiles:
         # No .claude/ tree was created as a side effect.
         assert not (tmp_path / ".claude" / "agents").exists()
 
-    def test_noop_on_partial_scaffold(self, tmp_path: Path) -> None:
-        """A partially-scaffolded repo (some files missing) is left untouched."""
+    def test_a_partial_scaffold_is_restored_without_eating_the_hand_edit(
+        self, tmp_path: Path
+    ) -> None:
+        """``--fix`` on a partial scaffold: recreate the deleted file, keep the edit.
+
+        Before BDL-061 `.57` one deletion made ``--fix`` a no-op for the whole
+        repo. It now acts on what it can, and the one thing it still must not do
+        is rewrite somebody's only copy of an intent (BDL-UX #139, #151).
+        """
         project = _make_scaffolded_project(tmp_path)
-        (project / ".claude" / "agents" / "test.md").unlink()
+        deleted = project / ".claude" / "agents" / "test.md"
+        deleted.unlink()
         agent = project / ".claude" / "agents" / "dev.md"
         agent.write_text("HAND EDITED\n", encoding="utf-8")
 
-        assert refresh_agentic_flow_files(project) == []
-        # The divergent file is NOT restored (flow not fully scaffolded).
+        written = refresh_agentic_flow_files(project)
+
+        assert "agents/test.md" in written
+        assert deleted.is_file()
         assert agent.read_text(encoding="utf-8") == "HAND EDITED\n"
 
     def test_rewrites_all_files_even_when_in_sync(self, tmp_path: Path) -> None:

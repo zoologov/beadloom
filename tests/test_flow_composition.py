@@ -224,12 +224,20 @@ class TestSuppressionIsDeclaredAndReported:
         # Append-only: the core is unchanged above the notice.
         assert "## 0. CRITICAL RULES" in body
 
-    def test_expired_suppression_says_so(self) -> None:
+    def test_expiry_is_computed_but_never_composed(self) -> None:
+        """BDL-061 `.57`: the verdict about today is a finding, not a byte.
+
+        ``describe()`` used to append ``EXPIRED``, which made the composition a
+        function of the clock — the property ``composer``'s own docstring denies
+        and the whole licence for ``config-check`` to compare against a
+        composition. Expiry is still computed; it is reported by ``config-check``
+        instead of being written into every artifact.
+        """
         from beadloom.onboarding.flow_suppression import FlowSuppression
 
         s = FlowSuppression(rule="X", reason="y", until="2020-01-01")
         assert s.expired() is True
-        assert "EXPIRED" in s.describe()
+        assert s.describe() == "X: y (until 2020-01-01)"
 
     def test_event_shaped_exit_condition_never_expires(self) -> None:
         from beadloom.onboarding.flow_suppression import FlowSuppression

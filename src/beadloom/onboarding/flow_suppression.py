@@ -31,6 +31,7 @@ it was stood down, by whom and until when), and surfaced by ``config-check``.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date
 
@@ -65,9 +66,27 @@ class FlowSuppression:
         return deadline is not None and deadline < (today or date.today())
 
     def describe(self) -> str:
-        """One-line rendering, saying HERE when the exit condition has passed."""
-        expiry = " — EXPIRED" if self.expired() else ""
-        return f"{self.rule}: {self.reason} (until {self.until}{expiry})"
+        """One-line rendering: which rule, why, and what retires it.
+
+        It says nothing about *today*. This string is COMPOSED BYTES, and the
+        composition must be a function of its inputs — which is the property
+        :mod:`beadloom.onboarding.composer` asserts in its own docstring and
+        the whole licence for ``config-check`` to compare against a composition
+        rather than against stored bytes. Rendering the expiry verdict here made
+        an untouched repository go from 0 findings to 9 errors overnight, under a
+        reason that named three causes which had not occurred (BDL-061 `.57`).
+
+        Expiry is not lost, it is MOVED: it is computed at check time by
+        :func:`expired_suppressions` and reported as a finding, which is what
+        CONTEXT promised in the first place — a suppression carries a named
+        reason, an exit condition, and is itself reported.
+
+        :class:`~beadloom.application.guards.config.GuardExclusion` keeps the
+        verdict in its own ``describe()`` on purpose: that string is a runtime
+        skip reason read by the person whose edit was just let through, not a
+        byte anything is later diffed against.
+        """
+        return f"{self.rule}: {self.reason} (until {self.until})"
 
 
 def build_suppression(entry: object) -> FlowSuppression:
@@ -130,3 +149,60 @@ def render_suppression_notice(suppressions: tuple[FlowSuppression, ...]) -> str:
     lines.extend(f"- {s.describe()}" for s in suppressions)
     lines.append("")
     return "\n".join(lines)
+
+
+#: A Markdown ATX heading — the shape a *rule* takes in these documents. A
+#: suppression names a rule by its heading path ("Anti-patterns / Shell"), so
+#: headings are what a declaration is matched against; body prose is not, or
+#: every entry would own something by coincidence.
+_HEADING = re.compile(r"^#{1,6}[ \t]+(.+?)[ \t]*$", re.MULTILINE)
+
+_NON_ALNUM = re.compile(r"[^a-z0-9]+")
+
+
+def _normalise(text: str) -> str:
+    """Lowercase, punctuation-free form, so ``Anti-patterns`` matches ``anti patterns``."""
+    return _NON_ALNUM.sub(" ", text.lower()).strip()
+
+
+def composed_headings(texts: tuple[str, ...]) -> tuple[str, ...]:
+    """Every heading in the composed artifacts, normalised for matching.
+
+    The corpus is the whole composition an adopter actually gets — CLAUDE.md,
+    the slash commands and the role protocols — because a core rule may live in
+    any of them and reporting "this suppresses nothing" from a partial corpus
+    would be the false positive that teaches people to ignore the finding.
+    """
+    return tuple(
+        _normalise(match.group(1))
+        for text in texts
+        for match in _HEADING.finditer(text)
+    )
+
+
+def suppresses_nothing(
+    suppression: FlowSuppression, headings: tuple[str, ...]
+) -> bool:
+    """True when no heading in the composed corpus answers to this rule name.
+
+    ``rule`` is read as a heading PATH: every ``/``-separated segment must be
+    named by some heading. ``Anti-patterns / Shell`` is matched by
+    ``### Anti-patterns (shell)``; ``Section 42 / Tap dance`` is matched by
+    nothing, and a declaration that owns nothing is named rather than counted as
+    checked (BDL-061 `.50`).
+    """
+    segments = [seg for seg in (_normalise(s) for s in suppression.rule.split("/")) if seg]
+    if not segments:
+        return True
+    return not all(any(seg in heading for heading in headings) for seg in segments)
+
+
+def expired_suppressions(
+    suppressions: tuple[FlowSuppression, ...], *, today: date | None = None
+) -> tuple[FlowSuppression, ...]:
+    """Those whose exit condition named a day and that day is behind us.
+
+    Computed HERE, at check time, and never rendered into the composed bytes —
+    that separation is the whole of BDL-061 `.57`.
+    """
+    return tuple(s for s in suppressions if s.expired(today))

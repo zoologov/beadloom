@@ -18,8 +18,11 @@ is counted), `.54` (the Gate's lint line, filed and closed inside `.49`) and `.5
 documentation pass that turned the combined tree green).
 **Open in S2b:** `.50` (annotations the extractor cannot see), `.51` (three modules past
 1000 lines).
-**S3 opened** with `.9` on `features/BDL-061-S3`; `.10`–`.12` follow. Also outstanding and not
-part of any slice: `.35`, `.39`, `.41`, `.42`.
+**S3 in progress** on `features/BDL-061-S3`: `.9` (dev), `.35`, `.10` (test) and `.11` (review)
+are closed; `.57` — the P0 ship-blocker `.11` raised — is closed, so the eight blind spots `.10`
+pinned as strict xfails and the clock defect `.11` measured are all fixed. `.12` (tech-writer)
+is what remains before the S3 PR. Also outstanding and not part of any slice: `.39`, `.41`,
+`.42`, `.58`.
 
 ## Progress
 
@@ -428,14 +431,18 @@ header comment, where a reader of a red check will look first.
 | .50 | Pending | P1: annotations the extractor cannot see — docstring annotation, directory source without a trailing slash, deny rules keyed on annotated symbols |
 | .51 | Pending | P2: three modules past 1000 lines with many responsibilities each, self-flagged and owned by nobody |
 | .9 | Done | S3 dev: `compose(core, architecture, stack, project)` for roles, commands AND `CLAUDE.md`; project layer in `.beadloom/flow/`; `config-check` verifies the composition result; #177, #139, #152, #132, #136, #137 closed |
-| .10–.12 | Pending | S3 test / review / tech-writer |
+| .10 | Done | S3 test: 71 passing + 9 `xfail(strict)` measured blind spots in the new `config-check`; the `#177` role leg closed and a structural guard against tests that write tracked files |
+| .35 | Done | S3: the `.gitignore` block for generated `.beadloom/` state; this repo now runs the SHIPPED guard adapter rather than a local binding |
+| .11 | Done | S3 review: NOT PASSING — 0 critical, 7 major, 8 minor. Reproduced `.10`'s clock defect and measured it WORSE than recorded: 0 findings / exit 0 → 9 ERROR / exit 1 on an untouched tree. Verdict accepted: fix that one first, ship the rest behind `.57` |
+| .57 | Done | S3 dev (P0, ship-blocker): all NINE pins closed. The clock removed from the composition (`composer.py`'s assertion kept, `describe()`'s behaviour deleted); expiry and dead-declaration became `config-check` findings; three deletion paths (manifest, provenance stamp, scaffolded file) each reported; `unmanaged` → `sync-check`'s `unverified`; the project layer is named, not judged |
+| .12 | Pending | S3 tech-writer: `services/mcp.md` + the `onboarding` README symbols cascade — 37 stale pairs measured at `fdbc1df`, before `.57` |
 | .13–.16 | Pending | S4 BDD, mutation, doc shape + quality, shared writing standard |
 | .17–.20 | Pending | S5 TO-BE / AS-IS / WORKING |
 | .21–.24 | Pending | S6 waves from the graph (#155, #118, #133) |
 
 ## Notes
 
-**Branch:** `features/BDL-061-S2b` for this slice (S1 ran on `features/BDL-061`, S2 on
+**Branch:** `features/BDL-061-S3` for the current slice (`features/BDL-061-S2b` for the one before) (S1 ran on `features/BDL-061`, S2 on
 `features/BDL-061-S2`). Slice boundary is a PR boundary — each slice green on `main` before the
 next begins, as BDL-060 ran.
 

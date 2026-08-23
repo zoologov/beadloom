@@ -59,7 +59,8 @@ touching it:
 | `clean` | nothing |
 | `stale` — matches what Beadloom last wrote | recomposed in place |
 | `hand_edited` | **skipped**, reported in `ScaffoldResult.migration_notes` with the `.beadloom/flow/<kind>/<name>.md` path the edit belongs in |
-| `unmanaged` — predates the manifest | skipped, reported, `--force` adopts the composed version |
+| `unverified` — nothing accounts for it | skipped, reported, `--force` adopts the composed version |
+| `missing` — recorded and gone from disk | recomposed in place |
 
 That is the difference between an idempotent generator and one that eats work.
 

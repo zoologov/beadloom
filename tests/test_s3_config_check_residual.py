@@ -50,7 +50,12 @@ from click.testing import CliRunner
 
 from beadloom.onboarding import composer, flow_suppression
 from beadloom.onboarding.agentic_flow_setup import AGENT_FILES, COMMAND_FILES, scaffold
-from beadloom.onboarding.composer import COMPOSED_MARKER, compose, templates_dir
+from beadloom.onboarding.composer import (
+    COMPOSED_MARKER,
+    PROJECT_FLOW_DIRNAME,
+    compose,
+    templates_dir,
+)
 from beadloom.onboarding.config_sync import ConfigDrift, check_config_drift
 from beadloom.onboarding.flow_config import load_flow_config
 from beadloom.onboarding.flow_manifest import (
@@ -124,6 +129,18 @@ def _drifts(project: Path) -> list[ConfigDrift]:
     return check_config_drift(project, sqlite3.connect(":memory:"))
 
 
+def _verdicts(project: Path) -> list[ConfigDrift]:
+    """Drifts that JUDGE an artifact — i.e. everything except the project-layer notice.
+
+    Since BDL-061 `.57` ``config-check`` states that a project layer is in effect
+    and that its prose is not judged (finding ``.10-8``). That notice is present
+    by construction wherever an overlay exists, so the two upgrade cases below
+    say which kind of quiet they require instead of asserting a bare ``== []``
+    that the notice would satisfy by accident.
+    """
+    return [d for d in _drifts(project) if d.file != str(PROJECT_FLOW_DIRNAME)]
+
+
 def _cli_exit(project: Path) -> int:
     """``beadloom config-check`` exit code — the Gate's own verdict, not a count."""
     return CliRunner().invoke(main, ["config-check", "--project", str(project)]).exit_code
@@ -148,16 +165,10 @@ class TestTheGuardCannotBeSilentlyDisabled:
         assert [(d.file, d.severity) for d in drifts] == [(".claude/CLAUDE.md", "error")]
         assert _cli_exit(project) == 1
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING S3/.10-1: deleting the generated .beadloom/flow-manifest.json "
-            "downgrades a hand edit from error to warn, and `config-check` exits 0. "
-            "Measured on a scaffolded temp project: same edit, same file, exit 1 -> 0. "
-            "The manifest is neither required nor gitignored, so an adopter who does "
-            "not commit it gets the warn-only reading in CI for every artifact."
-        ),
-    )
+    # FINDING S3/.10-1, CLOSED by `.57`: ownership rests on two independent
+    # pieces of evidence, so removing the generated manifest no longer downgrades
+    # a hand edit — the composed artifact's own provenance stamp still accounts
+    # for it. The deleted manifest is separately reported as `unverified`.
     def test_deleting_the_manifest_does_not_downgrade_a_hand_edit(
         self, tmp_path: Path
     ) -> None:
@@ -174,17 +185,11 @@ class TestTheGuardCannotBeSilentlyDisabled:
             "wrote must not be a way to stop the Gate blocking on it"
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING S3/.10-2: with the manifest deleted AND the one-line "
-            "'<!-- beadloom:composed' stamp removed, the CLAUDE.md body check "
-            "reports NOTHING (measured: 0 findings over a file carrying 'Skip the "
-            "gate'). The ownership boundary is right — a project's own CLAUDE.md is "
-            "not ours to police — but ownership is decided by two pieces of evidence "
-            "an editor can delete in the same edit."
-        ),
-    )
+    # FINDING S3/.10-2, CLOSED by `.57`: the ownership boundary is unchanged —
+    # with both pieces of evidence gone the BODY is genuinely not ours to judge —
+    # but the absence is no longer silence. A project that adopted the flow and
+    # has no usable manifest is reported `unverified`: the gate is not satisfied
+    # by having less to check (BDL-UX #174).
     def test_removing_the_provenance_stamp_does_not_silence_the_body_check(
         self, tmp_path: Path
     ) -> None:
@@ -221,18 +226,9 @@ class TestTheGuardCannotBeSilentlyDisabled:
         assert [d.file for d in _drifts(project)] == [".claude/commands/coordinator.md"]
         assert _cli_exit(project) == 1
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING S3/.10-3: _agentic_flow_scaffolded is an all-or-nothing "
-            "precondition with no `skip` verdict, so deleting ONE scaffolded file "
-            "switches the flow checks off for every OTHER file. Measured: a "
-            "hand-edited coordinator.md reported at exit 1; `rm "
-            ".claude/agents/dev.md`; the same edit, exit 0, silent on both streams. "
-            "CONTEXT: 'a guard that silently does not apply is indistinguishable "
-            "from one that passed'."
-        ),
-    )
+    # FINDING S3/.10-3, CLOSED by `.57`: adoption is now a per-file split
+    # (`_flow_scaffold`), so a partially scaffolded repo checks what is there and
+    # names what is not, instead of switching itself off.
     def test_a_missing_file_does_not_switch_off_the_checks_on_the_others(
         self, tmp_path: Path
     ) -> None:
@@ -249,15 +245,9 @@ class TestTheGuardCannotBeSilentlyDisabled:
             "file must not make it disappear from the report"
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING S3/.10-4: a scaffolded file that has been DELETED is reported "
-            "by nothing. _agentic_flow_drifts skips the whole repo and "
-            "_composed_adapter_drifts skips absent files one by one, so 'the role "
-            "protocol is gone' and 'the role protocol is intact' are the same green."
-        ),
-    )
+    # FINDING S3/.10-4, CLOSED by `.57`: a canonical flow file that is not on
+    # disk is its own finding — `error` when the manifest records that Beadloom
+    # wrote it, `warn` when nothing accounts for it.
     @pytest.mark.parametrize(
         ("subdir", "name"), [("agents", AGENT_FILES[0]), ("commands", COMMAND_FILES[0])]
     )
@@ -303,10 +293,17 @@ class TestSuppressionMustEarnItsPlace:
         assert "Anti-patterns / Shell" in claude_md
         assert _drifts(project) == [], "a declared suppression is not drift"
 
-    def test_an_expired_suppression_is_marked_in_the_composed_text(
+    def test_the_composed_notice_states_the_exit_condition_and_no_verdict(
         self, tmp_path: Path
     ) -> None:
-        """The control for the two findings below: the expiry IS computed."""
+        """The control for the findings below, inverted by ``.57`` and still a control.
+
+        It used to assert that an expired suppression stamps ``EXPIRED`` into the
+        composed bytes. That WAS the defect: it made the composition a function
+        of the clock. The property that replaced it is the one CONTEXT asked for
+        — the artifact states the exit condition, and the verdict about today is
+        a finding (``test_an_expired_suppression_is_reported``), not a byte.
+        """
         # Arrange
         past = (date.today() - timedelta(days=1)).isoformat()
         project = _adopter(tmp_path, flow_yml=_suppressing("Anti-patterns / Shell", past))
@@ -315,19 +312,12 @@ class TestSuppressionMustEarnItsPlace:
         claude_md = (project / ".claude" / "CLAUDE.md").read_text(encoding="utf-8")
 
         # Assert
-        assert "EXPIRED" in claude_md
+        assert f"until {past}" in claude_md, "the exit condition must be stated"
+        assert "EXPIRED" not in claude_md, "a verdict about today is not a byte"
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING S3/.10-5: a suppression naming a rule that appears NOWHERE in "
-            "the composed core is accepted, rendered into every artifact as a "
-            "decision, and reported by nothing. graph.rules.exemptions — whose "
-            "exit_condition_deadline this module deliberately reuses — reports "
-            "exactly this case for an import exemption ('suppresses nothing ... "
-            "delete it'). Suppressions inherit the function and not the finding."
-        ),
-    )
+    # FINDING S3/.10-5, CLOSED by `.57`: a suppression is matched against the
+    # headings of everything the project actually composes, and one that names no
+    # rule is reported — `_dead_finding`'s question, one layer up.
     def test_a_suppression_that_matches_no_core_rule_is_reported(
         self, tmp_path: Path
     ) -> None:
@@ -348,15 +338,8 @@ class TestSuppressionMustEarnItsPlace:
             "a suppression that stands down nothing is a decision nobody can act on"
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING S3/.10-6: an EXPIRED suppression is reported by nothing. The "
-            "composed text gains the word EXPIRED and the Gate says 'agent-config in "
-            "sync'. The exemption surface reports the same condition as a finding "
-            "('expired on <date> and is still suppressing N crossings', BDL-061 S2b)."
-        ),
-    )
+    # FINDING S3/.10-6, CLOSED by `.57`: expiry is computed at CHECK time and
+    # reported, sharing `.49`'s `exit_condition_deadline` rather than restating it.
     def test_an_expired_suppression_is_reported(self, tmp_path: Path) -> None:
         # Arrange
         past = (date.today() - timedelta(days=400)).isoformat()
@@ -371,18 +354,10 @@ class TestSuppressionMustEarnItsPlace:
             f"got {[d.reason for d in drifts]}"
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING S3/.10-7: the composition is a function of the CLOCK, which the "
-            "composer's own docstring denies ('the same inputs always yield the same "
-            "bytes'). FlowSuppression.describe() appends ' — EXPIRED' on the day the "
-            "exit condition passes, so an untouched repo goes from 0 findings to one "
-            "ERROR overnight — and the reason it prints, 'composed body is stale vs "
-            "CORE + the flow.yml overlays + the project layer', names a cause that "
-            "did not happen: nothing moved but the date."
-        ),
-    )
+    # FINDING S3/.10-7, CLOSED by `.57`, and it was worse than recorded here:
+    # review `.11` measured 0 findings/exit 0 -> NINE errors/exit 1 on an
+    # untouched tree, because the notice is appended to every composed artifact.
+    # `composer.py`'s assertion was the claim kept; `describe()` was the bug.
     def test_the_clock_alone_does_not_turn_an_untouched_repo_red(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -436,11 +411,11 @@ class TestOverlaySurvivesAnUpgradeOfTheCoreUnderneathIt:
     ) -> None:
         # Arrange — an adopter with a project layer, clean before the upgrade
         project = _adopter(tmp_path, fragments={"claude/CLAUDE.md": _PRACTICE})
-        assert _drifts(project) == []
+        assert _verdicts(project) == []
 
         # Act — the shipped core moves, the project does not
         self._upgrade_core(upgradable, "\n## 10. New core rule\nAlways re-read the graph.\n")
-        drifts = _drifts(project)
+        drifts = _verdicts(project)
 
         # Assert — recomposable, NOT 'hand-edited': the adopter changed nothing
         assert [(d.file, d.severity) for d in drifts] == [(".claude/CLAUDE.md", "error")]
@@ -464,7 +439,7 @@ class TestOverlaySurvivesAnUpgradeOfTheCoreUnderneathIt:
         assert composed.index("Always re-read the graph.") < composed.index(
             "Pair on migrations."
         ), "the project layer composes AFTER the core, or it cannot be append-only"
-        assert _drifts(project) == []
+        assert _verdicts(project) == [], "recomposing leaves nothing to report"
 
     def test_a_hand_edit_made_before_the_upgrade_is_still_not_rewritten(
         self, tmp_path: Path, upgradable: Path
@@ -506,19 +481,13 @@ class TestAppendOnlyHoldsInBytesButNotInEffect:
         # Assert
         assert text.endswith("\n"), fragment.name
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING S3/.10-8: overlays are append-only in BYTES, not in EFFECT. A "
-            "project fragment saying 'ignore section 0, do not run beadloom ci' "
-            "composes into CLAUDE.md with zero findings, no reason, no exit "
-            "condition and no notice — while the declared route for standing a rule "
-            "down (overlays.suppress) demands all three. The mandatory-reason "
-            "mechanism guards the route nobody has to take. Measured too: a fragment "
-            "72% the size of the composed file is reported by nothing, and "
-            "config-check never says a project layer is in effect at all."
-        ),
-    )
+    # FINDING S3/.10-8, CLOSED by `.57` in the only way prose admits of. Whether a
+    # fragment CONTRADICTS the core is not decidable, and `.57` does not pretend
+    # it is: the two fragments this file composes — "Pair on migrations" and
+    # "Do NOT run `beadloom ci`" — are indistinguishable to any checker. What is
+    # decidable, and was missing, is that a project layer is in effect AT ALL, so
+    # a green verdict is no longer read as covering text nobody judged. CONTEXT's
+    # own standard, applied to the composer's input: name what was not verified.
     def test_a_fragment_that_contradicts_a_core_rule_is_reported(
         self, tmp_path: Path
     ) -> None:
@@ -543,17 +512,27 @@ class TestAppendOnlyHoldsInBytesButNotInEffect:
             "standing a core rule down through the project layer avoids every "
             "requirement the declared channel imposes"
         )
+        # ...and the notice is a disclosure, not a block: an adopter's supported
+        # place for a standing practice must not turn their green project red.
+        assert [d.severity for d in drifts] == ["warn"]
+        assert "not judged" in drifts[0].reason
+        assert _cli_exit(project) == 0
 
 
 class TestTheFourStatesOfAComposedArtifact:
     """``flow_manifest.classify`` — the matrix ``.9`` handed forward, alternates included.
 
-    Four words exist because four situations need four different answers, and
-    the whole severity ladder (``error`` for a hand edit, ``warn`` for a
-    pre-manifest repo) rests on which one comes back. ``alternates`` is the
-    subtle one: a body Beadloom itself could have written in an older release —
-    the shipped core without the project layer — must read ``stale`` and be
+    The words exist because each situation needs a different answer, and the
+    whole severity ladder (``error`` for a hand edit, ``warn`` for a repo nothing
+    accounts for) rests on which one comes back. ``alternates`` is the subtle
+    one: a body Beadloom itself could have written in an older release — the
+    shipped core without the project layer — must read ``stale`` and be
     recomposed, not accused of being somebody's edit.
+
+    ``.57`` added two: ``missing`` (we wrote it and it is gone — a deleted role
+    protocol and an intact one must not read the same) and the rename of
+    ``unmanaged`` to ``sync-check``'s ``unverified``, which is the same idea and
+    was spelled two ways.
     """
 
     @pytest.mark.parametrize(
@@ -586,10 +565,10 @@ class TestTheFourStatesOfAComposedArtifact:
                 "edited",
                 None,
                 ("shipped-only",),
-                ArtifactState.UNMANAGED,
+                ArtifactState.UNVERIFIED,
             ),
-            ("absent file, no record", None, None, (), ArtifactState.UNMANAGED),
-            ("absent file, recorded", None, digest("ours"), (), ArtifactState.HAND_EDITED),
+            ("absent file, no record", None, None, (), ArtifactState.UNVERIFIED),
+            ("absent file, recorded", None, digest("ours"), (), ArtifactState.MISSING),
         ],
     )
     def test_the_state_matrix(
@@ -651,8 +630,8 @@ class TestTheFourStatesOfAComposedArtifact:
         # Assert
         assert entries == {}, label
         assert (
-            state_of(tmp_path, "any.md", expected="composed") is ArtifactState.UNMANAGED
-        )
+            state_of(tmp_path, "any.md", expected="composed") is ArtifactState.UNVERIFIED
+        ), "an unreadable manifest must not be stricter than a missing one"
 
     def test_recording_nothing_does_not_create_a_manifest(self, tmp_path: Path) -> None:
         """An empty write is not a write: a run that composed nothing records nothing."""
@@ -683,7 +662,7 @@ class TestTheFourStatesOfAComposedArtifact:
         state = state_of(tmp_path, "artifact.md", expected="composed", manifest={})
 
         # Assert
-        assert state is ArtifactState.UNMANAGED
+        assert state is ArtifactState.UNVERIFIED
 
 
 class TestAMalformedSuppressionIsALoudConfigError:

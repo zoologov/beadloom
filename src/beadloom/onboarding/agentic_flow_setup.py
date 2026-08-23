@@ -175,12 +175,12 @@ def _hand_edit_note(relpath: str, kind: str, name: str) -> str:
     )
 
 
-def _unmanaged_note(relpath: str, kind: str, name: str) -> str:
-    """Guidance for a file scaffolded before the manifest existed."""
+def _unverified_note(relpath: str, kind: str, name: str) -> str:
+    """Guidance for a file nothing accounts for — no manifest, no provenance stamp."""
     overlay = PROJECT_FLOW_DIRNAME / kind / f"{name}.md"
     return (
-        f"{relpath}: differs from the composition and predates the flow "
-        "manifest, so it cannot be told apart from a hand edit — left "
+        f"{relpath}: unverified — differs from the composition, and nothing "
+        "records whether Beadloom wrote it, so it cannot be told apart from a hand edit — left "
         f"untouched. Review it; move anything project-specific to {overlay}, "
         "then re-run with `--force` to adopt the composed version."
     )
@@ -221,9 +221,9 @@ def _scaffold_composed(
             skipped.append(name)
             notes.append(_hand_edit_note(relpath, kind, name))
             continue
-        if not force and state is ArtifactState.UNMANAGED and dest.is_file():
+        if not force and state is ArtifactState.UNVERIFIED and dest.is_file():
             skipped.append(name)
-            notes.append(_unmanaged_note(relpath, kind, name))
+            notes.append(_unverified_note(relpath, kind, name))
             continue
         _write(dest, content)
         written.append(name)
@@ -324,9 +324,9 @@ def _scaffold_claude_md(
     if not force and state is ArtifactState.HAND_EDITED:
         skipped.append("CLAUDE.md")
         notes.append(_hand_edit_note(relpath, "claude", CLAUDE_ARTIFACT_NAME))
-    elif not force and state is ArtifactState.UNMANAGED and claude_md.is_file():
+    elif not force and state is ArtifactState.UNVERIFIED and claude_md.is_file():
         skipped.append("CLAUDE.md")
-        notes.append(_unmanaged_note(relpath, "claude", CLAUDE_ARTIFACT_NAME))
+        notes.append(_unverified_note(relpath, "claude", CLAUDE_ARTIFACT_NAME))
     elif state is not ArtifactState.CLEAN:
         _write(
             claude_md, composed_claude_md(config, project_root, project_name=project_name)
