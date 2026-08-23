@@ -193,20 +193,30 @@ def _claude_md_body_drift(project_root: Path) -> ConfigDrift | None:
     before the manifest, so the two cannot be told apart and we say so).
     """
     claude_md_path = project_root / ".claude" / "CLAUDE.md"
-    if not claude_md_path.is_file():
-        return None
     relpath = ".claude/CLAUDE.md"
     manifest, manifest_usable = read_manifest(project_root)
     recorded = manifest.get(relpath)
+    if not claude_md_path.is_file():
+        if recorded is None:
+            return None
+        # Recorded and gone. `.10-4` closed this for the agents and the commands
+        # and left CLAUDE.md out, so deleting it was reported by nothing at all
+        # with the manifest fully intact (measured).
+        return _state_drift(
+            relpath, ArtifactState.MISSING, kind="claude", name=CLAUDE_ARTIFACT_NAME
+        )
     try:
         raw = claude_md_path.read_text(encoding="utf-8")
     except OSError:
         return None
     stamped = COMPOSED_MARKER in raw
     if recorded is None and not stamped:
-        # Not a Beadloom-composed CLAUDE.md — a project's own file is not ours
-        # to police (the boundary `_is_beadloom_adapter` draws for IDE adapters).
-        return None
+        # Ownership cannot be PROVED — but silence is not the honest fallback.
+        # A project that never adopted the flow owns its CLAUDE.md and is not
+        # ours to police (BDL-UX #73, the boundary `_is_beadloom_adapter` draws
+        # for IDE adapters); one that DID adopt it is a different subject, and
+        # `_flow_scaffold` already knows which is which.
+        return _unverifiable_body_drift(project_root, relpath, manifest)
     try:
         config = resolve_flow_config(project_root)
     except FlowConfigError:
@@ -231,6 +241,50 @@ def _claude_md_body_drift(project_root: Path) -> ConfigDrift | None:
         accounted=manifest_usable or stamped,
     )
     return _state_drift(relpath, state, kind="claude", name=CLAUDE_ARTIFACT_NAME)
+
+
+def _unverifiable_body_drift(
+    project_root: Path, relpath: str, manifest: dict[str, str]
+) -> ConfigDrift | None:
+    """Name a composed body whose ownership cannot be proved, in a project that adopted the flow.
+
+    Deleting the manifest AND stripping the ``<!-- beadloom:composed`` stamp used
+    to return ``None`` — nothing named the file and ``config-check`` exited 0
+    over a gutted ``CLAUDE.md``. Worse, and not only on the deletion route: a
+    manifest that was present and usable but simply did not mention this path
+    produced the same silence with nothing in the output pointing anywhere near
+    it (both measured, BDL-061 `.57`).
+
+    ``warn`` and not ``error``, deliberately. :func:`agentic_flow_setup.scaffold`
+    refuses to overwrite a pre-existing ``CLAUDE.md`` it did not write — it emits
+    a migration note instead — so an adopter can genuinely have adopted the flow
+    while owning that file, and calling it hand-edited would be the false red on
+    upgrade this slice exists to prevent. ``unverified`` is ``sync-check``'s word
+    for "there was nothing to compare against" (``.46``/``.47``): reported by
+    name, never counted as fresh, never blocking.
+
+    The agents and the commands already answered this way in the same state;
+    ``CLAUDE.md`` was the one artifact that went quiet, because it is the one
+    with an ownership pre-filter. The three now answer alike.
+    """
+    if not _flow_scaffold(project_root, manifest).adopted:
+        return None
+    overlay = PROJECT_FLOW_DIRNAME / "claude" / f"{CLAUDE_ARTIFACT_NAME}.md"
+    return ConfigDrift(
+        file=relpath,
+        reason=(
+            "unverified: this project adopted the flow and .claude/CLAUDE.md "
+            "carries neither a manifest entry nor the provenance stamp, so its "
+            "body could not be checked"
+        ),
+        severity="warn",
+        remediation=(
+            f"run `beadloom setup-agentic-flow` to compose it (your additions "
+            f"belong in {overlay}, which composes after the shipped core); if "
+            "this file is genuinely yours and not Beadloom's, it stays unchecked "
+            "and this stays a warning"
+        ),
+    )
 
 
 def _state_drift(

@@ -90,14 +90,35 @@ review `.11` MAJOR 2 and MAJOR 3). All three are findings now:
 | deletion | before | now |
 |----------|--------|-----|
 | `rm .beadloom/flow-manifest.json` | error → warn, exit 1 → 0 | still `hand_edited`/error: the artifact's own provenance stamp accounts for it, and the absent manifest is separately reported `unverified` |
-| …and the `<!-- beadloom:composed` line too | 0 findings | the BODY is genuinely not ours to judge — but the missing manifest is still reported |
+| …and the `<!-- beadloom:composed` line too | 0 findings | the body cannot be *judged* — ownership is unprovable — so it is reported `unverified`/`warn`, by name, plus the missing manifest |
 | `rm .claude/agents/dev.md` | every OTHER file stopped being checked, silently | the others are still checked; the deleted file is its own `missing` finding |
+| `rm .claude/CLAUDE.md`, manifest intact | 0 findings | `missing`/`error`, like the other two kinds |
+| a manifest that is present and usable but does not mention `.claude/CLAUDE.md` | 0 findings, nothing in the output near the file | `unverified`/`warn`, by name |
 
 `_flow_scaffold` replaced an all-or-nothing precondition that had no `skip`
 verdict — CONTEXT: "a guard that silently does not apply is indistinguishable
 from one that passed". Adoption still needs positive evidence (a manifest entry,
 or a `flow.yml` beside at least one canonical file, or the full scaffold), so a
 project with one stray file is never told it is missing eight.
+
+The last two rows were found by the coordinator probing `.57`'s own claim to have
+closed the first three, and they are the reason the rule is stated as *nothing an
+editor deletes makes the check quieter* rather than as a list of three deletions.
+
+#### The honest floor, stated because it is a limit and not a plan
+
+Even after all of this, deleting the manifest **and** stripping the provenance
+stamp downgrades the `CLAUDE.md` body from `error` to `warn`. That is not an
+oversight to be fixed later: every ownership signal available is *in band* — it
+lives in the repository the editor is editing — so any of them can be deleted.
+The achievable floor is that the deletion is **visible** and the file is **named**,
+not that it blocks. Raising it further needs a signal outside the repo, and
+Beadloom has none and is not going to invent one.
+
+The three composed kinds answer alike in that degraded state — `CLAUDE.md`, the
+agents and the commands each read `unverified` at `warn`. That symmetry is pinned
+by a test, because the defect it replaced was exactly one of the three going quiet
+while the other two spoke.
 
 ### The project layer is named, not judged
 
@@ -124,11 +145,24 @@ with the `rules.yml` import exemptions rather than restated.
 
 ### Ownership boundary
 
-The `CLAUDE.md` body check runs only when the file is Beadloom's: it has a flow
+The `CLAUDE.md` body is **judged** only when the file is Beadloom's: it has a flow
 manifest entry, or it carries the `<!-- beadloom:composed` provenance stamp the
 shipped core begins with. A project's own hand-written `CLAUDE.md` is not ours
 to police — the same boundary `_is_beadloom_adapter` draws for IDE adapter
 files, and the reason the BDL-UX #73 false-positive class does not return.
+
+Not judged is not the same as not mentioned. When neither signal is present in a
+project that **did** adopt the flow (`_flow_scaffold(...).adopted`), the file is
+reported `unverified` at `warn` and named — silence there was the check falling
+back to permissive at exactly the moment it lost its evidence. It is `warn` and
+not `error` because `scaffold()` deliberately refuses to overwrite a pre-existing
+`CLAUDE.md` it did not write (it emits a migration note instead), so an adopter
+can genuinely have adopted the flow while owning that file, and calling it
+hand-edited would be the false red on upgrade this slice exists to prevent.
+
+A project that never adopted the flow is still not policed and not mentioned —
+adoption is what separates "no stamp, and this is your file" from "no stamp, and
+this is a file we should be able to account for".
 
 ## Invariants
 
@@ -180,8 +214,10 @@ how they were closed:
   There is no mechanism, and no proposal for one, that distinguishes a standing
   practice from a countermand.
 - **Ownership of a `CLAUDE.md` still needs evidence.** Delete both the manifest
-  and the provenance stamp and the *body* is no longer compared — reported as
-  `unverified` rather than silently passed, but not verified either.
+  and the provenance stamp and the *body* is no longer compared — named and
+  reported `unverified` rather than silently passed, but not verified either, and
+  therefore not blocking. See *The honest floor* above; this is a limit of
+  in-band evidence, not a gap waiting on a bead.
 - **A suppression is matched against headings**, so a core rule stated in body
   prose and never given a heading cannot be named by an `overlays.suppress` entry
   without reading as dead.

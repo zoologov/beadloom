@@ -28,11 +28,13 @@ Four properties, in the order the bead gives them:
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import date, timedelta
 from typing import TYPE_CHECKING
 
 import pytest
+from click.testing import CliRunner
 
 from beadloom.onboarding import flow_suppression
 from beadloom.onboarding.agentic_flow_setup import AGENT_FILES, COMMAND_FILES, scaffold
@@ -47,6 +49,7 @@ from beadloom.onboarding.flow_manifest import (
 )
 from beadloom.onboarding.flow_suppression import FlowSuppression
 from beadloom.onboarding.role_adapters import generate_adapters
+from beadloom.services.cli import main
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -78,6 +81,11 @@ def _adopter(tmp_path: Path, *, flow_yml: str = _FLOW_YML) -> Path:
 
 def _drifts(project: Path) -> list[ConfigDrift]:
     return check_config_drift(project, sqlite3.connect(":memory:"))
+
+
+def _cli_exit(project: Path) -> int:
+    """``beadloom config-check`` exit code — the Gate's own verdict, not a count."""
+    return CliRunner().invoke(main, ["config-check", "--project", str(project)]).exit_code
 
 
 class _Later(date):
@@ -306,18 +314,27 @@ class TestSkipIsAFirstClassOutcome:
     """A guard that silently does not apply is indistinguishable from one that passed."""
 
     @pytest.mark.parametrize(
-        ("subdir", "name"),
-        [("agents", AGENT_FILES[0]), ("commands", COMMAND_FILES[0])],
+        "relpath",
+        [
+            f".claude/agents/{AGENT_FILES[0]}.md",
+            f".claude/commands/{COMMAND_FILES[0]}.md",
+            ".claude/CLAUDE.md",
+        ],
     )
-    def test_a_deleted_scaffolded_file_names_itself(
-        self, tmp_path: Path, subdir: str, name: str
+    def test_a_deleted_composed_artifact_names_itself(
+        self, tmp_path: Path, relpath: str
     ) -> None:
+        """All THREE kinds, because `CLAUDE.md` was the one this missed.
+
+        The agents and commands leg closed with `.10-4`. `CLAUDE.md` did not:
+        with the manifest fully intact, deleting it was reported by nothing at
+        all — measured, and the same equation one artifact over.
+        """
         # Arrange
         project = _adopter(tmp_path)
-        relpath = f".claude/{subdir}/{name}.md"
 
         # Act
-        (project / ".claude" / subdir / f"{name}.md").unlink()
+        (project / relpath).unlink()
         gone = [d for d in _drifts(project) if d.file == relpath]
 
         # Assert — we wrote it, so its disappearance blocks
@@ -341,3 +358,117 @@ class TestSkipIsAFirstClassOutcome:
         # Assert
         assert ".claude/commands/coordinator.md" in files
         assert ".claude/agents/dev.md" in files
+
+
+class TestTheDegradedPathIsNamedNotSilent:
+    """When ownership cannot be proved, say so — do not fall back to permissive.
+
+    `.claude/CLAUDE.md` is the one composed artifact with an ownership
+    pre-filter, and it exists for a real reason: a project's own hand-written
+    `CLAUDE.md` is not ours to police (BDL-UX #73). But the filter returned
+    SILENCE where the agents and commands return a verdict, so a project that
+    demonstrably adopted the flow could hold a gutted `CLAUDE.md` and the check
+    would name it nowhere and exit 0 — measured two ways below.
+
+    The fix is not to accuse: `scaffold()` deliberately refuses to overwrite a
+    pre-existing `CLAUDE.md` it did not write (it emits a migration note), so an
+    adopter can genuinely have adopted the flow while owning that file, and
+    calling it hand-edited would be the false red on upgrade this slice exists to
+    prevent. The fix is to NAME it, at `unverified` — `sync-check`'s word for
+    "there was nothing to compare against", reported and never blocking.
+    """
+
+    @staticmethod
+    def _drop_manifest_entry(project: Path, relpath: str) -> None:
+        """Leave a present, usable manifest that simply does not mention ``relpath``."""
+        path = project / FLOW_MANIFEST_RELPATH
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["written"].pop(relpath, None)
+        path.write_text(json.dumps(data), encoding="utf-8")
+
+    @pytest.mark.parametrize("degrade", ["manifest_absent", "entry_absent"])
+    def test_an_unverifiable_claude_md_is_named(
+        self, tmp_path: Path, degrade: str
+    ) -> None:
+        """Both degraded states, and the second is the worse one.
+
+        With the manifest merely ABSENT there is at least a manifest warning
+        pointing somewhere. With the manifest PRESENT and only this entry gone,
+        nothing in the output went anywhere near the file.
+        """
+        # Arrange
+        project = _adopter(tmp_path)
+        if degrade == "manifest_absent":
+            (project / FLOW_MANIFEST_RELPATH).unlink()
+        else:
+            self._drop_manifest_entry(project, ".claude/CLAUDE.md")
+
+        # Act — a body with no provenance stamp left in it
+        (project / ".claude" / "CLAUDE.md").write_text("# gone\n", encoding="utf-8")
+        named = [d for d in _drifts(project) if d.file == ".claude/CLAUDE.md"]
+
+        # Assert — named, said in `sync-check`'s word, and NOT blocking
+        assert [d.severity for d in named] == ["warn"], degrade
+        assert "unverified" in named[0].reason.lower()
+        assert _cli_exit(project) == 0
+
+    def test_the_three_composed_kinds_answer_alike(self, tmp_path: Path) -> None:
+        """Same deletion, same state, three artifacts — none of them may go quiet.
+
+        This is the measurement that decided the residual: with the manifest
+        deleted and all three gutted, `agents/dev.md` and `commands/coordinator.md`
+        were named at `unverified` and `CLAUDE.md` was silent. A future change
+        that makes any one of them quiet again reddens here.
+        """
+        # Arrange
+        project = _adopter(tmp_path)
+        (project / FLOW_MANIFEST_RELPATH).unlink()
+        relpaths = [
+            ".claude/CLAUDE.md",
+            f".claude/agents/{AGENT_FILES[0]}.md",
+            f".claude/commands/{COMMAND_FILES[0]}.md",
+        ]
+
+        # Act
+        for relpath in relpaths:
+            (project / relpath).write_text("# gone\n", encoding="utf-8")
+        answers = {
+            d.file: (d.severity, "unverified" in d.reason.lower())
+            for d in _drifts(project)
+        }
+
+        # Assert
+        assert {r: answers.get(r) for r in relpaths} == {
+            r: ("warn", True) for r in relpaths
+        }
+
+    def test_a_project_that_never_adopted_the_flow_is_still_not_policed(
+        self, tmp_path: Path
+    ) -> None:
+        """The #73 control, and the reason the fix gates on adoption rather than on nothing."""
+        # Arrange — a CLAUDE.md this project wrote, no flow anywhere
+        (tmp_path / ".claude").mkdir()
+        (tmp_path / ".claude" / "CLAUDE.md").write_text(
+            "# Our house rules\n\nDo whatever you like.\n", encoding="utf-8"
+        )
+
+        # Act + Assert
+        assert _drifts(tmp_path) == []
+
+    def test_the_stamped_hand_edit_still_blocks(self, tmp_path: Path) -> None:
+        """The control that the degraded path did not become the ONLY path."""
+        # Arrange
+        project = _adopter(tmp_path)
+        claude_md = project / ".claude" / "CLAUDE.md"
+
+        # Act — the stamp survives, so ownership is proved and the verdict is a verdict
+        claude_md.write_text(
+            claude_md.read_text(encoding="utf-8") + "\n## Local\nSkip the gate.\n",
+            encoding="utf-8",
+        )
+        named = [d for d in _drifts(project) if d.file == ".claude/CLAUDE.md"]
+
+        # Assert
+        assert [d.severity for d in named] == ["error"]
+        assert "hand-edited" in named[0].reason
+        assert _cli_exit(project) == 1

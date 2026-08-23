@@ -74,9 +74,14 @@ which `config-check` says in those words rather than passing silently.
 `config-check` verifies a `CLAUDE.md` body only when the file is Beadloom's: it
 has a manifest entry, or it carries the `<!-- beadloom:composed` provenance
 stamp the shipped core now begins with. A project's own hand-written
-`CLAUDE.md` is not ours to police — the same boundary `_is_beadloom_adapter`
+`CLAUDE.md` is not ours to JUDGE — the same boundary `_is_beadloom_adapter`
 draws for IDE adapter files, and the reason the BDL-UX #73 false-positive class
 does not return.
+
+It is a boundary on the VERDICT, not on the reporting. In a project that adopted
+the flow, a `CLAUDE.md` with neither signal is named and reported `unverified` at
+`warn` rather than passed over in silence — see the config-check SPEC, *Ownership
+boundary* and *The honest floor*.
 
 ## API
 
