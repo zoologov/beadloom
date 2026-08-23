@@ -7,12 +7,15 @@
 
 ## Current Bead
 
-**Bead:** `.8` — the S2 documentation pass, and the last bead of the slice. S2 is otherwise
-complete: eight dev beads (`.5`, `.33`, `.34`, `.37`, `.38`, `.40`, `.43`, `.44`), the `.6`
-verification bead and the `.7` review are all closed.
-**Next:** S3 opens with `.9` (compose(core, arch, stack, project)). Filed out of S2 and not
-part of it: `.45`–`.51` (the false-green residue, the two CRITICALs and the cohesion bead) plus
-`.35`, `.39`, `.41`, `.42`.
+**Slice:** S2b — the false-green residue S2 measured and left open, on
+`features/BDL-061-S2b`. S2 itself is complete (`.5`, `.33`, `.34`, `.37`, `.38`, `.40`, `.43`,
+`.44`, plus `.6` verification, `.7` review and `.8` docs, all closed).
+**Closed in S2b so far:** `.48` (rule liveness for all nine rule types) and `.46` + `.47`
+(*unverifiable is not clean* — one fix; the baseline moved out of the database).
+**Open in S2b:** `.49` (an exemption's `until:` is prose), `.50` (annotations the extractor
+cannot see), `.45` (docs-audit per-fact coverage), `.51` (three modules past 1000 lines).
+**Next:** S3 opens with `.9` (compose(core, arch, stack, project)). Also outstanding and not
+part of any slice: `.35`, `.39`, `.41`, `.42`.
 
 ## Progress
 
