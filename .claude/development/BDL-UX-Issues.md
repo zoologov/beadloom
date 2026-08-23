@@ -35,6 +35,19 @@
 
 ## Open Issues
 
+177. [2026-08-23] [HIGH] 🔴 Editing our own `CLAUDE.md` silently ships the edit to every adopter — the pre-commit hook propagates it into the vendored template verbatim
+
+    **Severity:** high (project-local context leaves the project without anyone deciding that it should, and the propagation happens inside a commit rather than at a review point)
+    **Command:** the `install-hooks` pre-commit coherence step; `beadloom config-check`
+    **Context:** the coordinator added a warning to `.claude/CLAUDE.md` §6 saying `setup-branch-protection` is not safe to re-run *in this repository right now*. Committing it left `src/beadloom/onboarding/templates/agentic_flow/CLAUDE.md.txt` modified — the hook had copied the paragraph into the shipped template **verbatim**, including the bead id `beadloom-mr2l.42` and the claim "`main`'s live protection has **seven**".
+    **Issue:** both of those are facts about *this* repository. A bead id means nothing to an adopter, and the seven-contexts claim is simply false for them — a freshly scaffolded project gets nine contexts and a workflow that produces all nine, so the warning that is urgent for us is wrong for them. Caught only because `git status` was read after the commit; nothing announced the propagation.
+    **The deeper problem is that there is no separation to enforce.** `.claude/CLAUDE.md` is simultaneously this project's instructions and the artifact we distribute, so every project-specific sentence is a shipping decision made by accident. This is exactly what BDL-061 S3 (`compose(core, architecture, stack, project)` with a project overlay) exists to fix, and this entry is the concrete case for it: the failure is not hypothetical drift, it is our own bead identifiers reaching adopters' onboarding text.
+    **Expected:**
+    - Until the overlay lands, the propagation must be **announced, not silent** — a hook that rewrites a distributed artifact should say so and require confirmation, the same standard we hold `sync-update` to (#163).
+    - The direction should be explicit. Today a local edit flows *outward* by default; the safe default is that the shipped template is the source and a local divergence is reported, with promotion to the template a deliberate act.
+    - Add a check that no project-local identifier — bead ids, our issue numbers, our repo's measured facts — appears in anything under `templates/`. Cheap, and it would have caught this at the commit.
+    **Related:** #139/#152 (a project has no supported place for its own additions — the same gap from the adopter's side), #163 (re-attesting without evidence). Fixed for this instance by rewriting the template paragraph to a version that is true for an adopter.
+
 176. [2026-08-23] [LOW] An incremental `reindex` prints `Imports: 0` and `Rules: 0` on the run that refreshed them
 
     **Severity:** low (cosmetic, but it is a zero printed by the command whose honesty BDL-061 S2 restored)
