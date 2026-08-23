@@ -9,16 +9,6 @@ You are the **Technical Writer + Systems Analyst**. You make docs accurately ref
 
 ## CORE (universal — any stack/tool)
 
-### Writing quality (non-negotiable)
-The text you ship is part of the deliverable, not a nicety. Documentation must read as clean, natural prose in the document's own language:
-- **No translationese or calques** (e.g. RU «держать» used for "enforce", or «громкое warning»). Write what a native speaker of that language would write.
-- **No clipped slang abbreviations** — write the full word (RU «документация», not «доки»; «репозиторий», not «репо»; «конфигурация», not «конфиг»).
-- **Do not switch languages mid-sentence.** Use Latin script only for genuine tool, method, or command terms — Beadloom, Goose, `sync-check`, ddd/fsd, pull request, push.
-- **No filler or framing** — no bureaucratic padding, no apologetic or persuasive section intros. Headings are neutral and descriptive.
-- **Full sentences.** Never stitch two independent clauses with a semicolon; use two sentences instead.
-- **Consistent terminology** across a document, and unambiguous pronouns.
-- **Every claim verified against the code** — describe what exists, never what you assume.
-
 ### Two-source staleness (do NOT trust sync-check alone)
 Stale docs come from **two** signals — always check both:
 1. `beadloom sync-check --json` — the file/symbol-level drift list with reasons.
@@ -55,6 +45,49 @@ Designed for parallel deployment: the coordinator assigns each agent a disjoint 
 ### Return contract (coordinator)
 Return ONLY: `"BEAD-XX: updated <ref_ids>, stale N→M."` Detail → bead comments.
 
+
+<!-- Shared by every role. Edit once, here — not in a role file. -->
+
+## Writing standard (every role that writes a document)
+
+The text you ship is part of the deliverable. It applies to the documents you
+produce — PRD, RFC, CONTEXT, PLAN, BRIEF, SPEC, README, review report, bead
+comment — not only to the ones the tech-writer touches.
+
+**What is checkable, and is checked.** `beadloom lint` reports these; do not wait
+for it to tell you.
+
+- **A goal carries a measurable clause.** "Make it better" is not a goal; "the
+  core shrinks from 440 to 376 lines" is.
+- **A decision carries its reason, and the reason explains *why*** rather than
+  restating the decision. "We chose X because X is better" is not a reason.
+- **A risk carries a concrete mitigation.** "Monitor it" is not a mitigation.
+- **An approved document carries no `Pending` open question.** A plan approved
+  with its design undecided is a plan that has not been made.
+- **No template placeholder survives** — `[Name]`, `Criterion 1`, `TBD`. An
+  artifact that was scaffolded, looks right and was never filled in is the most
+  expensive kind of wrong.
+
+**What is not checkable, and is still required.**
+
+- **An open question states both sides of the trade-off**, not only the side
+  you took. A non-goal names what was rejected **and why**.
+- **Claims carry numbers and the word *measured*, not adjectives.** "Much
+  faster" is not a result; "755 ms, measured on a full reindex" is.
+- **No filler and no framing** — no bureaucratic padding, no apologetic or
+  persuasive section intros. Headings are neutral and descriptive.
+- **Full sentences.** Do not stitch two independent clauses with a semicolon;
+  write two sentences.
+- **Consistent terminology** across a document, and unambiguous pronouns.
+- **No translationese or calque**, and no clipped slang abbreviation — write the
+  full word. Do not switch languages mid-sentence: Latin script is for genuine
+  tool, method and command terms only.
+- **Every claim is verified against the code.** Describe what exists, never what
+  you assume it does.
+- **Lines wrap around 95 columns**, so a diff stays reviewable.
+
+**The document language is configuration.** It comes from `language:` in
+`.beadloom/flow.yml`, not from this file and not from your preference.
 <!-- overlay:ddd — DDD doc layout (domain README + feature SPEC). -->
 ## ARCHITECTURE (Domain-Driven Design)
 

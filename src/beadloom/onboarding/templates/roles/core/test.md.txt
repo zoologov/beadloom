@@ -39,6 +39,19 @@ One behavior per test; a clear Arrange / Act / Assert shape; a name that states 
 ### Coverage
 - Target **>= 80%** on the changed code (statements + branches). Coverage is a floor, not a goal — cover the edge cases above, not just the happy path.
 
+### Mutation testing — the strength check on the scenarios
+Coverage says a line ran; it never says an assertion would have noticed if the line were wrong.
+Mutation testing answers that, and it is the only cheap answer there is.
+
+- **Scope: pure domain cores only.** Code with no I/O, no clock and no network. Elsewhere the
+  survivors are dominated by unreachable branches and the run costs more than it tells you.
+- **Cadence: once per slice**, on the code that slice changed. **Never in pre-commit** — a
+  mutation run is minutes, and a hook nobody can wait for is a hook everybody disables.
+- **A survivor is a finding**, and the fix is a stronger assertion, not a deleted mutant.
+- **Beadloom does not ship a mutation runner** — the tool is the project's choice, and owning
+  one would break tool-agnosticism. Record the tool, the target and the surviving count in the
+  bead comment; a target that ran zero mutants is reported as zero, never as clean.
+
 ### Validation, checkpoint, completion
 1. Tests pass + coverage >= 80%.
 2. Architecture/doc validation green (`beadloom reindex` → `beadloom sync-check` → `beadloom lint --strict`).

@@ -101,7 +101,7 @@ The database is stored in `.beadloom/beadloom.db` and uses WAL mode for concurre
 | `bundle_cache` | cache_key (PK), bundle_json, etag, graph_mtime, docs_mtime, created_at | L2 persistent context cache |
 | `search_index` | ref_id, kind, summary, content | FTS5 virtual table for full-text search |
 | `code_imports` | id (PK), file_path, line_number, import_path, resolved_ref_id, file_hash | Import relationships between files |
-| `rules` | id (PK), name (UNIQUE), description, rule_type (deny/require/forbid_edge/layer/cycle_detection/import_boundary/cardinality), rule_json, enabled | Architecture rules from rules.yml |
+| `rules` | id (PK), name (UNIQUE), description, rule_type (free-form `TEXT`; the loader owns the vocabulary — BDL-061 S4 dropped the CHECK that restated it and broke every existing DB on a new rule type), rule_json, enabled | Architecture rules from rules.yml |
 | `graph_snapshots` | id (PK), label, created_at, nodes_json, edges_json | Point-in-time architecture graph captures for drift detection |
 | `foreign_edges` | src_ref_id, dst_ref_id, kind, extra, lifecycle, contract_key | Declared cross-repository edges. Separate from `edges` because a foreign endpoint cannot satisfy the FK to local nodes; `beadloom export` unions them into the federation artifact |
 
@@ -140,7 +140,7 @@ Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3
 | `forbid_import` | Control file-level import boundaries | Files in `src/beadloom/tui/**` must not import `beadloom/infrastructure/**` — note the two vocabularies: `from` matches the **file path**, `to` the **dotted import path with dots → slashes** (no source root). A `src/`-prefixed `to` matches nothing (BDL-UX #172) |
 | `check` | Enforce complexity / coverage limits per node | `max_symbols: 180` per domain — counting the symbols a node OWNS, nested nodes excluded (Beadloom's `domain-size-limit`; see the recalibration note below); `module-coverage` (every src module tracked) |
 
-> Internally each parsed rule carries a `rule_type` string (`deny` / `require` / `forbid` / `layer` / `forbid_import` / `cardinality` / …) used by the evaluators; the **authoring key** in `rules.yml` is the column above.
+> Internally each parsed rule carries a `rule_type` string (`deny` / `require` / `forbid` / `layer` / `forbid_import` / `cardinality` / `scenario_coverage` / …) used by the evaluators; the **authoring key** in `rules.yml` is the column above.
 
 **Evaluation:**
 - `deny` rules are checked against the `code_imports` table: resolved import ref_ids are matched against rule patterns

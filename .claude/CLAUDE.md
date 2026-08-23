@@ -417,11 +417,26 @@ branch protection that is false for an adopter (BDL-UX #177).
 
 ### `setup-branch-protection` — not safe to re-run right now
 
-`DEFAULT_STATUS_CHECK_CONTEXTS` ships **nine** contexts since BDL-061 S2 (it
-gained the two `tests-locale` legs); `main`'s live protection has **seven**.
-Running the command today would require two checks that are knowingly red until
-`beadloom-mr2l.42` closes, making `main` unmergeable. Re-run it once those legs
-are green.
+`DEFAULT_STATUS_CHECK_CONTEXTS` ships **ten** contexts; `main`'s live protection
+has **seven**. Running the command today would require checks that do not yet
+report green, making `main` unmergeable.
+
+The count has moved twice, which is the thing to notice rather than the number:
+S2 added the two `tests-locale` legs (red until `beadloom-mr2l.42` closed them —
+they are green now), and S4 added `tests-windows`, which is expected red until
+`beadloom-mr2l.60` adjudicates the backslash refusal on a real Windows runner.
+
+So the rule is not "wait for a named bead" — that reading was wrong within an
+hour of being written. It is: **before running this command, compare the declared
+contexts against what actually reports green.**
+
+    gh api repos/:owner/:repo/branches/main/protection \
+      --jq '.required_status_checks.contexts'
+    gh pr checks <any open PR>
+
+A dimension is added whenever this project learns it was only ever verified along
+one axis, so the declared set will keep growing ahead of the green set. That gap
+is the normal state, not an incident.
 
 ### Concurrent waves share one working tree
 

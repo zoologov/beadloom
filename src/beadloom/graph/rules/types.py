@@ -14,6 +14,8 @@ import re
 from dataclasses import dataclass
 from datetime import date
 
+from beadloom.graph.scenarios import DEFAULT_FEATURE_GLOB
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -355,6 +357,66 @@ class ModuleCoverageRule:
     severity: str = "warn"
 
 
+@dataclass(frozen=True)
+class NonBehaviouralNode:
+    """One node declared to carry no behaviour, with the reason it does not.
+
+    The counterpart of :class:`ImportExemption` for
+    :class:`ScenarioCoverageRule`: a chore, a data model or a pure vocabulary
+    module has no user-observable behaviour, and demanding a scenario for it
+    produces ceremony rather than a check. So the absence becomes a **stated
+    decision** instead of a silent gap (PRD G7).
+
+    ``reason`` is mandatory — an unnamed exclusion is how a gate is quietly
+    switched off (BDL-061 CONTEXT). There is deliberately no ``until``: unlike
+    an import exemption, this is not a debt that expires but a classification
+    that is either true or false. What keeps it honest instead is that a dead
+    declaration — one naming a node outside the rule's population, or one that
+    turns out to HAVE a scenario — is itself reported.
+    """
+
+    node: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class ScenarioCoverageRule:
+    """Bind behaviour-bearing nodes to executable scenarios, both ways.
+
+    The ``.feature`` file is the source of truth (BDL-061 CONTEXT, option (b));
+    this rule reports where the binding is missing, in three directions:
+
+    - a node matched by ``for_matcher`` that **no scenario names**;
+    - a scenario that names **no bead**, or names a node that is not in the
+      graph, or a file in the suite that could not be read or declares nothing;
+    - a scenario a document under ``references`` claims exists and the suite
+      does not contain.
+
+    ``features`` is a glob, defaulting to the layout Q3 chose
+    (``tests/acceptance/features/**/*.feature``) and configurable from the
+    start, because the flow ships to projects with their own conventions.
+
+    ``severity`` defaults to ``warn`` and is meant to stay there. A finding here
+    is about declared *intent* — that a behaviour was specified — and an
+    ``error`` would turn every adopter's green project red on the upgrade that
+    ships the rule (BDL-061 CONTEXT). Loudness replaces blocking: the finding
+    prints by default and every message carries the population it is a fraction
+    of.
+    """
+
+    name: str
+    description: str
+    #: The population. Defaults to ``kind: feature`` — the node kind that models
+    #: a unit of user-observable behaviour in every methodology Beadloom ships an
+    #: overlay for — so ``scenario_coverage: {}`` is a working rule rather than a
+    #: configuration error.
+    for_matcher: NodeMatcher = NodeMatcher(kind="feature")
+    features: str = DEFAULT_FEATURE_GLOB
+    references: tuple[str, ...] = ()
+    non_behavioural: tuple[NonBehaviouralNode, ...] = ()
+    severity: str = "warn"
+
+
 Rule = (
     DenyRule
     | RequireRule
@@ -365,6 +427,7 @@ Rule = (
     | CardinalityRule
     | UnregisteredFeatureCandidateRule
     | ModuleCoverageRule
+    | ScenarioCoverageRule
 )
 
 

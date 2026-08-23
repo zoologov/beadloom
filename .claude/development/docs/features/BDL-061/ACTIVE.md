@@ -1,11 +1,56 @@
 # ACTIVE: BDL-061 — Enforced agentic flow
 
-> **Last updated:** 2026-08-23
+> **Last updated:** 2026-08-24
 > **Phase:** Development
 
 ---
 
 ## Current Bead
+
+**Slice: S4** on `features/BDL-061-S4`.
+
+**`.13` CLOSED (2026-08-24) — and REPORTED AS TWO BEADS, not one.** PLAN sized S4's dev work
+as one slice; it is six mechanisms in three domains, so it was split at the seam where they
+stop sharing code, before any code was written:
+
+- **`.13` — behaviour is bound to an executable scenario.** The owner's request, ported and
+  improved. `graph/scenarios.py` (a new `scenario-binding` feature node) reads `.feature`
+  files and the documents that reference them; `graph/rules/scenario_coverage.py` turns that
+  into a `warn` rule with four legs and per-LEG liveness. Plus the role-template layer: the
+  shared writing standard moved out of `tech-writer` into `templates/roles/core/_writing.md.txt`
+  and composed into all four roles (English + Russian, #136), the BDD and mutation duties, and
+  `templates.md`'s acceptance criteria restated as scenarios with a non-behavioural
+  declaration in BRIEF.
+- **`beadloom-b0xl` — document shape is a checkable claim.** Doc templates out of
+  `doc_generator.py` into `templates/docs/`, `missing_sections`, the five section-quality
+  checks, and the mutation-SCOPE check. Filed, not absorbed: the two halves share no module,
+  no domain and no test surface, and delivering both at half depth is how a check that cannot
+  fail gets shipped — which this epic has now measured twice (`.48`, `.10`).
+
+**What `scenario-coverage` reports on this repository today: 68 findings, all `warn`, all
+true.** 35 of 37 `feature` nodes carry no scenario (the suite covers `rule-engine` and
+`scenario-binding`), and 33 scenarios this epic's own PRD referenced by name do not exist —
+the S1/S2/S3/S5/S6 criteria, written as scenarios before there was anything to run them. The
+population is the honest one (`for: {kind: feature}`), not a hand-picked list that would report
+0 by construction.
+
+**The scenarios RUN.** `pytest-bdd` is a dev dependency; 7 scenarios execute inside
+`uv run pytest`. Without a runner a `.feature` file is prose and the rule would be checking the
+existence of text — the decision the slice rests on holds only while the artifact executes.
+
+**Three defects found by doing it rather than by reasoning about it:**
+
+| What | Why it mattered |
+|---|---|
+| `pytest-bdd` refuses a file with two `Feature:` blocks; our parser accepted it | scenarios would be counted as covering their nodes while nothing executed — a false green |
+| The DB's `rule_type` CHECK restated the loader's vocabulary (BDL-UX #171's shape) | a new rule type raised `IntegrityError` on every EXISTING `beadloom.db` — on the adopter's machine, not ours. The CHECK is dropped and migrated away |
+| `prime` printed one line per finding with no bound | 68 findings took it from 2.6 KB to 13.1 KB, five times its own "<2K tokens" promise. The list is capped at 10 and states the remainder; the COUNT is never truncated |
+
+**Still open in S4:** `.14` (test), `.15` (review), `.16` (tech-writer), and `beadloom-b0xl`.
+
+---
+
+## Earlier slices
 
 **Slice:** S2b — the false-green residue S2 measured and left open, on
 `features/BDL-061-S2b`. S2 itself is complete (`.5`, `.33`, `.34`, `.37`, `.38`, `.40`, `.43`,

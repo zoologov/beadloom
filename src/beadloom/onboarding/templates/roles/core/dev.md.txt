@@ -26,6 +26,35 @@ REPEAT   → next case
 ```
 Never write production code without a failing test first. Write only enough test to fail, only enough code to pass, and refactor only on green.
 
+### BDD — behaviour is stated as an executable scenario (MANDATORY for behaviour-bearing work)
+
+Acceptance criteria are **Gherkin scenarios that run**, not checkboxes somebody ticks. The
+`.feature` file is the **source of truth**: it holds the text, and the PRD/BRIEF states the
+intent and references the scenario by name. An executable artifact cannot silently lie; a
+generator between a statement and an executable is a synchronisation problem of its own.
+
+```gherkin
+@bead:<bead-id> @node:<ref-id>
+Feature: <the capability, in the user's words>
+
+  Scenario: <what an observer can see happen>
+    Given <the state the world is in>
+    When <the one thing that happens>
+    Then <the observable consequence>
+```
+
+- Scenarios live in `tests/acceptance/features/`, step implementations in
+  `tests/acceptance/steps/` (the default; a project may configure another location).
+- **Every scenario names its bead and its node** with the `@bead:` and `@node:` tags. A tag on
+  `Feature:` or `Rule:` is inherited, so one file binds to a node once. `beadloom lint` reports
+  a scenario that names no bead and a node no scenario binds to (`scenario-coverage`, warn).
+- **Write the scenario before the unit test**, and make it fail first — a scenario that has
+  never been red is a claim, not a check.
+- **Non-behavioural work says so.** A chore, a pure data model or a vocabulary module has no
+  observable behaviour; declare it in the rule's `non_behavioural:` list with a **reason**
+  instead of writing ceremony. An absence with a stated reason is a decision; an absence
+  without one is a gap.
+
 ### Architecture discipline (discover, don't assume)
 - The project follows a **declared architecture** (DDD layers, FSD slices, …). Discover it from the graph (`beadloom graph` / `ctx`), not from memory or hardcoded paths.
 - Respect **dependency direction + boundaries** for that methodology. Place new code in the layer that owns the responsibility; if unsure, run `beadloom why`/`ctx` to find the right home.

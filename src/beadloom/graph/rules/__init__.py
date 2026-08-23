@@ -52,6 +52,11 @@ from beadloom.graph.rules.loader import (
     load_rules_with_tags,
     validate_rules,
 )
+from beadloom.graph.rules.scenario_coverage import (
+    BEAD_NOT_VERIFIED,
+    SCENARIO_COVERAGE_RULE_TYPE,
+    evaluate_scenario_coverage_rules,
+)
 from beadloom.graph.rules.types import (
     LIVE_EDGE_LIFECYCLES,
     LIVENESS_RULE_TYPE,
@@ -70,8 +75,10 @@ from beadloom.graph.rules.types import (
     LayerRule,
     ModuleCoverageRule,
     NodeMatcher,
+    NonBehaviouralNode,
     RequireRule,
     Rule,
+    ScenarioCoverageRule,
     UnregisteredFeatureCandidateRule,
     Violation,
     exit_condition_deadline,
@@ -118,6 +125,11 @@ def _remediation_for(rule_type: str, violation: Violation) -> str | None:
             f"annotation + SPEC.md), or accept it as domain-level plumbing "
             f"(list it in the domain README and add it to the rule's `exclude`)"
         )
+    if rule_type == SCENARIO_COVERAGE_RULE_TYPE:
+        # The evaluator always writes its own: a scenario finding's remedy depends
+        # on WHICH of the three bindings is missing, and a hint derived from the
+        # rule kind alone could only restate the message.
+        return None
     if rule_type == "module_coverage":
         loc = violation.file_path or src
         return (
@@ -168,6 +180,7 @@ def evaluate_all(
     cardinality_rules: list[CardinalityRule] = []
     unregistered_rules: list[UnregisteredFeatureCandidateRule] = []
     module_coverage_rules: list[ModuleCoverageRule] = []
+    scenario_coverage_rules: list[ScenarioCoverageRule] = []
 
     for rule in rules:
         if isinstance(rule, DenyRule):
@@ -188,6 +201,8 @@ def evaluate_all(
             unregistered_rules.append(rule)
         elif isinstance(rule, ModuleCoverageRule):
             module_coverage_rules.append(rule)
+        elif isinstance(rule, ScenarioCoverageRule):
+            scenario_coverage_rules.append(rule)
 
     violations = (
         evaluate_deny_rules(conn, deny_rules)
@@ -199,6 +214,9 @@ def evaluate_all(
         + evaluate_cardinality_rules(conn, cardinality_rules)
         + evaluate_unregistered_feature_candidate_rules(conn, unregistered_rules)
         + evaluate_module_coverage_rules(conn, module_coverage_rules, project_root=project_root)
+        + evaluate_scenario_coverage_rules(
+            conn, scenario_coverage_rules, project_root=project_root
+        )
         # Last: what the rules above could NOT look at. A rule with an empty
         # candidate set contributes 0 violations and 1 to `N rules evaluated`,
         # which reads exactly like a rule that passed (BDL-UX #172 / .48).
@@ -215,11 +233,13 @@ def evaluate_all(
 
 
 __all__ = [
+    "BEAD_NOT_VERIFIED",
     "EXPIRED_EXEMPTION_HINT",
     "INERT_RULE_HINT",
     "LIVENESS_RULE_TYPE",
     "LIVE_EDGE_LIFECYCLES",
     "MATCHING_FORM_HINT",
+    "SCENARIO_COVERAGE_RULE_TYPE",
     "SUPPORTED_SCHEMA_VERSIONS",
     "VALID_EDGE_KINDS",
     "VALID_NODE_KINDS",
@@ -235,8 +255,10 @@ __all__ = [
     "LayerRule",
     "ModuleCoverageRule",
     "NodeMatcher",
+    "NonBehaviouralNode",
     "RequireRule",
     "Rule",
+    "ScenarioCoverageRule",
     "SuppressedCrossing",
     "UnregisteredFeatureCandidateRule",
     "Violation",
@@ -251,6 +273,7 @@ __all__ = [
     "evaluate_module_coverage_rules",
     "evaluate_require_rules",
     "evaluate_rule_liveness",
+    "evaluate_scenario_coverage_rules",
     "evaluate_unregistered_feature_candidate_rules",
     "exit_condition_deadline",
     "inert_rule_names",

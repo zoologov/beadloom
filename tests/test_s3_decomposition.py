@@ -57,12 +57,38 @@ class TestLintRecalibrationGuard:
         assert isinstance(violations, list)
         return violations
 
-    def test_live_repo_has_zero_lint_violations(
+    def test_live_repo_has_no_violation_outside_the_declared_scenario_debt(
         self, live_repo_reindexed: Path
     ) -> None:
-        """The live repo lints clean: zero violations of ANY rule/severity."""
+        """The live repo lints clean apart from one rule it deliberately opted into.
+
+        This assertion used to read "zero violations of ANY rule/severity", which
+        was true by luck: every rule in ``rules.yml`` happened to be satisfied.
+        BDL-061 S4 added ``scenario-coverage`` over the honest population — every
+        ``feature`` node — and Beadloom's own acceptance suite covers two of them.
+        The rest is real, measured debt, reported at ``warn`` so it blocks nothing.
+
+        Weakening the assertion to "ignore scenario-coverage" would be the false
+        green this epic exists to remove, so the debt is asserted in BOTH
+        directions instead: nothing else may fire, and the rule must still fire.
+        """
         findings = self._live_findings(live_repo_reindexed)
-        assert findings == [], findings
+        other = [f for f in findings if f.get("rule_name") != "scenario-coverage"]
+        assert other == [], other
+
+    def test_the_scenario_debt_is_reported_and_blocks_nothing(
+        self, live_repo_reindexed: Path
+    ) -> None:
+        """The other direction: a rule that went silent here would be a regression.
+
+        A count of zero would mean the suite covers every feature node (it does
+        not) or that the rule stopped firing (which is what ``.48`` measured on
+        four rule types at once). Either way it is a finding, not a pass.
+        """
+        findings = self._live_findings(live_repo_reindexed)
+        scenario = [f for f in findings if f.get("rule_name") == "scenario-coverage"]
+        assert scenario, "scenario-coverage reported nothing — it is inert or mis-scoped"
+        assert {f["severity"] for f in scenario} == {"warn"}
 
     def test_no_domain_size_limit_warning(
         self, live_repo_reindexed: Path

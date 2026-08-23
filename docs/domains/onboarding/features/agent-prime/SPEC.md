@@ -24,6 +24,12 @@ Cross-IDE context injection via a three-layer architecture.
 Returns compact project context. Static layer (config, rules, AGENTS.md) always available. Dynamic layer (DB queries) degrades gracefully without DB.
 
 - `fmt="markdown"` — human-readable output (~1000-1500 tokens)
+- **The finding lists are bounded** (`MAX_LISTED_FINDINGS = 10`, BDL-061 S4). `prime` used to
+  print one line per stale doc and per lint violation with no limit, which kept its size promise
+  only while the lists were empty: opting this repository into `scenario-coverage` (68 findings)
+  grew the output from 2.6 KB to 13.1 KB — five times the budget, in the artifact whose whole
+  job is to fit in one. The **count is never truncated**, only the list, and the cut says how
+  many are hidden and which command shows them (`beadloom lint` / `beadloom sync-check`)
 - `fmt="json"` — structured dict for programmatic use
 
 ### `setup_rules_auto(project_root)`

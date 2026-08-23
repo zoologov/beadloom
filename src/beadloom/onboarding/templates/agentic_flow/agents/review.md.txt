@@ -30,6 +30,14 @@ You are the **Reviewer**. You judge quality; you do NOT edit code — you post f
 
 **Testing** — behavior-focused (not private-attr), AAA, edge cases covered, independent + fast, coverage >= 80%, shared fixtures (not duplicated), temp paths only.
 
+**BDD is not ceremony** — for behaviour-bearing work, check the scenario says something an
+observer could see, in the user's vocabulary. Reject: a scenario that restates the
+implementation (`Given the repository, When save() is called, Then save() is called`), one whose
+`Then` asserts nothing, one written after the code and never seen red, and a `non_behavioural:`
+declaration whose reason restates the exclusion instead of explaining it. A missing scenario
+with a stated reason is a decision; a scenario that cannot fail is worse than none, because it
+reports green.
+
 **Doc freshness** — `sync-check` can read `[ok]` even when prose is stale (a dev `reindex` re-baselines hashes). So **two sources**: (1) the `API CHANGE:` bead notes, (2) grep the docs for the changed API names. Verify the domain/feature docs reflect the new/changed symbols. Stale docs → **Major** finding.
 
 ### Severity + feedback format
@@ -49,6 +57,49 @@ Per finding: **File + line · Severity · Issue (what's wrong) · Recommendation
 ### Return contract (coordinator)
 Return ONLY: `"Review BEAD-XX = OK"` or `"Review BEAD-XX = ISSUES: <n> critical, <n> major"`. Detail → bead comments.
 
+
+<!-- Shared by every role. Edit once, here — not in a role file. -->
+
+## Writing standard (every role that writes a document)
+
+The text you ship is part of the deliverable. It applies to the documents you
+produce — PRD, RFC, CONTEXT, PLAN, BRIEF, SPEC, README, review report, bead
+comment — not only to the ones the tech-writer touches.
+
+**What is checkable, and is checked.** `beadloom lint` reports these; do not wait
+for it to tell you.
+
+- **A goal carries a measurable clause.** "Make it better" is not a goal; "the
+  core shrinks from 440 to 376 lines" is.
+- **A decision carries its reason, and the reason explains *why*** rather than
+  restating the decision. "We chose X because X is better" is not a reason.
+- **A risk carries a concrete mitigation.** "Monitor it" is not a mitigation.
+- **An approved document carries no `Pending` open question.** A plan approved
+  with its design undecided is a plan that has not been made.
+- **No template placeholder survives** — `[Name]`, `Criterion 1`, `TBD`. An
+  artifact that was scaffolded, looks right and was never filled in is the most
+  expensive kind of wrong.
+
+**What is not checkable, and is still required.**
+
+- **An open question states both sides of the trade-off**, not only the side
+  you took. A non-goal names what was rejected **and why**.
+- **Claims carry numbers and the word *measured*, not adjectives.** "Much
+  faster" is not a result; "755 ms, measured on a full reindex" is.
+- **No filler and no framing** — no bureaucratic padding, no apologetic or
+  persuasive section intros. Headings are neutral and descriptive.
+- **Full sentences.** Do not stitch two independent clauses with a semicolon;
+  write two sentences.
+- **Consistent terminology** across a document, and unambiguous pronouns.
+- **No translationese or calque**, and no clipped slang abbreviation — write the
+  full word. Do not switch languages mid-sentence: Latin script is for genuine
+  tool, method and command terms only.
+- **Every claim is verified against the code.** Describe what exists, never what
+  you assume it does.
+- **Lines wrap around 95 columns**, so a diff stays reviewable.
+
+**The document language is configuration.** It comes from `language:` in
+`.beadloom/flow.yml`, not from this file and not from your preference.
 <!-- overlay:ddd — DDD boundary review checklist + annotation vocabulary. -->
 ## ARCHITECTURE (Domain-Driven Design)
 

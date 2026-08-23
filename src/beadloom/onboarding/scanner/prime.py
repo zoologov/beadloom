@@ -32,6 +32,27 @@ def _get_lint_violations(project_root: Path) -> list[dict[str, str]]:
         return []
 
 
+#: How many findings ``prime`` lists before it stops and states the remainder.
+#: ``prime``'s whole promise is to fit in an agent's context ("<2K tokens" in its
+#: own documentation), and it used to print one line per violation and per stale
+#: doc with no bound — a promise that held only while the lists were empty.
+#: Measured: opting this repository into ``scenario-coverage`` (68 findings) grew
+#: the output from 2.6 KB to 13.1 KB. The count is never truncated; only the list
+#: is, and the note says by how much and which command shows the rest.
+MAX_LISTED_FINDINGS = 10
+
+
+def _listed(
+    entries: list[str], *, total: int, noun: str, command: str
+) -> list[str]:
+    """The bounded list plus, when it was cut, a line naming what is not shown."""
+    lines = list(entries[:MAX_LISTED_FINDINGS])
+    remaining = total - len(lines)
+    if remaining > 0:
+        lines.append(f"- ... and {remaining} more {noun} — run `{command}` for the full list")
+    return lines
+
+
 def _format_prime_markdown(
     project_name: str,
     rules: list[dict[str, str]],
@@ -105,8 +126,14 @@ def _format_prime_markdown(
         stale: list[dict[str, str]] = dynamic.get("stale_docs", [])
         lines.append("## Stale Docs")
         if stale:
-            for s in stale:
-                lines.append(f"- {s['doc_path']} ({s['ref_id']})")
+            lines.extend(
+                _listed(
+                    [f"- {s['doc_path']} ({s['ref_id']})" for s in stale],
+                    total=len(stale),
+                    noun="stale doc(s)",
+                    command="beadloom sync-check",
+                )
+            )
         else:
             lines.append("(none)")
         lines.append("")
@@ -116,8 +143,14 @@ def _format_prime_markdown(
         violations: list[dict[str, str]] = dynamic.get("violations", [])
         lines.append("## Lint Violations")
         if violations:
-            for v in violations:
-                lines.append(f"- [{v['rule']}] {v['node']}: {v['message']}")
+            lines.extend(
+                _listed(
+                    [f"- [{v['rule']}] {v['node']}: {v['message']}" for v in violations],
+                    total=len(violations),
+                    noun="violation(s)",
+                    command="beadloom lint",
+                )
+            )
         else:
             lines.append("(none)")
         lines.append("")

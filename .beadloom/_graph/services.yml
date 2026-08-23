@@ -189,6 +189,15 @@ nodes:
     docs:
       - docs/domains/graph/features/rule-engine/SPEC.md
 
+  # Feature: Scenario Binding (BDL-061 S4) — reads the acceptance suite and the
+  # documents that reference it; the rule engine turns that into verdicts.
+  - ref_id: scenario-binding
+    kind: feature
+    summary: "Read .feature files and doc references: which node and which bead a scenario binds to"
+    source: src/beadloom/graph/scenarios.py
+    docs:
+      - docs/domains/graph/features/scenario-binding/SPEC.md
+
   # Feature: Import Resolver
   - ref_id: import-resolver
     kind: feature
@@ -637,6 +646,9 @@ edges:
     dst: graph
     kind: part_of
   - src: rule-engine
+    dst: graph
+    kind: part_of
+  - src: scenario-binding
     dst: graph
     kind: part_of
   - src: import-resolver

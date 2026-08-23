@@ -39,6 +39,19 @@ One behavior per test; a clear Arrange / Act / Assert shape; a name that states 
 ### Coverage
 - Target **>= 80%** on the changed code (statements + branches). Coverage is a floor, not a goal — cover the edge cases above, not just the happy path.
 
+### Mutation testing — the strength check on the scenarios
+Coverage says a line ran; it never says an assertion would have noticed if the line were wrong.
+Mutation testing answers that, and it is the only cheap answer there is.
+
+- **Scope: pure domain cores only.** Code with no I/O, no clock and no network. Elsewhere the
+  survivors are dominated by unreachable branches and the run costs more than it tells you.
+- **Cadence: once per slice**, on the code that slice changed. **Never in pre-commit** — a
+  mutation run is minutes, and a hook nobody can wait for is a hook everybody disables.
+- **A survivor is a finding**, and the fix is a stronger assertion, not a deleted mutant.
+- **Beadloom does not ship a mutation runner** — the tool is the project's choice, and owning
+  one would break tool-agnosticism. Record the tool, the target and the surviving count in the
+  bead comment; a target that ran zero mutants is reported as zero, never as clean.
+
 ### Validation, checkpoint, completion
 1. Tests pass + coverage >= 80%.
 2. Architecture/doc validation green (`beadloom reindex` → `beadloom sync-check` → `beadloom lint --strict`).
@@ -48,6 +61,49 @@ One behavior per test; a clear Arrange / Act / Assert shape; a name that states 
 ### Return contract (coordinator)
 Return ONLY 2-3 lines: `"BEAD-XX: N tests, coverage Z%."` Detail → bead comments.
 
+
+<!-- Shared by every role. Edit once, here — not in a role file. -->
+
+## Writing standard (every role that writes a document)
+
+The text you ship is part of the deliverable. It applies to the documents you
+produce — PRD, RFC, CONTEXT, PLAN, BRIEF, SPEC, README, review report, bead
+comment — not only to the ones the tech-writer touches.
+
+**What is checkable, and is checked.** `beadloom lint` reports these; do not wait
+for it to tell you.
+
+- **A goal carries a measurable clause.** "Make it better" is not a goal; "the
+  core shrinks from 440 to 376 lines" is.
+- **A decision carries its reason, and the reason explains *why*** rather than
+  restating the decision. "We chose X because X is better" is not a reason.
+- **A risk carries a concrete mitigation.** "Monitor it" is not a mitigation.
+- **An approved document carries no `Pending` open question.** A plan approved
+  with its design undecided is a plan that has not been made.
+- **No template placeholder survives** — `[Name]`, `Criterion 1`, `TBD`. An
+  artifact that was scaffolded, looks right and was never filled in is the most
+  expensive kind of wrong.
+
+**What is not checkable, and is still required.**
+
+- **An open question states both sides of the trade-off**, not only the side
+  you took. A non-goal names what was rejected **and why**.
+- **Claims carry numbers and the word *measured*, not adjectives.** "Much
+  faster" is not a result; "755 ms, measured on a full reindex" is.
+- **No filler and no framing** — no bureaucratic padding, no apologetic or
+  persuasive section intros. Headings are neutral and descriptive.
+- **Full sentences.** Do not stitch two independent clauses with a semicolon;
+  write two sentences.
+- **Consistent terminology** across a document, and unambiguous pronouns.
+- **No translationese or calque**, and no clipped slang abbreviation — write the
+  full word. Do not switch languages mid-sentence: Latin script is for genuine
+  tool, method and command terms only.
+- **Every claim is verified against the code.** Describe what exists, never what
+  you assume it does.
+- **Lines wrap around 95 columns**, so a diff stays reviewable.
+
+**The document language is configuration.** It comes from `language:` in
+`.beadloom/flow.yml`, not from this file and not from your preference.
 <!-- overlay:ddd — DDD test placement + boundary-aware mocking. -->
 ## ARCHITECTURE (Domain-Driven Design)
 

@@ -244,11 +244,11 @@ CREATE TABLE IF NOT EXISTS rules (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     name        TEXT NOT NULL UNIQUE,
     description TEXT NOT NULL DEFAULT '',
-    rule_type   TEXT NOT NULL CHECK(rule_type IN (
-        'deny', 'require', 'forbid_cycles', 'layers',
-        'cardinality', 'forbid_import', 'forbid_edge',
-        'unregistered_feature_candidate', 'module_coverage'
-    )),
+    -- Free-form: the rule vocabulary is defined by the loader, which raises on
+    -- an unknown type. A CHECK here made the same vocabulary a SECOND source of
+    -- truth (BDL-UX #171), so every new rule type became a schema migration and
+    -- an existing database rejected a rule the loader had already accepted.
+    rule_type   TEXT NOT NULL,
     rule_json   TEXT NOT NULL,
     enabled     INTEGER NOT NULL DEFAULT 1
 );
@@ -397,6 +397,7 @@ def ensure_schema_migrations(conn: sqlite3.Connection) -> None:
     _migrate_sync_status_verdicts(conn)
     _migrate_drop_kind_checks(conn)
     _migrate_lifecycle_external(conn)
+    _migrate_drop_rule_type_check(conn)
 
 
 def _ensure_declared_docs_table(conn: sqlite3.Connection) -> None:
@@ -533,6 +534,26 @@ def _migrate_drop_kind_checks(conn: sqlite3.Connection) -> None:
         _rebuild_table_without_kind_check(conn, "edges")
 
 
+def _migrate_drop_rule_type_check(conn: sqlite3.Connection) -> None:
+    """Drop the ``rule_type`` CHECK on ``rules`` (BDL-061 S4).
+
+    The CHECK enumerated the rule types a second time, next to the loader that
+    already validates them — one vocabulary, two sources of truth, which is
+    BDL-UX #171's shape. Its effect was that adding a rule type broke every
+    EXISTING database: the loader accepted ``scenario_coverage`` and the insert
+    raised ``IntegrityError`` on any ``beadloom.db`` created before the release,
+    on the adopter's machine rather than on ours.
+
+    SQLite cannot drop a CHECK in place, so a table that still carries one is
+    rebuilt. Additive + idempotent: it fires only while the stored DDL still
+    mentions ``CHECK(rule_typeIN`` (probed via ``sqlite_master.sql``), copies
+    every row verbatim, and is a no-op afterwards — so it needs no
+    ``SCHEMA_VERSION`` gate, like :func:`_migrate_drop_kind_checks`.
+    """
+    if _table_exists(conn, "rules") and _ddl_contains(conn, "rules", "CHECK(rule_typeIN"):
+        _rebuild_table(conn, "rules", suffix="ruletypemig_old")
+
+
 def _kind_has_check(conn: sqlite3.Connection, table: str) -> bool:
     """True when *table*'s stored DDL still restricts ``kind`` with a CHECK."""
     return _ddl_contains(conn, table, "CHECK(kindIN")
@@ -572,7 +593,21 @@ def _migrate_lifecycle_external(conn: sqlite3.Connection) -> None:
             _rebuild_table_for_lifecycle(conn, table)
 
 
+#: DDL of the ``rules`` table without the retired ``rule_type`` CHECK. Kept in
+#: the same dict the other rebuilds read so there is one rebuild mechanism.
+_RULES_DDL = (
+    "CREATE TABLE rules ("
+    "  id          INTEGER PRIMARY KEY AUTOINCREMENT,"
+    "  name        TEXT NOT NULL UNIQUE,"
+    "  description TEXT NOT NULL DEFAULT '',"
+    "  rule_type   TEXT NOT NULL,"
+    "  rule_json   TEXT NOT NULL,"
+    "  enabled     INTEGER NOT NULL DEFAULT 1"
+    ")"
+)
+
 _REBUILD_DDL: dict[str, str] = {
+    "rules": _RULES_DDL,
     "nodes": (
         "CREATE TABLE nodes ("
         "  ref_id  TEXT PRIMARY KEY,"
@@ -615,6 +650,9 @@ _REBUILD_COLUMNS: dict[str, str] = {
     "nodes": "ref_id, kind, summary, source, extra, lifecycle",
     "edges": "src_ref_id, dst_ref_id, kind, extra, lifecycle, contract_key",
     "foreign_edges": "src_ref_id, dst_ref_id, kind, extra, lifecycle, contract_key",
+    # ``id`` is copied too: a rebuild that renumbered the rows would silently
+    # change what any stored reference to a rule row points at.
+    "rules": "id, name, description, rule_type, rule_json, enabled",
 }
 
 # Indexes to recreate after rebuilding each table (the rebuild drops them).
@@ -625,6 +663,7 @@ _REBUILD_INDEXES: dict[str, str] = {
         "CREATE INDEX IF NOT EXISTS idx_edges_dst ON edges(dst_ref_id);"
     ),
     "foreign_edges": "",
+    "rules": "",
 }
 
 

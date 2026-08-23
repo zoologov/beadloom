@@ -3405,19 +3405,45 @@ class TestUnregisteredFeatureCandidateSerializationRoundTrip:
         assert rule_type == "unregistered_feature_candidate"
         assert "exclude" not in rule_def
 
-    def test_db_check_rejects_unknown_rule_type(self) -> None:
-        """Regression guard: the CHECK constraint is genuinely enforced."""
+    def test_the_loader_rejects_an_unknown_rule_type(self, tmp_path: Path) -> None:
+        """Where the rule vocabulary is enforced since BDL-061 S4.
+
+        This test replaces ``test_db_check_rejects_unknown_rule_type``. The DB's
+        ``CHECK(rule_type IN (...))`` stated the same vocabulary a second time
+        (BDL-UX #171's shape) and its real effect was that a NEW rule type broke
+        every EXISTING database — the loader accepted ``scenario_coverage`` and
+        the insert raised on any ``beadloom.db`` created before the release. The
+        constraint moved to the single place that can also say what is wrong.
+        """
+        from beadloom.graph.rule_engine import load_rules
+
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\nrules:\n"
+            "  - name: bogus\n"
+            "    description: d\n"
+            "    totally_unknown_type: {}\n"
+        )
+        with pytest.raises(ValueError, match="must have exactly one of"):
+            load_rules(rules_path)
+
+    def test_the_schema_no_longer_enumerates_the_rule_vocabulary(self) -> None:
+        """The other half of the same decision, pinned so it is not re-added."""
         conn = sqlite3.connect(":memory:")
         try:
             create_schema(conn)
-            with pytest.raises(sqlite3.IntegrityError):
-                conn.execute(
-                    "INSERT INTO rules (name, description, rule_type, rule_json, enabled)"
-                    " VALUES (?, ?, ?, ?, 1)",
-                    ("bogus", "d", "totally_unknown_type", "{}"),
-                )
+            conn.execute(
+                "INSERT INTO rules (name, description, rule_type, rule_json, enabled)"
+                " VALUES (?, ?, ?, ?, 1)",
+                ("future", "d", "a_rule_type_from_a_later_release", "{}"),
+            )
+            conn.commit()
+            row = conn.execute(
+                "SELECT rule_type FROM rules WHERE name = ?", ("future",)
+            ).fetchone()
         finally:
             conn.close()
+        assert row[0] == "a_rule_type_from_a_later_release"
 
 
 class TestUnregisteredFeatureCandidateReindexSurvival:

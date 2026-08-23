@@ -5,6 +5,9 @@
 
 **Rules:**
 - Use templates EXACTLY as written — no improvisation
+- **Acceptance criteria for behaviour-bearing work are Gherkin scenarios**, and the `.feature`
+  file is the source of truth: the document references the scenario BY NAME and the suite holds
+  its text. Non-behavioural work says so, with a reason
 - No numbered sections (use `##` / `###` headings)
 - Status: always `Draft` / `Approved` / `Done`
 - Date in separate field, never inside status
@@ -45,22 +48,41 @@ Used for: `epic`, `feature`
 ### US-1: [Name]
 **As** [role], **I want** [action], **so that** [result].
 
-**Acceptance criteria:**
-- [ ] Criterion 1
-- [ ] Criterion 2
+**Acceptance criteria** (each references a scenario in `tests/acceptance/features/`):
+- [ ] Scenario: `<the scenario's exact name>`
+- [ ] Scenario: `<the scenario's exact name>`
 
 ### US-2: [Name]
 **As** [role], **I want** [action], **so that** [result].
 
-**Acceptance criteria:**
-- [ ] Criterion 1
-- [ ] Criterion 2
+**Acceptance criteria** (each references a scenario in `tests/acceptance/features/`):
+- [ ] Scenario: `<the scenario's exact name>`
+- [ ] Scenario: `<the scenario's exact name>`
 
 ## Acceptance Criteria (overall)
 
-- [ ] Criterion 1
-- [ ] Criterion 2
-- [ ] Criterion 3
+Behaviour-bearing criteria are scenarios; the suite holds their text and this list references
+them by name. `beadloom lint` reports a referenced scenario the suite does not contain.
+
+- [ ] Scenario: `<the scenario's exact name>`
+- [ ] Scenario: `<the scenario's exact name>`
+
+**Non-behavioural criteria** stay checkboxes and are labelled, so the absence of a scenario is
+a stated decision rather than a gap:
+
+- [ ] [what is done] — non-behavioural: [why no observer can see a change]
+```
+
+### The scenario the criteria reference
+
+```gherkin
+@bead:{ISSUE-KEY}.N @node:<ref-id>
+Feature: [the capability, in the user's words]
+
+  Scenario: [what an observer can see happen]
+    Given [the state the world is in]
+    When [the one thing that happens]
+    Then [the observable consequence]
 ```
 
 ---
@@ -321,8 +343,16 @@ Used for: `bug`, `task`, `chore`
 
 ## Acceptance Criteria
 
-- [ ] Criterion 1
-- [ ] Criterion 2
+- [ ] Scenario: `<the scenario's exact name>`
+
+## Non-behavioural declaration
+
+Only for a `chore` or a `task` no observer can see the result of. Fill BOTH fields or delete
+the section — an exclusion without a stated reason is a check switched off without saying so.
+
+| Node | Reason it carries no behaviour |
+|------|-------------------------------|
+| [ref-id] | [why no observer can see a change — not a restatement of "it is a chore"] |
 ```
 
 ---

@@ -239,7 +239,7 @@ rules:
       max_symbols: 200      # too much code in one node
 ```
 
-Nine rule types are available: `require`, `deny`, `forbid`, `layers`, `forbid_cycles`, `forbid_import`, `check`, `unregistered_feature_candidate`, and `module_coverage`.
+Ten rule types are available: `require`, `deny`, `forbid`, `layers`, `forbid_cycles`, `forbid_import`, `check`, `unregistered_feature_candidate`, `module_coverage`, and `scenario_coverage` (behaviour-bearing nodes carry an executable Gherkin scenario; a scenario names its bead).
 
 A rule that **cannot match anything** reports itself. A matcher that selects no node, an edge kind the graph does not have, a `check` with no threshold, a glob that matches no file, an exemption that suppresses nothing — each is a `rule_liveness` warning rather than a silent pass, and `lint`'s summary carries the count (`N rules evaluated, M of them unable to check anything`) so the advertised rule count cannot over-claim. These findings are always warnings: they describe your configuration, not your code, so one mistyped glob does not turn a green project red. What a `forbid_import` exemption excused is counted the same way — `0 violations, 6 crossings suppressed by an exemption` — because `0 violations` must not be able to mean *0 violations we counted*.
 
