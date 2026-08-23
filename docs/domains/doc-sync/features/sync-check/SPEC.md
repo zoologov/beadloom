@@ -131,6 +131,13 @@ warning** when it differs. `mark_reference_synced` re-baselines a reference doc
 (via `sync-update <doc>`), clearing the drift. The signatures themselves live in
 `surface.py` (coarse identity sets, not file content).
 
+> **`--check` does not hold on this path (BDL-UX #189).** In
+> `services/commands/docsync.py` the reference-doc branch is reached *before* the
+> `check_only` guard, so `beadloom sync-update <doc-path> --check` re-baselines
+> the doc and prints `Re-baselined reference doc <path>`. Measured: the drift
+> count fell from 7 to 6 on a run whose flag asked for a report. `--check` is
+> honoured only for symbol pairs (`sync-update <ref-id> --check`).
+
 ## Invariants
 
 - Baselining is explicit (`mark_synced` / `sync-update`); the engine never

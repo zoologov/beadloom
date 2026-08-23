@@ -15,10 +15,14 @@ This guide covers:
   `--tool`/`--stack`/`--architecture` flags, `ddd` vs `fsd`, the CORE + overlay
   set composed into per-tool adapters, the drift-guard, and "roles are
   composer-owned",
+- the **project layer** (BDL-061 S3): every flow artifact composes, and the last
+  layer is the adopting repository's own — see the dedicated
+  [Project Overlays guide](project-overlays.md) for adding rules, declaring a
+  suppression and migrating a hand-edited file,
 - the **pre-push Beadloom Gate** (BDL-052): blocks a push on a red `beadloom ci`
   (`--no-verify` is the escape hatch),
 - the **trunk-based development model** the flow runs on (BDL-049),
-- how `beadloom config-check` keeps the scaffolded flow honest (`--fix` restores it),
+- how `beadloom config-check` keeps the scaffolded flow honest,
 - the four MCP **process-tools** (`task_init` / `bead_context` / `complete_bead` / `checkpoint`),
 - the tool-agnostic angle (Claude Code + Cursor adapters; any MCP client via `beadloom setup-mcp`),
 - the **honest boundary**: orchestration stays in the harness; CI is the true enforcement.
@@ -90,9 +94,9 @@ lands, so `main`'s live protection deliberately still carries the other seven.
 Strict trunk-based keeps
 `enforce_admins: true` (even the owner integrates via a PR) with 0 required reviews,
 so the solo maintainer self-merges but `main` is never bypassed (BDL-049). The
-vendored `.claude/CLAUDE.md` §6 (Git) and
-`.claude/commands/coordinator.md` describe this same model, so a scaffolded repo
-gets the trunk-based flow by default. **CI on the PR is the true enforcement** — the
+composed `.claude/CLAUDE.md` §6 (Git) and `.claude/commands/coordinator.md`
+describe this same model, so a scaffolded repo gets the trunk-based flow by
+default. **CI on the PR is the true enforcement** — the
 agent's refresh and the deterministic gate are proposals/checks; the human merges.
 
 ## What the packaged flow is
@@ -108,21 +112,31 @@ for Cursor), in two kinds of unit:
   fixed monolith.
 - **Slash skills** — `.claude/commands/{coordinator,task-init,checkpoint,templates}.md`.
   `task-init` scaffolds a work item, `coordinator` orchestrates the waves,
-  `checkpoint` saves progress, `templates` holds the doc templates. The
-  slash-command set is **vendored byte-identical** (the configurator owns the
-  role *agents*, not the commands).
+  `checkpoint` saves progress, `templates` holds the doc templates.
 
-Plus a `.claude/CLAUDE.md` entry point whose **auto-regions** carry the
-per-project facts (name / stack / version / commands).
+Plus a `.claude/CLAUDE.md` entry point. Its body carries the critical rules; two
+**auto-regions** carry the regenerated per-project facts — `project-info` (stack,
+tests, linter, type checking, version) and `doc-language` (rendered from
+`language:` in `flow.yml`). The project's name is substituted into the
+`## 0.1 Project:` heading at scaffold time.
 
 The effectiveness of this flow lives in the **exact wording** of those files,
-refined over many epics. So Beadloom does **not** rewrite or summarize them. For
-the slash commands it **vendors them byte-identical** from its own live
-`.claude/` and templates only the per-project facts in the CLAUDE.md
-auto-regions; for the role agents it composes them deterministically from
-versioned CORE + overlay fragments. In both cases a **drift-guard** asserts the
-on-disk file equals the recomputed source byte-for-byte, so the scaffold always
-ships the latest proven flow.
+refined over many epics. So Beadloom does **not** rewrite or summarize them.
+Since BDL-061 S3 all three kinds — role agents, slash commands and `CLAUDE.md` —
+are **composed** from the same versioned layers: a stack-neutral CORE, the
+architecture and stack overlays `flow.yml` selects, and the adopting repo's own
+project fragment. A **drift-guard** (`beadloom config-check`) compares each
+on-disk file against that composition, so the scaffold ships the latest proven
+flow and a project's additions are part of the expected result rather than
+drift.
+
+`CLAUDE.md` and the slash commands used to be byte-snapshots of Beadloom's own
+live files. That is how a bead id and a false claim about this repository's
+branch protection reached every adopter's `CLAUDE.md`, twice (BDL-UX #177):
+enforcing *template equals our file* in one direction makes the distributed
+artifact unable to differ from one project's local text. Nothing now writes back
+into the shipped core, and Beadloom's own project-specific rules live in its
+`.beadloom/flow/claude/CLAUDE.md` like everyone else's.
 
 ## The role configurator (BDL-052)
 
@@ -137,6 +151,12 @@ tools: [claude, cursor]        # which IDE adapter sets to generate
 architecture: [ddd]            # exactly one methodology: ddd | fsd
 stack: [python, fastapi]       # one+ stack/framework overlays
 quality: [clean-code, tdd]     # quality bars (informational)
+language: en                   # the language the flow's documents are written in
+overlays:                      # declared stand-downs of a shipped core rule
+  suppress:
+    - rule: "Anti-patterns / Shell"
+      reason: "the team runs on Windows; the -f idiom does not apply"
+      until: "a windows stack overlay ships"
 ```
 
 `flow_config.py` loads + validates this into an immutable `FlowConfig`.
@@ -150,23 +170,51 @@ Supported values: tools `claude` / `cursor`; architecture `ddd` / `fsd`
 (peers — pick one); stack `python` / `fastapi` / `javascript` / `typescript` /
 `vuejs`.
 
-### Composition: CORE + overlays
+`language` is a BCP-47-ish tag validated for **shape** rather than against a
+closed list — the set of languages a team writes in is not Beadloom's to
+enumerate. It selects a `<name>.<lang>.md.txt` fragment in every layer, and a
+localisation that has not shipped falls back to the default *and says so*
+(BDL-UX #136).
 
-`role_composer.compose_role(role, architecture=…, stack=…)` assembles a role
-file deterministically, in a fixed order:
+`overlays.suppress` entries each need `rule`, `reason` and `until`; an entry
+missing any of them is a configuration error. An unknown key under `overlays` is
+rejected too, with the reminder that project *additions* are files under
+`.beadloom/flow/` and never keys here. See the
+[Project Overlays guide](project-overlays.md).
 
-1. **CORE** — the universal, stack/tool-neutral role protocol (the single source
-   of truth).
+### Composition: CORE + overlays + the project layer
+
+`composer.compose(kind, name, config=…, project_root=…)` assembles every flow
+artifact deterministically, in a fixed order. `role_composer.compose_role(...)`
+is the roles-shaped door onto it, so roles, slash commands and `CLAUDE.md` share
+one implementation instead of three:
+
+1. **CORE** — the universal, stack/tool-neutral fragment (the single source of
+   truth).
 2. one **ARCHITECTURE** overlay — `ddd` or `fsd` (peers): the methodology's
    layer/boundary rules + the `# beadloom:` annotation vocabulary. FSD is at
    **parity** with DDD (every role has both overlays).
 3. one+ **STACK** overlays in **sorted** order: stack idioms + lint/type/test
    commands.
+4. the **PROJECT** fragment from the adopting repository —
+   `.beadloom/flow/roles/<role>.md`, `.beadloom/flow/commands/<cmd>.md` or
+   `.beadloom/flow/claude/CLAUDE.md`.
 
 A missing per-role overlay fragment contributes nothing (overlays are additive
 and never break an unrelated role). Because the stack overlays are sorted, the
-same `(role, architecture, stack)` always yields **byte-identical** output — the
-determinism the drift-guard relies on.
+same `(kind, name, config, project layer)` always yields **byte-identical**
+output — the determinism the drift-guard relies on. A composed artifact is a
+function of its inputs and of nothing else: not of the clock, not of ambient
+state. That is the entire licence for `config-check` to compare against a
+composition rather than against stored bytes.
+
+**The core shrank because of layer 4.** Measured on the shipped artifact: the
+core `CLAUDE.md` went from **440 to 376 lines**, with each removed line mapped to
+a replacement — the Quick Reference and Agent Checklist sections restated §0
+command for command, and the Python anti-patterns and the `uv run pytest` /
+`ruff` / `mypy` block moved into the Python stack overlay, where a TypeScript
+adopter no longer meets them. A `ddd` + `python` project composes **406** lines;
+a project selecting neither gets 376.
 
 ### Per-tool adapters
 
@@ -175,7 +223,8 @@ writer: it composes each role once and writes a per-tool adapter set for every
 configured tool, with each adapter body **exactly** `compose_role(...)`:
 
 - **claude** → `.claude/agents/<role>.md` (the slash-command set in
-  `.claude/commands/*` is vendored separately and is not regenerated here).
+  `.claude/commands/*` composes through the same `compose()` and is written by
+  the scaffold, not here).
 - **cursor** → `.cursor/agents/<role>.md` (same composed body) plus a thin
   `.cursor/rules/beadloom-flow.md` orchestrator pointer — the
   coordinator-as-Cursor-mode entry point, so Cursor runs the same flow at parity
@@ -195,24 +244,41 @@ overrides the corresponding `flow.yml` field; fields neither flagged nor present
 fall back to the defaults (`claude` / `ddd` / a stack auto-detected from the
 repo's source-file extensions). It echoes the resolved
 `architecture / stack / tools`, writes every configured tool's adapter set, then
-drops the vendored slash commands + the per-project CLAUDE.md.
+composes the slash commands and `CLAUDE.md`. A file Beadloom wrote and nobody
+touched is recomposed; a hand-edited one is **skipped** and reported
+(`Skipped .claude/commands/<name>.md (hand-edited; use --force)`); `--force`
+overwrites regardless.
 
-### Roles are composer-owned
+> **Write a `.beadloom/flow.yml` before you rely on the result.** Without one,
+> the command composes the role adapters from the auto-detected stack while
+> `config-check` expects the plain vendored role files. Measured on a fresh
+> TypeScript project: `config-check` exits 1 with four errors immediately after a
+> clean scaffold, and adding a `flow.yml` takes it to rc 0 (BDL-UX #187).
 
-Once a `flow.yml` exists, the **composer owns** `.claude/agents/*` and
-`.cursor/agents/*`. Do not hand-edit a role adapter: `config-check` byte-compares
-every existing `<tool>/agents/<role>.md` against the freshly recomposed body and
-flags a hand-edit, a stale CORE, or a stale overlay as drift.
+### Composed artifacts are Beadloom's; the project layer is yours
+
+Once a `flow.yml` exists, the **composer owns** the composed bodies —
+`.claude/agents/*`, `.cursor/agents/*`, `.claude/commands/*` and
+`.claude/CLAUDE.md`. Do not hand-edit them: `config-check` compares each against
+the freshly recomposed body and reports a hand edit, a stale CORE or a stale
+overlay. Put your project's own text in `.beadloom/flow/` instead — the
+[Project Overlays guide](project-overlays.md) covers adding it and migrating an
+edit you already made.
 
 ```bash
-beadloom config-check [--project DIR]         # exit 1 on drift, 0 when clean
-beadloom config-check --fix [--project DIR]   # recompose drifted adapters + restore
+beadloom config-check [--project DIR]         # exit 1 on blocking drift, 0 when clean
+beadloom config-check --fix [--project DIR]   # recompose what Beadloom owns
 ```
 
 `config-check --fix` recomposes every configured tool's adapter set from CORE +
-overlays (and re-drops the vendored commands + CLAUDE.md auto-regions). An
-**invalid** `flow.yml` is itself reported as drift; an **absent** one is not (a
-repo may never adopt the configurator — the composer drift-check is then a
+overlays and re-runs the scaffold's **non-forcing** path for the commands and
+`CLAUDE.md`, so a hand edit there survives it (BDL-UX #151). It does **not** yet
+survive on a role adapter: `refresh_composed_adapters` rewrites those
+unconditionally and the edit is lost, one line after the check said it would not
+be rewritten (BDL-UX #186). Move the text into the project layer first.
+
+An **invalid** `flow.yml` is itself reported as drift; an **absent** one is not
+(a repo may never adopt the configurator — the composer drift-check is then a
 no-op).
 
 > **Known limitation — orphaned adapters.** The composed-adapter drift-check
@@ -350,29 +416,36 @@ second harness inherits it instead of re-implementing it.
   overlays for each configured tool (see [the configurator](#the-role-configurator-bdl-052));
   `.cursor/agents/*` plus the Cursor orchestrator pointer when `cursor` is
   configured.
-- `.claude/commands/{coordinator,task-init,checkpoint,templates}.md` — vendored
-  byte-identical.
+- `.claude/commands/{coordinator,task-init,checkpoint,templates}.md` — **composed**
+  from the same four layers, with the project fragment at
+  `.beadloom/flow/commands/<cmd>.md`.
 - `.claude/hooks/beadloom-guard.sh` plus one `PreToolUse` entry per guard in
   `.claude/settings.json` — the [flow-guard](#flow-guards-bdl-061-s1) binding.
   Registration is a **merge**: existing hooks survive, re-running adds only what
   is missing, and a `settings.json` that cannot be parsed is reported and left
   untouched.
-- `.claude/CLAUDE.md` — the base file (only when absent, or with `--force`), then
-  its `project-info` auto-region is regenerated for **this** project via the same
-  `refresh_claude_md` machinery `setup-rules --refresh` uses. The scaffolded
-  CLAUDE.md version comes from Beadloom's own `__version__` (BDL-UX #92).
+- `.claude/CLAUDE.md` — **composed** like the rest, with the project fragment at
+  `.beadloom/flow/claude/CLAUDE.md`, then its `project-info` and `doc-language`
+  auto-regions are regenerated for **this** project via the same
+  `refresh_claude_md` machinery `setup-rules --refresh` uses. The version bullet
+  in `project-info` still comes from Beadloom's own `__version__` rather than
+  from the target project, so it is false for every adopter (BDL-UX #183).
+- an ignore block appended once to the project's `.gitignore`, naming Beadloom's
+  generated working set under `.beadloom/` — the same whole-set call
+  `beadloom init` makes, repeated here for a repository initialised by an older
+  release. Written once and never rewritten, so deleting a line is permanent.
 
-**Idempotent.** Re-running re-drops the composed adapters + vendored commands and
-re-refreshes the auto-regions; a file that already matches is left alone. A
-hand-edited *command* is skipped (reported as such); `--force` overwrites it.
-Composed role adapters are owned by the configurator — re-running recomposes
-them. User prose outside the CLAUDE.md auto-regions is never touched.
+**Idempotent.** Re-running recomposes what Beadloom wrote and re-refreshes the
+auto-regions; a file that already matches is left alone. A hand-edited *command*
+or `CLAUDE.md` is skipped and reported; `--force` overwrites it. Composed role
+adapters are owned by the configurator — re-running recomposes them.
 `--project DIR` targets a different repo root (default: current directory).
 
 `config-check` (the AgentConfigAsCode freshness gate) keeps all of this honest —
-it byte-checks the composed adapters, the vendored commands, and the CLAUDE.md
-auto-regions; `config-check --fix` restores them. See
-[Roles are composer-owned](#roles-are-composer-owned) above.
+it compares each composed artifact against its composition, classifies the result
+against the flow manifest, and reports the project layer that is in effect. See
+[Composed artifacts are Beadloom's](#composed-artifacts-are-beadlooms-the-project-layer-is-yours)
+above and the [Project Overlays guide](project-overlays.md).
 
 ## The four MCP process-tools
 
@@ -512,7 +585,11 @@ This is stated deliberately, not glossed over:
 - [AI tech-writer guide](./ai-techwriter.md) — the PR-triggered doc-refresh loop on the trunk-based model.
 - [MCP server](../services/mcp.md) — the full tool catalog (18 tools).
 - [Onboarding domain](../domains/onboarding/README.md) — the scaffold + config-sync internals.
+- [Project Overlays guide](./project-overlays.md) — the project layer, `overlays.suppress`, and migrating a hand-edited vendored file.
 - [Flow Config SPEC](../domains/onboarding/features/flow-config/SPEC.md) — `.beadloom/flow.yml` + the `FlowConfig` loader/validator.
+- [Flow Composer SPEC](../domains/onboarding/features/flow-composer/SPEC.md) — the four layers behind roles, slash commands and `CLAUDE.md`.
+- [Flow Manifest SPEC](../domains/onboarding/features/flow-manifest/SPEC.md) — the five states that tell Beadloom's own output from a hand edit.
+- [Config Check SPEC](../domains/onboarding/features/config-check/SPEC.md) — severities, the ownership boundary, and what is still not checked.
 - [Flow Guards SPEC](../domains/application/features/flow-guards/SPEC.md) — the guard primitive: verdicts, strictness, exclusions, liveness, and the enforcement surface.
 - [Guard Hooks component](../domains/onboarding/components/guard-hooks/DOC.md) — the emitted hook adapter and its registration.
 - [Role Composer SPEC](../domains/onboarding/features/role-composer/SPEC.md) — CORE + architecture + stack overlay composition.

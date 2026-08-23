@@ -10,10 +10,10 @@ Each feature has its own `SPEC.md`:
 - **[Doc Generator](features/doc-generator/SPEC.md)** — doc skeletons + polish data from the graph (`beadloom docs generate` / `polish`).
 - **[Config Check](features/config-check/SPEC.md)** — AgentConfigAsCode drift detection (`beadloom config-check`).
 - **[Branch Protection](features/branch-protection/SPEC.md)** — strict trunk-based `main` protection (`beadloom setup-branch-protection`).
-- **[Agentic Flow Setup](features/agentic-flow-setup/SPEC.md)** — scaffold the multi-agent dev flow 1:1 (`beadloom setup-agentic-flow`).
+- **[Agentic Flow Setup](features/agentic-flow-setup/SPEC.md)** — compose and write the multi-agent dev flow — roles, slash commands and `CLAUDE.md` (`beadloom setup-agentic-flow`).
 - **[AI Tech-Writer Setup](features/ai-techwriter-setup/SPEC.md)** — scaffold the packaged AI tech-writer harness (`beadloom setup-ai-techwriter`).
-- **[Flow Config](features/flow-config/SPEC.md)** — `.beadloom/flow.yml` schema + loader (`FlowConfig`) — declares tools/architecture/stack/quality for the role configurator.
-- **[Role Composer](features/role-composer/SPEC.md)** — deterministic role assembly from CORE + architecture + stack overlays (`compose_role`).
+- **[Flow Config](features/flow-config/SPEC.md)** — `.beadloom/flow.yml` schema + loader (`FlowConfig`) — declares tools/architecture/stack/quality, the document `language`, and `overlays.suppress`.
+- **[Role Composer](features/role-composer/SPEC.md)** — the roles-shaped door onto the composer: CORE + architecture + stack overlays + the project fragment (`compose_role`).
 - **[Role Adapters](features/role-adapters/SPEC.md)** — per-tool role adapter sets (`.claude/agents/*`, `.cursor/agents/*`) from composed roles (`generate_adapters`).
 - **[Flow Composer](features/flow-composer/SPEC.md)** — `compose(core, architecture, stack, project)`, the one layered assembly behind role files, slash commands and `CLAUDE.md`; the project layer lives in `.beadloom/flow/`.
 - **[Flow Suppression](features/flow-suppression/SPEC.md)** — a declared stand-down of a shipped core rule: reason + exit condition mandatory, appended as a visible notice rather than applied as a deletion.
@@ -49,6 +49,34 @@ part of this node's checked pairs: **docs.py** (the whole module — `docs gener
 command body). The behaviour lives in the modules above; what lives here is the option surface and
 the printed shape — which is why a change to either makes this document stale.
 
+### The composed flow, and the project layer
+
+Since BDL-061 S3 every flow artifact this domain writes is composed rather than copied.
+`composer.compose(kind, name, ...)` concatenates four layers in a fixed order — the shipped
+stack-neutral CORE, one architecture overlay, each stack overlay sorted, and the adopting
+repository's own fragment under `.beadloom/flow/` — for three kinds: `roles`
+(`.claude/agents/*`, `.cursor/agents/*`), `commands` (`.claude/commands/*`) and `claude`
+(`.claude/CLAUDE.md`).
+
+Three consequences shape the rest of the domain:
+
+- **The core shrank because layer 4 exists.** Measured: `440 -> 376` lines, each removed line
+  mapped to a replacement — two sections that restated §0 command for command, and the Python
+  anti-patterns plus the `uv run pytest` / `ruff` / `mypy` block, which moved into the Python
+  stack overlay. A project composing no stack overlay keeps the 376-line core, and its critical
+  rules name no Python tooling.
+- **`config-check` verifies the composition RESULT, not file bytes.** Byte-guarding against a
+  fixed template makes extension impossible: any project addition is drift and `--fix` deletes
+  it. Verifying the result keeps drift detection while making the project layer possible
+  (BDL-UX #139, #152).
+- **The composition is a function of its inputs and of nothing else.** No clock, no ambient
+  state. That property is the entire licence for the previous point, and `flow_suppression`
+  gave up rendering an expiry verdict into the bytes to keep it.
+
+Adopter-facing procedure — adding a fragment, declaring a suppression, migrating a
+hand-edited vendored file — is in the [Project Overlays
+guide](../../guides/project-overlays.md).
+
 ### CLI Commands
 
 ```bash
@@ -65,10 +93,11 @@ beadloom prime           # compact project context for AI agent injection
 beadloom setup-rules     # create IDE adapter files (.cursorrules, etc.)
 beadloom setup-rules --refresh           # refresh auto-managed CLAUDE.md sections
 beadloom setup-rules --refresh --dry-run # preview changes without writing
-beadloom setup-agentic-flow              # scaffold the packaged multi-agent dev flow into .claude/
-beadloom setup-agentic-flow --force      # overwrite hand-edited scaffolded flow files
-beadloom config-check                    # detect agent-config drift (exit 1 on drift)
-beadloom config-check --fix              # regenerate drifted artifacts (+ restore flow files), then re-check
+beadloom setup-agentic-flow              # compose the multi-agent dev flow into .claude/
+beadloom setup-agentic-flow --tool claude --architecture ddd --stack python,fastapi
+beadloom setup-agentic-flow --force      # overwrite hand-edited composed flow files
+beadloom config-check                    # detect agent-config drift (exit 1 on error-severity drift)
+beadloom config-check --fix              # recompose what Beadloom owns, then re-check
 beadloom setup-branch-protection --repo OWNER/NAME            # protect main: PR required + consolidated ci.yml checks required (gate/tests (3.10..3.13)/tests-locale (C, en_US.ISO-8859-1)/site-build/ai-techwriter) (GitHub)
 beadloom setup-branch-protection --repo OWNER/NAME --dry-run  # print the gh api call + payload without touching GitHub
 beadloom snapshot save [--label LABEL]           # save current graph state
@@ -90,9 +119,10 @@ opened, and both of those used to read as a clean bill of health (BDL-UX #173).
 - One summary line gives the fraction and names the shortfall. Measured on this repository:
   `2 of 9 declared fact(s) verified; NOT VERIFIED: cli_command_count, edge_count,
   framework_count, language_count, node_count, rule_type_count, test_count`.
-- A second line publishes the scan surface — `46 document(s) scanned, 33 not read, 1 scanned for
+- A second line publishes the scan surface — `48 document(s) scanned, 36 not read, 1 scanned for
   versions only (file-type heuristic)` on this repository — and `--verbose` names each excluded
-  document with the pattern that skipped it.
+  document with the pattern that skipped it. Those two numbers move whenever a document is added
+  or an exclude pattern changes; they describe a run, not a property of the tool.
 - `--json` gains `coverage`, `unverified_facts` and `scan_surface` beside the existing arrays,
   and four counts under `summary` (`declared_fact_count`, `verified_fact_count`,
   `unverified_count`, `unreadable_count`). `--fail-if` accepts `unverified>N` / `unverified>=N`
@@ -106,7 +136,7 @@ Module `src/beadloom/onboarding/scanner/` (package; public surface re-exported f
 - `ClusterEntry` -- TypedDict (`files`, `children`, `source_dir`); value type for `_cluster_with_children()` output, consumed by `_quick_import_scan()`
 - `scan_project(project_root) -> ScanResult` -- scan project structure, return manifests, source_dirs, file_count, languages
 - `classify_doc(doc_path)` -- classify a markdown document (adr, feature, architecture, other)
-- `bootstrap_project(root, *, preset_name=None)` -- auto-generate graph from code structure (incl. root node, rules, MCP config, AGENTS.md, IDE rules)
+- `bootstrap_project(root, *, preset_name=None)` -- auto-generate graph from code structure (incl. root node, rules, MCP config, AGENTS.md, IDE rules). Also calls `ensure_ignore_block`, and the result dict carries `ignore_added` / `ignore_skipped_reason` so the caller can report the `.gitignore` write instead of performing it silently
 - `import_docs(root, docs_dir)` -- classify and import existing documentation
 - `generate_rules(nodes, edges, project_name, rules_path)` -- generate architecture rules with empty matcher for hierarchy validation
 - `setup_mcp_auto(project_root)` -- auto-detect editor and create MCP config
@@ -142,8 +172,8 @@ Module `src/beadloom/onboarding/doc_generator.py`:
 - `format_polish_text(data)` -- render polish data as multi-line human-readable text with symbol drift, routes, activity, tests
 
 Module `src/beadloom/onboarding/config_sync.py`:
-- `ConfigDrift(file, reason)` -- frozen dataclass describing one drifted agent-config artifact
-- `check_config_drift(project_root, conn)` -- regenerate AGENTS.md + CLAUDE.md auto-sections + IDE adapters in memory and diff vs disk; returns sorted `list[ConfigDrift]` (auto-managed regions only)
+- `ConfigDrift(file, reason, severity="error", remediation=None)` -- frozen dataclass describing one drifted agent-config artifact; `severity` is `"error"` (blocks the Gate) or `"warn"` (printed, does not block), `remediation` is the concrete next move or `None`
+- `check_config_drift(project_root, conn)` -- re-run the same generators in memory, compare every composed artifact against its composition, and classify the result against the flow manifest; returns a sorted `list[ConfigDrift]` covering the AGENTS.md and CLAUDE.md auto-regions, the IDE adapters, the composed roles/commands/CLAUDE.md, the flow config, the project layer in effect and suppression liveness
 
 Module `src/beadloom/onboarding/ai_techwriter_setup.py`:
 
@@ -154,14 +184,69 @@ Module `src/beadloom/onboarding/ai_techwriter_setup.py`:
 - `PLATFORMS` -- supported CI platforms (`github`, `gitlab`)
 
 Module `src/beadloom/onboarding/agentic_flow_setup.py`:
-- `scaffold(project_root, *, force=False)` -- scaffold the packaged dev flow (vendored `agents/*` + `commands/*` byte-identical + CLAUDE.md auto-regions per-project); idempotent; returns `ScaffoldResult`
-- `sync_agentic_flow(live_claude_root)` -- refresh the packaged `.md.txt` assets from the live `.claude/` (drift guard; asserted byte-for-byte in tests)
+- `scaffold(project_root, *, force=False, include_agents=True)` -- scaffold the packaged dev flow: the slash commands and `CLAUDE.md` are **composed** and each write is fingerprinted in the flow manifest; a file Beadloom wrote and nobody touched is recomposed, a hand-edited one is skipped and reported. Idempotent; returns `ScaffoldResult`. `include_agents=False` leaves the role adapters to `generate_adapters`, which is how `beadloom setup-agentic-flow` calls it
+- `composed_command(name, config, project_root)` / `composed_claude_md(config, project_root, *, project_name)` -- the composed body of one slash command / of `CLAUDE.md`, for the scaffold and for `config-check` to compare against; the latter substitutes the target's detected name for the core's neutral `__BEADLOOM_PROJECT_NAME__` token
+- `orphaned_flow_files(project_root)` -- report files a PRIOR layout left behind, each with the exact `rm -f` command; never deletes anything (BDL-UX #137)
+- `sync_agentic_flow(live_claude_root)` -- refresh the packaged **agent** assets from the live `.claude/agents/`. It no longer snapshots `CLAUDE.md` or the commands: writing our own file back into the shipped template pinned the distributed artifact to this project's local text (BDL-UX #177)
 - `templates_root()` / `vendored_flow_root()` -- locate the packaged scaffold assets
-- `AGENT_FILES` / `COMMAND_FILES` -- the vendored role + command file stems
-- `ScaffoldResult` -- dataclass: files written/skipped + CLAUDE.md path + changed sections
+- `AGENT_FILES` / `COMMAND_FILES` -- the role + slash-command file stems
+- `SUPERSEDED_COMMAND_FILES` -- the stems an older layout left in `.claude/commands/` (the four roles + `epic-init`)
+- `ScaffoldResult` -- dataclass: files written/skipped + CLAUDE.md path + changed sections + `orphans` + `migration_notes`
 
-Module `src/beadloom/onboarding/config_sync.py` (BDL-048 additions):
-- `refresh_agentic_flow_files(project_root)` -- re-drop the vendored agentic-flow files into a scaffolded repo (the `config-check --fix` companion; gated on the flow already being present)
+> `ScaffoldResult.orphans` and `.migration_notes` are populated and have **no caller**: `beadloom setup-agentic-flow` prints neither, so the orphan list and the "move your additions to `.beadloom/flow/…`" guidance reach a library caller and not the person running the command (BDL-UX #188).
+
+Module `src/beadloom/onboarding/config_sync.py` (the `config-check --fix` companions):
+- `refresh_agentic_flow_files(project_root)` -- recompose the scaffolded flow files through the scaffold's own **non-forcing** path, so a hand-edited command or `CLAUDE.md` survives `--fix` (BDL-UX #151); gated on the flow already being present
+- `refresh_composed_adapters(project_root)` -- recompose every configured tool's role adapter set from CORE + overlays + the project layer. Unlike the function above this one writes **unconditionally**, so a hand edit in `.claude/agents/<role>.md` is deleted by `--fix` one line after `config-check` reported that it would not be rewritten (BDL-UX #186). A no-op when `flow.yml` is absent or invalid
+
+Module `src/beadloom/onboarding/composer.py` (BDL-061 S3):
+- `compose(kind, name, *, config, project_root=None)` -> `Composition` -- the one layered assembly for all three artifact kinds: CORE -> one architecture overlay -> each stack overlay sorted -> the project fragment
+- `Composition` -- `text` (the composed body), `fragments` (ordered `LayerFragment`s, each labelled `core` / `architecture:<a>` / `stack:<s>` / `project`), `notes` (why a layer could not do what was asked -- an unshipped localisation is an audible skip, never a silent English fallback) and `suppression_notice`
+- `ArtifactKind` -- where a kind's CORE fragment and overlay root live
+- `templates_dir()` / `project_fragment_path(kind, name, project_root)`
+- `ARTIFACT_KINDS` (`roles`, `commands`, `claude`) / `CLAUDE_ARTIFACT_NAME` / `COMPOSED_MARKER` (`<!-- beadloom:composed`) / `PROJECT_FLOW_DIRNAME` (`.beadloom/flow`)
+
+Module `src/beadloom/onboarding/flow_suppression.py` (BDL-061 S3):
+- `FlowSuppression(rule, reason, until)` with `.expired(today=None)` and `.describe()` -- `describe()` names the rule, the reason and the exit condition and says nothing about today, so the composition stays a function of its inputs
+- `build_suppression(entry)` / `build_suppressions(value)` -- validate `overlays.suppress`; a missing `rule`, `reason` or `until` raises `FlowSuppressionError`
+- `render_suppression_notice(suppressions)` -> `str` -- the notice appended to every composed artifact; empty when there are none, so a project that suppresses nothing gets byte-identical output
+- `composed_headings(texts)` / `suppresses_nothing(suppression, headings)` -- the dead-declaration check; `rule` is read as a `/`-separated heading path over the whole composed corpus
+- `expired_suppressions(suppressions, *, today=None)` -- expiry as a check-time finding
+- `SUPPRESSION_KEYS` (`rule`, `reason`, `until`) / `FlowSuppressionError`
+
+Module `src/beadloom/onboarding/flow_manifest.py` (BDL-061 S3):
+- `ArtifactState` -- `CLEAN` / `STALE` / `HAND_EDITED` / `MISSING` / `UNVERIFIED`
+- `classify(on_disk, expected, recorded, alternates, accounted)` -> `ArtifactState` -- `alternates` names other bodies Beadloom itself could have written, so a repo predating the manifest that was never edited reads `stale`; `accounted` is true when the project keeps a usable manifest or the artifact carries the provenance stamp, and a body then absent from the record was not written by us
+- `state_of(...)` / `digest(text)` / `record(project_root, entries)`
+- `read_manifest(project_root)` -> `(entries, usable)` -- the map and whether anything accounts for it, together; `load_manifest(project_root)` is the thin wrapper returning only the map
+- `FLOW_MANIFEST_RELPATH` -- `.beadloom/flow-manifest.json`, generated state that belongs in git
+
+Module `src/beadloom/onboarding/flow_config.py`:
+- `FlowConfig` -- frozen: `tools`, `architecture`, `stack`, `quality`, `language`, `suppressions`
+- `build_flow_config(data)` / `load_flow_config(project_root)` / `load_flow_config_or_default(project_root)` -- the last falls back when the file is absent but still raises on a present-but-bad one
+- `detect_stack(project_root)` -- infer a default stack from file extensions
+- `resolve_flow_config(project_root, *, tools, architecture, stack)` -- flag over `flow.yml` over default, carrying `language` and the suppressions through verbatim because they are project policy rather than a per-run choice
+- `SUPPORTED_TOOLS` / `SUPPORTED_ARCHITECTURES` / `SUPPORTED_STACKS` / `SUPPORTED_QUALITY` / `DEFAULT_LANGUAGE` / `FLOW_CONFIG_RELPATH` / `FlowConfigError`
+
+Module `src/beadloom/onboarding/role_composer.py`:
+- `compose_role(role, *, architecture, stack, language, suppressions, project_root)` -- the roles-shaped door onto `composer.compose("roles", ...)`
+- `compose_all_roles(config, project_root=None)` -- compose every role; omitting `project_root` yields the shipped-only composition, which is the drift baseline for a repo with no project layer
+- `roles_templates_root()` / `ROLE_NAMES` (`dev`, `test`, `review`, `tech-writer`)
+
+Module `src/beadloom/onboarding/role_adapters.py`:
+- `generate_adapters(config, project_root)` -> `AdapterResult` -- compose each role once and write every configured tool's adapter set, recording each write in the flow manifest; idempotent, and the single writer the drift-guard verifies against
+- `AdapterResult` -- `agents` (tool -> paths written) and `extra` (the Cursor orchestrator pointer)
+- `cursor_rules_relpath()` / `cursor_rules_body()` / `TOOL_AGENT_DIRS`
+
+Module `src/beadloom/onboarding/guard_hooks.py` (BDL-061 S1):
+- `scaffold_guard_hooks(project_root, *, guard_names)` -> `GuardHookResult` -- write `.claude/hooks/beadloom-guard.sh` and register one `PreToolUse` entry per guard in `.claude/settings.json`; registration is a merge, never a rewrite, and an unparseable settings file is reported in `settings_skipped_reason` and left untouched
+- `hook_command(guard_name)` -- the `$CLAUDE_PROJECT_DIR`-rooted command string
+- `GUARD_HOOK_RELPATH` / `SETTINGS_RELPATH` / `HOOK_EVENT` / `EDIT_MATCHER`
+
+Module `src/beadloom/onboarding/ignore_block.py` (BDL-061.35):
+- `ensure_ignore_block(project_root)` -> `IgnoreBlockResult(path, added, skipped_reason)` -- append Beadloom's generated working set to the project's `.gitignore`, once; nothing is written outside a git working tree and no pattern the project already declares is duplicated
+- `GENERATED_WORKING_SET` -- the `IgnoreEntry(pattern, why)` list; the `why` is rendered above its pattern, because a bare pattern in someone else's ignore file is indistinguishable from a mistake
+- `BLOCK_MARKER` / `IGNORE_RELPATH`
 
 Module `src/beadloom/onboarding/branch_protection.py` (BDL-049):
 - `build_protection_payload(*, status_check_contexts=DEFAULT_STATUS_CHECK_CONTEXTS)` -- build the GitHub branch-protection request body (PR required, the consolidated `ci.yml` checks required under `strict`, `enforce_admins: true` → strict trunk-based even for admins, 0 required reviews, `restrictions: null` → owner NOT locked out, can self-merge once the pipeline is green)
@@ -176,3 +261,10 @@ Module `src/beadloom/onboarding/config_reader.py`:
 ## Testing
 
 Tests: `tests/test_onboarding.py`, `tests/test_presets.py`, `tests/test_doc_generator.py`, `tests/test_cli_docs.py`, `tests/test_integration_onboarding.py`, `tests/test_bead06_misc_fixes.py`, `tests/test_config_reader.py`, `tests/test_auto_link_docs.py`, `tests/test_init_doc_generation.py`, `tests/test_snapshot.py`, `tests/test_cli_snapshot.py`, `tests/test_refresh_claude_md.py`, `tests/test_config_sync.py`, `tests/test_cli_config_check.py`, `tests/test_cli_setup_ai_techwriter.py`, `tests/test_cli_setup_agentic_flow.py`, `tests/test_branch_protection.py`
+
+The composition and its guard (BDL-061 S3): `tests/test_flow_composition.py`,
+`tests/test_role_configurator.py`, `tests/test_role_configurator_hardening.py`,
+`tests/test_s3_config_check_residual.py` (the adversarial half — the guard cannot be
+silently disabled, a suppression must earn its place, an overlay survives an upgrade of the
+CORE underneath it), `tests/test_bead57_config_check_sight.py`, `tests/test_ignore_block.py`,
+`tests/test_guard_hook_adapter.py`.

@@ -35,6 +35,52 @@
 
 ## Open Issues
 
+189. [2026-08-23] [MEDIUM] `beadloom sync-update <doc> --check` WRITES — a check flag that re-baselines the thing it was asked to report on
+
+    **Severity:** medium (it silences the warning it was asked to describe, and it is the defect class this epic exists to remove)
+    **Command:** `beadloom sync-update <doc-path> --check`
+    **Measured** on this repository while inspecting surface drift before deciding whether to re-attest. `beadloom sync-update docs/services/cli.md --check` printed `Re-baselined reference doc docs/services/cli.md.` and the following `sync-check --json` reported **6** surface-drift references where the previous run reported **7**. The flag asked for a report and got a write.
+    **Cause:** `services/commands/docsync.py` — in the non-`--yes` path the reference-doc branch (`mark_reference_synced`) is reached at line ~983, *before* the `if check_only:` guard at line ~994. `--check` is therefore honoured only when the argument resolves to symbol pairs; when it resolves to a reference doc's path, the branch that handles it never sees the flag.
+    **Why it matters beyond the one file:** a reviewer or an agent inspecting drift with `--check` — the flag whose whole contract is "tell me, do not change anything" — destroys the evidence it was inspecting, and the next `sync-check` reads clean for a reason nobody recorded. That is BDL-UX #147 (`lint` mutating the index) in a different command, and #163 (re-attesting can silence the check without evidence) reached by accident rather than by choice.
+    **Expected:** move the `check_only` guard above the reference-doc branch, and have `--check` on a reference doc print its `watches` set and its drift status instead of re-baselining it.
+    **Related:** #147 (a check that writes what it checks), #163 (re-attestation without evidence), BDL-057 (the reference surface).
+
+188. [2026-08-23] [HIGH] The orphan report and the migration guidance are computed on every scaffold and printed by nothing — NO CALLER, NO CAPABILITY
+
+    **Severity:** high (two shipped criteria are met by the library and not by the command anybody runs)
+    **Command:** `beadloom setup-agentic-flow`
+    **Measured** on a temp project carrying a pre-BDL-048 layout (`.claude/commands/{dev,test,review,tech-writer,epic-init}.md`) and a hand-edited `.claude/commands/coordinator.md`. `orphaned_flow_files()` returns five entries, each naming the file, where the role now lives, and the exact `rm -f` command. `ScaffoldResult.migration_notes` returns the note naming `.beadloom/flow/commands/coordinator.md` as the place the edit belongs. The command's own output loop covers only `commands_written`, `commands_skipped` and `claude_md`, so **neither list reaches stdout**. `grep -rn 'orphans\|migration_notes\|orphaned_flow_files' src/` finds no reader anywhere outside `agentic_flow_setup.py` itself.
+    **What the user sees instead:** `Skipped .claude/commands/coordinator.md (hand-edited; use --force)` — which advises the destructive flag and never mentions the project layer, the one place the edit could safely go.
+    **Why it matters:** BDL-UX #137 is recorded as closed by the orphan report, and BDL-061 S3's criterion "a hand-edited vendored file is reported with migration guidance" is recorded as met. Both claims are true of `scaffold()` and false of `beadloom setup-agentic-flow`. This is CONTEXT's own standing rule NO CALLER, NO CAPABILITY: a function nothing calls reads as "the feature exists".
+    **Expected:** print the orphan list (with its `rm -f` commands) and the migration notes after the write summary, the way `hooks.guards_registered` and `ignore.added` are printed.
+    **Related:** #137 (the orphan report), #151 (the destructive `--fix` this guidance replaced), #186.
+
+187. [2026-08-23] [MEDIUM] A virgin `setup-agentic-flow` leaves `config-check` red — four errors on a repository nobody has touched
+
+    **Severity:** medium (it is a first-contact experience, and it is the exact "green project goes red" shape the slice is built to avoid)
+    **Command:** `beadloom setup-agentic-flow` then `beadloom config-check`
+    **Measured** on a fresh TypeScript project (`package.json`, one `.ts` file, `beadloom init --yes --mode bootstrap`, then `setup-agentic-flow` with no flags). `config-check` exits **1** with four errors, one per role adapter: *"scaffolded agentic-flow file drifted from the shipped template … this repo has no .beadloom/flow.yml, so the role files are the plain vendored scaffold"*. Writing a three-key `.beadloom/flow.yml` and re-running gives `Agent-config in sync — no blocking drift`, rc **0**.
+    **Cause:** `setup-agentic-flow` resolves the config through `resolve_flow_config` (auto-detecting `stack: typescript`) and composes the role adapters from it, but never **writes** a `flow.yml`. `config-check` without one takes the no-flow.yml branch and expects the plain vendored role files, which the composed ones are not.
+    **Why it is not cosmetic:** the command's own closing advice is *"1) `beadloom config-check` keeps the scaffolded flow + CLAUDE.md auto-regions honest"*. Following it immediately produces four errors on an untouched repository, with a remediation that tells the reader to add a `flow.yml` — which is the right answer, arrived at through a failure.
+    **Expected:** either persist the resolved selection as `.beadloom/flow.yml` on scaffold (it is the file the whole feature is configured by, and the command already knows every value), or have `config-check` compare against the same resolution the scaffold used. The first is the smaller change and makes the configuration visible.
+    **Related:** #184 (the same command family answering an expected state with a failure shape), #186.
+
+186. [2026-08-23] [HIGH] 🔴 `config-check --fix` deletes a hand edit in a role adapter — one line after the check printed "It will NOT be rewritten"
+
+    **Severity:** high (it destroys unrecoverable user text, and it does so by following the command's own printed advice)
+    **Command:** `beadloom config-check` then `beadloom config-check --fix`
+    **Measured** by sha256 in a clean temp repository (`init` → `flow.yml` → `setup-agentic-flow`, then a four-line append to `.claude/agents/dev.md`):
+
+        scaffolded  999889b630259ffc5a46380f333c27f10603d6e640d30f63cf11cd8a41e5e748
+        edited      27a6ffbc81d249ac928001db2f6f3fd577f2792388b12c52eb3af585f521e7af
+        after --fix 999889b630259ffc5a46380f333c27f10603d6e640d30f63cf11cd8a41e5e748
+
+    **The contradiction is inside one command's output.** `config-check` reports: *"hand-edited: the body differs from the composition AND from what Beadloom last wrote. It will NOT be rewritten → move the additions to .beadloom/flow/roles/dev.md"*, and then closes with the generic *"Run `beadloom setup-rules --refresh` (or `config-check --fix`) to fix."* Doing what the last line says undoes what the line above promised.
+    **Cause:** `config_sync.refresh_composed_adapters` calls `generate_adapters` unconditionally. Its sibling `refresh_agentic_flow_files` was deliberately made non-forcing for the slash commands and `CLAUDE.md` (BDL-UX #151); the role-adapter path did not get the same treatment, and BDL-061 `.10`/`.11` measured the fixed path rather than this one.
+    **Why it is the sharpest of the three:** every other finding in this family is a message that is missing or wrong. This one is data loss, in the exact scenario BDL-UX #139 and #152 exist to end — a team putting its standing engineering practice in a role file.
+    **Expected:** `refresh_composed_adapters` must skip an adapter whose flow-manifest state is `hand_edited` (leaving the finding standing), and the generic remediation line must not name `--fix` when the findings include a hand edit.
+    **Related:** #151 (the destructive `--fix` this was supposed to have ended), #139, #152, #188.
+
 185. [2026-08-23] [LOW] SUSPECTED: a byte-identity assertion over a WAL-mode database may accuse the wrong thing — one occurrence, not attributable
 
     **Severity:** low, and deliberately filed as a SUSPICION rather than a defect
@@ -532,7 +578,7 @@
     **Expected:** (a) add a `language` field to `flow.yml` (a peer of `architecture`/`stack`), threaded into the composed/vendored docs so docs scaffold in the project's language; (b) make the templates' architecture/stack facts overlay-derived (DDD/FSD layer names; the project's Python from `pyproject.toml`) instead of the hardcoded "CLI → Core → Storage" / "3.10+"; or at minimum (c) make the templates composable (CORE + overlays) like the role agents, so they adapt per-project without breaking the drift-guard.
     **Workaround:** override the defaults at project level in CLAUDE.md (a project-level rule beats the vendored default).
 
-137. ~~[2026-06-18] [LOW] Cross-major flow re-init leaves orphaned command files and skips changed vendored commands as "hand-edited"~~ **CLOSED (BDL-061 S3, `.9`)** — the "at least a printed warning" option, plus the reason the surgical migration was needed in the first place. (a) `orphaned_flow_files()` reports every file a prior layout left in `.claude/commands/` — the four role files and `epic-init.md` — each with the exact `rm -f` command and, for a role, where it moved to; they are reported, never deleted. (b) A changed vendored command is no longer an undifferentiated "hand-edited; use --force": the flow manifest separates *stale* (Beadloom wrote it, the composition moved → recomposed in place) from *hand_edited* (reported with the `.beadloom/flow/commands/<name>.md` path, never rewritten), so a cross-major re-init recomposes what it owns without `--force`. (c) `--force` no longer clobbers a customised `CLAUDE.md` body either, because the customisation belongs in the project layer, which composes on top.
+137. ~~[2026-06-18] [LOW] Cross-major flow re-init leaves orphaned command files and skips changed vendored commands as "hand-edited"~~ **CLOSED (BDL-061 S3, `.9`)** — the "at least a printed warning" option, plus the reason the surgical migration was needed in the first place. (a) `orphaned_flow_files()` reports every file a prior layout left in `.claude/commands/` — the four role files and `epic-init.md` — each with the exact `rm -f` command and, for a role, where it moved to; they are reported, never deleted. (b) A changed vendored command is no longer an undifferentiated "hand-edited; use --force": the flow manifest separates *stale* (Beadloom wrote it, the composition moved → recomposed in place) from *hand_edited* (reported with the `.beadloom/flow/commands/<name>.md` path, never rewritten), so a cross-major re-init recomposes what it owns without `--force`. (c) `--force` no longer clobbers a customised `CLAUDE.md` body either, because the customisation belongs in the project layer, which composes on top. **Closure amended (BDL-061 `.12`, 2026-08-23): (a) is true of the LIBRARY and not of the command.** `orphaned_flow_files()` computes the list and `beadloom setup-agentic-flow` prints nothing from it — measured, no caller anywhere in `src/`. (b) and (c) hold as written. The unprinted half is re-opened as #188; this entry is left closed for the parts that shipped rather than reverted wholesale, because the mechanism is right and only its output is missing.
 
     **Severity:** low
     **Command:** `beadloom setup-agentic-flow` (on a repo scaffolded by an older major flow version)

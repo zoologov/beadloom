@@ -679,14 +679,16 @@ adopter upgrading into this release does not go red for a file scaffolded before
 the flow manifest existed. The clean line says which case it is —
 `Agent-config in sync — no blocking drift (N warning(s) — see above).`
 
-Re-runs the same `setup-rules --refresh` generator in memory and diffs its output against on-disk content for `.beadloom/AGENTS.md`, the auto-managed sections of `.claude/CLAUDE.md`, and present IDE adapter files. Checks ONLY auto-managed regions — editing user-authored prose (the AGENTS.md `custom` block, CLAUDE.md content outside the `auto-start`/`auto-end` markers) never trips it. Prints which file drifted, why, and the remediation (`beadloom setup-rules --refresh`); absent target files are skipped. `--fix` regenerates via the refresh path and re-checks. Delegates to `onboarding/config_sync.py:check_config_drift()`.
+Re-runs the same `setup-rules --refresh` generator in memory and diffs its output against on-disk content for `.beadloom/AGENTS.md`, the auto-managed sections of `.claude/CLAUDE.md`, and present IDE adapter files. For those three, only the auto-managed regions are compared — editing user-authored prose (the AGENTS.md `custom` block, CLAUDE.md content outside the `auto-start`/`auto-end` markers) never trips them. The composed artifacts are a separate check with its own rules, described below. Prints which file drifted, why, and the remediation; an absent target file is skipped unless the project adopted the flow, in which case it is `missing`. `--fix` regenerates via the refresh path and re-checks. Delegates to `onboarding/config_sync.py:check_config_drift()`.
 
 As of BDL-048, when a repo has the agentic flow scaffolded (`beadloom setup-agentic-flow`), `config-check` also drift-checks the **scaffolded flow files**. As of **BDL-061 S3** it checks them against their **composition result** rather than against fixed bytes: `.claude/CLAUDE.md`, each `.claude/commands/*` and each `.claude/agents/*` must equal `CORE + the flow.yml overlays + the project layer in .beadloom/flow/`. That is what makes a project extension legal — it is part of the expected output — while a change to a shipped fragment still differs from it and is reported.
 
 Two things this closed, both measured:
 
 - **The `CLAUDE.md` body was checked by nothing.** `config-check` diffed only the marker-bounded auto-regions, so on a freshly scaffolded project, appending a project-local paragraph, deleting the whole of section 7, and replacing the entire file with the single line `# gone` all returned zero drifts — and `beadloom ci` printed `config-check PASS: agent-config in sync` over it (BDL-UX #177).
-- **`--fix` used to delete hand edits.** It restored every divergent file byte-identical, with no diff and no confirmation, which is why a team's standing engineering practice could not live in a role adapter at all (BDL-UX #139, #152). It no longer rewrites a hand-edited file; it names `.beadloom/flow/<kind>/<name>.md` and leaves the edit where it is.
+- **`--fix` used to delete hand edits.** It restored every divergent file byte-identical, with no diff and no confirmation, which is why a team's standing engineering practice could not live in a role adapter at all (BDL-UX #139, #152). For the slash commands and `CLAUDE.md` it no longer does: it runs the scaffold's non-forcing path, names `.beadloom/flow/<kind>/<name>.md` and leaves the edit where it is.
+
+> **`--fix` still deletes a hand edit in a role adapter (BDL-UX #186).** `refresh_composed_adapters` rewrites `.claude/agents/<role>.md` unconditionally, so the generic remediation line this command prints at the bottom of its own output (*Run `beadloom setup-rules --refresh` (or `config-check --fix`) to fix.*) undoes the edit the message one line above promised not to rewrite. Verified by sha256 on a clean repository: the file after `--fix` is byte-identical to the scaffold. Move the additions into `.beadloom/flow/roles/<role>.md` first.
 
 Which of the two a divergence *is*, is decided by the flow manifest (`.beadloom/flow-manifest.json`): every write records the body's sha256, so `stale` (Beadloom wrote it, the composition moved — `error`, recompose), `hand_edited` (`error`, never rewritten) `missing` (we wrote it and it is gone — `error`) and `unverified` (nothing accounts for it, so the two cannot be told apart — `warn`) are separate findings and not one word. The `CLAUDE.md` body is JUDGED only when the file is Beadloom's: a manifest entry, or the `<!-- beadloom:composed` stamp the shipped core begins with — a project's own hand-written `CLAUDE.md` is never policed. Not judged is not the same as not mentioned: in a project that adopted the flow, a `CLAUDE.md` with neither signal is named at `unverified`/`warn` rather than passed over. Those two signals are independent on purpose: deleting the generated manifest used to downgrade a hand edit to `warn` and the command to exit 0, and deleting one scaffolded file used to switch the checks off for every other one. Neither does now — the deletions are themselves reported (BDL-061 `.57`). `config-check` also names, at `warn`, a project layer in effect (its prose is composed but not judged) and an `overlays.suppress` entry that has expired or that names no rule in the composed flow.
 
@@ -830,25 +832,37 @@ beadloom setup-agentic-flow [--project DIR] [--force] \
     [--stack python,fastapi,javascript,typescript,vuejs]  # CSV; default: flow.yml or auto-detected
 ```
 
-As of **BDL-052 S3** the role subagents are **composed** (not byte-vendored)
-from CORE + the selected architecture overlay (`ddd`/`fsd`) + the selected stack
-overlays, then written as a per-tool adapter set for every configured tool:
-`claude` → `.claude/agents/{dev,test,review,tech-writer}.md`; `cursor` →
-`.cursor/agents/*` plus a `.cursor/rules/beadloom-flow.md` orchestrator pointer.
-Selection comes from `.beadloom/flow.yml`, overridden by the
+Since **BDL-061 S3** every flow artifact is **composed** from four layers in a
+fixed order — the shipped stack-neutral CORE, one architecture overlay
+(`ddd`/`fsd`), each selected stack overlay **sorted**, and the project fragment
+under `.beadloom/flow/` — for all three kinds:
+
+| kind | written to | project fragment |
+|------|-----------|------------------|
+| `roles` | `.claude/agents/<role>.md`, `.cursor/agents/<role>.md` | `.beadloom/flow/roles/<role>.md` |
+| `commands` | `.claude/commands/<cmd>.md` | `.beadloom/flow/commands/<cmd>.md` |
+| `claude` | `.claude/CLAUDE.md` | `.beadloom/flow/claude/CLAUDE.md` |
+
+`cursor` additionally gets a `.cursor/rules/beadloom-flow.md` orchestrator
+pointer. Selection comes from `.beadloom/flow.yml`, overridden by the
 `--tool`/`--architecture`/`--stack` flags (defaults `claude` / `ddd` /
 auto-detected stack — **flag → flow.yml → default** precedence). An invalid
-selection raises a `FlowConfigError` naming the bad value + the allowed set. A
-drift-guard (`config-check`) keeps every generated adapter byte-identical to its
-composition.
+selection raises a `FlowConfigError` naming the bad value + the allowed set.
+`config-check` compares each artifact against its composition, so a project
+fragment is part of the expected output while a change to a shipped fragment is
+not. See the [Project Overlays guide](../guides/project-overlays.md).
 
-The slash skills
-(`.claude/commands/{coordinator,task-init,checkpoint,templates}.md`) are still
-vendored **byte-identical** to Beadloom's own proven flow, plus a
-`.claude/CLAUDE.md` whose auto-regions are generated for THIS project (name /
-stack / version / packages) via the same `refresh_claude_md` machinery
-`setup-rules --refresh` uses (the CLAUDE.md version comes from Beadloom's own
-`__version__`, BDL-UX #92).
+`.claude/CLAUDE.md` keeps two auto-regions generated for THIS project via the
+same `refresh_claude_md` machinery `setup-rules --refresh` uses: `project-info`
+and `doc-language` (rendered from `language:` in `flow.yml`). The version bullet
+in `project-info` still comes from Beadloom's own `__version__` rather than from
+the target project, so it is false for every adopter (BDL-UX #183).
+
+> **Write a `.beadloom/flow.yml` before relying on the result.** Without one the
+> command composes the role adapters from the auto-detected stack while
+> `config-check` expects the plain vendored role files. Measured on a fresh
+> TypeScript project: `config-check` exits 1 with four errors immediately after a
+> clean scaffold, and rc 0 once a `flow.yml` exists (BDL-UX #187).
 
 It also writes the **flow-guard binding** (BDL-061 S1): `.claude/hooks/beadloom-guard.sh`
 — one `exec beadloom guard "$1" --hook claude-code` — and one `PreToolUse` entry per
@@ -864,13 +878,19 @@ The command makes the same whole-working-set `.gitignore` call `init` makes (see
 the block: the guards' firing record is one entry in that set, not a special case owned
 by the guard scaffolder.
 
-A vendored command that already matches is left alone; a hand-edited command is
-**skipped** (reported as such) so user edits are not silently clobbered;
-`--force` overwrites it. Composed role adapters are owned by the configurator
-(re-running recomposes them). User prose outside the CLAUDE.md auto-regions is
-never touched. Delegates to `onboarding/role_adapters.py:generate_adapters()`
-(the adapters) + `onboarding/agentic_flow_setup.py:scaffold()` (the commands +
-CLAUDE.md).
+A composed command or `CLAUDE.md` that already matches is left alone; a
+hand-edited one is **skipped** (reported as such) so user edits are not silently
+clobbered; `--force` overwrites it. Composed role adapters are owned by the
+configurator (re-running recomposes them). Delegates to
+`onboarding/role_adapters.py:generate_adapters()` (the adapters) +
+`onboarding/agentic_flow_setup.py:scaffold()` (the commands + CLAUDE.md).
+
+`scaffold()` also returns the files an older layout left behind, each with the
+exact `rm -f` command (BDL-UX #137), and a migration note naming the project-layer
+path a hand edit belongs in. **This command prints neither** — both reach a
+library caller and not the person at the terminal (BDL-UX #188). Until that is
+fixed, remove `.claude/commands/{dev,test,review,tech-writer,epic-init}.md` by
+hand after upgrading from a pre-BDL-048 layout.
 
 The command prints the **honest boundary**: the coordinator + `Agent`-spawn are
 Claude-Code-native (orchestration stays in the harness); the Beadloom MCP

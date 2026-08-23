@@ -2,7 +2,7 @@
 
 <!-- beadloom:watches=graph,cli -->
 
-> 📘 **reference** — overview/deep-dive, not tied to a single code symbol. It aligns with (does not replace) the generated [`/architecture` C4 overview](../services/cli.md#beadloom-docs-site) on the published portal.
+> 📘 **reference** — overview/deep-dive, not tied to a single code symbol. It aligns with (does not replace) the generated [`/architecture` C4 overview](services/cli.md#beadloom-docs-site) on the published portal.
 
 Beadloom turns Architecture as Code into Architectural Intelligence — structured, queryable knowledge about your system that humans and AI agents consume in <20ms.
 
@@ -14,7 +14,7 @@ The system is organized into six DDD domain packages, an application (use-case o
 1. **Context Oracle** (`context_oracle/`) — BFS graph traversal, context bundle assembly, code indexing, two-tier caching, FTS5 search, `why` impact analysis
 2. **Doc Sync** (`doc_sync/`) — doc↔code synchronization tracking, stale detection, symbol-level hashing, docs audit
 3. **Graph** (`graph/`) — YAML graph loader, diff engine, rule engine, import resolver (9 languages), architecture linter, C4 diagram emitter, federation
-4. **Onboarding** (`onboarding/`) — project bootstrap, doc generation/polishing, architecture-aware presets, AGENTS.md / IDE-rules generation, config sync, and the **agentic-flow role configurator** (`flow_config.py`, `role_composer.py`, `role_adapters.py`)
+4. **Onboarding** (`onboarding/`) — project bootstrap, doc generation/polishing, architecture-aware presets, AGENTS.md / IDE-rules generation, config sync, and the **agentic-flow composer** (`flow_config.py`, `composer.py`, `role_composer.py`, `role_adapters.py`, `flow_manifest.py`, `flow_suppression.py`), which assembles every flow artifact from CORE + architecture + stack + the project layer in `.beadloom/flow/`
 5. **Infrastructure** (`infrastructure/`) — domain-agnostic SQLite database layer, health metrics, git-activity tracking
 6. **AI Agents** (`ai_agents/`) — governed AI-agent harnesses that ship inside the wheel; hosts the deterministic, seam-isolated **AI tech-writer** (`ai_agents/ai_techwriter/`, run via `python -m beadloom.ai_agents.ai_techwriter`). A **leaf consumer**: it may read `application`/`context_oracle`/`graph`/`doc_sync` APIs but must never be imported by the core domains or services (enforced by the `core-no-import-ai-agents` / `application-no-import-ai-agents` `forbid_import` rules).
 
@@ -305,29 +305,49 @@ tree against `HEAD`, so it cannot judge whether a long-committed document still 
 code. `--since <ref>` answers that, and an incremental reindex keeps the stronger accumulated
 index baseline where one exists.
 
-### Agentic Flow Configurator
+### Agentic Flow Composer
 
 The `onboarding` domain composes the packaged multi-agent dev flow from a
-declaration in `.beadloom/flow.yml`:
+declaration in `.beadloom/flow.yml` plus the adopting repository's own fragments
+under `.beadloom/flow/`:
 
 ```
-.beadloom/flow.yml  ──load──▶  flow_config.py (FlowConfig: tools, architecture, stack, quality)
+.beadloom/flow.yml  ──load──▶  flow_config.py
+                                 (FlowConfig: tools, architecture, stack,
+                                  quality, language, suppressions)
                                       │
                                       ▼
-                              role_composer.py  compose_role(role, architecture=, stack=)
-                                      │   = CORE protocol + ONE architecture overlay (ddd|fsd)
-                                      │     + sorted stack overlays (byte-deterministic)
+                              composer.py  compose(kind, name, config=, project_root=)
+                                      │   1. CORE fragment (stack-neutral)
+                                      │   2. ONE architecture overlay (ddd|fsd)
+                                      │   3. sorted stack overlays
+                                      │   4. .beadloom/flow/<kind>/<name>.md   ← the project
+                                      │   + the overlays.suppress notice
                                       ▼
-                              role_adapters.py  generate_adapters(config, project_root)
-                                      │
-                          ┌───────────┴───────────┐
-                          ▼                        ▼
-                .claude/agents/* (Claude Code)   .cursor/agents/* (Cursor)
+              ┌───────────────────────┼────────────────────────┐
+              ▼                       ▼                        ▼
+    role_composer.py +      agentic_flow_setup.py    agentic_flow_setup.py
+    role_adapters.py        composed_command()       composed_claude_md()
+              │                       │                        │
+              ▼                       ▼                        ▼
+   .claude/agents/*         .claude/commands/*        .claude/CLAUDE.md
+   .cursor/agents/*
+              └───────── every write recorded in ─────────────┘
+                          .beadloom/flow-manifest.json
 ```
 
-- **`flow_config.py`** — `FlowConfig` (frozen) + `resolve_flow_config` (flag → `flow.yml` → default) + `detect_stack`; strict validation. Supported: tools `claude`/`cursor`; architecture `ddd`/`fsd` (exactly one); stack `python`/`fastapi`/`javascript`/`typescript`/`vuejs`.
-- **`role_composer.py`** — `compose_role(role, *, architecture, stack)` = CORE + one architecture overlay + sorted stack overlays; FSD at parity with DDD. Overlay templates live under `onboarding/templates/roles/{core,architecture/<arch>,stack/<stack>}/`.
-- **`role_adapters.py`** — `generate_adapters(config, project_root)` writes the per-tool adapter set(s). `beadloom setup-agentic-flow --tool/--architecture/--stack` is the CLI entrypoint; `config-check`/`--fix` byte-guards each composed adapter against `compose_role(...)` and recomposes drift.
+- **`flow_config.py`** — `FlowConfig` (frozen) + `resolve_flow_config` (flag → `flow.yml` → default) + `detect_stack`; strict validation. Supported: tools `claude`/`cursor`; architecture `ddd`/`fsd` (exactly one); stack `python`/`fastapi`/`javascript`/`typescript`/`vuejs`. `language` is validated for shape, not against a closed list; `overlays.suppress` is validated through `flow_suppression`.
+- **`composer.py`** — `compose(kind, name, *, config, project_root)` for the three kinds `roles` / `commands` / `claude`. Deterministic: the same inputs always yield the same bytes, with no dependence on the clock or on ambient state. That property is what licenses `config-check` to compare against a composition rather than against stored bytes. The CORE fragments live at `onboarding/templates/roles/core/<role>.md.txt`, `onboarding/templates/agentic_flow/commands/<cmd>.md.txt` and `onboarding/templates/agentic_flow/CLAUDE.md.txt`; the overlays live under `onboarding/templates/{roles,commands,claude}/{architecture/<arch>,stack/<stack>}/`. The commands and `CLAUDE.md` kept their vendored location as the CORE and gained an overlay root beside it, because moving them would have churned the whole scaffold for no signal.
+- **`role_composer.py`** — `compose_role(role, *, architecture, stack, language, suppressions, project_root)`, the roles-shaped door onto `compose`; FSD at parity with DDD.
+- **`role_adapters.py`** — `generate_adapters(config, project_root)` writes the per-tool adapter set(s). `beadloom setup-agentic-flow --tool/--architecture/--stack` is the CLI entrypoint.
+- **`flow_manifest.py`** — the sha256 of every composed write, which is what lets a later run tell `stale` (recomposable) from `hand_edited` (reported, never rewritten) from `missing` from `unverified`. `.beadloom/flow-manifest.json` is generated state and belongs in git.
+- **`flow_suppression.py`** — a declared stand-down of a core rule (`rule` + `reason` + `until`, all mandatory), rendered as a visible notice into every composed artifact. Expiry is a `config-check` finding rather than a byte, so the composition stays a function of its inputs.
+- **`config_sync.py`** — compares each artifact against its composition, maps the manifest state onto a severity, names the project layer in effect and reports suppression liveness.
+
+The core `CLAUDE.md` measures **376 lines** (down from 440), with each removed line
+mapped to a replacement in a stack overlay or in `§0 CRITICAL RULES`. The project
+layer is what makes that shrinkage possible: a project's own rules have a home that
+survives an upgrade instead of being appended to a drift-guarded shipped file.
 
 The AI tech-writer harness (`ai_agents/ai_techwriter/`) is the runtime half of
 the flow: a PR-triggered, symbol-scoped, bounded-parallel doc-refresh harness —

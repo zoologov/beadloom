@@ -18,11 +18,12 @@ is counted), `.54` (the Gate's lint line, filed and closed inside `.49`) and `.5
 documentation pass that turned the combined tree green).
 **Open in S2b:** `.50` (annotations the extractor cannot see), `.51` (three modules past
 1000 lines).
-**S3 in progress** on `features/BDL-061-S3`: `.9` (dev), `.35`, `.10` (test) and `.11` (review)
-are closed; `.57` — the P0 ship-blocker `.11` raised — is closed, so the eight blind spots `.10`
-pinned as strict xfails and the clock defect `.11` measured are all fixed. `.12` (tech-writer)
-is what remains before the S3 PR. Also outstanding and not part of any slice: `.39`, `.41`,
-`.42`, `.58`.
+**S3 COMPLETE** on `features/BDL-061-S3`: `.9` (dev), `.35`, `.10` (test), `.11` (review),
+`.57` (the P0 ship-blocker `.11` raised) and `.12` (tech-writer) are all closed. The eight
+blind spots `.10` pinned as strict xfails and the clock defect `.11` measured are fixed, and
+`.12` turned the gate green — `beadloom ci` rc **0**, 305/305 pairs fresh, 0 surface drift,
+6083 tests passing. The slice is ready for its PR. Also outstanding and not part of any
+slice: `.39`, `.41`, `.42`, `.58` — which grew from two items to a routed list (below).
 
 ## Progress
 
@@ -388,6 +389,16 @@ header comment, where a reader of a red check will look first.
       propagation loop was a TEST that rewrote the shipped template from the live file.
       Shipped core `CLAUDE.md` 440 → 376 lines, every removed line mapped to its replacement in
       PLAN. 24 new tests; nine sabotages each reddened a named test in a clean room.
+- [x] S3 `.12` tech-writer (2026-08-23) — the gate turned green honestly: **rc 1 → rc 0**, 33
+      stale pairs cleared as 13 revised and 20 deliberately re-attested (`symbols_hash` is per
+      node, so files nobody touched went stale with the node — #182). New adopter guide
+      `docs/guides/project-overlays.md` and the upgrade/migration procedure; the three limits
+      written as limits (the in-band ownership floor, the project layer's prose being named and
+      not judged, #183's false version bullet). The guide's own measurements found four defects
+      nothing else had: #186 `config-check --fix` destroys a hand edit in a role adapter,
+      #187 a virgin scaffold leaves `config-check` red, #188 the orphan report and migration
+      notes have no caller (so #137 does not close), #189 `sync-update <doc> --check` writes.
+      All four filed, documented where an adopter meets them, and routed to `.58`.
 
 ## Results
 
@@ -435,7 +446,7 @@ header comment, where a reader of a red check will look first.
 | .35 | Done | S3: the `.gitignore` block for generated `.beadloom/` state; this repo now runs the SHIPPED guard adapter rather than a local binding |
 | .11 | Done | S3 review: NOT PASSING — 0 critical, 7 major, 8 minor. Reproduced `.10`'s clock defect and measured it WORSE than recorded: 0 findings / exit 0 → 9 ERROR / exit 1 on an untouched tree. Verdict accepted: fix that one first, ship the rest behind `.57` |
 | .57 | Done | S3 dev (P0, ship-blocker): all NINE pins closed, plus a residual the coordinator found by probing that claim — a `CLAUDE.md` whose ownership cannot be proved is now NAMED at `unverified`/warn instead of silently skipped (two states), and a deleted `CLAUDE.md` is `missing`/error like the other two kinds. The clock removed from the composition (`composer.py`'s assertion kept, `describe()`'s behaviour deleted); expiry and dead-declaration became `config-check` findings; three deletion paths (manifest, provenance stamp, scaffolded file) each reported; `unmanaged` → `sync-check`'s `unverified`; the project layer is named, not judged |
-| .12 | Pending | S3 tech-writer: `services/mcp.md` + the `onboarding` README symbols cascade — 37 stale pairs measured at `fdbc1df`, before `.57` |
+| .12 | Done | S3 tech-writer: gate **rc 1 → rc 0**. 33 stale pairs cleared — 13 revised against code that moved, 20 re-attested deliberately because `symbols_hash` is per node and those files did not change (#182). New adopter guide `docs/guides/project-overlays.md` (the project layer, `overlays.suppress`, migrating a hand-edited vendored file); the three limits stated as limits; CHANGELOG, both READMEs, architecture, getting-started, cli, mcp and the onboarding README revised. Measured four new defects while writing it — #186 (destructive `--fix` on a role adapter), #187 (a virgin scaffold leaves `config-check` red), #188 (orphans + migration notes have no caller), #189 (`sync-update --check` writes) — all filed and routed to `.58` |
 | .13–.16 | Pending | S4 BDD, mutation, doc shape + quality, shared writing standard |
 | .17–.20 | Pending | S5 TO-BE / AS-IS / WORKING |
 | .21–.24 | Pending | S6 waves from the graph (#155, #118, #133) |
@@ -504,3 +515,17 @@ cycle rule to see nested imports.
 **Owner-visible checkpoint:** after `.12` (end of S3) the core request is delivered — the flow
 is enforced, stops lying, and is extensible. If a later slice proves to be an epic of its own,
 that gets reported rather than absorbed; S5 and S6 are the likely candidates.
+
+**`.58` now carries the whole adopter-experience residue**, and nothing was dropped to get
+S3 green. Its original two items (BDL-UX #183, and the red-turns-green-on-upgrade direction,
+whose *prose* half `.12` closed in CONTEXT and the config-check SPEC) are joined by four
+defects `.12` measured while writing the adopter guide — **#186** (`config-check --fix`
+rewrites a hand edit in a role adapter, sha256-identical to the scaffold, one line after the
+check said it would not), **#187** (a virgin `setup-agentic-flow` without a `flow.yml` leaves
+`config-check` at exit 1 with four errors), **#188** (`ScaffoldResult.orphans` and
+`.migration_notes` are computed on every scaffold and printed by nothing, so BDL-UX #137 does
+not close), **#189** (`sync-update <doc> --check` re-baselines instead of reporting) — and by
+review `.11`'s code minors m1, m3, m4, m5, m6, m7 and n1, plus the one-word template residue
+m2 named. Each of the four is documented where an adopter meets it (CHANGELOG *Known
+limitations*, the overlay guide, the CLI reference, the onboarding README) rather than only
+in a bead.

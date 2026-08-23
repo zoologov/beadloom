@@ -136,9 +136,23 @@ what genuinely does not belong in a **stack-neutral** core is different and larg
 | *(added)* provenance stamp + pointers | +14 | — |
 
 **Measured, not described.** Shipped CORE: **440 → 376 lines** (−78/+14, −14.5%). Composed for
-a `ddd`+`python` project: **406** (the 30-line stack overlay returns). A non-Python project's
-`CLAUDE.md` no longer contains a single Python command. Beadloom's own live file is 432 = 376
-core + 30 stack + 26 project layer.
+a `ddd`+`python` project: **406** (the 30-line stack overlay returns). Beadloom's own live file
+is 432 = 376 core + 30 stack + 26 project layer.
+
+**Corrected by review `.11` (m2), because the claim a grep contradicts is the one this epic
+exists to remove.** The line above originally read "A non-Python project's `CLAUDE.md` no longer
+contains a single Python command." Re-derived on the composition for `stack=(typescript,)`, two
+Python references survive in the 376-line core, both outside the critical rules:
+
+| line (of the 376) | text | what it is |
+|---|---|---|
+| 92 | ``#       the core is stack-neutral and `uv run pytest` is not every project's suite.`` | a comment explaining why the command is *not* there — the pointer that replaced it |
+| 133 | ``**Role subagents …:** `dev` (TDD implementation), `test` (pytest, coverage), …`` | a genuine residue in the role-description table |
+
+So the honest claim is: **a non-Python project's `CLAUDE.md` carries no Python command to run.**
+The `uv run pytest` / `ruff` / `mypy` block and the Python anti-patterns are gone from the core
+and live in the stack overlay, and a TypeScript adopter is no longer told to run them. Line 133
+is a one-word template edit that belongs to `.58`; it is recorded rather than quietly dropped.
 
 **A second, unplanned finding this criterion depended on.** #177 left open whether
 `config-check` was right to print `PASS: agent-config in sync` over two files that demonstrably
@@ -151,11 +165,28 @@ shipped template from the live file, sha256 `f360bc60…` → `6fcae821…`, pas
 **Done when:**
 - [x] A project overlay survives an upgrade
 - [x] Drift in the shipped core is still detected while an overlay exists
-- [x] Suppressing a core rule requires reason + exit condition and is reported
-- [x] A hand-edited vendored file is reported with migration guidance and never rewritten
-- [x] #139, #152, #132, #136, #137 close
+- [x] Suppressing a core rule requires reason + exit condition and is reported — and expiry and
+      dead declarations are reported too, at check time rather than in the composed bytes (`.57`)
+- [~] A hand-edited vendored file is reported with migration guidance and never rewritten — true
+      of the slash commands and `CLAUDE.md`, and of the *report* everywhere. Two measured gaps,
+      both filed and both `.58`'s: `config-check --fix` still rewrites a hand edit in a role
+      adapter, byte-identically to the scaffold, one line after the check said it would not
+      (BDL-UX #186); and `ScaffoldResult.migration_notes` has **no caller**, so the guidance
+      naming `.beadloom/flow/<kind>/<name>.md` reaches a library caller and not the person
+      running `setup-agentic-flow` (BDL-UX #188)
+- [~] #139, #152, #132, #136, #137 close — #139/#152 (a project extension is legal), #132
+      (nothing writes the core, so `--force` cannot overwrite its placeholder) and #136
+      (`language:` + the `doc-language` region) close. **#137 does not:** `orphaned_flow_files()`
+      computes the list and the exact `rm -f` command, and no caller prints it (BDL-UX #188)
 - [x] The core `CLAUDE.md` shrinks, with each removed line mapped to its replacement — see the
       correction above; the criterion was re-derived rather than satisfied as written
+
+**The composition delivers the request; the CLI does not yet deliver all of it.** Three findings
+measured by the tech-writer bead `.12` while writing the adopter guide, all in the command layer
+rather than in the composition, all filed and routed to `.58`: BDL-UX #186 (destructive `--fix`
+on a role adapter), #187 (a virgin scaffold without a `flow.yml` leaves `config-check` at exit 1
+with four errors), #188 (orphans and migration notes computed and never printed). None of them
+touches the four layers, the manifest or the suppression mechanism, which is why S3 ships.
 
 ### S4 — Executable behaviour and document shape (`.13`–`.16`)
 

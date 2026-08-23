@@ -401,15 +401,20 @@ Process-tool handlers (BDL-048; the three bead-touching ones drive `bd` via the 
 
 The `bd` seam lives in `src/beadloom/services/bd_seam.py`: `run_bd(args, *, cwd=None)` returns a `BdResult(returncode, stdout, stderr)` (with `.ok`), and raises `BdUnavailableError` when `bd` cannot be run **to completion** — missing from PATH, present but not executable, wedged past the 60 s timeout, or answering in bytes that cannot be decoded. The message always names the underlying class — *bd could not be run to completion (TimeoutExpired: …)* — and `FileNotFoundError` keeps its own wording because installing `bd` is the one remedy a reader can act on. A non-zero *exit* is not this case: that is `bd` answering, and it comes back as a `BdResult`. Output is decoded with an explicit `utf-8` / `surrogateescape` codec rather than the ambient locale, so one non-UTF-8 byte in a bead title cannot turn a tool call into a crash (BDL-061.37). Tests patch this seam so the process-tools run without a real `bd` binary.
 
-Setup and configuration commands are in `src/beadloom/services/commands/setup.py`:
-- `setup_mcp(*, remove, tool_name, project)` -- create or update MCP config for supported editors
-- `setup_rules(*, tool_name, project)` -- generate architecture rules for IDE integration
-- `setup_ai_techwriter(*, project)` -- scaffold AI techwriter harness configuration
-- `setup_agentic_flow(*, project)` -- scaffold agentic dev flow files and adapters
-- `setup_branch_protection(*, project, repo)` -- apply branch protection rules via GitHub API
-- `config_check(*, project)` -- check for configuration drift
-- `mcp_serve(*, project)` -- launch the MCP server
-- `init(*, bootstrap, import_docs, yes, mode, force, preset, project)` -- project initialization
+Setup and configuration commands are in `src/beadloom/services/commands/setup.py`. Only
+`mcp_serve` belongs to this service; the rest carry `# beadloom:domain=onboarding` and are
+specified in the [onboarding domain](../domains/onboarding/README.md). They share the module
+because they share the `setup-*` option surface, which is why a change to any of them makes
+both documents stale:
+
+- `mcp_serve(*, project)` -- launch the MCP server over stdio; exits 1 with `Run `beadloom reindex` first` when the index is absent
+- `setup_mcp(*, remove, tool_name, project)` -- create, update or remove the MCP config for a supported editor
+- `setup_rules(*, tool_name, project, refresh, dry_run)` -- generate IDE adapter files; `--refresh` re-renders the `CLAUDE.md` auto-regions and `--dry-run` previews without writing
+- `setup_ai_techwriter(*, platform, project)` -- scaffold the AI tech-writer harness for `github` or `gitlab`
+- `setup_agentic_flow(*, project, force, tools, architecture, stack)` -- compose and write the agentic dev flow; selection is flag over `flow.yml` over default
+- `setup_branch_protection(*, repo_slug, branch, contexts, dry_run)` -- apply branch protection via `gh api`; `--dry-run` prints the call and payload without touching GitHub
+- `config_check(*, fix, project)` -- report agent-config drift. Warnings print `! <file>: <reason>` with a `-> <remediation>` line and **do not block**; the command exits 1 only on error-severity drift, and a clean run says `Agent-config in sync — no blocking drift` with the warning count appended when there is one
+- `init(*, bootstrap, preset, import_path, init_mode, non_interactive, force, project)` -- project initialization; also appends Beadloom's generated working set to the project's `.gitignore`, once
 
 ## Testing
 
