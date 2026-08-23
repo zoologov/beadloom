@@ -14,7 +14,8 @@
 (*unverifiable is not clean* — one fix; the baseline moved out of the database), `.45`
 (the same equation in `docs audit`: a declared fact nothing was checked for is now named,
 never counted as fresh), `.49` (an exemption's `until:` is checkable and what it suppressed
-is counted) and `.54` (the Gate's lint line, filed and closed inside `.49`).
+is counted), `.54` (the Gate's lint line, filed and closed inside `.49`) and `.55` (the
+documentation pass that turned the combined tree green).
 **Open in S2b:** `.50` (annotations the extractor cannot see), `.51` (three modules past
 1000 lines).
 **Next:** S3 opens with `.9` (compose(core, arch, stack, project)). Also outstanding and not
@@ -353,6 +354,29 @@ header comment, where a reader of a red check will look first.
       the fix: **2 of 9 declared facts verified on this repo, 6 `not_covered`, 1 `unreadable`,
       all seven named.** Four sabotages each reddened the naming tests; all reverted clean.
 
+- [x] **S2b `.55` — the documentation pass, and the wave's own blind spot** (2026-08-24). The
+      combined tree was RED where every agent's clean room had been green: `beadloom ci` rc 1,
+      286 pairs, 258 ok, **28 stale**, 4 unchecked, 6 `surface_drift`. All 28 stale pairs were
+      ONE document — `docs/domains/onboarding/README.md`, 27 `symbols_changed` and one
+      `hash_changed` — because `symbols_hash` is computed per `ref_id` over every symbol
+      annotated to the node, so four new private helpers in
+      `src/beadloom/services/commands/docs.py` (`.45`'s coverage rendering, the only file under
+      the `onboarding` surface this slice touched) made every sibling pair of that node stale.
+      The document was revised to the code rather than re-attested: what `docs audit` now
+      reports, the three `services/commands/` modules that carry
+      `# beadloom:domain=onboarding` sections, and one drift the slice exposed rather than
+      caused — `_detect_rule_type` maps seven of the loader's nine rule keys, so
+      `.beadloom/AGENTS.md` prints `**module-coverage** (unknown)` (BDL-UX #179). The six
+      `surface_drift` entries all trace to a single added CLI flag, `sync-check
+      --record-surface`, which is #166 measured again: one flag, six reference documents.
+      `CHANGELOG.md`, `README.md` and `README.ru.md` carried nothing about this slice and now
+      carry the one sentence — *unverifiable is not clean* — plus the architectural change an
+      adopter must act on: `beadloom.db` is a derived cache, freshness rests on git provenance
+      and the declared surface on the committed `.beadloom/sync-surface.json`. `docs/architecture.md`
+      gained the baseline-provenance section, the `declared_docs` / `reference_state` /
+      `foreign_edges` tables it never listed, `sync_state`'s two new columns and four verdicts,
+      and the `docs audit` step missing from its Gate chain.
+
 ## Results
 
 | Bead | Status | Details |
@@ -391,6 +415,7 @@ header comment, where a reader of a red check will look first.
 | .48 | Done | P0 (#172): rule liveness for all NINE dispatched rule types (the bead said six, the SPEC said seven, the loader dispatches nine); `rules_inert` qualifies the summary line |
 | .49 | Done | P0: outcome (i) — what an exemption suppressed is counted on every run, and an `until:` leading with an ISO date that has passed is a finding; the same grammar on `flow.yml` exclusions |
 | .54 | Done | P2: the Gate's lint line now carries the suppressed count; measured that it needs no `rules_inert` clause (an inert rule always flips it to the warning branch). Filed and closed inside `.49` |
+| .55 | Done | S2b docs: the 28-pair onboarding README revised to the code; *unverifiable is not clean* written once in both READMEs + CHANGELOG; the baseline-out-of-the-database change stated for adopters; 6 `surface_drift` re-attested after reading, stale 28 → 0 |
 | .50 | Pending | P1: annotations the extractor cannot see — docstring annotation, directory source without a trailing slash, deny rules keyed on annotated symbols |
 | .51 | Pending | P2: three modules past 1000 lines with many responsibilities each, self-flagged and owned by nobody |
 | .9–.12 | Pending | S3 composition + project overlay (#139, #152, #132, #136, #137) |
@@ -400,9 +425,9 @@ header comment, where a reader of a red check will look first.
 
 ## Notes
 
-**Branch:** `features/BDL-061-S2` for this slice (S1 ran on `features/BDL-061`). Slice boundary
-is a PR boundary — each slice green on `main`
-before the next begins, as BDL-060 ran.
+**Branch:** `features/BDL-061-S2b` for this slice (S1 ran on `features/BDL-061`, S2 on
+`features/BDL-061-S2`). Slice boundary is a PR boundary — each slice green on `main` before the
+next begins, as BDL-060 ran.
 
 **Ordering is load-bearing.** S1 first because it is the primitive; S2 second because S3's
 acceptance criterion is deleting the rules S2's bugs forced into the prose, which cannot happen
@@ -427,6 +452,32 @@ of the marker requirement; `m4`'s remaining half (the read-only digest does not 
 say the coordinator owns the commit) and `m7` (no firing-record rotation) stay open for S2.
 `N1(c)` — the exit-3 class is fail-open — is bead `.33` in S2. Until it lands, the documents
 state the gap rather than lowering the promise.
+
+**A wave's integration state is measured by nobody, and S2b is the proof (#181).** Four dev
+beads ran across two waves in one shared working tree. A shared tree makes a full-suite run
+meaningless for any single agent, so each verified in a clean room — `git archive HEAD` plus only
+its own files — and each honestly reported green. The combined tree was `beadloom ci` rc 1 with 28
+stale pairs. **None of the four reports was wrong.** The clean room is the correct technique for
+attributing a result to one bead while neighbours are editing, and it is blind by construction to
+any interaction between beads; nothing in the protocol runs the combined tree until the coordinator
+does it at wave end. Two consequences the next slice inherits: the combined run belongs in
+somebody's bead rather than in a coordinator's habit, and an agent's green needs a TYPE — "green in
+a clean room over N files" is a different claim from "green on the tree", and reporting both with
+the same word is what makes the discrepancy read as a contradiction. The cheapest mechanical
+improvement is to give the run to whoever holds the merge slot, since somebody already holds a lock
+at exactly the right moment. Related: #118 (parallel agents collide on the shared pre-commit hook)
+— same root, that the wave shares one tree.
+
+**Two friction findings this slice measured again rather than merely cited.** #167 at gate scale:
+one stale document printed 28 `[stale]` lines that differ in no visible way, and `beadloom doctor`
+printed 28 more of its own; the number a reader wants — how many DOCUMENTS need attention — had to
+be derived by eye from `--json`, and one document reads exactly like twenty-eight. #166 again: a
+single added CLI flag (`sync-check --record-surface`) drifted all six `watches:` reference
+documents at once. `sync-update --all --yes` does now clear the reference-doc path — measured at the close of this
+slice, one command printed `Re-baselined 7 reference doc(s)` and took `surface_drift` from 6 to 0
+— so #166's second half is narrower than filed — but its first half stands: one fact known once still costs six
+consequences to record, and the bulk form is exactly the operation #163 says should leave evidence
+rather than become frictionless.
 
 **Carried, not forgotten:** #160 (AsyncAPI wired to nothing) stays deferred with its plan in
 ROADMAP; #158 and #161 are separate items this epic's mechanisms may later absorb; #91 closes

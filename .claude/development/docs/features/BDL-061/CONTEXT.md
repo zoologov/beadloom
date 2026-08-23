@@ -167,6 +167,14 @@ corroborated against git `HEAD`, and where git cannot answer the pair reads `unv
 than fresh. A clean database is therefore no longer a way to get a green `sync-check`, and no
 role instruction anywhere asks for one.
 
+**One measurement is worth carrying past this epic**, because it shapes how a wave should be run:
+`symbols_hash` is computed per `ref_id` over every symbol annotated to the node, so ONE new module
+— or four new private helpers in one file — makes every pair of that node stale, including sibling
+files nobody touched. Neither an incremental nor a full reindex clears it, by design. The only
+fixpoint is to update the document and then `sync-update <ref> --yes`. In S2b that turned a
+four-file change into 28 gate lines about one README, which is why the slice's staleness looked
+larger than it was.
+
 **What still costs something, and is stated rather than left to be rediscovered:** the git leg
 compares the working tree against `HEAD`, so it catches drift a rebuild absorbed but does not
 judge whether a long-committed doc still describes its code. `--since <ref>` answers that, and
@@ -175,7 +183,7 @@ incremental path when one exists; it is now an optimisation, not a correctness r
 
 ## Current Phase
 
-- **Phase:** Development — S1 and S2 complete, S3 next (`.9`)
-- **Current bead:** `.8`, the S2 documentation pass; live status is in ACTIVE.md and the tracker
+- **Phase:** Development — S1 and S2 complete, S2b closing, S3 next (`.9`)
+- **Current bead:** `.55`, the S2b documentation pass; live status is in ACTIVE.md and the tracker
 - **Blockers:** none. `.42` (the locale legs' first run) is open, which is why the two
   `tests-locale` contexts are not yet part of `main`'s live protection — see ACTIVE.md

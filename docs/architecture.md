@@ -78,7 +78,7 @@ YAML Graph Files (.beadloom/_graph/*.yml)
 
 The database is stored in `.beadloom/beadloom.db` and uses WAL mode for concurrent access.
 
-**Core tables (7):**
+**Core tables (9):**
 
 | Table | Key columns | Description |
 |-------|-------------|-------------|
@@ -87,10 +87,12 @@ The database is stored in `.beadloom/beadloom.db` and uses WAL mode for concurre
 | `docs` | id (PK), path (UNIQUE), kind, ref_id (FK→nodes), hash, metadata | Document index |
 | `chunks` | id (PK), doc_id (FK→docs), chunk_index, heading, section, content, node_ref_id | Document chunks (max 2000 chars) |
 | `code_symbols` | id (PK), file_path, symbol_name, kind, line_start, line_end, annotations, file_hash | Code symbols (function, class, type, route, component) |
-| `sync_state` | id (PK), doc_path, code_path, ref_id (FK→nodes), code_hash_at_sync, doc_hash_at_sync, synced_at, status, symbols_hash | Doc↔code sync state (ok, stale) |
+| `sync_state` | id (PK), doc_path, code_path, ref_id (FK→nodes), code_hash_at_sync, doc_hash_at_sync, doc_hash_at_last_edit, synced_at, status, symbols_hash, baseline_source | Doc↔code sync state. Four verdicts (`ok`, `stale`, `missing`, `unverified`); `baseline_source` records where the row's baseline came from — `index_build`, `carried` or `attested` — and is carried verbatim across a reindex, never promoted |
+| `declared_docs` | declared_path (PK), doc_path, ref_id (FK→nodes) | Every doc path a node DECLARES in its `docs:` list, whether or not the file is on disk. A cache of the committed graph YAML, refreshed on reindex, so a declaration outlives the file it names |
+| `reference_state` | doc_path (PK), watches, aggregate_hash, status | Surface-drift baseline for reference docs that opt in with `<!-- beadloom:watches=... -->`. Kept apart from `sync_state` so the symbol-pair logic is untouched |
 | `meta` | key (PK), value | Index metadata (key-value) |
 
-**Infrastructure tables (7):**
+**Infrastructure tables (8):**
 
 | Table | Key columns | Description |
 |-------|-------------|-------------|
@@ -101,6 +103,7 @@ The database is stored in `.beadloom/beadloom.db` and uses WAL mode for concurre
 | `code_imports` | id (PK), file_path, line_number, import_path, resolved_ref_id, file_hash | Import relationships between files |
 | `rules` | id (PK), name (UNIQUE), description, rule_type (deny/require/forbid_edge/layer/cycle_detection/import_boundary/cardinality), rule_json, enabled | Architecture rules from rules.yml |
 | `graph_snapshots` | id (PK), label, created_at, nodes_json, edges_json | Point-in-time architecture graph captures for drift detection |
+| `foreign_edges` | src_ref_id, dst_ref_id, kind, extra, lifecycle, contract_key | Declared cross-repository edges. Separate from `edges` because a foreign endpoint cannot satisfy the FK to local nodes; `beadloom export` unions them into the federation artifact |
 
 ### BFS Algorithm
 
@@ -263,12 +266,44 @@ Snapshots are stored in SQLite and enable architecture drift detection across re
 
 `application/gate.py` powers `beadloom ci` — the unified gate that composes the
 existing checkers into one verdict with a single exit code: **reindex → `lint
---strict` → sync-check → config-check → doctor → (optional) federate landscape
-gate**. Every step's honest result is printed (PASS / WARN / FAIL / SKIP) — never a
-green that silently skipped a step. `--format rich|json|github` applies
+--strict` → sync-check → docs audit → config-check → doctor → (optional) federate
+landscape gate**. Every step's honest result is printed (PASS / WARN / FAIL / SKIP) —
+never a green that silently skipped a step. `--format rich|json|github` applies
 uniformly; `--hub <export>` arms the cross-service landscape gate. The same gate
 runs as the **pre-push Beadloom Gate** hook (`install-hooks --pre-push`) and in
 CI (`.github/workflows/ci.yml`).
+
+`WARN` is a fourth outcome, not a softer pass: a step sets `not_verified` when it ran,
+found nothing wrong, and could not establish that there was nothing to find. It does not
+change the exit code, so no adopter's green project turns red on upgrade, and it does not
+print the word that would claim more than the run knows.
+
+### Freshness rests on git, not on the database
+
+`.beadloom/beadloom.db` is a derived cache: git-ignored, per-machine, rebuilt by any
+`reindex --full`, and absent on every fresh CI checkout. A baseline kept only there is
+destroyed by the act that most needs it — a rebuilt index adopted the current tree as its
+own baseline, so `sync-check` reported every pair fresh by construction (BDL-UX #175). Two
+baselines therefore live outside it, both committed:
+
+1. **Freshness — git.** Each `sync_state` row records its `baseline_source`. One fabricated
+   at index-build time that would otherwise read `ok` is corroborated against `HEAD` through
+   a single `git status --porcelain -z -uall`; where git cannot answer, the pair reads
+   `unverified` rather than fresh. A `carried` baseline is copied verbatim across a reindex
+   and never promoted, so a fabricated one does not become earned by being copied.
+2. **Surface size — `.beadloom/sync-surface.json`.** Committed, and written only by the
+   deliberate `sync-check --record-surface`. A later run whose declared surface fell says so
+   with both numbers. A ratchet only works if lowering it is a deliberate act left in the
+   history, so no ordinary run rewrites the ledger — a check that silently re-records the
+   number it is checking against re-attests without evidence (BDL-UX #163).
+
+Two consequences for anyone scripting around the index. Deleting the database and rebuilding
+is no longer a way to reach a green `sync-check`, and the retired instruction to verify on a
+clean database — right for `lint`, vacuous for `sync-check` — must not come back. What a green
+still does not prove is stated rather than left to be found: the git leg compares the working
+tree against `HEAD`, so it cannot judge whether a long-committed document still describes its
+code. `--since <ref>` answers that, and an incremental reindex keeps the stronger accumulated
+index baseline where one exists.
 
 ### Agentic Flow Configurator
 

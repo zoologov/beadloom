@@ -61,6 +61,32 @@ Documentation, boundary, and contract checks converge into one Gate. `beadloom c
 
 So the rule is simple and the same for everyone. Nothing reaches `main` that breaks architectural boundaries and rules, ships stale or missing documentation, or carries a broken cross-service contract — whether the author is a person or an AI agent. `beadloom install-hooks` installs a pre-push hook that blocks the push on a red Gate (use the documented `git push --no-verify` to bypass), and that same `beadloom ci` stays a required check in CI. There is one gate, and it is deterministic.
 
+### Unverifiable is not clean
+
+A check that cannot answer must not print the same word as a check that answered *fine*. Five
+states used to be indistinguishable from a pass, and each now names itself:
+
+- **A declared document that is not on disk** is `missing`, not absent. The gate fails at exit 2,
+  because it is not satisfied by having less to check.
+- **A pair with no baseline** is `unverified`. It is printed by name, counted separately, and never
+  counted as fresh; the gate step reads `WARN` and the exit code is unchanged, because nothing about
+  your tree is wrong — the checker cannot speak.
+- **A rule that cannot match anything** is a `rule_liveness` warning, and the summary line says how
+  many of the evaluated rules were unable to check anything.
+- **An exemption whose `until:` has passed** is a warning, and the number of crossings the
+  remaining exemptions excused is printed on every run. Expiry never changes what is suppressed: a
+  build that reddens because a calendar day passed has no commit behind it.
+- **A fact the audit never checked** is named. `docs audit` reports how many declared facts it
+  verified out of how many it declares, lists the shortfall, and publishes the documents it never
+  opened.
+
+Freshness itself rests on **git**, not on the index. `.beadloom/beadloom.db` is a derived cache —
+git-ignored, per-machine, absent on every fresh CI checkout — so a rebuilt index used to adopt the
+current tree as its own baseline and report every pair fresh. Each pair now records where its
+baseline came from and is corroborated against `HEAD`; the declared surface size lives in the
+committed `.beadloom/sync-surface.json`, which only the explicit `sync-check --record-surface`
+writes. Deleting the database and rebuilding is no longer a way to reach a green `sync-check`.
+
 ## What it solves
 
 The architecture you intended and the code you actually shipped drift apart over time — and no one is watching that gap. Inside a repository, documentation quietly goes stale and architectural boundaries blur. Between services, contracts break just as quietly: a renamed queue listener, a dependency declared in the plan but never built, an endpoint with no consumer left. Each specialized check covers its own protocol, but no one is responsible for the landscape as a whole — so the break surfaces in production, in another service, not where the change was made.
@@ -210,7 +236,9 @@ rules:
       max_symbols: 200      # too much code in one node
 ```
 
-Seven rule types are available: `require`, `deny`, `forbid`, `layers`, `forbid_cycles`, `forbid_import`, and `check`.
+Nine rule types are available: `require`, `deny`, `forbid`, `layers`, `forbid_cycles`, `forbid_import`, `check`, `unregistered_feature_candidate`, and `module_coverage`.
+
+A rule that **cannot match anything** reports itself. A matcher that selects no node, an edge kind the graph does not have, a `check` with no threshold, a glob that matches no file, an exemption that suppresses nothing — each is a `rule_liveness` warning rather than a silent pass, and `lint`'s summary carries the count (`N rules evaluated, M of them unable to check anything`) so the advertised rule count cannot over-claim. These findings are always warnings: they describe your configuration, not your code, so one mistyped glob does not turn a green project red. What a `forbid_import` exemption excused is counted the same way — `0 violations, 6 crossings suppressed by an exemption` — because `0 violations` must not be able to mean *0 violations we counted*.
 
 ```bash
 beadloom lint                 # human-readable terminal output
@@ -259,7 +287,7 @@ Request a node's context, and Context Oracle traverses the graph breadth-first, 
 | `search QUERY` | Full-text search over nodes, documentation, and code symbols |
 | `status` | Index stats, documentation coverage, and a debt report |
 | `doctor` | Validate the architecture graph |
-| `sync-check` | Check doc-code freshness |
+| `sync-check` | Check doc-code freshness — `ok` / `stale` / `missing` / `unverified`; `--record-surface` pins the declared surface size |
 | `sync-update REF_ID` | Review and update stale documentation |
 | `why REF_ID` | Impact analysis — what it depends on and what depends on it |
 | `lint` | Check the code against the architecture rules (`--strict`, `--format rich/json/porcelain/github`) |
