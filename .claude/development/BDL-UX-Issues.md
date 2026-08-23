@@ -35,6 +35,19 @@
 
 ## Open Issues
 
+181. [2026-08-23] [MEDIUM] Clean-room verification is the right technique and structurally cannot see a cross-bead interaction — nothing runs the combined tree until a human does
+
+    **Severity:** medium (no defect ships, but every agent reports green on a tree that is red, and the discrepancy reads as a contradiction rather than as two different measurements)
+    **Command:** the multi-agent wave protocol in `/coordinator`, not a Beadloom command
+    **Context:** BDL-061 S2b ran four dev beads across two waves in one shared working tree. Because a shared tree makes a full-suite run meaningless for any single agent, each verified in a **clean room** — `git archive HEAD` plus only its own files — and each honestly reported green. The coordinator's combined run then found `beadloom ci` rc 1 with 28 stale pairs.
+    **Issue:** the clean-room technique is *correct* — it is the only way to attribute a result to one bead while neighbours are editing — and it is *blind by construction* to any interaction between beads. Nothing in the protocol runs the combined tree until the coordinator does it at wave end, so a wave's integration state is unmeasured for its whole duration and the first honest number arrives last.
+    **Why it is worth filing rather than shrugging at:** four agents reported green, the tree was red, and none of them was wrong. That is a signalling failure, not an engineering one, and it will recur on every wave. It also inverts the usual risk: the *more* carefully each agent isolates itself, the less anyone knows about the whole.
+    **Expected:**
+    - The wave protocol should name the combined run as a distinct, owned step — not a coordinator habit. It is currently in nobody's bead.
+    - An agent's green should be *typed*: "green in a clean room over N files" is a different claim from "green on the tree", and reporting them with the same word is what makes the discrepancy read as a contradiction.
+    - Cheapest mechanical improvement: have the last agent of a wave, or the merge-slot holder, run the combined gate — someone already holds a lock at exactly the right moment.
+    **Related:** #118 (parallel agents collide on the shared pre-commit hook) — same root, that the wave shares one tree; BDL-061 S6 (`beadloom waves`) is where the decision about what may share a tree belongs.
+
 180. [2026-08-24] [MEDIUM] A `docs-audit` fact that fails to COLLECT is silently dropped from the declared list, so coverage cannot report it
 
     **Severity:** medium (it is the one hole the coverage report cannot cover, and it is in the mechanism that was just built to close #173)
