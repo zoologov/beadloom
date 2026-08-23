@@ -11,11 +11,12 @@
 `features/BDL-061-S2b`. S2 itself is complete (`.5`, `.33`, `.34`, `.37`, `.38`, `.40`, `.43`,
 `.44`, plus `.6` verification, `.7` review and `.8` docs, all closed).
 **Closed in S2b so far:** `.48` (rule liveness for all nine rule types), `.46` + `.47`
-(*unverifiable is not clean* — one fix; the baseline moved out of the database) and `.45`
+(*unverifiable is not clean* — one fix; the baseline moved out of the database), `.45`
 (the same equation in `docs audit`: a declared fact nothing was checked for is now named,
-never counted as fresh).
-**Open in S2b:** `.49` (an exemption's `until:` is prose), `.50` (annotations the extractor
-cannot see), `.51` (three modules past 1000 lines).
+never counted as fresh), `.49` (an exemption's `until:` is checkable and what it suppressed
+is counted) and `.54` (the Gate's lint line, filed and closed inside `.49`).
+**Open in S2b:** `.50` (annotations the extractor cannot see), `.51` (three modules past
+1000 lines).
 **Next:** S3 opens with `.9` (compose(core, arch, stack, project)). Also outstanding and not
 part of any slice: `.35`, `.39`, `.41`, `.42`.
 
@@ -311,6 +312,25 @@ header comment, where a reader of a red check will look first.
       every check is OK. Four of `.6`'s strict `xfail`s XPASSed and were un-xfailed. 5824
       passed, ruff + mypy --strict clean, Gate rc 0 on an INCREMENTAL index.
 
+- [x] **S2b `.49` — an exit condition that can be checked, and a crossing that is counted**
+      (2026-08-24). Review `.7` MAJOR 2: `rules.yml` promised that "an exemption that stops
+      suppressing anything is itself reported"; only the DEAD half was true, and a wildcard
+      exemption dated 1999 swallowed a real error-severity crossing at `0 violations`, exit 0,
+      in silence. Outcome **(i)**, not (ii): (ii) would have written down that a mechanism this
+      epic added is decoration. THE COUNT — `LintResult.suppressed` carries the crossings
+      themselves, and the clause appears wherever a run can read as clean (`rich`, the piped
+      `0 violations, N rules evaluated` line, `--format json` with a `suppressed` array, and the
+      Gate). This repo now reads `12 rules, 0 violations, 6 crossings suppressed by an
+      exemption`. THE DEADLINE — `until` is a DATE when it leads with `YYYY-MM-DD` and an EVENT
+      otherwise; a passed date on an entry still suppressing something is a `warn` finding. It
+      never enforces: a crossing that reappeared at `error` because a calendar day passed would
+      redden a build with no commit behind it. `--fail-on-warn` is the lever. The guards half is
+      fixed on the same grammar, imported rather than restated, so `flow.yml` and `rules.yml`
+      cannot promise different things. All six of this repo's own exemptions retire on an EVENT,
+      which is why the count — not the date — is the mechanism they rely on. 39 new tests, both
+      surfaces in one file; the two strict `xfail`s that pinned this defect are live regression
+      tests; six sabotages measured. Clean room = HEAD + these files: 5882 passed, Gate rc 0.
+
 - [x] **S2b `.45` — the audit now reports what it did NOT verify** (2026-08-24). Same equation as
       `.46`/`.47`, in `docs audit`: a green `13 mention(s) fresh` was thirteen restatements of ONE
       of NINE declared facts, and nothing said so. Every declared fact now carries its own
@@ -368,8 +388,9 @@ header comment, where a reader of a red check will look first.
 | .45 | Done | P1 (#173): docs-audit reports what it did NOT verify — per-fact coverage (`verified` / `not_covered` / `unreadable`), a published scan surface, clause-scoped matching; measured 2 of 9 declared facts verified on this repo |
 | .46 | Done | P0 (#174, ONE fix with `.47`): a deleted doc is `missing`, not `ok`; the DECLARED surface outlives the file; the pair count is a committed ledger; doctor's count audited |
 | .47 | Done | P0 (#175, ONE fix with `.46`): the baseline moved OUT of the database — git for freshness, a committed ledger for the surface; a rebuilt baseline is corroborated or reported `unverified`, never fresh |
-| .48 | Pending | P0: rule liveness covers one rule type of six, and `validate_rules()` computes the diagnosis that `linter.py` throws away |
-| .49 | Pending | P0: an exemption's `until:` is prose, and a suppressed violation is never counted |
+| .48 | Done | P0 (#172): rule liveness for all NINE dispatched rule types (the bead said six, the SPEC said seven, the loader dispatches nine); `rules_inert` qualifies the summary line |
+| .49 | Done | P0: outcome (i) — what an exemption suppressed is counted on every run, and an `until:` leading with an ISO date that has passed is a finding; the same grammar on `flow.yml` exclusions |
+| .54 | Done | P2: the Gate's lint line now carries the suppressed count; measured that it needs no `rules_inert` clause (an inert rule always flips it to the warning branch). Filed and closed inside `.49` |
 | .50 | Pending | P1: annotations the extractor cannot see — docstring annotation, directory source without a trailing slash, deny rules keyed on annotated symbols |
 | .51 | Pending | P2: three modules past 1000 lines with many responsibilities each, self-flagged and owned by nobody |
 | .9–.12 | Pending | S3 composition + project overlay (#139, #152, #132, #136, #137) |
