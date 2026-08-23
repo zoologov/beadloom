@@ -35,6 +35,28 @@
 
 ## Open Issues
 
+175. [2026-08-22] [CRITICAL] 🔴 A clean-database `beadloom ci` is structurally blind to doc staleness — the rebuild adopts the current tree as its own baseline
+
+    **Severity:** critical (the freshness gate reports PASS for work it cannot have checked, and the blindness is *caused by* the practice this project recommends for a different defect)
+    **Command:** `beadloom reindex` on a fresh DB, then `beadloom sync-check` / `beadloom ci`
+    **Context:** found by the S2 review bead, reproduced by the coordinator. One modified source file (`graph/linter.py`), its paired doc untouched, measured by exit code:
+
+    ```
+    incremental reindex → sync-check   exit 2   (stale — correct)
+    rm beadloom.db; reindex → sync-check exit 0   (blind)
+                            → beadloom ci exit 0
+    ```
+
+    **Issue:** a fresh database holds no prior baseline, so the rebuild records the current hashes *as* the baseline. Nothing is stale relative to a baseline created a second ago. `sync-check` then reports every pair fresh and the gate exits 0.
+    **Why it is worse than an ordinary false green:** the blindness is produced by following this project's own advice. Standing rule CLEAN-DB LINT told every agent to lint on a clean database, because incremental reindex did not refresh import edges (#142). That workaround silently made the *freshness* leg vacuous. **A workaround for one lying check created another** — and the coordinator ran the gate that way all through BDL-061 S1 and S2, reporting the results as authoritative verification each time.
+    **Pre-existing at `main`** (`7c5fa7d`), not introduced by S2 — verified by the reviewer against `main`'s own code.
+    **Expected:**
+    - A rebuild must not silently establish a baseline. Either it preserves the prior baseline where one exists, or `sync-check` must report "no baseline — not checked" rather than "fresh". The distinction is the same one #174 and #146 turn on: *unverifiable* is not *clean*.
+    - `beadloom ci` should know whether the index it just built has a usable baseline, and say so in the sync-check line rather than printing a count that means nothing.
+    - Once fixed, delete the practice too: with #142 retired in BDL-061 S2, "lint on a clean DB" is no longer needed, and leaving the habit in place keeps the hazard alive.
+    **Related:** #174 (the gate passes when a declared doc is deleted), #146, #172, #173. Same theme, and this entry is the one that explains why nobody noticed the others sooner.
+    > Tracked as a bead (P0).
+
 174. [2026-08-22] [CRITICAL] 🔴 The documentation gate is defeated by deleting documentation — `beadloom ci` exits 0 with every step PASS
 
     **Severity:** critical (the product's central promise — "no code reaches `main` without current docs" — is satisfiable by removing the docs)
