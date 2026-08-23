@@ -1,0 +1,30 @@
+
+---
+
+## STACK (Python) — composed from `.beadloom/flow.yml`
+
+The core above is stack-neutral. These are this project's concrete commands and
+the anti-patterns that only mean something in Python.
+
+### Commands the completion checklist refers to
+
+```bash
+uv run pytest                      # 1. tests pass
+uv run ruff check src/ tests/      # 2. lint (same check as CI)
+uv run mypy src/                   # 2. types (strict)
+beadloom ci                        # the full pre-push Gate (rc 0 required)
+```
+
+### Anti-patterns (Python)
+
+- Using `Any` / `# type: ignore` without a stated reason
+- Leaving `print()` / `breakpoint()` — use logging
+- Bare `except:` without naming the exception type
+- `import *`
+- Mutable default arguments (`def f(x=[]):`)
+- `os.path` instead of `pathlib`; f-strings in SQL instead of `?` parameters;
+  `yaml.load` instead of `yaml.safe_load`
+
+### Anti-patterns (shell)
+
+- Using `cp`, `mv`, `rm` without `-f` (may hang on an interactive prompt)

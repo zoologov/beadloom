@@ -102,6 +102,10 @@ Held to the same bar the epic builds. Mechanised where possible (S4), prose wher
 | 2026-08-22 | **Q2: the guard registry lives in `application/guards/`** | Guards orchestrate domain reads to answer a process question — that is application-layer work. A separate domain would be premature until something outside the flow needs them |
 | 2026-08-22 | **Q3: `.feature` default location is `tests/acceptance/{features,steps}/`, configurable from the start** | Matches the layout proven in the dogfood project; configurable because the flow ships to projects with their own conventions |
 | 2026-08-22 | **Q5: the mutation tool is the project's choice; Beadloom ships the role duty, the scope convention and the check that a declared target is inside the configured source paths** | Owning a mutation runner is out of scope and would break tool-agnosticism; the failure worth catching is a declared target that runs zero mutants |
+| 2026-08-23 | **A composed artifact's write is fingerprinted** (`.beadloom/flow-manifest.json`), and `config-check` reports four states — clean / stale / hand-edited / unmanaged | The composition-result rule alone cannot tell "the shipped core moved" from "a human edited this file", and the two need opposite treatments. Without the fingerprint the check must either rewrite somebody's only copy of an intent, or stop reporting it |
+| 2026-08-23 | **Severity follows the state**: hand-edited is an `error` whose remedy is to MOVE the edit; unmanaged is a `warn` | Keeps enforcement no weaker than before (the drift-guard's job did not change, only its remedy) while honouring "no adopter's green project turns red on upgrade" — a repo that predates the manifest genuinely cannot be judged |
+| 2026-08-23 | **The `CLAUDE.md` body is checked only when the file is Beadloom's** — a manifest entry or the `<!-- beadloom:composed` stamp | A project's own hand-written `CLAUDE.md` is not ours to police; without this boundary the new check reintroduces the #73 false-positive class on every repo that never scaffolded |
+| 2026-08-23 | **`sync_agentic_flow` no longer snapshots `CLAUDE.md` or the commands** — the shipped core is authored package data and the live file is composed from it | #177 is a loop, not an instance: enforcing *template == our file* in one direction makes the distributed artifact unable to differ from one project's local text, and any correction survives exactly until the next run. Reversing the direction also removes #132 by construction |
 | 2026-08-22 | **#91 closes as verified, with the caveat that this is the first believable result** | Its evidence is stale (the god-package was decomposed in BDL-059) and `lint --strict` is clean — but only since #159 taught the cycle rule to see nested imports |
 
 ## Related Files
@@ -183,7 +187,7 @@ incremental path when one exists; it is now an optimisation, not a correctness r
 
 ## Current Phase
 
-- **Phase:** Development — S1 and S2 complete, S2b closing, S3 next (`.9`)
-- **Current bead:** `.55`, the S2b documentation pass; live status is in ACTIVE.md and the tracker
+- **Phase:** Development — S1, S2 and S2b complete; S3 in progress
+- **Current bead:** `.9`, the S3 composition dev bead; live status is in ACTIVE.md and the tracker
 - **Blockers:** none. `.42` (the locale legs' first run) is open, which is why the two
   `tests-locale` contexts are not yet part of `main`'s live protection — see ACTIVE.md

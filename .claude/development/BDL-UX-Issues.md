@@ -109,7 +109,7 @@
     **Expected:** an infrastructure failure is not a pass. Either fail the job (so the required check blocks and a human re-runs it), or report `neutral`/`skipped` so it is visibly not a verification — never `success`. If the intent is "do not block on flaky infra", that is a decision about whether the check should be required at all, and it should be made explicitly rather than implemented by exiting 0.
     **Related:** #174, #175 — same equation (*unverifiable is not clean*), this time in our own CI rather than in the tool.
 
-177. [2026-08-23] [HIGH] 🔴 Editing our own `CLAUDE.md` silently ships the edit to every adopter — the pre-commit hook propagates it into the vendored template verbatim
+177. ~~[2026-08-23] [HIGH] 🔴 Editing our own `CLAUDE.md` silently ships the edit to every adopter — the propagation loop~~ **CLOSED (BDL-061 S3, `.9`)** — the direction is reversed: the shipped core is authored package data, `.claude/CLAUDE.md` is COMPOSED from it plus this repo's own `.beadloom/flow/claude/CLAUDE.md`, and a local divergence is reported instead of flowing outward. Three corrections to the entry, all measured. (a) **The propagator was a TEST, not the pre-commit hook** — `tests/test_cli_setup_agentic_flow.py::TestSyncAgenticFlow::test_sync_round_trips_live_source` called `sync_agentic_flow(live)`, which rewrote the shipped template from the live file; in a clean room from HEAD one run moved its sha256 from `f360bc60…` to `6fcae821…` and the test PASSED while doing it. `pytest` runs inside `beadloom ci` and pre-push runs `beadloom ci`, hence "every commit". `sync_agentic_flow` now refreshes the AGENT assets only. (b) **The open question is answered, and worse than asked:** `config-check` was not "correct by design under the composition-result rule" — the `CLAUDE.md` body was verified by NOTHING. Measured on a scaffolded project: appending a paragraph → 0 drifts; deleting all of §7 → 0 drifts; replacing the whole file with `# gone` → 0 drifts, with the Gate printing `PASS: agent-config in sync`. It now compares against the composition result. (c) The third "Expected" item shipped: `test_no_bead_id_or_issue_number_in_the_shipped_templates` scans everything under `templates/` for a bead id. It was demonstrated to bite — a sabotage that re-enabled the snapshot put `beadloom-mr2l.42` back into the clean room's template and the test caught it.
 
     **Severity:** high (project-local context leaves the project without anyone deciding that it should, and the propagation happens inside a commit rather than at a review point)
     **Command:** the `install-hooks` pre-commit coherence step; `beadloom config-check`
@@ -343,7 +343,7 @@
     **Expected:** a separate cardinality key for the second question rather than overloading `max_symbols` — e.g. `max_subtree_symbols` (all symbols under the node's source, the old semantics) and/or `max_children` (how many nodes are `part_of` it). Keeping them distinct is the point: a threshold that silently answers whichever question happens to be convenient is how a metric stops meaning anything.
     > Deliberately NOT folded into the `domain-size-limit` threshold when it was recalibrated 290 → 180.
 
-152. [2026-08-18] [MEDIUM] A project cannot extend a composed role adapter — overlays resolve only INSIDE the installed package
+152. ~~[2026-08-18] [MEDIUM] A project cannot extend a composed role adapter — overlays resolve only INSIDE the installed package~~ **CLOSED (BDL-061 S3, `.9`)** — proposal (a), with the drift-guard kept. A project layer at `.beadloom/flow/{roles,commands,claude}/<name>.md` composes AFTER the shipped overlays, and `config-check` verifies the **composition result**, so the addition is part of the expected output rather than drift. The minimum bar is also met and then some: `--fix` no longer deletes non-empty hand-authored content at all — a hand-edited file is reported with the project-layer path it belongs in and left exactly as it is.
 
     **Severity:** medium (structural; it is the reason a downstream project's gate ends up depending on an unreleased upstream change — see #151)
     **Command:** `beadloom setup-agentic-flow` / `config-check`
@@ -424,7 +424,7 @@
     **Expected:** Group the stale report by ref/doc with a count (`conversation: 41 stale`, `application: 118 stale`, …) + a one-line total, so the fix target (`sync-update <ref>`) is obvious at a glance. Optionally a `--summary` mode. Per-occurrence detail behind `--verbose`.
     **Workaround:** `beadloom sync-check --json` and group client-side; defer to the tech-writer `sync-update` wave regardless of the noise.
 
-139. [2026-07-29] [MEDIUM] Composed role adapters are byte-identical drift-guarded with no methodology/quality overlay slot — a team cannot add standing practices (e.g. BDD, mutation testing) to `.claude/agents/*.md` without tripping `config-check`
+139. ~~[2026-07-29] [MEDIUM] Composed role adapters are byte-identical drift-guarded with no methodology/quality overlay slot~~ **CLOSED (BDL-061 S3, `.9`)** — a standing team practice now has a home: `.beadloom/flow/roles/<role>.md` is composed into the adapter and is part of the drift baseline, so `beadloom ci` stays green and the role subagents' own system prompts carry it (no per-launch injection needed). The workaround this entry recorded — keep it in CLAUDE.md prose — is retired; `.beadloom/flow/claude/CLAUDE.md` is the supported equivalent for the entry point itself.
 
     **Severity:** medium (blocks `beadloom ci` → blocks merge on a PR-gated main; forces a standing team practice OUT of the role adapters)
     **Command:** `beadloom config-check` / `beadloom setup-agentic-flow` / `beadloom ci`
@@ -448,7 +448,7 @@
     - Generate a `DOC.md` skeleton for `kind: component` (parity with feature SPEC).
     **Workaround (the downstream project-side):** re-annotate source with granular `beadloom:feature=`/`component=` tags + rebuild `services.yml` with feature/component nodes, then `docs generate` + migrate `architecture.md` sections (tracked as the downstream project-Issues #1–#4).
 
-132. [2026-06-15] [MEDIUM] `setup-agentic-flow --force` corrupts the vendored `CLAUDE.md` placeholder when run in Beadloom's own repo
+132. ~~[2026-06-15] [MEDIUM] `setup-agentic-flow --force` corrupts the vendored `CLAUDE.md` placeholder when run in Beadloom's own repo~~ **CLOSED (BDL-061 S3, `.9`)** — fixed by construction rather than by a guard: nothing writes the `CLAUDE.md` core any more. `sync_agentic_flow` no longer re-vendors it from the live copy, so `--force` cannot substitute a project name over `__BEADLOOM_PROJECT_NAME__`. The "do NOT run `--force` in the Beadloom repo" workaround is retired.
 
     **Severity:** medium
     **Command:** `beadloom setup-agentic-flow --force`
@@ -484,7 +484,7 @@
     **Expected:** (a) the indexer must **skip non-UTF-8/binary files gracefully** (try/except → warn + skip; never abort the whole `init` over one file); (b) auto-detect should exclude virtualenvs (`.venv*`, `site-packages`) and binary-asset directories from `scan_paths`; (c) support `exclude_paths` (overlaps the existing `exclude_paths` improvement request). A single binary file must never abort `init`.
     **Workaround:** manually narrow `.beadloom/config.yml` `scan_paths` to source-only, delete the stray venv(s), then `beadloom reindex`.
 
-136. [2026-06-18] [MEDIUM] Scaffolded flow is English-only and not overlay-aware: no `language` config; templates hardcode "Python 3.10+" and "CLI → Core → Storage"
+136. ~~[2026-06-18] [MEDIUM] Scaffolded flow is English-only and not overlay-aware~~ **CLOSED (BDL-061 S3, `.9`)** — all three parts. (a) `language:` is a `flow.yml` field, a peer of `architecture`/`stack`, validated for shape rather than against a closed list; every composition layer prefers a `<name>.<lang>.md.txt` fragment and a missing localisation falls back **with a note** rather than silently. (b) The hardcoded facts left the cores: `templates.md`'s "Python 3.10+" and testing/linting rows now come from `templates/commands/stack/<stack>/`, and "Modular architecture | CLI → Core → Storage" from `templates/commands/architecture/{ddd,fsd}/`. (c) The commands and `CLAUDE.md` are composable exactly like the role agents, so an adopter adapts them without breaking the drift-guard. The "ALL documents MUST be written in English" line is now the `doc-language` auto-region, rendered from `language:`.
 
     **Severity:** medium
     **Command:** `beadloom setup-agentic-flow` / `/templates` / `/task-init`
@@ -493,7 +493,7 @@
     **Expected:** (a) add a `language` field to `flow.yml` (a peer of `architecture`/`stack`), threaded into the composed/vendored docs so docs scaffold in the project's language; (b) make the templates' architecture/stack facts overlay-derived (DDD/FSD layer names; the project's Python from `pyproject.toml`) instead of the hardcoded "CLI → Core → Storage" / "3.10+"; or at minimum (c) make the templates composable (CORE + overlays) like the role agents, so they adapt per-project without breaking the drift-guard.
     **Workaround:** override the defaults at project level in CLAUDE.md (a project-level rule beats the vendored default).
 
-137. [2026-06-18] [LOW] Cross-major flow re-init leaves orphaned command files and skips changed vendored commands as "hand-edited"
+137. ~~[2026-06-18] [LOW] Cross-major flow re-init leaves orphaned command files and skips changed vendored commands as "hand-edited"~~ **CLOSED (BDL-061 S3, `.9`)** — the "at least a printed warning" option, plus the reason the surgical migration was needed in the first place. (a) `orphaned_flow_files()` reports every file a prior layout left in `.claude/commands/` — the four role files and `epic-init.md` — each with the exact `rm -f` command and, for a role, where it moved to; they are reported, never deleted. (b) A changed vendored command is no longer an undifferentiated "hand-edited; use --force": the flow manifest separates *stale* (Beadloom wrote it, the composition moved → recomposed in place) from *hand_edited* (reported with the `.beadloom/flow/commands/<name>.md` path, never rewritten), so a cross-major re-init recomposes what it owns without `--force`. (c) `--force` no longer clobbers a customised `CLAUDE.md` body either, because the customisation belongs in the project layer, which composes on top.
 
     **Severity:** low
     **Command:** `beadloom setup-agentic-flow` (on a repo scaffolded by an older major flow version)

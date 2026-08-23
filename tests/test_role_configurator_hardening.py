@@ -208,11 +208,14 @@ class TestComposeRoleErrors:
     ) -> None:
         """A role whose CORE fragment is absent raises loudly (no silent empty
         file). Exercised by pointing the templates root at an empty dir."""
-        empty = tmp_path / "roles"
-        empty.mkdir()
-        import beadloom.onboarding.role_composer as rc
+        empty = tmp_path / "templates"
+        (empty / "roles" / "core").mkdir(parents=True)
+        import beadloom.onboarding.composer as composer
 
-        monkeypatch.setattr(rc, "roles_templates_root", lambda: empty)
+        # Patch the seam the composition actually reads (BDL-061 S3 moved the
+        # layering into `composer`); patching the old accessor would leave the
+        # test green while proving nothing.
+        monkeypatch.setattr(composer, "templates_dir", lambda: empty)
         with pytest.raises(FlowConfigError, match="missing CORE"):
             compose_role("dev", architecture="ddd", stack=["python"])
 

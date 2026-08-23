@@ -1,0 +1,26 @@
+
+---
+
+## STACK (Python) — composed from `.beadloom/flow.yml`
+
+Fill the placeholders above from this section; it replaces nothing, it supplies.
+
+### Language and Environment
+- **Language:** Python 3.10+ (type hints, `str | None` syntax)
+- **Package manager:** uv
+- **Virtual environment:** uv venv
+
+### Testing
+- **Framework:** pytest + pytest-cov
+
+### Code Quality
+- **Linter:** ruff (lint + format)
+- **Typing:** mypy --strict
+
+### Restrictions (Python)
+- No `Any` without justification
+- No `print()` / `breakpoint()` — use logging
+- No bare `except:` — only `except SpecificError:`
+- No `os.path` — pathlib only
+- No f-strings in SQL — parameterized queries `?`
+- No `yaml.load()` — safe_load only

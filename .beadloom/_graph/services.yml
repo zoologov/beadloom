@@ -367,6 +367,27 @@ nodes:
     docs:
       - docs/domains/onboarding/features/role-adapters/SPEC.md
 
+  - ref_id: flow-composer
+    kind: feature
+    summary: "compose(core, architecture, stack, project) — the one layered assembly behind role files, slash commands and CLAUDE.md; the project layer lives in .beadloom/flow/"
+    source: src/beadloom/onboarding/composer.py
+    docs:
+      - docs/domains/onboarding/features/flow-composer/SPEC.md
+
+  - ref_id: flow-suppression
+    kind: feature
+    summary: "a declared stand-down of a shipped core rule — reason + exit condition mandatory, appended as a visible notice rather than applied as a deletion"
+    source: src/beadloom/onboarding/flow_suppression.py
+    docs:
+      - docs/domains/onboarding/features/flow-suppression/SPEC.md
+
+  - ref_id: flow-manifest
+    kind: feature
+    summary: "records the sha256 of every composed artifact Beadloom writes, so a later run tells its own output (recomposable) from a hand edit (reported, never rewritten)"
+    source: src/beadloom/onboarding/flow_manifest.py
+    docs:
+      - docs/domains/onboarding/features/flow-manifest/SPEC.md
+
   - ref_id: site-generation
     kind: feature
     summary: "`docs site` — generate the VitePress content tree from the indexed graph (About/architecture/per-node pages, dashboard, landscape, nav, mermaid guard)"
@@ -667,6 +688,15 @@ edges:
     dst: onboarding
     kind: part_of
   - src: role-adapters
+    dst: onboarding
+    kind: part_of
+  - src: flow-composer
+    dst: onboarding
+    kind: part_of
+  - src: flow-suppression
+    dst: onboarding
+    kind: part_of
+  - src: flow-manifest
     dst: onboarding
     kind: part_of
 

@@ -13,11 +13,13 @@ set** for every configured tool:
   body) plus a thin ``.cursor/rules/beadloom-flow.md`` orchestrator pointer
   (the coordinator-as-Cursor-mode entry point).
 
-Every adapter body is exactly ``compose_role(...)`` for the repo's ``flow.yml``,
-so :func:`generate_adapters` is the single writer the drift-guard test verifies
-against: a hand-edit of any adapter, or a CORE/overlay change without
-regenerating, makes the on-disk file differ from the recomputed composition and
-fails the guard.
+Every adapter body is exactly ``compose_role(...)`` for the repo's ``flow.yml``
+**plus its project layer** (``.beadloom/flow/roles/<role>.md``), so
+:func:`generate_adapters` is the single writer the drift-guard verifies against:
+a CORE/overlay change without regenerating makes the on-disk file differ from
+the recomputed composition and is reported, while a project extension is part of
+the expected result and is not (BDL-UX #139, #152). Each write is fingerprinted
+in the flow manifest so a later run can tell its own output from a hand edit.
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from beadloom.onboarding.flow_manifest import digest, record
 from beadloom.onboarding.role_composer import ROLE_NAMES, compose_all_roles
 
 if TYPE_CHECKING:
@@ -97,8 +100,9 @@ def generate_adapters(config: FlowConfig, project_root: Path) -> AdapterResult:
     sources, so re-running with the same config rewrites identical files.
     Returns an :class:`AdapterResult` of the project-relative paths written.
     """
-    composed = compose_all_roles(config)
+    composed = compose_all_roles(config, project_root)
     result = AdapterResult()
+    recorded: dict[str, str] = {}
     for tool in config.tools:
         agent_dir = TOOL_AGENT_DIRS[tool]
         written: list[str] = []
@@ -106,8 +110,11 @@ def generate_adapters(config: FlowConfig, project_root: Path) -> AdapterResult:
             relpath = agent_dir / f"{role}.md"
             _write(project_root / relpath, composed[role])
             written.append(str(relpath))
+            recorded[str(relpath)] = digest(composed[role])
         result.agents[tool] = written
     if "cursor" in config.tools:
         _write(project_root / _CURSOR_RULES_RELPATH, _CURSOR_RULES_BODY)
         result.extra.append(str(_CURSOR_RULES_RELPATH))
+        recorded[str(_CURSOR_RULES_RELPATH)] = digest(_CURSOR_RULES_BODY)
+    record(project_root, recorded)
     return result

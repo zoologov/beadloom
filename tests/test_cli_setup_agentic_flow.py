@@ -62,18 +62,58 @@ class TestVendoredFlowAssets:
             assert (root / "commands" / f"{name}.md.txt").is_file(), name
 
     def test_vendored_flow_matches_live_claude(self) -> None:
-        """Drift guard: every vendored template byte-matches the live ``.claude/``
-        file (so the scaffold always ships the latest proven flow)."""
+        """Drift guard: every vendored AGENT template byte-matches the live file.
+
+        Agents only. The commands and ``CLAUDE.md`` are no longer snapshots of
+        this repo's live files — they are the shipped CORE, and the live files
+        are COMPOSED from them plus this repo's own project layer. Asserting
+        byte-equality on those is exactly the loop BDL-UX #177 measured: it made
+        the distributed artifact unable to differ from one project's local text.
+        Their guard is :meth:`test_live_flow_equals_its_composition`.
+        """
         root = vendored_flow_root()
         live = _live_claude_root()
         for name in AGENT_FILES:
             assert (root / "agents" / f"{name}.md.txt").read_text(
                 encoding="utf-8"
             ) == (live / "agents" / f"{name}.md").read_text(encoding="utf-8"), name
+
+    def test_live_flow_equals_its_composition(self) -> None:
+        """This repo's own ``.claude/`` is the composition of what it ships.
+
+        The replacement guard: instead of "the template equals our file", which
+        forced our local text outward, "our file equals CORE + overlays + OUR
+        project layer", which lets the two differ exactly where we declared they
+        should.
+        """
+        from pathlib import Path
+
+        from beadloom.onboarding.agentic_flow_setup import (
+            composed_claude_md,
+            composed_command,
+        )
+        from beadloom.onboarding.flow_config import resolve_flow_config
+        from beadloom.onboarding.scanner import (
+            _detect_project_name,
+            blank_auto_regions,
+        )
+
+        repo = Path(__file__).resolve().parents[1]
+        config = resolve_flow_config(repo)
+        live = _live_claude_root()
         for name in COMMAND_FILES:
-            assert (root / "commands" / f"{name}.md.txt").read_text(
-                encoding="utf-8"
-            ) == (live / "commands" / f"{name}.md").read_text(encoding="utf-8"), name
+            assert composed_command(name, config, repo) == (
+                live / f"commands/{name}.md"
+            ).read_text(encoding="utf-8"), name
+        expected = blank_auto_regions(
+            composed_claude_md(
+                config, repo, project_name=_detect_project_name(repo)
+            )
+        )
+        actual = blank_auto_regions(
+            (live / "CLAUDE.md").read_text(encoding="utf-8")
+        )
+        assert expected == actual
 
 
 class TestCoordinatorGateLoop:
@@ -164,9 +204,62 @@ class TestSyncAgenticFlow:
     def test_sync_round_trips_live_source(self) -> None:
         written = sync_agentic_flow(_live_claude_root())
         assert "agents/dev.md.txt" in written
-        assert "commands/coordinator.md.txt" in written
         # Re-running is a no-op against the packaged copy (drift guard as code).
         assert TestVendoredFlowAssets().test_vendored_flow_matches_live_claude() is None
+
+    def test_sync_does_not_touch_the_claude_md_core(self, tmp_path: Path) -> None:
+        """BDL-UX #177's loop, closed: the shipped CLAUDE.md is no longer a
+        snapshot of this project's live file.
+
+        It used to be. Running this very function rewrote
+        ``templates/agentic_flow/CLAUDE.md.txt`` from ``.claude/CLAUDE.md``,
+        which is why a project-local paragraph — a bead id and a false claim
+        about this repo's branch protection — reached the shipped template
+        twice, the second time OVER the correction. Measured before the fix:
+        the template's sha256 moved from f360bc60… to 6fcae821… on a single
+        test run, and the test passed while doing it.
+        """
+        import hashlib
+        from pathlib import Path
+
+        core = (
+            Path(__file__).resolve().parents[1]
+            / "src"
+            / "beadloom"
+            / "onboarding"
+            / "templates"
+            / "agentic_flow"
+            / "CLAUDE.md.txt"
+        )
+        before = hashlib.sha256(core.read_bytes()).hexdigest()
+        written = sync_agentic_flow(_live_claude_root())
+        assert hashlib.sha256(core.read_bytes()).hexdigest() == before
+        assert not any("CLAUDE" in name for name in written)
+
+    def test_sync_does_not_touch_the_command_cores(self) -> None:
+        """The commands compose too, so they are not snapshotted either."""
+        import hashlib
+        from pathlib import Path
+
+        root = (
+            Path(__file__).resolve().parents[1]
+            / "src"
+            / "beadloom"
+            / "onboarding"
+            / "templates"
+            / "agentic_flow"
+            / "commands"
+        )
+        before = {
+            p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in sorted(root.glob("*.md.txt"))
+        }
+        sync_agentic_flow(_live_claude_root())
+        after = {
+            p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in sorted(root.glob("*.md.txt"))
+        }
+        assert after == before
 
 
 class TestScaffoldFiles:

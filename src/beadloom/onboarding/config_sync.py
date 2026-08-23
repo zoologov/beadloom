@@ -27,20 +27,35 @@ from typing import TYPE_CHECKING
 from beadloom.onboarding.agentic_flow_setup import (
     AGENT_FILES,
     COMMAND_FILES,
-    _scaffold_vendored,
     _vendored_asset,
+    composed_claude_md,
+    composed_command,
+)
+from beadloom.onboarding.composer import (
+    CLAUDE_ARTIFACT_NAME,
+    COMPOSED_MARKER,
+    PROJECT_FLOW_DIRNAME,
 )
 from beadloom.onboarding.flow_config import (
     FLOW_CONFIG_RELPATH,
     FlowConfigError,
     load_flow_config,
+    resolve_flow_config,
+)
+from beadloom.onboarding.flow_manifest import (
+    ArtifactState,
+    classify,
+    load_manifest,
+    state_of,
 )
 from beadloom.onboarding.role_adapters import TOOL_AGENT_DIRS, generate_adapters
 from beadloom.onboarding.role_composer import ROLE_NAMES, compose_all_roles
 from beadloom.onboarding.scanner import (
     _RULES_ADAPTER_TEMPLATE,
     _RULES_CONFIGS,
+    _detect_project_name,
     _is_beadloom_adapter,
+    blank_auto_regions,
     build_agents_md_content,
     refresh_claude_md,
 )
@@ -60,10 +75,20 @@ class ConfigDrift:
         Project-relative path of the drifted artifact.
     reason:
         Agent-actionable explanation of what is stale.
+    severity:
+        ``error`` blocks the Gate; ``warn`` is reported and does not. A
+        hand-edited or pre-manifest artifact is a ``warn``: it is a real finding
+        the adopter must act on, but turning a green project red on upgrade is
+        how a check gets switched off wholesale (BDL-061's standing constraint).
+    remediation:
+        The concrete next command or move; ``None`` falls back to the caller's
+        generic advice.
     """
 
     file: str
     reason: str
+    severity: str = "error"
+    remediation: str | None = None
 
 
 _AGENTS_CUSTOM_START = "<!-- beadloom:custom-start -->"
@@ -121,7 +146,8 @@ def _claude_md_drift(project_root: Path) -> ConfigDrift | None:
 
     Reuses ``refresh_claude_md(dry_run=True)`` which returns the names of
     auto-managed sections whose regenerated content differs from disk.
-    Content outside the markers (human prose) is never considered.
+    Content outside the markers is checked separately by
+    :func:`_claude_md_body_drift` against the composition result.
     """
     claude_md_path = project_root / ".claude" / "CLAUDE.md"
     if not claude_md_path.is_file():
@@ -136,6 +162,112 @@ def _claude_md_drift(project_root: Path) -> ConfigDrift | None:
         reason=(
             "auto-managed section(s) stale: "
             f"{', '.join(sorted(changed))}"
+        ),
+    )
+
+
+def _claude_md_body_drift(project_root: Path) -> ConfigDrift | None:
+    """Drift for the COMPOSED body of ``.claude/CLAUDE.md`` (BDL-UX #177).
+
+    Until BDL-061 S3 nothing checked this file's body at all: ``config-check``
+    diffed only the marker-bounded auto-regions, so replacing the entire file
+    with a single line still printed ``agent-config in sync`` (measured). The
+    body is now compared against ``compose("claude", ...)`` for this repo's
+    ``flow.yml`` **including its project layer**, with the auto-region bodies
+    blanked because those are generated per project and checked above.
+
+    The three outcomes are three different findings, never one word: recomposable
+    (we wrote it, the composition moved), hand-edited (somebody's intent lives
+    only in that file — reported, never rewritten), and unmanaged (scaffolded
+    before the manifest, so the two cannot be told apart and we say so).
+    """
+    claude_md_path = project_root / ".claude" / "CLAUDE.md"
+    if not claude_md_path.is_file():
+        return None
+    relpath = ".claude/CLAUDE.md"
+    recorded = load_manifest(project_root).get(relpath)
+    try:
+        raw = claude_md_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    if recorded is None and COMPOSED_MARKER not in raw:
+        # Not a Beadloom-composed CLAUDE.md — a project's own file is not ours
+        # to police (the boundary `_is_beadloom_adapter` draws for IDE adapters).
+        return None
+    try:
+        config = resolve_flow_config(project_root)
+    except FlowConfigError:
+        # Reported by :func:`_flow_config_drift`; don't double-report.
+        return None
+    project_name = _detect_project_name(project_root)
+    expected = blank_auto_regions(
+        composed_claude_md(config, project_root, project_name=project_name)
+    )
+    shipped_only = blank_auto_regions(
+        composed_claude_md(config, None, project_name=project_name)
+    )
+    state = classify(
+        on_disk=blank_auto_regions(raw),
+        expected=expected,
+        recorded=recorded,
+        alternates=(shipped_only,),
+    )
+    return _state_drift(relpath, state, kind="claude", name=CLAUDE_ARTIFACT_NAME)
+
+
+def _state_drift(
+    relpath: str,
+    state: ArtifactState,
+    *,
+    kind: str,
+    name: str,
+) -> ConfigDrift | None:
+    """Project an :class:`ArtifactState` onto a :class:`ConfigDrift` (or ``None``)."""
+    if state is ArtifactState.CLEAN:
+        return None
+    overlay = PROJECT_FLOW_DIRNAME / kind / f"{name}.md"
+    if state is ArtifactState.STALE:
+        return ConfigDrift(
+            file=relpath,
+            reason=(
+                "composed body is stale vs CORE + the flow.yml overlays + the "
+                "project layer"
+            ),
+            severity="error",
+            remediation="run `beadloom setup-agentic-flow` to recompose",
+        )
+    if state is ArtifactState.HAND_EDITED:
+        return ConfigDrift(
+            file=relpath,
+            reason=(
+                "hand-edited: the body differs from the composition AND from "
+                "what Beadloom last wrote. It will NOT be rewritten"
+            ),
+            # Error, not warn: Beadloom wrote this exact file and a human changed
+            # it, which is precisely what the drift-guard has always been for. The
+            # change since BDL-061 S3 is that the remedy is to MOVE the edit into
+            # the project layer, not to have `--fix` delete it (#139, #152).
+            severity="error",
+            remediation=(
+                f"move the additions to {overlay} (the project layer composes "
+                "after the shipped core, survives upgrades and does not trip "
+                "this check), then re-run `beadloom setup-agentic-flow`"
+            ),
+        )
+    # Warn, not error: this repo was scaffolded before the manifest existed, so
+    # an upgrade cannot be told apart from a hand edit — and turning an adopter's
+    # green project red on upgrade is how a check gets switched off wholesale.
+    return ConfigDrift(
+        file=relpath,
+        reason=(
+            "differs from the composition and predates the flow manifest, so a "
+            "hand edit cannot be told apart from an upgrade"
+        ),
+        severity="warn",
+        remediation=(
+            f"review it; move anything project-specific to {overlay}, then "
+            "re-run `beadloom setup-agentic-flow --force` to adopt the "
+            "composed version"
         ),
     )
 
@@ -198,42 +330,63 @@ def _agentic_flow_drifts(project_root: Path) -> list[ConfigDrift]:
     """Drift for the scaffolded ``.claude/agents/*`` + ``.claude/commands/*``.
 
     Only checked when the flow is fully scaffolded (see
-    :func:`_agentic_flow_scaffolded`): each present file is byte-compared
-    against its vendored template (the proven flow shipped with Beadloom), and
-    any divergent file is reported. Project-specific facts live only in
-    CLAUDE.md (checked separately), so the agents/commands compare exactly.
+    :func:`_agentic_flow_scaffolded`). The **commands** are compared against
+    their composition (CORE + the flow.yml overlays + the project layer) rather
+    than against the vendored bytes, so a project extension in
+    ``.beadloom/flow/commands/`` is part of the expected result while a change
+    to the shipped core still differs from it. Agents are the role composer's
+    responsibility (:func:`_composed_adapter_drifts`).
     """
     if not _agentic_flow_scaffolded(project_root):
         return []
 
-    # When a flow.yml is present the role files (.claude/agents/*) are COMPOSED
-    # from CORE+overlays and checked by :func:`_composed_adapter_drifts` against
-    # that config — the vendored byte-compare (which assumes Beadloom's own
-    # ddd+python) would false-positive on any other stack. So only check the
-    # commands here; agents are the composer's responsibility.
     flow_yml = (project_root / FLOW_CONFIG_RELPATH).is_file()
-    kinds = (
-        tuple(k for k in _AGENTIC_FLOW_KINDS if k[0] != "agents")
-        if flow_yml
-        else _AGENTIC_FLOW_KINDS
-    )
+    try:
+        config = resolve_flow_config(project_root)
+    except FlowConfigError:
+        # Reported separately by :func:`_flow_config_drift`; don't double-report.
+        return []
 
     drifts: list[ConfigDrift] = []
-    for kind, names in kinds:
-        for name in names:
-            path = project_root / ".claude" / kind / f"{name}.md"
+    manifest = load_manifest(project_root)
+    for name in COMMAND_FILES:
+        relpath = f".claude/commands/{name}.md"
+        expected = composed_command(name, config, project_root)
+        state = state_of(
+            project_root,
+            relpath,
+            expected=expected,
+            manifest=manifest,
+            alternates=(composed_command(name, config, None),),
+        )
+        drift = _state_drift(relpath, state, kind="commands", name=name)
+        if drift is not None:
+            drifts.append(drift)
+
+    if not flow_yml:
+        # Without a flow.yml the agents are the plain BDL-048 byte-identical
+        # scaffold, so the vendored compare is exact for them too.
+        for name in AGENT_FILES:
+            path = project_root / ".claude" / "agents" / f"{name}.md"
             try:
                 on_disk = path.read_text(encoding="utf-8")
             except OSError:
                 continue
-            if on_disk == _vendored_asset(kind, name):
+            if on_disk == _vendored_asset("agents", name):
                 continue
             drifts.append(
                 ConfigDrift(
-                    file=f".claude/{kind}/{name}.md",
+                    file=f".claude/agents/{name}.md",
                     reason=(
                         "scaffolded agentic-flow file drifted from the shipped "
-                        "template (run `beadloom config-check --fix` to restore)"
+                        "template"
+                    ),
+                    remediation=(
+                        "this repo has no .beadloom/flow.yml, so the role files "
+                        "are the plain vendored scaffold and there is no project "
+                        "layer to hold an addition. Add a flow.yml (`beadloom "
+                        "setup-agentic-flow`), then move the edit to "
+                        f"{PROJECT_FLOW_DIRNAME / 'roles' / f'{name}.md'}"
                     ),
                 )
             )
@@ -261,11 +414,12 @@ def _composed_adapter_drifts(project_root: Path) -> list[ConfigDrift]:
     """Drift for composed role adapters vs ``compose_role`` for this flow.yml.
 
     Only runs when a valid ``.beadloom/flow.yml`` is present. For each tool the
-    config names, byte-compares every existing ``<tool-agent-dir>/<role>.md``
-    against the freshly-composed body (CORE + the configured architecture +
-    stack overlays). A hand-edit of an adapter, or a CORE/overlay change without
-    re-running ``setup-agentic-flow``, makes the on-disk file differ and is
-    reported — the BDL-048 drift-guard pattern, now over the composer.
+    config names, compares every existing ``<tool-agent-dir>/<role>.md`` against
+    the freshly-composed body — CORE + the configured architecture + stack
+    overlays + the project fragment at ``.beadloom/flow/roles/<role>.md``. A
+    CORE/overlay change without re-running ``setup-agentic-flow`` is reported;
+    a project extension is not, because it is part of the expected composition
+    (BDL-UX #139, #152).
     """
     if not (project_root / FLOW_CONFIG_RELPATH).is_file():
         return []
@@ -275,31 +429,26 @@ def _composed_adapter_drifts(project_root: Path) -> list[ConfigDrift]:
         # The invalid-config drift is reported separately; don't double-report.
         return []
 
-    composed = compose_all_roles(config)
+    composed = compose_all_roles(config, project_root)
+    shipped_only = compose_all_roles(config)
+    manifest = load_manifest(project_root)
     drifts: list[ConfigDrift] = []
     for tool in config.tools:
         agent_dir = TOOL_AGENT_DIRS[tool]
         for role in ROLE_NAMES:
             rel = agent_dir / f"{role}.md"
-            path = project_root / rel
-            if not path.is_file():
+            if not (project_root / rel).is_file():
                 continue
-            try:
-                on_disk = path.read_text(encoding="utf-8")
-            except OSError:
-                continue
-            if on_disk == composed[role]:
-                continue
-            drifts.append(
-                ConfigDrift(
-                    file=str(rel),
-                    reason=(
-                        "composed role adapter drifted from CORE+overlays for "
-                        f"flow.yml ({config.architecture}+{','.join(config.stack)}) "
-                        "— run `beadloom setup-agentic-flow` to recompose"
-                    ),
-                )
+            state = state_of(
+                project_root,
+                str(rel),
+                expected=composed[role],
+                manifest=manifest,
+                alternates=(shipped_only[role],),
             )
+            drift = _state_drift(str(rel), state, kind="roles", name=role)
+            if drift is not None:
+                drifts.append(drift)
     return drifts
 
 
@@ -326,23 +475,26 @@ def refresh_composed_adapters(project_root: Path) -> list[str]:
 
 
 def refresh_agentic_flow_files(project_root: Path) -> list[str]:
-    """Re-drop the vendored agentic-flow files into a scaffolded repo.
+    """Recompose the scaffolded flow files in a repo that already adopted it.
 
-    The ``config-check --fix`` companion to :func:`_agentic_flow_drifts`:
-    restores every drifted ``.claude/agents/*`` + ``.claude/commands/*`` from
-    its shipped template (reusing the scaffold's own file-write helper with
-    ``force=True``), but ONLY when the flow is already scaffolded — so ``--fix``
-    never forces the flow onto a repo that did not adopt it. CLAUDE.md is left
-    untouched here (its auto-regions are refreshed by the caller, preserving
-    user prose). Returns the file names rewritten.
+    The ``config-check --fix`` companion to :func:`_agentic_flow_drifts`: runs
+    the scaffold's own non-forcing path, so every file Beadloom wrote and nobody
+    touched is recomposed from CORE + overlays + the project layer, while a
+    hand-edited file is left exactly as it is and reported with somewhere to put
+    the edit. ``--fix`` deleting somebody's only copy of an engineering standard
+    is the failure BDL-UX #139 and #152 were filed for; it does not do that any
+    more. Returns the file names rewritten.
     """
     if not _agentic_flow_scaffolded(project_root):
         return []
-    written: list[str] = []
-    for kind, names in _AGENTIC_FLOW_KINDS:
-        target_dir = project_root / ".claude" / kind
-        done, _skipped = _scaffold_vendored(target_dir, kind, names, force=True)
-        written.extend(f"{kind}/{name}.md" for name in done)
+    from beadloom.onboarding.agentic_flow_setup import scaffold
+
+    has_flow = (project_root / FLOW_CONFIG_RELPATH).is_file()
+    result = scaffold(project_root, include_agents=not has_flow)
+    written = [f"agents/{name}.md" for name in result.agents_written]
+    written.extend(f"commands/{name}.md" for name in result.commands_written)
+    if result.claude_md is not None:
+        written.append("CLAUDE.md")
     return written
 
 
@@ -374,6 +526,10 @@ def check_config_drift(
     if claude is not None:
         drifts.append(claude)
 
+    body = _claude_md_body_drift(project_root)
+    if body is not None:
+        drifts.append(body)
+
     drifts.extend(_adapter_drifts(project_root))
     drifts.extend(_agentic_flow_drifts(project_root))
 
@@ -382,4 +538,4 @@ def check_config_drift(
         drifts.append(flow)
     drifts.extend(_composed_adapter_drifts(project_root))
 
-    return sorted(drifts, key=lambda d: d.file)
+    return sorted(drifts, key=lambda d: (d.file, d.reason))

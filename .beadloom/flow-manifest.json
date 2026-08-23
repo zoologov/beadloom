@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "written": {
+    ".claude/CLAUDE.md": "c87b933041be944aa2fe874fc78e4a8bcaf28579efc99ee6fd3af5e78cc6d714",
+    ".claude/commands/checkpoint.md": "d6019d0b91d01f6243b749bf9d8beb61426aa8e190d2660110942c6c2468e900",
+    ".claude/commands/coordinator.md": "f9c4d9ac1d4a1a797517417cd9fb255860dabba6690926f18ddb56e2432e8619",
+    ".claude/commands/task-init.md": "1183502a530b879b056e71a1bf1371bc42df35f8f9140fd7bcf561967d6c1a47",
+    ".claude/commands/templates.md": "665d6171f51a4130a34aeb0b374930031af5b2f915a93d22e84ab942d640272c"
+  }
+}

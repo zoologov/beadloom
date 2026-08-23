@@ -522,13 +522,27 @@ def config_check(*, fix: bool, project: Path | None) -> None:
     with connection(db_path) as conn:
         drifts = check_config_drift(project_root, conn)
 
-    if not drifts:
-        click.echo("Agent-config in sync — no drift.")
+    blocking = [d for d in drifts if d.severity == "error"]
+    warnings = [d for d in drifts if d.severity != "error"]
+
+    for drift in warnings:
+        click.echo(f"  ! {drift.file}: {drift.reason}", err=True)
+        if drift.remediation:
+            click.echo(f"    -> {drift.remediation}", err=True)
+
+    if not blocking:
+        # A warning is a real finding and is printed above; it does not block,
+        # because a green project going red on upgrade is how a check gets
+        # switched off wholesale.
+        suffix = f" ({len(warnings)} warning(s) — see above)" if warnings else ""
+        click.echo(f"Agent-config in sync — no blocking drift{suffix}.")
         return
 
-    click.echo(f"Agent-config drift detected ({len(drifts)}):", err=True)
-    for drift in drifts:
+    click.echo(f"Agent-config drift detected ({len(blocking)}):", err=True)
+    for drift in blocking:
         click.echo(f"  - {drift.file}: {drift.reason}", err=True)
+        if drift.remediation:
+            click.echo(f"    -> {drift.remediation}", err=True)
     click.echo(
         "  Run `beadloom setup-rules --refresh` (or `config-check --fix`) to fix.",
         err=True,

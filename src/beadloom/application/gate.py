@@ -394,11 +394,22 @@ def _step_config_check(project_root: Path) -> GateStep:
     with connection(db_path) as conn:
         drifts = check_config_drift(project_root, conn)
 
-    findings = [_config_finding(d.file, d.reason) for d in drifts]
-    passed = not drifts
-    summary = (
-        f"{len(drifts)} drifted artifact(s)" if drifts else "agent-config in sync"
-    )
+    findings = [
+        _config_finding(d.file, d.reason, d.severity, d.remediation) for d in drifts
+    ]
+    blocking = [d for d in drifts if d.severity == "error"]
+    warned = len(drifts) - len(blocking)
+    passed = not blocking
+    # Three states, three summaries. `agent-config in sync` printed over a
+    # reported-but-non-blocking finding is the shape BDL-061 S2b spent itself on.
+    if blocking:
+        summary = f"{len(blocking)} drifted artifact(s)"
+        if warned:
+            summary += f" + {warned} warning(s)"
+    elif warned:
+        summary = f"no blocking drift; {warned} artifact(s) reported (warn)"
+    else:
+        summary = "agent-config in sync"
     return GateStep("config-check", passed=passed, findings=findings, summary=summary)
 
 
@@ -649,16 +660,28 @@ def _audit_finding(finding: object) -> Finding:
     }
 
 
-def _config_finding(file: str, reason: str) -> Finding:
-    """Project an AgentConfigAsCode drift onto the shared finding shape."""
+def _config_finding(
+    file: str,
+    reason: str,
+    severity: str = "error",
+    remediation: str | None = None,
+) -> Finding:
+    """Project an AgentConfigAsCode drift onto the shared finding shape.
+
+    ``severity`` is carried through from the drift rather than hardcoded: a
+    hand-edited composed artifact is a real finding that must be reported and
+    must NOT block, and collapsing the two onto one severity is what would make
+    an adopter switch the whole check off.
+    """
     locations: list[Finding] = [{"file": file}] if file else []
     return {
         "kind": "config-check",
         "rule": "config-drift",
-        "severity": "error",
+        "severity": severity,
         "locations": locations,
         "why": reason,
-        "remediation": "run `beadloom setup-rules --refresh` (or `config-check --fix`)",
+        "remediation": remediation
+        or "run `beadloom setup-rules --refresh` (or `config-check --fix`)",
     }
 
 

@@ -1,0 +1,10 @@
+
+---
+
+## ARCHITECTURE (FSD) — composed from `.beadloom/flow.yml`
+
+- **Layering:** `app → pages → widgets → features → entities → shared`, never
+  the reverse. No slice imports a sibling slice on the same layer.
+- **Boundaries are machine-enforced:** `beadloom lint --strict`. Discover the
+  live slice map with `beadloom graph` / `beadloom ctx` — never hardcode it.
+- **One nameable responsibility per slice segment** (`ui`, `model`, `api`, `lib`).

@@ -1,6 +1,6 @@
 # ACTIVE: BDL-061 — Enforced agentic flow
 
-> **Last updated:** 2026-08-24
+> **Last updated:** 2026-08-23
 > **Phase:** Development
 
 ---
@@ -18,7 +18,7 @@ is counted), `.54` (the Gate's lint line, filed and closed inside `.49`) and `.5
 documentation pass that turned the combined tree green).
 **Open in S2b:** `.50` (annotations the extractor cannot see), `.51` (three modules past
 1000 lines).
-**Next:** S3 opens with `.9` (compose(core, arch, stack, project)). Also outstanding and not
+**S3 opened** with `.9` on `features/BDL-061-S3`; `.10`–`.12` follow. Also outstanding and not
 part of any slice: `.35`, `.39`, `.41`, `.42`.
 
 ## Progress
@@ -376,6 +376,15 @@ header comment, where a reader of a red check will look first.
       gained the baseline-provenance section, the `declared_docs` / `reference_state` /
       `foreign_edges` tables it never listed, `sync_state`'s two new columns and four verdicts,
       and the `docs audit` step missing from its Gate chain.
+- [x] S3 `.9` dev (2026-08-23) — composition generalised to `compose(core, architecture,
+      stack, project)` over three artifact kinds; the project layer lives in `.beadloom/flow/`;
+      `config-check` verifies the composition RESULT and the flow manifest separates a stale
+      artifact from a hand-edited one (which is reported and never rewritten). #177's open
+      question answered by measurement: the `CLAUDE.md` body was checked by nothing — a file
+      gutted to one line still printed `config-check PASS: agent-config in sync` — and the
+      propagation loop was a TEST that rewrote the shipped template from the live file.
+      Shipped core `CLAUDE.md` 440 → 376 lines, every removed line mapped to its replacement in
+      PLAN. 24 new tests; nine sabotages each reddened a named test in a clean room.
 
 ## Results
 
@@ -418,7 +427,8 @@ header comment, where a reader of a red check will look first.
 | .55 | Done | S2b docs: the 28-pair onboarding README revised to the code; *unverifiable is not clean* written once in both READMEs + CHANGELOG; the baseline-out-of-the-database change stated for adopters; 6 `surface_drift` re-attested after reading, stale 28 → 0 |
 | .50 | Pending | P1: annotations the extractor cannot see — docstring annotation, directory source without a trailing slash, deny rules keyed on annotated symbols |
 | .51 | Pending | P2: three modules past 1000 lines with many responsibilities each, self-flagged and owned by nobody |
-| .9–.12 | Pending | S3 composition + project overlay (#139, #152, #132, #136, #137) |
+| .9 | Done | S3 dev: `compose(core, architecture, stack, project)` for roles, commands AND `CLAUDE.md`; project layer in `.beadloom/flow/`; `config-check` verifies the composition result; #177, #139, #152, #132, #136, #137 closed |
+| .10–.12 | Pending | S3 test / review / tech-writer |
 | .13–.16 | Pending | S4 BDD, mutation, doc shape + quality, shared writing standard |
 | .17–.20 | Pending | S5 TO-BE / AS-IS / WORKING |
 | .21–.24 | Pending | S6 waves from the graph (#155, #118, #133) |

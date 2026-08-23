@@ -27,6 +27,28 @@ Auto-detects IDEs by marker files and creates adapter files. Returns list of cre
 
 Generates `.beadloom/AGENTS.md` with v2 template. Injects rules from `rules.yml`. Preserves user content below `## Custom`.
 
+### `refresh_claude_md(project_root, *, dry_run=False)`
+
+Regenerates the auto-managed regions of `.claude/CLAUDE.md` between
+`<!-- beadloom:auto-start SECTION -->` / `<!-- beadloom:auto-end -->` markers and
+returns the names of the regions whose content changed. Two regions are
+rendered:
+
+- **`project-info`** — stack, tests, linter, typing, packages, version, read
+  from the project's own manifest and tree.
+- **`doc-language`** — the "ALL documents MUST be written in …" sentence,
+  derived from `language:` in `.beadloom/flow.yml` (default `en`). The
+  scaffolded flow used to state English unconditionally, so a team documenting
+  in another language had to override the shipped default in prose
+  (BDL-UX #136).
+
+### `blank_auto_regions(text)`
+
+Replaces every auto-region BODY with a fixed token. `config-check` compares the
+composed part of `CLAUDE.md` against `compose("claude", ...)`; the regions are
+generated per project and are supposed to move, so blanking them keeps the two
+checks from reporting each other's drift.
+
 ### `setup_mcp_auto(project_root)`
 
 Auto-detects editor (claude-code, cursor, windsurf) by marker files and creates MCP config. Returns editor name on success, or `None` if config already exists.

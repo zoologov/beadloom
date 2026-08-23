@@ -121,13 +121,41 @@ apply it to roles, commands and `CLAUDE.md`. Project layer in `.beadloom/flow/`.
 Cross-major re-init reports orphans (#137). Relocate role-owned rules out of the core
 `CLAUDE.md` into role templates.
 
+**Correction, measured in `.9` (2026-08-23).** The last criterion was written as
+"the core `CLAUDE.md` shrinks" on the assumption that what leaves it are the three standing
+rules S2 retired. `.7` established that those rules were never in the shipped `CLAUDE.md` at
+all, so that assumption was already false when it was written. Re-derived from the file itself,
+what genuinely does not belong in a **stack-neutral** core is different and larger:
+
+| Removed from the core | Lines | Replacement |
+|---|---|---|
+| §8 Quick Reference + §9 Agent Checklist | 61 | §0 CRITICAL RULES, which both restated command-for-command |
+| §7 "Code" + "Shell" anti-patterns | 11 | `templates/claude/stack/python/CLAUDE.md.txt` (already duplicated in `roles/stack/python/dev.md.txt`) |
+| §0 `uv run pytest` / `ruff check` / `mypy` | 5 | the same stack overlay — a TypeScript adopter was being told to run `uv run pytest` in their CRITICAL RULES |
+| §3 "MUST be written in English" | 1 | the `doc-language` auto-region, rendered from `language:` in `flow.yml` (#136) |
+| *(added)* provenance stamp + pointers | +14 | — |
+
+**Measured, not described.** Shipped CORE: **440 → 376 lines** (−78/+14, −14.5%). Composed for
+a `ddd`+`python` project: **406** (the 30-line stack overlay returns). A non-Python project's
+`CLAUDE.md` no longer contains a single Python command. Beadloom's own live file is 432 = 376
+core + 30 stack + 26 project layer.
+
+**A second, unplanned finding this criterion depended on.** #177 left open whether
+`config-check` was right to print `PASS: agent-config in sync` over two files that demonstrably
+differed. It was not "correct by design under the composition-result rule" — the `CLAUDE.md`
+body was verified by **nothing**. Measured on a scaffolded project before the fix: appending a
+paragraph → 0 drifts; deleting all of §7 → 0 drifts; replacing the whole file with `# gone` →
+0 drifts. The propagation loop itself was a **test** (`TestSyncAgenticFlow`) that rewrote the
+shipped template from the live file, sha256 `f360bc60…` → `6fcae821…`, passing while it did so.
+
 **Done when:**
-- [ ] A project overlay survives an upgrade
-- [ ] Drift in the shipped core is still detected while an overlay exists
-- [ ] Suppressing a core rule requires reason + exit condition and is reported
-- [ ] A hand-edited vendored file is reported with migration guidance and never rewritten
-- [ ] #139, #152, #132, #136, #137 close
-- [ ] The core `CLAUDE.md` shrinks, with each removed line mapped to its replacement
+- [x] A project overlay survives an upgrade
+- [x] Drift in the shipped core is still detected while an overlay exists
+- [x] Suppressing a core rule requires reason + exit condition and is reported
+- [x] A hand-edited vendored file is reported with migration guidance and never rewritten
+- [x] #139, #152, #132, #136, #137 close
+- [x] The core `CLAUDE.md` shrinks, with each removed line mapped to its replacement — see the
+      correction above; the criterion was re-derived rather than satisfied as written
 
 ### S4 — Executable behaviour and document shape (`.13`–`.16`)
 

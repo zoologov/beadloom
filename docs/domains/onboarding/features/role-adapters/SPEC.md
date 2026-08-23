@@ -12,13 +12,15 @@ Generates per-tool role adapters from composed roles (BDL-052 S3).
 
 The role configurator's output stage: given a `FlowConfig`, compose each role
 once and write a **per-tool adapter set** for every configured tool. Every
-adapter body is exactly `compose_role(...)`, so this is the single writer the
-drift-guard verifies against.
+adapter body is exactly `compose_role(...)` for the repo's `flow.yml` **plus its
+project layer** (`.beadloom/flow/roles/<role>.md`), so this is the single writer
+the drift-guard verifies against — and a project extension is part of the
+expected result rather than drift (BDL-UX #139, #152).
 
 ### Tool adapter sets
 
 - **claude** → `.claude/agents/<role>.md` (the Claude-Code subagent files). The
-  slash-command set (`.claude/commands/*`) is vendored separately by
+  slash-command set (`.claude/commands/*`) is composed separately by
   `agentic_flow_setup` and is not regenerated here.
 - **cursor** → `.cursor/agents/<role>.md` (Cursor subagents — same composed
   body) plus a thin `.cursor/rules/beadloom-flow.md` orchestrator pointer (the
@@ -36,7 +38,9 @@ drift-guard verifies against.
   re-running with the same config rewrites identical files.
 - A hand-edit of any adapter, or a CORE/overlay change without regenerating,
   makes the on-disk file differ from the recomputed composition and is flagged
-  by `config-check` (and the drift-guard test).
+  by `config-check`. Which of the two it is, is decided by the flow manifest:
+  every write records the body's sha256, so a file Beadloom wrote and nobody
+  touched is recomposed while a hand-edited one is reported and left alone.
 - Beadloom's own `.claude/agents/*` reproduce exactly from
   `compose_role(ddd, python)`.
 
@@ -49,6 +53,8 @@ Module `src/beadloom/onboarding/role_adapters.py`:
 - `cursor_rules_relpath()` → `Path`
 - `cursor_rules_body()` → `str`
 
+Writes are fingerprinted through `flow_manifest.record()`.
+
 ## Testing
 
-Tests: `tests/test_role_configurator.py`
+Tests: `tests/test_role_configurator.py`, `tests/test_flow_composition.py`

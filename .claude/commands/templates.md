@@ -92,8 +92,8 @@ Used for: `epic`, `feature`
 ## Technical Context
 
 ### Constraints
-- Python 3.10+
-- SQLite (WAL mode)
+- [Language/runtime constraint — see the STACK section appended below, composed
+  from `.beadloom/flow.yml`; the core does not assume a language]
 - [Additional constraints specific to this task]
 
 ### Affected Areas
@@ -158,33 +158,30 @@ Used for: `epic`, `feature`
 ## Code Standards
 
 ### Language and Environment
-- **Language:** Python 3.10+ (type hints, `str | None` syntax)
-- **Package manager:** uv
-- **Virtual environment:** uv venv
+- Filled from the STACK section appended below (composed from
+  `.beadloom/flow.yml`). Do NOT hardcode a language here: this template ships to
+  every adopter, and most of them are not on the one Beadloom happens to use.
 
 ### Methodologies
 
 | Methodology | Application |
 |-------------|-------------|
 | TDD | Red -> Green -> Refactor |
-| Clean Code | snake_case, SRP, DRY, KISS |
-| Modular architecture | CLI -> Core -> Storage |
+| Clean Code | SRP, DRY, KISS |
+| Architecture | see the ARCHITECTURE section appended below (from `.beadloom/flow.yml`) |
 
 ### Testing
-- **Framework:** pytest + pytest-cov
+- **Framework:** see the STACK section appended below
 - **Coverage:** minimum 80%
 
 ### Code Quality
-- **Linter:** ruff (lint + format)
-- **Typing:** mypy --strict
+- **Linter/type-checker:** see the STACK section appended below
 
 ### Restrictions
-- No `Any` without justification
-- No `print()` / `breakpoint()` — use logging
-- No bare `except:` — only `except SpecificError:`
-- No `os.path` — pathlib only
-- No f-strings in SQL — parameterized queries `?`
-- No `yaml.load()` — safe_load only
+- No unjustified escape hatch from the type system
+- No stray debug output — use the language's logging facility
+- No catch-all exception handler — name the exception
+- Language-specific restrictions: see the STACK section appended below
 
 ## Architectural Decisions
 
@@ -327,3 +324,40 @@ Used for: `bug`, `task`, `chore`
 - [ ] Criterion 1
 - [ ] Criterion 2
 ```
+
+---
+
+## ARCHITECTURE (DDD) — composed from `.beadloom/flow.yml`
+
+- **Layering:** `services → application → domains → infrastructure`, never the
+  reverse. No domain depends on a peer domain.
+- **Boundaries are machine-enforced:** `beadloom lint --strict`. Discover the
+  live layer map with `beadloom graph` / `beadloom ctx` — never hardcode it.
+- **One nameable responsibility per module.** A CONTEXT that says "and" in a
+  module's responsibility is describing two modules.
+
+---
+
+## STACK (Python) — composed from `.beadloom/flow.yml`
+
+Fill the placeholders above from this section; it replaces nothing, it supplies.
+
+### Language and Environment
+- **Language:** Python 3.10+ (type hints, `str | None` syntax)
+- **Package manager:** uv
+- **Virtual environment:** uv venv
+
+### Testing
+- **Framework:** pytest + pytest-cov
+
+### Code Quality
+- **Linter:** ruff (lint + format)
+- **Typing:** mypy --strict
+
+### Restrictions (Python)
+- No `Any` without justification
+- No `print()` / `breakpoint()` — use logging
+- No bare `except:` — only `except SpecificError:`
+- No `os.path` — pathlib only
+- No f-strings in SQL — parameterized queries `?`
+- No `yaml.load()` — safe_load only

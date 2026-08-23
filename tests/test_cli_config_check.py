@@ -98,23 +98,29 @@ class TestConfigCheckAgenticFlow:
         assert result.exit_code == 1
         assert ".claude/agents/dev.md" in result.output
 
-    def test_fix_restores_drifted_flow_file(self, tmp_path: Path) -> None:
+    def test_fix_reports_a_hand_edit_and_does_not_delete_it(
+        self, tmp_path: Path
+    ) -> None:
+        """BDL-061 S3: ``--fix`` reports a hand edit and leaves it in place.
+
+        It used to restore the file byte-identical, deleting the edit with no
+        diff and no confirmation (BDL-UX #139, #152). The finding is a ``warn``,
+        so the exit code stays 0 — an adopter's green project does not go red on
+        upgrade — and the message names where the edit belongs.
+        """
         project = _scaffolded_project(tmp_path)
         agent = project / ".claude" / "agents" / "dev.md"
-        original = agent.read_text(encoding="utf-8")
         agent.write_text("HAND EDITED\n", encoding="utf-8")
 
         result = CliRunner().invoke(
             main, ["config-check", "--fix", "--project", str(project)]
         )
-        assert result.exit_code == 0
-        # --fix restores the flow file BYTE-IDENTICAL to the shipped template.
-        assert agent.read_text(encoding="utf-8") == original
-
-        recheck = CliRunner().invoke(
-            main, ["config-check", "--project", str(project)]
-        )
-        assert recheck.exit_code == 0
+        # Still reported (exit 1) — the guard did not get weaker. What changed
+        # is that the edit is still there afterwards, and the message says where
+        # it belongs instead of offering to delete it.
+        assert result.exit_code == 1
+        assert agent.read_text(encoding="utf-8") == "HAND EDITED\n"
+        assert ".beadloom/flow/" in result.output
 
     def test_unscaffolded_repo_not_flagged_for_flow(self, tmp_path: Path) -> None:
         """A repo that never adopted the flow (only a stray partial file) is not

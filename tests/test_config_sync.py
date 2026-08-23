@@ -400,30 +400,43 @@ class TestAgenticFlowDrift:
 
 
 class TestRefreshAgenticFlowFiles:
-    def test_restores_drifted_files_byte_identical(self, tmp_path: Path) -> None:
-        """``--fix`` restores every drifted flow file to the shipped template
-        byte-for-byte (and the post-fix check is clean)."""
+    def test_hand_edited_files_are_reported_never_rewritten(
+        self, tmp_path: Path
+    ) -> None:
+        """BDL-061 S3 contract change: ``--fix`` no longer eats a hand edit.
+
+        It used to restore every divergent flow file byte-for-byte, which is the
+        failure BDL-UX #139/#152 were filed for — the only copy of a team's
+        standing engineering practice was deleted with no diff and no
+        confirmation. A hand-edited file is now left alone and reported as a
+        ``warn`` naming the project-layer path the edit belongs in.
+        """
         project = _make_scaffolded_project(tmp_path)
         agent = project / ".claude" / "agents" / "dev.md"
         cmd = project / ".claude" / "commands" / "coordinator.md"
-        original = agent.read_text(encoding="utf-8")
         agent.write_text("HAND EDITED\n", encoding="utf-8")
         cmd.write_text("REWRITTEN\n", encoding="utf-8")
 
         written = refresh_agentic_flow_files(project)
 
-        assert "agents/dev.md" in written
-        assert "commands/coordinator.md" in written
-        assert agent.read_text(encoding="utf-8") == original
+        assert "agents/dev.md" not in written
+        assert "commands/coordinator.md" not in written
+        assert agent.read_text(encoding="utf-8") == "HAND EDITED\n"
+        assert cmd.read_text(encoding="utf-8") == "REWRITTEN\n"
+
         conn = _make_conn()
         try:
             drifts = check_config_drift(project, conn)
         finally:
             conn.close()
-        flow_drifts = [
-            d for d in drifts if "/agents/" in d.file or "/commands/" in d.file
-        ]
-        assert flow_drifts == []
+        reported = {
+            d.file: d for d in drifts if "/agents/" in d.file or "/commands/" in d.file
+        }
+        command_drift = reported[".claude/commands/coordinator.md"]
+        assert command_drift.severity == "error"
+        assert ".beadloom/flow/commands/coordinator.md" in (
+            command_drift.remediation or ""
+        )
 
     def test_noop_on_unscaffolded_repo(self, tmp_path: Path) -> None:
         """``--fix`` never forces the flow onto a repo that did not adopt it."""
@@ -443,13 +456,16 @@ class TestRefreshAgenticFlowFiles:
         assert agent.read_text(encoding="utf-8") == "HAND EDITED\n"
 
     def test_rewrites_all_files_even_when_in_sync(self, tmp_path: Path) -> None:
-        """On a fully-scaffolded repo, every flow file is reported rewritten
-        (force=True) — idempotent and byte-stable."""
+        """On a fully-scaffolded repo, every flow file is reported rewritten —
+        idempotent and byte-stable. CLAUDE.md is now one of them: since BDL-061
+        S3 its body is composed, not a snapshot of Beadloom's own live file."""
         project = _make_scaffolded_project(tmp_path)
         written = refresh_agentic_flow_files(project)
-        expected = {f"agents/{n}.md" for n in AGENT_FILES} | {
-            f"commands/{n}.md" for n in COMMAND_FILES
-        }
+        expected = (
+            {f"agents/{n}.md" for n in AGENT_FILES}
+            | {f"commands/{n}.md" for n in COMMAND_FILES}
+            | {"CLAUDE.md"}
+        )
         assert set(written) == expected
 
 
