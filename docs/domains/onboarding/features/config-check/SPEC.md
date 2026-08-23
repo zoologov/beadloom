@@ -34,8 +34,10 @@ against disk, returning one `ConfigDrift` per drifted artifact, sorted by path:
 A repo that never adopted the flow is never reported for it. A repo that DID
 adopt it and is missing a canonical file is reported, because the gate is not
 satisfied by having less to check (see *Deletion is not a pass*).
-`refresh_composed_adapters` and `refresh_agentic_flow_files` re-render the
-managed files (the `--fix` path).
+`apply_config_fixes` is the `--fix` seam: it runs every writer
+(`refresh_claude_md`, `generate_agents_md`, `setup_rules_auto`,
+`refresh_agentic_flow_files`, `refresh_composed_adapters`) and reports what
+changed — see *`--fix` may only rewrite what Beadloom wrote*.
 
 ### The composition result, not file bytes
 
@@ -65,9 +67,9 @@ exists to remove:
 |-------|----------|--------------|
 | `clean` | — | no finding |
 | `stale` | `error` | recompose (`beadloom setup-agentic-flow`) |
-| `hand_edited` | `error` | reported, **never rewritten**; the message names `.beadloom/flow/<kind>/<name>.md` |
+| `hand_edited` | `error` | reported, **never rewritten** — `--fix` declines it by name; the message names `.beadloom/flow/<kind>/<name>.md` |
 | `missing` | `error` | Beadloom composed it and it is gone — restore with `beadloom setup-agentic-flow` |
-| `unverified` | `warn` | nothing accounts for it (no manifest, no provenance stamp), so a hand edit cannot be told apart from an upgrade — reported, does not block |
+| `unverified` | `warn` | nothing accounts for it (no manifest, no provenance stamp), so a hand edit cannot be told apart from an upgrade — reported, does not block, and `--fix` declines it |
 
 `unverified` is a warning so that no adopter's green project turns red on
 upgrade. `hand_edited` stays an error because the drift-guard's job did not
@@ -80,6 +82,54 @@ role file before this release has no manifest entry for it, so what used to bloc
 now warns. That is the trade `--fix`-no-longer-restores buys, and BDL-061 `.57`'s
 manifest-presence rule largely closes it — once a project has a manifest at all, a
 file missing from it is not "pre-manifest", it is unaccounted for.
+
+### `--fix` may only rewrite what Beadloom wrote
+
+The table above says a hand-edited file "will NOT be rewritten", and the check
+prints that sentence. Until BDL-061 `.59` it was false for exactly the file it
+was printed about: `refresh_composed_adapters` called `generate_adapters`
+unconditionally, so `--fix` restored the composed body byte-for-byte and the
+re-check then printed `Agent-config in sync — no blocking drift` at exit 0,
+mentioning nothing. Measured on this repo and on `main`: `77dfc84f…` →
+`f40b584e…` (the edit) → `77dfc84f…` (gone).
+
+The destruction pre-dated the slice; the **promise** did not. Before S3, `--fix`
+overwrote silently and claimed nothing. A reader who trusts the sentence is
+exactly the reader who runs `--fix` feeling safe, so the sentence is now the
+behaviour:
+
+- `--fix` rewrites an adapter only when its state is `clean`, `stale` or
+  `missing` — bodies Beadloom can prove it wrote. `hand_edited` and `unverified`
+  are **declined**, named in the output with the reason, and left byte-identical.
+  A preserved path is not recorded in the flow manifest either: recording a
+  digest we did not write would make the next run believe the edit was ours.
+- `unverified` is declined for the stronger reason — there we cannot even tell
+  whose the body is. Its own remediation says *review it, then
+  `setup-agentic-flow --force`*: a deliberate act by somebody who has looked.
+  `--fix` has not looked. It matters because `unverified` is a `warn`, so
+  overwriting one would have destroyed content and then reported "no blocking
+  drift" at exit 0, with no red anywhere to catch it.
+- **Say what it did.** `apply_config_fixes` digests the artifact surface before
+  and after the writers run and reports the difference, so the run names every
+  file it created or rewrote (and the summary line carries the count) rather
+  than trusting each writer's account of itself — several over-report, and #186
+  is a case of the output being believed over the bytes. The surface is
+  enumerated from the artifact names, so a file the run *creates* is in frame;
+  `.beadloom/flow-manifest.json` is deliberately out of frame as Beadloom's own
+  record of its writes rather than authored content.
+- `ConfigDrift.fixable` stops the closing advice offering `config-check --fix`
+  for a finding it will decline — doing what the last line said used to undo what
+  the line above it promised.
+
+One consequence had to be fixed first, and it is measured rather than argued: on
+a repo scaffolded **before** it adopted a `flow.yml`, all four `.claude/agents/*`
+read `hand_edited`, because `_scaffold_vendored` wrote those bytes and never
+recorded a digest (probe: `fsd`+`vuejs` → four hand-edits on files nobody
+touched; `ddd`+`python` reads `clean` only by coincidence, since the vendored
+bytes *are* that composition). Declining those would mean `--fix` refusing for
+ever to recompose files Beadloom itself wrote — the mirror of the defect. The
+plain vendored body is therefore offered as an `alternate`, so it classifies
+`stale` and recomposes. **Unowned is not the same as somebody's only copy.**
 
 ### Deletion is not a pass
 
@@ -174,6 +224,13 @@ this is a file we should be able to account for".
 - Nothing an editor can delete makes this check quieter. Ownership rests on two
   independent signals (the manifest and the artifact's provenance stamp), and the
   absence of either is itself reported.
+- `--fix` never destroys content while reporting success. It rewrites only bodies
+  Beadloom can prove it wrote, and every file a run changes is named in that
+  run's output. A destructive act that reports success is the same class as a
+  check that reports clean without checking (BDL-UX #172/#174/#175), and worse,
+  because those only misinformed.
+- The remedy a finding offers is a remedy that applies to it: `--fix` is never
+  named as the fix for a finding `--fix` declines.
 - Composition is a function of its inputs and of nothing else — no clock, no
   ambient state. That is what licenses checking against a composition rather than
   against stored bytes.
@@ -188,14 +245,22 @@ Module `src/beadloom/onboarding/config_sync.py`:
 - `check_config_drift(project_root, conn) -> list[ConfigDrift]` — report every
   drifted artifact, sorted by path.
 - `ConfigDrift` — `file` (project-relative path), `reason` (agent-actionable
-  explanation), `severity` (`error` blocks the Gate, `warn` does not) and
+  explanation), `severity` (`error` blocks the Gate, `warn` does not),
   `remediation` (the concrete next move, or `None` for the caller's generic
-  advice).
-- `refresh_composed_adapters(project_root) -> list[str]` — re-render the
-  composed role adapters.
+  advice) and `fixable` (whether `--fix` can repair it; `False` when repairing
+  would mean deleting the body on disk).
+- `apply_config_fixes(project_root) -> FixReport` — run every `--fix` writer and
+  report, by measurement, what changed.
+- `FixReport` — `rewritten`, `created` (measured against the disk) and `declined`;
+  `.changed` is the union of the first two.
+- `DeclinedRewrite` — `file`, `reason`, `remediation` for one refusal.
+- `refresh_composed_adapters(project_root) -> AdapterRefresh` — re-render the
+  composed role adapters, minus the ones it declines (`rewritten` + `declined`).
 - `refresh_agentic_flow_files(project_root) -> list[str]` — recompose the
   scaffolded flow files through the scaffold's own non-forcing path, so a
-  hand-edited file survives `--fix`.
+  hand-edited file survives `--fix`. Its list is the scaffold's self-report and
+  includes files it re-read and left identical; `apply_config_fixes` measures
+  instead of relying on it.
 
 ## Testing
 

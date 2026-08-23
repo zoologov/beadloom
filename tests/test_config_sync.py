@@ -519,3 +519,112 @@ class TestContract:
         assert first == second
         files = [d.file for d in first]
         assert files == sorted(files)
+
+
+# ---------------------------------------------------------------------------
+# refresh_composed_adapters — what --fix rewrites, and what it refuses to.
+# ---------------------------------------------------------------------------
+
+
+class TestRefreshComposedAdapters:
+    """BDL-061 `.59` / BDL-UX #186 — ``--fix`` may only rewrite what it wrote.
+
+    The check tells the reader a hand-edited adapter *"will NOT be rewritten"*.
+    Whether that sentence is true is decided here: the composer's ``--fix``
+    companion regenerated every configured adapter unconditionally, so the
+    promise was false for exactly the file it was printed about.
+    """
+
+    def _adopt_flow(self, project: Path, body: str) -> None:
+        (project / ".beadloom").mkdir(parents=True, exist_ok=True)
+        (project / ".beadloom" / "flow.yml").write_text(body, encoding="utf-8")
+
+    def test_a_hand_edit_is_declined_by_name_while_the_rest_recompose(
+        self, tmp_path: Path
+    ) -> None:
+        from beadloom.onboarding.config_sync import refresh_composed_adapters
+
+        project = _make_scaffolded_project(tmp_path)
+        self._adopt_flow(
+            project, "tools: [claude]\narchitecture: [ddd]\nstack: [python]\n"
+        )
+        refresh_composed_adapters(project)  # baseline: recorded by the manifest
+        edited = project / ".claude" / "agents" / "dev.md"
+        body = edited.read_text(encoding="utf-8") + "\n## Ours\n\nNo red merges.\n"
+        edited.write_text(body, encoding="utf-8")
+        stale = project / ".claude" / "agents" / "test.md"
+        composed_test = stale.read_text(encoding="utf-8")
+        stale.unlink()
+
+        report = refresh_composed_adapters(project)
+
+        # The edit is still there, and the run says which file it left alone.
+        assert edited.read_text(encoding="utf-8") == body
+        assert [d.file for d in report.declined] == [".claude/agents/dev.md"]
+        assert "hand-edited" in report.declined[0].reason
+        assert ".beadloom/flow/roles/dev.md" in (report.declined[0].remediation or "")
+        # Declining one file does not stop it fixing the others.
+        assert stale.read_text(encoding="utf-8") == composed_test
+        assert ".claude/agents/test.md" in report.rewritten
+        assert ".claude/agents/dev.md" not in report.rewritten
+
+    def test_the_plain_vendored_scaffold_is_not_a_hand_edit(
+        self, tmp_path: Path
+    ) -> None:
+        """Adopting a flow.yml on an already-scaffolded repo must still be fixable.
+
+        The vendored role files are bytes Beadloom itself shipped and wrote, but
+        nothing records them, so under a naive ownership test they read as a
+        hand edit — and ``--fix`` would then refuse to recompose them for ever.
+        Refusing to touch a file we wrote is the mirror of the defect, not the
+        cure: unowned is not the same as somebody's only copy.
+        """
+        from beadloom.onboarding.config_sync import refresh_composed_adapters
+
+        project = _make_scaffolded_project(tmp_path)
+        self._adopt_flow(
+            project, "tools: [claude, cursor]\narchitecture: [fsd]\nstack: [vuejs]\n"
+        )
+
+        report = refresh_composed_adapters(project)
+
+        assert report.declined == ()
+        assert ".claude/agents/dev.md" in report.rewritten
+        assert "Feature-Sliced Design" in (
+            project / ".claude" / "agents" / "dev.md"
+        ).read_text(encoding="utf-8")
+
+    def test_an_unverified_adapter_is_declined_too(self, tmp_path: Path) -> None:
+        """The rule is stated over provenance, not over the word ``hand_edited``.
+
+        ``unverified`` — the body matches no composition Beadloom could have
+        produced, and nothing accounts for it — is the worst case available,
+        because it is a ``warn``: overwriting one would have deleted the body
+        and then let the command print "no blocking drift" at exit 0, with no
+        red anywhere in the output to catch it. Its own remediation says
+        *review it, then `setup-agentic-flow --force`* — a deliberate act by
+        somebody who has looked. ``--fix`` has not looked.
+
+        Written AFTER the implementation, unlike the rest of this class; its
+        value rests on the sabotage that reddens it (declining only
+        ``hand_edited``), not on its having failed first.
+        """
+        from beadloom.onboarding.config_sync import refresh_composed_adapters
+
+        project = tmp_path / "acme-service"
+        (project / ".beadloom").mkdir(parents=True)
+        (project / ".beadloom" / "flow.yml").write_text(
+            "tools: [claude]\narchitecture: [ddd]\nstack: [python]\n", encoding="utf-8"
+        )
+        agents = project / ".claude" / "agents"
+        agents.mkdir(parents=True)
+        # A role protocol from somewhere else: no manifest, no provenance.
+        body = "# Our own dev protocol\n\nPair on migrations.\n"
+        (agents / "dev.md").write_text(body, encoding="utf-8")
+
+        report = refresh_composed_adapters(project)
+
+        assert (agents / "dev.md").read_text(encoding="utf-8") == body
+        assert [d.file for d in report.declined] == [".claude/agents/dev.md"]
+        assert "unverified" in report.declined[0].reason
+        assert ".claude/agents/dev.md" not in report.rewritten

@@ -21,6 +21,7 @@ regions so editing user-authored prose can never trip it (avoids the
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -57,7 +58,11 @@ from beadloom.onboarding.flow_suppression import (
     expired_suppressions,
     suppresses_nothing,
 )
-from beadloom.onboarding.role_adapters import TOOL_AGENT_DIRS, generate_adapters
+from beadloom.onboarding.role_adapters import (
+    TOOL_AGENT_DIRS,
+    cursor_rules_relpath,
+    generate_adapters,
+)
 from beadloom.onboarding.role_composer import ROLE_NAMES, compose_all_roles
 from beadloom.onboarding.scanner import (
     _RULES_ADAPTER_TEMPLATE,
@@ -66,7 +71,9 @@ from beadloom.onboarding.scanner import (
     _is_beadloom_adapter,
     blank_auto_regions,
     build_agents_md_content,
+    generate_agents_md,
     refresh_claude_md,
+    setup_rules_auto,
 )
 
 if TYPE_CHECKING:
@@ -94,12 +101,65 @@ class ConfigDrift:
     remediation:
         The concrete next command or move; ``None`` falls back to the caller's
         generic advice.
+    fixable:
+        Whether ``config-check --fix`` can repair this finding. ``False`` when
+        the body on disk is not Beadloom's to replace — repairing it would mean
+        deleting it. A caller must not offer ``--fix`` as the remedy for a
+        finding it will decline: the output used to promise a hand-edited file
+        "will NOT be rewritten" and then close by recommending the command that
+        rewrote it (BDL-UX #186).
     """
 
     file: str
     reason: str
     severity: str = "error"
     remediation: str | None = None
+    fixable: bool = True
+
+
+@dataclass(frozen=True)
+class DeclinedRewrite:
+    """One file ``--fix`` refused to overwrite, and why.
+
+    A destructive act that reports success is worse than a check that reports
+    clean without checking (BDL-UX #172/#174/#175) — those only misinformed. So
+    every refusal is carried back to the caller by name and printed, rather than
+    being inferred from the absence of a line.
+    """
+
+    file: str
+    reason: str
+    remediation: str | None = None
+
+
+@dataclass(frozen=True)
+class AdapterRefresh:
+    """What :func:`refresh_composed_adapters` rewrote and what it left alone."""
+
+    rewritten: tuple[str, ...] = ()
+    declined: tuple[DeclinedRewrite, ...] = ()
+
+
+@dataclass(frozen=True)
+class FixReport:
+    """What one ``config-check --fix`` run changed on disk, and what it declined.
+
+    ``rewritten`` and ``created`` are MEASURED — the artifact surface is
+    digested before and after the writers run, so the report describes the disk
+    rather than each writer's opinion of itself. Several of those writers
+    already over-report (the scaffold counts a file it re-read and left
+    identical as "written"), and #186 is a case of the output being trusted
+    over the bytes.
+    """
+
+    rewritten: tuple[str, ...] = ()
+    created: tuple[str, ...] = ()
+    declined: tuple[DeclinedRewrite, ...] = ()
+
+    @property
+    def changed(self) -> tuple[str, ...]:
+        """Every path whose bytes this run changed, created or rewritten."""
+        return tuple(sorted((*self.rewritten, *self.created)))
 
 
 _AGENTS_CUSTOM_START = "<!-- beadloom:custom-start -->"
@@ -284,6 +344,10 @@ def _unverifiable_body_drift(
             "this file is genuinely yours and not Beadloom's, it stays unchecked "
             "and this stays a warning"
         ),
+        # `--fix` refreshes the auto-regions and leaves the body alone. The body
+        # is precisely the part nobody can prove is ours, so it is not `--fix`'s
+        # to write.
+        fixable=False,
     )
 
 
@@ -325,6 +389,11 @@ def _state_drift(
                 "after the shipped core, survives upgrades and does not trip "
                 "this check), then re-run `beadloom setup-agentic-flow`"
             ),
+            # `--fix` DECLINES this one, which is what makes the sentence above
+            # true. Beadloom wrote this file, a human changed it, and the change
+            # is the only copy of an intent; recomposing over it is the data
+            # loss BDL-UX #139/#152/#186 are about.
+            fixable=False,
         )
     if state is ArtifactState.MISSING:
         return ConfigDrift(
@@ -352,6 +421,10 @@ def _state_drift(
             "re-run `beadloom setup-agentic-flow --force` to adopt the "
             "composed version"
         ),
+        # Not fixable either, and for the stronger reason: here we cannot even
+        # tell whether the body is ours. "Review it, then --force" is a
+        # deliberate act by somebody who has looked; `--fix` has not looked.
+        fixable=False,
     )
 
 
@@ -561,6 +634,11 @@ def _agentic_flow_drifts(project_root: Path) -> list[ConfigDrift]:
                         "setup-agentic-flow`), then move the edit to "
                         f"{PROJECT_FLOW_DIRNAME / 'roles' / f'{name}.md'}"
                     ),
+                    # The scaffold's non-forcing path skips a divergent vendored
+                    # file, so `--fix` leaves this one standing. Offering it as
+                    # the remedy would be the #186 contradiction in the other
+                    # direction: advice that does nothing.
+                    fixable=False,
                 )
             )
     return drifts
@@ -579,7 +657,11 @@ def _flow_config_drift(project_root: Path) -> ConfigDrift | None:
     try:
         load_flow_config(project_root)
     except FlowConfigError as exc:
-        return ConfigDrift(file=str(FLOW_CONFIG_RELPATH), reason=str(exc))
+        # Authored configuration: `--fix` has nothing valid to write here, and
+        # guessing would overwrite the adopter's selection.
+        return ConfigDrift(
+            file=str(FLOW_CONFIG_RELPATH), reason=str(exc), fixable=False
+        )
     return None
 
 
@@ -708,16 +790,30 @@ def _composed_corpus(config: FlowConfig, project_root: Path) -> tuple[str, ...]:
     return tuple(texts)
 
 
-def _composed_adapter_drifts(project_root: Path) -> list[ConfigDrift]:
-    """Drift for composed role adapters vs ``compose_role`` for this flow.yml.
+def _vendored_role_body(role: str) -> str | None:
+    """The plain vendored ``agents/<role>.md`` body, if this release ships one."""
+    if role not in AGENT_FILES:
+        return None
+    try:
+        return _vendored_asset("agents", role)
+    except OSError:
+        return None
 
-    Only runs when a valid ``.beadloom/flow.yml`` is present. For each tool the
-    config names, compares every existing ``<tool-agent-dir>/<role>.md`` against
-    the freshly-composed body — CORE + the configured architecture + stack
-    overlays + the project fragment at ``.beadloom/flow/roles/<role>.md``. A
-    CORE/overlay change without re-running ``setup-agentic-flow`` is reported;
-    a project extension is not, because it is part of the expected composition
-    (BDL-UX #139, #152).
+
+def _adapter_states(project_root: Path) -> list[tuple[str, str, ArtifactState]]:
+    """``(relpath, role, state)`` for every composed role adapter on disk.
+
+    The single classification the check and ``--fix`` both read, so the verdict
+    printed about a file and the decision taken about it cannot disagree — which
+    is exactly what BDL-UX #186 was: one command saying "It will NOT be
+    rewritten" while another line of the same command rewrote it.
+
+    The plain vendored scaffold is offered as an ``alternate``. Those bytes are
+    Beadloom's own — ``_scaffold_vendored`` wrote them and simply never recorded
+    a digest — so without this a repo that adopts a ``flow.yml`` after
+    scaffolding reads ``hand_edited`` on four files nobody has touched
+    (measured), and ``--fix`` would then refuse to recompose them for ever.
+    Unowned is not the same as somebody's only copy.
     """
     if not (project_root / FLOW_CONFIG_RELPATH).is_file():
         return []
@@ -730,47 +826,100 @@ def _composed_adapter_drifts(project_root: Path) -> list[ConfigDrift]:
     composed = compose_all_roles(config, project_root)
     shipped_only = compose_all_roles(config)
     manifest, manifest_usable = read_manifest(project_root)
-    drifts: list[ConfigDrift] = []
+    states: list[tuple[str, str, ArtifactState]] = []
     for tool in config.tools:
         agent_dir = TOOL_AGENT_DIRS[tool]
         for role in ROLE_NAMES:
-            rel = agent_dir / f"{role}.md"
+            rel = str(agent_dir / f"{role}.md")
             if not (project_root / rel).is_file():
                 continue
+            vendored = _vendored_role_body(role)
+            alternates = [shipped_only[role]]
+            if vendored is not None:
+                alternates.append(vendored)
             state = state_of(
                 project_root,
-                str(rel),
+                rel,
                 expected=composed[role],
                 manifest=manifest,
-                alternates=(shipped_only[role],),
+                alternates=tuple(alternates),
                 accounted=manifest_usable,
             )
-            drift = _state_drift(str(rel), state, kind="roles", name=role)
-            if drift is not None:
-                drifts.append(drift)
+            states.append((rel, role, state))
+    return states
+
+
+def _composed_adapter_drifts(project_root: Path) -> list[ConfigDrift]:
+    """Drift for composed role adapters vs ``compose_role`` for this flow.yml.
+
+    Only runs when a valid ``.beadloom/flow.yml`` is present. For each tool the
+    config names, compares every existing ``<tool-agent-dir>/<role>.md`` against
+    the freshly-composed body — CORE + the configured architecture + stack
+    overlays + the project fragment at ``.beadloom/flow/roles/<role>.md``. A
+    CORE/overlay change without re-running ``setup-agentic-flow`` is reported;
+    a project extension is not, because it is part of the expected composition
+    (BDL-UX #139, #152).
+    """
+    drifts: list[ConfigDrift] = []
+    for relpath, role, state in _adapter_states(project_root):
+        drift = _state_drift(relpath, state, kind="roles", name=role)
+        if drift is not None:
+            drifts.append(drift)
     return drifts
 
 
-def refresh_composed_adapters(project_root: Path) -> list[str]:
-    """Recompose + rewrite the per-tool role adapters for this flow.yml.
+#: Adapter states ``--fix`` will not write over. Both mean the same thing from
+#: the caller's side — the body on disk is not demonstrably Beadloom's output —
+#: and overwriting either is how the only copy of a team's standing practice
+#: gets deleted (BDL-UX #139, #152, #186).
+_UNOWNED_STATES = (ArtifactState.HAND_EDITED, ArtifactState.UNVERIFIED)
+
+
+def refresh_composed_adapters(project_root: Path) -> AdapterRefresh:
+    """Recompose the per-tool role adapters for this flow.yml — except the unowned ones.
 
     The ``config-check --fix`` companion to :func:`_composed_adapter_drifts`:
     when a valid ``.beadloom/flow.yml`` is present, regenerates every configured
-    tool's adapter set from CORE + overlays (overwriting drifted files). A
-    no-op (returns ``[]``) when ``flow.yml`` is absent or invalid.
+    tool's adapter set from CORE + overlays. An empty
+    :class:`AdapterRefresh` when ``flow.yml`` is absent or invalid.
+
+    **What changed in BDL-061 `.59`.** It used to call ``generate_adapters``
+    unconditionally, so a file the check had just described as hand-edited and
+    promised "It will NOT be rewritten" was restored byte-for-byte one line
+    later, and the re-check then printed "no blocking drift" at exit 0 over the
+    deletion. The promise is now the behaviour: an adapter whose body Beadloom
+    cannot prove it wrote is left alone and returned in ``declined``, the rest
+    are recomposed, and the standing finding keeps the exit code honest.
     """
     if not (project_root / FLOW_CONFIG_RELPATH).is_file():
-        return []
+        return AdapterRefresh()
     try:
         config = load_flow_config(project_root)
     except FlowConfigError:
-        return []
-    result = generate_adapters(config, project_root)
+        return AdapterRefresh()
+
+    declined: list[DeclinedRewrite] = []
+    for relpath, role, state in _adapter_states(project_root):
+        if state not in _UNOWNED_STATES:
+            continue
+        drift = _state_drift(relpath, state, kind="roles", name=role)
+        if drift is not None:
+            declined.append(
+                DeclinedRewrite(
+                    file=relpath, reason=drift.reason, remediation=drift.remediation
+                )
+            )
+    result = generate_adapters(
+        config, project_root, preserve=frozenset(d.file for d in declined)
+    )
     written: list[str] = []
     for files in result.agents.values():
         written.extend(files)
     written.extend(result.extra)
-    return written
+    return AdapterRefresh(
+        rewritten=tuple(sorted(written)),
+        declined=tuple(sorted(declined, key=lambda d: d.file)),
+    )
 
 
 def refresh_agentic_flow_files(project_root: Path) -> list[str]:
@@ -795,6 +944,73 @@ def refresh_agentic_flow_files(project_root: Path) -> list[str]:
     if result.claude_md is not None:
         written.append("CLAUDE.md")
     return written
+
+
+def _fix_surface(project_root: Path) -> tuple[str, ...]:
+    """Every project-relative path a ``--fix`` writer can touch.
+
+    Enumerated from the artifact names rather than from what exists, so a file
+    the run CREATES is in frame too. ``.beadloom/flow-manifest.json`` is
+    deliberately out of frame: it is Beadloom's own record of its writes rather
+    than authored content, and naming it in every run would bury the lines that
+    matter. That is a stated limit of the report, not an oversight.
+    """
+    paths = {"/".join((".beadloom", "AGENTS.md")), ".claude/CLAUDE.md"}
+    paths |= {f".claude/agents/{name}.md" for name in AGENT_FILES}
+    paths |= {f".claude/commands/{name}.md" for name in COMMAND_FILES}
+    for agent_dir in TOOL_AGENT_DIRS.values():
+        paths |= {str(agent_dir / f"{role}.md") for role in ROLE_NAMES}
+    paths.add(str(cursor_rules_relpath()))
+    paths |= {config["path"] for config in _RULES_CONFIGS.values()}
+    paths |= set(load_manifest(project_root))
+    return tuple(sorted(paths))
+
+
+def _surface_digests(project_root: Path) -> dict[str, str]:
+    """SHA-256 per existing artifact — an absent file is absent from the map."""
+    digests: dict[str, str] = {}
+    for relpath in _fix_surface(project_root):
+        try:
+            digests[relpath] = hashlib.sha256(
+                (project_root / relpath).read_bytes()
+            ).hexdigest()
+        except OSError:
+            continue
+    return digests
+
+
+def apply_config_fixes(project_root: Path) -> FixReport:
+    """Run every ``config-check --fix`` writer and report what actually changed.
+
+    One responsibility: apply the repairs and MEASURE them. The artifact surface
+    is digested before and after, so the report describes the disk instead of
+    trusting each writer's account of itself — several of them over-report (the
+    scaffold counts a file it re-read and left byte-identical as "written"), and
+    BDL-UX #186 is precisely a case of the output being believed over the bytes.
+
+    Everything here writes only what Beadloom itself produced: the ``CLAUDE.md``
+    auto-regions (user prose outside them is preserved), ``AGENTS.md`` (the
+    ``custom`` block is preserved), IDE pointers that are ours, the scaffold's
+    non-forcing path, and the composed adapters minus the ones
+    :func:`refresh_composed_adapters` declines. So a rewritten file in this
+    report never means somebody's text was lost.
+    """
+    before = _surface_digests(project_root)
+    refresh_claude_md(project_root)
+    generate_agents_md(project_root)
+    setup_rules_auto(project_root)
+    # Never force the flow onto a repo that did not adopt it; no-op if absent.
+    refresh_agentic_flow_files(project_root)
+    adapters = refresh_composed_adapters(project_root)
+    after = _surface_digests(project_root)
+
+    return FixReport(
+        rewritten=tuple(
+            sorted(p for p, sha in after.items() if p in before and before[p] != sha)
+        ),
+        created=tuple(sorted(p for p in after if p not in before)),
+        declined=adapters.declined,
+    )
 
 
 def check_config_drift(

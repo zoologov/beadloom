@@ -200,11 +200,13 @@ The migration itself:
    body is Beadloom's again.
 5. **Verify:** `beadloom config-check` should exit 0.
 
-> **Do not reach for `config-check --fix` to do this.** On a role adapter it recomposes
-> the file unconditionally and your edit is gone — measured by sha256 on a clean
-> repository: the file after `--fix` is byte-identical to the scaffold, one line after
-> the check printed *"It will NOT be rewritten"*. This is filed as BDL-UX #186 and is
-> not fixed in this release. Move the text first; recompose second.
+> **`config-check --fix` will not do this for you, and will not undo it either.** It
+> declines to rewrite any adapter whose body Beadloom cannot prove it wrote, names the
+> file under *Declined to rewrite*, and leaves the finding standing — so running it on a
+> hand-edited role adapter is safe but changes nothing. Move the text into the project
+> layer first, then recompose with `setup-agentic-flow`. (Until BDL-UX #186 was closed
+> it recomposed the file unconditionally and the edit was gone, one line after the check
+> printed *"It will NOT be rewritten"*.)
 
 `setup-agentic-flow` without `--force` never overwrites a hand-edited file — it prints
 `Skipped .claude/commands/<name>.md (hand-edited; use --force)` and leaves it alone.

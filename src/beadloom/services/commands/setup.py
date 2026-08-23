@@ -11,10 +11,14 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
 
 from beadloom.services.commands._root import _warn_missing_parsers, main
+
+if TYPE_CHECKING:
+    from beadloom.onboarding.config_sync import ConfigDrift, FixReport
 
 # beadloom:service=mcp-server
 _MCP_TOOL_CONFIGS: dict[str, dict[str, str]] = {
@@ -497,37 +501,20 @@ def config_check(*, fix: bool, project: Path | None) -> None:
 
     Regenerates AGENTS.md + the auto-managed sections of CLAUDE.md + IDE
     adapters in memory and diffs them against disk.  Exits 1 on drift,
-    0 when clean.  With --fix, regenerates via ``setup-rules --refresh``
-    and re-checks.
+    0 when clean.  With --fix, regenerates what Beadloom itself wrote, names
+    every file it changed, declines to overwrite any body it cannot prove is
+    its own, and re-checks.
     """
     from beadloom.infrastructure.db import connection
     from beadloom.onboarding import check_config_drift
-    from beadloom.onboarding.scanner import generate_agents_md, refresh_claude_md
+    from beadloom.onboarding.config_sync import FixReport, apply_config_fixes
 
     project_root = project or Path.cwd()
 
+    report = FixReport()
     if fix:
-        # Regenerate via the same refresh path used by `setup-rules --refresh`.
-        refresh_claude_md(project_root)
-        generate_agents_md(project_root)
-        from beadloom.onboarding.scanner import setup_rules_auto
-
-        setup_rules_auto(project_root)
-
-        # Re-drop drifted agentic-flow files (only if the flow is scaffolded —
-        # never force the flow onto a repo that did not adopt it). Restores the
-        # vendored agents/commands; CLAUDE.md regions are already refreshed
-        # above, so user prose outside the auto-regions is preserved.
-        from beadloom.onboarding.config_sync import (
-            refresh_agentic_flow_files,
-            refresh_composed_adapters,
-        )
-
-        refresh_agentic_flow_files(project_root)
-        # Recompose the per-tool role adapters from .beadloom/flow.yml (no-op
-        # when flow.yml is absent/invalid). The composer owns .claude/agents/*
-        # + .cursor/agents/* once a flow.yml exists.
-        refresh_composed_adapters(project_root)
+        report = apply_config_fixes(project_root)
+        _echo_fix_report(report)
 
     db_path = project_root / ".beadloom" / "beadloom.db"
     with connection(db_path) as conn:
@@ -545,7 +532,12 @@ def config_check(*, fix: bool, project: Path | None) -> None:
         # A warning is a real finding and is printed above; it does not block,
         # because a green project going red on upgrade is how a check gets
         # switched off wholesale.
-        suffix = f" ({len(warnings)} warning(s) — see above)" if warnings else ""
+        notes = []
+        if report.changed:
+            notes.append(f"{len(report.changed)} file(s) changed, named above")
+        if warnings:
+            notes.append(f"{len(warnings)} warning(s) — see above")
+        suffix = f" ({'; '.join(notes)})" if notes else ""
         click.echo(f"Agent-config in sync — no blocking drift{suffix}.")
         return
 
@@ -554,11 +546,64 @@ def config_check(*, fix: bool, project: Path | None) -> None:
         click.echo(f"  - {drift.file}: {drift.reason}", err=True)
         if drift.remediation:
             click.echo(f"    -> {drift.remediation}", err=True)
+    _echo_closing_advice(blocking)
+    raise SystemExit(1)
+
+
+def _echo_fix_report(report: FixReport) -> None:
+    """Name every file the ``--fix`` pass changed, and every one it declined.
+
+    BDL-UX #186: ``--fix`` restored a hand-edited role adapter byte-for-byte and
+    closed with "Agent-config in sync — no blocking drift" at exit 0, mentioning
+    nothing. A destructive act that reports success is the same class as a check
+    that reports clean without checking, and worse — so the run now says what it
+    did, in the output rather than in a document.
+    """
+    if report.created:
+        click.echo(f"Created {len(report.created)} agent-config file(s):")
+        for path in report.created:
+            click.echo(f"  + {path}")
+    if report.rewritten:
+        click.echo(
+            f"Rewrote {len(report.rewritten)} agent-config file(s) — each body was "
+            "Beadloom's own output and is recomposed from CORE + the flow.yml "
+            "overlays + the project layer, so nothing hand-written was in them:"
+        )
+        for path in report.rewritten:
+            click.echo(f"  ~ {path}")
+    if report.declined:
+        click.echo(
+            f"Declined to rewrite {len(report.declined)} file(s) — Beadloom did "
+            "not write the body that is there, so rewriting it would delete it:",
+            err=True,
+        )
+        for declined in report.declined:
+            click.echo(f"  = {declined.file}", err=True)
+
+
+def _echo_closing_advice(blocking: list[ConfigDrift]) -> None:
+    """Offer ``--fix`` only for the findings it will actually repair.
+
+    The command used to print "It will NOT be rewritten" about a hand edit and
+    then close by recommending ``config-check --fix``; doing what the last line
+    said undid what the line above promised (BDL-UX #186). ``--fix`` now honours
+    the sentence, so the advice must stop naming it for the findings it declines.
+    """
+    declines = [d for d in blocking if not d.fixable]
+    if declines:
+        click.echo(
+            f"  {len(declines)} of these will NOT be rewritten: the body on disk "
+            "is not Beadloom's output, so repairing it would mean deleting it. "
+            "Follow the `->` line under each.",
+            err=True,
+        )
+    if len(declines) == len(blocking):
+        return
+    rest = " for the rest" if declines else " to fix"
     click.echo(
-        "  Run `beadloom setup-rules --refresh` (or `config-check --fix`) to fix.",
+        f"  Run `beadloom setup-rules --refresh` (or `config-check --fix`){rest}.",
         err=True,
     )
-    raise SystemExit(1)
 
 
 # beadloom:service=mcp-server

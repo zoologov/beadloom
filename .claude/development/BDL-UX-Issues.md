@@ -65,7 +65,7 @@
     **Expected:** either persist the resolved selection as `.beadloom/flow.yml` on scaffold (it is the file the whole feature is configured by, and the command already knows every value), or have `config-check` compare against the same resolution the scaffold used. The first is the smaller change and makes the configuration visible.
     **Related:** #184 (the same command family answering an expected state with a failure shape), #186.
 
-186. [2026-08-23] [HIGH] 🔴 `config-check --fix` deletes a hand edit in a role adapter — one line after the check printed "It will NOT be rewritten"
+186. ~~[2026-08-23] [HIGH] 🔴 `config-check --fix` deletes a hand edit in a role adapter — one line after the check printed "It will NOT be rewritten"~~ **CLOSED (BDL-061 S3, `.59`)**
 
     **Severity:** high (it destroys unrecoverable user text, and it does so by following the command's own printed advice)
     **Command:** `beadloom config-check` then `beadloom config-check --fix`
@@ -80,6 +80,10 @@
     **Why it is the sharpest of the three:** every other finding in this family is a message that is missing or wrong. This one is data loss, in the exact scenario BDL-UX #139 and #152 exist to end — a team putting its standing engineering practice in a role file.
     **Expected:** `refresh_composed_adapters` must skip an adapter whose flow-manifest state is `hand_edited` (leaving the finding standing), and the generic remediation line must not name `--fix` when the findings include a hand edit.
     **Related:** #151 (the destructive `--fix` this was supposed to have ended), #139, #152, #188.
+
+    > **CLOSED by option (a) — `--fix` honours the sentence.** `refresh_composed_adapters` classifies each adapter first and hands the unowned ones to `generate_adapters(preserve=…)`, which neither writes **nor records** them (recording a digest we did not write would make the next run believe the edit was ours). Re-measured on a clean temp repository: scaffolded `77dfc84f…` → edited `26a0da67…` → **after `--fix` `26a0da67…`**, exit 1, the file named under *Declined to rewrite*. Option (b) — qualifying the sentence — was rejected: it is cheaper and honest, and it leaves a documented data-loss path in a command whose name promises repair.
+    > Three things beyond the one file. (1) **`unverified` is declined too**, not just `hand_edited`: it is a `warn`, so overwriting one would have destroyed content and then printed "no blocking drift" at exit 0 with no red anywhere. The rule is one phrase — *`--fix` rewrites only what Beadloom can prove it wrote.* (2) **The run says what it did**: `apply_config_fixes` digests the artifact surface before and after the writers and names every file created or rewritten, with the count on the summary line — measured against the disk rather than trusting the writers, several of which over-report. (3) **The closing advice stops offering `--fix`** for a finding it will decline (`ConfigDrift.fixable`).
+    > One pre-existing misclassification had to go first, measured not argued: on a repo scaffolded **before** adopting a `flow.yml`, all four `.claude/agents/*` read `hand_edited` (`_scaffold_vendored` writes those bytes and never records a digest). Declining them would have made `--fix` refuse for ever to recompose files Beadloom itself wrote. The vendored body is now an `alternate`, so it reads `stale` and recomposes — **unowned is not the same as somebody's only copy**.
 
 185. [2026-08-23] [LOW] SUSPECTED: a byte-identity assertion over a WAL-mode database may accuse the wrong thing — one occurrence, not attributable
 

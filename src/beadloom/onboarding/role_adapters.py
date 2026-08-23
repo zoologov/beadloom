@@ -69,11 +69,14 @@ class AdapterResult:
     """Files written per tool by :func:`generate_adapters`.
 
     ``agents`` maps a tool name to the project-relative role-file paths written;
-    ``extra`` lists any non-role files (e.g. the Cursor orchestrator pointer).
+    ``extra`` lists any non-role files (e.g. the Cursor orchestrator pointer);
+    ``preserved`` lists the paths a caller asked to be left alone, so a run that
+    did not write a file it normally writes says so rather than going quiet.
     """
 
     agents: dict[str, list[str]] = field(default_factory=dict)
     extra: list[str] = field(default_factory=list)
+    preserved: list[str] = field(default_factory=list)
 
 
 def _write(path: Path, content: str) -> None:
@@ -91,7 +94,12 @@ def cursor_rules_body() -> str:
     return _CURSOR_RULES_BODY
 
 
-def generate_adapters(config: FlowConfig, project_root: Path) -> AdapterResult:
+def generate_adapters(
+    config: FlowConfig,
+    project_root: Path,
+    *,
+    preserve: frozenset[str] = frozenset(),
+) -> AdapterResult:
     """Compose roles for ``config`` and write each configured tool's adapter set.
 
     For every tool in ``config.tools`` writes ``<tool-agent-dir>/<role>.md`` with
@@ -99,6 +107,15 @@ def generate_adapters(config: FlowConfig, project_root: Path) -> AdapterResult:
     configured. Idempotent — the bytes depend only on ``config`` + the overlay
     sources, so re-running with the same config rewrites identical files.
     Returns an :class:`AdapterResult` of the project-relative paths written.
+
+    ``preserve`` names project-relative paths to leave exactly as they are. The
+    caller establishes ownership, not this function: ``setup-agentic-flow`` is
+    an explicit instruction to compose and passes nothing, while
+    ``config-check --fix`` passes every adapter whose body Beadloom cannot prove
+    it wrote, because rewriting one deletes the only copy of somebody's intent
+    (BDL-UX #186, #139, #152). A preserved path is not recorded in the flow
+    manifest either — recording a digest we did not write would make the next
+    run believe the edit was ours.
     """
     composed = compose_all_roles(config, project_root)
     result = AdapterResult()
@@ -108,6 +125,9 @@ def generate_adapters(config: FlowConfig, project_root: Path) -> AdapterResult:
         written: list[str] = []
         for role in ROLE_NAMES:
             relpath = agent_dir / f"{role}.md"
+            if str(relpath) in preserve:
+                result.preserved.append(str(relpath))
+                continue
             _write(project_root / relpath, composed[role])
             written.append(str(relpath))
             recorded[str(relpath)] = digest(composed[role])

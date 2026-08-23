@@ -221,17 +221,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`docs audit` read numbers out of identifiers (#169).** A line is tokenized on
   whitespace and only a token whose whole core is a number is a candidate, so
   `BDL-061.33` is no longer an `mcp_tool_count` of 33 and `6,390` is read whole.
+- **`config-check --fix` may only rewrite what Beadloom wrote (BDL-UX #186).** The role
+  adapters were the one kind left out: `refresh_composed_adapters` rewrote
+  `.claude/agents/<role>.md` unconditionally, so doing what the command's own closing line
+  said undid what the line above it promised, and the re-check then printed *Agent-config in
+  sync — no blocking drift* at exit 0 over the deletion. An adapter Beadloom cannot prove it
+  wrote — `hand_edited`, and `unverified` too, which is the worse case because it is only a
+  warning — is now **declined**: left byte-identical, named in the output, its finding still
+  standing. Every file a `--fix` run creates or rewrites is named, measured against the disk
+  rather than taken from each writer's account of itself, and the closing advice stops
+  offering `--fix` for a finding it will decline.
 
 ### Known limitations (BDL-061 S3)
 
 Measured and open at the time of writing, listed here rather than left to be discovered.
 
-- **`config-check --fix` still deletes a hand edit in a role adapter (BDL-UX #186).**
-  `refresh_composed_adapters` rewrites `.claude/agents/<role>.md` unconditionally, so
-  following the advice the command prints at the bottom of its own output undoes the edit the
-  message one line above promised not to rewrite. Verified by sha256 on a clean repository:
-  the file after `--fix` is byte-identical to the scaffold. Move your additions into
-  `.beadloom/flow/roles/<role>.md` before running it.
 - **A fresh scaffold without a `flow.yml` leaves `config-check` red (BDL-UX #187).**
   `setup-agentic-flow` composes the role adapters from the auto-detected stack but does not
   write a `.beadloom/flow.yml`, and `config-check` without one expects the plain vendored role

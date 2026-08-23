@@ -6,6 +6,7 @@ path and re-checks.
 
 from __future__ import annotations
 
+import hashlib
 from typing import TYPE_CHECKING
 
 from click.testing import CliRunner
@@ -213,3 +214,150 @@ class TestConfigCheckFlowYml:
         cursor_dev = project / ".cursor" / "agents" / "dev.md"
         assert cursor_dev.is_file()
         assert "Feature-Sliced Design" in cursor_dev.read_text(encoding="utf-8")
+
+
+def _write_flow_yml(project: Path, body: str) -> None:
+    (project / ".beadloom").mkdir(parents=True, exist_ok=True)
+    (project / ".beadloom" / "flow.yml").write_text(body, encoding="utf-8")
+
+
+def _agent_config_digests(project: Path) -> dict[str, str]:
+    """SHA-256 of every agent-config artifact on disk, project-relative.
+
+    Enumerated by WALKING the tree rather than by asking the production code
+    which paths it considers its surface: a report is not evidence, and a
+    surface list that forgot a path would otherwise excuse itself.
+    ``.beadloom/flow-manifest.json`` is out of frame on purpose — it is
+    Beadloom's own record of its writes, not authored content, and naming it in
+    every ``--fix`` run would be noise. Everything else under ``.claude/`` and
+    ``.cursor/``, plus ``AGENTS.md`` and the IDE pointer files, is in frame.
+    """
+    roots = [project / ".claude", project / ".cursor"]
+    singles = [
+        project / ".beadloom" / "AGENTS.md",
+        project / ".cursorrules",
+        project / ".windsurfrules",
+        project / ".clinerules",
+    ]
+    files: list[Path] = [p for p in singles if p.is_file()]
+    for root in roots:
+        if root.is_dir():
+            files.extend(p for p in root.rglob("*") if p.is_file())
+    return {
+        str(p.relative_to(project)): hashlib.sha256(p.read_bytes()).hexdigest()
+        for p in files
+    }
+
+
+class TestFixNeverDestroysWhatBeadloomDidNotWrite:
+    """BDL-061 `.59` / BDL-UX #186 — ``--fix`` honours the sentence above it.
+
+    ``config-check`` says of a hand-edited role adapter *"It will NOT be
+    rewritten"* and then closes by offering ``config-check --fix``. Running it
+    restored the composed body byte-for-byte, deleting the edit, and reported
+    *"Agent-config in sync — no blocking drift"* at exit 0 — a destructive act
+    reporting success, which is the same class as a check that reports clean
+    without checking (BDL-UX #172/#174/#175) and worse, because those only
+    misinformed.
+    """
+
+    def test_a_hand_edited_adapter_survives_fix_when_a_flow_yml_exists(
+        self, tmp_path: Path
+    ) -> None:
+        """The coordinator's measurement, as a test: sha in == sha out."""
+        project = _scaffolded_project(tmp_path)
+        _write_flow_yml(
+            project, "tools: [claude]\narchitecture: [ddd]\nstack: [python]\n"
+        )
+        CliRunner().invoke(main, ["config-check", "--fix", "--project", str(project)])
+        agent = project / ".claude" / "agents" / "dev.md"
+        edited = agent.read_text(encoding="utf-8") + (
+            "\n## Our standing engineering practice\n\nNever merge on a red gate.\n"
+        )
+        agent.write_text(edited, encoding="utf-8")
+        before = hashlib.sha256(agent.read_bytes()).hexdigest()
+
+        result = CliRunner().invoke(
+            main, ["config-check", "--fix", "--project", str(project)]
+        )
+
+        assert hashlib.sha256(agent.read_bytes()).hexdigest() == before
+        assert agent.read_text(encoding="utf-8") == edited
+        assert ".claude/agents/dev.md" in result.output
+
+    def test_a_run_that_declined_does_not_report_no_blocking_drift(
+        self, tmp_path: Path
+    ) -> None:
+        """The other half: the verdict may not read clean over a standing finding."""
+        project = _scaffolded_project(tmp_path)
+        _write_flow_yml(
+            project, "tools: [claude]\narchitecture: [ddd]\nstack: [python]\n"
+        )
+        CliRunner().invoke(main, ["config-check", "--fix", "--project", str(project)])
+        agent = project / ".claude" / "agents" / "dev.md"
+        agent.write_text(
+            agent.read_text(encoding="utf-8") + "\n## Ours\n", encoding="utf-8"
+        )
+
+        result = CliRunner().invoke(
+            main, ["config-check", "--fix", "--project", str(project)]
+        )
+
+        assert result.exit_code == 1, result.output
+        assert "no blocking drift" not in result.output
+        assert ".claude/agents/dev.md" in result.output
+        assert "declined" in result.output.lower()
+
+    def test_the_closing_advice_does_not_offer_fix_for_a_finding_it_will_decline(
+        self, tmp_path: Path
+    ) -> None:
+        """BDL-UX #186's second expectation: doing what the last line says must
+        not undo what the line above it promised."""
+        project = _scaffolded_project(tmp_path)
+        _write_flow_yml(
+            project, "tools: [claude]\narchitecture: [ddd]\nstack: [python]\n"
+        )
+        CliRunner().invoke(main, ["config-check", "--fix", "--project", str(project)])
+        agent = project / ".claude" / "agents" / "dev.md"
+        agent.write_text(
+            agent.read_text(encoding="utf-8") + "\n## Ours\n", encoding="utf-8"
+        )
+
+        result = CliRunner().invoke(
+            main, ["config-check", "--project", str(project)]
+        )
+
+        assert result.exit_code == 1
+        assert "It will NOT be rewritten" in result.output
+        assert "config-check --fix" not in result.output
+
+    def test_every_file_a_fix_run_changed_is_named_in_its_output(
+        self, tmp_path: Path
+    ) -> None:
+        """Say what it did — measured against the disk, not against the writers.
+
+        A ``--fix`` that changes bytes and says nothing is how #186 became
+        invisible. This asserts the general property rather than the one path:
+        whatever the run touched, the run named.
+        """
+        project = _scaffolded_project(tmp_path)
+        _write_flow_yml(
+            project, "tools: [claude, cursor]\narchitecture: [fsd]\nstack: [vuejs]\n"
+        )
+        _write_rules_yml(project, domains=["graph"])
+        before = _agent_config_digests(project)
+
+        result = CliRunner().invoke(
+            main, ["config-check", "--fix", "--project", str(project)]
+        )
+
+        after = _agent_config_digests(project)
+        changed = {
+            path
+            for path in set(before) | set(after)
+            if before.get(path) != after.get(path)
+        }
+        assert changed, "the probe changed nothing — it would pass vacuously"
+        unnamed = sorted(path for path in changed if path not in result.output)
+        assert not unnamed, f"changed but never named: {unnamed}\n{result.output}"
+
