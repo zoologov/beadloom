@@ -22,6 +22,23 @@ if TYPE_CHECKING:
 _ANNOTATION_RE = re.compile(r"beadloom:(.+)")
 _KV_RE = re.compile(r"(\w+)=(\S+)")
 
+#: A module-level annotation written INSIDE a module docstring.
+#:
+#: tree-sitter reads a docstring as a string node, not a comment, so until
+#: BDL-061.50 every ``# beadloom:`` line placed there was invisible to the
+#: extractor — and therefore to every annotation-keyed reader (sync pairs, deny
+#: rules, symbol counts). Five modules in Beadloom's own ``src/`` are written
+#: that way, and the residue it produced was reported as "no indexed code" for
+#: a fully indexed file (review .7 MAJOR 3).
+#:
+#: The line must carry the language's comment marker at **column 0**, which is
+#: what separates a declaration from a documented EXAMPLE: prose shows the
+#: syntax in an indented code sample (``    # beadloom:domain=...``) or in the
+#: in-doc HTML form (``<!-- beadloom:watches=... -->``), and a module that
+#: documents the convention must not thereby claim a node. Measured on this
+#: repo: ``doc_sync/surface.py`` does exactly that in its own docstring.
+_DOCSTRING_ANNOTATION_RE = re.compile(r"^#[ \t]*beadloom:(.+)$")
+
 
 @dataclass(frozen=True)
 class LangConfig:
@@ -31,6 +48,10 @@ class LangConfig:
     comment_types: frozenset[str]
     symbol_types: dict[str, str]  # node_type -> kind
     wrapper_types: frozenset[str]  # types that wrap definitions (e.g. decorated_definition)
+    #: Node types that may hold a module docstring, scanned for annotations the
+    #: way comments are.  Empty for every language whose module-level
+    #: documentation IS a comment; only Python has a docstring statement.
+    docstring_types: frozenset[str] = frozenset()
 
 
 # ---- Language loaders (lazy, handle ImportError) ----
@@ -47,6 +68,7 @@ def _load_python() -> LangConfig:
             "class_definition": "class",
         },
         wrapper_types=frozenset({"decorated_definition"}),
+        docstring_types=frozenset({"expression_statement"}),
     )
 
 
@@ -305,6 +327,41 @@ def parse_annotations(line: str) -> dict[str, str]:
     return dict(_KV_RE.findall(payload))
 
 
+def parse_docstring_annotations(text: str) -> dict[str, str]:
+    """Parse the beadloom annotations declared inside a module docstring.
+
+    Every line of the docstring is considered, not only the first: a docstring
+    is prose, and the annotation lines are routinely separated by it.  A line
+    counts only in the strict declaration form — the comment marker at column 0,
+    then ``beadloom:<key>=<value>`` — so that a documented EXAMPLE (indented, or
+    written in the in-doc ``<!-- ... -->`` form) is never mistaken for a claim of
+    ownership.  See :data:`_DOCSTRING_ANNOTATION_RE`.
+
+    Returns a dict of key->value pairs, empty when the docstring declares none.
+    """
+    found: dict[str, str] = {}
+    for line in text.splitlines():
+        match = _DOCSTRING_ANNOTATION_RE.match(line)
+        if match:
+            found.update(_KV_RE.findall(match.group(1)))
+    return found
+
+
+def _docstring_node_text(node: TSNode, config: LangConfig) -> str | None:
+    """The raw text of *node* when it is a docstring statement, else ``None``.
+
+    A docstring is an expression statement whose whole content is a string
+    literal; anything else in that node type (an assignment, a call) is code and
+    must not be scanned for annotations.
+    """
+    if node.type not in config.docstring_types:
+        return None
+    children = [child for child in node.children if child.is_named]
+    if len(children) != 1 or "string" not in children[0].type:
+        return None
+    return node.text.decode("utf-8") if node.text else None
+
+
 def _get_symbol_name(node: TSNode) -> str | None:
     """Extract symbol name from a definition node.
 
@@ -394,6 +451,15 @@ def extract_symbols(file_path: Path) -> list[dict[str, Any]]:
                 pending_annotation = ann
                 if not found_first_symbol:
                     module_annotation.update(ann)
+            continue
+
+        # A module docstring may carry the module-level annotation. It is not a
+        # comment node, so it needs its own strict reader (BDL-061.50).
+        docstring = _docstring_node_text(child, config)
+        if docstring is not None:
+            ann = parse_docstring_annotations(docstring)
+            if ann and not found_first_symbol:
+                module_annotation.update(ann)
             continue
 
         # Check if this is a wrapper type that needs unwrapping.

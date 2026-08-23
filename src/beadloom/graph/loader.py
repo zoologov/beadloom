@@ -221,6 +221,40 @@ def update_node_in_yaml(
     return False
 
 
+def _normalize_source(
+    source: str | None,
+    *,
+    ref_id: str,
+    project_root: Path,
+    result: GraphLoadResult,
+) -> str | None:
+    """Resolve a declared ``source`` against disk, and report one that owns nothing.
+
+    A directory written WITHOUT a trailing slash owned NOTHING: ownership,
+    module-coverage and the sync fallback all read ``source`` as a lone file
+    path, so the node contributed no ``depends_on`` edge, no sync pair, no
+    symbol count and no coverage — silently, and only for an adopter, since
+    Beadloom's own graph happens to use trailing slashes on all 67 sourced nodes
+    (``.5``'s finding (a)). The path is STAT'ed rather than guessed: a file
+    source is never widened into a directory.
+
+    A source that names no path at all is the residual "declared thing that owns
+    nothing", and it is reported here — where the path can still be checked —
+    instead of surfacing later as an empty node nobody questions.
+    """
+    if not source:
+        return source
+    path = project_root / source.rstrip("/")
+    if path.is_dir():
+        return source if source.endswith("/") else source + "/"
+    if not path.exists():
+        result.warnings.append(
+            f"Node '{ref_id}' declares source '{source}', which does not exist — "
+            f"it owns no files, so nothing under it is checked"
+        )
+    return source
+
+
 def load_graph(
     graph_dir: Path,
     conn: sqlite3.Connection,
@@ -271,7 +305,9 @@ def load_graph(
 
         kind: str = node.get("kind", "")
         summary: str = node.get("summary", "")
-        source: str | None = node.get("source")
+        source: str | None = _normalize_source(
+            node.get("source"), ref_id=ref_id, project_root=project_root, result=result
+        )
         lifecycle = _normalize_lifecycle(node.get("lifecycle"), f"Node '{ref_id}'", result)
 
         # Everything not in direct/skip fields goes to ``extra``.

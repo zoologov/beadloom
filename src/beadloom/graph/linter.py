@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from beadloom.graph.rule_engine import (
     ImportBoundaryRule,
     Violation,
+    count_unattributed_import_files,
     evaluate_all,
     inert_rule_names,
     load_rules,
@@ -63,6 +64,13 @@ class LintResult:
     #: nobody checked (review .7 MAJOR 2 / BDL-061.49).
     suppressed: list[SuppressedCrossing] = field(default_factory=list)
     files_scanned: int = 0
+    #: How many of ``files_scanned`` belong to no node at all — no annotation
+    #: naming one, and under no node's ``source``. Every ``deny`` rule is blind
+    #: to them, so a clean deny result covers ``files_scanned`` MINUS this
+    #: number. Measured on this repository before BDL-061.50 the equivalent was
+    #: 22 of 128 (annotation-only attribution); the count is printed so the
+    #: coverage of a green result is stated rather than assumed.
+    files_unattributed: int = 0
     imports_resolved: int = 0
     elapsed_ms: float = 0.0
 
@@ -200,6 +208,9 @@ def _evaluate(
         row = conn.execute("SELECT COUNT(DISTINCT file_path) FROM code_imports").fetchone()
         files_scanned: int = int(row[0]) if row is not None else 0
 
+        # How many of those files no rule can attribute to a node (BDL-061.50).
+        files_unattributed: int = count_unattributed_import_files(conn)
+
         # imports_resolved: where resolved_ref_id IS NOT NULL.
         row = conn.execute(
             "SELECT COUNT(*) FROM code_imports WHERE resolved_ref_id IS NOT NULL"
@@ -223,6 +234,7 @@ def _evaluate(
         rules_inert=len(inert),
         suppressed=excused,
         files_scanned=files_scanned,
+        files_unattributed=files_unattributed,
         imports_resolved=imports_resolved,
         elapsed_ms=(time.monotonic() - start) * 1000,
     )
@@ -259,6 +271,19 @@ def _suppressed_note(result: LintResult) -> str:
     return f", {excused} {crossings} suppressed by an exemption"
 
 
+def _unattributed_note(result: LintResult) -> str:
+    """The clause that stops the scanned count from over-claiming, or "".
+
+    Same treatment as :func:`_inert_note` and :func:`_suppressed_note`: absent
+    when every scanned file has an owner, so the common line keeps its shape;
+    present the moment a file no deny rule can see is counted as scanned
+    (BDL-061.50).
+    """
+    if not result.files_unattributed:
+        return ""
+    return f", {result.files_unattributed} attributable to no node"
+
+
 def format_rich(result: LintResult) -> str:
     """Format a LintResult as human-readable Rich-style text (plain text, no Rich dependency).
 
@@ -286,6 +311,7 @@ def format_rich(result: LintResult) -> str:
     lines.append(f"Rules: {result.rules_evaluated} loaded")
     lines.append(
         f"Files: {result.files_scanned} scanned, {result.imports_resolved} imports resolved"
+        f"{_unattributed_note(result)}"
     )
     lines.append("")
 
@@ -386,6 +412,7 @@ def format_json(result: LintResult) -> str:
             "error_count": result.error_count,
             "warning_count": result.warning_count,
             "files_scanned": result.files_scanned,
+            "files_unattributed": result.files_unattributed,
             "imports_resolved": result.imports_resolved,
             "elapsed_ms": result.elapsed_ms,
         },

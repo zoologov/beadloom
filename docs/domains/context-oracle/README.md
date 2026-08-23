@@ -142,6 +142,8 @@ Tree-sitter-based code symbol extraction supporting 12 languages:
 
 Annotations are parsed from comments matching the pattern `# beadloom:<key>=<value>`. Module-level annotations (before the first symbol) apply to all symbols in the file; symbol-specific annotations (immediately before a definition) take precedence.
 
+A **module docstring** is read too (BDL-061.50): tree-sitter sees a docstring as a string node rather than a comment, so an annotation written there was invisible to the extractor and to every annotation-keyed reader downstream. Inside a docstring the form is strict — the comment marker at **column 0**, one declaration per line, every line considered — so that an indented code sample, or the in-doc `<!-- beadloom:watches=... -->` form, is read as the EXAMPLE it is and does not silently claim a node. See the [code-indexer SPEC](features/code-indexer/SPEC.md).
+
 ### Route Extractor
 
 Extracts API routes from source files using regex pattern matching across 12 frameworks. Includes self-exclusion (skips files named `route_extractor` to avoid false positive matches from regex patterns in the extractor's own source code):

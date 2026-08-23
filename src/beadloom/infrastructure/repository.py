@@ -260,14 +260,18 @@ def get_symbols_for_source(
 _FACADE_FILENAME = "__init__.py"
 
 
-def _covering_prefix(source: str) -> str:
+def covering_prefix(source: str) -> str:
     """The path prefix a node *source* covers, normalised to end with ``/``.
 
     A directory source covers everything beneath it. A package façade
     (``pkg/__init__.py``) covers its PACKAGE: the façade only re-exports, so
     treating it as a lone file reports an empty node for a package full of code
     (BDL-UX #157). Any other file source covers only itself, which
-    :func:`_covers` handles separately.
+    :func:`source_covers` handles separately.
+
+    Public since BDL-061.50: ownership is the rule by which the linter now
+    attributes an imported-FROM file to a node, so the two must not each keep
+    their own copy of it.
     """
     if source.endswith("/"):
         return source
@@ -276,9 +280,9 @@ def _covering_prefix(source: str) -> str:
     return source
 
 
-def _covers(source: str, file_path: str) -> bool:
+def source_covers(source: str, file_path: str) -> bool:
     """Whether a node *source* covers *file_path* at all (ignoring specificity)."""
-    prefix = _covering_prefix(source)
+    prefix = covering_prefix(source)
     if prefix.endswith("/"):
         return file_path.startswith(prefix)
     return file_path == source
@@ -299,9 +303,9 @@ def get_owning_ref_id(
     best: tuple[int, str] | None = None
     for row in rows:
         source = str(row["source"])
-        if not _covers(source, file_path):
+        if not source_covers(source, file_path):
             continue
-        specificity = len(_covering_prefix(source))
+        specificity = len(covering_prefix(source))
         if best is None or specificity > best[0]:
             best = (specificity, str(row["ref_id"]))
     return best[1] if best is not None else None
@@ -321,7 +325,7 @@ def _owned_file_clause(
     prefix" so the exclusion happens in SQL rather than by post-filtering every
     symbol row.
     """
-    prefix = _covering_prefix(source)
+    prefix = covering_prefix(source)
     if prefix.endswith("/"):
         clause = "file_path LIKE ?"
         params: list[str] = [f"{prefix}%"]
@@ -334,7 +338,7 @@ def _owned_file_clause(
     ).fetchall()
     for row in rows:
         other = str(row["source"])
-        other_prefix = _covering_prefix(other)
+        other_prefix = covering_prefix(other)
         if other_prefix == prefix:
             continue
         # Strictly more specific: covered by me, and longer than my prefix.
@@ -388,13 +392,20 @@ def count_files_owned_by_node(conn: sqlite3.Connection, ref_id: str) -> int:
 
 
 def get_owned_code_files(conn: sqlite3.Connection, ref_id: str) -> list[tuple[str, str]]:
-    """Return ``(file_path, file_hash)`` for the indexed files *ref_id* owns.
+    """Return ``(path, hash)`` for the indexed CODE files *ref_id* owns.
 
     The same most-specific-source ownership rule as the counters above, so a
     node never claims a nested node's files. Used to pair a node's doc with its
     code when no symbol carries the node's annotation — without it a node that
     declares ``docs:`` could contribute no sync pair at all and still be
     reported as clean (BDL-UX #146).
+
+    Read from ``file_index``, not ``code_symbols``, since BDL-061.50: the #146
+    fallback was itself keyed on SYMBOLS, so a module holding no top-level
+    ``def``/``class`` — a pure re-export facade — was unreachable by BOTH the
+    annotation path and the fallback, and ``sync-check`` reported it as "no
+    indexed code" while the index held it (review .7 MAJOR 3). A file with no
+    symbol is still a file whose content can change under a doc.
     """
     row = conn.execute(
         "SELECT source FROM nodes WHERE ref_id = ?", (ref_id,)
@@ -403,11 +414,11 @@ def get_owned_code_files(conn: sqlite3.Connection, ref_id: str) -> list[tuple[st
         return []
     clause, params = _owned_file_clause(conn, str(row["source"]))
     rows = conn.execute(
-        "SELECT DISTINCT file_path, file_hash FROM code_symbols "  # noqa: S608
-        f"WHERE {clause} ORDER BY file_path",
+        "SELECT path, hash FROM file_index "  # noqa: S608
+        f"WHERE kind = 'code' AND {clause.replace('file_path', 'path')} ORDER BY path",
         params,
     ).fetchall()
-    return [(str(r["file_path"]), str(r["file_hash"])) for r in rows]
+    return [(str(r["path"]), str(r["hash"])) for r in rows]
 
 
 def get_owned_symbols(conn: sqlite3.Connection, ref_id: str) -> list[SymbolRow]:

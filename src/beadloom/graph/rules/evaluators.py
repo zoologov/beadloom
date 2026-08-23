@@ -16,6 +16,7 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from beadloom.graph.rules.attribution import FileAttribution
 from beadloom.graph.rules.cycles import _live_lifecycle_clause
 from beadloom.graph.rules.exemptions import exemption_index_for, stale_exemption_findings
 from beadloom.graph.rules.types import (
@@ -40,45 +41,12 @@ from beadloom.infrastructure.repository import (
 
 if TYPE_CHECKING:
     import sqlite3
+    from collections.abc import Callable
 
 
 # ---------------------------------------------------------------------------
 # Helpers for evaluation
 # ---------------------------------------------------------------------------
-
-
-def _get_file_node(file_path: str, conn: sqlite3.Connection) -> str | None:
-    """Look up the node ref_id for a source file via code_symbols annotations.
-
-    Checks the ``annotations`` JSON column for keys like ``domain``, ``service``,
-    etc. that match a node's ``ref_id``.  Returns the first matching ref_id,
-    or ``None`` if no annotation or no matching node is found.
-    """
-    rows = conn.execute(
-        "SELECT annotations FROM code_symbols WHERE file_path = ?",
-        (file_path,),
-    ).fetchall()
-
-    for row in rows:
-        annotations_raw = row[0]
-        if annotations_raw is None:
-            continue
-        try:
-            annotations: dict[str, object] = json.loads(str(annotations_raw))
-        except (json.JSONDecodeError, TypeError):
-            continue
-
-        for _key, value in annotations.items():
-            if not isinstance(value, str):
-                continue
-            # Check if this annotation value corresponds to a known node
-            node_row = conn.execute(
-                "SELECT ref_id FROM nodes WHERE ref_id = ?", (value,)
-            ).fetchone()
-            if node_row is not None:
-                return str(node_row[0])
-
-    return None
 
 
 def _get_node(ref_id: str, conn: sqlite3.Connection) -> tuple[str, str] | None:
@@ -117,10 +85,18 @@ def _edge_exists(
 def evaluate_deny_rules(conn: sqlite3.Connection, rules: list[DenyRule]) -> list[Violation]:
     """Evaluate deny rules against the code_imports table.
 
-    For each import with a resolved_ref_id, determines the source node from
-    code_symbols annotations and checks whether the import violates any deny
-    rule.  Tag-based matchers are supported: tags are lazily loaded from the
-    node ``extra`` JSON column and cached per evaluation run.
+    For each import with a resolved_ref_id, the SOURCE file is attributed to its
+    node candidates (:mod:`.attribution`) and each rule is matched against them
+    most-specific-first.  Tag-based matchers are supported: tags are lazily
+    loaded from the node ``extra`` JSON column and cached per evaluation run.
+
+    Attribution is annotation OR ownership since BDL-061.50: keyed on
+    annotations alone, a file the extractor could not read an annotation from
+    was invisible to every deny rule while its ``depends_on`` edge — derived
+    from ownership — existed (BDL-UX #146's disease in the linter).  Files that
+    can be attributed to no node at all are counted for the lint header by
+    :func:`~.attribution.count_unattributed_import_files`, never silently
+    skipped.
     """
     if not rules:
         return []
@@ -147,45 +123,39 @@ def evaluate_deny_rules(conn: sqlite3.Connection, rules: list[DenyRule]) -> list
         "SELECT file_path, line_number, import_path, resolved_ref_id "
         "FROM code_imports WHERE resolved_ref_id IS NOT NULL"
     ).fetchall()
+    attribution = FileAttribution.build(conn)
 
     for imp in imports:
         file_path = str(imp[0])
         line_number = int(imp[1])
         target_ref_id = str(imp[3])
-        source_ref_id = _get_file_node(file_path, conn)
-        if source_ref_id is None:
+        candidates = attribution.candidates(file_path)
+        if not candidates:
             continue
 
-        # Skip self-references
-        if source_ref_id == target_ref_id:
-            continue
-
-        source_node = _get_node(source_ref_id, conn)
         target_node = _get_node(target_ref_id, conn)
-
-        if source_node is None or target_node is None:
+        if target_node is None:
             continue
-
-        source_id, source_kind = source_node
         target_id, target_kind = target_node
 
-        # Lazily load tags only when needed
-        source_tags: set[str] | None = None
-        target_tags: set[str] | None = None
-        if any_tag_rule:
-            source_tags = _cached_tags(source_id)
-            target_tags = _cached_tags(target_id)
+        target_tags: set[str] | None = _cached_tags(target_id) if any_tag_rule else None
 
         for rule in rules:
-            if not rule.from_matcher.matches(source_id, source_kind, tags=source_tags):
-                continue
-            if not rule.to_matcher.matches(target_id, target_kind, tags=target_tags):
+            match = _first_matching_source(
+                candidates,
+                rule,
+                attribution=attribution,
+                target_ref_id=target_ref_id,
+                target_id=target_id,
+                target_kind=target_kind,
+                target_tags=target_tags,
+                tags_of=_cached_tags if any_tag_rule else None,
+            )
+            if match is None:
                 continue
 
             # Check exemption via unless_edge
-            if rule.unless_edge and _edge_exists(
-                source_ref_id, target_ref_id, rule.unless_edge, conn
-            ):
+            if rule.unless_edge and _edge_exists(match, target_ref_id, rule.unless_edge, conn):
                 continue
 
             violations.append(
@@ -196,16 +166,44 @@ def evaluate_deny_rules(conn: sqlite3.Connection, rules: list[DenyRule]) -> list
                     severity=rule.severity,
                     file_path=file_path,
                     line_number=line_number,
-                    from_ref_id=source_ref_id,
+                    from_ref_id=match,
                     to_ref_id=target_ref_id,
                     message=(
-                        f"Import from '{source_ref_id}' to '{target_ref_id}' "
+                        f"Import from '{match}' to '{target_ref_id}' "
                         f"violates deny rule '{rule.name}': {rule.description}"
                     ),
                 )
             )
 
     return violations
+
+
+def _first_matching_source(
+    candidates: tuple[str, ...],
+    rule: DenyRule,
+    *,
+    attribution: FileAttribution,
+    target_ref_id: str,
+    target_id: str,
+    target_kind: str,
+    target_tags: set[str] | None,
+    tags_of: Callable[[str], set[str]] | None,
+) -> str | None:
+    """The most specific candidate this rule applies to, or ``None``.
+
+    Most-specific-first, and the FIRST match decides: a file attributed to both
+    a component and the domain above it must produce one verdict, not two, and
+    the finer node is the one that describes the crossing.
+    """
+    if not rule.to_matcher.matches(target_id, target_kind, tags=target_tags):
+        return None
+    for source_id in candidates:
+        if source_id == target_ref_id:  # self-reference
+            continue
+        source_tags = tags_of(source_id) if tags_of is not None else None
+        if rule.from_matcher.matches(source_id, attribution.kind_of(source_id), tags=source_tags):
+            return source_id
+    return None
 
 
 # ---------------------------------------------------------------------------

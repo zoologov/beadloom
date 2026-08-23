@@ -14,6 +14,24 @@ integrity (every edge endpoint must resolve to a declared node). This is the
 ingestion seam every other graph capability (lint, diff, ctx, snapshot) reads
 from after reindex.
 
+### `source:` is resolved against disk at load time
+
+A node's `source` is STAT'ed as it is loaded (BDL-061.50):
+
+- a **directory written without a trailing slash** is normalised to carry one. A
+  directory source is a covering prefix everywhere it is consumed — ownership,
+  the sync-pair fallback, symbol counts, module-coverage — and each of those
+  reads a slash-less value as a lone file path, so the node owned **nothing**:
+  no `depends_on` edge, no sync pair, no symbol count, no coverage, silently.
+  Beadloom's own graph happens to use trailing slashes on all its sourced nodes,
+  which is precisely why the defect could only ever be an adopter's.
+- a **file** source is never widened into a directory: the path is stat'ed, not
+  guessed.
+- a source that names **no path at all** is a declaration that owns nothing, and
+  it is reported as a `GraphLoadResult` warning naming the `ref_id` — surfaced
+  by `beadloom reindex` — instead of turning into an empty node nobody
+  questions.
+
 ## Public surface
 
 - `load_graph(...)` — parse the graph YAML and populate `nodes` / `edges` (and
