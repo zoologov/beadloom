@@ -47,6 +47,7 @@
     - The direction should be explicit. Today a local edit flows *outward* by default; the safe default is that the shipped template is the source and a local divergence is reported, with promotion to the template a deliberate act.
     - Add a check that no project-local identifier — bead ids, our issue numbers, our repo's measured facts — appears in anything under `templates/`. Cheap, and it would have caught this at the commit.
     **Related:** #139/#152 (a project has no supported place for its own additions — the same gap from the adopter's side), #163 (re-attesting without evidence). Fixed for this instance by rewriting the template paragraph to a version that is true for an adopter.
+    **Open question, noticed while fixing this and deliberately not chased here:** after the two files were made to differ on purpose, `beadloom ci` still reported `config-check PASS: agent-config in sync`. That is plausibly correct by design — CONTEXT's decision is that `config-check` verifies the *composition result*, not file bytes — but it has not been verified, and "in sync" printed over two files that demonstrably differ is the exact shape this slice spent itself on. Whoever takes S3's composition work should establish which it is before relying on that green.
 
 176. [2026-08-23] [LOW] An incremental `reindex` prints `Imports: 0` and `Rules: 0` on the run that refreshed them
 
