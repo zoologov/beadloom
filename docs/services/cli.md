@@ -997,7 +997,7 @@ Idempotently sets `main` (or `--branch`) protection with a declarative
 `PUT repos/{owner}/{repo}/branches/{branch}/protection`: a **PR is required** (no
 direct push), the scaffolded default set of `ci.yml` checks — `gate`, `tests (3.10)`,
 `tests (3.11)`, `tests (3.12)`, `tests (3.13)`, `tests-locale (C)`,
-`tests-locale (en_US.ISO-8859-1)`, `site-build`, `ai-techwriter`
+`tests-locale (en_US.ISO-8859-1)`, `tests-windows`, `site-build`, `ai-techwriter`
 (ci.yml's job names + matrix legs) — are **required status checks**
 (`strict: true`), and `enforce_admins: true` + 0 required reviews so the
 **solo owner is never locked out** (can self-merge). `PUT .../protection` is
@@ -1021,12 +1021,17 @@ DEFAULT set above, and `strict: true` means every context in it must pass before
 a pull request can merge. Requiring a check-run that is red — or that does not
 exist in your pipeline at all — makes the branch permanently unmergeable until it
 is green or the context is removed. **On this repository today that is a live
-constraint:** the two `tests-locale` legs added in BDL-061.38 are in
-`DEFAULT_STATUS_CHECK_CONTEXTS` and are knowingly red (100 ASCII / 76 8-bit
-locale-attributable failures, measured) until bead `beadloom-mr2l.42` fixes the
-text I/O they expose, so `main` deliberately still carries the seven pre-BDL-061.38
-contexts. Re-run the command after `.42` closes, or pass `--check` explicitly for
-the set your pipeline can actually satisfy.
+constraint, and the reason has moved:** the two `tests-locale` legs added in
+BDL-061.38 were knowingly red (108 ASCII / 83 8-bit locale-attributable failures,
+measured) and BDL-061.42 turned both **green**; the `tests-windows` leg added in
+BDL-061.39 is now the red one, and deliberately so — nothing in this project had
+ever executed on Windows when it landed, so its first runs are the measurement
+rather than a regression. `main` therefore still carries the seven
+pre-BDL-061.38 contexts while `DEFAULT_STATUS_CHECK_CONTEXTS` names ten.
+**Sequencing:** running `beadloom setup-branch-protection` here today would apply
+all ten and block every merge until the Windows leg is green. Re-run it once the
+locale rows and `tests-windows` have all been observed green on a real PR, or
+pass `--check` explicitly for the set your pipeline can actually satisfy.
 
 Delegates to `onboarding/branch_protection.py:apply_branch_protection()` (the
 `gh` invocation is injected via a `GhRunner` seam for mockable tests).

@@ -25,7 +25,20 @@ clock defect `.11` measured are fixed; `.12` turned the gate green; `.59` closed
 so the slice no longer ships a false promise in front of a destructive operation. `beadloom ci`
 rc **0**, 305/305 pairs fresh, 0 surface drift, **6090** tests passing. The slice is ready for
 its PR. Also outstanding and not part of any
-slice: `.39`, `.41`, `.42`, `.58` — which grew from two items to a routed list (below).
+slice: `.41`, `.58` — which grew from two items to a routed list (below).
+**`.39` CLOSED (2026-08-24)** on `features/BDL-061-S4`: the platform dimension. The six
+`skipif(sys.platform == "win32")` guard tests were made non-vacuous FIRST — all six were
+platform-independent in their assertions and the mark's reason misnamed the obstacle
+(Windows has symlinks; what a process may lack is `SeCreateSymbolicLinkPrivilege`), so they
+are now capability-gated on a measured refusal and RUN on a runner that holds the privilege.
+Only then did the `tests-windows` leg land (`DEFAULT_STATUS_CHECK_CONTEXTS` 9 → 10, vendored
+template mirrored), with an in-CI probe that fails the leg both when it is not Windows and
+when it cannot create a link — the second is the lock, because that is the state in which the
+six rows skip again and ~6000 unrelated tests carry the green. **Expect the leg RED on its
+first run and do NOT run `setup-branch-protection` until it is observed green.** Two findings
+filed rather than fixed: `.60` (the backslash refusal refuses every native edit target on
+Windows and its stated reason is false there) and `.61` (the skip POPULATION differs by
+image — .6's uncounted 26-vs-11 — which is a third dimension and its own mechanism).
 
 ## Progress
 

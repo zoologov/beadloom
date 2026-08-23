@@ -93,7 +93,8 @@ def test_ci_grants_contents_and_pull_request_write() -> None:
 
 
 def test_ci_has_the_declared_jobs() -> None:
-    """The consolidated four (BDL-050) plus the locale DIMENSION (BDL-061.38).
+    """The consolidated four (BDL-050) + the locale DIMENSION (BDL-061.38) + the
+    platform DIMENSION (BDL-061.39).
 
     Asserted as an exact set: a job added here without a matching required
     status-check context is a check that gates nothing, and one removed is a
@@ -106,6 +107,7 @@ def test_ci_has_the_declared_jobs() -> None:
         "gate",
         "tests",
         "tests-locale",
+        "tests-windows",
         "site-build",
         "ai-techwriter",
     }

@@ -6,8 +6,10 @@
 #             tests ─┼─(all green?)─► ai-techwriter ─► PR unblocked
 #        site-build ─┘   └─(any red)──► ai-techwriter skipped → PR blocked
 #      tests-locale ──(the environment dimension; not in ai-techwriter's needs)
+#     tests-windows ──(the platform dimension;    not in ai-techwriter's needs)
 #
-# gate / tests / tests-locale / site-build run in parallel on GitHub-hosted runners;
+# gate / tests / tests-locale / tests-windows / site-build run in parallel on
+# GitHub-hosted runners;
 # ai-techwriter (self-hosted VPS where Goose + the API key live) has
 # `needs: [gate, tests, site-build]` so a broken PR never spends Qwen tokens.
 # deploy-site.yml stays the ONLY thing on push:main (main is green by
@@ -246,6 +248,139 @@ jobs:
           # Same as the `tests` legs: a missing tree-sitter grammar must FAIL,
           # not skip (BDL-059 S1) — otherwise the language tests could vanish
           # from this leg and take the dimension's reach with them.
+          BEADLOOM_REQUIRE_LANGUAGE_GRAMMARS: "1"
+        run: uv run pytest
+
+  # ---------------------------------------------------------------------- #
+  # tests-windows — the PLATFORM dimension (BDL-061.39).
+  #
+  # EXPECT THIS LEG RED BEFORE IT IS EVER GREEN, and read it the way the locale
+  # legs are read: THE VALUE IS THE DELTA BETWEEN LEGS, NEVER ANY LEG'S COLOUR.
+  # A red check with no legend is ignored by the second week, so here is the
+  # legend. Nothing in this repository has ever executed on Windows. `src/`
+  # contains no `sys.platform` and no `os.name` branch anywhere, so the product
+  # is either genuinely platform-neutral or it has simply never been asked, and
+  # those two states are indistinguishable from an all-green ubuntu pipeline.
+  # Concretely unverified today: the backslash refusal in
+  # application/guards/paths.py exists FOR Windows harnesses and has never run
+  # on one; `Path.resolve`, the documented "C:/... is read as a relative
+  # directory called C:" behaviour and case-insensitive path comparison all
+  # differ there; sqlite/WAL file locking, temp-dir cleanup over open handles
+  # and the tree-sitter grammar wheels are Windows stories nobody has read.
+  #
+  # THE ORDER MATTERED, and it is the reason this job did not land with .38.
+  # Six guard tests carried `skipif(sys.platform == "win32")`. A leg added while
+  # those marks stood would have SKIPPED all six on the one platform they name,
+  # run everything else and reported "passed" — a green check that proves
+  # nothing, which is the exact failure mode this family of beads exists to
+  # stop. Those marks are gone: tests/symlink_capability.py takes the skip on a
+  # MEASURED refusal to create a link (Windows has symlinks; what a process may
+  # lack is SeCreateSymbolicLinkPrivilege), so on a runner that holds the
+  # privilege the six rows RUN. tests/test_windows_dimension.py keeps a ledger
+  # that fails the suite if any platform skip is ever re-added unjudged.
+  #
+  # THE PROBE BELOW IS WHY THIS LEG CANNOT QUIETLY STOP BEING A DIMENSION, and
+  # it guards TWO ways of asserting nothing:
+  #   VACUOUS  — the runner is not Windows at all (a `runs-on` edit, a matrix
+  #              row that became ubuntu), so every verdict below is about Linux;
+  #   DEGRADED — it IS Windows but this process cannot create a symbolic link,
+  #              so the six rows this leg was bought for capability-skip again
+  #              and ~6000 unrelated tests carry the green. Non-Windows is
+  #              caught by everyone; this second one is caught by nobody.
+  # tests/test_ci_windows_dimension.py EXECUTES this script (it parses the
+  # heredoc out of this file), so the least-tested code in any repository — a
+  # shell script inside a YAML string — is covered and cannot drift from here.
+  #
+  # ONLY THE PLATFORM VARIES: python is 3.13 (the version the owner runs
+  # locally, so a red leg is attributable to the OS and to nothing else — the
+  # version dimension is the `tests` matrix's job), the extras are byte-identical
+  # to the `tests` leg, and the whole suite runs. No `--cov`: coverage is a
+  # property of the code, not of the platform, and the `tests` legs already
+  # enforce the floor.
+  #
+  # COST, priced the way .38 priced the locale rows rather than waved at.
+  # ONE row, ~8-14 minutes (this suite is ~6100 tests and does a great deal of
+  # tempdir + sqlite work, which is where Windows is slowest), billed by GitHub
+  # at the 2x Windows multiplier => ~16-28 runner-minutes per PR, against ~8 for
+  # both locale rows. Unlike those rows it is NOT free in wall-clock: the ubuntu
+  # legs finish in ~4 minutes, so this becomes the pipeline's critical path and
+  # PR-to-merge latency roughly triples. It is deliberately absent from
+  # `ai-techwriter`'s `needs:` so the doc refresh is not held behind it — the
+  # cost lands on the merge, not on the writer.
+  #
+  # WHY THAT IS WORTH PAYING, in evidence rather than in principle: the locale
+  # dimension has already repaid its own cost (BDL-061.42 fixed 108 ASCII / 83
+  # 8-bit locale-attributable failures, a git-hook writer that could not write
+  # on a non-UTF-8 image, a federation export raising past its own handler, and
+  # a `--help` that exited 1) — and Windows is a larger delta than a locale:
+  # separators, absolute-path parsing, case-folding, file locking and process
+  # spawning all change at once, over a product with no platform branches at all.
+  # ---------------------------------------------------------------------- #
+  tests-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python 3.13
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra languages --extra tui --extra watch --extra graphql
+
+      # `shell: bash` is load-bearing, not a style choice: the DEFAULT shell on
+      # windows-latest is pwsh, which has no POSIX heredoc — `<<'PY'` would be a
+      # redirection error rather than a script. The image ships Git-for-Windows
+      # bash, which runs this unchanged.
+      - name: Assert the leg is genuinely Windows and can link
+        shell: bash
+        run: |
+          uv run python - <<'PY'
+          import os
+          import sys
+          import tempfile
+          from pathlib import Path
+
+          if sys.platform != "win32" or os.sep != "\\":
+              raise SystemExit(
+                  f"VACUOUS LEG: this runner reports platform={sys.platform!r} "
+                  f"sep={os.sep!r}, so nothing it measures is a Windows fact."
+              )
+
+          with tempfile.TemporaryDirectory() as raw:
+              root = Path(raw)
+              target = root / "target.txt"
+              target.write_text("probe\n", encoding="utf-8")
+              link = root / "link.txt"
+              try:
+                  os.symlink(target, link)
+              except OSError as exc:
+                  raise SystemExit(
+                      f"DEGRADED LEG: this process cannot create a symbolic link "
+                      f"({exc}). On Windows that is SeCreateSymbolicLinkPrivilege, "
+                      "which is granted by Developer Mode or an elevated shell. "
+                      "Without it the six guard rows this leg exists for are "
+                      "capability-skipped and the green below would be carried "
+                      "entirely by tests that never needed Windows."
+                  ) from exc
+              if link.resolve() != target.resolve():
+                  raise SystemExit(
+                      "DEGRADED LEG: a symbolic link was created but resolved to "
+                      f"{link.resolve()} instead of {target.resolve()}, so "
+                      "link-following semantics cannot be measured here — the six "
+                      "rows would RUN and assert the wrong thing."
+                  )
+          print(f"platform={sys.platform} sep={os.sep!r} symlinks=yes")
+          PY
+
+      - name: Whole suite on Windows
+        env:
+          # Same as the `tests` legs: a missing tree-sitter grammar must FAIL,
+          # not skip (BDL-059 S1). Grammar wheels are built per platform, so
+          # this is where a silent skip would be most likely and would make the
+          # delta an artifact of what installed rather than of the platform.
           BEADLOOM_REQUIRE_LANGUAGE_GRAMMARS: "1"
         run: uv run pytest
 

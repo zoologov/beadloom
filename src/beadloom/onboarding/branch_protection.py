@@ -68,6 +68,16 @@ from typing import Protocol
 #:   VARIED rather than pinned. It is required for the same reason the version
 #:   matrix is — a leg that cannot block a merge is advisory, and the defect it
 #:   exists to catch (BDL-061.36) was one every UTF-8 leg agreed was fine;
+#: * ``tests-windows`` — the platform DIMENSION (BDL-061.39): the same whole
+#:   suite on ``windows-latest``. Required on the same argument, with one cost
+#:   stated rather than discovered — unlike the locale rows it is NOT free in
+#:   wall-clock (a 2x-billed runner that becomes the pipeline's critical path),
+#:   and it is EXPECTED RED before it is ever green, because nothing in this
+#:   project had executed on Windows when it was added. A required context is a
+#:   CONSTANT here and not live protection: the repo's actual required checks
+#:   change only when someone RUNS ``setup-branch-protection``, so landing it
+#:   red blocks nothing by itself — see the sequencing note in
+#:   ``docs/services/cli.md``;
 #: * ``site-build`` — the VitePress build job;
 #: * ``ai-techwriter`` — gated on ``needs: [gate, tests, site-build]``.
 #:
@@ -87,6 +97,7 @@ DEFAULT_STATUS_CHECK_CONTEXTS: tuple[str, ...] = (
     "tests (3.13)",
     "tests-locale (C)",
     "tests-locale (en_US.ISO-8859-1)",
+    "tests-windows",
     "site-build",
     "ai-techwriter",
 )

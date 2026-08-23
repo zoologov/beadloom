@@ -63,6 +63,7 @@ branch and integrates via a single PR:
 4. **The PR triggers** the consolidated CI pipeline (`.github/workflows/ci.yml`,
    BDL-050): `gate` (the `beadloom ci` verdict) ∥ `tests` (the 3.10–3.13 matrix) ∥
    `tests-locale` (the same suite under `C` and `en_US.ISO-8859-1`) ∥
+   `tests-windows` (the same suite on `windows-latest`) ∥
    `site-build` (the VitePress build) run in parallel, then the
    [AI tech-writer](./ai-techwriter.md) job runs **only after all three are green**
    (`needs: [gate, tests, site-build]`) and commits its doc refresh **into the PR
@@ -77,19 +78,24 @@ before re-running it):
 beadloom setup-branch-protection --repo OWNER/NAME
 ```
 
-This requires a PR to `main` with the consolidated `ci.yml`'s **9 check-runs as
+This requires a PR to `main` with the consolidated `ci.yml`'s **10 check-runs as
 required status checks** — `gate`, `tests (3.10)`, `tests (3.11)`, `tests (3.12)`,
 `tests (3.13)`, `tests-locale (C)`, `tests-locale (en_US.ISO-8859-1)`,
-`site-build`, `ai-techwriter` (BDL-050; the two `tests-locale` legs are the
-environment dimension added in BDL-061.38 — the same whole suite with the locale
-**varied, never pinned**).
+`tests-windows`, `site-build`, `ai-techwriter` (BDL-050; the two `tests-locale`
+legs are the environment dimension added in BDL-061.38 — the same whole suite
+with the locale **varied, never pinned**; `tests-windows` is the platform
+dimension added in BDL-061.39 — the same whole suite on Windows, added only
+after the six `skipif(win32)` guard tests were made non-vacuous, because a leg
+that re-skips the tests it was bought for is a green check that proves nothing).
 
 **Require only checks your pipeline can turn green.** The default set is applied
 whole, and `strict: true` blocks a merge until every context in it passes, so
 requiring a check-run that is red — or absent from your pipeline — makes the branch
 unmergeable until you fix it or narrow the set with `--check`. In this repository
-the two `tests-locale` contexts are knowingly red until bead `beadloom-mr2l.42`
-lands, so `main`'s live protection deliberately still carries the other seven.
+the two `tests-locale` contexts were knowingly red until bead `beadloom-mr2l.42`
+turned them green, and `tests-windows` is expected red on its first runs — the
+delta between legs is the measurement, never any leg's colour — so `main`'s live
+protection deliberately still carries the other seven.
 
 Strict trunk-based keeps
 `enforce_admins: true` (even the owner integrates via a PR) with 0 required reviews,
