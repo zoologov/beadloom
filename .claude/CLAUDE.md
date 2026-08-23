@@ -325,7 +325,14 @@ Example:
 One-time per repo: `beadloom setup-branch-protection` configures `main` protection
 (PR required, `beadloom ci` a required check, `enforce_admins: true` — strict
 trunk-based, even the owner integrates via a PR — and 0 required reviews → the
-owner still self-merges). Safe to re-run.
+owner still self-merges).
+
+> **Not safe to re-run right now.** `DEFAULT_STATUS_CHECK_CONTEXTS` ships **nine**
+> contexts since BDL-061 S2 (it gained the two `tests-locale` legs); `main`'s live
+> protection has **seven**. Running the command today would require two checks that
+> are knowingly red until `beadloom-mr2l.42` closes, making `main` unmergeable.
+> Re-run it once those legs are green. It is idempotent, not harmless — the payload
+> it applies is whatever the current constant says, not whatever is live.
 
 ---
 
