@@ -98,3 +98,11 @@ data).
 Part of the `ai_agents` domain (a leaf consumer). The harness consumes
 `beadloom` / `bd` via subprocess seams and must not be imported by the core
 (`core-no-import-ai-agents` / `application-no-import-ai-agents` rules).
+
+Its Click entry (`_TolerantOutputCommand`) applies the console-stream policy from
+`infrastructure/console_streams.py` before dispatch, so `--help` and every verdict it
+prints survive a terminal whose codec cannot spell an arrow. MEASURED under
+`LC_ALL=en_US.ISO-8859-1` before it did: `python -m beadloom.ai_agents.ai_techwriter
+--help` exited **1** with `UnicodeEncodeError` on the `→` in its own help text
+(BDL-061.42). It is wired here rather than shared with the `beadloom` group because the
+two are separate Click objects and a domain may not import a service.

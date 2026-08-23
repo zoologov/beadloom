@@ -56,6 +56,7 @@ from beadloom.services import bd_seam, guard_probes
 from beadloom.services.bd_seam import BdUnavailableError, run_bd
 from beadloom.services.guard_probes import build_probes
 from tests.ambient_codec import under_ambient_codec
+from tests.filesystem_names import as_the_process_receives
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -149,8 +150,14 @@ class TestTheAmbientDecoderDoesNotDecideTheAnswer:
         branch name nobody has ever checked out (the latin-1 mojibake of it), which the
         trunk comparison then answers confidently.
         """
-        _git(repo, "branch", CYRILLIC_BRANCH)
-        _git(repo, "checkout", "-q", CYRILLIC_BRANCH)
+        # The branch is created from the BYTES a real caller sends, not from the
+        # str: on an image whose filesystem encoding cannot spell the name, argv
+        # would carry those bytes and arrive surrogate-escaped, while passing the
+        # str raises before git is even spawned. The assertion below is unchanged
+        # — what the probe must return is still the name as UTF-8 (BDL-061.42).
+        branch = as_the_process_receives(CYRILLIC_BRANCH)
+        _git(repo, "branch", branch)
+        _git(repo, "checkout", "-q", branch)
         under_ambient_codec(monkeypatch, guard_probes, ambient)
 
         assert build_probes(repo).workspace.current_branch() == CYRILLIC_BRANCH

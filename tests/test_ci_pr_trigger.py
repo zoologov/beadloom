@@ -142,7 +142,10 @@ def test_inline_shell_parses_with_bash_n(path: Path) -> None:
         result = subprocess.run(
             ["bash", "-n"],  # noqa: S607 - bash resolved on PATH in CI/dev
             input=block,
-            text=True,
+            # The child speaks UTF-8 by contract (our own CLI, a JSON payload, a shell
+            # block from a YAML file); `text=True` would have decoded it with the
+            # image's locale instead (BDL-061.42).
+            encoding="utf-8",
             capture_output=True,
             check=False,
         )

@@ -245,7 +245,10 @@ class TestTheEmittedAdapterIsTrueAboutWhatItCanReturn:
             cwd=str(tmp_path),
             input=payload,
             capture_output=True,
-            text=True,
+            # The child speaks UTF-8 by contract (our own CLI, a JSON payload, a shell
+            # block from a YAML file); `text=True` would have decoded it with the
+            # image's locale instead (BDL-061.42).
+            encoding="utf-8",
             env=self._env(),
             check=False,
         )

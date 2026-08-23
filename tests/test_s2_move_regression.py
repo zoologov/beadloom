@@ -110,7 +110,10 @@ class TestPackageDataResources:
             [sys.executable, "-c", code],
             cwd=tmp_path,
             capture_output=True,
-            text=True,
+            # The child speaks UTF-8 by contract (our own CLI, a JSON payload, a shell
+            # block from a YAML file); `text=True` would have decoded it with the
+            # image's locale instead (BDL-061.42).
+            encoding="utf-8",
             check=False,
         )
         assert proc.returncode == 0, proc.stderr
@@ -138,7 +141,7 @@ class TestInvocation:
             [sys.executable, "-m", _HARNESS_PKG, "--help"],
             cwd=tmp_path,
             capture_output=True,
-            text=True,
+            encoding="utf-8",
             check=False,
         )
         assert proc.returncode == 0, proc.stderr
@@ -476,7 +479,7 @@ def _beadloom_ctx_json(ref_id: str) -> dict[str, object]:
         [exe, "ctx", ref_id, "--json"],
         cwd=_REPO_ROOT,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
         check=False,
     )
     assert proc.returncode == 0, proc.stderr
@@ -550,7 +553,7 @@ class TestBehaviorUnchangedAtNewPath:
             ],
             cwd=tmp_path,
             capture_output=True,
-            text=True,
+            encoding="utf-8",
             check=False,
         )
         assert proc.returncode == 0, proc.stderr

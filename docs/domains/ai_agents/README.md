@@ -39,7 +39,7 @@ rules in `.beadloom/_graph/rules.yml` enforce this (`lint --strict`).
 |--------|--------|-------------|
 | `backoff` | `backoff.py` | Per-session 429/5xx exponential back-off (`retry_with_backoff`, `RateLimitError`); deterministic schedule, injected `sleep` seam |
 | `cli` | `cli.py` | Thin Click entrypoint (`main`); assembles seams, injects timestamp, delegates to `runner.run_harness`; exit codes driven by the three-verdict classifier (BDL-050) |
-| `commands` | `commands.py` | Patchable subprocess wrappers (`run_command`, `beadloom_sync_check_json`, `beadloom_ctx_json`, `beadloom_why`, `git_changed_line_numbers`, etc.); the single `subprocess.run` seam |
+| `commands` | `commands.py` | Patchable subprocess wrappers (`run_command`, `beadloom_sync_check_json`, `beadloom_ctx_json`, `beadloom_why`, `git_changed_line_numbers`, etc.); the single `subprocess.run` seam, which states its codec (`utf-8`, `errors="replace"`) rather than inheriting the image's locale — goose, git and beadloom all emit UTF-8 by contract, and this text is displayed and re-encoded (logs, a PR comment), so a lossless surrogate would raise later at a site that cannot explain it (BDL-061.42) |
 | `models` | `models.py` | Frozen dataclasses crossing seams: `DriftItem`, `ContextPacket`, `AgentResult`, `GateResult`, `PublishResult`, `RunRecord`, `HarnessConfig`, `HarnessResult` |
 | `packet` | `packet.py` | Deterministic context-packet assembly (`build_packet`, `select_polish_for_ref`, `read_doc`) |
 | `provider` | `provider.py` | `ProviderConfig` (Qwen3.7-Plus / OpenAI-compatible endpoint), `qwen_provider`, `default_recipe_path`; API key resolved from env at run time, never inlined |

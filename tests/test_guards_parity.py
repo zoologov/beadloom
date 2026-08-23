@@ -290,7 +290,10 @@ class TestTheEmittedAdapterAgreesWithTheCli:
             cwd=str(repo_on_trunk),
             input=payload,
             capture_output=True,
-            text=True,
+            # The child speaks UTF-8 by contract (our own CLI, a JSON payload, a shell
+            # block from a YAML file); `text=True` would have decoded it with the
+            # image's locale instead (BDL-061.42).
+            encoding="utf-8",
             env=env,
             check=False,
         )
@@ -299,7 +302,7 @@ class TestTheEmittedAdapterAgreesWithTheCli:
             cwd=str(repo_on_trunk),
             input=payload,
             capture_output=True,
-            text=True,
+            encoding="utf-8",
             env=env,
             check=False,
         )

@@ -97,6 +97,10 @@ DEFAULT_BRANCH = "main"
 #: ``Accept`` header GitHub recommends for its REST API via ``gh api``.
 _ACCEPT_HEADER = "Accept: application/vnd.github+json"
 
+#: The codec of the GitHub API conversation, in both directions — see
+#: :func:`_subprocess_runner` for why the outbound half is the load-bearing one.
+_GH_ENCODING = "utf-8"
+
 
 class GhRunner(Protocol):
     """Runs the full ``argv`` (``["gh", ...]``) with ``stdin``; returns stdout.
@@ -169,12 +173,27 @@ class BranchProtectionRequest:
 
 
 def _subprocess_runner(argv: list[str], stdin: str) -> str:
-    """Default :class:`GhRunner`: shell out to the real ``gh`` CLI."""
+    """Default :class:`GhRunner`: shell out to the real ``gh`` CLI.
+
+    The encoding is stated in BOTH directions, and the outbound one is the reason
+    this is not cosmetic: ``stdin`` is the protection payload we PUT, and
+    ``text=True`` would have encoded it with ``locale.getpreferredencoding(False)``
+    — a check-run context with one non-ASCII character would raise on an ASCII
+    image and be silently *altered* on an 8-bit one, i.e. we would protect the
+    branch with a required check whose name nobody declared. JSON is UTF-8 by
+    definition (RFC 8259 §8.1), so this is gh's contract rather than a guess.
+
+    ``errors`` stays strict on purpose: an outbound payload must never be made
+    lossy to keep a call alive, and an inbound byte that is not UTF-8 means the
+    response is not the JSON it claims to be — saying so beats inventing a
+    character (BDL-061.42).
+    """
     completed = subprocess.run(  # noqa: S603 - argv is built internally, not user shell
         argv,
         input=stdin,
         capture_output=True,
-        text=True,
+        encoding=_GH_ENCODING,
+        errors="strict",
         check=True,
     )
     return completed.stdout

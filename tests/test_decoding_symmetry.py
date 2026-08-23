@@ -61,6 +61,7 @@ from beadloom.graph.federation import export as federation_export
 from beadloom.infrastructure import git_activity
 from beadloom.infrastructure.db import open_db
 from tests.ambient_codec import AMBIENT_CODECS, under_ambient_codec
+from tests.filesystem_names import as_the_process_receives
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -417,7 +418,7 @@ class TestContributorNamesAreNotAmbient:
     ) -> None:
         """MEASURED before the fix: latin-1 -> 'Ð\\x98Ð²Ð°Ð½ Ð\\x9fÐµÑ\\x82Ñ\\x80Ð¾Ð²',
         ascii -> UnicodeDecodeError past ``except (OSError, SubprocessError)``."""
-        repo = _build_activity_repo(tmp_path, "Иван Петров")
+        repo = _build_activity_repo(tmp_path, as_the_process_receives("Иван Петров"))
         under_ambient_codec(monkeypatch, git_activity, ambient)
 
         activities = git_activity.analyze_git_activity(repo, {"N": "src"})
@@ -482,7 +483,20 @@ class TestContributorNamesAreNotAmbient:
 
 
 class TestFederationProvenanceIsNotAmbient:
-    """``None`` means "unknown HEAD" (#103). It must not also mean "we misread a path"."""
+    """``None`` means "unknown HEAD" (#103). It must not also mean "we misread a path".
+
+    What the ambient rows prove after BDL-061.42, stated because it changed:
+    ``export`` now reads git as BYTES and decodes a *path* with ``os.fsdecode``,
+    so the injected codec has nothing left to corrupt on this route and the rows
+    can no longer fail by mis-decoding. They still bite for the defect they were
+    written about — reintroducing ``text=True`` puts the ambient codec back in
+    charge and reddens all three — and the row that can fail on its own evidence
+    is the real-bytes one below, plus the same path under a genuinely non-UTF-8
+    filesystem, which only the ``tests-locale`` legs can run. That combination is
+    what caught .42's own defect: with the path decoded as UTF-8 and the
+    filesystem's codec ASCII, ``Path(toplevel).resolve()`` raised
+    ``UnicodeEncodeError`` out of ``beadloom export``.
+    """
 
     @pytest.mark.parametrize("ambient", AMBIENT_CODECS)
     def test_the_head_sha_survives_a_non_ascii_project_path(
@@ -496,7 +510,7 @@ class TestFederationProvenanceIsNotAmbient:
         to ``project_root``, so the export takes the honest-unknown branch for a
         dishonest reason and silently loses its provenance.
         """
-        repo = tmp_path / "проект"
+        repo = tmp_path / as_the_process_receives("проект")
         _init_repo(repo)
         (repo / "a.txt").write_text("x\n", encoding="utf-8")
         _git(repo, "add", "-A")
