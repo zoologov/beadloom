@@ -20,7 +20,7 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
 `run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex)` runs, in order:
 
 1. **reindex** (unless `--no-reindex`) — rebuild the index.
-2. **lint** — `lint --strict`, architecture boundaries.
+2. **lint** — `lint --strict`, architecture boundaries. Its summary carries what a `forbid_import` exemption excused (`… 12 rules, 0 violations, 6 crossings suppressed by an exemption`), taken from the linter's own formatter so the Gate line cannot drift from the command it summarises (BDL-061.49). The clause is absent when nothing was suppressed. There is deliberately no matching clause for `rules_inert`: an inert rule always emits a finding, so a non-zero count already flips this summary to the `0 error(s), N warning(s)` branch.
 3. **sync-check** — symbol-pair doc freshness; fails on stale **and missing**
    pairs, and reports `unverified` ones as `WARN` rather than fresh.
 4. **docs-audit** — numeric/version fact freshness; fails on `stale>0`, and

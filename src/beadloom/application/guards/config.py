@@ -17,7 +17,11 @@ Four rules are enforced here because each is a way a gate is switched off
 without anyone saying so:
 
 * an exclusion carries **both** ``reason`` and ``until`` — an unnamed, undated
-  exclusion is permanent by accident;
+  exclusion is permanent by accident. An ``until`` that leads with an ISO date is
+  a DEADLINE and is checked: once it passes, the exclusion says so wherever it is
+  rendered and ``guard --liveness`` names it. One that names an event is prose, by
+  design — a real exit condition is often a landed bead, not a day — and prose is
+  reported as prose rather than quietly treated as satisfied;
 * a guard name that is not registered is an error, not a no-op, so a typo
   cannot silently disable a gate;
 * an unknown strictness value is an error rather than a fallback to something
@@ -47,12 +51,14 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from datetime import date
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
 import yaml
 
 from beadloom.application.guards.checks import BUILTIN_GUARDS
+from beadloom.graph.rules import exit_condition_deadline
 from beadloom.onboarding.flow_config import FLOW_CONFIG_RELPATH
 
 if TYPE_CHECKING:
@@ -153,7 +159,15 @@ CATCH_ALL_PROBE_PATHS: tuple[str, ...] = (
 
 @dataclass(frozen=True)
 class GuardExclusion:
-    """One declared exclusion: a path pattern, why it exists, and when it ends."""
+    """One declared exclusion: a path pattern, why it exists, and when it ends.
+
+    ``until`` answers *what retires this exclusion*, and it may answer with a
+    date or with an event. Which of the two it is, is decided by
+    :func:`~beadloom.graph.rules.exit_condition_deadline` — the same function the
+    ``forbid_import`` exemptions in ``rules.yml`` use, because the two surfaces
+    make the identical promise and restating it here is how they would come to
+    mean different things (BDL-061.49).
+    """
 
     path: str
     reason: str
@@ -163,9 +177,25 @@ class GuardExclusion:
         """True when this exclusion covers *relative_path* (project-relative POSIX)."""
         return bool(_glob_to_regex(self.path).match(relative_path))
 
+    def expired(self, today: date | None = None) -> bool:
+        """True when ``until`` names a day and that day is behind us.
+
+        An event-shaped exit condition ("BDL-0xx introduces a scripts node") is
+        never expired: unparseable is not a verdict either way. The deadline names
+        the LAST day the exclusion covers, so ``until`` equal to today still holds.
+        """
+        deadline = exit_condition_deadline(self.until)
+        return deadline is not None and deadline < (today or date.today())
+
     def describe(self) -> str:
-        """One-line rendering used as the ``skip`` reason."""
-        return f"excluded by {self.path!r}: {self.reason} (until {self.until})"
+        """One-line rendering used as the ``skip`` reason.
+
+        A passed deadline is said HERE, at the moment the exclusion suppresses
+        something, and not only in ``guard --liveness``: the reader who needs it
+        is the one being told their edit was let through.
+        """
+        expiry = " — EXPIRED" if self.expired() else ""
+        return f"excluded by {self.path!r}: {self.reason} (until {self.until}{expiry})"
 
 
 @dataclass(frozen=True)

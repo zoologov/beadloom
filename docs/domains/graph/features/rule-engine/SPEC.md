@@ -6,10 +6,11 @@ Architecture-as-Code rule engine: parse `rules.yml`, validate rule definitions, 
 
 The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 
-- `rules/types.py` — constants, rule dataclasses, `NodeMatcher`, `Violation` (the model).
+- `rules/types.py` — constants, rule dataclasses, `NodeMatcher`, `Violation` (the model), plus the vocabulary the model is matched in: `import_path_as_path` / `matches_import_target` / `MATCHING_FORM_HINT`, and `exit_condition_deadline` (the `until:` grammar).
 - `rules/loader.py` — `load_rules` / `load_rules_with_tags` / `validate_rules` (YAML → typed rules + DB validation).
 - `rules/evaluators.py` — per-rule-type evaluation (deny / require / import-boundary / forbid-edge / layer / cardinality / unregistered-feature / module-coverage) + shared node/edge lookup helpers.
 - `rules/liveness.py` — rule liveness: whether a rule *can* fire at all, for every rule type (BDL-061.48). It answers about the CONFIGURATION, never about the code.
+- `rules/exemptions.py` — what a `forbid_import` exemption is doing: which crossings it covers, how many it swallows, and whether its exit condition has passed (BDL-061.49).
 - `rules/cycles.py` — cycle detection (WHITE/GREY/BLACK colored DFS, path-as-set membership) + edge-liveness SQL helpers.
 - `rules/__init__.py` — `evaluate_all` orchestration + the remediation post-pass + stable public re-exports.
 
@@ -132,11 +133,30 @@ One recorded exception to an `ImportBoundaryRule`. An exemption baselines a pre-
 | `to_glob`   | `str`  | Matched like the rule's `to` (dotted import path). Default `"*"` — any target.   |
 | `from_glob` | `str`  | Matched like the rule's `from` (source file path). Default `"*"` — any source.   |
 | `reason`    | `str`  | **Mandatory.** Why this crossing is tolerated.                                   |
-| `until`     | `str`  | **Mandatory.** The condition that retires the entry — free text (see below).      |
+| `until`     | `str`  | **Mandatory.** The condition that retires the entry — a date or an event (see below). |
 
-`load_rules` raises `ValueError` when an entry omits `reason` or `until`, or sets neither `from` nor `to` (an entry matching both would exempt the whole rule). An exemption that suppresses nothing is reported as a liveness finding, which is how a DEAD entry announces itself.
+`load_rules` raises `ValueError` when an entry omits `reason` or `until`, or sets neither `from` nor `to` (an entry matching both would exempt the whole rule). A deadline already in the past is **not** a load error: rejecting a config for the passage of time would break a project that changed nothing, so it is reported by the run instead.
 
-**What `until` is today, stated because the surrounding wording invites more.** It is required, it is stored, and it is quoted back in the liveness finding — and nothing parses it. A date that has passed is not a finding, and a live exemption is not reported at all: this repository's own `lint` prints `0 violations` while six onboarding crossings sit behind exemptions, and the suppressed count is never surfaced. So an exemption retires when a human reads the entry, not when the condition arrives. Reporting the suppressed count and making an expired `until` a finding is bead `beadloom-mr2l.49`.
+**What `until` is (BDL-061.49).** It answers one question — *what retires this entry* — and there are two honest answers, so the grammar admits both:
+
+- a **deadline**: the value LEADS with an ISO `YYYY-MM-DD` date, optionally followed by the prose that explains it (`2026-09-01 — when the repository read seam lands`). It is parsed, and once that day has passed while the entry is still suppressing something, the run reports it;
+- an **event**: anything else (`the rule is re-scoped — BDL-UX #150 follow-up`). Not parseable, and deliberately still legal: what retires a real baseline is usually a landed change, not a day. An event is reported as prose, never treated as satisfied.
+
+The spelling is pinned to a leading `YYYY-MM-DD` by a pattern rather than delegated to `date.fromisoformat`, because that parser widened in Python 3.11 (`20260101` and week dates parse there and raise on 3.10) — the same `until:` must not be enforceable on one supported interpreter and prose on another. A date in the MIDDLE of a sentence is an event: a deadline is the first thing an exit condition says, or it is not one. `exit_condition_deadline` is the single definition, shared with the `guards.<name>.exclusions[].until` of `flow.yml`, so the two surfaces cannot promise different things.
+
+**Every exemption is visible, whatever it does.** The three channels are exhaustive over what an entry can be doing, and this is the guarantee the `rules.yml` comment used to overstate:
+
+| The entry | What the run says |
+|-----------|-------------------|
+| suppresses nothing | a **dead** finding (`rule_liveness`, `warn`): "suppresses nothing … delete it" |
+| suppresses something, past its deadline | an **expired** finding (`rule_liveness`, `warn`) naming the date and how many crossings it is still excusing |
+| suppresses something, within its deadline or on an event | counted: `LintResult.violations_suppressed`, the `", N crossings suppressed by an exemption"` clause on the summary line, and one entry per crossing in `--format json`'s `suppressed` array |
+
+A blanket `from: "*" / to: "*"` entry therefore cannot hide either: it suppresses crossings (counted) or it suppresses none (dead).
+
+**Severity is `warn`, and expiry never changes what is suppressed.** A finding here is a statement about the CONFIGURATION, not about the code — the distinction BDL-061.48 drew for inert rules — and it is honoured harder in this case: a crossing does **not** reappear at `error` severity because a calendar day passed, because a build that reddens with no commit behind it is worse than the silence being fixed. A project that wants a hard deadline has `lint --fail-on-warn`.
+
+**Named limit.** The suppressed count appears wherever a run could read as clean — `rich`, `--format json`, and the `0 violations, N rules evaluated` line the CLI prints when a piped run has nothing to report. It does **not** appear in `porcelain` output that already carries violations (one line per violation is the format's contract), nor in the Gate's own `N rules, 0 violations` step summary, which belongs to `application/gate.py`.
 
 #### Rule liveness (a rule that cannot fire)
 
@@ -149,14 +169,14 @@ One recorded exception to an `ImportBoundaryRule`. An exemption baselines a pre-
 | `deny` | its `from` or `to` matcher selects **0** nodes (an unknown `ref_id` is named as such; otherwise the tag or kind nobody carries is named) | `liveness.py` |
 | `require` | its `for` selects **0** nodes — **or** its `has_edge_to` selects 0, in which case every node it matches would fail, which is equally broken | `liveness.py` |
 | `forbid_cycles` | the graph holds **0** *live* (`active`) edges of the declared `edge_kind`(s), so there is no chain to walk | `liveness.py` |
-| `forbid_import` | its `from` glob matches **0** indexed source files, or its `to` glob matches **0** indexed import paths | `evaluators.py` |
+| `forbid_import` | its `from` glob matches **0** indexed source files, or its `to` glob matches **0** indexed import paths | `evaluators.py` (a stale `exempt` entry: `exemptions.py`) |
 | `forbid` (edge) | its `from`/`to` selects **0** nodes, or the graph holds **0** edges of its `edge_kind` | `liveness.py` |
 | `layers` | fewer than **2** of its layers are populated (direction needs two layers to point between), or no live `edge_kind` edge runs between two layered nodes | `liveness.py` |
 | `check` (cardinality) | its `for` selects **0** nodes, **or** no threshold is set at all (`max_symbols`, `max_files` and `min_doc_coverage` all unset), so nothing is compared | `liveness.py` |
 | `unregistered_feature_candidate` | its `for` selects **0** nodes, or none of the nodes it selects declares a `source`, so it has no files to inspect | `liveness.py` |
 | `module_coverage` | its `source_root` holds **0** modules, on disk or in the index — "complete coverage" of nothing | `liveness.py` |
 
-`forbid_import` additionally reports an `exempt` entry that suppressed nothing (one finding per entry, quoting its `until`). That is a statement about an exemption, not about the rule, so it is **not** counted in `LintResult.rules_inert`; the suppressed-count half of that question is bead `beadloom-mr2l.49`.
+`forbid_import` additionally reports a stale `exempt` entry — dead or expired, at most one finding per entry (`rules/exemptions.py`, from the counts the import scan already produced). That is a statement about an exemption, not about the rule, so it is **not** counted in `LintResult.rules_inert`; what those entries suppressed is counted separately, as `LintResult.violations_suppressed`. Two counters, because they answer two questions: *which of my rules cannot check anything* and *what did my checks catch and excuse*.
 
 **Severity is always `warn`, whatever the rule declares.** A liveness finding is a statement about the *configuration*, never about the code: `error` would conflate "your architecture is broken" with "your check is broken", and would turn an adopter's green pipeline red on upgrade the moment they update Beadloom (BDL-061 CONTEXT). Being `warn` is not the same as being quiet — the finding is printed by default, appears in `--json` under `kind: "rule_liveness"`, and `LintResult.rules_inert` qualifies the rule count on the summary line (`13 rules evaluated, 2 of them unable to check anything`), so a green run cannot advertise checks that never looked.
 
@@ -283,7 +303,7 @@ rules:
       exempt:                                  # optional, baselines existing crossings
         - to: "pkg/module_b/atomic_io"         # `from` optional; at least one required
           reason: "<why this crossing is tolerated>"   # mandatory
-          until: "<the condition that retires it>"     # mandatory
+          until: "<a YYYY-MM-DD deadline, or the event that retires it>"  # mandatory
 
   # --- forbid (forbid_edge): forbid graph edges between tagged groups ---
   - name: <unique-rule-name>
@@ -615,6 +635,18 @@ One **pair** per rule type — an inert rule that must be reported, and a live r
 - **Always `warn`.** Nine `severity: error` rules, all inert. Assert every finding is `warn` and `has_errors` is `False` — the adopter-safety invariant, asserted rather than assumed.
 - **Silent on an empty index.** Assert the same nine rules produce nothing against an empty schema.
 - **End to end.** Drive the reproduction from `beadloom-mr2l.7` (a `require` naming `no-such-node-at-all`) through the real CLI; assert the unknown ref_id is named, `lint --strict` exits **0**, and the JSON payload carries `kind: "rule_liveness"` and `summary.rules_inert == 1`. Exit codes and `--json` only, never piped line counts (BDL-UX #148).
+
+### Exit-condition Tests (`tests/test_exit_condition_expiry.py`)
+
+Both surfaces that require an exit condition are covered in ONE file on purpose: `forbid_import.exempt[].until` and `guards.<name>.exclusions[].until` share one grammar, and a file per surface is how the two would drift into promising different things.
+
+- **The grammar.** A bare ISO date is a deadline; a date LEADING a sentence is a deadline; a date mid-sentence, `2026-1-1`, `20260101`, `2026-W01-1` and prose are all events. The rejected spellings include the two `date.fromisoformat` accepts on Python 3.11+ and rejects on 3.10 — the assertion that keeps the grammar interpreter-independent.
+- **Expiry, with its non-vacuity twin.** Same fixture, same exemption, only the date differs: a past deadline is reported, a future one is not. `until` equal to *today* is not expired (a deadline names the last day it covers); yesterday is.
+- **Expiry does not enforce.** The crossing under an expired exemption is still suppressed — no `forbid_import` violation, `has_errors` `False`. A build must not redden because a day passed.
+- **One entry, one finding.** A dead *and* expired entry is reported once (the dead half already says "delete it").
+- **The count.** Two crossings behind one exemption count as two; a rule with no exemptions counts zero (the counter must be able to say zero); the clean summary line grows the clause only when the count is non-zero.
+- **The reviewer's probe, end to end.** A wildcard exemption dated `1999-01-01` over a real error-severity crossing: `lint --strict` exits **0** and the JSON payload carries the finding and `summary.violations_suppressed`; `--fail-on-warn` exits **1**. Exit codes and `--json` only, never piped line counts (BDL-UX #148).
+- **This repository's own entries.** Every `until:` in `.beadloom/_graph/rules.yml` that names a date is asserted to be in the future — the suite reddens the day one of our own baselines outlives its deadline.
 
 ### Combined Evaluation Tests
 

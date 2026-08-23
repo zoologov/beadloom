@@ -12,10 +12,12 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from beadloom.graph.rule_engine import (
+    ImportBoundaryRule,
     Violation,
     evaluate_all,
     inert_rule_names,
     load_rules,
+    suppressed_crossings,
 )
 from beadloom.infrastructure.db import connection, create_schema, readonly_connection
 
@@ -23,7 +25,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
     from pathlib import Path
 
-    from beadloom.graph.rules import Rule
+    from beadloom.graph.rules import Rule, SuppressedCrossing
 
 
 # ---------------------------------------------------------------------------
@@ -54,9 +56,20 @@ class LintResult:
     #: liveness finding is a dead *exemption* are NOT counted here: the rule
     #: itself fires, and that finding belongs to `beadloom-mr2l.49`.
     rules_inert: int = 0
+    #: Every crossing a ``forbid_import`` exemption excused on this run. Carried
+    #: as the crossings themselves, not merely a number, so the count can be
+    #: audited rather than trusted: "3 crossings suppressed" invites the question
+    #: "which three", and a result that cannot answer it is another green count
+    #: nobody checked (review .7 MAJOR 2 / BDL-061.49).
+    suppressed: list[SuppressedCrossing] = field(default_factory=list)
     files_scanned: int = 0
     imports_resolved: int = 0
     elapsed_ms: float = 0.0
+
+    @property
+    def violations_suppressed(self) -> int:
+        """How many real crossings an exemption kept out of ``violations``."""
+        return len(self.suppressed)
 
     @property
     def error_count(self) -> int:
@@ -176,6 +189,13 @@ def _evaluate(
         # reader to infer it from the findings (BDL-UX #172 / BDL-061.48).
         inert = inert_rule_names(conn, rules, project_root=project_root)
 
+        # What the boundaries DID catch and excused. Reported on every run, not
+        # only when something is wrong: an exemption that suppresses a crossing
+        # silently is how "0 violations" comes to mean "0 violations we counted".
+        excused = suppressed_crossings(
+            conn, [rule for rule in rules if isinstance(rule, ImportBoundaryRule)]
+        )
+
         # files_scanned: distinct file_path in code_imports.
         row = conn.execute("SELECT COUNT(DISTINCT file_path) FROM code_imports").fetchone()
         files_scanned: int = int(row[0]) if row is not None else 0
@@ -201,6 +221,7 @@ def _evaluate(
         violations=violations,
         rules_evaluated=len(rules),
         rules_inert=len(inert),
+        suppressed=excused,
         files_scanned=files_scanned,
         imports_resolved=imports_resolved,
         elapsed_ms=(time.monotonic() - start) * 1000,
@@ -221,6 +242,21 @@ def _inert_note(result: LintResult) -> str:
     if not result.rules_inert:
         return ""
     return f", {result.rules_inert} of them unable to check anything"
+
+
+def _suppressed_note(result: LintResult) -> str:
+    """The clause that stops "no violations" from over-claiming, or "" when it does not.
+
+    Same treatment as :func:`_inert_note` and for the same reason: a count is
+    honest only next to what it did not count. Absent when nothing was excused,
+    so the common line keeps its shape; present the moment a real crossing was
+    kept out of the violation list by an exemption (BDL-061.49).
+    """
+    excused = result.violations_suppressed
+    if not excused:
+        return ""
+    crossings = "crossing" if excused == 1 else "crossings"
+    return f", {excused} {crossings} suppressed by an exemption"
 
 
 def format_rich(result: LintResult) -> str:
@@ -272,12 +308,13 @@ def format_rich(result: LintResult) -> str:
 
         lines.append(
             f"Errors: {result.error_count}, Warnings: {result.warning_count} "
-            f"({result.rules_evaluated} rules evaluated{_inert_note(result)}, {elapsed_str})"
+            f"({result.rules_evaluated} rules evaluated{_inert_note(result)}"
+            f"{_suppressed_note(result)}, {elapsed_str})"
         )
     else:
         lines.append(
             f"\u2713 No violations found ({result.rules_evaluated} rules evaluated"
-            f"{_inert_note(result)}, {elapsed_str})"
+            f"{_inert_note(result)}{_suppressed_note(result)}, {elapsed_str})"
         )
 
     return "\n".join(lines)
@@ -315,7 +352,8 @@ def format_json(result: LintResult) -> str:
     Returns a JSON string with a ``violations`` array (backward-compatible
     keys, plus an additive ``remediation``), a stable agent-actionable
     ``findings`` array (``{kind, rule, severity, locations, why, remediation}``),
-    and a ``summary`` object. The pre-sorted violation order makes the output
+    a ``suppressed`` array naming every crossing an exemption excused, and a
+    ``summary`` object. The pre-sorted violation order makes the output
     deterministic.
     """
     violations_list: list[dict[str, object]] = []
@@ -337,9 +375,13 @@ def format_json(result: LintResult) -> str:
     output: dict[str, object] = {
         "violations": violations_list,
         "findings": [_finding(v) for v in result.violations],
+        # What an exemption kept OUT of `violations`, so a machine reader can
+        # audit the suppressed count instead of taking it on trust.
+        "suppressed": [crossing.to_dict() for crossing in result.suppressed],
         "summary": {
             "rules_evaluated": result.rules_evaluated,
             "rules_inert": result.rules_inert,
+            "violations_suppressed": result.violations_suppressed,
             "violations_count": len(result.violations),
             "error_count": result.error_count,
             "warning_count": result.warning_count,

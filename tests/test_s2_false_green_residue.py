@@ -20,8 +20,11 @@ Every gap here was **measured** on a clean-room copy of this repo at
 * A ``forbid_import`` ``exempt`` entry written ``from: "*" / to: "*"`` with an
   ``until:`` date already in the past swallowed a real error-severity crossing:
   ``12 rules, 0 violations``, exit 0, and nothing in the output said a crossing
-  had been suppressed. ``until`` is free text and is never evaluated anywhere in
-  the product.
+  had been suppressed. CLOSED by ``beadloom-mr2l.49``: what an exemption excused
+  is counted on every run, and an ``until:`` leading with an ISO date that has
+  passed is a finding while the entry still suppresses something. The
+  assertions below are kept as live regression tests;
+  ``tests/test_exit_condition_expiry.py`` owns the grammar and both surfaces.
 * ``sync-check`` reports ``status: ok`` for a pair whose code file — or whose
   doc — no longer exists, because ``_file_hash`` returns ``None`` for a missing
   file and both comparisons are guarded by the truthiness of that hash. Deleting
@@ -376,7 +379,7 @@ _UNUSED_EXEMPTION_RULES = "version: 1\nrules:\n" + _UNUSED_EXEMPTION
 
 
 class TestAnExemptionCanSuppressEverythingAndReadClean:
-    """``reason`` + ``until`` are mandatory strings; neither is ever evaluated."""
+    """An exemption is visible whatever it does: counted when live, named when stale."""
 
     def test_an_exemption_that_suppresses_nothing_is_reported(self, tmp_path: Path) -> None:
         """BDL-061.43's dead-exemption finding works — this class's non-vacuity guard."""
@@ -392,18 +395,16 @@ class TestAnExemptionCanSuppressEverythingAndReadClean:
             f"a dead exemption must announce its own exit condition — got {result.violations}"
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING S2/.6-2: a `from: '*' / to: '*'` exemption swallows every crossing "
-            "the rule exists to catch and the lint prints '0 violations' with no mention "
-            "that anything was suppressed. Measured on this repo: an injected "
-            "tui -> infrastructure import vanished behind a blanket exemption at exit 0."
-        ),
-    )
     def test_a_blanket_exemption_swallowing_a_real_crossing_is_reported(
         self, tmp_path: Path
     ) -> None:
+        """CLOSED by ``beadloom-mr2l.49`` — kept as a live regression test.
+
+        The crossing is still suppressed (an exemption that stops working on a
+        date would redden a build with no commit behind it), but the run no
+        longer reads as untouched: what was excused is counted on the result and
+        said in the summary line.
+        """
         # Arrange — a real, error-severity crossing under a wildcard exemption
         project = _indexed(tmp_path, rules=_BLANKET_EXEMPTION_RULES, alpha_source=_ALPHA_CROSSING)
 
@@ -411,21 +412,16 @@ class TestAnExemptionCanSuppressEverythingAndReadClean:
         result = run_lint(project)
 
         # Assert
-        assert result.violations, (
+        assert result.violations_suppressed == 1, (
             "a suppressed crossing is still a crossing: the count of what an exemption "
             "silenced must appear somewhere in the result"
         )
+        assert result.violations, (
+            "and the entry that silenced it — a wildcard dated 1999 — must be named"
+        )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING S2/.6-2: `until` is free text everywhere it is required — "
-            "forbid_import exemptions and guard exclusions alike. Nothing parses it, so "
-            "'carries an exit condition' is documentation, not a mechanism, and an "
-            "exclusion dated 1999 suppresses just as well as one dated next week."
-        ),
-    )
     def test_an_exemption_whose_until_has_passed_is_reported(self, tmp_path: Path) -> None:
+        """CLOSED by ``beadloom-mr2l.49`` — ``until`` leading with an ISO date is parsed."""
         # Arrange
         project = _indexed(tmp_path, rules=_BLANKET_EXEMPTION_RULES, alpha_source=_ALPHA_CROSSING)
 

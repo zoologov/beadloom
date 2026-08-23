@@ -192,7 +192,7 @@ def _step_reindex(project_root: Path, *, no_reindex: bool) -> GateStep:
 
 def _step_lint(project_root: Path) -> GateStep:
     """``lint --strict`` — boundary rules at error severity."""
-    from beadloom.graph.linter import LintError, _finding
+    from beadloom.graph.linter import LintError, _finding, _suppressed_note
     from beadloom.graph.linter import lint as run_lint
 
     try:
@@ -207,11 +207,17 @@ def _step_lint(project_root: Path) -> GateStep:
         )
     findings = [_finding(v) for v in result.violations]
     passed = not result.has_errors
+    # The suppressed-crossing clause comes from the linter's own formatter rather
+    # than being restated here, so the Gate line cannot drift from the command it
+    # summarises. It is absent when nothing was excused, so the everyday green
+    # line keeps its shape. The OTHER counter needs no clause: an inert rule
+    # always emits a finding, so `rules_inert > 0` already flips this summary to
+    # the "0 error(s), N warning(s)" branch (BDL-061.48/.49).
     summary = (
         f"{result.error_count} error(s), {result.warning_count} warning(s)"
         if result.violations
         else f"{result.rules_evaluated} rules, 0 violations"
-    )
+    ) + _suppressed_note(result)
     return GateStep("lint", passed=passed, findings=findings, summary=summary)
 
 

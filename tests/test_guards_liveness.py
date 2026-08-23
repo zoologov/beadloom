@@ -410,6 +410,7 @@ class TestLivenessOutput:
             "last_outcome",
             "idle",
             "dead_exclusions",
+            "expired_exclusions",
         }
 
     def test_the_text_report_names_a_dead_exclusion_and_its_pattern(
