@@ -155,6 +155,15 @@ defect as BDL-UX #171: one identifier, two sources of truth.
    declared surface a green result actually covered, and make anything that cannot fire report
    itself. S2 fixed three NAMED checks (#142, #146, #147) and left the class open: `.6` measured
    seven further false-greens and `.7` an eighth, filed as #173, #174, #175 and beads `.45`–`.51`.
+8. **CAPTURE, DON'T RE-RUN** — when a run reports a failure, read the name out of *that* run's
+   output. Re-running to inspect it destroys the identity of anything intermittent, and an
+   intermittent failure is the one most worth naming. The coordinator did this three times in
+   one session before writing it down; each time the finding evaporated. Save the output to a
+   file and read the file.
+9. **TRUE HERE IS NOT TRUE** — a fact that is correct on this repository *by coincidence* reads
+   as verified by every check, review and dogfood run. Every adopter's `CLAUDE.md` stated
+   Beadloom's version as the project's own for four slices, because we *are* Beadloom (#183).
+   Prove anything adopter-facing against `tests/adopter_project.py`, never against this tree.
 
 ### Retired in S2
 
