@@ -136,9 +136,12 @@ tools:        [claude, cursor]   # generate adapters for one or both
 architecture: [ddd]              # ddd | fsd (exactly one)
 stack:        [python]           # python, fastapi, javascript, typescript, vuejs
 quality:      [clean-code, tdd]
+language:     en                 # the language the flow's documents are written in
 ```
 
-`beadloom setup-agentic-flow` composes each role (dev, test, review, tech-writer) from the CORE protocol, the architecture overlay, and the stack overlays, and writes the adapter set for each tool — `.claude/agents/*` for Claude Code, `.cursor/agents/*` for Cursor — at parity. `config-check` compares every generated adapter byte-for-byte against its composition, so the workflow never drifts from the graph unnoticed.
+`beadloom setup-agentic-flow` composes every flow artifact — the four role protocols, the four slash commands and `CLAUDE.md` — from four layers in a fixed order: a stack-neutral CORE, the architecture overlay, the stack overlays, and **your project's own fragment** under `.beadloom/flow/`. It writes the adapter set for each tool at parity, `.claude/agents/*` for Claude Code and `.cursor/agents/*` for Cursor. `config-check` compares each artifact against that composition, so the workflow never drifts unnoticed while your additions remain part of the expected result rather than drift.
+
+The project layer is what makes the shipped core small enough to survive a long session: it went from **440 to 376 lines**, with every removed line mapped to a replacement. A project that selects no stack overlay keeps that smaller core, and its critical rules name no Python tooling at all. Your own rules live in `.beadloom/flow/`, so an upgrade moves the core underneath them and leaves them untouched. Standing a core rule down is a declaration with a mandatory reason and exit condition, rendered as a visible notice into every composed file and reported when it expires — see the [Project Overlays guide](docs/guides/project-overlays.md).
 
 The workflow is local-first and goes through the same Gate. A pull-request-triggered AI tech-writer orchestrator (shipped inside the package, `python -m beadloom.ai_agents.ai_techwriter`) fixes stale documentation right in the pull-request branch — at the symbol level. A symbol is a named code entity: a function, class, method, or constant (extracted by tree-sitter when it parses the sources). A document is rewritten only when a symbol it references actually changed, not on every edit to a file. The orchestrator has bounded parallelism and verdict classification, so a dead runner or an exhausted quota doesn't freeze the merge. CI stays the real enforcement, and the agent's edit is a proposal that a human reviews and merges.
 
@@ -255,7 +258,7 @@ When an agent requests context for a node, the rules that apply to it come back 
 - **Context Oracle** — deterministic graph traversal, a compact JSON bundle in under 20 ms.
 - **Doc Sync Engine** — tracks the code-to-doc link, catches stale docs, hooks into git.
 - **Agent context** — `beadloom prime` (under 2K tokens), `setup-rules` for IDE adapters, an MCP server with 18 tools, and `config-check` that keeps the agent files in agreement with the graph.
-- **Agentic dev workflow** — `setup-agentic-flow` composes a configurable, tool-agnostic multi-agent workflow (Claude Code and Cursor; DDD/FSD and stack overlays) from `.beadloom/flow.yml`, enforced through the pre-push Gate and a pull-request-triggered AI tech-writer.
+- **Agentic dev workflow** — `setup-agentic-flow` composes a configurable, tool-agnostic multi-agent workflow (Claude Code and Cursor; DDD/FSD and stack overlays) from `.beadloom/flow.yml`, extensible by a project layer in `.beadloom/flow/` that survives every upgrade, enforced through the pre-push Gate and a pull-request-triggered AI tech-writer.
 - **No shadow code** — the `module-coverage` lint (`error`) requires every source module to be a graph node or an explicit exemption, and the `component` node kind tracks internal building blocks alongside `feature` nodes.
 - **Full-text search** — FTS5 over nodes, documentation, and code symbols.
 - **Impact analysis** — `beadloom why` shows what a node depends on and what breaks if it changes.
@@ -307,7 +310,7 @@ Request a node's context, and Context Oracle traverses the graph breadth-first, 
 | `active-sync` | Reconcile each epic's bead-status table in `ACTIVE.md` with the tracker (`bd`) |
 | `setup-rules` | Create IDE adapter files (`.cursorrules`, `.windsurfrules`, `.clinerules`) |
 | `setup-mcp` | Configure the MCP server for AI agents |
-| `setup-agentic-flow` | Compose and write the multi-agent workflow role adapters from `.beadloom/flow.yml` (`--tool`/`--architecture`/`--stack`) |
+| `setup-agentic-flow` | Compose and write the multi-agent workflow — role adapters, slash commands and `CLAUDE.md` — from `.beadloom/flow.yml` plus the project layer (`--tool`/`--architecture`/`--stack`/`--force`) |
 | `mcp-serve` | Start the MCP server (stdio transport) |
 | `tui` / `ui` | Interactive terminal dashboard (needs `beadloom[tui]`) |
 | `watch` | Auto-reindex on file changes (needs `beadloom[watch]`) |
@@ -330,11 +333,13 @@ Request a node's context, and Context Oracle traverses the graph breadth-first, 
 Everything lives under `.beadloom/` at the repository root:
 
 - **`config.yml`** — scan paths, languages, sync settings.
-- **`flow.yml`** — the agentic-workflow declaration: `tools` (claude/cursor), `architecture` (ddd/fsd), `stack` and `quality` overlays (read by `setup-agentic-flow`).
+- **`flow.yml`** — the agentic-workflow declaration: `tools` (claude/cursor), `architecture` (ddd/fsd), `stack` and `quality` overlays, `language`, and `overlays.suppress` (read by `setup-agentic-flow`).
+- **`flow/`** — your project's own flow fragments (`roles/`, `commands/`, `claude/`), composed after the shipped core and never overwritten.
+- **`flow-manifest.json`** — the sha256 of every composed artifact Beadloom wrote, so a later run tells its own output from a hand edit. Generated, and it belongs in git.
 - **`_graph/*.yml`** — the architecture graph (version-controlled).
 - **`_graph/rules.yml`** — the boundary rules.
 - **`AGENTS.md`** — conventions and the MCP tool catalog for agents.
-- **`beadloom.db`** — the SQLite index (auto-generated; add it to `.gitignore`).
+- **`beadloom.db`** — the SQLite index (auto-generated; `beadloom init` adds it to `.gitignore` for you, once).
 
 You can link code to a graph node with a one-line annotation:
 

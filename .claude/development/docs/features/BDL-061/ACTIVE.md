@@ -1,6 +1,6 @@
 # ACTIVE: BDL-061 — Enforced agentic flow
 
-> **Last updated:** 2026-08-24
+> **Last updated:** 2026-08-23
 > **Phase:** Development
 
 ---
@@ -18,8 +18,14 @@ is counted), `.54` (the Gate's lint line, filed and closed inside `.49`) and `.5
 documentation pass that turned the combined tree green).
 **Open in S2b:** `.50` (annotations the extractor cannot see), `.51` (three modules past
 1000 lines).
-**Next:** S3 opens with `.9` (compose(core, arch, stack, project)). Also outstanding and not
-part of any slice: `.35`, `.39`, `.41`, `.42`.
+**S3 COMPLETE** on `features/BDL-061-S3`: `.9` (dev), `.35`, `.10` (test), `.11` (review),
+`.57` (the P0 ship-blocker `.11` raised), `.12` (tech-writer) and `.59` (the P0 merge-blocker
+`.12` measured) are all closed. The eight blind spots `.10` pinned as strict xfails and the
+clock defect `.11` measured are fixed; `.12` turned the gate green; `.59` closed BDL-UX #186,
+so the slice no longer ships a false promise in front of a destructive operation. `beadloom ci`
+rc **0**, 305/305 pairs fresh, 0 surface drift, **6090** tests passing. The slice is ready for
+its PR. Also outstanding and not part of any
+slice: `.39`, `.41`, `.42`, `.58` — which grew from two items to a routed list (below).
 
 ## Progress
 
@@ -376,6 +382,25 @@ header comment, where a reader of a red check will look first.
       gained the baseline-provenance section, the `declared_docs` / `reference_state` /
       `foreign_edges` tables it never listed, `sync_state`'s two new columns and four verdicts,
       and the `docs audit` step missing from its Gate chain.
+- [x] S3 `.9` dev (2026-08-23) — composition generalised to `compose(core, architecture,
+      stack, project)` over three artifact kinds; the project layer lives in `.beadloom/flow/`;
+      `config-check` verifies the composition RESULT and the flow manifest separates a stale
+      artifact from a hand-edited one (which is reported and never rewritten). #177's open
+      question answered by measurement: the `CLAUDE.md` body was checked by nothing — a file
+      gutted to one line still printed `config-check PASS: agent-config in sync` — and the
+      propagation loop was a TEST that rewrote the shipped template from the live file.
+      Shipped core `CLAUDE.md` 440 → 376 lines, every removed line mapped to its replacement in
+      PLAN. 24 new tests; nine sabotages each reddened a named test in a clean room.
+- [x] S3 `.12` tech-writer (2026-08-23) — the gate turned green honestly: **rc 1 → rc 0**, 33
+      stale pairs cleared as 13 revised and 20 deliberately re-attested (`symbols_hash` is per
+      node, so files nobody touched went stale with the node — #182). New adopter guide
+      `docs/guides/project-overlays.md` and the upgrade/migration procedure; the three limits
+      written as limits (the in-band ownership floor, the project layer's prose being named and
+      not judged, #183's false version bullet). The guide's own measurements found four defects
+      nothing else had: #186 `config-check --fix` destroys a hand edit in a role adapter,
+      #187 a virgin scaffold leaves `config-check` red, #188 the orphan report and migration
+      notes have no caller (so #137 does not close), #189 `sync-update <doc> --check` writes.
+      All four filed, documented where an adopter meets them, and routed to `.58`.
 
 ## Results
 
@@ -418,14 +443,20 @@ header comment, where a reader of a red check will look first.
 | .55 | Done | S2b docs: the 28-pair onboarding README revised to the code; *unverifiable is not clean* written once in both READMEs + CHANGELOG; the baseline-out-of-the-database change stated for adopters; 6 `surface_drift` re-attested after reading, stale 28 → 0 |
 | .50 | Pending | P1: annotations the extractor cannot see — docstring annotation, directory source without a trailing slash, deny rules keyed on annotated symbols |
 | .51 | Pending | P2: three modules past 1000 lines with many responsibilities each, self-flagged and owned by nobody |
-| .9–.12 | Pending | S3 composition + project overlay (#139, #152, #132, #136, #137) |
+| .9 | Done | S3 dev: `compose(core, architecture, stack, project)` for roles, commands AND `CLAUDE.md`; project layer in `.beadloom/flow/`; `config-check` verifies the composition result; #177, #139, #152, #132, #136, #137 closed |
+| .10 | Done | S3 test: 71 passing + 9 `xfail(strict)` measured blind spots in the new `config-check`; the `#177` role leg closed and a structural guard against tests that write tracked files |
+| .35 | Done | S3: the `.gitignore` block for generated `.beadloom/` state; this repo now runs the SHIPPED guard adapter rather than a local binding |
+| .11 | Done | S3 review: NOT PASSING — 0 critical, 7 major, 8 minor. Reproduced `.10`'s clock defect and measured it WORSE than recorded: 0 findings / exit 0 → 9 ERROR / exit 1 on an untouched tree. Verdict accepted: fix that one first, ship the rest behind `.57` |
+| .57 | Done | S3 dev (P0, ship-blocker): all NINE pins closed, plus a residual the coordinator found by probing that claim — a `CLAUDE.md` whose ownership cannot be proved is now NAMED at `unverified`/warn instead of silently skipped (two states), and a deleted `CLAUDE.md` is `missing`/error like the other two kinds. The clock removed from the composition (`composer.py`'s assertion kept, `describe()`'s behaviour deleted); expiry and dead-declaration became `config-check` findings; three deletion paths (manifest, provenance stamp, scaffolded file) each reported; `unmanaged` → `sync-check`'s `unverified`; the project layer is named, not judged |
+| .12 | Done | S3 tech-writer: gate **rc 1 → rc 0**. 33 stale pairs cleared — 13 revised against code that moved, 20 re-attested deliberately because `symbols_hash` is per node and those files did not change (#182). New adopter guide `docs/guides/project-overlays.md` (the project layer, `overlays.suppress`, migrating a hand-edited vendored file); the three limits stated as limits; CHANGELOG, both READMEs, architecture, getting-started, cli, mcp and the onboarding README revised. Measured four new defects while writing it — #186 (destructive `--fix` on a role adapter), #187 (a virgin scaffold leaves `config-check` red), #188 (orphans + migration notes have no caller), #189 (`sync-update --check` writes) — all filed and routed to `.58` |
+| .59 | Done | S3 dev (P0, merge-blocker): **#186 closed by option (a)** — `--fix` honours the sentence the check prints. `refresh_composed_adapters` classifies first and passes the unowned adapters to `generate_adapters(preserve=…)`, which neither writes nor records them; `hand_edited` **and** `unverified` are declined by name (the second is the worse case: a `warn`, so overwriting one destroyed content and then read "no blocking drift" at exit 0). `apply_config_fixes` measures the artifact surface before/after, so a run names every file it created or rewrote; `ConfigDrift.fixable` stops the closing advice offering `--fix` for a finding it declines. One pre-existing misclassification fixed first: the plain vendored scaffold read `hand_edited` on the flow.yml upgrade path, so it is now an `alternate` — unowned is not somebody's only copy. Re-measured live: `77dfc84f` → edited → **edit intact**, exit 1 |
 | .13–.16 | Pending | S4 BDD, mutation, doc shape + quality, shared writing standard |
 | .17–.20 | Pending | S5 TO-BE / AS-IS / WORKING |
 | .21–.24 | Pending | S6 waves from the graph (#155, #118, #133) |
 
 ## Notes
 
-**Branch:** `features/BDL-061-S2b` for this slice (S1 ran on `features/BDL-061`, S2 on
+**Branch:** `features/BDL-061-S3` for the current slice (`features/BDL-061-S2b` for the one before) (S1 ran on `features/BDL-061`, S2 on
 `features/BDL-061-S2`). Slice boundary is a PR boundary — each slice green on `main` before the
 next begins, as BDL-060 ran.
 
@@ -487,3 +518,19 @@ cycle rule to see nested imports.
 **Owner-visible checkpoint:** after `.12` (end of S3) the core request is delivered — the flow
 is enforced, stops lying, and is extensible. If a later slice proves to be an epic of its own,
 that gets reported rather than absorbed; S5 and S6 are the likely candidates.
+
+**`.58` now carries the whole adopter-experience residue**, and nothing was dropped to get
+S3 green. Its original two items (BDL-UX #183, and the red-turns-green-on-upgrade direction,
+whose *prose* half `.12` closed in CONTEXT and the config-check SPEC) are joined by four
+defects `.12` measured while writing the adopter guide — **#186** (`config-check --fix`
+rewrites a hand edit in a role adapter, sha256-identical to the scaffold, one line after the
+check said it would not) — **pulled OUT of `.58` and closed by `.59` as an S3 merge-blocker,
+because the destruction pre-dates the slice but the promise in front of it does not** —
+**#187** (a virgin `setup-agentic-flow` without a `flow.yml` leaves
+`config-check` at exit 1 with four errors), **#188** (`ScaffoldResult.orphans` and
+`.migration_notes` are computed on every scaffold and printed by nothing, so BDL-UX #137 does
+not close), **#189** (`sync-update <doc> --check` re-baselines instead of reporting) — and by
+review `.11`'s code minors m1, m3, m4, m5, m6, m7 and n1, plus the one-word template residue
+m2 named. Each of the four is documented where an adopter meets it (CHANGELOG *Known
+limitations*, the overlay guide, the CLI reference, the onboarding README) rather than only
+in a bead.

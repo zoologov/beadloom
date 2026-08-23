@@ -8,7 +8,14 @@ Cross-IDE context injection via a three-layer architecture.
 
 2. **IDE adapters** (pointers) — `.cursorrules`, `.windsurfrules`, `.clinerules` files that instruct agents to read AGENTS.md. Created by `setup_rules_auto()` on bootstrap.
 
-3. **`beadloom prime`** (dynamic) — CLI command and MCP tool that queries the DB for current project state: architecture summary, stale docs, lint violations, domain list.
+3. **The ignore block** (one write) — `bootstrap_project()` also calls
+   `ignore_block.ensure_ignore_block()`, so the derived state bootstrap is about to create
+   under `.beadloom/` (the index, and later the guard firing record) does not arrive as
+   untracked churn in the adopter's repository. It is appended once and never rewritten,
+   the result is returned as `ignore_added` / `ignore_skipped_reason`, and `beadloom init`
+   prints it. See the [ignore-block component](../../components/ignore-block/DOC.md).
+
+4. **`beadloom prime`** (dynamic) — CLI command and MCP tool that queries the DB for current project state: architecture summary, stale docs, lint violations, domain list.
 
 ## API
 
@@ -26,6 +33,28 @@ Auto-detects IDEs by marker files and creates adapter files. Returns list of cre
 ### `generate_agents_md(project_root)`
 
 Generates `.beadloom/AGENTS.md` with v2 template. Injects rules from `rules.yml`. Preserves user content below `## Custom`.
+
+### `refresh_claude_md(project_root, *, dry_run=False)`
+
+Regenerates the auto-managed regions of `.claude/CLAUDE.md` between
+`<!-- beadloom:auto-start SECTION -->` / `<!-- beadloom:auto-end -->` markers and
+returns the names of the regions whose content changed. Two regions are
+rendered:
+
+- **`project-info`** — stack, tests, linter, typing, packages, version, read
+  from the project's own manifest and tree.
+- **`doc-language`** — the "ALL documents MUST be written in …" sentence,
+  derived from `language:` in `.beadloom/flow.yml` (default `en`). The
+  scaffolded flow used to state English unconditionally, so a team documenting
+  in another language had to override the shipped default in prose
+  (BDL-UX #136).
+
+### `blank_auto_regions(text)`
+
+Replaces every auto-region BODY with a fixed token. `config-check` compares the
+composed part of `CLAUDE.md` against `compose("claude", ...)`; the regions are
+generated per project and are supposed to move, so blanking them keeps the two
+checks from reporting each other's drift.
 
 ### `setup_mcp_auto(project_root)`
 

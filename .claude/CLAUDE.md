@@ -1,3 +1,8 @@
+<!-- beadloom:composed — this file is CORE + the architecture/stack overlays your
+`.beadloom/flow.yml` selects. Put YOUR project's rules in `.beadloom/flow/claude/CLAUDE.md`:
+the project layer composes AFTER the core, survives every upgrade, and does not trip
+`beadloom config-check`. Editing this body directly is reported and never rewritten. -->
+
 # CLAUDE.md — Multi-Agent Development Core
 
 > **Version:** 3.1 (agents/ + commands/ split)
@@ -82,12 +87,9 @@ bd comments add <bead-id> "CHECKPOINT: [what was done]"
 ### WHEN COMPLETING bead
 
 ```bash
-# 1. Tests pass
-uv run pytest
-
-# 2. Code quality (same checks as CI)
-uv run ruff check src/ tests/
-uv run mypy src/
+# 1. Tests pass, 2. lint + type-check clean
+#    -> the concrete commands come from the STACK section below, not from here:
+#       the core is stack-neutral and `uv run pytest` is not every project's suite.
 
 # 3. Beadloom validation
 beadloom reindex
@@ -104,7 +106,7 @@ bd close <bead-id> --suggest-next
 
 ---
 
-## 0.1 Project: Beadloom
+## 0.1 Project: beadloom
 
 <!-- beadloom:auto-start project-info -->
 - **Stack:** Python 3.10+, SQLite, Click, Rich, tree-sitter
@@ -235,7 +237,9 @@ beadloom install-hooks           # pre-commit (lint + sync-check + coherence) + 
 
 ## 3. File Memory (protection against auto-compaction)
 
-**Document language:** ALL documents (PRD, RFC, CONTEXT, PLAN, ACTIVE, BRIEF) MUST be written in English.
+<!-- beadloom:auto-start doc-language -->
+**Document language:** ALL documents (PRD, RFC, CONTEXT, PLAN, ACTIVE, BRIEF) MUST be written in English — set by `language: en` in `.beadloom/flow.yml`.
+<!-- beadloom:auto-end -->
 
 ```
 .claude/development/docs/features/{ISSUE-KEY}/
@@ -327,12 +331,12 @@ One-time per repo: `beadloom setup-branch-protection` configures `main` protecti
 trunk-based, even the owner integrates via a PR — and 0 required reviews → the
 owner still self-merges).
 
-> **Not safe to re-run right now.** `DEFAULT_STATUS_CHECK_CONTEXTS` ships **nine**
-> contexts since BDL-061 S2 (it gained the two `tests-locale` legs); `main`'s live
-> protection has **seven**. Running the command today would require two checks that
-> are knowingly red until `beadloom-mr2l.42` closes, making `main` unmergeable.
-> Re-run it once those legs are green. It is idempotent, not harmless — the payload
-> it applies is whatever the current constant says, not whatever is live.
+> **Idempotent is not harmless.** The command applies whatever
+> `DEFAULT_STATUS_CHECK_CONTEXTS` currently says, not whatever is already live, so
+> re-running it after an upgrade can require checks your workflow does not yet
+> produce — and a required check that never reports makes `main` unmergeable.
+> Before re-running, confirm every context it will require exists as a job and is
+> green. `gh api repos/:owner/:repo/branches/main/protection` shows what is live now.
 
 ---
 
@@ -362,79 +366,67 @@ owner still self-merges).
 - Skipping `beadloom reindex` after graph YAML changes
 - Ignoring `beadloom lint` violations
 
-### Shell
-- Using `cp`, `mv`, `rm` without `-f` flag (may hang on interactive prompts)
-
-### Code
-- Using `Any` / `# type: ignore` without reason
-- Leaving `print()` / `breakpoint()`
-- Writing code without a test (TDD violation)
-- Bare `except:` without specifying exception type
-- `import *`
-- Mutable default arguments (`def f(x=[]):`)
-
----
-
-## 8. Quick Reference
-
-### Session start
-```bash
-beadloom prime                        # project context
-bd ready
-bd update <id> --status in_progress --claim
-beadloom ctx <ref-id>                 # architecture context for the area
-# Read CONTEXT.md, ACTIVE.md (if epic)
-# Confirm to user
-```
-
-### During work
-```bash
-# Every 30 min
-bd comments add <id> "CHECKPOINT: ..."
-# Update ACTIVE.md
-```
-
-### Completing bead
-```bash
-uv run pytest
-bd comments add <id> "COMPLETED: ..."
-bd close <id> --suggest-next          # shows newly unblocked beads
-```
-
-### New work item
-```
-/task-init
-```
-
-### Need templates
-```
-/templates
-```
-
----
-
-## 9. Agent Checklist
-
-### At start
-- [ ] `beadloom prime` -> project overview
-- [ ] `bd ready` -> selected a task
-- [ ] `bd update <id> --status in_progress --claim`
-- [ ] `beadloom ctx <ref-id>` -> architecture context
-- [ ] Read CONTEXT.md and ACTIVE.md (if epic)
-- [ ] Confirmed understanding to user
-
-### During work
-- [ ] Updating ACTIVE.md
-- [ ] Checkpoint in beads every 30 min
-- [ ] Following TDD (if code)
-
-### At completion
-- [ ] Tests pass
-- [ ] `bd comments add` — final checkpoint
-- [ ] `bd close <id>`
-- [ ] ACTIVE.md cleaned
+> Language- and shell-specific anti-patterns live in the STACK section, composed
+> from `.beadloom/flow.yml` — they are not universal and the core does not claim
+> they are.
 
 ---
 
 > **Need detailed instructions?** Slash skills: `/task-init` | `/coordinator` | `/templates` | `/checkpoint`.
 > Role subagents (`Agent` tool / follow the agent file inline): `dev` | `test` | `review` | `tech-writer` — see §0.0.
+
+---
+
+## STACK (Python) — composed from `.beadloom/flow.yml`
+
+The core above is stack-neutral. These are this project's concrete commands and
+the anti-patterns that only mean something in Python.
+
+### Commands the completion checklist refers to
+
+```bash
+uv run pytest                      # 1. tests pass
+uv run ruff check src/ tests/      # 2. lint (same check as CI)
+uv run mypy src/                   # 2. types (strict)
+beadloom ci                        # the full pre-push Gate (rc 0 required)
+```
+
+### Anti-patterns (Python)
+
+- Using `Any` / `# type: ignore` without a stated reason
+- Leaving `print()` / `breakpoint()` — use logging
+- Bare `except:` without naming the exception type
+- `import *`
+- Mutable default arguments (`def f(x=[]):`)
+- `os.path` instead of `pathlib`; f-strings in SQL instead of `?` parameters;
+  `yaml.load` instead of `yaml.safe_load`
+
+### Anti-patterns (shell)
+
+- Using `cp`, `mv`, `rm` without `-f` (may hang on an interactive prompt)
+
+---
+
+## Project layer — Beadloom's own rules (`.beadloom/flow/claude/CLAUDE.md`)
+
+Everything above is the shipped CORE plus the overlays `.beadloom/flow.yml`
+selects. Everything below is true of **this repository only** and is never
+distributed. Before BDL-061 S3 there was nowhere to put it, so it went into the
+core and shipped verbatim — including a bead id and a claim about this repo's
+branch protection that is false for an adopter (BDL-UX #177).
+
+### `setup-branch-protection` — not safe to re-run right now
+
+`DEFAULT_STATUS_CHECK_CONTEXTS` ships **nine** contexts since BDL-061 S2 (it
+gained the two `tests-locale` legs); `main`'s live protection has **seven**.
+Running the command today would require two checks that are knowingly red until
+`beadloom-mr2l.42` closes, making `main` unmergeable. Re-run it once those legs
+are green.
+
+### Concurrent waves share one working tree
+
+Commit only your own files, by explicit path — never `git add -A`. Take
+`bd merge-slot acquire --wait` before committing and `release` after. Verify in
+a clean room (`git archive HEAD` + only your files) and say so in those words:
+"green in a clean room over N files" is a different claim from "green on the
+tree" (BDL-UX #181).

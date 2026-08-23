@@ -3,17 +3,70 @@
 from __future__ import annotations
 
 import sqlite3
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
 from beadloom.infrastructure.db import create_schema, open_db
+from tests.tracked_write_guard import TrackedWriteGuard
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+# --------------------------------------------------------------------------- #
+# The suite may not write to a file this repository tracks in git (BDL-UX #177).
+# A test that mutates the tree it measures cannot be trusted about it, and the
+# mutation is invisible to `git status` whenever it happens to be byte-identical
+# — which is exactly how the shipped CLAUDE.md template came to be a snapshot of
+# this project's local file, and how four `agents/*.md.txt` writes per run
+# survived unnoticed after the CLAUDE.md leg was closed.
+#
+# Enforced as a hook rather than a fixture so the verdict lands in the CALL
+# phase: a teardown-phase failure is reported as ERROR, and ERROR is not FAILED
+# (this epic's TESTS MUST BITE rule). See tests/tracked_write_guard.py for the
+# reach of the check and its honest limits.
+# --------------------------------------------------------------------------- #
+
+_GUARD: TrackedWriteGuard | None = None
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Install the tracked-write guard, or say why it cannot fire."""
+    global _GUARD
+    _GUARD = TrackedWriteGuard(_REPO_ROOT)
+    if _GUARD.inert:
+        # A guard that cannot fire says so, rather than passing silently: a
+        # clean-room extraction has no .git, so that run does not answer for
+        # this property and must not be reported as though it did.
+        warnings.warn(_GUARD.inert_reason, RuntimeWarning, stacklevel=1)
+        return
+    _GUARD.install()
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    if _GUARD is not None:
+        _GUARD.uninstall()
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_call(item: pytest.Item) -> Iterator[None]:
+    """Fail the test that wrote to a tracked file, naming the file and the call.
+
+    Writes made by a fixture count toward the test the fixture set up; a write
+    made during teardown surfaces on the next test, which is stated here rather
+    than left to be discovered from a confusing message.
+    """
+    outcome = yield
+    if _GUARD is not None:
+        written = _GUARD.take()
+        if written:
+            pytest.fail(_GUARD.describe(written), pytrace=False)
+    return outcome
 
 
 @pytest.fixture(scope="session")

@@ -18,6 +18,12 @@ Schema
     architecture: [ddd]              # exactly one methodology: ddd | fsd
     stack: [python, fastapi]         # one+ stack/framework overlays
     quality: [clean-code, tdd]       # quality bars (informational)
+    language: en                     # tag the flow's documents are written in
+    overlays:
+      suppress:                      # stand down a shipped core rule, declared
+        - rule: "Anti-patterns / Shell"
+          reason: "the team runs on Windows; the -f idiom does not apply"
+          until: "a windows stack overlay ships"
 
 For Beadloom itself: ``tools: [claude]``, ``architecture: [ddd]``,
 ``stack: [python]``.
@@ -29,10 +35,17 @@ value and the allowed set, so ``config-check`` can surface exactly what to fix.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import yaml
+
+from beadloom.onboarding.flow_suppression import (
+    FlowSuppression,
+    FlowSuppressionError,
+    build_suppressions,
+)
 
 #: Tool adapters Beadloom can generate (each writes a per-tool role-file set).
 SUPPORTED_TOOLS: tuple[str, ...] = ("claude", "cursor")
@@ -51,6 +64,15 @@ SUPPORTED_STACKS: tuple[str, ...] = (
 
 #: Quality bars (informational — recorded, not yet overlay-bearing).
 SUPPORTED_QUALITY: tuple[str, ...] = ("clean-code", "tdd")
+
+#: Language every shipped fragment is authored in; the composer falls back to
+#: it and says so when a requested localisation is not shipped (BDL-UX #136).
+DEFAULT_LANGUAGE = "en"
+
+#: A language tag is validated for SHAPE, not against a closed list: the set of
+#: languages a team writes in is not ours to enumerate, and rejecting an unlisted
+#: one would push the project straight back to hand-editing.
+_LANGUAGE_RE = re.compile(r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$")
 
 #: Config path relative to the project root.
 FLOW_CONFIG_RELPATH = Path(".beadloom") / "flow.yml"
@@ -78,12 +100,21 @@ class FlowConfig:
         One+ overlays from :data:`SUPPORTED_STACKS`, deterministically ordered.
     quality:
         Quality bars from :data:`SUPPORTED_QUALITY` (informational).
+    language:
+        BCP-47-ish tag the flow's documents and role standards are written in
+        (default :data:`DEFAULT_LANGUAGE`). A team writing in Russian is held to
+        the standard in Russian, or told which fragment is missing.
+    suppressions:
+        Declared stand-downs of shipped core rules — each with a reason and an
+        exit condition, appended to every composition as a visible notice.
     """
 
     tools: tuple[str, ...]
     architecture: str
     stack: tuple[str, ...]
     quality: tuple[str, ...] = ()
+    language: str = DEFAULT_LANGUAGE
+    suppressions: tuple[FlowSuppression, ...] = field(default_factory=tuple)
 
 
 def _as_str_list(value: object, *, key: str) -> list[str]:
@@ -132,6 +163,44 @@ def _validate_architecture(values: list[str]) -> str:
         )
         raise FlowConfigError(msg)
     return arch
+
+
+def _validate_language(value: object) -> str:
+    """Validate the ``language`` tag's shape (absent → :data:`DEFAULT_LANGUAGE`)."""
+    if value is None:
+        return DEFAULT_LANGUAGE
+    if not isinstance(value, str) or not _LANGUAGE_RE.match(value.strip()):
+        msg = (
+            f"flow.yml: 'language' must be a language tag like 'en', 'ru' or "
+            f"'pt-BR', got {value!r}"
+        )
+        raise FlowConfigError(msg)
+    return value.strip()
+
+
+def _validate_suppressions(overlays: object) -> tuple[FlowSuppression, ...]:
+    """Validate ``overlays.suppress`` (absent → empty).
+
+    Re-raised as :class:`FlowConfigError` so ``config-check`` reports a bad
+    suppression through the same channel as every other flow.yml defect.
+    """
+    if overlays is None:
+        return ()
+    if not isinstance(overlays, dict):
+        msg = "flow.yml: 'overlays' must be a mapping"
+        raise FlowConfigError(msg)
+    unknown = sorted(str(k) for k in overlays if k != "suppress")
+    if unknown:
+        msg = (
+            f"flow.yml: 'overlays' has unknown key(s) {unknown} — allowed: "
+            "['suppress']. Project ADDITIONS are files under .beadloom/flow/, "
+            "not keys here: overlays are append-only"
+        )
+        raise FlowConfigError(msg)
+    try:
+        return build_suppressions(overlays.get("suppress"))
+    except FlowSuppressionError as exc:
+        raise FlowConfigError(str(exc)) from exc
 
 
 def build_flow_config(data: object) -> FlowConfig:
@@ -183,6 +252,8 @@ def build_flow_config(data: object) -> FlowConfig:
         architecture=architecture,
         stack=stack,
         quality=quality,
+        language=_validate_language(data.get("language")),
+        suppressions=_validate_suppressions(data.get("overlays")),
     )
 
 
@@ -274,11 +345,18 @@ def resolve_flow_config(
     eff_stack = stack or (on_disk.stack if on_disk else detect_stack(project_root))
     eff_quality = on_disk.quality if on_disk else ()
 
-    return build_flow_config(
+    resolved = build_flow_config(
         {
             "tools": list(eff_tools),
             "architecture": [eff_arch],
             "stack": list(eff_stack),
             "quality": list(eff_quality),
         }
+    )
+    if on_disk is None:
+        return resolved
+    # `language` and `overlays.suppress` have no flag: they are project policy,
+    # not a per-run choice, so they are carried through from flow.yml verbatim.
+    return replace(
+        resolved, language=on_disk.language, suppressions=on_disk.suppressions
     )

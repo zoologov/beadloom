@@ -12,8 +12,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
 from click.testing import CliRunner
 
+from beadloom.onboarding import agentic_flow_setup
 from beadloom.onboarding.agentic_flow_setup import (
     AGENT_FILES,
     COMMAND_FILES,
@@ -62,18 +64,58 @@ class TestVendoredFlowAssets:
             assert (root / "commands" / f"{name}.md.txt").is_file(), name
 
     def test_vendored_flow_matches_live_claude(self) -> None:
-        """Drift guard: every vendored template byte-matches the live ``.claude/``
-        file (so the scaffold always ships the latest proven flow)."""
+        """Drift guard: every vendored AGENT template byte-matches the live file.
+
+        Agents only. The commands and ``CLAUDE.md`` are no longer snapshots of
+        this repo's live files — they are the shipped CORE, and the live files
+        are COMPOSED from them plus this repo's own project layer. Asserting
+        byte-equality on those is exactly the loop BDL-UX #177 measured: it made
+        the distributed artifact unable to differ from one project's local text.
+        Their guard is :meth:`test_live_flow_equals_its_composition`.
+        """
         root = vendored_flow_root()
         live = _live_claude_root()
         for name in AGENT_FILES:
             assert (root / "agents" / f"{name}.md.txt").read_text(
                 encoding="utf-8"
             ) == (live / "agents" / f"{name}.md").read_text(encoding="utf-8"), name
+
+    def test_live_flow_equals_its_composition(self) -> None:
+        """This repo's own ``.claude/`` is the composition of what it ships.
+
+        The replacement guard: instead of "the template equals our file", which
+        forced our local text outward, "our file equals CORE + overlays + OUR
+        project layer", which lets the two differ exactly where we declared they
+        should.
+        """
+        from pathlib import Path
+
+        from beadloom.onboarding.agentic_flow_setup import (
+            composed_claude_md,
+            composed_command,
+        )
+        from beadloom.onboarding.flow_config import resolve_flow_config
+        from beadloom.onboarding.scanner import (
+            _detect_project_name,
+            blank_auto_regions,
+        )
+
+        repo = Path(__file__).resolve().parents[1]
+        config = resolve_flow_config(repo)
+        live = _live_claude_root()
         for name in COMMAND_FILES:
-            assert (root / "commands" / f"{name}.md.txt").read_text(
-                encoding="utf-8"
-            ) == (live / "commands" / f"{name}.md").read_text(encoding="utf-8"), name
+            assert composed_command(name, config, repo) == (
+                live / f"commands/{name}.md"
+            ).read_text(encoding="utf-8"), name
+        expected = blank_auto_regions(
+            composed_claude_md(
+                config, repo, project_name=_detect_project_name(repo)
+            )
+        )
+        actual = blank_auto_regions(
+            (live / "CLAUDE.md").read_text(encoding="utf-8")
+        )
+        assert expected == actual
 
 
 class TestCoordinatorGateLoop:
@@ -161,12 +203,84 @@ class TestCoordinatorVendoredDriftGuard:
 
 
 class TestSyncAgenticFlow:
-    def test_sync_round_trips_live_source(self) -> None:
+    """Re-vendoring the ROLE files from a live ``.claude/`` — into tmp_path.
+
+    ``sync_agentic_flow`` writes package data. Until BDL-061.10 these tests
+    called it against the REAL package, so every ``pytest`` run — and ``pytest``
+    runs inside ``beadloom ci`` — copied whatever this maintainer's local
+    ``.claude/agents/*`` happened to say into the shipped templates, and the
+    drift guard that exists to catch that then compared the template against the
+    file it had just been copied from.
+
+    Measured in a clean room at HEAD, with one line appended to the live
+    ``.claude/agents/dev.md``: run 1 FAILED and shipped the edit anyway (the
+    tracked template's sha256 moved ``77dfc84…`` → ``b8bf376…``), run 2 passed
+    with the edit inside the package. That is BDL-UX #177's loop, surviving on
+    the one leg the CLAUDE.md fix did not cover — and it left no trace in ``git
+    status`` on an unedited tree, because the write is byte-identical there.
+
+    The destination is redirected here, so the round trip is exercised without
+    the suite mutating the artifact it measures. The structural half of the fix
+    is in ``tests/conftest.py``: any test that writes a git-tracked file fails.
+    """
+
+    @pytest.fixture()
+    def vendor_root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        """A throw-away stand-in for the installed package's template root."""
+        root = tmp_path / "package-templates"
+        root.mkdir()
+        monkeypatch.setattr(
+            agentic_flow_setup, "vendored_flow_root", lambda: root
+        )
+        return root
+
+    def test_sync_round_trips_live_source(self, vendor_root: Path) -> None:
+        # Arrange
+        live = _live_claude_root()
+
+        # Act
+        written = sync_agentic_flow(live)
+
+        # Assert — every role file arrives, byte-identical to its live source
+        assert sorted(written) == sorted(f"agents/{name}.md.txt" for name in AGENT_FILES)
+        for name in AGENT_FILES:
+            assert (vendor_root / "agents" / f"{name}.md.txt").read_text(
+                encoding="utf-8"
+            ) == (live / "agents" / f"{name}.md").read_text(encoding="utf-8"), name
+
+    def test_sync_does_not_touch_the_claude_md_core(self, vendor_root: Path) -> None:
+        """BDL-UX #177's first leg: the shipped CLAUDE.md is not a snapshot.
+
+        It used to be. Running this very function rewrote
+        ``templates/agentic_flow/CLAUDE.md.txt`` from ``.claude/CLAUDE.md``,
+        which is why a project-local paragraph — a bead id and a false claim
+        about this repo's branch protection — reached the shipped template
+        twice, the second time OVER the correction.
+
+        Asserted over what the sync PRODUCED rather than over the package's
+        unchanged sha256: with the destination redirected, "the packaged file
+        did not change" would be true by construction and would check nothing.
+        """
+        # Act
         written = sync_agentic_flow(_live_claude_root())
-        assert "agents/dev.md.txt" in written
-        assert "commands/coordinator.md.txt" in written
-        # Re-running is a no-op against the packaged copy (drift guard as code).
-        assert TestVendoredFlowAssets().test_vendored_flow_matches_live_claude() is None
+
+        # Assert
+        assert not any("CLAUDE" in name for name in written)
+        assert not (vendor_root / "CLAUDE.md.txt").exists()
+
+    def test_sync_does_not_touch_the_command_cores(self, vendor_root: Path) -> None:
+        """The commands compose too, so they are not snapshotted either."""
+        # Act
+        written = sync_agentic_flow(_live_claude_root())
+
+        # Assert — the produced set is exactly the roles, nothing else
+        produced = sorted(
+            path.relative_to(vendor_root).as_posix()
+            for path in vendor_root.rglob("*")
+            if path.is_file()
+        )
+        assert produced == sorted(f"agents/{name}.md.txt" for name in AGENT_FILES)
+        assert not any(name.startswith("commands/") for name in written)
 
 
 class TestScaffoldFiles:

@@ -22,9 +22,40 @@ tools: [claude, cursor]        # which IDE adapter sets to generate
 architecture: [ddd]            # exactly one methodology: ddd | fsd
 stack: [python, fastapi]       # one+ stack/framework overlays
 quality: [clean-code, tdd]     # quality bars (informational)
+language: en                   # tag the flow's documents are written in
+overlays:
+  suppress:                    # stand down a shipped core rule, declared
+    - rule: "Anti-patterns / Shell"
+      reason: "the team runs on Windows; the -f idiom does not apply"
+      until: "a windows stack overlay ships"
 ```
 
 For Beadloom itself: `tools: [claude]`, `architecture: [ddd]`, `stack: [python]`.
+
+### `language` (BDL-061 S3, BDL-UX #136)
+
+A BCP-47-ish tag, default `en`. It is validated for **shape**, not against a
+closed list: the set of languages a team writes in is not ours to enumerate, and
+rejecting an unlisted one would push the project straight back to hand-editing a
+drift-guarded file. It does two things:
+
+- every composition layer prefers a `<name>.<lang>.md.txt` fragment, and a
+  missing localisation falls back to the default **with a note** — the
+  composition says which fragment it could not find, so a Russian-speaking team
+  is never silently handed English;
+- the `doc-language` auto-region in `CLAUDE.md` renders from it, replacing the
+  unconditional "ALL documents MUST be written in English" the scaffolded flow
+  used to state as a core rule.
+
+### `overlays.suppress` (BDL-061 S3)
+
+Overlays are append-only, so nothing in the project layer can delete core text.
+A core rule can only be stood down by declaration, and `rule`, `reason` and
+`until` are all mandatory — the same bar `guards.<name>.exclusions` holds.
+Validation runs through `flow_suppression`; an unknown key under `overlays` is
+rejected with the reminder that project *additions* are files under
+`.beadloom/flow/`, not keys here. See the
+[Flow Suppression SPEC](../flow-suppression/SPEC.md).
 
 ### The `guards:` block is a second reader of the same file
 
@@ -74,15 +105,21 @@ rules live in the
 ## API
 
 Module `src/beadloom/onboarding/flow_config.py`:
-- `FlowConfig` — frozen config (`tools`, `architecture`, `stack`, `quality`).
+- `FlowConfig` — frozen config (`tools`, `architecture`, `stack`, `quality`,
+  `language`, `suppressions`).
 - `FlowConfigError` — raised for malformed / unknown-value configs.
 - `build_flow_config(data)` → `FlowConfig`
 - `load_flow_config(project_root)` → `FlowConfig`
 - `load_flow_config_or_default(project_root, *, default)` → `FlowConfig`
 - `resolve_flow_config(project_root, *, tools, architecture, stack)` → `FlowConfig`
 - `detect_stack(project_root)` → `tuple[str, ...]`
-- `SUPPORTED_TOOLS` / `SUPPORTED_ARCHITECTURES` / `SUPPORTED_STACKS` / `SUPPORTED_QUALITY`
+- `SUPPORTED_TOOLS` / `SUPPORTED_ARCHITECTURES` / `SUPPORTED_STACKS` /
+  `SUPPORTED_QUALITY` / `DEFAULT_LANGUAGE`
+
+`resolve_flow_config()` carries `language` and `suppressions` through from
+`flow.yml` verbatim: they are project policy, not a per-run choice, so they have
+no overriding flag.
 
 ## Testing
 
-Tests: `tests/test_role_configurator.py`
+Tests: `tests/test_role_configurator.py`, `tests/test_flow_composition.py`

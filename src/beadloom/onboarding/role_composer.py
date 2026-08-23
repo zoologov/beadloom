@@ -1,6 +1,6 @@
 # beadloom:domain=onboarding
 # beadloom:feature=role-composer
-"""Compose role files from CORE + architecture + stack overlays (BDL-052 S3).
+"""Compose role files from CORE + architecture + stack + project layers.
 
 A role file is no longer one monolith. It is assembled deterministically from:
 
@@ -13,11 +13,16 @@ A role file is no longer one monolith. It is assembled deterministically from:
   ``typescript`` / ``vuejs``: the stack idioms + lint/type/test commands, under
   ``templates/roles/stack/<stack>/<role>.md.txt``.
 
-:func:`compose_role` concatenates ``CORE + architecture + stack`` in a fixed,
-deterministic order (stack overlays sorted), so the same ``(role, architecture,
-stack)`` always yields byte-identical output. That determinism is what the
-drift-guard test leans on: every generated adapter must equal
-``compose_role(...)`` for the repo's ``flow.yml``.
+* a **PROJECT** fragment at ``.beadloom/flow/roles/<role>.md`` in the adopting
+  repo — the supported place for a team's standing practices, appended last
+  (BDL-061 S3; BDL-UX #139, #152).
+
+:func:`compose_role` concatenates those layers in a fixed, deterministic order
+(stack overlays sorted, project last), so the same inputs always yield
+byte-identical output. That determinism is what the drift-guard leans on: every
+generated adapter must equal ``compose_role(...)`` for the repo's ``flow.yml``
+**and** its project layer — which is why a project extension no longer trips
+``config-check`` while a change to a shipped fragment still does.
 
 Not every overlay has a fragment for every role (e.g. a framework overlay may
 only refine the dev/test roles); a missing fragment contributes nothing, so an
@@ -26,14 +31,21 @@ overlay is additive and never breaks an unrelated role.
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
+from beadloom.onboarding.composer import compose, templates_dir
 from beadloom.onboarding.flow_config import (
+    DEFAULT_LANGUAGE,
     SUPPORTED_ARCHITECTURES,
     SUPPORTED_STACKS,
     FlowConfig,
     FlowConfigError,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from beadloom.onboarding.flow_suppression import FlowSuppression
 
 #: Canonical role names (mirrors ``agentic_flow_setup.AGENT_FILES``).
 ROLE_NAMES: tuple[str, ...] = ("dev", "test", "review", "tech-writer")
@@ -41,30 +53,7 @@ ROLE_NAMES: tuple[str, ...] = ("dev", "test", "review", "tech-writer")
 
 def roles_templates_root() -> Path:
     """Directory holding the CORE + overlay role-source fragments."""
-    return Path(__file__).resolve().parent / "templates" / "roles"
-
-
-def _core_path(role: str) -> Path:
-    return roles_templates_root() / "core" / f"{role}.md.txt"
-
-
-def _architecture_path(architecture: str, role: str) -> Path:
-    return roles_templates_root() / "architecture" / architecture / f"{role}.md.txt"
-
-
-def _stack_path(stack: str, role: str) -> Path:
-    return roles_templates_root() / "stack" / stack / f"{role}.md.txt"
-
-
-def _read_fragment(path: Path) -> str:
-    """Read an overlay fragment; return ``""`` when the fragment is absent.
-
-    A missing per-role fragment for an overlay is legitimate (the overlay does
-    not refine that role) and contributes nothing to the composition.
-    """
-    if not path.is_file():
-        return ""
-    return path.read_text(encoding="utf-8")
+    return templates_dir() / "roles"
 
 
 def compose_role(
@@ -72,15 +61,22 @@ def compose_role(
     *,
     architecture: str,
     stack: tuple[str, ...] | list[str],
+    language: str = DEFAULT_LANGUAGE,
+    suppressions: tuple[FlowSuppression, ...] = (),
+    project_root: Path | None = None,
 ) -> str:
-    """Compose one role file from CORE + architecture + stack overlays.
+    """Compose one role file from CORE + architecture + stack + project layers.
 
-    The output is ``CORE`` then the single ``architecture`` overlay then each
-    ``stack`` overlay in **sorted** order — deterministic for a given
-    ``(role, architecture, stack)``. Raises :class:`FlowConfigError` for an
+    The output is ``CORE`` then the single ``architecture`` overlay, then each
+    ``stack`` overlay in **sorted** order, then the project fragment at
+    ``.beadloom/flow/roles/<role>.md`` when ``project_root`` is given —
+    deterministic for a given input. Raises :class:`FlowConfigError` for an
     unknown role / architecture / stack (so a bad compose request is loud, not
-    a silently-empty file). The CORE fragment is required; overlay fragments
-    are optional per role.
+    a silently-empty file).
+
+    The layering itself lives in :mod:`beadloom.onboarding.composer`, which is
+    the single implementation shared by roles, commands and ``CLAUDE.md``; this
+    function is the roles-shaped door onto it.
     """
     if role not in ROLE_NAMES:
         msg = f"compose_role: unknown role {role!r} — allowed: {list(ROLE_NAMES)}"
@@ -99,27 +95,27 @@ def compose_role(
         )
         raise FlowConfigError(msg)
 
-    core_path = _core_path(role)
-    if not core_path.is_file():
-        msg = f"compose_role: missing CORE fragment for role {role!r} at {core_path}"
-        raise FlowConfigError(msg)
-
-    parts = [core_path.read_text(encoding="utf-8")]
-    parts.append(_read_fragment(_architecture_path(architecture, role)))
-    for stack_name in sorted(stack):
-        parts.append(_read_fragment(_stack_path(stack_name, role)))
-    return "".join(parts)
+    config = FlowConfig(
+        tools=("claude",),
+        architecture=architecture,
+        stack=tuple(stack),
+        language=language,
+        suppressions=suppressions,
+    )
+    return compose("roles", role, config=config, project_root=project_root).text
 
 
-def compose_all_roles(config: FlowConfig) -> dict[str, str]:
-    """Compose every role for a :class:`FlowConfig`'s architecture + stack.
+def compose_all_roles(
+    config: FlowConfig, project_root: Path | None = None
+) -> dict[str, str]:
+    """Compose every role for a :class:`FlowConfig`, including the project layer.
 
     Returns ``{role: composed_text}`` for all :data:`ROLE_NAMES`, ready to be
-    written into each configured tool's adapter directory.
+    written into each configured tool's adapter directory. ``project_root`` is
+    optional: omitting it yields the shipped-only composition, which is exactly
+    the baseline a repo without a project layer is checked against.
     """
     return {
-        role: compose_role(
-            role, architecture=config.architecture, stack=config.stack
-        )
+        role: compose("roles", role, config=config, project_root=project_root).text
         for role in ROLE_NAMES
     }

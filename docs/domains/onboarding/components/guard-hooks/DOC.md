@@ -70,11 +70,22 @@ script's own comment:
   re-derive it. The [flow-guards SPEC](../../../application/features/flow-guards/SPEC.md)
   states the class and the reasoning.
 
-This repository is not currently bound through the emitted script: its
-`.claude/settings.json` registers the `beadloom guard` command directly, with a
-narrower matcher. So the artifact adopters receive has not been exercised here —
-recorded as review minor n1, and carried with M3 into S3 rather than patched in
-one place.
+## The dogfood runs the emitted script (BDL-061.35)
+
+Until S3 this repository was **not** bound through the emitted adapter: its
+`.claude/settings.json` registered the `beadloom guard` command directly, with a
+matcher one tool narrower. The artifact adopters receive had therefore never run
+here, so "dogfooded under the flow it builds" was evidence about a path adopters
+do not use — the stated reason #170's narrow binding survived five review cycles.
+
+`.claude/settings.json` now carries exactly what `scaffold_guard_hooks` writes,
+and the entries were produced by running it rather than typed. Three tests hold
+the two together against the scaffolder's own output rather than against
+literals: every registered command equals `hook_command(name)`, no command is the
+direct form, and the committed `.claude/hooks/beadloom-guard.sh` is byte-identical
+to a freshly emitted one (and executable). The consequence is deliberate: this
+repository now inherits `EDIT_MATCHER` in full, so #170's surface gap is a gap we
+run under rather than one only adopters meet.
 
 ## Invariants
 

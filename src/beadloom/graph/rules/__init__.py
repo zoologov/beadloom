@@ -22,6 +22,10 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
+from beadloom.graph.rules.attribution import (
+    FileAttribution,
+    count_unattributed_import_files,
+)
 from beadloom.graph.rules.cycles import evaluate_cycle_rules
 from beadloom.graph.rules.evaluators import (
     evaluate_cardinality_rules,
@@ -223,6 +227,7 @@ __all__ = [
     "CardinalityRule",
     "CycleRule",
     "DenyRule",
+    "FileAttribution",
     "ForbidEdgeRule",
     "ImportBoundaryRule",
     "ImportExemption",
@@ -235,6 +240,7 @@ __all__ = [
     "SuppressedCrossing",
     "UnregisteredFeatureCandidateRule",
     "Violation",
+    "count_unattributed_import_files",
     "evaluate_all",
     "evaluate_cardinality_rules",
     "evaluate_cycle_rules",

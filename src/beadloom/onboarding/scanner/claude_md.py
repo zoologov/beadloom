@@ -192,6 +192,71 @@ def _render_project_info_section(project_root: Path) -> str:
     return "\n".join(lines) + "\n"
 
 
+#: Display names for the language tags we can name; anything else is shown as
+#: the tag itself rather than guessed at (BDL-UX #136).
+_LANGUAGE_NAMES: dict[str, str] = {
+    "en": "English",
+    "ru": "Russian",
+    "de": "German",
+    "fr": "French",
+    "es": "Spanish",
+    "pt": "Portuguese",
+    "it": "Italian",
+    "pl": "Polish",
+    "uk": "Ukrainian",
+    "tr": "Turkish",
+    "zh": "Chinese",
+    "ja": "Japanese",
+    "ko": "Korean",
+}
+
+
+def _render_doc_language_section(project_root: Path) -> str:
+    """The ``doc-language`` auto-region — derived from ``flow.yml``, not hardcoded.
+
+    The scaffolded flow used to state "ALL documents MUST be written in English"
+    as an unconditional core rule, so a team documenting in another language had
+    to override the shipped default in prose (BDL-UX #136). The language is now a
+    declared field and this sentence follows it.
+    """
+    from beadloom.onboarding.flow_config import DEFAULT_LANGUAGE, load_flow_config
+
+    try:
+        language = load_flow_config(project_root).language
+    except (FileNotFoundError, ValueError):
+        # No flow.yml (or an invalid one, reported by config-check) — state the
+        # default rather than inventing a language for the project.
+        language = DEFAULT_LANGUAGE
+    name = _LANGUAGE_NAMES.get(language.split("-")[0], language)
+    return (
+        f"**Document language:** ALL documents (PRD, RFC, CONTEXT, PLAN, ACTIVE, "
+        f"BRIEF) MUST be written in {name} — set by `language: {language}` in "
+        "`.beadloom/flow.yml`.\n"
+    )
+
+
+def blank_auto_regions(text: str) -> str:
+    """Replace every auto-managed region's BODY with a fixed token.
+
+    The auto-regions are regenerated per project (version, packages, stack), so
+    comparing them against a composition would report drift on facts that are
+    supposed to move. Blanking them leaves exactly the composed part to compare,
+    which is what ``config-check`` verifies; the regions themselves are checked
+    separately by :func:`refresh_claude_md` in dry-run mode.
+    """
+    markers = _parse_markers(text)
+    if not markers:
+        return text
+    out: list[str] = []
+    cursor = 0
+    for name, start, end, _content in markers:
+        out.append(text[cursor:start])
+        out.append(f"<!-- beadloom:auto-region {name} -->\n")
+        cursor = end
+    out.append(text[cursor:])
+    return "".join(out)
+
+
 def refresh_claude_md(
     project_root: Path,
     *,
@@ -239,6 +304,8 @@ def refresh_claude_md(
     for section_name, _start, _end, _content in markers:
         if section_name == "project-info":
             renderers[section_name] = _render_project_info_section(project_root)
+        elif section_name == "doc-language":
+            renderers[section_name] = _render_doc_language_section(project_root)
 
     # Rebuild the text, replacing changed sections.
     changed: list[str] = []

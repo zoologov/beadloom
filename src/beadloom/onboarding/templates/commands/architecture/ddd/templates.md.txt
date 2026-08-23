@@ -1,0 +1,11 @@
+
+---
+
+## ARCHITECTURE (DDD) — composed from `.beadloom/flow.yml`
+
+- **Layering:** `services → application → domains → infrastructure`, never the
+  reverse. No domain depends on a peer domain.
+- **Boundaries are machine-enforced:** `beadloom lint --strict`. Discover the
+  live layer map with `beadloom graph` / `beadloom ctx` — never hardcode it.
+- **One nameable responsibility per module.** A CONTEXT that says "and" in a
+  module's responsibility is describing two modules.

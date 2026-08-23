@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from beadloom.doc_sync.declared_docs import find_missing_declared_docs
 from beadloom.doc_sync.git_baseline import changed_paths
-from beadloom.infrastructure.repository import get_owned_code_files
+from beadloom.infrastructure.repository import covering_prefix, get_owned_code_files
 
 if TYPE_CHECKING:
     import sqlite3
@@ -146,13 +146,29 @@ def _unchecked_reason(conn: sqlite3.Connection, source: str) -> dict[str, str]:
     belongs to a nested node — the reader would go looking for missing code
     that is in fact indexed, just owned elsewhere. The two cases get different
     words because they call for different action: index the code, or nothing.
+
+    Both questions are asked of ``file_index``, not of ``code_symbols``, since
+    BDL-061.50. Keyed on symbols, this branch answered ``no_indexed_code`` for
+    ``graph-reads`` — a fully indexed 75-line re-export facade with no top-level
+    ``def`` — and sent the reader hunting for missing code (review .7 MAJOR 3).
+    It was the ONE place in this repository where the reason was exercised, and
+    naming the residue accurately is the whole mechanism by which "clean means
+    checked, and where it cannot, it says so" is worth anything.
     """
     if not source:
         return {"reason": "no_source", "details": ""}
-    covered = conn.execute(
-        "SELECT COUNT(*) FROM code_symbols WHERE file_path LIKE ?", (f"{source}%",)
-    ).fetchone()
-    if covered is not None and int(covered[0]) > 0:
+    prefix = covering_prefix(source)
+    if prefix.endswith("/"):
+        indexed = conn.execute(
+            "SELECT COUNT(*) FROM file_index WHERE kind = 'code' AND path LIKE ?",
+            (f"{prefix}%",),
+        ).fetchone()
+    else:
+        indexed = conn.execute(
+            "SELECT COUNT(*) FROM file_index WHERE kind = 'code' AND path = ?",
+            (source,),
+        ).fetchone()
+    if indexed is not None and int(indexed[0]) > 0:
         return {"reason": "files_owned_by_nested_nodes", "details": source}
     return {"reason": "no_indexed_code", "details": source}
 

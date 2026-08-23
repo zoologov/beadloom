@@ -8,6 +8,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **A project layer for the agentic flow — every artifact composes (BDL-061 S3).**
+  `compose(kind, name, config, project_root)` assembles the role protocols, the slash
+  commands and `CLAUDE.md` from four layers in a fixed order: the shipped stack-neutral
+  CORE, one architecture overlay (`ddd` | `fsd`), each stack overlay **sorted**, and the
+  adopting repository's own fragment under `.beadloom/flow/{roles,commands,claude}/`. The
+  project layer is appended verbatim, cannot delete core text, is never overwritten, and
+  **survives every upgrade** — it lives in Beadloom's configuration directory rather than
+  inside a vendored file. Measured on the shipped artifact: the core `CLAUDE.md` went from
+  **440 to 376 lines**, with every removed line mapped to a replacement (the Quick
+  Reference and Agent Checklist sections restated §0 command for command; the Python
+  anti-patterns and the `uv run pytest` / `ruff` / `mypy` block moved into the Python stack
+  overlay). A `ddd` + `python` project composes 406 lines; a project selecting no stack
+  overlay gets 376 and no Python command in its critical rules. Closes BDL-UX #139 and
+  #152. See the new [Project Overlays guide](docs/guides/project-overlays.md).
+- **`overlays.suppress` — standing a core rule down is a declaration (BDL-061 S3).**
+  `.beadloom/flow.yml` gains `overlays.suppress`, each entry carrying a mandatory `rule`,
+  `reason` and `until`; an entry missing any of them is a configuration error, and an
+  unknown key under `overlays` is rejected with the reminder that project additions are
+  files, not keys. Every suppression is appended to **each** composed artifact as a visible
+  notice, so the reader about to follow the core rule is told it was stood down, why, and
+  what retires it. `config-check` reports one that has expired and one whose `rule` names
+  no heading in the project's own composed corpus, both at `warn` — the findings
+  `forbid_import` exemptions already made, one layer up, through the same
+  `exit_condition_deadline`.
+- **`language:` in `flow.yml` (BDL-061 S3).** A BCP-47-ish tag validated for shape rather
+  than against a closed list, selecting a `<name>.<lang>.md.txt` fragment in every layer.
+  A localisation that has not shipped falls back to the default **and says so** in the
+  composition notes. The core's unconditional "documents MUST be written in English" is now
+  the `doc-language` auto-region rendered from this key. Closes BDL-UX #136.
+- **`.beadloom/flow-manifest.json` — the record of what Beadloom wrote (BDL-061 S3).** Every
+  composed write is fingerprinted, so a later run can tell its own output (`stale`,
+  recomposable) from a hand edit (`hand_edited`, reported and never rewritten) from a file
+  it wrote that is now gone (`missing`) from one nothing accounts for (`unverified`). The
+  file is generated state and **belongs in git**: without it in the clone, ownership rests
+  on the artifact's provenance stamp alone.
+- **An ignore block at `init` (BDL-061 S3).** `beadloom init` and `beadloom
+  setup-agentic-flow` append Beadloom's generated working set to the project's `.gitignore`,
+  once, each pattern preceded by the reason it is there. Written once and never rewritten,
+  so deleting a line is a permanent override rather than a losing fight with the tool.
+  Nothing is written outside a git working tree and no pattern the project already declares
+  is duplicated.
 - **Flow guards — the enforcement primitive (BDL-061 S1).** `beadloom guard NAME`
   evaluates one named guard and returns a verdict
   `{guard, outcome, why, not_covered[], remediation, context}` where the outcome is
@@ -40,8 +81,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Ground Truth` block and summarised on the line the Gate prints. `--json` gains `coverage`,
   `unverified_facts`, `scan_surface` and four summary counts; `--fail-if` accepts
   `unverified>N` / `unverified>=N`; `--verbose` names every document the scan did not read
-  and the pattern that skipped it. Measured on this repository: 2 of 9 declared facts
-  verified, the other seven named, over 46 documents scanned and 33 not read.
+  and the pattern that skipped it. Measured on this repository at the time of writing: 2 of 9
+  declared facts verified, the other seven named, over 48 documents scanned and 36 not read.
 - **`lint` counts what it could not check and what it excused (BDL-061 S2b).**
   `LintResult.rules_inert` qualifies the summary line (`N rules evaluated, M of them unable
   to check anything`) and `LintResult.suppressed` carries every crossing a `forbid_import`
@@ -57,6 +98,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   suite itself rejects.
 
 ### Changed
+- **`config-check` verifies the composition result, not file bytes (BDL-061 S3).** Byte-guarding
+  a generated file against a fixed template makes extension impossible: any project addition is
+  drift and `--fix` deletes it. The check now compares each artifact against its composition,
+  so a project fragment is part of the expected output while a change to a shipped fragment
+  still is not. **Before this, the `CLAUDE.md` body was verified by nothing** — measured on a
+  scaffolded project, replacing the whole file with a single line returned zero drifts and the
+  Gate printed `config-check PASS: agent-config in sync` (BDL-UX #177). Severity follows the
+  state: `stale`, `hand_edited` and `missing` are errors, `unverified` is a warning, and the
+  command exits 1 only on error-severity drift. `--fix` runs the scaffold's **non-forcing**
+  path for the commands and `CLAUDE.md`, so a hand edit there is no longer deleted (BDL-UX
+  #151). Two limits are stated rather than omitted: a project fragment's **prose is not
+  judged** — only its presence is reported, at `warn`, with each fragment named — and deleting
+  both the manifest and the provenance stamp downgrades the `CLAUDE.md` body from `error` to
+  `warn`, because every ownership signal is in band and can therefore be deleted. The
+  achievable floor is that the deletion is visible and the file is named, not that it blocks.
+- **Nothing an editor deletes makes `config-check` quieter (BDL-061 S3).** Three deletions used
+  to reduce the finding count. `rm .beadloom/flow-manifest.json` took a hand-edited `CLAUDE.md`
+  from error to warn (exit 1 → 0); deleting the `<!-- beadloom:composed` stamp as well took it
+  to zero findings; `rm .claude/agents/dev.md` switched the checks off for every other file,
+  silently. All are findings now, and the absent manifest, the missing canonical file and the
+  project layer in effect are each reported by name.
+- **A composed artifact is a function of its inputs and of nothing else (BDL-061 S3).**
+  `FlowSuppression.describe()` no longer stamps `— EXPIRED` into the composed text; expiry is
+  a `config-check` finding instead. Measured before the change: one dated suppression took an
+  untouched repository from 0 findings / exit 0 to **9 errors / exit 1** three days later, with
+  nothing on disk touched, under a reason that named three causes which had not occurred. A
+  project with an already-expired dated suppression composes different bytes than before and
+  adopts them on one `beadloom setup-agentic-flow`.
+- **`sync_agentic_flow` no longer snapshots `CLAUDE.md` or the slash commands (BDL-061 S3).**
+  The shipped core is authored package data and the live file is composed from it. Enforcing
+  *template equals our file* in one direction made the distributed artifact unable to differ
+  from this project's local text — a bead id and a false claim about this repository's branch
+  protection reached the shipped template twice, the second time over the correction (BDL-UX
+  #177). It also removes BDL-UX #132 by construction: nothing writes the core, so `--force`
+  cannot overwrite its project-name placeholder.
 - **The freshness baseline moved out of the database (BDL-061 S2b).**
   `.beadloom/beadloom.db` is a derived cache again — git-ignored, per-machine, dropped by
   every rebuild and absent on every fresh CI checkout — so a baseline kept only there is
@@ -145,6 +221,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`docs audit` read numbers out of identifiers (#169).** A line is tokenized on
   whitespace and only a token whose whole core is a number is a candidate, so
   `BDL-061.33` is no longer an `mcp_tool_count` of 33 and `6,390` is read whole.
+- **`config-check --fix` may only rewrite what Beadloom wrote (BDL-UX #186).** The role
+  adapters were the one kind left out: `refresh_composed_adapters` rewrote
+  `.claude/agents/<role>.md` unconditionally, so doing what the command's own closing line
+  said undid what the line above it promised, and the re-check then printed *Agent-config in
+  sync — no blocking drift* at exit 0 over the deletion. An adapter Beadloom cannot prove it
+  wrote — `hand_edited`, and `unverified` too, which is the worse case because it is only a
+  warning — is now **declined**: left byte-identical, named in the output, its finding still
+  standing. Every file a `--fix` run creates or rewrites is named, measured against the disk
+  rather than taken from each writer's account of itself, and the closing advice stops
+  offering `--fix` for a finding it will decline.
+
+### Known limitations (BDL-061 S3)
+
+Measured and open at the time of writing, listed here rather than left to be discovered.
+
+- **A fresh scaffold without a `flow.yml` leaves `config-check` red (BDL-UX #187).**
+  `setup-agentic-flow` composes the role adapters from the auto-detected stack but does not
+  write a `.beadloom/flow.yml`, and `config-check` without one expects the plain vendored role
+  files. Measured on a new TypeScript project: exit 1 with four errors immediately after a
+  clean scaffold, and rc 0 once a `flow.yml` exists.
+- **The orphan list and the migration guidance have no caller (BDL-UX #188).**
+  `ScaffoldResult.orphans` and `.migration_notes` are computed on every scaffold — the files
+  an older layout left behind with their exact `rm -f` commands, and the project-layer path a
+  hand edit belongs in — and `beadloom setup-agentic-flow` prints neither. Both reach a
+  library caller and not the person running the command.
+- **`CLAUDE.md` states Beadloom's version as the project's own (BDL-UX #183).** The
+  `project-info` auto-region renders the installed `beadloom` package version, and its other
+  facts are derived from `pyproject.toml` only. Measured on a scaffolded project whose
+  `package.json` reads `0.4.1`: the whole `## 0.1 Project:` section renders as the single
+  bullet `- **Current version:** 2.2.0`.
 
 ## [2.2.0] - 2026-08-20
 

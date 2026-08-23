@@ -346,13 +346,21 @@ class TestAgenticFlowDrift:
 
         assert any(d.file == f".claude/{kind}/{name}.md" for d in drifts)
 
-    def test_partial_scaffold_not_flagged(self, tmp_path: Path) -> None:
-        """A repo with SOME (but not all) flow files present is not flagged —
-        the flow is only checked when fully scaffolded."""
+    def test_partial_scaffold_checks_what_is_there_and_names_what_is_not(
+        self, tmp_path: Path
+    ) -> None:
+        """The inverse of what this test asserted before BDL-061 `.57`.
+
+        It used to pin "a repo with SOME flow files present is not flagged",
+        which measured out as: deleting ONE file switched the checks off for
+        every other one, and the deletion itself was reported by nothing. The
+        gate is not satisfied by having less to check (BDL-UX #174), so the
+        statement is now the opposite one — the remaining files are still
+        checked, and the absent file is its own finding.
+        """
         project = _make_scaffolded_project(tmp_path)
-        # Remove one command file -> the flow is no longer fully scaffolded.
-        (project / ".claude" / "commands" / f"{COMMAND_FILES[0]}.md").unlink()
-        # Diverge a remaining file; it must still NOT be flagged.
+        gone = f".claude/commands/{COMMAND_FILES[0]}.md"
+        (project / gone).unlink()
         agent = project / ".claude" / "agents" / "dev.md"
         agent.write_text("HAND EDITED\n", encoding="utf-8")
 
@@ -362,10 +370,11 @@ class TestAgenticFlowDrift:
         finally:
             conn.close()
 
-        flow_drifts = [
-            d for d in drifts if "/agents/" in d.file or "/commands/" in d.file
-        ]
-        assert flow_drifts == []
+        flow_drifts = {
+            d.file for d in drifts if "/agents/" in d.file or "/commands/" in d.file
+        }
+        assert ".claude/agents/dev.md" in flow_drifts
+        assert gone in flow_drifts
 
     def test_all_drifted_flow_files_reported(self, tmp_path: Path) -> None:
         """Every present-but-drifted flow file gets its own ConfigDrift."""
@@ -400,30 +409,43 @@ class TestAgenticFlowDrift:
 
 
 class TestRefreshAgenticFlowFiles:
-    def test_restores_drifted_files_byte_identical(self, tmp_path: Path) -> None:
-        """``--fix`` restores every drifted flow file to the shipped template
-        byte-for-byte (and the post-fix check is clean)."""
+    def test_hand_edited_files_are_reported_never_rewritten(
+        self, tmp_path: Path
+    ) -> None:
+        """BDL-061 S3 contract change: ``--fix`` no longer eats a hand edit.
+
+        It used to restore every divergent flow file byte-for-byte, which is the
+        failure BDL-UX #139/#152 were filed for — the only copy of a team's
+        standing engineering practice was deleted with no diff and no
+        confirmation. A hand-edited file is now left alone and reported as a
+        ``warn`` naming the project-layer path the edit belongs in.
+        """
         project = _make_scaffolded_project(tmp_path)
         agent = project / ".claude" / "agents" / "dev.md"
         cmd = project / ".claude" / "commands" / "coordinator.md"
-        original = agent.read_text(encoding="utf-8")
         agent.write_text("HAND EDITED\n", encoding="utf-8")
         cmd.write_text("REWRITTEN\n", encoding="utf-8")
 
         written = refresh_agentic_flow_files(project)
 
-        assert "agents/dev.md" in written
-        assert "commands/coordinator.md" in written
-        assert agent.read_text(encoding="utf-8") == original
+        assert "agents/dev.md" not in written
+        assert "commands/coordinator.md" not in written
+        assert agent.read_text(encoding="utf-8") == "HAND EDITED\n"
+        assert cmd.read_text(encoding="utf-8") == "REWRITTEN\n"
+
         conn = _make_conn()
         try:
             drifts = check_config_drift(project, conn)
         finally:
             conn.close()
-        flow_drifts = [
-            d for d in drifts if "/agents/" in d.file or "/commands/" in d.file
-        ]
-        assert flow_drifts == []
+        reported = {
+            d.file: d for d in drifts if "/agents/" in d.file or "/commands/" in d.file
+        }
+        command_drift = reported[".claude/commands/coordinator.md"]
+        assert command_drift.severity == "error"
+        assert ".beadloom/flow/commands/coordinator.md" in (
+            command_drift.remediation or ""
+        )
 
     def test_noop_on_unscaffolded_repo(self, tmp_path: Path) -> None:
         """``--fix`` never forces the flow onto a repo that did not adopt it."""
@@ -431,25 +453,38 @@ class TestRefreshAgenticFlowFiles:
         # No .claude/ tree was created as a side effect.
         assert not (tmp_path / ".claude" / "agents").exists()
 
-    def test_noop_on_partial_scaffold(self, tmp_path: Path) -> None:
-        """A partially-scaffolded repo (some files missing) is left untouched."""
+    def test_a_partial_scaffold_is_restored_without_eating_the_hand_edit(
+        self, tmp_path: Path
+    ) -> None:
+        """``--fix`` on a partial scaffold: recreate the deleted file, keep the edit.
+
+        Before BDL-061 `.57` one deletion made ``--fix`` a no-op for the whole
+        repo. It now acts on what it can, and the one thing it still must not do
+        is rewrite somebody's only copy of an intent (BDL-UX #139, #151).
+        """
         project = _make_scaffolded_project(tmp_path)
-        (project / ".claude" / "agents" / "test.md").unlink()
+        deleted = project / ".claude" / "agents" / "test.md"
+        deleted.unlink()
         agent = project / ".claude" / "agents" / "dev.md"
         agent.write_text("HAND EDITED\n", encoding="utf-8")
 
-        assert refresh_agentic_flow_files(project) == []
-        # The divergent file is NOT restored (flow not fully scaffolded).
+        written = refresh_agentic_flow_files(project)
+
+        assert "agents/test.md" in written
+        assert deleted.is_file()
         assert agent.read_text(encoding="utf-8") == "HAND EDITED\n"
 
     def test_rewrites_all_files_even_when_in_sync(self, tmp_path: Path) -> None:
-        """On a fully-scaffolded repo, every flow file is reported rewritten
-        (force=True) — idempotent and byte-stable."""
+        """On a fully-scaffolded repo, every flow file is reported rewritten —
+        idempotent and byte-stable. CLAUDE.md is now one of them: since BDL-061
+        S3 its body is composed, not a snapshot of Beadloom's own live file."""
         project = _make_scaffolded_project(tmp_path)
         written = refresh_agentic_flow_files(project)
-        expected = {f"agents/{n}.md" for n in AGENT_FILES} | {
-            f"commands/{n}.md" for n in COMMAND_FILES
-        }
+        expected = (
+            {f"agents/{n}.md" for n in AGENT_FILES}
+            | {f"commands/{n}.md" for n in COMMAND_FILES}
+            | {"CLAUDE.md"}
+        )
         assert set(written) == expected
 
 
@@ -484,3 +519,112 @@ class TestContract:
         assert first == second
         files = [d.file for d in first]
         assert files == sorted(files)
+
+
+# ---------------------------------------------------------------------------
+# refresh_composed_adapters — what --fix rewrites, and what it refuses to.
+# ---------------------------------------------------------------------------
+
+
+class TestRefreshComposedAdapters:
+    """BDL-061 `.59` / BDL-UX #186 — ``--fix`` may only rewrite what it wrote.
+
+    The check tells the reader a hand-edited adapter *"will NOT be rewritten"*.
+    Whether that sentence is true is decided here: the composer's ``--fix``
+    companion regenerated every configured adapter unconditionally, so the
+    promise was false for exactly the file it was printed about.
+    """
+
+    def _adopt_flow(self, project: Path, body: str) -> None:
+        (project / ".beadloom").mkdir(parents=True, exist_ok=True)
+        (project / ".beadloom" / "flow.yml").write_text(body, encoding="utf-8")
+
+    def test_a_hand_edit_is_declined_by_name_while_the_rest_recompose(
+        self, tmp_path: Path
+    ) -> None:
+        from beadloom.onboarding.config_sync import refresh_composed_adapters
+
+        project = _make_scaffolded_project(tmp_path)
+        self._adopt_flow(
+            project, "tools: [claude]\narchitecture: [ddd]\nstack: [python]\n"
+        )
+        refresh_composed_adapters(project)  # baseline: recorded by the manifest
+        edited = project / ".claude" / "agents" / "dev.md"
+        body = edited.read_text(encoding="utf-8") + "\n## Ours\n\nNo red merges.\n"
+        edited.write_text(body, encoding="utf-8")
+        stale = project / ".claude" / "agents" / "test.md"
+        composed_test = stale.read_text(encoding="utf-8")
+        stale.unlink()
+
+        report = refresh_composed_adapters(project)
+
+        # The edit is still there, and the run says which file it left alone.
+        assert edited.read_text(encoding="utf-8") == body
+        assert [d.file for d in report.declined] == [".claude/agents/dev.md"]
+        assert "hand-edited" in report.declined[0].reason
+        assert ".beadloom/flow/roles/dev.md" in (report.declined[0].remediation or "")
+        # Declining one file does not stop it fixing the others.
+        assert stale.read_text(encoding="utf-8") == composed_test
+        assert ".claude/agents/test.md" in report.rewritten
+        assert ".claude/agents/dev.md" not in report.rewritten
+
+    def test_the_plain_vendored_scaffold_is_not_a_hand_edit(
+        self, tmp_path: Path
+    ) -> None:
+        """Adopting a flow.yml on an already-scaffolded repo must still be fixable.
+
+        The vendored role files are bytes Beadloom itself shipped and wrote, but
+        nothing records them, so under a naive ownership test they read as a
+        hand edit — and ``--fix`` would then refuse to recompose them for ever.
+        Refusing to touch a file we wrote is the mirror of the defect, not the
+        cure: unowned is not the same as somebody's only copy.
+        """
+        from beadloom.onboarding.config_sync import refresh_composed_adapters
+
+        project = _make_scaffolded_project(tmp_path)
+        self._adopt_flow(
+            project, "tools: [claude, cursor]\narchitecture: [fsd]\nstack: [vuejs]\n"
+        )
+
+        report = refresh_composed_adapters(project)
+
+        assert report.declined == ()
+        assert ".claude/agents/dev.md" in report.rewritten
+        assert "Feature-Sliced Design" in (
+            project / ".claude" / "agents" / "dev.md"
+        ).read_text(encoding="utf-8")
+
+    def test_an_unverified_adapter_is_declined_too(self, tmp_path: Path) -> None:
+        """The rule is stated over provenance, not over the word ``hand_edited``.
+
+        ``unverified`` — the body matches no composition Beadloom could have
+        produced, and nothing accounts for it — is the worst case available,
+        because it is a ``warn``: overwriting one would have deleted the body
+        and then let the command print "no blocking drift" at exit 0, with no
+        red anywhere in the output to catch it. Its own remediation says
+        *review it, then `setup-agentic-flow --force`* — a deliberate act by
+        somebody who has looked. ``--fix`` has not looked.
+
+        Written AFTER the implementation, unlike the rest of this class; its
+        value rests on the sabotage that reddens it (declining only
+        ``hand_edited``), not on its having failed first.
+        """
+        from beadloom.onboarding.config_sync import refresh_composed_adapters
+
+        project = tmp_path / "acme-service"
+        (project / ".beadloom").mkdir(parents=True)
+        (project / ".beadloom" / "flow.yml").write_text(
+            "tools: [claude]\narchitecture: [ddd]\nstack: [python]\n", encoding="utf-8"
+        )
+        agents = project / ".claude" / "agents"
+        agents.mkdir(parents=True)
+        # A role protocol from somewhere else: no manifest, no provenance.
+        body = "# Our own dev protocol\n\nPair on migrations.\n"
+        (agents / "dev.md").write_text(body, encoding="utf-8")
+
+        report = refresh_composed_adapters(project)
+
+        assert (agents / "dev.md").read_text(encoding="utf-8") == body
+        assert [d.file for d in report.declined] == [".claude/agents/dev.md"]
+        assert "unverified" in report.declined[0].reason
+        assert ".claude/agents/dev.md" not in report.rewritten

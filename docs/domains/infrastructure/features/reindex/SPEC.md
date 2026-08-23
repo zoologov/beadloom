@@ -91,11 +91,24 @@ _DEFAULT_SCAN_DIRS = ("src", "lib", "app")
 | 5d | Map test files to source nodes and store in `nodes.extra` | `_store_test_mappings` |
 | 5e | Analyze git activity and store in `nodes.extra` | `_store_git_activity` |
 | 5f | Extract API routes and store in `nodes.extra` | `_extract_and_store_routes` |
+| 5g | Populate `file_index` — BEFORE anything derives ownership from it | `_populate_file_index` |
 | 6 | Build `sync_state` with preserved symbol hashes for drift detection | `_build_initial_sync_state` |
 | 7 | Populate FTS5 search index | `context_oracle.search.populate_search_index` |
 | 8 | Clear `bundle_cache`, set meta, take health snapshot | Multiple internal functions |
-| 9 | Populate `file_index` for subsequent incremental runs | `_populate_file_index` |
-| 10 | Store parser fingerprint | `_store_parser_fingerprint` |
+| 9 | Store parser fingerprint | `_store_parser_fingerprint` |
+
+Step **5g** moved ahead of step 6 in BDL-061.50, and the ordering is now load
+bearing rather than incidental. A node's owned files are read from `file_index`
+(so a module with no top-level symbol is still paired with its doc), and a full
+reindex drops every table first — so populating `file_index` at the END left the
+very first build of a fresh index with an empty table, and those pairs appeared
+only on the SECOND reindex. A checker whose input arrives after it runs reports
+clean because there was nothing there.
+
+`load_graph` (step 3) also STATs each node's declared `source`: a directory
+written without a trailing slash is normalised to carry one, and a `source` that
+names no path on disk becomes a `ReindexResult` warning naming the `ref_id` —
+see the [graph-loader component doc](../../../graph/components/graph-loader/DOC.md).
 
 ### Incremental Reindex Pipeline
 

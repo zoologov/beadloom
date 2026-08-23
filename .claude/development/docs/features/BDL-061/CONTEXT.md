@@ -90,6 +90,9 @@ Held to the same bar the epic builds. Mechanised where possible (S4), prose wher
 | 2026-08-22 | **S2 (fix the lying checks) runs first** | S3's acceptance criterion is deleting the rules those bugs forced into the prose; it cannot be met earlier |
 | 2026-08-22 | **`config-check` verifies the composition result, not file bytes** | Keeps drift detection while making project extension possible (#139, #152) |
 | 2026-08-22 | **Overlays are append-only**; suppressing a core rule needs a named reason, an exit condition, and is itself reported | Silent override is a way to disable the gate without saying so |
+| 2026-08-23 | **Append-only is a property of the BYTES, and the project layer is named rather than judged** (`.57`, correcting the row above, which review `.11` measured false) | The core text cannot be deleted; a fragment may still CONTRADICT it in prose, and whether it does is not decidable — "Pair on migrations" and "Do NOT run `beadloom ci`" are the same to any checker. What is decidable is that a layer is in effect, so `config-check` reports it at `warn`. Suppressions are now checked for existence and expiry, so the promise the row above makes is kept where it can be |
+| 2026-08-23 | **A composed artifact is a function of its inputs and of nothing else — no clock** (`.57`) | It is the entire licence for `config-check` to compare against a composition rather than stored bytes, and `composer.py` asserted it while `describe()` denied it. Measured by review `.11`: one dated suppression took an untouched repository from 0 findings / exit 0 to 9 errors / exit 1 three days later, under a reason naming three causes that had not occurred. Expiry moved to check time, where CONTEXT already said it belonged |
+| 2026-08-23 | **Absence is not evidence: nothing an editor deletes may make a check quieter** (`.57`) | `rm .beadloom/flow-manifest.json` downgraded a hand edit from `error` to `warn` (exit 1 → 0) and `rm .claude/agents/dev.md` switched the flow checks off for every other file, silently. Ownership now rests on two independent signals and every deletion is itself a finding — the same equation as BDL-UX #174, and `unverified` is `sync-check`'s word (`.46`/`.47`) rather than a second vocabulary |
 | 2026-08-22 | **The `.feature` file is the source of truth; the PRD states intent and references it** (option б) | An executable artifact cannot silently lie; a generator between statement and executable becomes a synchronisation problem |
 | 2026-08-22 | **Documentation spaces are TO-BE / AS-IS / WORKING**, not TODO/DONE | Nothing changes status: a PRD stays the record of intent while a *different* artifact (AS-IS) is updated. The checkable claim is a relation between two artifacts |
 | 2026-08-22 | **WORKING (ACTIVE) is exempt from freshness by declaration** | It is neither intent nor reality; checking it against code is meaningless and would pollute every rule written for the other two |
@@ -102,6 +105,10 @@ Held to the same bar the epic builds. Mechanised where possible (S4), prose wher
 | 2026-08-22 | **Q2: the guard registry lives in `application/guards/`** | Guards orchestrate domain reads to answer a process question — that is application-layer work. A separate domain would be premature until something outside the flow needs them |
 | 2026-08-22 | **Q3: `.feature` default location is `tests/acceptance/{features,steps}/`, configurable from the start** | Matches the layout proven in the dogfood project; configurable because the flow ships to projects with their own conventions |
 | 2026-08-22 | **Q5: the mutation tool is the project's choice; Beadloom ships the role duty, the scope convention and the check that a declared target is inside the configured source paths** | Owning a mutation runner is out of scope and would break tool-agnosticism; the failure worth catching is a declared target that runs zero mutants |
+| 2026-08-23 | **A composed artifact's write is fingerprinted** (`.beadloom/flow-manifest.json`), and `config-check` reports four states — clean / stale / hand-edited / unmanaged | The composition-result rule alone cannot tell "the shipped core moved" from "a human edited this file", and the two need opposite treatments. Without the fingerprint the check must either rewrite somebody's only copy of an intent, or stop reporting it |
+| 2026-08-23 | **Severity follows the state**: hand-edited is an `error` whose remedy is to MOVE the edit; `unverified` is a `warn` | Keeps enforcement no weaker than before (the drift-guard's job did not change, only its remedy) while honouring "no adopter's green project turns red on upgrade" — a repo that predates the manifest genuinely cannot be judged. **The other direction, stated because the original rationale did not** (review `.11` MAJOR 5): `unverified = warn` also turns some RED projects green. A repo that hand-edited a role file before this release has no manifest entry for it, so what used to block now warns — exactly the #139/#151 population this slice exists to serve. `.57`'s manifest-presence rule largely closes it: once a project has a manifest at all, a file missing from it is not "pre-manifest", it is unaccounted for |
+| 2026-08-23 | **The `CLAUDE.md` body is checked only when the file is Beadloom's** — a manifest entry or the `<!-- beadloom:composed` stamp | A project's own hand-written `CLAUDE.md` is not ours to police; without this boundary the new check reintroduces the #73 false-positive class on every repo that never scaffolded |
+| 2026-08-23 | **`sync_agentic_flow` no longer snapshots `CLAUDE.md` or the commands** — the shipped core is authored package data and the live file is composed from it | #177 is a loop, not an instance: enforcing *template == our file* in one direction makes the distributed artifact unable to differ from one project's local text, and any correction survives exactly until the next run. Reversing the direction also removes #132 by construction |
 | 2026-08-22 | **#91 closes as verified, with the caveat that this is the first believable result** | Its evidence is stale (the god-package was decomposed in BDL-059) and `lint --strict` is clean — but only since #159 taught the cycle rule to see nested imports |
 
 ## Related Files
@@ -181,9 +188,65 @@ judge whether a long-committed doc still describes its code. `--since <ref>` ans
 an incremental reindex on an existing index keeps the stronger accumulated baseline. Prefer the
 incremental path when one exists; it is now an optimisation, not a correctness requirement.
 
+## What S3 delivered, and what it did not
+
+S3 delivered the request it was written for. `CLAUDE.md` is composed from
+`core → architecture → stack → project`; the core measures **440 → 376 lines** with every
+removed line mapped to its replacement; a non-Python adopter's core carries no Python command
+to run; and the project layer lives in `.beadloom/flow/`, outside every file Beadloom writes,
+so it survives an upgrade. `config-check` verifies the composition result, the flow manifest
+tells Beadloom's own output from a hand edit, and a suppression carries a reason, an exit
+condition and a report.
+
+Three limits are stated in the shipped documentation rather than omitted, because each is a
+property of the design and not a bead waiting to be done:
+
+- **The floor on ownership is visibility, not blocking.** Deleting the manifest *and* stripping
+  the provenance stamp downgrades the `CLAUDE.md` body from `error` to `warn`. Every ownership
+  signal is in band — it lives in the repository the editor is editing — so any of them can be
+  deleted. What is guaranteed is that the deletion is visible and the file is named. Raising
+  the floor needs a signal from outside the repository, and Beadloom has none.
+- **The project layer's prose is not judged.** A fragment may stand a core rule down without
+  the reason, exit condition or notice `overlays.suppress` requires. That is a real hole in
+  "the guard cannot be silently disabled", it is not decidable by any checker, and an adopter
+  meets it in the guide rather than discovering it.
+- **`CLAUDE.md` renders Beadloom's version as the adopter's own** (BDL-UX #183, bead `.58`).
+  It reads TRUE on this repository by coincidence, which is why four slices of scrutiny passed
+  over it.
+
+Three further defects were **measured by the tech-writer bead `.12`**, all in the command layer
+rather than in the composition, all filed and routed to `.58`:
+
+| # | Measured | Route |
+|---|----------|-------|
+| BDL-UX #186 | `config-check --fix` rewrites a hand edit in a role adapter byte-identically to the scaffold (sha256), one line after the check printed *"It will NOT be rewritten"* | `.58` |
+| BDL-UX #187 | A virgin `setup-agentic-flow` without a `flow.yml` leaves `config-check` at exit 1 with four errors; writing a `flow.yml` gives rc 0 | `.58` |
+| BDL-UX #188 | `ScaffoldResult.orphans` and `.migration_notes` are computed on every scaffold and have **no caller** — #137's orphan report and S3's migration guidance reach a library caller, not the terminal | `.58` |
+
+### Review `.11`'s minors, routed
+
+Recorded so none is silently dropped. The two that were documentation are fixed in `.12`.
+
+| Minor | Kind | Disposition |
+|-------|------|-------------|
+| m1 — `gate._config_finding`'s docstring names `hand_edited` where it means `unmanaged` | code (a docstring in `src/`) | `.58` |
+| m2 — PLAN's "not a single Python command" is falsified by grep | **documentation** | **fixed in `.12`**: PLAN now carries the re-derived claim and the two surviving references, one of which is the pointer that replaced the command. The residue in the role-description table is a template edit and is `.58`'s |
+| m3 — `repository.py` performs string surgery on a SQL fragment | code | `.58` |
+| m4 — a `source` naming a nonexistent path reports `no_indexed_code` | code | `.58` |
+| m5 — the emitted guard adapter has no `PATH` fallback | code | `.58` |
+| m6 — an unreadable managed artifact is indistinguishable from a clean one | code | `.58` |
+| m7 — the tracked-write guard attributes a failing test's write to the next test | code (tests) | `.58` |
+| m8 — `onboarding` is now the largest bounded context (14 `part_of` children, 31 modules) | judgement, not a defect | Carried to S4 as the signal `domain-size-limit` cannot give, per BDL-UX #158. Not acted on here |
+| n1 — three blank lines in `attribution.py` | code | `.58` |
+| n2 — an over-long line in the flow-guards SPEC | **documentation** | **fixed in `.12`** |
+
+Review `.11`'s **red-turns-green-on-upgrade** finding (MAJOR 5) is documentation and is closed:
+`unverified = warn` also takes some previously-red projects green, and both the config-check
+SPEC and the decision table below now say so in both directions.
+
 ## Current Phase
 
-- **Phase:** Development — S1 and S2 complete, S2b closing, S3 next (`.9`)
-- **Current bead:** `.55`, the S2b documentation pass; live status is in ACTIVE.md and the tracker
+- **Phase:** Development — S1, S2, S2b and S3 complete; S4 next
+- **Current bead:** `.12` closes S3; `.13` opens S4. Live status is in ACTIVE.md and the tracker
 - **Blockers:** none. `.42` (the locale legs' first run) is open, which is why the two
   `tests-locale` contexts are not yet part of `main`'s live protection — see ACTIVE.md

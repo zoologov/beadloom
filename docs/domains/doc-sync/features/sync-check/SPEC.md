@@ -37,6 +37,23 @@ whose annotation is not a comment tree-sitter reads — or which declares only
 `source:` — with no pairs at all, kind-independent, and a freshness gate with no
 pairs reported "clean" for files it never opened (BDL-UX #146).
 
+The owned-file fallback reads **`file_index`**, not `code_symbols`
+(BDL-061.50). Keyed on symbols, the #146 fallback carried the very blindness it
+was written to close: a module holding no top-level `def`/`class` — a pure
+re-export facade — has no symbol row, so it was unreachable through BOTH the
+annotation path and the fallback. On this repository that module was
+`application/graph_reads.py`, 75 lines and fully indexed, and `sync-check`
+reported its node as unchecked with the reason `no_indexed_code`, sending the
+reader to look for code the index already held (review `.7` MAJOR 3). A file
+with no symbol is still a file whose content can change under a doc.
+
+Because a node's owned files are now read from `file_index`, a full `reindex` —
+which drops every table first — populates `file_index` **before** it builds
+`sync_state`, not at the end of the run. Populated after, the very first build
+of a fresh index saw an empty table and produced those pairs only on the SECOND
+reindex: a checker whose input arrives after it runs reports clean because there
+was nothing there.
+
 `build_sync_state` records the baseline doc and symbol hashes for each pair;
 `check_sync` re-reads files from disk to detect changes since the last sync,
 independently of reindex, and also runs source-coverage and doc-coverage checks
@@ -114,6 +131,13 @@ warning** when it differs. `mark_reference_synced` re-baselines a reference doc
 (via `sync-update <doc>`), clearing the drift. The signatures themselves live in
 `surface.py` (coarse identity sets, not file content).
 
+> **`--check` does not hold on this path (BDL-UX #189).** In
+> `services/commands/docsync.py` the reference-doc branch is reached *before* the
+> `check_only` guard, so `beadloom sync-update <doc-path> --check` re-baselines
+> the doc and prints `Re-baselined reference doc <path>`. Measured: the drift
+> count fell from 7 to 6 on a run whose flag asked for a report. `--check` is
+> honoured only for symbol pairs (`sync-update <ref-id> --check`).
+
 ## Invariants
 
 - Baselining is explicit (`mark_synced` / `sync-update`); the engine never
@@ -172,8 +196,15 @@ Module `src/beadloom/doc_sync/engine.py`:
 - `check_sync_since(conn, project_root, ref) -> list[dict]` — diff-based check
   against a git ref.
 - `find_unchecked_doc_nodes(conn) -> list[dict]` — nodes that declare a doc but
-  contribute no pair, each with the reason (`no_indexed_code`,
-  `files_owned_by_nested_nodes`, `no_source`). Advisory.
+  contribute no pair, each with the reason. Advisory. Three reasons, all asked
+  of `file_index` since BDL-061.50 so that each is TRUE of the index rather than
+  of the symbol table:
+  - `no_source` — the node declares no `source` at all.
+  - `files_owned_by_nested_nodes` — files are indexed under it, but every one
+    belongs to a more specific node. Nothing to do.
+  - `no_indexed_code` — the index holds no code file under the declared source.
+    Index the code (or check the path: a `source` naming no path on disk is
+    reported by `reindex` as a warning).
 - `STATUS_OK` / `STATUS_STALE` / `STATUS_MISSING` / `STATUS_UNVERIFIED`,
   `BLOCKING_STATUSES`, `BASELINE_INDEX` / `BASELINE_GIT` / `BASELINE_NONE`,
   `BASELINE_SOURCE_INDEX_BUILD` / `_CARRIED` / `_ATTESTED` — the verdict and

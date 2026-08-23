@@ -26,6 +26,7 @@ from beadloom.onboarding.scanner.claude_md import (
     _auto_insert_markers,
     _parse_markers,
     _render_project_info_section,
+    blank_auto_regions,
     refresh_claude_md,
 )
 from beadloom.onboarding.scanner.constants import (
@@ -111,6 +112,7 @@ __all__ = [
     "_render_project_info_section",
     "_sanitize_ref_id",
     "auto_link_docs",
+    "blank_auto_regions",
     "bootstrap_project",
     "build_agents_md_content",
     "classify_doc",

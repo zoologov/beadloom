@@ -208,11 +208,14 @@ class TestComposeRoleErrors:
     ) -> None:
         """A role whose CORE fragment is absent raises loudly (no silent empty
         file). Exercised by pointing the templates root at an empty dir."""
-        empty = tmp_path / "roles"
-        empty.mkdir()
-        import beadloom.onboarding.role_composer as rc
+        empty = tmp_path / "templates"
+        (empty / "roles" / "core").mkdir(parents=True)
+        import beadloom.onboarding.composer as composer
 
-        monkeypatch.setattr(rc, "roles_templates_root", lambda: empty)
+        # Patch the seam the composition actually reads (BDL-061 S3 moved the
+        # layering into `composer`); patching the old accessor would leave the
+        # test green while proving nothing.
+        monkeypatch.setattr(composer, "templates_dir", lambda: empty)
         with pytest.raises(FlowConfigError, match="missing CORE"):
             compose_role("dev", architecture="ddd", stack=["python"])
 
@@ -435,15 +438,23 @@ class TestDriftGuardConfigCheck:
         assert result.exit_code == 1
         assert ".claude/agents/dev.md" in result.output
 
-    def test_cursor_adapter_handedit_fails_and_fix_restores(
+    def test_cursor_adapter_handedit_fails_and_fix_declines_to_delete_it(
         self, tmp_path: Path
     ) -> None:
+        """CONTRACT CHANGE, BDL-061 `.59` / BDL-UX #186 — updated, not deleted.
+
+        This test asserted that ``--fix`` restored the hand-edited adapter
+        byte-for-byte and went green. That is the defect, codified: BDL-061 S3
+        made the check print "It will NOT be rewritten" about this exact file,
+        so the old contract turned a printed promise into a false one in front
+        of a destructive operation. What must hold now is the opposite — the
+        edit survives, the run says it declined, and the finding keeps standing.
+        """
         project = _scaffolded_project(
             tmp_path,
             "tools: [claude, cursor]\narchitecture: [fsd]\nstack: [vuejs]\n",
         )
         cursor_dev = project / ".cursor" / "agents" / "dev.md"
-        original = cursor_dev.read_text(encoding="utf-8")
         cursor_dev.write_text("HAND EDITED\n", encoding="utf-8")
         bad = CliRunner().invoke(
             main, ["config-check", "--project", str(project)]
@@ -453,8 +464,10 @@ class TestDriftGuardConfigCheck:
         fixed = CliRunner().invoke(
             main, ["config-check", "--fix", "--project", str(project)]
         )
-        assert fixed.exit_code == 0
-        assert cursor_dev.read_text(encoding="utf-8") == original
+        assert fixed.exit_code == 1
+        assert cursor_dev.read_text(encoding="utf-8") == "HAND EDITED\n"
+        assert "Declined to rewrite" in fixed.output
+        assert ".cursor/agents/dev.md" in fixed.output
 
     def test_clean_after_fix_is_green(self, tmp_path: Path) -> None:
         project = _scaffolded_project(

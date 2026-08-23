@@ -35,9 +35,13 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 # The annotation deliberately sits INSIDE the module docstring — the shape the
-# dogfood project hit in #146. tree-sitter sees a string node, not a comment,
-# so the symbol rows carry no annotation and every annotation-keyed reader
-# (sync pairs, deny rules) silently sees nothing.
+# dogfood project hit in #146. It was invisible to the extractor (tree-sitter
+# sees a string node, not a comment), so the symbol rows carried no annotation
+# and every annotation-keyed reader silently saw nothing. SINCE BDL-061.50 the
+# extractor READS this form, so these fixtures are genuinely annotated and #146's
+# source-owned fallback is exercised instead by `gamma` below (a node that
+# declares docs and owns no file at all) and by the unannotated modules in
+# tests/test_s3_owns_nothing.py.
 _ALPHA_CLEAN = (
     '"""Alpha service.\n\n# beadloom:component=alpha\n"""\n\n\n'
     "def run() -> int:\n    return 1\n"

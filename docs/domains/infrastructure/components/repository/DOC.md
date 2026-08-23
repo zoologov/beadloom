@@ -58,11 +58,24 @@ full of code (BDL-UX #157).
 - `count_symbols_owned_by_node(conn, ref_id)` -> `int` — what `max_symbols` measures
 - `count_files_owned_by_node(conn, ref_id)` -> `int` — what `max_files` measures
 - `get_owned_symbols(conn, ref_id)` -> `list[SymbolRow]` — what a node page lists
+- `get_owned_code_files(conn, ref_id)` -> `list[tuple[str, str]]` — `(path, hash)`
+  for the indexed CODE files a node owns; what pairs a doc with code when no
+  symbol carries the node's annotation
+- `covering_prefix(source)` / `source_covers(source, file_path)` — the ownership
+  rule itself, public since BDL-061.50 because the linter's file attribution now
+  applies the same rule and the two must not each keep a copy
+
+`get_owned_code_files` reads **`file_index`**, not `code_symbols` (BDL-061.50):
+keyed on symbols it could not see a module holding no top-level `def`/`class` —
+a pure re-export facade — so such a module was reachable through neither the
+annotation path nor this fallback, and `sync-check` reported its node as having
+"no indexed code" while the index held the file. A file with no symbol is still
+a file whose content can change under a doc.
 
 Consumers: the `max_symbols` / `max_files` cardinality rules, the architecture
-view's symbol badge, node-page symbol listings, and `import_resolver`'s
-file-to-node attribution — so no two surfaces can report different numbers for
-the same node.
+view's symbol badge, node-page symbol listings, `import_resolver`'s
+file-to-node attribution and the rule engine's `FileAttribution` — so no two
+surfaces can report different numbers, or different owners, for the same node.
 
 Search fallback: `search_nodes_like` (the non-FTS5 LIKE path).
 

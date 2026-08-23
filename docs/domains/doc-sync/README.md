@@ -8,7 +8,7 @@ Mechanism for tracking synchronization between documentation and code.
 
 Doc Sync Engine compares document and code hashes to detect desynchronization through a multi-phase pipeline:
 
-1. **build_sync_state** -- finds doc-code pairs that share the same ref_id
+1. **build_sync_state** -- finds doc-code pairs that share the same ref_id. A node's code files come from symbol annotations first and, when those yield none, from the files its declared `source` OWNS -- read from `file_index`, so a module with no top-level `def`/`class` (a pure re-export facade) is paired rather than reported as absent code (BDL-061.50)
 2. **check_sync** -- compares current file hashes and symbol signatures against stored baselines, then runs source coverage and doc coverage checks
 
 The sync check pipeline operates in four phases:

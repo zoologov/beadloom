@@ -121,13 +121,72 @@ apply it to roles, commands and `CLAUDE.md`. Project layer in `.beadloom/flow/`.
 Cross-major re-init reports orphans (#137). Relocate role-owned rules out of the core
 `CLAUDE.md` into role templates.
 
+**Correction, measured in `.9` (2026-08-23).** The last criterion was written as
+"the core `CLAUDE.md` shrinks" on the assumption that what leaves it are the three standing
+rules S2 retired. `.7` established that those rules were never in the shipped `CLAUDE.md` at
+all, so that assumption was already false when it was written. Re-derived from the file itself,
+what genuinely does not belong in a **stack-neutral** core is different and larger:
+
+| Removed from the core | Lines | Replacement |
+|---|---|---|
+| §8 Quick Reference + §9 Agent Checklist | 61 | §0 CRITICAL RULES, which both restated command-for-command |
+| §7 "Code" + "Shell" anti-patterns | 11 | `templates/claude/stack/python/CLAUDE.md.txt` (already duplicated in `roles/stack/python/dev.md.txt`) |
+| §0 `uv run pytest` / `ruff check` / `mypy` | 5 | the same stack overlay — a TypeScript adopter was being told to run `uv run pytest` in their CRITICAL RULES |
+| §3 "MUST be written in English" | 1 | the `doc-language` auto-region, rendered from `language:` in `flow.yml` (#136) |
+| *(added)* provenance stamp + pointers | +14 | — |
+
+**Measured, not described.** Shipped CORE: **440 → 376 lines** (−78/+14, −14.5%). Composed for
+a `ddd`+`python` project: **406** (the 30-line stack overlay returns). Beadloom's own live file
+is 432 = 376 core + 30 stack + 26 project layer.
+
+**Corrected by review `.11` (m2), because the claim a grep contradicts is the one this epic
+exists to remove.** The line above originally read "A non-Python project's `CLAUDE.md` no longer
+contains a single Python command." Re-derived on the composition for `stack=(typescript,)`, two
+Python references survive in the 376-line core, both outside the critical rules:
+
+| line (of the 376) | text | what it is |
+|---|---|---|
+| 92 | ``#       the core is stack-neutral and `uv run pytest` is not every project's suite.`` | a comment explaining why the command is *not* there — the pointer that replaced it |
+| 133 | ``**Role subagents …:** `dev` (TDD implementation), `test` (pytest, coverage), …`` | a genuine residue in the role-description table |
+
+So the honest claim is: **a non-Python project's `CLAUDE.md` carries no Python command to run.**
+The `uv run pytest` / `ruff` / `mypy` block and the Python anti-patterns are gone from the core
+and live in the stack overlay, and a TypeScript adopter is no longer told to run them. Line 133
+is a one-word template edit that belongs to `.58`; it is recorded rather than quietly dropped.
+
+**A second, unplanned finding this criterion depended on.** #177 left open whether
+`config-check` was right to print `PASS: agent-config in sync` over two files that demonstrably
+differed. It was not "correct by design under the composition-result rule" — the `CLAUDE.md`
+body was verified by **nothing**. Measured on a scaffolded project before the fix: appending a
+paragraph → 0 drifts; deleting all of §7 → 0 drifts; replacing the whole file with `# gone` →
+0 drifts. The propagation loop itself was a **test** (`TestSyncAgenticFlow`) that rewrote the
+shipped template from the live file, sha256 `f360bc60…` → `6fcae821…`, passing while it did so.
+
 **Done when:**
-- [ ] A project overlay survives an upgrade
-- [ ] Drift in the shipped core is still detected while an overlay exists
-- [ ] Suppressing a core rule requires reason + exit condition and is reported
-- [ ] A hand-edited vendored file is reported with migration guidance and never rewritten
-- [ ] #139, #152, #132, #136, #137 close
-- [ ] The core `CLAUDE.md` shrinks, with each removed line mapped to its replacement
+- [x] A project overlay survives an upgrade
+- [x] Drift in the shipped core is still detected while an overlay exists
+- [x] Suppressing a core rule requires reason + exit condition and is reported — and expiry and
+      dead declarations are reported too, at check time rather than in the composed bytes (`.57`)
+- [~] A hand-edited vendored file is reported with migration guidance and never rewritten — true
+      of the slash commands and `CLAUDE.md`, and of the *report* everywhere. Two measured gaps,
+      both filed and both `.58`'s: `config-check --fix` still rewrites a hand edit in a role
+      adapter, byte-identically to the scaffold, one line after the check said it would not
+      (BDL-UX #186); and `ScaffoldResult.migration_notes` has **no caller**, so the guidance
+      naming `.beadloom/flow/<kind>/<name>.md` reaches a library caller and not the person
+      running `setup-agentic-flow` (BDL-UX #188)
+- [~] #139, #152, #132, #136, #137 close — #139/#152 (a project extension is legal), #132
+      (nothing writes the core, so `--force` cannot overwrite its placeholder) and #136
+      (`language:` + the `doc-language` region) close. **#137 does not:** `orphaned_flow_files()`
+      computes the list and the exact `rm -f` command, and no caller prints it (BDL-UX #188)
+- [x] The core `CLAUDE.md` shrinks, with each removed line mapped to its replacement — see the
+      correction above; the criterion was re-derived rather than satisfied as written
+
+**The composition delivers the request; the CLI does not yet deliver all of it.** Three findings
+measured by the tech-writer bead `.12` while writing the adopter guide, all in the command layer
+rather than in the composition, all filed and routed to `.58`: BDL-UX #186 (destructive `--fix`
+on a role adapter), #187 (a virgin scaffold without a `flow.yml` leaves `config-check` at exit 1
+with four errors), #188 (orphans and migration notes computed and never printed). None of them
+touches the four layers, the manifest or the suppression mechanism, which is why S3 ships.
 
 ### S4 — Executable behaviour and document shape (`.13`–`.16`)
 

@@ -89,13 +89,14 @@ tools:        [claude, cursor]   # generate adapters for one or both
 architecture: [ddd]              # ddd | fsd (exactly one)
 stack:        [python]           # python, fastapi, javascript, typescript, vuejs
 quality:      [clean-code, tdd]
+language:     en                 # the language the flow's documents are written in
 ```
 
 Then:
 
 ```bash
-# Compose roles from CORE + architecture overlay + stack overlays,
-# and write the per-tool adapter set(s):
+# Compose the roles, the slash commands and CLAUDE.md from
+# CORE + architecture overlay + stack overlays + your project layer:
 beadloom setup-agentic-flow
 
 # Override the flow.yml selection from flags:
@@ -103,8 +104,15 @@ beadloom setup-agentic-flow --tool cursor --architecture fsd --stack typescript,
 ```
 
 This writes `.claude/agents/*` (Claude Code) and/or `.cursor/agents/*` (Cursor)
-at parity. `config-check` byte-guards every generated adapter against its
-composition, so the workflow never silently drifts from the graph.
+at parity, plus `.claude/commands/*` and `.claude/CLAUDE.md`. `config-check`
+compares each of them against its composition, so the workflow never silently
+drifts.
+
+Your project's own rules go in `.beadloom/flow/{roles,commands,claude}/` rather
+than into the composed files: that fourth layer composes last, is never
+overwritten, and survives every upgrade. See the
+[Project Overlays guide](guides/project-overlays.md) for adding a fragment,
+declaring a suppression, and migrating an edit you already made by hand.
 
 ### Git hooks — pre-commit + the pre-push Gate
 

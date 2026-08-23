@@ -284,7 +284,7 @@ def lint(
     2 = configuration error or missing index.
     """
     from beadloom.application.reindex import incremental_reindex
-    from beadloom.graph.linter import LintError, _suppressed_note
+    from beadloom.graph.linter import LintError, _suppressed_note, _unattributed_note
     from beadloom.graph.linter import format_github as _format_github
     from beadloom.graph.linter import format_json as _format_json
     from beadloom.graph.linter import format_porcelain as _format_porcelain
@@ -323,7 +323,7 @@ def lint(
         # (BDL-061.49).
         click.echo(
             f"0 violations, {result.rules_evaluated} rules evaluated"
-            f"{_suppressed_note(result)}"
+            f"{_suppressed_note(result)}{_unattributed_note(result)}"
         )
 
     if fail_on_warn and result.violations:

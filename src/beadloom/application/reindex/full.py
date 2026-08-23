@@ -179,6 +179,16 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
     # 3f. Extract API routes and store in nodes.extra.
     _extract_and_store_routes(project_root, conn)
 
+    # 3g. Populate file_index. This runs BEFORE anything derives ownership from
+    # it: since BDL-061.50 a node's owned files are read from file_index (so a
+    # module with no top-level symbol is still paired with its doc), and a full
+    # reindex drops every table first — populating it at the end left the very
+    # first build with an empty index, i.e. pairs that appeared only on the
+    # SECOND reindex. A checker whose input arrives after it runs reports clean
+    # because there was nothing there.
+    current_files = _scan_project_files(project_root, docs_dir)
+    _populate_file_index(conn, current_files)
+
     # 4. Build initial sync state.
     _build_initial_sync_state(
         conn,
@@ -210,11 +220,7 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
     # 7. Take health snapshot for trend tracking.
     take_snapshot(conn)
 
-    # 8. Populate file_index for subsequent incremental runs.
-    current_files = _scan_project_files(project_root, docs_dir)
-    _populate_file_index(conn, current_files)
-
-    # 9. Store parser fingerprint for incremental reindex to detect new parsers.
+    # 8. Store parser fingerprint for incremental reindex to detect new parsers.
     _store_parser_fingerprint(conn, _compute_parser_fingerprint())
 
     conn.close()

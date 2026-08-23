@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import stat
+from pathlib import Path
 
 from beadloom.onboarding.guard_hooks import (
     GUARD_HOOK_RELPATH,
@@ -12,6 +13,9 @@ from beadloom.onboarding.guard_hooks import (
 )
 
 GUARDS = ("bead-claimed", "working-branch")
+
+#: This repository, used where the claim under test is about the dogfood itself.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _script_logic_lines(text: str) -> list[str]:
@@ -40,9 +44,7 @@ class TestSettingsWiring:
         result = scaffold_guard_hooks(tmp_path, guard_names=GUARDS)
         settings = json.loads((tmp_path / SETTINGS_RELPATH).read_text(encoding="utf-8"))
         commands = [
-            hook["command"]
-            for entry in settings["hooks"]["PreToolUse"]
-            for hook in entry["hooks"]
+            hook["command"] for entry in settings["hooks"]["PreToolUse"] for hook in entry["hooks"]
         ]
         for name in GUARDS:
             assert any(command.endswith(f"beadloom-guard.sh {name}") for command in commands)
@@ -86,9 +88,7 @@ class TestSettingsWiring:
         scaffold_guard_hooks(tmp_path, guard_names=GUARDS)
         settings = json.loads(path.read_text(encoding="utf-8"))
         commands = [
-            hook["command"]
-            for entry in settings["hooks"]["PreToolUse"]
-            for hook in entry["hooks"]
+            hook["command"] for entry in settings["hooks"]["PreToolUse"] for hook in entry["hooks"]
         ]
         assert "echo hi" in commands
 
@@ -109,16 +109,14 @@ def test_setup_agentic_flow_emits_the_hooks_for_every_shipped_guard(tmp_path) ->
     assert (tmp_path / GUARD_HOOK_RELPATH).is_file()
     settings = json.loads((tmp_path / SETTINGS_RELPATH).read_text(encoding="utf-8"))
     commands = [
-        hook["command"]
-        for entry in settings["hooks"]["PreToolUse"]
-        for hook in entry["hooks"]
+        hook["command"] for entry in settings["hooks"]["PreToolUse"] for hook in entry["hooks"]
     ]
     for name in GUARD_NAMES:
         assert any(command.endswith(f"beadloom-guard.sh {name}") for command in commands)
 
 
 class TestSettingsOfTheWrongShapeAreNeverRewritten:
-    """"Report and leave alone" must hold for readable-but-unexpected JSON too.
+    """ "Report and leave alone" must hold for readable-but-unexpected JSON too.
 
     A scaffolder that eats an adopter's configuration is not worth the hook it
     installs, and readable-but-wrong is the shape a hand-edited file actually
@@ -166,9 +164,7 @@ class TestSettingsOfTheWrongShapeAreNeverRewritten:
         assert result.settings_skipped_reason
         assert (tmp_path / SETTINGS_RELPATH).read_text(encoding="utf-8") == original
 
-    def test_malformed_entries_beside_a_valid_one_do_not_stop_registration(
-        self, tmp_path
-    ) -> None:
+    def test_malformed_entries_beside_a_valid_one_do_not_stop_registration(self, tmp_path) -> None:
         """A foreign entry Beadloom cannot read is skipped, not treated as ours."""
         self._write(
             tmp_path,
@@ -192,24 +188,22 @@ class TestSettingsOfTheWrongShapeAreNeverRewritten:
 class TestTheMatcherIsTheOnlyRouterAndItLivesInTheHarness:
     """Independent re-verification (BDL-061.26) of the SPEC's event-routing claim.
 
-    SPEC.md, after ``on:`` was deleted: "Which tool invocations count as an edit
-    is decided entirely by the harness adapter — in Claude Code, the
-    ``Edit|Write|NotebookEdit`` matcher in ``.claude/settings.json``".
+        SPEC.md, after ``on:`` was deleted: "Which tool invocations count as an edit
+        is decided entirely by the harness adapter — in Claude Code, the
+        ``Edit|Write|NotebookEdit`` matcher in ``.claude/settings.json``".
 
-    The first half is TRUE and asserted below: the routing decision exists only
-    as a matcher string the scaffolder writes into the harness's settings, and no
-    Beadloom code reads it back.
+        The first half is TRUE and asserted below: the routing decision exists only
+        as a matcher string the scaffolder writes into the harness's settings, and no
+        Beadloom code reads it back.
 
-The second half used to quote the wrong string — the three-tool spelling from
-    *this* repo's hand-written ``.claude/settings.json`` (review .3, m5, still
-    open) rather than the four the scaffolder writes. The SPEC now quotes the
-    constant, and the test below asserts the two agree rather than asserting a
-    literal, so they cannot drift apart again in silence.
+    The second half used to quote the wrong string — the three-tool spelling from
+        *this* repo's hand-written ``.claude/settings.json`` (review .3, m5, still
+        open) rather than the four the scaffolder writes. The SPEC now quotes the
+        constant, and the test below asserts the two agree rather than asserting a
+        literal, so they cannot drift apart again in silence.
     """
 
-    def test_the_routing_decision_exists_only_in_the_harness_settings(
-        self, tmp_path
-    ) -> None:
+    def test_the_routing_decision_exists_only_in_the_harness_settings(self, tmp_path) -> None:
         scaffold_guard_hooks(tmp_path, guard_names=GUARDS)
         settings = json.loads((tmp_path / SETTINGS_RELPATH).read_text(encoding="utf-8"))
 
@@ -243,3 +237,61 @@ The second half used to quote the wrong string — the three-tool spelling from
         ).read_text(encoding="utf-8")
 
         assert f"`{EDIT_MATCHER}` matcher" in spec
+
+
+class TestThisRepositoryRunsWhatItShips:
+    """n1 (BDL-061.35): the dogfood must exercise the artifact adopters get.
+
+    Until this bead, `.claude/settings.json` here registered the DIRECT CLI command
+    while `scaffold_guard_hooks` emitted `.claude/hooks/beadloom-guard.sh` — so the
+    shipped adapter had never run in this repository, and five review cycles read
+    "dogfooded" as evidence about a path no adopter uses. That is the stated reason
+    BDL-UX #170's narrower binding went unnoticed. These tests pin the repair to the
+    scaffolder's own output rather than to literals, so the two cannot drift again.
+    """
+
+    @staticmethod
+    def _live_commands() -> list[str]:
+        settings = json.loads((_REPO_ROOT / SETTINGS_RELPATH).read_text(encoding="utf-8"))
+        return [
+            hook["command"] for entry in settings["hooks"]["PreToolUse"] for hook in entry["hooks"]
+        ]
+
+    def test_every_shipped_guard_is_bound_through_the_emitted_adapter(self) -> None:
+        from beadloom.application.guards.checks import GUARD_NAMES
+        from beadloom.onboarding.guard_hooks import hook_command
+
+        commands = self._live_commands()
+        for name in GUARD_NAMES:
+            assert hook_command(name) in commands, name
+
+    def test_no_guard_is_bound_by_the_direct_command_instead(self) -> None:
+        assert [c for c in self._live_commands() if c.startswith("beadloom guard")] == []
+
+    def test_the_committed_adapter_is_byte_identical_to_the_emitted_one(self, tmp_path) -> None:
+        from beadloom.application.guards.checks import GUARD_NAMES
+
+        scaffold_guard_hooks(tmp_path, guard_names=GUARD_NAMES)
+        assert (_REPO_ROOT / GUARD_HOOK_RELPATH).read_bytes() == (
+            tmp_path / GUARD_HOOK_RELPATH
+        ).read_bytes()
+
+    def test_the_committed_adapter_is_executable(self) -> None:
+        """A non-executable adapter fires nothing, and the failure is silent."""
+        assert (_REPO_ROOT / GUARD_HOOK_RELPATH).stat().st_mode & stat.S_IXUSR
+
+    def test_the_live_matcher_is_the_one_the_scaffolder_emits(self) -> None:
+        from beadloom.onboarding.guard_hooks import EDIT_MATCHER, hook_command
+
+        settings = json.loads((_REPO_ROOT / SETTINGS_RELPATH).read_text(encoding="utf-8"))
+        ours = [
+            entry
+            for entry in settings["hooks"]["PreToolUse"]
+            if any(
+                hook["command"].endswith(".sh bead-claimed")
+                or hook["command"] == hook_command("working-branch")
+                for hook in entry["hooks"]
+            )
+        ]
+        assert ours
+        assert {entry["matcher"] for entry in ours} == {EDIT_MATCHER}

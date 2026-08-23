@@ -25,7 +25,12 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    pairs, and reports `unverified` ones as `WARN` rather than fresh.
 4. **docs-audit** — numeric/version fact freshness; fails on `stale>0`, and
    states how much of the declared fact surface it covered.
-5. **config-check** — agent-config drift (AgentConfigAsCode).
+5. **config-check** — agent-config drift (AgentConfigAsCode). Since BDL-061 S3
+   a drift carries its own severity: `error` blocks the step, `warn` is
+   reported and does not. The summary has three forms accordingly —
+   `N drifted artifact(s)`, `no blocking drift; N artifact(s) reported (warn)`,
+   and `agent-config in sync` — because printing "in sync" over a reported
+   finding is the false-green shape this epic exists to remove.
 6. **doctor** — graph integrity.
 7. **federate** — `federate --fail-on` when hub exports are supplied.
 

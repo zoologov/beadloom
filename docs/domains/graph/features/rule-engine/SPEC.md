@@ -8,6 +8,7 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 
 - `rules/types.py` — constants, rule dataclasses, `NodeMatcher`, `Violation` (the model), plus the vocabulary the model is matched in: `import_path_as_path` / `matches_import_target` / `MATCHING_FORM_HINT`, and `exit_condition_deadline` (the `until:` grammar).
 - `rules/loader.py` — `load_rules` / `load_rules_with_tags` / `validate_rules` (YAML → typed rules + DB validation).
+- `rules/attribution.py` — which node a source FILE belongs to, and how many files belong to none.
 - `rules/evaluators.py` — per-rule-type evaluation (deny / require / import-boundary / forbid-edge / layer / cardinality / unregistered-feature / module-coverage) + shared node/edge lookup helpers.
 - `rules/liveness.py` — rule liveness: whether a rule *can* fire at all, for every rule type (BDL-061.48). It answers about the CONFIGURATION, never about the code.
 - `rules/exemptions.py` — what a `forbid_import` exemption is doing: which crossings it covers, how many it swallows, and whether its exit condition has passed (BDL-061.49).
@@ -376,15 +377,61 @@ def evaluate_deny_rules(conn: sqlite3.Connection, rules: list[DenyRule]) -> list
 ```
 
 Algorithm:
-1. Query all rows from `code_imports` where `resolved_ref_id IS NOT NULL`.
+1. Query all rows from `code_imports` where `resolved_ref_id IS NOT NULL`, and build the run's `FileAttribution` snapshot (see **Source attribution** below).
 2. For each import row `(file_path, line_number, import_path, resolved_ref_id)`:
-   a. Determine the source node by calling `_get_file_node(file_path, conn)`, which inspects `code_symbols.annotations` JSON for keys (`domain`, `service`, `feature`) whose values match a `nodes.ref_id`.
-   b. Skip if no source node is found.
-   c. Skip self-references (source == target).
-   d. Look up full `(ref_id, kind)` for both source and target via `_get_node`.
-   e. For each deny rule, check whether `from_matcher` matches the source and `to_matcher` matches the target.
-   f. If both match, check for exemption: if `unless_edge` is non-empty, query `edges` table for any edge of those kinds between source and target. If found, skip.
-   g. Otherwise, emit a `Violation`.
+   a. Ask `FileAttribution.candidates(file_path)` for every node that CONTAINS the file, most specific first.
+   b. Skip if the list is empty — and note that these files are counted, not merely skipped: see `LintResult.files_unattributed`.
+   c. Look up `(ref_id, kind)` for the target via `_get_node`.
+   d. For each deny rule, take the most specific candidate whose `from_matcher` matches (skipping a candidate equal to the target — a self-reference). The FIRST match decides: a file attributed to both a component and the domain above it produces one verdict, not two, and the finer node is the one that describes the crossing.
+   e. If a candidate matched and `to_matcher` matches the target, check for exemption: if `unless_edge` is non-empty, query `edges` for any edge of those kinds between the matched source and the target. If found, skip.
+   f. Otherwise, emit a `Violation` naming the matched candidate as `from_ref_id`.
+
+##### Source attribution (`rules/attribution.py`, BDL-061.50)
+
+A deny rule used to resolve the SOURCE node of an import from
+`code_symbols.annotations` alone, taking the first value that named a node. Two
+silent defects followed:
+
+- a file whose annotation the extractor could not read — or that carries none —
+  was invisible to **every** deny rule, while its `depends_on` edge existed,
+  because `import_resolver` derives that edge from OWNERSHIP. Measured on this
+  repository before the fix: **22 of 128** import-source files (17%), among them
+  `services/cli.py` and two TUI widgets. This is BDL-UX #146's disease in the
+  linter.
+- "the first annotation that names a node" is dictionary order, so a rule
+  written against a specific node quietly stopped matching when a coarser one
+  happened to be listed first.
+
+`FileAttribution.candidates(file_path)` answers with every node that **contains**
+the file, ranked most specific first:
+
+| Candidate | Rank |
+|-----------|------|
+| a node the file annotates that declares **no `source`** of its own (what a feature node IS) | most specific — an annotation is a per-file declaration |
+| a node whose `source` covers the file (annotated or not) | by covering-prefix length, longest first |
+
+Containment, **not mere mention**: an annotation naming a node whose own `source`
+lies elsewhere is a cross-reference and is not a candidate. Measured: this
+repository's `services/commands/setup.py` annotates individual commands
+`domain=onboarding`; counting that label as containment reported the CLI's own
+`mcp-server` import as an error-severity domain-to-service breach, on a file
+whose derived `depends_on` edge says `service`.
+
+Known limit, stated rather than discovered later: attribution is per FILE, not
+per symbol. A module whose symbols carry different annotations contributes all
+of them as candidates, and an import is attributed to the module rather than to
+the symbol whose lines enclose it.
+
+What remains unattributable — a file under no node's `source` that annotates no
+source-less node — is **counted and reported**, never silently skipped:
+`LintResult.files_unattributed`, carried in `--json` under
+`summary.files_unattributed`, printed on the `rich` header
+(`Files: N scanned, M imports resolved, K attributable to no node`) and appended
+to the CLI's no-violations summary line. A deny rule that never saw a file did
+not clear it. The clause is absent when the count is zero, so the common line
+keeps its shape. Limit: the `porcelain` format is a strict
+one-line-per-violation contract, so when violations ARE printed in that format
+the count appears only in `--json`.
 
 #### Require Rule Evaluation
 
@@ -420,7 +467,7 @@ Owned by `rules/__init__.py`. Partitions rules by type into `DenyRule`, `Require
 | `_parse_forbid_edge_rule`     | Parse a forbid block into a `ForbidEdgeRule` with from/to matchers and optional edge_kind. |
 | `_parse_layer_rule`   | Parse a layers block into a `LayerRule` with ordered `LayerDef` entries.                       |
 | `_parse_cardinality_rule`     | Parse a check block into a `CardinalityRule` with threshold fields.                      |
-| `_get_file_node`      | Look up the owning node for a file via `code_symbols.annotations` JSON.                        |
+| `_first_matching_source` | The most specific candidate a deny rule applies to, or `None`.                              |
 | `_get_node`           | Return `(ref_id, kind)` tuple for a node, or `None`.                                          |
 | `_edge_exists`        | Return `True` if an edge of any of the specified kinds exists between two nodes.               |
 
@@ -567,6 +614,7 @@ beadloom lint [--format {rich,json,porcelain}] [--strict] [--no-reindex]
 - Rule names are unique within a single `rules.yml` file.
 - Each rule contains exactly one of `deny`, `require`, `forbid_cycles`, `forbid_import`, `forbid`, `layers`, or `check` (never multiple, never none).
 - Self-references (`source_ref_id == target_ref_id`) are skipped during deny evaluation and never produce violations.
+- A deny rule sees every indexed file its node contains, whether or not that file carries an annotation; a file no node contains is counted in `files_unattributed` rather than passing silently.
 - `evaluate_all` output is deterministically sorted by `(rule_name, file_path or "")`.
 - `NodeMatcher.matches` returns `False` if `node_ref_id` is in `exclude`. Otherwise returns `True` only when all non-`None` fields match. An empty matcher (`NodeMatcher()`) matches any node.
 - All `kind` values in matchers are validated against `VALID_NODE_KINDS` at parse time.

@@ -1,6 +1,7 @@
 # Role Composer
 
-Composes role files from CORE + architecture + stack overlays (BDL-052 S3).
+Composes role files from CORE + architecture + stack + **project** layers
+(BDL-052 S3; the fourth layer and the shared implementation arrived in BDL-061 S3).
 
 **Source:** `src/beadloom/onboarding/role_composer.py`
 
@@ -16,7 +17,9 @@ byte-identical output — the determinism the drift-guard relies on.
 
 ### Composition
 
-`compose_role(role, *, architecture, stack)` concatenates, in order:
+`compose_role(...)` validates the role/architecture/stack and then delegates to
+`composer.compose("roles", role, ...)` — the layering is shared with the slash
+commands and `CLAUDE.md` rather than reimplemented per artifact. The order is:
 
 1. **CORE** — the universal, stack/tool-neutral role protocol
    (`templates/roles/core/<role>.md.txt`), the single source of truth.
@@ -28,8 +31,14 @@ byte-identical output — the determinism the drift-guard relies on.
    (`templates/roles/stack/<stack>/<role>.md.txt`): stack idioms + lint/type/test
    commands.
 
+4. the **PROJECT** fragment — `.beadloom/flow/roles/<role>.md` in the adopting
+   repo, when a `project_root` is given. This is the supported place for a
+   team's standing practices; before it existed, any such addition was reported
+   as drift and `--fix` deleted it (BDL-UX #139, #152).
+
 A missing per-role overlay fragment contributes nothing (overlays are additive
-and never break an unrelated role).
+and never break an unrelated role). Overlays are **append-only**: a core rule
+can only be stood down by a declared suppression (see `flow-suppression`).
 
 ### Modules
 
@@ -47,11 +56,13 @@ and never break an unrelated role).
 ## API
 
 Module `src/beadloom/onboarding/role_composer.py`:
-- `compose_role(role, *, architecture, stack)` → `str`
-- `compose_all_roles(config)` → `dict[str, str]`
+- `compose_role(role, *, architecture, stack, language=..., suppressions=(), project_root=None)` → `str`
+- `compose_all_roles(config, project_root=None)` → `dict[str, str]` — omitting
+  `project_root` yields the shipped-only composition, the drift baseline for a
+  repo with no project layer
 - `roles_templates_root()` → `Path`
 - `ROLE_NAMES` — `("dev", "test", "review", "tech-writer")`
 
 ## Testing
 
-Tests: `tests/test_role_configurator.py`
+Tests: `tests/test_role_configurator.py`, `tests/test_flow_composition.py`
