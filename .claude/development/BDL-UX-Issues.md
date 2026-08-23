@@ -35,6 +35,27 @@
 
 ## Open Issues
 
+179. [2026-08-23] [MEDIUM] How many rule types exist? Three documents give three answers and all of them are wrong
+
+    **Severity:** medium (nothing is broken by it, but it silently scoped a P0 fix and would have left four rule types uncovered)
+    **Command:** `beadloom lint`; `.beadloom/_graph/rules.yml` authoring
+    **Context:** while implementing the rule-liveness fix (`beadloom-mr2l.48`), the agent found that the number of rule types is stated in four places and only one is right:
+
+    | source | says |
+    |---|---|
+    | the bead brief (written by the coordinator) | 6 |
+    | BDL-UX #172 | 6 |
+    | `docs/domains/graph/features/rule-engine/SPEC.md` table | 7 |
+    | `load_rules` dispatch | **9** (since BDL-051 S3a) |
+
+    **Issue:** the agent counted against the loader rather than against any document, and covered all nine. Had it trusted its brief, four rule types would have kept counting clean while unable to match — the very false green the bead exists to close, shipped inside its own fix.
+    **Why it is filed rather than left in a bead comment:** this is the third instance in two days of one fact with several sources and no owner — #171 (a bead's number in its own title vs. the id `bd` allocates), #177 (our `CLAUDE.md` vs. the vendored template), and now this. The recurring shape is that a *count* gets copied into prose, the code grows, and nothing compares them. It is also exactly what `docs-audit` exists for, which is the sharp part: the audit verifies counts against project state, and this count was never one of its facts.
+    **Expected:**
+    - Make the rule-type count a `docs-audit` fact, derived from the dispatch. The mechanism already exists; this number simply was not registered with it.
+    - Correct the SPEC table and #172's text to nine.
+    - More generally: a number that appears in both code and prose is a fact to be audited, not a sentence to be maintained. #173 already showed the audit is weaker than it looks (a green result covered 1 declared fact of 9), so registering more facts and fixing the audit are the same piece of work.
+    **Related:** #171, #177 (one fact, several sources), #172, #173.
+
 178. [2026-08-23] [HIGH] 🔴 A REQUIRED check reports `pass` while its own output says it verified nothing
 
     **Severity:** high (it is in the required set, so it is load-bearing for merge, and the failure mode is the one the whole S2 slice was about)
