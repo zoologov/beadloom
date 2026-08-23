@@ -19,10 +19,12 @@ documentation pass that turned the combined tree green).
 **Open in S2b:** `.50` (annotations the extractor cannot see), `.51` (three modules past
 1000 lines).
 **S3 COMPLETE** on `features/BDL-061-S3`: `.9` (dev), `.35`, `.10` (test), `.11` (review),
-`.57` (the P0 ship-blocker `.11` raised) and `.12` (tech-writer) are all closed. The eight
-blind spots `.10` pinned as strict xfails and the clock defect `.11` measured are fixed, and
-`.12` turned the gate green — `beadloom ci` rc **0**, 305/305 pairs fresh, 0 surface drift,
-6083 tests passing. The slice is ready for its PR. Also outstanding and not part of any
+`.57` (the P0 ship-blocker `.11` raised), `.12` (tech-writer) and `.59` (the P0 merge-blocker
+`.12` measured) are all closed. The eight blind spots `.10` pinned as strict xfails and the
+clock defect `.11` measured are fixed; `.12` turned the gate green; `.59` closed BDL-UX #186,
+so the slice no longer ships a false promise in front of a destructive operation. `beadloom ci`
+rc **0**, 305/305 pairs fresh, 0 surface drift, **6090** tests passing. The slice is ready for
+its PR. Also outstanding and not part of any
 slice: `.39`, `.41`, `.42`, `.58` — which grew from two items to a routed list (below).
 
 ## Progress
