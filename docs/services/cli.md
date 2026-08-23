@@ -52,6 +52,8 @@ When `--preset` is omitted, Beadloom auto-detects: `services/` or `cmd/` -> micr
 
 Projects without a `docs/` directory work fine -- Beadloom operates in zero-doc mode with code-only context (graph nodes, annotations, context oracle).
 
+**`--bootstrap` also appends an ignore block to the project's `.gitignore`, once** (BDL-061.35). Before it, Beadloom wrote an ignore entry nowhere, so an adopter collected untracked churn from the very first `reindex`. The block names the derived state only — `.beadloom/**/*.db{,-wal,-shm}` and `.beadloom/guard-firings.jsonl` — and each pattern carries its reason in the file; the graph under `.beadloom/_graph/` and `flow.yml` are source and stay committable. It is **written once and never rewritten**: a run that finds the marker does nothing, so deleting a line is a real override rather than an edit the next run undoes (a team that wants the guard firing record committed removes that line, once). Nothing is written outside a git working tree, a pattern the project already declares is not duplicated, and the project's own lines are untouched. The write is reported (`✓ Ignored: N generated path(s) …`), because silently editing someone's `.gitignore` is its own surprise.
+
 ### beadloom reindex
 
 Full reindex: drops all tables and reloads from scratch.
@@ -856,6 +858,11 @@ re-running this command. Registration is a **merge**: existing hooks survive, re
 only the missing entries, and a `settings.json` that cannot be parsed is reported and left
 untouched. Those four tool calls are the whole enforcement surface — a file written through
 `Bash` fires no guard (see [`beadloom guard`](#beadloom-guard)).
+
+The command makes the same whole-working-set `.gitignore` call `init` makes (see
+[`beadloom init`](#beadloom-init)), for a project initialised by a Beadloom older than
+the block: the guards' firing record is one entry in that set, not a special case owned
+by the guard scaffolder.
 
 A vendored command that already matches is left alone; a hand-edited command is
 **skipped** (reported as such) so user edits are not silently clobbered;

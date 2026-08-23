@@ -308,6 +308,7 @@ def setup_agentic_flow(
     from beadloom.onboarding.agentic_flow_setup import scaffold
     from beadloom.onboarding.flow_config import FlowConfigError, resolve_flow_config
     from beadloom.onboarding.guard_hooks import scaffold_guard_hooks
+    from beadloom.onboarding.ignore_block import ensure_ignore_block
     from beadloom.onboarding.role_adapters import generate_adapters
 
     project_root = project or Path.cwd()
@@ -347,6 +348,16 @@ def setup_agentic_flow(
     # The guard hook adapter: the harness binding for the tool-agnostic
     # `beadloom guard` primitive. The names come from the registry, so a guard
     # shipped by a later release is wired by re-running this command.
+    # Same whole-working-set call `init` makes, repeated here for a project that was
+    # initialised by a Beadloom older than the block: the guards' firing record is one
+    # entry in that set, not a special case owned by the guard scaffolder.
+    ignore = ensure_ignore_block(project_root)
+    if ignore.added:
+        click.echo(
+            f"Wrote .gitignore ({len(ignore.added)} generated path(s); "
+            "yours to edit, never rewritten)"
+        )
+
     hooks = scaffold_guard_hooks(project_root, guard_names=GUARD_NAMES)
     if hooks.script is not None:
         click.echo(f"Wrote {hooks.script.relative_to(project_root)} (guard hook adapter)")
@@ -718,6 +729,11 @@ def init(
         if result.get("rules_files"):
             for rf in result["rules_files"]:
                 click.echo(f"\u2713 IDE rules: {rf}")
+        if result.get("ignore_added"):
+            click.echo(
+                f"\u2713 Ignored: {len(result['ignore_added'])} generated path(s) "
+                "appended to .gitignore (yours to edit; never rewritten)"
+            )
         click.echo(
             f"\u2713 Index: {ri.symbols_indexed} symbols, "
             f"{ri.imports_indexed} imports"

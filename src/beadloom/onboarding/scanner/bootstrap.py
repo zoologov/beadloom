@@ -9,6 +9,7 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from beadloom.infrastructure.atomic_io import write_yaml_atomic
+from beadloom.onboarding.ignore_block import ensure_ignore_block
 from beadloom.onboarding.scanner.agents_md import (
     generate_agents_md,
     setup_mcp_auto,
@@ -275,6 +276,11 @@ def bootstrap_project(
     # Auto-create IDE rules files.
     rules_created = setup_rules_auto(project_root)
 
+    # Name the derived state this directory now holds, so the adopter does not
+    # inherit untracked churn from the first reindex or the first guarded edit.
+    # Bootstrap owns it because bootstrap is what creates the working set.
+    ignore = ensure_ignore_block(project_root)
+
     return {
         "project_name": project_name,
         "nodes_generated": len(nodes),
@@ -288,4 +294,6 @@ def bootstrap_project(
         "scan": scan,
         "nodes": nodes,
         "edges": edges,
+        "ignore_added": ignore.added,
+        "ignore_skipped_reason": ignore.skipped_reason,
     }

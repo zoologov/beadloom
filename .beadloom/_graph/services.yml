@@ -530,6 +530,13 @@ nodes:
     docs:
       - docs/domains/onboarding/components/guard-hooks/DOC.md
 
+  - ref_id: ignore-block
+    kind: component
+    summary: "The generated working set under .beadloom/ and the one-time .gitignore block naming it (written by init, never rewritten)"
+    source: src/beadloom/onboarding/ignore_block.py
+    docs:
+      - docs/domains/onboarding/components/ignore-block/DOC.md
+
   - ref_id: active-table
     kind: component
     summary: "Shared ACTIVE.md bead-status table parser/updater + reconcile-from-bd core (tolerant, fail-safe; MCP S4 tools + active-sync build on it)"
@@ -766,6 +773,9 @@ edges:
     dst: cli
     kind: part_of
   - src: guard-hooks
+    dst: onboarding
+    kind: part_of
+  - src: ignore-block
     dst: onboarding
     kind: part_of
 

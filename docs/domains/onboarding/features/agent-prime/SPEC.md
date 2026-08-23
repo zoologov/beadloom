@@ -8,7 +8,14 @@ Cross-IDE context injection via a three-layer architecture.
 
 2. **IDE adapters** (pointers) — `.cursorrules`, `.windsurfrules`, `.clinerules` files that instruct agents to read AGENTS.md. Created by `setup_rules_auto()` on bootstrap.
 
-3. **`beadloom prime`** (dynamic) — CLI command and MCP tool that queries the DB for current project state: architecture summary, stale docs, lint violations, domain list.
+3. **The ignore block** (one write) — `bootstrap_project()` also calls
+   `ignore_block.ensure_ignore_block()`, so the derived state bootstrap is about to create
+   under `.beadloom/` (the index, and later the guard firing record) does not arrive as
+   untracked churn in the adopter's repository. It is appended once and never rewritten,
+   the result is returned as `ignore_added` / `ignore_skipped_reason`, and `beadloom init`
+   prints it. See the [ignore-block component](../../components/ignore-block/DOC.md).
+
+4. **`beadloom prime`** (dynamic) — CLI command and MCP tool that queries the DB for current project state: architecture summary, stale docs, lint violations, domain list.
 
 ## API
 

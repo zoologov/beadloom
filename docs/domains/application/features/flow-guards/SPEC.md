@@ -522,6 +522,16 @@ Every CLI evaluation appends one line to `.beadloom/guard-firings.jsonl`.
 often it fired, its last outcome, and four ways a gate stops protecting
 anything — a gate that cannot demonstrate it ran is treated as not having run.
 
+The record is **gitignored by default** (BDL-061.35): it is machine-local and
+append-only, so committing it makes every guarded edit a working-tree change and
+every branch a conflict on the same last line. It is evidence, and a team may
+reasonably want that evidence committed — so the default is overridable, by
+deleting the line from the ignore block Beadloom wrote once and never rewrites.
+Ignoring it settles nothing about its size: the record is **not rotated** and
+`--liveness` parses it whole on every run (review minor m7, filed as `beadloom-mr2l.56`). The block says
+so, in the adopter's own file, rather than letting the ignore entry make the growth
+invisible.
+
 | Flag | Means | Computed from |
 |---|---|---|
 | `never-fired` | no firing that reached a verdict (an `error` record does not count) | the firing record |
