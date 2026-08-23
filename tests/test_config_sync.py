@@ -17,9 +17,12 @@ import pytest
 from beadloom.onboarding.agentic_flow_setup import AGENT_FILES, COMMAND_FILES, scaffold
 from beadloom.onboarding.config_sync import (
     ConfigDrift,
+    apply_config_fixes,
     check_config_drift,
     refresh_agentic_flow_files,
+    refresh_composed_adapters,
 )
+from beadloom.onboarding.role_composer import ROLE_NAMES
 from beadloom.onboarding.scanner import (
     _RULES_ADAPTER_TEMPLATE,
     generate_agents_md,
@@ -336,7 +339,12 @@ class TestAgenticFlowDrift:
         name = names[idx]
         project = _make_scaffolded_project(tmp_path)
         target = project / ".claude" / kind / f"{name}.md"
-        target.write_text(target.read_text(encoding="utf-8") + "\n<!-- diverged -->\n")
+        # Both sides of the round-trip state the same codec. The read already did;
+        # the write inherited the image's locale, so under a non-UTF-8 image this
+        # line raised on a role file containing an em dash (BDL-061.42).
+        target.write_text(
+            target.read_text(encoding="utf-8") + "\n<!-- diverged -->\n", encoding="utf-8"
+        )
 
         conn = _make_conn()
         try:
@@ -468,24 +476,34 @@ class TestRefreshAgenticFlowFiles:
         agent = project / ".claude" / "agents" / "dev.md"
         agent.write_text("HAND EDITED\n", encoding="utf-8")
 
-        written = refresh_agentic_flow_files(project)
+        # Asserted through `--fix`'s own entry point rather than one of its two
+        # writers. Since a scaffold records its selection in `flow.yml`
+        # (BDL-UX #187), `.claude/agents/*` belongs to the COMPOSED adapter
+        # writer and the scaffold path deliberately leaves it alone; measuring
+        # one writer would report a capability the command still has.
+        report = apply_config_fixes(project)
 
-        assert "agents/test.md" in written
         assert deleted.is_file()
+        assert ".claude/agents/test.md" in (*report.created, *report.rewritten)
         assert agent.read_text(encoding="utf-8") == "HAND EDITED\n"
+        assert [d.file for d in report.declined] == [".claude/agents/dev.md"]
 
-    def test_rewrites_all_files_even_when_in_sync(self, tmp_path: Path) -> None:
-        """On a fully-scaffolded repo, every flow file is reported rewritten —
-        idempotent and byte-stable. CLAUDE.md is now one of them: since BDL-061
-        S3 its body is composed, not a snapshot of Beadloom's own live file."""
+    def test_rewrites_every_file_it_owns_even_when_in_sync(self, tmp_path: Path) -> None:
+        """On a fully-scaffolded repo, every flow file this writer OWNS is
+        reported rewritten — idempotent and byte-stable. CLAUDE.md is one of
+        them: since BDL-061 S3 its body is composed, not a snapshot of
+        Beadloom's own live file. `.claude/agents/*` is not: a repo whose
+        scaffold recorded a `flow.yml` (BDL-UX #187) has its role files written
+        by the composed-adapter writer, and having both write them would be two
+        owners for one file."""
         project = _make_scaffolded_project(tmp_path)
         written = refresh_agentic_flow_files(project)
-        expected = (
-            {f"agents/{n}.md" for n in AGENT_FILES}
-            | {f"commands/{n}.md" for n in COMMAND_FILES}
-            | {"CLAUDE.md"}
-        )
+        expected = {f"commands/{n}.md" for n in COMMAND_FILES} | {"CLAUDE.md"}
         assert set(written) == expected
+        # The role files still have an owner — asserted, not assumed.
+        assert set(refresh_composed_adapters(project).rewritten) == {
+            f".claude/agents/{n}.md" for n in ROLE_NAMES
+        }
 
 
 # ---------------------------------------------------------------------------

@@ -18,6 +18,7 @@ import click
 from beadloom.services.commands._root import _warn_missing_parsers, main
 
 if TYPE_CHECKING:
+    from beadloom.onboarding.agentic_flow_setup import ScaffoldResult
     from beadloom.onboarding.config_sync import ConfigDrift, FixReport
 
 # beadloom:service=mcp-server
@@ -340,14 +341,22 @@ def setup_agentic_flow(
     for rel in adapters.extra:
         click.echo(f"Wrote {rel}")
 
-    result = scaffold(project_root, force=force, include_agents=False)
+    result = scaffold(
+        project_root, force=force, include_agents=False, config=config
+    )
 
+    if result.flow_config_written is not None:
+        click.echo(
+            f"Wrote {result.flow_config_written.relative_to(project_root)} "
+            "(the selection above, recorded; yours to edit, never rewritten)"
+        )
     for name in result.commands_written:
         click.echo(f"Wrote .claude/commands/{name}.md")
     for name in result.commands_skipped:
-        click.echo(f"Skipped .claude/commands/{name}.md (hand-edited; use --force)")
+        click.echo(f"Skipped .claude/commands/{name}.md (hand-edited)")
     if result.claude_md is not None:
         click.echo(f"Wrote {result.claude_md.relative_to(project_root)}")
+    _echo_scaffold_findings(result)
 
     # The guard hook adapter: the harness binding for the tool-agnostic
     # `beadloom guard` primitive. The names come from the registry, so a guard
@@ -539,6 +548,7 @@ def config_check(*, fix: bool, project: Path | None) -> None:
             notes.append(f"{len(warnings)} warning(s) — see above")
         suffix = f" ({'; '.join(notes)})" if notes else ""
         click.echo(f"Agent-config in sync — no blocking drift{suffix}.")
+        _echo_weakened_verdicts(warnings)
         return
 
     click.echo(f"Agent-config drift detected ({len(blocking)}):", err=True)
@@ -547,7 +557,67 @@ def config_check(*, fix: bool, project: Path | None) -> None:
         if drift.remediation:
             click.echo(f"    -> {drift.remediation}", err=True)
     _echo_closing_advice(blocking)
+    _echo_weakened_verdicts(warnings)
     raise SystemExit(1)
+
+
+def _echo_scaffold_findings(result: ScaffoldResult) -> None:
+    """Print what the scaffold FOUND, not just what it wrote (BDL-UX #188).
+
+    ``orphaned_flow_files()`` and ``ScaffoldResult.migration_notes`` were
+    computed on every run and read by nothing outside the library: BDL-UX #137
+    is recorded as closed by the orphan report and S3's criterion "a hand-edited
+    vendored file is reported with migration guidance" as met, and both claims
+    were true of ``scaffold()`` and false of the command anybody runs. What the
+    user actually saw was ``(hand-edited; use --force)`` — advice to run the
+    destructive flag, never naming the project layer where the edit could safely
+    go. NO CALLER, NO CAPABILITY: this is the caller.
+    """
+    if result.migration_notes:
+        click.echo(
+            f"\nLeft alone ({len(result.migration_notes)}) — your edits are the "
+            "only copy of an intent, so Beadloom did not recompose over them:",
+            err=True,
+        )
+        for note in result.migration_notes:
+            click.echo(f"  = {note}", err=True)
+    if result.orphans:
+        click.echo(
+            f"\nLeft by an older flow layout ({len(result.orphans)}) — reported, "
+            "never deleted:",
+            err=True,
+        )
+        for orphan in result.orphans:
+            click.echo(f"  ? {orphan}", err=True)
+
+
+def _echo_weakened_verdicts(warnings: list[ConfigDrift]) -> None:
+    """Say when this pass is WEAKER than it would be, and why.
+
+    CONTEXT's constraint is one-directional: no adopter's green project turns
+    red on upgrade. Review `.11` measured the other direction — a repo that used
+    to block starts passing, because a release that added provenance cannot
+    account for files written before it. That is the worse of the two: a red is
+    loud, a downgrade is silent, and the evidence the project ever failed is
+    gone. The exit code deliberately does not change (a warn must not block);
+    what changes is that the reduction is stated, counted, and given the command
+    that restores the blocking verdict.
+    """
+    weakened = [d for d in warnings if d.weakened_from == "error"]
+    if not weakened:
+        return
+    click.echo(
+        f"  This pass is WEAKER than it would be: {len(weakened)} finding(s) "
+        "are `warn` only because Beadloom cannot prove what it wrote — each "
+        "would be an `error` with the evidence. A verdict that got quieter "
+        "across an upgrade is a finding, not a pass.",
+        err=True,
+    )
+    click.echo(
+        "    -> restore `.beadloom/flow-manifest.json` (re-run "
+        "`beadloom setup-agentic-flow`) to get the blocking verdict back.",
+        err=True,
+    )
 
 
 def _echo_fix_report(report: FixReport) -> None:

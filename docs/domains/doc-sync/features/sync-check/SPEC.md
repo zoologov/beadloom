@@ -131,12 +131,20 @@ warning** when it differs. `mark_reference_synced` re-baselines a reference doc
 (via `sync-update <doc>`), clearing the drift. The signatures themselves live in
 `surface.py` (coarse identity sets, not file content).
 
-> **`--check` does not hold on this path (BDL-UX #189).** In
-> `services/commands/docsync.py` the reference-doc branch is reached *before* the
-> `check_only` guard, so `beadloom sync-update <doc-path> --check` re-baselines
-> the doc and prints `Re-baselined reference doc <path>`. Measured: the drift
-> count fell from 7 to 6 on a run whose flag asked for a report. `--check` is
-> honoured only for symbol pairs (`sync-update <ref-id> --check`).
+`--check` holds on this path as well as on the symbol-pair one. It did not
+until BDL-061 S3b: the reference-doc branch was reached *before* the `check_only`
+guard, so `beadloom sync-update <doc-path> --check` re-baselined the doc and
+printed `Re-baselined reference doc <path>` — measured, the drift count fell from
+7 to 6 on a run whose flag asked for a report (BDL-UX #189, the same defect as
+#147's mutating `lint`, and #163's evidence-free re-attestation reached by
+accident rather than by choice). The guard now runs first and
+`describe_reference_doc` answers it: one `SELECT`, one recomputed aggregate hash,
+no `UPDATE` and no `commit`.
+
+```
+$ beadloom sync-update docs/architecture.md --check
+  [surface drift] docs/architecture.md watches cli, graph
+```
 
 ## Invariants
 
@@ -212,6 +220,10 @@ Module `src/beadloom/doc_sync/engine.py`:
 - `mark_synced(...)` / `mark_synced_by_ref(...)` — re-baseline a symbol pair.
 - `build_reference_state(conn, project_root) -> int` — baseline every
   `watches`-annotated reference doc; returns the count recorded.
+- `describe_reference_doc(conn, doc_path, project_root) -> dict | None` — the
+  **read-only** counterpart to `mark_reference_synced`: a doc's `watches` set and
+  its current drift status, `None` when it is not a tracked reference doc.
+  Writes nothing, commits nothing; this is what `--check` calls.
 - `check_reference_drift(conn, project_root) -> list[dict]` — recompute and
   report reference surface drift (warning severity).
 - `mark_reference_synced(conn, doc_path, project_root, *, all_docs=False) -> int`

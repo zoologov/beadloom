@@ -47,7 +47,7 @@ When the RFC needs technical context: delegate to an Explore sub-agent in the ba
 
 1. **One bead = one agent** at a time. Do NOT batch multiple beads into one agent (keeps contexts small, failures isolated).
 2. **Synchronization through files + beads**, not chat. CONTEXT.md is the source of truth.
-3. **Independent ready beads in the same wave MUST be launched concurrently** — one subagent each, all in the same batch (`run_in_background: true`), NOT one-at-a-time. Parallelism is mandatory, not optional: if `bd ready` lists N independent beads, spawn N subagents now. `bd ready` (universal) / `bd dep tree` is authoritative for what is launchable — NOT `bd close --suggest-next` (which can list still-blocked beads; see BDL-UX-Issues #97).
+3. **Independent ready beads in the same wave MUST be launched concurrently** — one subagent each, all in the same batch (`run_in_background: true`), NOT one-at-a-time. Parallelism is mandatory, not optional: if `bd ready` lists N independent beads, spawn N subagents now. `bd ready` (universal) / `bd dep tree` is authoritative for what is launchable — NOT `bd close --suggest-next` (which can list still-blocked beads).
 4. **Serialize landings** with `bd merge-slot` so the parallel agents never race on commits/merges — they run concurrently but land one at a time.
 
 ---
@@ -172,9 +172,9 @@ Agent(
 
 Monitor progress via `bd ready` / `bd dep tree <parent-id>` (always) or `bd swarm status <epic-id>` (epic parents) + `bd comments <id>` — not by reading agent output.
 
-### Subagent write-blocked fallback (observed BDL-036)
+### Subagent write-blocked fallback (observed in practice)
 
-A background subagent may report that file-writing tools (`Edit`/`Write`, and sometimes `grep`/`python3` piping) are denied in its environment, so it cannot do its work. (In BDL-036 the background `tech-writer` subagent hit this while parallel `dev` subagents in the same run wrote files fine — cause unconfirmed, likely transient/sandbox; treat it as possible, not guaranteed.)
+A background subagent may report that file-writing tools (`Edit`/`Write`, and sometimes `grep`/`python3` piping) are denied in its environment, so it cannot do its work. (Observed once: a background `tech-writer` subagent hit this while parallel `dev` subagents in the same run wrote files fine — cause unconfirmed, likely transient/sandbox; treat it as possible, not guaranteed.)
 
 **Fallback:** if a subagent returns "blocked — could not edit files", the coordinator (main loop) does NOT silently drop the bead. Either (a) re-launch the subagent, or (b) **complete the bead inline in the main loop** using the subagent's analysis (it should still return its findings), then checkpoint + close the bead normally. For write-heavy beads (docs/finalization), inline execution by the main loop is an acceptable first choice when a prior subagent was write-blocked. Record the fallback honestly in the bead comment.
 
@@ -314,8 +314,8 @@ Then notify the user (do not change the DAG silently):
 
 > **MANDATORY:** We use Beadloom (and bd) as our own tooling. Collect UX feedback to improve it.
 
-**File:** `.claude/development/BDL-UX-Issues.md`
+**File:** `.claude/development/UX-Issues.md`
 
 **Log when:** a command fails/confuses, friction points, missing features, surprising behavior, or **false signals** (e.g. #97). Beadloom issues = our backlog; `bd` (steveyegge/beads) issues = log as **External**.
 
-**Who:** Coordinator logs orchestration issues (prime/graph/lint/sync-check/swarm/gate); sub-agents report in bead comments → coordinator transfers to the UX file. Follow the template in `BDL-UX-Issues.md`.
+**Who:** Coordinator logs orchestration issues (prime/graph/lint/sync-check/swarm/gate); sub-agents report in bead comments → coordinator transfers to the UX file. Follow the template at the top of that file.

@@ -13,9 +13,9 @@ from beadloom.application.doctor import (
     _extract_version_claim,
     _get_actual_cli_commands,
     _get_actual_mcp_tool_count,
-    _get_actual_packages,
     get_actual_version,
 )
+from beadloom.onboarding.scanner.project_facts import detect_source_packages
 
 if TYPE_CHECKING:
     import pytest
@@ -223,29 +223,33 @@ class TestGetActualMcpToolCount:
 
 
 # ---------------------------------------------------------------------------
-# _get_actual_packages
+# detect_source_packages — the TARGET project's packages
+#
+# Replaces `_get_actual_packages`, which scanned `<project_root>/src/beadloom/`:
+# our own layout, looked for inside somebody else's tree. It could only ever
+# find something in this one repository, which is why the package audit read
+# correct here and was empty for every adopter (BDL-UX #183's sweep).
 # ---------------------------------------------------------------------------
 
 
-class TestGetActualPackages:
+class TestDetectSourcePackages:
     def test_returns_packages_for_real_project(self) -> None:
-        """Returns DDD package names for the beadloom project root."""
+        """Returns this project's own top-level packages."""
         # Arrange
-        # Use the actual project root (two levels up from src/beadloom/)
         project_root = Path(__file__).parent.parent
 
         # Act
-        result = _get_actual_packages(project_root)
+        result = detect_source_packages(project_root)
 
         # Assert
         assert isinstance(result, set)
         assert "infrastructure" in result
         assert "graph" in result
 
-    def test_returns_empty_for_nonexistent_path(self, tmp_path: Path) -> None:
-        """Returns empty set when src/beadloom/ doesn't exist."""
+    def test_returns_empty_for_a_tree_with_no_src(self, tmp_path: Path) -> None:
+        """Returns empty set when the project has no src/<pkg>/ layout."""
         # Arrange & Act
-        result = _get_actual_packages(tmp_path)
+        result = detect_source_packages(tmp_path)
 
         # Assert
         assert result == set()
@@ -289,13 +293,22 @@ class TestCheckAgentInstructions:
         assert checks == []
 
     def test_version_mismatch_produces_warning(self, tmp_path: Path) -> None:
-        """Version claim that doesn't match actual version -> WARNING."""
+        """Claim that contradicts THE PROJECT's declared version -> WARNING.
+
+        Both version tests used to point at a tmp directory with no manifest and
+        compare against ``get_actual_version()`` — Beadloom's own ``__version__``
+        — so they asserted the defect BDL-UX #183 is about. The project now
+        declares a version of its own and the claim is checked against that.
+        """
         # Arrange
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "widget"\nversion = "1.4.0"\n', encoding="utf-8"
+        )
         claude_dir = tmp_path / ".claude"
         claude_dir.mkdir()
         claude_md = claude_dir / "CLAUDE.md"
         claude_md.write_text(
-            "- **Current version:** 0.0.1-fake\n",
+            "- **Current version:** 0.0.1\n",
             encoding="utf-8",
         )
 
@@ -308,14 +321,16 @@ class TestCheckAgentInstructions:
         assert version_checks[0].severity == Severity.WARNING
 
     def test_version_match_produces_ok(self, tmp_path: Path) -> None:
-        """Version claim matching actual version -> OK."""
+        """Claim matching THE PROJECT's declared version -> OK."""
         # Arrange
-        actual_version = get_actual_version()
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "widget"\nversion = "1.4.0"\n', encoding="utf-8"
+        )
         claude_dir = tmp_path / ".claude"
         claude_dir.mkdir()
         claude_md = claude_dir / "CLAUDE.md"
         claude_md.write_text(
-            f"- **Current version:** {actual_version}\n",
+            "- **Current version:** 1.4.0\n",
             encoding="utf-8",
         )
 

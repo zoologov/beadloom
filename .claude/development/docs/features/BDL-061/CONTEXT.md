@@ -107,6 +107,9 @@ Held to the same bar the epic builds. Mechanised where possible (S4), prose wher
 | 2026-08-22 | **Q5: the mutation tool is the project's choice; Beadloom ships the role duty, the scope convention and the check that a declared target is inside the configured source paths** | Owning a mutation runner is out of scope and would break tool-agnosticism; the failure worth catching is a declared target that runs zero mutants |
 | 2026-08-23 | **A composed artifact's write is fingerprinted** (`.beadloom/flow-manifest.json`), and `config-check` reports four states — clean / stale / hand-edited / unmanaged | The composition-result rule alone cannot tell "the shipped core moved" from "a human edited this file", and the two need opposite treatments. Without the fingerprint the check must either rewrite somebody's only copy of an intent, or stop reporting it |
 | 2026-08-23 | **Severity follows the state**: hand-edited is an `error` whose remedy is to MOVE the edit; `unverified` is a `warn` | Keeps enforcement no weaker than before (the drift-guard's job did not change, only its remedy) while honouring "no adopter's green project turns red on upgrade" — a repo that predates the manifest genuinely cannot be judged. **The other direction, stated because the original rationale did not** (review `.11` MAJOR 5): `unverified = warn` also turns some RED projects green. A repo that hand-edited a role file before this release has no manifest entry for it, so what used to block now warns — exactly the #139/#151 population this slice exists to serve. `.57`'s manifest-presence rule largely closes it: once a project has a manifest at all, a file missing from it is not "pre-manifest", it is unaccounted for |
+| 2026-08-23 | **A downgrade across an upgrade is itself a finding** — a severity reduced for want of evidence carries `weakened_from` and is stated with a count and a remedy; the exit code does not change, and nothing is recorded to compute it (`.58`) | The standing constraint ran one way; review `.11` measured the other. A red is loud and correlates with the release, a downgrade is silent — the project was correctly failing, now passes, and the evidence is gone. Making it BLOCK would be the red-on-upgrade the constraint forbids, so what it needed was to be said; recording a verdict history would make `config-check` a writer, which is #147/#189 |
+| 2026-08-23 | **A fact rendered about the adopter is READ from the adopter, or not rendered** — unknown is `None` and the bullet is omitted; no fact computed about Beadloom appears in an artifact composed for somebody else (`.58`) | #183: the version line read TRUE here by coincidence and was false everywhere else, and four slices of review passed over it. The rule is enforced by rendering fixtures that are not Beadloom, because the reason it survived is that we had never rendered a project we could not be accidentally right about |
+| 2026-08-23 | **The scaffold RECORDS the selection it composed from** (`.beadloom/flow.yml`, written once, never over an existing one) (`.58`) | A configuration resolved in memory is invisible to every later check: a virgin scaffold left `config-check` at exit 1 on an untouched repo (#187), and `scaffold()` re-resolving from disk meant `--architecture` reached the role adapters and not `CLAUDE.md`. The file the feature is configured by should be on disk |
 | 2026-08-23 | **The `CLAUDE.md` body is checked only when the file is Beadloom's** — a manifest entry or the `<!-- beadloom:composed` stamp | A project's own hand-written `CLAUDE.md` is not ours to police; without this boundary the new check reintroduces the #73 false-positive class on every repo that never scaffolded |
 | 2026-08-23 | **`sync_agentic_flow` no longer snapshots `CLAUDE.md` or the commands** — the shipped core is authored package data and the live file is composed from it | #177 is a loop, not an instance: enforcing *template == our file* in one direction makes the distributed artifact unable to differ from one project's local text, and any correction survives exactly until the next run. Reversing the direction also removes #132 by construction |
 | 2026-08-22 | **#91 closes as verified, with the caveat that this is the first believable result** | Its evidence is stale (the god-package was decomposed in BDL-059) and `lint --strict` is clean — but only since #159 taught the cycle rule to see nested imports |
@@ -210,18 +213,25 @@ property of the design and not a bead waiting to be done:
   the reason, exit condition or notice `overlays.suppress` requires. That is a real hole in
   "the guard cannot be silently disabled", it is not decidable by any checker, and an adopter
   meets it in the guide rather than discovering it.
-- **`CLAUDE.md` renders Beadloom's version as the adopter's own** (BDL-UX #183, bead `.58`).
-  It reads TRUE on this repository by coincidence, which is why four slices of scrutiny passed
-  over it.
+- **`CLAUDE.md` rendered Beadloom's version as the adopter's own** (BDL-UX #183) — **closed in
+  S3b by `.58`**, together with four more facts computed about us and rendered about them (a
+  constant `DDD` architecture label, a stack vocabulary that was our own dependency list, our
+  Python floor, and a package scan that looked for `src/beadloom/` in the adopter's tree), the
+  template seed that shipped our nine packages and our version, and — the largest of them —
+  `doctor`'s audit of an adopter's `CLAUDE.md` against **our** version, packages, stack and test
+  framework. The durable part is `tests/adopter_project.py`: non-Beadloom fixtures rendered in
+  tests, because the reason this survived four slices is that we had never rendered a project we
+  could not be accidentally right about.
 
 Three further defects were **measured by the tech-writer bead `.12`**, all in the command layer
 rather than in the composition, all filed and routed to `.58`:
 
 | # | Measured | Route |
 |---|----------|-------|
-| BDL-UX #186 | `config-check --fix` rewrites a hand edit in a role adapter byte-identically to the scaffold (sha256), one line after the check printed *"It will NOT be rewritten"* | `.58` |
-| BDL-UX #187 | A virgin `setup-agentic-flow` without a `flow.yml` leaves `config-check` at exit 1 with four errors; writing a `flow.yml` gives rc 0 | `.58` |
-| BDL-UX #188 | `ScaffoldResult.orphans` and `.migration_notes` are computed on every scaffold and have **no caller** — #137's orphan report and S3's migration guidance reach a library caller, not the terminal | `.58` |
+| BDL-UX #186 | `config-check --fix` rewrites a hand edit in a role adapter byte-identically to the scaffold (sha256), one line after the check printed *"It will NOT be rewritten"* | **closed, `.59`** |
+| BDL-UX #187 | A virgin `setup-agentic-flow` without a `flow.yml` leaves `config-check` at exit 1 with four errors; writing a `flow.yml` gives rc 0 | **closed, `.58`** — the scaffold records the selection it resolved; the fix also exposed `--architecture`/`--stack` never reaching the commands or `CLAUDE.md` |
+| BDL-UX #188 | `ScaffoldResult.orphans` and `.migration_notes` are computed on every scaffold and have **no caller** — #137's orphan report and S3's migration guidance reach a library caller, not the terminal | **closed, `.58`** — printed; `(hand-edited; use --force)` replaced by the migration note |
+| BDL-UX #189 | `sync-update <doc> --check` re-baselines the doc it was asked to report on | **closed, `.58`** — the guard runs before the branch; a read-only `describe_reference_doc` answers it |
 
 ### Review `.11`'s minors, routed
 
@@ -240,9 +250,21 @@ Recorded so none is silently dropped. The two that were documentation are fixed 
 | n1 — three blank lines in `attribution.py` | code | `.58` |
 | n2 — an over-long line in the flow-guards SPEC | **documentation** | **fixed in `.12`** |
 
-Review `.11`'s **red-turns-green-on-upgrade** finding (MAJOR 5) is documentation and is closed:
-`unverified = warn` also takes some previously-red projects green, and both the config-check
-SPEC and the decision table below now say so in both directions.
+Review `.11`'s **red-turns-green-on-upgrade** finding (MAJOR 5) was recorded as documentation
+and closed in `.12`; **`.58` decided the question the prose left open** and gave it a mechanism.
+
+> **A downgrade across an upgrade is itself a finding.** An upgrade that WEAKENS a verdict is
+> worse than one that strengthens it: a red is loud and the adopter correlates it with the
+> release, while a downgrade is silent — a project that was correctly failing now passes, nobody
+> is told, and the evidence it ever failed is gone.
+
+Every severity Beadloom reduced *for want of evidence* now carries `ConfigDrift.weakened_from`,
+and `config-check` states the count and the command that restores the blocking verdict, on the
+passing path as well as the blocking one. Two properties are deliberate: the **exit code does not
+change** (a `warn` must not block, or fixing the silence would itself be the red-on-upgrade the
+constraint forbids), and **nothing is recorded** — the downgrade follows from the finding's own
+state rather than from a stored verdict history, because a check that writes on every run to keep
+one would be BDL-UX #147/#189 in the command whose job is to look without touching.
 
 ## Current Phase
 

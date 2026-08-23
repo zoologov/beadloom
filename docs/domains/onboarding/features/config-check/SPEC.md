@@ -83,6 +83,44 @@ now warns. That is the trade `--fix`-no-longer-restores buys, and BDL-061 `.57`'
 manifest-presence rule largely closes it — once a project has a manifest at all, a
 file missing from it is not "pre-manifest", it is unaccounted for.
 
+### A DOWNGRADE ACROSS AN UPGRADE IS ITSELF A FINDING
+
+The constraint this project has always stated runs one way: *no adopter's green
+project turns red on upgrade*. The inverse was never written because nobody
+expected to need it, and then review `.11` measured it happening. Both
+directions now hold, and the second is the sharper of the two:
+
+> **An upgrade that WEAKENS a verdict is worse than one that strengthens it.** A
+> red is loud and the adopter correlates it with the release. A downgrade is
+> silent — a project that was correctly failing now passes, nobody is told, and
+> the evidence that it ever failed is gone.
+
+So a severity Beadloom reduced *for want of evidence* is a finding in its own
+right. Every such finding carries `ConfigDrift.weakened_from` — the severity it
+would have had if the evidence existed — and the command prints, on the passing
+path as well as the blocking one:
+
+```
+  This pass is WEAKER than it would be: N finding(s) are `warn` only because
+  Beadloom cannot prove what it wrote — each would be an `error` with the
+  evidence. A verdict that got quieter across an upgrade is a finding, not a pass.
+    -> restore `.beadloom/flow-manifest.json` (re-run `beadloom setup-agentic-flow`)
+       to get the blocking verdict back.
+```
+
+Two properties of the mechanism are deliberate. **The exit code does not
+change** — a `warn` must not block, or fixing the silence would itself be the
+red-on-upgrade this whole section exists to prevent; what changes is that the
+reduction is stated, counted and given a remedy. And **nothing is recorded**:
+the downgrade is computed from the finding's own state rather than from a stored
+history of past verdicts, because `config-check` writing on every run to keep
+such a history would be BDL-UX #147/#189 all over again in the one command whose
+job is to look without touching.
+
+Set on: an `unverified` composed body, an `unverified` artifact state, a missing
+file no manifest accounts for, and an absent or unreadable manifest. Not set on
+`stale`, `hand_edited` or `missing` — those are errors on their own evidence.
+
 ### `--fix` may only rewrite what Beadloom wrote
 
 The table above says a hand-edited file "will NOT be rewritten", and the check
