@@ -45,7 +45,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from beadloom.application.doctor import Check
-    from beadloom.doc_sync.audit import AuditResult
+    from beadloom.doc_sync.audit import AuditFinding, AuditResult
 
 
 # A single finding in the shared, agent-actionable shape (see linter._finding).
@@ -325,13 +325,40 @@ def _step_docs_audit(project_root: Path) -> GateStep:
 
     stale = [f for f in result.findings if f.status == "stale"]
     findings = [_audit_finding(f) for f in stale]
-    passed = not stale
-    summary = (
+    return GateStep(
+        "docs-audit",
+        passed=not stale,
+        findings=findings,
+        summary=_audit_summary(result, stale),
+    )
+
+
+def _audit_summary(result: AuditResult, stale: list[AuditFinding]) -> str:
+    """The docs-audit line, which must say what it COVERED, not only what it found.
+
+    ``13 mention(s) fresh`` was measured to be thirteen restatements of one of
+    NINE declared facts: the line reported the checker's activity and read as a
+    verdict on the docs (BDL-UX #173). It now carries the declared surface, so a
+    reader can see that a green audit checked two facts of nine.
+
+    Coverage does not fail or WARN the step, deliberately. Silence in the docs
+    about a fact is not a defect in the code, and a WARN every project would
+    carry on every run would spend the channel ``sync-check`` needs for a real
+    missing baseline. The number is on the line everybody reads, and
+    ``docs audit --fail-if unverified>N`` is there for a project that wants it
+    enforced.
+    """
+    declared = len(result.facts)
+    unverified = result.unverified_facts
+    head = (
         f"{len(stale)} stale fact(s)"
         if stale
         else f"{len(result.findings)} mention(s) fresh"
     )
-    return GateStep("docs-audit", passed=passed, findings=findings, summary=summary)
+    coverage = f"{declared - len(unverified)}/{declared} declared fact(s) verified"
+    if unverified:
+        coverage += f", NOT VERIFIED: {', '.join(unverified)}"
+    return f"{head}; {coverage}"
 
 
 def _step_config_check(project_root: Path) -> GateStep:

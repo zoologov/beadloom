@@ -15,11 +15,12 @@ from __future__ import annotations
 import json
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from beadloom.doc_sync.scanner import DocScanner, Mention
+from beadloom.doc_sync.audit_coverage import FactCoverage, assess_coverage
+from beadloom.doc_sync.scanner import DocScanner, Mention, ScanSurface
 from beadloom.infrastructure.mcp_tools import MCP_TOOL_CATALOG
 from beadloom.infrastructure.surface_registry import get_cli_group
 
@@ -123,11 +124,33 @@ class AuditResult:
         Findings (stale/fresh) for mentions with a matching fact.
     unmatched:
         Mentions that had no corresponding fact in the registry.
+    coverage:
+        Per-fact coverage — what the run CHECKED, as opposed to what it found.
+        A finding count says nothing about the facts nobody stated, and on this
+        repo thirteen findings covered one fact of nine (BDL-UX #173).
+    surface:
+        Which documents were read and which were skipped, with reasons.
+        ``None`` when the result was built from mentions directly rather than
+        by scanning a project.
     """
 
     facts: dict[str, Fact]
     findings: list[AuditFinding]
     unmatched: list[Mention]
+    coverage: dict[str, FactCoverage] = field(default_factory=dict)
+    surface: ScanSurface | None = None
+
+    @property
+    def unverified_facts(self) -> list[str]:
+        """Declared facts the run verified nothing for — named, not just counted.
+
+        Includes both the facts no document states and the facts the scanner
+        cannot read; the two read differently in the report, but neither is a
+        verification and neither may be counted as one.
+        """
+        return sorted(
+            name for name, cov in self.coverage.items() if not cov.verified
+        )
 
 
 @dataclass(frozen=True)
@@ -165,7 +188,12 @@ class IgnoreRule:
         return str(mention.file).replace("\\", "/").endswith(self.path)
 
 
-_SUPPORTED_METRICS = frozenset({"stale"})
+#: ``stale``      — mentions that disagree with ground truth.
+#: ``unverified`` — DECLARED FACTS the run checked nothing for.  A project that
+#: wants every fact it declares to be stated somewhere can enforce it here;
+#: without such a channel the coverage number would be reportable but not
+#: actionable, which is how #178's honest-but-green log line failed.
+_SUPPORTED_METRICS = frozenset({"stale", "unverified"})
 _SUPPORTED_OPS = frozenset({">", ">="})
 _FAIL_IF_RE = re.compile(r"^\s*(\w+)\s*(>=?)\s*(\d+)\s*$")
 
@@ -194,7 +222,7 @@ def parse_fail_condition(expr: str) -> tuple[str, str, int]:
     if match is None:
         raise click.BadParameter(
             f"Invalid --fail-if expression {expr!r}. "
-            "Expected format: stale>N (e.g., stale>0, stale>5)",
+            "Expected format: METRIC>N (e.g., stale>0, unverified>2)",
             param_hint="'--fail-if'",
         )
 
@@ -213,6 +241,29 @@ def parse_fail_condition(expr: str) -> tuple[str, str, int]:
         )
 
     return metric, op, int(threshold_str)
+
+
+def metric_value(
+    metric: str, *, stale_count: int, unverified_count: int
+) -> int:
+    """Return the run's value for a ``--fail-if`` metric.
+
+    One place decides what each metric MEANS, so the reported number and the
+    exit code can never disagree — the failure mode of a gate that prints one
+    verdict and returns another.
+    """
+    return unverified_count if metric == "unverified" else stale_count
+
+
+def fail_condition_triggered(
+    condition: tuple[str, str, int], *, stale_count: int, unverified_count: int
+) -> bool:
+    """True when the run's value for *condition*'s metric crosses its threshold."""
+    metric, op, threshold = condition
+    value = metric_value(
+        metric, stale_count=stale_count, unverified_count=unverified_count
+    )
+    return value > threshold if op == ">" else value >= threshold
 
 
 def compare_facts(
@@ -284,7 +335,12 @@ def compare_facts(
             )
         )
 
-    return AuditResult(facts=facts, findings=findings, unmatched=unmatched)
+    return AuditResult(
+        facts=facts,
+        findings=findings,
+        unmatched=unmatched,
+        coverage=assess_coverage(facts, findings),
+    )
 
 
 def _values_match_with_tolerance(
@@ -464,12 +520,13 @@ def run_audit(
     facts = registry.collect(project_root, db)
 
     scanner = DocScanner()
-    paths = scanner.resolve_paths(project_root, scan_paths)
-    mentions = scanner.scan(paths)
+    surface = scanner.resolve_surface(project_root, scan_paths)
+    mentions = scanner.scan(list(surface.scanned))
 
     tolerances = _load_tolerances_from_config(project_root)
     ignore = _load_ignore_from_config(project_root)
-    return compare_facts(facts, mentions, tolerances=tolerances, ignore=ignore)
+    result = compare_facts(facts, mentions, tolerances=tolerances, ignore=ignore)
+    return replace(result, surface=surface)
 
 
 class FactRegistry:

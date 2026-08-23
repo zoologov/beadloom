@@ -157,7 +157,12 @@ def docs_audit(
     fail_if_expr: str | None,
 ) -> None:
     """Detect stale facts in project documentation."""
-    from beadloom.doc_sync.audit import parse_fail_condition, run_audit
+    from beadloom.doc_sync.audit import (
+        fail_condition_triggered,
+        metric_value,
+        parse_fail_condition,
+        run_audit,
+    )
     from beadloom.infrastructure.db import connection
 
     # Validate --fail-if early (before doing any work)
@@ -183,7 +188,13 @@ def docs_audit(
     fresh = [f for f in result.findings if f.status == "fresh"]
 
     if output_json:
-        _docs_audit_json(result, stale, fresh, fail_condition=fail_condition)
+        _docs_audit_json(
+            result,
+            stale,
+            fresh,
+            fail_condition=fail_condition,
+            project_root=project_root,
+        )
     else:
         _docs_audit_rich(
             result,
@@ -197,18 +208,52 @@ def docs_audit(
     # CI gate check (after output so user sees results)
     if fail_condition is not None:
         metric, op, threshold = fail_condition
-        if metric == "stale":
-            stale_count = len(stale)
-            should_fail = (op == ">" and stale_count > threshold) or (
-                op == ">=" and stale_count >= threshold
+        counts = {
+            "stale_count": len(stale),
+            "unverified_count": len(result.unverified_facts),
+        }
+        if fail_condition_triggered(fail_condition, **counts):
+            unit = "unverified fact(s)" if metric == "unverified" else "stale mention(s)"
+            click.echo(
+                f"CI gate triggered: {metric_value(metric, **counts)} {unit} "
+                f"(threshold: {metric}{op}{threshold})",
+                err=True,
             )
-            if should_fail:
-                click.echo(
-                    f"CI gate triggered: {stale_count} stale mention(s) "
-                    f"(threshold: {metric}{op}{threshold})",
-                    err=True,
-                )
-                sys.exit(1)
+            sys.exit(1)
+
+
+def _scan_surface_json(
+    surface: object, project_root: Path | None
+) -> dict[str, object]:
+    """Project the scan surface: which docs were read, which were not, and why.
+
+    A count of findings over an unstated surface is the defect BDL-UX #173
+    recorded; the audit therefore publishes the surface it ran over, not only
+    what it found on it.
+    """
+    from beadloom.doc_sync.scanner import ScanSurface
+
+    if not isinstance(surface, ScanSurface):
+        return {}
+
+    root = (project_root or Path.cwd()).resolve()
+
+    def _rel(path: Path) -> str:
+        try:
+            return str(path.resolve().relative_to(root))
+        except ValueError:
+            return str(path)
+
+    return {
+        "files_scanned": len(surface.scanned),
+        "files_excluded": len(surface.excluded),
+        "files_count_suppressed": len(surface.count_suppressed),
+        "excluded": [
+            {"path": _rel(entry.path), "reason": entry.reason}
+            for entry in surface.excluded
+        ],
+        "count_suppressed": [_rel(path) for path in surface.count_suppressed],
+    }
 
 
 def _docs_audit_json(
@@ -217,6 +262,7 @@ def _docs_audit_json(
     fresh: Sequence[object],
     *,
     fail_condition: tuple[str, str, int] | None = None,
+    project_root: Path | None = None,
 ) -> None:
     """Emit docs audit results as JSON."""
     from beadloom.doc_sync.audit import AuditFinding, AuditResult
@@ -264,29 +310,48 @@ def _docs_audit_json(
             }
         )
 
+    coverage_out: dict[str, dict[str, object]] = {
+        name: {
+            "status": cov.status,
+            "mentions": cov.mentions,
+            "reason": cov.reason,
+        }
+        for name, cov in sorted(result.coverage.items())
+    }
+    unverified = result.unverified_facts
+
     data: dict[str, object] = {
         "facts": facts_out,
         "stale": stale_out,
         "fresh": fresh_out,
         "unmatched": unmatched_out,
+        "coverage": coverage_out,
+        "unverified_facts": unverified,
+        "scan_surface": _scan_surface_json(result.surface, project_root),
         "summary": {
             "stale_count": len(stale_out),
             "fresh_count": len(fresh_out),
             "unmatched_count": len(unmatched_out),
+            "declared_fact_count": len(result.facts),
+            "verified_fact_count": len(result.facts) - len(unverified),
+            "unverified_count": len(unverified),
+            "unreadable_count": sum(
+                1 for cov in result.coverage.values() if cov.status == "unreadable"
+            ),
         },
     }
 
     if fail_condition is not None:
+        from beadloom.doc_sync.audit import fail_condition_triggered, metric_value
+
         metric, op, threshold = fail_condition
-        stale_count = len(stale_out)
-        triggered = (op == ">" and stale_count > threshold) or (
-            op == ">=" and stale_count >= threshold
-        )
+        counts = {"stale_count": len(stale_out), "unverified_count": len(unverified)}
         data["ci_gate"] = {
             "expression": f"{metric}{op}{threshold}",
-            "stale_count": stale_count,
+            "stale_count": len(stale_out),
+            "metric_value": metric_value(metric, **counts),
             "threshold": threshold,
-            "triggered": triggered,
+            "triggered": fail_condition_triggered(fail_condition, **counts),
         }
 
     click.echo(json.dumps(data, indent=2, ensure_ascii=False))
@@ -302,6 +367,63 @@ def _format_tolerance(tolerance: float) -> str:
         return "OK"
     pct = int(tolerance * 100)
     return f"OK (tolerance: \u00b1{pct}%)"
+
+
+
+def _coverage_note(coverage: object) -> str:
+    """Rich markup stating what the run checked for one fact."""
+    from beadloom.doc_sync.audit_coverage import (
+        COVERAGE_NOT_COVERED,
+        COVERAGE_UNREADABLE,
+        FactCoverage,
+    )
+
+    if not isinstance(coverage, FactCoverage):
+        return ""
+    if coverage.status == COVERAGE_NOT_COVERED:
+        return "[yellow]-- NOT VERIFIED: no document states it[/yellow]"
+    if coverage.status == COVERAGE_UNREADABLE:
+        return f"[yellow]-- NOT VERIFIED: {coverage.reason}[/yellow]"
+    return f"[green]-- {coverage.mentions} mention(s) checked[/green]"
+
+
+def _print_coverage_summary(console: object, result: object) -> None:
+    """Print how much of the declared surface this run actually covered.
+
+    ``N mention(s) fresh`` is a count of what the audit FOUND; it is silent
+    about the facts nothing was found for and about the documents that were
+    never opened.  Both are printed here, because a number whose coverage is
+    unstated reads as a clean bill of health (BDL-UX #173).
+    """
+    from rich.console import Console
+
+    from beadloom.doc_sync.audit import AuditResult
+
+    assert isinstance(console, Console)
+    assert isinstance(result, AuditResult)
+
+    declared = len(result.facts)
+    unverified = result.unverified_facts
+    verified = declared - len(unverified)
+    style = "green" if not unverified else "yellow"
+    console.print(
+        f"[{style}]{verified} of {declared} declared fact(s) verified"
+        + (f"; NOT VERIFIED: {', '.join(unverified)}" if unverified else "")
+        + f"[/{style}]"
+    )
+
+    surface = result.surface
+    if surface is not None:
+        line = f"[dim]{len(surface.scanned)} document(s) scanned"
+        if surface.excluded:
+            line += f", {len(surface.excluded)} not read"
+        if surface.count_suppressed:
+            line += (
+                f", {len(surface.count_suppressed)} scanned for versions only"
+                " (file-type heuristic)"
+            )
+        console.print(line + " -- `--verbose` names them[/dim]")
+    console.print()
 
 
 def _docs_audit_rich(
@@ -323,9 +445,15 @@ def _docs_audit_rich(
     _root = (project_root or Path.cwd()).resolve()
 
     def _rel_path(file_path: Path) -> str:
-        """Return path relative to project root, falling back to name."""
+        """Return path relative to project root, falling back to name.
+
+        Resolved first: the scanner hands back paths as they were globbed
+        (relative when the project root is relative), and comparing those to an
+        absolute root printed every document as a bare file name — thirty-three
+        identical ``SPEC.md`` lines that named nothing.
+        """
         try:
-            return str(file_path.relative_to(_root))
+            return str(file_path.resolve().relative_to(_root))
         except ValueError:
             return str(file_path.name)
 
@@ -342,12 +470,19 @@ def _docs_audit_rich(
         "test_count": " (symbols)",
     }
 
-    # Ground Truth
+    # Ground Truth — every declared fact carries what the run CHECKED for it.
+    # The block used to list nine facts next to a count of thirteen
+    # verifications that were all of ONE of them (BDL-UX #173); the coverage
+    # note sits on the fact so the two can no longer be read as each other.
     console.print("[bold]Ground Truth[/bold] (from project state)")
     for name, fact in sorted(result.facts.items()):
         label = name.replace("_", " ") + _fact_suffixes.get(name, "")
-        console.print(f"  {label}: [cyan]{fact.value}[/cyan]")
+        console.print(
+            f"  {label}: [cyan]{fact.value}[/cyan]"
+            f"  {_coverage_note(result.coverage.get(name))}"
+        )
     console.print()
+    _print_coverage_summary(console, result)
 
     # Stale Mentions
     if stale:
@@ -391,6 +526,27 @@ def _docs_audit_rich(
         console.print()
         console.print(f"  [green]{len(fresh)} verified mention(s)[/green]")
         console.print()
+
+    # The documents the run never read (only in verbose mode)
+    if verbose and result.surface is not None:
+        surface = result.surface
+        if surface.excluded:
+            console.print("[dim]Documents Not Read[/dim]")
+            console.print("[dim]" + "-" * 50 + "[/dim]")
+            for entry in surface.excluded:
+                console.print(
+                    f"  [dim]{_rel_path(entry.path)} -- {entry.reason}[/dim]"
+                )
+            console.print()
+        if surface.count_suppressed:
+            console.print("[dim]Counts Suppressed (versions still checked)[/dim]")
+            console.print("[dim]" + "-" * 50 + "[/dim]")
+            for path in surface.count_suppressed:
+                console.print(
+                    f"  [dim]{_rel_path(path)} -- file type carries too many "
+                    f"example numbers to read counts from[/dim]"
+                )
+            console.print()
 
     # Unmatched (only in verbose mode)
     if verbose and result.unmatched:

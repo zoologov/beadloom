@@ -21,6 +21,11 @@ docs_audit:
   # and the ai-techwriter "3.10-3.13" entries suppressed mentions the scanner
   # no longer produces, and a suppression that matches nothing reads as coverage
   # it does not have. Measured: 0 matching mentions repo-wide.
+  # Retired by BDL-061.45 (clause-scoped matching) for the same reason, measured
+  # the same way: README.ru cli_command_count=14, getting-started
+  # mcp_tool_count=14 and SECURITY mcp_tool_count=14 were all "N tools: 14 over
+  # the graph" breakdowns, which the extractor no longer binds to the noun on
+  # the other side of the separator. 0 matching mentions repo-wide afterwards.
   ignore:
     - path: docs/domains/context-oracle/README.md
       fact: language_count
@@ -34,22 +39,13 @@ docs_audit:
     - path: README.md
       fact: mcp_tool_count
       value: 14
-    - path: README.ru.md
-      fact: cli_command_count
-      value: 14
     - path: docs/architecture.md
-      fact: mcp_tool_count
-      value: 14
-    - path: docs/getting-started.md
       fact: mcp_tool_count
       value: 14
     - path: docs/guides/agentic-flow.md
       fact: mcp_tool_count
       value: 14
     - path: docs/services/mcp.md
-      fact: mcp_tool_count
-      value: 14
-    - path: SECURITY.md
       fact: mcp_tool_count
       value: 14
     - path: SECURITY.md

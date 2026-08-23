@@ -147,41 +147,18 @@ class TestPlainClaimsStillRead:
 
 
 # ===========================================================================
-# Measured blind spots (BDL-061.44 sweep)
+# Measured blind spots (BDL-061.44 sweep) -- RESOLVED by BDL-061.45
 #
 # A false POSITIVE announces itself by failing the Gate; a false NEGATIVE is
-# silent.  These are the silent ones the sweep measured but this bead does not
-# fix — each is pinned as a strict xfail so it becomes LOUD the day the
-# extractor stops being blind, instead of staying invisible forever.
+# silent.  Two silent ones were pinned here as strict xfails.  Both are now
+# settled, in opposite ways, and both live in tests/test_docs_audit_coverage.py:
+#
+#   * A modifier word suppressing a count it does not modify ("316 edges, one
+#     per import") was a real defect and is FIXED -- windows are scoped to the
+#     number's own clause.
+#   * Counts below ten are NOT extracted, and that stays: re-measuring the
+#     alternative on this repo produced 14 extra mentions, 13 of them ordinals,
+#     table cells and category breakdowns.  What changed is that the audit now
+#     REPORTS the fact it therefore cannot check, instead of reading green
+#     about it.
 # ===========================================================================
-
-
-class TestKnownBlindSpots:
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "Silent FN: a modifier word ('per') anywhere within +/-3 word "
-            "positions suppresses the number, even when it modifies a "
-            "different noun. Measured 2026-08-23; follow-up bead filed."
-        ),
-    )
-    def test_modifier_word_modifying_another_noun_blinds_a_genuine_count(
-        self, scanner: DocScanner, tmp_path: Path
-    ) -> None:
-        line = "The graph holds 316 edges, one per import."
-        assert _scan_line(scanner, tmp_path, line) == [("edge_count", 316)]
-
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "Silent FN: counts below 10 are never extracted, so any fact whose "
-            "true value is single-digit (language_count is 1 in this repo) can "
-            "never be audited and the Gate is green about a fact it never "
-            "checked. Measured 2026-08-23; follow-up bead filed."
-        ),
-    )
-    def test_single_digit_count_claim_is_invisible(
-        self, scanner: DocScanner, tmp_path: Path
-    ) -> None:
-        line = "Beadloom indexes 7 languages."
-        assert _scan_line(scanner, tmp_path, line) == [("language_count", 7)]

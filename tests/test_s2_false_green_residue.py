@@ -738,15 +738,6 @@ class TestDocsAuditNamesWhatItVerifiedNothingFor:
             f"a stated fact must be verified — declared {sorted(declared)}"
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING S2/.6-7 (BDL-061.45 owns the fix): the audit payload has no channel "
-            "naming a declared fact that matched nothing. Measured on this repo: 9 facts "
-            "declared, 13 'fresh' verifications, ALL of them mcp_tool_count — a green "
-            "docs-audit covers 1 of 9 declared facts and says nothing about the other 8."
-        ),
-    )
     def test_the_audit_names_the_facts_it_verified_nothing_for(self, tmp_path: Path) -> None:
         # Arrange
         project = _indexed(tmp_path)

@@ -8,6 +8,10 @@ from beadloom.doc_sync.audit import (
     compare_facts,
     run_audit,
 )
+from beadloom.doc_sync.audit_coverage import (
+    FactCoverage,
+    assess_coverage,
+)
 from beadloom.doc_sync.doc_indexer import (
     DocIndexResult,
     chunk_markdown,
@@ -26,7 +30,10 @@ from beadloom.doc_sync.engine import (
 )
 from beadloom.doc_sync.scanner import (
     DocScanner,
+    ExcludedDoc,
     Mention,
+    ScanSurface,
+    unreadable_reason,
 )
 from beadloom.doc_sync.surface import (
     VALID_SURFACES,
@@ -40,11 +47,15 @@ __all__ = [
     "AuditResult",
     "DocIndexResult",
     "DocScanner",
+    "ExcludedDoc",
     "Fact",
+    "FactCoverage",
     "FactRegistry",
     "Mention",
+    "ScanSurface",
     "SyncPair",
     "aggregate_hash",
+    "assess_coverage",
     "build_reference_state",
     "build_sync_state",
     "check_reference_drift",
@@ -58,4 +69,5 @@ __all__ = [
     "mark_synced_by_ref",
     "parse_watches",
     "run_audit",
+    "unreadable_reason",
 ]

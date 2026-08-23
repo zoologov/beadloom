@@ -475,13 +475,15 @@ Checks cross-boundary imports against rules defined in `rules.yml`. Format auto-
 
 `--format` options:
 - `rich` -- human-readable text (default on a TTY).
-- `json` -- structured output: a backward-compatible `violations` array (now with an additive `remediation` key), a stable agent-actionable `findings` array (`{kind, rule, severity, locations, why, remediation}`), and a `summary` object. Deterministic (violations are pre-sorted).
+- `json` -- structured output: a backward-compatible `violations` array (now with an additive `remediation` key), a stable agent-actionable `findings` array (`{kind, rule, severity, locations, why, remediation}`), a `suppressed` array naming every crossing a `forbid_import` exemption excused, and a `summary` object (whose `violations_suppressed` is that array's length). Deterministic (violations are pre-sorted).
 - `porcelain` -- one colon-separated line per violation (default when piped).
 - `github` -- GitHub Actions workflow commands (`::error file=…,line=…::<rule>: <message> — <remediation>`) so violations surface as inline PR annotations; warnings use `::warning`.
 
 Each violation carries an agent-actionable `remediation` hint derived per rule kind (deny/forbid → remove/reroute the import or edge; cycle → break the cycle at a named edge; layer → invert the dependency or extract a shared abstraction; cardinality → split the node; require → add the required edge).
 
 Exit codes: 0 = clean (or violations without `--strict`/`--fail-on-warn`), 1 = violations with `--strict` (errors only) or `--fail-on-warn` (any violation), 2 = configuration error or missing index.
+
+**What an exemption excused is part of the answer.** A `forbid_import` rule may carry `exempt:` entries that baseline a pre-existing crossing (see the [rule-engine SPEC](../domains/graph/features/rule-engine/SPEC.md)). Every run says how many crossings they suppressed — `", N crossings suppressed by an exemption"` on the summary line, `violations_suppressed` plus the `suppressed` array under `--format json`, and the same clause on the `0 violations, N rules evaluated` line printed when a piped run has nothing to report. Without it, `0 violations` reads as "nothing crossed" when it means "what crossed was excused" (BDL-061.49). An entry whose `until:` leads with an ISO date that has passed, and which is still suppressing something, is reported as a `rule_liveness` finding (`warn`); it keeps suppressing, so no build reddens because a day passed. `--fail-on-warn` is the lever for a project that wants that deadline enforced.
 
 Without `--strict` the exit code stays 0 even when error-severity violations were printed. That is deliberate — changing it would turn an adopter's green pipeline red on upgrade — so `lint` names the omission on stderr instead (`warning: N error-severity violation(s) found, but the exit code stays 0 without --strict`).
 
@@ -558,15 +560,31 @@ beadloom docs audit [--json] [--fail-if EXPR] [--stale-only] [--verbose] [--path
 
 Scans markdown documentation for numeric mentions (version strings, counts) and compares them against ground-truth facts collected from the project infrastructure (manifest files, graph DB, MCP tools, CLI commands). The audit is stable and runs as the **docs-audit step inside `beadloom ci`**, where it blocks the gate on `stale>0`.
 
-- `--json` -- structured JSON output with facts, findings, and unmatched mentions.
-- `--fail-if` -- CI gate expression. Supported format: `stale>N` or `stale>=N`. Exits with code 1 when condition is met.
+- `--json` -- structured JSON output with facts, findings, unmatched mentions, per-fact `coverage`, `unverified_facts` and the `scan_surface`.
+- `--fail-if` -- CI gate expression. Supported formats: `stale>N` / `stale>=N` (mentions that disagree with ground truth) and `unverified>N` / `unverified>=N` (declared facts the run checked nothing for). Exits with code 1 when the condition is met.
 - `--stale-only` -- show only stale findings (omit fresh matches).
-- `--verbose` -- include extra detail (unmatched mentions, fact sources).
+- `--verbose` -- include extra detail: unmatched mentions, the documents that were not read (with the reason each was skipped), and the ones scanned for versions only.
 - `--path` -- override default scan paths with custom glob patterns (can be specified multiple times).
 
 Exit codes: 0 = no issues (or below threshold), 1 = `--fail-if` condition met.
 
-**What counts as a claim.** A line is split on whitespace and only a token whose whole core is a number is a candidate — all digits, or digits in thousands groups (`6,390`, read whole as `6390`). A number inside a larger token is an identifier rather than a claim (`BDL-061.33`, `v2.2.0`, `utf-8`) and is never extracted; markdown emphasis, brackets and trailing punctuation around the token are stripped first. See `docs/domains/doc-sync/features/docs-audit/SPEC.md` for the layer model and the blind spots pinned as strict `xfail`s.
+**What a green audit covers.** `N mention(s) fresh` counts what the audit FOUND, not what it
+CHECKED, and the two were measured nine-fold apart on this repo: nine declared facts, thirteen
+verifications, all thirteen of the same fact (BDL-UX #173). Every declared fact therefore
+carries its own coverage — `verified` (something was compared), `not_covered` (no document
+states it) or `unreadable` (the extractor cannot read a claim of that value at all, with the
+reason) — printed against the fact in the `Ground Truth` block and summarised on one line:
+
+```
+2 of 9 declared fact(s) verified; NOT VERIFIED: cli_command_count, edge_count, ...
+46 document(s) scanned, 33 not read, 1 scanned for versions only (file-type heuristic)
+```
+
+A fact nothing was found for is never counted as passing. Coverage does not fail the gate —
+documentation is not required to state every fact — but `--fail-if unverified>N` makes it
+enforceable for a project that wants it.
+
+**What counts as a claim.** A line is split on whitespace and only a token whose whole core is a number is a candidate — all digits, or digits in thousands groups (`6,390`, read whole as `6390`). A number inside a larger token is an identifier rather than a claim (`BDL-061.33`, `v2.2.0`, `utf-8`) and is never extracted; markdown emphasis, brackets and trailing punctuation around the token are stripped first. A claim also reaches only to the end of its own clause: a modifier or a noun on the far side of `,` `;` `:` or a dash belongs to the rest of the sentence, so `The graph holds 316 edges, one per import.` is read (the `per` is not modifying the count) while the `14` in `exposes 18 tools: 14 over the graph` is not (it is a breakdown, not the total). See `docs/domains/doc-sync/features/docs-audit/SPEC.md` for the layer model and the declared blind spots.
 
 **Tuning false positives.** The audit masks dates, hex, issue IDs, line refs, and version pins, and applies per-fact tolerances. Two `.beadloom/config.yml` keys handle the rest:
 
@@ -590,6 +608,9 @@ beadloom docs audit
 
 # CI gate: fail if any stale docs
 beadloom docs audit --fail-if=stale>0
+
+# Stricter: also fail when a declared fact is stated by no document at all
+beadloom docs audit --fail-if=unverified>0
 
 # JSON output for scripting
 beadloom docs audit --json --stale-only
@@ -684,7 +705,7 @@ guards:
         until: "BDL-0xx introduces a scripts node"
 ```
 
-Strictness resolves per work kind (`--context work_kind=epic`) with a `default` fallback. **An exclusion must carry both `reason` and `until`** — one without either is a configuration error (exit 3 from a shell, exit 2 through a hook), because an unnamed, undated exclusion disables a gate permanently by accident. A `guards:` key naming an unregistered guard is likewise an error, not a no-op, and so is **a key the loader does not read** — a guard body carries `strictness` / `exclusions` / `options`, an exclusion carries `path` / `reason` / `until` (BDL-061.34): `option:` for `options:` used to drop the declared `trunk` and leave `working-branch` comparing against `main`, which passes an edit made on the project's real trunk at exit 0. There is **no `on:` key**: which tool invocations count as an edit, and which guards run on them, is decided by the harness adapter (in Claude Code, the matcher and the per-guard entries in `.claude/settings.json`), not by Beadloom. An `on:` key shipped in the S1 schema with no consumer and was deleted rather than quoted; it returns wired in S3.
+Strictness resolves per work kind (`--context work_kind=epic`) with a `default` fallback. **An exclusion must carry both `reason` and `until`** — one without either is a configuration error (exit 3 from a shell, exit 2 through a hook), because an unnamed, undated exclusion disables a gate permanently by accident. `until` may name a **deadline** (it LEADS with an ISO `YYYY-MM-DD`, optionally followed by the prose that explains it) or an **event** (anything else, as above — what retires a real exclusion is usually a landed change, not a day). A deadline is parsed by the same function the `forbid_import` exemptions of `rules.yml` use, so the two surfaces cannot promise different things; once it passes, the exclusion says so in its own skip reason (`… (until 2024-01-01 — EXPIRED)`) and `--liveness` flags it as `exit condition has passed: '<pattern>'`. It is never enforced — the exclusion keeps applying, because a guard that starts blocking with no commit behind it is worse than the silence being reported (BDL-061.49). A `guards:` key naming an unregistered guard is likewise an error, not a no-op, and so is **a key the loader does not read** — a guard body carries `strictness` / `exclusions` / `options`, an exclusion carries `path` / `reason` / `until` (BDL-061.34): `option:` for `options:` used to drop the declared `trunk` and leave `working-branch` comparing against `main`, which passes an edit made on the project's real trunk at exit 0. There is **no `on:` key**: which tool invocations count as an edit, and which guards run on them, is decided by the harness adapter (in Claude Code, the matcher and the per-guard entries in `.claude/settings.json`), not by Beadloom. An `on:` key shipped in the S1 schema with no consumer and was deleted rather than quoted; it returns wired in S3.
 
 **That matcher is the enforcement surface, and it is narrower than "every edit".** The emitted adapter is registered on `PreToolUse` for `Edit|Write|MultiEdit|NotebookEdit`, so a file written through `Bash` — `sed -i`, a heredoc, `python3 - <<EOF` — invokes no guard, produces no verdict and writes no firing. `--liveness` therefore cannot distinguish a session that edited entirely outside the matcher from one that complied: both leave the same record. This is a property of the binding rather than of a verdict, so no `not_covered` note can carry it (there is no evaluation to attach one to) — see BDL-UX #170 and the [flow-guards SPEC](../domains/application/features/flow-guards/SPEC.md#the-enforcement-surface).
 
@@ -696,7 +717,7 @@ The path is model-supplied, so its **shape is narrowed rather than repaired**: a
 
 `--hook HARNESS` reads the harness's own hook event as JSON on stdin and derives the context from it (`claude-code`: `tool_input.file_path`, `tool_name`, `hook_event_name`). The event is read as **bytes** and decoded as UTF-8 strictly, so a payload the harness could not encode is refused (`error`, exit 2) identically under every locale — reading it as text left the decode to `sys.stdin`, whose error handler is `surrogateescape` under `LC_ALL=C`/`PYTHONUTF8=1` (the default in most containers), and there the undecodable bytes silently became a file name the guard then evaluated (BDL-061.36). The emitted adapter (`.claude/hooks/beadloom-guard.sh`, written by `beadloom setup-agentic-flow`) contains no logic — it is one `exec beadloom guard "$1" --hook claude-code` — so a hook and a shell cannot produce different verdicts.
 
-`--liveness` reports, per guard, its effective strictness, how many times it fired, its last outcome, and three ways a gate stops protecting anything: `never-fired` (no firing that reached a verdict — an `error` is counted and shown, but does not clear the flag, because a guard that ran three times and answered none of them is not a live gate), `excluded-everywhere` (every strictness `off`, or nothing escapes the exclusion **list** — decided by matching the patterns against representative paths, not by comparing spellings, and asked of the list because `*` and `*/**` are each narrow and together exempt everything), and `matches no file in the project: '<pattern>'` (a declared exclusion that exempts nothing that currently exists — a typo'd `scrpits/**` is safe but was silent). A gate that cannot demonstrate it ran is treated as not having run. Every CLI evaluation appends one line to `.beadloom/guard-firings.jsonl`, which is the only file guards write — never the index they inspect. Decision logic lives in `application/guards/evaluation.py`; the CLI only renders it.
+`--liveness` reports, per guard, its effective strictness, how many times it fired, its last outcome, and four ways a gate stops protecting anything: `never-fired` (no firing that reached a verdict — an `error` is counted and shown, but does not clear the flag, because a guard that ran three times and answered none of them is not a live gate), `excluded-everywhere` (every strictness `off`, or nothing escapes the exclusion **list** — decided by matching the patterns against representative paths, not by comparing spellings, and asked of the list because `*` and `*/**` are each narrow and together exempt everything), `matches no file in the project: '<pattern>'` (a declared exclusion that exempts nothing that currently exists — a typo'd `scrpits/**` is safe but was silent), and `exit condition has passed: '<pattern>'` (its `until:` names a date that is behind us). A gate that cannot demonstrate it ran is treated as not having run. Every CLI evaluation appends one line to `.beadloom/guard-firings.jsonl`, which is the only file guards write — never the index they inspect. Decision logic lives in `application/guards/evaluation.py`; the CLI only renders it.
 
 ### beadloom ci
 
@@ -711,7 +732,7 @@ Composes the existing checkers, in order, into ONE verdict with a single exit co
 1. `reindex` (incremental) — unless `--no-reindex`.
 2. `lint --strict` — architecture boundary rules at error severity.
 3. `sync-check` — doc↔code freshness (stale pairs fail).
-4. `docs audit` — stale numeric facts in documentation (`stale>0` fails).
+4. `docs audit` — stale numeric facts in documentation (`stale>0` fails). The step line also states its coverage — `M/N declared fact(s) verified` plus the names of the facts it checked nothing for — because a count of findings says nothing about the facts nobody stated.
 5. `config-check` — AgentConfigAsCode drift.
 6. `doctor` — graph/data integrity; ONLY `ERROR`-severity checks fail the gate (WARNING/INFO advisories never block — no false gate).
 7. `federate --fail-on` — the cross-service landscape gate, only when `--hub` export(s) are given (safe-default fail-set `breaking,drift,orphaned_consumer,undeclared_producer`; no-false-gate verdicts rejected).

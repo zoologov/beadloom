@@ -83,7 +83,8 @@ green result says what it was green against.
 - **surface.py** -- Layer 2 reference surface-drift: parses the in-doc `<!-- beadloom:watches=cli,graph,flow.yml -->` annotation and computes coarse, deterministic per-surface signatures (`cli` command+flag tree, `graph` node+edge identity set, normalized `flow.yml`) plus the order-sensitive aggregate hash
 - **doc_indexer.py** -- Markdown scanning, chunking by H2 headings, section classification, and SQLite population
 - **audit.py** -- Documentation audit: fact registry, comparator, and audit facade for detecting stale numeric facts
-- **scanner.py** -- Document scanner: keyword-proximity extraction of numeric fact mentions from markdown files
+- **scanner.py** -- Document scanner: which markdown files are in scope (and which are skipped, with the reason), and keyword-proximity extraction of numeric fact mentions from them
+- **audit_coverage.py** -- Per-fact coverage of an audit run: whether anything was checked for each declared fact (`verified` / `not_covered` / `unreadable`), so a count of findings can no longer read as a verdict on facts nobody stated
 - **docsync.py** (in `services/commands/`) -- CLI commands: `beadloom sync-check`, `beadloom sync-update`, `beadloom install-hooks`, and `beadloom active-sync` (the ACTIVE-table reconcile command; annotated as `component=active-table` but housed in this module after the BDL-059 split of `services/cli.py` into `services/commands/`)
 
 ### Features

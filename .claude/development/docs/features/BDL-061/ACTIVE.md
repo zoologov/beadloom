@@ -1,6 +1,6 @@
 # ACTIVE: BDL-061 — Enforced agentic flow
 
-> **Last updated:** 2026-08-23
+> **Last updated:** 2026-08-24
 > **Phase:** Development
 
 ---
@@ -10,10 +10,12 @@
 **Slice:** S2b — the false-green residue S2 measured and left open, on
 `features/BDL-061-S2b`. S2 itself is complete (`.5`, `.33`, `.34`, `.37`, `.38`, `.40`, `.43`,
 `.44`, plus `.6` verification, `.7` review and `.8` docs, all closed).
-**Closed in S2b so far:** `.48` (rule liveness for all nine rule types) and `.46` + `.47`
-(*unverifiable is not clean* — one fix; the baseline moved out of the database).
+**Closed in S2b so far:** `.48` (rule liveness for all nine rule types), `.46` + `.47`
+(*unverifiable is not clean* — one fix; the baseline moved out of the database) and `.45`
+(the same equation in `docs audit`: a declared fact nothing was checked for is now named,
+never counted as fresh).
 **Open in S2b:** `.49` (an exemption's `until:` is prose), `.50` (annotations the extractor
-cannot see), `.45` (docs-audit per-fact coverage), `.51` (three modules past 1000 lines).
+cannot see), `.51` (three modules past 1000 lines).
 **Next:** S3 opens with `.9` (compose(core, arch, stack, project)). Also outstanding and not
 part of any slice: `.35`, `.39`, `.41`, `.42`.
 
@@ -309,6 +311,28 @@ header comment, where a reader of a red check will look first.
       every check is OK. Four of `.6`'s strict `xfail`s XPASSed and were un-xfailed. 5824
       passed, ruff + mypy --strict clean, Gate rc 0 on an INCREMENTAL index.
 
+- [x] **S2b `.45` — the audit now reports what it did NOT verify** (2026-08-24). Same equation as
+      `.46`/`.47`, in `docs audit`: a green `13 mention(s) fresh` was thirteen restatements of ONE
+      of NINE declared facts, and nothing said so. Every declared fact now carries its own
+      coverage — `verified`, `not_covered` (no document states it) or `unreadable` (the extractor
+      cannot read a claim of that value, with the reason) — printed against the fact, summarised
+      on the `beadloom ci` line, and never counted as passing. A mention hidden by a
+      `docs_audit.ignore` rule is deliberately NOT coverage. The scan surface is published too:
+      all 33 unread documents named with the pattern that skipped them. **The two parser blind
+      spots were settled by measurement, in opposite directions.** The modifier class was a real
+      defect and is fixed — both windows stop at a phrase separator, so `316 edges, one per
+      import` is read and the `14` in `exposes 18 tools: 14 over the graph` is not; parentheses
+      were EXCLUDED from the separator set because they cost the true verification in `MCP tools
+      (18):`, and a lost true positive is the same silent false negative being fixed. Repo-wide:
+      0 mentions gained, 5 lost, all five confirmed false positives — three more dead
+      `docs_audit.ignore` entries retired, none added. The single-digit floor was re-measured and
+      KEPT: removing it yields 14 extra mentions of which 13 are ordinals, table cells and
+      category breakdowns, several of which would have failed the Gate. Trading a silent false
+      negative for a loud false positive that then needs a suppression is the wrong trade, so the
+      floor stays and `language_count` (value 1) is reported `unreadable` by name. MEASURED after
+      the fix: **2 of 9 declared facts verified on this repo, 6 `not_covered`, 1 `unreadable`,
+      all seven named.** Four sabotages each reddened the naming tests; all reverted clean.
+
 ## Results
 
 | Bead | Status | Details |
@@ -341,7 +365,7 @@ header comment, where a reader of a red check will look first.
 | .39 | Pending | S2/S3 chore: a Windows CI leg — only after the six `skipif(win32)` guard tests are made meaningful |
 | .41 | Pending | S3: three more ambient-decode sites, plus an MCP test runner with no timeout |
 | .42 | Pending | S2/S3: the locale dimension's first run — 100 ASCII / 76 8-bit failures from text I/O without an explicit encoding (the title still carries `.38`'s superseded 97/73; the owner is correcting it) |
-| .45 | Pending | S2 follow-up: docs-audit reports green about facts it never checked (#173) — per-fact coverage |
+| .45 | Done | P1 (#173): docs-audit reports what it did NOT verify — per-fact coverage (`verified` / `not_covered` / `unreadable`), a published scan surface, clause-scoped matching; measured 2 of 9 declared facts verified on this repo |
 | .46 | Done | P0 (#174, ONE fix with `.47`): a deleted doc is `missing`, not `ok`; the DECLARED surface outlives the file; the pair count is a committed ledger; doctor's count audited |
 | .47 | Done | P0 (#175, ONE fix with `.46`): the baseline moved OUT of the database — git for freshness, a committed ledger for the surface; a rebuilt baseline is corroborated or reported `unverified`, never fresh |
 | .48 | Pending | P0: rule liveness covers one rule type of six, and `validate_rules()` computes the diagnosis that `linter.py` throws away |

@@ -23,7 +23,8 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
 2. **lint** — `lint --strict`, architecture boundaries.
 3. **sync-check** — symbol-pair doc freshness; fails on stale **and missing**
    pairs, and reports `unverified` ones as `WARN` rather than fresh.
-4. **docs-audit** — numeric/version fact freshness; fails on `stale>0`.
+4. **docs-audit** — numeric/version fact freshness; fails on `stale>0`, and
+   states how much of the declared fact surface it covered.
 5. **config-check** — agent-config drift (AgentConfigAsCode).
 6. **doctor** — graph integrity.
 7. **federate** — `federate --fail-on` when hub exports are supplied.
@@ -35,6 +36,16 @@ fact (version, node/edge counts, language/framework counts, MCP-tool count,
 CLI-command count). The audit's false-positive masking and per-fact tolerances
 keep this honest; targeted exceptions live in `.beadloom/config.yml`
 (`docs_audit.tolerances` / `docs_audit.ignore`).
+
+Its summary line carries the audit's own COVERAGE, not only its findings:
+`14 mention(s) fresh; 2/9 declared fact(s) verified, NOT VERIFIED: ...`. A bare
+`13 mention(s) fresh` was measured on this repo to be thirteen restatements of
+ONE of nine declared facts — the line reported the checker's activity and read as
+a verdict on the documentation (BDL-UX #173). Coverage is reported, not enforced:
+silence in the docs about a fact is not a defect in the code, and a `WARN` every
+project would carry on every run would spend the channel `sync-check` needs for a
+genuinely missing baseline. `beadloom docs audit --fail-if unverified>N` is the
+opt-in for a project that wants every declared fact stated somewhere.
 
 Each step reports a `GateStep` with `PASS` / `WARN` / `FAIL` / `SKIP` — never an
 ambiguous green — and its findings in the shared finding shape. `GateResult.ok`
@@ -64,8 +75,9 @@ as the code's health (BDL-UX #174/#175):
 
 - Every step runs; the gate never short-circuits on the first failure.
 - A skipped step counts as passed (it cannot block the build).
-- `docs-audit` blocks on `stale>0`; `sync-check` `surface_drift`, `unverified`
-  and declared-surface-shrink findings are advisory and never fail the gate.
+- `docs-audit` blocks on `stale>0` and never counts an unverified fact as
+  passing; `sync-check` `surface_drift`, `unverified` and
+  declared-surface-shrink findings are advisory and never fail the gate.
 - No step prints a count of something it did not check, and no step prints
   *clean* over a warning.
 - `WARN` never changes the exit code: an adopter whose project is green today
