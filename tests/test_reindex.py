@@ -887,8 +887,12 @@ class TestSnapshotSyncBaselines:
 
         symbols, pairs = _snapshot_sync_baselines(conn)
         assert symbols == {"F1": "abc123"}
-        # No doc_hash_at_last_edit set, so pair_snapshots should be empty.
-        assert pairs == {}
+        # Every pair is snapshotted, with or without two-phase data: the
+        # baseline's PROVENANCE has to survive the table drop, or a fabricated
+        # baseline comes back looking earned (BDL-UX #175).
+        pair = pairs[("spec.md", "src/api.py")]
+        assert pair.doc_hash_at_last_edit == ""
+        assert pair.code_hash_at_sync == "ch1"
         conn.close()
 
     def test_returns_empty_when_no_table(self, tmp_path: Path) -> None:
@@ -922,7 +926,9 @@ class TestSnapshotSyncBaselines:
 
         symbols, pairs = _snapshot_sync_baselines(conn)
         assert symbols == {}
-        assert pairs == {}
+        # The PAIR is still snapshotted (it carries the baseline provenance);
+        # only the empty symbols hash is skipped.
+        assert set(pairs) == {("spec.md", "src/api.py")}
         conn.close()
 
     def test_preserves_two_phase_data(self, project: Path) -> None:

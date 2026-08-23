@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -38,6 +39,14 @@ from beadloom.services.commands._root import main
     "the ref while the doc was not correspondingly updated.",
 )
 @click.option(
+    "--record-surface",
+    is_flag=True,
+    default=False,
+    help="Record the declared documentation surface (pair + declared-doc counts) "
+    "to the committed `.beadloom/sync-surface.json`, so a later run can tell "
+    "when the surface SHRANK. Deliberate act: no ordinary run rewrites it.",
+)
+@click.option(
     "--project",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     default=None,
@@ -50,19 +59,31 @@ def sync_check(
     output_report: bool,
     ref_filter: str | None,
     since_ref: str | None,
+    record_surface: bool,
     project: Path | None,
 ) -> None:
     """Check doc-code synchronization status.
 
-    Exit codes: 0 = all ok, 1 = error, 2 = stale pairs found.
+    Exit codes: 0 = all ok, 1 = error, 2 = a pair is stale or MISSING.
+
+    A pair reads ``ok`` only when it was compared against a baseline and found
+    fresh. ``missing`` (the doc or code file is gone, or the graph declares a doc
+    that is not on disk) fails the check; ``unverified`` (the index was rebuilt,
+    so its baseline is the tree it was built from, and git could not supply one)
+    is reported by name and never counted as fresh.
     """
+    from beadloom.doc_sync.declared_docs import count_declared_docs
     from beadloom.doc_sync.engine import (
+        BLOCKING_STATUSES,
+        STATUS_OK,
+        STATUS_UNVERIFIED,
         _validate_git_ref,
         check_reference_drift,
         check_sync,
         check_sync_since,
         find_unchecked_doc_nodes,
     )
+    from beadloom.doc_sync.surface_ledger import compare_surface, read_ledger, write_ledger
     from beadloom.infrastructure.db import open_db
 
     project_root = project or Path.cwd()
@@ -92,18 +113,40 @@ def sync_check(
         # stops a green verdict from reading as "checked" (BDL-UX #146);
         # advisory, so the exit code is unaffected.
         unchecked = find_unchecked_doc_nodes(conn)
+    declared_docs = count_declared_docs(conn)
     conn.close()
 
     if ref_filter:
         results = [r for r in results if r["ref_id"] == ref_filter]
         unchecked = [u for u in unchecked if u["ref_id"] == ref_filter]
 
-    has_stale = any(r["status"] == "stale" for r in results)
+    # ``missing`` blocks exactly like ``stale``: the gate is not satisfied by
+    # having less to check (BDL-UX #174).
+    has_blocking = any(r["status"] in BLOCKING_STATUSES for r in results)
+    unverified = [r for r in results if r["status"] == STATUS_UNVERIFIED]
     # Surface drift is advisory (warning) — it NEVER affects the exit code.
     drifted_refs = [r for r in references if r["status"] == "surface_drift"]
 
+    pair_count = len([r for r in results if r.get("code_path")])
+    if record_surface:
+        recorded_path = write_ledger(
+            project_root,
+            declared_pairs=pair_count,
+            declared_docs=declared_docs,
+            recorded_at=datetime.now(tz=timezone.utc).isoformat(),
+        )
+        click.echo(
+            f"Recorded declared surface: {pair_count} pair(s), "
+            f"{declared_docs} declared doc(s) -> {recorded_path}"
+        )
+    surface = compare_surface(
+        read_ledger(project_root),
+        declared_pairs=pair_count,
+        declared_docs=declared_docs,
+    )
+
     if output_json:
-        ok_count = sum(1 for r in results if r["status"] == "ok")
+        ok_count = sum(1 for r in results if r["status"] == STATUS_OK)
         stale_count = sum(1 for r in results if r["status"] == "stale")
         summary: dict[str, Any] = {
             "total": len(results),
@@ -119,6 +162,11 @@ def sync_check(
                     "doc_path": r["doc_path"],
                     "code_path": r["code_path"],
                     "reason": r.get("reason", "ok"),
+                    # WHICH baseline produced this verdict — a green result must
+                    # say what it was green against (BDL-UX #175). Only in the
+                    # stored-baseline mode: `--since` is a ref-relative view
+                    # whose JSON shape is a fixed contract.
+                    **({} if since_ref is not None else {"baseline": r.get("baseline", "index")}),
                     **({"details": r["details"]} if r.get("details") else {}),
                 }
                 for r in results
@@ -131,9 +179,17 @@ def sync_check(
         if since_ref is None:
             # Both additions belong to the stored-baseline mode only: `--since`
             # is a ref-relative pair view whose JSON shape is a fixed contract.
+            summary["missing"] = sum(1 for r in results if r["status"] == "missing")
+            summary["unverified"] = len(unverified)
             summary["unchecked"] = len(unchecked)
             data["unchecked"] = unchecked
             summary["surface_drift"] = len(drifted_refs)
+            summary["declared_docs"] = declared_docs
+            data["declared_surface"] = {
+                "recorded": surface.recorded,
+                "shrank": surface.shrank,
+                "message": surface.message,
+            }
             data["references"] = [
                 {
                     "status": r["status"],
@@ -163,11 +219,22 @@ def sync_check(
             click.echo("No sync pairs found.")
         else:
             for r in results:
-                marker = "[stale]" if r["status"] == "stale" else "[ok]"
+                marker = _STATUS_MARKER.get(str(r["status"]), "[ok]")
                 reason = r.get("reason", "ok")
                 details = r.get("details", "")
 
-                if reason == "untracked_files" and details:
+                if r["status"] == "missing":
+                    click.echo(
+                        f"  {marker} {r['ref_id']}: {r['doc_path']} "
+                        f"({_MISSING_WHY[str(reason)]})"
+                    )
+                elif r["status"] == STATUS_UNVERIFIED:
+                    click.echo(
+                        f"  {marker} {r['ref_id']}: {r['doc_path']} <-> {r['code_path']} "
+                        f"(not checked: no baseline — the index was rebuilt and git "
+                        f"could not supply one)"
+                    )
+                elif reason == "untracked_files" and details:
                     click.echo(f"  {marker} {r['ref_id']}: {r['doc_path']} (untracked: {details})")
                 elif reason == "missing_modules" and details:
                     click.echo(
@@ -201,9 +268,28 @@ def sync_check(
                     f"(not checked: {_UNCHECKED_WHY[u['reason']].format(source=u['details'])})"
                 )
 
-    if has_stale:
+            if surface.message:
+                click.echo(f"  [warn] {surface.message}")
+
+    if has_blocking:
         sys.exit(2)
 
+
+# The four verdicts, in the reader's terms. ``[missing]`` and ``[not verified]``
+# exist because they used to print ``[ok]`` (BDL-UX #174/#175).
+_STATUS_MARKER = {
+    "ok": "[ok]",
+    "stale": "[stale]",
+    "missing": "[missing]",
+    "unverified": "[not verified]",
+}
+
+# What a ``missing`` verdict means, by reason.
+_MISSING_WHY = {
+    "doc_missing": "the linked doc file is gone",
+    "code_missing": "the paired code file is gone",
+    "declared_doc_missing": "declared in the graph, not on disk",
+}
 
 # Why a node that declares a doc contributes no sync pair, in the reader's terms.
 _UNCHECKED_WHY = {

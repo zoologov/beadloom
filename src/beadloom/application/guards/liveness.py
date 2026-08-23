@@ -10,7 +10,12 @@ reported per guard alongside the firing evidence by ``beadloom guard
 * it simply never fires;
 * one of its exclusions matches nothing that exists — the author believes a
   directory is exempt and it is not, and only a reread of ``flow.yml`` would
-  say otherwise.
+  say otherwise;
+* one of its exclusions has outlived the date it gave itself — the exit
+  condition arrived and nothing announced it (BDL-061.49). Reported, never
+  enforced: an exclusion does not stop applying on a calendar day, because a
+  guard that starts blocking with no commit behind it is a worse failure than
+  the one being reported.
 
 The third needs the project's tree, which is why it is answered here rather than
 on :class:`~beadloom.application.guards.config.GuardSpec`: "is this pattern a
@@ -34,6 +39,7 @@ from beadloom.application.guards.firing import read_firings
 from beadloom.application.guards.models import GuardOutcome
 
 if TYPE_CHECKING:
+    from datetime import date
     from pathlib import Path
 
     from beadloom.application.guards.config import GuardsConfig, GuardSpec
@@ -80,6 +86,7 @@ class GuardLiveness:
     last_fired_at: str = ""
     last_outcome: str = ""
     dead_exclusions: tuple[str, ...] = ()
+    expired_exclusions: tuple[str, ...] = ()
 
     @property
     def idle(self) -> bool:
@@ -99,6 +106,7 @@ class GuardLiveness:
             "last_outcome": self.last_outcome,
             "idle": self.idle,
             "dead_exclusions": list(self.dead_exclusions),
+            "expired_exclusions": list(self.expired_exclusions),
         }
 
 
@@ -119,6 +127,19 @@ def dead_exclusions(spec: GuardSpec, project_files: tuple[str, ...]) -> tuple[st
         exclusion.path
         for exclusion in spec.exclusions
         if not any(exclusion.matches(path) for path in project_files)
+    )
+
+
+def expired_exclusions(spec: GuardSpec, *, today: date | None = None) -> tuple[str, ...]:
+    """Declared patterns whose stated exit condition is a date that has passed.
+
+    Answered from the configuration alone — unlike :func:`dead_exclusions` this
+    needs no tree, because a deadline is a property of the entry. An exclusion
+    whose ``until`` names an event rather than a date is never listed: it is not
+    unexpired, it is uncheckable, and saying so is the SPEC's job, not a row's.
+    """
+    return tuple(
+        exclusion.path for exclusion in spec.exclusions if exclusion.expired(today)
     )
 
 
@@ -173,6 +194,7 @@ def _row(
         last_fired_at=last.at if last else "",
         last_outcome=last.outcome if last else "",
         dead_exclusions=dead_exclusions(spec, files),
+        expired_exclusions=expired_exclusions(spec),
     )
 
 

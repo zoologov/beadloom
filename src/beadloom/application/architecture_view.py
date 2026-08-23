@@ -126,7 +126,8 @@ def _doc_status(conn: sqlite3.Connection, ref_id: str) -> str:
     if has_doc is None:
         return _DOC_NONE
     stale = conn.execute(
-        "SELECT 1 FROM sync_state WHERE ref_id = ? AND status = 'stale' LIMIT 1",
+        # ``missing`` marks the node not-fresh too (BDL-UX #174).
+        "SELECT 1 FROM sync_state WHERE ref_id = ? AND status IN ('stale', 'missing') LIMIT 1",
         (ref_id,),
     ).fetchone()
     return _DOC_STALE if stale is not None else _DOC_FRESH

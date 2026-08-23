@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
     from pathlib import Path
 
 
@@ -27,6 +27,36 @@ class Mention:
     file: Path
     line: int
     context: str
+
+
+@dataclass(frozen=True)
+class ExcludedDoc:
+    """A markdown file the scanner did not read, and the reason it did not."""
+
+    path: Path
+    reason: str
+
+
+@dataclass(frozen=True)
+class ScanSurface:
+    """Which documents the audit actually read — the audit's own surface.
+
+    A scan reports numbers found in the files it read; nothing in that report
+    used to say which files it never opened.  On this repo that was 32 of 78
+    markdown files (every ``docs/**/features/*/SPEC.md``), plus one whose counts
+    are suppressed by the file-type heuristic — a third of the documentation,
+    silently outside the audit (BDL-UX #173).
+
+    - ``scanned``          — files read for mentions.
+    - ``excluded``         — files never opened, each with its reason.
+    - ``count_suppressed`` — files read for versions only, because their
+      file type (``SPEC.md`` / ``CONTRIBUTING.md``) makes count matches
+      unreliable.  They are a SUBSET of ``scanned``.
+    """
+
+    scanned: tuple[Path, ...] = ()
+    excluded: tuple[ExcludedDoc, ...] = ()
+    count_suppressed: tuple[Path, ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -116,6 +146,52 @@ _PLAIN_NUMBER_RE = re.compile(r"\d+")
 _GROUPED_NUMBER_RE = re.compile(r"\d{1,3}(?:,\d{3})+")
 
 # ---------------------------------------------------------------------------
+# Clause scope: a number's claim reaches only to the end of its own clause
+# ---------------------------------------------------------------------------
+#
+# A modifier suppresses a number when it MODIFIES it, and a keyword names a
+# number when it is the noun that number COUNTS.  A flat +/-N word window cannot
+# tell either, and both directions were measured wrong (BDL-UX #173):
+#
+#   "The graph holds 316 edges, one per import."   -> "per" killed a true count
+#   "exposes 18 tools: 14 over the graph"          -> "tools" bound the 14 too,
+#                                                     so a BREAKDOWN read as a
+#                                                     restatement of the TOTAL
+#
+# Both windows therefore stop at a phrase separator.  Punctuation is a coarse
+# proxy for syntax, but it is the one every prose convention agrees on, and it
+# is the cheapest thing that distinguishes "what this number counts" from "what
+# the rest of the sentence talks about".
+#
+# The SET was chosen by measurement, not by taste.  Parentheses are deliberately
+# NOT separators: they cost the true verification in ``MCP tools (18):`` — an
+# appositive restates its noun rather than leaving it — and a lost true
+# verification is the very silent false negative this rule exists to remove.
+# With ``,;:`` and the dashes: 0 mentions gained repo-wide, 5 lost, and every
+# one of the five a confirmed false positive that had needed a
+# ``docs_audit.ignore`` entry to stay quiet.
+_CLAUSE_SEPARATORS = frozenset(",;:\u2014\u2013")
+
+# ---------------------------------------------------------------------------
+# Extraction floors — what the scanner deliberately cannot read
+# ---------------------------------------------------------------------------
+#
+# These are the audit's own blind spots, and they are DECLARED rather than
+# implicit: :func:`unreadable_reason` turns each one into a sentence the audit
+# prints against the affected fact, so a fact nobody can check never reads as a
+# fact that checked out (BDL-UX #173).
+#
+# The single-digit floor was re-measured before being kept (BDL-061.45).
+# Removing it and binding a small number to an immediately following keyword
+# yields 14 extra mentions on this repo, of which 13 are ordinals ("5. Domain
+# list"), table cells ("| 5 | tests |") and category breakdowns ("(4 tools):"),
+# several of which would have failed the Gate.  Trading a silent false negative
+# for a loud false positive that then needs a suppression entry is the wrong
+# trade; the floor stays, and its cost is now reported instead of hidden.
+MIN_READABLE_NUMBER = 2
+MIN_READABLE_COUNT = 10
+
+# ---------------------------------------------------------------------------
 # Layer 1: Blocklist modifier words — numbers near these are NOT factual claims
 # ---------------------------------------------------------------------------
 
@@ -157,6 +233,9 @@ _LOW_CONFIDENCE_FILENAMES: frozenset[str] = frozenset({
 
 # Directories to always exclude from path resolution
 _EXCLUDE_DIRS = frozenset({"node_modules", ".git", "__pycache__", ".venv", "venv"})
+
+# Default glob patterns for files to scan.
+DEFAULT_SCAN_GLOBS: tuple[str, ...] = ("*.md", "docs/**/*.md", ".beadloom/*.md")
 
 # Glob patterns for files to exclude by default
 _EXCLUDE_PATTERNS = (
@@ -266,9 +345,9 @@ class DocScanner:
             lambda m: " " * len(m.group()), text_for_words,
         )
 
-        for start, number_val in self._iter_number_tokens(text_for_words):
+        for start, end, number_val in self._iter_number_tokens(text_for_words):
             # Skip 0 and 1 — too common and ambiguous
-            if number_val <= 1:
+            if number_val < MIN_READABLE_NUMBER:
                 continue
 
             # Skip a number written as a share, not a count: "50 %" (the
@@ -294,15 +373,22 @@ class DocScanner:
             if num_idx == -1:
                 continue
 
+            # Every window below is scoped to the number's own clause: a word
+            # on the far side of a phrase separator neither modifies it nor
+            # names what it counts (see _CLAUSE_SEPARATORS).
+            in_clause = self._clause_scope(
+                text_for_words, word_positions, num_idx, span=(start, end)
+            )
+
             # Layer 1c: skip if modifier word is within ±3 tokens of number
             modifier_window_start = max(0, num_idx - 3)
             modifier_window_end = min(
                 len(word_positions), num_idx + 3 + 1
             )
             modifier_tokens = [
-                wp.group().lower()
-                for wp in word_positions[modifier_window_start:modifier_window_end]
-                if re.match(r"[a-zA-Z]", wp.group())
+                word_positions[i].group().lower()
+                for i in range(modifier_window_start, modifier_window_end)
+                if re.match(r"[a-zA-Z]", word_positions[i].group()) and in_clause(i)
             ]
 
             if self._has_modifier(modifier_tokens):
@@ -323,15 +409,17 @@ class DocScanner:
                 if fact_name == "version":
                     continue  # handled separately
 
-                # Skip small numbers (<10) for count-type facts — too
-                # many false positives from examples in SPEC docs.
-                if number_val < 10 and fact_name.endswith("_count"):
+                # Skip small numbers for count-type facts — measured to be
+                # ordinals, table cells and category breakdowns far more often
+                # than counts (see MIN_READABLE_COUNT).  The cost is reported
+                # per fact by :func:`unreadable_reason`, never silent.
+                if number_val < MIN_READABLE_COUNT and fact_name.endswith("_count"):
                     continue
 
                 for keyword in keywords:
                     kw_words = keyword.lower().split()
                     score = self._keyword_distance(
-                        kw_words, word_positions, num_idx,
+                        kw_words, word_positions, num_idx, in_clause=in_clause,
                     )
                     if score is not None and score < best_score:
                         best_score = score
@@ -351,8 +439,8 @@ class DocScanner:
         return results
 
     @staticmethod
-    def _iter_number_tokens(text: str) -> Iterator[tuple[int, int]]:
-        """Yield ``(offset, value)`` for tokens that are entirely a number.
+    def _iter_number_tokens(text: str) -> Iterator[tuple[int, int, int]]:
+        """Yield ``(start, end, value)`` for tokens that are entirely a number.
 
         Implements the token boundary policy documented at the top of this
         module: split on whitespace, strip wrapping punctuation, and accept a
@@ -360,8 +448,11 @@ class DocScanner:
         larger token (``BDL-061.33``, ``v2.2.0``, ``Python 3.10``, ``PR #33``,
         ``33/40``) is an identifier and yields nothing.
 
-        ``offset`` is the position of the number's first digit in *text*, so
-        callers can locate it among the surrounding words.
+        ``start`` is the position of the number's first digit in *text* and
+        ``end`` the position just past its last, so callers can both locate it
+        among the surrounding words and know how much of the line it OWNS — the
+        separator inside ``6,390`` belongs to the number, not between it and the
+        next word.
         """
         for token in _TOKEN_RE.finditer(text):
             raw = token.group()
@@ -369,11 +460,43 @@ class DocScanner:
             core = lstripped.rstrip(_TOKEN_TRAIL_STRIP)
             if not core:
                 continue
-            offset = token.start() + (len(raw) - len(lstripped))
+            start = token.start() + (len(raw) - len(lstripped))
+            end = start + len(core)
             if _PLAIN_NUMBER_RE.fullmatch(core):
-                yield offset, int(core)
+                yield start, end, int(core)
             elif _GROUPED_NUMBER_RE.fullmatch(core):
-                yield offset, int(core.replace(",", ""))
+                yield start, end, int(core.replace(",", ""))
+
+    @staticmethod
+    def _clause_scope(
+        text: str,
+        word_positions: list[re.Match[str]],
+        num_idx: int,
+        *,
+        span: tuple[int, int],
+    ) -> Callable[[int], bool]:
+        """Return a predicate: is word *i* in the same clause as the number?
+
+        Two words share a clause when no phrase separator stands between them.
+        The predicate is built once per number so both the modifier window and
+        the keyword window are scoped identically — scoping one and not the
+        other would let a noun bind across a boundary the qualifier could not
+        cross, which is a false positive wearing the fix's clothes.
+        """
+        anchor_start, anchor_end = span
+
+        def in_clause(i: int) -> bool:
+            other = word_positions[i]
+            if other.start() >= anchor_start and other.end() <= anchor_end:
+                return True  # a digit group of the number itself
+            between = (
+                text[other.end():anchor_start]
+                if other.end() <= anchor_start
+                else text[anchor_end:other.start()]
+            )
+            return not any(ch in _CLAUSE_SEPARATORS for ch in between)
+
+        return in_clause
 
     @staticmethod
     def _has_modifier(tokens: list[str]) -> bool:
@@ -402,6 +525,8 @@ class DocScanner:
         kw_words: list[str],
         word_positions: list[re.Match[str]],
         num_idx: int,
+        *,
+        in_clause: Callable[[int], bool],
     ) -> tuple[int, int] | None:
         """Return (distance, before_flag) from a number to a keyword match.
 
@@ -410,6 +535,10 @@ class DocScanner:
         appearing *after* the number are preferred (``before_flag=0``)
         over those before it (``before_flag=1``), because natural English
         typically writes "63 edges" (number then noun).
+
+        *in_clause* bounds the search to the number's own clause: a noun on the
+        far side of a phrase separator is what the SENTENCE talks about, not
+        what the NUMBER counts.
 
         Returns ``None`` if the keyword is not found within the proximity
         window.
@@ -423,6 +552,8 @@ class DocScanner:
         if len(kw_words) == 1:
             kw = kw_words[0]
             for i in range(start, end):
+                if not in_clause(i):
+                    continue
                 w = word_positions[i].group().lower()
                 if re.match(r"[a-zA-Z]", w) and (w == kw or w.startswith(kw)):
                     dist = abs(i - num_idx)
@@ -435,6 +566,8 @@ class DocScanner:
         # Multi-word keyword: find consecutive matches
         kw_len = len(kw_words)
         for i in range(start, min(end, len(word_positions) - kw_len + 1)):
+            if not all(in_clause(i + j) for j in range(kw_len)):
+                continue
             words_at = [word_positions[i + j].group().lower() for j in range(kw_len)]
             if all(
                 re.match(r"[a-zA-Z]", words_at[j])
@@ -494,7 +627,25 @@ class DocScanner:
         *,
         config_path: Path | None = None,
     ) -> list[Path]:
-        """Resolve glob patterns to actual file paths.
+        """Resolve glob patterns to the markdown files that will be scanned.
+
+        Thin projection of :meth:`resolve_surface` — the files it did NOT
+        resolve are on the surface record, which is what the audit reports.
+        """
+        return list(
+            self.resolve_surface(
+                project_root, scan_globs, config_path=config_path
+            ).scanned
+        )
+
+    def resolve_surface(
+        self,
+        project_root: Path,
+        scan_globs: list[str] | None = None,
+        *,
+        config_path: Path | None = None,
+    ) -> ScanSurface:
+        """Resolve glob patterns into the scan surface: read, skipped, and why.
 
         Parameters
         ----------
@@ -511,51 +662,69 @@ class DocScanner:
 
         Returns
         -------
-        list[Path]
-            Deduplicated, sorted list of resolved markdown file paths.
+        ScanSurface
+            Deduplicated, sorted files to scan, plus every candidate file left
+            out and the reason it was left out.
         """
-        default_globs = ["*.md", "docs/**/*.md", ".beadloom/*.md"]
-        globs = scan_globs or default_globs
+        globs = scan_globs or list(DEFAULT_SCAN_GLOBS)
 
-        # Build set of excluded resolved paths from default + config patterns
-        excluded: set[Path] = set()
-        for pattern in _EXCLUDE_PATTERNS:
-            for p in project_root.glob(pattern):
-                excluded.add(p.resolve())
-
-        # Load additional exclude patterns from config
-        extra_excludes = self._load_exclude_paths(project_root, config_path)
-        for pattern in extra_excludes:
-            for p in project_root.glob(pattern):
-                excluded.add(p.resolve())
+        reasons = self._exclusion_reasons(project_root, config_path)
 
         seen: set[Path] = set()
-        result: list[Path] = []
+        scanned: list[Path] = []
+        excluded: list[ExcludedDoc] = []
 
         for pattern in globs:
             for path in sorted(project_root.glob(pattern)):
                 if not path.is_file():
                     continue
 
-                # Exclude directories
+                # Whole directories that never hold project documentation.
                 if any(part in _EXCLUDE_DIRS for part in path.parts):
                     continue
 
-                # Exclude CHANGELOG.md by default
-                if path.name == "CHANGELOG.md":
-                    continue
-
                 resolved = path.resolve()
+                if resolved in seen:
+                    continue
+                seen.add(resolved)
 
-                # Exclude default + config patterns
-                if resolved in excluded:
+                if path.name == "CHANGELOG.md":
+                    excluded.append(
+                        ExcludedDoc(path, "CHANGELOG.md is excluded by default")
+                    )
                     continue
 
-                if resolved not in seen:
-                    seen.add(resolved)
-                    result.append(path)
+                reason = reasons.get(resolved)
+                if reason is not None:
+                    excluded.append(ExcludedDoc(path, reason))
+                    continue
 
-        return result
+                scanned.append(path)
+
+        return ScanSurface(
+            scanned=tuple(scanned),
+            excluded=tuple(excluded),
+            count_suppressed=tuple(
+                p for p in scanned if p.name in _LOW_CONFIDENCE_FILENAMES
+            ),
+        )
+
+    def _exclusion_reasons(
+        self, project_root: Path, config_path: Path | None
+    ) -> dict[Path, str]:
+        """Map each excluded file to the pattern that excluded it."""
+        reasons: dict[Path, str] = {}
+        for pattern in _EXCLUDE_PATTERNS:
+            for path in project_root.glob(pattern):
+                reasons.setdefault(
+                    path.resolve(), f"built-in exclude pattern {pattern}"
+                )
+        for pattern in self._load_exclude_paths(project_root, config_path):
+            for path in project_root.glob(pattern):
+                reasons.setdefault(
+                    path.resolve(), f"docs_audit.exclude_paths pattern {pattern}"
+                )
+        return reasons
 
     @staticmethod
     def _load_exclude_paths(
@@ -596,3 +765,47 @@ class DocScanner:
             return []
 
         return [str(p) for p in raw if isinstance(p, str)]
+
+
+def unreadable_reason(fact_name: str, value: str | int) -> str | None:
+    """Why no document could state *value* readably — or ``None`` if it could.
+
+    The audit's declared fact list used to include facts the scanner is
+    incapable of matching, and their zero findings read exactly like the zero
+    findings of a fact nobody happened to mention (BDL-UX #173).  They are
+    different situations: one is silence in the docs, the other is blindness in
+    the checker, and only the second is a defect in this tool.  This function
+    is the checker's own statement of the second.
+
+    Returns a human sentence naming the limit, or ``None`` when a document
+    stating this fact at this value would in fact be read.
+    """
+    if fact_name == "version":
+        return None  # versions are matched by pattern, not by keyword or size
+
+    if not DocScanner.FACT_KEYWORDS.get(fact_name):
+        return (
+            f"no scanner keywords are registered for {fact_name}, so no sentence "
+            "in any document can be matched to it"
+        )
+
+    try:
+        number = int(str(value))
+    except (TypeError, ValueError):
+        return None
+
+    if number < MIN_READABLE_NUMBER:
+        return (
+            f"its value is {number}: 0 and 1 are too common in prose to be read "
+            "as claims, so no statement of this fact can be verified"
+        )
+
+    if number < MIN_READABLE_COUNT and fact_name.endswith("_count"):
+        return (
+            f"its value is {number}: single-digit counts are not extracted "
+            "(measured: ordinals, table cells and category breakdowns swamp "
+            "genuine claims below ten), so a correct statement of this fact "
+            "cannot be verified"
+        )
+
+    return None

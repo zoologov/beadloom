@@ -344,7 +344,10 @@ class TestIncrementalReindexPreservesSymbolDrift:
         db_path = project / ".beadloom" / "beadloom.db"
         conn = open_db(db_path)
         results = check_sync(conn, project_root=project)
-        assert all(r["status"] == "ok" for r in results)
+        # A first index of a non-git project has no baseline behind it, so the
+        # pairs read `unverified` rather than `ok` (BDL-UX #175). The symbols
+        # baseline below is still established — that is what this test is about.
+        assert all(r["status"] == "unverified" for r in results)
 
         baseline_hash = conn.execute(
             "SELECT symbols_hash FROM sync_state WHERE ref_id = 'F1'"

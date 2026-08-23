@@ -17,7 +17,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from beadloom.graph.rules.cycles import _live_lifecycle_clause
+from beadloom.graph.rules.exemptions import exemption_index_for, stale_exemption_findings
 from beadloom.graph.rules.types import (
+    MATCHING_FORM_HINT,
     CardinalityRule,
     DenyRule,
     ForbidEdgeRule,
@@ -27,6 +29,9 @@ from beadloom.graph.rules.types import (
     RequireRule,
     UnregisteredFeatureCandidateRule,
     Violation,
+    import_path_as_path,
+    liveness_finding,
+    matches_import_target,
 )
 from beadloom.infrastructure.repository import (
     count_files_owned_by_node,
@@ -307,76 +312,18 @@ def evaluate_require_rules(conn: sqlite3.Connection, rules: list[RequireRule]) -
 # ---------------------------------------------------------------------------
 
 
-def _import_path_to_file_path(import_path: str) -> str:
-    """Convert a dotted import path to a slash-separated file path for glob matching.
-
-    Example: ``components.features.calendar.events`` becomes
-    ``components/features/calendar/events``.
-    """
-    return import_path.replace(".", "/")
-
-
-#: What each side of a ``forbid_import`` rule is matched against. Stated on every
-#: liveness finding because the mismatch it describes is invisible otherwise: a
-#: ``src/``-prefixed ``to:`` glob simply never matches, and the rule reads green
-#: forever (BDL-UX #150).
-MATCHING_FORM_HINT = (
-    "`from:` is matched against the repo-relative source file path as indexed "
-    "(e.g. `src/pkg/tui/app.py`); `to:` against the dotted import path with dots "
-    "replaced by slashes (e.g. `pkg/infrastructure/db`) — no `src/` prefix, no file "
-    "extension. Drop the source root from `to:`, or widen it to `**/infrastructure/**`"
-)
-
-#: ``rule_type`` of a finding that reports a rule which cannot fire, as opposed to
-#: code that breaks one. Kept distinct so a consumer can tell "your architecture is
-#: broken" from "your check is broken".
-LIVENESS_RULE_TYPE = "rule_liveness"
-
-
-def _matches_import_target(target_as_path: str, glob: str) -> bool:
-    """Match a ``to``-side glob against an indexed import target.
-
-    A glob covering a package covers a bare import OF that package: Python records
-    ``from pkg.infrastructure import db`` as the target ``pkg/infrastructure``, so
-    a rule written ``pkg/infrastructure/**`` would otherwise miss the single most
-    common way of reaching into the package it forbids (BDL-UX #150 — the probe
-    injected to reproduce that bead fired under no glob form at all). Matching the
-    target with a trailing slash appended covers it without widening anything else:
-    ``pkg/infrastructure_docs`` still does not match ``pkg/infrastructure/**``.
-    """
-    return fnmatch.fnmatch(target_as_path, glob) or fnmatch.fnmatch(
-        target_as_path + "/", glob
-    )
-
-
-def _import_exemption_index(
-    rule: ImportBoundaryRule, file_path: str, target_as_path: str
-) -> int | None:
-    """Return the index of the first exemption covering this crossing, if any."""
-    for index, exemption in enumerate(rule.exempt):
-        if fnmatch.fnmatch(file_path, exemption.from_glob) and _matches_import_target(
-            target_as_path, exemption.to_glob
-        ):
-            return index
-    return None
-
-
 def _liveness_finding(rule: ImportBoundaryRule, message: str) -> Violation:
     """Build one advisory finding about *rule* being unable to do its job.
 
-    Always ``warn``, whatever the rule's own severity: an inert rule is a
-    configuration smell, not a boundary breach, and promoting it to ``error``
-    would turn an adopter's green pipeline red on upgrade (BDL-061 CONTEXT).
+    Shape and severity come from :func:`~beadloom.graph.rules.types.liveness_finding`,
+    which the matcher-based channel in :mod:`beadloom.graph.rules.liveness` shares —
+    the two must report a dead rule identically. Only the remediation is local: an
+    import rule's usual cause is the two matching forms, so it carries the hint that
+    states them.
     """
-    return Violation(
+    return liveness_finding(
         rule_name=rule.name,
         rule_description=rule.description,
-        rule_type=LIVENESS_RULE_TYPE,
-        severity="warn",
-        file_path=None,
-        line_number=None,
-        from_ref_id=None,
-        to_ref_id=None,
         message=message,
         remediation=MATCHING_FORM_HINT,
     )
@@ -407,22 +354,6 @@ def _dead_glob_finding(
     )
 
 
-def _dead_exemption_findings(
-    rule: ImportBoundaryRule, used: set[int]
-) -> list[Violation]:
-    """Report every exemption that suppressed nothing — its exit condition firing."""
-    return [
-        _liveness_finding(
-            rule,
-            f"Rule '{rule.name}': the exemption for imports of '{exemption.to_glob}' "
-            f"from '{exemption.from_glob}' suppresses nothing — no such crossing is left "
-            f"in the code. Its exit condition ({exemption.until}) is met; delete it",
-        )
-        for index, exemption in enumerate(rule.exempt)
-        if index not in used
-    ]
-
-
 def _evaluate_one_import_rule(
     rule: ImportBoundaryRule,
     imports: list[tuple[str, int, str]],
@@ -432,22 +363,28 @@ def _evaluate_one_import_rule(
 ) -> list[Violation]:
     """Evaluate one rule: its crossings, or the reason it can produce none."""
     violations: list[Violation] = []
-    used_exemptions: set[int] = set()
+    # How many crossings each exemption excused. A COUNT, not a set of indices:
+    # an entry that suppresses nothing is dead, and one that suppresses something
+    # past its own deadline is expired — the two findings need the number, not
+    # merely the fact that it was used (BDL-061.49).
+    suppressed_per_exemption: dict[int, int] = {}
     from_matched = False
     to_matched = False
 
     for file_path, line_number, import_path in imports:
-        target_as_path = _import_path_to_file_path(import_path)
+        target_as_path = import_path_as_path(import_path)
         matches_from = fnmatch.fnmatch(file_path, rule.from_glob)
-        matches_to = _matches_import_target(target_as_path, rule.to_glob)
+        matches_to = matches_import_target(target_as_path, rule.to_glob)
         from_matched = from_matched or matches_from
         to_matched = to_matched or matches_to
         if not (matches_from and matches_to):
             continue
 
-        exemption_index = _import_exemption_index(rule, file_path, target_as_path)
+        exemption_index = exemption_index_for(rule, file_path, target_as_path)
         if exemption_index is not None:
-            used_exemptions.add(exemption_index)
+            suppressed_per_exemption[exemption_index] = (
+                suppressed_per_exemption.get(exemption_index, 0) + 1
+            )
             continue
 
         violations.append(
@@ -481,7 +418,7 @@ def _evaluate_one_import_rule(
             )
         ]
 
-    return violations + _dead_exemption_findings(rule, used_exemptions)
+    return violations + stale_exemption_findings(rule, suppressed_per_exemption)
 
 
 def evaluate_import_boundary_rules(
@@ -868,8 +805,18 @@ def evaluate_cardinality_rules(
                 total = int(total_row[0]) if total_row is not None else 0
 
                 if total > 0:
+                    # Covered = not KNOWN to be behind. ``unverified`` (BDL-UX
+                    # #175: the index was rebuilt, so it had no baseline) used to
+                    # be written as ``ok`` and is deliberately still counted
+                    # here: this is a coverage ratio, and a pair nobody could
+                    # check is not evidence that the doc is absent. Reporting it
+                    # as 0% would turn an adopter's green project red for a
+                    # reason that is about the index, not about their docs. The
+                    # honest accounting of what was not checked belongs to
+                    # ``sync-check``, which names every such pair.
                     ok_row = conn.execute(
-                        "SELECT COUNT(*) FROM sync_state WHERE ref_id = ? AND status = 'ok'",
+                        "SELECT COUNT(*) FROM sync_state WHERE ref_id = ? "
+                        "AND status NOT IN ('stale', 'missing')",
                         (node_ref_id,),
                     ).fetchone()
                     ok_count = int(ok_row[0]) if ok_row is not None else 0

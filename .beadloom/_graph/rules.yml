@@ -139,9 +139,21 @@ rules:
   # domain READMEs prescribe these three targets by name. They are BASELINED,
   # not silenced: the rule keeps its full scope, so a NEW onboarding ->
   # infrastructure import still fails, and each exemption carries the reason it
-  # exists and the condition that retires it. An exemption that stops
-  # suppressing anything is itself reported, which is how the exit condition
-  # announces itself instead of waiting to be remembered.
+  # exists and the condition that retires it.
+  #
+  # WHAT THAT BUYS, stated exactly, because the earlier wording here promised a
+  # guarantee the code did not provide (review .7 MAJOR 2, fixed in
+  # BDL-061.49): every run REPORTS what these entries suppressed — `lint` says
+  # "N crossings suppressed by an exemption" beside its violation count and
+  # `--format json` lists each one — so a green line can never mean "nothing
+  # crossed" when it means "what crossed was excused". An entry that suppresses
+  # nothing is reported as dead. An `until:` that LEADS with an ISO date
+  # (`2026-09-01`, optionally followed by prose) is parsed, and once that day
+  # passes while the entry is still suppressing something, the run says so.
+  # The six `until:` values below name an EVENT, not a date — the honest shape
+  # here, since what retires them is a landed re-scope rather than a day — and
+  # an event is prose that nothing can check. That is why the COUNT, not the
+  # date, is the mechanism these entries rely on to be remembered.
   - name: onboarding-no-direct-infra
     description: "Onboarding must not import infrastructure directly"
     forbid_import:

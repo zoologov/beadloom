@@ -2,7 +2,8 @@
 
 Zero-config detection of stale facts in project markdown documentation.
 
-Source: `src/beadloom/doc_sync/audit.py`, `src/beadloom/doc_sync/scanner.py`
+Source: `src/beadloom/doc_sync/audit.py`, `src/beadloom/doc_sync/scanner.py`,
+`src/beadloom/doc_sync/audit_coverage.py`
 
 ## Specification
 
@@ -19,6 +20,8 @@ The audit pipeline has three stages:
 2. **DocScanner** (`scanner.py`) -- Scans markdown files for numeric and version string mentions. A line is tokenized on whitespace first, and only a token whose whole core is a number is a candidate (Layer 0); each candidate is then associated with a fact type based on nearby keywords within a configurable proximity window. False positives (dates, hex colors, issue IDs, line references, version pins) are masked before extraction.
 
 3. **Comparator** (`compare_facts` in `audit.py`) -- Matches mentions against facts and applies configurable tolerances. Version strings require exact match; numeric facts support percentage-based tolerances (e.g., +/-10% for growing metrics like node_count).
+
+4. **Coverage** (`audit_coverage.py`) -- Reports, for every declared fact, whether the run checked anything at all, and the scan surface it ran over. A count of findings describes what the audit FOUND; coverage describes what it COVERED, and the two were measured to differ by a factor of nine (see *Coverage reporting*).
 
 ### Fact Types
 
@@ -67,7 +70,7 @@ This single rule subsumes the per-pattern skips it replaced (`0xFF`, `>=0.80`, `
 
 #### Layer 1: Blocklist Modifiers
 
-Numbers near modifier words or phrases are skipped as configuration parameters or thresholds, not factual claims. Checked within a +/-3 token window around the number.
+Numbers near modifier words or phrases are skipped as configuration parameters or thresholds, not factual claims. Checked within a +/-3 token window around the number, **scoped to the number's own clause** (see *Clause scope*).
 
 **Single-word modifiers:** `default`, `max`, `minimum`, `limit`, `cap`, `target`, `threshold`, `about`, `approximately`, `per`, `depth`, `days`, `hours`, `minutes`, `seconds`.
 
@@ -77,7 +80,33 @@ Numbers near modifier words or phrases are skipped as configuration parameters o
 
 #### Layer 2: Proximity Scoring
 
-When multiple fact keywords appear near a number, the closest keyword wins. On ties, keywords appearing *after* the number are preferred (e.g., "63 edges") over those before it. Uses the same `PROXIMITY_WINDOW = 5` but with distance-based ranking via `_keyword_distance()`.
+When multiple fact keywords appear near a number, the closest keyword wins. On ties, keywords appearing *after* the number are preferred (e.g., "63 edges") over those before it. Uses the same `PROXIMITY_WINDOW = 5` but with distance-based ranking via `_keyword_distance()`, **scoped to the number's own clause**.
+
+#### Clause scope
+
+Both windows above stop at a phrase separator (`,` `;` `:` and the em/en dash). A word on the
+far side of one neither modifies the number nor names what it counts, and a flat +/-N window
+was measured wrong in both directions (BDL-UX #173):
+
+| Sentence | Old behaviour | With clause scope |
+|----------|---------------|-------------------|
+| `The graph holds 316 edges, one per import.` | nothing extracted — `per` is in the window | `edge_count = 316` |
+| `exposes 18 tools: 14 over the graph` | `tools` bound the `14` too, so a **breakdown** read as a restatement of the **total** | only the `18` |
+
+Punctuation is a coarse proxy for syntax; it is also the only one available without a parser,
+and it is what distinguishes *what this number counts* from *what the rest of the sentence
+talks about*. The separator set was chosen by measurement rather than taste:
+
+- Parentheses are deliberately **not** separators. They would cost the true verification in
+  `MCP tools (18):` — an appositive restates its noun — and a lost true verification is
+  precisely the silent false negative this rule exists to remove.
+- Digit groups inside a number belong to the number: the comma in `6,390` is not a boundary
+  between the number and the next word.
+
+MEASURED repo-wide: 0 mentions gained, 5 lost, and all five were confirmed false positives
+that had needed a `docs_audit.ignore` entry to stay quiet. Three of those entries were
+retired with this change, because a suppression that matches nothing reads as coverage it
+does not have.
 
 #### Layer 3: File-Type Heuristics
 
@@ -85,6 +114,13 @@ Files with lower-confidence names suppress count-type fact matching (versions st
 
 - **Low-confidence filenames:** `SPEC.md`, `CONTRIBUTING.md`
 - **Excluded glob patterns:** `_graph/features/*/SPEC.md`, `docs/**/features/*/SPEC.md`, `docs/**/features/**/SPEC.md`
+
+The heuristic is load-bearing and was re-measured before being kept: shadow-scanning the 33
+files it hides on this repo yields 17 count/version matches, **all** of them local examples,
+historical figures ("edge count went from 51 to 146"), table rows or Python interpreter
+versions. What changed is that the files are no longer hidden silently -- every one of them
+is named on the scan surface with the pattern that excluded it (`--verbose`, or
+`scan_surface` in `--json`).
 
 #### Pattern Masking
 
@@ -106,17 +142,51 @@ Several masks above are now subsumed by Layer 0 (`#123`, `0xFF`, `>=0.80`, `:15`
 `0-100` are not number tokens). They are retained as defence in depth, because masking also
 governs version extraction and the word positions used for proximity.
 
-#### Known blind spots (measured 2026-08-23)
+#### Declared blind spots (measured 2026-08-23, resolved 2026-08-24)
 
-A false positive announces itself by failing the Gate; a false negative is silent. These are
-the silent ones, measured and pinned as strict `xfail` tests in
-`tests/test_doc_scanner_tokenization.py` so they become loud when fixed:
+A false positive announces itself by failing the Gate; a false negative is silent. The three
+silent ones measured on this repo are all settled -- one by a fix, two by being **declared in
+the output** rather than left implicit. Nothing here is silenced by a tolerance or an
+`ignore` entry: those hide a true-positive channel to quiet a false one.
 
-| Blind spot | Effect |
-|------------|--------|
-| A Layer 1 modifier word anywhere within +/-3 word positions suppresses the number, even when it modifies a different noun (`316 edges, one per import`) | A genuine drift is never reported |
-| Counts below 10 are never extracted for `*_count` facts | Any fact whose true value is single-digit (`language_count` is 1 in this repo) can never be audited, and the audit reads green about a fact it never checked |
-| `SPEC.md` / `CONTRIBUTING.md` suppress all count facts, and `docs/**/features/*/SPEC.md` is excluded outright | Count claims in those files are unchecked, and nothing in the output says so |
+| Blind spot | Resolution |
+|------------|------------|
+| A Layer 1 modifier word suppressed a number it did not modify (`316 edges, one per import`) | **Fixed** -- windows are clause-scoped (see *Clause scope*) |
+| Counts below `MIN_READABLE_COUNT` (10) are not extracted for `*_count` facts, and 0/1 are never extracted at all | **Kept, and reported.** Removing the floor was re-measured: binding a single digit to an immediately following keyword yields 14 extra mentions on this repo, 13 of them ordinals (`5. Domain list`), table cells (`\| 5 \| tests \|`) and category breakdowns (`(4 tools):`) -- several of which would have failed the Gate. The floor stays; the facts it costs are now named `unreadable` in the coverage report, so nothing reads green about them |
+| `SPEC.md` / `CONTRIBUTING.md` suppress count facts, and `docs/**/features/*/SPEC.md` is excluded outright (33 of 79 markdown files on this repo) | **Reported.** Every skipped file is named on the scan surface with the reason it was skipped |
+
+The residual, and it is stated rather than hidden: a doc claim written below the floor
+(`indexes 7 languages`) is invisible whether it is right or wrong. The floor is a property of
+the extractor, so `unreadable_reason()` states it against the fact rather than leaving the
+reader to infer it from a zero.
+
+### Coverage reporting
+
+`N mention(s) fresh` counts what the audit FOUND. It says nothing about the facts nothing was
+found for, and on this repo the gap was the whole report: **9 facts declared, 13
+verifications, all thirteen of the same fact.** A green `docs-audit` meant "one fact of nine
+was checked" and printed as a clean bill of health (BDL-UX #173).
+
+Every declared fact therefore carries a `FactCoverage`:
+
+| Status | Meaning |
+|--------|---------|
+| `verified` | At least one mention was compared against the fact. This is about being **checked**, not about being right -- a stale mention is coverage |
+| `not_covered` | No document states the fact. Nothing to check, said out loud |
+| `unreadable` | The scanner cannot read a claim of this fact at all -- its value is below an extraction floor, or no keywords are registered for it. The fact is structurally unverifiable, and `reason` says why |
+
+Two consequences hold by construction:
+
+- A mention dropped by a `docs_audit.ignore` rule is **not** coverage. A suppression that
+  hides the only mention of a fact leaves that fact unchecked.
+- A fact with zero judged mentions is never counted as passing. It is named -- in the
+  `Ground Truth` block, in `unverified_facts`, and on the `beadloom ci` line.
+
+Coverage does not fail or WARN the gate step, deliberately. Silence in the documentation
+about a fact is not a defect in the code, and a WARN that every project would carry on every
+run would spend the channel `sync-check` needs for a genuinely missing baseline. The number
+rides on the line everybody reads, and `--fail-if unverified>N` is there for a project that
+wants every declared fact stated somewhere.
 
 ### Keyword-Proximity Matching
 
@@ -184,6 +254,27 @@ Tolerances are merged in order: built-in defaults, then user overrides from `con
 | `facts` | `dict[str, Fact]` | All collected ground-truth facts |
 | `findings` | `list[AuditFinding]` | Findings for matched mentions |
 | `unmatched` | `list[Mention]` | Mentions with no corresponding fact |
+| `coverage` | `dict[str, FactCoverage]` | Per-fact coverage -- what the run checked |
+| `surface` | `ScanSurface \| None` | Documents read and skipped (`None` when built from mentions directly) |
+
+`unverified_facts` (property) names the declared facts the run verified nothing for, sorted.
+
+#### FactCoverage (frozen dataclass)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `fact` | `Fact` | The declared fact |
+| `mentions` | `int` | Mentions judged against it |
+| `status` | `str` | `verified` / `not_covered` / `unreadable` |
+| `reason` | `str \| None` | For `unreadable`, the scanner's statement of the limit |
+
+#### ScanSurface (frozen dataclass)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `scanned` | `tuple[Path, ...]` | Files read for mentions |
+| `excluded` | `tuple[ExcludedDoc, ...]` | Files never opened, each with `path` + `reason` |
+| `count_suppressed` | `tuple[Path, ...]` | Files read for versions only (subset of `scanned`) |
 
 ### CLI Interface
 
@@ -200,7 +291,18 @@ beadloom docs audit [--json] [--fail-if EXPR] [--stale-only] [--verbose] [--path
 | `--path` | `str` (multiple) | `None` | Override default scan paths with custom glob patterns |
 | `--project` | `Path` | current directory | Project root |
 
-The `--fail-if` expression supports the `stale` metric with `>` and `>=` operators. When the condition is met, the command exits with code 1.
+The `--fail-if` expression supports the `stale` and `unverified` metrics with `>` and `>=`
+operators. When the condition is met, the command exits with code 1.
+
+- `stale>N` -- mentions that disagree with ground truth.
+- `unverified>N` -- **declared facts the run checked nothing for** (`not_covered` +
+  `unreadable`). Opt-in: a project that wants every fact it declares to be stated somewhere
+  enforces it here.
+
+`--verbose` additionally names the documents that were not read and those whose counts were
+suppressed. `--json` carries `coverage`, `unverified_facts`, `scan_surface`, and a `summary`
+with `declared_fact_count` / `verified_fact_count` / `unverified_count` / `unreadable_count`
+alongside the existing counts.
 
 ### Configuration
 
@@ -262,6 +364,25 @@ def parse_fail_condition(expr: str) -> tuple[str, str, int]
 ```
 Parse a `--fail-if` expression. Returns `(metric, operator, threshold)`. Raises `click.BadParameter` on invalid input.
 
+```python
+def fail_condition_triggered(
+    condition: tuple[str, str, int], *, stale_count: int, unverified_count: int
+) -> bool
+```
+Whether the run crosses the condition's threshold. One place decides what each metric means, so the reported number and the exit code cannot disagree.
+
+```python
+def assess_coverage(
+    facts: dict[str, Fact], findings: list[AuditFinding]
+) -> dict[str, FactCoverage]
+```
+Per-fact coverage: what the run checked, as opposed to what it found (`audit_coverage.py`).
+
+```python
+def unreadable_reason(fact_name: str, value: str | int) -> str | None
+```
+The scanner's own statement of why no document could state this fact readably -- or `None` when one could (`scanner.py`).
+
 ### Public Classes
 
 ```python
@@ -272,6 +393,7 @@ class DocScanner:
     def scan(self, paths: list[Path]) -> list[Mention]: ...
     def scan_file(self, file_path: Path) -> list[Mention]: ...
     def resolve_paths(self, project_root: Path, scan_globs: list[str] | None = None) -> list[Path]: ...
+    def resolve_surface(self, project_root: Path, scan_globs: list[str] | None = None) -> ScanSurface: ...
 
 @dataclass(frozen=True)
 class Fact: ...
@@ -284,6 +406,15 @@ class AuditFinding: ...
 
 @dataclass(frozen=True)
 class AuditResult: ...
+
+@dataclass(frozen=True)
+class FactCoverage: ...
+
+@dataclass(frozen=True)
+class ScanSurface: ...
+
+@dataclass(frozen=True)
+class ExcludedDoc: ...
 ```
 
 ## Invariants
@@ -293,6 +424,9 @@ class AuditResult: ...
 - The DocScanner skips code blocks (lines between triple-backtick fences).
 - False-positive masking replaces matched patterns with spaces of equal length to preserve character positions.
 - Each number in a line is matched to at most one fact type (first keyword match wins).
+- A modifier or keyword on the far side of a phrase separator is never matched to the number.
+- A fact with zero judged mentions is never counted as verified, and is named in the output.
+- A mention suppressed by `docs_audit.ignore` is not coverage.
 - Tolerance merging order: built-in `DEFAULT_TOLERANCES` < user overrides from config.
 - When ground truth is 0 and tolerance > 0, only an exact mention of 0 is accepted.
 
@@ -302,11 +436,14 @@ class AuditResult: ...
 - Keyword-proximity matching is heuristic; it may produce false positives for numbers near unrelated keywords.
 - The scanner only processes `.md` files; other documentation formats are not supported.
 - Version detection relies on regex, not full TOML/JSON parsing, which may miss edge cases.
-- The `--fail-if` expression only supports the `stale` metric with `>` and `>=` operators.
+- The `--fail-if` expression only supports the `stale` and `unverified` metrics with `>` and `>=` operators.
+- Coverage answers "was this fact checked", never "is this fact stated correctly everywhere" -- the scanner cannot know about a claim it did not extract, which is why the extraction floors are reported as `unreadable` rather than inferred from a zero.
 
 ## Testing
 
-Test files: `tests/test_docs_audit_cli.py`, `tests/test_doc_scanner.py`
+Test files: `tests/test_docs_audit_cli.py`, `tests/test_doc_scanner.py`,
+`tests/test_doc_scanner_tokenization.py`, `tests/test_docs_audit_coverage.py`,
+`tests/test_audit_ignore.py`
 
 Key scenarios:
 
@@ -320,3 +457,6 @@ Key scenarios:
 - **Full audit pipeline**: Verify `run_audit` end-to-end with stale and fresh findings.
 - **Fail condition parsing**: Verify valid and invalid `--fail-if` expressions.
 - **CLI integration**: Verify `beadloom docs audit` command options, output formats (JSON/Rich), and CI gate behavior.
+- **Clause scope**: Verify a modifier in another clause does not suppress a genuine count, that one in the same clause still does, and that a breakdown after a separator is not bound to the total's noun.
+- **Coverage**: Verify a stated fact reads `verified`, an unstated one `not_covered`, one below the extraction floor `unreadable`, that a stale mention still counts as coverage, and that an ignored mention does not.
+- **Scan surface**: Verify excluded and count-suppressed documents are named with their reason in both the Rich and JSON output.

@@ -31,14 +31,18 @@ from beadloom.application.reindex.indexing import (
     _index_single_code_file,
     _index_single_doc,
     _resolve_docs_dir,
+    read_declared_docs,
+    store_declared_docs,
 )
 from beadloom.application.reindex.models import (
     _IMPORT_PROVENANCE_KEY,
     _IMPORT_PROVENANCE_VERSION,
     ReindexResult,
-    _SyncPairSnapshot,
 )
-from beadloom.application.reindex.sync_state import _build_initial_sync_state
+from beadloom.application.reindex.sync_state import (
+    _build_initial_sync_state,
+    _snapshot_sync_baselines,
+)
 from beadloom.infrastructure.db import create_schema, get_meta, open_db, set_meta
 from beadloom.infrastructure.health import take_snapshot
 
@@ -144,24 +148,16 @@ def incremental_reindex(
             docs_dir,
         )
         result.warnings.extend(doc_ref_warns)
+        store_declared_docs(conn, read_declared_docs(graph_dir, project_root, docs_dir))
     else:
         ref_map = {}
 
-    # Snapshot symbols_hash and two-phase data BEFORE deleting/re-indexing
-    # files so we can preserve baselines for drift detection.
-    old_symbols: dict[str, str] = {}
-    old_pairs: dict[tuple[str, str], _SyncPairSnapshot] = {}
-    for row in conn.execute("SELECT * FROM sync_state").fetchall():
-        if row["symbols_hash"]:
-            old_symbols[row["ref_id"]] = row["symbols_hash"]
-        # sqlite3.Row `in` checks values not keys; use .keys()
-        has_edit_col = "doc_hash_at_last_edit" in row.keys()  # noqa: SIM118
-        edit_hash: str = row["doc_hash_at_last_edit"] if has_edit_col else ""
-        if edit_hash:
-            old_pairs[(row["doc_path"], row["code_path"])] = _SyncPairSnapshot(
-                doc_hash_at_last_edit=edit_hash,
-                code_hash_at_sync=row["code_hash_at_sync"],
-            )
+    # Snapshot symbols_hash, two-phase data and baseline PROVENANCE BEFORE
+    # deleting/re-indexing files, so drift detection keeps its baselines and a
+    # fabricated one is not promoted by the copy (BDL-UX #175). This is the same
+    # snapshot the full path takes — re-deriving it here once let the two paths
+    # disagree about what survives a rebuild.
+    old_symbols, old_pairs = _snapshot_sync_baselines(conn)
 
     # Process deleted files.
     for path in deleted:

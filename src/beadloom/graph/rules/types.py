@@ -9,7 +9,10 @@ evaluation logic, only the immutable model and the constants that bound it.
 
 from __future__ import annotations
 
+import fnmatch
+import re
 from dataclasses import dataclass
+from datetime import date
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -29,6 +32,84 @@ SUPPORTED_SCHEMA_VERSIONS: frozenset[int] = frozenset({1, 2, 3})
 # built), ``deprecated`` (on the way out), and ``dead`` edges are not counted
 # as live ``no-dependency-cycles`` / ``architecture-layers`` violations.
 LIVE_EDGE_LIFECYCLES: frozenset[str] = frozenset({"active"})
+
+#: ``rule_type`` of a finding that reports a rule which cannot fire, as opposed
+#: to code that breaks one. Kept distinct so a consumer can tell "your
+#: architecture is broken" from "your check is broken". It lives here, with the
+#: model, because two modules produce it: :mod:`.liveness` for the eight
+#: matcher/graph-based rule types, and :mod:`.evaluators` for ``forbid_import``
+#: (whose dead-glob and dead-exemption findings fall out of the import scan the
+#: rule evaluation already runs).
+LIVENESS_RULE_TYPE = "rule_liveness"
+
+#: The one spelling of a deadline an exit condition may lead with, pinned as a
+#: pattern rather than delegated to ``date.fromisoformat``: that parser widened
+#: in Python 3.11 (``20260101`` and week dates parse there and raise on 3.10),
+#: so leaning on it would make the same ``until:`` enforceable on one supported
+#: interpreter and prose on another.
+_ISO_DATE_PREFIX = re.compile(r"^(\d{4})-(\d{2})-(\d{2})(?:\b|$)")
+
+
+def exit_condition_deadline(until: str) -> date | None:
+    """The calendar date an exit condition names, or ``None`` when it names an event.
+
+    ``until`` answers one question — *what retires this exclusion* — and there are
+    two honest answers: a **date** (``2026-09-01``, optionally followed by the
+    prose that explains it) and an **event** (``the repository read seam lands``).
+    Only the first is checkable, and this function is the single definition of
+    which is which: both surfaces that require an exit condition —
+    ``forbid_import.exempt[].until`` in ``rules.yml`` and
+    ``guards.<name>.exclusions[].until`` in ``flow.yml`` — read it here rather
+    than restating it, so the two cannot promise different things.
+
+    A date must LEAD the string: a deadline is the first thing an exit condition
+    says, or it is not one. ``some time after 2026-01-01`` is an event.
+    """
+    match = _ISO_DATE_PREFIX.match(until.strip())
+    if match is None:
+        return None
+    try:
+        return date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+    except ValueError:  # a well-formed spelling of a day that does not exist
+        return None
+
+#: What each side of a ``forbid_import`` rule is matched against. Stated on every
+#: liveness finding because the mismatch it describes is invisible otherwise: a
+#: ``src/``-prefixed ``to:`` glob simply never matches, and the rule reads green
+#: forever (BDL-UX #150). It lives with the model, beside the ``ImportBoundaryRule``
+#: docstring that defines the two forms, because three modules now state them:
+#: :mod:`.evaluators` (a dead glob), :mod:`.exemptions` (a dead exemption) and the
+#: reference documentation generated from here.
+MATCHING_FORM_HINT = (
+    "`from:` is matched against the repo-relative source file path as indexed "
+    "(e.g. `src/pkg/tui/app.py`); `to:` against the dotted import path with dots "
+    "replaced by slashes (e.g. `pkg/infrastructure/db`) — no `src/` prefix, no file "
+    "extension. Drop the source root from `to:`, or widen it to `**/infrastructure/**`"
+)
+
+
+def import_path_as_path(import_path: str) -> str:
+    """Convert a dotted import path to the slash-separated form globs are matched against.
+
+    Example: ``components.features.calendar.events`` becomes
+    ``components/features/calendar/events``.
+    """
+    return import_path.replace(".", "/")
+
+
+def matches_import_target(target_as_path: str, glob: str) -> bool:
+    """Match a ``to``-side glob against an indexed import target.
+
+    A glob covering a package covers a bare import OF that package: Python records
+    ``from pkg.infrastructure import db`` as the target ``pkg/infrastructure``, so
+    a rule written ``pkg/infrastructure/**`` would otherwise miss the single most
+    common way of reaching into the package it forbids (BDL-UX #150 — the probe
+    injected to reproduce that bead fired under no glob form at all). Matching the
+    target with a trailing slash appended covers it without widening anything else:
+    ``pkg/infrastructure_docs`` still does not match ``pkg/infrastructure/**``.
+    """
+    return fnmatch.fnmatch(target_as_path, glob) or fnmatch.fnmatch(target_as_path + "/", glob)
+
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -307,3 +388,35 @@ class Violation:
     to_ref_id: str | None  # target node
     message: str  # human-readable explanation
     remediation: str | None = None  # agent-actionable "how to fix" hint
+
+
+def liveness_finding(
+    *,
+    rule_name: str,
+    rule_description: str,
+    message: str,
+    remediation: str,
+) -> Violation:
+    """Build one advisory finding about a rule being unable to do its job.
+
+    The named constructor lives beside :class:`Violation` because **two** modules
+    produce liveness findings — :mod:`.liveness` for the eight matcher/graph-based
+    rule types and :mod:`.evaluators` for ``forbid_import`` — and the two must not
+    drift in shape.
+
+    Always ``warn``, whatever the rule's own severity: an inert rule is a
+    configuration smell, not a boundary breach, and promoting it to ``error``
+    would turn an adopter's green pipeline red on upgrade (BDL-061 CONTEXT).
+    """
+    return Violation(
+        rule_name=rule_name,
+        rule_description=rule_description,
+        rule_type=LIVENESS_RULE_TYPE,
+        severity="warn",
+        file_path=None,
+        line_number=None,
+        from_ref_id=None,
+        to_ref_id=None,
+        message=message,
+        remediation=remediation,
+    )

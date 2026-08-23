@@ -99,7 +99,9 @@ def gather_status(conn: sqlite3.Connection, project_root: Path) -> StatusData:
     chunks_count: int = conn.execute("SELECT count(*) FROM chunks").fetchone()[0]
     symbols_count: int = conn.execute("SELECT count(*) FROM code_symbols").fetchone()[0]
     stale_count: int = conn.execute(
-        "SELECT count(*) FROM sync_state WHERE status = 'stale'"
+        # ``missing`` counts as not-fresh: a pair whose file is gone is not
+        # one less thing to worry about (BDL-UX #174).
+        "SELECT count(*) FROM sync_state WHERE status IN ('stale', 'missing')"
     ).fetchone()[0]
 
     # Per-kind breakdown.

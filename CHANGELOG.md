@@ -27,6 +27,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   adapter containing **no logic**: it forwards the harness event to the CLI, so a hook
   and a shell cannot produce different verdicts. Defaults are `warn`, and a warning
   always names what it did not check, so no green project turns red on upgrade.
+- **`sync-check --record-surface` and the committed surface ledger (BDL-061 S2b).** The
+  declared documentation surface — the pair count and the declared-doc count — is recorded
+  to `.beadloom/sync-surface.json`, which is committed and rewritten only by that explicit
+  flag. A later run whose surface FELL says so by name with both numbers, instead of quietly
+  printing the smaller one. `sync-check --json` gains `missing`, `unverified` and
+  `declared_docs` counts, a `declared_surface` block, and a `baseline` key on every pair
+  (`index` / `git:HEAD` / `none`) so a green result says what it was green against. The
+  `--since` JSON shape is unchanged.
+- **`docs audit` reports its own coverage (BDL-061 S2b).** Every declared fact carries
+  `verified` / `not_covered` / `unreadable` with the reason, printed against the fact in the
+  `Ground Truth` block and summarised on the line the Gate prints. `--json` gains `coverage`,
+  `unverified_facts`, `scan_surface` and four summary counts; `--fail-if` accepts
+  `unverified>N` / `unverified>=N`; `--verbose` names every document the scan did not read
+  and the pattern that skipped it. Measured on this repository: 2 of 9 declared facts
+  verified, the other seven named, over 46 documents scanned and 33 not read.
+- **`lint` counts what it could not check and what it excused (BDL-061 S2b).**
+  `LintResult.rules_inert` qualifies the summary line (`N rules evaluated, M of them unable
+  to check anything`) and `LintResult.suppressed` carries every crossing a `forbid_import`
+  exemption excused, printed as `, N crossings suppressed by an exemption` on the rich, piped
+  and Gate summaries and as a `suppressed` array under `--format json`. Both clauses are
+  absent at zero, so the everyday line keeps its shape.
 - **An environment dimension in CI (BDL-061 S2).** The scaffolded pipeline gains a
   `tests-locale` job — the same whole suite under `LC_ALL=C` and under
   `en_US.ISO-8859-1`, with `PYTHONUTF8=0` + `PYTHONCOERCECLOCALE=0` so PEP 538/540
@@ -36,6 +57,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   suite itself rejects.
 
 ### Changed
+- **The freshness baseline moved out of the database (BDL-061 S2b).**
+  `.beadloom/beadloom.db` is a derived cache again — git-ignored, per-machine, dropped by
+  every rebuild and absent on every fresh CI checkout — so a baseline kept only there is
+  destroyed by the act that most needs it. Freshness now rests on **git**: each `sync_state`
+  row records a `baseline_source` (`index_build` / `carried` / `attested`) which is carried
+  verbatim across a reindex and never promoted, and a baseline fabricated at index-build time
+  that would otherwise read `ok` is corroborated against `HEAD`. The declared surface rests on
+  the committed ledger above. **If you have scripted `rm .beadloom/beadloom.db && beadloom
+  reindex` to reach a green `sync-check`, it no longer works, and that is the point** — the
+  instruction to verify on a clean database was retired in S2 for the same reason. A clean
+  database is still the right instrument for `lint`.
+- **`sync-check` has four verdicts, and `beadloom ci` has four outcomes (BDL-061 S2b).**
+  `ok` / `stale` / `missing` / `unverified`. `missing` — a doc file, a code file, or a doc the
+  graph DECLARES that is not on disk — exits 2 and fails the Gate, because the Gate is not
+  satisfied by having less to check. `unverified` means nothing could be compared: it is
+  printed by name, counted separately, never counted as fresh, and the Gate step prints
+  `WARN` with the exit code unchanged, so no adopter goes red on upgrade. `min_doc_coverage`
+  counts pairs not known to be behind, so an unverified pair cannot turn a green project red.
+- **`doctor` counts the checks that ran, not the findings (BDL-061 S2b).** `run_checks`
+  returns one entry per finding, so `N check(s) clean` was counting problems — it rose from 20
+  to 21 while a file was being deleted, and included nine warnings and one *not verified*. The
+  summary now reads `N check(s): E error(s), W warning(s), I info` over distinct check names,
+  and the word *clean* appears only when every check is OK (13 checks on this repository).
 - **A guard that cannot answer now blocks (BDL-061 S2).** Through `--hook`, the
   configuration/usage class (an unparseable `guards:` block, an exclusion missing
   `reason` or `until`, an unregistered guard name, an unsupported harness) exits `2`
@@ -50,6 +94,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unchanged so no adopter's pipeline turns red on upgrade.
 
 ### Fixed
+- **Five states that read as a pass because nothing could check them (BDL-061 S2b).** One
+  sentence, four fixes: *unverifiable is not clean*. A **deleted declared document** left the
+  Gate green — the reindex that followed simply removed its pairs, so there was nothing left to
+  miss; declarations are now cached from the committed graph YAML in a `declared_docs` table
+  and survive the file they name (#174). A **rebuilt index** stored the current tree as its own
+  baseline and reported every pair fresh, which made the CI gate structurally blind on every
+  fresh checkout rather than only when someone typed `rm` (#175). A **rule that cannot match
+  anything** counted toward `N rules evaluated, 0 violations`; all nine rule types now report
+  their own inertness — a matcher selecting no node, an edge kind the graph does not have, a
+  `check` with no threshold, a `source_root` with no module (#172). An **exemption whose
+  `until:` has passed** kept suppressing in silence; a passed ISO deadline on an entry that is
+  still suppressing something is a finding, the same deadline grammar is shared with the flow
+  guards' exclusions so `flow.yml` and `rules.yml` cannot promise different things, and expiry
+  never changes what is suppressed — a build reddening because a calendar day passed has no
+  commit behind it. And a **fact the audit never checked** was invisible behind a count of what
+  it did find (#173). Every one of these is reported at `warn` unless something in the tree is
+  actually wrong, so a green project stays green on upgrade; `--fail-on-warn` and
+  `docs audit --fail-if unverified>N` are the levers for a project that wants them enforced.
 - **Three checks that reported green over work they had not done (BDL-061 S2).**
   An incremental `reindex` now re-extracts imports for the code files it touched,
   drops those of files that disappeared and rebuilds the derived `depends_on` set

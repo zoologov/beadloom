@@ -130,6 +130,18 @@ CREATE TABLE IF NOT EXISTS code_symbols (
 );
 
 -- Doc↔code sync state
+--
+-- ``status`` carries FOUR verdicts, because *unverifiable is not clean*
+-- (BDL-UX #174/#175): ``ok`` (checked, fresh) and ``stale`` (checked, drifted)
+-- are the two CHECKED outcomes, while ``missing`` (the doc or the code file is
+-- gone) and ``unverified`` (nothing to compare against) are states in which the
+-- checker cannot know. They used to print the same word as ``ok``.
+--
+-- ``baseline_source`` records where this pair's baseline CAME FROM, which is the
+-- fact #175 turned on: a rebuilt index records the current tree as its own
+-- baseline, so a pair marked ``rebuilt`` proves nothing until it is corroborated
+-- against git or explicitly attested. ``''`` means a pre-BDL-061 row whose
+-- provenance was never recorded (resolved at the next reindex).
 CREATE TABLE IF NOT EXISTS sync_state (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     doc_path        TEXT NOT NULL,
@@ -138,10 +150,23 @@ CREATE TABLE IF NOT EXISTS sync_state (
     code_hash_at_sync TEXT NOT NULL,
     doc_hash_at_sync  TEXT NOT NULL,
     synced_at       TEXT NOT NULL,
-    status          TEXT NOT NULL DEFAULT 'ok' CHECK(status IN ('ok','stale')),
+    status          TEXT NOT NULL DEFAULT 'ok'
+        CHECK(status IN ('ok','stale','missing','unverified')),
     symbols_hash    TEXT DEFAULT '',
     doc_hash_at_last_edit TEXT DEFAULT '',
+    baseline_source TEXT NOT NULL DEFAULT '',
     UNIQUE(doc_path, code_path)
+);
+
+-- The DECLARED documentation surface: every doc a graph node names in its
+-- ``docs:`` list, whether or not the file exists. The ``docs`` table indexes
+-- files found on disk, so deleting a declared doc simply removed it from the
+-- index and the gate had nothing to miss (BDL-UX #174). Declarations live in the
+-- committed graph YAML; this table is only their cache, refreshed on reindex.
+CREATE TABLE IF NOT EXISTS declared_docs (
+    declared_path TEXT PRIMARY KEY,
+    doc_path      TEXT NOT NULL,
+    ref_id        TEXT NOT NULL
 );
 
 -- Reference doc surface-drift state (BDL-057 Layer 2) — see ``_REFERENCE_STATE_SQL``
@@ -342,6 +367,11 @@ def ensure_schema_migrations(conn: sqlite3.Connection) -> None:
                 "ALTER TABLE sync_state ADD COLUMN doc_hash_at_last_edit TEXT DEFAULT ''"
             )
             conn.commit()
+        if "baseline_source" not in sync_columns:
+            conn.execute(
+                "ALTER TABLE sync_state ADD COLUMN baseline_source TEXT NOT NULL DEFAULT ''"
+            )
+            conn.commit()
 
     # lifecycle column on nodes/edges (BDL-037 Principle 8). Additive: existing
     # DBs upgrade cleanly and existing rows default to 'active' (no regression).
@@ -363,8 +393,73 @@ def ensure_schema_migrations(conn: sqlite3.Connection) -> None:
     _migrate_edges_contract_kinds(conn)
     _ensure_foreign_edges_table(conn)
     _ensure_reference_state_table(conn)
+    _ensure_declared_docs_table(conn)
+    _migrate_sync_status_verdicts(conn)
     _migrate_drop_kind_checks(conn)
     _migrate_lifecycle_external(conn)
+
+
+def _ensure_declared_docs_table(conn: sqlite3.Connection) -> None:
+    """Create the ``declared_docs`` table on a pre-BDL-061 DB (idempotent)."""
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS declared_docs ("
+        "declared_path TEXT PRIMARY KEY, doc_path TEXT NOT NULL, ref_id TEXT NOT NULL)"
+    )
+    conn.commit()
+
+
+def _migrate_sync_status_verdicts(conn: sqlite3.Connection) -> None:
+    """Widen ``sync_state.status`` to the four verdicts (BDL-UX #174/#175).
+
+    A DB created before this change restricts ``status`` to ``ok``/``stale``, so
+    writing the honest ``missing`` / ``unverified`` verdict would raise
+    ``IntegrityError`` and the caller would have to fall back to a word that
+    means something else. SQLite cannot ALTER a CHECK, so the table is rebuilt.
+
+    Idempotent and additive: it fires only while the stored DDL still carries the
+    two-verdict CHECK (probed via ``sqlite_master.sql``), copies every row
+    verbatim, and is a no-op afterwards.
+    """
+    if not _table_exists(conn, "sync_state"):
+        return
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='sync_state'"
+    ).fetchone()
+    ddl = str(row[0]) if row and row[0] else ""
+    if "'unverified'" in ddl or "CHECK" not in ddl:
+        return
+    conn.executescript(
+        """
+        PRAGMA foreign_keys=OFF;
+        ALTER TABLE sync_state RENAME TO sync_state_old;
+        CREATE TABLE sync_state (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            doc_path        TEXT NOT NULL,
+            code_path       TEXT NOT NULL,
+            ref_id          TEXT NOT NULL REFERENCES nodes(ref_id),
+            code_hash_at_sync TEXT NOT NULL,
+            doc_hash_at_sync  TEXT NOT NULL,
+            synced_at       TEXT NOT NULL,
+            status          TEXT NOT NULL DEFAULT 'ok'
+                CHECK(status IN ('ok','stale','missing','unverified')),
+            symbols_hash    TEXT DEFAULT '',
+            doc_hash_at_last_edit TEXT DEFAULT '',
+            baseline_source TEXT NOT NULL DEFAULT '',
+            UNIQUE(doc_path, code_path)
+        );
+        INSERT INTO sync_state
+            (id, doc_path, code_path, ref_id, code_hash_at_sync, doc_hash_at_sync,
+             synced_at, status, symbols_hash, doc_hash_at_last_edit, baseline_source)
+        SELECT id, doc_path, code_path, ref_id, code_hash_at_sync, doc_hash_at_sync,
+               synced_at, status, symbols_hash, doc_hash_at_last_edit, baseline_source
+        FROM sync_state_old;
+        DROP TABLE sync_state_old;
+        CREATE INDEX IF NOT EXISTS idx_sync_status ON sync_state(status);
+        CREATE INDEX IF NOT EXISTS idx_sync_ref ON sync_state(ref_id);
+        PRAGMA foreign_keys=ON;
+        """
+    )
+    conn.commit()
 
 
 def _ensure_reference_state_table(conn: sqlite3.Connection) -> None:

@@ -136,6 +136,8 @@ def _emit_liveness(rows: tuple[GuardLiveness, ...], *, output_json: bool) -> Non
             flags.append("excluded-everywhere")
         for pattern in row.dead_exclusions:
             flags.append(f"matches no file in the project: {pattern!r}")
+        for pattern in row.expired_exclusions:
+            flags.append(f"exit condition has passed: {pattern!r}")
         source = "flow.yml" if row.declared else "default"
         suffix = f" [{', '.join(flags)}]" if flags else ""
         last = f", last {row.last_outcome} at {row.last_fired_at}" if row.last_fired_at else ""

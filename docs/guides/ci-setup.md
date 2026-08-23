@@ -132,7 +132,7 @@ writes the index.
 docs audit -> config-check -> doctor -> (optional) federate landscape gate** into a single
 verdict with one exit code (0 = every step passed, 1 = any step failed). It never
 short-circuits — every step runs and contributes findings — and it names every
-step that ran with its honest result (PASS/FAIL/SKIP); a green is never a silently
+step that ran with its honest result (PASS/WARN/FAIL/SKIP); a green is never a silently
 skipped step. All steps share one agent-actionable finding shape
 (`{kind, rule, severity, locations, why, remediation}`), so `--format` applies
 uniformly: `rich` (default in a TTY), `json` (structured), or `github` (default

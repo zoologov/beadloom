@@ -29,7 +29,8 @@ definitions the rest of Beadloom depends on.
   `ensure_schema_migrations`.
 - `ensure_schema_migrations(conn)` — apply the additive, idempotent migrations
   (the `lifecycle` column + `external` CHECK rebuild, `edges.contract_key`,
-  `foreign_edges`, the free-form `kind` rebuild, …).
+  `foreign_edges`, the free-form `kind` rebuild, `sync_state.baseline_source`,
+  the four-verdict `sync_state.status` rebuild, `declared_docs`, …).
 - `get_meta(conn, key, default=None)` / `set_meta(conn, key, value)` — the
   `meta` key/value helpers.
 - `SCHEMA_VERSION` — the schema version constant (currently `"4"`).
@@ -37,7 +38,7 @@ definitions the rest of Beadloom depends on.
 ## Collaborators
 
 The lowest layer: every domain reads and writes through it. The full table
-inventory (nodes/edges/foreign_edges, docs/chunks, code_symbols, sync_state,
+inventory (nodes/edges/foreign_edges, docs/chunks, declared_docs, code_symbols, sync_state,
 health/graph snapshots, FTS5 search, rules, …) and the migration detail live in
 the [infrastructure README](../../README.md).
 

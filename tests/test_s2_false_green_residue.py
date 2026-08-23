@@ -9,18 +9,22 @@ result still does not mean "checked".
 Every gap here was **measured** on a clean-room copy of this repo at
 004487a before it was written down — never inferred from reading the code:
 
-* ``lint`` reports ``16 rules, 0 violations`` over four rules that cannot match
+* ``lint`` reported ``16 rules, 0 violations`` over four rules that cannot match
   anything (a ``require`` about a node that does not exist, a ``deny`` between
   tags nobody carries, ``module_coverage`` over an absent source root, a
-  cardinality ``check`` on a missing node). BDL-061.43's ``rule_liveness``
-  covers ``forbid_import`` **only** — and ``validate_rules()`` already computes
-  the "unknown ref_id" warning that would catch two of the four; the linter
-  calls it as a bare statement and drops the return value (``linter.py``).
+  cardinality ``check`` on a missing node), because BDL-061.43's ``rule_liveness``
+  covered ``forbid_import`` **only**. CLOSED by ``beadloom-mr2l.48``, which
+  extended liveness to all nine rule types; the assertions below are kept as
+  live regression tests rather than deleted, and
+  ``tests/test_rule_liveness_all_types.py`` owns the per-type pairs.
 * A ``forbid_import`` ``exempt`` entry written ``from: "*" / to: "*"`` with an
   ``until:`` date already in the past swallowed a real error-severity crossing:
   ``12 rules, 0 violations``, exit 0, and nothing in the output said a crossing
-  had been suppressed. ``until`` is free text and is never evaluated anywhere in
-  the product.
+  had been suppressed. CLOSED by ``beadloom-mr2l.49``: what an exemption excused
+  is counted on every run, and an ``until:`` leading with an ISO date that has
+  passed is a finding while the entry still suppresses something. The
+  assertions below are kept as live regression tests;
+  ``tests/test_exit_condition_expiry.py`` owns the grammar and both surfaces.
 * ``sync-check`` reports ``status: ok`` for a pair whose code file — or whose
   doc — no longer exists, because ``_file_hash`` returns ``None`` for a missing
   file and both comparisons are guarded by the truthiness of that hash. Deleting
@@ -223,8 +227,8 @@ _DEAD_IMPORT_GLOB = """\
 """
 
 
-class TestARuleThatCannotMatchIsStillCountedClean:
-    """``rule_liveness`` covers ``forbid_import`` only; the other rule types are silent."""
+class TestARuleThatCannotMatchIsReported:
+    """Every rule type reports its own inertness (was: ``forbid_import`` only)."""
 
     def test_a_dead_import_glob_is_reported(self, tmp_path: Path) -> None:
         """The one liveness channel that exists works — this file's non-vacuity guard."""
@@ -240,15 +244,6 @@ class TestARuleThatCannotMatchIsStillCountedClean:
             f"got {result.violations}"
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING S2/.6-1: no liveness for require rules. A `require` about a node "
-            "that does not exist matches zero nodes, contributes 0 violations, and is "
-            "counted in `N rules evaluated`. validate_rules() already computes the "
-            "'unknown ref_id' warning; linter.py discards its return value."
-        ),
-    )
     def test_a_require_rule_about_a_node_that_does_not_exist_is_reported(
         self, tmp_path: Path
     ) -> None:
@@ -269,14 +264,6 @@ class TestARuleThatCannotMatchIsStillCountedClean:
             f"{len(result.violations)} violations"
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING S2/.6-1: no liveness for deny rules. Node kinds and edge kinds ARE "
-            "validated (both are a config error); tags are not, so a deny rule between "
-            "two tags nobody carries reads clean forever."
-        ),
-    )
     def test_a_deny_rule_between_tags_nobody_carries_is_reported(self, tmp_path: Path) -> None:
         # Arrange
         project = _indexed(
@@ -293,15 +280,6 @@ class TestARuleThatCannotMatchIsStillCountedClean:
             "a deny rule whose matchers select no node is inert and must be reported"
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING S2/.6-1: no liveness for module_coverage. A source_root that does "
-            "not exist enumerates zero modules, so the 'no shadow code' rule reports "
-            "complete coverage of nothing — at error severity, which reads as the "
-            "strongest guarantee in the file."
-        ),
-    )
     def test_module_coverage_over_a_source_root_that_does_not_exist_is_reported(
         self, tmp_path: Path
     ) -> None:
@@ -320,8 +298,17 @@ class TestARuleThatCannotMatchIsStillCountedClean:
             "module_coverage over an absent source root covers no module and must say so"
         )
 
-    def test_the_dead_rules_still_inflate_the_rules_evaluated_count(self, tmp_path: Path) -> None:
-        """The count grows by three while nothing more is checked — measured, not argued."""
+    def test_the_dead_rules_are_named_instead_of_inflating_the_count(
+        self, tmp_path: Path
+    ) -> None:
+        """The count still grows by three — and now says the three checked nothing.
+
+        Before ``beadloom-mr2l.48`` the ONLY thing three inert rules changed was
+        the advertised count: same violations, bigger number, no signal. The
+        count is left alone (they were loaded and dispatched, so ``evaluated``
+        is true) and qualified instead, at ``warn`` so a green pipeline does not
+        turn red on upgrade.
+        """
         # Arrange
         live = _indexed(
             tmp_path / "live", rules=_rules_yml(_LIVE_RULE), alpha_source=_ALPHA_CROSSING
@@ -336,11 +323,18 @@ class TestARuleThatCannotMatchIsStillCountedClean:
         lean = run_lint(live)
         fat = run_lint(padded)
 
-        # Assert — this is the shape of the defect, asserted so the number is on record
+        # Assert — the numbers are on record, in their corrected relationship
         assert fat.rules_evaluated == lean.rules_evaluated + 3
-        assert len(fat.violations) == len(lean.violations), (
-            "three rules that can match nothing changed the advertised count and "
-            "nothing else — a green count that is not a checked count"
+        assert fat.rules_inert == 3
+        assert lean.rules_inert == 0
+        assert {v.rule_name for v in fat.violations if v.rule_type == "rule_liveness"} == {
+            "dead-require",
+            "dead-deny",
+            "dead-coverage",
+        }
+        assert fat.error_count == lean.error_count, (
+            "naming an inert rule must not fail a build that was passing — the "
+            "finding is about the configuration, not the code"
         )
 
 
@@ -385,7 +379,7 @@ _UNUSED_EXEMPTION_RULES = "version: 1\nrules:\n" + _UNUSED_EXEMPTION
 
 
 class TestAnExemptionCanSuppressEverythingAndReadClean:
-    """``reason`` + ``until`` are mandatory strings; neither is ever evaluated."""
+    """An exemption is visible whatever it does: counted when live, named when stale."""
 
     def test_an_exemption_that_suppresses_nothing_is_reported(self, tmp_path: Path) -> None:
         """BDL-061.43's dead-exemption finding works — this class's non-vacuity guard."""
@@ -401,18 +395,16 @@ class TestAnExemptionCanSuppressEverythingAndReadClean:
             f"a dead exemption must announce its own exit condition — got {result.violations}"
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING S2/.6-2: a `from: '*' / to: '*'` exemption swallows every crossing "
-            "the rule exists to catch and the lint prints '0 violations' with no mention "
-            "that anything was suppressed. Measured on this repo: an injected "
-            "tui -> infrastructure import vanished behind a blanket exemption at exit 0."
-        ),
-    )
     def test_a_blanket_exemption_swallowing_a_real_crossing_is_reported(
         self, tmp_path: Path
     ) -> None:
+        """CLOSED by ``beadloom-mr2l.49`` — kept as a live regression test.
+
+        The crossing is still suppressed (an exemption that stops working on a
+        date would redden a build with no commit behind it), but the run no
+        longer reads as untouched: what was excused is counted on the result and
+        said in the summary line.
+        """
         # Arrange — a real, error-severity crossing under a wildcard exemption
         project = _indexed(tmp_path, rules=_BLANKET_EXEMPTION_RULES, alpha_source=_ALPHA_CROSSING)
 
@@ -420,21 +412,16 @@ class TestAnExemptionCanSuppressEverythingAndReadClean:
         result = run_lint(project)
 
         # Assert
-        assert result.violations, (
+        assert result.violations_suppressed == 1, (
             "a suppressed crossing is still a crossing: the count of what an exemption "
             "silenced must appear somewhere in the result"
         )
+        assert result.violations, (
+            "and the entry that silenced it — a wildcard dated 1999 — must be named"
+        )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING S2/.6-2: `until` is free text everywhere it is required — "
-            "forbid_import exemptions and guard exclusions alike. Nothing parses it, so "
-            "'carries an exit condition' is documentation, not a mechanism, and an "
-            "exclusion dated 1999 suppresses just as well as one dated next week."
-        ),
-    )
     def test_an_exemption_whose_until_has_passed_is_reported(self, tmp_path: Path) -> None:
+        """CLOSED by ``beadloom-mr2l.49`` — ``until`` leading with an ISO date is parsed."""
         # Arrange
         project = _indexed(tmp_path, rules=_BLANKET_EXEMPTION_RULES, alpha_source=_ALPHA_CROSSING)
 
@@ -485,15 +472,7 @@ class TestSyncCheckOverAFileItCouldNotRead:
             f"a changed code file must make its pair stale — got {statuses}"
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING S2/.6-3: a pair whose CODE file no longer exists is reported "
-            "status=ok/reason=ok. Measured on this repo: deleting a paired module left "
-            "`sync-check` at exit 0 reporting '275 ok', two of which were about a file "
-            "that does not exist."
-        ),
-    )
+    # FIXED in BDL-061.46/.47 (BDL-UX #174): the code side reads ``missing`` too.
     def test_a_pair_whose_code_file_was_deleted_is_not_reported_fresh(
         self, tmp_path: Path
     ) -> None:
@@ -509,14 +488,8 @@ class TestSyncCheckOverAFileItCouldNotRead:
             "a file that is not there was not checked, and must not be called fresh"
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING S2/.6-3: the same guard on the doc side — a pair whose DOC file was "
-            "deleted is reported fresh. Measured on this repo: deleting a feature's whole "
-            "SPEC.md left all 11 of its pairs 'ok' at exit 0."
-        ),
-    )
+    # FIXED in BDL-061.46/.47 (BDL-UX #174): a pair whose doc file is gone is
+    # reported ``missing`` — a failure, not an absence.
     def test_a_pair_whose_doc_was_deleted_is_not_reported_fresh(self, tmp_path: Path) -> None:
         # Arrange
         project = _indexed(tmp_path)
@@ -570,20 +543,18 @@ class TestTheGateOverADeclaredDocThatIsGone:
         assert clean_lint.passed is True, f"clean fixture: {clean_lint.summary}"
         assert crossing_lint.passed is False, "a real crossing must fail lint in the Gate"
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING S2/.6-4: deleting a doc a node explicitly declares changes NOTHING "
-            "in the Gate's verdict. Measured on this repo: removing "
-            "docs/domains/ai_agents/features/ai-techwriter/SPEC.md left `beadloom ci` at "
-            "exit 0 with every step PASS; sync-check's count silently fell 275 -> 264 and "
-            "doctor's nodes_without_docs warning is advisory."
-        ),
-    )
+    # FIXED in BDL-061.46/.47 (BDL-UX #174): the DECLARATION outlives the file,
+    # so deleting the doc fails the Gate by name instead of shrinking a count.
     def test_deleting_a_declared_doc_is_reported_by_the_gate(self, tmp_path: Path) -> None:
         # Arrange
         project = _indexed(tmp_path)
-        assert _gate(project) == (True, []), "the untouched fixture must pass cleanly"
+        # The untouched fixture must not FAIL. It does carry warnings — it is not
+        # a git repo and its index was just built, so its pairs are honestly
+        # `unverified` rather than fresh (BDL-UX #175); that is the fix, not a
+        # regression, and the assertion is about errors.
+        before_ok, before_findings = _gate(project)
+        assert before_ok is True
+        assert not [f for f in before_findings if '"severity": "error"' in f]
         (project / "docs" / "components" / "alpha.md").unlink()
 
         # Act
@@ -622,16 +593,9 @@ class TestTheDoctorSummaryCountsWarningsAsClean:
         # Assert
         assert [c for c in checks if c.severity is Severity.WARNING]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING S2/.6-5: gate.py's doctor step builds its summary as "
-            "f'{len(checks)} check(s) clean' over EVERY check, not the OK ones. Measured "
-            "on the untouched repo: '20 check(s) clean' described 10 OK, 9 WARNING and 1 "
-            "INFO reading 'CLI surface not available in this process — command count not "
-            "verified'."
-        ),
-    )
+    # FIXED in BDL-061.46 (BDL-UX #174, third item): the summary counts the
+    # CHECKS that ran and reports their severities, so it can no longer rise
+    # while the tree shrinks and can no longer call a warning clean.
     def test_the_doctor_step_does_not_call_a_warning_clean(self, tmp_path: Path) -> None:
         # Arrange
         project = _indexed(tmp_path)
@@ -770,15 +734,6 @@ class TestDocsAuditNamesWhatItVerifiedNothingFor:
             f"a stated fact must be verified — declared {sorted(declared)}"
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING S2/.6-7 (BDL-061.45 owns the fix): the audit payload has no channel "
-            "naming a declared fact that matched nothing. Measured on this repo: 9 facts "
-            "declared, 13 'fresh' verifications, ALL of them mcp_tool_count — a green "
-            "docs-audit covers 1 of 9 declared facts and says nothing about the other 8."
-        ),
-    )
     def test_the_audit_names_the_facts_it_verified_nothing_for(self, tmp_path: Path) -> None:
         # Arrange
         project = _indexed(tmp_path)

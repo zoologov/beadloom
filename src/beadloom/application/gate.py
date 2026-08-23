@@ -30,12 +30,22 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from beadloom.doc_sync.declared_docs import count_declared_docs
+from beadloom.doc_sync.engine import (
+    BLOCKING_STATUSES,
+    STATUS_MISSING,
+    STATUS_OK,
+    STATUS_STALE,
+    STATUS_UNVERIFIED,
+)
+from beadloom.doc_sync.surface_ledger import SurfaceVerdict, compare_surface, read_ledger
+
 if TYPE_CHECKING:
     import sqlite3
     from pathlib import Path
 
     from beadloom.application.doctor import Check
-    from beadloom.doc_sync.audit import AuditResult
+    from beadloom.doc_sync.audit import AuditFinding, AuditResult
 
 
 # A single finding in the shared, agent-actionable shape (see linter._finding).
@@ -79,6 +89,12 @@ class GateStep:
     - ``passed``   — True when the step did not fail the gate. A *skipped* step
       counts as passed (it cannot block the build).
     - ``skipped``  — True when the step did not run (e.g. ``--no-reindex``).
+    - ``not_verified`` — True when the step ran, found nothing wrong, and could
+      not actually check part of what it reports on. It stays ``passed`` (a
+      project that cannot supply a baseline is not thereby broken) but it prints
+      ``WARN``, because *unverifiable is not clean*: a green that describes the
+      checker's own ignorance is the defect BDL-UX #174/#175/#178 are all made
+      of, and the honest word costs nothing.
     - ``findings`` — the step's findings in the shared shape (empty on PASS/SKIP).
     - ``summary``  — a short human line for the ``rich`` report.
     """
@@ -88,13 +104,16 @@ class GateStep:
     skipped: bool = False
     findings: list[Finding] = field(default_factory=list)
     summary: str = ""
+    not_verified: bool = False
 
     @property
     def status(self) -> str:
-        """``PASS`` / ``FAIL`` / ``SKIP`` — never an ambiguous green."""
+        """``PASS`` / ``WARN`` / ``FAIL`` / ``SKIP`` — never an ambiguous green."""
         if self.skipped:
             return "SKIP"
-        return "PASS" if self.passed else "FAIL"
+        if not self.passed:
+            return "FAIL"
+        return "WARN" if self.not_verified else "PASS"
 
 
 @dataclass
@@ -173,7 +192,7 @@ def _step_reindex(project_root: Path, *, no_reindex: bool) -> GateStep:
 
 def _step_lint(project_root: Path) -> GateStep:
     """``lint --strict`` — boundary rules at error severity."""
-    from beadloom.graph.linter import LintError, _finding
+    from beadloom.graph.linter import LintError, _finding, _suppressed_note
     from beadloom.graph.linter import lint as run_lint
 
     try:
@@ -188,11 +207,17 @@ def _step_lint(project_root: Path) -> GateStep:
         )
     findings = [_finding(v) for v in result.violations]
     passed = not result.has_errors
+    # The suppressed-crossing clause comes from the linter's own formatter rather
+    # than being restated here, so the Gate line cannot drift from the command it
+    # summarises. It is absent when nothing was excused, so the everyday green
+    # line keeps its shape. The OTHER counter needs no clause: an inert rule
+    # always emits a finding, so `rules_inert > 0` already flips this summary to
+    # the "0 error(s), N warning(s)" branch (BDL-061.48/.49).
     summary = (
         f"{result.error_count} error(s), {result.warning_count} warning(s)"
         if result.violations
         else f"{result.rules_evaluated} rules, 0 violations"
-    )
+    ) + _suppressed_note(result)
     return GateStep("lint", passed=passed, findings=findings, summary=summary)
 
 
@@ -218,12 +243,62 @@ def _step_sync_check(project_root: Path) -> GateStep:
         )
     with connection(db_path) as conn:
         results = check_sync(conn, project_root=project_root)
+        declared_docs = count_declared_docs(conn)
 
-    stale = [r for r in results if r.get("status") == "stale"]
-    findings = [_sync_finding(r) for r in stale]
-    passed = not stale
-    summary = f"{len(stale)} stale doc(s)" if stale else f"{len(results)} pair(s) fresh"
-    return GateStep("sync-check", passed=passed, findings=findings, summary=summary)
+    pairs = [r for r in results if r.get("code_path")]
+    blocking = [r for r in results if r.get("status") in BLOCKING_STATUSES]
+    unverified = [r for r in results if r.get("status") == STATUS_UNVERIFIED]
+    surface = compare_surface(
+        read_ledger(project_root),
+        declared_pairs=len(pairs),
+        declared_docs=declared_docs,
+    )
+
+    findings = [_sync_finding(r) for r in blocking]
+    findings.extend(_sync_unverified_finding(r) for r in unverified)
+    if surface.shrank:
+        findings.append(_surface_finding(surface.message))
+
+    return GateStep(
+        "sync-check",
+        passed=not blocking,
+        not_verified=bool(unverified) or surface.shrank,
+        findings=findings,
+        summary=_sync_summary(results, unverified, surface),
+    )
+
+
+def _sync_summary(
+    results: list[dict[str, object]],
+    unverified: list[dict[str, object]],
+    surface: SurfaceVerdict,
+) -> str:
+    """The sync-check line, which must never print a count that means nothing.
+
+    It says how many pairs were CHECKED and found fresh, how many could not be
+    checked at all, and — when the recorded declared surface moved — that it
+    moved. A bare ``N pair(s) fresh`` was true of a run in which six pairs had
+    just been deleted (BDL-UX #174) and of a run that could not detect staleness
+    at all (BDL-UX #175).
+    """
+    missing = [r for r in results if r.get("status") == STATUS_MISSING]
+    stale = [r for r in results if r.get("status") == STATUS_STALE]
+    suffix = f"; {surface.headline}" if surface.headline else ""
+    if missing or stale:
+        parts = []
+        if missing:
+            parts.append(f"{len(missing)} missing doc(s)/code file(s)")
+        if stale:
+            parts.append(f"{len(stale)} stale doc(s)")
+        # The surface headline rides along HERE too: a run that deleted a doc is
+        # precisely the run whose count fell, and suppressing the number in
+        # favour of the failure would discard the signal again.
+        return ", ".join(parts) + suffix
+    fresh = [r for r in results if r.get("status") == STATUS_OK]
+    summary = f"{len(fresh)} pair(s) fresh"
+    if unverified:
+        summary += f", {len(unverified)} NOT VERIFIED (no baseline — index rebuilt)"
+    return summary + suffix
 
 
 def _step_docs_audit(project_root: Path) -> GateStep:
@@ -256,13 +331,40 @@ def _step_docs_audit(project_root: Path) -> GateStep:
 
     stale = [f for f in result.findings if f.status == "stale"]
     findings = [_audit_finding(f) for f in stale]
-    passed = not stale
-    summary = (
+    return GateStep(
+        "docs-audit",
+        passed=not stale,
+        findings=findings,
+        summary=_audit_summary(result, stale),
+    )
+
+
+def _audit_summary(result: AuditResult, stale: list[AuditFinding]) -> str:
+    """The docs-audit line, which must say what it COVERED, not only what it found.
+
+    ``13 mention(s) fresh`` was measured to be thirteen restatements of one of
+    NINE declared facts: the line reported the checker's activity and read as a
+    verdict on the docs (BDL-UX #173). It now carries the declared surface, so a
+    reader can see that a green audit checked two facts of nine.
+
+    Coverage does not fail or WARN the step, deliberately. Silence in the docs
+    about a fact is not a defect in the code, and a WARN every project would
+    carry on every run would spend the channel ``sync-check`` needs for a real
+    missing baseline. The number is on the line everybody reads, and
+    ``docs audit --fail-if unverified>N`` is there for a project that wants it
+    enforced.
+    """
+    declared = len(result.facts)
+    unverified = result.unverified_facts
+    head = (
         f"{len(stale)} stale fact(s)"
         if stale
         else f"{len(result.findings)} mention(s) fresh"
     )
-    return GateStep("docs-audit", passed=passed, findings=findings, summary=summary)
+    coverage = f"{declared - len(unverified)}/{declared} declared fact(s) verified"
+    if unverified:
+        coverage += f", NOT VERIFIED: {', '.join(unverified)}"
+    return f"{head}; {coverage}"
 
 
 def _step_config_check(project_root: Path) -> GateStep:
@@ -328,11 +430,31 @@ def _step_doctor(project_root: Path) -> GateStep:
 
     errors = [c for c in checks if c.severity is Severity.ERROR]
     findings = [_doctor_finding(c) for c in errors]
-    passed = not errors
-    summary = (
-        f"{len(errors)} integrity error(s)" if errors else f"{len(checks)} check(s) clean"
+    return GateStep(
+        "doctor", passed=not errors, findings=findings, summary=_doctor_summary(checks)
     )
-    return GateStep("doctor", passed=passed, findings=findings, summary=summary)
+
+
+def _doctor_summary(checks: list[Check]) -> str:
+    """Count the CHECKS, and never call a warning clean.
+
+    ``run_checks`` returns one entry per FINDING, so ``len(checks)`` counted
+    problems, not checks: deleting a declared doc added a ``nodes_without_docs``
+    warning and the gate reported ``21 check(s) clean`` where it had reported 20
+    — the count rose while the tree shrank (BDL-UX #174). The distinct check
+    names are the number of checks; the severities say what they found.
+    """
+    from beadloom.application.doctor import Severity
+
+    ran = len({c.name for c in checks})
+    errors = sum(1 for c in checks if c.severity is Severity.ERROR)
+    if errors:
+        return f"{errors} integrity error(s) across {ran} check(s)"
+    warnings = sum(1 for c in checks if c.severity is Severity.WARNING)
+    infos = sum(1 for c in checks if c.severity is Severity.INFO)
+    if not warnings and not infos:
+        return f"{ran} check(s) clean"
+    return f"{ran} check(s): 0 error(s), {warnings} warning(s), {infos} info"
 
 
 def _step_federate(
@@ -412,11 +534,32 @@ def _simple_finding(
 
 
 def _sync_finding(row: dict[str, object]) -> Finding:
-    """Project a stale sync pair onto the shared finding shape."""
+    """Project a BLOCKING sync pair onto the shared finding shape.
+
+    *Missing* and *stale* are different facts and read differently: a stale doc
+    is behind the code, a missing one is not there to be behind it, and telling
+    an agent to re-attest a file that does not exist is not a remediation.
+    """
     doc_path = str(row.get("doc_path", ""))
     reason = str(row.get("reason", "stale"))
     ref_id = str(row.get("ref_id", ""))
     locations: list[Finding] = [{"file": doc_path}] if doc_path else []
+    if str(row.get("status")) == STATUS_MISSING:
+        return {
+            "kind": "sync-check",
+            "rule": "doc-missing",
+            "severity": "error",
+            "locations": locations,
+            "why": (
+                f"{ref_id}: {_MISSING_WHY.get(reason, reason)} — "
+                f"'{doc_path}' does not exist"
+            ),
+            "remediation": (
+                "restore the file, or remove the declaration from the graph "
+                "if the doc is genuinely gone — the gate is not satisfied by "
+                "having less to check"
+            ),
+        }
     return {
         "kind": "sync-check",
         "rule": "doc-stale",
@@ -424,6 +567,50 @@ def _sync_finding(row: dict[str, object]) -> Finding:
         "locations": locations,
         "why": f"{ref_id}: doc out of sync with code ({reason})",
         "remediation": f"run `beadloom sync-update {ref_id}` to review and re-attest",
+    }
+
+
+#: What each ``missing`` reason means to a reader, in the reader's terms.
+_MISSING_WHY = {
+    "doc_missing": "the linked doc file is gone",
+    "code_missing": "the paired code file is gone",
+    "declared_doc_missing": "the graph declares a doc that is not on disk",
+}
+
+
+def _sync_unverified_finding(row: dict[str, object]) -> Finding:
+    """A pair that could not be checked at all — a warning, and never silent."""
+    doc_path = str(row.get("doc_path", ""))
+    ref_id = str(row.get("ref_id", ""))
+    locations: list[Finding] = [{"file": doc_path}] if doc_path else []
+    return {
+        "kind": "sync-check",
+        "rule": "doc-not-verified",
+        "severity": "warning",
+        "locations": locations,
+        "why": (
+            f"{ref_id}: NOT checked — the index was rebuilt, so its baseline is "
+            f"the current tree, and git could not supply one either"
+        ),
+        "remediation": (
+            "reindex incrementally on the existing index, run inside a git "
+            "work tree, or attest the pair with `beadloom sync-update`"
+        ),
+    }
+
+
+def _surface_finding(message: str) -> Finding:
+    """The declared surface shrank since it was recorded."""
+    return {
+        "kind": "sync-check",
+        "rule": "declared-surface-shrank",
+        "severity": "warning",
+        "locations": [],
+        "why": message,
+        "remediation": (
+            "restore what was removed, or re-record deliberately with "
+            "`beadloom sync-check --record-surface`"
+        ),
     }
 
 

@@ -35,6 +35,63 @@
 
 ## Open Issues
 
+182. [2026-08-23] [HIGH] 🔴 `symbols_changed` is computed per node, so one changed file marks every pair of that node stale — and the only way through is bulk re-attestation
+
+    **Severity:** high (it manufactures the exact situation #163 warns about, on every doc pass, and the tool's own remediation is the unsafe act)
+    **Command:** `beadloom sync-check`, `beadloom sync-update`
+    **Context:** measured on BDL-061 S2b's doc pass. The gate reported **28 stale pairs** on `docs/domains/onboarding/README.md`. Exactly **one** of them had a changed file (`services/commands/docs.py`). The other 27 read `symbols_changed` while their files were untouched, because `symbols_hash` is stored per `ref_id` rather than per file: one file's symbols move, the node's hash moves, and every pair the node owns goes stale together.
+    **Why it is worse than noise:** the writer is handed 28 pairs, told they are stale, and given `sync-update` as the remedy. Twenty-seven of them cannot be revised, because nothing about their files changed — so the only available action is to re-attest in bulk. That is precisely the "attested but never revised" hazard #163 was filed for, and here the tool *requires* it rather than merely permitting it. The honest pass on this repo was 1 revision and 27 deliberate re-attestations, and there was no better answer available.
+    **Compounding:** because the 28 print as 28 near-identical gate lines (#167), the one pair that genuinely needed attention is indistinguishable from the 27 that did not — the signal is diluted by exactly the factor of the defect.
+    **Expected:**
+    - Compute the staleness fact at the granularity of the thing that changed. A pair is stale when *its* file's symbols moved, not when a sibling's did.
+    - If per-node hashing is deliberate (it is cheaper), then the pairs that follow from it must be reported differently — `unaffected` or `sibling_changed`, never the same word as a pair whose own file moved. This is the same distinction the rest of this slice turned on: **unverifiable, unaffected and stale are three states and they must not print one word.**
+    - Whatever the fix, `sync-update` should not be the recommended action for a pair nobody can revise.
+    **Related:** #163 (re-attesting without evidence — this is the mechanism that forces it), #167 (28 identical lines), #146/#174/#175 (one word for several states).
+
+181. [2026-08-23] [MEDIUM] Clean-room verification is the right technique and structurally cannot see a cross-bead interaction — nothing runs the combined tree until a human does
+
+    **Severity:** medium (no defect ships, but every agent reports green on a tree that is red, and the discrepancy reads as a contradiction rather than as two different measurements)
+    **Command:** the multi-agent wave protocol in `/coordinator`, not a Beadloom command
+    **Context:** BDL-061 S2b ran four dev beads across two waves in one shared working tree. Because a shared tree makes a full-suite run meaningless for any single agent, each verified in a **clean room** — `git archive HEAD` plus only its own files — and each honestly reported green. The coordinator's combined run then found `beadloom ci` rc 1 with 28 stale pairs.
+    **Issue:** the clean-room technique is *correct* — it is the only way to attribute a result to one bead while neighbours are editing — and it is *blind by construction* to any interaction between beads. Nothing in the protocol runs the combined tree until the coordinator does it at wave end, so a wave's integration state is unmeasured for its whole duration and the first honest number arrives last.
+    **Why it is worth filing rather than shrugging at:** four agents reported green, the tree was red, and none of them was wrong. That is a signalling failure, not an engineering one, and it will recur on every wave. It also inverts the usual risk: the *more* carefully each agent isolates itself, the less anyone knows about the whole.
+    **Expected:**
+    - The wave protocol should name the combined run as a distinct, owned step — not a coordinator habit. It is currently in nobody's bead.
+    - An agent's green should be *typed*: "green in a clean room over N files" is a different claim from "green on the tree", and reporting them with the same word is what makes the discrepancy read as a contradiction.
+    - Cheapest mechanical improvement: have the last agent of a wave, or the merge-slot holder, run the combined gate — someone already holds a lock at exactly the right moment.
+    **Related:** #118 (parallel agents collide on the shared pre-commit hook) — same root, that the wave shares one tree; BDL-061 S6 (`beadloom waves`) is where the decision about what may share a tree belongs.
+
+180. [2026-08-24] [MEDIUM] A `docs-audit` fact that fails to COLLECT is silently dropped from the declared list, so coverage cannot report it
+
+    **Severity:** medium (it is the one hole the coverage report cannot cover, and it is in the mechanism that was just built to close #173)
+    **Command:** `beadloom docs audit`, `beadloom ci`
+    **Context:** found while implementing `beadloom-mr2l.45`. `FactRegistry.collect` wraps every source in `try/except`, logs a warning, and omits the fact. Reproduced in-process: with the Click surface registry unpopulated, `cli_command_count` vanishes and the audit reports `2/8 declared fact(s) verified` — an honest-looking fraction over a denominator that silently lost a fact. The same happens to `rule_type_count` against a database with no `rules` table, and to `version` when a manifest cannot be parsed.
+    **Issue:** BDL-061.45 made the audit report what it could not VERIFY, but a fact that could not be COLLECTED never reaches that report. Coverage can only speak about facts in `result.facts`, so the failure mode moved one level up rather than away: *a fact that failed to collect reads as a fact that does not exist*. The warning goes to a logger nobody reads at `beadloom ci` time — #178's shape exactly.
+    **Expected:** `FactRegistry` records collection failures alongside successes (`uncollected: {name: reason}`), the audit prints them in the same place it prints `not_covered` / `unreadable`, and the declared-fact denominator counts them. A fact that could not be computed is a fourth coverage status, not an absence.
+    **Related:** #173 (the coverage report this hole sits inside), #174/#175 (*unverifiable is not clean*), #178 (honesty routed to a channel nobody reads).
+
+179. [2026-08-23] [MEDIUM] How many rule types exist? Three documents give three answers and all of them are wrong
+
+    **Severity:** medium (nothing is broken by it, but it silently scoped a P0 fix and would have left four rule types uncovered)
+    **Command:** `beadloom lint`; `.beadloom/_graph/rules.yml` authoring
+    **Context:** while implementing the rule-liveness fix (`beadloom-mr2l.48`), the agent found that the number of rule types is stated in four places and only one is right:
+
+    | source | says |
+    |---|---|
+    | the bead brief (written by the coordinator) | 6 |
+    | BDL-UX #172 | 6 |
+    | `docs/domains/graph/features/rule-engine/SPEC.md` table | 7 |
+    | `load_rules` dispatch | **9** (since BDL-051 S3a) |
+
+    **Issue:** the agent counted against the loader rather than against any document, and covered all nine. Had it trusted its brief, four rule types would have kept counting clean while unable to match — the very false green the bead exists to close, shipped inside its own fix.
+    **Why it is filed rather than left in a bead comment:** this is the third instance in two days of one fact with several sources and no owner — #171 (a bead's number in its own title vs. the id `bd` allocates), #177 (our `CLAUDE.md` vs. the vendored template), and now this. The recurring shape is that a *count* gets copied into prose, the code grows, and nothing compares them. It is also exactly what `docs-audit` exists for, which is the sharp part: the audit verifies counts against project state, and this count was never one of its facts.
+    **Expected:**
+    - Make the rule-type count a `docs-audit` fact, derived from the dispatch. The mechanism already exists; this number simply was not registered with it.
+    - Correct the SPEC table and #172's text to nine.
+    - More generally: a number that appears in both code and prose is a fact to be audited, not a sentence to be maintained. #173 already showed the audit is weaker than it looks (a green result covered 1 declared fact of 9), so registering more facts and fixing the audit are the same piece of work.
+    **Related:** #171, #177 (one fact, several sources), #172, #173.
+    **MEASURED AGAINST THE FIXED AUDIT (`beadloom-mr2l.45`, 2026-08-24), and it changes the ask.** Registering the fact is necessary but NOT sufficient here, for two reasons the coverage report makes visible: (1) the document that states the number — `docs/domains/graph/features/rule-engine/SPEC.md` — matches `docs/**/features/*/SPEC.md` and is **never scanned**, so a registered fact would still read `not_covered` while the SPEC drifted; (2) the existing `rule_type_count` fact is a MISNOMER — it counts rows in the `rules` table (12 configured rules on this repo), not the loader's nine dispatch KINDS, and `FACT_KEYWORDS` maps `rule`, `rule type` and `rule kind` all to that one fact. Registering the dispatch count therefore means splitting the keywords and renaming the existing fact, which is a breaking change to `docs_audit.tolerances` / `docs_audit.ignore` keys in every adopter's config. That is a bead of its own, not a line in #173's fix.
+
 178. [2026-08-23] [HIGH] 🔴 A REQUIRED check reports `pass` while its own output says it verified nothing
 
     **Severity:** high (it is in the required set, so it is load-bearing for merge, and the failure mode is the one the whole S2 slice was about)
@@ -63,7 +120,8 @@
     - Until the overlay lands, the propagation must be **announced, not silent** — a hook that rewrites a distributed artifact should say so and require confirmation, the same standard we hold `sync-update` to (#163).
     - The direction should be explicit. Today a local edit flows *outward* by default; the safe default is that the shipped template is the source and a local divergence is reported, with promotion to the template a deliberate act.
     - Add a check that no project-local identifier — bead ids, our issue numbers, our repo's measured facts — appears in anything under `templates/`. Cheap, and it would have caught this at the commit.
-    **Related:** #139/#152 (a project has no supported place for its own additions — the same gap from the adopter's side), #163 (re-attesting without evidence). Fixed for this instance by rewriting the template paragraph to a version that is true for an adopter.
+    **Related:** #139/#152 (a project has no supported place for its own additions — the same gap from the adopter's side), #163 (re-attesting without evidence).
+    **CORRECTION, one commit later: this is a LOOP, not an instance, and "fixed for this instance" was wrong.** The template was rewritten to an adopter-true paragraph and committed. The very next commit's pre-commit hook **re-propagated the project-local text over it**, restoring the bead id and the seven-contexts claim in the working tree. The hook enforces *template == our `CLAUDE.md`* in one direction, so the shipped artifact cannot diverge from this project's own instructions by construction — any correction survives exactly until the next commit. It reached `main` intact only because the re-propagation landed in the working tree and was never staged; a single `git add -A` would have shipped it. The severity is therefore not "a paragraph leaked once" but "the distributed artifact is permanently pinned to one project's local text, and the mechanism silently undoes attempts to separate them".
     **Open question, noticed while fixing this and deliberately not chased here:** after the two files were made to differ on purpose, `beadloom ci` still reported `config-check PASS: agent-config in sync`. That is plausibly correct by design — CONTEXT's decision is that `config-check` verifies the *composition result*, not file bytes — but it has not been verified, and "in sync" printed over two files that demonstrably differ is the exact shape this slice spent itself on. Whoever takes S3's composition work should establish which it is before relying on that green.
 
 176. [2026-08-23] [LOW] An incremental `reindex` prints `Imports: 0` and `Rules: 0` on the run that refreshed them
@@ -95,7 +153,7 @@
     - `beadloom ci` should know whether the index it just built has a usable baseline, and say so in the sync-check line rather than printing a count that means nothing.
     - Once fixed, delete the practice too: with #142 retired in BDL-061 S2, "lint on a clean DB" is no longer needed, and leaving the habit in place keeps the hazard alive.
     **Related:** #174 (the gate passes when a declared doc is deleted), #146, #172, #173. Same theme, and this entry is the one that explains why nobody noticed the others sooner.
-    > Tracked as a bead (P0).
+    > **FIXED in BDL-061 (`beadloom-mr2l.47`, one fix with #174).** The load-bearing decision was WHERE the baseline lives: `.beadloom/beadloom.db` is a derived cache — git-ignored, per-machine, dropped by every rebuild and absent on every fresh CI checkout — so a baseline kept only there is destroyed by the act that most needs it. It now lives in **git**, which is committed by construction and cannot be lost. Each pair records its baseline's provenance (`baseline_source`: `index_build` / `carried` / `attested`, carried verbatim across a reindex and never promoted); a pair whose baseline was fabricated at index-build time and would otherwise read `ok` is corroborated against `HEAD`, and where git cannot answer it reads `unverified` — reported by name, never counted as fresh, `beadloom ci` prints the step **WARN**. MEASURED on the repro: edit `graph/linter.py`, leave its doc, `rm beadloom.db`, reindex → `stale` at exit 2 (was: 0 stale at exit 0). The practice is retired with the defect: nothing in `CONTEXT.md`, the guides or any role template now asks for a clean database before checking freshness.
 
 174. [2026-08-22] [CRITICAL] 🔴 The documentation gate is defeated by deleting documentation — `beadloom ci` exits 0 with every step PASS
 
@@ -121,7 +179,7 @@
     - The declared-pair **count** is part of the contract. A run whose count fell since the last run must say so — the silent 275 → 269 was the available signal and it was discarded.
     - **Nothing may pass by having less to check.** Audit every gate step against that sentence, not only `sync-check`: `doctor` reported 21 clean while a file vanished, and its `20 check(s) clean` separately counts 9 warnings and 1 "not verified". A count that grows when the tree shrinks is not a count of anything.
     **Related:** #146 (same equation, node kind), #172 (a rule that cannot match reads clean), #173 (the audit affirms one fact thirteen times). Together these four are one theme: *a green result that describes the checker's ignorance rather than the code's health.*
-    > Tracked as a bead (P0, `beadloom-mr2l.46`).
+    > **FIXED in BDL-061 (`beadloom-mr2l.46`, one fix with #175 — both are "unverifiable is not clean", and they diverge only in the verdict each earns).** Three parts. (1) A pair whose doc or code file is gone is `missing`, not `ok`. (2) The DECLARED surface is checked against the tree: every doc a node names in its `docs:` list is cached in the new `declared_docs` table at reindex, so a declaration outlives the file it names and `declared_doc_missing` fails the gate by NAME after a reindex has removed the pairs — `missing` and `stale` read differently, because restoring a file and updating a doc are different actions. (3) The count is part of the contract: `sync-check --record-surface` writes the committed `.beadloom/sync-surface.json`, and a later run whose declared surface FELL says so with both numbers (warning, not a verdict — the cause that matters fails on its own). `doctor`'s count was audited too: `run_checks` returns one entry per FINDING, so `len(checks)` counted problems and rose 20 → 21 while a file was being deleted; the summary now counts the CHECKS that ran, by severity, and prints *clean* only when every check is OK.
 
 173. [2026-08-23] [HIGH] 🔴 `docs audit` reports green about facts it never checked — three measured false-negative classes, and one of them printed a false claim as *verified*
 
@@ -138,6 +196,7 @@
     - Name the files whose counts were suppressed by the file-type heuristic, and why.
     - Only then revisit the `<10` threshold and the modifier window: with coverage reported, their cost is visible instead of invisible.
     **Related:** #170's third piece ("report the surface, not just the firings") is the identical defect on the guard binding; #161 and #169 are the same audit being confident about text it misparsed. Tracked as `beadloom-mr2l.45`.
+    > **FIXED in BDL-061 (`beadloom-mr2l.45`).** Not three parser fixes — the audit now REPORTS WHAT IT DID NOT VERIFY, which is the same equation as #174/#175 (`unverifiable is not clean`) and #172 (a rule that cannot match reports itself). Three parts. (1) **Per-fact coverage.** Every declared fact carries `verified` / `not_covered` / `unreadable`, printed against the fact in the `Ground Truth` block and summarised on the one line everybody reads — including the `beadloom ci` step line: `14 mention(s) fresh; 2/9 declared fact(s) verified, NOT VERIFIED: cli_command_count, edge_count, ...`. A fact nothing was found for is never counted as passing, and a mention hidden by a `docs_audit.ignore` rule is NOT coverage. (2) **Clause-scoped matching** fixes the modifier class: both the modifier window and the keyword window stop at `,` `;` `:` and the dashes, so `316 edges, one per import` is read and the `14` in `exposes 18 tools: 14 over the graph` is not. The separator set was chosen by MEASUREMENT — parentheses are deliberately excluded because they cost the true verification in `MCP tools (18):`, and a lost true positive is the very silent false negative being fixed. Repo-wide: 0 mentions gained, 5 lost, all five confirmed false positives; three more `docs_audit.ignore` entries went dead and were retired. (3) **The scan surface is published** — all 33 unread documents named with the pattern that skipped them, plus the count-suppressed ones, in `--verbose` and in `--json`. The single-digit floor was RE-MEASURED and KEPT: removing it yields 14 extra mentions on this repo of which 13 are ordinals, table cells and category breakdowns, several of which would have failed the Gate. Trading a silent false negative for a loud false positive that then needs a suppression entry is the wrong trade — so the floor stays and `language_count` (value 1) is now reported `unreadable` by name instead of reading green. Coverage is reported, not enforced (a WARN every project would carry on every run would spend the channel `sync-check` needs); `docs audit --fail-if unverified>N` is the opt-in. MEASURED after the fix: **2 of 9 declared facts verifiable-and-verified on this repo, 6 `not_covered` because no document states them, 1 `unreadable`** — and every one of those seven is now named in the output.
 
 172. [2026-08-22] [HIGH] 🔴 `from:` and `to:` are matched against two different vocabularies, so a `src/`-prefixed `to:` silently disables the rule — and the reference taught the broken form
 
@@ -206,6 +265,7 @@
     **Command:** `beadloom sync-check`
     **Context:** one doc with many watched symbols emits one line per pair. The output is 28 lines that differ in no visible way, and the count of distinct DOCUMENTS needing attention — the number the reader actually wants — has to be derived by eye.
     **Expected:** group by document: one line per doc with the pair count and the reasons, and the per-pair detail behind `--verbose` or `--json`.
+    **MEASURED AGAIN AT GATE SCALE (BDL-061 S2b, 2026-08-24), and it is worse than filed.** The combined tree of a four-bead wave reported 28 stale pairs, all of them the SAME document (`docs/domains/onboarding/README.md`) — because `symbols_hash` is per `ref_id`, one changed file makes every sibling pair of that node stale. The Gate's output, `beadloom sync-check`'s output and `beadloom doctor`'s output each carried 28 near-identical lines, so the reader's first question — *is this one document or twenty-eight?* — could only be answered from `--json`. At gate scale the noise is not merely low signal-to-noise: it misrepresents the SIZE of the problem, which is what a reader decides how to spend an hour on.
 
 166. [2026-08-22] [MEDIUM] Adding one CLI command drifts six reference docs, and `sync-update --all --yes` does not cover them
 
@@ -214,6 +274,7 @@
     **Context:** adding a single command (`beadloom guard`) put six `watches: cli` documents into `surface_drift`. `sync-update --all --yes` re-baselines hash/symbol pairs but not the reference-doc surface-drift path, so each of the six needed an individual `sync-update <ref>` — six commands to record one fact that was already known.
     **Expected:** `--all` should mean all, or say plainly which surfaces it does not cover. Ideally a surface change touching N reference docs is one attestation with N consequences, not N attestations.
     **Related:** #163 — bulk re-baselining is exactly the operation that needs to be recorded rather than made frictionless, so the fix here should count these, not just make them faster.
+    **RE-MEASURED (BDL-061 S2b, 2026-08-24): the second half no longer holds, the first half does.** `sync-update --all --yes` DOES clear the reference-doc path — `_mark_synced_noninteractive` calls `mark_reference_synced(conn, None, project_root, all_docs=True)` and reports the count (measured on this repository at the close of S2b: `Re-baselined 7 reference doc(s)`, clearing all six drifted entries in one command) — so the six-commands-for-one-fact friction is gone. What remains is the shape: adding the single flag `sync-check --record-surface` drifted all six `watches:` documents at once, and the bulk form clears them with no record of which six were re-read. That is #163's objection, not a convenience one, and it is the half worth fixing: one attestation with N consequences should say what it attested to.
 
 165. [2026-08-22] [LOW] External (steveyegge/beads): `bd create` costs one process per bead, so building a DAG of ~50 beads stalls
 

@@ -141,7 +141,10 @@ def _compute_health(conn: sqlite3.Connection) -> _HealthSummary:
     )
     coverage = (covered / nodes * 100.0) if nodes > 0 else 0.0
     stale = int(
-        conn.execute("SELECT count(*) FROM sync_state WHERE status = 'stale'").fetchone()[0]
+        # ``missing`` counts as not-fresh (BDL-UX #174).
+        conn.execute(
+            "SELECT count(*) FROM sync_state WHERE status IN ('stale', 'missing')"
+        ).fetchone()[0]
     )
     return _HealthSummary(
         nodes=nodes, edges=edges, docs=docs, coverage_pct=coverage, stale=stale

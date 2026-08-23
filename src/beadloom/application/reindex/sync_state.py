@@ -7,6 +7,10 @@ snapshots the prior ``sync_state`` (symbols hashes + per-pair edit/code hashes)
 before the table is dropped, then rebuilds ``sync_state`` afterwards, preserving
 those baselines so :func:`~beadloom.doc_sync.engine.check_sync` can still detect
 symbol drift and code drift relative to the last doc edit.
+
+It also records each baseline's PROVENANCE (the BASELINE_* constants), because a
+baseline invented by a rebuild and one inherited from an earlier generation are
+worth different things and used to be indistinguishable (BDL-UX #175).
 """
 
 from __future__ import annotations
@@ -33,7 +37,7 @@ def _snapshot_sync_baselines(
     try:
         rows = conn.execute(
             "SELECT ref_id, symbols_hash, doc_path, code_path, "
-            "doc_hash_at_last_edit, code_hash_at_sync FROM sync_state"
+            "doc_hash_at_last_edit, code_hash_at_sync, baseline_source FROM sync_state"
         ).fetchall()
     except sqlite3.OperationalError as exc:  # sync_state may not exist on first run
         if _is_missing_table_error(exc):
@@ -49,12 +53,38 @@ def _snapshot_sync_baselines(
         # sqlite3.Row `in` checks values not keys; use .keys()
         has_edit_col = "doc_hash_at_last_edit" in row.keys()  # noqa: SIM118
         edit_hash: str = row["doc_hash_at_last_edit"] if has_edit_col else ""
-        if edit_hash:
-            pairs[(row["doc_path"], row["code_path"])] = _SyncPairSnapshot(
-                doc_hash_at_last_edit=edit_hash,
-                code_hash_at_sync=row["code_hash_at_sync"],
-            )
+        provenance: str = row["baseline_source"] or ""
+        # Every pair is snapshotted, not only those with an edit hash: the
+        # PROVENANCE must survive the drop even when there is no two-phase data,
+        # otherwise a rebuilt (fabricated) baseline comes back indistinguishable
+        # from one that was actually earned.
+        pairs[(row["doc_path"], row["code_path"])] = _SyncPairSnapshot(
+            doc_hash_at_last_edit=edit_hash,
+            code_hash_at_sync=row["code_hash_at_sync"],
+            baseline_source=provenance,
+        )
     return symbols, pairs
+
+
+def _baseline_provenance(snapshot: _SyncPairSnapshot | None) -> str:
+    """Where this pair's baseline came from — see the BASELINE_* constants.
+
+    A missing snapshot means the pair had no baseline before this build, so the
+    hashes just written ARE the current tree. An existing one is carried
+    verbatim (never promoted): ``index_build`` that survives a reindex is still
+    ``index_build``, because a fabricated baseline does not become earned by
+    being copied. A pre-provenance row (``''``) reads as ``carried`` — it
+    genuinely came from an earlier generation, it was simply written before
+    provenance was recorded.
+    """
+    from beadloom.doc_sync.engine import (
+        BASELINE_SOURCE_CARRIED,
+        BASELINE_SOURCE_INDEX_BUILD,
+    )
+
+    if snapshot is None:
+        return BASELINE_SOURCE_INDEX_BUILD
+    return snapshot.baseline_source or BASELINE_SOURCE_CARRIED
 
 
 def _build_initial_sync_state(
@@ -108,8 +138,16 @@ def _build_initial_sync_state(
         conn.execute(
             "INSERT OR IGNORE INTO sync_state "
             "(doc_path, code_path, ref_id, code_hash_at_sync, doc_hash_at_sync, "
-            "synced_at, status) VALUES (?, ?, ?, ?, ?, ?, 'ok')",
-            (pair.doc_path, pair.code_path, pair.ref_id, effective_code_hash, pair.doc_hash, now),
+            "synced_at, status, baseline_source) VALUES (?, ?, ?, ?, ?, ?, 'ok', ?)",
+            (
+                pair.doc_path,
+                pair.code_path,
+                pair.ref_id,
+                effective_code_hash,
+                pair.doc_hash,
+                now,
+                _baseline_provenance(snapshot),
+            ),
         )
         # Preserve old symbols hash to detect drift, or compute fresh baseline.
         if preserved_symbols is not None and pair.ref_id in preserved_symbols:

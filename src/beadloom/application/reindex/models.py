@@ -33,6 +33,7 @@ _TABLES_TO_DROP = [
     "code_symbols",
     "chunks",
     "docs",
+    "declared_docs",
     "edges",
     "nodes",
     "meta",
@@ -97,10 +98,17 @@ class ReindexResult:
 
 @dataclass
 class _SyncPairSnapshot:
-    """Preserved per-pair sync data across reindex for two-phase detection."""
+    """Preserved per-pair sync data across reindex for two-phase detection.
+
+    ``baseline_source`` travels with the hashes because a baseline's WORTH is a
+    property of where it came from: carrying the hashes while forgetting that
+    they were invented by a rebuild is how a fabricated baseline launders itself
+    into a trusted one (BDL-UX #175).
+    """
 
     doc_hash_at_last_edit: str
     code_hash_at_sync: str
+    baseline_source: str = ""
 
 
 def _is_missing_table_error(exc: sqlite3.OperationalError) -> bool:

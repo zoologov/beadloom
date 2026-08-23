@@ -1,18 +1,25 @@
 # ACTIVE: BDL-061 — Enforced agentic flow
 
-> **Last updated:** 2026-08-23
+> **Last updated:** 2026-08-24
 > **Phase:** Development
 
 ---
 
 ## Current Bead
 
-**Bead:** `.8` — the S2 documentation pass, and the last bead of the slice. S2 is otherwise
-complete: eight dev beads (`.5`, `.33`, `.34`, `.37`, `.38`, `.40`, `.43`, `.44`), the `.6`
-verification bead and the `.7` review are all closed.
-**Next:** S3 opens with `.9` (compose(core, arch, stack, project)). Filed out of S2 and not
-part of it: `.45`–`.51` (the false-green residue, the two CRITICALs and the cohesion bead) plus
-`.35`, `.39`, `.41`, `.42`.
+**Slice:** S2b — the false-green residue S2 measured and left open, on
+`features/BDL-061-S2b`. S2 itself is complete (`.5`, `.33`, `.34`, `.37`, `.38`, `.40`, `.43`,
+`.44`, plus `.6` verification, `.7` review and `.8` docs, all closed).
+**Closed in S2b so far:** `.48` (rule liveness for all nine rule types), `.46` + `.47`
+(*unverifiable is not clean* — one fix; the baseline moved out of the database), `.45`
+(the same equation in `docs audit`: a declared fact nothing was checked for is now named,
+never counted as fresh), `.49` (an exemption's `until:` is checkable and what it suppressed
+is counted), `.54` (the Gate's lint line, filed and closed inside `.49`) and `.55` (the
+documentation pass that turned the combined tree green).
+**Open in S2b:** `.50` (annotations the extractor cannot see), `.51` (three modules past
+1000 lines).
+**Next:** S3 opens with `.9` (compose(core, arch, stack, project)). Also outstanding and not
+part of any slice: `.35`, `.39`, `.41`, `.42`.
 
 ## Progress
 
@@ -284,6 +291,92 @@ header comment, where a reader of a red check will look first.
       re-run by the coordinator and reddens 9 tests through three independent mechanisms; the
       `click.Choice` sabotage reddens 3. Both restored byte-identical by sha256.
 
+- [x] **S2b `.46` + `.47` — ONE fix, not two** (2026-08-23). The two P0s are the same sentence,
+      *unverifiable is not clean*, and they diverge only in the verdict each state earns: a doc
+      that is GONE is `missing` (a failure — exit 2, gate FAIL), a pair with NO BASELINE is
+      `unverified` (reported by name, never counted fresh, gate step `WARN`, exit code
+      unchanged so no green project turns red). **The load-bearing decision was where the
+      baseline lives: not in the database.** `.beadloom/beadloom.db` is a derived cache —
+      git-ignored, per-machine, dropped by every rebuild and absent on every fresh CI checkout
+      — so a baseline kept there is destroyed by the act that most needs it. Freshness now
+      rests on **git** (committed by construction; a pair records its baseline's provenance and
+      a fabricated one is corroborated against `HEAD`), and the size of the declared surface on
+      a **committed ledger** (`.beadloom/sync-surface.json`, written only by an explicit
+      `sync-check --record-surface`). MEASURED in a clean room through the real CLI, by exit
+      code: `#175` edit + `rm beadloom.db` + reindex → `sync-check` rc 2 and `ci` rc 1 (was
+      rc 0 / rc 0); `#174` delete a declared SPEC → `ci` rc 1 with `::error … doc-missing`
+      naming the file, and with a ledger present the same run prints `declared surface SHRANK
+      283 → 276 pair(s)` — the signal that was silently discarded. Both probes reverted by
+      reverse edit, `git status` clean, SPEC sha256 re-verified. Doctor's count was audited as
+      the bead asked: it counted FINDINGS, so it rose 20 → 21 while a file was being deleted;
+      it now reads `13 check(s): 0 error(s), 9 warning(s), 0 info` and prints *clean* only when
+      every check is OK. Four of `.6`'s strict `xfail`s XPASSed and were un-xfailed. 5824
+      passed, ruff + mypy --strict clean, Gate rc 0 on an INCREMENTAL index.
+
+- [x] **S2b `.49` — an exit condition that can be checked, and a crossing that is counted**
+      (2026-08-24). Review `.7` MAJOR 2: `rules.yml` promised that "an exemption that stops
+      suppressing anything is itself reported"; only the DEAD half was true, and a wildcard
+      exemption dated 1999 swallowed a real error-severity crossing at `0 violations`, exit 0,
+      in silence. Outcome **(i)**, not (ii): (ii) would have written down that a mechanism this
+      epic added is decoration. THE COUNT — `LintResult.suppressed` carries the crossings
+      themselves, and the clause appears wherever a run can read as clean (`rich`, the piped
+      `0 violations, N rules evaluated` line, `--format json` with a `suppressed` array, and the
+      Gate). This repo now reads `12 rules, 0 violations, 6 crossings suppressed by an
+      exemption`. THE DEADLINE — `until` is a DATE when it leads with `YYYY-MM-DD` and an EVENT
+      otherwise; a passed date on an entry still suppressing something is a `warn` finding. It
+      never enforces: a crossing that reappeared at `error` because a calendar day passed would
+      redden a build with no commit behind it. `--fail-on-warn` is the lever. The guards half is
+      fixed on the same grammar, imported rather than restated, so `flow.yml` and `rules.yml`
+      cannot promise different things. All six of this repo's own exemptions retire on an EVENT,
+      which is why the count — not the date — is the mechanism they rely on. 39 new tests, both
+      surfaces in one file; the two strict `xfail`s that pinned this defect are live regression
+      tests; six sabotages measured. Clean room = HEAD + these files: 5882 passed, Gate rc 0.
+
+- [x] **S2b `.45` — the audit now reports what it did NOT verify** (2026-08-24). Same equation as
+      `.46`/`.47`, in `docs audit`: a green `13 mention(s) fresh` was thirteen restatements of ONE
+      of NINE declared facts, and nothing said so. Every declared fact now carries its own
+      coverage — `verified`, `not_covered` (no document states it) or `unreadable` (the extractor
+      cannot read a claim of that value, with the reason) — printed against the fact, summarised
+      on the `beadloom ci` line, and never counted as passing. A mention hidden by a
+      `docs_audit.ignore` rule is deliberately NOT coverage. The scan surface is published too:
+      all 33 unread documents named with the pattern that skipped them. **The two parser blind
+      spots were settled by measurement, in opposite directions.** The modifier class was a real
+      defect and is fixed — both windows stop at a phrase separator, so `316 edges, one per
+      import` is read and the `14` in `exposes 18 tools: 14 over the graph` is not; parentheses
+      were EXCLUDED from the separator set because they cost the true verification in `MCP tools
+      (18):`, and a lost true positive is the same silent false negative being fixed. Repo-wide:
+      0 mentions gained, 5 lost, all five confirmed false positives — three more dead
+      `docs_audit.ignore` entries retired, none added. The single-digit floor was re-measured and
+      KEPT: removing it yields 14 extra mentions of which 13 are ordinals, table cells and
+      category breakdowns, several of which would have failed the Gate. Trading a silent false
+      negative for a loud false positive that then needs a suppression is the wrong trade, so the
+      floor stays and `language_count` (value 1) is reported `unreadable` by name. MEASURED after
+      the fix: **2 of 9 declared facts verified on this repo, 6 `not_covered`, 1 `unreadable`,
+      all seven named.** Four sabotages each reddened the naming tests; all reverted clean.
+
+- [x] **S2b `.55` — the documentation pass, and the wave's own blind spot** (2026-08-24). The
+      combined tree was RED where every agent's clean room had been green: `beadloom ci` rc 1,
+      286 pairs, 258 ok, **28 stale**, 4 unchecked, 6 `surface_drift`. All 28 stale pairs were
+      ONE document — `docs/domains/onboarding/README.md`, 27 `symbols_changed` and one
+      `hash_changed` — because `symbols_hash` is computed per `ref_id` over every symbol
+      annotated to the node, so four new private helpers in
+      `src/beadloom/services/commands/docs.py` (`.45`'s coverage rendering, the only file under
+      the `onboarding` surface this slice touched) made every sibling pair of that node stale.
+      The document was revised to the code rather than re-attested: what `docs audit` now
+      reports, the three `services/commands/` modules that carry
+      `# beadloom:domain=onboarding` sections, and one drift the slice exposed rather than
+      caused — `_detect_rule_type` maps seven of the loader's nine rule keys, so
+      `.beadloom/AGENTS.md` prints `**module-coverage** (unknown)` (BDL-UX #179). The six
+      `surface_drift` entries all trace to a single added CLI flag, `sync-check
+      --record-surface`, which is #166 measured again: one flag, six reference documents.
+      `CHANGELOG.md`, `README.md` and `README.ru.md` carried nothing about this slice and now
+      carry the one sentence — *unverifiable is not clean* — plus the architectural change an
+      adopter must act on: `beadloom.db` is a derived cache, freshness rests on git provenance
+      and the declared surface on the committed `.beadloom/sync-surface.json`. `docs/architecture.md`
+      gained the baseline-provenance section, the `declared_docs` / `reference_state` /
+      `foreign_edges` tables it never listed, `sync_state`'s two new columns and four verdicts,
+      and the `docs audit` step missing from its Gate chain.
+
 ## Results
 
 | Bead | Status | Details |
@@ -316,11 +409,13 @@ header comment, where a reader of a red check will look first.
 | .39 | Pending | S2/S3 chore: a Windows CI leg — only after the six `skipif(win32)` guard tests are made meaningful |
 | .41 | Pending | S3: three more ambient-decode sites, plus an MCP test runner with no timeout |
 | .42 | Pending | S2/S3: the locale dimension's first run — 100 ASCII / 76 8-bit failures from text I/O without an explicit encoding (the title still carries `.38`'s superseded 97/73; the owner is correcting it) |
-| .45 | Pending | S2 follow-up: docs-audit reports green about facts it never checked (#173) — per-fact coverage |
-| .46 | Pending | P0: the doc gate is defeated by DELETING documentation — `beadloom ci` exits 0 with every step PASS (#174); pre-existing at `main` |
-| .47 | Pending | P0: a clean-DB rebuild adopts the tree as its own baseline, so the freshness gate is blind (#175) — the defect the retired CLEAN-DB LINT habit fed |
-| .48 | Pending | P0: rule liveness covers one rule type of six, and `validate_rules()` computes the diagnosis that `linter.py` throws away |
-| .49 | Pending | P0: an exemption's `until:` is prose, and a suppressed violation is never counted |
+| .45 | Done | P1 (#173): docs-audit reports what it did NOT verify — per-fact coverage (`verified` / `not_covered` / `unreadable`), a published scan surface, clause-scoped matching; measured 2 of 9 declared facts verified on this repo |
+| .46 | Done | P0 (#174, ONE fix with `.47`): a deleted doc is `missing`, not `ok`; the DECLARED surface outlives the file; the pair count is a committed ledger; doctor's count audited |
+| .47 | Done | P0 (#175, ONE fix with `.46`): the baseline moved OUT of the database — git for freshness, a committed ledger for the surface; a rebuilt baseline is corroborated or reported `unverified`, never fresh |
+| .48 | Done | P0 (#172): rule liveness for all NINE dispatched rule types (the bead said six, the SPEC said seven, the loader dispatches nine); `rules_inert` qualifies the summary line |
+| .49 | Done | P0: outcome (i) — what an exemption suppressed is counted on every run, and an `until:` leading with an ISO date that has passed is a finding; the same grammar on `flow.yml` exclusions |
+| .54 | Done | P2: the Gate's lint line now carries the suppressed count; measured that it needs no `rules_inert` clause (an inert rule always flips it to the warning branch). Filed and closed inside `.49` |
+| .55 | Done | S2b docs: the 28-pair onboarding README revised to the code; *unverifiable is not clean* written once in both READMEs + CHANGELOG; the baseline-out-of-the-database change stated for adopters; 6 `surface_drift` re-attested after reading, stale 28 → 0 |
 | .50 | Pending | P1: annotations the extractor cannot see — docstring annotation, directory source without a trailing slash, deny rules keyed on annotated symbols |
 | .51 | Pending | P2: three modules past 1000 lines with many responsibilities each, self-flagged and owned by nobody |
 | .9–.12 | Pending | S3 composition + project overlay (#139, #152, #132, #136, #137) |
@@ -330,9 +425,9 @@ header comment, where a reader of a red check will look first.
 
 ## Notes
 
-**Branch:** `features/BDL-061-S2` for this slice (S1 ran on `features/BDL-061`). Slice boundary
-is a PR boundary — each slice green on `main`
-before the next begins, as BDL-060 ran.
+**Branch:** `features/BDL-061-S2b` for this slice (S1 ran on `features/BDL-061`, S2 on
+`features/BDL-061-S2`). Slice boundary is a PR boundary — each slice green on `main` before the
+next begins, as BDL-060 ran.
 
 **Ordering is load-bearing.** S1 first because it is the primitive; S2 second because S3's
 acceptance criterion is deleting the rules S2's bugs forced into the prose, which cannot happen
@@ -357,6 +452,32 @@ of the marker requirement; `m4`'s remaining half (the read-only digest does not 
 say the coordinator owns the commit) and `m7` (no firing-record rotation) stay open for S2.
 `N1(c)` — the exit-3 class is fail-open — is bead `.33` in S2. Until it lands, the documents
 state the gap rather than lowering the promise.
+
+**A wave's integration state is measured by nobody, and S2b is the proof (#181).** Four dev
+beads ran across two waves in one shared working tree. A shared tree makes a full-suite run
+meaningless for any single agent, so each verified in a clean room — `git archive HEAD` plus only
+its own files — and each honestly reported green. The combined tree was `beadloom ci` rc 1 with 28
+stale pairs. **None of the four reports was wrong.** The clean room is the correct technique for
+attributing a result to one bead while neighbours are editing, and it is blind by construction to
+any interaction between beads; nothing in the protocol runs the combined tree until the coordinator
+does it at wave end. Two consequences the next slice inherits: the combined run belongs in
+somebody's bead rather than in a coordinator's habit, and an agent's green needs a TYPE — "green in
+a clean room over N files" is a different claim from "green on the tree", and reporting both with
+the same word is what makes the discrepancy read as a contradiction. The cheapest mechanical
+improvement is to give the run to whoever holds the merge slot, since somebody already holds a lock
+at exactly the right moment. Related: #118 (parallel agents collide on the shared pre-commit hook)
+— same root, that the wave shares one tree.
+
+**Two friction findings this slice measured again rather than merely cited.** #167 at gate scale:
+one stale document printed 28 `[stale]` lines that differ in no visible way, and `beadloom doctor`
+printed 28 more of its own; the number a reader wants — how many DOCUMENTS need attention — had to
+be derived by eye from `--json`, and one document reads exactly like twenty-eight. #166 again: a
+single added CLI flag (`sync-check --record-surface`) drifted all six `watches:` reference
+documents at once. `sync-update --all --yes` does now clear the reference-doc path — measured at the close of this
+slice, one command printed `Re-baselined 7 reference doc(s)` and took `surface_drift` from 6 to 0
+— so #166's second half is narrower than filed — but its first half stands: one fact known once still costs six
+consequences to record, and the bulk form is exactly the operation #163 says should leave evidence
+rather than become frictionless.
 
 **Carried, not forgotten:** #160 (AsyncAPI wired to nothing) stays deferred with its plan in
 ROADMAP; #158 and #161 are separate items this epic's mechanisms may later absorb; #91 closes

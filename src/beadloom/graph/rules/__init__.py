@@ -24,8 +24,6 @@ from typing import TYPE_CHECKING
 
 from beadloom.graph.rules.cycles import evaluate_cycle_rules
 from beadloom.graph.rules.evaluators import (
-    LIVENESS_RULE_TYPE,
-    MATCHING_FORM_HINT,
     evaluate_cardinality_rules,
     evaluate_deny_rules,
     evaluate_forbid_edge_rules,
@@ -35,6 +33,16 @@ from beadloom.graph.rules.evaluators import (
     evaluate_require_rules,
     evaluate_unregistered_feature_candidate_rules,
 )
+from beadloom.graph.rules.exemptions import (
+    EXPIRED_EXEMPTION_HINT,
+    SuppressedCrossing,
+    suppressed_crossings,
+)
+from beadloom.graph.rules.liveness import (
+    INERT_RULE_HINT,
+    evaluate_rule_liveness,
+    inert_rule_names,
+)
 from beadloom.graph.rules.loader import (
     load_rules,
     load_rules_with_tags,
@@ -42,6 +50,8 @@ from beadloom.graph.rules.loader import (
 )
 from beadloom.graph.rules.types import (
     LIVE_EDGE_LIFECYCLES,
+    LIVENESS_RULE_TYPE,
+    MATCHING_FORM_HINT,
     SUPPORTED_SCHEMA_VERSIONS,
     VALID_EDGE_KINDS,
     VALID_NODE_KINDS,
@@ -60,6 +70,7 @@ from beadloom.graph.rules.types import (
     Rule,
     UnregisteredFeatureCandidateRule,
     Violation,
+    exit_condition_deadline,
 )
 
 if TYPE_CHECKING:
@@ -137,6 +148,10 @@ def evaluate_all(
     and cardinality rules. Each violation is enriched with an agent-actionable
     ``remediation`` hint (BDL-039 F3 BEAD-02) as a deterministic post-pass.
 
+    Every rule is ALSO checked for liveness: one that cannot fire — because its
+    matcher, edge kind, threshold or source root selects nothing — is reported
+    as a ``rule_liveness`` finding (``warn``) instead of counting as clean.
+
     *project_root* (default: cwd) roots the on-disk module enumeration the
     ``module-coverage`` rule uses to close the zero-symbol false-negative.
     """
@@ -180,6 +195,10 @@ def evaluate_all(
         + evaluate_cardinality_rules(conn, cardinality_rules)
         + evaluate_unregistered_feature_candidate_rules(conn, unregistered_rules)
         + evaluate_module_coverage_rules(conn, module_coverage_rules, project_root=project_root)
+        # Last: what the rules above could NOT look at. A rule with an empty
+        # candidate set contributes 0 violations and 1 to `N rules evaluated`,
+        # which reads exactly like a rule that passed (BDL-UX #172 / .48).
+        + evaluate_rule_liveness(conn, rules, project_root=project_root)
     )
 
     # Enrich each violation with an agent-actionable remediation hint.
@@ -192,6 +211,8 @@ def evaluate_all(
 
 
 __all__ = [
+    "EXPIRED_EXEMPTION_HINT",
+    "INERT_RULE_HINT",
     "LIVENESS_RULE_TYPE",
     "LIVE_EDGE_LIFECYCLES",
     "MATCHING_FORM_HINT",
@@ -211,6 +232,7 @@ __all__ = [
     "NodeMatcher",
     "RequireRule",
     "Rule",
+    "SuppressedCrossing",
     "UnregisteredFeatureCandidateRule",
     "Violation",
     "evaluate_all",
@@ -222,8 +244,12 @@ __all__ = [
     "evaluate_layer_rules",
     "evaluate_module_coverage_rules",
     "evaluate_require_rules",
+    "evaluate_rule_liveness",
     "evaluate_unregistered_feature_candidate_rules",
+    "exit_condition_deadline",
+    "inert_rule_names",
     "load_rules",
     "load_rules_with_tags",
+    "suppressed_crossings",
     "validate_rules",
 ]

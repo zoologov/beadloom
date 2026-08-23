@@ -284,7 +284,7 @@ def lint(
     2 = configuration error or missing index.
     """
     from beadloom.application.reindex import incremental_reindex
-    from beadloom.graph.linter import LintError
+    from beadloom.graph.linter import LintError, _suppressed_note
     from beadloom.graph.linter import format_github as _format_github
     from beadloom.graph.linter import format_json as _format_json
     from beadloom.graph.linter import format_porcelain as _format_porcelain
@@ -317,7 +317,14 @@ def lint(
     if output:
         click.echo(output)
     elif not result.violations:
-        click.echo(f"0 violations, {result.rules_evaluated} rules evaluated")
+        # The line the reviewer measured as a false green: it read
+        # "0 violations, 12 rules evaluated" while six crossings sat behind
+        # exemptions. What was excused is now part of the same sentence
+        # (BDL-061.49).
+        click.echo(
+            f"0 violations, {result.rules_evaluated} rules evaluated"
+            f"{_suppressed_note(result)}"
+        )
 
     if fail_on_warn and result.violations:
         sys.exit(1)
@@ -388,7 +395,7 @@ def ci(
 
     Composes the existing checkers into one verdict with a single exit code:
     0 when every step passed, 1 when any step failed. The output names EVERY
-    step that ran and its honest result (PASS/FAIL/SKIP) — never a green that
+    step that ran and its honest result (PASS/WARN/FAIL/SKIP) — never a green that
     silently skipped a step. ``--format`` applies uniformly across all steps
     (findings share the agent-actionable {kind, rule, severity, locations, why,
     remediation} shape). With ``--hub`` the cross-service landscape gate runs.

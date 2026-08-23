@@ -24,6 +24,8 @@ questions, answered separately and on purpose.
 from __future__ import annotations
 
 from beadloom.graph.rules import (
+    EXPIRED_EXEMPTION_HINT,
+    INERT_RULE_HINT,
     LIVE_EDGE_LIFECYCLES,
     LIVENESS_RULE_TYPE,
     MATCHING_FORM_HINT,
@@ -43,6 +45,7 @@ from beadloom.graph.rules import (
     NodeMatcher,
     RequireRule,
     Rule,
+    SuppressedCrossing,
     UnregisteredFeatureCandidateRule,
     Violation,
     _remediation_for,
@@ -55,13 +58,19 @@ from beadloom.graph.rules import (
     evaluate_layer_rules,
     evaluate_module_coverage_rules,
     evaluate_require_rules,
+    evaluate_rule_liveness,
     evaluate_unregistered_feature_candidate_rules,
+    exit_condition_deadline,
+    inert_rule_names,
     load_rules,
     load_rules_with_tags,
+    suppressed_crossings,
     validate_rules,
 )
 
 __all__ = [
+    "EXPIRED_EXEMPTION_HINT",
+    "INERT_RULE_HINT",
     "LIVENESS_RULE_TYPE",
     "LIVE_EDGE_LIFECYCLES",
     "MATCHING_FORM_HINT",
@@ -81,6 +90,7 @@ __all__ = [
     "NodeMatcher",
     "RequireRule",
     "Rule",
+    "SuppressedCrossing",
     "UnregisteredFeatureCandidateRule",
     "Violation",
     "_remediation_for",
@@ -93,8 +103,12 @@ __all__ = [
     "evaluate_layer_rules",
     "evaluate_module_coverage_rules",
     "evaluate_require_rules",
+    "evaluate_rule_liveness",
     "evaluate_unregistered_feature_candidate_rules",
+    "exit_condition_deadline",
+    "inert_rule_names",
     "load_rules",
     "load_rules_with_tags",
+    "suppressed_crossings",
     "validate_rules",
 ]

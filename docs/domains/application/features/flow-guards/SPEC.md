@@ -519,7 +519,7 @@ outside the project is acceptable at all.
 
 Every CLI evaluation appends one line to `.beadloom/guard-firings.jsonl`.
 `beadloom guard --liveness` reports, per guard, its effective strictness, how
-often it fired, its last outcome, and three ways a gate stops protecting
+often it fired, its last outcome, and four ways a gate stops protecting
 anything — a gate that cannot demonstrate it ran is treated as not having run.
 
 | Flag | Means | Computed from |
@@ -527,6 +527,7 @@ anything — a gate that cannot demonstrate it ran is treated as not having run.
 | `never-fired` | no firing that reached a verdict (an `error` record does not count) | the firing record |
 | `excluded-everywhere` | every strictness is `off`, or nothing escapes the exclusions | the configuration alone |
 | `matches no file in the project: '<pattern>'` | a declared exclusion matches nothing that exists right now | the project's files |
+| `exit condition has passed: '<pattern>'` | a declared exclusion's `until:` names a date that is behind us | the configuration alone |
 
 The two exclusion flags answer different questions and neither pretends to
 answer the other. `excluded-everywhere` asks whether the **exclusion list**
@@ -547,6 +548,21 @@ and shown as the last outcome, so a broken guard is visible, but it does not
 clear the flag: a gate that has run three times and answered none of them is not
 a live gate.
 
+`exit condition has passed` is the half a tree cannot answer (BDL-061.49). An
+`until:` that LEADS with an ISO date (`2026-09-01`, optionally followed by the
+prose that explains it) is a deadline and is parsed by
+`beadloom.graph.rules.exit_condition_deadline` — the same function the
+`forbid_import` exemptions of `rules.yml` use, because the two surfaces make the
+identical promise and restating it here is how they would come to mean different
+things. Anything else names an EVENT (`BDL-0xx introduces a scripts node`), which
+stays legal and is reported as prose rather than quietly treated as satisfied:
+what retires a real exclusion is usually a landed change, not a day. A passed
+deadline is REPORTED, never enforced — the exclusion keeps applying, because a
+guard that starts blocking with no commit behind it is a worse failure than the
+silence being fixed. It is said in two places: on the row in `--liveness`, and in
+the `skip` reason itself (`… (until 2024-01-01 — EXPIRED)`), because the reader
+who most needs it is the one being told their edit was let through.
+
 `matches no file in the project` is the project-dependent half: a typo'd
 `scrpits/**` exempts nothing, which is the safe direction but was silent until
 someone reread `flow.yml`. It is a statement about the tree **right now**, not a
@@ -566,7 +582,9 @@ never louder.
 - **A `warn` always names what it did not check** (`not_covered` is never empty).
 - **An exclusion carries `reason` and `until`.** One without either is a
   configuration error, because an unnamed, undated exclusion disables a gate
-  permanently by accident.
+  permanently by accident. An `until:` that names a DATE is checked and reported
+  once it passes; one that names an event is prose, and is reported as prose.
+  Neither ever changes what the exclusion covers.
 - **A guard name with no implementation is a configuration error**, not a no-op,
   so a typo in `flow.yml` cannot quietly switch a gate off.
 - **A key the loader does not read is a configuration error** at either level of
