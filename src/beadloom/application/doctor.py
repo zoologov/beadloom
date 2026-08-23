@@ -161,10 +161,16 @@ def _check_symbol_drift(conn: sqlite3.Connection) -> list[Check]:
 
 
 def _check_stale_sync(conn: sqlite3.Connection) -> list[Check]:
-    """Report sync_state entries already marked as stale."""
+    """Report sync_state entries that are not fresh — stale OR missing.
+
+    ``missing`` is included because a pair whose doc file is gone is not a pair
+    with nothing to report: "No stale sync entries" over a deleted document is
+    the same false green the verdict was introduced to end (BDL-UX #174).
+    """
     try:
         rows = conn.execute(
-            "SELECT ref_id, doc_path, code_path FROM sync_state WHERE status = 'stale'"
+            "SELECT ref_id, doc_path, code_path, status FROM sync_state "
+            "WHERE status IN ('stale', 'missing')"
         ).fetchall()
     except Exception:  # OperationalError on missing table
         return [Check("stale_sync", Severity.OK, "sync_state not available — skipping.")]
@@ -176,7 +182,8 @@ def _check_stale_sync(conn: sqlite3.Connection) -> list[Check]:
         Check(
             "stale_sync",
             Severity.WARNING,
-            f"Sync stale for '{r['ref_id']}': doc={r['doc_path']}, code={r['code_path']}",
+            f"Sync {r['status']} for '{r['ref_id']}': "
+            f"doc={r['doc_path']}, code={r['code_path']}",
         )
         for r in rows
     ]

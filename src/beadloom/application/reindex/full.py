@@ -30,6 +30,8 @@ from beadloom.application.reindex.indexing import (
     _build_doc_ref_map,
     _index_code_files,
     _resolve_docs_dir,
+    read_declared_docs,
+    store_declared_docs,
 )
 from beadloom.application.reindex.models import (
     _IMPORT_PROVENANCE_KEY,
@@ -144,6 +146,9 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
                 docs_dir,
             )
             result.warnings.extend(doc_ref_warnings)
+            store_declared_docs(
+                conn, read_declared_docs(graph_dir, project_root, docs_dir)
+            )
         else:
             ref_map = {}
         doc_result = index_docs(docs_dir, conn, ref_id_map=ref_map)

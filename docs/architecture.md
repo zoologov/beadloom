@@ -264,7 +264,7 @@ Snapshots are stored in SQLite and enable architecture drift detection across re
 `application/gate.py` powers `beadloom ci` — the unified gate that composes the
 existing checkers into one verdict with a single exit code: **reindex → `lint
 --strict` → sync-check → config-check → doctor → (optional) federate landscape
-gate**. Every step's honest result is printed (PASS / FAIL / SKIP) — never a
+gate**. Every step's honest result is printed (PASS / WARN / FAIL / SKIP) — never a
 green that silently skipped a step. `--format rich|json|github` applies
 uniformly; `--hub <export>` arms the cross-service landscape gate. The same gate
 runs as the **pre-push Beadloom Gate** hook (`install-hooks --pre-push`) and in

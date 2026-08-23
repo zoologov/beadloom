@@ -320,6 +320,11 @@ class TestSyncReaches100PercentOnAnnotatedSample:
         assert stale == [], (
             f"Expected genuine 100% (no stale), got stale: {stale}"
         )
-        assert any(r["status"] == "ok" for r in results), (
-            f"Expected at least one ok pair, got: {results}"
+        # NOT `ok`: this project has just been indexed for the first time and is
+        # not a git repository, so its baseline is the tree the index was built
+        # from and nothing has been compared. The honest verdict is
+        # `unverified`, which is the whole of BDL-UX #175 — "100% fresh" here
+        # used to mean "nothing was checked".
+        assert {r["status"] for r in results} == {"unverified"}, (
+            f"Expected the unverifiable verdict, got: {results}"
         )

@@ -212,7 +212,7 @@ Enforces complexity limits per node (architectural smell detection).
 | `for_matcher`      | `NodeMatcher`     | Matches nodes to check.                        |
 | `max_symbols`      | `int \| None`     | Maximum symbols a node OWNS (nested nodes excluded). |
 | `max_files`        | `int \| None`     | Maximum files per node.                        |
-| `min_doc_coverage` | `float \| None`   | Minimum documentation coverage percentage.     |
+| `min_doc_coverage` | `float \| None`   | Minimum documentation coverage: the fraction of the node's sync pairs NOT known to be behind (`stale`/`missing` excluded; a pair the freshness engine could not check is not counted against the docs — BDL-UX #175). |
 | `severity`         | `str`             | `"error"` or `"warn"` (default `"warn"`).      |
 
 #### `Rule` (type alias)

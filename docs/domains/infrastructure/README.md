@@ -38,7 +38,8 @@ Stored in `.beadloom/beadloom.db` (WAL mode):
 - `docs`, `chunks` — document index
 - `code_symbols` — code symbol index (includes `annotations` JSON and `file_hash`)
 - `code_imports` — resolved import relationships
-- `sync_state` — doc-code synchronization (includes `symbols_hash` column for drift detection and `doc_hash_at_last_edit` column for two-phase sync that survives reindex)
+- `sync_state` — doc-code synchronization (includes `symbols_hash` for drift detection, `doc_hash_at_last_edit` for two-phase sync that survives reindex, and `baseline_source` recording where the baseline CAME FROM — `index_build` / `carried` / `attested`). Its `status` CHECK carries four verdicts, `ok`/`stale`/`missing`/`unverified`: the last two are states in which the checker could not know, and writing them as `ok` is what let a deleted doc and a rebuilt index both read fresh (BDL-UX #174/#175)
+- `declared_docs` — the DECLARED documentation surface: every doc a node names in its `docs:` list, whether or not the file exists. `docs` indexes files found on disk, so without this table deleting a declared doc simply removed it from the index and no check could miss it. A cache of the committed graph YAML, rebuilt on reindex
 - `file_index` — file hash tracking for incremental reindex (includes `__parser_fingerprint__` sentinel row)
 - `health_snapshots` — trend tracking (persists across reindexes)
 - `graph_snapshots` — point-in-time architecture graph captures (nodes_json, edges_json, symbols_count, label)

@@ -16,7 +16,10 @@ broad interface surface. Two layers cooperate without interfering:
 
 - **Symbol-pair freshness** pairs a node's `docs:` entries with the source files
   attributed to that node, computes a freshness signal from the code
-  `symbols_hash` (plus git state), and reports each pair as `ok` or stale.
+  `symbols_hash` (plus git state), and reports each pair with one of four
+  verdicts — `ok`, `stale`, `missing`, `unverified`.
+- **The declared surface** is checked against the tree, so a doc the graph names
+  and the tree does not hold is a failure rather than one less thing to check.
 - **Unchecked accounting** names every node that declares a doc but contributes
   no pair, so a green verdict can never be read as "checked" when it means
   "nothing was looked at".
@@ -41,6 +44,62 @@ to catch untracked files and missing module mentions. `mark_synced` (and
 `mark_synced_by_ref`) re-baselines a pair once its doc is brought up to date.
 `check_sync_since` compares against a git ref for diff-based checks.
 
+### The four verdicts — unverifiable is not clean
+
+`ok` and `stale` are outcomes of a comparison that HAPPENED. The other two are
+states in which the checker cannot know, and they exist because they used to
+print `ok`:
+
+| Verdict | Reason | Meaning | Exit |
+|---|---|---|---|
+| `ok` | `ok` | compared against a baseline and unchanged | 0 |
+| `stale` | `hash_changed`, `symbols_changed`, `hash_changed_since_head`, `untracked_files`, `missing_modules` | compared and drifted | 2 |
+| `missing` | `doc_missing`, `code_missing`, `declared_doc_missing` | the thing to check is not there | 2 |
+| `unverified` | `no_baseline` | there was nothing to compare against | 0, reported by name |
+
+Every result also carries `baseline` — `index`, `git:HEAD` or `none` — so a green
+result says what it was green against (BDL-UX #175).
+
+`missing` blocks. Deleting a document was the cheapest way to satisfy a gate
+whose whole promise is that docs stay current: the pair simply stopped existing
+and every count still read fresh (BDL-UX #174, measured `275 → 269 pair(s)
+fresh`, `beadloom ci` exit 0). The pair-level check catches a doc deleted since
+the last index; `declared_doc_missing` catches it after a reindex, because the
+declaration lives in the committed graph YAML and a deleted file cannot remove
+it.
+
+`unverified` does not block, and is never counted as fresh. `beadloom ci` prints
+the sync-check step as **WARN** with the count, rather than `PASS`.
+
+### Where the baseline lives
+
+**Not in the database.** `.beadloom/beadloom.db` is a derived cache: git-ignored,
+per-machine, dropped by every rebuild and absent on every fresh CI checkout. A
+baseline kept only there is destroyed by the act that most needs it — a rebuild
+records the tree it is indexing AS the baseline, and nothing can be stale
+relative to a baseline created a second ago (BDL-UX #175).
+
+Two baselines live outside it, and both are committed:
+
+1. **Freshness — git.** Each pair's stored baseline carries its provenance
+   (`baseline_source`): `index_build` (copied from the tree at build time, worth
+   nothing on its own), `carried` (inherited from an earlier index generation),
+   or `attested` (`sync-update`, or an observed doc edit). A pair whose baseline
+   is `index_build` and which would otherwise read `ok` is corroborated against
+   git — code that differs from `HEAD` while its doc does not is drift the
+   rebuild absorbed. Where git cannot answer (no repository, no commit, no git),
+   the pair is `unverified`.
+   Provenance is carried verbatim across a reindex and never promoted: a
+   fabricated baseline does not become earned by being copied.
+2. **Surface size — `.beadloom/sync-surface.json`**, committed. It records how
+   many pairs and declared docs there were, so a run whose count FELL can say so
+   instead of printing a smaller number. Written only by
+   `sync-check --record-surface`: a check that silently re-records the number it
+   is checking against re-attests without evidence (BDL-UX #163).
+
+The database still holds the working baseline and stays the fast path; it is a
+cache of a fact recorded elsewhere, not the record.
+
 ### Reference surface drift
 
 A reference doc opts in with an in-doc annotation declaring a coarse `watches:`
@@ -62,8 +121,13 @@ warning** when it differs. `mark_reference_synced` re-baselines a reference doc
 - Symbol-pair `sync_state` logic and its reason-masking / fixpoint behaviour are
   untouched by Layer 2, which lives in its own `reference_state` table and is
   additive in output.
-- `sync-check` exits non-zero on symbol-pair staleness; `surface_drift` and the
-  unchecked accounting are warnings and never change the exit code.
+- `sync-check` exits non-zero on symbol-pair staleness AND on `missing`;
+  `surface_drift`, `unverified` and the unchecked accounting are warnings and
+  never change the exit code.
+- A pair reads `ok` only when a comparison happened. Nothing that was not
+  checked prints the word a checked pair prints.
+- A declared doc that is not on disk fails, whether or not a reindex has
+  removed its pairs.
 - An empty `sync_state` is not a clean verdict: the source-coverage and
   doc-coverage phases still run, and any node that declares a doc without
   contributing a pair is listed with the reason it could not be checked.
@@ -82,23 +146,21 @@ warning** when it differs. `mark_reference_synced` re-baselines a reference doc
   `None` for *absent at that ref* and for nothing else: an unreachable `git` is
   not caught into `None`, because that would report drift in an untouched file.
 
-### Known gaps — what a green result does not yet prove
+### What a green result proves, and what it still does not
 
-Recorded here rather than in a bead comment, because both are reachable through
-the documented commands and neither is fixed:
+Both gaps recorded here previously — a rebuilt index reporting every pair fresh
+(BDL-UX #175) and a missing file reading `ok` (BDL-UX #174) — are CLOSED by the
+four verdicts and the git corroboration above. What remains true and is stated
+rather than left to be discovered:
 
-- **A rebuilt index has no prior baseline, so nothing can be stale against it.**
-  `reindex` into a fresh or deleted database records the tree it is indexing as
-  the baseline, so `sync-check` then reports every declared pair fresh, and
-  `beadloom ci` around it exits 0 (measured on one modified source file with its
-  doc untouched: incremental reindex → exit 2 with 6 stale; `rm beadloom.db*` +
-  reindex → exit 0 with 0 stale). Freshness must be verified after an incremental
-  reindex on the existing index, or against a git ref with `--since`. BDL-UX #175,
-  bead `beadloom-mr2l.47`.
-- **A pair whose file is missing reads `ok`.** `_file_hash` answers `None` for a
-  file that is not there and both comparisons are guarded by that hash's
-  truthiness, so *unverifiable* and *unchanged* print the same word — deleting a
-  declared SPEC leaves the gate green. BDL-UX #174, bead `beadloom-mr2l.46`.
+- The git leg compares the working tree against `HEAD`. It catches drift the
+  rebuild absorbed, including uncommitted work; it does not judge whether a doc
+  committed long ago still describes its code. That question is answered by
+  `--since <ref>` (which the CI harness passes on a fresh checkout) and by the
+  carried index baseline on a machine that has one.
+- A project that is not a git repository and has just been indexed has no
+  baseline at all. It reports `unverified` and says so; `sync-update` is the way
+  back to a checkable state.
 
 ## API
 
@@ -112,6 +174,10 @@ Module `src/beadloom/doc_sync/engine.py`:
 - `find_unchecked_doc_nodes(conn) -> list[dict]` — nodes that declare a doc but
   contribute no pair, each with the reason (`no_indexed_code`,
   `files_owned_by_nested_nodes`, `no_source`). Advisory.
+- `STATUS_OK` / `STATUS_STALE` / `STATUS_MISSING` / `STATUS_UNVERIFIED`,
+  `BLOCKING_STATUSES`, `BASELINE_INDEX` / `BASELINE_GIT` / `BASELINE_NONE`,
+  `BASELINE_SOURCE_INDEX_BUILD` / `_CARRIED` / `_ATTESTED` — the verdict and
+  baseline vocabulary, owned by the domain that interprets it.
 - `mark_synced(...)` / `mark_synced_by_ref(...)` — re-baseline a symbol pair.
 - `build_reference_state(conn, project_root) -> int` — baseline every
   `watches`-annotated reference doc; returns the count recorded.
@@ -119,6 +185,27 @@ Module `src/beadloom/doc_sync/engine.py`:
   report reference surface drift (warning severity).
 - `mark_reference_synced(conn, doc_path, project_root, *, all_docs=False) -> int`
   — re-baseline a reference doc, clearing its drift.
+
+Module `src/beadloom/doc_sync/declared_docs.py` — the declared surface vs disk:
+
+- `count_declared_docs(conn) -> int` — how many docs the graph declares.
+- `find_missing_declared_docs(conn, project_root) -> list[dict]` — declarations
+  the tree no longer satisfies (re-exported from `engine`).
+
+Module `src/beadloom/doc_sync/git_baseline.py` — the baseline that cannot be lost:
+
+- `changed_paths(project_root) -> frozenset[str] | None` — project-relative paths
+  differing from `HEAD`; `None` means *git could not answer*, never *nothing
+  changed*.
+
+Module `src/beadloom/doc_sync/surface_ledger.py` — the committed surface record:
+
+- `read_ledger(project_root) -> SurfaceLedger | None`
+- `write_ledger(project_root, *, declared_pairs, declared_docs, recorded_at="")`
+- `compare_surface(ledger, *, declared_pairs, declared_docs) -> SurfaceVerdict`
+  — `recorded` / `shrank` / `message` / `headline`; an absent ledger says "not
+  recorded". The headline rides on the gate's sync-check line even when the step
+  FAILS, because the run that deleted a doc is the run whose count fell.
 
 Module `src/beadloom/doc_sync/surface.py`:
 

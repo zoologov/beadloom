@@ -157,13 +157,21 @@ with the epic: plain `beadloom lint` reindexes first and therefore writes the in
 so the default never lints a stale graph; and `sync-check` names the pairs it could not check,
 with the reason, so its count describes what was checked.
 
-**One habit outlived its rule, and it must not be carried forward.** CLEAN-DB LINT taught every
-role to verify on a freshly built database. That is right for `lint` and for the test suite, and
-it is vacuous for `sync-check`: a rebuild adopts the current tree as its own baseline, so a
-clean-DB `sync-check` — and the `beadloom ci` around it — reports every pair fresh by
-construction (measured twice, and reproduced under `main`'s own code; BDL-UX #175, bead `.47`).
-Verify doc freshness against the existing baseline with an INCREMENTAL reindex, and keep the
-clean database for lint and for tests.
+**The habit that outlived its rule is retired, and the tool no longer depends on it.** CLEAN-DB
+LINT taught every role to verify on a freshly built database, which was right for `lint` and for
+the test suite and vacuous for `sync-check`: a rebuild adopted the current tree as its own
+baseline, so a clean-DB `sync-check` — and the `beadloom ci` around it — reported every pair
+fresh by construction (BDL-UX #175, bead `.47`). Beads `.46`/`.47` moved the baseline out of the
+database: a pair records where its baseline came from, one fabricated by a rebuild is
+corroborated against git `HEAD`, and where git cannot answer the pair reads `unverified` rather
+than fresh. A clean database is therefore no longer a way to get a green `sync-check`, and no
+role instruction anywhere asks for one.
+
+**What still costs something, and is stated rather than left to be rediscovered:** the git leg
+compares the working tree against `HEAD`, so it catches drift a rebuild absorbed but does not
+judge whether a long-committed doc still describes its code. `--since <ref>` answers that, and
+an incremental reindex on an existing index keeps the stronger accumulated baseline. Prefer the
+incremental path when one exists; it is now an optimisation, not a correctness requirement.
 
 ## Current Phase
 

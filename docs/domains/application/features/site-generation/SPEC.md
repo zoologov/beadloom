@@ -55,6 +55,10 @@ One feature node covers the cooperating modules below (all annotated
 - `site_published.py` — published `docs/` section + per-doc badges (including
   the `reference` badge for unpaired overview docs)
 
+The dashboard's not-fresh count and a node's stale marker read
+`status IN ('stale','missing')`: a pair whose file is gone is not one less thing
+to worry about (BDL-UX #174).
+
 ### Output contract
 
 The generated `site/` tree is consumed by the VitePress site (the

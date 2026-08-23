@@ -43,6 +43,77 @@ def _resolve_docs_dir(project_root: Path) -> Path:
     return project_root / "docs"
 
 
+def read_declared_docs(
+    graph_dir: Path,
+    project_root: Path,
+    docs_dir: Path,
+) -> list[tuple[str, str, str]]:
+    """Every doc a graph node DECLARES, in declaration order.
+
+    Returns ``(declared_path, doc_path, ref_id)`` triples where *doc_path* is
+    the docs-dir-relative form used as the key of the ``docs`` table, and
+    *declared_path* is the same doc RESOLVED to a project-relative path, so a
+    later existence check needs neither the YAML nor the configured docs
+    directory. Both spellings a node may use — ``docs/domains/x/README.md`` and
+    ``domains/x/README.md`` — resolve to the same file.
+
+    Declaration is a fact of the committed graph, independent of what is on
+    disk: a declared doc that was deleted still appears here, which is what lets
+    the gate notice it went missing instead of simply having less to check
+    (BDL-UX #174).
+    """
+    import yaml
+
+    declared: list[tuple[str, str, str]] = []
+    for yml_path in sorted(graph_dir.glob("*.yml")):
+        data = yaml.safe_load(yml_path.read_text(encoding="utf-8"))
+        if data is None:
+            continue
+        for node in data.get("nodes") or []:
+            ref_id = node.get("ref_id", "")
+            for doc_path_str in node.get("docs") or []:
+                # Normalize: if path starts with docs dir prefix, strip to make it relative.
+                abs_path = project_root / doc_path_str
+                if abs_path.is_relative_to(docs_dir):
+                    rel = str(abs_path.relative_to(docs_dir))
+                else:
+                    rel = doc_path_str
+                declared.append(
+                    (
+                        _project_relative_doc(docs_dir, project_root, rel),
+                        rel,
+                        str(ref_id),
+                    )
+                )
+    return declared
+
+
+def _project_relative_doc(docs_dir: Path, project_root: Path, rel: str) -> str:
+    """The docs-relative *rel* as a path under *project_root*.
+
+    A docs directory configured outside the project has no project-relative
+    spelling; its absolute path is returned, which still resolves for the
+    existence check that consumes this.
+    """
+    resolved = docs_dir / rel
+    if resolved.is_relative_to(project_root):
+        return str(resolved.relative_to(project_root))
+    return str(resolved)
+
+
+def store_declared_docs(
+    conn: sqlite3.Connection, declared: list[tuple[str, str, str]]
+) -> None:
+    """Cache the declared documentation surface (see :func:`read_declared_docs`)."""
+    conn.execute("DELETE FROM declared_docs")
+    conn.executemany(
+        "INSERT OR REPLACE INTO declared_docs (declared_path, doc_path, ref_id) "
+        "VALUES (?, ?, ?)",
+        declared,
+    )
+    conn.commit()
+
+
 def _build_doc_ref_map(
     graph_dir: Path,
     project_root: Path,
@@ -68,31 +139,16 @@ def _build_doc_ref_map(
         ``(ref_map, warnings)`` where *warnings* lists any doc path conflicts
         (i.e. a doc referenced by more than one node).
     """
-    import yaml
-
     ref_map: dict[str, str] = {}
     warnings: list[str] = []
-    for yml_path in sorted(graph_dir.glob("*.yml")):
-        text = yml_path.read_text(encoding="utf-8")
-        data = yaml.safe_load(text)
-        if data is None:
-            continue
-        for node in data.get("nodes") or []:
-            ref_id = node.get("ref_id", "")
-            for doc_path_str in node.get("docs") or []:
-                # Normalize: if path starts with docs dir prefix, strip to make it relative.
-                abs_path = project_root / doc_path_str
-                if abs_path.is_relative_to(docs_dir):
-                    rel = str(abs_path.relative_to(docs_dir))
-                else:
-                    rel = doc_path_str
-                if rel in ref_map and ref_map[rel] != ref_id:
-                    warnings.append(
-                        f"Doc '{rel}' referenced by both '{ref_map[rel]}' and '{ref_id}'; "
-                        f"keeping '{ref_map[rel]}'"
-                    )
-                else:
-                    ref_map[rel] = ref_id
+    for _declared_path, rel, ref_id in read_declared_docs(graph_dir, project_root, docs_dir):
+        if rel in ref_map and ref_map[rel] != ref_id:
+            warnings.append(
+                f"Doc '{rel}' referenced by both '{ref_map[rel]}' and '{ref_id}'; "
+                f"keeping '{ref_map[rel]}'"
+            )
+        else:
+            ref_map[rel] = ref_id
     return ref_map, warnings
 
 

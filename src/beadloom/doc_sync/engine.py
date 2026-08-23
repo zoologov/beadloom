@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from beadloom.doc_sync.declared_docs import find_missing_declared_docs
+from beadloom.doc_sync.git_baseline import changed_paths
 from beadloom.infrastructure.repository import get_owned_code_files
 
 if TYPE_CHECKING:
@@ -184,6 +186,76 @@ def _file_hash(path: Path) -> str | None:
     return _hash_text(path.read_text(encoding=_TEXT_CODEC, errors=_TEXT_ERRORS))
 
 
+#: The four verdicts a pair can carry, and the distinction the whole of BDL-UX
+#: #174/#175 turns on: ``ok`` and ``stale`` are outcomes of a comparison that
+#: HAPPENED, while ``missing`` (the file is gone) and ``unverified`` (there was
+#: nothing to compare against) are states in which the checker cannot know.
+#: *Unverifiable is not clean*, and the two must not print the same word.
+STATUS_OK = "ok"
+STATUS_STALE = "stale"
+STATUS_MISSING = "missing"
+STATUS_UNVERIFIED = "unverified"
+
+#: Which baseline produced a verdict. Reported on every pair so a green result
+#: says what it was green against, instead of printing a count that means
+#: nothing (BDL-UX #175).
+BASELINE_INDEX = "index"
+BASELINE_GIT = "git:HEAD"
+BASELINE_NONE = "none"
+
+#: Statuses that must fail a gate: the tree does not meet the bar (``stale``) or
+#: the thing to check is gone (``missing``). ``unverified`` is deliberately NOT
+#: here — it is reported by name and never counted as fresh, but a project that
+#: cannot supply a baseline is not thereby broken.
+BLOCKING_STATUSES = frozenset({STATUS_STALE, STATUS_MISSING})
+
+#: Where a pair's stored baseline came from, written by the reindex that built
+#: it. ``index_build`` is a baseline copied from the tree at build time and
+#: therefore worth nothing on its own; ``carried`` came from an earlier index
+#: generation; ``attested`` followed an observed doc edit or an explicit
+#: ``sync-update``. The vocabulary lives in the domain that interprets it.
+BASELINE_SOURCE_INDEX_BUILD = "index_build"
+BASELINE_SOURCE_CARRIED = "carried"
+BASELINE_SOURCE_ATTESTED = "attested"
+
+#: Sentinel: the git baseline has not been consulted yet. Distinct from ``None``,
+#: which is git's own answer ("I cannot tell you"), so an unavailable git is
+#: asked once per run rather than once per pair.
+_UNREAD: Any = object()
+
+
+def _missing_side(current_doc_hash: str | None, current_code_hash: str | None) -> str | None:
+    """Which side of the pair no longer exists on disk, if either.
+
+    A pair whose file is gone used to be skipped by both hash comparisons and
+    fall through as ``ok`` — "the gate is defeated by deleting documentation"
+    (BDL-UX #174), from the other side.
+    """
+    if current_doc_hash is None:
+        return "doc_missing"
+    if current_code_hash is None:
+        return "code_missing"
+    return None
+
+
+def _corroborate_with_git(
+    doc_path: str, code_path: str, changed: frozenset[str] | None
+) -> tuple[str, str, str]:
+    """Verdict for a pair whose only baseline is the tree the index was built from.
+
+    Such a pair compares equal to its baseline by construction, so the stored
+    answer is worthless and git is asked instead: code that differs from ``HEAD``
+    while its doc does not is drift the rebuild absorbed. When git cannot answer
+    the pair is ``unverified`` — reported, never green by default.
+    """
+    if changed is None:
+        return STATUS_UNVERIFIED, "no_baseline", BASELINE_NONE
+    doc_changed = str(Path("docs") / doc_path) in changed
+    if code_path in changed and not doc_changed:
+        return STATUS_STALE, "hash_changed_since_head", BASELINE_GIT
+    return STATUS_OK, "ok", BASELINE_GIT
+
+
 def check_sync(
     conn: sqlite3.Connection,
     project_root: Path | None = None,
@@ -217,6 +289,8 @@ def check_sync(
         project_root = Path(db_path).parent.parent  # .beadloom/beadloom.db → project
 
     results: list[dict[str, Any]] = []
+    # Read at most once per run, and only if some pair actually needs it.
+    git_changed: frozenset[str] | None = _UNREAD
 
     for row in sync_rows:
         doc_path = row["doc_path"]
@@ -229,13 +303,37 @@ def check_sync(
             if "doc_hash_at_last_edit" in row.keys()  # noqa: SIM118 - sqlite3.Row `in` checks values, not keys
             else ""
         )
+        baseline_source: str = (
+            row["baseline_source"]
+            if "baseline_source" in row.keys()  # noqa: SIM118 - sqlite3.Row `in` checks values, not keys
+            else ""
+        )
 
         # Hash actual files on disk.
         current_doc_hash = _file_hash(project_root / "docs" / doc_path)
         current_code_hash = _file_hash(project_root / code_path)
 
+        gone = _missing_side(current_doc_hash, current_code_hash)
+        if gone is not None:
+            conn.execute(
+                "UPDATE sync_state SET status = ? WHERE doc_path = ? AND code_path = ?",
+                (STATUS_MISSING, doc_path, code_path),
+            )
+            results.append(
+                {
+                    "doc_path": doc_path,
+                    "code_path": code_path,
+                    "ref_id": ref_id,
+                    "status": STATUS_MISSING,
+                    "reason": gone,
+                    "baseline": BASELINE_NONE,
+                }
+            )
+            continue
+
         status = "ok"
         reason = "ok"
+        baseline = BASELINE_INDEX
 
         # --- Two-phase sync detection ---
         # When doc_hash_at_last_edit is set, use it to detect code drift
@@ -256,7 +354,15 @@ def check_sync(
         # Update doc_hash_at_last_edit when doc changes.
         if doc_edited and current_doc_hash:
             # Doc was edited: record new doc hash and reset code
-            # baseline so future checks measure drift from here.
+            # baseline so future checks measure drift from here. An OBSERVED doc
+            # edit is evidence, so this baseline stops being the tree's own echo
+            # and becomes attested (BDL-UX #175).
+            conn.execute(
+                "UPDATE sync_state SET baseline_source = ? "
+                "WHERE doc_path = ? AND code_path = ?",
+                (BASELINE_SOURCE_ATTESTED, doc_path, code_path),
+            )
+            baseline_source = BASELINE_SOURCE_ATTESTED
             conn.execute(
                 "UPDATE sync_state "
                 "SET doc_hash_at_last_edit = ?, "
@@ -287,6 +393,15 @@ def check_sync(
                 status = "stale"
                 reason = "symbols_changed"
 
+        # A baseline the index invented from the tree it was just built from
+        # cannot make a pair fresh: ask git, or say it was not checked.
+        if status == "ok" and baseline_source == BASELINE_SOURCE_INDEX_BUILD:
+            if git_changed is _UNREAD:
+                git_changed = changed_paths(project_root)
+            status, reason, baseline = _corroborate_with_git(
+                doc_path, code_path, git_changed
+            )
+
         # Update status in DB.
         conn.execute(
             "UPDATE sync_state SET status = ? WHERE doc_path = ? AND code_path = ?",
@@ -300,6 +415,7 @@ def check_sync(
                 "ref_id": ref_id,
                 "status": status,
                 "reason": reason,
+                "baseline": baseline,
             }
         )
 
@@ -322,7 +438,10 @@ def check_sync(
         if gap_ref_id in ref_id_indices:
             # Update existing results: if any are "ok", change to "stale"
             for idx in ref_id_indices[gap_ref_id]:
-                if results[idx]["status"] == "ok":
+                # ``unverified`` is included: a pair nothing could be compared
+                # against is still allowed to be found stale by a check that
+                # does not need a baseline.
+                if results[idx]["status"] in (STATUS_OK, STATUS_UNVERIFIED):
                     results[idx]["status"] = "stale"
                     results[idx]["reason"] = "untracked_files"
                     results[idx]["details"] = details
@@ -342,6 +461,7 @@ def check_sync(
                     "status": "stale",
                     "reason": "untracked_files",
                     "details": details,
+                    "baseline": BASELINE_INDEX,
                 }
             )
 
@@ -360,7 +480,10 @@ def check_sync(
 
         if gap_ref_id in ref_id_indices:
             for idx in ref_id_indices[gap_ref_id]:
-                if results[idx]["status"] == "ok":
+                # ``unverified`` is included: a pair nothing could be compared
+                # against is still allowed to be found stale by a check that
+                # does not need a baseline.
+                if results[idx]["status"] in (STATUS_OK, STATUS_UNVERIFIED):
                     results[idx]["status"] = "stale"
                     results[idx]["reason"] = "missing_modules"
                     results[idx]["details"] = details
@@ -378,8 +501,26 @@ def check_sync(
                     "status": "stale",
                     "reason": "missing_modules",
                     "details": details,
+                    "baseline": BASELINE_INDEX,
                 }
             )
+
+    # --- Phase 4: the DECLARED surface, which deleting a file cannot shrink ---
+    # A doc the graph declares and the tree does not hold is a failure, not an
+    # absence: without this phase the pair simply stopped existing at the next
+    # reindex and every count still read fresh (BDL-UX #174).
+    results.extend(
+        {
+            "doc_path": missing["doc_path"],
+            "code_path": "",
+            "ref_id": missing["ref_id"],
+            "status": STATUS_MISSING,
+            "reason": "declared_doc_missing",
+            "details": missing["doc_path"],
+            "baseline": BASELINE_NONE,
+        }
+        for missing in find_missing_declared_docs(conn, project_root)
+    )
 
     conn.commit()
     return results
@@ -521,7 +662,9 @@ def mark_synced(
 
     Also updates ``symbols_hash`` to the current value so that future
     :func:`check_sync` calls use this as the new baseline for symbol drift
-    detection.
+    detection, and records the baseline as ATTESTED: somebody looked and said
+    the doc is current, which is the one thing a rebuilt index cannot fabricate
+    (BDL-UX #175).
     """
     doc_hash = _file_hash(project_root / "docs" / doc_path)
     code_hash = _file_hash(project_root / code_path)
@@ -537,9 +680,18 @@ def mark_synced(
     conn.execute(
         "UPDATE sync_state SET doc_hash_at_sync = ?, code_hash_at_sync = ?, "
         "symbols_hash = ?, synced_at = ?, status = 'ok', "
-        "doc_hash_at_last_edit = ? "
+        "doc_hash_at_last_edit = ?, baseline_source = ? "
         "WHERE doc_path = ? AND code_path = ?",
-        (doc_hash, code_hash, symbols_hash, now, doc_hash, doc_path, code_path),
+        (
+            doc_hash,
+            code_hash,
+            symbols_hash,
+            now,
+            doc_hash,
+            BASELINE_SOURCE_ATTESTED,
+            doc_path,
+            code_path,
+        ),
     )
     conn.commit()
 
@@ -572,9 +724,18 @@ def mark_synced_by_ref(
         conn.execute(
             "UPDATE sync_state SET doc_hash_at_sync = ?, code_hash_at_sync = ?, "
             "symbols_hash = ?, synced_at = ?, status = 'ok', "
-            "doc_hash_at_last_edit = ? "
+            "doc_hash_at_last_edit = ?, baseline_source = ? "
             "WHERE doc_path = ? AND code_path = ?",
-            (doc_hash, code_hash, symbols_hash, now, doc_hash, row["doc_path"], row["code_path"]),
+            (
+                doc_hash,
+                code_hash,
+                symbols_hash,
+                now,
+                doc_hash,
+                BASELINE_SOURCE_ATTESTED,
+                row["doc_path"],
+                row["code_path"],
+            ),
         )
         count += 1
 

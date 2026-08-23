@@ -78,12 +78,13 @@ _DEFAULT_SCAN_DIRS = ("src", "lib", "app")
 
 | Step | Action | Module |
 |------|--------|--------|
-| 0 | Snapshot sync baselines (`symbols_hash` from `sync_state`) | `_snapshot_sync_baselines` |
+| 0 | Snapshot sync baselines (`symbols_hash`, two-phase hashes and baseline PROVENANCE from `sync_state`) | `_snapshot_sync_baselines` |
 | 1 | Drop all tables (`_TABLES_TO_DROP`) | `_drop_all_tables` |
 | 2 | Create schema | `infrastructure.db.create_schema` |
 | 3 | Load YAML graph from `.beadloom/_graph/*.yml` | `graph.loader.load_graph` |
 | 3b | Store deep config in root node's `extra` | `onboarding.config_reader.read_deep_config` |
 | 4 | Index Markdown documents from docs directory | `doc_sync.doc_indexer.index_docs` |
+| 4b | Cache the DECLARED doc surface (every `docs:` entry, existing or not) | `read_declared_docs` / `store_declared_docs` |
 | 5 | Extract and index code symbols from source files | `context_oracle.code_indexer.extract_symbols` |
 | 5b | Extract code imports and create `depends_on` edges | `graph.import_resolver.index_imports` |
 | 5c | Load architecture rules from `.beadloom/_graph/rules.yml` | `graph.rule_engine.load_rules` |
@@ -185,10 +186,12 @@ Resolve source scan directories from `.beadloom/config.yml`. Returns `["src", "l
 ### Internal Functions
 
 ```python
-def _snapshot_sync_baselines(conn: sqlite3.Connection) -> dict[str, str]
+def _snapshot_sync_baselines(
+    conn: sqlite3.Connection,
+) -> tuple[dict[str, str], dict[tuple[str, str], _SyncPairSnapshot]]
 ```
 
-Snapshot `symbols_hash` from `sync_state` before table drop. Returns `{ref_id: symbols_hash}` for entries with non-empty hash. Returns empty dict if the table does not exist yet (first run).
+Snapshot `sync_state` before the table drop. Returns `({ref_id: symbols_hash} for entries with a non-empty hash, {(doc_path, code_path): _SyncPairSnapshot})`, or two empty dicts if the table does not exist yet (first run). **Every pair is snapshotted**, not only those carrying two-phase data: the snapshot also carries `baseline_source`, and a baseline that comes back without its provenance is indistinguishable from one that was earned (BDL-UX #175). Both reindex paths call this one function, so they cannot disagree about what survives a rebuild.
 
 ```python
 def _drop_all_tables(conn: sqlite3.Connection) -> None
@@ -210,7 +213,22 @@ def _build_doc_ref_map(
 ) -> tuple[dict[str, str], list[str]]
 ```
 
-Build a mapping of `{relative_doc_path: ref_id}` from YAML graph nodes. Returns `(ref_map, warnings)`.
+Build a mapping of `{relative_doc_path: ref_id}` from YAML graph nodes. Returns `(ref_map, warnings)`. Built on `read_declared_docs`, so the doc→ref map and the declared surface are parsed once, from one place.
+
+```python
+def read_declared_docs(
+    graph_dir: Path,
+    project_root: Path,
+    docs_dir: Path,
+) -> list[tuple[str, str, str]]
+
+def store_declared_docs(
+    conn: sqlite3.Connection,
+    declared: list[tuple[str, str, str]],
+) -> None
+```
+
+Read every doc a node DECLARES in its `docs:` list as `(declared_path, doc_path, ref_id)` — *declared_path* resolved project-relative (both spellings, `docs/domains/x/README.md` and `domains/x/README.md`, land on the same file) and *doc_path* docs-dir-relative, the key of the `docs` table — and cache them in `declared_docs`. The `docs` table only holds files found on disk, so without this a deleted doc simply stopped being indexed and the gate had nothing to miss (BDL-UX #174). Both reindex paths write it; a graph-YAML change already forces a full reindex.
 
 ```python
 def _index_code_files(
@@ -227,10 +245,16 @@ def _build_initial_sync_state(
     conn: sqlite3.Connection,
     *,
     preserved_symbols: dict[str, str] | None = None,
+    preserved_pairs: dict[tuple[str, str], _SyncPairSnapshot] | None = None,
 ) -> None
 ```
 
-Populate `sync_state` table from docs and code_symbols with shared ref_ids. When `preserved_symbols` is provided, keeps old `symbols_hash` for drift detection; otherwise computes a fresh baseline.
+Populate `sync_state` table from docs and code_symbols with shared ref_ids. When `preserved_symbols` is provided, keeps old `symbols_hash` for drift detection; otherwise computes a fresh baseline. `preserved_pairs` carries the two-phase hashes and, through `_baseline_provenance`, each pair's `baseline_source`:
+
+- no snapshot -> `index_build` — this pair had no baseline before the build, so the hashes just written ARE the current tree and prove nothing on their own;
+- a snapshot -> its own value, verbatim. `index_build` that survives a reindex is still `index_build`: a fabricated baseline does not become earned by being copied. A pre-provenance row (`''`) reads as `carried`, since it genuinely came from an earlier generation.
+
+`check_sync` corroborates an `index_build` pair against git rather than reporting it fresh.
 
 ```python
 def _load_rules_into_db(
@@ -354,7 +378,8 @@ class ReindexResult:
 
 ## Invariants
 
-- Full reindex always snapshots `symbols_hash` baselines via `_snapshot_sync_baselines()` before dropping tables, preserving drift detection state.
+- Full reindex always snapshots `symbols_hash` baselines via `_snapshot_sync_baselines()` before dropping tables, preserving drift detection state. The incremental path takes the SAME snapshot (it used to re-derive one inline, which silently dropped baseline provenance).
+- A baseline's provenance is never promoted by a reindex: only an attestation (`sync-update`) or an observed doc edit upgrades it.
 - Full reindex always drops ALL tables before recreating them (clean slate guarantee).
 - WAL mode is enabled on every database connection opened by `open_db`.
 - Foreign keys are enabled per-connection via `open_db`.

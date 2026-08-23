@@ -860,8 +860,18 @@ def evaluate_cardinality_rules(
                 total = int(total_row[0]) if total_row is not None else 0
 
                 if total > 0:
+                    # Covered = not KNOWN to be behind. ``unverified`` (BDL-UX
+                    # #175: the index was rebuilt, so it had no baseline) used to
+                    # be written as ``ok`` and is deliberately still counted
+                    # here: this is a coverage ratio, and a pair nobody could
+                    # check is not evidence that the doc is absent. Reporting it
+                    # as 0% would turn an adopter's green project red for a
+                    # reason that is about the index, not about their docs. The
+                    # honest accounting of what was not checked belongs to
+                    # ``sync-check``, which names every such pair.
                     ok_row = conn.execute(
-                        "SELECT COUNT(*) FROM sync_state WHERE ref_id = ? AND status = 'ok'",
+                        "SELECT COUNT(*) FROM sync_state WHERE ref_id = ? "
+                        "AND status NOT IN ('stale', 'missing')",
                         (node_ref_id,),
                     ).fetchone()
                     ok_count = int(ok_row[0]) if ok_row is not None else 0

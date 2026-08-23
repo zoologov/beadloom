@@ -284,6 +284,28 @@ header comment, where a reader of a red check will look first.
       re-run by the coordinator and reddens 9 tests through three independent mechanisms; the
       `click.Choice` sabotage reddens 3. Both restored byte-identical by sha256.
 
+- [x] **S2b `.46` + `.47` — ONE fix, not two** (2026-08-23). The two P0s are the same sentence,
+      *unverifiable is not clean*, and they diverge only in the verdict each state earns: a doc
+      that is GONE is `missing` (a failure — exit 2, gate FAIL), a pair with NO BASELINE is
+      `unverified` (reported by name, never counted fresh, gate step `WARN`, exit code
+      unchanged so no green project turns red). **The load-bearing decision was where the
+      baseline lives: not in the database.** `.beadloom/beadloom.db` is a derived cache —
+      git-ignored, per-machine, dropped by every rebuild and absent on every fresh CI checkout
+      — so a baseline kept there is destroyed by the act that most needs it. Freshness now
+      rests on **git** (committed by construction; a pair records its baseline's provenance and
+      a fabricated one is corroborated against `HEAD`), and the size of the declared surface on
+      a **committed ledger** (`.beadloom/sync-surface.json`, written only by an explicit
+      `sync-check --record-surface`). MEASURED in a clean room through the real CLI, by exit
+      code: `#175` edit + `rm beadloom.db` + reindex → `sync-check` rc 2 and `ci` rc 1 (was
+      rc 0 / rc 0); `#174` delete a declared SPEC → `ci` rc 1 with `::error … doc-missing`
+      naming the file, and with a ledger present the same run prints `declared surface SHRANK
+      283 → 276 pair(s)` — the signal that was silently discarded. Both probes reverted by
+      reverse edit, `git status` clean, SPEC sha256 re-verified. Doctor's count was audited as
+      the bead asked: it counted FINDINGS, so it rose 20 → 21 while a file was being deleted;
+      it now reads `13 check(s): 0 error(s), 9 warning(s), 0 info` and prints *clean* only when
+      every check is OK. Four of `.6`'s strict `xfail`s XPASSed and were un-xfailed. 5824
+      passed, ruff + mypy --strict clean, Gate rc 0 on an INCREMENTAL index.
+
 ## Results
 
 | Bead | Status | Details |
@@ -317,8 +339,8 @@ header comment, where a reader of a red check will look first.
 | .41 | Pending | S3: three more ambient-decode sites, plus an MCP test runner with no timeout |
 | .42 | Pending | S2/S3: the locale dimension's first run — 100 ASCII / 76 8-bit failures from text I/O without an explicit encoding (the title still carries `.38`'s superseded 97/73; the owner is correcting it) |
 | .45 | Pending | S2 follow-up: docs-audit reports green about facts it never checked (#173) — per-fact coverage |
-| .46 | Pending | P0: the doc gate is defeated by DELETING documentation — `beadloom ci` exits 0 with every step PASS (#174); pre-existing at `main` |
-| .47 | Pending | P0: a clean-DB rebuild adopts the tree as its own baseline, so the freshness gate is blind (#175) — the defect the retired CLEAN-DB LINT habit fed |
+| .46 | Done | P0 (#174, ONE fix with `.47`): a deleted doc is `missing`, not `ok`; the DECLARED surface outlives the file; the pair count is a committed ledger; doctor's count audited |
+| .47 | Done | P0 (#175, ONE fix with `.46`): the baseline moved OUT of the database — git for freshness, a committed ledger for the surface; a rebuilt baseline is corroborated or reported `unverified`, never fresh |
 | .48 | Pending | P0: rule liveness covers one rule type of six, and `validate_rules()` computes the diagnosis that `linter.py` throws away |
 | .49 | Pending | P0: an exemption's `until:` is prose, and a suppressed violation is never counted |
 | .50 | Pending | P1: annotations the extractor cannot see — docstring annotation, directory source without a trailing slash, deny rules keyed on annotated symbols |
