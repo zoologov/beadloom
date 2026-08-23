@@ -2,6 +2,9 @@
   "version": 1,
   "written": {
     ".claude/CLAUDE.md": "c87b933041be944aa2fe874fc78e4a8bcaf28579efc99ee6fd3af5e78cc6d714",
+    ".claude/agents/review.md": "9ed0ed5ce232ac722e59ee419fcfe507edd7020a7cd850eca238c8487f8cfcbf",
+    ".claude/agents/tech-writer.md": "365338969242e17deb7676ea1f563fa00095becc2f068c2c20a781ab5eb66e7a",
+    ".claude/agents/test.md": "8414e3ca3e8e025642414ae74f067e82c76686649dc3b43e2f1c40630afe0b70",
     ".claude/commands/checkpoint.md": "d6019d0b91d01f6243b749bf9d8beb61426aa8e190d2660110942c6c2468e900",
     ".claude/commands/coordinator.md": "f9c4d9ac1d4a1a797517417cd9fb255860dabba6690926f18ddb56e2432e8619",
     ".claude/commands/task-init.md": "1183502a530b879b056e71a1bf1371bc42df35f8f9140fd7bcf561967d6c1a47",
