@@ -37,6 +37,7 @@ deterministic JSON payload, and arguments — so it is inspectable and mockable;
 
 Module `src/beadloom/onboarding/branch_protection.py`:
 
+- The default runner states `encoding="utf-8"` in **both** directions, and the outbound one is the reason it is not cosmetic: the payload is PUT on `gh`'s stdin, so `text=True` would have encoded it with the image's locale — a check-run context with one non-ASCII character would raise on an ASCII image and be silently *altered* on an 8-bit one, i.e. the branch would be protected with a required check whose name nobody declared. JSON is UTF-8 by definition (RFC 8259 §8.1). `errors` stays strict: an outbound payload must never be made lossy to keep a call alive (BDL-061.42).
 - `build_protection_payload(*, status_check_contexts=DEFAULT_STATUS_CHECK_CONTEXTS) -> dict`
   — the GitHub branch-protection request body.
 - `BranchProtectionRequest` — `owner`, `repo`, `branch`, `status_check_contexts`,

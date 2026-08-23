@@ -35,7 +35,25 @@
 
 ## Open Issues
 
-189. [2026-08-23] [MEDIUM] `beadloom sync-update <doc> --check` WRITES — a check flag that re-baselines the thing it was asked to report on
+191. [2026-08-23] [MEDIUM] `setup-agentic-flow` without `--force` still recomposes a hand-edited ROLE adapter — the asymmetry `--fix` no longer has
+
+    **Severity:** medium (it is the #139/#151/#186 data-loss shape in the sibling command, and it is now the only door left open)
+    **Command:** `beadloom setup-agentic-flow` (no flags), on a repo with a `flow.yml`
+    **Context:** recorded, deliberately NOT fixed, by BDL-061 `.58` — it was named as adjacent to that bead and absorbing it would have made one bead answer for two decisions. `.59` closed #186 by teaching `config-check --fix` one rule: *rewrite only what Beadloom can prove it wrote*. `setup-agentic-flow` composes the role adapters through `generate_adapters(config, project_root)` with no `preserve=` argument, so the same hand edit `--fix` now declines is recomposed over by the command `--fix`'s own remediation tells the reader to run.
+    **Why it is undecided rather than a defect with an obvious fix:** the two commands have genuinely different contracts. `--fix` is a repair and must not destroy; `setup-agentic-flow` is a scaffold and an adopter may reasonably expect a re-run to reinstate the shipped flow. But the commands + `CLAUDE.md` path in the SAME command already declines a hand edit and reports migration guidance (BDL-UX #188 made that guidance visible), so today one command treats two of its three artifact kinds one way and the third the other, with nothing stating which is intended.
+    **Expected:** decide it, and make the three kinds agree. If the scaffold should preserve, pass `preserve=` the way `.59` does and report the decline; if it should overwrite, say so in the output and in the SPEC, and stop `config-check --fix` from pointing at a command that will do what `--fix` refused.
+    **Related:** #186 (the decided half), #139, #152, #188.
+
+190. [2026-08-23] [LOW] `docs audit` reads a version mentioned as an EXAMPLE as a claim about this project — a doc cannot cite anybody else's version
+
+    **Severity:** low (it is a false positive with an obvious workaround, and it blocks a specific and now-recurring kind of sentence)
+    **Command:** `beadloom docs audit` / the `docs-audit` step of `beadloom ci`
+    **Measured** while documenting BDL-UX #183. The sentence *"a JavaScript project at `0.4.1` was told `2.2.0`"* — an illustration of the defect being fixed, in backticks — failed the Gate twice: `doc-fact-stale: version: doc says '0.4.1' but project state is '2.2.0'`. `doc_sync/scanner.py::_extract_versions` matches every `\bv?\d+\.\d+\.\d+\b` outside a version pin and hands each one to an exact-match comparison against the project's own version; there is no notion of a version that is *about something else*.
+    **Why it is worth an entry:** the sentences this blocks are exactly the ones this epic keeps needing to write — "an adopter at X was told our Y". It is also the version-shaped cousin of #169, which drew the token boundary for counts and left versions to their own regex. The workaround used in `.58` was to rephrase (*"a JavaScript project a major version behind was told ours"*), which is weaker prose than the measurement deserved. Recorded rather than worked around silently, because the next writer will meet it and reach for `docs_audit.ignore`, which is the wrong door.
+    **Expected:** treat a version as a claim about THIS project only when the mention is attributive — near a project-version keyword, or in a line that does not already name another subject — the same clause-scoping `.45` gave the count facts. Failing that, an explicit inline escape (a fenced block, or a marker) so a doc can quote a foreign version without a tolerance entry.
+    **Related:** #169 (the token boundary for counts), #161, BDL-057 (the audit surface).
+
+189. ~~[2026-08-23] [MEDIUM] `beadloom sync-update <doc> --check` WRITES — a check flag that re-baselines the thing it was asked to report on~~ **CLOSED (BDL-061 S3b, `.58`)**
 
     **Severity:** medium (it silences the warning it was asked to describe, and it is the defect class this epic exists to remove)
     **Command:** `beadloom sync-update <doc-path> --check`
@@ -45,7 +63,10 @@
     **Expected:** move the `check_only` guard above the reference-doc branch, and have `--check` on a reference doc print its `watches` set and its drift status instead of re-baselining it.
     **Related:** #147 (a check that writes what it checks), #163 (re-attestation without evidence), BDL-057 (the reference surface).
 
-188. [2026-08-23] [HIGH] The orphan report and the migration guidance are computed on every scaffold and printed by nothing — NO CALLER, NO CAPABILITY
+    > **CLOSED — the guard runs first, and the answer is read-only.** `check_only` is now honoured above the reference-doc branch, and `doc_sync.engine.describe_reference_doc()` answers it: one `SELECT`, one recomputed aggregate hash, no `UPDATE`, no `commit`. `beadloom sync-update <doc> --check` prints `  [surface drift] <doc> watches cli, graph` and the `reference_state` row is byte-identical afterwards (asserted on `(doc_path, aggregate_hash, status)` before and after, not on the absence of the word "Re-baselined"). The non-`--check` path still re-baselines — asserted too, so the guard cannot silently disable the command it guards.
+    > Checked while there, since the entry raised the class rather than the line: `check_sync()` contains zero `UPDATE`/`INSERT`/`commit` in its own body, so `--check` on a SYMBOL pair was already clean. Stated as a measured result rather than left as an absence.
+
+188. ~~[2026-08-23] [HIGH] The orphan report and the migration guidance are computed on every scaffold and printed by nothing — NO CALLER, NO CAPABILITY~~ **CLOSED (BDL-061 S3b, `.58`)**
 
     **Severity:** high (two shipped criteria are met by the library and not by the command anybody runs)
     **Command:** `beadloom setup-agentic-flow`
@@ -55,7 +76,10 @@
     **Expected:** print the orphan list (with its `rm -f` commands) and the migration notes after the write summary, the way `hooks.guards_registered` and `ignore.added` are printed.
     **Related:** #137 (the orphan report), #151 (the destructive `--fix` this guidance replaced), #186.
 
-187. [2026-08-23] [MEDIUM] A virgin `setup-agentic-flow` leaves `config-check` red — four errors on a repository nobody has touched
+    > **CLOSED — `_echo_scaffold_findings()` is the caller.** `migration_notes` prints under *"Left alone (N) — your edits are the only copy of an intent"* with the `.beadloom/flow/<kind>/<name>.md` path, and `orphans` under *"Left by an older flow layout (N) — reported, never deleted"* with each `rm -f`. **`(hand-edited; use --force)` is gone** — the line advised the destructive flag and named nowhere safe, which was the actual harm; the migration note replaces it. Both assertions bite: removing the call takes both tests from passed to FAILED (measured).
+    > `ScaffoldResult.flow_config_written` was added in the same pass and printed the same way, so the file every composed artifact is built from is named on the run that creates it (#187).
+
+187. ~~[2026-08-23] [MEDIUM] A virgin `setup-agentic-flow` leaves `config-check` red — four errors on a repository nobody has touched~~ **CLOSED (BDL-061 S3b, `.58`)**
 
     **Severity:** medium (it is a first-contact experience, and it is the exact "green project goes red" shape the slice is built to avoid)
     **Command:** `beadloom setup-agentic-flow` then `beadloom config-check`
@@ -64,6 +88,9 @@
     **Why it is not cosmetic:** the command's own closing advice is *"1) `beadloom config-check` keeps the scaffolded flow + CLAUDE.md auto-regions honest"*. Following it immediately produces four errors on an untouched repository, with a remediation that tells the reader to add a `flow.yml` — which is the right answer, arrived at through a failure.
     **Expected:** either persist the resolved selection as `.beadloom/flow.yml` on scaffold (it is the file the whole feature is configured by, and the command already knows every value), or have `config-check` compare against the same resolution the scaffold used. The first is the smaller change and makes the configuration visible.
     **Related:** #184 (the same command family answering an expected state with a failure shape), #186.
+
+    > **CLOSED by the first of the two options — the selection is written down.** `flow_config.persist_flow_config()` writes the resolved config to `.beadloom/flow.yml` on a first scaffold and **never** over an existing one (that file is the adopter's policy — `language` and `overlays.suppress` have no flag and live only there). Measured end to end on a fresh TypeScript project: `init` → `setup-agentic-flow` → `config-check` **rc 0**, where it was rc 1 with four errors. The command names the file it wrote.
+    > **A second defect fell out of the fix and is worth more than the first.** `scaffold()` re-resolved the config from disk with `resolve_flow_config(project_root)` — **ignoring the CLI flags** — while the command resolved its own for `generate_adapters`. So `beadloom setup-agentic-flow --architecture fsd` composed the four ROLE adapters as `fsd` and the slash commands and `CLAUDE.md` as `ddd`, in one run, silently. The caller's resolved config is now threaded in (`scaffold(config=…)`) and a test asserts the flag reaches both.
 
 186. ~~[2026-08-23] [HIGH] 🔴 `config-check --fix` deletes a hand edit in a role adapter — one line after the check printed "It will NOT be rewritten"~~ **CLOSED (BDL-061 S3, `.59`)**
 
@@ -105,7 +132,7 @@
     **Expected:** an absent index is an answer, not an exception — say so and exit on a code that means it (this is `unverifiable is not clean` again, from the caller's side rather than the checker's). At minimum, never exit non-zero with both streams empty: a verdict nobody can read is not a verdict.
     **Related:** #175 (a rebuilt index has nothing to compare against), #174, #146 — the same family, and this is the entry point.
 
-183. [2026-08-23] [HIGH] 🔴 Every adopter's `CLAUDE.md` states **Beadloom's** version as the project's own — and it reads as correct on the one repo where it is
+183. ~~[2026-08-23] [HIGH] 🔴 Every adopter's `CLAUDE.md` states **Beadloom's** version as the project's own — and it reads as correct on the one repo where it is~~ **CLOSED (BDL-061 S3b, `.58`)**
 
     **Severity:** high (a false fact written into the file an agent treats as authoritative, in a section describing the adopter's project)
     **Command:** `beadloom setup-agentic-flow`, `beadloom init`
@@ -117,6 +144,17 @@
     - Audit the whole composed output the same way, not just this line: **which other rendered facts are computed about Beadloom rather than about the project?** One was found by reading; nobody has swept the rest.
     - A test that renders `CLAUDE.md` for a **non-Beadloom** fixture project would have caught this and would catch the next one. There is no such fixture today, which is why a correct-looking line survived four slices of scrutiny.
     **Related:** #177 (same class, different mechanism), #92 (why `get_actual_version` is right about Beadloom), #139/#152.
+
+    > **CLOSED — and the one-line fix was the least of it.** The deliverable is `tests/adopter_project.py`: five projects that are **not** Beadloom (TypeScript `0.4.1`, Rust `1.2.3`, Python `3.7.0`, Poetry `0.9.2`, and one declaring no version at all), rendered in `tests/test_adopter_projects.py`. Without a fixture the tool cannot be accidentally right about, the next instance survives exactly as this one did. Mutation-checked: restoring `get_actual_version()` and the hardcoded `DDD packages` takes 15 of 16 tests from passed to FAILED.
+    > **THE SWEEP, stated with what was checked and not only with what was found.** Checked: the composed `CLAUDE.md`, all four composed slash commands, all four composed role adapters, both auto-regions, and every `doctor` check that reads an adopter's `CLAUDE.md`. **The four role adapters are CLEAN** — a checked result, not an absence. Found, beyond the version line:
+    > - `- **Architecture:** DDD packages` was a **constant**. An `fsd` project was told it was DDD. It now follows the declared architecture and claims no methodology when none is declared.
+    > - The `Stack` bullet matched the target's manifest against **Beadloom's own dependency names** (`sqlite`, `click`, `rich`, `tree-sitter`) and printed `Python 3.10+` — *our* floor — for a project on `>=3.12`. It now names the project's declared stack, its `requires-python` verbatim, and its own first six declared dependencies.
+    > - `_get_actual_packages()` fell back to scanning `<adopter>/src/beadloom/` — our layout, looked for inside their tree. Deleted; `detect_source_packages()` scans theirs.
+    > - The shipped `CLAUDE.md` template **seeded** the auto-region with our stack, our nine DDD packages and `Current version: 2.2.0` — the bytes an adopter holds until the first refresh. Now a neutral one-line placeholder.
+    > - Our identifiers still shipped in the composed text: `BDL-037` and `BDL-UX-Issues #97` in the core, `BDL-036` twice and our issue-log filename three times in the coordinator command. That is #177's third "Expected" item, which its closure claimed and its check never covered.
+    > **The biggest catch was not the renderer.** `application/doctor.py::_check_agent_instructions` **audits four claims in the adopter's `CLAUDE.md` against BEADLOOM's state**: version vs `get_actual_version()`, packages vs a scan for `src/beadloom/`, stack vs the literal `{python, sqlite}`, test framework vs the literal `pytest`. All four read OK here by the same coincidence. Fixing only the renderer would have turned **every adopter's `doctor` red on upgrade** (their correct `0.4.1` against our `2.2.0`) — the precise constraint this epic is built on, reached from the other side. Each check now reads the project, and a fact the project does not declare is `INFO … not verified`, never a drift verdict.
+    > `get_actual_version()` is **unchanged**: it is right about Beadloom (#92) and the defect was always its caller.
+    > **The general half, so the class does not need re-finding:** `beadloom_local_facts_in(text)` is a deny-list of this repository's own identifiers — our epic key, our issue numbers, our issue-log filename, bead ids, `src/beadloom`, our `__version__`, our package names — asserted over every composed artifact, and it names the offender it found rather than failing bare.
 
 182. [2026-08-23] [HIGH] 🔴 `symbols_changed` is computed per node, so one changed file marks every pair of that node stale — and the only way through is bulk re-attestation
 

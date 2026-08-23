@@ -113,81 +113,103 @@ def _auto_insert_markers(text: str) -> str:
     return text[:block_start] + replacement + text[block_end:]
 
 
+#: How each supported architecture names its top-level units. A project that
+#: declares none gets the neutral word: claiming a methodology the project never
+#: chose is the same defect as claiming a version it never declared.
+_ARCHITECTURE_UNITS: dict[str, str] = {
+    "ddd": "DDD packages",
+    "fsd": "FSD slices",
+}
+
+#: Display names for the stack overlays. Anything unmapped is rendered as the
+#: declared tag itself rather than guessed at.
+_STACK_NAMES: dict[str, str] = {
+    "python": "Python",
+    "typescript": "TypeScript",
+    "javascript": "JavaScript",
+    "vuejs": "Vue.js",
+}
+
+
+def _declared_flow(project_root: Path) -> tuple[str | None, tuple[str, ...]]:
+    """The architecture and stack THIS project declares in ``flow.yml``.
+
+    ``(None, ())`` when the project declares nothing — the renderer then omits
+    the claim rather than falling back to Beadloom's own answer.
+    """
+    from beadloom.onboarding.flow_config import load_flow_config
+
+    try:
+        config = load_flow_config(project_root)
+    except (FileNotFoundError, ValueError):
+        return None, ()
+    return config.architecture, config.stack
+
+
 def _render_project_info_section(project_root: Path) -> str:
     """Generate the content for the ``project-info`` section.
 
-    Uses actual project state: version, packages, stack info.
-    The returned string does NOT include the marker comments — only
-    the bullet-list content that goes between markers.
+    Every bullet is a fact read out of **the target project** — its own
+    manifest, its own ``src/`` layout, its own ``flow.yml``. A fact that cannot
+    be read is omitted, never substituted: until BDL-UX #183 this function
+    rendered ``get_actual_version()`` (Beadloom's ``__version__``) as the
+    project's version, which read correctly on exactly one repository in the
+    world and was false on every other.
+
+    The returned string does NOT include the marker comments — only the
+    bullet-list content that goes between markers.
     """
-    from beadloom.application.doctor import _get_actual_packages, get_actual_version
+    from beadloom.onboarding.scanner.project_facts import (
+        detect_declared_dependencies,
+        detect_project_version,
+        detect_requires_python,
+        detect_source_packages,
+        manifest_text,
+    )
 
-    version = get_actual_version()
-
-    # Discover DDD packages under src/<project_name>/.
-    # We look for any subdirectory under src/ that has __init__.py children.
-    packages: set[str] = set()
-    src_dir = project_root / "src"
-    if src_dir.is_dir():
-        for pkg_root in src_dir.iterdir():
-            if pkg_root.is_dir() and (pkg_root / "__init__.py").is_file():
-                for child in pkg_root.iterdir():
-                    if child.is_dir() and (child / "__init__.py").is_file():
-                        packages.add(child.name)
-    # Fallback: try the doctor helper (beadloom-specific).
-    if not packages:
-        packages = _get_actual_packages(project_root)
-
-    # Read pyproject.toml for additional metadata.
-    pyproject_path = project_root / "pyproject.toml"
-    pyproject_text = ""
-    if pyproject_path.is_file():
-        import contextlib
-
-        with contextlib.suppress(OSError):
-            pyproject_text = pyproject_path.read_text(encoding="utf-8")
-
-    # Build bullet lines.
+    architecture, stack = _declared_flow(project_root)
+    manifest = manifest_text(project_root) or ""
+    dep_lower = manifest.lower()
     lines: list[str] = []
 
-    # Stack line — extract from pyproject deps if possible, else generic.
-    stack_parts: list[str] = []
-    dep_lower = pyproject_text.lower()
-    if "python" in dep_lower:
-        stack_parts.append("Python 3.10+")
-    if "sqlite" in dep_lower or "sqlite3" in dep_lower:
-        stack_parts.append("SQLite")
-    if "click" in dep_lower:
-        stack_parts.append("Click")
-    if "rich" in dep_lower:
-        stack_parts.append("Rich")
-    if "tree-sitter" in dep_lower or "tree_sitter" in dep_lower:
-        stack_parts.append("tree-sitter")
+    stack_parts = [_STACK_NAMES.get(name, name) for name in stack]
+    requires_python = detect_requires_python(project_root)
+    if requires_python is not None and stack_parts:
+        stack_parts = [
+            f"{part} ({requires_python})" if part == "Python" else part
+            for part in stack_parts
+        ]
     if stack_parts:
-        lines.append(f"- **Stack:** {', '.join(stack_parts)}")
+        dependencies = detect_declared_dependencies(project_root)
+        detail = f" — {', '.join(dependencies)}" if dependencies else ""
+        lines.append(f"- **Stack:** {', '.join(stack_parts)}{detail}")
 
-    # Tests line.
     if "pytest" in dep_lower:
-        cov = ""
-        if "pytest-cov" in dep_lower:
-            cov = " + pytest-cov"
+        cov = " + pytest-cov" if "pytest-cov" in dep_lower else ""
         lines.append(f"- **Tests:** pytest{cov}")
-
-    # Linter.
     if "ruff" in dep_lower:
         lines.append("- **Linter/formatter:** ruff (lint + format)")
-
-    # Type checking.
     if "mypy" in dep_lower:
         lines.append("- **Type checking:** mypy --strict")
 
-    # Architecture packages.
+    packages = detect_source_packages(project_root)
     if packages:
         pkg_list = ", ".join(f"`{p}/`" for p in sorted(packages))
-        lines.append(f"- **Architecture:** DDD packages -- {pkg_list}")
+        units = _ARCHITECTURE_UNITS.get(architecture or "", "packages")
+        lines.append(f"- **Architecture:** {units} -- {pkg_list}")
 
-    # Version.
-    lines.append(f"- **Current version:** {version}")
+    version = detect_project_version(project_root)
+    if version is not None:
+        lines.append(f"- **Current version:** {version}")
+
+    if not lines:
+        # Unverifiable is not clean (BDL-061 S2b): an empty region reads as
+        # "this project has no facts", which is a claim. Say what was looked at.
+        lines.append(
+            "- _No project facts read: Beadloom found no `pyproject.toml`, "
+            "`package.json` or `Cargo.toml`, and no `.beadloom/flow.yml` "
+            "declaring a stack._"
+        )
 
     return "\n".join(lines) + "\n"
 

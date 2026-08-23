@@ -728,11 +728,17 @@ def _run_test_suite(project_root: Path) -> tuple[bool, str]:
 
     try:
         # `uv` is resolved from PATH by design; argv is fixed (no shell, no user input).
+        # The codec is stated: only the last line is kept, and pytest's summary line
+        # carries non-ASCII (a test id, a path, an arrow) often enough that
+        # `text=True` turned "the suite failed" into an unrelated decode error on a
+        # non-UTF-8 image. `replace` because this string is shown to an agent as
+        # prose, so a visible U+FFFD beats an exception (BDL-061.42).
         completed = subprocess.run(
             ["uv", "run", "pytest", "-q"],  # noqa: S607
             cwd=str(project_root),
             capture_output=True,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
     except FileNotFoundError:

@@ -460,6 +460,13 @@ nodes:
     docs:
       - docs/domains/doc-sync/components/doc-indexer/DOC.md
 
+  - ref_id: console-streams
+    kind: component
+    summary: "Console output policy — the CLI's stdout/stderr keep the operator's codec but degrade an unencodable glyph instead of dying on it"
+    source: src/beadloom/infrastructure/console_streams.py
+    docs:
+      - docs/domains/infrastructure/components/console-streams/DOC.md
+
   - ref_id: atomic-io
     kind: component
     summary: "Atomic YAML writes — temp-file + os.replace so a crash mid-write never corrupts the source-of-truth graph YAML"
@@ -734,6 +741,9 @@ edges:
     kind: part_of
   - src: doc-indexer
     dst: doc-sync
+    kind: part_of
+  - src: console-streams
+    dst: infrastructure
     kind: part_of
   - src: atomic-io
     dst: infrastructure

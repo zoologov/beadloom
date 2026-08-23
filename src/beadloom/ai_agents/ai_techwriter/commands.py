@@ -22,6 +22,20 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: The codec every tool this harness shells out to is read in. ``text=True``
+#: would have used ``locale.getpreferredencoding(False)``, so the same repository
+#: gave the harness different answers on a container than on the author's machine
+#: (BDL-061.37/.42). goose, git and beadloom all emit UTF-8 — that is their
+#: contract, not a guess about the image.
+_TOOL_ENCODING = "utf-8"
+
+#: ``replace`` rather than ``surrogateescape``, stated by which way each fails.
+#: This text is *displayed and re-encoded* — it reaches logs, a PR comment and a
+#: JSON parse. A surrogate survives the decode losslessly and then raises on the
+#: way OUT, at a call site that cannot explain where the byte came from; U+FFFD is
+#: lossy, visible, and fails nothing later.
+_TOOL_DECODE_ERRORS = "replace"
+
 
 @dataclass(frozen=True)
 class CommandResult:
@@ -55,7 +69,8 @@ def run_command(args: list[str], *, cwd: Path, env: dict[str, str] | None = None
         args,
         cwd=str(cwd),
         capture_output=True,
-        text=True,
+        encoding=_TOOL_ENCODING,
+        errors=_TOOL_DECODE_ERRORS,
         check=False,
         env=full_env,
     )

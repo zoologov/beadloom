@@ -40,7 +40,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import click
 
@@ -65,6 +65,7 @@ from beadloom.ai_agents.ai_techwriter.seams import (
     GooseAgentRunner,
     ReviewPublisher,
 )
+from beadloom.infrastructure.console_streams import tolerate_unencodable_output
 
 if TYPE_CHECKING:
     from beadloom.ai_agents.ai_techwriter.seams import AgentRunner
@@ -134,7 +135,29 @@ def _resolve(ctx: click.Context, key: str, default: object) -> object:
     return obj.get(key, default)
 
 
-@click.command()
+class _TolerantOutputCommand(click.Command):
+    """This harness's entry, dispatched with output streams that survive a glyph.
+
+    The same policy the ``beadloom`` group applies, wired at this command because
+    the two entry points are separate Click objects and a domain may not import a
+    service. Only the four-line dispatch is repeated; the decision, the
+    measurement and the reasons live once, in
+    :mod:`beadloom.infrastructure.console_streams`. Placed on ``main()`` rather
+    than in the callback because Click answers ``--help`` while parsing, and
+    ``python -m beadloom.ai_agents.ai_techwriter --help`` is the invocation that
+    was measured exiting 1 on an ISO-8859-1 image (BDL-061.42).
+    """
+
+    # ``Any`` with a reason: Click types ``Command.main`` as two overloads whose
+    # return type depends on ``standalone_mode``. A pass-through override cannot
+    # restate that without re-declaring both, and narrowing either side here
+    # would be a claim about Click's contract rather than about ours.
+    def main(self, *args: Any, **kwargs: Any) -> Any:
+        tolerate_unencodable_output()
+        return super().main(*args, **kwargs)
+
+
+@click.command(cls=_TolerantOutputCommand)
 @click.option(
     "--platform",
     type=click.Choice(PLATFORMS),

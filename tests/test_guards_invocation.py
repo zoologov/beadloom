@@ -67,6 +67,11 @@ from beadloom.application.guards.config import GuardExclusion
 from beadloom.application.guards.contract import Guard, GuardProbes
 from beadloom.application.guards.firing import read_firings
 from beadloom.services.cli import main
+from tests.filesystem_names import (
+    UNENCODABLE_FRAGMENT,
+    as_the_process_receives,
+    filesystem_can_name,
+)
 
 _SRC = Path(__file__).resolve().parents[1] / "src" / "beadloom"
 _COMMAND_MODULE = _SRC / "services" / "commands" / "guard.py"
@@ -930,7 +935,12 @@ class TestControlLeavesTheBoundaryPathInExactlyOnePlace:
             ("a lone dash", "-"),
             ("a newline", "\n"),
             ("4 KiB of text", "x" * 4096),
-            ("a non-ascii name", "日本語-ø"),
+            # As argv would deliver it: a terminal sends BYTES and CPython
+            # decodes them with the filesystem encoding, so on an ASCII image
+            # this arrives surrogate-escaped rather than as real Japanese. The
+            # str form cannot reach a real invocation at all, and feeding it made
+            # the corpus assert a refusal production cannot produce (BDL-061.42).
+            ("a non-ascii name", as_the_process_receives("日本語-ø")),
             ("an existing file", str(a_file)),
             ("an existing directory", str(a_dir)),
             ("a path that does not exist", str(tmp_path / "nowhere")),
@@ -1778,7 +1788,15 @@ class TestTheShapeIsJudgedBeforeAnythingIsRemoved:
 
         payload = json.loads(result.output)
         exclusion = GuardExclusion(path="src/*.py", reason="r", until="u")
-        assert payload["outcome"] == "block", f"{label}: {payload}"
+        if not filesystem_can_name(f"src/app.py{suffix}"):
+            # Where the filesystem cannot spell the character, the name cannot
+            # exist and the shape gate refuses the target before any exclusion is
+            # consulted. Still "guarded, not exempted" — which is the claim — and
+            # the matcher assertion below is unaffected (BDL-061.42).
+            assert payload["outcome"] == "error", f"{label}: {payload}"
+            assert UNENCODABLE_FRAGMENT in payload["why"], payload["why"]
+        else:
+            assert payload["outcome"] == "block", f"{label}: {payload}"
         assert exclusion.matches(f"src/app.py{suffix}") is False
 
     def test_the_exclusion_matcher_stops_at_the_end_of_the_path(self) -> None:

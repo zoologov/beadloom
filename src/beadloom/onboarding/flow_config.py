@@ -321,6 +321,46 @@ def detect_stack(project_root: Path) -> tuple[str, ...]:
     return tuple(sorted(found))
 
 
+def persist_flow_config(project_root: Path, config: FlowConfig) -> Path | None:
+    """Write ``config`` to ``.beadloom/flow.yml`` — only when there is none.
+
+    A scaffold used to compose every artifact from a config it resolved in
+    memory and never wrote down, so ``config-check`` took its no-``flow.yml``
+    branch, expected the plain vendored role files, and reported four errors on
+    an untouched repository (BDL-UX #187). The command's own closing advice
+    pointed at that check, and the remediation it printed named the command the
+    adopter had just run.
+
+    Returns the path written, or ``None`` when a config already exists. An
+    existing ``flow.yml`` is **never** rewritten: it is the adopter's policy
+    file — ``language`` and ``overlays.suppress`` have no flag and live only
+    there — and a scaffold that overwrote it would be the data loss BDL-UX #186
+    ended for the role adapters.
+    """
+    path = project_root / FLOW_CONFIG_RELPATH
+    if path.is_file():
+        return None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    body = yaml.safe_dump(
+        {
+            "tools": list(config.tools),
+            "architecture": [config.architecture],
+            "stack": list(config.stack),
+            "quality": list(config.quality),
+            "language": config.language,
+        },
+        sort_keys=False,
+        allow_unicode=True,
+    )
+    header = (
+        "# Beadloom agentic-flow configuration — the selection every composed\n"
+        "# artifact is built from. Written once by `beadloom setup-agentic-flow`\n"
+        "# from what it detected; yours to edit, never rewritten.\n"
+    )
+    path.write_text(header + body, encoding="utf-8")
+    return path
+
+
 def resolve_flow_config(
     project_root: Path,
     *,

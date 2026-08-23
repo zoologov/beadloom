@@ -43,6 +43,11 @@ from beadloom.application.guards.firing import read_firings
 from beadloom.application.guards.models import GuardOutcome
 from beadloom.application.guards.paths import PathScope, rejection_reason, resolve_edit_path
 from beadloom.services.cli import main
+from tests.filesystem_names import (
+    UNENCODABLE_FRAGMENT,
+    filesystem_can_name,
+    unnameable_reason,
+)
 
 _SPEC = (
     Path(__file__).resolve().parents[1]
@@ -185,9 +190,22 @@ class TestTheAcceptedShapeAgreesWithTheSpec:
         ],
     )
     def test_a_target_the_spec_accepts_is_not_refused(self, tmp_path, label, raw) -> None:
-        """A refusal wider than the document breaks work nobody agreed to break."""
+        """A refusal wider than the document breaks work nobody agreed to break.
+
+        The SPEC's last clause — "encodable for this filesystem" — makes the
+        accepted SET a property of the image, so four of these rows (the
+        Cyrillic name, the emoji, the look-alike separator, the homoglyph
+        directory) are accepted where the filesystem can spell them and refused
+        where it cannot. Both answers are the document; the row asserts the one
+        that is true here rather than the one a UTF-8 machine gives
+        (BDL-061.42 measured the difference on the ``tests-locale`` legs).
+        """
         resolved = resolve_edit_path(raw, tmp_path)
 
+        if not filesystem_can_name(raw):
+            assert resolved.scope is PathScope.MALFORMED, unnameable_reason(raw)
+            assert UNENCODABLE_FRAGMENT in rejection_reason(raw), rejection_reason(raw)
+            return
         assert resolved.scope is not PathScope.MALFORMED, f"{label}: {resolved.rejection}"
         assert rejection_reason(raw) == "", label
 
@@ -313,9 +331,19 @@ class TestTheAcceptedShapeAgreesWithTheSpec:
         terminal control sequence is already outside the shape.
         """
         root = _project(tmp_path, _BLOCKING_WITH_EXCLUSION)
+        target = "docs/\u202egpj.txt"
 
-        verdict = _verdict(root, "docs/\u202egpj.txt")
+        verdict = _verdict(root, target)
 
+        if not filesystem_can_name(target):
+            # Where the filesystem cannot spell the name it never reaches the
+            # display path at all: the shape gate refuses it first and the echo
+            # is the bounded ``repr``, so the override character cannot reorder
+            # anything a human reads. The safer half of the same property, and
+            # the answer this image genuinely gives (BDL-061.42).
+            assert UNENCODABLE_FRAGMENT in verdict.why, verdict.why
+            assert "\u202e" not in verdict.why, unnameable_reason(target)
+            return
         assert "\u202e" in verdict.why
 
     def test_every_clause_of_the_spec_sentence_is_enforced_by_the_code(self) -> None:
@@ -392,9 +420,21 @@ class TestTheStripHappensBeforeTheShapeIsJudged:
     def test_unicode_whitespace_names_the_file_it_actually_names(
         self, tmp_path, label, char
     ) -> None:
-        """These name real, creatable files that differ from the stripped one."""
-        resolved = resolve_edit_path(f"src/app.py{char}", tmp_path)
+        """These name real, creatable files that differ from the stripped one.
 
+        "Creatable" is the load-bearing word and it is ambient: on an image whose
+        filesystem encoding cannot spell the character, no such file can exist, so
+        the shape gate refuses the target instead. What the row is actually about
+        — that the character is never silently REMOVED — holds in both worlds, and
+        is asserted in both (BDL-061.42).
+        """
+        target = f"src/app.py{char}"
+        resolved = resolve_edit_path(target, tmp_path)
+
+        if not filesystem_can_name(target):
+            assert resolved.scope is PathScope.MALFORMED, unnameable_reason(target)
+            assert UNENCODABLE_FRAGMENT in resolved.rejection, resolved.rejection
+            return
         assert resolved.scope is PathScope.INSIDE, label
         assert resolved.relative == f"src/app.py{char}", f"{label}: {resolved.relative!r}"
 
@@ -417,9 +457,17 @@ class TestTheStripHappensBeforeTheShapeIsJudged:
         is guarded. Both are the over-guarding direction, with a stated reason.
         """
         root = _project(tmp_path, _BLOCKING_EXCLUDING_TOP_LEVEL_PY)
+        target = f"src/app.py{suffix}"
 
-        verdict = _verdict(root, f"src/app.py{suffix}")
+        verdict = _verdict(root, target)
 
+        if not filesystem_can_name(target):
+            # The whitespace rows name a DIFFERENT file only where the filesystem
+            # can spell it; where it cannot, the shape gate refuses the target
+            # first. `error` rather than `block`, same exit code, and the row's
+            # own claim — no row reaches `skip`, and the pattern is not quoted at
+            # a file it does not name — is asserted either way (BDL-061.42).
+            outcome = GuardOutcome.ERROR
         assert verdict.outcome is outcome, f"{label}: {verdict.why}"
         assert verdict.exit_code == exit_code, label
         assert "src/*.py" not in verdict.why, label
@@ -1206,6 +1254,14 @@ class TestTheResidualsTheFixNamed:
 
         verdict = _verdict(root, raw)
 
+        if not filesystem_can_name(raw):
+            # A homoglyph the filesystem cannot spell is refused before any
+            # exclusion is consulted. The claim under test — the exclusion stops
+            # applying, it does not widen — holds in the over-guarding direction
+            # here too, which is what this asserts (BDL-061.42).
+            assert verdict.outcome is GuardOutcome.ERROR, f"{label}: {verdict.why}"
+            assert UNENCODABLE_FRAGMENT in verdict.why, verdict.why
+            return
         assert verdict.outcome is GuardOutcome.BLOCK, f"{label}: {verdict.why}"
 
     @pytest.mark.parametrize(
@@ -1320,6 +1376,13 @@ class TestTheAdversarialTable:
         root = _project(tmp_path / "project", _BLOCKING_WITH_EXCLUSION)
         (root / "src").mkdir()
         supplied = path.format(name=root.name) if "{name}" in path else path
+        if not filesystem_can_name(supplied):
+            # The table's verdicts are written for a filesystem that can spell
+            # every row. Where this image cannot, the shape gate refuses the
+            # target before any exclusion or check applies, so the row's verdict
+            # is `error`/2 — the same table read on a different machine, stated
+            # here rather than pinned to the author's (BDL-061.42).
+            outcome, exit_code = "error", 2
 
         result = _cli(
             ["guard", "bead-claimed", "--project", str(root), "--context", f"path={supplied}"]

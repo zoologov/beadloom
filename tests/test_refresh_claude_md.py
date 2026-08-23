@@ -141,8 +141,12 @@ class TestRenderProjectInfoSection:
 
         assert isinstance(result, str)
         assert len(result) > 0
-        # Version comes from the public resolver — assert the observable line.
-        assert f"**Current version:** {get_actual_version()}" in result
+        # The version is the one THIS project declares. Asserting
+        # `get_actual_version()` here is what let BDL-UX #183 live: it returns
+        # Beadloom's own `__version__`, so the test agreed with the renderer
+        # about a fact neither had read from the project.
+        assert "**Current version:** 1.0.0" in result
+        assert get_actual_version() not in result
 
     def test_includes_packages(self, tmp_path: Path) -> None:
         (tmp_path / "pyproject.toml").write_text(
@@ -181,8 +185,9 @@ class TestRefreshClaudeMd:
 
         assert "project-info" in changed
         updated = claude_md.read_text()
-        # The rendered section carries the real resolved version (observable).
-        assert get_actual_version() in updated
+        # The rendered section carries the version THIS project declares.
+        assert "- **Current version:** 2.0.0" in updated
+        assert get_actual_version() not in updated
         # Markers preserved
         assert "<!-- beadloom:auto-start project-info -->" in updated
         assert "<!-- beadloom:auto-end -->" in updated

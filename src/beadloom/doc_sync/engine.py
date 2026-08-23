@@ -923,6 +923,45 @@ def check_reference_drift(
     return results
 
 
+def describe_reference_doc(
+    conn: sqlite3.Connection,
+    doc_path: str | None,
+    project_root: Path,
+) -> dict[str, Any] | None:
+    """Read-only report on one reference doc: its watches and its drift status.
+
+    The counterpart :func:`mark_reference_synced` needs so that ``sync-update
+    <doc> --check`` can answer without writing. ``--check`` used to reach the
+    re-baselining branch before its own guard, so the flag whose contract is
+    "tell me, do not change anything" cleared the drift it was asked to describe
+    and the next ``sync-check`` read clean for a reason nobody recorded
+    (BDL-UX #189, the same defect as #147).
+
+    Returns ``None`` when *doc_path* is not a tracked reference doc — the caller
+    distinguishes "not this kind of thing" from "this thing, and here it is".
+    Nothing here executes an ``UPDATE``, and the connection is not committed.
+    """
+    from beadloom.doc_sync.surface import aggregate_hash
+
+    row = conn.execute(
+        "SELECT doc_path, watches, aggregate_hash FROM reference_state "
+        "WHERE doc_path = ?",
+        (doc_path,),
+    ).fetchone()
+    if row is None:
+        return None
+    watches = [s for s in row["watches"].split(",") if s]
+    current = aggregate_hash(watches, conn, project_root)
+    drifted = current != row["aggregate_hash"]
+    return {
+        "doc_path": row["doc_path"],
+        "watches": watches,
+        "status": "surface_drift" if drifted else "ok",
+        "baseline_hash": row["aggregate_hash"],
+        "current_hash": current,
+    }
+
+
 def mark_reference_synced(
     conn: sqlite3.Connection,
     doc_path: str | None,

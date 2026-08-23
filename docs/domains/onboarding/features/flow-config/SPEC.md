@@ -113,12 +113,34 @@ Module `src/beadloom/onboarding/flow_config.py`:
 - `load_flow_config_or_default(project_root, *, default)` → `FlowConfig`
 - `resolve_flow_config(project_root, *, tools, architecture, stack)` → `FlowConfig`
 - `detect_stack(project_root)` → `tuple[str, ...]`
+- `persist_flow_config(project_root, config)` → `Path | None`
 - `SUPPORTED_TOOLS` / `SUPPORTED_ARCHITECTURES` / `SUPPORTED_STACKS` /
   `SUPPORTED_QUALITY` / `DEFAULT_LANGUAGE`
 
 `resolve_flow_config()` carries `language` and `suppressions` through from
 `flow.yml` verbatim: they are project policy, not a per-run choice, so they have
 no overriding flag.
+
+### The resolved selection is written down (BDL-UX #187)
+
+`persist_flow_config()` writes the resolved config to `.beadloom/flow.yml` on a
+first scaffold, and **never** over an existing one — that file is the adopter's
+policy, and `language` / `overlays.suppress` have no flag and live only there.
+
+Before this, `setup-agentic-flow` composed every artifact from a selection it
+resolved in memory and never recorded. Measured on a fresh TypeScript project:
+`init` → `setup-agentic-flow` → `config-check` exited **1** with four errors,
+one per role adapter, because the no-`flow.yml` branch expects the plain
+vendored role files and the composed ones are not that. The command's own
+closing advice points at `config-check`, and following it produced four errors
+on an untouched repository — with a remediation that read *"Add a flow.yml
+(`beadloom setup-agentic-flow`)"*, the command the reader had just run.
+
+Persisting the selection also closed a divergence found while fixing it:
+`scaffold()` re-resolved the config from disk **without the CLI flags**, so
+`setup-agentic-flow --architecture fsd` composed the role adapters as `fsd` and
+the slash commands and `CLAUDE.md` as `ddd`. The command's resolved config is
+now threaded into `scaffold(config=…)`.
 
 ## Testing
 

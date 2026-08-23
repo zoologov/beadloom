@@ -95,15 +95,27 @@ jobs:
   # ---------------------------------------------------------------------- #
   # tests-locale — the ENVIRONMENT DIMENSION (BDL-061.38).
   #
-  # BOTH ROWS ARE EXPECTED RED until BDL-061.42 lands: measured on the final
-  # S2 tree, 100 locale-attributable failures under ASCII and 76 under the
-  # 8-bit locale, from text I/O written without an explicit encoding. THE VALUE
-  # IS THE DELTA BETWEEN LEGS, NEVER ANY LEG'S COLOUR — a green here would mean
-  # the dimension found nothing, and the way to make it green today is to pin
-  # UTF-8, which is the one thing this file may not do. The two check-runs are
-  # therefore NOT yet part of main's live branch protection (7 required
-  # contexts, not the 9 that `beadloom setup-branch-protection` would apply);
-  # the sequencing is stated in docs/services/cli.md next to that command.
+  # BOTH ROWS ARE EXPECTED GREEN since BDL-061.42. They were not: the first run
+  # measured 108 locale-attributable failures under ASCII and 83 under the 8-bit
+  # locale (an earlier count of 100/76 was taken on a smaller tree). THE VALUE IS
+  # THE DELTA BETWEEN LEGS, NEVER ANY LEG'S COLOUR — this green means the delta
+  # against the UTF-8 leg is 0 and 0, re-measured on the fixed tree, and it does
+  # NOT mean the dimension found nothing. The one way to make these legs green
+  # dishonestly is to pin UTF-8, which is the single thing this file may not do;
+  # tests/test_ci_locale_dimension.py fails the suite if anyone tries.
+  #
+  # WHAT IT FOUND, so a future reader knows the cost was repaid: one product call
+  # site that could not write a git hook at all on a non-UTF-8 image, four
+  # subprocess seams decoding in the image's locale, a federation export that
+  # raised UnicodeEncodeError on a project path, and — only on the 8-bit row,
+  # never on the ASCII one — a CLI whose `--help` exited 1 and whose passing
+  # guard verdict vanished, because CPython gives the C locale a tolerant stdout
+  # handler and a named 8-bit locale a strict one.
+  #
+  # The two check-runs are NOT yet part of main's live branch protection (7
+  # required contexts, not the 9 that `beadloom setup-branch-protection` would
+  # apply). Now that both rows have been measured green they can be, by running
+  # that command once; the sequencing is stated in docs/services/cli.md next to it.
   #
   # Runs the SAME whole suite as `tests`, changing exactly ONE thing: the
   # locale. The value is in the DIFFERENCE between this leg and the `tests`

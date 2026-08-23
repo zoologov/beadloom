@@ -13,6 +13,7 @@ provenance (:func:`resolve_repo_name` / :func:`resolve_landscape`).
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -247,7 +248,7 @@ def current_commit_sha(project_root: Path) -> str | None:
 
 def _is_git_toplevel(project_root: Path) -> bool:
     """True when *project_root* is the toplevel of its own git repository."""
-    toplevel = _run_git(project_root, "rev-parse", "--show-toplevel")
+    toplevel = _git_path(project_root, "rev-parse", "--show-toplevel")
     if toplevel is None:
         return False
     try:
@@ -265,22 +266,52 @@ def _is_git_toplevel(project_root: Path) -> bool:
 #: (#103) for a dishonest reason -- silently dropping its commit provenance;
 #: an ambient ascii raised ``UnicodeDecodeError`` past the handler.
 #:
-#: ``surrogateescape`` is not a default here but the *matching* rule: it is what
-#: ``os.fsdecode`` uses, so a path git prints round-trips to exactly the bytes
-#: the filesystem holds and both sides of that comparison are decoded alike.
+#: ``surrogateescape`` is not a default here but the *matching* rule: it keeps a
+#: byte no codec can read, rather than raising or inventing a character.
+#:
+#: CORRECTED BY BDL-061.42, because the sentence this note used to carry --
+#: "it is what ``os.fsdecode`` uses, so a path git prints round-trips ... and
+#: both sides of that comparison are decoded alike" -- is true only where the
+#: filesystem encoding IS UTF-8, which is the one condition the locale legs
+#: exist to remove. MEASURED on a real ASCII-locale image with the repo at
+#: ``.../проект``: this codec decoded the toplevel into real Cyrillic while
+#: Python's own ``project_root`` held the surrogate-escaped form of the same
+#: bytes, and ``Path(toplevel).resolve()`` raised ``UnicodeEncodeError`` out of
+#: ``beadloom export`` -- past the ``except OSError`` below, which cannot see it
+#: because the raise is not in this function. A path is therefore read with
+#: :func:`_git_path` instead: its codec is the FILESYSTEM's, which is the only
+#: rule under which both sides of that comparison genuinely agree.
 _GIT_CODEC = "utf-8"
 _GIT_ERRORS = "surrogateescape"
 
 
+def _git_path(cwd: Path, *args: str) -> str | None:
+    """Run ``git <args>``; read the answer as a PATH, not as text.
+
+    The distinction is the whole point: a sha or a remote URL is text whose
+    contract is UTF-8, while ``rev-parse --show-toplevel`` prints a name the
+    filesystem holds as bytes and Python must be able to hand back to the
+    filesystem. ``os.fsdecode`` is exactly that rule -- the same one CPython
+    applied to ``project_root`` when it decoded argv -- so the two sides of
+    :func:`_is_git_toplevel`'s comparison are decoded by one rule on every image.
+    """
+    raw = _run_git_bytes(cwd, *args)
+    return None if raw is None else os.fsdecode(raw).strip()
+
+
 def _run_git(cwd: Path, *args: str) -> str | None:
     """Run ``git <args>`` in *cwd*; return stripped stdout, or ``None`` on failure."""
+    raw = _run_git_bytes(cwd, *args)
+    return None if raw is None else raw.decode(_GIT_CODEC, _GIT_ERRORS).strip()
+
+
+def _run_git_bytes(cwd: Path, *args: str) -> bytes | None:
+    """The single git seam: bytes out, so each caller states its own decode rule."""
     try:
         result = subprocess.run(  # noqa: S603
             ["git", *args],  # noqa: S607
             cwd=cwd,
             capture_output=True,
-            encoding=_GIT_CODEC,
-            errors=_GIT_ERRORS,
         )
     except OSError:
         # ``OSError`` alone, and that is the fix rather than a tidy-up: the
@@ -293,4 +324,4 @@ def _run_git(cwd: Path, *args: str) -> str | None:
         return None
     if result.returncode != 0:
         return None
-    return result.stdout.strip()
+    return result.stdout

@@ -108,6 +108,17 @@ class ConfigDrift:
         finding it will decline: the output used to promise a hand-edited file
         "will NOT be rewritten" and then close by recommending the command that
         rewrote it (BDL-UX #186).
+    weakened_from:
+        The severity this finding would carry if the evidence existed — set only
+        when Beadloom *reduced* the verdict for lack of provenance, ``None``
+        otherwise. CONTEXT's constraint runs one way ("no adopter's green
+        project turns red on upgrade"); review `.11` measured the other
+        direction, where a repo that used to block starts passing because a
+        newer release cannot account for its files. A downgrade is the worse of
+        the two: a red is loud and correlates with the release, while a
+        downgrade is silent — the project was correctly failing, now passes, and
+        the evidence it ever failed is gone. So the reduction is a finding in
+        its own right and travels with the finding it reduced.
     """
 
     file: str
@@ -115,6 +126,7 @@ class ConfigDrift:
     severity: str = "error"
     remediation: str | None = None
     fixable: bool = True
+    weakened_from: str | None = None
 
 
 @dataclass(frozen=True)
@@ -222,6 +234,17 @@ def _claude_md_drift(project_root: Path) -> ConfigDrift | None:
     """
     claude_md_path = project_root / ".claude" / "CLAUDE.md"
     if not claude_md_path.is_file():
+        return None
+
+    try:
+        resolve_flow_config(project_root)
+    except FlowConfigError:
+        # The regions are rendered FROM the flow config (the declared stack and
+        # architecture, since BDL-UX #183), so a malformed flow.yml makes them
+        # differ for a reason that is not their own. Reported by
+        # :func:`_flow_config_drift` at `error`; naming the symptom here as a
+        # second independent finding would double-count one root cause — the
+        # same reason :func:`_claude_md_body_drift` returns early.
         return None
 
     changed = refresh_claude_md(project_root, dry_run=True)
@@ -338,6 +361,7 @@ def _unverifiable_body_drift(
             "body could not be checked"
         ),
         severity="warn",
+        weakened_from="error",
         remediation=(
             f"run `beadloom setup-agentic-flow` to compose it (your additions "
             f"belong in {overlay}, which composes after the shipped core); if "
@@ -416,6 +440,7 @@ def _state_drift(
             "hand edit cannot be told apart from an upgrade"
         ),
         severity="warn",
+        weakened_from="error",
         remediation=(
             f"review it; move anything project-specific to {overlay}, then "
             "re-run `beadloom setup-agentic-flow --force` to adopt the "
@@ -529,6 +554,7 @@ def _missing_file_drifts(
                 )
             ),
             severity="error" if relpath in manifest else "warn",
+            weakened_from=None if relpath in manifest else "error",
             remediation="run `beadloom setup-agentic-flow` to restore it",
         )
         for relpath in scaffold_state.missing
@@ -556,6 +582,7 @@ def _flow_manifest_drift(
             "stamp alone until it is restored"
         ),
         severity="warn",
+        weakened_from="error",
         remediation=(
             "commit `.beadloom/flow-manifest.json` — it is generated, but it is "
             "the record of what Beadloom wrote and belongs in git. Re-run "

@@ -51,7 +51,11 @@ from beadloom.onboarding.composer import (
     compose,
     templates_dir,
 )
-from beadloom.onboarding.flow_config import FlowConfig, resolve_flow_config
+from beadloom.onboarding.flow_config import (
+    FlowConfig,
+    persist_flow_config,
+    resolve_flow_config,
+)
 from beadloom.onboarding.flow_manifest import (
     ArtifactState,
     classify,
@@ -103,6 +107,11 @@ class ScaffoldResult:
     #: Hand-edited vendored files that were left alone, with where to move the
     #: edit so it survives (BDL-UX #137, #152).
     migration_notes: list[str] = field(default_factory=list)
+    #: ``.beadloom/flow.yml`` when this run wrote it (a first scaffold), ``None``
+    #: when the project already declared one. Naming it matters: it is the file
+    #: every composed artifact is built from, and it used to be resolved in
+    #: memory and never recorded (BDL-UX #187).
+    flow_config_written: Path | None = None
 
 
 def templates_root() -> Path:
@@ -341,7 +350,11 @@ def _scaffold_claude_md(
 
 
 def scaffold(
-    project_root: Path, *, force: bool = False, include_agents: bool = True
+    project_root: Path,
+    *,
+    force: bool = False,
+    include_agents: bool = True,
+    config: FlowConfig | None = None,
 ) -> ScaffoldResult:
     """Scaffold the agentic flow into ``project_root``.
 
@@ -359,7 +372,13 @@ def scaffold(
     the plain BDL-048 byte-identical scaffold path.
     """
     result = ScaffoldResult()
-    config = resolve_flow_config(project_root)
+    # A caller that already resolved the config (the CLI, with its flags) passes
+    # it in. Re-resolving from disk here ignored `--architecture`/`--stack`, so a
+    # flagged run composed the ROLE adapters for one selection and the commands +
+    # CLAUDE.md for another (BDL-UX #187, found while closing it).
+    if config is None:
+        config = resolve_flow_config(project_root)
+    result.flow_config_written = persist_flow_config(project_root, config)
     result.orphans = orphaned_flow_files(project_root)
     if include_agents:
         agents_dir = project_root / ".claude" / "agents"

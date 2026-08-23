@@ -109,7 +109,7 @@ bd close <bead-id> --suggest-next
 ## 0.1 Project: beadloom
 
 <!-- beadloom:auto-start project-info -->
-- **Stack:** Python 3.10+, SQLite, Click, Rich, tree-sitter
+- **Stack:** Python (>=3.10) — click, rich, pyyaml, tree-sitter, tree-sitter-python, mcp
 - **Tests:** pytest + pytest-cov
 - **Linter/formatter:** ruff (lint + format)
 - **Type checking:** mypy --strict
@@ -130,7 +130,7 @@ bd close <bead-id> --suggest-next
 | Need templates | `/templates` | PRD, RFC, CONTEXT, PLAN, ACTIVE, BRIEF |
 | Create checkpoint | `/checkpoint` | Format, rules |
 
-**Role subagents (via the `Agent` tool — see §0.0):** `dev` (TDD implementation), `test` (pytest, coverage), `review` (quality, read-only), `tech-writer` (doc refresh). Defined in `.claude/agents/<role>.md`. For a single small bead without orchestration, the main loop adopts a role inline by following its `.claude/agents/<role>.md`.
+**Role subagents (via the `Agent` tool — see §0.0):** `dev` (TDD implementation), `test` (tests, coverage), `review` (quality, read-only), `tech-writer` (doc refresh). Defined in `.claude/agents/<role>.md`. For a single small bead without orchestration, the main loop adopts a role inline by following its `.claude/agents/<role>.md`.
 
 **Rule:** Invoke a slash skill when you need detailed instructions; launch a role subagent (or follow its agent file inline) to do role work.
 
@@ -175,7 +175,7 @@ bd dep add <id> <depends-on-id>
 - `bd comments add` — for checkpoints (preserves history)
 - `bd update --append-notes` — for notes
 - NEVER work on a task without `--claim`
-- ALWAYS close via `bd close`; `--suggest-next` lists *candidate* unblocked beads — **confirm with `bd ready`** (it may list still-blocked beads; verified bd 1.0.4 quirk, see BDL-UX-Issues #97)
+- ALWAYS close via `bd close`; `--suggest-next` lists *candidate* unblocked beads — **confirm with `bd ready`** (it may list still-blocked beads; verified against bd 1.0.4)
 - `--session "$CLAUDE_SESSION_ID"` on close is optional (audit trail; only if the env var is set)
 
 ---
@@ -205,7 +205,7 @@ beadloom diff --since <git-ref>  # graph changes vs a git ref (exit 1 = changes)
 beadloom snapshot save           # snapshot architecture state; `snapshot compare <a> <b>` to diff
 beadloom link <ref-id> <url>     # link a graph node to an external tracker issue (GitHub/Jira)
 
-# Cross-repo federation (F1 / BDL-037)
+# Cross-repo federation (hub + satellites)
 beadloom export [--out FILE]     # deterministic federation artifact (schema v1: graph + lifecycle + AMQP contract meta)
 beadloom federate <exports...>   # hub: aggregate >=2 satellite exports -> federated graph (drift verdicts + staleness)
 

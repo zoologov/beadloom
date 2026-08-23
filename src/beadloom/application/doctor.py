@@ -17,6 +17,11 @@ if TYPE_CHECKING:
 
 from beadloom.infrastructure.mcp_tools import MCP_TOOL_CATALOG
 from beadloom.infrastructure.surface_registry import get_cli_group
+from beadloom.onboarding.scanner.project_facts import (
+    detect_project_version,
+    detect_source_packages,
+    manifest_text,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -261,6 +266,9 @@ _STACK_RE = re.compile(r"\*\*Stack:\*\*\s*(.+)")
 # Pattern: **Tests:** <text>
 _TESTS_RE = re.compile(r"\*\*Tests:\*\*\s*(.+)")
 
+# Pattern: a word in a prose claim (for matching a named tool against a manifest).
+_WORD_RE = re.compile(r"[A-Za-z][\w.-]*")
+
 
 def _extract_version_claim(text: str) -> str | None:
     """Extract version from CLAUDE.md (pattern: ``**Current version:** X.Y.Z``)."""
@@ -329,18 +337,6 @@ def _get_actual_mcp_tool_count() -> int:
     return len(MCP_TOOL_CATALOG)
 
 
-def _get_actual_packages(project_root: Path) -> set[str]:
-    """Scan ``src/beadloom/`` for DDD package directories (those with ``__init__.py``)."""
-    src_dir = project_root / "src" / "beadloom"
-    if not src_dir.is_dir():
-        return set()
-    packages: set[str] = set()
-    for child in src_dir.iterdir():
-        if child.is_dir() and (child / "__init__.py").is_file():
-            packages.add(child.name)
-    return packages
-
-
 def _check_agent_instructions(project_root: Path) -> list[Check]:
     """Check agent instruction files for factual drift.
 
@@ -378,10 +374,23 @@ def _check_agent_instructions(project_root: Path) -> list[Check]:
         return results
 
     # --- 1. Version check (from CLAUDE.md) ---
+    # Against the version THIS project declares — not `get_actual_version()`,
+    # which returns Beadloom's own `__version__` and is right about Beadloom
+    # (BDL-UX #92) and about nobody else (BDL-UX #183).
     claimed_version = _extract_version_claim(claude_text)
     if claimed_version is not None:
-        actual_version = get_actual_version()
-        if claimed_version == actual_version:
+        actual_version = detect_project_version(project_root)
+        if actual_version is None:
+            results.append(
+                Check(
+                    "agent_instructions_version",
+                    Severity.INFO,
+                    f"CLAUDE.md claims version {claimed_version}; this project "
+                    "declares none in pyproject.toml, package.json or Cargo.toml "
+                    "— not verified.",
+                )
+            )
+        elif claimed_version == actual_version:
             results.append(
                 Check(
                     "agent_instructions_version",
@@ -395,14 +404,14 @@ def _check_agent_instructions(project_root: Path) -> list[Check]:
                     "agent_instructions_version",
                     Severity.WARNING,
                     f"Version drift: CLAUDE.md claims {claimed_version}, "
-                    f"actual is {actual_version}",
+                    f"this project declares {actual_version}",
                 )
             )
 
     # --- 2. Packages check (from CLAUDE.md) ---
     claimed_packages = _extract_package_claims(claude_text)
     if claimed_packages:
-        actual_packages = _get_actual_packages(project_root)
+        actual_packages = detect_source_packages(project_root)
         missing = claimed_packages - actual_packages
         extra = actual_packages - claimed_packages
         if missing or extra:
@@ -482,52 +491,102 @@ def _check_agent_instructions(project_root: Path) -> list[Check]:
         )
 
     # --- 5. Stack check (from CLAUDE.md) ---
-    stack_match = _STACK_RE.search(claude_text)
-    if stack_match:
-        stack_claim = stack_match.group(1).lower()
-        # Verify key stack keywords against actual project
-        expected_keywords = {"python", "sqlite"}
-        found = {kw for kw in expected_keywords if kw in stack_claim}
-        if found == expected_keywords:
-            results.append(
-                Check(
-                    "agent_instructions_stack",
-                    Severity.OK,
-                    f"Stack claim includes expected keywords: {', '.join(sorted(found))}.",
-                )
-            )
-        else:
-            missing_kw = expected_keywords - found
-            results.append(
-                Check(
-                    "agent_instructions_stack",
-                    Severity.WARNING,
-                    f"Stack claim missing expected keywords: {', '.join(sorted(missing_kw))}",
-                )
-            )
+    results.extend(_check_stack_claim(claude_text, project_root))
 
     # --- 6. Test framework check (from CLAUDE.md) ---
-    tests_match = _TESTS_RE.search(claude_text)
-    if tests_match:
-        tests_claim = tests_match.group(1).lower()
-        if "pytest" in tests_claim:
-            results.append(
-                Check(
-                    "agent_instructions_test_framework",
-                    Severity.OK,
-                    "Test framework claim includes pytest.",
-                )
-            )
-        else:
-            results.append(
-                Check(
-                    "agent_instructions_test_framework",
-                    Severity.WARNING,
-                    f"Test framework claim does not mention pytest: {tests_match.group(1)}",
-                )
-            )
+    results.extend(_check_test_framework_claim(claude_text, project_root))
 
     return results
+
+
+def _check_stack_claim(claude_text: str, project_root: Path) -> list[Check]:
+    """Audit the ``**Stack:**`` bullet against the stack THIS project declares.
+
+    The expected keyword set used to be the literal ``{"python", "sqlite"}`` —
+    Beadloom's own stack, applied to everybody's file. A TypeScript adopter was
+    told their correct stack line was "missing expected keywords".
+    """
+    stack_match = _STACK_RE.search(claude_text)
+    if not stack_match:
+        return []
+    declared = _declared_stack(project_root)
+    if not declared:
+        return [
+            Check(
+                "agent_instructions_stack",
+                Severity.INFO,
+                "Stack claim present; this project declares no `stack:` in "
+                ".beadloom/flow.yml — not verified.",
+            )
+        ]
+    claim = stack_match.group(1).lower()
+    missing = sorted(name for name in declared if name.lower() not in claim)
+    if not missing:
+        return [
+            Check(
+                "agent_instructions_stack",
+                Severity.OK,
+                f"Stack claim covers the declared stack: {', '.join(sorted(declared))}.",
+            )
+        ]
+    return [
+        Check(
+            "agent_instructions_stack",
+            Severity.WARNING,
+            f"Stack claim does not mention the declared stack: {', '.join(missing)}",
+        )
+    ]
+
+
+def _check_test_framework_claim(claude_text: str, project_root: Path) -> list[Check]:
+    """Audit the ``**Tests:**`` bullet against the project's own manifests.
+
+    The old check asserted the literal string ``pytest``, so every non-Python
+    adopter's correct claim was a warning. A framework is now verified the only
+    way that generalises: it must appear where the project declares its
+    dependencies.
+    """
+    tests_match = _TESTS_RE.search(claude_text)
+    if not tests_match:
+        return []
+    claim = tests_match.group(1)
+    manifests = manifest_text(project_root)
+    if manifests is None:
+        return [
+            Check(
+                "agent_instructions_test_framework",
+                Severity.INFO,
+                f"Test framework claim {claim!r}; this project has no dependency "
+                "manifest Beadloom can read — not verified.",
+            )
+        ]
+    haystack = manifests.lower()
+    named = [word for word in _WORD_RE.findall(claim.lower()) if len(word) > 2]
+    if any(word in haystack for word in named):
+        return [
+            Check(
+                "agent_instructions_test_framework",
+                Severity.OK,
+                f"Test framework claim is declared by this project: {claim}",
+            )
+        ]
+    return [
+        Check(
+            "agent_instructions_test_framework",
+            Severity.WARNING,
+            f"Test framework claim names nothing this project declares: {claim}",
+        )
+    ]
+
+
+def _declared_stack(project_root: Path) -> tuple[str, ...]:
+    """The ``stack:`` overlays declared in this project's ``flow.yml``."""
+    from beadloom.onboarding.flow_config import load_flow_config
+
+    try:
+        return load_flow_config(project_root).stack
+    except (FileNotFoundError, ValueError):
+        return ()
 
 
 def run_checks(

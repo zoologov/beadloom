@@ -338,6 +338,15 @@ def _build_sync_report(results: list[dict[str, str]]) -> str:
     return "\n".join(lines)
 
 
+#: The codec the installed git hooks are written in. UTF-8 is the hook's own
+#: contract — the templates below carry an em dash, git executes the file as
+#: bytes, and every reader of it (an editor, a diff, the shell's error message)
+#: assumes UTF-8. Left to ``locale.getpreferredencoding(False)`` it was the
+#: image's decision instead, which is a wrong answer in both directions
+#: (BDL-061.42: 30 of the 108 measured ASCII-leg failures came from this one
+#: call site).
+_HOOK_ENCODING = "utf-8"
+
 _HOOK_TEMPLATE_WARN = """\
 #!/bin/sh
 # pre-commit hook managed by beadloom
@@ -543,8 +552,18 @@ def install_hooks(
 
 
 def _write_hook(hook_path: Path, template: str, stat_mod: ModuleType) -> None:
-    """Write an executable git hook (idempotent overwrite)."""
-    hook_path.write_text(template)
+    """Write an executable git hook (idempotent overwrite), always as UTF-8.
+
+    The encoding is stated rather than inherited: the templates above contain an
+    em dash, and ``write_text()`` without ``encoding=`` uses
+    ``locale.getpreferredencoding(False)``. Measured under the locale CI leg
+    (BDL-061.42): on an ASCII image the write RAISES and ``install-hooks`` aborts
+    having written nothing; on an ISO-8859-1 image nothing raises and the byte
+    lands mangled inside an executable script the adopter then keeps. A hook is a
+    file we generate for other programs to read, not prose in the operator's
+    locale, so UTF-8 is its contract.
+    """
+    hook_path.write_text(template, encoding=_HOOK_ENCODING)
     hook_path.chmod(
         hook_path.stat().st_mode | stat_mod.S_IXUSR | stat_mod.S_IXGRP | stat_mod.S_IXOTH
     )
@@ -641,11 +660,14 @@ def _jsonl_is_tracked(project_root: Path) -> bool:
         return False
     try:
         # Fixed argv, no shell; queries the index for the tracked path.
+        # NOT decoded: only the exit status is read below, so `text=True` bought
+        # nothing and cost a codec — under an ASCII image git's own message about
+        # a non-ASCII path made this raise where a boolean was expected. Bytes are
+        # the honest type for an answer nobody reads (BDL-061.42).
         completed = subprocess.run(
             ["git", "ls-files", "--error-unmatch", ".beads/issues.jsonl"],  # noqa: S607
             cwd=project_root,
             capture_output=True,
-            text=True,
             check=False,
         )
     except OSError:
@@ -975,10 +997,31 @@ def sync_update(
 
     if not filtered:
         # No symbol pair matched. The id may instead be a reference doc
-        # (BDL-057 Layer 2) addressed by its doc_path — re-baseline it through
-        # the same path `--yes` uses, so `sync-update docs/architecture.md`
-        # clears surface drift instead of printing "No sync pairs found".
-        from beadloom.doc_sync.engine import mark_reference_synced
+        # (BDL-057 Layer 2) addressed by its doc_path.
+        #
+        # `--check` is answered FIRST. This branch used to re-baseline before
+        # the `check_only` guard below could be reached, so the flag whose whole
+        # contract is "tell me, do not change anything" cleared the very drift it
+        # was asked to describe, and the next `sync-check` read clean for a
+        # reason nobody recorded (BDL-UX #189 — #147's defect in another
+        # command, and #163 reached by accident rather than by choice).
+        from beadloom.doc_sync.engine import (
+            describe_reference_doc,
+            mark_reference_synced,
+        )
+
+        if check_only:
+            report = describe_reference_doc(conn, ref_id, project_root)
+            conn.close()
+            if report is None:
+                click.echo(f"No sync pairs found for {ref_id}.")
+                return
+            marker = "[surface drift]" if report["status"] != "ok" else "[ok]"
+            click.echo(
+                f"  {marker} {report['doc_path']} watches "
+                f"{', '.join(report['watches'])}"
+            )
+            return
 
         ref_docs = mark_reference_synced(conn, ref_id, project_root)
         if ref_docs:

@@ -41,13 +41,58 @@ Regenerates the auto-managed regions of `.claude/CLAUDE.md` between
 returns the names of the regions whose content changed. Two regions are
 rendered:
 
-- **`project-info`** — stack, tests, linter, typing, packages, version, read
-  from the project's own manifest and tree.
+- **`project-info`** — stack, dependencies, tests, linter, typing, packages and
+  version, every one of them read from **the target project's** own manifest,
+  tree and `flow.yml`. A fact that cannot be read is **omitted**, never
+  substituted, and a section with nothing to say prints what it looked for
+  rather than nothing at all.
+
+  This sentence was already in this SPEC while the code did otherwise, which is
+  worth stating plainly. Until BDL-UX #183 the version bullet was
+  `application.doctor.get_actual_version()` — **Beadloom's** `__version__`,
+  correct about Beadloom (BDL-UX #92) and false for every adopter — the
+  architecture line said `DDD packages` whatever the project declared, the stack
+  line matched the project's manifest against Beadloom's own dependency names
+  (`sqlite`, `click`, `rich`, `tree-sitter`) and stated our Python floor as
+  theirs, and the package scan fell back to looking for `src/beadloom/` inside
+  the adopter's tree. Each read correct on this repository by coincidence.
+  :mod:`beadloom.onboarding.scanner.project_facts` now owns every one of those
+  reads, and `tests/adopter_project.py` renders non-Beadloom fixtures so a
+  coincidence cannot pass for a measurement again.
 - **`doc-language`** — the "ALL documents MUST be written in …" sentence,
   derived from `language:` in `.beadloom/flow.yml` (default `en`). The
   scaffolded flow used to state English unconditionally, so a team documenting
   in another language had to override the shipped default in prose
   (BDL-UX #136).
+
+### `project_facts` — what the TARGET project declares about itself
+
+One module, one responsibility: read a fact out of somebody else's project.
+Nothing in it may consult `beadloom.__version__`, our package layout, or
+anything else true of this repository — every value comes from a file under
+`project_root`.
+
+| Function | Reads | Unknown |
+|----------|-------|---------|
+| `detect_project_version(root)` | `pyproject.toml` (`[project]`, `[tool.poetry]`, then a `dynamic` version via `[tool.hatch.version]` / `[tool.setuptools.dynamic]`), `package.json`, `Cargo.toml` | `None` — the bullet is not rendered |
+| `detect_source_packages(root)` | `src/<pkg>/<child>/__init__.py` under the target | empty set |
+| `detect_requires_python(root)` | `requires-python`, verbatim | `None` |
+| `detect_declared_dependencies(root)` | `[project].dependencies` or `package.json` `dependencies`, first six, declared order | empty tuple |
+| `manifest_text(root)` | every readable dependency manifest, concatenated | `None` — "nothing declares this" and "we could not look" are different answers |
+
+A VCS tag is deliberately **not** consulted: a tag is a release marker on a
+commit rather than a statement the project makes about itself, and reading one
+would need the infrastructure layer `onboarding` is forbidden to import.
+
+The same reads back `beadloom doctor`'s audit of an adopter's `CLAUDE.md`.
+Before BDL-UX #183 that audit compared four claims — version, packages, stack,
+test framework — against **Beadloom's** state (`get_actual_version()`, a scan
+for `src/beadloom/`, the literal keyword set `{python, sqlite}` and the literal
+string `pytest`). A TypeScript adopter with a correct file was told their stack
+claim was missing keywords and their test framework was not pytest. Each check
+now reads the project, and a fact the project does not declare is reported
+`INFO … not verified` rather than as drift — *unknown is not zero, and it is not
+a verdict either*.
 
 ### `blank_auto_regions(text)`
 

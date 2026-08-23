@@ -155,6 +155,7 @@ In `warn` mode, violations print warnings but do not block the commit. In `block
 - `build_reference_state(conn: sqlite3.Connection, project_root: Path) -> int` -- (BDL-057 Layer 2) Discover `watches`-annotated reference docs and baseline each one's aggregate surface hash into the `reference_state` table. The baseline is **preserved across reindex** for docs already tracked with the same `watches` set (so accrued surface drift survives a routine reindex, mirroring the symbol-pair fixpoint concern); a fresh baseline is taken only for newly-discovered docs or when the declared `watches` set changes. Docs whose annotation was removed are dropped. Idempotent. Returns the number of reference docs recorded.
 - `check_reference_drift(conn: sqlite3.Connection, project_root: Path) -> list[dict[str, Any]]` -- (BDL-057 Layer 2) Recompute each reference doc's aggregate hash and report drift. Returns one dict per reference doc with `doc_path`, `watches`, `status` (`ok`/`surface_drift`), `reason`, and `severity` (always `warning`). Persists the new status; never affects the `sync-check` exit code.
 - `mark_reference_synced(conn: sqlite3.Connection, doc_path: str | None, project_root: Path, *, all_docs: bool = False) -> int` -- (BDL-057 Layer 2) Re-baseline a reference doc's aggregate hash (or every reference doc when `all_docs`), clearing surface drift. Returns the number of rows re-baselined. (Backs `beadloom sync-update <doc> --yes` / `--all`.)
+- `describe_reference_doc(conn: sqlite3.Connection, doc_path: str | None, project_root: Path) -> dict | None` -- the **read-only** counterpart: a reference doc's `watches` set and its current drift status (`ok` / `surface_drift`), with the baseline and current aggregate hashes. `None` when the path is not a tracked reference doc. Executes no `UPDATE` and does not commit. (Backs `beadloom sync-update <doc> --check`, BDL-UX #189.)
 
 ### Module `src/beadloom/doc_sync/git_baseline.py`
 
@@ -230,7 +231,7 @@ Show sync status and update docs for a ref_id. In interactive mode (default), di
 | Argument/Flag | Description |
 |---------------|----------|
 | `REF_ID` | Optional positional argument; the symbol-pair ref to update, **or** a reference doc's path (e.g. `docs/architecture.md`) to clear its surface drift. Required unless `--all` is used. |
-| `--check` | Only show status, don't open editor. |
+| `--check` | Report only — never write. Holds for a reference doc's path as well as for a symbol-pair ref: the branch that handles a doc path used to be reached *before* this guard, so `--check` re-baselined the doc it was asked to describe and printed `Re-baselined reference doc <path>` (BDL-UX #189, the shape of #147's mutating `lint`). It now prints the doc's `watches` set and its drift status through the read-only `describe_reference_doc`. |
 | `--yes` / `-y` | Non-interactive: re-baseline freshness without an editor or prompt. |
 | `--all` | With `--yes`: re-baseline every currently-stale ref (for the fixpoint loop). Requires `--yes`; mutually exclusive with an explicit `REF_ID`. |
 | `--project` | Project root (default: current directory). |

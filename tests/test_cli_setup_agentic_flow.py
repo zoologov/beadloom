@@ -328,8 +328,11 @@ class TestClaudeMdRegionsPerProject:
         start = text.index("<!-- beadloom:auto-start project-info -->")
         end = text.index("<!-- beadloom:auto-end -->")
         region = text[start:end]
-        assert "Click" in region
-        assert "Rich" in region
+        # Named verbatim as the target's manifest declares them: the renderer
+        # READS the dependency list now instead of matching it against a fixed
+        # vocabulary that happened to be Beadloom's own (BDL-UX #183's sweep).
+        assert "click" in region
+        assert "rich" in region
         # tree-sitter is in Beadloom's stack but NOT the target's deps.
         assert "tree-sitter" not in region
 
@@ -508,7 +511,11 @@ class TestCli:
         result = _run(project)
         assert result.exit_code == 0, result.output
         assert "Skipped .claude/commands/coordinator.md" in result.output
-        assert "--force" in result.output
+        # The advice used to be `use --force` — the destructive flag, naming
+        # nowhere safe for the edit. It is now the migration note the library
+        # had been computing and nobody printed (BDL-UX #188).
+        assert "--force" not in result.output
+        assert ".beadloom/flow/commands/coordinator.md" in result.output
         assert cmd.read_text(encoding="utf-8") == "HAND EDITED"
 
     def test_cli_force_overwrites_command_via_flag(self, tmp_path: Path) -> None:
