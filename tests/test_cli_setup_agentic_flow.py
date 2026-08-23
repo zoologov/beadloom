@@ -12,8 +12,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
 from click.testing import CliRunner
 
+from beadloom.onboarding import agentic_flow_setup
 from beadloom.onboarding.agentic_flow_setup import (
     AGENT_FILES,
     COMMAND_FILES,
@@ -201,65 +203,84 @@ class TestCoordinatorVendoredDriftGuard:
 
 
 class TestSyncAgenticFlow:
-    def test_sync_round_trips_live_source(self) -> None:
-        written = sync_agentic_flow(_live_claude_root())
-        assert "agents/dev.md.txt" in written
-        # Re-running is a no-op against the packaged copy (drift guard as code).
-        assert TestVendoredFlowAssets().test_vendored_flow_matches_live_claude() is None
+    """Re-vendoring the ROLE files from a live ``.claude/`` — into tmp_path.
 
-    def test_sync_does_not_touch_the_claude_md_core(self, tmp_path: Path) -> None:
-        """BDL-UX #177's loop, closed: the shipped CLAUDE.md is no longer a
-        snapshot of this project's live file.
+    ``sync_agentic_flow`` writes package data. Until BDL-061.10 these tests
+    called it against the REAL package, so every ``pytest`` run — and ``pytest``
+    runs inside ``beadloom ci`` — copied whatever this maintainer's local
+    ``.claude/agents/*`` happened to say into the shipped templates, and the
+    drift guard that exists to catch that then compared the template against the
+    file it had just been copied from.
+
+    Measured in a clean room at HEAD, with one line appended to the live
+    ``.claude/agents/dev.md``: run 1 FAILED and shipped the edit anyway (the
+    tracked template's sha256 moved ``77dfc84…`` → ``b8bf376…``), run 2 passed
+    with the edit inside the package. That is BDL-UX #177's loop, surviving on
+    the one leg the CLAUDE.md fix did not cover — and it left no trace in ``git
+    status`` on an unedited tree, because the write is byte-identical there.
+
+    The destination is redirected here, so the round trip is exercised without
+    the suite mutating the artifact it measures. The structural half of the fix
+    is in ``tests/conftest.py``: any test that writes a git-tracked file fails.
+    """
+
+    @pytest.fixture()
+    def vendor_root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        """A throw-away stand-in for the installed package's template root."""
+        root = tmp_path / "package-templates"
+        root.mkdir()
+        monkeypatch.setattr(
+            agentic_flow_setup, "vendored_flow_root", lambda: root
+        )
+        return root
+
+    def test_sync_round_trips_live_source(self, vendor_root: Path) -> None:
+        # Arrange
+        live = _live_claude_root()
+
+        # Act
+        written = sync_agentic_flow(live)
+
+        # Assert — every role file arrives, byte-identical to its live source
+        assert sorted(written) == sorted(f"agents/{name}.md.txt" for name in AGENT_FILES)
+        for name in AGENT_FILES:
+            assert (vendor_root / "agents" / f"{name}.md.txt").read_text(
+                encoding="utf-8"
+            ) == (live / "agents" / f"{name}.md").read_text(encoding="utf-8"), name
+
+    def test_sync_does_not_touch_the_claude_md_core(self, vendor_root: Path) -> None:
+        """BDL-UX #177's first leg: the shipped CLAUDE.md is not a snapshot.
 
         It used to be. Running this very function rewrote
         ``templates/agentic_flow/CLAUDE.md.txt`` from ``.claude/CLAUDE.md``,
         which is why a project-local paragraph — a bead id and a false claim
         about this repo's branch protection — reached the shipped template
-        twice, the second time OVER the correction. Measured before the fix:
-        the template's sha256 moved from f360bc60… to 6fcae821… on a single
-        test run, and the test passed while doing it.
+        twice, the second time OVER the correction.
+
+        Asserted over what the sync PRODUCED rather than over the package's
+        unchanged sha256: with the destination redirected, "the packaged file
+        did not change" would be true by construction and would check nothing.
         """
-        import hashlib
-        from pathlib import Path
-
-        core = (
-            Path(__file__).resolve().parents[1]
-            / "src"
-            / "beadloom"
-            / "onboarding"
-            / "templates"
-            / "agentic_flow"
-            / "CLAUDE.md.txt"
-        )
-        before = hashlib.sha256(core.read_bytes()).hexdigest()
+        # Act
         written = sync_agentic_flow(_live_claude_root())
-        assert hashlib.sha256(core.read_bytes()).hexdigest() == before
+
+        # Assert
         assert not any("CLAUDE" in name for name in written)
+        assert not (vendor_root / "CLAUDE.md.txt").exists()
 
-    def test_sync_does_not_touch_the_command_cores(self) -> None:
+    def test_sync_does_not_touch_the_command_cores(self, vendor_root: Path) -> None:
         """The commands compose too, so they are not snapshotted either."""
-        import hashlib
-        from pathlib import Path
+        # Act
+        written = sync_agentic_flow(_live_claude_root())
 
-        root = (
-            Path(__file__).resolve().parents[1]
-            / "src"
-            / "beadloom"
-            / "onboarding"
-            / "templates"
-            / "agentic_flow"
-            / "commands"
+        # Assert — the produced set is exactly the roles, nothing else
+        produced = sorted(
+            path.relative_to(vendor_root).as_posix()
+            for path in vendor_root.rglob("*")
+            if path.is_file()
         )
-        before = {
-            p.name: hashlib.sha256(p.read_bytes()).hexdigest()
-            for p in sorted(root.glob("*.md.txt"))
-        }
-        sync_agentic_flow(_live_claude_root())
-        after = {
-            p.name: hashlib.sha256(p.read_bytes()).hexdigest()
-            for p in sorted(root.glob("*.md.txt"))
-        }
-        assert after == before
+        assert produced == sorted(f"agents/{name}.md.txt" for name in AGENT_FILES)
+        assert not any(name.startswith("commands/") for name in written)
 
 
 class TestScaffoldFiles:
