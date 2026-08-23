@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from beadloom.infrastructure.repository import get_owned_code_files
+
 if TYPE_CHECKING:
     import sqlite3
 
@@ -46,57 +48,140 @@ class SyncPair:
     code_hash: str
 
 
+def _annotated_files_by_ref(conn: sqlite3.Connection) -> dict[str, list[tuple[str, str]]]:
+    """Map ``ref_id -> [(file_path, file_hash)]`` from code-symbol annotations.
+
+    One pass over ``code_symbols``; the previous shape re-scanned the whole
+    table once per linked doc.
+    """
+    by_ref: dict[str, list[tuple[str, str]]] = {}
+    seen: set[tuple[str, str]] = set()
+    for sym in conn.execute("SELECT file_path, file_hash, annotations FROM code_symbols"):
+        annotations: dict[str, Any] = json.loads(sym["annotations"])
+        file_path = str(sym["file_path"])
+        for value in annotations.values():
+            if not isinstance(value, str) or (value, file_path) in seen:
+                continue
+            seen.add((value, file_path))
+            by_ref.setdefault(value, []).append((file_path, str(sym["file_hash"])))
+    return by_ref
+
+
 # beadloom:domain=doc-sync
 def build_sync_state(conn: sqlite3.Connection) -> list[SyncPair]:
-    """Build sync pairs from docs and code_symbols sharing a ref_id.
+    """Build sync pairs for every node that has a linked doc AND indexed code.
 
-    For each ref_id that has both a doc and at least one code symbol,
-    creates a SyncPair with current hashes.
+    A node's code files are found first through symbol annotations
+    (``# beadloom:<kind>=<ref>``) and, when those yield nothing, through the
+    files the node's declared ``source`` OWNS. The fallback is the fix for
+    BDL-UX #146: pairing keyed on annotations alone meant a node whose
+    annotation sat somewhere tree-sitter does not read it as a comment — or
+    which simply declared ``source:`` without annotating — contributed no pairs
+    at all, and a freshness gate with no pairs reports "clean" for files it
+    never opened.
+
+    Nodes that still yield no pair are not silently dropped: see
+    :func:`find_unchecked_doc_nodes`, which names them.
     """
-    # Find ref_ids that have linked docs.
     doc_rows = conn.execute(
         "SELECT ref_id, path, hash FROM docs WHERE ref_id IS NOT NULL"
     ).fetchall()
-
     if not doc_rows:
         return []
 
+    annotated = _annotated_files_by_ref(conn)
     pairs: list[SyncPair] = []
 
     for doc_row in doc_rows:
-        ref_id = doc_row["ref_id"]
-        doc_path = doc_row["path"]
-        doc_hash = doc_row["hash"]
-
-        # Find code symbols annotated with this ref_id.
-        sym_rows = conn.execute("SELECT * FROM code_symbols").fetchall()
-        seen_files: set[str] = set()
-
-        for sym in sym_rows:
-            annotations: dict[str, Any] = json.loads(sym["annotations"])
-            for _key, val in annotations.items():
-                if val == ref_id and sym["file_path"] not in seen_files:
-                    seen_files.add(sym["file_path"])
-                    pairs.append(
-                        SyncPair(
-                            ref_id=ref_id,
-                            doc_path=doc_path,
-                            code_path=sym["file_path"],
-                            doc_hash=doc_hash,
-                            code_hash=sym["file_hash"],
-                        )
-                    )
-                    break
+        ref_id = str(doc_row["ref_id"])
+        code_files = annotated.get(ref_id) or get_owned_code_files(conn, ref_id)
+        pairs.extend(
+            SyncPair(
+                ref_id=ref_id,
+                doc_path=str(doc_row["path"]),
+                code_path=code_path,
+                doc_hash=str(doc_row["hash"]),
+                code_hash=code_hash,
+            )
+            for code_path, code_hash in code_files
+        )
 
     return pairs
+
+
+def find_unchecked_doc_nodes(conn: sqlite3.Connection) -> list[dict[str, str]]:
+    """Nodes that declare a doc but contribute no sync pair.
+
+    A freshness gate must never let "clean" stand for "nothing was looked at"
+    (BDL-UX #146). Everything reachable is paired by :func:`build_sync_state`;
+    what remains here is the honest residue — a doc whose node has no indexed
+    code under it — and it is reported rather than dropped.
+
+    Advisory only: this never changes an exit code, so a project that is green
+    today does not turn red on upgrade.
+    """
+    paired = {str(row["ref_id"]) for row in conn.execute("SELECT DISTINCT ref_id FROM sync_state")}
+    rows = conn.execute(
+        "SELECT DISTINCT d.ref_id AS ref_id, d.path AS doc_path, n.source AS source "
+        "FROM docs d JOIN nodes n ON n.ref_id = d.ref_id "
+        "WHERE d.ref_id IS NOT NULL ORDER BY d.ref_id, d.path"
+    ).fetchall()
+    return [
+        {
+            "ref_id": str(row["ref_id"]),
+            "doc_path": str(row["doc_path"]),
+            **_unchecked_reason(conn, str(row["source"] or "")),
+        }
+        for row in rows
+        if str(row["ref_id"]) not in paired
+    ]
+
+
+def _unchecked_reason(conn: sqlite3.Connection, source: str) -> dict[str, str]:
+    """Say WHY a node contributes no pair, distinguishing the two causes.
+
+    "No indexed code under X" would be false for a container whose every file
+    belongs to a nested node — the reader would go looking for missing code
+    that is in fact indexed, just owned elsewhere. The two cases get different
+    words because they call for different action: index the code, or nothing.
+    """
+    if not source:
+        return {"reason": "no_source", "details": ""}
+    covered = conn.execute(
+        "SELECT COUNT(*) FROM code_symbols WHERE file_path LIKE ?", (f"{source}%",)
+    ).fetchone()
+    if covered is not None and int(covered[0]) > 0:
+        return {"reason": "files_owned_by_nested_nodes", "details": source}
+    return {"reason": "no_indexed_code", "details": source}
+
+
+#: The one rule by which **both** sides of every hash comparison in this module
+#: are decoded: the working tree and the content at a git ref.
+#:
+#: The codec is stated because the alternative is ``text=True``, which consults
+#: ``locale.getpreferredencoding(False)`` -- the image speaking, not the tool --
+#: while the working-tree side has always read UTF-8. A comparison whose two
+#: sides are decoded by different rules reports a difference that is an artefact
+#: of the environment: MEASURED on this repo with ``docs/architecture.md``
+#: unchanged at HEAD, an ambient latin-1 made ``sync-check --since`` report drift
+#: in a file nobody touched, and an ambient ascii raised an uncaught
+#: ``UnicodeDecodeError`` out of a command that runs inside ``beadloom ci``.
+#:
+#: ``surrogateescape`` rather than ``strict`` because the Gate must have an
+#: answer for every file: bytes that are not UTF-8 round-trip to exactly
+#: themselves, so the digest stays the digest of the file's own bytes and one
+#: latin-1 source file cannot crash ``sync-check``. ``replace`` is rejected here
+#: for the usual reason -- it is not injective, so two different files could
+#: hash equal, which is a comparison handed a wrong answer.
+_TEXT_CODEC = "utf-8"
+_TEXT_ERRORS = "surrogateescape"
 
 
 def _file_hash(path: Path) -> str | None:
     """Compute SHA-256 hash of a file, or None if file doesn't exist."""
     if not path.is_file():
         return None
-    content = path.read_text(encoding="utf-8")
-    return hashlib.sha256(content.encode()).hexdigest()
+    return _hash_text(path.read_text(encoding=_TEXT_CODEC, errors=_TEXT_ERRORS))
 
 
 def check_sync(
@@ -120,9 +205,11 @@ def check_sync(
     Returns list of dicts with doc_path, code_path, ref_id, status,
     reason, and optional details.
     """
+    # An empty sync_state is NOT a clean project: phases 2 and 3 below check
+    # doc coverage against files on disk and need no pairs to do it. Returning
+    # early here meant a project where nothing paired skipped every check and
+    # printed a green "No sync pairs found" (BDL-UX #146).
     sync_rows = conn.execute("SELECT * FROM sync_state").fetchall()
-    if not sync_rows:
-        return []
 
     # Infer project root from database path if not provided.
     if project_root is None:
@@ -304,13 +391,20 @@ def _validate_git_ref(project_root: Path, ref: str) -> bool:
     Uses ``git rev-parse --verify <ref>``. An all-zero SHA (force-push /
     first-push sentinel) never resolves, so it is rejected here too.
     """
-    result = subprocess.run(  # noqa: S603
-        ["git", "rev-parse", "--verify", ref],  # noqa: S607
-        cwd=project_root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(  # noqa: S603
+            ["git", "rev-parse", "--verify", ref],  # noqa: S607
+            cwd=project_root,
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        # As wide as this call can raise: with no text mode, nothing is decoded,
+        # so ``OSError`` (git missing, not executable, bad cwd) is the whole set
+        # -- ``check=False`` rules out ``CalledProcessError`` and no ``timeout``
+        # is passed. A ref that cannot be verified does not resolve; the CLI
+        # turns that into "Invalid git ref" at exit 1 rather than a traceback.
+        return False
     return result.returncode == 0
 
 
@@ -319,12 +413,25 @@ def _file_content_at_ref(project_root: Path, rel_path: str, ref: str) -> str | N
 
     Non-destructive: reads from the object store, never touches the working
     tree or any beadloom DB.
+
+    Decoded by :data:`_TEXT_CODEC` / :data:`_TEXT_ERRORS` -- the same rule the
+    working-tree side uses -- so the two sides of the comparison in
+    :func:`check_sync_since` cannot disagree about what the bytes say. Text mode
+    is kept (rather than hashing raw bytes) because it also applies universal
+    newline translation on both sides, so a CRLF checkout does not read as drift.
+
+    ``None`` means *absent at that ref* and nothing else. An unreachable ``git``
+    is deliberately not caught into ``None``: that would report drift in a file
+    nobody touched, which is the defect this call site exists to have fixed. The
+    CLI validates the ref through :func:`_validate_git_ref` first, so the
+    reachable case is answered there.
     """
     result = subprocess.run(  # noqa: S603
         ["git", "show", f"{ref}:{rel_path}"],  # noqa: S607
         cwd=project_root,
         capture_output=True,
-        text=True,
+        encoding=_TEXT_CODEC,
+        errors=_TEXT_ERRORS,
         check=False,
     )
     if result.returncode != 0:
@@ -333,8 +440,12 @@ def _file_content_at_ref(project_root: Path, rel_path: str, ref: str) -> str | N
 
 
 def _hash_text(text: str) -> str:
-    """SHA-256 of *text* (UTF-8), matching :func:`_file_hash`'s digest."""
-    return hashlib.sha256(text.encode()).hexdigest()
+    """SHA-256 of *text*, and the single definition of "the digest of a file".
+
+    :func:`_file_hash` routes through here so the working-tree side and the
+    at-ref side cannot drift apart: same codec, same error handler, one place.
+    """
+    return hashlib.sha256(text.encode(_TEXT_CODEC, _TEXT_ERRORS)).hexdigest()
 
 
 def check_sync_since(

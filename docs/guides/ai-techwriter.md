@@ -14,7 +14,8 @@ check on `main` is the true enforcement.
 
 **BDL-050** folds the agent into one consolidated `.github/workflows/ci.yml`: the
 `ai-techwriter` job has `needs: [gate, tests, site-build]`, so it runs **only after**
-the gate + the 3.10–3.13 test matrix + the VitePress site-build are all green — a
+the gate + the 3.10–3.13 test matrix + the VitePress site-build are all green (the
+`tests-locale` legs run in parallel with them and are outside that `needs:` set) — a
 broken PR never spends Qwen tokens. The harness now classifies each run into a
 **verdict** (`ok` / `flagged` / `infra`): a genuine unresolved doc drift (`flagged`)
 blocks the PR, but an infra failure (`infra` — a dead runner / exhausted quota / a
@@ -57,6 +58,17 @@ open / update a PR to main/master  (pull_request: opened, synchronize, reopened)
 BDL-050 runs this job as `ai-techwriter` inside the single `ci.yml`, gated on
 `needs: [gate, tests, site-build]`. The job body is the BDL-049 model verbatim — only
 the trigger moved into `ci.yml` and the exit code is now driven by the verdict.
+
+The scaffolded pipeline also carries a fifth verify job, `tests-locale`
+(BDL-061.38): the same whole suite run under `LC_ALL=C` and under
+`en_US.ISO-8859-1`, with `PYTHONUTF8=0` + `PYTHONCOERCECLOCALE=0` so PEP 538/540
+cannot quietly put it back on UTF-8. It is an environment **dimension** — the
+value is in the DIFFERENCE between it and the UTF-8 `tests` legs, so never
+"fix" a red leg by pinning a UTF-8 locale. Its two check-runs are in
+`DEFAULT_STATUS_CHECK_CONTEXTS`; if you delete the job from your pipeline, drop
+the matching contexts too, or `main` waits forever for a check that never runs.
+It does not gate `ai-techwriter` (`needs:` stays the portable three), because a
+locale-red PR is already unmergeable via the required checks.
 
 Why `--since <merge-base>`: a fresh CI checkout reindexes from scratch and
 re-baselines the stored `sync_state` to the PR's code, so a plain `sync-check`
@@ -222,12 +234,20 @@ To make the trunk-based model a hard guarantee, protect `main` so the
 required-check gate is true enforcement (one-time, idempotent):
 
 ```bash
-beadloom setup-branch-protection --repo OWNER/NAME    # GitHub; safe to re-run
+beadloom setup-branch-protection --repo OWNER/NAME    # GitHub; declarative PUT
 ```
 
 This requires a PR to `main` (no direct push) with the consolidated `ci.yml`'s
-**7 check-runs as required status checks** — `gate`, `tests (3.10)`, `tests (3.11)`,
-`tests (3.12)`, `tests (3.13)`, `site-build`, `ai-techwriter` (BDL-050). Under strict
+**9 check-runs as required status checks** — `gate`, `tests (3.10)`, `tests (3.11)`,
+`tests (3.12)`, `tests (3.13)`, `tests-locale (C)`,
+`tests-locale (en_US.ISO-8859-1)`, `site-build`, `ai-techwriter` (BDL-050 + the
+BDL-061.38 environment dimension). Re-running the command re-settles the same
+declarative state, so it is safe **as long as every context in the set can go
+green**: under `strict: true` a required check that is red — or that your pipeline
+does not produce at all — leaves the branch unmergeable. In this repository the two
+`tests-locale` contexts are red until bead `beadloom-mr2l.42` lands, which is why
+`main`'s live protection still requires the other seven; use `--check` to state a
+narrower set. Under strict
 trunk-based (`enforce_admins: true`, BDL-049) even the owner integrates via a PR; with
 0 required reviews the solo maintainer still self-merges. See `docs/services/cli.md`
 for the full command + `--check`/`--branch`/`--dry-run` options.

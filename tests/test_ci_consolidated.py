@@ -88,14 +88,27 @@ def test_ci_grants_contents_and_pull_request_write() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# ci.yml — the four jobs
+# ci.yml — the declared jobs
 # --------------------------------------------------------------------------- #
 
 
-def test_ci_has_the_four_jobs() -> None:
+def test_ci_has_the_declared_jobs() -> None:
+    """The consolidated four (BDL-050) plus the locale DIMENSION (BDL-061.38).
+
+    Asserted as an exact set: a job added here without a matching required
+    status-check context is a check that gates nothing, and one removed is a
+    required context that never reports (lockout). Both directions are caught by
+    ``test_required_contexts_match_ci_yml_check_runs``.
+    """
     jobs = _load(CI)["jobs"]
     assert isinstance(jobs, dict)
-    assert set(jobs) == {"gate", "tests", "site-build", "ai-techwriter"}
+    assert set(jobs) == {
+        "gate",
+        "tests",
+        "tests-locale",
+        "site-build",
+        "ai-techwriter",
+    }
 
 
 def test_ci_gate_tests_site_build_run_on_ubuntu() -> None:

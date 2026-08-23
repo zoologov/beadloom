@@ -215,6 +215,19 @@ beadloom diff [--since REF] [--json] [--project DIR]
 - `has_changes` returns `True` if and only if at least one `NodeChange` or `EdgeChange` exists.
 - `diff_to_dict` output is deterministic for a given `GraphDiff` input.
 - `NodeChange.old_tags` and `NodeChange.new_tags` are always sorted tuples.
+- **Both sides of the diff are decoded by the same call** (`_decode_graph_yaml`,
+  `utf-8` + `errors="strict"`): the working tree from disk, the previous state
+  from `git show`. The at-ref side never consults the image's locale — MEASURED
+  before the fix against `HEAD` with nothing changed: an ambient `latin-1` raised
+  `yaml.reader.ReaderError` ("unacceptable character #x0086") and an ambient
+  `ascii` raised `UnicodeDecodeError`, both uncaught out of the review role's own
+  instrument.
+- Graph YAML that is not valid UTF-8 produces a `ValueError` naming the file (and
+  the ref, for the at-ref side) — never a diff. Treating an undecodable side as
+  absent would report the whole graph as added or removed.
+- Paths listed by `git ls-tree` are decoded with `errors="surrogateescape"`, the
+  rule `os.fsdecode` itself uses, so a name that is not UTF-8 round-trips back
+  through `git show`'s argv instead of raising.
 
 ---
 

@@ -23,19 +23,29 @@ Two functions, and the split is the whole design:
 * :func:`_record` writes — it is the **only** place a firing is recorded, and it
   either records or names why it did not.
 
-``run_invocation`` is ``_record(_answer(...))`` and has exactly one return, so a
-new exit path that skips the record cannot be added without changing that line.
+``run_invocation`` is ``_record(invocation, _answer(...))`` and has exactly one
+return, so a new exit path that skips the record cannot be added without
+changing that line.
 
 **Recording is one predicate, stated once**: a firing is written when a project
 was located, a *registered* guard was named, and the invocation was an
-evaluation rather than a report. Each of the three exceptions has a reason it
-cannot be otherwise, and each is reported on the result rather than inferred
-from an absent line:
+evaluation rather than a report. That predicate has **four** exceptions, one per
+clause plus the report; each has a reason it cannot be otherwise, and each is
+reported on the result rather than inferred from an absent line:
 
 * **no project** — there is nowhere to write it. Manufacturing a root was the
   measured failure (a stray ``.beadloom/`` inside the source tree that the real
   project's ``--liveness`` never reads), so the guard writes nothing and answers
   ``error``, which blocks.
+* **no name** — nothing was asked about, so there is nothing to attribute. It
+  was the fourth case folded into the third's wording until BDL-061.34:
+  :func:`_named` renders the missing name as ``(no guard named)`` for the
+  reader, ``_record`` routed on that rendering, and an invocation that named no
+  guard reported ``'(no guard named)' is not a registered guard`` — a
+  pseudo-name quoted as though the caller had typed it, and byte-identical to
+  the reason a caller who *did* type it got. The routing is on
+  :attr:`GuardInvocation.name`, which is why :func:`_record` takes the
+  invocation rather than reading the verdict's display form.
 * **an unregistered name** — there is no guard to attribute the row to, and an
   invented row is a lie in the one report whose product is honesty.
 * **``--liveness``** — a report evaluates nothing; recording one would inflate
@@ -59,18 +69,27 @@ above it exist only to give a reader a cause they can act on; the wide one
 exists so that the class nobody thought of is a verdict rather than an escape.
 
 **Exit codes.** The code follows the verdict (``pass``/``skip`` 0, ``warn`` 1,
-``block``/``error`` 2). ``3`` is overridden onto two classes and no others: a
-defect in the project's own declared configuration (a ``guards:`` block that
-will not parse, an exclusion with no reason, a guard name nobody registered) and
-a command line the CLI could not use at all (no guard named, ``--liveness`` with
-a name, a malformed ``--context`` pair, an unsupported ``--hook`` harness). Both
-are stable defects a human fixes once, they are not about any particular edit,
-and BDL-061.2 reserved ``3`` so that a broken ``flow.yml`` is never mistaken for
-a guard that fired. Everything that goes wrong while trying to answer about
+``block``/``error`` 2). One class is overridden and no other: a defect in the
+project's own declared configuration (a ``guards:`` block that will not parse,
+an exclusion with no reason, a guard name nobody registered) and a command line
+the CLI could not use at all (no guard named, ``--liveness`` with a name, a
+malformed ``--context`` pair, an unsupported ``--hook`` harness). Both are
+stable defects a human fixes once and neither is about any particular edit, so
+BDL-061.2 reserved ``3`` for them — a broken ``flow.yml`` is then never mistaken
+for a guard that fired. Everything that goes wrong while trying to answer about
 *this* edit — a payload that cannot be decoded or parsed, a project that cannot
 be located, an exception anywhere — is an ``error`` verdict at exit ``2``,
 because that is the one code the shipped adapter blocks on, and the harness
 supplied the input that failed.
+
+**The override is conditional on the caller (BDL-061.33).** ``3`` blocks nothing
+in the harness the emitted adapter binds to, so while it was unconditional the
+largest reachable class of "I could not tell" — a ``flow.yml`` that will not
+parse — switched every bound guard off and said so on a stream nobody stops for.
+:func:`~beadloom.application.guards.models.harness_exit_code` decides: ``3`` for
+a shell or CI caller, where the distinction is the whole point and no edit is
+waiting on the answer, and the blocking code when ``--hook`` names a harness,
+where the only question the code answers is whether the edit proceeds.
 """
 
 from __future__ import annotations
@@ -90,10 +109,10 @@ from beadloom.application.guards.hook_payload import (
 )
 from beadloom.application.guards.liveness import build_liveness
 from beadloom.application.guards.models import (
-    EXIT_CODE_CONFIG_ERROR,
     GuardOutcome,
     GuardVerdict,
     exception_detail,
+    harness_exit_code,
 )
 from beadloom.application.guards.project_root import (
     ProjectLocation,
@@ -130,6 +149,9 @@ NOT_RECORDED_LIVENESS = (
 )
 NOT_RECORDED_NO_PROJECT = (
     "no project was located, and a guard does not create one to write into"
+)
+NOT_RECORDED_NO_NAME = (
+    "no guard was named, so there is no guard to record a firing against"
 )
 NOT_RECORDED_UNREGISTERED = (
     "{name!r} is not a registered guard, so there is nothing to record it against"
@@ -241,7 +263,7 @@ def run_invocation(invocation: GuardInvocation) -> InvocationResult:
     then it records. It does not raise and it does not exit — the caller renders
     the result and exits once.
     """
-    return _record(_answer(invocation))
+    return _record(invocation, _answer(invocation))
 
 
 def _answer(invocation: GuardInvocation) -> InvocationResult:
@@ -270,17 +292,28 @@ def _answer(invocation: GuardInvocation) -> InvocationResult:
         )
 
 
-def _record(result: InvocationResult) -> InvocationResult:
-    """Write the firing, or state why this invocation could not leave one."""
+def _record(
+    invocation: GuardInvocation, result: InvocationResult
+) -> InvocationResult:
+    """Write the firing, or state why this invocation could not leave one.
+
+    The invocation is read for the name the caller actually typed, and never
+    ``result.verdict.guard``: that field is the *display* form, and for an
+    invocation that named nothing it is the placeholder :data:`UNNAMED_GUARD` —
+    a string a caller can also type. Routing on it made those two invocations
+    indistinguishable and quoted a name nobody had written (BDL-061.34).
+    """
     if result.verdict is None:
         return replace(result, not_recorded_because=NOT_RECORDED_LIVENESS)
     if result.project_root is None:
         return replace(result, not_recorded_because=NOT_RECORDED_NO_PROJECT)
-    if result.verdict.guard not in BUILTIN_GUARDS:
+    if invocation.name is None:
+        return replace(result, not_recorded_because=NOT_RECORDED_NO_NAME)
+    if invocation.name not in BUILTIN_GUARDS:
         return replace(
             result,
             not_recorded_because=NOT_RECORDED_UNREGISTERED.format(
-                name=result.verdict.guard
+                name=invocation.name
             ),
         )
     try:
@@ -315,7 +348,7 @@ def _decide(invocation: GuardInvocation, location: ProjectLocation) -> Invocatio
         return _report(invocation, root)
     if invocation.name is None:
         return _usage(
-            None,
+            invocation,
             root,
             why=_NO_NAME_WHY,
             because=_BECAUSE_NO_NAME,
@@ -328,7 +361,7 @@ def _report(invocation: GuardInvocation, root: Path) -> InvocationResult:
     """The liveness report: rows, or the configuration error that stopped them."""
     if invocation.name is not None:
         return _usage(
-            invocation.name,
+            invocation,
             root,
             why=_LIVENESS_WITH_NAME_WHY,
             because=_BECAUSE_INCOMPLETE,
@@ -338,7 +371,7 @@ def _report(invocation: GuardInvocation, root: Path) -> InvocationResult:
         rows = build_liveness(root)
     except GuardConfigError as exc:
         return _usage(
-            None,
+            invocation,
             root,
             why=str(exc),
             because=_BECAUSE_NO_REPORT,
@@ -355,7 +388,7 @@ def _evaluate(
         context = _context(invocation)
     except GuardUsageError as exc:
         return _usage(
-            name,
+            invocation,
             root,
             why=str(exc),
             because=_BECAUSE_INCOMPLETE,
@@ -363,7 +396,7 @@ def _evaluate(
         )
     except UnknownHarnessError as exc:
         return _usage(
-            name,
+            invocation,
             root,
             why=str(exc),
             because=_BECAUSE_INCOMPLETE,
@@ -386,7 +419,7 @@ def _evaluate(
         )
     except GuardConfigError as exc:
         return _usage(
-            name,
+            invocation,
             root,
             why=str(exc),
             because=_BECAUSE_INCOMPLETE,
@@ -467,17 +500,32 @@ def _failed(
 
 
 def _usage(
-    name: str | None,
+    invocation: GuardInvocation,
     root: Path | None,
     *,
     why: str,
     because: str,
     remediation: str,
 ) -> InvocationResult:
-    """A configuration or command-line defect: an ``error`` verdict on exit 3."""
-    verdict = _error_verdict(name, why=why, because=because, remediation=remediation)
+    """A configuration or command-line defect: an ``error`` verdict, on whose code?
+
+    The verdict is the same one every failure takes; only the code differs, and
+    it differs by *caller* rather than by cause (BDL-061.33). A shell caller
+    gets ``3``, which keeps a defect in the declared configuration
+    distinguishable from a guard that fired; an invocation bound to a harness
+    gets the blocking code, because ``3`` is a code that harness carries on
+    past. The whole invocation is taken rather than a name, because the name is
+    already ``invocation.name`` at every call site and the harness is the other
+    thing this function now needs to know — see
+    :func:`~beadloom.application.guards.models.harness_exit_code`.
+    """
+    verdict = _error_verdict(
+        invocation.name, why=why, because=because, remediation=remediation
+    )
     return InvocationResult(
-        exit_code=EXIT_CODE_CONFIG_ERROR, verdict=verdict, project_root=root
+        exit_code=harness_exit_code(invocation.harness),
+        verdict=verdict,
+        project_root=root,
     )
 
 

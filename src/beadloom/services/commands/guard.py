@@ -22,7 +22,8 @@ Streams and codes (the adapter contract):
 * ``pass`` / ``skip`` -> stdout, exit 0
 * ``warn`` -> stderr, exit 1 (visible, never blocking)
 * ``block`` / ``error`` -> stderr, exit 2
-* configuration or command-line error -> stderr, exit 3
+* configuration or command-line error -> stderr, exit 3 **from a shell**, exit 2
+  when ``--hook`` names a harness
 
 ``warn``/``block``/``error`` go to **stderr** because that is the stream a hook
 harness shows to the agent. ``3`` is kept for a defect in the project's declared
@@ -30,6 +31,14 @@ configuration and for a command line that could not be used at all, so a genuine
 ``block`` stays distinguishable from Click's own usage exit code (2); which
 failures earn ``3`` rather than ``2`` is decided — with the reason — in the
 boundary module.
+
+That distinction is worth something to a person at a terminal and nothing to a
+hook, where ``3`` means only that the edit went through unguarded — which is how
+a ``flow.yml`` that would not parse switched every bound guard off (BDL-061.33).
+So the same class exits the blocking code when the invocation names a harness.
+The choice is made in the application layer, not in the emitted adapter: an
+adapter that maps codes carries logic, and logic in an adapter is behaviour that
+exists inside one tool only.
 """
 
 # beadloom:component=cli-commands
@@ -218,7 +227,11 @@ def guard(
 
     Guards are declared in ``.beadloom/flow.yml`` (strictness per work kind,
     exclusions that must carry a reason and an expiry). A harness hook calls
-    this same command, so the hook and the shell can never disagree.
+    this same command, so the hook and the shell can never disagree about the
+    *verdict*. They differ in one code and only one: a defect in the declared
+    configuration, or a command line that could not be used, exits ``3`` here
+    and ``2`` under ``--hook``, because ``3`` does not stop a tool call and a
+    guard that cannot answer must never read as one that passed.
 
     With no ``--project``, the project root is the nearest directory at or above
     the working directory that contains ``.beadloom/`` — the firing record

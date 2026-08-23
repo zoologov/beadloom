@@ -47,6 +47,17 @@ def _clean_project(project_root: Path) -> None:
     generate_agents_md(project_root)
 
 
+def _build_index(project_root: Path) -> None:
+    """Build the index a ``--no-reindex`` run then READS.
+
+    Needed since the gate stopped creating the database it inspects: a step
+    that manufactures its own input cannot report on it (BDL-UX #147).
+    """
+    from beadloom.application.reindex import reindex
+
+    reindex(project_root)
+
+
 def _export(repo: str) -> dict[str, object]:
     """Minimal satellite export artifact (no breaks)."""
     return {
@@ -259,11 +270,30 @@ class TestRunCiGate:
 
     def test_no_reindex_skips_step_one(self, tmp_path: Path) -> None:
         _clean_project(tmp_path)
+        _build_index(tmp_path)
         result = run_ci_gate(tmp_path, fail_on=None, hub_exports=[], no_reindex=True)
         reindex_step = next(s for s in result.steps if s.name == "reindex")
         assert reindex_step.status == "SKIP"
         assert reindex_step.passed is True  # a skipped step does not fail the gate
         assert result.ok is True
+
+    def test_no_reindex_without_an_index_fails_instead_of_passing(
+        self, tmp_path: Path
+    ) -> None:
+        """`ci --no-reindex` on a never-indexed project used to be a pure false green.
+
+        Every index-reading step either created the database it was about to
+        inspect or found the one a previous step had created, so the gate
+        reported PASS over an empty index (BDL-UX #142/#147 family).
+        """
+        _clean_project(tmp_path)
+        result = run_ci_gate(tmp_path, fail_on=None, hub_exports=[], no_reindex=True)
+        assert result.ok is False
+        failed = {s.name for s in result.steps if not s.passed}
+        # `lint` is absent on purpose: this fixture declares no rules, and "no
+        # rules" is a truthful empty result that needs no index to reach.
+        assert {"sync-check", "config-check", "doctor"} <= failed
+        assert not (tmp_path / ".beadloom" / "beadloom.db").exists()
 
     def test_lint_violation_fails_gate_and_collects_finding(self, tmp_path: Path) -> None:
         # A require-rule that cannot be satisfied -> an error-level violation.
@@ -368,6 +398,7 @@ class TestCiCommand:
 
     def test_no_reindex_reports_skip(self, tmp_path: Path) -> None:
         _clean_project(tmp_path)
+        _build_index(tmp_path)
         result = CliRunner().invoke(
             main, ["ci", "--no-reindex", "--project", str(tmp_path)]
         )

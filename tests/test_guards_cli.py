@@ -390,12 +390,21 @@ class TestRealProbes:
 
 
 class TestHookHarnessValidation:
-    def test_unknown_harness_exits_three(self, tmp_path, stub_probes) -> None:
+    def test_unknown_harness_blocks_and_names_the_ones_it_knows(
+        self, tmp_path, stub_probes
+    ) -> None:
+        """Exit 2 since BDL-061.33: a wiring defect in the binding is not a free pass.
+
+        It exited 3, and 3 is a code a harness carries on past — so an adapter
+        naming a harness Beadloom cannot translate produced an unguarded edit on
+        every invocation. Beadloom cannot know the exit vocabulary of a tool it
+        does not support, so it answers with the code it knows stops work.
+        """
         stub_probes(beads=())
         result = CliRunner().invoke(
             main,
             ["guard", "bead-claimed", "--project", str(tmp_path), "--hook", "emacs"],
             input="{}",
         )
-        assert result.exit_code == 3, result.output
+        assert result.exit_code == 2, result.output
         assert "claude-code" in result.stderr

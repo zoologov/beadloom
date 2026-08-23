@@ -1,16 +1,18 @@
 # ACTIVE: BDL-061 — Enforced agentic flow
 
-> **Last updated:** 2026-08-22
+> **Last updated:** 2026-08-23
 > **Phase:** Development
 
 ---
 
 ## Current Bead
 
-**Bead:** none — `.36` (the S1 CI hotfix) is done; the branch is awaiting the owner's push and
-a re-check of PR #33.
-**Next:** S2 (`.5`–`.8`, plus `.33` and `.34` filed out of S1's review). S2 begins only after
-S1 is green on `main`, per the slice-boundary-is-a-PR-boundary rule.
+**Bead:** `.8` — the S2 documentation pass, and the last bead of the slice. S2 is otherwise
+complete: eight dev beads (`.5`, `.33`, `.34`, `.37`, `.38`, `.40`, `.43`, `.44`), the `.6`
+verification bead and the `.7` review are all closed.
+**Next:** S3 opens with `.9` (compose(core, arch, stack, project)). Filed out of S2 and not
+part of it: `.45`–`.51` (the false-green residue, the two CRITICALs and the cohesion bead) plus
+`.35`, `.39`, `.41`, `.42`.
 
 ## Progress
 
@@ -83,6 +85,198 @@ S1 is green on `main`, per the slice-boundary-is-a-PR-boundary rule.
       DIMENSION (4 ambient decoders × the payload matrix) and the loop is asserted as a property
       with the exception INJECTED, so 3.13 coverage cannot go vacuous. Verified on a real 3.10:
       full suite 5442 passed, 0 guard failures. Suite 5574 → 5595
+- [x] S2 `.37` dev (2026-08-22) — **the third instance of `.36`'s family, and the first caught
+      before CI:** both subprocess probes ran with `text=True`, which decodes with
+      `locale.getpreferredencoding(False)`, and both handlers enumerated classes that exclude
+      `UnicodeDecodeError` (a `ValueError`), so on a non-UTF-8 image a branch name or a bead
+      title with one non-ASCII byte raised past the handler and the boundary turned it into
+      `error`/exit 2 — fail-closed but WRONG, where the designed answer is a skip that says why.
+      Fixed with a stated codec (`encoding="utf-8"`, `errors="surrogateescape"` — the only
+      handler of the three that is injective, so no comparison a guard makes can be given a
+      wrong answer by a byte) and handlers as wide as their sentence. Found en route in the same
+      call: `run_bd` caught `FileNotFoundError` ALONE, so a 60 s timeout and a real
+      non-executable `bd` on PATH also blocked the edit at exit 2. The ambient-locale dimension
+      is CONSTRUCTED, not arranged — patching `locale.getpreferredencoding` does not reach
+      `TextIOWrapper` (measured) — while the undecodable-bytes half runs against the real `git`.
+      The sweep of the other 17 subprocess call sites is a bead comment: `doc_sync/engine.py`,
+      `graph/diff.py`, `infrastructure/git_activity.py` and `federation/export.py` carry the
+      same pair, and the first two make `sync-check --since` and `diff --since` report changes
+      that did not happen. Suite 5595 → 5633
+
+- [x] S2 `.40` dev (2026-08-23) — **the Gate's own instrument was lying.** Four call sites where
+      a comparison decoded its two sides by different rules: the current content with an explicit
+      `encoding="utf-8"`, the at-ref / subprocess content with whatever the image says. All four
+      of `.37`'s verdicts RE-MEASURED before any edit and all four held to the digit — an ambient
+      `latin-1` made `sync-check --since` report drift in a file nobody touched and an ambient
+      `ascii` raised out of a command that runs inside `beadloom ci`; `diff --since` (the review
+      role's instrument) crashed or fabricated; the dashboard showed a contributor who does not
+      exist; a federation export dropped its provenance while looking like an honest unknown.
+      Fixed by decoding deliberately on BOTH sides through one shared definition per site, with
+      each `errors=` chosen by direction of failure and stated in the code: `surrogateescape` for
+      the sync digest (total + injective, so no doc can crash the Gate), `strict` for graph YAML
+      (UTF-8 by definition — a refusal that names the file, never a fabricated diff), `replace`
+      for author names (MEASURED: `surrogateescape` there makes sqlite3 raise
+      `UnicodeEncodeError` inside `reindex`, turning a display defect into a Gate crash), and
+      `surrogateescape` for git paths in the export (the rule `os.fsdecode` itself uses, so the
+      toplevel comparison has the same rule on both sides). Handlers narrowed-by-analysis to
+      `OSError` with the enumeration argued, including the redundant
+      `(FileNotFoundError, OSError)` `.37` read as the tell — which was also narrow in the
+      direction that matters (`PermissionError`). 10 sabotages, and 2 of them PASSED first time,
+      exposing two of my own gaps (the at-ref decode error and the `PermissionError` row) that
+      are now covered. 23 tests; isolated tree (HEAD + only my files): 5691 passed / 0 failed,
+      clean-DB lint 0 violations, sync-check rc 0, doctor rc 0.
+- [x] S2 `.34` dev (2026-08-23) — **an unknown key in a guard body is now a configuration
+      error, and one not-recorded reason stopped quoting a name nobody typed.** (b) `_build_spec`
+      dropped any key it did not read; `option:` for `options:` cost `working-branch` its
+      declared trunk — MEASURED through the real binary on a project whose trunk is `develop`:
+      an edit made directly ON `develop` answered `PASS ... (trunk is 'main')` at exit 0, and
+      after the fix the same file is an ERROR the hook blocks (rc 2) while the corrected
+      spelling BLOCKS the edit. Chosen as an **error** rather than a `warn` because the one
+      mitigation (the verdict prints the trunk) rides the stream and exit code a harness
+      discards, and because the feature is unreleased, so no published project can turn red;
+      the same rule after release would need the `warn` route. Applied at both levels of the
+      block (guard body + exclusion entry) from one helper, with the allowed set DERIVED from
+      the `body.get` literals by an AST pin — an allowed key nobody reads is the deleted `on:`
+      again. (a) `_record` routed the no-name case through the unregistered-name branch, so
+      `beadloom guard` printed `'(no guard named)' is not a registered guard` — byte-identical
+      to what `beadloom guard "(no guard named)"`, an invocation that DID name a guard,
+      printed; `_record` now takes the invocation and routes on the name the caller typed, the
+      docstring enumerates four exceptions instead of three, and the count is pinned to the
+      number of branches. Carried from `.32`: an unreadable `--project` no longer surfaces
+      `PermissionError: [Errno 13] ...` as the whole `why` — `locate_project_root` states the
+      cause on both entry paths and keeps the errno as its parenthetical detail. 16 tests
+      (11 RED first: 4 config + 7 boundary), 8 sabotages all reddening (1 caught by the
+      `.31` B2 anchor). Suite 5748 passed / 0 failed, ruff + mypy clean, `beadloom ci` rc 0.
+- [x] S2 `.43` dev (2026-08-23) — **a third of `lint --strict` could not fire, and the reference
+      taught the mistake.** `forbid_import` matches `from:` against the SOURCE FILE PATH
+      (`src/beadloom/tui/app.py`) and `to:` against the DOTTED IMPORT PATH with dots turned into
+      slashes (`beadloom/infrastructure/db`) — two vocabularies, so the `src/`-prefixed `to:`
+      globs in `rules.yml` matched nothing, ever. MEASURED reconciliation of the two reported
+      counts: both are right at different scopes — repairing rule 1 alone surfaces 1
+      (`tui/data_providers.py:284`), repairing rules 1+2 surfaces 7 (1 tui + 6 onboarding); the
+      `**/x/**` and `beadloom/x/**` forms match identically here. CORRECTION to `.5`: only TWO
+      of the four rules were dead — the two `ai_agents` rules already carry the correct dotted
+      `to:` (it matches 11 of 221 indexed targets) and their `0` was truthful. Fixed: the tui
+      crossing routed through `application/graph_reads` (which now also passes through
+      `analyze_git_activity`); the 6 onboarding crossings BASELINED as `forbid_import.exempt`
+      entries with a mandatory `reason` + `until` — the rule keeps full scope, proved by
+      deleting one entry and watching `lint --strict` go red with 4 errors. PERMANENT, not a
+      one-time correction: a rule whose `from:`/`to:` glob matches ZERO candidates in the whole
+      index is now reported (`rule_type: rule_liveness`, always `warn`, remediation states both
+      matching forms), and so is an exemption that suppresses nothing — the exit condition
+      announcing itself. Found while verifying: a `to:` glob covering a package did NOT cover a
+      bare import OF it, so the coordinator's own injected probe (`from beadloom.infrastructure
+      import db`) fired under NO glob form; now it does. Standing rule 1 VERIFIED not assumed
+      (isolated tree copy: probe + incremental reindex → caught; probe removed → back to 0).
+      22 tests (16 red first, 6 guards green by design), 4 sabotages; final tree 5718 passed /
+      0 failed / 11 skipped (a plain delta is not attributable — `.40` and `.33` landed their own
+      test files mid-bead), clean-DB lint 0 violations / 12 rules, sync-check rc 0, doctor rc 0.
+      NOT mine, blocking the Gate: `docs audit` reads "(BDL-061.33)" in `docs/services/cli.md:645`
+      as an `mcp_tool_count` of 33 — arrived with commit 71e31eb, reproduced on a tree whose
+      cli.md is byte-identical to HEAD.
+- [x] S2 `.5` dev (2026-08-22) — **the three lying checks fixed, and each fix proved by a test
+      that would have caught the false green.** #142: an incremental reindex now re-extracts
+      imports for the code files it touched and rebuilds the DERIVED `depends_on` set, which is
+      identified by a provenance marker (`extra.derived="imports"`) so a graph-declared edge is
+      never collateral damage; an index predating the marker rebuilds once. Proved on the real
+      graph, not a toy: an injected `tui → infrastructure` import is caught by the INCREMENTAL
+      path with a violation set and an edge set byte-for-byte identical to a full rebuild, and
+      both revert symmetrically. #146: sync pairs fall back to the files a node's `source`
+      OWNS when annotations yield none (kind-independent — the real cause was never the node
+      KIND, it was that pairing read only annotations), `check_sync` no longer short-circuits on
+      an empty `sync_state`, and every node that still yields no pair is NAMED with the reason.
+      Measured on this repo: 272 → 275 pairs, 4 nodes reported as not checked where the gate
+      previously printed nothing. #147: `lint` without a reindex callback opens the index
+      `mode=ro`/`query_only` and REFUSES a missing one — it used to print
+      "0 violations, N rules evaluated" against a database it created in the same breath — and
+      `beadloom ci --no-reindex` on a never-indexed project, previously a wholly green gate,
+      now fails honestly. Timing recorded: full 755 ms; incremental +29 ms (1 file) / +42 ms
+      (5 files) for the import refresh, paid for several times over by `build_sync_state`
+      170 ms → 4 ms. **Found and NOT absorbed:** all four `forbid_import` rules in this repo's
+      own `rules.yml` are dead — 0 of 1322 imports can match a `to:` glob written as
+      `src/beadloom/…/**`, because the evaluator matches the DOTTED import path
+      (`beadloom/tui/app`), which never carries `src/`. Filed for its own bead: repairing the
+      globs surfaces 7 pre-existing violations immediately. Suite 5633 → 5649
+
+- [x] S2 `.33` dev (2026-08-22) — **a guard that could not answer let the edit through.** The
+      configuration/usage class exited 3, and a Claude Code PreToolUse hook reads 3 as "proceed",
+      so an unparseable `guards:` block disabled every guard silently. The mapping now lives in
+      the CLI, keyed on the harness the adapter already declares: through `--hook` that class
+      exits 2 (the code that stops the edit), from a shell it still exits 3, where the distinction
+      between "your configuration is broken" and Click's own usage exit is worth something. An
+      unsupported harness blocks too — Beadloom cannot know the exit vocabulary of a tool it does
+      not support, so it uses the code it knows stops work. 24 tests (10 red first), including the
+      real emitted `.sh` driven through a real subprocess, and a derivation that re-runs every
+      exit-3 row of the existing matrix under `--hook`, so a config-error path added later is
+      covered on the day it is added.
+- [x] S2 `.38` chore (2026-08-22) — **CI gains an environment DIMENSION: the locale is varied,
+      never pinned.** One `tests-locale` job, the whole suite, python 3.13, rows `C` and
+      `en_US.ISO-8859-1`. The bead's central measurement is that the obvious spelling would have
+      shipped a leg that asserted nothing: bare `LC_ALL=C` reports `utf8_mode=1`, because PEP 540
+      auto-enables UTF-8 Mode under a C locale — `PYTHONUTF8=0` + `PYTHONCOERCECLOCALE=0` are what
+      make the leg real. Three independent locks keep it from going vacuous: an in-CI probe that
+      fails the leg both when the image is back on UTF-8 and when glibc silently degrades the
+      8-bit row to a second ASCII row; a test that parses that probe out of `ci.yml` and executes
+      it; and a test forbidding any job in `ci.yml` from pinning a UTF-8 locale — the tempting
+      "fix" the first time the leg goes red. Windows was measured and split off as `.39` for a
+      stated reason: adding the leg would not un-vacuum the six `skipif(win32)` guard tests.
+- [x] S2 `.44` dev (2026-08-23) — **`docs audit` read numbers out of identifiers (#169).** A line
+      is now tokenized on whitespace and only a token whose whole core is a number is a candidate,
+      so `(BDL-061.33)` is no longer an `mcp_tool_count` of 33 and `6,390` is read whole. The
+      sweep the bead asked for found the silent half: three false-negative classes, filed as #173
+      and bead `.45` rather than absorbed, two of them pinned as strict `xfail`s. It also RETIRED
+      three `docs_audit.ignore` entries that matched nothing and added none.
+- [x] S2 `.6` test (2026-08-22) — **all three standing rules re-derived adversarially, and the
+      class they belong to measured.** Each verdict was reproduced through the CLI on a clean room
+      instead of inherited from `.5`, including the two qualifications `.8` carries into the CLI
+      reference: the read-only lint leaves `beadloom.db` byte-identical but does create the
+      `-wal` / `-shm` sidecars, and it answers about the INDEX rather than the tree. Then the
+      question the bead exists for: can a check still report green over work it did not do? Yes —
+      **seven measured ways**, four of them P0, one of which is the whole gate green after a
+      declared SPEC is deleted. 19 tests, 11 of them strict `xfail`s so the day someone fixes a
+      gap the suite goes red rather than silent. The locale legs were also run for real on a Linux
+      image: 100 ASCII and 76 8-bit locale-attributable failures, with 75 failing under both, so
+      the 8-bit row's unique yield is now one test rather than a file — `.42`'s starting shape.
+- [x] S2 `.7` review (2026-08-23) — **NOT PASSING: 1 critical, 4 major, 4 minor — and none of them
+      argues against the merge.** The three rules were re-derived a third time in a fresh clean
+      room and confirmed retirable on evidence. The critical is the one that matters most: a
+      clean-database `beadloom ci` is structurally blind to doc staleness, because the rebuild
+      adopts the tree as its own baseline — and seven of this slice's nine beads cite exactly that
+      run as their gate evidence, a habit standing rule CLEAN-DB LINT taught. Reproduced under
+      `main`'s own code, so it is pre-existing; filed as #175 / `.47`. The majors: eight measured
+      findings with no owner outside a closed bead's comments (filed as `.48`–`.51` before S3
+      opens), an honesty note in `rules.yml` claiming an exit condition the code does not enforce,
+      an unchecked reason naming the wrong cause, and a doc asserting a branch protection that is
+      not live. #174 was reproduced identically at `main` `7c5fa7d`, which is what makes deferring
+      it legitimate rather than forgetting it.
+- [x] S2 `.8` tech-writer (2026-08-23) — **the three standing rules deleted, with their two
+      replacement sentences placed where a reader meets them.** CLEAN-DB LINT, COMPONENT BLINDNESS
+      and LINT WRITES are gone from CONTEXT; the CLI reference now states which form of `lint`
+      writes the index and what a `sync-check` count covers, and both documents carry the habit
+      CLEAN-DB LINT left behind: a clean database is right for `lint` and vacuous for
+      `sync-check`. PLAN's S2 criterion was corrected rather than satisfied — `.7` measured that
+      the three rules were never in the shipped `CLAUDE.md`, so the criterion had been written
+      against an assumption nobody checked. MAJOR 4 closed on both halves: the nine required
+      contexts are stated as the scaffolded default rather than as this repository's live
+      protection (`gh api` confirms seven), and every place that documents
+      `beadloom setup-branch-protection` now names the sequencing constraint and the bead that
+      retires it.
+
+- [x] **S2 COMPLETE** — the three lying checks (#142, #146, #147) are fixed and their standing
+      rules retired, `lint`'s DDD boundary rule fires for the first time (#172), the Gate's own
+      instruments give the same answer under every ambient codec, and `docs audit` no longer reads
+      a number out of an identifier (#169). **S2 fixed three NAMED checks and did not fix the
+      class:** `.6` measured seven further false-greens and `.7` an eighth, filed as #173, #174,
+      #175 and beads `.45`–`.51`. The slice ships with them open and named, which is the honest
+      form of the claim.
+
+**The two `tests-locale` legs are knowingly red, and that is the signal, not a failure of it.**
+100 ASCII / 76 8-bit locale-attributable failures until `.42` lands. **The value is the delta
+between legs, never any leg's colour** — a green leg today would mean the dimension found
+nothing, and the only way to get one is to pin UTF-8, which `ci.yml`'s own tests forbid. The
+legs are outside `ai-techwriter`'s `needs:` and outside `main`'s live required contexts, so they
+can neither block a merge nor let a required check be skipped. The same legend is in `ci.yml`'s
+header comment, where a reader of a red check will look first.
 
 - [x] **S1 COMPLETE** — verified by the coordinator on the final tree: 5574 passed / 10 skipped,
       ruff and mypy --strict clean, `beadloom ci` rc 0 on a clean DB. The B2 sabotage
@@ -97,6 +291,7 @@ S1 is green on `main`, per the slice-boundary-is-a-PR-boundary rule.
 | .1 | Done | Guard primitive: registry, verdict, CLI, hook adapter, liveness (68 tests) |
 | .2 | Done | Verdict matrix, exclusion validation, liveness widened (248 tests) |
 | .3 | Done | Review: 5 fix cycles, then 0 critical / 4 major — code shippable, doc majors routed to `.4` |
+| .4 | Done | S1 docs: exit-3 invariant qualified (not deleted), enforcement surface written down, `error` in both READMEs |
 | .25 | Done | S1 fix: traversal bypass, probe limit, liveness honesty, `on:` deleted |
 | .26 | Done | S1 test: re-verification — F1 backslash bypass, F2 NUL crash, F3–F6 recorded |
 | .27 | Done | S1 fix-2: path shape narrowed, `error` outcome, no invocation without a record |
@@ -106,11 +301,28 @@ S1 is green on `main`, per the slice-boundary-is-a-PR-boundary rule.
 | .31 | Done | S1 fix-4: pin as wide as its invariant; `--project` must name a project; interrupt handled |
 | .32 | Done | S1 test: the Click-validation pin as wide as its sentence; `--project` `readable=False` |
 | .36 | Done | S1 hotfix: the payload decoded as bytes (locale-independent); the resolve handler as wide as its sentence |
-| .4 | Done | S1 docs: exit-3 invariant qualified (not deleted), enforcement surface written down, `error` in both READMEs |
-| .33 | Pending | S2: the exit-3 class is fail-open — a broken `flow.yml` disables every guard |
-| .34 | Pending | S2: an unknown key in a guard body is silently ignored (`option:` → trunk `main`) |
+| .5 | Done | S2: #142 incremental import refresh, #146 source-owned sync pairs + unchecked accounting, #147 read-only lint that refuses a missing index |
+| .33 | Done | S2: the exit-3 class was fail-open — through `--hook` a config error now exits 2 and blocks the edit |
+| .34 | Done | S2: an unknown key in a guard body is a config error at both levels; the no-name record reason no longer quotes the placeholder; an unreadable `--project` states its cause |
+| .37 | Done | S2: the probes decode with a stated codec, not the image's locale; handlers as wide as their sentence; sweep of every other subprocess call |
+| .38 | Done | S2: `tests-locale` — the environment dimension in CI (locale varied, never pinned); three locks against a vacuous leg; `DEFAULT_STATUS_CHECK_CONTEXTS` 7 → 9 |
+| .40 | Done | S2: the four call sites with a measured wrong ANSWER — both sides of a comparison now decoded by the same stated rule |
+| .43 | Done | S2: two `forbid_import` rules could not match anything (`src/`-prefixed `to:`); glob liveness + named, expiring exemptions |
+| .44 | Done | S2: docs-audit token boundary (#169) — a number inside a larger token is an identifier; sweep filed 3 silent FN classes as #173 / `.45` |
+| .6 | Done | S2 test: the three rules re-derived adversarially + seven remaining false-greens measured, 11 of them strict `xfail`s; the locale legs run for real (100 / 76) |
+| .7 | Done | S2 review: NOT PASSING — 1 critical (#175), 4 major, 4 minor; merge with #174 open argued from evidence, with the honesty condition now in `.8` |
+| .8 | Done | S2 docs: the three standing rules deleted, replacements in the CLI reference, PLAN's S2 criterion corrected, MAJOR 4 + minors 1/3/4 closed |
 | .35 | Pending | S3: no `.gitignore` entry for the firing record; carries n1 (our dogfood never ran the shipped artifact) |
-| .5–.8 | Pending | S2 stop the lying checks (#142, #146, #147) |
+| .39 | Pending | S2/S3 chore: a Windows CI leg — only after the six `skipif(win32)` guard tests are made meaningful |
+| .41 | Pending | S3: three more ambient-decode sites, plus an MCP test runner with no timeout |
+| .42 | Pending | S2/S3: the locale dimension's first run — 100 ASCII / 76 8-bit failures from text I/O without an explicit encoding (the title still carries `.38`'s superseded 97/73; the owner is correcting it) |
+| .45 | Pending | S2 follow-up: docs-audit reports green about facts it never checked (#173) — per-fact coverage |
+| .46 | Pending | P0: the doc gate is defeated by DELETING documentation — `beadloom ci` exits 0 with every step PASS (#174); pre-existing at `main` |
+| .47 | Pending | P0: a clean-DB rebuild adopts the tree as its own baseline, so the freshness gate is blind (#175) — the defect the retired CLEAN-DB LINT habit fed |
+| .48 | Pending | P0: rule liveness covers one rule type of six, and `validate_rules()` computes the diagnosis that `linter.py` throws away |
+| .49 | Pending | P0: an exemption's `until:` is prose, and a suppressed violation is never counted |
+| .50 | Pending | P1: annotations the extractor cannot see — docstring annotation, directory source without a trailing slash, deny rules keyed on annotated symbols |
+| .51 | Pending | P2: three modules past 1000 lines with many responsibilities each, self-flagged and owned by nobody |
 | .9–.12 | Pending | S3 composition + project overlay (#139, #152, #132, #136, #137) |
 | .13–.16 | Pending | S4 BDD, mutation, doc shape + quality, shared writing standard |
 | .17–.20 | Pending | S5 TO-BE / AS-IS / WORKING |
@@ -118,7 +330,8 @@ S1 is green on `main`, per the slice-boundary-is-a-PR-boundary rule.
 
 ## Notes
 
-**Branch:** `features/BDL-061`. Slice boundary is a PR boundary — each slice green on `main`
+**Branch:** `features/BDL-061-S2` for this slice (S1 ran on `features/BDL-061`). Slice boundary
+is a PR boundary — each slice green on `main`
 before the next begins, as BDL-060 ran.
 
 **Ordering is load-bearing.** S1 first because it is the primitive; S2 second because S3's

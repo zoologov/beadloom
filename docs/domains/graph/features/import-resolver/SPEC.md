@@ -163,8 +163,40 @@ def create_import_edges(conn: sqlite3.Connection) -> int
    real dependency, and dropping it made such a node report "depends on
    nothing" — false, and worse than a coarse answer.
 5. Deduplicate `(source, target)` pairs via a `seen` set.
-6. Insert `depends_on` edge with `INSERT OR IGNORE`.
+6. Insert `depends_on` edge with `INSERT OR IGNORE`, stamping
+   `extra = {"derived": "imports"}`. The marker is the provenance that lets an
+   incremental refresh delete the derived set without touching a graph-declared
+   edge; `INSERT OR IGNORE` means a pair also declared in YAML keeps the YAML
+   row and stays unmarked.
 7. Commit and return the count of edges created.
+
+### Derived-Edge Refresh
+
+```python
+def delete_derived_import_edges(conn: sqlite3.Connection) -> int
+def refresh_import_edges(conn: sqlite3.Connection) -> int
+```
+
+The derived edge set is a pure function of `code_imports`, so a refresh is
+delete-then-recreate. Doing only the recreate half kept a dependency edge alive
+after its import was removed, for the cycle and layer rules to trip over.
+
+### Incremental Indexing
+
+```python
+def reindex_file_imports(
+    project_root: Path,
+    conn: sqlite3.Connection,
+    *,
+    touched: Sequence[str],
+    removed: Sequence[str],
+) -> int
+```
+
+Deletes `code_imports` rows for the touched and removed paths, re-extracts the
+touched ones, then calls `refresh_import_edges`. This is what an incremental
+reindex calls; without it every import rule read an index frozen at the last
+FULL rebuild, so `reindex && lint` passed a real boundary break (BDL-UX #142).
 
 ### Full Indexing Pipeline
 
@@ -181,7 +213,7 @@ def index_imports(project_root: Path, conn: sqlite3.Connection) -> int
    d. For each `ImportInfo`, call `resolve_import_to_node` to resolve it.
    e. Upsert into `code_imports` with `ON CONFLICT(file_path, line_number, import_path) DO UPDATE SET resolved_ref_id, file_hash`.
 4. Commit.
-5. Call `create_import_edges(conn)` to generate `depends_on` edges.
+5. Call `refresh_import_edges(conn)` to regenerate `depends_on` edges.
 6. Return the total count of imports indexed.
 
 ### Configuration
@@ -214,7 +246,16 @@ def resolve_import_to_node(
     is_ts: bool = False,
 ) -> str | None: ...
 def create_import_edges(conn: sqlite3.Connection) -> int: ...
+def delete_derived_import_edges(conn: sqlite3.Connection) -> int: ...
+def refresh_import_edges(conn: sqlite3.Connection) -> int: ...
 def index_imports(project_root: Path, conn: sqlite3.Connection) -> int: ...
+def reindex_file_imports(
+    project_root: Path,
+    conn: sqlite3.Connection,
+    *,
+    touched: Sequence[str],
+    removed: Sequence[str],
+) -> int: ...
 ```
 
 ### Public Classes

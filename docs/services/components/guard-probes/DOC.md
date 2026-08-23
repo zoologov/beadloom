@@ -45,6 +45,25 @@ inward.
   "no bead is in progress" while one was — a false warning, and a false BLOCK
   under the `strictness: { epic: block }` configuration the docs ship as the
   example.
+- **Text is decoded by a stated codec, never by the image's locale.** `git` is
+  run with `encoding="utf-8", errors="surrogateescape"`. `text=True` decodes with
+  `locale.getpreferredencoding(False)`, which made the same repository answer
+  differently depending on where the process ran: under a C-locale container the
+  decode raised (and, being a `UnicodeDecodeError`, escaped the handler below),
+  and under an 8-bit locale it returned a branch name nobody had checked out.
+  `surrogateescape` rather than `strict` because it is the only one of the
+  handlers that is injective — it round-trips to the exact bytes git holds, so
+  `branch == trunk` stays truthful and a legal-but-not-UTF-8 branch name does not
+  silently switch `working-branch` off. `strict` would answer `None` there and the
+  guard would skip: an exemption nobody declared. (BDL-061.37)
+- **The handler is as wide as the sentence it holds.** "A probe that cannot
+  answer returns `None`" quantifies over every way the call can fail, so it
+  catches `Exception` — not an enumeration of classes, which is how
+  `UnicodeDecodeError` (a `ValueError`: neither an `OSError` nor a
+  `subprocess.SubprocessError`) used to escape and reach the boundary as an
+  `error` verdict at exit 2. Blocking the edit is not the designed answer for
+  "the probe cannot answer"; a skip that says why is. Deliberately not
+  `BaseException`: an interrupt is the process being stopped, not git declining.
 
 ## Collaborators
 

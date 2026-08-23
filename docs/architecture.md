@@ -24,7 +24,7 @@ The system is organized into six DDD domain packages, an application (use-case o
 - `status.py` — the read-side of `beadloom status` (index/coverage/health/trend counts + context-bundle metrics)
 - `debt_report/` — architecture-debt aggregation, scoring, trend tracking, CI gating, a cohesion-split package
 - `watcher.py` — file watcher for auto-reindex on change
-- `gate.py` — the unified `beadloom ci` gate (reindex → lint → sync-check → config-check → doctor → optional federate)
+- `gate.py` — the unified `beadloom ci` gate (reindex → lint → sync-check → docs audit → config-check → doctor → optional federate)
 - `guards/` — the flow-guard primitive behind `beadloom guard` (BDL-061 S1): a verdict per named guard, the `guards:` block of `.beadloom/flow.yml`, one invocation boundary, and the firing record `--liveness` reads
 - the VitePress site generators — `site.py` (orchestrator), `site_pages.py`, `site_nav.py`, `site_about.py`, `site_dashboard/` (a cohesion-split package), `site_landscape.py`, `site_published.py`, `site_mermaid_guard.py`, `site_metrics_history.py`
 
@@ -134,7 +134,7 @@ Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3
 | `forbid` | Forbid specific edge patterns between tagged node groups | Nodes tagged `ui-layer` must not have `uses` edges to `native-layer` |
 | `layers` | Enforce layered architecture direction | Top-down: services → domains → infrastructure |
 | `forbid_cycles` | Detect circular dependencies in the graph | No cycles on `uses`/`depends_on` edges |
-| `forbid_import` | Control file-level import boundaries | Files in `src/beadloom/tui/**` must not import from `src/beadloom/infrastructure/**` |
+| `forbid_import` | Control file-level import boundaries | Files in `src/beadloom/tui/**` must not import `beadloom/infrastructure/**` — note the two vocabularies: `from` matches the **file path**, `to` the **dotted import path with dots → slashes** (no source root). A `src/`-prefixed `to` matches nothing (BDL-UX #172) |
 | `check` | Enforce complexity / coverage limits per node | `max_symbols: 180` per domain — counting the symbols a node OWNS, nested nodes excluded (Beadloom's `domain-size-limit`; see the recalibration note below); `module-coverage` (every src module tracked) |
 
 > Internally each parsed rule carries a `rule_type` string (`deny` / `require` / `forbid` / `layer` / `forbid_import` / `cardinality` / …) used by the evaluators; the **authoring key** in `rules.yml` is the column above.
@@ -147,7 +147,7 @@ Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3
 - `forbid` rules check edge patterns between nodes matching tag selectors
 - `layers` rules verify dependency direction across ordered architectural layers
 - `forbid_cycles` uses an iterative WHITE/GREY/BLACK colored DFS (in `graph/rules/cycles.py`) to find circular dependency paths, reporting each unique cycle once
-- `forbid_import` rules query the `code_imports` table for forbidden cross-boundary imports
+- `forbid_import` rules query the `code_imports` table for forbidden cross-boundary imports; a rule whose glob matches **zero** candidates anywhere in the index is itself reported (`rule_type: rule_liveness`, `warn`) rather than counted clean, and `exempt:` entries — which baseline a pre-existing crossing and must carry `reason` + `until` — are reported the same way once they suppress nothing
 - `check` rules count symbols/files per node (cardinality) and verify module coverage; `module-coverage` is `severity: error`
 
 **Output formats:**

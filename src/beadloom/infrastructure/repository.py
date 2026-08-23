@@ -387,6 +387,29 @@ def count_files_owned_by_node(conn: sqlite3.Connection, ref_id: str) -> int:
     return int(count[0])
 
 
+def get_owned_code_files(conn: sqlite3.Connection, ref_id: str) -> list[tuple[str, str]]:
+    """Return ``(file_path, file_hash)`` for the indexed files *ref_id* owns.
+
+    The same most-specific-source ownership rule as the counters above, so a
+    node never claims a nested node's files. Used to pair a node's doc with its
+    code when no symbol carries the node's annotation — without it a node that
+    declares ``docs:`` could contribute no sync pair at all and still be
+    reported as clean (BDL-UX #146).
+    """
+    row = conn.execute(
+        "SELECT source FROM nodes WHERE ref_id = ?", (ref_id,)
+    ).fetchone()
+    if row is None or not row["source"]:
+        return []
+    clause, params = _owned_file_clause(conn, str(row["source"]))
+    rows = conn.execute(
+        "SELECT DISTINCT file_path, file_hash FROM code_symbols "  # noqa: S608
+        f"WHERE {clause} ORDER BY file_path",
+        params,
+    ).fetchall()
+    return [(str(r["file_path"]), str(r["file_hash"])) for r in rows]
+
+
 def get_owned_symbols(conn: sqlite3.Connection, ref_id: str) -> list[SymbolRow]:
     """Return the symbols in the files *ref_id* owns (nested nodes excluded)."""
     row = conn.execute(

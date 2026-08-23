@@ -97,6 +97,93 @@ jobs:
         run: uv run pytest
 
   # ---------------------------------------------------------------------- #
+  # tests-locale — the ENVIRONMENT DIMENSION. Runs the SAME whole suite as
+  # `tests`, changing exactly ONE thing: the locale. The value is in the
+  # DIFFERENCE between this leg and the `tests` legs, so never PIN a UTF-8
+  # locale here — pinning makes every leg agree, which is indistinguishable
+  # from having no dimension at all. A container is the default deployment,
+  # and a container is usually not UTF-8.
+  #
+  # `LC_ALL=C` ALONE IS A VACUOUS LEG: PEP 540 auto-enables UTF-8 Mode under a
+  # C/POSIX LC_CTYPE and PEP 538 coerces the C locale to C.UTF-8, so a bare
+  # `LC_ALL=C` still reports a UTF-8 preferred encoding. `PYTHONUTF8=0` +
+  # `PYTHONCOERCECLOCALE=0` are what make it real, and the assertion step below
+  # fails the leg if the runner image puts it back on UTF-8 anyway.
+  #
+  # Two rows because they fail in OPPOSITE directions: under ASCII an
+  # undecodable byte RAISES; under an 8-bit codec nothing raises and the byte is
+  # SILENTLY MANGLED. Delete a row and you lose that direction, not just a leg.
+  #
+  # Both check-runs are REQUIRED by `beadloom setup-branch-protection`
+  # (DEFAULT_STATUS_CHECK_CONTEXTS), so keep the job name and the matrix values
+  # as they are, or drop the matching `--check` contexts when you change them.
+  # ---------------------------------------------------------------------- #
+  tests-locale:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        locale: ["C", "en_US.ISO-8859-1"]
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra languages
+
+      # NOT `locale-gen`: on ubuntu-24.04 `locale-gen en_US.ISO-8859-1` is
+      # rejected, because /usr/share/i18n/SUPPORTED spells that entry
+      # `en_US ISO-8859-1`. `localedef` builds it directly in ~0.25s.
+      - name: Build the 8-bit locale
+        if: matrix.locale != 'C'
+        run: |
+          name="${{ matrix.locale }}"
+          sudo localedef -i "${name%%.*}" -f "${name#*.}" "$name"
+
+      - name: Assert the leg is genuinely non-UTF-8
+        env:
+          LC_ALL: ${{ matrix.locale }}
+          PYTHONUTF8: "0"
+          PYTHONCOERCECLOCALE: "0"
+        run: |
+          uv run python - <<'PY'
+          import codecs, locale, os, sys
+
+          declared = os.environ["LC_ALL"]
+          preferred = codecs.lookup(locale.getpreferredencoding(False)).name
+          filesystem = codecs.lookup(sys.getfilesystemencoding()).name
+          print(f"declared={declared} preferred={preferred} "
+                f"fs={filesystem} utf8_mode={sys.flags.utf8_mode}")
+          if "utf-8" in (preferred, filesystem):
+              raise SystemExit(
+                  f"VACUOUS LEG: {declared} came back as UTF-8 "
+                  f"(preferred={preferred} fs={filesystem}), so this leg asserts "
+                  "nothing about the environment dimension."
+              )
+          if "." in declared:
+              want = codecs.lookup(declared.split(".", 1)[1]).name
+              if (preferred, filesystem) != (want, want):
+                  raise SystemExit(
+                      f"DEGRADED LEG: {declared} did not take effect (expected "
+                      f"{want}, got preferred={preferred} fs={filesystem}) — the "
+                      "locale is probably not built on this image, so this leg is "
+                      "a duplicate of the C row."
+                  )
+          PY
+
+      - name: Whole suite under ${{ matrix.locale }}
+        env:
+          LC_ALL: ${{ matrix.locale }}
+          PYTHONUTF8: "0"
+          PYTHONCOERCECLOCALE: "0"
+        run: uv run pytest
+
+  # ---------------------------------------------------------------------- #
   # site-build — regenerate + build the docs site on every PR (the BUILD half,
   # no deploy) so doc/site breaks are caught BEFORE they land on the trunk.
   # ---------------------------------------------------------------------- #

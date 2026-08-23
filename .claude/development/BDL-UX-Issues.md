@@ -35,6 +35,138 @@
 
 ## Open Issues
 
+178. [2026-08-23] [HIGH] 🔴 A REQUIRED check reports `pass` while its own output says it verified nothing
+
+    **Severity:** high (it is in the required set, so it is load-bearing for merge, and the failure mode is the one the whole S2 slice was about)
+    **Command:** the `ai-techwriter` GitHub Actions job
+    **Context:** observed on PR #34 (BDL-061 S2). The job's own log line reads:
+
+    ```
+    ! could not run (infra) — docs were NOT checked on this PR;
+      re-run before relying on freshness
+    ```
+
+    and the job's conclusion is **pass**, which GitHub reports as a green required check.
+    **Issue:** the job is admirably honest in its *text* — it names the failure, says what was not checked, and tells the reader what to do. Then it exits 0 and everything downstream sees green. Nobody reads a passing check's log. The honesty is placed exactly where it cannot be acted on.
+    **Why it is filed at HIGH rather than as CI housekeeping:** this is the same defect S2 spent nine beads on — a green result that describes the checker's own inability rather than the code's health — sitting in the check that guards the promise the product is built around ("no code reaches `main` without current docs"). Two `tests-locale` legs on the same run were **red on purpose** and are *not* required; a check that could not run was **green** and *is* required. The signalling is inverted.
+    **Expected:** an infrastructure failure is not a pass. Either fail the job (so the required check blocks and a human re-runs it), or report `neutral`/`skipped` so it is visibly not a verification — never `success`. If the intent is "do not block on flaky infra", that is a decision about whether the check should be required at all, and it should be made explicitly rather than implemented by exiting 0.
+    **Related:** #174, #175 — same equation (*unverifiable is not clean*), this time in our own CI rather than in the tool.
+
+177. [2026-08-23] [HIGH] 🔴 Editing our own `CLAUDE.md` silently ships the edit to every adopter — the pre-commit hook propagates it into the vendored template verbatim
+
+    **Severity:** high (project-local context leaves the project without anyone deciding that it should, and the propagation happens inside a commit rather than at a review point)
+    **Command:** the `install-hooks` pre-commit coherence step; `beadloom config-check`
+    **Context:** the coordinator added a warning to `.claude/CLAUDE.md` §6 saying `setup-branch-protection` is not safe to re-run *in this repository right now*. Committing it left `src/beadloom/onboarding/templates/agentic_flow/CLAUDE.md.txt` modified — the hook had copied the paragraph into the shipped template **verbatim**, including the bead id `beadloom-mr2l.42` and the claim "`main`'s live protection has **seven**".
+    **Issue:** both of those are facts about *this* repository. A bead id means nothing to an adopter, and the seven-contexts claim is simply false for them — a freshly scaffolded project gets nine contexts and a workflow that produces all nine, so the warning that is urgent for us is wrong for them. Caught only because `git status` was read after the commit; nothing announced the propagation.
+    **The deeper problem is that there is no separation to enforce.** `.claude/CLAUDE.md` is simultaneously this project's instructions and the artifact we distribute, so every project-specific sentence is a shipping decision made by accident. This is exactly what BDL-061 S3 (`compose(core, architecture, stack, project)` with a project overlay) exists to fix, and this entry is the concrete case for it: the failure is not hypothetical drift, it is our own bead identifiers reaching adopters' onboarding text.
+    **Expected:**
+    - Until the overlay lands, the propagation must be **announced, not silent** — a hook that rewrites a distributed artifact should say so and require confirmation, the same standard we hold `sync-update` to (#163).
+    - The direction should be explicit. Today a local edit flows *outward* by default; the safe default is that the shipped template is the source and a local divergence is reported, with promotion to the template a deliberate act.
+    - Add a check that no project-local identifier — bead ids, our issue numbers, our repo's measured facts — appears in anything under `templates/`. Cheap, and it would have caught this at the commit.
+    **Related:** #139/#152 (a project has no supported place for its own additions — the same gap from the adopter's side), #163 (re-attesting without evidence). Fixed for this instance by rewriting the template paragraph to a version that is true for an adopter.
+    **Open question, noticed while fixing this and deliberately not chased here:** after the two files were made to differ on purpose, `beadloom ci` still reported `config-check PASS: agent-config in sync`. That is plausibly correct by design — CONTEXT's decision is that `config-check` verifies the *composition result*, not file bytes — but it has not been verified, and "in sync" printed over two files that demonstrably differ is the exact shape this slice spent itself on. Whoever takes S3's composition work should establish which it is before relying on that green.
+
+176. [2026-08-23] [LOW] An incremental `reindex` prints `Imports: 0` and `Rules: 0` on the run that refreshed them
+
+    **Severity:** low (cosmetic, but it is a zero printed by the command whose honesty BDL-061 S2 restored)
+    **Command:** `beadloom reindex`
+    **Context:** found by the S2 review while watching the incremental path catch an injected boundary violation — the run genuinely re-extracted imports, and its summary said it had indexed none.
+    **Issue:** `ReindexResult.imports_indexed` and `.rules_loaded` are only populated on the `--full` path (`application/reindex/full.py`), while the incremental path calls `reindex_file_imports()` without recording a count, so the CLI's `Imports:` / `Rules:` lines print the dataclass defaults. A reader cannot distinguish "no imports were touched" from "imports were refreshed and nobody counted them".
+    **Expected:** either backfill both counters to the live DB totals on the incremental path — the fix #112 already applied to `Symbols:` for exactly this reason — or label them as per-run deltas and omit them when the path does not compute one. Same shape as #148: a number whose meaning depends on which path produced it.
+    **Related:** #112 (closed, BDL-047 — the identical defect on `Symbols:`), #148.
+
+175. [2026-08-22] [CRITICAL] 🔴 A clean-database `beadloom ci` is structurally blind to doc staleness — the rebuild adopts the current tree as its own baseline
+
+    **Severity:** critical (the freshness gate reports PASS for work it cannot have checked, and the blindness is *caused by* the practice this project recommends for a different defect)
+    **Command:** `beadloom reindex` on a fresh DB, then `beadloom sync-check` / `beadloom ci`
+    **Context:** found by the S2 review bead, reproduced by the coordinator. One modified source file (`graph/linter.py`), its paired doc untouched, measured by exit code:
+
+    ```
+    incremental reindex → sync-check   exit 2   (stale — correct)
+    rm beadloom.db; reindex → sync-check exit 0   (blind)
+                            → beadloom ci exit 0
+    ```
+
+    **Issue:** a fresh database holds no prior baseline, so the rebuild records the current hashes *as* the baseline. Nothing is stale relative to a baseline created a second ago. `sync-check` then reports every pair fresh and the gate exits 0.
+    **Why it is worse than an ordinary false green:** the blindness is produced by following this project's own advice. Standing rule CLEAN-DB LINT told every agent to lint on a clean database, because incremental reindex did not refresh import edges (#142). That workaround silently made the *freshness* leg vacuous. **A workaround for one lying check created another** — and the coordinator ran the gate that way all through BDL-061 S1 and S2, reporting the results as authoritative verification each time.
+    **Pre-existing at `main`** (`7c5fa7d`), not introduced by S2 — verified by the reviewer against `main`'s own code.
+    **Expected:**
+    - A rebuild must not silently establish a baseline. Either it preserves the prior baseline where one exists, or `sync-check` must report "no baseline — not checked" rather than "fresh". The distinction is the same one #174 and #146 turn on: *unverifiable* is not *clean*.
+    - `beadloom ci` should know whether the index it just built has a usable baseline, and say so in the sync-check line rather than printing a count that means nothing.
+    - Once fixed, delete the practice too: with #142 retired in BDL-061 S2, "lint on a clean DB" is no longer needed, and leaving the habit in place keeps the hazard alive.
+    **Related:** #174 (the gate passes when a declared doc is deleted), #146, #172, #173. Same theme, and this entry is the one that explains why nobody noticed the others sooner.
+    > Tracked as a bead (P0).
+
+174. [2026-08-22] [CRITICAL] 🔴 The documentation gate is defeated by deleting documentation — `beadloom ci` exits 0 with every step PASS
+
+    **Severity:** critical (the product's central promise — "no code reaches `main` without current docs" — is satisfiable by removing the docs)
+    **Command:** `beadloom ci`, `beadloom sync-check`, `beadloom doctor`
+    **Context:** found by the S2 verification bead and reproduced by the coordinator through the real CLI before filing. Delete one SPEC that the graph declares, run the gate on a clean DB:
+
+    ```
+    rm docs/domains/graph/features/rule-engine/SPEC.md
+    beadloom ci
+      lint         PASS: 12 rules, 0 violations
+      sync-check   PASS: 269 pair(s) fresh     ← was 275
+      docs-audit   PASS: 13 mention(s) fresh
+      doctor       PASS: 21 check(s) clean     ← was 20
+      exit 0
+    ```
+
+    **Issue:** six declared pairs vanished and the gate called the result fresh. The `doctor` check count *rose* while a file was being deleted. Nothing anywhere reported that the declared surface had shrunk.
+    **Why it outranks every other false-green in this log:** the others make a check unreliable about what it examined. This one lets the thing being examined disappear. The cheapest way to pass the gate is now to delete the document rather than update it — and an agent under time pressure, a careless rebase, or a merge that drops a file all produce green.
+    **It is the exact shape of the `component`-node defect (#146), one level up.** That one said "clean" means "no pairs exist" rather than "docs are fresh", for a node kind. The same equation survives for whole DOCUMENTS. A pair whose doc is gone is not fresh — it is unverifiable, and those two must not print the same word. `sync-check` calling a pair `ok` when the file is gone is the same defect from the other side.
+    **Expected — the third item is the one that makes it durable:**
+    - A declared doc that does not exist is a failure, not an absence; *missing* and *stale* are different facts and should read differently.
+    - The declared-pair **count** is part of the contract. A run whose count fell since the last run must say so — the silent 275 → 269 was the available signal and it was discarded.
+    - **Nothing may pass by having less to check.** Audit every gate step against that sentence, not only `sync-check`: `doctor` reported 21 clean while a file vanished, and its `20 check(s) clean` separately counts 9 warnings and 1 "not verified". A count that grows when the tree shrinks is not a count of anything.
+    **Related:** #146 (same equation, node kind), #172 (a rule that cannot match reads clean), #173 (the audit affirms one fact thirteen times). Together these four are one theme: *a green result that describes the checker's ignorance rather than the code's health.*
+    > Tracked as a bead (P0, `beadloom-mr2l.46`).
+
+173. [2026-08-23] [HIGH] 🔴 `docs audit` reports green about facts it never checked — three measured false-negative classes, and one of them printed a false claim as *verified*
+
+    **Severity:** high (a false positive fails the Gate and gets fixed; every one of these is silent, and the audit's own output reads as a clean bill of health)
+    **Command:** `beadloom docs audit`, `beadloom ci`
+    **Context:** the sweep asked for by `beadloom-mr2l.44` while fixing #169. #169 was found twice by the Gate going red; nobody had looked for the half that keeps the Gate green. Measured on this repo, 2026-08-23.
+    **The worst one printed a lie as a verification.** `The graph holds 1,067 nodes.` was extracted as `067`, compared equal to the project's `node_count` of 67, and listed under **Fresh (verified)** — the audit affirmed a claim that is off by a thousand. Symmetrically, the TRUE sentence `The suite has 6,390 tests.` extracted as `390` and was reported stale. One defect, both directions, and only the noisy direction was ever noticed. (Fixed in `.44`; recorded here as the proof the class is real.)
+    **Two more, unfixed and pinned as strict `xfail`s** in `tests/test_doc_scanner_tokenization.py::TestKnownBlindSpots` so they go LOUD when someone fixes them:
+    - Counts below 10 are never extracted for any `*_count` fact. `language_count` is **1** in this repo, so that fact cannot be audited at all — any claim about it, right or wrong, is invisible, and the audit reads green.
+    - A Layer-1 modifier word anywhere in the +/-3 word window suppresses a genuine count even when it modifies a different noun: `The graph holds 316 edges, one per import.` yields nothing, because of `per`.
+    **The measurement that makes the shape plain:** the audit prints a Ground Truth block of **nine** facts and then `13 mention(s) fresh` — and all 13 are the **same** fact (`mcp_tool_count`). `cli_command_count`, `edge_count`, `node_count`, `rule_type_count`, `test_count` and `version` have **zero** findings; no doc in the repo states the current version at all. A green `docs-audit` leg today means "one fact of nine was checked", and nothing in the output says so. By design but equally silent: `SPEC.md` / `CONTRIBUTING.md` suppress all count facts and `docs/**/features/*/SPEC.md` is excluded outright — 26 of the 72 `.md` files under `docs/` are never scanned.
+    **Expected — report the surface, not more heuristics:**
+    - Emit per-fact coverage: for each fact in the registry, the number of mentions found. A fact with **zero** mentions is `not_covered`, printed as such, and never counted as passing. This is "unknown is not zero" applied to the audit's own output.
+    - Name the files whose counts were suppressed by the file-type heuristic, and why.
+    - Only then revisit the `<10` threshold and the modifier window: with coverage reported, their cost is visible instead of invisible.
+    **Related:** #170's third piece ("report the surface, not just the firings") is the identical defect on the guard binding; #161 and #169 are the same audit being confident about text it misparsed. Tracked as `beadloom-mr2l.45`.
+
+172. [2026-08-22] [HIGH] 🔴 `from:` and `to:` are matched against two different vocabularies, so a `src/`-prefixed `to:` silently disables the rule — and the reference taught the broken form
+
+    **Severity:** high (the architecture gate printed a green count computed over rules incapable of firing; a required CI check, both git hooks, and the review role all read that count)
+    **Command:** `beadloom lint --strict`, `beadloom ci`
+    **Context:** found during BDL-061 S2 while fixing #142/#146/#147, and reproduced end-to-end through the real CLI. Two of this project's own twelve rules — `tui-no-direct-infra`, `onboarding-no-direct-infra` — could not match anything, while `lint --strict` reported `12 rules, 0 violations`.
+    **Issue:** `from:` is matched against the **repo-relative source file path as indexed** (`src/beadloom/tui/app.py`, source root included). `to:` is matched against the **dotted import path with dots replaced by slashes** (`beadloom.infrastructure.db` → `beadloom/infrastructure/db`) — no source root, no extension, because an import names a module rather than a file. A `to:` written `src/beadloom/infrastructure/**` therefore matches nothing, ever. Two engineers wrote the `src/`-prefixed form into `rules.yml` and neither noticed, because **the rules reference itself documented that form**. The defect is in the documentation as much as in the four lines of YAML.
+    **A second, independent defect in the same area:** a `to:` glob covering a package did not cover a *bare import of the package*. `from pkg.infrastructure import db` is indexed with `import_path == "pkg.infrastructure"` — the target is the package, not the module — so the most common Python reach-in form was invisible. The probe injected to reproduce this issue (`from beadloom.infrastructure import db` in the TUI) fired under **no** glob form until this was fixed, which is why the first reproduction attempt wrongly concluded all four rules were dead.
+    **Measured:** repairing rule 1 alone surfaces 1 violation (`tui/data_providers.py:284`); repairing rules 1 and 2 surfaces 7 (1 tui + 6 onboarding). The two `ai_agents` rules already carried the correct dotted `to:` and their zero was truthful — 11 of 221 indexed targets match them.
+    **Expected, and the third part is the one that matters:**
+    - State the two vocabularies in the rules reference, in one sentence, with an example of each. (Done in this fix.)
+    - Make a `to:` covering a package cover a bare import of it, while leaving sibling names (`pkg/infrastructure_docs`) unmatched.
+    - **Report a rule that cannot match.** A glob matching zero candidate imports across the whole graph is a `rule_liveness` warning, as is an exemption that suppresses nothing. This is the S1 guard lesson — *a check that can never fail is not a check* — applied to the linter, and it is what makes the fix permanent rather than a one-time correction.
+    **Related:** #142/#146/#147 make `lint` unreliable; this made a third of it inert. Same family, higher severity.
+    > Fixed in BDL-061 S2 (`beadloom-mr2l.43`).
+
+171. [2026-08-22] [MEDIUM] Concurrent `bd create` shifts the id out from under the id written in the title — and the wrong dependency edge is then perfectly valid
+
+    **Severity:** medium (silent, produces a well-formed but wrong DAG, and only surfaces when someone reads the echo)
+    **Command:** `bd create --parent <id>`, `bd dep add`
+    **Context:** observed in BDL-061 S2 wave 1, with three agents and the coordinator working the same epic. Our convention writes the bead's own number into its title (`[BDL-061.39][dev] ...`), but the number is authored **before** creation while the id is allocated **at** creation. During a concurrent wave those two diverge: the coordinator wrote two beads intending `.39` and `.40`; a subagent had meanwhile created its own bead, which took `.39`; the coordinator's two landed as `.40` and `.41` carrying `[BDL-061.39]` and `[BDL-061.40]` in their titles.
+    **The damage is not the cosmetic mismatch, it is the wiring.** The coordinator then ran `bd dep add beadloom-mr2l.39 beadloom-mr2l.5`, which made the *subagent's* Windows-CI bead depend on the S2 core — a real edge, on a real bead, accepted without complaint, and wrong. `bd dep add` cannot detect this: every id exists and the graph stays acyclic, so there is nothing malformed to reject.
+    **What caught it:** `bd dep add` echoes both beads' **full titles**, not just their ids. Reading that echo is the only reason the mis-wiring was noticed within seconds instead of surviving into the next wave. That verbosity is good design and worth keeping — the entry records it so nobody "tidies" it into id-only output.
+    **Expected:** three separable pieces.
+    - **Stop keeping the number twice.** Either drop the id from the title convention and let `bd` be the single source of it, or have the scaffolding write the title *after* creation from the id actually allocated. Two sources of truth for one number is the root cause; the concurrency only exposes it.
+    - **Make `bd create` report the id it allocated in a form a script can consume**, so an agent that must reference its own bead does not have to predict the number. (`--json` on create would be enough.)
+    - **Consider a `bd dep add --expect-title <substring>` guard**, or at minimum document that dependency wiring under a concurrent wave must be verified against `bd dep tree`, not assumed from the ids the author had in mind.
+    **Note on scope:** `/coordinator` *mandates* launching independent ready beads concurrently, so this is not an exotic mode — it is the prescribed one. The id-in-title convention is ours, not `bd`'s, which makes the first fix ours to make.
+
 170. [2026-08-22] [HIGH] 🔴 A guard bound to `Edit|Write` does not see a file written through `Bash` — the enforcement surface is narrower than the promise
 
     **Severity:** high (the guard reports it ran and passed on the edits it saw; the edits it never saw are indistinguishable from none)
@@ -54,6 +186,11 @@
     **Context:** a SPEC sentence mentioning bead `BDL-061.29` alongside the words "the CLI" was extracted as a `cli_command_count` claim; the Gate failed with "doc says 29 but project state is 39". The number was never a claim about anything — it is the tail of an identifier.
     **Expected:** do not extract a number that is part of a larger token (`BDL-061.29`, `v2.2.0`, `Python 3.10`). Tokenize before matching rather than scanning for digits near a keyword. Same family as #161: the audit is confident about text it has misparsed.
     **Workaround:** reword the sentence — which is exactly the outcome to avoid, since it trains authors to write for the checker.
+    > Fixed in BDL-061 S2 (`beadloom-mr2l.44`). The extractor now tokenizes on whitespace and
+    > accepts a number only when the token's whole core is a number, so `BDL-061.33`, `v2.2.0`,
+    > `Python 3.10`, `PR #33`, `cli.py:645` and `33/40` are identifiers again. No prose was
+    > reworded, no tolerance and no ignore entry were added — three now-dead ignore entries were
+    > RETIRED instead. Measured: 4 spurious extractions removed repo-wide, 0 genuine ones lost.
 
 168. [2026-08-22] [MEDIUM] `pytest-randomly` produces failures no seed reproduces, and nothing in the output says the order was random
 
@@ -174,8 +311,12 @@
     **Compounding:** `--strict` is also required for a non-zero exit on an `error`-severity violation; plain `lint` exits 0 while printing the violation. A caller checking only the exit code reads a real boundary break as clean (same false-green family as #142/#146).
     **Expected:** make `lint` read-only by default (reindex only on an explicit `--reindex`), or at minimum document the write in `--help` and warn when the index is written by a verb the user invoked to *check* something. Ideally `--no-reindex` becomes the default and the docs name the trade-off (possibly stale graph) explicitly.
     **Workaround:** downstream pinned the argv form to `lint --no-reindex --strict` and added a test asserting the DB hash is unchanged across the call.
+    > **Fixed in BDL-061 S2 (`beadloom-mr2l.5`), verified in `.6` and again in `.7`.** `lint --no-reindex` is a genuine read-only path — `beadloom.db` is byte-identical afterwards under both `journal_mode=wal` and `journal_mode=delete`, and a MISSING index is now exit 2 with `index not found … Run 'beadloom reindex' first` instead of an empty database created in the same breath and reported clean. `--help` states that the default writes, and plain `lint` names on stderr that its exit code stays 0 over error-severity violations without `--strict` (the code itself is deliberately unchanged: turning it would flip an adopter's green pipeline red).
+    > **Two residues, both measured, both unfixed.** (a) On a WAL index the read-only form still creates and leaves `beadloom.db-wal` / `beadloom.db-shm`, so byte-identity is a property of the FILE, not of `.beadloom/`. (b) **`--no-reindex` answers about the INDEX and never says so:** with a real error-severity crossing on disk and a stale index, `lint --no-reindex --strict` printed `0 violations, 12 rules evaluated` at rc 0, silent on both streams, while plain `lint --strict` on the same tree exited 1 — and `beadloom ci --no-reindex` reported `lint PASS` over that same live violation. The flag is exposed to adopters (`.github/actions/beadloom-gate` has a `no-reindex` input; `docs/guides/ci-setup.md` recommends `beadloom ci --no-reindex` in the GitLab example), so #147's fix created a second way to lint a stale graph. `file_index` already stores a sha256 per path, so "N files differ from the index" is one query. **Documented in `docs/services/cli.md` and `docs/guides/ci-setup.md`; no bead yet.**
 
 148. [2026-08-05] [MEDIUM] `lint` prints machine porcelain when stdout is not a TTY — the human summary line vanishes in a pipe, so the documented output is not what a program receives
+
+    **Escalated 2026-08-22 — this is not cosmetic, it produces wrong conclusions.** `sync-check` has the same TTY-dependent shape, and it corrupted the coordinator's own verification twice in one session while investigating a suspected gate defect. Counting `beadloom sync-check | grep -c '^stale'` returned **0** on a tree with genuinely stale pairs, because the piped shape omits the per-pair lines the interactive shape prints. Measured on the same tree, same moment: piped grep count **0**, exit code **2**, `--json` **2 stale pairs**. The first reading was used to conclude — wrongly — that `reindex` re-baselines sync pairs and that the gate could be turned green by running it twice. Neither is true. A monitoring surface whose shape depends on whether a human is watching will be sampled by programs and by agents, and it will silently give them the wrong number. **Any agent instruction to "count the stale lines" is unsound today**; the exit code and `--json` are the only trustworthy contracts, and that should be stated in the docs until the shape is stable.
 
     **Severity:** medium (contract differs by TTY; parsers written against the documented/human output silently see nothing to parse)
     **Command:** `beadloom lint` / `beadloom lint --strict`
@@ -201,6 +342,8 @@
     **Issue:** Pair construction appears to be keyed on node kind (feature/service) rather than on "node declares `docs:`". A component's docs can therefore rot indefinitely with a permanently green gate — and, worse, the operator/agent is actively misled, because the same command prints an OK line for feature nodes right next to the silent gap. There is no "N nodes declare docs but contribute no pairs" warning anywhere in `sync-check`, `doctor`, or `ci`.
     **Expected:** Build sync pairs for ANY node that declares `docs:` (kind-independent), or — if components are deliberately out of scope — say so explicitly in the output (`skipped: 4 component nodes`) and flag it in `doctor`. A freshness gate must never return green for files it did not examine.
     **Workaround:** Verify component docs by reading the code; do not trust `sync-check` for them. Detect the gap with `sync-check --json` and compare the set of `ref_id`s against the nodes that declare `docs:` in `services.yml`.
+    > **Fixed in BDL-061 S2 (`beadloom-mr2l.5`), verified in `.6` and `.7`.** Pairing was never keyed on node kind — it read annotations only, which is why the kinds whose sources carry no `# beadloom:` comment looked exempt. `build_sync_state` now falls back to the files a node's `source:` OWNS when annotations yield none, `check_sync` no longer short-circuits on an empty `sync_state`, and `find_unchecked_doc_nodes` NAMES every node that still contributes no pair, with a reason (`no_indexed_code`, `files_owned_by_nested_nodes`, `no_source`) — advisory, never changing the exit code. Measured on this repository: 272 → 275 pairs, all 22 `component` nodes covered, 4 nodes named as not-checked where the gate previously printed nothing.
+    > **Residue:** one of those reasons names the wrong cause. `graph-reads` is reported `no_indexed_code` for a file that IS indexed; what is absent is ANNOTATED symbols, because the module's annotations sit inside its docstring, which `extract_symbols` does not read. Bead `beadloom-mr2l.50`.
 
 145. [2026-08-03] [MEDIUM] `ctx <ref> --json` returns the REPO-WIDE `code_symbols` array, not the focused node's — an agent sizing/inspecting a node from its own context bundle reads every other package's symbols
 

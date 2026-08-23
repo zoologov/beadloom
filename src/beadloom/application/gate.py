@@ -271,6 +271,24 @@ def _step_config_check(project_root: Path) -> GateStep:
     from beadloom.onboarding import check_config_drift
 
     db_path = project_root / ".beadloom" / "beadloom.db"
+    if not db_path.exists():
+        # Guard mirrored from the sibling steps. Without it ``connection``
+        # CREATES an empty database, so a later step that only checks for the
+        # file's existence found one with no tables and crashed — a gate step
+        # manufacturing the state the next step reads (BDL-UX #147's shape).
+        return GateStep(
+            "config-check",
+            passed=False,
+            findings=[
+                _simple_finding(
+                    "config-check",
+                    "error",
+                    "database not found",
+                    "run `beadloom reindex` first",
+                )
+            ],
+            summary="database missing",
+        )
     with connection(db_path) as conn:
         drifts = check_config_drift(project_root, conn)
 

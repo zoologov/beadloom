@@ -109,7 +109,7 @@ beadloom lint                     # Human-readable (rich) — default in TTY
 beadloom lint --format json       # Structured JSON for scripts
 beadloom lint --format porcelain  # Machine-readable, one line per violation
 beadloom lint --format github     # GitHub Actions ::error annotations (inline on the PR)
-beadloom lint --no-reindex        # Skip reindex (faster, uses existing DB)
+beadloom lint --no-reindex        # Read the index as-is (read-only; see the note below)
 ```
 
 Every violation carries an agent-actionable `remediation` ("how to fix"), surfaced
@@ -117,10 +117,19 @@ in `json` (a `remediation` key per violation) and rendered into the `github`
 annotation message — so an agent or CI reviewer gets the fix, not just the
 detection.
 
+**`--no-reindex` answers about the index, not about the tree.** It is the
+read-only form — it leaves `beadloom.db` byte-identical and refuses a missing
+index at exit 2 instead of creating one — but it judges whatever the index
+happens to hold. With an index older than the working tree it reports
+`0 violations` over a live error-severity crossing that plain `lint --strict`
+catches on the same tree (measured). Use it only where the caller has just
+reindexed; otherwise let the default reindex first, which is why the default
+writes the index.
+
 ## Unified Gate (`beadloom ci`)
 
 `beadloom ci` composes, in order, **reindex -> lint --strict -> sync-check ->
-config-check -> doctor -> (optional) federate landscape gate** into a single
+docs audit -> config-check -> doctor -> (optional) federate landscape gate** into a single
 verdict with one exit code (0 = every step passed, 1 = any step failed). It never
 short-circuits — every step runs and contributes findings — and it names every
 step that ran with its honest result (PASS/FAIL/SKIP); a green is never a silently
@@ -134,13 +143,26 @@ when piped — emits `::error` annotations so violations show inline on the PR).
 | `reindex` | rebuild the index from current code/graph | `--no-reindex` |
 | `lint --strict` | architecture-boundary violations | — |
 | `sync-check` | doc-code freshness (stale docs) | — |
+| `docs audit` | stale numeric facts stated in documentation | — |
 | `config-check` | AgentConfigAsCode — generated agent-config matches the graph | — |
 | `doctor` | graph integrity | — |
 | `federate --fail-on` | cross-service landscape gate | no `--hub` exports given |
 
 Beadloom dogfoods this gate on its own CI: the per-repo gate (`reindex` →
-`lint --strict` → `sync-check` → `config-check` → `doctor`) shipped and runs on
-every Beadloom PR. The cross-service landscape step is opt-in via `--hub`.
+`lint --strict` → `sync-check` → `docs audit` → `config-check` → `doctor`) shipped
+and runs on every Beadloom PR. The cross-service landscape step is opt-in via
+`--hub`.
+
+**What `--no-reindex` costs the verdict.** Skipping the reindex step makes every
+later step describe the index rather than the working tree: `lint` can pass over a
+crossing that exists on disk, and `sync-check` compares against whatever baseline
+the index already holds. Use the input only when something else in the same job
+has just reindexed. The opposite mistake is just as costly and less obvious: a
+gate run against a database built **from scratch** re-baselines every doc-code
+pair as it indexes, so its `sync-check` step reports every pair fresh by
+construction. On a fresh CI checkout, drift is detected with
+`sync-check --since <git-ref>` rather than by the stored baseline — that is what
+the AI tech-writer harness passes the push parent for.
 
 ### AgentConfigAsCode (`config-check`)
 
@@ -191,7 +213,7 @@ jobs:
 | `fail-on` | `""` | Federate fail-set (comma-separated, or `default`). Applied only with `hub-exports`. |
 | `hub-exports` | `""` | Space-separated satellite export artifact path(s); enables the federate landscape gate. |
 | `format` | `github` | `rich` \| `json` \| `github`. |
-| `no-reindex` | `false` | Skip the reindex step. |
+| `no-reindex` | `false` | Skip the reindex step, so every later step judges the existing index rather than the checked-out tree. |
 | `project` | `.` | Project root passed to `beadloom ci --project`. |
 
 The Action injects no secrets. It only installs uv, syncs deps, and runs `beadloom ci`.

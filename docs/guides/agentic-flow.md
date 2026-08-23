@@ -58,6 +58,7 @@ branch and integrates via a single PR:
    commit.
 4. **The PR triggers** the consolidated CI pipeline (`.github/workflows/ci.yml`,
    BDL-050): `gate` (the `beadloom ci` verdict) ∥ `tests` (the 3.10–3.13 matrix) ∥
+   `tests-locale` (the same suite under `C` and `en_US.ISO-8859-1`) ∥
    `site-build` (the VitePress build) run in parallel, then the
    [AI tech-writer](./ai-techwriter.md) job runs **only after all three are green**
    (`needs: [gate, tests, site-build]`) and commits its doc refresh **into the PR
@@ -65,15 +66,28 @@ branch and integrates via a single PR:
 5. **Merge when green** — a human merges once CI is green and any doc refresh has
    landed. No auto-merge; no direct push to `main`, so `main` stays always-green.
 
-Protect `main` once per repo (idempotent; safe to re-run):
+Protect `main` once per repo (idempotent — but read the sequencing note below
+before re-running it):
 
 ```bash
 beadloom setup-branch-protection --repo OWNER/NAME
 ```
 
-This requires a PR to `main` with the consolidated `ci.yml`'s **7 check-runs as
+This requires a PR to `main` with the consolidated `ci.yml`'s **9 check-runs as
 required status checks** — `gate`, `tests (3.10)`, `tests (3.11)`, `tests (3.12)`,
-`tests (3.13)`, `site-build`, `ai-techwriter` (BDL-050). Strict trunk-based keeps
+`tests (3.13)`, `tests-locale (C)`, `tests-locale (en_US.ISO-8859-1)`,
+`site-build`, `ai-techwriter` (BDL-050; the two `tests-locale` legs are the
+environment dimension added in BDL-061.38 — the same whole suite with the locale
+**varied, never pinned**).
+
+**Require only checks your pipeline can turn green.** The default set is applied
+whole, and `strict: true` blocks a merge until every context in it passes, so
+requiring a check-run that is red — or absent from your pipeline — makes the branch
+unmergeable until you fix it or narrow the set with `--check`. In this repository
+the two `tests-locale` contexts are knowingly red until bead `beadloom-mr2l.42`
+lands, so `main`'s live protection deliberately still carries the other seven.
+
+Strict trunk-based keeps
 `enforce_admins: true` (even the owner integrates via a PR) with 0 required reviews,
 so the solo maintainer self-merges but `main` is never bypassed (BDL-049). The
 vendored `.claude/CLAUDE.md` §6 (Git) and
@@ -278,6 +292,15 @@ guards:
   project root — so respelling a path cannot turn an exclusion into an opt-out.
 - A `guards:` key naming a guard nobody registered is a configuration error too,
   not a no-op, so a typo cannot quietly switch a gate off.
+- **A key Beadloom does not read is a configuration error as well** — a guard body
+  carries `strictness` / `exclusions` / `options`, an exclusion carries `path` /
+  `reason` / `until`, and nothing else. A dropped key is not harmless in both
+  directions: `exclude:` for `exclusions:` leaves the guard over-guarding, while
+  `option:` for `options:` drops the declared `trunk` and `working-branch` then
+  compares against `main` — measured on a project whose trunk is `develop`, an
+  edit made directly on `develop` came back `PASS` at exit 0. The verdict does
+  print the trunk it used, but a `pass` at 0 is shown to nobody, so the typo is
+  answered in the file where it was made.
 - The `guards:` block is read by the guard evaluator. `tools` / `architecture` /
   `stack` / `quality` are read by the role configurator. The two readers share one
   file and nothing else.
@@ -298,22 +321,25 @@ being folded into a verdict's `not_covered` (BDL-UX #170). Giving Beadloom its
 own event vocabulary, so that the adapter forwards *what happened* rather than
 *which guard to run*, is S3 work.
 
-### Exit codes, and the one that does not block
+### Exit codes, and who is asking
 
-| Code | Outcome | In Claude Code |
-|---|---|---|
-| `0` | `pass` / `skip` | the edit proceeds |
-| `1` | `warn` | shown to the agent, the edit proceeds |
-| `2` | `block` / `error` | the tool call is stopped |
-| `3` | usage or configuration error | **the edit proceeds** |
+| Code | Outcome | From a shell | Through a hook |
+|---|---|---|---|
+| `0` | `pass` / `skip` | — | the edit proceeds |
+| `1` | `warn` | — | shown to the agent, the edit proceeds |
+| `2` | `block` / `error` | — | the tool call is stopped |
+| `3` | usage or configuration error | reported | never returned — the class exits `2` |
 
-The harness stops a tool call on `2` and on nothing else. `3` was reserved so a
-broken `flow.yml` could never be mistaken for a guard that fired, and that
-distinction is worth keeping — but it means the class kept at `3` is loud and
-**fail-open**: while `.beadloom/flow.yml` will not parse, every bound guard
-answers "could not tell" and no edit is stopped. Bead BDL-061.33 owns the choice
-between mapping the class to `2` and having the adapter map it. Until it lands,
-read a `3` from a hook as an unenforced edit.
+The harness stops a tool call on `2` and on nothing else, so `3` stopped nothing:
+until **BDL-061.33** a `.beadloom/flow.yml` that would not parse left every bound
+guard answering "could not tell" while every edit went through — fail-open on the
+one file of this feature you edit by hand. `3` still exists, because a defect in
+your declared configuration is genuinely not the same thing as a guard that
+fired, and Click's own usage errors also exit `2`. It is now answered to the
+caller it means something to: run `beadloom guard` yourself and a broken
+`flow.yml` is a `3`; the same defect reached through `--hook` is a `2` and stops
+the edit. The mapping is in the CLI rather than in the generated script, so a
+second harness inherits it instead of re-implementing it.
 
 ## Scaffold contents + idempotency
 
@@ -475,7 +501,7 @@ This is stated deliberately, not glossed over:
   harness binding, not by the guard — see
   [the binding](#the-binding-and-what-it-does-not-cover).
 - **CI is the single source of true enforcement.** `beadloom ci` runs
-  independently in CI (reindex → lint → sync-check → config-check → doctor) as a
+  independently in CI (reindex → lint → sync-check → docs audit → config-check → doctor) as a
   required check on `main`; that is the gate nothing can route around (no
   `--no-verify`).
 

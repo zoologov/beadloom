@@ -13,7 +13,7 @@
             reason: "operational scripts are not bead-scoped"
             until: "BDL-0xx introduces a scripts node"
 
-Three rules are enforced here because each is a way a gate is switched off
+Four rules are enforced here because each is a way a gate is switched off
 without anyone saying so:
 
 * an exclusion carries **both** ``reason`` and ``until`` — an unnamed, undated
@@ -21,7 +21,10 @@ without anyone saying so:
 * a guard name that is not registered is an error, not a no-op, so a typo
   cannot silently disable a gate;
 * an unknown strictness value is an error rather than a fallback to something
-  looser.
+  looser;
+* a key this loader does not read is an error too, at either level
+  (:data:`GUARD_BODY_KEYS`, :data:`EXCLUSION_KEYS`) — see
+  :func:`_reject_unknown_keys` for what a dropped key costs.
 
 An absent ``guards:`` block is not an error: every registered guard resolves to
 its default spec (:data:`DEFAULT_STRICTNESS` = ``warn``, no exclusions), so a
@@ -64,6 +67,12 @@ STRICTNESS_VALUES: tuple[str, ...] = ("off", "warn", "block")
 
 #: Key under which a work kind's fallback strictness is declared.
 DEFAULT_KEY = "default"
+
+#: The keys one guard's declaration block may carry — the ones the loader reads.
+GUARD_BODY_KEYS: tuple[str, ...] = ("strictness", "exclusions", "options")
+
+#: The keys one exclusion entry may carry, all three of them required.
+EXCLUSION_KEYS: tuple[str, ...] = ("path", "reason", "until")
 
 
 class GuardConfigError(ValueError):
@@ -278,14 +287,51 @@ def _build_strictness(value: object, *, guard: str) -> dict[str, str]:
     return strictness
 
 
+def _reject_unknown_keys(
+    body: Mapping[object, object], *, where: str, allowed: tuple[str, ...]
+) -> None:
+    """Refuse a key nobody reads, naming it and the set that would have been read.
+
+    The fourth rule of this module, and the one that was missing (BDL-061.34). A
+    key the loader does not read is dropped in silence, and the guard then runs
+    on a default the project never declared — which is the same failure as an
+    unregistered guard name and an unknown strictness value, both already
+    errors here. It is not symmetric: ``exclude:`` for ``exclusions:`` costs
+    zero exclusions and the guard OVER-guards, while ``option:`` for
+    ``options:`` costs ``working-branch`` its declared ``trunk``. Measured
+    through the real binary on a project whose trunk is ``develop``: an edit
+    made directly on ``develop`` answered ``PASS ... (trunk is 'main')`` at exit
+    ``0``.
+
+    Reported as an error rather than a warning because the one mitigation — the
+    verdict names the trunk it compared against — travels on the stream and the
+    exit code a hook harness discards, so in the case that matters nobody reads
+    it. Nothing green goes red: a ``guards:`` block that only uses keys the
+    loader reads is unaffected, and the feature is unreleased, so no published
+    project has one at all.
+    """
+    unknown = sorted(str(key) for key in body if key not in allowed)
+    if unknown:
+        msg = (
+            f"flow.yml: {where} has unknown key(s) {unknown} — "
+            f"allowed: {list(allowed)}. A key nothing reads is dropped in "
+            "silence, and the guard then runs on a default the project never "
+            "declared"
+        )
+        raise GuardConfigError(msg)
+
+
 def _build_exclusion(entry: object, *, guard: str) -> GuardExclusion:
     """Validate one exclusion entry — ``path`` + ``reason`` + ``until`` all required."""
     if not isinstance(entry, dict):
         msg = f"flow.yml: guards.{guard}.exclusions entries must be mappings"
         raise GuardConfigError(msg)
+    _reject_unknown_keys(
+        entry, where=f"guards.{guard} exclusion {entry!r}", allowed=EXCLUSION_KEYS
+    )
     missing = [
         field_name
-        for field_name in ("path", "reason", "until")
+        for field_name in EXCLUSION_KEYS
         if not str(entry.get(field_name) or "").strip()
     ]
     if missing:
@@ -310,6 +356,7 @@ def _build_spec(name: str, body: object) -> GuardSpec:
     if not isinstance(body, dict):
         msg = f"flow.yml: guards.{name} must be a mapping"
         raise GuardConfigError(msg)
+    _reject_unknown_keys(body, where=f"guards.{name}", allowed=GUARD_BODY_KEYS)
     raw_exclusions = body.get("exclusions") or []
     if not isinstance(raw_exclusions, list):
         msg = f"flow.yml: guards.{name}.exclusions must be a list"

@@ -23,6 +23,7 @@ from beadloom.graph.rules.types import (
     DenyRule,
     ForbidEdgeRule,
     ImportBoundaryRule,
+    ImportExemption,
     LayerDef,
     LayerRule,
     ModuleCoverageRule,
@@ -211,6 +212,45 @@ def _parse_cycle_rule(
     )
 
 
+def _parse_import_exemption(
+    name: str,
+    index: int,
+    entry: object,
+) -> ImportExemption:
+    """Parse one entry of ``forbid_import.exempt``.
+
+    An exemption must name what it exempts (``from`` and/or ``to``), why, and
+    when it goes away: an exclusion with no reason and no exit condition is how
+    a gate is switched off without saying so (BDL-061 CONTEXT).
+    """
+    where = f"Rule '{name}': forbid_import.exempt[{index}]"
+    if not isinstance(entry, dict):
+        msg = f"{where} must be a mapping"
+        raise ValueError(msg)
+
+    from_glob = str(entry.get("from", "") or "").strip()
+    to_glob = str(entry.get("to", "") or "").strip()
+    if not from_glob and not to_glob:
+        msg = f"{where} must set 'from' and/or 'to' — an entry matching both would exempt the rule"
+        raise ValueError(msg)
+
+    reason = str(entry.get("reason", "") or "").strip()
+    if not reason:
+        msg = f"{where} must carry a non-empty 'reason'"
+        raise ValueError(msg)
+    until = str(entry.get("until", "") or "").strip()
+    if not until:
+        msg = f"{where} must carry a non-empty 'until' (its exit condition)"
+        raise ValueError(msg)
+
+    return ImportExemption(
+        to_glob=to_glob or "*",
+        from_glob=from_glob or "*",
+        reason=reason,
+        until=until,
+    )
+
+
 def _parse_forbid_import_rule(
     name: str,
     description: str,
@@ -229,12 +269,21 @@ def _parse_forbid_import_rule(
         msg = f"Rule '{name}': forbid_import.to must be a non-empty string"
         raise ValueError(msg)
 
+    exempt_raw = forbid_data.get("exempt", [])
+    if not isinstance(exempt_raw, list):
+        msg = f"Rule '{name}': forbid_import.exempt must be a list"
+        raise ValueError(msg)
+    exempt = tuple(
+        _parse_import_exemption(name, i, entry) for i, entry in enumerate(exempt_raw)
+    )
+
     return ImportBoundaryRule(
         name=name,
         description=description,
         from_glob=from_glob,
         to_glob=to_glob,
         severity=severity,
+        exempt=exempt,
     )
 
 

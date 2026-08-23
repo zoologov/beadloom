@@ -57,9 +57,12 @@ _HOOK_SCRIPT = '''\
 # Beadloom CLI, which owns every decision. Configure guards, strictness per work
 # kind, and exclusions in `.beadloom/flow.yml`.
 #
-# Exit codes: 0 = pass/skip, 1 = warn (shown, never blocking), 2 = block or
-# error (the guard could not answer, so the edit stops), 3 = usage or
-# configuration error.
+# Exit codes this adapter can return: 0 = pass/skip, 1 = warn (shown, never
+# blocking), 2 = block, or error — the guard could not answer, so the edit stops.
+# A defect in `.beadloom/flow.yml` or in the command line arrives as 2 here too.
+# Run the same command without `--hook` and it exits 3 instead, which keeps a
+# broken configuration distinguishable from a guard that fired; through a hook
+# that distinction would only mean "the edit went through unguarded".
 exec beadloom guard "$1" --hook claude-code
 '''
 

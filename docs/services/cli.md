@@ -69,6 +69,10 @@ Order: drop tables -> create schema -> load graph YAML -> index docs -> index co
 
 When no changes are detected, displays current DB totals (nodes, edges, docs, symbols) instead of reindex counts. Warns about missing tree-sitter parsers when symbols == 0.
 
+The incremental path re-extracts imports for the code files it touched, deletes the imports of files that disappeared, and rebuilds the derived `depends_on` edge set (marked `extra.derived='imports'`, so a graph-declared edge is never collateral damage). A boundary violation introduced between two incremental runs is therefore caught by `lint` without a full rebuild. Two counters in the summary do not describe that work: `Imports:` and `Rules:` are only populated on the `--full` path and print `0` on an incremental run that did refresh them.
+
+**Reindex sets the freshness baseline.** `sync_state` is (re-)established from the tree being indexed, so a reindex into a fresh or deleted database makes every declared pair fresh by construction. That is why doc freshness must be checked after an *incremental* reindex on an existing index — see `beadloom sync-check`.
+
 ### beadloom ctx
 
 Get a context bundle for the specified ref_id(s).
@@ -192,6 +196,12 @@ Exit codes: 0 = all OK, 1 = error, 2 = stale pairs found.
 - `--report` -- ready-to-post Markdown report for CI (GitHub/GitLab).
 - `--ref` -- filter results by ref_id.
 - `--since GIT_REF` -- compute drift against the code state at a **git ref** (e.g. the push's parent commit) instead of the stored `sync_state` baseline. Reports pairs whose code drifted since the ref while the doc was not correspondingly updated. This makes drift detection work on a **fresh CI checkout**: a clean clone reindexes from scratch and re-baselines `sync_state` to the just-pushed code, so without a ref baseline `sync-check` sees 0 stale even when the push left a doc behind. Mirrors `beadloom diff --since`. Used by the AI tech-writer harness (it passes the push parent — `github.event.before` / `$CI_COMMIT_BEFORE_SHA`, falling back to `HEAD~1`).
+
+**What a green count covers.** A node that declares `docs:` contributes pairs from its `# beadloom:` annotations or, when those yield none, from the files its `source:` owns — the pairing is independent of node kind. Whatever is still uncovered is listed BY NAME with a reason, as an advisory line that never changes the exit code: `no_indexed_code` (no indexed code under the node's source), `files_owned_by_nested_nodes` (every file under it belongs to a more specific node) and `no_source` (the node declares no source path). `--json` carries the same list in `data.unchecked` with `summary.unchecked`; `--porcelain` prints one `unchecked` line per unchecked doc.
+
+Measured on this repository: of 279 declared pairs, 275 are checked and the other 4 are listed with their reason.
+
+**A rebuilt index has nothing to compare against.** Freshness is measured against the baseline `reindex` stored, so a database built from scratch records the current tree AS the baseline and `sync-check` then reports every pair fresh — including pairs whose doc was never updated (measured: incremental reindex → exit 2 with 6 stale; `rm .beadloom/beadloom.db*` + reindex → exit 0 with 0 stale, same tree). Verify doc freshness with an **incremental** reindex on the existing index, or compare against a git ref with `--since`, which is what the CI harness does on a fresh checkout. A clean database is the right instrument for `lint` and the wrong one for `sync-check`.
 
 Human-readable output includes reason-aware formatting:
 - `untracked_files` reason: displays list of untracked files in `details`.
@@ -463,7 +473,11 @@ Checks cross-boundary imports against rules defined in `rules.yml`. Format auto-
 
 Each violation carries an agent-actionable `remediation` hint derived per rule kind (deny/forbid → remove/reroute the import or edge; cycle → break the cycle at a named edge; layer → invert the dependency or extract a shared abstraction; cardinality → split the node; require → add the required edge).
 
-Exit codes: 0 = clean (or violations without `--strict`/`--fail-on-warn`), 1 = violations with `--strict` (errors only) or `--fail-on-warn` (any violation), 2 = configuration error.
+Exit codes: 0 = clean (or violations without `--strict`/`--fail-on-warn`), 1 = violations with `--strict` (errors only) or `--fail-on-warn` (any violation), 2 = configuration error or missing index.
+
+Without `--strict` the exit code stays 0 even when error-severity violations were printed. That is deliberate — changing it would turn an adopter's green pipeline red on upgrade — so `lint` names the omission on stderr instead (`warning: N error-severity violation(s) found, but the exit code stays 0 without --strict`).
+
+**Which form writes the index.** Plain `beadloom lint` reindexes first and therefore WRITES `.beadloom/beadloom.db` (measured: its sha256 changes). This is by design: the default must never lint a stale graph. `--no-reindex` is the read-only form — it leaves `beadloom.db` byte-identical (measured under both `journal_mode=wal` and `journal_mode=delete`) and refuses a missing index at exit 2 with `index not found … Run 'beadloom reindex' first` rather than creating one and reporting `0 violations` against it. Two qualifications, both measured: on a WAL index the read-only form still creates and leaves the `beadloom.db-wal` / `beadloom.db-shm` sidecars, so byte-identity is a property of the FILE and not of `.beadloom/`; and `--no-reindex` answers about the INDEX rather than about the working tree, so with a stale index it reports `0 violations` over a boundary violation that plain `lint --strict` catches on the same tree (BDL-UX, `beadloom-mr2l`). Use it when you have just reindexed, or when the read-only property is what you need.
 
 ### beadloom tui
 
@@ -543,6 +557,8 @@ Scans markdown documentation for numeric mentions (version strings, counts) and 
 - `--path` -- override default scan paths with custom glob patterns (can be specified multiple times).
 
 Exit codes: 0 = no issues (or below threshold), 1 = `--fail-if` condition met.
+
+**What counts as a claim.** A line is split on whitespace and only a token whose whole core is a number is a candidate — all digits, or digits in thousands groups (`6,390`, read whole as `6390`). A number inside a larger token is an identifier rather than a claim (`BDL-061.33`, `v2.2.0`, `utf-8`) and is never extracted; markdown emphasis, brackets and trailing punctuation around the token are stripped first. See `docs/domains/doc-sync/features/docs-audit/SPEC.md` for the layer model and the blind spots pinned as strict `xfail`s.
 
 **Tuning false positives.** The audit masks dates, hex, issue IDs, line refs, and version pins, and applies per-fact tolerances. Two `.beadloom/config.yml` keys handle the rest:
 
@@ -638,13 +654,13 @@ beadloom guard NAME --hook claude-code            # harness event as JSON on std
 beadloom guard --liveness [--json] [--project DIR]
 ```
 
-Returns a verdict `{guard, outcome, why, not_covered[], remediation, context}` — plus `recorded` and `not_recorded_because` under `--json` — where `outcome` is `pass` / `warn` / `block` / `skip` / `error`. **Exit codes carry the outcome** so a shell adapter needs no parsing: `0` for `pass`/`skip`, `1` for `warn` (shown, never blocking), `2` for `block`, and `3` for a usage or configuration error — deliberately not `2`, which is Click's own usage code and would otherwise be indistinguishable from a genuine block. `warn`, `block` and `error` are written to **stderr** (the stream a hook harness shows the agent); `pass` and `skip` go to stdout, as does `--json` in every case.
+Returns a verdict `{guard, outcome, why, not_covered[], remediation, context}` — plus `recorded` and `not_recorded_because` under `--json` — where `outcome` is `pass` / `warn` / `block` / `skip` / `error`. **Exit codes carry the outcome** so a shell adapter needs no parsing: `0` for `pass`/`skip`, `1` for `warn` (shown, never blocking), `2` for `block`, and `3` for a usage or configuration error reported to a **shell** caller — deliberately not `2`, which is Click's own usage code and would otherwise be indistinguishable from a genuine block. That distinction is answered only to the caller it means something to: reached through `--hook`, the same class exits `2` (BDL-061.33). It exited `3` there until S2, and `3` stops no tool call — so a `.beadloom/flow.yml` that would not parse left every bound guard announcing that it could not answer while every edit went through. The mapping lives in the CLI, keyed on the harness the adapter already declares, rather than in the generated script: a script that maps codes carries logic, and the next harness would have to re-implement it. `warn`, `block` and `error` are written to **stderr** (the stream a hook harness shows the agent); `pass` and `skip` go to stdout, as does `--json` in every case.
 
 `3` is for a defect in the project's *declared configuration* (an unparseable `guards:` block, an exclusion with no reason, a guard name nobody registered) and for a command line that could not be used at all (no guard named, `--liveness` with a name, a malformed `--context` pair, an unsupported `--hook` harness) — stable defects that fail the same way on every invocation. Anything that goes wrong while answering about *this* edit — a hook payload that cannot be decoded or parsed, a project that cannot be located, an exception anywhere — is an `error` verdict at `2`, the one code the shipped adapter blocks on.
 
-**Keeping that class at `3` is not a pure win: `3` does not block.** The harness stops the tool call on `2` and on nothing else, so all five cases above are an `error` verdict, loud on stderr, that lets the edit through. The reachable one is a `.beadloom/flow.yml` that will not parse — the one file of this feature an adopter edits by hand — and while it will not parse, every bound guard answers "could not tell" and nothing is enforced. The distinction `3` draws is worth keeping, so the choice is between mapping the class to `2` here and having the adapter map it. **BDL-061.33** owns that choice, and this reference is updated with it. Until then, treat a `3` from a hook as an unenforced edit rather than a warning.
+**`3` is not what a hook sees, and that is the point (BDL-061.33).** The harness stops the tool call on `2` and on nothing else, so while the class exited `3` unconditionally, all five cases above were an `error` verdict — loud on stderr, and letting the edit through. The reachable one is a `.beadloom/flow.yml` that will not parse, the one file of this feature an adopter edits by hand: while it will not parse, every bound guard answered "could not tell" and nothing was enforced. The distinction `3` draws is worth keeping, so it is kept for the caller that can act on it and dropped for the one that cannot: `beadloom guard` run by a person or by CI still exits `3`, and the same defect reached through `--hook` exits `2` and stops the edit. Mapping the whole class to `2` would have spent the distinction on a caller with no use for it; mapping it in the emitted script would have put logic in an adapter and left the next harness to re-derive it. An unsupported `--hook` harness blocks for the same reason, since Beadloom cannot know the exit vocabulary of a tool it does not support.
 
-`error` means **the guard could not answer** — a refused path (see below), a `guards:` block that will not parse, a project that cannot be located, or any failure inside the evaluation. It exits `2`, because the adapter's harness blocks on 2 and on nothing else, and because `1` is the `warn` code a harness reads as "carry on". Every invocation runs inside one boundary: argument parsing, the stdin read and the evaluation all come back through it, so a failure anywhere is a recorded verdict rather than a traceback — including a **`KeyboardInterrupt`**, which since BDL-061.31 is a recorded `error` at exit 2 rather than an escape to Click's exit 1. That means Ctrl-C during a guarded edit *blocks* that edit: an interrupted guard checked nothing, and "could not answer" must never read as "passed". Rendering the verdict happens after the boundary and is wrapped, so a failure while printing is reported on stderr and the exit code stays the verdict's. Every invocation that names a registered guard in a located project is recorded, `error` included — an evaluation missing from `guard-firings.jsonl` is invisible to `--liveness`. The three invocations that leave no record say so (`not recorded: <reason>` on stderr): a successful `--liveness` report evaluated nothing, an unlocatable project has nowhere to write, and an unregistered name has nothing to attribute the row to.
+`error` means **the guard could not answer** — a refused path (see below), a `guards:` block that will not parse, a project that cannot be located, or any failure inside the evaluation. It exits `2`, because the adapter's harness blocks on 2 and on nothing else, and because `1` is the `warn` code a harness reads as "carry on". Every invocation runs inside one boundary: argument parsing, the stdin read and the evaluation all come back through it, so a failure anywhere is a recorded verdict rather than a traceback — including a **`KeyboardInterrupt`**, which since BDL-061.31 is a recorded `error` at exit 2 rather than an escape to Click's exit 1. That means Ctrl-C during a guarded edit *blocks* that edit: an interrupted guard checked nothing, and "could not answer" must never read as "passed". Rendering the verdict happens after the boundary and is wrapped, so a failure while printing is reported on stderr and the exit code stays the verdict's. Every invocation that names a registered guard in a located project is recorded, `error` included — an evaluation missing from `guard-firings.jsonl` is invisible to `--liveness`. The four invocations that leave no record say so (`not recorded: <reason>` on stderr): a successful `--liveness` report evaluated nothing, an unlocatable project has nowhere to write, an invocation that named no guard asked about nothing, and an unregistered name has nothing to attribute the row to. The last two were one reason until BDL-061.34, which is why `beadloom guard` with no name used to report `'(no guard named)' is not a registered guard` — a placeholder quoted as though it had been typed, and identical to what a caller who really typed it got.
 
 Shipped guards: `bead-claimed` (an edit happens under a claimed work item) and `working-branch` (work happens off the protected trunk; `options.trunk`, default `main`). Both skip — with a stated reason — when their evidence is unavailable (`bd` not present, no branch checked out), because a guard that silently does not apply is indistinguishable from one that passed.
 
@@ -660,7 +676,7 @@ guards:
         until: "BDL-0xx introduces a scripts node"
 ```
 
-Strictness resolves per work kind (`--context work_kind=epic`) with a `default` fallback. **An exclusion must carry both `reason` and `until`** — one without either is a configuration error (exit 3), because an unnamed, undated exclusion disables a gate permanently by accident. A `guards:` key naming an unregistered guard is likewise an error, not a no-op. There is **no `on:` key**: which tool invocations count as an edit, and which guards run on them, is decided by the harness adapter (in Claude Code, the matcher and the per-guard entries in `.claude/settings.json`), not by Beadloom. An `on:` key shipped in the S1 schema with no consumer and was deleted rather than quoted; it returns wired in S3.
+Strictness resolves per work kind (`--context work_kind=epic`) with a `default` fallback. **An exclusion must carry both `reason` and `until`** — one without either is a configuration error (exit 3 from a shell, exit 2 through a hook), because an unnamed, undated exclusion disables a gate permanently by accident. A `guards:` key naming an unregistered guard is likewise an error, not a no-op, and so is **a key the loader does not read** — a guard body carries `strictness` / `exclusions` / `options`, an exclusion carries `path` / `reason` / `until` (BDL-061.34): `option:` for `options:` used to drop the declared `trunk` and leave `working-branch` comparing against `main`, which passes an edit made on the project's real trunk at exit 0. There is **no `on:` key**: which tool invocations count as an edit, and which guards run on them, is decided by the harness adapter (in Claude Code, the matcher and the per-guard entries in `.claude/settings.json`), not by Beadloom. An `on:` key shipped in the S1 schema with no consumer and was deleted rather than quoted; it returns wired in S3.
 
 **That matcher is the enforcement surface, and it is narrower than "every edit".** The emitted adapter is registered on `PreToolUse` for `Edit|Write|MultiEdit|NotebookEdit`, so a file written through `Bash` — `sed -i`, a heredoc, `python3 - <<EOF` — invokes no guard, produces no verdict and writes no firing. `--liveness` therefore cannot distinguish a session that edited entirely outside the matcher from one that complied: both leave the same record. This is a property of the binding rather than of a verdict, so no `not_covered` note can carry it (there is no evaluation to attach one to) — see BDL-UX #170 and the [flow-guards SPEC](../domains/application/features/flow-guards/SPEC.md#the-enforcement-surface).
 
@@ -687,9 +703,12 @@ Composes the existing checkers, in order, into ONE verdict with a single exit co
 1. `reindex` (incremental) — unless `--no-reindex`.
 2. `lint --strict` — architecture boundary rules at error severity.
 3. `sync-check` — doc↔code freshness (stale pairs fail).
-4. `config-check` — AgentConfigAsCode drift.
-5. `doctor` — graph/data integrity; ONLY `ERROR`-severity checks fail the gate (WARNING/INFO advisories never block — no false gate).
-6. `federate --fail-on` — the cross-service landscape gate, only when `--hub` export(s) are given (safe-default fail-set `breaking,drift,orphaned_consumer,undeclared_producer`; no-false-gate verdicts rejected).
+4. `docs audit` — stale numeric facts in documentation (`stale>0` fails).
+5. `config-check` — AgentConfigAsCode drift.
+6. `doctor` — graph/data integrity; ONLY `ERROR`-severity checks fail the gate (WARNING/INFO advisories never block — no false gate).
+7. `federate --fail-on` — the cross-service landscape gate, only when `--hub` export(s) are given (safe-default fail-set `breaking,drift,orphaned_consumer,undeclared_producer`; no-false-gate verdicts rejected).
+
+**What `--no-reindex` changes about the verdict.** It skips step 1, so every later step describes the INDEX rather than the working tree. With an index older than the tree, the `lint` step reports `PASS` over a live error-severity violation that the same gate catches after a reindex (measured), and the `sync-check` step compares against whatever baseline the index holds. Use it only where something else has just reindexed.
 
 **Honest gate (the Phase-0 lesson):** the report names every step that ran and its outcome — `PASS` / `FAIL` / `SKIP` — never a green that silently skipped a step. **No short-circuit:** all steps run and ALL findings are collected even after an earlier failure, so one run surfaces every problem. `--format` applies uniformly across every step; findings share the agent-actionable `{kind, rule, severity, locations, why, remediation}` shape (`github` emits valid `::error file=<path>,line=<n>::<msg>` workflow-command annotations, matching `lint --format github`; `json` emits `{ok, steps[]}`). The per-repo `beadloom-aac-lint.yml` reindex+lint+sync steps collapse into one `beadloom ci` call. Orchestration lives in `application/gate.py:run_ci_gate()`; the CLI only parses options and renders.
 
@@ -818,8 +837,9 @@ beadloom setup-branch-protection --repo OWNER/NAME [--branch main] [--check CONT
 
 Idempotently sets `main` (or `--branch`) protection with a declarative
 `PUT repos/{owner}/{repo}/branches/{branch}/protection`: a **PR is required** (no
-direct push), the consolidated `ci.yml` checks — `gate`, `tests (3.10)`,
-`tests (3.11)`, `tests (3.12)`, `tests (3.13)`, `site-build`, `ai-techwriter`
+direct push), the scaffolded default set of `ci.yml` checks — `gate`, `tests (3.10)`,
+`tests (3.11)`, `tests (3.12)`, `tests (3.13)`, `tests-locale (C)`,
+`tests-locale (en_US.ISO-8859-1)`, `site-build`, `ai-techwriter`
 (ci.yml's job names + matrix legs) — are **required status checks**
 (`strict: true`), and `enforce_admins: true` + 0 required reviews so the
 **solo owner is never locked out** (can self-merge). `PUT .../protection` is
@@ -836,6 +856,19 @@ declarative, so re-running re-settles the same state.
   matrix leg runs on every PR and is a reliable required check.
 - `--dry-run` — print the exact `gh api` call + JSON payload without touching
   GitHub.
+
+**A required context must be a check that can go green.** `PUT .../protection` is
+declarative and re-running it is harmless in itself, but the payload is the
+DEFAULT set above, and `strict: true` means every context in it must pass before
+a pull request can merge. Requiring a check-run that is red — or that does not
+exist in your pipeline at all — makes the branch permanently unmergeable until it
+is green or the context is removed. **On this repository today that is a live
+constraint:** the two `tests-locale` legs added in BDL-061.38 are in
+`DEFAULT_STATUS_CHECK_CONTEXTS` and are knowingly red (100 ASCII / 76 8-bit
+locale-attributable failures, measured) until bead `beadloom-mr2l.42` fixes the
+text I/O they expose, so `main` deliberately still carries the seven pre-BDL-061.38
+contexts. Re-run the command after `.42` closes, or pass `--check` explicitly for
+the set your pipeline can actually satisfy.
 
 Delegates to `onboarding/branch_protection.py:apply_branch_protection()` (the
 `gh` invocation is injected via a `GhRunner` seam for mockable tests).

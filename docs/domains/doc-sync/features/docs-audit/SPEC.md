@@ -16,7 +16,7 @@ The audit pipeline has three stages:
 
 1. **FactRegistry** (`audit.py`) -- Collects ground-truth facts from multiple project data sources: `pyproject.toml` (version), graph DB (node/edge/test/framework/rule counts), MCP server introspection (tool count), Click CLI introspection (command count), and code_symbols (language count). Extra facts can be injected via `config.yml`.
 
-2. **DocScanner** (`scanner.py`) -- Scans markdown files for numeric and version string mentions using keyword-proximity matching. Each mention is associated with a fact type based on nearby keywords within a configurable proximity window. False positives (dates, hex colors, issue IDs, line references, version pins) are masked before extraction.
+2. **DocScanner** (`scanner.py`) -- Scans markdown files for numeric and version string mentions. A line is tokenized on whitespace first, and only a token whose whole core is a number is a candidate (Layer 0); each candidate is then associated with a fact type based on nearby keywords within a configurable proximity window. False positives (dates, hex colors, issue IDs, line references, version pins) are masked before extraction.
 
 3. **Comparator** (`compare_facts` in `audit.py`) -- Matches mentions against facts and applies configurable tolerances. Version strings require exact match; numeric facts support percentage-based tolerances (e.g., +/-10% for growing metrics like node_count).
 
@@ -36,7 +36,34 @@ The audit pipeline has three stages:
 
 ### False-Positive Filtering
 
-The DocScanner applies a 3-layer false-positive reduction pipeline that reduces FP rate from ~60% to ~11%:
+Extraction starts from a token boundary rule (Layer 0), then applies a 3-layer
+false-positive reduction pipeline that reduces FP rate from ~60% to ~11%:
+
+#### Layer 0: Token Boundary
+
+A number that is part of a **larger token** is an identifier, not a claim, and is never
+extracted. The bead reference `BDL-061.33`, the version `v2.2.0`, the language version
+`Python 3.10`, the reference `PR #33`, the location `cli.py:645` and the ratio `33/40` all
+end in digits that mean nothing on their own. Scanning for digits near a keyword read those
+tails as facts and failed the Gate twice (BDL-UX #169).
+
+**The boundary is whitespace, and only whitespace.** Whitespace is the one separator every
+prose convention agrees on; `.` `-` `/` `:` `#` and `=` are precisely the characters that
+hold identifiers together, so treating them as boundaries is the defect rather than the fix.
+
+A token's **core** is the token with *wrapping* characters removed — markdown emphasis and
+bracket/quote punctuation at either end, plus sentence punctuation at the **end** only
+(`33.`, `33,`, `33:`). Sentence punctuation is deliberately not stripped from the start: a
+leading `.` `#` or `-` is exactly what an identifier tail looks like once its prefix is
+masked (masking `BDL-061` leaves `.33`), and stripping it would restore the bug.
+
+A token becomes a fact candidate only when its whole core is a number — either all digits,
+or digits in thousands groups (`6,390`, read whole as `6390`). Reading a grouped number by
+its tail is the audit's worst available outcome: `1,067 nodes` used to extract as `067`,
+compare equal to a project count of 67, and stamp a false claim **verified**.
+
+This single rule subsumes the per-pattern skips it replaced (`0xFF`, `>=0.80`, `limit=10`,
+`20+`, `33%`, `0-100`, `L42`, `file.py:15`) — none of those cores is a number.
 
 #### Layer 1: Blocklist Modifiers
 
@@ -46,7 +73,7 @@ Numbers near modifier words or phrases are skipped as configuration parameters o
 
 **Multi-word phrases:** `up to`, `at least`, `at most`, `no more than`, `capped at`.
 
-**Regex-based modifiers:** percentage patterns (`N%`), plus-sign approximations (`N+`), assignment-style patterns (`key=N`).
+**Regex-based modifiers:** share patterns written with a space (`N %`). The no-space forms `N%`, `N+` and `key=N` are not number tokens at all and are rejected by Layer 0.
 
 #### Layer 2: Proximity Scoring
 
@@ -74,6 +101,22 @@ The DocScanner also masks the following patterns before number extraction to pre
 | Line references | `:15`, `line 42`, `L42` | Various patterns |
 
 Numbers 0 and 1 are always skipped as too common and ambiguous.
+
+Several masks above are now subsumed by Layer 0 (`#123`, `0xFF`, `>=0.80`, `:15`, `L42`,
+`0-100` are not number tokens). They are retained as defence in depth, because masking also
+governs version extraction and the word positions used for proximity.
+
+#### Known blind spots (measured 2026-08-23)
+
+A false positive announces itself by failing the Gate; a false negative is silent. These are
+the silent ones, measured and pinned as strict `xfail` tests in
+`tests/test_doc_scanner_tokenization.py` so they become loud when fixed:
+
+| Blind spot | Effect |
+|------------|--------|
+| A Layer 1 modifier word anywhere within +/-3 word positions suppresses the number, even when it modifies a different noun (`316 edges, one per import`) | A genuine drift is never reported |
+| Counts below 10 are never extracted for `*_count` facts | Any fact whose true value is single-digit (`language_count` is 1 in this repo) can never be audited, and the audit reads green about a fact it never checked |
+| `SPEC.md` / `CONTRIBUTING.md` suppress all count facts, and `docs/**/features/*/SPEC.md` is excluded outright | Count claims in those files are unchecked, and nothing in the output says so |
 
 ### Keyword-Proximity Matching
 

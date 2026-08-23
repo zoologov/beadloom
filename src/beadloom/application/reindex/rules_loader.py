@@ -112,6 +112,19 @@ def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
             "from_glob": rule.from_glob,
             "to_glob": rule.to_glob,
         }
+        if rule.exempt:
+            # Stored so the indexed rule is the whole rule: an exemption is part of
+            # what the boundary currently means, and a reader of the `rules` table
+            # must not see a stricter rule than the one that runs.
+            rule_def["exempt"] = [
+                {
+                    "from": e.from_glob,
+                    "to": e.to_glob,
+                    "reason": e.reason,
+                    "until": e.until,
+                }
+                for e in rule.exempt
+            ]
         return ("forbid_import", rule_def)
 
     if isinstance(rule, ForbidEdgeRule):

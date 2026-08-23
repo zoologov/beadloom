@@ -206,7 +206,10 @@ class TestErrorLevelRegressionGuard:
         project = self._make_project(tmp_path, severity="error")
         runner = CliRunner()
         result = runner.invoke(main, ["lint", "--format", "json", "--project", str(project)])
-        payload = json.loads(result.output)
+        # stdout, not output: plain `lint` now names on STDERR that its exit
+        # code ignores error-severity violations without --strict (BDL-UX #147),
+        # and CliRunner's `output` merges the two streams.
+        payload = json.loads(result.stdout)
         coverage = [
             v for v in payload["violations"] if v["rule_name"] == "module-coverage"
         ]

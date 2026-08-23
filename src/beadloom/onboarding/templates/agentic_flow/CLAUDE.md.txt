@@ -325,7 +325,14 @@ Example:
 One-time per repo: `beadloom setup-branch-protection` configures `main` protection
 (PR required, `beadloom ci` a required check, `enforce_admins: true` — strict
 trunk-based, even the owner integrates via a PR — and 0 required reviews → the
-owner still self-merges). Safe to re-run.
+owner still self-merges).
+
+> **Idempotent is not harmless.** The command applies whatever
+> `DEFAULT_STATUS_CHECK_CONTEXTS` currently says, not whatever is already live, so
+> re-running it after an upgrade can require checks your workflow does not yet
+> produce — and a required check that never reports makes `main` unmergeable.
+> Before re-running, confirm every context it will require exists as a job and is
+> green. `gh api repos/:owner/:repo/branches/main/protection` shows what is live now.
 
 ---
 

@@ -33,8 +33,11 @@ to a tool by an adapter that contains no logic of its own.
 
 Exit codes carry the outcome, so a shell adapter needs no parsing: `0` for
 `pass`/`skip`, `1` for `warn`, `2` for `block`. `3` is reserved for a usage or
-configuration error — deliberately not `2`, which is Click's own usage code and
-would otherwise be indistinguishable from a genuine block.
+configuration error reported to a **shell** caller — deliberately not `2`, which
+is Click's own usage code and would otherwise be indistinguishable from a genuine
+block. An invocation that names a harness (`--hook`) reports that same class at
+`2`, because there the exit code answers one question only and `3` answers it
+"the edit proceeds" (BDL-061.33, below).
 
 **Which failures earn `3` rather than `2`** is one line, not a list of cases: `3`
 is for a defect in the project's *declared configuration* (a `guards:` block that
@@ -58,25 +61,44 @@ evaluation missing from the firing record is invisible to `--liveness`. It exits
 call on exit 2 and on nothing else, so an outcome that must stop work has exactly
 one code available. `1` would be worse than useless here — it is the `warn` code,
 which the harness reads as "carry on", and that is precisely how a crashing guard
-let an edit through (BDL-061.27, F2). A configuration error additionally keeps
-exit `3` at the CLI boundary, so a broken `flow.yml` is still not mistaken for a
-guard that fired.
+let an edit through (BDL-061.27, F2). A configuration error keeps exit `3` for a
+shell caller, so a broken `flow.yml` is still not mistaken for a guard that fired.
 
-**Exit `3` does not block, and that is a gap rather than a decision.** The
-adapter this project emits binds to a harness that stops the tool call on exit
-`2` and on nothing else, so everything the paragraph above keeps at `3` is loud
-on stderr and lets the edit through. Measured through the real binary, five
-cases answer `error` at `3`: an unregistered guard name, a `guards:` block that
-will not parse, `--liveness` given a name, a malformed `--context` pair, and an
-unsupported `--hook` harness. The second is the one an adopter meets, because
-`.beadloom/flow.yml` is the one file of this feature edited by hand: a mistyped
-line there disables every bound guard while each invocation prints that it could
-not answer. The distinction `3` draws — a defect in the declared configuration
-against a failure to answer about this edit — is worth keeping, so the two ways
-out are to map the class to `2` at the CLI or to have the adapter map it, and
-neither is decided here. **BDL-061.33 owns that choice.** Until it lands, this
-document states `3` as fail-open, and the invariant it contradicts is marked
-where it appears.
+**Which caller gets `3` (BDL-061.33).** The adapter this project emits binds to a
+harness that stops the tool call on exit `2` and on nothing else, so while `3`
+was unconditional everything kept at it was loud on stderr and let the edit
+through. Measured through the real binary, five cases answer `error` at `3`: an
+unregistered guard name, a `guards:` block that will not parse, `--liveness`
+given a name, a malformed `--context` pair, and an unsupported `--hook` harness.
+The second is the one an adopter meets, because `.beadloom/flow.yml` is the one
+file of this feature edited by hand: a mistyped line there disabled every bound
+guard while each invocation printed that it could not answer.
+
+The class is therefore answered at **`3` from a shell and `2` under `--hook`**,
+which keeps both true things:
+
+- the distinction `3` draws — a defect in the *declared configuration* against a
+  failure to answer about *this edit* — survives for the caller it means
+  something to, and stays out of Click's `2`;
+- nothing that cannot answer reaches a harness with a code that harness ignores.
+
+Mapping the whole class to `2` was the other candidate. It is simpler, but it
+spends the distinction on a caller that has no use for it and changes the code
+every shell and CI caller already reads. Having the *emitted script* map instead
+was the third: it puts logic in an adapter, which is the one thing this feature
+forbids, and every future harness would re-implement it — the same fail-open, one
+tool later. The adapter already declares its harness; that declaration selects
+the mapping, and the mapping stays in Beadloom where it is tested. A harness
+whose name Beadloom cannot translate blocks too: an unsupported `--hook` is a
+defect in the binding itself, and Beadloom cannot learn the exit vocabulary of a
+tool it does not support, so it uses the code it knows stops work.
+
+This is not a green project turning red on upgrade. A project whose `flow.yml`
+parses sees no change at all; a project whose `flow.yml` does not parse had no
+enforcement to lose. There is deliberately **no per-harness table**: every
+harness Beadloom supports blocks on `2`, and a one-entry table with a default
+reads as a capability that exists. The day a harness disagrees, its blocking code
+becomes an entry beside its payload translator.
 
 ### Configuration
 
@@ -94,6 +116,28 @@ Strictness is resolved per work kind (`--context work_kind=epic`), falling back
 to `default` and then to `warn`. Exclusion patterns follow POSIX glob semantics
 where `**` crosses directories and `*` does not, so `src/*.py` cannot silently
 exempt a subtree.
+
+**A key this loader does not read is a configuration error** — `strictness`,
+`exclusions` and `options` in a guard body, `path`, `reason` and `until` in an
+exclusion entry, and nothing else (BDL-061.34). Unknown guard *names* and unknown
+strictness *values* were already errors for one reason: a gate must not be
+switched off by a spelling. An unknown *key* was the hole in that reasoning, and
+it is not symmetric. `exclude:` for `exclusions:` parses to zero exclusions, so
+the guard over-guards — the safe direction. `option:` for `options:` drops the
+declared `trunk`, and `working-branch` then compares against the shipped default
+`main`: measured through the real binary on a project whose trunk is `develop`,
+an edit made directly **on `develop`** answered `PASS — on working branch
+'develop' (trunk is 'main')` at exit `0`, which is the one situation that guard
+exists to catch.
+
+It is an error rather than a warning because the mitigation that exists — the
+verdict names the trunk it compared against — travels on the stream and the exit
+code a hook harness discards: a `pass` at `0` is shown to nobody, so in the case
+that matters the evidence is never read. It costs no adopter a green build: a
+block using only keys the loader reads is unaffected, `flow.yml` files with no
+`guards:` block are unaffected, and the feature is unreleased, so no published
+project has such a block at all. The same rule after release would be a breaking
+change and would need the `warn` route instead.
 
 An absent `guards:` block is not an error: every registered guard runs at the
 shipped default (`warn`), so upgrading Beadloom adds warnings that name what
@@ -206,6 +250,22 @@ declares `readable=False`, which is not a relaxation: the directory is refused
 by the boundary, as a verdict a reader and a harness can both act on, instead of
 by the argument parser.
 
+**That refusal now states its cause instead of quoting an exception**
+(BDL-061.34). `Path.is_dir()` re-raises `EACCES` rather than answering `False`,
+so the unreadable directory reached the boundary's last-resort handler and the
+verdict read `the guard could not be evaluated: PermissionError: [Errno 13]
+Permission denied: '<dir>/.beadloom'`, with `not_covered` claiming an evaluation
+had not completed when none had been attempted. Locating a project is not
+evaluating a guard: the refusal is answered where the condition is known — *the
+directory `<dir>` could not be read (PermissionError: …), so the guard cannot
+tell whether it is a Beadloom project* — and the verdict then carries the
+project-location `not_covered` note and the `--project` remediation. The
+filesystem's own words are kept as the parenthetical detail, because which layer
+spoke is what tells a reader where to look; what is removed is an interpreter
+repr standing where a stated cause belongs. Both entry paths are covered — the
+declared directory and any directory met while walking up — because fixing this
+class in one place and not the other is how it has come back three times.
+
 The cost, stated because it is real: `--project` can no longer point at a
 directory before `beadloom init` has run there. That is the intended reading —
 there is no `flow.yml` in such a directory to answer from, so any verdict it
@@ -287,7 +347,7 @@ the boundary returns.
 
 
 **A firing is written when the invocation produced a verdict, a project was
-located, and the verdict names a registered guard.** The three exceptions are
+located, and the caller named a registered guard.** The four exceptions are
 intrinsic rather than convenient, and each is *reported* on the result (and shown
 as `not recorded: <reason>` on stderr, or as `recorded` / `not_recorded_because`
 under `--json`) instead of being left to be inferred from a missing line:
@@ -296,7 +356,16 @@ under `--json`) instead of being left to be inferred from a missing line:
 |---|---|
 | a successful `--liveness` report | it evaluates nothing, so there is no verdict to record, and recording one would inflate the count it prints |
 | no project could be located | there is nowhere to write it, and creating a project root is the failure this rule exists to prevent |
-| the name is not a registered guard (including no name at all) | there is nothing to attribute the row to, and an invented row is a lie in the one report whose product is honesty |
+| no guard was named | nothing was asked about, so there is nothing to attribute a row to |
+| the name is not a registered guard | there is nothing to attribute the row to, and an invented row is a lie in the one report whose product is honesty |
+
+The last two were **one row until BDL-061.34**, and the fold was visible in the
+output: `beadloom guard` with no name reported `'(no guard named)' is not a
+registered guard`, quoting a placeholder the caller had never typed — and
+byte-identical to what `beadloom guard "(no guard named)"`, an invocation that
+*did* name a guard, reported. The routing is now on the name the caller supplied
+rather than on the verdict's display form, so the two are distinguishable and
+neither borrows the other's words.
 
 A fourth case is a failure rather than an exception: if the record cannot be
 written (a read-only filesystem, say), the verdict still reaches the reader and
@@ -500,8 +569,25 @@ never louder.
   permanently by accident.
 - **A guard name with no implementation is a configuration error**, not a no-op,
   so a typo in `flow.yml` cannot quietly switch a gate off.
+- **A key the loader does not read is a configuration error** at either level of
+  the block, for the same reason and measured: `option:` for `options:` cost
+  `working-branch` its declared trunk and passed an edit made on it.
 - **Unavailable evidence skips, never passes.** A probe that cannot answer
   returns `None`, and the guard reports why.
+- **A probe's answer does not depend on the image it runs on** (BDL-061.37).
+  Both probes run their child with `encoding="utf-8", errors="surrogateescape"`
+  instead of `text=True`, which decodes with the ambient locale: on a container
+  whose locale is not UTF-8, a branch name or a bead title carrying one non-ASCII
+  byte either raised — and a `UnicodeDecodeError` is a `ValueError`, so it was
+  caught by neither `OSError` nor `subprocess.SubprocessError` and reached the
+  boundary as `error`/exit 2, blocking the edit for a reason that is not the real
+  one — or came back as a name nobody had checked out. `surrogateescape` because
+  it is the only one of the handlers that is injective: it round-trips to the
+  bytes the tool holds, so no comparison a guard makes can be given a wrong
+  answer by an undecodable byte, and a legal-but-not-UTF-8 name does not switch a
+  guard off the way `strict` would. The probes' handlers are as wide as the
+  sentence they hold (`Exception`, deliberately never `BaseException`); the
+  reasons are in the `guard-probes` and `bd-seam` component docs.
 - **A probe reads all of its evidence.** `bd list` paginates at 50 rows by
   default; the tracker probe lifts the limit and asks bd for the claimed beads
   rather than filtering its first page, because a guard reporting a violation of
@@ -513,8 +599,9 @@ never louder.
   in a located project ends without a firing record.** A failure that leaves no
   record is invisible to the one report whose whole product is honesty about dead
   gates. Held by one boundary rather than case by case — see *One boundary per
-  invocation* for the three exceptions, each reported on the result rather than
-  inferred from its absence.
+  invocation* for the four exceptions, each reported on the result rather than
+  inferred from its absence, and each in its own words rather than borrowing a
+  neighbour's.
 - **The record is the project's.** The root is discovered by walking up for
   `.beadloom/`, never taken from the working directory and never created: a
   firing written somewhere `--liveness` does not read is indistinguishable from
@@ -531,14 +618,13 @@ never louder.
   and the render step is wrapped, so a failure while printing cannot move the
   code the harness reads.
 - **A guard that cannot answer says so and blocks.** "I could not tell" is a
-  verdict (`error`), not an exception, and it never borrows the `warn` code.
-  **It says so. It does not always block.** The `warn` code is never borrowed, so
-  no `error` exits `1`. But the configuration and command-line class exits `3`,
-  which the harness the emitted adapter binds to does not block on, and five
-  cases were measured in it — the one an adopter meets is a `flow.yml` that will
-  not parse. The sentence stands as the target rather than as a description, and
-  **BDL-061.33** owns closing the gap. See *Verdict* for the cases and the two
-  ways out.
+  verdict (`error`), not an exception; it never borrows the `warn` code; and
+  every code it can exit with, in the harness it is bound to, stops the edit.
+  The second half was not true until BDL-061.33: the configuration and
+  command-line class exited `3`, which that harness does not block on, so a
+  `flow.yml` that would not parse switched every bound guard off. That class now
+  exits the blocking code whenever `--hook` names a harness, and keeps `3` for a
+  shell caller, where nothing is waiting on the answer. See *Verdict*.
 - **One decision point.** The CLI, the hook adapter and (from S2) the Gate all
   call `evaluate_guard`, so their verdicts cannot diverge.
 - **The surface is bounded by the harness, and the bound is stated.** Guards see

@@ -24,6 +24,8 @@ from typing import TYPE_CHECKING
 
 from beadloom.graph.rules.cycles import evaluate_cycle_rules
 from beadloom.graph.rules.evaluators import (
+    LIVENESS_RULE_TYPE,
+    MATCHING_FORM_HINT,
     evaluate_cardinality_rules,
     evaluate_deny_rules,
     evaluate_forbid_edge_rules,
@@ -49,6 +51,7 @@ from beadloom.graph.rules.types import (
     DenyRule,
     ForbidEdgeRule,
     ImportBoundaryRule,
+    ImportExemption,
     LayerDef,
     LayerRule,
     ModuleCoverageRule,
@@ -111,7 +114,14 @@ def _remediation_for(rule_type: str, violation: Violation) -> str | None:
 
 
 def _with_remediation(violation: Violation) -> Violation:
-    """Return a copy of *violation* with its derived ``remediation`` populated."""
+    """Return a copy of *violation* with its derived ``remediation`` populated.
+
+    A remediation the evaluator already wrote is kept: it knows more than a hint
+    derived from the rule kind alone (a liveness finding, for instance, carries
+    the matching form the author got wrong).
+    """
+    if violation.remediation:
+        return violation
     return replace(violation, remediation=_remediation_for(violation.rule_type, violation))
 
 
@@ -182,7 +192,9 @@ def evaluate_all(
 
 
 __all__ = [
+    "LIVENESS_RULE_TYPE",
     "LIVE_EDGE_LIFECYCLES",
+    "MATCHING_FORM_HINT",
     "SUPPORTED_SCHEMA_VERSIONS",
     "VALID_EDGE_KINDS",
     "VALID_NODE_KINDS",
@@ -192,6 +204,7 @@ __all__ = [
     "DenyRule",
     "ForbidEdgeRule",
     "ImportBoundaryRule",
+    "ImportExemption",
     "LayerDef",
     "LayerRule",
     "ModuleCoverageRule",

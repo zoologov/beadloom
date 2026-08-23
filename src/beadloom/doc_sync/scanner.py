@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
 
@@ -67,14 +68,52 @@ _VERSION_RE = re.compile(r"\bv?\d+\.\d+\.\d+\b")
 # Standalone 4-digit year: 2000-2099
 _YEAR_STANDALONE_RE = re.compile(r"\b20[0-9]{2}\b")
 
-# Bare number (integer) in text
-_NUMBER_RE = re.compile(r"\b\d+\b")
-
 # Backtick-enclosed inline code: `mcp-server`, `depth=2`
 _BACKTICK_RE = re.compile(r"`[^`]+`")
 
 # Numeric range pattern: 0-100, 1-10, etc.
 _RANGE_RE = re.compile(r"\b\d+-\d+\b")
+
+# ---------------------------------------------------------------------------
+# Token boundary policy (BDL-UX #169)
+# ---------------------------------------------------------------------------
+#
+# A number that is part of a LARGER TOKEN is an identifier, not a claim: the
+# bead reference ``BDL-061.33``, the version ``v2.2.0``, the language version
+# ``Python 3.10``, the reference ``PR #33``, the location ``cli.py:645`` and the
+# ratio ``33/40`` all end in digits that mean nothing on their own.  Scanning for
+# digits near a keyword read those tails as facts and failed the Gate twice.
+#
+# THE BOUNDARY IS WHITESPACE, and only whitespace.  Reason: whitespace is the one
+# separator every prose convention agrees on, whereas ``.``  ``-`` ``/`` ``:``
+# ``#`` and ``=`` are exactly the characters that hold those identifiers
+# together — treating them as boundaries is the defect, not the fix.
+#
+# A token's CORE is the token with *wrapping* characters removed: markdown
+# emphasis and bracket/quote punctuation at either end, plus sentence
+# punctuation at the END only (``33.``, ``33,``, ``33:``).  Sentence punctuation
+# is deliberately NOT stripped from the START, because a leading ``.`` ``#`` or
+# ``-`` is what an identifier tail looks like once its prefix is masked
+# (``BDL-061`` masked leaves ``.33``), and stripping it would restore the bug.
+#
+# A token is a fact candidate only when its whole core is a number.  This one
+# rule subsumes the per-pattern skips it replaced (``0xFF``, ``>=0.80``,
+# ``limit=10``, ``20+``, ``33%``, ``0-100``, ``L42``, ``file.py:15``) — those
+# cores are not numbers, so they are never candidates.
+_TOKEN_RE = re.compile(r"\S+")
+# Typographic quotes are spelled as escapes so the source stays ASCII:
+# \u00ab/\u00bb guillemets, \u201c/\u201d double quotes, \u2018/\u2019 single quotes.
+_QUOTE_OPEN = "\u00ab\u201c\u2018"
+_QUOTE_CLOSE = "\u00bb\u201d\u2019"
+_TOKEN_LEAD_STRIP = "([{<\"'`*_~|" + _QUOTE_OPEN
+_TOKEN_TRAIL_STRIP = ")]}>\"'`*_~|" + _QUOTE_CLOSE + ",;:.!?"
+
+# A core that is entirely digits, or digits in thousands groups (``6,390``).
+# Grouped numbers are read WHOLE: splitting ``1,067`` at the comma used to yield
+# ``067``, which then compared equal to a project count of 67 and stamped a false
+# claim "verified" — a silent false negative, the worst outcome available here.
+_PLAIN_NUMBER_RE = re.compile(r"\d+")
+_GROUPED_NUMBER_RE = re.compile(r"\d{1,3}(?:,\d{3})+")
 
 # ---------------------------------------------------------------------------
 # Layer 1: Blocklist modifier words — numbers near these are NOT factual claims
@@ -105,12 +144,6 @@ _FP_MODIFIER_PHRASES: tuple[list[str], ...] = (
 
 # Regex-based modifier: % sign immediately after or near the number
 _FP_PERCENT_RE = re.compile(r"\b\d+\s*%")
-
-# Plus modifier: 20+, 100+  (approximate count, not exact)
-_FP_PLUS_RE = re.compile(r"\b\d+\+")
-
-# Assignment-style modifiers: limit=10, depth=2, max_nodes=20
-_FP_ASSIGN_RE = re.compile(r"\w+=\d+")
 
 # ---------------------------------------------------------------------------
 # Layer 3: File-type heuristics — paths with lower/higher FP risk
@@ -233,56 +266,28 @@ class DocScanner:
             lambda m: " " * len(m.group()), text_for_words,
         )
 
-        for match in _NUMBER_RE.finditer(text_for_words):
-            number_str = match.group()
-            number_val = int(number_str)
-
+        for start, number_val in self._iter_number_tokens(text_for_words):
             # Skip 0 and 1 — too common and ambiguous
             if number_val <= 1:
                 continue
 
-            # Check if this number is part of a version string in original
-            # (already handled by _extract_versions)
-            if _VERSION_RE.search(cleaned):
-                # Check if this specific number position overlaps a version
-                pos = match.start()
-                is_in_version = False
-                for vmatch in _VERSION_RE.finditer(text_for_words):
-                    if vmatch.start() <= pos < vmatch.end():
-                        is_in_version = True
-                        break
-                if is_in_version:
-                    continue
-
-            # Layer 1a: skip if number has a % modifier (threshold, not count)
-            if _FP_PERCENT_RE.search(text_for_words):
-                # Check if THIS number is the one with %
-                end_pos = match.end()
-                rest = text_for_words[end_pos:end_pos + 3]
-                if re.match(r"\s*%", rest):
-                    continue
-
-            # Layer 1a2: skip if number has a + modifier (approximate, e.g. 20+)
-            if _FP_PLUS_RE.search(text_for_words):
-                end_pos = match.end()
-                if end_pos < len(text_for_words) and text_for_words[end_pos] == "+":
-                    continue
-
-            # Layer 1b: skip if number is part of an assignment pattern
-            # (e.g. limit=10, depth=2, max_nodes=20)
-            if _FP_ASSIGN_RE.search(text_for_words):
-                # Check if this specific number is the RHS of an assignment
-                start_pos = match.start()
-                if start_pos > 0 and text_for_words[start_pos - 1] == "=":
-                    continue
+            # Skip a number written as a share, not a count: "50 %" (the
+            # no-space form "50%" is not a number token at all).
+            rest = text_for_words[start:]
+            share_match = _PLAIN_NUMBER_RE.match(rest)
+            if share_match is not None and re.match(
+                r"\s*%", rest[share_match.end():share_match.end() + 3]
+            ):
+                continue
 
             # Find position of the number in the raw text to locate nearby words
             word_positions = list(re.finditer(r"[a-zA-Z]+|\d+", text_for_words))
 
-            # Find index of this number in word_positions
+            # Find index of this number in word_positions (matched on offset:
+            # a grouped number such as "6,390" starts one word-position run)
             num_idx = -1
             for i, wp in enumerate(word_positions):
-                if wp.start() == match.start() and wp.group() == number_str:
+                if wp.start() == start:
                     num_idx = i
                     break
 
@@ -344,6 +349,31 @@ class DocScanner:
                 )
 
         return results
+
+    @staticmethod
+    def _iter_number_tokens(text: str) -> Iterator[tuple[int, int]]:
+        """Yield ``(offset, value)`` for tokens that are entirely a number.
+
+        Implements the token boundary policy documented at the top of this
+        module: split on whitespace, strip wrapping punctuation, and accept a
+        token only when its whole core is a number.  A number embedded in a
+        larger token (``BDL-061.33``, ``v2.2.0``, ``Python 3.10``, ``PR #33``,
+        ``33/40``) is an identifier and yields nothing.
+
+        ``offset`` is the position of the number's first digit in *text*, so
+        callers can locate it among the surrounding words.
+        """
+        for token in _TOKEN_RE.finditer(text):
+            raw = token.group()
+            lstripped = raw.lstrip(_TOKEN_LEAD_STRIP)
+            core = lstripped.rstrip(_TOKEN_TRAIL_STRIP)
+            if not core:
+                continue
+            offset = token.start() + (len(raw) - len(lstripped))
+            if _PLAIN_NUMBER_RE.fullmatch(core):
+                yield offset, int(core)
+            elif _GROUPED_NUMBER_RE.fullmatch(core):
+                yield offset, int(core.replace(",", ""))
 
     @staticmethod
     def _has_modifier(tokens: list[str]) -> bool:
@@ -417,37 +447,6 @@ class DocScanner:
                 if best is None or score < best:
                     best = score
         return best
-
-    @staticmethod
-    def _word_matches_keyword(word: str, kw: str) -> bool:
-        """Check if a window word matches a keyword (prefix match).
-
-        "languages" matches keyword "language", "tools" matches "tool", etc.
-        """
-        return word == kw or word.startswith(kw)
-
-    @staticmethod
-    def _keyword_in_window(kw_words: list[str], window: list[str]) -> bool:
-        """Check if keyword words appear in the window.
-
-        Single-word keywords use prefix matching (e.g. "language" matches
-        "languages").  Multi-word keywords require consecutive prefix matches.
-        """
-        if len(kw_words) == 1:
-            kw = kw_words[0]
-            return any(
-                w == kw or w.startswith(kw) for w in window
-            )
-
-        # Multi-word keyword: check if words appear consecutively (prefix match)
-        kw_len = len(kw_words)
-        for i in range(len(window) - kw_len + 1):
-            if all(
-                window[i + j] == kw_words[j] or window[i + j].startswith(kw_words[j])
-                for j in range(kw_len)
-            ):
-                return True
-        return False
 
     @staticmethod
     def _mask_false_positives(line: str) -> str:

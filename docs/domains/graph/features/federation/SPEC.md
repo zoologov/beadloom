@@ -228,7 +228,7 @@ disabled):
 `federate --fail-on` and `beadloom ci` **write the federated artifact (and print
 the report) before exiting non-zero**, so CI always has `federated.json` to
 upload even when the gate blocks. `beadloom ci` composes the landscape gate as
-its final step (after reindex → lint → sync-check → config-check → doctor); see
+its final step (after reindex → lint → sync-check → docs audit → config-check → doctor); see
 `docs/guides/ci-setup.md`.
 
 #### Public API (`graph/federation/reconcile.py` + `gate.py`, re-exported from `graph.federation`)
@@ -338,6 +338,7 @@ def extract_payload_body(document: str, channel: str | None = None) -> dict | No
 - A foreign ref that does not resolve at the hub is recorded in `unresolved_refs`, not dropped.
 - An `external` target (declared) and an `unmapped` target (present-but-undescribed) never DRIFT, and `unmapped` is kept distinct from `unresolved_refs` (present vs absent) — honest unknowns, never faked (BDL-038 G7/U4).
 - `commit_sha` is reported honestly: `null` when it cannot be verified, never an unrelated repo's HEAD.
+- That `null` is never an artefact of the image: every `git` answer is read with a stated codec (`utf-8` + `errors="surrogateescape"`, the rule `os.fsdecode` uses), because one of them — `rev-parse --show-toplevel` — is a *path* compared against `project_root`. MEASURED before the fix with the repo at a path containing Cyrillic: an ambient `latin-1` misdecoded the toplevel, the comparison failed, and the export took the honest-unknown branch for a dishonest reason; an ambient `ascii` raised `UnicodeDecodeError` past the handler.
 - `EXPORT_SCHEMA_VERSION` and `FEDERATION_SCHEMA_VERSION` are independent; each is bumped only on a breaking shape change. F2 bumps EXPORT `1 → 2`, FEDERATION `1 → 2`, DB SCHEMA `3 → 4` — all backward-compatible: `federate` ingests v1 **and** v2 exports, and an older DB migrates idempotently (no data loss).
 - `contract_key` is language-neutral: contracts resolve on the contract name (AMQP exchange/routing/message_type, GraphQL schema), never a code symbol — so a cross-language edge (TS client ↔ backend) reconciles across the boundary.
 - Contract-level `DRIFT` is subsumed by `ORPHANED_CONSUMER` / `UNDECLARED_PRODUCER`; `DRIFT` is the edge-level `EdgeVerdict` only.
@@ -358,7 +359,7 @@ def extract_payload_body(document: str, channel: str | None = None) -> dict | No
 **Still non-goals (deferred):**
 
 - **REST / OpenAPI and gRPC contracts** (lowest priority — runtime-generated, no static source files; future F-phase).
-- **CI gating** — **delivered in F3 (BDL-039):** the landscape gate (`federate --fail-on`), the unified `beadloom ci` orchestrator (reindex → lint → sync-check → config-check → doctor → optional federate gate), and a reusable composite GitHub Action + GitLab template, dogfooded on Beadloom's own CI. The **pull-based hub** plumbing (SHA-tagged export publishing + fetch) is a documented pattern run by the satellites' ops — no SaaS hub, no satellite auto-bootstrap is Beadloom-built. See `docs/guides/ci-setup.md`.
+- **CI gating** — **delivered in F3 (BDL-039):** the landscape gate (`federate --fail-on`), the unified `beadloom ci` orchestrator (reindex → lint → sync-check → docs audit → config-check → doctor → optional federate gate), and a reusable composite GitHub Action + GitLab template, dogfooded on Beadloom's own CI. The **pull-based hub** plumbing (SHA-tagged export publishing + fetch) is a documented pattern run by the satellites' ops — no SaaS hub, no satellite auto-bootstrap is Beadloom-built. See `docs/guides/ci-setup.md`.
 - **Visual landscape map** — **delivered in F4 (BDL-040):** the `federate` hub artifact (`federated.json`) is consumed by `beadloom docs site --federated` to render the 🌟 cross-repo landscape map (a clickable Mermaid diagram of the contract graph, edges labelled by their `ContractVerdict`/`EdgeVerdict`, a health overlay) in the published VitePress knowledge base. The map carries the hub verdicts verbatim — Beadloom produces, VitePress renders. A richer JS graph library (Cytoscape / D3) remains a follow-up. See `docs/guides/vitepress-site.md`. No semantic layer yet.
 - Hub needs **≥ 2** satellite exports.
 

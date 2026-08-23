@@ -105,12 +105,14 @@ _DEFAULT_SCAN_DIRS = ("src", "lib", "app")
 3. **Fallback to full reindex** if:
    - `file_index` is empty (first run or post-upgrade).
    - Parser fingerprint changed (new tree-sitter grammar installed).
+   - The index predates derived-edge provenance (`meta.import_edge_provenance` absent or older). One rebuild is required because a derived `depends_on` edge is otherwise indistinguishable from a graph-declared one, so refreshing the first would delete the second.
    - Any graph YAML file changed, detected via `_graph_yaml_changed()` which directly compares hashes for files with `kind == "graph"` (belt-and-suspenders check that catches changes even when `file_index` is stale).
 4. **Early return** if no files changed (sets `nothing_changed=True`, updates meta timestamp, takes health snapshot).
 5. **True incremental path**:
    - Snapshot `symbols_hash` from `sync_state` before modifications for drift preservation.
    - Delete old data for changed and deleted files (from `docs`, `code_symbols`, `sync_state`).
    - Re-index changed and added files individually.
+   - **Re-extract imports** for the code files touched, forget those deleted, then rebuild the derived `depends_on` edge set (`reindex_file_imports`). Without this step `code_imports` — and therefore every `forbid_import`, cycle and layer rule — described the tree as it was at the last FULL rebuild, so the documented `reindex && lint` loop reported a clean boundary over a real violation (BDL-UX #142).
    - Re-extract API routes and update `nodes.extra`.
    - Rebuild `sync_state` from scratch (full table delete + rebuild) with preserved `symbols_hash`.
    - Rebuild FTS5 search index.
@@ -360,6 +362,8 @@ class ReindexResult:
 - Incremental reindex always rebuilds `sync_state` from scratch (full delete + rebuild) even though only some files changed, using preserved `symbols_hash` values.
 - Incremental reindex always clears `bundle_cache` (conservative invalidation).
 - Incremental reindex re-extracts API routes after code changes.
+- Incremental reindex re-extracts imports for changed/added code files and deletes those of removed files, then rebuilds the derived `depends_on` edges, so the incremental import graph is identical to the one a full rebuild produces. Measured on Beadloom's own tree (67 nodes, 1255 symbols, 1322 imports): +29 ms for one changed file, +42 ms for five, against 755 ms for a full rebuild.
+- Only `depends_on` edges carrying `extra.derived = "imports"` are deleted by that refresh; an edge declared in the graph YAML is never touched.
 - Incremental reindex backfills `nodes_loaded`, `edges_loaded`, and `symbols_indexed` with live-DB totals (not per-run deltas), ensuring accurate reporting even when the incremental path does not touch the graph or code symbols.
 - `file_index` is fully replaced after full reindex and incrementally updated after incremental reindex.
 - Meta key `last_reindex_at` is updated on every successful reindex (including no-change incremental runs).
