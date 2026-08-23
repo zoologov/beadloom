@@ -35,6 +35,23 @@
 
 ## Open Issues
 
+178. [2026-08-23] [HIGH] 🔴 A REQUIRED check reports `pass` while its own output says it verified nothing
+
+    **Severity:** high (it is in the required set, so it is load-bearing for merge, and the failure mode is the one the whole S2 slice was about)
+    **Command:** the `ai-techwriter` GitHub Actions job
+    **Context:** observed on PR #34 (BDL-061 S2). The job's own log line reads:
+
+    ```
+    ! could not run (infra) — docs were NOT checked on this PR;
+      re-run before relying on freshness
+    ```
+
+    and the job's conclusion is **pass**, which GitHub reports as a green required check.
+    **Issue:** the job is admirably honest in its *text* — it names the failure, says what was not checked, and tells the reader what to do. Then it exits 0 and everything downstream sees green. Nobody reads a passing check's log. The honesty is placed exactly where it cannot be acted on.
+    **Why it is filed at HIGH rather than as CI housekeeping:** this is the same defect S2 spent nine beads on — a green result that describes the checker's own inability rather than the code's health — sitting in the check that guards the promise the product is built around ("no code reaches `main` without current docs"). Two `tests-locale` legs on the same run were **red on purpose** and are *not* required; a check that could not run was **green** and *is* required. The signalling is inverted.
+    **Expected:** an infrastructure failure is not a pass. Either fail the job (so the required check blocks and a human re-runs it), or report `neutral`/`skipped` so it is visibly not a verification — never `success`. If the intent is "do not block on flaky infra", that is a decision about whether the check should be required at all, and it should be made explicitly rather than implemented by exiting 0.
+    **Related:** #174, #175 — same equation (*unverifiable is not clean*), this time in our own CI rather than in the tool.
+
 177. [2026-08-23] [HIGH] 🔴 Editing our own `CLAUDE.md` silently ships the edit to every adopter — the pre-commit hook propagates it into the vendored template verbatim
 
     **Severity:** high (project-local context leaves the project without anyone deciding that it should, and the propagation happens inside a commit rather than at a review point)
