@@ -35,6 +35,16 @@
 
 ## Open Issues
 
+184. [2026-08-23] [MEDIUM] `config-check --project <dir>` crashes with a raw sqlite error on a project that has no index — exit 1 with nothing on either stream
+
+    **Severity:** medium (it is indistinguishable from a verdict, and it was silently corrupting a measurement while nobody noticed)
+    **Command:** `beadloom config-check --project <dir>`
+    **Context:** found by the `.57` agent while measuring a control case, and it is the manner of finding that matters: the agent was using a never-adopted project as a control to prove a fix did not over-report. The control's exit 1 was read as meaningful until it turned out to be a crash.
+    **Issue:** on a project with no `.beadloom/beadloom.db`, the command dies with `sqlite3.OperationalError("unable to open database file")` and exits 1, printing nothing on stdout or stderr. A caller — a gate action, a script, an agent — sees a non-zero exit and no output, which is exactly the shape of a failing check.
+    **Why it is worse than an ugly traceback:** an uninitialised project is a *legitimate, expected* state for this command, since `config-check` is one of the first things anyone runs. So the most likely first-contact experience with the command is a silent failure that reads as "your config is wrong" rather than "there is no index yet, run `beadloom init`".
+    **Expected:** an absent index is an answer, not an exception — say so and exit on a code that means it (this is `unverifiable is not clean` again, from the caller's side rather than the checker's). At minimum, never exit non-zero with both streams empty: a verdict nobody can read is not a verdict.
+    **Related:** #175 (a rebuilt index has nothing to compare against), #174, #146 — the same family, and this is the entry point.
+
 183. [2026-08-23] [HIGH] 🔴 Every adopter's `CLAUDE.md` states **Beadloom's** version as the project's own — and it reads as correct on the one repo where it is
 
     **Severity:** high (a false fact written into the file an agent treats as authoritative, in a section describing the adopter's project)
