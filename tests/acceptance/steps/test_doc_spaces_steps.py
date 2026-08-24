@@ -175,20 +175,27 @@ def _not_reported(world: dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _node_with_active_doc(world: dict[str, Any]) -> str:
-    """A graph node whose only declared document is an ACTIVE.md."""
-    doc = f"{_EPIC_ROOT}/PROJ-4/ACTIVE.md"
-    _write(world["root"], doc, "# ACTIVE: PROJ-4\n\n## Current\n\nstep two of five\n")
+def _node_with_active_doc(world: dict[str, Any]) -> tuple[str, str]:
+    """A graph node whose only declared document is an ACTIVE.md.
+
+    Returns the document in both spellings a reader may hold it in: the
+    project-relative one the graph declares, and the docs-dir-relative one a
+    ``sync_state`` row carries. They are one file and `beadloom-mr2l.75` is why
+    the difference is spelled out here rather than assumed away.
+    """
+    indexed = "features/PROJ-4/ACTIVE.md"
+    declared = f"docs/{indexed}"
+    _write(world["root"], declared, "# ACTIVE: PROJ-4\n\n## Current\n\nstep two of five\n")
     world["known"].add("billing")
     world["documented"].add("billing")
-    world["declared"].add(doc)
-    return doc
+    world["declared"].add(declared)
+    return declared, indexed
 
 
 @given("a graph node whose documentation is an ACTIVE document and whose code changed")
 def _pair_with_active(world: dict[str, Any]) -> None:
     root: Path = world["root"]
-    doc = _node_with_active_doc(world)
+    _declared, indexed = _node_with_active_doc(world)
     code = "src/billing.py"
     _write(root, code, "def charge() -> None:\n    return None\n")
     conn = open_db(root / ".beadloom" / "beadloom.db")
@@ -200,7 +207,7 @@ def _pair_with_active(world: dict[str, Any]) -> None:
     conn.execute(
         "INSERT INTO sync_state (doc_path, code_path, ref_id, code_hash_at_sync, "
         "doc_hash_at_sync, synced_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (doc, code, "billing", "stale-hash", "stale-hash", "2026-01-01", "ok"),
+        (indexed, code, "billing", "stale-hash", "stale-hash", "2026-01-01", "ok"),
     )
     conn.commit()
     world["conn"] = conn
@@ -251,6 +258,65 @@ def _inert_working(world: dict[str, Any]) -> None:
 @then("the WORKING exemption is reported as matching no document")
 def _inert_reported(world: dict[str, Any]) -> None:
     assert FINDING_WORKING_INERT in [f.rule for f in world["report"].findings]
+
+
+@given("a project that declares its whole documentation tree exempt from freshness")
+def _docs_tree_declared_working(world: dict[str, Any]) -> None:
+    """The gate defeat `beadloom-mr2l.75` closed, arranged on disk.
+
+    The pair is spelled the way ``index_docs`` spells one — relative to the docs
+    directory — because that spelling is what reached freshness while the report
+    was reading another.
+    """
+    root: Path = world["root"]
+    _write(
+        root,
+        ".beadloom/config.yml",
+        yaml.safe_dump(
+            {
+                "doc_roots": {
+                    "working": {
+                        "roots": ["docs/**/*.md"],
+                        "exempt_from_freshness": True,
+                        "reason": "generated release notes, regenerated per tag",
+                    }
+                }
+            }
+        ),
+    )
+    _write(root, "docs/guides/ci.md", "# ci\n")
+    _write(root, "src/billing.py", "def charge() -> None:\n    return None\n")
+    conn = open_db(root / ".beadloom" / "beadloom.db")
+    create_schema(conn)
+    conn.execute(
+        "INSERT INTO nodes (ref_id, kind, summary, source) VALUES (?, ?, ?, ?)",
+        ("billing", "feature", "billing", "src/billing.py"),
+    )
+    conn.execute(
+        "INSERT INTO sync_state (doc_path, code_path, ref_id, code_hash_at_sync, "
+        "doc_hash_at_sync, synced_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            "guides/ci.md",
+            "src/billing.py",
+            "billing",
+            "stale-hash",
+            "stale-hash",
+            "2026-01-01",
+            "ok",
+        ),
+    )
+    conn.commit()
+    world["conn"] = conn
+    world["known"].add("billing")
+    world["documented"].add("billing")
+    world["declared"].add("docs/guides/ci.md")
+
+
+@then("the paired document is exempt rather than stale")
+def _pair_exempt(world: dict[str, Any]) -> None:
+    rows = [r for r in world["rows"] if r["doc_path"] == "guides/ci.md"]
+    assert rows, "no row was produced for the paired document at all"
+    assert all(r["status"] == "exempt" for r in rows), rows
 
 
 @then("the contradicted WORKING declaration is reported")

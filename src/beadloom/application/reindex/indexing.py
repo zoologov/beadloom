@@ -25,21 +25,16 @@ if TYPE_CHECKING:
 
 
 def _resolve_docs_dir(project_root: Path) -> Path:
-    """Resolve docs directory from config.yml or use default ``docs``.
+    """The docs directory as an absolute path, from the one reader of the key.
 
-    Checks ``.beadloom/config.yml`` for a ``docs_dir`` key.  If present,
-    returns ``project_root / <value>``.  Otherwise falls back to
-    ``project_root / "docs"``.
+    ``docs_dir`` was read in three places — here, in the reference-document scan
+    and as a hardcoded ``docs`` inside ``check_sync`` — so a project keeping its
+    documentation elsewhere had one reader looking where the others had not
+    (`beadloom-mr2l.75`). The key now has a single reader.
     """
-    config_path = project_root / ".beadloom" / "config.yml"
-    if config_path.exists():
-        import yaml
+    from beadloom.infrastructure.doc_roots import resolve_docs_dir
 
-        config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-        docs_path = config.get("docs_dir")
-        if isinstance(docs_path, str) and docs_path:
-            return project_root / docs_path
-    return project_root / "docs"
+    return project_root / resolve_docs_dir(project_root)
 
 
 def read_declared_docs(

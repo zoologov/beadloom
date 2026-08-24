@@ -48,8 +48,10 @@ saying the same thing from another angle would double one finding.
 
 The WORKING declaration is audited two ways, neither inferred from an absence:
 
-- `working_exemption_inert` — declared kinds that no document uses, so the
-  exemption excused nothing.
+- `working_exemption_inert` — declared kinds **or roots** that no document
+  matches, so the exemption excused nothing. A root reaches the exemption
+  exactly as a kind does, and which half of a declaration carries it changes
+  nothing about an exclusion that quietly stops applying.
 - `working_declaration_contradicted` — the graph declares a WORKING document as
   a node's documentation, so one artifact says it describes the code while
   another says it must not be held against it.

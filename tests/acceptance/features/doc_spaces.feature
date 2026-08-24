@@ -42,6 +42,14 @@ Feature: documentation is named by space, and intent is held against reality
     When the documentation spaces are checked
     Then the contradicted WORKING declaration is reported
 
+  @bead:beadloom-mr2l.75
+  Scenario: A WORKING root that switches freshness off is a root the report names
+    Given a project that declares its whole documentation tree exempt from freshness
+    When freshness is checked
+    And the documentation spaces are checked
+    Then the paired document is exempt rather than stale
+    And the contradicted WORKING declaration is reported
+
   Scenario: A project that keeps its documents elsewhere is read from its configured roots
     Given a project whose doc roots are configured away from the shipped defaults
     When the documentation spaces are checked

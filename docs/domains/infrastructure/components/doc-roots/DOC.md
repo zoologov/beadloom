@@ -31,6 +31,30 @@ domain reaching UP into `application`.
 inside the TO-BE tree, so a root-first answer would classify every WORKING
 document as intent and the exemption would apply to nothing.
 
+**Among roots, WORKING is consulted first.** Its shipped root list is empty, so
+the only way a document reaches WORKING by root is a project declaring it, while
+the AS-IS default is the catch-all `docs/**/*.md`. If the catch-all won, a
+declaration written in the file adopters are told to edit would be silently
+inert. The declaration wins, and the win is visible: a document excused this way
+that the graph also declares as a node's documentation is reported as
+`working_declaration_contradicted` by `beadloom docs spaces`.
+
+## One spelling of a document path
+
+A `sync_state` row names its document **relative to the docs directory**
+(`guides/ci.md`) because that is what the indexer writes, while every root glob
+is written **relative to the project** (`docs/guides/ci.md`). Those were two
+different questions asked of one declaration: kind agreed on both spellings (a
+stem carries no prefix), roots did not, and a root-declared WORKING exemption
+therefore reached freshness without reaching the report that exists to object to
+it. `DocSpaces.project_path(doc_path)` is the one translation, and every caller
+holding a docs-dir-relative path passes it through before asking `space_of`.
+
+The docs directory itself is read by `resolve_docs_dir(project_root)` — the
+single reader of the `docs_dir` config key, which three readers held before
+(the reindexer's, the reference-document scan's, and a hardcoded `docs` inside
+`check_sync`).
+
 ## Configuration
 
 `.beadloom/config.yml`, key `doc_roots`. Every part is optional; what a project
@@ -61,19 +85,26 @@ cannot turn into a crashing gate that names the wrong file.
 ## Public surface
 
 - `SPACE_TO_BE`, `SPACE_AS_IS`, `SPACE_WORKING`, `SPACES` — the vocabulary.
-- `DEFAULT_ROOTS`, `DEFAULT_KINDS`, `DEFAULT_WORKING_REASON` — the shipped
-  defaults.
+- `DEFAULT_ROOTS`, `DEFAULT_KINDS`, `DEFAULT_WORKING_REASON`,
+  `DEFAULT_DOCS_DIR`, `DOCS_DIR_KEY` — the shipped defaults and the config key
+  naming the documentation directory.
 - `document_kind(path)` — the kind a path names (`PRD.md` is a `PRD`).
 - `WorkingExemption` — `exempt_from_freshness` plus its declared `reason`.
 - `DocSpaces` — `space_of(rel_path)`, `space_of_kind(kind)`,
-  `documents_in(project_root, space)`, `working_documents(project_root)`, and
+  `project_path(doc_path)`, `documents_in(project_root, space)`,
+  `working_documents(project_root)`, the `docs_dir` it was resolved with, and
   the `config_errors` found while reading the block.
-- `resolve_doc_spaces(project_root)` / `default_doc_spaces()`.
+- `resolve_doc_spaces(project_root)` / `default_doc_spaces(docs_dir)`.
+- `resolve_docs_dir(project_root)` — the documentation directory, project
+  relative.
 
 ## Collaborators
 
 - `doc_sync/engine.py` reads the WORKING exemption in `check_sync`, where an
-  exempt pair is reported with status `exempt` and the declared reason.
+  exempt pair is reported with status `exempt` and the declared reason. The
+  exemption covers freshness and nothing else: a pair whose document or code file
+  is gone is reported `missing` before any exemption applies, so deleting a file
+  cannot be quieter than leaving it.
 - `application/doc_spaces.py` classifies populations and evaluates the
   TO-BE → AS-IS relation.
 - `application/reindex/indexing.py` indexes the TO-BE space in place.

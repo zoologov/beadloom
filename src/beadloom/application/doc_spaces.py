@@ -359,17 +359,29 @@ def _working_findings(
     if not spaces.working.exempt_from_freshness:
         return []
     declared_kinds = spaces.kinds.get(SPACE_WORKING, ())
+    declared_roots = spaces.roots.get(SPACE_WORKING, ())
     findings: list[SpaceFinding] = []
-    if spaces.working.declared and declared_kinds and not working_docs:
+    # A root reaches the exemption exactly as a kind does, so an exemption
+    # declared only by root and matching nothing reports itself too: an
+    # exclusion that quietly stops applying is how a gate is switched off, and
+    # which half of the declaration carries it changes nothing about that.
+    if spaces.working.declared and (declared_kinds or declared_roots) and not working_docs:
+        declares = " and ".join(
+            part
+            for part in (
+                f"kind(s) {', '.join(declared_kinds)}" if declared_kinds else "",
+                f"root(s) {', '.join(declared_roots)}" if declared_roots else "",
+            )
+            if part
+        )
         findings.append(
             SpaceFinding(
                 rule=FINDING_WORKING_INERT,
                 path=".beadloom/config.yml",
                 line=0,
                 why=(
-                    f"the WORKING exemption declares {', '.join(declared_kinds)} but no "
-                    f"document of those kinds was found under the configured roots, so "
-                    f"it excused nothing"
+                    f"the WORKING exemption declares {declares} but no document "
+                    f"was found under them, so it excused nothing"
                 ),
                 remediation=(
                     "point `doc_roots` at the tree the ephemeral documents live in, or "

@@ -26,6 +26,7 @@ from beadloom.infrastructure.doc_roots import (
     SPACE_WORKING,
     DocSpaces,
     resolve_doc_spaces,
+    resolve_docs_dir,
 )
 from beadloom.infrastructure.repository import covering_prefix, get_owned_code_files
 
@@ -249,7 +250,11 @@ def _exempt_reason(doc_path: str, spaces: DocSpaces) -> str | None:
     """
     if not spaces.working.exempt_from_freshness:
         return None
-    if spaces.space_of(doc_path) != SPACE_WORKING:
+    # ONE spelling. A `sync_state` row names its document relative to the docs
+    # directory and every root glob is written relative to the project, so
+    # asking with the row's own spelling asked a different question from the one
+    # the spaces report asks about the same file (`beadloom-mr2l.75`).
+    if spaces.space_of(spaces.project_path(doc_path)) != SPACE_WORKING:
         return None
     return spaces.working.reason or "declared exempt without a stated reason"
 
@@ -305,7 +310,7 @@ def _missing_side(current_doc_hash: str | None, current_code_hash: str | None) -
 
 
 def _corroborate_with_git(
-    doc_path: str, code_path: str, changed: frozenset[str] | None
+    doc_path: str, code_path: str, changed: frozenset[str] | None, docs_dir: str
 ) -> tuple[str, str, str]:
     """Verdict for a pair whose only baseline is the tree the index was built from.
 
@@ -316,7 +321,7 @@ def _corroborate_with_git(
     """
     if changed is None:
         return STATUS_UNVERIFIED, "no_baseline", BASELINE_NONE
-    doc_changed = str(Path("docs") / doc_path) in changed
+    doc_changed = str(Path(docs_dir) / doc_path) in changed
     if code_path in changed and not doc_changed:
         return STATUS_STALE, "hash_changed_since_head", BASELINE_GIT
     return STATUS_OK, "ok", BASELINE_GIT
@@ -384,7 +389,20 @@ def check_sync(
             else ""
         )
 
-        if _exempt_reason(doc_path, spaces) is not None:
+        exempt_reason = _exempt_reason(doc_path, spaces)
+
+        # Hash actual files on disk, under the documentation directory the
+        # project declared — the same one the classification above asked about.
+        current_doc_hash = _file_hash(project_root / spaces.docs_dir / doc_path)
+        current_code_hash = _file_hash(project_root / code_path)
+
+        # A file that is gone is reported before any exemption is applied. The
+        # exemption says a WORKING document was never a description of the code,
+        # which is a statement about freshness and none at all about existence;
+        # excusing an absent file would make deleting it quieter than leaving it
+        # (BDL-UX #174) through the one verdict that never blocks.
+        gone = _missing_side(current_doc_hash, current_code_hash)
+        if gone is None and exempt_reason is not None:
             results.append(
                 {
                     "doc_path": doc_path,
@@ -393,16 +411,11 @@ def check_sync(
                     "status": STATUS_EXEMPT,
                     "reason": REASON_WORKING_SPACE,
                     "baseline": BASELINE_NONE,
-                    "details": _exempt_reason(doc_path, spaces),
+                    "details": exempt_reason,
                 }
             )
             continue
 
-        # Hash actual files on disk.
-        current_doc_hash = _file_hash(project_root / "docs" / doc_path)
-        current_code_hash = _file_hash(project_root / code_path)
-
-        gone = _missing_side(current_doc_hash, current_code_hash)
         if gone is not None:
             conn.execute(
                 "UPDATE sync_state SET status = ? WHERE doc_path = ? AND code_path = ?",
@@ -488,7 +501,7 @@ def check_sync(
             if git_changed is _UNREAD:
                 git_changed = changed_paths(project_root)
             status, reason, baseline = _corroborate_with_git(
-                doc_path, code_path, git_changed
+                doc_path, code_path, git_changed, spaces.docs_dir
             )
 
         # Update status in DB.
@@ -716,6 +729,7 @@ def check_sync_since(
     sync_rows = conn.execute(
         "SELECT doc_path, code_path, ref_id FROM sync_state"
     ).fetchall()
+    docs_dir = resolve_docs_dir(project_root)
 
     results: list[dict[str, Any]] = []
     for row in sync_rows:
@@ -730,9 +744,9 @@ def check_sync_since(
         ref_code_hash = _hash_text(code_at_ref) if code_at_ref is not None else None
         code_drifted = ref_code_hash != current_code_hash
 
-        doc_rel = str(Path("docs") / doc_path)
+        doc_rel = str(Path(docs_dir) / doc_path)
         doc_at_ref = _file_content_at_ref(project_root, doc_rel, since)
-        current_doc_hash = _file_hash(project_root / "docs" / doc_path)
+        current_doc_hash = _file_hash(project_root / docs_dir / doc_path)
         ref_doc_hash = _hash_text(doc_at_ref) if doc_at_ref is not None else None
         doc_changed = ref_doc_hash != current_doc_hash
 
@@ -764,7 +778,7 @@ def mark_synced(
     the doc is current, which is the one thing a rebuilt index cannot fabricate
     (BDL-UX #175).
     """
-    doc_hash = _file_hash(project_root / "docs" / doc_path)
+    doc_hash = _file_hash(project_root / resolve_docs_dir(project_root) / doc_path)
     code_hash = _file_hash(project_root / code_path)
 
     # Look up ref_id for this pair to recompute symbols_hash.
@@ -815,9 +829,10 @@ def mark_synced_by_ref(
 
     symbols_hash = _compute_symbols_hash(conn, ref_id)
     now = datetime.now(tz=timezone.utc).isoformat()
+    docs_dir = resolve_docs_dir(project_root)
     count = 0
     for row in rows:
-        doc_hash = _file_hash(project_root / "docs" / row["doc_path"])
+        doc_hash = _file_hash(project_root / docs_dir / row["doc_path"])
         code_hash = _file_hash(project_root / row["code_path"])
         conn.execute(
             "UPDATE sync_state SET doc_hash_at_sync = ?, code_hash_at_sync = ?, "
@@ -855,23 +870,13 @@ def mark_synced_by_ref(
 
 
 def _resolve_reference_docs_dir(project_root: Path) -> Path:
-    """Return the docs directory, honoring ``.beadloom/config.yml`` ``docs_dir``.
+    """The docs directory as an absolute path, from the one reader of the key.
 
-    Mirrors the application-layer resolver without importing upward: reads the
-    optional ``docs_dir`` key from config, falling back to ``<root>/docs``.
+    It mirrored the application-layer resolver here once, and a mirror is two
+    readers of one fact: `beadloom-mr2l.75` collapsed them into
+    :func:`beadloom.infrastructure.doc_roots.resolve_docs_dir`.
     """
-    import yaml
-
-    config_path = project_root / ".beadloom" / "config.yml"
-    if config_path.is_file():
-        try:
-            config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-        except (OSError, yaml.YAMLError):
-            config = {}
-        docs_path = config.get("docs_dir") if isinstance(config, dict) else None
-        if docs_path:
-            return project_root / str(docs_path)
-    return project_root / "docs"
+    return project_root / resolve_docs_dir(project_root)
 
 
 def _discover_reference_docs(project_root: Path) -> list[tuple[str, list[str]]]:
@@ -1214,6 +1219,7 @@ def check_source_coverage(
     Returns list of dicts with ``ref_id``, ``doc_path``, ``untracked_files``
     for nodes that have gaps.
     """
+    docs_dir = resolve_docs_dir(project_root)
     # 1. Query nodes with directory-based source (ending in /)
     node_rows = conn.execute(
         "SELECT ref_id, source FROM nodes WHERE source IS NOT NULL AND source LIKE '%/'"
@@ -1273,7 +1279,7 @@ def check_source_coverage(
         # 6b. (#90) Honor explicit `beadloom:track=path` markers in the doc.
         owned_ref_ids = set(all_ref_ids)
         tracked |= _tracked_paths_from_doc(
-            project_root / "docs" / doc_path, project_root
+            project_root / docs_dir / doc_path, project_root
         )
 
         # 6c. (#89) Honor file-level `# beadloom:domain/feature=` annotations.
@@ -1314,6 +1320,7 @@ def check_doc_coverage(
     Returns list of dicts with ``ref_id``, ``doc_path``, ``missing_modules``
     for nodes where the doc is missing module mentions.
     """
+    docs_dir = resolve_docs_dir(project_root)
     # 1. Query nodes with directory-based source (ending in /)
     node_rows = conn.execute(
         "SELECT ref_id, source FROM nodes WHERE source IS NOT NULL AND source LIKE '%/'"
@@ -1345,7 +1352,7 @@ def check_doc_coverage(
         doc_path: str = doc_row["path"]
 
         # 4. Read the doc file content from disk
-        doc_file = project_root / "docs" / doc_path
+        doc_file = project_root / docs_dir / doc_path
         if not doc_file.is_file():
             continue
 

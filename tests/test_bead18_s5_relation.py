@@ -668,18 +668,16 @@ class TestAWrongWorkingDeclarationIsDetectable:
 
         assert [r["status"] for r in rows if r["doc_path"] == "guides/ci.md"] == ["stale"]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING BDL-061.18-4: a WORKING root spelled the way every other "
-            "root in `doc_roots` is spelled — project-relative — has no effect "
-            "on freshness, because `check_sync` classifies the docs-dir-relative "
-            "path `guides/ci.md` against the pattern `docs/guides/*.md`. One "
-            "configuration string means two different things depending on which "
-            "reader holds it."
-        ),
-    )
     def test_a_working_root_spelled_like_its_neighbours_reaches_freshness(self) -> None:
+        """FINDING BDL-061.18-4, closed by `beadloom-mr2l.75`.
+
+        A WORKING root spelled the way every other root in `doc_roots` is
+        spelled — project-relative — had no effect on freshness, because
+        `check_sync` classified the docs-dir-relative path `guides/ci.md`
+        against the pattern `docs/guides/*.md`. One configuration string meant
+        two different things depending on which reader held it. It now reaches
+        freshness through `DocSpaces.project_path`.
+        """
         root = _tmp()
         _config(
             root,
@@ -697,40 +695,42 @@ class TestAWrongWorkingDeclarationIsDetectable:
 
         assert [r["status"] for r in rows if r["doc_path"] == "guides/ci.md"] == [STATUS_EXEMPT]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING BDL-061.18-4, the dangerous direction: the docs-dir-relative "
-            "spelling DOES silence freshness, and the check built to catch a "
-            "wrong WORKING declaration cannot see it. `working_documents` "
-            "classifies `docs/guides/ci.md` project-relative, finds AS-IS, and "
-            "reports no contradiction for the very document `check_sync` just "
-            "excused. Measured in a clean-room worktree at HEAD: three stale "
-            "documents, `beadloom sync-check` rc 2 -> rc 0, six pairs exempt and "
-            "zero `working_declaration_contradicted` findings. Where the "
-            "project-relative spelling matches nothing at all the liveness leg "
-            "does fire — and says `the WORKING exemption excused nothing` while "
-            "freshness was excusing six pairs, which is worse than silence "
-            "because it invites the reader to conclude the declaration is inert."
-        ),
-    )
     def test_a_root_declared_exemption_that_silences_a_pair_is_contradicted(self) -> None:
+        """FINDING BDL-061.18-4, the dangerous direction, closed by `.75`.
+
+        The docs-dir-relative spelling silenced freshness and the check built to
+        catch a wrong WORKING declaration could not see it: `working_documents`
+        classified `docs/guides/ci.md` project-relative, found AS-IS, and
+        reported no contradiction for the very document `check_sync` had just
+        excused. Measured in a clean-room worktree at `f67fc36`: three stale
+        documents, `beadloom sync-check` rc 2 -> rc 0, six pairs exempt, zero
+        `working_declaration_contradicted`.
+
+        **The roots below are re-spelled project-relative**, which is the whole
+        of the fix and therefore changes what this fixture has to say. The old
+        spelling encoded the broken vocabulary — `guides/*.md` meant a directory
+        under `docs/` to one reader and a top-level one to the other — and under
+        one vocabulary it means what it says and excuses nothing here; that case
+        is pinned in
+        `tests/test_bead75_one_path_vocabulary.py::TestADocsDirRelativeRootMeansWhatItSays`.
+        The assertion is untouched, and it is the assertion that matters: a
+        declaration that silences a pair is a declaration the report names.
+        """
         root = _tmp()
         _config(
             root,
             {
-                "as_is": {"roots": ["docs/**/*.md"]},
                 "working": {
-                    # Two roots, as the clean-room measurement had them: the
-                    # second matches a real project-relative file, so the
-                    # liveness leg stays quiet and the report says nothing at all.
-                    "roots": ["guides/*.md", "*.md"],
+                    # The gate defeat itself: the documentation tree declared
+                    # WORKING. It still excuses the pair — the exemption is a
+                    # declaration and honouring it is the point — and the report
+                    # now classifies the same file the same way, so it is named.
+                    "roots": ["docs/**/*.md"],
                     "exempt_from_freshness": True,
                     "reason": "generated release notes, regenerated per tag",
                 },
             },
         )
-        _write(root, "NOTES.md", "# notes\n")
         conn = self._stale_project(root, "guides/ci.md")
 
         rows = check_sync(conn, root)

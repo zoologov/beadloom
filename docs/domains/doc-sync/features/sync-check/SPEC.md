@@ -102,6 +102,19 @@ docs spaces` reports an exemption that excuses nothing and a document the graph
 declares as a node's documentation while the config declares its kind
 ephemeral.
 
+Two properties make that detection reachable rather than merely present
+(`beadloom-mr2l.75`):
+
+- **One spelling.** A `sync_state` row names its document relative to the docs
+  directory and every root glob is written relative to the project, so the two
+  readers of one declaration held two strings for one file. `check_sync` asks
+  `DocSpaces.project_path(doc_path)` before classifying, so a root-declared
+  exemption reaches freshness and the report alike. The docs directory comes
+  from `resolve_docs_dir`, the single reader of the `docs_dir` config key.
+- **The exemption covers freshness only.** A pair whose document or code file is
+  gone is reported `missing` before any exemption is applied, so a WORKING
+  declaration cannot make a deleted file quieter than a present one.
+
 `incomplete` does not block either, and for a different reason: it is a NEW
 check (BDL-061 S4b) and every new check ships as `warn`, so no adopter's green
 project turns red on upgrade. **It has no counter in the `--json` summary**, so

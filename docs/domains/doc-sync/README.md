@@ -57,7 +57,7 @@ class SyncPair:
 | `missing` | The doc or code file is gone, or the graph declares a doc that is not on disk | 2 |
 | `unverified` | There was nothing to compare against (rebuilt index, no git baseline). Reported by name; never counted as fresh | 0 |
 | `incomplete` | The document is current and does not carry the shape its kind requires. A `warn`: reported, never blocking | 0 |
-| `exempt` | The document is in the WORKING space and is exempt from freshness by DECLARATION (`doc_roots.working` in `.beadloom/config.yml`). The row carries the declared reason in `details`. Not `ok` — nothing was verified — and never blocking | 0 |
+| `exempt` | The document is in the WORKING space and is exempt from freshness by DECLARATION (`doc_roots.working` in `.beadloom/config.yml`). The row carries the declared reason in `details`. Not `ok` — nothing was verified — and never blocking. The classification asks `DocSpaces.project_path(doc_path)`, so the declaration reaches freshness and `beadloom docs spaces` in one spelling; the exemption covers freshness alone, and a pair whose document or code file is gone is `missing` before any exemption applies | 0 |
 
 Every result also carries `baseline` -- `index`, `git:HEAD` or `none` -- so a
 green result says what it was green against.

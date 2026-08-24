@@ -49,8 +49,29 @@ SPACE_WORKING = "working"
 #: Every space, in the order a report reads best: intent, reality, work.
 SPACES: tuple[str, ...] = (SPACE_TO_BE, SPACE_AS_IS, SPACE_WORKING)
 
+#: The order roots are consulted in when two of them name one file. WORKING
+#: first, and that is the whole rule: its shipped root list is empty, so the only
+#: way a document lands there by root is a project DECLARING it, while the AS-IS
+#: default is the catch-all ``docs/**/*.md`` that claims everything under the
+#: documentation tree. If the catch-all won, a declaration a project wrote in the
+#: file we tell it to edit would be silently inert — which is the defect
+#: `beadloom-mr2l.75` closes one layer up, where a declaration never reached the
+#: reader that would object to it. A declaration wins, and the win is visible:
+#: a document excused this way that the graph ALSO declares as a node's
+#: documentation is reported as `working_declaration_contradicted`.
+_ROOT_PRECEDENCE: tuple[str, ...] = (SPACE_WORKING, SPACE_TO_BE, SPACE_AS_IS)
+
 #: ``.beadloom/config.yml`` key holding a project's own spaces.
 CONFIG_KEY = "doc_roots"
+
+#: ``.beadloom/config.yml`` key naming the directory ``sync-check`` pairs with
+#: code. A ``sync_state`` row spells its document RELATIVE TO that directory, so
+#: this key is what turns the indexer's spelling into the project-relative one
+#: every root glob is written in.
+DOCS_DIR_KEY = "docs_dir"
+
+#: Where documentation lives when a project declares nothing.
+DEFAULT_DOCS_DIR = "docs"
 
 #: Where each space lives when a project declares nothing. ``to_be`` points at
 #: the flow's scaffold (``/task-init`` writes there and ``active-sync`` already
@@ -135,6 +156,8 @@ class DocSpaces:
     kinds: Mapping[str, tuple[str, ...]]
     working: WorkingExemption
     config_errors: tuple[str, ...] = ()
+    docs_dir: str = DEFAULT_DOCS_DIR
+    """Where documentation lives, project-relative — see :meth:`project_path`."""
 
     def space_of_kind(self, kind: str) -> str | None:
         """The space claiming *kind*, or ``None`` when no space claims it."""
@@ -157,10 +180,25 @@ class DocSpaces:
         if by_kind is not None:
             return by_kind
         posix = rel_path.replace("\\", "/")
-        for space in SPACES:
+        for space in _ROOT_PRECEDENCE:
             if any(path_matches(posix, p) for p in self.roots.get(space, ())):
                 return space
         return None
+
+    def project_path(self, doc_path: str) -> str:
+        """A ``sync_state`` document path in the ONE project-relative spelling.
+
+        ``index_docs`` writes a document's path relative to the docs directory
+        while every root glob is written relative to the project, so the two
+        readers of one declaration held two strings for one file:
+        ``guides/ci.md`` reached freshness and ``docs/guides/ci.md`` reached the
+        report that exists to object. Kind hid it — a stem carries no prefix, so
+        every shipped case agreed — and roots did not. Every caller holding a
+        docs-dir-relative path passes it through here before asking.
+        """
+        posix = doc_path.replace("\\", "/").lstrip("/")
+        prefix = self.docs_dir.strip("/")
+        return f"{prefix}/{posix}" if prefix else posix
 
     def documents_in(self, project_root: Path, space: str) -> list[Path]:
         """Files under *space*'s roots whose kind does not move them elsewhere.
@@ -247,7 +285,7 @@ def path_matches(posix: str, pattern: str) -> bool:
 
 
 #: Returned when configuration is absent or unreadable — the shipped defaults.
-def default_doc_spaces() -> DocSpaces:
+def default_doc_spaces(docs_dir: str = DEFAULT_DOCS_DIR) -> DocSpaces:
     """The shipped spaces, for a project that configures nothing."""
     return DocSpaces(
         roots=dict(DEFAULT_ROOTS),
@@ -255,7 +293,47 @@ def default_doc_spaces() -> DocSpaces:
         working=WorkingExemption(
             exempt_from_freshness=True, reason=DEFAULT_WORKING_REASON, declared=False
         ),
+        docs_dir=docs_dir,
     )
+
+
+def _read_config(project_root: Path) -> tuple[dict[str, object] | None, str | None]:
+    """``.beadloom/config.yml`` as a mapping, and what was wrong with reading it.
+
+    One parse for both facts this module answers — where the spaces are, and
+    where the documentation directory is. Two parses are two chances to
+    disagree, which is the defect class this module was just repaired for.
+    """
+    import yaml
+
+    config_path = project_root / ".beadloom" / "config.yml"
+    if not config_path.is_file():
+        return None, None
+    try:
+        data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
+        return None, f"config.yml is unreadable: {exc}"
+    return (data if isinstance(data, dict) else {}), None
+
+
+def _docs_dir_from(data: Mapping[str, object] | None) -> str:
+    """The documentation directory a config mapping declares, or the default."""
+    value = data.get(DOCS_DIR_KEY) if data is not None else None
+    if isinstance(value, str) and value.strip():
+        return value.strip().replace("\\", "/").strip("/")
+    return DEFAULT_DOCS_DIR
+
+
+def resolve_docs_dir(project_root: Path) -> str:
+    """The project-relative documentation directory, read from configuration.
+
+    The single reader of ``docs_dir``. Three lived in the tree before this — the
+    reindexer's, the reference-document scan's, and a hardcoded ``docs`` inside
+    ``check_sync`` — so a project keeping its documentation elsewhere had one
+    reader looking in a directory the others had left.
+    """
+    data, _ = _read_config(project_root)
+    return _docs_dir_from(data)
 
 
 def resolve_doc_spaces(project_root: Path) -> DocSpaces:
@@ -265,38 +343,37 @@ def resolve_doc_spaces(project_root: Path) -> DocSpaces:
     otherwise turn one bad line into a crashing gate that names the wrong file;
     every error here is reported by name in the spaces report instead.
     """
-    import yaml
-
-    config_path = project_root / ".beadloom" / "config.yml"
-    if not config_path.is_file():
-        return default_doc_spaces()
-    try:
-        data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
-        return _with_errors(f"{CONFIG_KEY}: config.yml is unreadable: {exc}")
-    block = data.get(CONFIG_KEY) if isinstance(data, dict) else None
+    data, error = _read_config(project_root)
+    docs_dir = _docs_dir_from(data)
+    if error is not None:
+        return _with_errors(docs_dir, f"{CONFIG_KEY}: {error}")
+    if data is None:
+        return default_doc_spaces(docs_dir)
+    block = data.get(CONFIG_KEY)
     if block is None:
-        return default_doc_spaces()
+        return default_doc_spaces(docs_dir)
     if not isinstance(block, dict):
         return _with_errors(
+            docs_dir,
             f"{CONFIG_KEY}: expected a mapping of space -> settings, "
-            f"got {type(block).__name__}"
+            f"got {type(block).__name__}",
         )
-    return _from_block(block)
+    return _from_block(block, docs_dir)
 
 
-def _with_errors(*errors: str) -> DocSpaces:
+def _with_errors(docs_dir: str, *errors: str) -> DocSpaces:
     """The shipped spaces, carrying the configuration errors that were found."""
-    base = default_doc_spaces()
+    base = default_doc_spaces(docs_dir)
     return DocSpaces(
         roots=base.roots,
         kinds=base.kinds,
         working=base.working,
         config_errors=tuple(errors),
+        docs_dir=docs_dir,
     )
 
 
-def _from_block(block: dict[str, object]) -> DocSpaces:
+def _from_block(block: dict[str, object], docs_dir: str = DEFAULT_DOCS_DIR) -> DocSpaces:
     """Build the spaces from a ``doc_roots`` mapping, collecting every error."""
     roots: dict[str, tuple[str, ...]] = dict(DEFAULT_ROOTS)
     kinds: dict[str, tuple[str, ...]] = dict(DEFAULT_KINDS)
@@ -326,7 +403,11 @@ def _from_block(block: dict[str, object]) -> DocSpaces:
     working, working_errors = _working_from(block.get(SPACE_WORKING))
     errors.extend(working_errors)
     return DocSpaces(
-        roots=roots, kinds=kinds, working=working, config_errors=tuple(errors)
+        roots=roots,
+        kinds=kinds,
+        working=working,
+        config_errors=tuple(errors),
+        docs_dir=docs_dir,
     )
 
 
