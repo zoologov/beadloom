@@ -71,3 +71,43 @@ import a service; the decision and its reasons live only here.
 The function returns the names of the streams it actually reconfigured, so
 "nothing needed changing" is distinguishable from "nothing was done" — a silent
 no-op is how a policy stops being applied without anyone noticing.
+
+## The read side: a handler as wide as what the read can raise (BDL-061.68)
+
+The section above settles the **codec**. It does not settle what happens when
+the bytes do not match it, and that is a separate defect with its own history:
+`read_text(encoding="utf-8")` states the codec and still raises
+`UnicodeDecodeError` on a byte that is not UTF-8, so `except OSError` around it
+catches the file being *absent* and not the file being *unreadable*.
+
+That exact shape was repaired five times in one epic — `beadloom-mr2l.36` (two
+instances), `.37` (the tracker probes), `.40` (four call sites), `.42` (a sweep
+of about forty) — and then `doc_sync/doc_quality.py`, written after all four,
+took the `docs quality` gate down the same way. Five repairs did not reach the
+sixth author, so the rule is now enforced by two mechanisms rather than
+remembered.
+
+**The codec is stated:** ruff's `PLW1514` is selected in `pyproject.toml`. It is a
+preview rule in `ruff==0.16.3`, the release `uv.lock` pins, so `preview` and
+`explicit-preview-rules` travel with the selection — selecting a preview rule without
+them makes `ruff check` print a warning and exit 0, which is a gate that reads as
+configured and checks nothing. Its reach was measured, not read off the rule description: it reports
+`Path.read_text` only where it can infer a `Path` receiver, and it does not look
+at `subprocess(text=True)` at all. The receiver-agnostic AST sweep in
+`tests/test_locale_independent_io.py` therefore still covers `src/`, and
+`PLW1514` adds `tests/`, which that sweep does not read.
+
+**The handler is wide enough:** `tests/test_decode_handlers.py` holds an AST
+ledger of every `try` or `contextlib.suppress` block in `src/beadloom` whose body
+decodes text. Measured on this tree: `203` modules parsed, 55 such blocks, 28 of
+them narrow — no handler catching `UnicodeDecodeError`, `UnicodeError`,
+`ValueError` or a blanket clause. Each of the 28 is listed with the stream it
+reads, the answer its handler gives today and what happens instead when the
+bytes will not decode. A new narrow block fails the suite; so does a listed one
+that is repaired without deleting its row.
+
+The 28 are **not** 28 defects. Each needs the per-site judgement `.42` used — is
+this stream a UTF-8 contract we wrote, or somebody else's document in their
+codec — and that judgement is `beadloom-mr2l.67`'s, one site at a time. What the
+ledger buys before then is that every one of them is a decision on the record
+instead of an accident, and that the twenty-ninth cannot be added silently.

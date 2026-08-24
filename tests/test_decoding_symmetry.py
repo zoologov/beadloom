@@ -417,7 +417,7 @@ class TestContributorNamesAreNotAmbient:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ambient: str
     ) -> None:
         """MEASURED before the fix: latin-1 -> 'Ð\\x98Ð²Ð°Ð½ Ð\\x9fÐµÑ\\x82Ñ\\x80Ð¾Ð²',
-        ascii -> UnicodeDecodeError past ``except (OSError, SubprocessError)``."""
+        ascii -> UnicodeDecodeError past ``except (OSError, SubprocessError)``."""  # noqa: RUF002 — a measured latin-1 mojibake byte, not a Greek mu
         repo = _build_activity_repo(tmp_path, as_the_process_receives("Иван Петров"))
         under_ambient_codec(monkeypatch, git_activity, ambient)
 
