@@ -495,10 +495,25 @@ def _pair_project(root: Path, *, doc_rel: str) -> sqlite3.Connection:
 class TestTheTwoReadingsOfExemptAreNamedApart:
     """Two adjacent lines of one run said 0 and 55 about "exempt"."""
 
-    def test_the_gate_line_says_which_population_the_number_counts(self) -> None:
-        """`55 WORKING document(s) exempt` invited the pair reading and got it."""
-        step = _step_doc_spaces(REPO_ROOT, pairs_excused=0)
+    def test_the_gate_line_says_which_population_the_number_counts(
+        self, tmp_path: Path
+    ) -> None:
+        """`55 WORKING document(s) exempt` invited the pair reading and got it.
 
+        Built on a tmp project rather than REPO_ROOT. The first version read the
+        live repository, so on a leg where `.beadloom/beadloom.db` did not exist
+        yet the step came back `skipped` and the assertion compared its text
+        against "skipped — no index" — a text mismatch reported where a missing
+        PRECONDITION was the fact. That is this epic's own subject: asserting on
+        a result without first establishing that the result was produced. The
+        step is now asserted to have RUN before its summary is read.
+        """
+        conn = _pair_project(tmp_path, doc_rel="guides/ci.md")
+        conn.close()
+        _write(tmp_path, ".claude/development/docs/features/BDL-1/CONTEXT.md")
+        step = _step_doc_spaces(tmp_path, pairs_excused=0)
+
+        assert not step.skipped, step.summary
         assert "WORKING document(s) in the exempt space" in step.summary
         assert "0 sync pair(s) excused" in step.summary
 
