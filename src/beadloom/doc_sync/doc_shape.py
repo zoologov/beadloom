@@ -33,6 +33,8 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any
 
+from beadloom.infrastructure.doc_roots import resolve_docs_dir
+
 if TYPE_CHECKING:
     import sqlite3
     from collections.abc import Iterable, Mapping
@@ -95,6 +97,7 @@ def _documents_by_node_kind(
     pair, already reported with its own reason, and calling it "a document with
     no sections" would report one fault twice under two names.
     """
+    docs_dir = resolve_docs_dir(project_root)
     by_kind: dict[str, list[tuple[str, str, str]]] = {}
     rows = conn.execute(
         "SELECT n.ref_id AS ref_id, n.kind AS kind, d.path AS path "
@@ -105,7 +108,7 @@ def _documents_by_node_kind(
         kind = row["kind"]
         if kind not in kinds:
             continue
-        path = project_root / "docs" / row["path"]
+        path = project_root / docs_dir / row["path"]
         try:
             text = path.read_text(encoding="utf-8")
         except OSError:

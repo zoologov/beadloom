@@ -10,8 +10,11 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from beadloom.infrastructure.doc_roots import SPACE_AS_IS
+
 if TYPE_CHECKING:
     import sqlite3
+    from collections.abc import Iterable
     from pathlib import Path
 
 # Maximum chunk size in characters.
@@ -158,31 +161,88 @@ def index_docs(
     for md_path in sorted(docs_dir.rglob("*.md")):
         content = md_path.read_text(encoding="utf-8")
         rel_path = str(md_path.relative_to(docs_dir))
-        file_hash = hashlib.sha256(content.encode()).hexdigest()
-        ref_id = ref_id_map.get(rel_path)
-
-        conn.execute(
-            "INSERT INTO docs (path, kind, ref_id, hash) VALUES (?, ?, ?, ?)",
-            (rel_path, "other", ref_id, file_hash),
+        _insert_document(
+            conn,
+            path=rel_path,
+            content=content,
+            ref_id=ref_id_map.get(rel_path),
+            space=SPACE_AS_IS,
+            result=result,
         )
-        doc_id = conn.execute("SELECT id FROM docs WHERE path = ?", (rel_path,)).fetchone()[0]
-        result.docs_indexed += 1
-
-        chunks = chunk_markdown(content)
-        for chunk in chunks:
-            conn.execute(
-                "INSERT INTO chunks (doc_id, chunk_index, heading, section, content, "
-                "node_ref_id) VALUES (?, ?, ?, ?, ?, ?)",
-                (
-                    doc_id,
-                    chunk["chunk_index"],
-                    chunk["heading"],
-                    chunk["section"],
-                    chunk["content"],
-                    ref_id,
-                ),
-            )
-            result.chunks_indexed += 1
 
     conn.commit()
     return result
+
+
+def index_space_documents(
+    paths: Iterable[Path],
+    conn: sqlite3.Connection,
+    *,
+    project_root: Path,
+    space: str,
+) -> DocIndexResult:
+    """Index documents of another space, keyed by their PROJECT-relative path.
+
+    The TO-BE space is indexed **in place** (BDL-061 CONTEXT Q4): the planning
+    tree does not move, because indexing delivers the value immediately while
+    relocating paths mid-epic is a breaking change with no added signal. Its rows
+    therefore carry a project-relative ``path`` rather than the docs-dir-relative
+    one :func:`index_docs` uses — the two trees have no common root, and giving
+    them one would mean moving the tree.
+
+    ``ref_id`` is ``NULL`` by construction: a planning document describes intent,
+    not one node's code, so pairing it with a node would make ``sync-check`` hold
+    a PRD against a module it never described.
+    """
+    result = DocIndexResult()
+    for path in sorted(set(paths)):
+        try:
+            content = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            # A document that cannot be decoded is not indexed and is not a
+            # reason to abandon the run; ``docs quality`` reports it by name.
+            continue
+        try:
+            rel = path.relative_to(project_root).as_posix()
+        except ValueError:
+            continue
+        _insert_document(
+            conn, path=rel, content=content, ref_id=None, space=space, result=result
+        )
+    conn.commit()
+    return result
+
+
+def _insert_document(
+    conn: sqlite3.Connection,
+    *,
+    path: str,
+    content: str,
+    ref_id: str | None,
+    space: str,
+    result: DocIndexResult,
+) -> None:
+    """Insert one document and its chunks. Shared by every space."""
+    file_hash = hashlib.sha256(content.encode()).hexdigest()
+    conn.execute(
+        "INSERT OR REPLACE INTO docs (path, kind, ref_id, hash, space) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (path, "other", ref_id, file_hash, space),
+    )
+    doc_id = conn.execute("SELECT id FROM docs WHERE path = ?", (path,)).fetchone()[0]
+    result.docs_indexed += 1
+
+    for chunk in chunk_markdown(content):
+        conn.execute(
+            "INSERT INTO chunks (doc_id, chunk_index, heading, section, content, "
+            "node_ref_id) VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                doc_id,
+                chunk["chunk_index"],
+                chunk["heading"],
+                chunk["section"],
+                chunk["content"],
+                ref_id,
+            ),
+        )
+        result.chunks_indexed += 1

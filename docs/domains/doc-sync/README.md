@@ -57,6 +57,7 @@ class SyncPair:
 | `missing` | The doc or code file is gone, or the graph declares a doc that is not on disk | 2 |
 | `unverified` | There was nothing to compare against (rebuilt index, no git baseline). Reported by name; never counted as fresh | 0 |
 | `incomplete` | The document is current and does not carry the shape its kind requires. A `warn`: reported, never blocking | 0 |
+| `exempt` | The document is in the WORKING space and is exempt from freshness by DECLARATION (`doc_roots.working` in `.beadloom/config.yml`). The row carries the declared reason in `details`, prints as `[exempt]` with that reason, and is counted in the `--json` summary and in the gate line. Not `ok` — nothing was verified — and never blocking. The classification asks `DocSpaces.project_path(doc_path)`, so the declaration reaches freshness and `beadloom docs spaces` in one spelling; the exemption covers freshness alone, and a pair whose document or code file is gone is `missing` before any exemption applies | 0 |
 
 Every result also carries `baseline` -- `index`, `git:HEAD` or `none` -- so a
 green result says what it was green against.
@@ -177,6 +178,8 @@ In `warn` mode, violations print warnings but do not block the commit. In `block
 - `document_kind(path: str) -> str` -- The file's stem: `PRD.md` is a `PRD`. A project whose documents are `prd.md` gets `prd` as a kind of its own, which is honest — nothing was told the two are the same.
 - `document_status(text) -> str` / `is_approved(text) -> bool` -- The `> **Status:**` line, and whether it is one of `APPROVED_STATUSES` (`approved`, `accepted`). A Draft is allowed its open questions.
 - `QualityReport` -- `findings`, `documents`, `applicable` (per check), `by_kind` (per `KindCoverage`), `unreadable`, and the properties `checks_that_read_nothing` and `kinds_that_read_nothing`. The second exists because the first is a global OR over the corpus and goes silent as soon as one document carries one row, so it cannot see a check that is blind on a whole document kind.
+- `names_a_witness(statement: str) -> bool` -- Whether a goal names something an observer could go and look at: a quantity, a named artifact (an inline code span, a `--flag`, a file name, a `snake_case` identifier) or an observable outcome (`exits`, `fails`, `passes`, `detects`, `green`).
+- `states_an_unbounded_improvement(statement: str) -> bool` -- Whether a goal's predicate is a quality rather than an outcome (`improve`, `establish`, `clean up`, `make`/`keep` something *better*). `measurable-goal` reports a goal only when this holds AND `names_a_witness` does not; it shipped as a numeral detector and reported 154 of 235 goal statements here, against 4 of 232 now (`beadloom-mr2l.70`).
 - `CHECK_NAMES` (the five), `CONTENT_CHECKS` (the four that read ITEMS; `unfilled-placeholder` counts documents OPENED and would report every kind as read).
 
 ### Module `src/beadloom/doc_sync/git_baseline.py`

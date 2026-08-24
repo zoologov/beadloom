@@ -101,7 +101,12 @@ CREATE TABLE IF NOT EXISTS docs (
     )),
     ref_id   TEXT REFERENCES nodes(ref_id) ON DELETE SET NULL,
     metadata TEXT DEFAULT '{}',
-    hash     TEXT NOT NULL
+    hash     TEXT NOT NULL,
+    -- Which documentation SPACE the file belongs to: 'to_be' (intent), 'as_is'
+    -- (reality, held against the code) or 'working' (ephemeral). Defaults to
+    -- 'as_is' so a pre-BDL-061 row keeps the meaning it always had -- the docs
+    -- table only ever held the tree ``sync-check`` pairs with code.
+    space    TEXT NOT NULL DEFAULT 'as_is'
 );
 
 -- Document chunks
@@ -357,6 +362,14 @@ def ensure_schema_migrations(conn: sqlite3.Connection) -> None:
     BDL-037 federation migrations).  Safe to call multiple times and on a
     partially-created schema (each step guards on the table/column existing).
     """
+    # The documentation SPACE a doc row belongs to (BDL-061 S5). Additive: an
+    # existing row defaults to 'as_is', which is what every row in a
+    # pre-BDL-061 index already was.
+    doc_columns = _table_columns(conn, "docs")
+    if doc_columns and "space" not in doc_columns:
+        conn.execute("ALTER TABLE docs ADD COLUMN space TEXT NOT NULL DEFAULT 'as_is'")
+        conn.commit()
+
     sync_columns = _table_columns(conn, "sync_state")
     if sync_columns:
         if "symbols_hash" not in sync_columns:

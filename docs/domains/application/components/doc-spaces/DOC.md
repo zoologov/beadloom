@@ -1,0 +1,184 @@
+# Doc Spaces (component)
+
+Internal building block of the application domain.
+
+**Source:** `src/beadloom/application/doc_spaces.py`
+
+---
+
+## Overview
+
+Makes the claim *"the intent recorded in TO-BE is reflected in AS-IS"* checkable.
+It is a relation between two artifacts rather than a flag on one: nothing here
+marks a planning document "done", because that document stays the record of what
+was intended and a different document is what gets updated.
+
+It lives in `application` because the answer joins three readers no single domain
+owns — the graph (which nodes exist and which have documentation), the tracker
+(which beads closed) and the space vocabulary in `infrastructure/doc_roots.py`.
+
+## The join, and why it is a declaration
+
+An epic's `CONTEXT.md` (or a task's `BRIEF.md`) carries a *Related Files* section
+naming the graph nodes the work touches. The relation is read from that section
+and from nothing else.
+
+Scanning a whole document for backticked tokens that happen to be ref ids was
+measured first and rejected: on this repository it attributed the node `status`
+to nine epics whose documents merely used the English word. That is the
+false-positive class BDL-UX #169 and #190 already record against the audit
+scanner.
+
+An epic that declares no node is therefore **unresolved** — counted in its own
+bucket and reported, never silently counted as clean. So is an epic whose
+planning document carries no *Related Files* heading at all. Filtering those
+out was the first implementation: on this repository it removed 34 of 57 epics
+from the denominator and the report then read *16 of 23*, which looks like
+coverage of two thirds where the real figure is under a third.
+
+## An epic is a directory that holds intent
+
+Not "a directory that carries a `CONTEXT.md` or `BRIEF.md`", which is what it
+was. The difference was four of this repository's 61 TO-BE directories, in NO
+field of the report — not `epics`, not `unresolved_epics`, not a NOT CHECKED
+line — while their documents stayed in the TO-BE population. One report stated
+two sizes for one tree: 61 directories held intent and 57 became epics.
+
+Every directory is an epic now, and `unresolved_reasons` says which of three
+situations each unresolved one is in:
+
+| Reason | What it means | Reported? |
+|---|---|---|
+| `no_node_declared` | the intent document was read and declares no node | counted and named |
+| `no_intent_document` | the directory carries none of the configured names | counted and named |
+| `unreadable_intent_document` | it carries one and it is not valid UTF-8 | `intent_document_unreadable` |
+
+Only the third is a finding, and the distinction is the point. A directory that
+carries no intent document is a directory that is not an epic —
+`.claude/development` holds the ROADMAP and the issue log — and reporting it
+would fill the everyday line with things nobody intends to change. A document
+that is there and cannot be decoded is a defect in that document: `_read`
+answered `None` and the caller continued, so a cp1251 planning document used to
+remove its own epic instead of naming itself.
+
+The file names come from `doc_roots.to_be.intent_documents`. With them
+hardcoded, an adopter whose planning document is called anything else lost 100%
+of its epics and the gate printed a plausible `0 of 0 epic(s) with closed
+beads`.
+
+## What is checked, and what is not
+
+One leg: an epic with at least one closed bead that declares node *X*, where *X*
+has no AS-IS document at all. Intent was recorded, the work finished, and reality
+was never written down.
+
+There is deliberately no second leg on staleness. `sync-check` already holds
+every AS-IS document against its code and names the stale ones; a second check
+saying the same thing from another angle would double one finding.
+
+The WORKING declaration is audited two ways, neither inferred from an absence:
+
+- `working_exemption_inert` — one declared kind **or** one declared root that no
+  document matches, so that half of the exemption excused nothing. Per declared
+  item, because liveness asked of a declaration as a whole is answered by its
+  luckiest half: one `ACTIVE.md` made a `kinds: [ACTIVE, SPEC]` line covering 39
+  `SPEC.md` files report nothing at all. `SpacesReport.working_reach` carries
+  the count each declared half reached, so a single configuration line that
+  excuses 39 documents has to print the number 39.
+- `working_declaration_contradicted` — the graph declares a WORKING document as
+  a node's documentation, so one artifact says it describes the code while
+  another says it must not be held against it.
+
+## A document counted twice is wrong; a document counted nowhere is worse
+
+`document_outside_declared_root` reports a document whose **kind** places it in a
+space whose own **roots** exclude it. Kind still wins — that ordering is
+load-bearing, because `ACTIVE.md` lives inside the TO-BE tree — and the document
+is counted in the space its kind names, so the populations add up to the number
+of files the declared roots matched on any tree. Before this, such a document was
+in no population at all, its directory was in no epic list, and nothing said so:
+a project whose planning directories carry a `README.md` lost every epic while
+the gate printed a plausible small count.
+
+One finding per kind rather than one per document: sixty directories named the
+same way are one convention decided once, and the finding carries the count, up
+to five paths, and the roots that failed to reach them.
+`SpacesReport.documents_outside_declared_root` holds the full list.
+
+## Two populations that were called by one word
+
+`working_documents` counts documents in the exempt space.
+`SpacesReport.pairs_excused` counts the **sync pairs** the exemption excused.
+One `beadloom ci` run reported `exempt: 0` from `sync-check --json` and `55
+WORKING document(s) exempt` from the doc-spaces line, about one tree, because
+one word stood for both: on this repository the 55 `ACTIVE.md` documents live
+outside the documentation directory the indexer walks, so none of them is a sync
+pair at all.
+
+The pair count is never computed here. Whoever ran `check_sync` supplies it —
+`beadloom ci` passes its own sync-check step's number into the doc-spaces step —
+and a caller that ran no freshness check supplies `None`, so `beadloom docs
+spaces` prints the document count under the name of its own population and makes
+no pair claim it did not measure.
+
+## An epic the tracker forgot
+
+`bd close` writes only the local database, so an epic leaves
+`.beads/issues.jsonl` by ordinary use rather than by mistake. Reading its bead
+statuses as the empty tuple made *the tracker has no record of this epic* and
+*this epic's beads are all open* one fact, and only the second is an honest
+skip. They are now three states: statuses known, statuses unknown because the
+tracker does not name this epic, and statuses unknown because no tracker
+answered at all. `EpicIntent.unknown_status_reason` carries which, and
+`SpacesReport.epics_unknown_to_tracker` names the epics of the middle state.
+
+An epic in that middle state **that declares a node** is reported as
+`epic_not_in_tracker` — whether its work finished is unknown, so its intent was
+held against nothing. One that declares nothing is not reported that way: it is
+already counted and named as declaring no node, and one fact under two names
+makes a report unreadable.
+
+`TrackerRead` carries the statuses and the source they came from, because two
+entry points read two trackers deliberately — the gate the committed export, so
+it answers the same in a fresh CI checkout, and `beadloom docs spaces` the live
+`bd` database, which is the more current. Each prints which it read.
+
+## Public surface
+
+- `check_spaces(project_root, *, spaces, known_refs, documented_refs,
+  declared_doc_paths, beads_by_epic, tracker_source, pairs_excused)` — the pure
+  core. Every graph, tracker and freshness fact arrives as an argument, so the
+  relation can be exercised against a project that is not this one and no count
+  it prints is computed a second way here.
+- `spaces_report(conn, project_root, *, beads, tracker_source, pairs_excused)` —
+  the same over a live index.
+- `graph_facts(conn)` — `(known_refs, documented_refs, declared_doc_paths)`.
+- `read_tracker_export(project_root)` — the committed export as a `TrackerRead`.
+- `jsonl_records(project_root)` — the tracked export as records, or `None` when
+  no file was readable.
+- `describe_unresolved(reasons)` — the unresolved bucket's composition as one
+  clause, shared by the gate and the command so one bucket cannot be described
+  two ways.
+- `beads_by_epic(records)` — group tracker records by the epic key their title
+  names.
+- `read_epic_intents(...)`, `EpicIntent`, `SpaceFinding`, `SpacesReport`,
+  `TrackerRead`.
+- `FINDING_NO_AS_IS`, `FINDING_WORKING_CONTRADICTED`, `FINDING_WORKING_INERT`,
+  `FINDING_CONFIG`, `FINDING_EPIC_NOT_IN_TRACKER`, `FINDING_INTENT_UNREADABLE`,
+  `FINDING_OUTSIDE_DECLARED_ROOT`.
+- `TRACKER_BD`, `TRACKER_EXPORT`, `TRACKER_UNREADABLE` — which tracker answered.
+- `UNRESOLVED_NO_NODE_DECLARED`, `UNRESOLVED_NO_INTENT_DOCUMENT`,
+  `UNRESOLVED_UNREADABLE_INTENT` — why an epic declares no node.
+
+`SpacesReport.relation_checked` is false when nothing was related. A relation
+check over an empty population reports nothing and reads exactly like one that
+found no problem, so the report says which of the two it is.
+
+## Collaborators
+
+- `services/commands/docs.py` — `beadloom docs spaces`.
+- `application/gate.py` — the `doc-spaces` step, which reports and never blocks.
+- `services/bd_seam.py` supplies the tracker records the service layer converts
+  with `beads_by_epic`.
+
+> Component doc (BDL-061 S5). Public surface verified against `doc_spaces.py`.

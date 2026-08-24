@@ -11,13 +11,12 @@ self-edges for annotated symbols.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from typing import TYPE_CHECKING, Any
 
 from beadloom.application.reindex.models import _CODE_EXTENSIONS
 from beadloom.context_oracle.code_indexer import extract_symbols
-from beadloom.doc_sync.doc_indexer import chunk_markdown
+from beadloom.doc_sync.doc_indexer import DocIndexResult
 from beadloom.infrastructure.scan_paths import resolve_scan_paths
 
 if TYPE_CHECKING:
@@ -26,21 +25,16 @@ if TYPE_CHECKING:
 
 
 def _resolve_docs_dir(project_root: Path) -> Path:
-    """Resolve docs directory from config.yml or use default ``docs``.
+    """The docs directory as an absolute path, from the one reader of the key.
 
-    Checks ``.beadloom/config.yml`` for a ``docs_dir`` key.  If present,
-    returns ``project_root / <value>``.  Otherwise falls back to
-    ``project_root / "docs"``.
+    ``docs_dir`` was read in three places — here, in the reference-document scan
+    and as a hardcoded ``docs`` inside ``check_sync`` — so a project keeping its
+    documentation elsewhere had one reader looking where the others had not
+    (`beadloom-mr2l.75`). The key now has a single reader.
     """
-    config_path = project_root / ".beadloom" / "config.yml"
-    if config_path.exists():
-        import yaml
+    from beadloom.infrastructure.doc_roots import resolve_docs_dir
 
-        config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-        docs_path = config.get("docs_dir")
-        if isinstance(docs_path, str) and docs_path:
-            return project_root / docs_path
-    return project_root / "docs"
+    return project_root / resolve_docs_dir(project_root)
 
 
 def read_declared_docs(
@@ -215,34 +209,30 @@ def _index_single_doc(
     docs_dir: Path,
     ref_map: dict[str, str],
 ) -> tuple[int, int]:
-    """Index one doc file. Returns ``(docs_count, chunks_count)``."""
+    """Index one doc file. Returns ``(docs_count, chunks_count)``.
+
+    Delegates the row write to :func:`~beadloom.doc_sync.doc_indexer.
+    _insert_document`, the one the FULL path uses, so the two reindex paths
+    cannot disagree about what a ``docs`` row carries — the ``space`` column
+    would otherwise be set on one path and left to its default on the other,
+    which is the incremental/full divergence BDL-UX #142 and #146 both are.
+    """
+    from beadloom.doc_sync.doc_indexer import _insert_document
+    from beadloom.infrastructure.doc_roots import SPACE_AS_IS
+
     content = md_path.read_text(encoding="utf-8")
     rel_path = str(md_path.relative_to(docs_dir))
-    file_hash = hashlib.sha256(content.encode()).hexdigest()
-    ref_id = ref_map.get(rel_path)
-
-    conn.execute(
-        "INSERT INTO docs (path, kind, ref_id, hash) VALUES (?, ?, ?, ?)",
-        (rel_path, "other", ref_id, file_hash),
+    result = DocIndexResult()
+    _insert_document(
+        conn,
+        path=rel_path,
+        content=content,
+        ref_id=ref_map.get(rel_path),
+        space=SPACE_AS_IS,
+        result=result,
     )
-    doc_id = conn.execute("SELECT id FROM docs WHERE path = ?", (rel_path,)).fetchone()[0]
-
-    chunks = chunk_markdown(content)
-    for chunk in chunks:
-        conn.execute(
-            "INSERT INTO chunks (doc_id, chunk_index, heading, section, "
-            "content, node_ref_id) VALUES (?, ?, ?, ?, ?, ?)",
-            (
-                doc_id,
-                chunk["chunk_index"],
-                chunk["heading"],
-                chunk["section"],
-                chunk["content"],
-                ref_id,
-            ),
-        )
     conn.commit()
-    return 1, len(chunks)
+    return result.docs_indexed, result.chunks_indexed
 
 
 def _index_single_code_file(
@@ -283,3 +273,28 @@ def _index_single_code_file(
 
     conn.commit()
     return count
+
+
+def index_to_be_space(project_root: Path, conn: sqlite3.Connection) -> DocIndexResult:
+    """Index the TO-BE space in place, from the project's configured doc roots.
+
+    Configurable from the start rather than hardcoded to ``.claude/development``:
+    a project that keeps its planning documents elsewhere would otherwise have an
+    empty TO-BE space and no way to say so, and the check built on it would be
+    true here and unknown everywhere else.
+
+    WORKING documents live inside the same tree and are deliberately NOT indexed
+    here — ``documents_in`` classifies by kind first, so an ACTIVE.md is excluded
+    by the same rule that exempts it from freshness rather than by a second list
+    that could disagree with it.
+    """
+    from beadloom.doc_sync.doc_indexer import index_space_documents
+    from beadloom.infrastructure.doc_roots import SPACE_TO_BE, resolve_doc_spaces
+
+    spaces = resolve_doc_spaces(project_root)
+    return index_space_documents(
+        spaces.documents_in(project_root, SPACE_TO_BE),
+        conn,
+        project_root=project_root,
+        space=SPACE_TO_BE,
+    )

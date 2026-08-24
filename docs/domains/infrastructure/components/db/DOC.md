@@ -30,7 +30,10 @@ definitions the rest of Beadloom depends on.
 - `ensure_schema_migrations(conn)` — apply the additive, idempotent migrations
   (the `lifecycle` column + `external` CHECK rebuild, `edges.contract_key`,
   `foreign_edges`, the free-form `kind` rebuild, `sync_state.baseline_source`,
-  the four-verdict `sync_state.status` rebuild, `declared_docs`, …).
+  the four-verdict `sync_state.status` rebuild, `declared_docs`, the
+  `docs.space` column, …). `docs.space` records which documentation space a
+  file belongs to — `to_be`, `as_is` or `working` — and defaults to `as_is`,
+  which is what every row in a pre-BDL-061 index already was.
 - `get_meta(conn, key, default=None)` / `set_meta(conn, key, value)` — the
   `meta` key/value helpers.
 - `SCHEMA_VERSION` — the schema version constant (currently `"4"`).

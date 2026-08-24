@@ -55,11 +55,6 @@ class TestMeasurableGoal:
         text = "## Goals\n\n- The core shrinks from 440 to 376 lines.\n"
         assert _checks(text) == []
 
-    def test_a_bead_identifier_is_not_a_measurable_clause(self) -> None:
-        """``BDL-061`` and ``v2.2`` are names with digits in them, not quantities."""
-        text = "## Goals\n\n- Finish BDL-061 before v2.2 ships.\n"
-        assert _checks(text) == [MEASURABLE_GOAL]
-
     def test_a_goal_continued_on_the_next_line_is_read_whole(self) -> None:
         text = (
             "## Goals\n\n"
@@ -73,8 +68,155 @@ class TestMeasurableGoal:
         assert _checks(text) == []
 
     def test_a_prose_goal_is_read_when_the_section_has_no_bullets(self) -> None:
-        text = "## Goal\n\nTurn prose into mechanisms so the flow survives.\n"
+        text = "## Goal\n\nMake the whole thing simpler and more enjoyable.\n"
         assert _checks(text) == [MEASURABLE_GOAL]
+
+
+# ---------------------------------------------------------------------------
+# 1b. The criterion is a witness, not a numeral (`.70`, review `.15`)
+# ---------------------------------------------------------------------------
+
+
+class TestAGoalIsJudgedOnWhatCanBeWitnessed:
+    """The re-scope measured in `.70`.
+
+    As shipped the check found a digit and called its absence "no measurable
+    clause": on this repository it reported 154 of 235 goal statements at
+    roughly 1-in-18 precision, including the two exit-code goals BDL-UX #148
+    exists to demand. A check satisfied by inserting a numeral teaches an author
+    to write for the checker, which is the failure #169 was fixed by NOT doing.
+
+    What it decides now is one named form the writing standard itself rejects:
+    a goal whose predicate is a QUALITY and which names nothing an observer
+    could go and look at.
+    """
+
+    def test_an_exit_code_goal_is_measurable(self) -> None:
+        """BDL-036/PRD.md:26, reported by the shipped check."""
+        text = (
+            "## Goals\n\n"
+            "- `beadloom lint --strict` **fails** (non-zero) on real cycle "
+            "and layer violations.\n"
+        )
+        assert _checks(text) == []
+
+    def test_a_second_exit_code_goal_is_measurable(self) -> None:
+        """BDL-039/PRD.md:22, reported by the shipped check."""
+        text = (
+            "## Goals\n\n"
+            "- **G1 — Federated landscape gate.** `beadloom federate --fail-on "
+            "<verdicts>` exits non-zero when the landscape drifts.\n"
+        )
+        assert _checks(text) == []
+
+    def test_a_stated_property_is_measurable(self) -> None:
+        """BDL-060/PRD.md:28 — atomicity is a property anyone can check for."""
+        text = (
+            "## Goals\n\n"
+            "- **G6 — Graph-write safety.** Graph YAML writes are atomic "
+            "(temp + `os.replace`), so a crash cannot truncate the graph.\n"
+        )
+        assert _checks(text) == []
+
+    def test_an_artifact_named_without_backticks_is_still_an_artifact(self) -> None:
+        """BDL-034/PRD.md:31. Demanding backticks would be a formatting rule
+        wearing a measurability rule's name."""
+        text = (
+            "## Goals\n\n"
+            "- AGENTS.md regeneration produces clean output without "
+            "duplication.\n"
+        )
+        assert _checks(text) == []
+
+    def test_a_goal_whose_predicate_is_a_quality_is_reported(self) -> None:
+        """BDL-006/CONTEXT.md:13, and the standard's own example."""
+        text = (
+            "## Goal\n\nMake Beadloom enjoyable and intuitive — visual graph "
+            "exploration, impact analysis, change visibility.\n"
+        )
+        assert _checks(text) == [MEASURABLE_GOAL]
+
+    def test_an_unbounded_improvement_verb_is_reported(self) -> None:
+        text = "## Goals\n\n- Improve the developer experience.\n"
+        assert _checks(text) == [MEASURABLE_GOAL]
+
+    def test_establishing_something_is_reported(self) -> None:
+        """BDL-002/CONTEXT.md:12 — nothing observable separates "established"
+        from "not yet"."""
+        text = (
+            "## Goal\n\nEstablish the agent-native architecture and clean up "
+            "the codebase before building new features.\n"
+        )
+        assert _checks(text) == [MEASURABLE_GOAL]
+
+    def test_an_improvement_with_a_quantity_is_not_reported(self) -> None:
+        text = "## Goals\n\n- Improve the core: it shrinks from 440 to 376 lines.\n"
+        assert _checks(text) == []
+
+    def test_an_improvement_with_a_named_artifact_is_not_reported(self) -> None:
+        text = (
+            "## Goals\n\n- Make the loader simpler: `loader.py` splits into "
+            "three modules.\n"
+        )
+        assert _checks(text) == []
+
+    def test_an_improvement_with_an_observable_outcome_is_not_reported(self) -> None:
+        text = "## Goals\n\n- Make the build simpler, so a cold clone passes.\n"
+        assert _checks(text) == []
+
+    def test_an_identifier_is_still_not_a_quantity(self) -> None:
+        """The old necessity is gone; the old distinction is not. ``BDL-061``
+        and ``v2.2`` are names with digits in them."""
+        text = "## Goals\n\n- Make the tool better before BDL-061 and v2.2 ship.\n"
+        assert _checks(text) == [MEASURABLE_GOAL]
+
+    def test_the_finding_says_what_it_actually_decided(self) -> None:
+        """A finding that over-claims is the defect this bead exists to fix."""
+        report = check_document(
+            "## Goals\n\n- Make it better.\n", path="D.md"
+        )
+        assert "witness" in report.findings[0].why
+
+    @pytest.mark.parametrize(
+        "abbreviation",
+        ["e.g. the graph", "i.e. the graph", "and so on, etc.", "vs. last week"],
+    )
+    def test_an_abbreviation_is_not_a_named_artifact(self, abbreviation: str) -> None:
+        """The witness that accepts a filename must not accept ordinary prose:
+        a loose recognizer lowers the count silently, which is the one way this
+        re-scope could be worse than the numeral it replaces."""
+        text = f"## Goals\n\n- Make the tool better, {abbreviation}.\n"
+        assert _checks(text) == [MEASURABLE_GOAL]
+
+    def test_a_goal_that_states_no_improvement_is_not_reported(self) -> None:
+        """BDL-027/PRD.md:27, reported by the shipped check and accepted now.
+
+        The load-bearing half of the criterion, and the one a sabotage found
+        unpinned: this statement names NO witness either — no quantity, no
+        artifact, no outcome verb — and is accepted solely because its predicate
+        is not an unbounded improvement. Without this row, deleting the
+        improvement leg reddens nothing (sabotage S2).
+        """
+        text = "## Goals\n\n- Route extraction has no self-matching false positives.\n"
+        assert _checks(text) == []
+
+    def test_a_structural_goal_with_no_witness_is_not_reported(self) -> None:
+        """BDL-046/PRD.md:30 — an observer opens the menu and looks."""
+        text = '## Goals\n\n- **Dashboard** — a single flat item (no "Metrics" child).\n'
+        assert _checks(text) == []
+
+    def test_a_slash_separated_enumeration_is_not_a_named_artifact(self) -> None:
+        """Measured: "fresh/stale/missing docs" read as a path and witnessed a
+        goal that names no artifact at all."""
+        text = "## Goals\n\n- Make the panel nicer for fresh/stale/missing docs.\n"
+        assert _checks(text) == [MEASURABLE_GOAL]
+
+    def test_a_horizontal_rule_is_not_a_goal_statement(self) -> None:
+        """Review `.15` m1: three of the 235 statements read were ``---``."""
+        report = check_document(
+            "## Goal\n\nMake it better.\n\n---\n", path="D.md"
+        )
+        assert report.applicable[MEASURABLE_GOAL] == 1
 
 
 # ---------------------------------------------------------------------------

@@ -123,6 +123,26 @@ line-length = 99
 src = ["src", "tests"]
 
 [tool.ruff.lint]
+# PREVIEW IS ON FOR ONE RULE, AND `explicit-preview-rules` IS WHAT MAKES THAT
+# TRUE (BDL-061.68). PLW1514 (`unspecified-encoding`) is the mechanical half of
+# the decode family this epic repaired five times by hand: text I/O that leaves
+# the codec to `locale.getpreferredencoding(False)`. It is still a preview rule
+# in ruff 0.16.3, and selecting a preview rule WITHOUT `preview = true` is not an
+# error — ruff prints "has no effect because preview is not enabled" on stderr
+# and exits 0, i.e. the gate reads as configured while checking nothing. So the
+# three settings travel together, and tests/test_decode_handlers.py fails if any
+# of them is removed.
+#
+# `explicit-preview-rules` keeps every OTHER preview rule out, so turning this
+# on does not silently enlist whatever lands in preview next. It does not stop
+# preview from changing the behaviour of STABLE rules, and the cost of that here
+# was measured, not assumed: exactly one new finding, RUF002 on a deliberate
+# latin-1 mojibake docstring in tests/test_decoding_symmetry.py, answered by a
+# `noqa` on that line rather than by editing the measurement it records. Ruff is
+# pinned by uv.lock, so further preview drift arrives with a reviewed lockfile
+# bump and never on its own.
+preview = true
+explicit-preview-rules = true
 select = [
     "E",    # pycodestyle errors
     "W",    # pycodestyle warnings
@@ -138,6 +158,7 @@ select = [
     "PTH",  # flake8-use-pathlib
     "S",    # flake8-bandit
     "T20",  # flake8-print
+    "PLW1514",  # pylint: text I/O must state its encoding (preview; see above)
 ]
 ignore = [
     "S101",  # assert used in tests

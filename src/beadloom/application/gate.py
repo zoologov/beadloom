@@ -38,6 +38,7 @@ from beadloom.doc_sync.doc_shape import (
 )
 from beadloom.doc_sync.engine import (
     BLOCKING_STATUSES,
+    STATUS_EXEMPT,
     STATUS_MISSING,
     STATUS_OK,
     STATUS_STALE,
@@ -111,6 +112,15 @@ class GateStep:
     findings: list[Finding] = field(default_factory=list)
     summary: str = ""
     not_verified: bool = False
+    pairs_excused: int | None = None
+    """Sync pairs a declaration excused, for the step that MEASURED it.
+
+    Carried on the step rather than recomputed by the later step that also
+    prints it: one run said ``exempt: 0`` and ``55 WORKING document(s) exempt``
+    about one tree, and a second implementation of "how many were excused" is
+    exactly how two adjacent lines came to contradict. ``None`` means no step in
+    this run measured it, and a surface that was not told makes no pair claim.
+    """
 
     @property
     def status(self) -> str:
@@ -163,15 +173,22 @@ def run_ci_gate(
     (``breaking,drift,orphaned_consumer,undeclared_producer``) — the no-false-gate
     verdicts are never included.
     """
+    # Built in execution order rather than as one literal: `sync-check` needs the
+    # index `reindex` writes, and the doc-spaces step needs the excused-pair count
+    # `sync-check` measured. Order is behaviour here, not layout.
     steps: list[GateStep] = [
         _step_reindex(project_root, no_reindex=no_reindex),
         _step_lint(project_root),
-        _step_sync_check(project_root),
-        _step_docs_audit(project_root),
-        _step_docs_quality(project_root),
-        _step_config_check(project_root),
-        _step_doctor(project_root),
     ]
+    sync = _step_sync_check(project_root)
+    steps.append(sync)
+    steps.append(_step_docs_audit(project_root))
+    steps.append(_step_docs_quality(project_root))
+    # The excused-pair count travels from the step that produced it, so the two
+    # lines of one run cannot say different numbers about one word.
+    steps.append(_step_doc_spaces(project_root, pairs_excused=sync.pairs_excused))
+    steps.append(_step_config_check(project_root))
+    steps.append(_step_doctor(project_root))
     if hub_exports:
         steps.append(_step_federate(project_root, hub_exports, fail_on))
     return GateResult(steps=steps)
@@ -279,6 +296,7 @@ def _step_sync_check(project_root: Path) -> GateStep:
         not_verified=bool(unverified) or surface.shrank,
         findings=findings,
         summary=_sync_summary(results, unverified, surface),
+        pairs_excused=sum(1 for r in results if r.get("status") == STATUS_EXEMPT),
     )
 
 
@@ -331,14 +349,17 @@ def _sync_summary(
     """The sync-check line, which must never print a count that means nothing.
 
     It says how many pairs were CHECKED and found fresh, how many could not be
-    checked at all, and — when the recorded declared surface moved — that it
-    moved. A bare ``N pair(s) fresh`` was true of a run in which six pairs had
-    just been deleted (BDL-UX #174) and of a run that could not detect staleness
-    at all (BDL-UX #175).
+    checked at all, how many were EXCUSED and on what declaration, and — when
+    the recorded declared surface moved — that it moved. A bare ``N pair(s)
+    fresh`` was true of a run in which six pairs had just been deleted (BDL-UX
+    #174) and of a run that could not detect staleness at all (BDL-UX #175); the
+    ``exempt`` verdict, added after this docstring was written, reintroduced
+    exactly that shape until `beadloom-mr2l.76` (measured: 326 of 330 pair(s)
+    fresh became "326 pair(s) fresh" when a declaration excused four).
     """
     missing = [r for r in results if r.get("status") == STATUS_MISSING]
     stale = [r for r in results if r.get("status") == STATUS_STALE]
-    suffix = f"; {surface.headline}" if surface.headline else ""
+    suffix = _excused_clause(results) + (f"; {surface.headline}" if surface.headline else "")
     if missing or stale:
         parts = []
         if missing:
@@ -354,6 +375,23 @@ def _sync_summary(
     if unverified:
         summary += f", {len(unverified)} NOT VERIFIED (no baseline — index rebuilt)"
     return summary + suffix
+
+
+def _excused_clause(results: list[dict[str, object]]) -> str:
+    """How many pairs a declaration excused, and what it was declared with.
+
+    Empty when nothing was excused, so a project that declares no exemption
+    keeps the line it had. A skip is a first-class outcome and always says why,
+    so the declared reason the row carries travels into the line rather than
+    being left in ``--json`` for somebody to look up.
+    """
+    excused = [r for r in results if r.get("status") == STATUS_EXEMPT]
+    if not excused:
+        return ""
+    reasons = {str(r.get("details", "")).strip() for r in excused}
+    reasons.discard("")
+    stated = f" — {sorted(reasons)[0]}" if len(reasons) == 1 else ""
+    return f", {len(excused)} exempt{stated}"
 
 
 def _step_docs_audit(project_root: Path) -> GateStep:
@@ -484,6 +522,151 @@ def _step_docs_quality(project_root: Path) -> GateStep:
         findings=findings,
         summary=summary,
     )
+
+
+def _step_doc_spaces(project_root: Path, *, pairs_excused: int | None = None) -> GateStep:
+    """``docs spaces`` — the TO-BE -> AS-IS relation; reports, never blocks.
+
+    ``passed=True`` unconditionally and deliberately, like its sibling above: the
+    check ships as ``warn`` so a project whose planning documents predate it does
+    not go red on upgrade.
+
+    ``not_verified`` carries the honest half, and here it has three causes rather
+    than one. No tracker readable means no epic could be shown to have closed
+    beads; no epic declaring a node means the relation had nothing to relate; and
+    epics that declare nothing are a denominator that left without saying so.
+    Each is a way for this step to print no findings while having checked
+    nothing, which is the vacuity `.48` and `.68` exist to make visible.
+
+    The tracker is read from the committed ``.beads/issues.jsonl`` export rather
+    than from a ``bd`` subprocess: the gate must give the same answer in a fresh
+    CI checkout with no tracker installed, and a check whose result depends on
+    what is on the runner is not a gate.
+    """
+    from beadloom.application.doc_spaces import (
+        describe_unresolved,
+        read_tracker_export,
+        spaces_report,
+    )
+    from beadloom.infrastructure.db import open_db
+
+    db_path = project_root / ".beadloom" / "beadloom.db"
+    if not db_path.is_file():
+        return GateStep(
+            "doc-spaces",
+            skipped=True,
+            summary="skipped — no index at .beadloom/beadloom.db",
+        )
+    tracker = read_tracker_export(project_root)
+    beads = tracker.statuses
+    conn = open_db(db_path)
+    report = spaces_report(
+        conn,
+        project_root,
+        beads=beads,
+        tracker_source=tracker.source,
+        pairs_excused=pairs_excused,
+    )
+    if not report.populations.get("to_be"):
+        # A named SKIP, never a silent pass: a project with no TO-BE document has
+        # no intent recorded anywhere, so there is nothing this step could hold
+        # against reality and saying "PASS" would claim otherwise.
+        from beadloom.infrastructure.doc_roots import SPACE_TO_BE, resolve_doc_spaces
+
+        roots = ", ".join(resolve_doc_spaces(project_root).roots.get(SPACE_TO_BE, ()))
+        return GateStep(
+            "doc-spaces",
+            skipped=True,
+            summary=f"skipped — no TO-BE document matches {roots or '(no root declared)'}",
+        )
+    findings = [_doc_space_finding(f) for f in report.findings]
+    populations = ", ".join(
+        f"{space} {report.populations.get(space, 0)}"
+        for space in ("to_be", "as_is", "working")
+    )
+    summary = (
+        f"{populations}; {report.refs_checked} node declaration(s) from "
+        f"{report.epics_with_closed_beads} of {report.epics} epic(s) with closed "
+        f"beads held against the AS-IS space"
+    )
+    not_verified = False
+    if beads is None:
+        summary += "; NOT CHECKED: no tracker export was readable"
+        not_verified = True
+    else:
+        summary += f"; tracker read from {tracker.source}"
+        if not report.relation_checked:
+            summary += "; NOT CHECKED: no epic with closed beads declared a node"
+            not_verified = True
+    if report.epics_declaring_nothing:
+        summary += (
+            f"; NOT CHECKED: {report.epics_declaring_nothing} epic(s) declare no node"
+            + describe_unresolved(report.unresolved_reasons)
+        )
+        not_verified = True
+    if report.epics_unknown_to_tracker:
+        # Its own channel, and not `not_verified` alone: that boolean was
+        # already True here for an unrelated reason, so a saturated signal
+        # carried no information about an epic the export had lost (`.74`).
+        summary += (
+            f"; NOT CHECKED: {len(report.epics_unknown_to_tracker)} epic(s) the "
+            f"tracker does not name ({_named(report.epics_unknown_to_tracker)})"
+        )
+        not_verified = True
+    if report.working_exempt:
+        # Two populations, two names. "N WORKING document(s) exempt" beside a
+        # sync-check line whose own excused count was 0 was one word standing
+        # for both, and a reader took the number that was not the pairs.
+        summary += (
+            f"; {report.working_documents} WORKING document(s) in the exempt space"
+        )
+        if report.pairs_excused is not None:
+            summary += f", {report.pairs_excused} sync pair(s) excused"
+        if report.working_reach:
+            summary += (
+                "; the declaration reaches "
+                + ", ".join(f"{label} ({n})" for label, n in report.working_reach.items())
+            )
+    if report.documents_outside_declared_root:
+        summary += (
+            f"; {len(report.documents_outside_declared_root)} document(s) placed "
+            f"by kind outside their space's declared roots"
+        )
+    return GateStep(
+        "doc-spaces",
+        passed=True,
+        not_verified=not_verified,
+        findings=findings,
+        summary=summary,
+    )
+
+
+def _named(keys: tuple[str, ...], limit: int = 5) -> str:
+    """Up to *limit* keys by name, then how many more there were.
+
+    A count alone cannot be acted on and a list of sixty cannot be read; the
+    full list is in the report and in ``docs spaces --json``.
+    """
+    if len(keys) <= limit:
+        return ", ".join(keys)
+    return f"{', '.join(keys[:limit])} and {len(keys) - limit} more"
+
+
+def _doc_space_finding(finding: object) -> Finding:
+    """Project a :class:`SpaceFinding` onto the shared finding shape."""
+    return {
+        "kind": "doc-spaces",
+        "rule": finding.rule,  # type: ignore[attr-defined]
+        "severity": "warning",
+        "locations": [
+            {
+                "file": finding.path,  # type: ignore[attr-defined]
+                "line": finding.line,  # type: ignore[attr-defined]
+            }
+        ],
+        "why": finding.why,  # type: ignore[attr-defined]
+        "remediation": finding.remediation,  # type: ignore[attr-defined]
+    }
 
 
 def _doc_quality_finding(finding: object) -> Finding:

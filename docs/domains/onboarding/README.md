@@ -91,6 +91,16 @@ beadloom docs polish     # structured data for AI enrichment (text or JSON)
 beadloom docs audit      # check documented facts against project state (text or JSON)
 beadloom docs audit --verbose            # also name every document the scan did not read
 beadloom docs audit --fail-if unverified>0  # fail when a declared fact was checked against nothing
+beadloom docs spaces     # the three documentation spaces + where intent never reached AS-IS
+beadloom docs spaces --json [--strict]   # machine-readable; --strict exits 1 on any finding
+                         # the JSON names the tracker it read (`tracker_source`), lists the
+                         # epics that tracker does not name (`epics_unknown_to_tracker`),
+                         # says why each unresolved epic is unresolved (`unresolved_reasons`),
+                         # names the documents whose kind overruled their space's roots
+                         # (`documents_outside_declared_root`) and, under `working`, how many
+                         # documents each declared half of the exemption reached (`reach`);
+                         # `working.pairs_excused` is null because this command runs no
+                         # freshness check and states no pair count it did not measure
 beadloom prime           # compact project context for AI agent injection
 beadloom setup-rules     # create IDE adapter files (.cursorrules, etc.)
 beadloom setup-rules --refresh           # refresh auto-managed CLAUDE.md sections

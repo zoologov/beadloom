@@ -53,7 +53,16 @@ Two instruments, because either alone proves too little:
 
 * :class:`TestEveryTextIoSiteStatesItsEncoding` reads the *source* — it fails the
   day a new call site omits ``encoding=``, whatever the content happens to be
-  today, and needs no environment;
+  today, and needs no environment. BDL-061.68 selected ruff's ``PLW1514``, which
+  asks the same question in the lint job, so the two overlap — but neither
+  contains the other, and both facts were MEASURED on ruff 0.16.3 rather than
+  read off the rule's description: ``PLW1514`` does not look at
+  ``subprocess(text=True)`` at all, and it reports ``read_text`` only where it
+  can infer the receiver is a ``Path``, which an unannotated parameter defeats.
+  This class keys on the attribute name and needs no inference, so it is what
+  actually covers the package; ``PLW1514`` adds ``tests/``, which this class
+  does not read. The shared notion of "a call whose codec somebody chooses"
+  lives in :mod:`tests.decoding_calls` so the two cannot drift apart;
 * :class:`TestTheGeneratedArtifactsSurviveANonUtf8Locale` runs the *real CLI* in a
   real subprocess under a real non-UTF-8 locale and reads the bytes back, so the
   guarantee is proven end-to-end rather than by grep.
@@ -79,6 +88,14 @@ from beadloom.infrastructure.console_streams import (
 )
 from tests import filesystem_names
 from tests.adopter_project import typescript_project
+from tests.decoding_calls import (
+    SUBPROCESS_CALLS,
+    TEXT_READWRITE,
+    called_name,
+    is_true,
+    keyword,
+    open_mode,
+)
 
 _SRC_ROOT = Path(__file__).resolve().parent.parent / "src" / "beadloom"
 _BEADLOOM = shutil.which("beadloom") or str(Path(sys.executable).parent / "beadloom")
@@ -86,10 +103,6 @@ _BEADLOOM = shutil.which("beadloom") or str(Path(sys.executable).parent / "beadl
 #: The knobs that make a non-UTF-8 locale real. A bare ``LC_ALL=C`` is coerced
 #: back to UTF-8 by PEP 538/540 and would make every test below vacuous.
 _ASCII_ENV = {"LC_ALL": "C", "PYTHONUTF8": "0", "PYTHONCOERCECLOCALE": "0"}
-
-#: Calls whose text mode is governed by ``locale.getpreferredencoding(False)``.
-_TEXT_READWRITE = frozenset({"write_text", "read_text"})
-_SUBPROCESS_CALLS = frozenset({"run", "Popen", "check_output", "check_call", "call"})
 
 #: Sites that genuinely want the *operator's* locale rather than a contract, each
 #: named with its reason. Empty on purpose: everything this package writes or
@@ -106,52 +119,21 @@ def _module_sources() -> list[tuple[Path, ast.Module]]:
     return parsed
 
 
-def _called_name(call: ast.Call) -> str | None:
-    if isinstance(call.func, ast.Attribute):
-        return call.func.attr
-    if isinstance(call.func, ast.Name):
-        return call.func.id
-    return None
-
-
-def _keyword(call: ast.Call, name: str) -> ast.expr | None:
-    for kw in call.keywords:
-        if kw.arg == name:
-            return kw.value
-    return None
-
-
-def _is_true(node: ast.expr | None) -> bool:
-    return isinstance(node, ast.Constant) and node.value is True
-
-
-def _open_mode(call: ast.Call) -> str:
-    """The literal mode of an ``open()`` / ``Path.open()`` call ('' when dynamic)."""
-    mode = _keyword(call, "mode")
-    if mode is None:
-        positional = 0 if isinstance(call.func, ast.Attribute) else 1
-        if len(call.args) > positional:
-            mode = call.args[positional]
-    if isinstance(mode, ast.Constant) and isinstance(mode.value, str):
-        return mode.value
-    return "r"
-
-
 def _ambient_text_io_sites() -> list[tuple[Path, int, str]]:
     """Every call in the package whose codec the *image* would choose."""
     sites: list[tuple[Path, int, str]] = []
     for path, tree in _module_sources():
         rel = path.relative_to(_SRC_ROOT.parent.parent)
         for node in ast.walk(tree):
-            if not isinstance(node, ast.Call) or _keyword(node, "encoding") is not None:
+            if not isinstance(node, ast.Call) or keyword(node, "encoding") is not None:
                 continue
-            name = _called_name(node)
-            if name in _TEXT_READWRITE:
+            name = called_name(node)
+            if name in TEXT_READWRITE:
                 sites.append((rel, node.lineno, f"{name}()"))
-            elif name == "open" and "b" not in _open_mode(node):
-                sites.append((rel, node.lineno, f"open(mode={_open_mode(node)!r})"))
-            elif name in _SUBPROCESS_CALLS and (
-                _is_true(_keyword(node, "text")) or _is_true(_keyword(node, "universal_newlines"))
+            elif name == "open" and "b" not in open_mode(node):
+                sites.append((rel, node.lineno, f"open(mode={open_mode(node)!r})"))
+            elif name in SUBPROCESS_CALLS and (
+                is_true(keyword(node, "text")) or is_true(keyword(node, "universal_newlines"))
             ):
                 sites.append((rel, node.lineno, f"subprocess.{name}(text=True)"))
     return [s for s in sites if (str(s[0]), s[1]) not in _LOCALE_BY_DESIGN]
@@ -172,9 +154,9 @@ class TestEveryTextIoSiteStatesItsEncoding:
         """The sweep is not vacuous: it finds a planted call it should reject."""
         planted = ast.parse("from pathlib import Path\nPath('x').write_text('y')\n")
         calls = [n for n in ast.walk(planted) if isinstance(n, ast.Call)]
-        offending = [c for c in calls if _called_name(c) == "write_text"]
+        offending = [c for c in calls if called_name(c) == "write_text"]
         assert offending, "the AST walk no longer recognises a write_text() call"
-        assert _keyword(offending[0], "encoding") is None
+        assert keyword(offending[0], "encoding") is None
 
 
 def _run_under(

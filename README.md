@@ -57,13 +57,13 @@ On that same graph Beadloom builds tools that work across the whole system:
 
 ## A single Gate
 
-Documentation, boundary, and contract checks converge into one Gate. `beadloom ci` runs the full set — reindex, `lint --strict`, sync-check, docs audit, docs-quality, config-check, doctor, and the optional landscape gate — and works in three places: in a pre-push hook locally, as a required check in CI, and in the agent's hands.
+Documentation, boundary, and contract checks converge into one Gate. `beadloom ci` runs the full set — reindex, `lint --strict`, sync-check, docs audit, docs-quality, doc-spaces, config-check, doctor, and the optional landscape gate — and works in three places: in a pre-push hook locally, as a required check in CI, and in the agent's hands.
 
 So the rule is simple and the same for everyone. Nothing reaches `main` that breaks architectural boundaries and rules, ships stale or missing documentation, or carries a broken cross-service contract — whether the author is a person or an AI agent. `beadloom install-hooks` installs a pre-push hook that blocks the push on a red Gate (use the documented `git push --no-verify` to bypass), and that same `beadloom ci` stays a required check in CI. There is one gate, and it is deterministic.
 
 ### Unverifiable is not clean
 
-A check that cannot answer must not print the same word as a check that answered *fine*. Five
+A check that cannot answer must not print the same word as a check that answered *fine*. Seven
 states used to be indistinguishable from a pass, and each now names itself:
 
 - **A declared document that is not on disk** is `missing`, not absent. The gate fails at exit 2,
@@ -79,6 +79,14 @@ states used to be indistinguishable from a pass, and each now names itself:
 - **A fact the audit never checked** is named. `docs audit` reports how many declared facts it
   verified out of how many it declares, lists the shortfall, and publishes the documents it never
   opened.
+- **An intent that never reached a document of reality** is reported by `docs spaces`. An epic
+  whose work finished and whose declared node has no document reads clean to every other check:
+  `lint` asks whether modules reach nodes, and `sync-check` compares pairs, so a node that
+  declares no document has no pair to go stale.
+- **A pair a configuration excused** says so. Documentation a project declares ephemeral is
+  exempt from freshness by that declaration — never by inference from a missing pair — and the
+  excused count and the declared reason are printed beside the fresh count, so the denominator
+  cannot fall in silence.
 
 Freshness itself rests on **git**, not on the index. `.beadloom/beadloom.db` is a derived cache —
 git-ignored, per-machine, absent on every fresh CI checkout — so a rebuilt index used to adopt the
@@ -254,7 +262,7 @@ When an agent requests context for a node, the rules that apply to it come back 
 ## Key features
 
 - **Cross-service contract graph** — `export` in each repository, `federate` combines two or more services into one landscape with a per-contract verdict (`CONFIRMED` / `BREAKING` / `ORPHANED_CONSUMER` / `UNDECLARED_PRODUCER` / `EXTERNAL`) over AMQP and GraphQL, plus a per-service freshness tag. Product and company scale.
-- **A single Gate** — `beadloom ci` runs reindex → lint → sync-check → docs audit → docs-quality → config-check → doctor → the optional landscape gate under one exit code. Ships as a ready-made GitHub Action and a pre-push hook.
+- **A single Gate** — `beadloom ci` runs reindex → lint → sync-check → docs audit → docs-quality → doc-spaces → config-check → doctor → the optional landscape gate under one exit code. Ships as a ready-made GitHub Action and a pre-push hook.
 - **Context Oracle** — deterministic graph traversal, a compact JSON bundle in under 20 ms.
 - **Doc Sync Engine** — tracks the code-to-doc link, catches stale docs, hooks into git.
 - **Agent context** — `beadloom prime` (under 2K tokens), `setup-rules` for IDE adapters, an MCP server with 18 tools, and `config-check` that keeps the agent files in agreement with the graph.
@@ -290,11 +298,11 @@ Request a node's context, and Context Oracle traverses the graph breadth-first, 
 | `search QUERY` | Full-text search over nodes, documentation, and code symbols |
 | `status` | Index stats, documentation coverage, and a debt report |
 | `doctor` | Validate the architecture graph |
-| `sync-check` | Check doc-code freshness — `ok` / `stale` / `missing` / `unverified`; `--record-surface` pins the declared surface size |
+| `sync-check` | Check doc-code freshness — `ok` / `stale` / `missing` / `unverified` / `exempt` / `incomplete`; `--record-surface` pins the declared surface size |
 | `sync-update REF_ID` | Review and update stale documentation |
 | `why REF_ID` | Impact analysis — what it depends on and what depends on it |
 | `lint` | Check the code against the architecture rules (`--strict`, `--format rich/json/porcelain/github`) |
-| `ci` | The single Gate: reindex → lint → sync-check → docs audit → docs-quality → config-check → doctor → the optional landscape gate |
+| `ci` | The single Gate: reindex → lint → sync-check → docs audit → docs-quality → doc-spaces → config-check → doctor → the optional landscape gate |
 | `config-check` | Check (or `--fix`) that the generated agent files match the graph |
 | `guard NAME` | Evaluate one flow guard — `pass`/`warn`/`block`/`skip`/`error` in the exit code (`--liveness` reports which guards ever fired) |
 | `export` | Export the graph as a deterministic artifact for federation |
@@ -304,6 +312,7 @@ Request a node's context, and Context Oracle traverses the graph breadth-first, 
 | `docs site` | Build the VitePress site (dashboard, architecture, landscape map, validated docs) |
 | `docs audit` | Find stale facts in overview documentation (README, guides) |
 | `docs quality` | Check planning documents against the writing standard — a measurable goal, a decision with a reason, a risk with a mitigation, no `Pending` question in an approved document, no unfilled placeholder (`--check`, `--strict`) |
+| `docs spaces` | Report the TO-BE / AS-IS / WORKING documentation spaces and the epics whose recorded intent never reached a document of reality (`--strict`) |
 | `diff` | Show graph changes since a git ref |
 | `snapshot` | Save and compare architecture snapshots |
 | `link REF_ID [URL]` | Manage links to external trackers on nodes |

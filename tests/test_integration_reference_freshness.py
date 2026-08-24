@@ -173,12 +173,13 @@ class TestLayer1GateIntegration:
             "sync-check",
             "docs-audit",
             "docs-quality",
+            "doc-spaces",
             "config-check",
             "doctor",
         ]
         assert all(s.status in {"PASS", "FAIL", "WARN", "SKIP"} for s in result.steps)
         after = names[names.index("docs-audit") + 1 :]
-        assert after == ["docs-quality", "config-check", "doctor"]
+        assert after == ["docs-quality", "doc-spaces", "config-check", "doctor"]
         # ``docs-quality`` is allowed its NAMED skip — this fixture holds no
         # planning document, and a skip that says why is the honest outcome
         # (BDL-061 S1). The invariant under test is that a failing docs-audit

@@ -125,10 +125,11 @@ denominator smaller without saying so.
 
 **The scenarios have to RUN.** Nothing in the rule executes them: it reads structure — keywords,
 tags, names. A suite that parses and never runs would satisfy every finding above while
-asserting nothing. That is why this repository ships `pytest-bdd` in its `dev` extra, runs the
-six `.feature` files as part of the ordinary suite, and holds a test that binds the number of
-executed scenarios to the project's own parser count, so a seventh feature file with no step
-module reddens instead of quietly counting as coverage.
+asserting nothing. That is why this repository ships `pytest-bdd` in its `dev` extra, runs every
+`.feature` file as part of the ordinary suite, and holds a test that binds the number of
+executed scenarios to the project's own parser count, so a feature file with no step module
+reddens instead of quietly counting as coverage. Measured on this repository, 2026-08-24: 33
+scenarios in 7 files, the newest being `doc_spaces.feature` (BDL-061 S5).
 
 ## Work with no behaviour says so
 

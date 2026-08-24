@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from beadloom.application.active_table import ReconcileResult
 
 from beadloom.doc_sync.doc_shape import STATUS_INCOMPLETE
+from beadloom.doc_sync.engine import STATUS_EXEMPT
 from beadloom.services.commands._root import main
 
 
@@ -191,6 +192,16 @@ def sync_check(
             # is a ref-relative pair view whose JSON shape is a fixed contract.
             summary["missing"] = sum(1 for r in results if r["status"] == "missing")
             summary["unverified"] = len(unverified)
+            # Every verdict has a key, so `ok + stale + missing + unverified +
+            # exempt + incomplete` sums to `total`. It did not while `exempt` and
+            # `incomplete` had none, and a consumer computing `total - ok` read
+            # unexplained pairs (`beadloom-mr2l.76`). `unchecked` is deliberately
+            # NOT in that sum: it counts NODES that contribute no pair at all,
+            # which is a different population from the pairs above it.
+            summary["exempt"] = sum(1 for r in results if r["status"] == STATUS_EXEMPT)
+            summary["incomplete"] = sum(
+                1 for r in results if r["status"] == STATUS_INCOMPLETE
+            )
             summary["unchecked"] = len(unchecked)
             data["unchecked"] = unchecked
             summary["surface_drift"] = len(drifted_refs)
@@ -237,6 +248,11 @@ def sync_check(
                     click.echo(
                         f"  {marker} {r['ref_id']}: {r['doc_path']} "
                         f"({_MISSING_WHY[str(reason)]})"
+                    )
+                elif r["status"] == STATUS_EXEMPT:
+                    click.echo(
+                        f"  {marker} {r['ref_id']}: {r['doc_path']} <-> {r['code_path']} "
+                        f"(not checked: {details or 'declared exempt from freshness'})"
                     )
                 elif r["status"] == STATUS_UNVERIFIED:
                     click.echo(
@@ -304,6 +320,9 @@ _STATUS_MARKER = {
     "stale": "[stale]",
     "missing": "[missing]",
     "unverified": "[not verified]",
+    # Unverifiable, excused and clean are three states, and an exempt row read
+    # `[ok]` — the word for a comparison that happened (`beadloom-mr2l.76`).
+    STATUS_EXEMPT: "[exempt]",
 }
 
 # What a ``missing`` verdict means, by reason.

@@ -430,7 +430,13 @@ FTS5 MATCH search. Returns list of result dicts with `ref_id`, `kind`, `summary`
 def populate_search_index(conn: sqlite3.Connection) -> int
 ```
 
-Clear and rebuild the `search_index` FTS5 table from `nodes` and `chunks`. Returns row count.
+Clear and rebuild the `search_index` FTS5 table. One row per node, plus one row per
+document bound to NO node — the second half is what makes the TO-BE space searchable
+(BDL-061 S5). A planning document describes intent rather than one node's code, so it
+carries no `ref_id`, and a node-only index could never return it however well it was
+chunked. Such a row keys `ref_id` on the document's path (the only identifier it has,
+and the one a reader needs to open the file) and `kind` on its SPACE, so
+`search --kind to_be` narrows to intent without a second index. Returns row count.
 
 ```python
 def has_fts5(conn: sqlite3.Connection) -> bool
@@ -503,7 +509,7 @@ The context-oracle domain exposes functionality through CLI commands registered 
 
 - **`services/commands/query.py`** — read-only context/graph query commands:
   - `beadloom ctx REF_IDS... [--json] [--markdown] [--depth N] [--max-nodes N] [--max-chunks N] [--project DIR]` -- Build and display context bundle
-  - `beadloom search QUERY [--kind KIND] [--limit N] [--json] [--project DIR]` -- FTS5 search with LIKE fallback
+  - `beadloom search QUERY [--kind KIND] [--limit N] [--json] [--project DIR]` -- FTS5 search with LIKE fallback. `KIND` is a node kind or one of the three documentation spaces (`to_be`/`as_is`/`working`), because a document bound to no node is indexed under its space (BDL-061 S5)
   - `beadloom why REF_ID [--depth N] [--reverse] [--format panel|tree] [--json] [--project DIR]` -- Impact analysis
   - `beadloom graph [REF_IDS...] [--json] [--depth N] [--format mermaid|c4|c4-plantuml] [--level context|container|component] [--scope REF_ID] [--project DIR]` -- Architecture graph (Mermaid, C4-Mermaid, C4-PlantUML, or JSON). C4 formats use `--level` for diagram granularity and `--scope` to show internals of one container (only with `--level=component`).
 - **`services/commands/federation.py`** — federation, gate, and lint commands:

@@ -203,11 +203,11 @@ Exit codes: 0 = all OK, 1 = error, 2 = a pair is stale **or missing**.
 
 **What a green count covers.** A node that declares `docs:` contributes pairs from its `# beadloom:` annotations or, when those yield none, from the files its `source:` owns — the pairing is independent of node kind. Whatever is still uncovered is listed BY NAME with a reason, as an advisory line that never changes the exit code: `no_indexed_code` (no indexed code under the node's source), `files_owned_by_nested_nodes` (every file under it belongs to a more specific node) and `no_source` (the node declares no source path). `--json` carries the same list in `data.unchecked` with `summary.unchecked`; `--porcelain` prints one `unchecked` line per unchecked doc.
 
-Measured on this repository: of 279 declared pairs, 275 are checked and the other 4 are listed with their reason.
+Measured on this repository, 2026-08-24: 330 declared pairs, all of them checked and 0 listed as unchecked.
 
-**Five verdicts, because unverifiable is not clean.** `ok` and `stale` are outcomes of a comparison that happened. `missing` (the doc file, the code file, or a doc the graph DECLARES is not on disk) fails the check at exit 2 — the gate is not satisfied by having less to check. `unverified` (`reason=no_baseline`) means nothing could be compared; it is printed as `[not verified]`, counted separately, and never counted as fresh. `incomplete` (`missing_sections`, `section_not_in_use`, BDL-061 S4) is the only verdict about a document's STRUCTURE rather than its currency: the four content reasons all measure bytes changing, so none of them can see a README edited down to a title. It never blocks and is never written to `sync_state`. Every pair also reports `baseline` — `index`, `git:HEAD` or `none` — so a green result says what it was green against.
+**Six verdicts, because unverifiable is not clean.** `ok` and `stale` are outcomes of a comparison that happened. `missing` (the doc file, the code file, or a doc the graph DECLARES is not on disk) fails the check at exit 2 — the gate is not satisfied by having less to check. `unverified` (`reason=no_baseline`) means nothing could be compared; it is printed as `[not verified]`, counted separately, and never counted as fresh. `incomplete` (`missing_sections`, `section_not_in_use`, BDL-061 S4) is the only verdict about a document's STRUCTURE rather than its currency: the four content reasons all measure bytes changing, so none of them can see a README edited down to a title. It never blocks and is never written to `sync_state`. `exempt` (`working_space`, BDL-061 S5) means the document is in the WORKING space and a project's config declared that space exempt from freshness; the declared reason travels in `details`, and `missing` is decided BEFORE any exemption applies, so a deleted file is never made quieter by a declaration. Every pair also reports `baseline` — `index`, `git:HEAD` or `none` — so a green result says what it was green against.
 
-**`incomplete` has no summary counter.** The rows appear in `pairs` and each is printed by name, but `ok + stale + missing + unverified + unchecked` does not sum to `total` when any row is incomplete, so a machine consumer reading only the summary does not see them. Measured on this repository, 2026-08-24: `total 326 = 240 ok + 82 stale + 4 incomplete`, summary accounts for 322.
+**The verdicts sum to the total.** `incomplete` and `exempt` each had no summary counter, so `ok + stale + missing + unverified + unchecked` did not add up to `total` and a machine consumer reading only the summary saw neither. Both keys are in the summary now (stored-baseline mode; the `--since` shape is untouched), and the sum that holds is `ok + stale + missing + unverified + exempt + incomplete`. `unchecked` is deliberately outside it — it counts NODES that contribute no pair at all, a different population from the pairs the verdicts describe. Measured on this repository, 2026-08-24: `total 330 = 326 ok + 4 incomplete`, with `exempt 0` and `unchecked 0`.
 
 **Where the baseline lives, and why a rebuild no longer blinds it.** `.beadloom/beadloom.db` is a cache, not the record: a database built from scratch used to store the current tree AS the baseline, so `sync-check` reported every pair fresh, including pairs whose doc was never updated (measured before the fix: incremental reindex → exit 2 with 6 stale; `rm .beadloom/beadloom.db*` + reindex → exit 0 with 0 stale, same tree). Each pair now records where its baseline came from, and a pair whose baseline was fabricated at index-build time is corroborated against **git `HEAD`** — the baseline a rebuild cannot destroy, because it is committed. Where git cannot answer (not a repository, no commit, no git binary), the pair reads `unverified` rather than fresh. `--since <ref>` remains the strongest form and is what the CI harness passes on a fresh checkout. A clean database is still the right instrument for `lint`, and it is no longer a way to get a green `sync-check` for free.
 
@@ -469,10 +469,19 @@ Displays added/removed/changed nodes and added/removed edges between the two sna
 Search nodes and documentation by keyword.
 
 ```bash
-beadloom search QUERY [--kind {domain,feature,service,entity,adr}] [--limit N] [--json] [--project DIR]
+beadloom search QUERY [--kind {domain,feature,service,entity,adr,to_be,as_is,working}] [--limit N] [--json] [--project DIR]
 ```
 
 Uses FTS5 full-text search when available, falls back to SQL LIKE. Run `beadloom reindex` first to populate the search index.
+
+`--kind` takes a node kind, or one of the three documentation SPACES. A document
+bound to no node — every planning document in the TO-BE space — is indexed under
+its space and keyed by its path, so `--kind to_be` narrows a search to recorded
+intent:
+
+```bash
+beadloom search "sequencing principles" --kind to_be
+```
 
 ### beadloom why
 
@@ -677,13 +686,18 @@ The exit code is **0 even with findings** — no adopter's green project turns r
 on upgrade. `--strict` exits 1 when anything is reported, for a project that
 wants to enforce it.
 
-**`measurable-goal` is a numeral detector, and its individual findings are not yet
-trustworthy.** It looks for a digit; the premise that a number is *necessary* for
-a measurable clause is false, and an exit-code criterion — the most checkable
-goal this project knows how to write — is reported as unmeasurable. Read the
-count, not the rows, until the criterion is re-scoped (`beadloom-mr2l.65`). The
-other four checks state their own limits in the
-[doc-quality SPEC](../domains/doc-sync/features/doc-quality/SPEC.md).
+**`measurable-goal` decides one named form, not measurability in general.** A
+goal is reported only when its predicate is an unbounded improvement (`improve`,
+`establish`, `clean up`, `make` something *better*) AND it names no witness — no
+quantity, no named artifact, no observable outcome. It shipped as a numeral
+detector and reported 154 of 235 goal statements here, against **4 of 232** after
+`beadloom-mr2l.70` re-scoped it; all four are in closed epics, which is why the
+remaining debt is a historical exclusion (`beadloom-mr2l.71`) rather than a
+rewrite. The stated limit: 27 of the 150 newly-accepted statements name no
+witness either, so this check now decides nothing about them — precision was
+bought with recall, deliberately. That number is not on the gate line; it is in
+the [doc-quality SPEC](../domains/doc-sync/features/doc-quality/SPEC.md), which
+also states the other four checks' limits.
 
 The report ends with a per-check line stating how much there was to READ, and
 names any check that found nothing at all: a green count over documents that
@@ -695,8 +709,8 @@ that is blind everywhere and not one that is blind on an entire document kind.
 `NO CHECK READS: <kind>` names each kind no *content* check enters, with its
 document count. The judgement is made over the four checks that read items;
 `unfilled-placeholder` counts documents OPENED and would report every kind as
-read. Measured on this repository, 2026-08-24: `measurable-goal` 154 over 235,
-`pending-in-approved` 2 over 69, 0 over 269 / 138 / 243 for the other three, and
+read. Measured on this repository, 2026-08-24: `measurable-goal` 4 over 232,
+`pending-in-approved` 2 over 69, 0 over 272 / 138 / 243 for the other three, and
 `NO CHECK READS: BRIEF, PLAN, SUMMARY` — 56 of 243 documents (23%).
 
 **A document nobody could read is named, not dropped.** A planning document is a
@@ -732,6 +746,91 @@ beadloom docs quality --check pending-in-approved --json
 # Enforce it
 beadloom docs quality --strict
 ```
+
+### beadloom docs spaces
+
+Report the three documentation spaces, and where recorded intent never reached
+the documentation of reality.
+
+```bash
+beadloom docs spaces [--json] [--strict] [--project DIR]
+```
+
+- **TO-BE** — `PRD`, `RFC`, `BRIEF`, `CONTEXT`, `PLAN`. What the system is to
+  become.
+- **AS-IS** — `SPEC`, `DOC`, `README`. What it is; the space `sync-check` holds
+  against the code.
+- **WORKING** — `ACTIVE`. Ephemeral, exempt from freshness by declaration.
+
+The names are deliberately not TODO/DONE. Nothing changes status: a planning
+document stays the record of what was intended, and a *different* artifact is
+what gets updated — so the checkable claim is a relation between two artifacts.
+
+An epic with at least one closed bead that declared a graph node with no AS-IS
+document is reported: intent was recorded, the work finished, and reality was
+never written down. The node list is read only from the epic's *Related Files*
+section, because that list is a declaration; an epic that declares nothing is
+counted as unresolved and named, never counted as clean.
+
+Roots, kinds and the intent documents an epic declares its nodes in are
+configurable under `doc_roots` in `.beadloom/config.yml`; the documentation
+directory itself comes from `docs_dir`. See the
+[Doc Roots component](../domains/infrastructure/components/doc-roots/DOC.md) for
+the keys and the [Document Kinds guide](../guides/document-kinds.md) for the
+decision behind the three spaces.
+
+**Every document a declared root matched is in exactly one population.** When a
+document's kind sends it to a space whose declared roots do not reach it, it is
+counted in the space its kind chose and reported as `document_outside_declared_root`
+— once per kind, with the count, up to five example paths and the roots that
+failed to reach them. It used to fall out of every count instead.
+
+**What is not checked is named, never folded into a green count.** An epic that
+declares no node, one whose intent document nothing could decode, and one a
+readable tracker does not name are three different ways of knowing nothing, and
+each is reported under its own reason.
+
+Exits 0 with findings unless `--strict` is given, so no adopter's green project
+turns red on upgrade. The same check runs as the `doc-spaces` step of
+`beadloom ci`, where it reports and never blocks.
+
+```bash
+# The report, with every denominator beside every count
+beadloom docs spaces
+
+# Machine-readable
+beadloom docs spaces --json
+
+# Enforce it
+beadloom docs spaces --strict
+```
+
+`--json` carries the populations and every denominator behind the human report:
+
+| Key | What it holds |
+|-----|---------------|
+| `populations` | `{to_be, as_is, working}` document counts |
+| `epics`, `epics_with_closed_beads`, `epics_declaring_nodes`, `epics_declaring_nothing` | the relation's denominators |
+| `refs_checked` | node declarations actually held against the AS-IS space |
+| `relation_checked` | `false` when nothing was related — reported as NOT CHECKED, never as clean |
+| `unresolved_epics`, `unresolved_reasons` | every epic the relation could not decide, with `no_node_declared` / `no_intent_document` / `unreadable_intent_document` |
+| `tracker_read`, `tracker_source`, `epics_unknown_to_tracker` | which tracker answered, and the epics it has no record of |
+| `documents_outside_declared_root` | documents whose kind and root disagree |
+| `working` | `{documents, exempt_from_freshness, reason, reach, pairs_excused}` |
+| `findings` | `{rule, path, line, why, remediation}` per finding |
+
+`working.reach` names each **declared** kind and each declared root with how many
+documents it excused, so a declaration whose halves are half inert says which
+half. `working.pairs_excused` is **`null`** from this command rather than `0`:
+`docs spaces` runs no freshness check, so it did not measure that number and does
+not print one. The `beadloom ci` doc-spaces line does carry it, because the
+sync-check step in the same run measured it and hands it over.
+
+Measured on this repository, 2026-08-24: `to_be 190`, `as_is 93`, `working 55`;
+`epics 61`, `epics_with_closed_beads 37`, `epics_declaring_nodes 5`,
+`refs_checked 17`; `epics_declaring_nothing 56` and
+`epics_unknown_to_tracker 24`, every one of them named rather than folded into a
+green count; and one `intent_without_as_is` finding.
 
 ### beadloom docs polish
 
@@ -896,10 +995,11 @@ Composes the existing checkers, in order, into ONE verdict with a single exit co
 2. `lint --strict` — architecture boundary rules at error severity.
 3. `sync-check` — doc↔code freshness (stale pairs fail).
 4. `docs audit` — stale numeric facts in documentation (`stale>0` fails). The step line also states its coverage — `M/N declared fact(s) verified` plus the names of the facts it checked nothing for — because a count of findings says nothing about the facts nobody stated.
-5. `docs-quality` — the five writing-standard checks over the project's planning documents. Warn only: it never fails the gate, and a project with no planning document is a NAMED skip stating the globs. Three states set the step to `WARN` rather than `PASS`: a check that read nothing anywhere (`NOT CHECKED`), a document KIND no content check enters (`NO CHECK READS`), and a document nothing could decode (`UNREADABLE: N`). Measured on this repository, 2026-08-24: `WARN | 243 document(s) read; measurable-goal 154, pending-in-approved 2; NO CHECK READS: BRIEF, PLAN, SUMMARY`.
-6. `config-check` — AgentConfigAsCode drift, plus the mutation-SCOPE findings (a declared `mutation.targets` entry outside `scan_paths`, absent from disk, or holding no source a runner could mutate). All `warn`.
-7. `doctor` — graph/data integrity; ONLY `ERROR`-severity checks fail the gate (WARNING/INFO advisories never block — no false gate).
-8. `federate --fail-on` — the cross-service landscape gate, only when `--hub` export(s) are given (safe-default fail-set `breaking,drift,orphaned_consumer,undeclared_producer`; no-false-gate verdicts rejected).
+5. `docs-quality` — the five writing-standard checks over the project's planning documents. Warn only: it never fails the gate, and a project with no planning document is a NAMED skip stating the globs. Three states set the step to `WARN` rather than `PASS`: a check that read nothing anywhere (`NOT CHECKED`), a document KIND no content check enters (`NO CHECK READS`), and a document nothing could decode (`UNREADABLE: N`). Measured on this repository, 2026-08-24: `WARN | 243 document(s) read; measurable-goal 4, pending-in-approved 2; NO CHECK READS: BRIEF, PLAN, SUMMARY`. The line prints the finding count and not the 27 accepted-without-witness statements the re-scope stopped deciding about; that limit is stated in the doc-quality SPEC.
+6. `doc-spaces` — the TO-BE → AS-IS relation over the project's documentation spaces (BDL-061 S5). Warn only, on the same terms as the step above, and a project with no TO-BE document is a NAMED skip stating the roots it looked under. FOUR states set `not_verified` and the step then reports `WARN`: no tracker was readable, no epic with closed beads declared a node, some epics declare none, and some epics the tracker does not name. The line states both WORKING populations apart — `N WORKING document(s) in the exempt space, M sync pair(s) excused` — because one word for two populations is how a reader takes the document count as the excused-pair count; the pair count is carried from the sync-check step that measured it, never recomputed here.
+7. `config-check` — AgentConfigAsCode drift, plus the mutation-SCOPE findings (a declared `mutation.targets` entry outside `scan_paths`, absent from disk, or holding no source a runner could mutate). All `warn`.
+8. `doctor` — graph/data integrity; ONLY `ERROR`-severity checks fail the gate (WARNING/INFO advisories never block — no false gate).
+9. `federate --fail-on` — the cross-service landscape gate, only when `--hub` export(s) are given (safe-default fail-set `breaking,drift,orphaned_consumer,undeclared_producer`; no-false-gate verdicts rejected).
 
 **What `--no-reindex` changes about the verdict.** It skips step 1, so every later step describes the INDEX rather than the working tree. With an index older than the tree, the `lint` step reports `PASS` over a live error-severity violation that the same gate catches after a reindex (measured), and the `sync-check` step compares against whatever baseline the index holds. Use it only where something else has just reindexed.
 
@@ -1187,7 +1287,7 @@ Commands (re-exported from the package via the registration shell):
 - `setup_ai_techwriter` -- scaffold the AI tech-writer (vendored harness + recipe + chosen platform CI wrapper + getting-started guide) for one-command opt-in; delegates to `onboarding/ai_techwriter_setup.py:scaffold()`
 - `setup_agentic_flow` -- scaffold the packaged multi-agent dev flow (`.claude/agents/*` + `commands/*` vendored byte-identical + CLAUDE.md auto-regions per-project); idempotent, `--force` overwrites hand-edited flow files; delegates to `onboarding/agentic_flow_setup.py:scaffold()`
 - `config_check` -- AgentConfigAsCode drift gate (`--fix` regenerates); reuses the `setup-rules --refresh` generator; also drift-checks/restores the scaffolded agentic-flow files when the flow is present
-- `ci` -- unified enforcement gate composing reindex -> lint -> sync-check -> docs-audit -> config-check -> doctor -> (optional `--hub`) federate into one exit code; the docs-audit step blocks on stale facts (`stale>0`); honest per-step PASS/WARN/FAIL/SKIP; uniform `--format {rich,json,github}` (github = valid `::error file=,line=` annotations); delegates to `application/gate.py:run_ci_gate()`
+- `ci` -- unified enforcement gate composing reindex -> lint -> sync-check -> docs-audit -> docs-quality -> doc-spaces -> config-check -> doctor -> (optional `--hub`) federate into one exit code; the docs-audit step blocks on stale facts (`stale>0`); honest per-step PASS/WARN/FAIL/SKIP; uniform `--format {rich,json,github}` (github = valid `::error file=,line=` annotations); delegates to `application/gate.py:run_ci_gate()`
 - `mcp_serve` -- run MCP stdio server
 - `docs` -- Click group for doc commands (`generate`, `polish`, `audit`)
 - `tui` -- launch TUI dashboard (primary command, multi-screen with `--no-watch`)

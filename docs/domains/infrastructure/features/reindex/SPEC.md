@@ -85,6 +85,12 @@ _DEFAULT_SCAN_DIRS = ("src", "lib", "app")
 | 3b | Store deep config in root node's `extra` | `onboarding.config_reader.read_deep_config` |
 | 4 | Index Markdown documents from docs directory | `doc_sync.doc_indexer.index_docs` |
 | 4b | Cache the DECLARED doc surface (every `docs:` entry, existing or not) | `read_declared_docs` / `store_declared_docs` |
+| 4c | Index the TO-BE space in place, from the configured `doc_roots` | `index_to_be_space` → `doc_sync.doc_indexer.index_space_documents` |
+
+Step 4c runs on BOTH paths. The incremental path rebuilds the TO-BE space
+wholesale rather than tracking it in `file_index`: the planning tree is
+small, and the two reindex paths disagreeing about what is in the index is a
+defect class this project has already paid for twice (BDL-UX #142, #146).
 | 5 | Extract and index code symbols from source files | `context_oracle.code_indexer.extract_symbols` |
 | 5b | Extract code imports and create `depends_on` edges | `graph.import_resolver.index_imports` |
 | 5c | Load architecture rules from `.beadloom/_graph/rules.yml` | `graph.rule_engine.load_rules` |
@@ -216,7 +222,7 @@ Drop all application tables to allow a clean re-create. Iterates `_TABLES_TO_DRO
 def _resolve_docs_dir(project_root: Path) -> Path
 ```
 
-Resolve docs directory from `.beadloom/config.yml` key `docs_dir`, defaulting to `<project_root>/docs`.
+Resolve docs directory from `.beadloom/config.yml` key `docs_dir`, defaulting to `<project_root>/docs`. Delegates to `infrastructure.doc_roots.resolve_docs_dir`, the single reader of the key: it was read in three places before, so a project keeping its documentation elsewhere had one reader looking where the others had not (`beadloom-mr2l.75`).
 
 ```python
 def _build_doc_ref_map(

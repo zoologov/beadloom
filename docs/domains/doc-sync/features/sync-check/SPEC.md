@@ -16,8 +16,8 @@ broad interface surface. Two layers cooperate without interfering:
 
 - **Symbol-pair freshness** pairs a node's `docs:` entries with the source files
   attributed to that node, computes a freshness signal from the code
-  `symbols_hash` (plus git state), and reports each pair with one of four
-  verdicts — `ok`, `stale`, `missing`, `unverified`.
+  `symbols_hash` (plus git state), and reports each pair with one of six
+  verdicts — `ok`, `stale`, `missing`, `unverified`, `incomplete`, `exempt`.
 - **The declared surface** is checked against the tree, so a doc the graph names
   and the tree does not hold is a failure rather than one less thing to check.
 - **Unchecked accounting** names every node that declares a doc but contributes
@@ -61,11 +61,13 @@ to catch untracked files and missing module mentions. `mark_synced` (and
 `mark_synced_by_ref`) re-baselines a pair once its doc is brought up to date.
 `check_sync_since` compares against a git ref for diff-based checks.
 
-### The four verdicts — unverifiable is not clean
+### The six verdicts — unverifiable is not clean
 
-`ok` and `stale` are outcomes of a comparison that HAPPENED. The other two are
-states in which the checker cannot know, and they exist because they used to
-print `ok`:
+`ok` and `stale` are outcomes of a comparison that HAPPENED. `missing` and
+`unverified` are states in which the checker cannot know, and they exist because
+they used to print `ok`. `incomplete` and `exempt` were added later and each
+answers a different question again — the document's SHAPE, and a freshness
+exemption the project DECLARED:
 
 | Verdict | Reason | Meaning | Exit |
 |---|---|---|---|
@@ -74,6 +76,7 @@ print `ok`:
 | `missing` | `doc_missing`, `code_missing`, `declared_doc_missing` | the thing to check is not there | 2 |
 | `unverified` | `no_baseline` | there was nothing to compare against | 0, reported by name |
 | `incomplete` | `missing_sections`, `section_not_in_use` | the document is current and does not carry the shape its kind requires | 0, reported by name |
+| `exempt` | `working_space` | the document is in the WORKING space and is exempt from freshness by declaration | 0, reported by name and counted |
 
 Every result also carries `baseline` — `index`, `git:HEAD` or `none` — so a green
 result says what it was green against (BDL-UX #175).
@@ -89,15 +92,51 @@ it.
 `unverified` does not block, and is never counted as fresh. `beadloom ci` prints
 the sync-check step as **WARN** with the count, rather than `PASS`.
 
+`exempt` does not block either. The WORKING space — `ACTIVE` by default — is
+exempt from freshness by DECLARATION (`doc_roots.working` in
+`.beadloom/config.yml`), and the row carries the declared reason in `details`
+so a skip always says why. It is a declaration rather than an inference from a
+missing pair, because deleting a pair must not make a check quieter
+(BDL-UX #174). An ACTIVE document records progress within a bead rather than
+what the code is, so holding it against the code would compare a document to
+something it never described. A wrong declaration is detectable — `beadloom
+docs spaces` reports an exemption that excuses nothing and a document the graph
+declares as a node's documentation while the config declares its kind
+ephemeral.
+
+Two properties make that detection reachable rather than merely present
+(`beadloom-mr2l.75`):
+
+- **One spelling.** A `sync_state` row names its document relative to the docs
+  directory and every root glob is written relative to the project, so the two
+  readers of one declaration held two strings for one file. `check_sync` asks
+  `DocSpaces.project_path(doc_path)` before classifying, so a root-declared
+  exemption reaches freshness and the report alike. The docs directory comes
+  from `resolve_docs_dir`, the single reader of the `docs_dir` config key.
+- **The exemption covers freshness only.** A pair whose document or code file is
+  gone is reported `missing` before any exemption is applied, so a WORKING
+  declaration cannot make a deleted file quieter than a present one.
+
+An excused pair says so on every surface (`beadloom-mr2l.76`). It carries an
+`exempt` key in the `--json` summary, prints `[exempt]` with its declared reason
+rather than `[ok]` in the rich output, and is counted in the gate line
+(`326 pair(s) fresh, 4 exempt — <reason>`). It had none of those: the gate
+printed `326 pair(s) fresh` where the same tree without the declaration printed
+326 of 330, which is the shape the gate summary had already been rewritten
+against once (BDL-UX #174/#175).
+
 `incomplete` does not block either, and for a different reason: it is a NEW
 check (BDL-061 S4b) and every new check ships as `warn`, so no adopter's green
-project turns red on upgrade. **It has no counter in the `--json` summary**, so
-`ok + stale + missing + unverified + unchecked` does not sum to `total` when any
-row is incomplete: the rows are in `pairs` and the rich output prints each one,
-but a machine consumer reading only the summary does not see them. Measured on
-this repository, 2026-08-24: `total 326 = 240 ok + 82 stale + 4 incomplete`, and
-the summary accounts for 322. Review `beadloom-mr2l.15` M5 filed it and it is
-open. It is the only verdict here about a document's
+project turns red on upgrade. It had no counter in the `--json` summary, so
+`ok + stale + missing + unverified` did not sum to `total` when any row was
+incomplete — measured on this repository, 2026-08-24: `total 326 = 240 ok +
+82 stale + 4 incomplete`, with the summary accounting for 322. Review
+`beadloom-mr2l.15` M5 filed it and `beadloom-mr2l.76` closed it together with
+the same gap under `exempt`: **the verdicts now sum to the total**, as
+`ok + stale + missing + unverified + exempt + incomplete`. `unchecked` is
+deliberately outside that sum — it counts NODES that contribute no pair at all,
+a different population from the pairs the verdicts describe. `incomplete` is the
+only verdict here about a document's
 STRUCTURE rather than its currency — the five reasons above all compare content,
 and none of them can see a README edited down to a title. The verdict is never
 written to `sync_state`: the status column would then mean two different things,

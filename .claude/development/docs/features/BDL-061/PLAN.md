@@ -213,7 +213,8 @@ non-behavioural decision.
       appends `## Runbook` makes `Runbook` required by the same act
 - [x] A goal without a measurable clause, a decision without a reason, a risk without a
       mitigation, a `Pending` question in an `Approved` document, and an unfilled placeholder
-      are each reported — 154 / 0 / 0 / 2 / 0 over 235 / 269 / 138 / 69 / 243 read
+      are each reported — 4 / 0 / 0 / 2 / 0 over 232 / 272 / 138 / 69 / 243 read (154 over 235
+      when S4 closed; `.70` re-scoped the goal criterion in S5)
 - [x] All four roles carry the same writing standard, and it is selectable by language — the
       shared `core:_writing` layer, `en` and `ru` shipped
 - [x] A mutation target outside the configured source paths is reported — plus one that is not
@@ -225,11 +226,13 @@ non-behavioural decision.
 
 **Three limits, stated rather than left to be discovered.** Each is a property of the design.
 
-- `measurable-goal` is closer to a numeral detector than a measurability detector: review `.15`
-  measured roughly 1-in-18 precision on a sample of 18 and found it flags
-  `beadloom lint --strict fails (non-zero)`, the exit-code form standing note #148 demands. Read
-  the count, not the row. The re-scope is `beadloom-mr2l.65` and the owner's decision is to
-  re-scope before paying the debt.
+- `measurable-goal` decides one named form, not measurability in general. It shipped as a
+  numeral detector at roughly 1-in-18 precision — review `.15` measured that and found it flags
+  `beadloom lint --strict fails (non-zero)`, the exit-code form standing note #148 demands — and
+  `.70` re-scoped it to an unbounded-improvement predicate with no witness named, taking 154 of
+  235 to **4 of 232**. The limit that remains is stated: 27 of the 150 newly-accepted statements
+  name no witness either and the check decides nothing about them. All four findings are in
+  closed epics, so the debt is `beadloom-mr2l.71`'s historical exclusion, not a rewrite.
 - Windows is unverified by decision (`.64`): the leg was priced at ~16-28 runner-minutes per pull
   request and roughly 3x PR-to-merge latency, and the Windows verdict is composed from `ntpath`
   plus a refusal proved branchless rather than observed on a runner.
@@ -249,11 +252,22 @@ indexed **in place** (Q4); the TO-BE → AS-IS relation checkable; WORKING exemp
 our ROADMAP and issue log restructured as instances with computed facts.
 
 **Done when:**
-- [ ] The TO-BE space is indexed and searchable, bound to beads
-- [ ] An epic with closed beads whose criteria never reached AS-IS is reported
-- [ ] A WORKING document is exempt from freshness
-- [ ] The issue log's counts are computed — the hand-written tally cannot return
-- [ ] Our ROADMAP and issue log validate against the shipped kinds
+- [x] The TO-BE space is indexed and searchable, bound to beads — indexed in place with a
+      `docs.space` column and `beadloom search --kind to_be`; 190 TO-BE documents here
+- [x] An epic with closed beads whose criteria never reached AS-IS is reported — one true
+      finding on this repository: BDL-061 declares `cli-commands`, which has no `docs:` entry
+- [x] A WORKING document is exempt from freshness — verdict `exempt`, by config DECLARATION
+      with a mandatory reason, detectable when wrong two ways
+- [ ] The issue log's counts are computed — the hand-written tally cannot return. **`.72`**;
+      the kinds and the computed facts do not exist yet
+- [ ] Our ROADMAP and issue log validate against the shipped kinds — blocked on `.72` for the
+      same reason: there is no `ROADMAP` kind, no required sections and no computed fact to
+      render, so restructuring the two documents now would validate them against nothing
+
+**Split out of S5 rather than absorbed** (the note below said S5 was a likely candidate, and it
+was): `.72` carries the ROADMAP + issue-log kinds and their computed facts. `.20` shipped the
+spec-space guide and left the two remaining criteria open with the reason, rather than writing
+documents whose kind does not exist.
 
 ### S6 — Waves from the graph (`.21`–`.24`)
 

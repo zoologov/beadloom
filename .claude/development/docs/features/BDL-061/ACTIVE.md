@@ -7,6 +7,75 @@
 
 ## Current Bead
 
+**Slice: S5** on `features/BDL-061-S5`.
+
+**`.17` CLOSED (2026-08-24) — and REPORTED AS TWO BEADS, the second time this epic has met
+the shape.** PLAN sized S5's dev work as one slice and named it a likely candidate for the
+split; it is six mechanisms, and five of them share `infrastructure/doc_roots.py` while the
+sixth shares nothing with them. The seam was called before the ROADMAP half was started.
+
+- **`.17` — the spaces, and intent held against reality.** TO-BE / AS-IS / WORKING,
+  deliberately not TODO/DONE: nothing changes status, so the checkable claim is a relation
+  between two artifacts rather than a flag on one. Configurable doc roots, the TO-BE space
+  indexed in place and searchable, WORKING exempt from freshness by declaration, and the
+  TO-BE → AS-IS relation as `beadloom docs spaces` plus a warn-only gate step.
+- **`.72` — ROADMAP and issue log as instances with computed facts.** Filed, not absorbed.
+  Those two are checked by mechanisms that already exist and belong to other modules —
+  `doc_shape`'s required sections and `docs audit`'s fact registry — so the halves share a
+  vocabulary and no code. Same call `.13` made in S4, on the same evidence.
+
+**`.18` CLOSED (2026-08-24) — the numbers hold and the population does not.** The relation's
+denominators are recomputable: an independent recount of the three spaces, the declarations, the
+epics with closed beads and the unresolved bucket agrees with the report exactly, so the figures
+below are not in dispute. What the figures cover is. Two populations leave the report without
+saying so — a TO-BE directory that carries no `CONTEXT.md` or `BRIEF.md` (four of them here,
+including `.claude/development` itself), and an epic the tracker export no longer names (23 of 60
+directories, all of them finished work). Both are BDL-UX #174's equation at a layer nobody had
+looked at: an editor's deletion makes the check quieter. Filed as `.73`–`.76` with an executable
+`xfail(strict=True)` each, so a fix reddens the suite rather than passing in silence.
+
+**What `docs spaces` reports on this repository today: ONE finding, and it is true.** BDL-061
+declares `cli-commands` in its CONTEXT's *Related Files*, has 60+ closed beads, and
+`cli-commands` has no `docs:` entry at all — a node that shipped without documentation, which
+neither `lint --strict` nor `module-coverage` can see because both ask about modules reaching
+nodes rather than nodes reaching documents. 17 node declarations from 37 of 57 epics with
+closed beads were held against the AS-IS space; 52 epics declare no node and are named as NOT
+CHECKED rather than counted as clean. That denominator is the honest one on the second
+attempt: the first implementation counted only epics whose CONTEXT carried a *Related Files*
+heading, which removed 34 of the 57 and made the report read *16 of 23*.
+
+**The relation was measured before it was built.** The obvious join — every backticked token
+in an epic's documents that matches a ref id — was written first and thrown away: on 60 epics
+it attributed the node `status` to nine whose documents merely used the English word. The
+declared *Related Files* section is the join that shipped.
+
+**`.19` and `.77` CLOSED (2026-08-24) — the population's THIRD hole, found by probing rather
+than by reading.** The reviewer did not look for a mistake in the classifier; it planted a
+`README.md`-only planning directory and watched what the population did with it. Measured: the
+directory left every count and nothing reported the drop, which is the same shape `.17`'s first
+denominator had (34 epics silently removed) and `.18`'s (four directories carrying no intent
+document) and `.73`'s widening. Three recounts of the same rule had agreed with it exactly,
+because an independent recount of a rule cannot find a hole in the rule.
+
+`.77` therefore did not patch the third case. What a document's KIND and its space's ROOTS
+disagreeing means is settled once — kind wins, the document is counted, and the disagreement is
+itself a finding — and the property pinned is arithmetic rather than a list of known holes:
+`sum(populations) == |files any declared root matched|` on any tree. The two other majors were
+the same sentence one field over. A `working.kinds` declaration covering 39 SPEC files reported
+nothing, because liveness was asked of the declaration as a whole and because `space_of_kind`
+reused the report's reading order as a classification precedence; liveness is per declared item
+now and prints what each half reached. And one word named two populations, so `sync-check --json`
+said `exempt: 0` while the doc-spaces line said `55 WORKING document(s) exempt` about one tree —
+the two are named apart, and the pair count is carried from the step that measured it rather than
+computed twice.
+
+**One defect the full-suite run caught in `.77`'s own change**, stated because it is the cost
+`.76` had already recorded for targeted runs: hoisting the sync-check step out of the gate's step
+list made it run before `reindex`, so a fresh project's gate reported `database missing`. Six
+tests reddened.
+
+---
+
 **Slice: S4** on `features/BDL-061-S4`.
 
 **`.13` CLOSED (2026-08-24) — and REPORTED AS TWO BEADS, not one.** PLAN sized S4's dev work
@@ -53,7 +122,7 @@ done; the gate is green on this branch. What S4 leaves behind, in the order it s
 
 | Bead | What it is | Why it was not done here |
 |------|------------|--------------------------|
-| `.65` (P1) | pay the `measurable-goal` debt, 154 of 235 | review `.15` says the criterion must be RE-SCOPED first — as written it flags exit-code criteria, so paying it as stated would insert numerals into goals that are already checkable |
+| `.65` (P1) | pay the `measurable-goal` debt, **4 of 232** | `.70` re-scoped the criterion first, as review `.15` required: 154 of 235 was the numeral detector's number, and 150 of those statements are accepted now. The four that remain are `BDL-002`, `BDL-004`, `BDL-005` and `BDL-006`'s CONTEXT goal — the "make it better" class the check exists for |
 | `.68` (P1) | the decode-family mechanism: ruff `PLW1514` plus an AST ledger | measured, not built: `PLW1514` reports ZERO on `src/` and `tests/` today so enabling it costs one config line, and a ~40-line prototype already finds 29 live narrow handlers |
 | `.60` (P1) | the backslash refusal on a Windows harness | Windows is unverified by decision; the defect is decidable by reading and is pinned as a strict `xfail` |
 | `.62`, `.63` (P2) | the reference leg's syntax; the silent population exit | each filed with its measurement and its options, and each is a scoping decision rather than a fix |
@@ -589,16 +658,28 @@ header comment, where a reader of a red check will look first.
 | .60 | Pending | Filed by `.39`: the backslash refusal makes the flow guard refuse every edit on a Windows harness, and its stated reason is false there. Measured by proxy with `PureWindowsPath` and pinned |
 | .62 | Pending | Filed by `.14`: three reference-leg defects — `Example:` prose read as a scenario reference, an indented code block read while a fenced one is not, and an undecodable document reading as no intent. Each a strict `xfail`, so the fix reddens the suite |
 | .63 | Pending | Filed by `.14`: a feature reclassified as a component leaves the population with nothing reported. Two options priced in the bead |
-| .65 | Pending | Owner decision: pay the `measurable-goal` debt — 154 of 235 goal statements. Review `.15` says re-scope the criterion FIRST; do not start rewriting before that answer |
+| .65 | Pending | Owner decision: pay the `measurable-goal` debt. `.70` answered the re-scope question first, so the number to start from is **4 of 232**, not 154 of 235 |
+| .70 | Done | S5 dev: re-scoped `measurable-goal` from a numeral detector to a two-leg criterion — a goal is reported only when its predicate is an unbounded improvement AND it names no witness (a quantity, a named artifact, or an observable outcome). Measured on this repository: 154 of 235 -> **4 of 232**, and the population fell only because three of the 235 were a markdown horizontal rule (review `.15` m1). No tolerance, no excluded document, no suppression. The reviewer's proposed criterion did NOT reproduce its stated 87 under any literal reading (49 / 54 / 91 / 134 / 139), and its remainder still held statements that are not the "make it better" class, so the criterion shipped is a different one. Stated limit, measured: 27 of the 150 newly-accepted statements name no witness either and this check now decides nothing about them — precision was bought with recall, deliberately. 7 sabotages, 6 bit first time and the 1 that did not exposed a real gap (nothing pinned the improvement leg's necessity), now closed by two rows |
 | .67 | Pending | The decode sweep: 29 narrow handlers judged per site, per `.42`'s framework. Depends on `.68` |
 | .69 | Pending | Filed by `.16`: `_writing.md.txt` and `_writing.ru.md.txt` tell every role that `beadloom lint` reports the five section-quality checks. It reports none of them — measured: 68 lint findings, all `scenario_coverage`, and 156 doc-quality findings from the other command |
-| .17–.20 | Pending | S5 TO-BE / AS-IS / WORKING |
+| .17 | Done | S5 dev: three documentation spaces and the TO-BE → AS-IS relation. `infrastructure/doc_roots.py` (the vocabulary, configurable roots, kind wins over root) and `application/doc_spaces.py` (the relation, read only from the epic's declared *Related Files*). WORKING exempt from freshness by declaration — `check_sync` verdict `exempt` carrying the declared reason — with a wrong declaration detectable two ways. TO-BE indexed IN PLACE on both reindex paths and searchable (`docs.space` + an FTS row per unlinked document). `beadloom docs spaces` and a warn-only `doc-spaces` gate step. **Measured here: to_be 190 / as_is 93 / working 55; 17 node declarations from 37 of 57 epics with closed beads; ONE finding — BDL-061 declares `cli-commands`, which has no AS-IS document at all.** 52 epics declare no node and are named as not checked. **REPORTED AS TWO BEADS:** the ROADMAP/issue-log half shares no module with these five mechanisms and became `.72` |
+| .72 | Pending | Split out of `.17`: the `ROADMAP` and issue-log kinds, and counts a mechanism computes so the hand-written tally cannot return. `.19` and `.20` will need it; the DAG was NOT rewired — that is the owner's call |
+| .18 | Done | S5 test: 62 tests (50 passing + 12 `xfail(strict=True)`) attacking the POPULATION rather than the arithmetic. Every denominator `.17` reported is recounted here from the filesystem and the export by code sharing no function with the code under test, and all five recount exactly — to_be 190 / as_is 93 / working 55, 17 declarations, 5 declaring epics, 37 of 57, 52 unresolved. **Five findings filed as `.73`–`.76`**, each an executable `xfail(strict=True)` rather than prose: a TO-BE directory carrying no intent document leaves every count (61 directories hold intent, 57 become epics); an epic the tracker export forgot is indistinguishable from one whose beads are open (23 of 60 directories, and deleting an epic's records took the gate step from 1 finding to 0 with `not_verified` already saturated); the command and the gate read different trackers and answered 17/1 against 4/0 at one commit; a WORKING root means one thing to `check_sync` and another to `check_spaces`, so a root-declared exemption took `sync-check` rc 2 → rc 0 with zero contradiction findings; and an `exempt` pair is in no count any surface prints |
+| .75 | Done | S5 dev (P0, gate defeat): ONE spelling of a document path. `check_sync` classified the docs-dir-relative path the indexer writes while `check_spaces` classified the project-relative one, so a root-declared WORKING exemption reached freshness and never reached the report built to object to it. `DocSpaces.project_path(doc_path)` is the single translation and `resolve_docs_dir` the single reader of `docs_dir` — a key three readers held before. Among roots the WORKING space is now consulted first, because its shipped root list is empty and the AS-IS default is the catch-all `docs/**/*.md`: a declaration the catch-all shadowed would be silently inert. **Measured on this repository:** one stale document takes `sync-check` rc 2 → rc 0 under `working.roots: [docs/architecture.md]` exactly as before, and `docs spaces` now reports **1** `working_declaration_contradicted` naming `docs/architecture.md` where it reported **0**; declaring the whole tree excuses 28 pairs and names 6. Two further holes closed while the seam was open: an exemption declared by ROOT and matching nothing reported nothing (only kinds were checked), and `exempt` was returned before the files were looked for, so a deleted document read as excused rather than `missing` — BDL-UX #174's equation through the one verdict that never blocks. 16 tests + 1 acceptance scenario; both `.18-4` pins closed |
+| .74 | Done | S5 dev (P1, drifts by ordinary use): an epic the tracker export forgot is UNVERIFIABLE, not compliant. `beads_by_epic.get(key, ())` made *the export has no record of this epic* and *its beads are all open* one empty tuple; they are three states now — known, unknown because the tracker does not name it, unknown because no tracker answered — and `EpicIntent.unknown_status_reason` carries which. An epic in the middle state that DECLARES a node is reported as `epic_not_in_tracker`; one that declares nothing is not, because it is already counted in the *declare no node* clause and one fact under two names makes the line unreadable. The state has its own channel rather than `not_verified` alone, which was already True here for an unrelated reason. Both surfaces name the tracker they read (`TrackerRead`), since the gate reads the committed export by design and the command prefers the live `bd` database. **Measured on this repository:** 20 of 57 epics are named by neither tracker and are listed in the gate line; **2 findings** where there was 1 — `BDL-061` declares `cli-commands` (no AS-IS document) and `BDL-030` declares a node no tracker has any record of. Deleting an epic's records now leaves the finding count where it was instead of taking it to zero. 14 tests + 1 acceptance scenario; three `.18-2`/`.18-3` pins closed |
+| .73 | Done | S5 dev (P2): **an epic is a TO-BE directory**, not a directory carrying a `CONTEXT.md`. The narrower reading left four of this repository's 61 directories in NO field of the report — not `epics`, not `unresolved_epics`, not a NOT CHECKED line — while their documents stayed in the TO-BE population, so one report stated two sizes for one tree. `unresolved_reasons` now says which of three situations each unresolved epic is in: the document declares no node, the directory carries none of the configured intent documents, or the one it carries cannot be decoded. Only the third is a FINDING (`intent_document_unreadable`) — a document that is there and unreadable is a defect in that document, while a directory that is not an epic is not, and `.claude/development` holds the ROADMAP and the issue log. The file names moved into `doc_roots.to_be.intent_documents`, because hardcoded they made an adopter with another convention lose 100% of its epics behind a plausible `0 of 0`. **Re-published denominators, measured: epics 57 → 61, unresolved 52 → 56 (52 declare no node + 4 carry none), epics the tracker does not name 20 → 24; to_be 190 / as_is 93 / working 55, 17 declarations, 5 declaring, 37 with closed beads all unchanged, and `.18`'s independent recount still agrees.** 15 tests + 1 acceptance scenario; four `.18-1` pins closed and `.18-2`'s repository leg with them |
+| .76 | Done | S5 dev (P2): an excused pair says so. The `exempt` verdict was in no count any surface printed — `_sync_summary` passed over it, the `--json` summary had no key for it, and the rich output printed `[ok]`, the word for a comparison that HAPPENED. Measured by `.18`: 341 pairs = 326 ok + 11 exempt + 4 incomplete, printed as `total 341, ok 326, stale 0, missing 0, unverified 0, unchecked 0`. The gate line now reads `N pair(s) fresh, M exempt — <declared reason>` (absent when nothing was excused, so the everyday line keeps its shape) and carries the clause on the FAILING branch too, since a run that hides a count is exactly the run whose count fell. `exempt` and `incomplete` both gained summary keys, so the verdicts sum to the total: `incomplete`'s absence was review `.15`'s M5, stated honestly in the sync-check SPEC and open since S4b, and it closes here because the sum cannot work while any verdict has no key. `unchecked` stays outside the sum — it counts NODES with no pair, a different population. Non-blocking throughout; only the visibility changed. 13 tests + 1 acceptance scenario; both `.18-5` pins closed |
+| .19 | Done | S5 review: NOT PASSING — 0 critical, 3 major, 3 minor, found by ACTIVE PROBING (a planted `README.md`-only planning directory) rather than by reading the code. `.75` seconded: ship it |
+| .77 | Done | S5 dev: review `.19`'s three majors, closed as one classification decision rather than as three patches. **M1 — the population's third hole.** `documents_in` globbed a space's own roots and kept only what the classifier returned to that same space, so a document whose KIND sent it to a space whose ROOTS exclude it was in no population, its directory in no epic list, and nothing said so. `DocSpaces.classify` now places every document one declared root found in one bucket, so `sum(populations) == |files any declared root matched|` on any tree — the invariant, not the three known holes. Kind still wins, and the disagreement is itself a finding (`document_outside_declared_root`, one per kind with the count and up to five paths). **Measured through the real CLI on this repository**, planting the reviewer's two probes and reverting them: `.claude/.../ZALPHA/README.md` + `docs/PLAN.md` took to_be 190 → 191, as_is 93 → 94, epics 61 → 62 and printed **2** findings where both files had been in nothing; reverted, the numbers return to 190 / 93 / 55 / 61 with 0 findings. **M2 — a half-inert declaration.** `space_of_kind` walked `SPACES`, a reporting order, so AS-IS's DEFAULT kind list shadowed a project's explicit `working.kinds`; `_KIND_PRECEDENCE` is now its own constant with its own reason, and the three shipped kind lists are disjoint so nothing shipped moves. Liveness is per DECLARED item — `working_reach` prints how many documents each declared half excused, so a one-line declaration covering 39 files prints 39, and a `[ACTIVE, SPEC]` line whose SPEC half is inert says which half. **M3 — two adjacent lines contradicting.** Reproduced, in the split form the coordinator suspected: `sync-check --json` reads `exempt: 0` and `docs spaces` printed `55 WORKING document(s) exempt`, while inside one `beadloom ci` run only the second half printed because `.76` omits the excused clause when nothing was excused. The gate line now reads `55 WORKING document(s) in the exempt space, 0 sync pair(s) excused`, and the pair count is CARRIED on `GateStep.pairs_excused` from the step that measured it rather than computed a second time; `docs spaces`, which runs no freshness check, states `pairs_excused: null` and makes no pair claim. 30 tests + 3 acceptance scenarios; three sabotage rounds, all bit (9 / 4 / 5 reddened). Review Minor 1 and Minor 3 closed in passing, in the files this bead already had to edit: 27 of the repository's 61 `# type: ignore[attr-defined]` removed by typing the two `docs spaces` renderers, and the doc-spaces DOC's "public surface verified" list made true |
+| .20 | Done | S5 tech-writer: the spec-space guide, written for an adopter and led by the decision — TO-BE / AS-IS / WORKING deliberately not TODO/DONE, because nothing changes status, so the checkable claim is a relation between two artifacts and not a flag on one. The 11 advisory `surface_drift` reference documents `.17` left un-re-baselined were read one by one: **9 revised** (CHANGELOG, both READMEs, `docs/architecture.md`, `docs/getting-started.md`, `docs/guides/{document-kinds,bdd-scenarios}.md`, `docs/services/cli.md`, the sync-check SPEC) and **2 deliberately re-attested** with the reason recorded — the code-indexer SPEC and the project-overlays guide drifted because the CLI tree grew, and S5 changed nothing either of them describes. `.75`'s two residuals are STATED LIMITS in the guide, not omissions: `beadloom ci` stays rc 0 on every doc-spaces finding because the step is warn-only by design, and the shipped kind list is the only thing between an adopter and a one-line `working.roots` that excuses a whole tree — with the measurement that makes honouring the declaration defensible (28 excused pairs mapping onto exactly the 6 documents `docs spaces` names, review `.19`, clean room). Review `.19`'s Minor 2 is answered as a stated limit in the ci-gate SPEC and the CLI reference: the gate line prints `measurable-goal 4` and not the 27 goals the re-scope stopped deciding about. `.68`'s three ruff settings are explained where a reader meets the rule, including the false green — selecting a preview rule without `preview = true` exits 0 with a warning. `.70`'s seven stale documents corrected to 4 over 232. **NOT done, and reported rather than hidden:** the ROADMAP and issue-log restructure in this bead's own title is blocked on `.72` — there is no `ROADMAP` kind, no required sections and no computed fact to render, so restructuring them now would validate them against nothing |
+| .73–.76 | Done | The five findings `.18` measured, filed rather than absorbed and all four beads closed. `.75` (one spelling for a doc path) is the one `.71` and `.72` inherit; the DAG was NOT rewired |
 | .21–.24 | Pending | S6 waves from the graph (#155, #118, #133) |
 
 ## Notes
 
-**Branch:** `features/BDL-061-S4` for the current slice. Earlier slices ran on
-`features/BDL-061-S3`, `features/BDL-061-S2b`, `features/BDL-061-S2` and `features/BDL-061`.
+**Branch:** `features/BDL-061-S5` for the current slice. Earlier slices ran on
+`features/BDL-061-S4`, `features/BDL-061-S3`, `features/BDL-061-S2b`, `features/BDL-061-S2`
+and `features/BDL-061`.
 A slice boundary is a PR boundary — each slice green on `main` before the next begins, as
 BDL-060 ran.
 

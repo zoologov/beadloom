@@ -89,7 +89,9 @@ section, and `site_published`, because publishing a site does not judge one.
 
 ## Dependencies
 
-- Depends on: (none — pure markdown and SQL reads)
+- Depends on: `infrastructure.doc_roots.resolve_docs_dir` — the documents are read from the
+  documentation directory the project declared, rather than from a hardcoded `docs/`
+  (`beadloom-mr2l.75`). Otherwise pure markdown and SQL reads.
 - Used by: `sync-check`, the CI gate, `beadloom sync-check`
 
 ## Parent

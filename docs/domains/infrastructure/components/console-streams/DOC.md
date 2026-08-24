@@ -71,3 +71,68 @@ import a service; the decision and its reasons live only here.
 The function returns the names of the streams it actually reconfigured, so
 "nothing needed changing" is distinguishable from "nothing was done" — a silent
 no-op is how a policy stops being applied without anyone noticing.
+
+## The read side: a handler as wide as what the read can raise (BDL-061.68)
+
+The section above settles the **codec**. It does not settle what happens when
+the bytes do not match it, and that is a separate defect with its own history:
+`read_text(encoding="utf-8")` states the codec and still raises
+`UnicodeDecodeError` on a byte that is not UTF-8, so `except OSError` around it
+catches the file being *absent* and not the file being *unreadable*.
+
+That exact shape was repaired five times in one epic — `beadloom-mr2l.36` (two
+instances), `.37` (the tracker probes), `.40` (four call sites), `.42` (a sweep
+of about forty) — and then `doc_sync/doc_quality.py`, written after all four,
+took the `docs quality` gate down the same way. Five repairs did not reach the
+sixth author, so the rule is now enforced by two mechanisms rather than
+remembered.
+
+**The codec is stated:** ruff reports text I/O that names no codec. That takes
+**three** settings in `pyproject.toml`, and they travel together — any one of them
+alone is inert:
+
+| Setting | What it does | What its absence costs |
+|---|---|---|
+| `select = [..., "PLW1514"]` | asks for `unspecified-encoding` | without it, nothing is reported |
+| `preview = true` | `PLW1514` is a preview rule in `ruff==0.16.3`, the release `uv.lock` pins | **selecting a preview rule without it is not an error**: ruff prints `Selection PLW1514 has no effect because preview is not enabled` and exits 0 |
+| `explicit-preview-rules = true` | keeps every *other* preview rule out of the selection | without it, enabling preview opts the project into the whole preview rule set at once |
+
+The middle row is the reason all three are named here rather than one. A
+config line that reads as a gate, warns, and exits 0 is a gate that checks
+nothing — the same class as BDL-UX #172 and #173, measured with `--isolated`
+rather than read off the documentation.
+
+`explicit-preview-rules` bounds the rule set; it does **not** stop preview from
+changing a STABLE rule's behaviour, and that cost was measured rather than
+argued: exactly one new finding on this tree, `RUF002` on the deliberate
+latin-1 mojibake docstring in `tests/test_decoding_symmetry.py`, answered with a
+line `noqa` carrying its reason rather than by editing the measurement that row
+records. Further preview drift arrives with a reviewed lockfile bump, because
+ruff is pinned by `uv.lock`. **When the rule graduates:** delete the two knobs,
+keep the `select` line — the `noqa` then becomes unused, which `RUF100` says out
+loud rather than leaving behind.
+
+Its reach was measured, not read off the rule description: it reports
+`Path.read_text` only where it can infer a `Path` receiver — an unannotated
+parameter hides the call from it — and it does not look at
+`subprocess(text=True)` at all. Over `src/` the reach is broad because
+`mypy --strict` makes annotations mandatory there; over `tests/`, type-checked
+by nothing, it is partial. The receiver-agnostic AST sweep in
+`tests/test_locale_independent_io.py` therefore still covers `src/`, and
+`PLW1514` adds `tests/`, which that sweep does not read. Neither instrument
+contains the other.
+
+**The handler is wide enough:** `tests/test_decode_handlers.py` holds an AST
+ledger of every `try` or `contextlib.suppress` block in `src/beadloom` whose body
+decodes text. Measured on this tree: `203` modules parsed, 55 such blocks, 28 of
+them narrow — no handler catching `UnicodeDecodeError`, `UnicodeError`,
+`ValueError` or a blanket clause. Each of the 28 is listed with the stream it
+reads, the answer its handler gives today and what happens instead when the
+bytes will not decode. A new narrow block fails the suite; so does a listed one
+that is repaired without deleting its row.
+
+The 28 are **not** 28 defects. Each needs the per-site judgement `.42` used — is
+this stream a UTF-8 contract we wrote, or somebody else's document in their
+codec — and that judgement is `beadloom-mr2l.67`'s, one site at a time. What the
+ledger buys before then is that every one of them is a decision on the record
+instead of an accident, and that the twenty-ninth cannot be added silently.

@@ -105,6 +105,7 @@ class TestCliSurfaceStability:
             "site",
             "audit",
             "quality",
+            "spaces",
         }
 
     def test_snapshot_subgroup_commands(self) -> None:

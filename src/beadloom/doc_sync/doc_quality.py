@@ -11,7 +11,9 @@ a document back to see whether they held.
 The five, each ``warn``:
 
 ``measurable-goal``
-    A goal with no number in it. "Make it better" is not a goal.
+    A goal whose predicate is a quality and which names nothing an observer
+    could go and look at. "Make it better" is not a goal; "the core shrinks
+    from 440 to 376 lines" is.
 ``decision-reason``
     A decision row whose reason cell is empty.
 ``risk-mitigation``
@@ -27,12 +29,33 @@ The five, each ``warn``:
     listed here, so it cannot drift away from them.
 
 **What each check can and cannot decide**, stated here rather than discovered by
-a reader who trusted it: a number is necessary for a measurable clause and not
-sufficient (``#142 and #146 close`` is checkable, ``we improved 3 things`` is
-not, and nothing here can tell them apart); a reason is checked for EXISTENCE,
-not for explaining rather than restating the decision, which no checker decides;
-and a mitigation is judged against a named set of empty ones rather than on
-whether it would work.
+a reader who trusted it: a reason is checked for EXISTENCE, not for explaining
+rather than restating the decision, which no checker decides; and a mitigation
+is judged against a named set of empty ones rather than on whether it would
+work.
+
+``measurable-goal`` was the fourth (BDL-061 `.70`). It shipped as a numeral
+detector calling the absence of a digit "no measurable clause", and on this
+repository that reported **154 of 235** goal statements at roughly 1-in-18
+precision — including ``beadloom lint --strict fails (non-zero)`` and
+``beadloom federate --fail-on ... exits non-zero``, which are the exit-code form
+BDL-UX #148 exists to demand. A check satisfied by inserting a numeral into a
+correct sentence teaches an author to write for the checker, which is the
+failure #169 was fixed by NOT doing. So the criterion is now the one its three
+siblings already use: name the EMPTY FORM rather than guess at the good one. A
+goal is reported when both legs hold — its predicate is an unbounded improvement
+(:func:`states_an_unbounded_improvement`) and it names no witness
+(:func:`names_a_witness`). Measured on the same corpus: **4 of 232**, and the
+four are the standard's own example ("Make Beadloom enjoyable and intuitive").
+
+**Its limit, measured rather than asserted.** Precision was bought with recall.
+Of the 150 statements the re-scope newly accepts, **27 name no witness either**
+— they are accepted because their predicate is not an unbounded improvement, and
+about those this check now decides nothing ("Turn prose into mechanisms",
+"Clear separation between policy and fact sections"). That is deliberate: a
+check firing on 66% of a corpus does not get satisfied, it gets excluded, and an
+excluded check decides nothing about 100%. A goal this check accepts is not
+thereby proved measurable.
 
 **Applicability is reported PER DOCUMENT KIND, not only per check.**
 ``checks_that_read_nothing`` is a global OR over the corpus, so it goes silent
@@ -100,9 +123,61 @@ _EMPTY_MITIGATION_RE = re.compile(
     re.IGNORECASE,
 )
 
-#: A number that is not part of an identifier. ``BDL-061`` and ``v2.2`` do not
-#: make a sentence measurable; ``440 -> 376 lines`` does.
+#: A number that is not part of an identifier. ``BDL-061`` and ``v2.2`` are
+#: names with digits in them; ``440 -> 376 lines`` is a quantity.
 _NUMBER_RE = re.compile(r"(?<![\w.\-])\d")
+
+#: An artifact named in a way that leaves no doubt it IS one: an inline code
+#: span, a command flag, a file name, a snake_case identifier. Prose is
+#: deliberately not enough — this recognizer only ever ACCEPTS a goal, so a
+#: loose one lowers the finding count silently, and that is the single way this
+#: criterion could be worse than the numeral it replaces. ``e.g.``, ``i.e.``,
+#: ``etc.`` and ``vs.`` are excluded by the two-character stem and by requiring
+#: the suffix to follow the dot with no space. A bare slashed path is
+#: deliberately NOT a branch of its own: it accepted the prose enumeration
+#: "fresh/stale/missing docs", while every path this corpus states in a goal
+#: carries a file name (``docs/guides/ci-setup.md``) or a code span anyway.
+_ARTIFACT_RE = re.compile(
+    r"`[^`\n]+`"
+    r"|(?<![\w-])--[a-z][\w-]+"
+    r"|\b\w{2,}\.[a-z]{2,4}\b"
+    r"|\b[a-z][a-z0-9]*_[a-z0-9_]+\b"
+)
+
+#: An outcome a run or a reader can witness. Closed and listed rather than
+#: inferred: a verb list that grows whenever a document is reported is a
+#: tolerance wearing a criterion's name.
+_OUTCOME_RE = re.compile(
+    r"\b(?:exits?|non-zero|rc|fails?|passes|catches|detects?|reports?|renders?"
+    r"|produces?|shows?|works?|builds?|generates?|blocks?|refuses?|emits?"
+    r"|green|red|no longer)\b",
+    re.IGNORECASE,
+)
+
+#: A quality — a word that says how good something is, not what it does. The
+#: reader of "make it faster" cannot say whether it happened.
+_QUALITY = (
+    r"(?:better|best|fast(?:er)?|quick(?:er)?|simple(?:r)?|clean(?:er)?"
+    r"|nice(?:r)?|easy|easier|useful|usable|user-friendly|enjoyable|intuitive"
+    r"|robust|solid|seamless|smooth|powerful|comprehensive|modern|elegant"
+    r"|pleasant|delightful|maintainable|readable|good|great)"
+)
+
+#: The form the writing standard rejects: an unbounded improvement. Either a
+#: verb whose completion nothing observes (``improve``, ``establish``, ``clean
+#: up``) or ``make/keep <something> <quality>`` — the standard's own example.
+_IMPROVEMENT_RE = re.compile(
+    r"\b(?:improve|enhance|optimi[sz]e|polish|streamline|moderni[sz]e"
+    r"|strengthen|establish|clean\s+up|tidy\s+up)\w*\b"
+    r"|\b(?:make|makes|making|keep|keeps|keeping|render|leave)\b"
+    r"[^.;:!?]{0,60}?\b" + _QUALITY + r"\b",
+    re.IGNORECASE,
+)
+
+#: A markdown horizontal rule. Not a paragraph, and never a goal statement:
+#: three of the 235 statements this check read on its own repository were
+#: ``---`` closing a Goal section (review BDL-061.15 m1).
+_HRULE_RE = re.compile(r"^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$")
 
 _HEADING_RE = re.compile(r"^(#{1,6}) +(.+?)\s*$")
 _STATUS_RE = re.compile(r"^>\s*\*\*Status:\*\*\s*(.+?)\s*$", re.MULTILINE)
@@ -297,7 +372,8 @@ def _paragraphs(lines: Sequence[tuple[int, str]]) -> list[tuple[int, str]]:
     """Non-empty paragraphs, each as one joined string."""
     out: list[tuple[int, list[str]]] = []
     for number, line in lines:
-        if not line.strip():
+        if not line.strip() or _HRULE_RE.match(line):
+            # A horizontal rule separates paragraphs; it is not one of them.
             out.append((0, []))
             continue
         if out and out[-1][1]:
@@ -312,6 +388,29 @@ def _paragraphs(lines: Sequence[tuple[int, str]]) -> list[tuple[int, str]]:
 # ---------------------------------------------------------------------------
 
 
+def names_a_witness(statement: str) -> bool:
+    """Whether *statement* names something an observer could go and look at.
+
+    Three kinds, and any one is enough: a QUANTITY (``440 -> 376 lines``), a
+    named ARTIFACT (``beadloom lint --strict``, ``AGENTS.md``, ``scan_paths``),
+    or an observable OUTCOME (``exits non-zero``, ``the build passes``).
+    """
+    return bool(
+        _NUMBER_RE.search(statement)
+        or _ARTIFACT_RE.search(statement)
+        or _OUTCOME_RE.search(statement)
+    )
+
+
+def states_an_unbounded_improvement(statement: str) -> bool:
+    """Whether *statement*'s predicate is a quality rather than an outcome.
+
+    "Make the tool better", "improve the developer experience", "establish the
+    architecture" — forms whose completion nobody can date.
+    """
+    return bool(_IMPROVEMENT_RE.search(statement))
+
+
 def _check_goals(path: str, sections: Sequence[_Section]) -> tuple[list[QualityFinding], int]:
     findings: list[QualityFinding] = []
     read = 0
@@ -323,17 +422,24 @@ def _check_goals(path: str, sections: Sequence[_Section]) -> tuple[list[QualityF
             if statement.startswith(">"):
                 continue
             read += 1
-            if _NUMBER_RE.search(statement) is None:
+            if states_an_unbounded_improvement(statement) and not names_a_witness(
+                statement
+            ):
                 findings.append(
                     QualityFinding(
                         check=MEASURABLE_GOAL,
                         path=path,
                         line=number,
                         excerpt=_excerpt(statement),
-                        why="the goal states no measurable clause",
+                        why=(
+                            "the goal states an improvement with no witness — it "
+                            "names a quality, and no quantity, artifact or "
+                            "outcome that would show it happened"
+                        ),
                         remediation=(
                             "name the quantity the goal moves and the value it "
-                            "moves to, so the goal can be shown to be met"
+                            "moves to, the artifact it produces, or the outcome "
+                            "a run would show"
                         ),
                     )
                 )

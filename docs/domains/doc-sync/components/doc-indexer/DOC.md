@@ -16,7 +16,13 @@ documentation exists and whether it has changed.
 ## Public surface
 
 - `index_docs(...)` — scan the docs tree, chunk each file, and populate the
-  `docs` / `chunks` tables; returns a `DocIndexResult`.
+  `docs` / `chunks` tables in the `as_is` space; returns a `DocIndexResult`.
+- `index_space_documents(paths, conn, *, project_root, space)` — index
+  documents of another space, keyed by their PROJECT-relative path. The TO-BE
+  space is indexed **in place** (BDL-061 CONTEXT Q4), so its rows cannot use
+  the docs-dir-relative key `index_docs` uses: the two trees have no common
+  root, and giving them one would mean moving the tree. `ref_id` is `NULL` by
+  construction — a planning document describes intent, not one node's code.
 - `chunk_markdown(text)` — split Markdown into section chunks by H2 heading
   (capped at `MAX_CHUNK_SIZE` = 2000 chars per chunk).
 - `classify_section(heading)` — map a heading to a section label

@@ -19,7 +19,7 @@ document back to see whether they held.
 
 | Check | Reports | Scope |
 |-------|---------|-------|
-| `measurable-goal` | a goal statement with no number in it | the `## Goal` / `## Goals` section |
+| `measurable-goal` | a goal that states an unbounded improvement and names no witness | the `## Goal` / `## Goals` section |
 | `decision-reason` | a decision row whose reason cell is empty | any table with a Reason / Rationale / Why column |
 | `risk-mitigation` | a risk row with no mitigation, or one that names no action | any table with a Mitigation column |
 | `pending-in-approved` | a question still answered `Pending` | the `## Open Questions` section of a document whose status is Approved or Accepted |
@@ -32,19 +32,35 @@ the `docs-quality` gate step never blocks.
 
 Stated here rather than discovered by a reader who trusted it.
 
-- **`measurable-goal` is closer to a numeral detector than a measurability detector, and its
-  findings are not yet trustworthy.** It looks for a digit not preceded by a word character, dot
-  or hyphen. `#142 and #146 close` is a checkable claim and `we improved 3 things` is not, and
-  nothing here tells them apart — but the stronger half of the original claim, that a number is
-  *necessary* for a measurable clause, is false. An exit code, a named artifact that either
-  exists or does not, and a binary capability are all measurable without a digit. Review
-  `beadloom-mr2l.15` sampled 18 of this repository's 154 findings and could defend **one** as a
-  true positive; among the false ones are `beadloom lint --strict fails (non-zero)` and
-  `beadloom federate --fail-on <verdicts>` exits non-zero — the exit-code form BDL-UX #148 exists
-  to insist on. Read the COUNT, which is a real statement about a corpus; do not act on an
-  individual finding until the criterion is re-scoped. `beadloom-mr2l.65` carries the re-scope,
-  and the owner's decision is to re-scope before paying the debt, because inserting numerals into
-  goals that are already checkable would satisfy the regex and improve nothing.
+- **`measurable-goal` decides one named form, not measurability in general.** A goal is reported
+  when BOTH legs hold: its predicate is an unbounded improvement — `improve`, `enhance`,
+  `establish`, `clean up`, or `make`/`keep` something *better / faster / simpler / useful /
+  intuitive* — and it names no witness. A witness is a quantity (`440 -> 376 lines`), a named
+  artifact (an inline code span, a `--flag`, a file name, a `snake_case` identifier), or an
+  observable outcome (`exits`, `fails`, `passes`, `detects`, `renders`, `produces`, `green`). The
+  three sibling checks all work this way — name the empty form, do not guess at the good one —
+  and `risk-mitigation`'s list of non-mitigations is the same construction one check over.
+- **Why it changed (`beadloom-mr2l.70`).** As shipped it looked for a digit and called its
+  absence "no measurable clause". On this repository that reported **154 of 235** goal statements;
+  review `beadloom-mr2l.15` sampled 18 of them and could defend **one**. Among the false ones were
+  `beadloom lint --strict` **fails** (non-zero) and `beadloom federate --fail-on <verdicts>` exits
+  non-zero — the exit-code form BDL-UX #148 exists to insist on — and `Graph YAML writes are
+  atomic (temp + os.replace)`, a property any reader can check for. Paying that debt as written
+  would have inserted numerals into 154 sentences that were already checkable, which teaches an
+  author to write for the checker; that is the failure BDL-UX #169 was fixed by explicitly NOT
+  rewording the document. The re-scoped criterion reports **4 of 232** on the same corpus, and the
+  four are the standard's own example ("Make Beadloom enjoyable and intuitive").
+- **The limit, measured rather than asserted: precision was bought with recall.** Of the 150
+  statements the re-scope newly accepts, **27 name no witness either** — they are accepted because
+  their predicate is not an unbounded improvement, and about those this check now decides nothing
+  ("Turn prose into mechanisms", "Clear separation between policy and fact sections"). A goal this
+  check accepts is not thereby proved measurable. The trade was made deliberately: a check firing
+  on 66% of a corpus does not get satisfied, it gets `--check`-excluded, and an excluded check
+  decides nothing about 100% of it.
+- **The population did not move to make the count smaller.** Every goal statement is still read
+  and still counted; the denominator fell 235 -> 232 for one unrelated reason, that three of the
+  235 were a markdown horizontal rule closing a Goal section (review `beadloom-mr2l.15` m1). There
+  is no tolerance, no excluded document and no suppression in this check.
 - **A reason is checked for EXISTENCE.** The standard also asks that a reason explain *why*
   rather than restate the decision; no checker decides that, and pretending otherwise would be
   the vacuous green this epic exists to remove.
@@ -98,7 +114,7 @@ guard in place of the first.
 
 | Check | Findings | Read |
 |-------|----------|------|
-| `measurable-goal` | 154 | 235 goal statements |
+| `measurable-goal` | 4 | 232 goal statements |
 | `decision-reason` | 0 | 269 decision rows |
 | `risk-mitigation` | 0 | 138 risk rows |
 | `pending-in-approved` | 2 | 69 open-question rows |
@@ -108,7 +124,8 @@ Three of those checks report nothing here, and that is a CHECKED green rather th
 each was shown to fire on a real document of this repository under a single reverse-editable edit
 made in memory — a blanked reason cell in `BDL-061/CONTEXT.md`, a mitigation replaced by
 *Monitor it* in `BDL-040/RFC.md`, and `[Name]` put back into `BDL-061/PRD.md`'s title — 0
-findings before, 1 after.
+findings before, 1 after. `measurable-goal`'s four are live findings on
+`BDL-002`, `BDL-004`, `BDL-005` and `BDL-006`'s CONTEXT; `beadloom-mr2l.65` pays them.
 What that demonstration proves is that the check CAN fire on a real document; it does not prove
 the population is complete, which is what the per-kind report below is for.
 
