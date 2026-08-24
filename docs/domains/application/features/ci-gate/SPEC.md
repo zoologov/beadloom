@@ -25,14 +25,38 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    pairs, and reports `unverified` ones as `WARN` rather than fresh.
 4. **docs-audit** — numeric/version fact freshness; fails on `stale>0`, and
    states how much of the declared fact surface it covered.
-5. **config-check** — agent-config drift (AgentConfigAsCode). Since BDL-061 S3
+5. **docs-quality** — the five writing-standard checks over the project's
+   planning documents (BDL-061 S4b): a goal with a measurable clause, a decision
+   carrying a reason, a risk carrying a mitigation, no `Pending` question inside
+   an `Approved` document, and no unfilled template placeholder. Every finding is
+   a `warn` and the step is `passed` unconditionally, so a project whose
+   documents predate the checks does not go red on upgrade. A project with no
+   planning document is a NAMED skip that states the globs it looked under.
+   Three states set `not_verified`, and the step then reports **WARN** rather
+   than PASS — *unverifiable is not clean*: a check that found no document with
+   anything to read (`NOT CHECKED: <checks>`), a document KIND no content check
+   enters (`NO CHECK READS: <kinds>`), and a document nothing could decode
+   (`UNREADABLE: N`). The second exists because the first is a global OR over
+   the corpus and goes silent as soon as one document carries one row, so it
+   cannot see a check that is blind on an entire shipped document kind.
+   Measured on this repository, 2026-08-24, the step reports:
+
+   ```
+   docs-quality WARN | 243 document(s) read; measurable-goal 154,
+                       pending-in-approved 2; NO CHECK READS: BRIEF, PLAN, SUMMARY
+   ```
+6. **config-check** — agent-config drift (AgentConfigAsCode). Since BDL-061 S3
    a drift carries its own severity: `error` blocks the step, `warn` is
    reported and does not. The summary has three forms accordingly —
    `N drifted artifact(s)`, `no blocking drift; N artifact(s) reported (warn)`,
    and `agent-config in sync` — because printing "in sync" over a reported
-   finding is the false-green shape this epic exists to remove.
-6. **doctor** — graph integrity.
-7. **federate** — `federate --fail-on` when hub exports are supplied.
+   finding is the false-green shape this epic exists to remove. The step also
+   carries the mutation-SCOPE findings (BDL-061 S4b), each with its own rule
+   name and severity `warning`; they are computed BEFORE the step's database
+   guard, because a declaration is checkable against the tree whether or not the
+   index was built.
+7. **doctor** — graph integrity.
+8. **federate** — `federate --fail-on` when hub exports are supplied.
 
 The **docs-audit** step (BDL-057 Layer 1) reuses
 `beadloom.doc_sync.audit.run_audit` — the same path `beadloom docs audit` calls —

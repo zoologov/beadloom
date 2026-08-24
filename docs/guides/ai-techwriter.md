@@ -15,8 +15,7 @@ check on `main` is the true enforcement.
 **BDL-050** folds the agent into one consolidated `.github/workflows/ci.yml`: the
 `ai-techwriter` job has `needs: [gate, tests, site-build]`, so it runs **only after**
 the gate + the 3.10–3.13 test matrix + the VitePress site-build are all green (the
-`tests-locale` legs run in parallel with them and are outside that `needs:` set) — a
-broken PR never spends Qwen tokens. The harness now classifies each run into a
+`tests-locale` legs run in parallel with them and are outside that `needs:` set) — a broken PR never spends Qwen tokens. The harness now classifies each run into a
 **verdict** (`ok` / `flagged` / `infra`): a genuine unresolved doc drift (`flagged`)
 blocks the PR, but an infra failure (`infra` — a dead runner / exhausted quota / a
 provider 5xx) PASSES with a loud `::warning::` so it never freezes merges. See
@@ -69,6 +68,22 @@ value is in the DIFFERENCE between it and the UTF-8 `tests` legs, so never
 the matching contexts too, or `main` waits forever for a check that never runs.
 It does not gate `ai-techwriter` (`needs:` stays the portable three), because a
 locale-red PR is already unmergeable via the required checks.
+
+**There is no platform leg, and the absence is a decision with a price on it.**
+A `tests-windows` job carrying the same idea on the platform axis was built in
+BDL-061.39 and withdrawn by the owner in `beadloom-mr2l.64`. Two things made it
+different from the locale rows, and both were measured rather than argued.
+First, it is **not free in wall-clock**: a 2x-billed Windows runner becomes the
+pipeline's critical path at ~16-28 runner-minutes per PR against ~8 for both
+locale rows, roughly tripling PR-to-merge latency. Second, it is **not
+on-thesis for every project**: a container is the default deployment and is
+usually not UTF-8, but a Linux-only product — this one included — has no reason
+to pay for Windows. If your product does run there, add the job **and** the
+matching `--check` context in one change (adding the job alone gates nothing;
+adding the context alone is the lockout), and give it an anti-vacuity probe with
+the second half that is easy to miss: fail the leg when the runner cannot create
+a symbolic link, or every test that needs one skips and the green is carried
+entirely by tests that never needed Windows.
 
 Why `--since <merge-base>`: a fresh CI checkout reindexes from scratch and
 re-baselines the stored `sync_state` to the PR's code, so a plain `sync-check`
@@ -238,16 +253,17 @@ beadloom setup-branch-protection --repo OWNER/NAME    # GitHub; declarative PUT
 ```
 
 This requires a PR to `main` (no direct push) with the consolidated `ci.yml`'s
-**9 check-runs as required status checks** — `gate`, `tests (3.10)`, `tests (3.11)`,
-`tests (3.12)`, `tests (3.13)`, `tests-locale (C)`,
-`tests-locale (en_US.ISO-8859-1)`, `site-build`, `ai-techwriter` (BDL-050 + the
-BDL-061.38 environment dimension). Re-running the command re-settles the same
+**nine check-runs as required status checks** — `gate`, `tests (3.10)`,
+`tests (3.11)`, `tests (3.12)`, `tests (3.13)`, `tests-locale (C)`,
+`tests-locale (en_US.ISO-8859-1)`, `site-build`, `ai-techwriter`
+(BDL-050 + the BDL-061.38 environment dimension; the BDL-061.39 platform
+dimension was withdrawn in `beadloom-mr2l.64`). Re-running the command re-settles the same
 declarative state, so it is safe **as long as every context in the set can go
 green**: under `strict: true` a required check that is red — or that your pipeline
 does not produce at all — leaves the branch unmergeable. In this repository the two
-`tests-locale` contexts are red until bead `beadloom-mr2l.42` lands, which is why
-`main`'s live protection still requires the other seven; use `--check` to state a
-narrower set. Under strict
+`tests-locale` contexts were red until bead `beadloom-mr2l.42` turned them green,
+which is why `main`'s live protection still requires the other seven; use
+`--check` to state a narrower set. Under strict
 trunk-based (`enforce_admins: true`, BDL-049) even the owner integrates via a PR; with
 0 required reviews the solo maintainer still self-merges. See `docs/services/cli.md`
 for the full command + `--check`/`--branch`/`--dry-run` options.

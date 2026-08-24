@@ -28,10 +28,13 @@ from beadloom.graph.rules.types import (
     LayerRule,
     ModuleCoverageRule,
     NodeMatcher,
+    NonBehaviouralNode,
     RequireRule,
     Rule,
+    ScenarioCoverageRule,
     UnregisteredFeatureCandidateRule,
 )
+from beadloom.graph.scenarios import DEFAULT_FEATURE_GLOB
 
 if TYPE_CHECKING:
     import sqlite3
@@ -572,6 +575,118 @@ def _parse_module_coverage_rule(
     )
 
 
+def _parse_scenario_coverage_rule(
+    name: str,
+    description: str,
+    data: dict[str, object],
+    *,
+    severity: str = "warn",
+) -> ScenarioCoverageRule:
+    """Parse the 'scenario_coverage' block of a rule.
+
+    YAML example::
+
+        - name: scenario-coverage
+          description: "behaviour carries an executable claim"
+          scenario_coverage:
+            for: { kind: feature }
+            features: "tests/acceptance/features/**/*.feature"
+            references:
+              - "docs/**/PRD.md"
+            non_behavioural:
+              - node: rule-types
+                reason: "frozen dataclasses; the behaviour is the evaluator's"
+
+    ``reason`` is mandatory on every declaration: an unnamed exclusion is how a
+    gate is quietly switched off (BDL-061 CONTEXT), so a declaration without one
+    is a configuration error rather than a silent pass.
+
+    For the same reason there is exactly ONE way to take a node out of this
+    rule's population, and ``for.exclude`` is not it. An ``exclude`` entry
+    carries no reason, is never reported and never expires, and
+    ``_matcher_description`` does not even print it — so a matcher excluded down
+    to nothing reports only that it selects no node. The error below routes the
+    author to ``non_behavioural``, which requires the reason and reports the
+    declaration when it stops excusing anything.
+
+    Scoped to this rule type deliberately: ``exclude`` is shared by every rule
+    type, and requiring a reason everywhere would turn an adopter's green project
+    red on upgrade for rules this epic never touched. That widening is its own
+    decision with its own migration; this rule type ships in the same release as
+    the requirement, so no adopter has written one yet.
+    """
+    for_data = data.get("for", {"kind": "feature"})
+    if not isinstance(for_data, dict):
+        msg = f"Rule '{name}': scenario_coverage.for must be a mapping"
+        raise ValueError(msg)
+    excluded = for_data.get("exclude")
+    if excluded is not None:
+        listed = excluded if isinstance(excluded, list) else [excluded]
+        names = ", ".join(str(item) for item in listed)
+        msg = (
+            f"Rule '{name}': scenario_coverage.for.exclude ({names}) carries no "
+            f"reason and is never reported — declare each node under "
+            f"scenario_coverage.non_behavioural with a 'reason' instead, which is "
+            f"reported when it stops excusing anything"
+        )
+        raise ValueError(msg)
+    for_matcher = _parse_node_matcher(for_data, f"Rule '{name}' scenario_coverage.for")
+
+    features = str(data.get("features", DEFAULT_FEATURE_GLOB))
+
+    references_raw = data.get("references", [])
+    if references_raw is None:
+        references_raw = []
+    if not isinstance(references_raw, list):
+        msg = f"Rule '{name}': scenario_coverage.references must be a list"
+        raise ValueError(msg)
+    references = tuple(str(item) for item in references_raw)
+
+    declarations_raw = data.get("non_behavioural", [])
+    if declarations_raw is None:
+        declarations_raw = []
+    if not isinstance(declarations_raw, list):
+        msg = f"Rule '{name}': scenario_coverage.non_behavioural must be a list"
+        raise ValueError(msg)
+    declarations = tuple(
+        _parse_non_behavioural(name, index, entry)
+        for index, entry in enumerate(declarations_raw)
+    )
+
+    return ScenarioCoverageRule(
+        name=name,
+        description=description,
+        for_matcher=for_matcher,
+        features=features,
+        references=references,
+        non_behavioural=declarations,
+        severity=severity,
+    )
+
+
+def _parse_non_behavioural(
+    rule_name: str, index: int, entry: object
+) -> NonBehaviouralNode:
+    """Parse one ``non_behavioural`` declaration, both fields mandatory."""
+    where = f"Rule '{rule_name}': scenario_coverage.non_behavioural[{index}]"
+    if not isinstance(entry, dict):
+        msg = f"{where} must be a mapping with 'node' and 'reason'"
+        raise ValueError(msg)
+    node = str(entry.get("node", "")).strip()
+    reason = str(entry.get("reason", "")).strip()
+    if not node:
+        msg = f"{where} must name a 'node'"
+        raise ValueError(msg)
+    if not reason:
+        msg = (
+            f"{where} (node '{node}') must carry a 'reason' — a node excused from "
+            f"scenario coverage without a stated reason is a check switched off "
+            f"without saying so"
+        )
+        raise ValueError(msg)
+    return NonBehaviouralNode(node=node, reason=reason)
+
+
 def load_rules(rules_path: Path) -> list[Rule]:
     """Parse rules.yml and return validated Rule objects.
 
@@ -627,7 +742,12 @@ def load_rules(rules_path: Path) -> list[Rule]:
         # The advisory ``unregistered_feature_candidate`` and ``module_coverage``
         # checks default to "warn" when severity is omitted (they must never fail
         # the build until S3b classifies every module).
-        default_severity = "warn" if (has_unregistered or has_module_coverage) else "error"
+        has_scenario_coverage_block = "scenario_coverage" in rule_data
+        default_severity = (
+            "warn"
+            if (has_unregistered or has_module_coverage or has_scenario_coverage_block)
+            else "error"
+        )
         severity_raw = rule_data.get("severity", default_severity)
         severity = str(severity_raw)
         if severity not in VALID_RULE_SEVERITIES:
@@ -644,6 +764,7 @@ def load_rules(rules_path: Path) -> list[Rule]:
         has_forbid = "forbid" in rule_data
         has_layers = "layers" in rule_data
         has_check = "check" in rule_data
+        has_scenario_coverage = "scenario_coverage" in rule_data
 
         rule_type_count = sum(
             [
@@ -656,6 +777,7 @@ def load_rules(rules_path: Path) -> list[Rule]:
                 has_check,
                 has_unregistered,
                 has_module_coverage,
+                has_scenario_coverage,
             ]
         )
         if rule_type_count != 1:
@@ -663,7 +785,7 @@ def load_rules(rules_path: Path) -> list[Rule]:
                 f"rules.yml: rule '{name}' must have exactly one of "
                 f"'deny', 'require', 'forbid_cycles', 'forbid_import', "
                 f"'forbid', 'layers', 'check', 'unregistered_feature_candidate', "
-                f"or 'module_coverage'"
+                f"'module_coverage', or 'scenario_coverage'"
             )
             raise ValueError(msg)
 
@@ -718,6 +840,14 @@ def load_rules(rules_path: Path) -> list[Rule]:
                 raise ValueError(msg)
             rules.append(
                 _parse_module_coverage_rule(name, description, mc_data, severity=severity)
+            )
+        elif has_scenario_coverage:
+            sc_data = rule_data["scenario_coverage"]
+            if not isinstance(sc_data, dict):
+                msg = f"Rule '{name}': 'scenario_coverage' must be a mapping"
+                raise ValueError(msg)
+            rules.append(
+                _parse_scenario_coverage_rule(name, description, sc_data, severity=severity)
             )
         else:
             cycle_data = rule_data["forbid_cycles"]

@@ -140,6 +140,12 @@ Check doc-code synchronization.
 
 Returns list of sync pairs with `status`, `ref_id`, `doc_path`, `code_path`, `reason`, and optional `details`.
 
+Since BDL-061 S4b the result also carries `incomplete` rows — a document that is
+current and does not carry the shape its kind requires (`missing_sections`,
+`section_not_in_use`). They are `warn`: reported, never blocking. The tool
+resolves the required sections from the project's composed doc templates, so an
+`ref_id`-less call is the honest whole-project view.
+
 #### get_status
 
 Get index statistics.
@@ -338,7 +344,7 @@ The **refusing completion gate**: run `beadloom ci` (+ tests) before closing a b
 }
 ```
 
-Runs the `beadloom ci` gate (reindex → lint → sync-check → docs audit → config-check → doctor, via `application/gate.run_ci_gate`) and, when `run_tests` is true (the default), the test suite. **On PASS** it closes the bead (`bd close --suggest-next`), best-effort flips the bead's row in the epic's `ACTIVE.md` bead-status table to `✓ done`, and returns `{ "status": "PASS", "bead", "findings": [], "next": ..., "active_updated": <bool> }`. **On FAIL** it does NOT close the bead and leaves the table untouched — it returns `{ "status": "FAIL", "bead", "findings": [...] }` so the agent must fix the findings first. Set `run_tests=false` for a fast gate-only check (skips the suite). This gate is **advisory-strong**, not the true enforcement point — `beadloom ci` in CI remains the single source of true enforcement.
+Runs the `beadloom ci` gate (reindex → lint → sync-check → docs audit → docs-quality → config-check → doctor, via `application/gate.run_ci_gate`) and, when `run_tests` is true (the default), the test suite. **On PASS** it closes the bead (`bd close --suggest-next`), best-effort flips the bead's row in the epic's `ACTIVE.md` bead-status table to `✓ done`, and returns `{ "status": "PASS", "bead", "findings": [], "next": ..., "active_updated": <bool> }`. **On FAIL** it does NOT close the bead and leaves the table untouched — it returns `{ "status": "FAIL", "bead", "findings": [...] }` so the agent must fix the findings first. Set `run_tests=false` for a fast gate-only check (skips the suite). This gate is **advisory-strong**, not the true enforcement point — `beadloom ci` in CI remains the single source of true enforcement.
 
 #### checkpoint
 
@@ -382,7 +388,7 @@ Handler functions (sync, testable without MCP transport):
 - `handle_get_context(conn, *, ref_id, depth=2, max_nodes=20, max_chunks=10)` -- context bundle
 - `handle_get_graph(conn, *, ref_id, depth=2)` -- subgraph
 - `handle_list_nodes(conn, kind=None)` -- list nodes
-- `handle_sync_check(conn, ref_id=None, project_root=None)` -- sync status
+- `handle_sync_check(conn, ref_id=None, project_root=None)` -- sync status, including the `incomplete` document-shape rows when `project_root` is given (the required sections are resolved from that root, so they cannot be resolved without one)
 - `handle_get_status(conn)` -- index statistics
 - `handle_update_node(conn, project_root, *, ref_id, summary=None, source=None)` -- update node
 - `handle_mark_synced(conn, project_root, *, ref_id)` -- mark synced

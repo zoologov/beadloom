@@ -98,7 +98,10 @@ def test_ci_has_the_declared_jobs() -> None:
     Asserted as an exact set: a job added here without a matching required
     status-check context is a check that gates nothing, and one removed is a
     required context that never reports (lockout). Both directions are caught by
-    ``test_required_contexts_match_ci_yml_check_runs``.
+    ``test_required_contexts_match_ci_yml_check_runs``, which is what made the
+    ``tests-windows`` withdrawal (``beadloom-mr2l.64``) a two-sided edit rather
+    than a job deletion — see ``tests/test_ci_windows_dimension.py`` for the
+    decision and its price.
     """
     jobs = _load(CI)["jobs"]
     assert isinstance(jobs, dict)

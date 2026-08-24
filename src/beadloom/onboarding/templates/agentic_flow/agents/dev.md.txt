@@ -26,6 +26,35 @@ REPEAT   → next case
 ```
 Never write production code without a failing test first. Write only enough test to fail, only enough code to pass, and refactor only on green.
 
+### BDD — behaviour is stated as an executable scenario (MANDATORY for behaviour-bearing work)
+
+Acceptance criteria are **Gherkin scenarios that run**, not checkboxes somebody ticks. The
+`.feature` file is the **source of truth**: it holds the text, and the PRD/BRIEF states the
+intent and references the scenario by name. An executable artifact cannot silently lie; a
+generator between a statement and an executable is a synchronisation problem of its own.
+
+```gherkin
+@bead:<bead-id> @node:<ref-id>
+Feature: <the capability, in the user's words>
+
+  Scenario: <what an observer can see happen>
+    Given <the state the world is in>
+    When <the one thing that happens>
+    Then <the observable consequence>
+```
+
+- Scenarios live in `tests/acceptance/features/`, step implementations in
+  `tests/acceptance/steps/` (the default; a project may configure another location).
+- **Every scenario names its bead and its node** with the `@bead:` and `@node:` tags. A tag on
+  `Feature:` or `Rule:` is inherited, so one file binds to a node once. `beadloom lint` reports
+  a scenario that names no bead and a node no scenario binds to (`scenario-coverage`, warn).
+- **Write the scenario before the unit test**, and make it fail first — a scenario that has
+  never been red is a claim, not a check.
+- **Non-behavioural work says so.** A chore, a pure data model or a vocabulary module has no
+  observable behaviour; declare it in the rule's `non_behavioural:` list with a **reason**
+  instead of writing ceremony. An absence with a stated reason is a decision; an absence
+  without one is a gap.
+
 ### Architecture discipline (discover, don't assume)
 - The project follows a **declared architecture** (DDD layers, FSD slices, …). Discover it from the graph (`beadloom graph` / `ctx`), not from memory or hardcoded paths.
 - Respect **dependency direction + boundaries** for that methodology. Place new code in the layer that owns the responsibility; if unsure, run `beadloom why`/`ctx` to find the right home.
@@ -79,6 +108,49 @@ This is the signal the review + tech-writer roles rely on — `sync-check` can r
 ### Return contract (when launched by the coordinator)
 Return ONLY a 2-3 line summary: `"BEAD-XX done. N tests added. Files: <list>."` Write all detail to bead comments. Do NOT return diffs or verbose test output.
 
+
+<!-- Shared by every role. Edit once, here — not in a role file. -->
+
+## Writing standard (every role that writes a document)
+
+The text you ship is part of the deliverable. It applies to the documents you
+produce — PRD, RFC, CONTEXT, PLAN, BRIEF, SPEC, README, review report, bead
+comment — not only to the ones the tech-writer touches.
+
+**What is checkable, and is checked.** `beadloom lint` reports these; do not wait
+for it to tell you.
+
+- **A goal carries a measurable clause.** "Make it better" is not a goal; "the
+  core shrinks from 440 to 376 lines" is.
+- **A decision carries its reason, and the reason explains *why*** rather than
+  restating the decision. "We chose X because X is better" is not a reason.
+- **A risk carries a concrete mitigation.** "Monitor it" is not a mitigation.
+- **An approved document carries no `Pending` open question.** A plan approved
+  with its design undecided is a plan that has not been made.
+- **No template placeholder survives** — `[Name]`, `Criterion 1`, `TBD`. An
+  artifact that was scaffolded, looks right and was never filled in is the most
+  expensive kind of wrong.
+
+**What is not checkable, and is still required.**
+
+- **An open question states both sides of the trade-off**, not only the side
+  you took. A non-goal names what was rejected **and why**.
+- **Claims carry numbers and the word *measured*, not adjectives.** "Much
+  faster" is not a result; "755 ms, measured on a full reindex" is.
+- **No filler and no framing** — no bureaucratic padding, no apologetic or
+  persuasive section intros. Headings are neutral and descriptive.
+- **Full sentences.** Do not stitch two independent clauses with a semicolon;
+  write two sentences.
+- **Consistent terminology** across a document, and unambiguous pronouns.
+- **No translationese or calque**, and no clipped slang abbreviation — write the
+  full word. Do not switch languages mid-sentence: Latin script is for genuine
+  tool, method and command terms only.
+- **Every claim is verified against the code.** Describe what exists, never what
+  you assume it does.
+- **Lines wrap around 95 columns**, so a diff stays reviewable.
+
+**The document language is configuration.** It comes from `language:` in
+`.beadloom/flow.yml`, not from this file and not from your preference.
 <!-- overlay:ddd — Domain-Driven Design layer/boundary rules + the beadloom annotation vocabulary. -->
 ## ARCHITECTURE (Domain-Driven Design)
 

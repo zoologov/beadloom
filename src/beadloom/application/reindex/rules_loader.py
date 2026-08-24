@@ -42,7 +42,7 @@ def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
 
     Supports all v3 rule types: DenyRule, RequireRule, CycleRule,
     ImportBoundaryRule, ForbidEdgeRule, LayerRule, CardinalityRule,
-    UnregisteredFeatureCandidateRule, ModuleCoverageRule.
+    UnregisteredFeatureCandidateRule, ModuleCoverageRule, ScenarioCoverageRule.
     """
     from beadloom.graph.rule_engine import (
         CardinalityRule,
@@ -53,6 +53,7 @@ def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
         LayerRule,
         ModuleCoverageRule,
         RequireRule,
+        ScenarioCoverageRule,
         UnregisteredFeatureCandidateRule,
     )
 
@@ -153,6 +154,23 @@ def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
         if rule.exempt:
             rule_def["exempt"] = list(rule.exempt)
         return ("module_coverage", rule_def)
+
+    if isinstance(rule, ScenarioCoverageRule):
+        rule_def = {
+            "for": _serialize_node_matcher(rule.for_matcher),
+            "features": rule.features,
+        }
+        if rule.references:
+            rule_def["references"] = list(rule.references)
+        if rule.non_behavioural:
+            # Stored so the indexed rule is the WHOLE rule: a node excused from
+            # scenario coverage is part of what the rule currently means, and a
+            # reader of the `rules` table must not see a stricter rule than the
+            # one that runs (the same reasoning as `forbid_import.exempt`).
+            rule_def["non_behavioural"] = [
+                {"node": d.node, "reason": d.reason} for d in rule.non_behavioural
+            ]
+        return ("scenario_coverage", rule_def)
 
     # Should never happen with known Rule types, but guard against future additions.
     msg = f"Unknown rule type: {type(rule).__name__}"

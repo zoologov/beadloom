@@ -7,7 +7,9 @@
 #        site-build ─┘   └─(any red)──► ai-techwriter skipped → PR blocked
 #      tests-locale ──(the environment dimension; not in ai-techwriter's needs)
 #
-# gate / tests / tests-locale / site-build run in parallel on GitHub-hosted runners;
+# gate / tests / tests-locale / site-build run in parallel on GitHub-hosted
+# runners; there is no platform dimension — it was built, priced and declined
+# (beadloom-mr2l.64; the reasoning is where the job used to be, below);
 # ai-techwriter (self-hosted VPS where Goose + the API key live) has
 # `needs: [gate, tests, site-build]` so a broken PR never spends Qwen tokens.
 # deploy-site.yml stays the ONLY thing on push:main (main is green by
@@ -248,6 +250,49 @@ jobs:
           # from this leg and take the dimension's reach with them.
           BEADLOOM_REQUIRE_LANGUAGE_GRAMMARS: "1"
         run: uv run pytest
+
+  # ---------------------------------------------------------------------- #
+  # THE PLATFORM DIMENSION IS NOT SHIPPED — built and priced in BDL-061.39,
+  # declined by the owner in beadloom-mr2l.64 (2026-08-24). The decision is
+  # recorded here and not only in the bead, because the question a reader
+  # arrives with is "why does this pipeline vary the locale but not the
+  # operating system?", and they arrive with it while reading this file.
+  #
+  # THE REASON IS COST, and .39 measured it rather than estimating it. A
+  # `windows-latest` leg runs this suite in ~8-14 minutes (~6100 tests doing a
+  # great deal of tempdir + sqlite work, which is where Windows is slowest) and
+  # GitHub bills Windows at 2x => ~16-28 runner-minutes per PR, against ~8 for
+  # both locale rows together. Unlike those rows it is not free in wall-clock
+  # either: the ubuntu legs finish in ~4 minutes, so the Windows leg becomes the
+  # pipeline's critical path and PR-to-merge latency roughly triples. Windows is
+  # not in this project's target audience, so the dimension is not bought.
+  #
+  # WHAT IS THEREFORE NOT CLAIMED, said plainly rather than left to be inferred
+  # from a green pipeline: nothing in this repository has ever executed on
+  # Windows, and by this decision nothing will. `src/` contains no
+  # `sys.platform` and no `os.name` branch anywhere, so the product is either
+  # genuinely platform-neutral or has simply never been asked — and an all-green
+  # ubuntu pipeline cannot tell those two states apart. Unverified BY DECISION
+  # (a third state, next to verified and next to known-broken): the backslash
+  # refusal in application/guards/paths.py, which exists FOR Windows harnesses
+  # and refuses the spelling every one of them produces (beadloom-mr2l.60);
+  # `Path.resolve`, drive-letter parsing and case-folding; sqlite/WAL file
+  # locking, temp-dir cleanup over open handles, and the tree-sitter wheels.
+  #
+  # WHAT THIS DECISION DOES NOT UNDO, because it was never about the runner: the
+  # six guard tests that carried `skipif(sys.platform == "win32")` are gated on
+  # a MEASURED symlink capability (tests/symlink_capability.py) and run on any
+  # runner that holds it, and tests/test_windows_dimension.py fails the suite if
+  # a platform skip is ever re-added unjudged. Both hold with or without a leg.
+  #
+  # RE-ADDING IT LATER: the job, its anti-vacuity probe — a Windows runner that
+  # cannot create a symbolic link would capability-skip exactly the rows the leg
+  # is bought for and report green on the ~6000 that never needed Windows — and
+  # the sixteen rows that execute that probe are recoverable verbatim from
+  # commit 98bcb0d. Restore them together, and put `tests-windows` back into
+  # DEFAULT_STATUS_CHECK_CONTEXTS in the same change: a required context no
+  # pipeline produces is a branch nobody can merge.
+  # ---------------------------------------------------------------------- #
 
   # ---------------------------------------------------------------------- #
   # site-build — regenerate + build the VitePress site on every PR (G3, closes

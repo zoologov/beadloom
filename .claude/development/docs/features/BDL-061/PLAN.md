@@ -201,15 +201,46 @@ role templates; `templates.md` acceptance criteria become scenarios and BRIEF ga
 non-behavioural decision.
 
 **Done when:**
-- [ ] A behaviour-bearing node with no scenario is reported; a scenario naming no bead is reported
-- [ ] A PRD-referenced scenario absent from the suite is reported
-- [ ] A document missing a required section is reported; a project overlay can add sections
-- [ ] A goal without a measurable clause, a decision without a reason, a risk without a
+- [x] A behaviour-bearing node with no scenario is reported; a scenario naming no bead is
+      reported — 35 uncovered `feature` nodes on this repository, and the scenario legs report a
+      missing `@bead:`, a `@node:` the graph does not contain, an unreadable file and a file
+      declaring no scenario
+- [x] A PRD-referenced scenario absent from the suite is reported — 33 on this repository, all
+      from BDL-061's own PRD, with the reference globs reading 52 documents so a new one is found
+- [x] A document missing a required section is reported; a project overlay can add sections —
+      `incomplete` / `missing_sections`, peer-relative by majority so a convention is reported
+      once against the KIND with its ratio; a `.beadloom/flow/docs/<kind>.md` fragment that
+      appends `## Runbook` makes `Runbook` required by the same act
+- [x] A goal without a measurable clause, a decision without a reason, a risk without a
       mitigation, a `Pending` question in an `Approved` document, and an unfilled placeholder
-      are each reported
-- [ ] All four roles carry the same writing standard, and it is selectable by language
-- [ ] A mutation target outside the configured source paths is reported
-- [ ] A chore may declare itself non-behavioural with a named reason and is accepted
+      are each reported — 154 / 0 / 0 / 2 / 0 over 235 / 269 / 138 / 69 / 243 read
+- [x] All four roles carry the same writing standard, and it is selectable by language — the
+      shared `core:_writing` layer, `en` and `ru` shipped
+- [x] A mutation target outside the configured source paths is reported — plus one that is not
+      on disk and one holding no file in an indexed language, all `warn`, carried by
+      `config-check` because Beadloom owns no mutation runner to hang a step on
+- [x] A chore may declare itself non-behavioural with a named reason and is accepted — and a
+      live declaration now states how many of how many nodes it excused, because accepted in
+      SILENCE improves the coverage fraction without saying the denominator moved
+
+**Three limits, stated rather than left to be discovered.** Each is a property of the design.
+
+- `measurable-goal` is closer to a numeral detector than a measurability detector: review `.15`
+  measured roughly 1-in-18 precision on a sample of 18 and found it flags
+  `beadloom lint --strict fails (non-zero)`, the exit-code form standing note #148 demands. Read
+  the count, not the row. The re-scope is `beadloom-mr2l.65` and the owner's decision is to
+  re-scope before paying the debt.
+- Windows is unverified by decision (`.64`): the leg was priced at ~16-28 runner-minutes per pull
+  request and roughly 3x PR-to-merge latency, and the Windows verdict is composed from `ntpath`
+  plus a refusal proved branchless rather than observed on a runner.
+- 56 of 243 documents (23%) are in a kind no content check enters — BRIEF, PLAN, SUMMARY — by
+  template construction. **The decision is open**, not made here: the documentation reports the
+  measured state and names it as undecided rather than converting an accident into a policy.
+
+**Two mechanisms ship inert on this repository**, said out loud because a green count is not a
+checked count: `rules.yml` declares no `non_behavioural` entry and no `for.exclude` on the
+`scenario_coverage` rule, so those three findings are proved by unit rows and acceptance
+scenarios and by nothing on this corpus.
 
 ### S5 — TO-BE / AS-IS / WORKING (`.17`–`.20`)
 

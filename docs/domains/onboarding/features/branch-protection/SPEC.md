@@ -24,11 +24,33 @@ green PR. `BranchProtectionRequest` captures the exact `gh api` call — endpoin
 deterministic JSON payload, and arguments — so it is inspectable and mockable;
 `apply_branch_protection` sends it through a `GhRunner`.
 
+## The default set, and what may change it
+
+`DEFAULT_STATUS_CHECK_CONTEXTS` holds **nine** contexts — the check-runs of the
+consolidated `ci.yml` (`gate`, the four `tests (3.x)` matrix legs, the two
+`tests-locale (...)` environment-dimension legs, `site-build`, `ai-techwriter`).
+It is the SCAFFOLDED DEFAULT that `setup-branch-protection` PUTs in any
+repository, not a description of any repository's live protection.
+
+The set has grown and shrunk, and the shrink is the instructive one. BDL-061.39
+added a tenth context, `tests-windows`, for a platform dimension; the owner
+withdrew it in `beadloom-mr2l.64` on a measured cost — ~16-28 runner-minutes per
+pull request, and, unlike the locale legs, the pipeline's critical path, roughly
+tripling PR-to-merge latency for a platform outside this project's audience. A
+withdrawal moves the `ci.yml` job and this constant in ONE change, in either
+direction: a job with no context is a check that gates nothing, and a context
+with no job is a check-run that never reports.
+
 ## Invariants
 
 - A required status-check context must match a real check-run name exactly and
   must not be produced by a path-filtered workflow (it would not run on every PR
   under `strict`, stalling PRs).
+- Every declared context is produced by a job that exists, and every job that
+  exists is a declared context. Both directions are enforced against the real
+  `ci.yml` by `tests/test_ci_consolidated_structure.py::test_required_contexts_
+  match_ci_yml_check_runs`; the second direction is what the withdrawal above
+  exercised.
 - `enforce_admins: true` with zero required reviews — strict trunk-based, but
   the owner can still self-merge.
 - The operation is safe to re-run.

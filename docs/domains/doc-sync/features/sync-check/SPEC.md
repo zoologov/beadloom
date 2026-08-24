@@ -73,6 +73,7 @@ print `ok`:
 | `stale` | `hash_changed`, `symbols_changed`, `hash_changed_since_head`, `untracked_files`, `missing_modules` | compared and drifted | 2 |
 | `missing` | `doc_missing`, `code_missing`, `declared_doc_missing` | the thing to check is not there | 2 |
 | `unverified` | `no_baseline` | there was nothing to compare against | 0, reported by name |
+| `incomplete` | `missing_sections`, `section_not_in_use` | the document is current and does not carry the shape its kind requires | 0, reported by name |
 
 Every result also carries `baseline` — `index`, `git:HEAD` or `none` — so a green
 result says what it was green against (BDL-UX #175).
@@ -87,6 +88,29 @@ it.
 
 `unverified` does not block, and is never counted as fresh. `beadloom ci` prints
 the sync-check step as **WARN** with the count, rather than `PASS`.
+
+`incomplete` does not block either, and for a different reason: it is a NEW
+check (BDL-061 S4b) and every new check ships as `warn`, so no adopter's green
+project turns red on upgrade. **It has no counter in the `--json` summary**, so
+`ok + stale + missing + unverified + unchecked` does not sum to `total` when any
+row is incomplete: the rows are in `pairs` and the rich output prints each one,
+but a machine consumer reading only the summary does not see them. Measured on
+this repository, 2026-08-24: `total 326 = 240 ok + 82 stale + 4 incomplete`, and
+the summary accounts for 322. Review `beadloom-mr2l.15` M5 filed it and it is
+open. It is the only verdict here about a document's
+STRUCTURE rather than its currency — the five reasons above all compare content,
+and none of them can see a README edited down to a title. The verdict is never
+written to `sync_state`: the status column would then mean two different things,
+and the check that produces it reads without touching what it reads.
+
+Phase 5 runs only when the caller passes `section_requirements`. The required
+sections are derived from the composed doc templates, which live in the
+`onboarding` PEER domain, so they are computed in the application layer and
+injected. The four surfaces that REPORT freshness pass them in (the CI gate,
+`beadloom sync-check`, the MCP `sync_check` tool, the TUI dashboard); `sync-update`
+and the site publisher deliberately do not, because re-baselining a pair cannot
+fix a missing section and publishing a site does not judge one. See
+[`doc-shape`](../doc-shape/SPEC.md).
 
 ### Where the baseline lives
 

@@ -55,7 +55,11 @@ class TestPayload:
         """BDL-050: the default required checks are the consolidated ``ci.yml``
         job check-run names — ``gate``, the four ``tests (3.x)`` matrix legs,
         the two ``tests-locale (...)`` environment-dimension legs (BDL-061.38),
-        ``site-build`` and ``ai-techwriter``. All run on EVERY PR (no ``paths:``
+        ``site-build`` and ``ai-techwriter``. Nine, not the ten of BDL-061.39:
+        the ``tests-windows`` platform leg was withdrawn by owner decision in
+        ``beadloom-mr2l.64`` for cost, and the job and the context left together
+        because either one alone is a lockout or a check that gates nothing.
+        All run on EVERY PR (no ``paths:``
         filter — the matrix is un-filtered now), so requiring them under
         ``strict`` never stalls a PR. They must match ``ci.yml``'s job names +
         matrix legs EXACTLY."""

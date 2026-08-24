@@ -10,9 +10,18 @@ Why it exists (BDL-UX #172, BDL-061.48): a rule that cannot match is
 indistinguishable from a rule that passed. Two of this project's own twelve
 rules were incapable of firing for months while ``lint --strict`` printed
 ``12 rules, 0 violations``. ``beadloom-mr2l.43`` closed that for
-``forbid_import`` only; this module closes it for the remaining eight rule
-types, so ``N rules evaluated`` stops being a count of rules that looked at
-nothing.
+``forbid_import`` only; this module closes it for the other nine rule types, so
+``N rules evaluated`` stops being a count of rules that looked at nothing.
+
+**The finding and the COUNT are separable, and for two rule types they are
+separated.** ``forbid_import`` and ``scenario_coverage`` state their own liveness
+where the diagnosis is — which glob, which leg — and this module answers the
+other question, *how many of my rules checked nothing*, for every type.
+``scenario_coverage`` is therefore counted here and reported there.
+``forbid_import`` is reported there and not counted here, because its liveness
+channel also carries statements about individual ``exempt`` entries, which the
+SPEC deliberately excludes from ``rules_inert``. That asymmetry is the limit this
+module has not closed, stated rather than left to be discovered.
 
 **What "cannot fire" means per rule type** — the same table appears in
 ``docs/domains/graph/features/rule-engine/SPEC.md``:
@@ -32,6 +41,10 @@ Rule type                        Inert when
 ``check``                        ``for`` selects 0 nodes, or no threshold is set
 ``unregistered_feature_...``     ``for`` selects 0 nodes, or none of them declares a source
 ``module_coverage``              0 candidate modules under ``source_root``
+``scenario_coverage``            the ``features`` glob matches 0 files, which stands the
+                                 WHOLE rule down. A dead ``for`` matcher or ``references``
+                                 glob stands ONE leg down and is not inertness. Counted
+                                 here, reported by :mod:`.scenario_coverage`
 ===============================  =========================================================
 
 Two deliberate boundaries, named rather than left to be discovered:
@@ -43,6 +56,12 @@ Two deliberate boundaries, named rather than left to be discovered:
   cost a second scan and separate two halves of one diagnosis. This module owns
   the shared *shape* of a liveness finding (:func:`liveness_finding`) so the two
   channels cannot drift.
+* ``scenario_coverage`` liveness is REPORTED by :mod:`.scenario_coverage`, per
+  leg, because the finding must name which of the four legs stood down and which
+  glob or matcher did it — and because those legs are decided by files on disk
+  that no index holds. The predicate counted with here is that module's own
+  :func:`~beadloom.graph.rules.scenario_coverage.inert_reason`, not a second copy
+  of it, so the count cannot drift from the control flow it describes.
 * ``deny`` liveness is matcher-based only. An index with **no resolved imports**
   makes every ``deny`` rule inert too, but that is a property of the index, not
   of the rule, and ``lint``'s header already states it (``0 imports resolved``).
@@ -65,6 +84,7 @@ from beadloom.graph.rules.types import (
     ModuleCoverageRule,
     NodeMatcher,
     RequireRule,
+    ScenarioCoverageRule,
     UnregisteredFeatureCandidateRule,
     liveness_finding,
 )
@@ -308,13 +328,37 @@ def _module_coverage_reasons(
 # ---------------------------------------------------------------------------
 
 
+def _scenario_coverage_reasons(
+    rule: ScenarioCoverageRule, project_root: Path | None
+) -> list[str]:
+    """Whether the rule can check anything, asked of the module that owns it.
+
+    The predicate is
+    :func:`~beadloom.graph.rules.scenario_coverage.inert_reason` rather than a
+    copy of it here: this rule's legs are decided by files on disk that no index
+    holds, and a second implementation of "is there a suite" would be free to
+    drift from the control flow it describes.
+
+    Silent without a *project_root*: the globs are rooted at it, so there is
+    nothing to decide rather than nothing to check.
+    """
+    if project_root is None:
+        return []
+    from beadloom.graph.rules.scenario_coverage import inert_reason
+
+    reason = inert_reason(rule, project_root)
+    return [reason] if reason is not None else []
+
+
 def _reasons_for_rule(
     rule: Rule, facts: _GraphFacts, conn: sqlite3.Connection, project_root: Path | None
 ) -> list[str]:
     """Every reason *rule* cannot fire, or an empty list when it can.
 
     ``forbid_import`` is absent by design: :mod:`.evaluators` reports it from the
-    import scan it already runs (see the module docstring).
+    import scan it already runs (see the module docstring). ``scenario_coverage``
+    is present for the COUNT and absent from :func:`evaluate_rule_liveness`,
+    which is the other half of the same boundary.
     """
     if isinstance(rule, DenyRule):
         return _deny_reasons(rule, facts)
@@ -332,6 +376,8 @@ def _reasons_for_rule(
         return _unregistered_reasons(rule, facts)
     if isinstance(rule, ModuleCoverageRule):
         return _module_coverage_reasons(rule, facts, project_root)
+    if isinstance(rule, ScenarioCoverageRule):
+        return _scenario_coverage_reasons(rule, project_root)
     # An unknown-ref_id diagnosis the loader can make about a rule kind this
     # module does not model yet is still worth printing: `validate_rules`
     # computes it, and dropping its return value is how #172 stayed open.
@@ -371,13 +417,29 @@ def inert_rule_names(
     return {rule.name for rule, _ in inert_rules(conn, rules, project_root=project_root)}
 
 
+#: Rule types that report their own liveness, so this module counts them and does
+#: not report them a second time. ``scenario_coverage`` states which LEG stood
+#: down and names the glob that did it, which a generic "cannot fire" cannot; two
+#: findings for one fact is the affirm-it-twice defect of BDL-UX #173, and it
+#: would double the single finding a repointed ``features:`` path is measured
+#: down to.
+_SELF_REPORTING: tuple[type, ...] = (ScenarioCoverageRule,)
+
+
 def evaluate_rule_liveness(
     conn: sqlite3.Connection,
     rules: list[Rule],
     *,
     project_root: Path | None = None,
 ) -> list[Violation]:
-    """Report every rule that cannot fire — one finding per rule, always ``warn``."""
+    """Report every rule that cannot fire — one finding per rule, always ``warn``.
+
+    A rule type that reports its own liveness is skipped here and still counted
+    by :func:`inert_rules`: the count answers *how many of my rules checked
+    nothing*, the finding answers *what exactly stood down*, and only the second
+    is better said by the rule's own module.
+    """
+    reportable = [rule for rule in rules if not isinstance(rule, _SELF_REPORTING)]
     return [
         liveness_finding(
             rule_name=rule.name,
@@ -388,5 +450,5 @@ def evaluate_rule_liveness(
             ),
             remediation=INERT_RULE_HINT,
         )
-        for rule, reason in inert_rules(conn, rules, project_root=project_root)
+        for rule, reason in inert_rules(conn, reportable, project_root=project_root)
     ]

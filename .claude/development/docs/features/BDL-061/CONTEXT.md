@@ -2,7 +2,7 @@
 
 > **Status:** Approved
 > **Created:** 2026-08-22
-> **Last updated:** 2026-08-23
+> **Last updated:** 2026-08-24
 
 ---
 
@@ -85,6 +85,7 @@ Held to the same bar the epic builds. Mechanised where possible (S4), prose wher
 | 2026-08-22 | **A guard is data, not code in a hook.** Declared in `flow.yml`, evaluated by Beadloom, bound by a thin adapter | Portability, testability, and conditions phrased in terms of the graph — the only reason this belongs in Beadloom rather than a shell script |
 | 2026-08-22 | **Strictness is per rule and per work kind; default `warn`** and the warning names what was not checked | An adopter who goes red on upgrade disables everything, and a disabled guard is worse than none |
 | 2026-08-22 | **Every exclusion carries `reason` and `until`**; one with neither is a config error | An unnamed exclusion is how a gate is quietly switched off |
+| 2026-08-24 | **A classification carries a `reason` and deliberately no `until`** (`.13` decision 7, written back here by `.16` after review `.15` m4 measured that it never was), refining the row above | `until` is an exit condition for a DEBT, and `non_behavioural` is not a debt: a vocabulary module does not become behaviour-bearing on a calendar date, so a mandatory date would be a date nobody can choose honestly and every entry would carry a fiction. What keeps the classification from becoming the quiet switch-off the row above forbids is a different mechanism: a declaration that excuses nothing is itself a finding, and a live one prints how many of how many nodes it excused, so the denominator cannot shrink in silence. `for.exclude`, which carries neither a reason nor a report, is REJECTED on that rule type for exactly the reason the row above gives |
 | 2026-08-22 | **`skip` is a first-class outcome and always says why** | A guard that silently does not apply is indistinguishable from one that passed |
 | 2026-08-22 | **Guards are read-only**, which requires closing #147 first | A check that writes to the artifact it checks cannot be trusted about it |
 | 2026-08-22 | **S2 (fix the lying checks) runs first** | S3's acceptance criterion is deleting the rules those bugs forced into the prose; it cannot be met earlier |
@@ -155,6 +156,15 @@ defect as BDL-UX #171: one identifier, two sources of truth.
    declared surface a green result actually covered, and make anything that cannot fire report
    itself. S2 fixed three NAMED checks (#142, #146, #147) and left the class open: `.6` measured
    seven further false-greens and `.7` an eighth, filed as #173, #174, #175 and beads `.45`–`.51`.
+8. **CAPTURE, DON'T RE-RUN** — when a run reports a failure, read the name out of *that* run's
+   output. Re-running to inspect it destroys the identity of anything intermittent, and an
+   intermittent failure is the one most worth naming. The coordinator did this three times in
+   one session before writing it down; each time the finding evaporated. Save the output to a
+   file and read the file.
+9. **TRUE HERE IS NOT TRUE** — a fact that is correct on this repository *by coincidence* reads
+   as verified by every check, review and dogfood run. Every adopter's `CLAUDE.md` stated
+   Beadloom's version as the project's own for four slices, because we *are* Beadloom (#183).
+   Prove anything adopter-facing against `tests/adopter_project.py`, never against this tree.
 
 ### Retired in S2
 
@@ -266,9 +276,68 @@ constraint forbids), and **nothing is recorded** — the downgrade follows from 
 state rather than from a stored verdict history, because a check that writes on every run to keep
 one would be BDL-UX #147/#189 in the command whose job is to look without touching.
 
+## What S4 delivered, and what it did not
+
+S4 delivered the owner's second original request: acceptance criteria are executable Gherkin,
+and the shape and quality of a planning document are checkable claims rather than conventions
+written down nowhere. Measured on this repository with `--json` and exit codes, 2026-08-24:
+
+- `scenario-coverage` reports **68** findings — 35 `feature` nodes with no bound scenario and 33
+  scenarios our own PRD names that do not exist. The population is the honest one
+  (`for: {kind: feature}` selects all 40 declared feature nodes, 5 of them covered); a hand-picked
+  list would report
+  0 by construction. Repointing `features:` at a directory that does not exist takes the number
+  to **1**, and that 1 is the liveness finding naming the dead glob — the proof the rule cannot
+  be silently zeroed by moving a path.
+- The 19 scenarios in 6 `.feature` files **run** under `pytest-bdd`, 0 skipped, and a test binds
+  the executed count to the project's own parser count, so a seventh file with no step module
+  reddens instead of counting as coverage.
+- The five section-quality checks read real populations: `measurable-goal` 154 over 235,
+  `pending-in-approved` 2 over 69, and 0 over 269 / 138 / 243 for the other three. Each of the
+  three zero rows was shown to fire on a real document of this repository under one
+  reverse-editable edit, so it is a checked green rather than a vacuous one.
+- **56 of 243 documents (23%) are in a kind no content check enters** — BRIEF 11, PLAN 42,
+  SUMMARY 3 — while the global `checks_that_read_nothing` read `()` throughout. The global count
+  is an OR over the corpus and structurally cannot see that; per-kind coverage can.
+
+Three limits are stated in the shipped documentation rather than omitted, because each is a
+property of the design and not a bead waiting to be done:
+
+- **`measurable-goal` is closer to a numeral detector than a measurability detector, and its
+  individual findings are not yet trustworthy.** Review `.15` measured roughly 1-in-18 precision
+  on a sample of 18 and found it flags `beadloom lint --strict fails (non-zero)`, which is
+  exactly the exit-code form standing note #148 demands. The count is a real statement about a
+  corpus; a row is not yet actionable. The owner's decision is to re-scope the criterion before
+  paying the debt — `beadloom-mr2l.65` carries it — because inserting numerals into goals that
+  are already checkable would satisfy the regex and improve nothing.
+- **Windows is unverified by decision.** `.64` withdrew the CI leg on a measured cost (~16-28
+  runner-minutes and roughly 3x PR-to-merge latency) and the Windows verdict for the flow guards
+  is composed from `ntpath` plus a refusal proved branchless, never observed on a runner. The
+  flow-guards SPEC says so under its own heading, and nothing elsewhere in the documentation
+  implies Windows support.
+- **Whether BRIEF, PLAN and SUMMARY belong inside the four content checks is open.** They read
+  zero by template construction, not by accident of content. `.66` deliberately declined to
+  write "BRIEF is outside these four checks" into the SPEC, on the grounds that it would convert
+  an accident into a decision on no authority, and that judgement stands: the documentation
+  reports the measured state and names the decision as open.
+
+Two mechanisms ship **inert on this repository**, stated rather than implied by a green count:
+this repo's `rules.yml` declares no `non_behavioural` entry and no `for.exclude` on the
+`scenario_coverage` rule, so the excused-population line, the dead-declaration finding and the
+`exclude` rejection are proved by unit rows and by acceptance scenarios, and by nothing on this
+corpus.
+
 ## Current Phase
 
-- **Phase:** Development — S1, S2, S2b and S3 complete; S4 next
-- **Current bead:** `.12` closes S3; `.13` opens S4. Live status is in ACTIVE.md and the tracker
-- **Blockers:** none. `.42` (the locale legs' first run) is open, which is why the two
-  `tests-locale` contexts are not yet part of `main`'s live protection — see ACTIVE.md
+- **Phase:** Development — S1, S2, S2b, S3 and S4 complete; S5 next
+- **Current bead:** `.16` closes S4; `.17` opens S5. Live status is in ACTIVE.md and the tracker
+- **Blockers:** none. `main`'s live protection still requires the seven pre-`.38` contexts while
+  the scaffolded default declares nine, so `setup-branch-protection` is not re-run here until
+  every declared context is observed green — see ACTIVE.md
+- **Open after S4, and deliberately unresolved rather than decided in prose:** whether the
+  BRIEF, PLAN and SUMMARY templates gain the rows the four content checks read, or are placed
+  outside those checks. 56 of 243 documents (23%) are in a kind no content check enters. Both
+  sides have a cost: giving the templates a Goal and a Risks table makes every `bug`, `task` and
+  `chore` document carry sections most of them have nothing to put in, and declaring the kinds
+  out of scope makes the exclusion permanent for the document kind the majority of work uses.
+  The measurement is printed by `docs quality`; the decision is the owner's

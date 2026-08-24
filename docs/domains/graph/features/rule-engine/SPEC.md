@@ -21,7 +21,7 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 
 ### Purpose
 
-Enforce architectural constraints declaratively. Rules are defined in a YAML file and evaluated against the graph database (nodes, edges, code_imports, code_symbols, file_index, and sync_state tables). **Nine** rule types exist — `load_rules` has dispatched nine since BDL-051 S3a; this table listed seven until BDL-061.48 counted them against the loader:
+Enforce architectural constraints declaratively. Rules are defined in a YAML file and evaluated against the graph database (nodes, edges, code_imports, code_symbols, file_index, and sync_state tables). **Ten** rule types exist — `load_rules` dispatched nine from BDL-051 S3a until BDL-061 S4 added `scenario_coverage`; this table listed seven until BDL-061.48 counted them against the loader:
 
 | Type | Keyword | Semantics |
 |------|---------|-----------|
@@ -34,6 +34,7 @@ Enforce architectural constraints declaratively. Rules are defined in a YAML fil
 | **cardinality** | `check` | Enforce complexity limits per node |
 | **unregistered_feature_candidate** | `unregistered_feature_candidate` | Flag substantial domain-only modules that model no feature |
 | **module_coverage** | `module_coverage` | Require every `src/` module to be a tracked node or explicitly exempt |
+| **scenario_coverage** | `scenario_coverage` | Bind behaviour-bearing nodes to executable scenarios, both ways |
 
 ### Constants
 
@@ -161,7 +162,9 @@ A blanket `from: "*" / to: "*"` entry therefore cannot hide either: it suppresse
 
 #### Rule liveness (a rule that cannot fire)
 
-**A rule that cannot match is indistinguishable from a rule that passed.** Both contribute `0` violations and `1` to `N rules evaluated`. Every rule type therefore reports its own inertness instead of counting as clean — `rules/liveness.py` for the eight matcher/graph-based types, `evaluate_import_boundary_rules` for `forbid_import` (whose diagnosis falls out of the import scan it already runs).
+**A rule that cannot match is indistinguishable from a rule that passed.** Both contribute `0` violations and `1` to `N rules evaluated`. Every rule type therefore reports its own inertness instead of counting as clean — `rules/liveness.py` for the eight matcher/graph-based types, `evaluate_import_boundary_rules` for `forbid_import` (whose diagnosis falls out of the import scan it already runs), and `scenario_coverage.py` for `scenario_coverage` (whose legs are decided by files on disk that no index holds).
+
+**Reporting a rule and counting it are two questions, and for `scenario_coverage` two modules answer them.** The finding says *what stood down and which glob did it*; `LintResult.rules_inert` says *how many of my rules checked nothing*. `liveness.py` counts `scenario_coverage` through that module's own `inert_reason` predicate — not a second copy of it — and does not report it a second time. Until BDL-061.66 the count had no branch for the type at all: `13 rules evaluated, 0 inert` printed over a rule that had stood all four legs down.
 
 **What "cannot fire" means, per rule type.** This table is the contract: a liveness check narrower than the invariant it names is the defect this section exists to close (BDL-UX #172, BDL-061.48).
 
@@ -176,6 +179,73 @@ A blanket `from: "*" / to: "*"` entry therefore cannot hide either: it suppresse
 | `check` (cardinality) | its `for` selects **0** nodes, **or** no threshold is set at all (`max_symbols`, `max_files` and `min_doc_coverage` all unset), so nothing is compared | `liveness.py` |
 | `unregistered_feature_candidate` | its `for` selects **0** nodes, or none of the nodes it selects declares a `source`, so it has no files to inspect | `liveness.py` |
 | `module_coverage` | its `source_root` holds **0** modules, on disk or in the index — "complete coverage" of nothing | `liveness.py` |
+| `scenario_coverage` | **per leg**: its `for` matcher selects **0** nodes (coverage leg) or a `references` glob matches **0** documents (reference leg). Its `features` glob matching **0** files is the exception — that stands **all four** legs down, and only that state is counted in `rules_inert` | reported by `scenario_coverage.py`, counted by `liveness.py` |
+
+### `scenario_coverage` — behaviour bound to an executable claim (BDL-061 S4)
+
+The `.feature` file is the **source of truth** for behaviour and the PRD references it by name
+(BDL-061 CONTEXT, option б). This rule reports where that binding is missing, reading the suite
+through [`scenario-binding`](../scenario-binding/SPEC.md).
+
+```yaml
+  - name: scenario-coverage
+    description: "Behaviour-bearing nodes carry an executable scenario; a scenario names its bead"
+    severity: warn
+    scenario_coverage:
+      for: { kind: feature }                                # default: kind: feature
+      features: "tests/acceptance/features/**/*.feature"    # default (Q3)
+      references:
+        - "docs/**/PRD.md"                                  # default: none
+      non_behavioural:
+        - node: rule-types
+          reason: "frozen dataclasses; the behaviour is the evaluator's"
+```
+
+| Leg | Finding |
+|-----|---------|
+| coverage | a node matched by `for` that **no scenario names**, and no declaration excuses |
+| suite | a scenario that names **no bead**; a scenario naming a `@node:` that is not in the graph; a file that could not be read; a file in the suite that declares no scenario |
+| reference | a scenario a `references` document claims exists and the suite does not contain |
+| declaration | a `non_behavioural` entry naming a node outside the population, or one that has a scenario anyway |
+| excused | one statement per run naming how many of how many nodes left the population and why — silent when nothing is excused |
+
+**`reason` is mandatory on a declaration** and there is deliberately **no `until`**: unlike an
+import exemption this is not a debt that expires but a classification that is either true or
+false. What keeps it honest is that a dead declaration is itself a finding.
+
+**A live declaration is stated, not merely honoured.** PLAN's criterion is that a node may declare
+itself non-behavioural *with a named reason* and is accepted; accepted in **silence** is a
+different promise, because the excused node leaves the population, the coverage fraction improves
+and nothing says the denominator moved. Every run that excuses anything therefore prints one line
+— `1 of 2 node(s) in this rule's population are excused as non-behavioural, so every coverage
+figure below is a fraction of 1: ...` — carrying each node with its reason. It is `warn` whatever
+the rule declares: doing the thing PLAN says is accepted must never redden a pipeline. It is
+**silent when nothing is excused**, because a line about zero on every lint of every project is
+how a real one goes unread.
+
+**`for.exclude` is rejected on this rule type**, with the error naming the excluded nodes and
+routing the author to `non_behavioural`. An `exclude` entry carries no reason, is never reported
+and never expires, and a matcher excluded down to nothing reports only that it selects no node —
+which is CONTEXT's "an unnamed exclusion is how a gate is quietly switched off", in the one place
+this rule could still be switched off quietly. The requirement is scoped to `scenario_coverage`:
+`exclude` is shared by every rule type, and demanding a reason everywhere would turn an adopter's
+green project red on upgrade for rules this epic never touched.
+
+**Severity is `warn` by design and is meant to stay there.** A finding here is about declared
+*intent* — that a behaviour was specified — and an `error` would turn every adopter's green
+project red on the upgrade that ships the rule. Loudness replaces blocking: every message
+carries the population it is a fraction of (`none of 7 scenarios in 2 files carries
+@node:billing`).
+
+**Two boundaries, stated rather than discovered.** A `features` glob that matches **no file**
+reports the glob and does **not** then report every node: one configuration error printing as N
+architecture findings buries the finding that would fix it. It stands **all four** legs down, not
+the coverage leg alone — measured on this repository, repointing `features:` takes `lint` from 68
+findings to exactly 1, and the 33 reference findings an empty suite would make definitionally true
+go with them. That is why this state, and only this state, is counted in `rules_inert`. And the bead id is **not verified**
+against the tracker — reading it from the rule engine would make a domain depend on the
+application layer — so what is checked is that a scenario *names* one. The `@node:` reference is
+verified.
 
 `forbid_import` additionally reports a stale `exempt` entry — dead or expired, at most one finding per entry (`rules/exemptions.py`, from the counts the import scan already produced). That is a statement about an exemption, not about the rule, so it is **not** counted in `LintResult.rules_inert`; what those entries suppressed is counted separately, as `LintResult.violations_suppressed`. Two counters, because they answer two questions: *which of my rules cannot check anything* and *what did my checks catch and excuse*.
 

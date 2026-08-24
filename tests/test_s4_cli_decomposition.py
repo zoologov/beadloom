@@ -104,6 +104,7 @@ class TestCliSurfaceStability:
             "polish",
             "site",
             "audit",
+            "quality",
         }
 
     def test_snapshot_subgroup_commands(self) -> None:
@@ -156,7 +157,7 @@ class TestGoldenHelp:
 # above). A command whose module failed to wire up cleanly after the S4 split
 # fails its --help render here even if it still appears in ``main.commands``.
 _SUBGROUPS = {
-    "docs": ("generate", "polish", "site", "audit"),
+    "docs": ("generate", "polish", "site", "audit", "quality"),
     "snapshot": ("save", "list", "compare"),
 }
 _ALL_HELP_INVOCATIONS = sorted(

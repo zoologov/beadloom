@@ -1,11 +1,68 @@
 # ACTIVE: BDL-061 — Enforced agentic flow
 
-> **Last updated:** 2026-08-23
+> **Last updated:** 2026-08-24
 > **Phase:** Development
 
 ---
 
 ## Current Bead
+
+**Slice: S4** on `features/BDL-061-S4`.
+
+**`.13` CLOSED (2026-08-24) — and REPORTED AS TWO BEADS, not one.** PLAN sized S4's dev work
+as one slice; it is six mechanisms in three domains, so it was split at the seam where they
+stop sharing code, before any code was written:
+
+- **`.13` — behaviour is bound to an executable scenario.** The owner's request, ported and
+  improved. `graph/scenarios.py` (a new `scenario-binding` feature node) reads `.feature`
+  files and the documents that reference them; `graph/rules/scenario_coverage.py` turns that
+  into a `warn` rule with four legs and per-LEG liveness. Plus the role-template layer: the
+  shared writing standard moved out of `tech-writer` into `templates/roles/core/_writing.md.txt`
+  and composed into all four roles (English + Russian, #136), the BDD and mutation duties, and
+  `templates.md`'s acceptance criteria restated as scenarios with a non-behavioural
+  declaration in BRIEF.
+- **`beadloom-b0xl` — document shape is a checkable claim.** Doc templates out of
+  `doc_generator.py` into `templates/docs/`, `missing_sections`, the five section-quality
+  checks, and the mutation-SCOPE check. Filed, not absorbed: the two halves share no module,
+  no domain and no test surface, and delivering both at half depth is how a check that cannot
+  fail gets shipped — which this epic has now measured twice (`.48`, `.10`).
+
+**What `scenario-coverage` reports on this repository today: 68 findings, all `warn`, all
+true.** 35 of **40** `feature` nodes carry no scenario — the suite covers `rule-engine`,
+`scenario-binding`, `doc-quality`, `doc-shape` and `doc-templates`. The split was 35 of 37 when
+`.13` closed; `beadloom-b0xl` then added three feature nodes and three scenarios, so both sides
+of the fraction moved by three and the finding count did not. And 33 scenarios this epic's own
+PRD referenced by name do not exist — the S1/S2/S3/S5/S6 criteria, written as scenarios before
+there was anything to run them. The population is the honest one (`for: {kind: feature}`), not a
+hand-picked list that would report 0 by construction.
+
+**The scenarios RUN.** `pytest-bdd` is a dev dependency; **19 scenarios in 6 files** execute
+inside `uv run pytest`, 0 skipped (7 in 2 files when `.13` closed). Without a runner a `.feature` file is prose and the rule would be checking the
+existence of text — the decision the slice rests on holds only while the artifact executes.
+
+**Three defects found by doing it rather than by reasoning about it:**
+
+| What | Why it mattered |
+|---|---|
+| `pytest-bdd` refuses a file with two `Feature:` blocks; our parser accepted it | scenarios would be counted as covering their nodes while nothing executed — a false green |
+| The DB's `rule_type` CHECK restated the loader's vocabulary (BDL-UX #171's shape) | a new rule type raised `IntegrityError` on every EXISTING `beadloom.db` — on the adopter's machine, not ours. The CHECK is dropped and migrated away |
+| `prime` printed one line per finding with no bound | 68 findings took it from 2.6 KB to 13.1 KB, five times its own "<2K tokens" promise. The list is capped at 10 and states the remainder; the COUNT is never truncated |
+
+**S4 IS CLOSED (2026-08-24).** `.13`, `beadloom-b0xl`, `.14`, `.15`, `.64`, `.66` and `.16` are
+done; the gate is green on this branch. What S4 leaves behind, in the order it should be picked up:
+
+| Bead | What it is | Why it was not done here |
+|------|------------|--------------------------|
+| `.65` (P1) | pay the `measurable-goal` debt, 154 of 235 | review `.15` says the criterion must be RE-SCOPED first — as written it flags exit-code criteria, so paying it as stated would insert numerals into goals that are already checkable |
+| `.68` (P1) | the decode-family mechanism: ruff `PLW1514` plus an AST ledger | measured, not built: `PLW1514` reports ZERO on `src/` and `tests/` today so enabling it costs one config line, and a ~40-line prototype already finds 29 live narrow handlers |
+| `.60` (P1) | the backslash refusal on a Windows harness | Windows is unverified by decision; the defect is decidable by reading and is pinned as a strict `xfail` |
+| `.62`, `.63` (P2) | the reference leg's syntax; the silent population exit | each filed with its measurement and its options, and each is a scoping decision rather than a fix |
+| `.69` (P2) | the shared writing standard names the wrong command | found while writing the doc-kind reference from the templates; the fix is in `src/`, which `.16` does not edit |
+| open | whether BRIEF, PLAN and SUMMARY gain the rows the four content checks read | 56 of 243 documents are in a kind no content check enters. `.66` declined to write the exclusion into the SPEC on no authority, and `.16` kept that: the documentation reports the state and names the decision as open |
+
+---
+
+## Earlier slices
 
 **Slice:** S2b — the false-green residue S2 measured and left open, on
 `features/BDL-061-S2b`. S2 itself is complete (`.5`, `.33`, `.34`, `.37`, `.38`, `.40`, `.43`,
@@ -25,7 +82,20 @@ clock defect `.11` measured are fixed; `.12` turned the gate green; `.59` closed
 so the slice no longer ships a false promise in front of a destructive operation. `beadloom ci`
 rc **0**, 305/305 pairs fresh, 0 surface drift, **6090** tests passing. The slice is ready for
 its PR. Also outstanding and not part of any
-slice: `.39`, `.41`, `.42`, `.58` — which grew from two items to a routed list (below).
+slice: `.41`, `.58` — which grew from two items to a routed list (below).
+**`.39` CLOSED (2026-08-24)** on `features/BDL-061-S4`: the platform dimension. The six
+`skipif(sys.platform == "win32")` guard tests were made non-vacuous FIRST — all six were
+platform-independent in their assertions and the mark's reason misnamed the obstacle
+(Windows has symlinks; what a process may lack is `SeCreateSymbolicLinkPrivilege`), so they
+are now capability-gated on a measured refusal and RUN on a runner that holds the privilege.
+Only then did the `tests-windows` leg land (`DEFAULT_STATUS_CHECK_CONTEXTS` 9 → 10, vendored
+template mirrored), with an in-CI probe that fails the leg both when it is not Windows and
+when it cannot create a link — the second is the lock, because that is the state in which the
+six rows skip again and ~6000 unrelated tests carry the green. **Expect the leg RED on its
+first run and do NOT run `setup-branch-protection` until it is observed green.** Two findings
+filed rather than fixed: `.60` (the backslash refusal refuses every native edit target on
+Windows and its stated reason is false there) and `.61` (the skip POPULATION differs by
+image — .6's uncounted 26-vs-11 — which is a third dimension and its own mechanism).
 
 ## Progress
 
@@ -401,6 +471,63 @@ header comment, where a reader of a red check will look first.
       #187 a virgin scaffold leaves `config-check` red, #188 the orphan report and migration
       notes have no caller (so #137 does not close), #189 `sync-update <doc> --check` writes.
       All four filed, documented where an adopter meets them, and routed to `.58`.
+- [x] S4 `.64` dev — the Windows leg WITHDRAWN by owner decision (2026-08-24), and what it
+      taught kept. `tests-windows` out of `ci.yml` and out of the vendored template,
+      `DEFAULT_STATUS_CHECK_CONTEXTS` 10 → 9 in the same change (a context whose check-run
+      nothing produces is a lockout — the derive-from-ci.yml guard reddened when only the job
+      went). The reason is in the file where the job was: ~16-28 runner-minutes per PR and the
+      pipeline's critical path, roughly tripling PR-to-merge latency, for a platform outside
+      the audience. `.60`'s strict `xfail` — pinned for the leg to adjudicate — converted to a
+      measurement rather than dropped: the Windows verdict is composed from `ntpath` +
+      the branchless refusal, and the ledger rule now forbids ANY platform `xfail` while no
+      runner can flip one. SPEC states the residue as *unverified by decision*. Review `.15`'s
+      M7 fixed in the same bead: the capability probe could report "unavailable" everywhere
+      and stay green (reproduced: 133 passed / 6 skipped / rc 0), so the flag is now asserted
+      to BE the measurement and the six rows are observed to RUN in a child pytest by node id.
+- [x] S4 `.13` dev (2026-08-24) — behaviour bound to an executable scenario, both ways, and
+      the split reported before any code: the document-shape half went out as
+      `beadloom-b0xl` rather than being absorbed at half depth. Binding by Gherkin TAGS rather
+      than the header comment the RFC sketched, so every parser and runner already reads it;
+      the scenarios RUN under `pytest-bdd`; localised Gherkin is first-class (`en` + `ru`).
+      Three defects found by doing it rather than reasoning about it, each recorded above.
+- [x] S4 `beadloom-b0xl` dev (2026-08-24) — document shape is a checkable claim. Doc templates
+      out of `doc_generator.py` into `templates/docs/` as a fourth artifact kind, with required
+      sections DERIVED from the composed template so a project fragment that appends a section
+      makes it required by the same act. `missing_sections`/`incomplete`, the five
+      section-quality checks, `beadloom docs quality`, a seventh gate step, and the
+      mutation-SCOPE check riding with `config-check` because Beadloom owns no mutation runner.
+- [x] S4 `.14` test (2026-08-24) — the 68 attacked rather than accepted: re-derived from
+      tracked files in a 897-file clean room with a from-scratch index, identical 35/33 split;
+      68 → 1 proved on the PRODUCT by repointing the shipped glob; the scenarios OBSERVED to
+      run per row from a JUnit report, 0 skipped, plus a sabotage that breaks one step's text
+      and asserts the reason the copy reddens. 100% statements and branches on both new graph
+      modules. 11 sabotages, all FAILED never ERROR. Filed `.62` and `.63`.
+- [x] S4 `.15` review (2026-08-24) — NOT PASSING: 1 critical, 8 major, 6 minor, 1 nitpick, all
+      measured on HEAD or in a 921-file clean room proved empty before extraction. The critical
+      was the widest: one undecodable planning document took the WHOLE gate down with a
+      traceback and the step results of that run with it. The verdict the coordinator asked
+      for: `measurable-goal` must be RE-SCOPED before its debt is paid — roughly 1-in-18
+      precision on a sample of 18, and it flags exit-code criteria. Also corrected its own
+      first measurement, because a wrong measurement is reported rather than quietly re-taken.
+- [x] S4 `.66` dev (2026-08-24) — the critical plus all four majors, in three narrow commits.
+      `rules_inert` now counts the tenth rule type through the rule's own predicate; the
+      deliberate-silence note says all four legs; a reasonless `for.exclude` is a configuration
+      error routing to `non_behavioural`; a live declaration prints the denominator it moved;
+      and applicability is reported per document KIND — 56 of 243 documents (23%) are in a kind
+      no content check enters while the global guard read `()` throughout. Declined to write
+      "BRIEF is outside these checks" into the SPEC: that would convert an accident into a
+      decision on no authority.
+- [x] S4 `.16` tech-writer (2026-08-24) — the gate turned green honestly: **rc 1 → rc 0**, 82
+      stale pairs cleared. Two new adopter guides: `docs/guides/bdd-scenarios.md` (the decision,
+      the scenario shape, the binding, what the rule reports, the honest limits, and the two
+      mechanisms that ship inert here) and `docs/guides/document-kinds.md` (both document
+      families, required sections, the five checks and the per-kind blind spot). Role duties
+      written down where an adopter meets them. The three limits stated AS limits —
+      `measurable-goal`'s precision, Windows unverified by decision, and the BRIEF/PLAN/SUMMARY
+      question named as open rather than answered. Found and filed `.69` while writing the
+      doc-kind reference from the templates rather than from a report: the shared writing
+      standard tells all four roles that `beadloom lint` reports the five checks, and it
+      reports none of them.
 
 ## Results
 
@@ -430,10 +557,9 @@ header comment, where a reader of a red check will look first.
 | .6 | Done | S2 test: the three rules re-derived adversarially + seven remaining false-greens measured, 11 of them strict `xfail`s; the locale legs run for real (100 / 76) |
 | .7 | Done | S2 review: NOT PASSING — 1 critical (#175), 4 major, 4 minor; merge with #174 open argued from evidence, with the honesty condition now in `.8` |
 | .8 | Done | S2 docs: the three standing rules deleted, replacements in the CLI reference, PLAN's S2 criterion corrected, MAJOR 4 + minors 1/3/4 closed |
-| .35 | Pending | S3: no `.gitignore` entry for the firing record; carries n1 (our dogfood never ran the shipped artifact) |
-| .39 | Pending | S2/S3 chore: a Windows CI leg — only after the six `skipif(win32)` guard tests are made meaningful |
+| .39 | Done | S2/S3 chore: the six `skipif(win32)` guard rows made non-vacuous on a MEASURED symlink capability, the `sys.platform` skip ledger, and the Windows leg — the leg itself withdrawn again in `.64`, the six rows and the ledger kept |
 | .41 | Pending | S3: three more ambient-decode sites, plus an MCP test runner with no timeout |
-| .42 | Pending | S2/S3: the locale dimension's first run — 100 ASCII / 76 8-bit failures from text I/O without an explicit encoding (the title still carries `.38`'s superseded 97/73; the owner is correcting it) |
+| .42 | Done | S2/S3: the locale dimension's first run — 100 ASCII / 76 8-bit failures from text I/O without an explicit encoding; both `tests-locale` contexts green since |
 | .45 | Done | P1 (#173): docs-audit reports what it did NOT verify — per-fact coverage (`verified` / `not_covered` / `unreadable`), a published scan surface, clause-scoped matching; measured 2 of 9 declared facts verified on this repo |
 | .46 | Done | P0 (#174, ONE fix with `.47`): a deleted doc is `missing`, not `ok`; the DECLARED surface outlives the file; the pair count is a committed ledger; doctor's count audited |
 | .47 | Done | P0 (#175, ONE fix with `.46`): the baseline moved OUT of the database — git for freshness, a committed ledger for the surface; a rebuilt baseline is corroborated or reported `unverified`, never fresh |
@@ -441,7 +567,7 @@ header comment, where a reader of a red check will look first.
 | .49 | Done | P0: outcome (i) — what an exemption suppressed is counted on every run, and an `until:` leading with an ISO date that has passed is a finding; the same grammar on `flow.yml` exclusions |
 | .54 | Done | P2: the Gate's lint line now carries the suppressed count; measured that it needs no `rules_inert` clause (an inert rule always flips it to the warning branch). Filed and closed inside `.49` |
 | .55 | Done | S2b docs: the 28-pair onboarding README revised to the code; *unverifiable is not clean* written once in both READMEs + CHANGELOG; the baseline-out-of-the-database change stated for adopters; 6 `surface_drift` re-attested after reading, stale 28 → 0 |
-| .50 | Pending | P1: annotations the extractor cannot see — docstring annotation, directory source without a trailing slash, deny rules keyed on annotated symbols |
+| .50 | Done | P1: annotations the extractor cannot see — docstring annotation, directory source without a trailing slash, deny rules keyed on annotated symbols |
 | .51 | Pending | P2: three modules past 1000 lines with many responsibilities each, self-flagged and owned by nobody |
 | .9 | Done | S3 dev: `compose(core, architecture, stack, project)` for roles, commands AND `CLAUDE.md`; project layer in `.beadloom/flow/`; `config-check` verifies the composition result; #177, #139, #152, #132, #136, #137 closed |
 | .10 | Done | S3 test: 71 passing + 9 `xfail(strict)` measured blind spots in the new `config-check`; the `#177` role leg closed and a structural guard against tests that write tracked files |
@@ -451,15 +577,30 @@ header comment, where a reader of a red check will look first.
 | .12 | Done | S3 tech-writer: gate **rc 1 → rc 0**. 33 stale pairs cleared — 13 revised against code that moved, 20 re-attested deliberately because `symbols_hash` is per node and those files did not change (#182). New adopter guide `docs/guides/project-overlays.md` (the project layer, `overlays.suppress`, migrating a hand-edited vendored file); the three limits stated as limits; CHANGELOG, both READMEs, architecture, getting-started, cli, mcp and the onboarding README revised. Measured four new defects while writing it — #186 (destructive `--fix` on a role adapter), #187 (a virgin scaffold leaves `config-check` red), #188 (orphans + migration notes have no caller), #189 (`sync-update --check` writes) — all filed and routed to `.58` |
 | .58 | Done | S3b dev (P0): **#183 + the inverse rule.** The deliverable is `tests/adopter_project.py` — five non-Beadloom fixtures rendered in tests — because without one the next instance survives as this one did. The sweep beyond the version line: the architecture label was the constant `DDD` whatever `flow.yml` declared; the stack line matched the target's manifest against *our* dependency names and printed our Python floor as theirs; the package scan fell back to looking for `src/beadloom/` inside the adopter's tree; the shipped template SEEDED the region with our stack, our nine packages and our version; and `BDL-037` / `BDL-036` / `BDL-UX-Issues #97` shipped in the core + coordinator templates. **The biggest catch was not the renderer**: `doctor._check_agent_instructions` audited FOUR claims in an adopter's `CLAUDE.md` against Beadloom's own state, so fixing the renderer alone would have turned every adopter's `doctor` red on upgrade. Four composed role adapters swept CLEAN — stated as a checked result. **Inverse rule decided: yes** — `ConfigDrift.weakened_from` carries the verdict a finding would have had, `config-check` names the count and the remedy on both paths, the exit code deliberately does not move, and nothing is recorded (a verdict history would make the check a writer). Also #187 (the scaffold records its `flow.yml`; found that `--architecture` never reached `CLAUDE.md`), #188 (orphans + migration notes printed; `use --force` gone), #189 (`--check` guarded first, answered by a read-only `describe_reference_doc`) |
 | .59 | Done | S3 dev (P0, merge-blocker): **#186 closed by option (a)** — `--fix` honours the sentence the check prints. `refresh_composed_adapters` classifies first and passes the unowned adapters to `generate_adapters(preserve=…)`, which neither writes nor records them; `hand_edited` **and** `unverified` are declined by name (the second is the worse case: a `warn`, so overwriting one destroyed content and then read "no blocking drift" at exit 0). `apply_config_fixes` measures the artifact surface before/after, so a run names every file it created or rewrote; `ConfigDrift.fixable` stops the closing advice offering `--fix` for a finding it declines. One pre-existing misclassification fixed first: the plain vendored scaffold read `hand_edited` on the flow.yml upgrade path, so it is now an `alternate` — unowned is not somebody's only copy. Re-measured live: `77dfc84f` → edited → **edit intact**, exit 1 |
-| .13–.16 | Pending | S4 BDD, mutation, doc shape + quality, shared writing standard |
+| b0xl | Done | S4b dev: the DOCUMENT-SHAPE half `.13` split off. Doc templates out of `doc_generator.py`'s string literals into `templates/docs/`, composed through S3's `compose()` as a fourth artifact kind, with the required sections DERIVED from the composed template — so a project fragment at `.beadloom/flow/docs/<kind>.md` adds a required section by the same act that adds the section. New `missing_sections` staleness reason (status `incomplete`, never blocking), peer-relative by MAJORITY after measuring that a presence-of-one rule reports the 35 feature SPECs that follow this repo's actual convention instead of the 1 that does not. The five section-quality checks behind `beadloom docs quality` + a `docs-quality` gate step; measured on our own 243 planning documents: 154 goals with no measurable clause over 235 read, 6 `Pending` questions in Approved documents (4 of them in BDL-061's own RFC), and 0 over 261 decision rows / 138 risk rows / 243 documents — each of those three proved to fire by a single reverse-editable edit to a real document here. The mutation-SCOPE check (Q5) in `config-check`, dogfooded by declaring our own three targets. 14 sabotages, 12 bit on the first pass and the 2 that did not exposed two real test gaps, now closed |
+| .64 | Done | S4 dev (owner decision): the Windows leg withdrawn — `tests-windows` out of `ci.yml`, out of the vendored template and out of `DEFAULT_STATUS_CHECK_CONTEXTS` (10 → 9) in ONE change, because a required context whose check-run nothing produces is a lockout. Cost stated where the job was: ~16-28 runner-minutes per PR and the pipeline's critical path, ~3x PR-to-merge latency, for a platform outside the audience. **`.60`'s strict `xfail` converted to a measurement, not dropped** — the Windows verdict is composed from `ntpath` plus a refusal that has no platform branch (asserted both ways), and the ledger now forbids any platform `xfail` while no runner can flip one. The flow-guards SPEC states the residue as **unverified by decision**, a third state next to verified and broken. Review `.15`'s **M7** closed here too: the capability probe could answer 'unavailable' everywhere and stay green (reproduced — 133 passed / 6 skipped / rc 0), so the skip flag is asserted to BE the measurement and the six rows are OBSERVED to run, by node id, in a child pytest. 13 sabotages, all FAILED never ERROR |
+| .66 | Done | S4 dev (P0, ship-blocker): review `.15`'s critical + the four majors. The CRITICAL (`349b1e5`, owner, inline): `check_documents` caught only `OSError`, so one non-UTF-8 planning document took the WHOLE `beadloom ci` down with a traceback and no step results; the handler is now as wide as the call and an unreadable document is reported on a named `unreadable` channel. **M3** — `rules_inert` did not count `scenario_coverage`: `13 rules, 0 inert` printed over a rule that had stood all four legs down. Counted now through the rule's own `inert_reason`, reported only by the module that owns the diagnosis; measured 68 findings -> **1**, `rules_inert` 0 -> **1**, in the working tree and again in a 921-file clean room. **M4** — the deliberate-silence note named ONE leg where the code skips FOUR; the docstring and the SPEC now say all four and state what follows from the reach. **M1(a)** — a reasonless `for.exclude` is a configuration error naming the excluded nodes and routing to `non_behavioural`; scoped to this rule type so no adopter's green project reddens. **M1(b)** — a LIVE `non_behavioural` now prints `N of M excused ... a fraction of M-N`, silent at zero and always `warn`; the acceptance scenario that asserted the silence was rewritten, because the `.feature` file is where the promise is stated. **M2** — applicability is reported PER KIND: `checks_that_read_nothing` is a global OR and structurally cannot see a per-kind hole. Measured here: **56 of 243 documents (23%) are in a kind no content check enters** — BRIEF 11, PLAN 42, SUMMARY 3 — while the guard read `()` throughout. The critical's `unreadable` channel was populated and printed NOWHERE; the CLI and the gate now name it, and the gate step goes PASS -> WARN on this repo without blocking. Whether to give BRIEF/PLAN/SUMMARY the rows is the OWNER's decision and is left open rather than written into the SPEC as if it had been made. 28 new tests; suite 6453 passed / 2 failed (both `.16`'s pre-existing stale-doc rows). |
+| .68 | Open | Filed by `.66`: the decode family has **29 live candidates** in `src/` and no mechanism. Half one is one ruff line — `PLW1514` bites on a probe and reports ZERO here, so enabling it costs nothing. Half two is an AST ledger keyed on the CALL, the shape `test_windows_dimension.py` already ships one test file over. |
+| .13 | Done | S4 dev: `graph/scenarios.py` + `scenario_coverage.py` — the binding both ways, four legs, per-leg liveness, `en`+`ru` dialects; the shared writing standard into all four roles; the BDD and mutation duties; the DB `rule_type` CHECK dropped and migrated |
+| beadloom-b0xl | Done | S4 dev: document shape is a checkable claim — doc templates out of `doc_generator.py` into `templates/docs/` as a fourth artifact kind, `missing_sections`/`incomplete`, the five section-quality checks, `beadloom docs quality`, a seventh gate step, and the mutation-SCOPE check |
+| .14 | Done | S4 test: 39 rows, 100% statements AND branches on both S4 graph modules; the 68 re-derived from tracked files in a clean room (35+33); 68 → 1 proved on the PRODUCT; the scenarios OBSERVED to run per row from a JUnit report; 11 sabotages, all FAILED. Filed `.62` (three reference-leg defects, each a strict xfail) and `.63` (the silent population exit) |
+| .15 | Done | S4 review: NOT PASSING — 1 critical, 8 major, 6 minor, 1 nitpick, everything measured on HEAD or in a 921-file clean room. Verdict on the criterion the coordinator asked about: `measurable-goal` is a numeral detector at roughly 1-in-18 precision and must be RE-SCOPED before the debt is paid. Verdict on the Windows leg: do not pay it, agreeing with `.64` on independent reasoning |
+| .16 | Done | S4 tech-writer: gate **rc 1 → rc 0**. Two new adopter guides — `docs/guides/bdd-scenarios.md` (scenario shape, bead/node binding, the honesty block naming what ships inert) and `docs/guides/document-kinds.md` (required sections, the five checks, the per-kind blind spot). Role duties written down. The three limits stated AS limits, and the BRIEF/PLAN/SUMMARY decision left open rather than resolved in prose. Filed `.69` (the shared writing standard names `beadloom lint`, which reports none of its five checks) |
+| .60 | Pending | Filed by `.39`: the backslash refusal makes the flow guard refuse every edit on a Windows harness, and its stated reason is false there. Measured by proxy with `PureWindowsPath` and pinned |
+| .62 | Pending | Filed by `.14`: three reference-leg defects — `Example:` prose read as a scenario reference, an indented code block read while a fenced one is not, and an undecodable document reading as no intent. Each a strict `xfail`, so the fix reddens the suite |
+| .63 | Pending | Filed by `.14`: a feature reclassified as a component leaves the population with nothing reported. Two options priced in the bead |
+| .65 | Pending | Owner decision: pay the `measurable-goal` debt — 154 of 235 goal statements. Review `.15` says re-scope the criterion FIRST; do not start rewriting before that answer |
+| .67 | Pending | The decode sweep: 29 narrow handlers judged per site, per `.42`'s framework. Depends on `.68` |
+| .69 | Pending | Filed by `.16`: `_writing.md.txt` and `_writing.ru.md.txt` tell every role that `beadloom lint` reports the five section-quality checks. It reports none of them — measured: 68 lint findings, all `scenario_coverage`, and 156 doc-quality findings from the other command |
 | .17–.20 | Pending | S5 TO-BE / AS-IS / WORKING |
 | .21–.24 | Pending | S6 waves from the graph (#155, #118, #133) |
 
 ## Notes
 
-**Branch:** `features/BDL-061-S3` for the current slice (`features/BDL-061-S2b` for the one before) (S1 ran on `features/BDL-061`, S2 on
-`features/BDL-061-S2`). Slice boundary is a PR boundary — each slice green on `main` before the
-next begins, as BDL-060 ran.
+**Branch:** `features/BDL-061-S4` for the current slice. Earlier slices ran on
+`features/BDL-061-S3`, `features/BDL-061-S2b`, `features/BDL-061-S2` and `features/BDL-061`.
+A slice boundary is a PR boundary — each slice green on `main` before the next begins, as
+BDL-060 ran.
 
 **Ordering is load-bearing.** S1 first because it is the primitive; S2 second because S3's
 acceptance criterion is deleting the rules S2's bugs forced into the prose, which cannot happen

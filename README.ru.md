@@ -57,7 +57,7 @@
 
 ## Единый Gate
 
-Проверки документации, границ и контрактов сходятся в один Gate. `beadloom ci` прогоняет полный набор — reindex, `lint --strict`, sync-check, docs audit, config-check, doctor и необязательный гейт ландшафта — и работает в трёх местах: в pre-push-хуке локально, как обязательная проверка в CI и в руках агента.
+Проверки документации, границ и контрактов сходятся в один Gate. `beadloom ci` прогоняет полный набор — reindex, `lint --strict`, sync-check, docs audit, docs-quality, config-check, doctor и необязательный гейт ландшафта — и работает в трёх местах: в pre-push-хуке локально, как обязательная проверка в CI и в руках агента.
 
 Поэтому правило простое и одинаковое для всех. В `main` не попадёт ни код, нарушающий архитектурные границы и правила, ни код с устаревшей или отсутствующей документацией, ни сломанный контракт между сервисами — будь автором человек или ИИ-агент. `beadloom install-hooks` ставит pre-push-хук, который блокирует push при красном Gate (обойти можно документированным `git push --no-verify`), а тот же `beadloom ci` остаётся обязательной проверкой в CI. Контроль один, и он детерминированный.
 
@@ -240,7 +240,7 @@ rules:
       max_symbols: 200      # слишком много кода в одном узле
 ```
 
-Доступно девять типов правил: `require`, `deny`, `forbid`, `layers`, `forbid_cycles`, `forbid_import`, `check`, `unregistered_feature_candidate` и `module_coverage`.
+Доступно десять типов правил: `require`, `deny`, `forbid`, `layers`, `forbid_cycles`, `forbid_import`, `check`, `unregistered_feature_candidate`, `module_coverage` и `scenario_coverage` (у узла, несущего поведение, есть исполняемый сценарий на Gherkin, а сценарий называет свою бусину).
 
 Правило, которое **не может ни с чем совпасть**, сообщает о себе само. Матчер, не выбирающий ни одного узла; вид связи, которого нет в графе; `check` без порога; шаблон пути, не совпадающий ни с одним файлом; исключение, которое ничего не подавляет, — каждый такой случай становится предупреждением `rule_liveness`, а не молчаливым успехом. В итоговой строке `lint` появляется их число (`N rules evaluated, M of them unable to check anything`), поэтому объявленное количество правил не может обещать больше, чем проверено. Такие сообщения всегда предупреждения: они описывают конфигурацию, а не код, и одна опечатка в шаблоне не сделает зелёный проект красным. То, что покрыло исключение `forbid_import`, считается так же — `0 violations, 6 crossings suppressed by an exemption`, — чтобы «0 нарушений» не могло означать «0 нарушений, которые мы посчитали».
 
@@ -255,7 +255,7 @@ beadloom lint --format json   # машиночитаемый вывод
 ## Ключевые возможности
 
 - **Граф контрактов между сервисами** — `export` в каждом репозитории, `federate` объединяет два и более сервиса в один ландшафт с вердиктами по каждому контракту (`CONFIRMED` / `BREAKING` / `ORPHANED_CONSUMER` / `UNDECLARED_PRODUCER` / `EXTERNAL`) поверх AMQP и GraphQL, плюс отметка актуальности по каждому сервису. Масштаб продукта и компании.
-- **Единый Gate** — `beadloom ci` прогоняет reindex → lint → sync-check → docs audit → config-check → doctor → необязательный гейт ландшафта за одним кодом возврата. Поставляется готовым GitHub Action и pre-push-хуком.
+- **Единый Gate** — `beadloom ci` прогоняет reindex → lint → sync-check → docs audit → docs-quality → config-check → doctor → необязательный гейт ландшафта за одним кодом возврата. Поставляется готовым GitHub Action и pre-push-хуком.
 - **Context Oracle** — детерминированный обход графа, компактный JSON-пакет меньше чем за 20 мс.
 - **Doc Sync Engine** — отслеживает связь кода и документации, ловит устаревшее, встраивается в git-хуки.
 - **Контекст для агента** — `beadloom prime` (меньше 2K токенов), `setup-rules` для IDE-адаптеров, MCP-сервер с 18 инструментами и `config-check`, который держит файлы агента в согласии с графом.
@@ -295,7 +295,7 @@ Beadloom держит граф архитектуры в YAML под `.beadloom/
 | `sync-update REF_ID` | Просмотреть и обновить устаревшую документацию |
 | `why REF_ID` | Анализ влияния — от чего зависит и что зависит от него |
 | `lint` | Проверить код по правилам архитектуры (`--strict`, `--format rich/json/porcelain/github`) |
-| `ci` | Единый Gate: reindex → lint → sync-check → docs audit → config-check → doctor → необязательный гейт ландшафта |
+| `ci` | Единый Gate: reindex → lint → sync-check → docs audit → docs-quality → config-check → doctor → необязательный гейт ландшафта |
 | `config-check` | Проверить (или `--fix`), что сгенерированные файлы агента совпадают с графом |
 | `guard NAME` | Проверить одну заставу процесса — `pass`/`warn`/`block`/`skip`/`error` в коде возврата (`--liveness` показывает, какие заставы вообще срабатывали) |
 | `export` | Выгрузить граф детерминированным артефактом для федерации |
@@ -304,6 +304,7 @@ Beadloom держит граф архитектуры в YAML под `.beadloom/
 | `docs polish` | Выдать структурные данные для обогащения документации с помощью ИИ |
 | `docs site` | Собрать сайт VitePress (дашборд, архитектура, карта ландшафта, проверенная документация) |
 | `docs audit` | Найти устаревшие факты в обзорной документации (README, руководства) |
+| `docs quality` | Проверить проектные документы по стандарту письма — измеримая цель, решение с обоснованием, риск со смягчением, ни одного `Pending`-вопроса в утверждённом документе, ни одного незаполненного плейсхолдера (`--check`, `--strict`) |
 | `diff` | Показать изменения графа с момента git-ref |
 | `snapshot` | Сохранять и сравнивать снимки архитектуры |
 | `link REF_ID [URL]` | Управлять ссылками на внешние трекеры у узлов |
@@ -357,6 +358,8 @@ def check_freshness(db: sqlite3.Connection, ref_id: str) -> SyncStatus:
 | [architecture.md](docs/architecture.md) | Дизайн системы и обзор компонентов |
 | [getting-started.md](docs/getting-started.md) | Руководство по быстрому старту |
 | [Мультиагентная разработка](docs/guides/multi-agent-development.ru.md) | Как устроен агентный процесс Beadloom |
+| [Исполняемые приёмочные сценарии](docs/guides/bdd-scenarios.md) | Gherkin как источник истины: привязка сценария к биду и узлу и что сообщает `scenario-coverage` |
+| [Виды документов](docs/guides/document-kinds.md) | Обязательные разделы, пять проверок стандарта письма и то, чего каждая из них решить не может |
 | [CI Setup](docs/guides/ci-setup.md) | Интеграция с GitHub Actions / GitLab CI |
 | [VitePress Site](docs/guides/vitepress-site.md) | Публикация базы знаний на VitePress |
 | **Домены** | [Context Oracle](docs/domains/context-oracle/README.md) · [Graph](docs/domains/graph/README.md) · [Doc Sync](docs/domains/doc-sync/README.md) · [Onboarding](docs/domains/onboarding/README.md) · [Infrastructure](docs/domains/infrastructure/README.md) |

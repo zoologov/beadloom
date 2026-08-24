@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import errno
 import json
-import sys
 from pathlib import Path
 
 import pytest
@@ -30,6 +29,7 @@ from tests.filesystem_names import (
     filesystem_can_name,
     unnameable_reason,
 )
+from tests.symlink_capability import SYMLINK_SKIP_REASON, SYMLINKS_UNAVAILABLE
 
 _EXCLUDED_SCRIPTS = (
     "guards:\n"
@@ -110,7 +110,7 @@ class TestTraversalCannotBypassAnExclusion:
         assert verdict.outcome is GuardOutcome.WARN, verdict.why
         assert "src/app.py" in verdict.why
 
-    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX symlink semantics")
+    @pytest.mark.skipif(SYMLINKS_UNAVAILABLE, reason=SYMLINK_SKIP_REASON)
     def test_a_symlink_out_of_an_excluded_directory_is_guarded(
         self, tmp_path, write_flow_yml, make_guard_probes
     ) -> None:
@@ -347,7 +347,7 @@ class TestThePathOutsideTheProjectIsNamed:
 class TestSymlinksInBothDirections:
     """Resolution follows the link, so the exclusion follows the file it lands on."""
 
-    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX symlink semantics")
+    @pytest.mark.skipif(SYMLINKS_UNAVAILABLE, reason=SYMLINK_SKIP_REASON)
     def test_a_link_into_the_excluded_tree_is_excluded(
         self, tmp_path, write_flow_yml, make_guard_probes
     ) -> None:
@@ -366,7 +366,7 @@ class TestSymlinksInBothDirections:
 
         assert verdict.outcome is GuardOutcome.SKIP, verdict.why
 
-    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX symlink semantics")
+    @pytest.mark.skipif(SYMLINKS_UNAVAILABLE, reason=SYMLINK_SKIP_REASON)
     def test_an_exclusion_stops_applying_when_its_directory_is_a_symlink(
         self, tmp_path, write_flow_yml, make_guard_probes
     ) -> None:
@@ -788,7 +788,7 @@ class TestASymlinkLoopEndsInAVerdictAndNeverInATraceback:
     the bug cannot appear is not coverage of the bug.
     """
 
-    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX symlink semantics")
+    @pytest.mark.skipif(SYMLINKS_UNAVAILABLE, reason=SYMLINK_SKIP_REASON)
     @pytest.mark.parametrize("target", ["a", "a/x.py"])
     def test_a_real_loop_comes_back_as_a_scope_whatever_this_platform_does(
         self, tmp_path, target
@@ -841,7 +841,7 @@ class TestASymlinkLoopEndsInAVerdictAndNeverInATraceback:
         assert resolved.scope is PathScope.MALFORMED, label
         assert type(error).__name__ in resolved.rejection, resolved.rejection
 
-    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX symlink semantics")
+    @pytest.mark.skipif(SYMLINKS_UNAVAILABLE, reason=SYMLINK_SKIP_REASON)
     def test_the_guard_reaches_a_verdict_through_a_real_loop(
         self, tmp_path, write_flow_yml, make_guard_probes
     ) -> None:

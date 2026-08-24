@@ -54,16 +54,54 @@ the 376, and its critical rules name no Python tooling.
 Layers 1–3 ship inside the `beadloom` wheel and change when you upgrade. Layer 4 is
 yours and never does.
 
-Three kinds of artifact compose, and each has its own project fragment:
+Four kinds of artifact compose, and each has its own project fragment:
 
 | kind | written to | your fragment |
 |------|-----------|---------------|
 | `roles` | `.claude/agents/<role>.md`, `.cursor/agents/<role>.md` | `.beadloom/flow/roles/<role>.md` |
 | `commands` | `.claude/commands/<cmd>.md` | `.beadloom/flow/commands/<cmd>.md` |
 | `claude` | `.claude/CLAUDE.md` | `.beadloom/flow/claude/CLAUDE.md` |
+| `docs` | the skeletons `beadloom docs generate` writes | `.beadloom/flow/docs/<kind>.md` |
 
 Role names are `dev`, `test`, `review`, `tech-writer`. Command names are
-`coordinator`, `task-init`, `checkpoint`, `templates`.
+`coordinator`, `task-init`, `checkpoint`, `templates`. Doc kinds are `overview`,
+`domain`, `service`, `feature` and `beadloom-readme`.
+
+### The docs layer does one thing the others do not
+
+A section you append to a doc template becomes a **required section** of that doc
+kind. Append this:
+
+```markdown
+<!-- .beadloom/flow/docs/domain.md -->
+## Runbook
+
+Who to page when this domain misbehaves.
+```
+
+and every domain README `beadloom docs generate` writes carries a Runbook
+section — and `beadloom sync-check` reports a domain README that loses it, once
+a majority of them carry it. There is one source of truth: the composed
+template. Nothing else has to be told.
+
+## Declaring your mutation scope
+
+`flow.yml` also records which code a mutation run is supposed to cover. Beadloom
+runs no mutants — the tool is yours to choose — and checks only that the scope
+could run one:
+
+```yaml
+# .beadloom/flow.yml
+mutation:
+  targets:
+    - src/acme/pricing/
+```
+
+`beadloom config-check` reports a target that is outside your `scan_paths`, is
+not on disk, or holds no file in a language you index. All three are warnings,
+and all three describe the same failure: a mutation score computed over an empty
+denominator reads as evidence of test strength and is evidence of nothing.
+Declare nothing and nothing is reported.
 
 `.beadloom/flow/` is source, belongs in git, and is never covered by the ignore block
 `beadloom init` writes. So does `.beadloom/flow.yml`, and so does

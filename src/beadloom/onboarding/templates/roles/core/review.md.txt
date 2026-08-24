@@ -30,6 +30,14 @@ You are the **Reviewer**. You judge quality; you do NOT edit code — you post f
 
 **Testing** — behavior-focused (not private-attr), AAA, edge cases covered, independent + fast, coverage >= 80%, shared fixtures (not duplicated), temp paths only.
 
+**BDD is not ceremony** — for behaviour-bearing work, check the scenario says something an
+observer could see, in the user's vocabulary. Reject: a scenario that restates the
+implementation (`Given the repository, When save() is called, Then save() is called`), one whose
+`Then` asserts nothing, one written after the code and never seen red, and a `non_behavioural:`
+declaration whose reason restates the exclusion instead of explaining it. A missing scenario
+with a stated reason is a decision; a scenario that cannot fail is worse than none, because it
+reports green.
+
 **Doc freshness** — `sync-check` can read `[ok]` even when prose is stale (a dev `reindex` re-baselines hashes). So **two sources**: (1) the `API CHANGE:` bead notes, (2) grep the docs for the changed API names. Verify the domain/feature docs reflect the new/changed symbols. Stale docs → **Major** finding.
 
 ### Severity + feedback format

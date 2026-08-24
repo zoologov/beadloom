@@ -73,6 +73,10 @@ headings, the Progress Log, and non-Status columns are always left untouched.
   non-closed target), then calls `reconcile_active_tables`. After a fix it
   best-effort runs `bd export -o .beads/issues.jsonl` (only when that file is
   git-tracked) so the tracker artifact stays honest across branch/squash-merge.
+  The module also hosts the `sync-check` command, which since BDL-061 S4b
+  resolves the project's required document sections and passes them into
+  `check_sync` — the two `sync-update` paths in the same module deliberately do
+  not, because re-baselining a pair cannot fix a missing section.
   The `--stage` flag runs `git add` on EXACTLY the reconciled ACTIVE.md paths
   plus the exported jsonl (via `_stage_reconciled`), never staging unrelated
   files. The `--check` mode runs reconcile on a throwaway sandbox copy

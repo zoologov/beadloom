@@ -131,18 +131,25 @@ class TestRunCiGate:
         result = run_ci_gate(tmp_path, fail_on=None, hub_exports=[], no_reindex=False)
         assert isinstance(result, GateResult)
         assert result.ok is True
-        # reindex, lint, sync-check, docs-audit, config-check, doctor all ran.
+        # reindex, lint, sync-check, docs-audit, docs-quality, config-check,
+        # doctor all ran.
         names = [s.name for s in result.steps]
         assert names == [
             "reindex",
             "lint",
             "sync-check",
             "docs-audit",
+            "docs-quality",
             "config-check",
             "doctor",
         ]
         assert all(s.passed for s in result.steps)
-        assert all(s.status == "PASS" for s in result.steps)
+        # ``docs-quality`` is a named SKIP on a project with no planning
+        # documents — a skip that says why, never a silent pass (BDL-061 S1).
+        assert [s.name for s in result.steps if s.skipped] == ["docs-quality"]
+        assert all(
+            s.status == "PASS" for s in result.steps if not s.skipped
+        )
         assert result.findings == []
 
     def test_docs_audit_step_runs_directly_after_sync_check(

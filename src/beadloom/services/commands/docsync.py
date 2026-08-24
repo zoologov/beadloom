@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
     from beadloom.application.active_table import ReconcileResult
 
+from beadloom.doc_sync.doc_shape import STATUS_INCOMPLETE
 from beadloom.services.commands._root import main
 
 
@@ -72,7 +73,12 @@ def sync_check(
     so its baseline is the tree it was built from, and git could not supply one)
     is reported by name and never counted as fresh.
     """
+    from beadloom.application.doc_shape import section_requirements
     from beadloom.doc_sync.declared_docs import count_declared_docs
+    from beadloom.doc_sync.doc_shape import (
+        REASON_MISSING_SECTIONS,
+        REASON_SECTION_NOT_IN_USE,
+    )
     from beadloom.doc_sync.engine import (
         BLOCKING_STATUSES,
         STATUS_OK,
@@ -107,7 +113,11 @@ def sync_check(
         references: list[dict[str, Any]] = []
         unchecked: list[dict[str, str]] = []
     else:
-        results = check_sync(conn, project_root=project_root)
+        results = check_sync(
+            conn,
+            project_root=project_root,
+            section_requirements=section_requirements(project_root),
+        )
         references = check_reference_drift(conn, project_root)
         # Nodes that declare a doc but contribute no pair. Naming them is what
         # stops a green verdict from reading as "checked" (BDL-UX #146);
@@ -240,6 +250,17 @@ def sync_check(
                     click.echo(
                         f"  {marker} {r['ref_id']}: {r['doc_path']} (missing modules: {details})"
                     )
+                elif reason == REASON_SECTION_NOT_IN_USE:
+                    click.echo(
+                        f"  {marker} required section(s) {details} — not carried "
+                        f"by a majority of {r['ref_id']}, so no document is "
+                        f"reported for them"
+                    )
+                elif reason == REASON_MISSING_SECTIONS:
+                    click.echo(
+                        f"  {marker} {r['ref_id']}: {r['doc_path']} "
+                        f"(missing sections: {details})"
+                    )
                 elif r["status"] == "stale" and reason not in (
                     "ok",
                     "untracked_files",
@@ -278,6 +299,7 @@ def sync_check(
 # The four verdicts, in the reader's terms. ``[missing]`` and ``[not verified]``
 # exist because they used to print ``[ok]`` (BDL-UX #174/#175).
 _STATUS_MARKER = {
+    STATUS_INCOMPLETE: "[warn]",
     "ok": "[ok]",
     "stale": "[stale]",
     "missing": "[missing]",

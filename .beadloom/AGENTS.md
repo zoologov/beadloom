@@ -61,6 +61,7 @@
 - **onboarding-no-direct-infra** (forbid_import): Onboarding must not import infrastructure directly
 - **core-no-import-ai-agents** (forbid_import): Core domains/services must not import the ai_agents domain
 - **application-no-import-ai-agents** (forbid_import): Application must not import the ai_agents domain (leaf consumer only)
+- **scenario-coverage** (unknown): Behaviour-bearing nodes carry an executable scenario; a scenario names its bead
 
 ## Custom
 

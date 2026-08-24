@@ -184,6 +184,32 @@ jobs:
         run: uv run pytest
 
   # ---------------------------------------------------------------------- #
+  # NO PLATFORM DIMENSION IS SCAFFOLDED, and that is a decision rather than an
+  # oversight. A `windows-latest` leg running this whole suite costs ~2x per
+  # minute at GitHub's Windows billing multiplier and, unlike the locale rows
+  # above, it does not run inside their shadow: it becomes the pipeline's
+  # critical path, so PR-to-merge latency grows by roughly the leg's own
+  # duration. The environment dimension is on-thesis for everyone (a container
+  # is the usual deployment and is usually not UTF-8); the platform dimension is
+  # on-thesis only if your product actually runs on Windows.
+  #
+  # IF IT DOES, add it as TWO edits that must land together: a `tests-windows`
+  # job (`runs-on: windows-latest`, the same extras and the same whole suite, so
+  # exactly one thing varies) AND the matching required context —
+  #
+  #     beadloom setup-branch-protection --repo OWNER/NAME \
+  #       --check gate --check 'tests (3.10)' ... \
+  #       --check tests-windows --check site-build --check ai-techwriter
+  #
+  # Adding the job alone leaves a real check that gates nothing; adding the
+  # context alone is a check-run that never reports, and `main` stops being
+  # mergeable. Give the job a probe that fails it when the runner is not Windows
+  # AND when the process cannot create a symbolic link — without the second
+  # half, every test that needs a link skips and the green is carried entirely
+  # by tests that never needed Windows.
+  # ---------------------------------------------------------------------- #
+
+  # ---------------------------------------------------------------------- #
   # site-build — regenerate + build the docs site on every PR (the BUILD half,
   # no deploy) so doc/site breaks are caught BEFORE they land on the trunk.
   # ---------------------------------------------------------------------- #

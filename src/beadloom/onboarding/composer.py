@@ -65,21 +65,48 @@ class ArtifactKind:
     name: str
     core_dir: Path
     overlay_root: Path
+    #: Whether a declared flow suppression is appended to this artifact. A
+    #: suppression stands down a rule addressed to an AGENT; a generated
+    #: document has no rules to stand down, so appending the notice would
+    #: publish flow configuration as documentation (BDL-061 S4b).
+    carries_suppressions: bool = True
+    #: CORE fragments every artifact of this kind carries in addition to its own,
+    #: composed straight after it. One text, one file, four consumers — the
+    #: alternative is a copy per role, which drifts the moment one is edited
+    #: (BDL-061 S4: the writing standard used to live inside `tech-writer`, so the
+    #: three roles that produce the TO-BE documents were held to no standard).
+    shared: tuple[str, ...] = ()
 
 
 def _artifact_kinds() -> dict[str, ArtifactKind]:
     root = templates_dir()
     return {
-        "roles": ArtifactKind("roles", root / "roles" / "core", root / "roles"),
+        "roles": ArtifactKind(
+            "roles",
+            root / "roles" / "core",
+            root / "roles",
+            shared=SHARED_ROLE_FRAGMENTS,
+        ),
         "commands": ArtifactKind(
             "commands", root / "agentic_flow" / "commands", root / "commands"
         ),
         "claude": ArtifactKind("claude", root / "agentic_flow", root / "claude"),
+        "docs": ArtifactKind(
+            "docs",
+            root / "docs" / "core",
+            root / "docs",
+            carries_suppressions=False,
+        ),
     }
 
 
+#: CORE fragments shared by every role. Named here, next to the composition that
+#: reads them, because ``_writing`` is a LAYER and not a role: it has no front
+#: matter, is never written as an adapter, and ``compose_role`` refuses it.
+SHARED_ROLE_FRAGMENTS: tuple[str, ...] = ("_writing",)
+
 #: The artifact kinds ``compose`` understands.
-ARTIFACT_KINDS: tuple[str, ...] = ("roles", "commands", "claude")
+ARTIFACT_KINDS: tuple[str, ...] = ("roles", "commands", "claude", "docs")
 
 #: Fragment name of the composed ``CLAUDE.md`` (its core is the vendored asset).
 CLAUDE_ARTIFACT_NAME = "CLAUDE"
@@ -209,6 +236,16 @@ def compose(
         raise FlowConfigError(msg)
 
     fragments = [core]
+    for shared_name in spec.shared:
+        shared = _read_layer(
+            spec.core_dir,
+            shared_name,
+            language=language,
+            layer=f"core:{shared_name}",
+            notes=notes,
+        )
+        if shared is not None:
+            fragments.append(shared)
     arch = _read_layer(
         spec.overlay_root / "architecture" / config.architecture,
         name,
@@ -237,5 +274,9 @@ def compose(
         name=name,
         fragments=tuple(fragments),
         notes=tuple(notes),
-        suppression_notice=render_suppression_notice(config.suppressions),
+        suppression_notice=(
+            render_suppression_notice(config.suppressions)
+            if spec.carries_suppressions
+            else ""
+        ),
     )

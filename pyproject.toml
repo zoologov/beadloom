@@ -75,6 +75,11 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "pytest-asyncio>=0.23",
+    # Gherkin scenarios RUN (BDL-061 S4). Without a runner a `.feature` file is
+    # prose, and `scenario-coverage` would check the existence of text — the
+    # decision it enforces ("an executable artifact cannot silently lie") only
+    # holds while the artifact executes.
+    "pytest-bdd>=7.0",
     # Randomized test order each run — surfaces order-dependence (BDL-059 S1).
     "pytest-randomly>=3.15",
     "ruff>=0.8",

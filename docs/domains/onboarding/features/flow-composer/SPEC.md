@@ -31,9 +31,20 @@ breaking the Beadloom gate":
 | # | Layer | Source | Optional |
 |---|-------|--------|----------|
 | 1 | `core` | the shipped CORE fragment for the kind | no |
-| 2 | `architecture:<a>` | one methodology overlay (`ddd` \| `fsd`) | yes |
-| 3 | `stack:<s>` | each stack overlay, **sorted** | yes |
-| 4 | `project` | `.beadloom/flow/<kind>/<name>.md` in the adopting repo | yes |
+| 2 | `core:<shared>` | a CORE fragment **every** artifact of the kind carries | yes |
+| 3 | `architecture:<a>` | one methodology overlay (`ddd` \| `fsd`) | yes |
+| 4 | `stack:<s>` | each stack overlay, **sorted** | yes |
+| 5 | `project` | `.beadloom/flow/<kind>/<name>.md` in the adopting repo | yes |
+
+**Shared CORE fragments** (`ArtifactKind.shared`, BDL-061 S4) are how one text
+reaches several artifacts without being copied into each. Today there is one —
+`SHARED_ROLE_FRAGMENTS = ("_writing",)`, the writing standard composed into all
+four roles. It used to live inside the `tech-writer` core, so the three roles
+that produce the TO-BE documents were held to no standard at all; four copies
+would have drifted the moment one was edited. A shared fragment is a **layer and
+not a role**: it has no front matter, is never written as an adapter, and
+`compose_role("_writing", …)` raises. Being a normal layer, it is
+language-selectable like every other one.
 
 ### Artifact kinds
 
@@ -42,6 +53,13 @@ breaking the Beadloom gate":
 | `roles` | `templates/roles/core/<role>.md.txt` | `templates/roles/` | `.beadloom/flow/roles/<role>.md` |
 | `commands` | `templates/agentic_flow/commands/<cmd>.md.txt` | `templates/commands/` | `.beadloom/flow/commands/<cmd>.md` |
 | `claude` | `templates/agentic_flow/CLAUDE.md.txt` | `templates/claude/` | `.beadloom/flow/claude/CLAUDE.md` |
+| `docs` | `templates/docs/core/<kind>.md.txt` | `templates/docs/` | `.beadloom/flow/docs/<kind>.md` |
+
+`docs` (BDL-061 S4b) is the only kind with `carries_suppressions=False`: a
+declared suppression stands down a rule addressed to an AGENT, and a generated
+README has no rules to stand down, so appending the notice would publish flow
+configuration as documentation. See
+[`doc-templates`](../doc-templates/SPEC.md).
 
 The commands and `CLAUDE.md` keep their vendored location as the CORE and gain
 an overlay root beside it; moving them would have churned the whole scaffold for
@@ -83,7 +101,7 @@ Module `src/beadloom/onboarding/composer.py`:
 - `compose(kind, name, *, config, project_root=None)` → `Composition`
 - `Composition.text` → the composed body
 - `templates_dir()`, `project_fragment_path(kind, name, project_root)`
-- `ARTIFACT_KINDS`, `CLAUDE_ARTIFACT_NAME`, `COMPOSED_MARKER`,
+- `ARTIFACT_KINDS` (`roles`, `commands`, `claude`, `docs`), `CLAUDE_ARTIFACT_NAME`, `COMPOSED_MARKER`,
   `PROJECT_FLOW_DIRNAME`
 
 ## Testing

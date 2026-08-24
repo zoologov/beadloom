@@ -223,10 +223,13 @@ Protection is configured by `onboarding/branch_protection.py`. The set it applie
 
 ```
 gate · tests (3.10) · tests (3.11) · tests (3.12) · tests (3.13) ·
-tests-locale (C) · tests-locale (en_US.ISO-8859-1) · site-build · ai-techwriter
+tests-locale (C) · tests-locale (en_US.ISO-8859-1) ·
+site-build · ai-techwriter
 ```
 
-**This repository's live protection currently requires seven of them** — the two `tests-locale` contexts are not in it, verified against `gh api repos/:owner/:repo/branches/main/protection`. The legs are knowingly red until bead `beadloom-mr2l.42` fixes the text I/O they expose, and a red required check under `strict: true` would make `main` unmergeable. So `beadloom setup-branch-protection` is idempotent but **not** currently safe to re-run here: running it today would apply all nine and block every merge until `.42` closes. Re-run it after that bead, or pass `--check` for the set the pipeline can satisfy.
+**This repository's live protection currently requires seven of them** — the two `tests-locale` contexts are not in it, verified against `gh api repos/:owner/:repo/branches/main/protection`. Those legs were knowingly red until bead `beadloom-mr2l.42` fixed the text I/O they exposed, and both are green now — the delta between legs is the measurement, never any leg's colour. A red required check under `strict: true` would make `main` unmergeable, so `beadloom setup-branch-protection` is idempotent but is re-run only after comparing the declared contexts against what actually reports green on an open pull request; otherwise pass `--check` for the set the pipeline can satisfy.
+
+The count has moved in both directions, which is the thing to take from it rather than the number. A tenth context, `tests-windows`, was added in BDL-061.39 to vary the PLATFORM the way `tests-locale` varies the environment, and the owner withdrew it in `beadloom-mr2l.64`: the leg was measured at ~16-28 runner-minutes per pull request and, unlike the locale rows, it becomes the pipeline's critical path and roughly triples PR-to-merge latency, for a platform outside this project's audience. Nothing in this project has ever executed on Windows, and by that decision nothing will — which is stated in `docs/domains/application/features/flow-guards/SPEC.md` as *unverified by decision*, rather than left for a green pipeline to imply.
 
 The `enforce_admins: true` flag means even the owner integrates through a pull request (strict trunk-based), and 0 required reviews leave a solo maintainer able to merge themselves — but the `main` branch still can't be bypassed.
 
@@ -545,7 +548,7 @@ The typical 2.0.0 scenario looks like this. On the task branch the documentation
 | Drift base point | `git merge-base origin/<base> HEAD` (`--since`), scope narrowed by changed symbols |
 | Where the edit lands | a commit to the **same** pull request's branch (pushed via `AI_TW_PAT`) |
 | Verdict | `ok` / `infra` → exit 0; `flagged` → exit 1 (only real drift blocks) |
-| Required checks | scaffolded default 9: `gate`, `tests (3.10..3.13)`, `tests-locale (C)`, `tests-locale (en_US.ISO-8859-1)`, `site-build`, `ai-techwriter`; live on this repo: the 7 without `tests-locale`, until `beadloom-mr2l.42` |
+| Required checks | scaffolded default 9: `gate`, `tests (3.10..3.13)`, `tests-locale (C)`, `tests-locale (en_US.ISO-8859-1)`, `site-build`, `ai-techwriter`; live on this repo: the 7 without the two `tests-locale` contexts |
 | Branch protection | `enforce_admins: true`, 0 reviews (strict trunk-based) |
 | How it reaches main | pull request + human merge (no automatic merge) |
 | What the server-side agent writes | `docs/**` only |

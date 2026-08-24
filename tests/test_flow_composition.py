@@ -158,7 +158,16 @@ class TestComposeApi:
         )
         result = compose("roles", "dev", config=config, project_root=project)
         layers = [f.layer for f in result.fragments]
-        assert layers == ["core", "architecture:ddd", "stack:python", "project"]
+        # ``core:_writing`` is the shared writing standard, composed into every
+        # role straight after its own core (BDL-061 S4). It is a LAYER and not a
+        # role: one text, one file, four consumers.
+        assert layers == [
+            "core",
+            "core:_writing",
+            "architecture:ddd",
+            "stack:python",
+            "project",
+        ]
         assert result.text.endswith("\n## Acme\n")
 
     def test_unknown_kind_is_loud(self, tmp_path: Path) -> None:

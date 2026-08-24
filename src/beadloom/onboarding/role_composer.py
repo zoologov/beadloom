@@ -13,6 +13,11 @@ A role file is no longer one monolith. It is assembled deterministically from:
   ``typescript`` / ``vuejs``: the stack idioms + lint/type/test commands, under
   ``templates/roles/stack/<stack>/<role>.md.txt``.
 
+* the **shared CORE fragments** (:data:`SHARED_ROLE_FRAGMENTS`) — today the
+  writing standard, composed into every role straight after its own core, so the
+  roles that produce TO-BE documents are held to the same bar as the one that
+  produces AS-IS documents. Language-selectable like every other layer (#136).
+
 * a **PROJECT** fragment at ``.beadloom/flow/roles/<role>.md`` in the adopting
   repo — the supported place for a team's standing practices, appended last
   (BDL-061 S3; BDL-UX #139, #152).
@@ -33,7 +38,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from beadloom.onboarding.composer import compose, templates_dir
+from beadloom.onboarding.composer import (
+    SHARED_ROLE_FRAGMENTS,
+    compose,
+    templates_dir,
+)
 from beadloom.onboarding.flow_config import (
     DEFAULT_LANGUAGE,
     SUPPORTED_ARCHITECTURES,
@@ -46,6 +55,14 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from beadloom.onboarding.flow_suppression import FlowSuppression
+
+__all__ = [
+    "ROLE_NAMES",
+    "SHARED_ROLE_FRAGMENTS",
+    "compose_all_roles",
+    "compose_role",
+    "roles_templates_root",
+]
 
 #: Canonical role names (mirrors ``agentic_flow_setup.AGENT_FILES``).
 ROLE_NAMES: tuple[str, ...] = ("dev", "test", "review", "tech-writer")

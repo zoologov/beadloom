@@ -71,6 +71,16 @@ from typing import Protocol
 #: * ``site-build`` — the VitePress build job;
 #: * ``ai-techwriter`` — gated on ``needs: [gate, tests, site-build]``.
 #:
+#: There is no PLATFORM dimension in this set, and the absence is a decision
+#: rather than an omission. A ``tests-windows`` context was added in BDL-061.39
+#: and withdrawn by the owner in ``beadloom-mr2l.64`` on a measured cost:
+#: ~16-28 runner-minutes per PR, and — unlike the locale rows, which finish
+#: inside the ubuntu legs' shadow — a Windows leg becomes the pipeline's
+#: critical path and roughly triples PR-to-merge latency. Windows is not in this
+#: project's target audience. If it is ever bought back, the ci.yml job and this
+#: context land in the SAME change: a context whose check-run nothing produces
+#: never reports, and under ``strict: true`` that branch is unmergeable.
+#:
 #: A required status-check context MUST match a real GitHub check-run name
 #: EXACTLY, and must NOT be a **path-filtered** workflow's check: such a check
 #: does not run on PRs that miss the path filter, so under ``strict: true`` the

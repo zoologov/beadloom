@@ -17,6 +17,7 @@ The sync check pipeline operates in four phases:
 - **Phase 2: Source coverage checks** (`check_source_coverage`). For each graph node with a directory-based `source` (ending in `/`), verifies that all Python files on disk are tracked in sync_state or code_symbols. Reports `untracked_files` when gaps are found.
 - **Phase 3: Doc coverage checks** (`check_doc_coverage`). For each graph node with a directory-based `source`, verifies that the linked documentation mentions all Python module names (file stems). Reports `missing_modules` when the doc does not reference a module.
 - **Phase 4: The declared surface** (`find_missing_declared_docs`). Every doc a graph node names in its `docs:` list is checked for existence. The declaration lives in the committed graph YAML, so deleting the file cannot remove it — which is what stops the gate being satisfied by having less to check (BDL-UX #174).
+- **Phase 5: The document's SHAPE** (`check_section_shape`, BDL-061 S4b). The four phases above all compare CONTENT; this one compares structure, and it is the only phase that can see a document edited down to a title. It runs only when the caller supplies `section_requirements` — the required sections are derived from the composed doc templates in the `onboarding` PEER domain, so they are passed in rather than read here. Nothing is written to `sync_state`. See [`doc-shape`](features/doc-shape/SPEC.md).
 
 ### Where the baseline lives
 
@@ -55,6 +56,7 @@ class SyncPair:
 | `stale` | Compared and drifted -- update needed | 2 |
 | `missing` | The doc or code file is gone, or the graph declares a doc that is not on disk | 2 |
 | `unverified` | There was nothing to compare against (rebuilt index, no git baseline). Reported by name; never counted as fresh | 0 |
+| `incomplete` | The document is current and does not carry the shape its kind requires. A `warn`: reported, never blocking | 0 |
 
 Every result also carries `baseline` -- `index`, `git:HEAD` or `none` -- so a
 green result says what it was green against.
@@ -72,6 +74,8 @@ green result says what it was green against.
 | `doc_missing` / `code_missing` | One side of the pair no longer exists on disk |
 | `declared_doc_missing` | The graph declares this doc and the tree does not hold it |
 | `no_baseline` | The index was rebuilt (its baseline is the tree it indexed) and git could not supply one -- **not checked** |
+| `missing_sections` | The document lacks sections a MAJORITY of its peers of the same kind carry |
+| `section_not_in_use` | A required section no majority of a kind's documents carries — reported once against the KIND, with its ratio, because the fix is in the template and not in every document |
 | `surface_drift` | **Advisory warning** (severity `warning`, never a hard failure / exit 2). A reference / overview doc that declared `<!-- beadloom:watches=... -->` has had a watched surface (`cli` / `graph` / `flow.yml`) change since its baseline. Stored in the separate `reference_state` table; cleared with `beadloom sync-update <doc> --yes`. |
 
 ### Modules
@@ -82,6 +86,8 @@ green result says what it was green against.
 - **surface_ledger.py** -- The committed record (`.beadloom/sync-surface.json`) of how much there was to check last time, so a shrinking surface is reported rather than silently smaller
 - **surface.py** -- Layer 2 reference surface-drift: parses the in-doc `<!-- beadloom:watches=cli,graph,flow.yml -->` annotation and computes coarse, deterministic per-surface signatures (`cli` command+flag tree, `graph` node+edge identity set, normalized `flow.yml`) plus the order-sensitive aggregate hash
 - **doc_indexer.py** -- Markdown scanning, chunking by H2 headings, section classification, and SQLite population
+- **doc_shape.py** -- Whether a document still carries the sections its kind requires; peer-relative by majority, so a convention is reported once and an outlier per document ([SPEC](features/doc-shape/SPEC.md))
+- **doc_quality.py** -- The five writing-standard checks over planning documents: a measurable goal, a decision with a reason, a risk with a mitigation, no `Pending` question in an `Approved` document, no unfilled template placeholder ([SPEC](features/doc-quality/SPEC.md))
 - **audit.py** -- Documentation audit: fact registry, comparator, and audit facade for detecting stale numeric facts
 - **scanner.py** -- Document scanner: which markdown files are in scope (and which are skipped, with the reason), and keyword-proximity extraction of numeric fact mentions from them
 - **audit_coverage.py** -- Per-fact coverage of an audit run: whether anything was checked for each declared fact (`verified` / `not_covered` / `unreadable`), so a count of findings can no longer read as a verdict on facts nobody stated
@@ -144,7 +150,7 @@ In `warn` mode, violations print warnings but do not block the commit. In `block
 ### Module `src/beadloom/doc_sync/engine.py`
 
 - `build_sync_state(conn: sqlite3.Connection) -> list[SyncPair]` -- Build sync pairs from docs and code_symbols sharing a ref_id.
-- `check_sync(conn: sqlite3.Connection, project_root: Path | None = None) -> list[dict[str, Any]]` -- Multi-phase sync check. Returns list of dicts with fields: `doc_path`, `code_path`, `ref_id`, `status`, `reason`, `baseline`, and optional `details`. Runs hash comparison, symbol drift detection, git corroboration of fabricated baselines, source coverage, doc coverage, and the declared-surface check.
+- `check_sync(conn: sqlite3.Connection, project_root: Path | None = None, *, section_requirements: Mapping[str, tuple[str, ...]] | None = None) -> list[dict[str, Any]]` -- Multi-phase sync check. Returns list of dicts with fields: `doc_path`, `code_path`, `ref_id`, `status`, `reason`, `baseline`, and optional `details`. Runs hash comparison, symbol drift detection, git corroboration of fabricated baselines, source coverage, doc coverage, the declared-surface check, and — only when `section_requirements` is supplied — the document-shape phase. `section_requirements=None` means structure was NOT checked; the requirements come from the `onboarding` PEER domain and so are injected by the application layer rather than read here.
 - `find_missing_declared_docs(conn, project_root) -> list[dict[str, str]]` -- (re-exported from `declared_docs.py`) Docs the graph declares that are not on disk. Each entry carries `ref_id`, `doc_path` (project-relative) and `index_path`.
 - `mark_synced(conn: sqlite3.Connection, doc_path: str, code_path: str, project_root: Path) -> None` -- Recompute hashes for a doc-code pair and mark as synced. Updates `symbols_hash` baseline.
 - `mark_synced_by_ref(conn: sqlite3.Connection, ref_id: str, project_root: Path) -> int` -- Mark all doc-code pairs for a ref_id as synced. Returns the number of rows updated. (Backs `beadloom sync-update --yes`/`--all`.)
@@ -156,6 +162,22 @@ In `warn` mode, violations print warnings but do not block the commit. In `block
 - `check_reference_drift(conn: sqlite3.Connection, project_root: Path) -> list[dict[str, Any]]` -- (BDL-057 Layer 2) Recompute each reference doc's aggregate hash and report drift. Returns one dict per reference doc with `doc_path`, `watches`, `status` (`ok`/`surface_drift`), `reason`, and `severity` (always `warning`). Persists the new status; never affects the `sync-check` exit code.
 - `mark_reference_synced(conn: sqlite3.Connection, doc_path: str | None, project_root: Path, *, all_docs: bool = False) -> int` -- (BDL-057 Layer 2) Re-baseline a reference doc's aggregate hash (or every reference doc when `all_docs`), clearing surface drift. Returns the number of rows re-baselined. (Backs `beadloom sync-update <doc> --yes` / `--all`.)
 - `describe_reference_doc(conn: sqlite3.Connection, doc_path: str | None, project_root: Path) -> dict | None` -- the **read-only** counterpart: a reference doc's `watches` set and its current drift status (`ok` / `surface_drift`), with the baseline and current aggregate hashes. `None` when the path is not a tracked reference doc. Executes no `UPDATE` and does not commit. (Backs `beadloom sync-update <doc> --check`, BDL-UX #189.)
+
+### Module `src/beadloom/doc_sync/doc_shape.py`
+
+- `document_sections(text: str) -> tuple[str, ...]` -- Every heading in a markdown document, at any depth.
+- `carries_section(sections: Iterable[str], required: str) -> bool` -- Whether a required section is stated. Case-insensitive, whole-word and depth-independent, so `## Features and components` carries `Features` and `## Featureset` does not.
+- `check_section_shape(conn, project_root, requirements) -> list[dict[str, Any]]` -- Phase 5 of `check_sync`. Peer-relative: a section is required of a node kind only when a MAJORITY of that kind's documents carry it; a minority reports the KIND once with its ratio (`Source (5/39)`) instead of reporting every document that follows the project's actual convention.
+- `STATUS_INCOMPLETE` (`incomplete`), `REASON_MISSING_SECTIONS`, `REASON_SECTION_NOT_IN_USE` -- deliberately absent from `BLOCKING_STATUSES`, and never written to `sync_state`: the column would then mean two things, and a check that writes to what it inspects cannot be trusted about it.
+
+### Module `src/beadloom/doc_sync/doc_quality.py`
+
+- `check_document(text: str, *, path: str, placeholders: Sequence[str] = ()) -> QualityReport` -- The five checks over one document, returning the findings and how much each check had to READ.
+- `check_documents(paths, *, project_root, placeholders=()) -> QualityReport` -- The same over a set, aggregated per check and per document KIND. A document that does not decode is counted, carries a named `unreadable` finding and is left out of its kind's denominators.
+- `document_kind(path: str) -> str` -- The file's stem: `PRD.md` is a `PRD`. A project whose documents are `prd.md` gets `prd` as a kind of its own, which is honest — nothing was told the two are the same.
+- `document_status(text) -> str` / `is_approved(text) -> bool` -- The `> **Status:**` line, and whether it is one of `APPROVED_STATUSES` (`approved`, `accepted`). A Draft is allowed its open questions.
+- `QualityReport` -- `findings`, `documents`, `applicable` (per check), `by_kind` (per `KindCoverage`), `unreadable`, and the properties `checks_that_read_nothing` and `kinds_that_read_nothing`. The second exists because the first is a global OR over the corpus and goes silent as soon as one document carries one row, so it cannot see a check that is blind on a whole document kind.
+- `CHECK_NAMES` (the five), `CONTENT_CHECKS` (the four that read ITEMS; `unfilled-placeholder` counts documents OPENED and would report every kind as read).
 
 ### Module `src/beadloom/doc_sync/git_baseline.py`
 
@@ -209,7 +231,7 @@ beadloom sync-check [--porcelain] [--json] [--report] [--ref REF_ID] [--since GI
 | Flag | Description |
 |------|----------|
 | `--porcelain` | TAB-separated machine-readable output |
-| `--json` | Structured JSON output: `summary` (incl. `missing`, `unverified`, `declared_docs` and the advisory `surface_drift` count), the symbol-pair `pairs` array (each with its `baseline`), an additive `references` array for reference-doc surface drift, and `declared_surface` (the ledger verdict). The `--since` shape is a fixed contract and is left untouched. |
+| `--json` | Structured JSON output: `summary` (incl. `missing`, `unverified`, `declared_docs` and the advisory `surface_drift` count), the symbol-pair `pairs` array (each with its `baseline`), an additive `references` array for reference-doc surface drift, and `declared_surface` (the ledger verdict). The `--since` shape is a fixed contract and is left untouched. **`incomplete` has no summary counter**: the rows are in `pairs` and are printed by name, but `ok + stale + missing + unverified + unchecked` does not sum to `total` when any row is incomplete, so a consumer reading only the summary does not see them (review `beadloom-mr2l.15` M5, open). |
 | `--report` | Markdown report for CI posting |
 | `--ref` | Filter results by ref_id |
 | `--since` | Baseline = code state at this git ref (e.g. the push's parent) instead of the stored `sync_state`; reports pairs whose code drifted since the ref while the doc was not correspondingly updated. Delegates to `check_sync_since`; invalid/zero refs are rejected via `_validate_git_ref`. |

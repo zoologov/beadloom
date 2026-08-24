@@ -208,3 +208,20 @@ rules:
     forbid_import:
       from: "src/beadloom/a[!i]*/**"
       to: "beadloom/ai_agents/**"
+
+  # Beadloom holds itself to the rule it ships (BDL-061 S4). The population is
+  # the honest one — every `feature` node — so the count it prints is the real
+  # debt and not a hand-picked list that reports 0 by construction. It is `warn`
+  # by design: a finding about declared INTENT is not a finding about code, and
+  # `error` would turn every adopter's green project red on the upgrade that
+  # ships the rule. Loudness replaces blocking, and every message carries the
+  # population it is a fraction of.
+  - name: scenario-coverage
+    description: "Behaviour-bearing nodes carry an executable scenario; a scenario names its bead"
+    severity: warn
+    scenario_coverage:
+      for: { kind: feature }
+      features: "tests/acceptance/features/**/*.feature"
+      references:
+        - ".claude/development/docs/features/**/PRD.md"
+        - ".claude/development/docs/features/**/BRIEF.md"
