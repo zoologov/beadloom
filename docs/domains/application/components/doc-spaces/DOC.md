@@ -30,7 +30,11 @@ false-positive class BDL-UX #169 and #190 already record against the audit
 scanner.
 
 An epic that declares no node is therefore **unresolved** — counted in its own
-bucket and reported, never silently counted as clean.
+bucket and reported, never silently counted as clean. So is an epic whose
+planning document carries no *Related Files* heading at all. Filtering those
+out was the first implementation: on this repository it removed 34 of 57 epics
+from the denominator and the report then read *16 of 23*, which looks like
+coverage of two thirds where the real figure is under a third.
 
 ## What is checked, and what is not
 

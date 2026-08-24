@@ -173,15 +173,6 @@ def _related_refs(text: str, known_refs: frozenset[str]) -> list[tuple[str, int]
     return found
 
 
-def _has_related_section(text: str) -> bool:
-    """Whether the document carries a related-files heading at all."""
-    return any(
-        any(word in match.group(1).lower() for word in _RELATED_HEADINGS)
-        for match in (_HEADING_RE.match(line) for line in text.splitlines())
-        if match is not None
-    )
-
-
 def read_epic_intents(
     project_root: Path,
     *,
@@ -192,9 +183,15 @@ def read_epic_intents(
     """Every epic in the TO-BE space, with the nodes it declares.
 
     An epic is a TO-BE directory carrying one of :data:`_INTENT_DOCUMENTS` — the
-    documents whose template has a related-files section. A directory of planning
-    documents without one declares no relation and is not an epic for this
-    purpose, which keeps a project's loose notes out of the denominator.
+    documents whose template has a related-files section.
+
+    An epic whose document has NO such section is still an epic here, and lands
+    in ``unresolved_epics`` with no declared ref. Filtering it out was the first
+    implementation and it was wrong in the way this epic keeps meeting: on this
+    repository it removed 34 of 57 epics from the denominator and the report
+    then said "16 of 23", which reads like coverage of two thirds where the real
+    figure is under a third. Absence is not evidence, and a denominator that
+    shrinks without saying why is BDL-UX #174's equation.
     """
     directories: dict[Path, None] = {}
     for path in spaces.documents_in(project_root, SPACE_TO_BE):
@@ -206,7 +203,7 @@ def read_epic_intents(
             if not candidate.is_file():
                 continue
             text = _read(candidate)
-            if text is None or not _has_related_section(text):
+            if text is None:
                 continue
             key = directory.name
             intents.append(

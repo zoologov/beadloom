@@ -288,6 +288,22 @@ class TestRelation:
         assert report.epics_declaring_nothing == 1
         assert report.findings == ()
 
+    def test_an_epic_with_no_related_section_still_counts(self, tmp_path: Path) -> None:
+        """The denominator must not shrink because a document lacks a heading.
+
+        Filtering these out was the first implementation: on this repository it
+        removed 34 of 57 epics and the report then read "16 of 23", which looks
+        like coverage of two thirds where the real figure is under a third.
+        """
+        _write(
+            tmp_path,
+            f"{_EPICS}/BDL-1/CONTEXT.md",
+            "# CONTEXT\n\n## Goal\n\nShip it.\n",
+        )
+        report = _report(tmp_path, beads={"BDL-1": ("closed",)})
+        assert report.epics == 1
+        assert report.unresolved_epics == ("BDL-1",)
+
     def test_an_empty_population_says_it_related_nothing(self, tmp_path: Path) -> None:
         """A relation check with nothing to relate must not read as clean."""
         report = _report(tmp_path, beads={})

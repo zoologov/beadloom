@@ -62,8 +62,8 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
 
    ```
    doc-spaces WARN | to_be 190, as_is 93, working 55; 17 node declaration(s)
-                     from 16 of 23 epic(s) with closed beads held against the
-                     AS-IS space; NOT CHECKED: 18 epic(s) declare no node;
+                     from 37 of 57 epic(s) with closed beads held against the
+                     AS-IS space; NOT CHECKED: 52 epic(s) declare no node;
                      55 WORKING document(s) exempt
    ```
 7. **config-check** — agent-config drift (AgentConfigAsCode). Since BDL-061 S3
