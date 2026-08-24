@@ -372,9 +372,15 @@ def prime(*, as_json: bool, update: bool, project: Path | None) -> None:
 @click.argument("query")
 @click.option(
     "--kind",
-    type=click.Choice(["domain", "feature", "service", "entity", "adr"]),
+    # Node kinds, plus the three documentation SPACES (BDL-061 S5). A document
+    # bound to no node is indexed under its space, so `--kind to_be` narrows to
+    # intent; without these choices the space rows would be reachable only by a
+    # query that happens not to match a node, which is not a filter.
+    type=click.Choice(
+        ["domain", "feature", "service", "entity", "adr", "to_be", "as_is", "working"]
+    ),
     default=None,
-    help="Filter results by node kind.",
+    help="Filter results by node kind, or by documentation space (to_be/as_is/working).",
 )
 @click.option("--limit", default=10, type=int, help="Max results.")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON.")

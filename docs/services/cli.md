@@ -469,10 +469,19 @@ Displays added/removed/changed nodes and added/removed edges between the two sna
 Search nodes and documentation by keyword.
 
 ```bash
-beadloom search QUERY [--kind {domain,feature,service,entity,adr}] [--limit N] [--json] [--project DIR]
+beadloom search QUERY [--kind {domain,feature,service,entity,adr,to_be,as_is,working}] [--limit N] [--json] [--project DIR]
 ```
 
 Uses FTS5 full-text search when available, falls back to SQL LIKE. Run `beadloom reindex` first to populate the search index.
+
+`--kind` takes a node kind, or one of the three documentation SPACES. A document
+bound to no node — every planning document in the TO-BE space — is indexed under
+its space and keyed by its path, so `--kind to_be` narrows a search to recorded
+intent:
+
+```bash
+beadloom search "sequencing principles" --kind to_be
+```
 
 ### beadloom why
 

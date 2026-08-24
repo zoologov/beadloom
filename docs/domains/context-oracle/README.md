@@ -509,7 +509,7 @@ The context-oracle domain exposes functionality through CLI commands registered 
 
 - **`services/commands/query.py`** — read-only context/graph query commands:
   - `beadloom ctx REF_IDS... [--json] [--markdown] [--depth N] [--max-nodes N] [--max-chunks N] [--project DIR]` -- Build and display context bundle
-  - `beadloom search QUERY [--kind KIND] [--limit N] [--json] [--project DIR]` -- FTS5 search with LIKE fallback
+  - `beadloom search QUERY [--kind KIND] [--limit N] [--json] [--project DIR]` -- FTS5 search with LIKE fallback. `KIND` is a node kind or one of the three documentation spaces (`to_be`/`as_is`/`working`), because a document bound to no node is indexed under its space (BDL-061 S5)
   - `beadloom why REF_ID [--depth N] [--reverse] [--format panel|tree] [--json] [--project DIR]` -- Impact analysis
   - `beadloom graph [REF_IDS...] [--json] [--depth N] [--format mermaid|c4|c4-plantuml] [--level context|container|component] [--scope REF_ID] [--project DIR]` -- Architecture graph (Mermaid, C4-Mermaid, C4-PlantUML, or JSON). C4 formats use `--level` for diagram granularity and `--scope` to show internals of one container (only with `--level=component`).
 - **`services/commands/federation.py`** — federation, gate, and lint commands:

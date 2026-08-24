@@ -7,6 +7,38 @@
 
 ## Current Bead
 
+**Slice: S5** on `features/BDL-061-S5`.
+
+**`.17` CLOSED (2026-08-24) — and REPORTED AS TWO BEADS, the second time this epic has met
+the shape.** PLAN sized S5's dev work as one slice and named it a likely candidate for the
+split; it is six mechanisms, and five of them share `infrastructure/doc_roots.py` while the
+sixth shares nothing with them. The seam was called before the ROADMAP half was started.
+
+- **`.17` — the spaces, and intent held against reality.** TO-BE / AS-IS / WORKING,
+  deliberately not TODO/DONE: nothing changes status, so the checkable claim is a relation
+  between two artifacts rather than a flag on one. Configurable doc roots, the TO-BE space
+  indexed in place and searchable, WORKING exempt from freshness by declaration, and the
+  TO-BE → AS-IS relation as `beadloom docs spaces` plus a warn-only gate step.
+- **`.72` — ROADMAP and issue log as instances with computed facts.** Filed, not absorbed.
+  Those two are checked by mechanisms that already exist and belong to other modules —
+  `doc_shape`'s required sections and `docs audit`'s fact registry — so the halves share a
+  vocabulary and no code. Same call `.13` made in S4, on the same evidence.
+
+**What `docs spaces` reports on this repository today: ONE finding, and it is true.** BDL-061
+declares `cli-commands` in its CONTEXT's *Related Files*, has 60+ closed beads, and
+`cli-commands` has no `docs:` entry at all — a node that shipped without documentation, which
+neither `lint --strict` nor `module-coverage` can see because both ask about modules reaching
+nodes rather than nodes reaching documents. 17 node declarations from 16 of 23 epics with
+closed beads were held against the AS-IS space; 18 epics declare no node and are named as NOT
+CHECKED rather than counted as clean.
+
+**The relation was measured before it was built.** The obvious join — every backticked token
+in an epic's documents that matches a ref id — was written first and thrown away: on 60 epics
+it attributed the node `status` to nine whose documents merely used the English word. The
+declared *Related Files* section is the join that shipped.
+
+---
+
 **Slice: S4** on `features/BDL-061-S4`.
 
 **`.13` CLOSED (2026-08-24) — and REPORTED AS TWO BEADS, not one.** PLAN sized S4's dev work
@@ -593,13 +625,16 @@ header comment, where a reader of a red check will look first.
 | .70 | Done | S5 dev: re-scoped `measurable-goal` from a numeral detector to a two-leg criterion — a goal is reported only when its predicate is an unbounded improvement AND it names no witness (a quantity, a named artifact, or an observable outcome). Measured on this repository: 154 of 235 -> **4 of 232**, and the population fell only because three of the 235 were a markdown horizontal rule (review `.15` m1). No tolerance, no excluded document, no suppression. The reviewer's proposed criterion did NOT reproduce its stated 87 under any literal reading (49 / 54 / 91 / 134 / 139), and its remainder still held statements that are not the "make it better" class, so the criterion shipped is a different one. Stated limit, measured: 27 of the 150 newly-accepted statements name no witness either and this check now decides nothing about them — precision was bought with recall, deliberately. 7 sabotages, 6 bit first time and the 1 that did not exposed a real gap (nothing pinned the improvement leg's necessity), now closed by two rows |
 | .67 | Pending | The decode sweep: 29 narrow handlers judged per site, per `.42`'s framework. Depends on `.68` |
 | .69 | Pending | Filed by `.16`: `_writing.md.txt` and `_writing.ru.md.txt` tell every role that `beadloom lint` reports the five section-quality checks. It reports none of them — measured: 68 lint findings, all `scenario_coverage`, and 156 doc-quality findings from the other command |
-| .17–.20 | Pending | S5 TO-BE / AS-IS / WORKING |
+| .17 | Done | S5 dev: three documentation spaces and the TO-BE → AS-IS relation. `infrastructure/doc_roots.py` (the vocabulary, configurable roots, kind wins over root) and `application/doc_spaces.py` (the relation, read only from the epic's declared *Related Files*). WORKING exempt from freshness by declaration — `check_sync` verdict `exempt` carrying the declared reason — with a wrong declaration detectable two ways. TO-BE indexed IN PLACE on both reindex paths and searchable (`docs.space` + an FTS row per unlinked document). `beadloom docs spaces` and a warn-only `doc-spaces` gate step. **Measured here: to_be 190 / as_is 93 / working 55; 17 node declarations from 16 of 23 epics with closed beads; ONE finding — BDL-061 declares `cli-commands`, which has no AS-IS document at all.** 18 epics declare no node and are named as not checked. **REPORTED AS TWO BEADS:** the ROADMAP/issue-log half shares no module with these five mechanisms and became `.72` |
+| .72 | Pending | Split out of `.17`: the `ROADMAP` and issue-log kinds, and counts a mechanism computes so the hand-written tally cannot return. `.19` and `.20` will need it; the DAG was NOT rewired — that is the owner's call |
+| .18–.20 | Pending | S5 test / review / tech-writer |
 | .21–.24 | Pending | S6 waves from the graph (#155, #118, #133) |
 
 ## Notes
 
-**Branch:** `features/BDL-061-S4` for the current slice. Earlier slices ran on
-`features/BDL-061-S3`, `features/BDL-061-S2b`, `features/BDL-061-S2` and `features/BDL-061`.
+**Branch:** `features/BDL-061-S5` for the current slice. Earlier slices ran on
+`features/BDL-061-S4`, `features/BDL-061-S3`, `features/BDL-061-S2b`, `features/BDL-061-S2`
+and `features/BDL-061`.
 A slice boundary is a PR boundary — each slice green on `main` before the next begins, as
 BDL-060 ran.
 

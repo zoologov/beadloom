@@ -11,13 +11,12 @@ self-edges for annotated symbols.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from typing import TYPE_CHECKING, Any
 
 from beadloom.application.reindex.models import _CODE_EXTENSIONS
 from beadloom.context_oracle.code_indexer import extract_symbols
-from beadloom.doc_sync.doc_indexer import DocIndexResult, chunk_markdown
+from beadloom.doc_sync.doc_indexer import DocIndexResult
 from beadloom.infrastructure.scan_paths import resolve_scan_paths
 
 if TYPE_CHECKING:
@@ -215,34 +214,30 @@ def _index_single_doc(
     docs_dir: Path,
     ref_map: dict[str, str],
 ) -> tuple[int, int]:
-    """Index one doc file. Returns ``(docs_count, chunks_count)``."""
+    """Index one doc file. Returns ``(docs_count, chunks_count)``.
+
+    Delegates the row write to :func:`~beadloom.doc_sync.doc_indexer.
+    _insert_document`, the one the FULL path uses, so the two reindex paths
+    cannot disagree about what a ``docs`` row carries — the ``space`` column
+    would otherwise be set on one path and left to its default on the other,
+    which is the incremental/full divergence BDL-UX #142 and #146 both are.
+    """
+    from beadloom.doc_sync.doc_indexer import _insert_document
+    from beadloom.infrastructure.doc_roots import SPACE_AS_IS
+
     content = md_path.read_text(encoding="utf-8")
     rel_path = str(md_path.relative_to(docs_dir))
-    file_hash = hashlib.sha256(content.encode()).hexdigest()
-    ref_id = ref_map.get(rel_path)
-
-    conn.execute(
-        "INSERT INTO docs (path, kind, ref_id, hash) VALUES (?, ?, ?, ?)",
-        (rel_path, "other", ref_id, file_hash),
+    result = DocIndexResult()
+    _insert_document(
+        conn,
+        path=rel_path,
+        content=content,
+        ref_id=ref_map.get(rel_path),
+        space=SPACE_AS_IS,
+        result=result,
     )
-    doc_id = conn.execute("SELECT id FROM docs WHERE path = ?", (rel_path,)).fetchone()[0]
-
-    chunks = chunk_markdown(content)
-    for chunk in chunks:
-        conn.execute(
-            "INSERT INTO chunks (doc_id, chunk_index, heading, section, "
-            "content, node_ref_id) VALUES (?, ?, ?, ?, ?, ?)",
-            (
-                doc_id,
-                chunk["chunk_index"],
-                chunk["heading"],
-                chunk["section"],
-                chunk["content"],
-                ref_id,
-            ),
-        )
     conn.commit()
-    return 1, len(chunks)
+    return result.docs_indexed, result.chunks_indexed
 
 
 def _index_single_code_file(
