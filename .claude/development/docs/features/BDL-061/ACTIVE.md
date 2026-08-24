@@ -721,7 +721,7 @@ header comment, where a reader of a red check will look first.
 | .22 | In progress | S6 test: the guarantee held to both clauses — clause one enforced, clause two measured as prose; five findings pinned as strict xfails. Left open deliberately: `.78` and `.79` have not shipped |
 | .80 | Done | S6 fix: clause two ENFORCED — each of the four shared media gets a plan-time check that can fail, and a medium nobody measured is `unmeasured`, which is a finding rather than a pass. The sentence in `waves/__init__.py`, the SPEC and `cli.md` now names the split it ships: what is checked is a PRECONDITION measured before the wave runs, and the wave's conduct afterwards is checked by nothing here and cannot be. #171 closes — `waves` held the allocated id and the id written into the title and never compared them; it does now, and the first dogfood run found a live one (`beadloom-mr2l.72` titled `BDL-061.17b`). All five `.22` pins pass. #118 JUDGED rather than patched: the `git add` half is not fixable at the hook layer (the swept hunk is inside the region the gate judges) and is filed as `.81` with its mechanism and its four preceding decisions; the `active-sync --stage` half IS fixed — the hook now lists what it added to a commit in flight |
 | .23–.24 | Pending | S6 review and docs |
-| .78–.79, .81 | Pending | S6 follow-ups: the doc-baseline vocabulary (#133/#182), reviewer isolation (#155 C), the committed-scope comparison (#118 remainder) |
+| .78–.79, .81–.82 | Pending | S6 follow-ups: the doc-baseline vocabulary (#133/#182), reviewer isolation (#155 C), the committed-scope comparison (#118 remainder), and the hook's mypy leg checking a surface the project never declared typed |
 
 ## Notes
 
