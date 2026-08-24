@@ -40,7 +40,7 @@ make the count of real problems unreadable.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
@@ -186,7 +186,9 @@ class SpacesReport:
     working_reason: str
     findings: tuple[SpaceFinding, ...] = ()
     unresolved_epics: tuple[str, ...] = ()
-    unresolved_reasons: Mapping[str, str] = MappingProxyType({})
+    unresolved_reasons: Mapping[str, str] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
     """Why each unresolved epic is unresolved, keyed by epic key."""
     epics_unknown_to_tracker: tuple[str, ...] = ()
     """Epics a READABLE tracker does not name, by key.
@@ -202,7 +204,9 @@ class SpacesReport:
     classification that overrules a project's own roots without saying so is how
     a whole planning tree left the population while the count stayed plausible.
     """
-    working_reach: Mapping[str, int] = MappingProxyType({})
+    working_reach: Mapping[str, int] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
     """How many documents each DECLARED half of the WORKING exemption excused.
 
     Keyed ``kind ACTIVE`` / ``root docs/**/*.md``, and empty for a project that
