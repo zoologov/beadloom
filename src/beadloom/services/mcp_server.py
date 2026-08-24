@@ -26,6 +26,7 @@ from beadloom.application.active_table import (
 )
 from beadloom.application.gate import run_ci_gate
 from beadloom.application.reindex import incremental_reindex
+from beadloom.application.waves import declared_refs
 from beadloom.context_oracle.builder import bfs_subgraph, build_context
 from beadloom.context_oracle.cache import (
     ContextCache,
@@ -689,7 +690,17 @@ def handle_bead_context(
         record = _bd_show(bead, project_root)
     except BdUnavailableError as exc:
         return {"status": "ERROR", "error": str(exc)}
-    ref_id = _extract_field(record, "ref") or _extract_field(record, "area")
+    # ONE parser for a bead's declared scope, shared with `beadloom waves`
+    # (BDL-061 S6). Two readings of one declaration is how a tool and a planner
+    # come to disagree about what a bead said — the id-in-two-places defect this
+    # epic has now met three times (BDL-UX #171, #177, #179).
+    declared = declared_refs(
+        " ".join(
+            str(record.get(key, ""))
+            for key in ("design", "description", "title", "notes")
+        )
+    )
+    ref_id = declared[0] if declared else None
     if ref_id is None:
         return {
             "status": "ERROR",

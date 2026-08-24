@@ -7,7 +7,43 @@
 
 ## Current Bead
 
-**Slice: S5** on `features/BDL-061-S5`.
+**Slice: S6** on `features/BDL-061-S6`.
+
+**`.21` — `beadloom waves` decides, and #118 closes. REPORTED AS THREE BEADS**, the third time
+this epic has met the shape and the one PLAN named in advance. The bead carried four
+deliverables; two of them share the wave decision's own question and two do not.
+
+- **`.21` (shipped) — the wave shape, and the commit gate that makes it runnable.**
+  `beadloom waves <bead>...` decides parallelism from the code-level independence of the beads'
+  node scopes, with one named reason per serialised pair and a human override recorded as an
+  exclusion carrying a reason and an exit condition. #118 ships with it rather than after it,
+  because a wave the tooling then breaks is an advisory wave shape — the failure the decision
+  exists to remove. The pre-commit hook now judges the commit and states the tree it did not
+  judge; the pre-push Gate is unchanged.
+- **`.78` — a doc pair says whose own file moved (#133/#182).** Split on a measurement taken on
+  this bead's own tree: one new package made `sync-check` report **72 stale pairs, 10 of which
+  had a file this tree modified**, and the fixpoint cost 3 revisions and 65 deliberate
+  re-attestations. #133 is #182 observed at integration time — the per-worktree baseline is the
+  occasion, the per-node `symbols_hash` is the cause — and the repair needs a verdict-vocabulary
+  decision the wave bead does not own.
+- **`.79` — the reviewer's input excludes the author's advocacy (#155 C).** Split because it
+  shares no module with the wave decision: it changes what a role is HANDED, not which beads may
+  run at once.
+
+**The guarantee the shape makes**, written down because half of it is what this session
+measured rather than what the graph knows: *for any two beads placed in the same wave, no medium
+they share can carry one bead's in-progress state into the other's result — and where a medium
+cannot give that guarantee, the wave says so and names the one bead that measures the combined
+outcome.* Code independence is the half the graph decides. The other half — one working tree
+(#181), one commit gate (#118), one doc baseline (#182/#133), one tracker id space (#171) — is
+not decidable by any shape, so every wave of more than one bead prints it with its evidence and
+assigns a `gate_owner`.
+
+**Dogfooded on this epic's own beads.** Asked about `.21` and `.72`, the command refused to call
+them parallel: neither had declared a scope, and an unknown scope is not an empty one. Asked
+about the two beads it just filed, it decided cleanly — `.78` before `.79`, because
+`cli-commands` depends on `doc-quality`, which is part of the `doc-sync` domain `.78` rewrites.
+
 
 **`.17` CLOSED (2026-08-24) — and REPORTED AS TWO BEADS, the second time this epic has met
 the shape.** PLAN sized S5's dev work as one slice and named it a likely candidate for the

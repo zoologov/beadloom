@@ -377,7 +377,10 @@ class TestADeclaredKindIsNotShadowedByADefaultList:
         populations = _populations(REPO_ROOT, spaces)
 
         assert populations[SPACE_TO_BE] == 190
-        assert populations[SPACE_AS_IS] == 93
+        # 93 -> 94 in S6: `docs/domains/application/features/wave-plan/SPEC.md`.
+        # The number moves when this repository gains a document, which is what
+        # makes it a denominator rather than a constant.
+        assert populations[SPACE_AS_IS] == 94
         assert len(spaces.working_documents(REPO_ROOT)) == 55
 
 

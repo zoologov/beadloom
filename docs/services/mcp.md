@@ -328,7 +328,7 @@ Return ONE structured payload for a bead: graph context + impact + doc excerpt +
 }
 ```
 
-Resolves the bead's graph ref from a `ref:` (or `area:`) token in the bead's design/description via `bd show`, then reuses `context_oracle` (ctx + why) and `graph/rule_engine` (active rules). Read-only and deterministic. Returns `{ "status": "OK", "bead", "ref_id", "context", "impact", "active_rules", "doc_excerpt" }` (a `CONTEXT.md`/`ACTIVE.md` excerpt when locatable, else null). Returns `{"status": "ERROR", ...}` when the ref cannot be resolved or is not in the graph.
+Resolves the bead's graph ref from a `ref:`, `refs:` or `area:` token in the bead's design/description via `bd show`, then reuses `context_oracle` (ctx + why) and `graph/rule_engine` (active rules). Read-only and deterministic. Returns `{ "status": "OK", "bead", "ref_id", "context", "impact", "active_rules", "doc_excerpt" }` (a `CONTEXT.md`/`ACTIVE.md` excerpt when locatable, else null). Returns `{"status": "ERROR", ...}` when the ref cannot be resolved or is not in the graph.
 
 #### complete_bead
 
@@ -400,7 +400,7 @@ Handler functions (sync, testable without MCP transport):
 
 Process-tool handlers (BDL-048; the three bead-touching ones drive `bd` via the `services/bd_seam.py:run_bd` seam):
 - `handle_task_init(project_root, *, type_, key)` -- scaffold docs folder + per-type skeletons + a 4-role bead DAG (dev → test → review → tech-writer)
-- `handle_bead_context(project_root, *, bead)` -- one payload: ctx + why + CONTEXT/ACTIVE excerpt + active rules (resolves the bead's graph ref from `bd show`)
+- `handle_bead_context(project_root, *, bead)` -- one payload: ctx + why + CONTEXT/ACTIVE excerpt + active rules (resolves the bead's graph ref from `bd show`, through the same `application.waves.declared_refs` parser `beadloom waves` reads a bead's declared scope with, so the tool and the wave planner cannot come to disagree about what a bead said; the first declared ref is the one this tool builds a bundle for)
 - `handle_complete_bead(project_root, *, bead, run_tests=True)` -- the refusing gate: `run_ci_gate` (+ tests); PASS closes the bead (`bd close --suggest-next`) + best-effort flips its ACTIVE.md table row to `✓ done`, FAIL returns findings and does NOT close (table untouched); advisory-strong (CI is the true gate)
 - The suite runner behind it (`_run_test_suite`) reads pytest's output with a stated `encoding="utf-8"`, `errors="replace"`. It keeps only the summary line, and that line carries a test id, a path or an arrow often enough that inheriting the image's locale turned "the suite failed" into an unrelated decode error on a non-UTF-8 container; `replace` because the string is shown to an agent as prose, so a visible U+FFFD beats an exception (BDL-061.42)
 - `handle_checkpoint(project_root, *, bead, text, status="in progress")` -- `bd comments add` + best-effort timestamped ACTIVE.md note + best-effort ACTIVE.md table row → `status`

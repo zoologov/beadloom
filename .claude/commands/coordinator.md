@@ -111,6 +111,63 @@ Dependencies ARE the gates: a downstream bead never appears in `bd ready` until 
 
 ---
 
+## The wave shape is decided, not guessed (`beadloom waves`)
+
+Before launching a wave, ask the graph which of the ready beads may run at the
+same time:
+
+```bash
+beadloom waves <bead-id> <bead-id> ...      # exit 0 = clean, 1 = findings, 2 = undecidable
+beadloom waves <bead-id> ... --json         # the same facts, for a script
+```
+
+A tracker knows which beads block which; only the architecture graph knows which
+**code** they occupy, and that is what decides whether parallel agents pay off or
+rot. The command returns the wave shape, one named reason per serialised pair,
+and — for every wave of more than one bead — the media that wave shares no matter
+what shape was chosen.
+
+**A bead declares its scope in the tracker**, in its own words, so that it can be
+placed at all:
+
+```bash
+bd update <bead-id> --append-notes "refs: <ref-id>, <ref-id>"
+```
+
+A bead that declares nothing is serialised against every bead. That is not a
+penalty, it is the honest answer: an unknown scope is not an empty scope, and an
+empty one compares independent of everything.
+
+**Two obligations the shape hands to named beads rather than to habit:**
+
+- Each wave's `gate_owner` runs the combined-tree Gate once that wave has landed.
+  Every agent verifying in its own clean room is correct and blind by
+  construction to any interaction between beads — four agents once each reported
+  green on a tree that was red, and none of them was wrong.
+- An agent reports its result in the words that say which measurement it made:
+  "green in a clean room over N files" is a different claim from "green on the
+  tree". Reporting them with one word is what makes the discrepancy read as a
+  contradiction.
+
+**If a human overrules the shape, it is recorded, not remembered** — in
+`.beadloom/flow.yml`, with a reason and an exit condition, exactly like every
+other stand-down:
+
+```yaml
+waves:
+  overrides:
+  - beads: [proj-1, proj-2]
+    decision: parallel
+    reason: "the two touch one vocabulary module and nothing else"
+    until: "2026-09-01"
+```
+
+An override that changes no decision is reported as inert, because an override
+nobody can see doing anything is how a rule gets switched off without anybody
+saying so.
+
+---
+
 ## Wave-based execution
 
 Launch each wave from `bd ready` (filtered to this epic); `bd swarm status` adds a grouped view for `epic`-type parents:

@@ -33,6 +33,14 @@ from beadloom.services.commands._root import main
 @click.option("--report", "output_report", is_flag=True, help="Markdown report for CI posting.")
 @click.option("--ref", "ref_filter", default=None, help="Filter by ref_id.")
 @click.option(
+    "--staged",
+    is_flag=True,
+    default=False,
+    help="Judge only the pairs this commit stages, and say how many were left "
+    "to the push gate. For a pre-commit hook in a shared working tree, where a "
+    "whole-tree check fails one agent's commit on a neighbour's WIP (#118).",
+)
+@click.option(
     "--since",
     "since_ref",
     default=None,
@@ -60,6 +68,7 @@ def sync_check(
     output_json: bool,
     output_report: bool,
     ref_filter: str | None,
+    staged: bool,
     since_ref: str | None,
     record_surface: bool,
     project: Path | None,
@@ -75,6 +84,7 @@ def sync_check(
     is reported by name and never counted as fresh.
     """
     from beadloom.application.doc_shape import section_requirements
+    from beadloom.doc_sync.commit_scope import scope_to_commit
     from beadloom.doc_sync.declared_docs import count_declared_docs
     from beadloom.doc_sync.doc_shape import (
         REASON_MISSING_SECTIONS,
@@ -90,8 +100,10 @@ def sync_check(
         check_sync_since,
         find_unchecked_doc_nodes,
     )
+    from beadloom.doc_sync.git_baseline import staged_paths
     from beadloom.doc_sync.surface_ledger import compare_surface, read_ledger, write_ledger
     from beadloom.infrastructure.db import open_db
+    from beadloom.infrastructure.doc_roots import resolve_docs_dir
 
     project_root = project or Path.cwd()
     db_path = project_root / ".beadloom" / "beadloom.db"
@@ -127,9 +139,28 @@ def sync_check(
     declared_docs = count_declared_docs(conn)
     conn.close()
 
+    # The DECLARED surface is the whole surface, counted before any narrowing.
+    # `--ref` and `--staged` both restrict what is REPORTED; neither says the
+    # project declared less. Counted after the filter, `--ref sync-check` read
+    # "declared surface SHRANK: 322 -> 6 pair(s)", and `--record-surface` would
+    # have written that 6 into the committed ledger (BDL-061 S6).
+    declared_pairs = len([r for r in results if r.get("code_path")])
+
     if ref_filter:
         results = [r for r in results if r["ref_id"] == ref_filter]
         unchecked = [u for u in unchecked if u["ref_id"] == ref_filter]
+
+    # `--staged` moves the question from "is this tree clean" to "is this commit
+    # clean", which is the only form of the question a shared working tree can
+    # answer for one agent (BDL-UX #118). The pairs it leaves out are COUNTED and
+    # printed: a check that narrows itself in silence is the false green this
+    # epic exists to remove.
+    commit_scope = None
+    if staged:
+        commit_scope = scope_to_commit(
+            results, staged_paths(project_root), docs_dir=resolve_docs_dir(project_root)
+        )
+        results = list(commit_scope.pairs)
 
     # ``missing`` blocks exactly like ``stale``: the gate is not satisfied by
     # having less to check (BDL-UX #174).
@@ -138,7 +169,7 @@ def sync_check(
     # Surface drift is advisory (warning) — it NEVER affects the exit code.
     drifted_refs = [r for r in references if r["status"] == "surface_drift"]
 
-    pair_count = len([r for r in results if r.get("code_path")])
+    pair_count = declared_pairs
     if record_surface:
         recorded_path = write_ledger(
             project_root,
@@ -164,6 +195,14 @@ def sync_check(
             "ok": ok_count,
             "stale": stale_count,
         }
+        # Present only in commit-scoped mode: without `--staged` nothing was left
+        # out, and a key reporting a narrowing that did not happen is a fact
+        # rendered about a run that never made it.
+        if commit_scope is not None:
+            summary["not_checked_outside_commit"] = commit_scope.not_checked
+            summary["commit_scope"] = (
+                "narrowed" if commit_scope.narrowed else "not_narrowed"
+            )
         data: dict[str, Any] = {
             "summary": summary,
             "pairs": [
@@ -225,6 +264,11 @@ def sync_check(
     elif output_report:
         click.echo(_build_sync_report(results))
     elif porcelain:
+        # A record in the same five-column shape rather than a stray human line:
+        # porcelain is what a hook parses, and a check that narrowed itself has
+        # to say so THROUGH the contract its caller reads (BDL-UX #148).
+        if commit_scope is not None:
+            click.echo(f"scope\t\t\t\t{commit_scope.describe()}")
         for r in results:
             reason = r.get("reason", "ok")
             click.echo(
@@ -236,6 +280,8 @@ def sync_check(
         for u in unchecked:
             click.echo(f"unchecked\t{u['ref_id']}\t{u['doc_path']}\t\t{u['reason']}")
     else:
+        if commit_scope is not None:
+            click.echo(commit_scope.describe())
         if not results and not references and not unchecked:
             click.echo("No sync pairs found.")
         else:
@@ -388,34 +434,56 @@ def _build_sync_report(results: list[dict[str, str]]) -> str:
 #: call site).
 _HOOK_ENCODING = "utf-8"
 
+#: The header both pre-commit templates open with, and the whole of the #118
+#: repair in one place. The hook judges THE COMMIT: it reads what git says this
+#: commit stages, and it states the tree it therefore did not judge. Serialising
+#: *who* commits does not help — the merge slot orders the commits and leaves the
+#: tree exactly as shared as it was — so the boundary has to be what each check
+#: is asked about.
+_HOOK_COMMIT_SCOPE = """\
+# This hook judges THE COMMIT, not the working tree. In a tree shared by several
+# agents -- the mode a multi-agent flow prescribes, not an exotic one -- a
+# whole-tree check fails one agent's commit on a neighbour's half-written file,
+# in a module the committer never opened (BDL-UX #118). The pre-push Beadloom
+# Gate judges the whole tree, so nothing stops being enforced; what moves is WHEN
+# a file is judged.
+#
+# Stated rather than assumed: the content read below is the WORKING-TREE content
+# of the staged paths, not the staged blobs, so a partially staged file is judged
+# including the part this commit leaves behind.
+
+staged_py=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^(src|tests)/.*[.]py$')
+outside=$(git diff --name-only | wc -l | tr -d ' ')
+"""
+
 _HOOK_TEMPLATE_WARN = """\
 #!/bin/sh
 # pre-commit hook managed by beadloom
-
-# --- Lint check (ruff) ---
-if command -v uv >/dev/null 2>&1; then
-  echo "Running ruff check..."
-  uv run ruff check src/ tests/ 2>/dev/null
+""" + _HOOK_COMMIT_SCOPE + """
+# --- Lint check (ruff), over the staged files only ---
+if command -v uv >/dev/null 2>&1 && [ -n "$staged_py" ]; then
+  echo "Running ruff check on the staged Python file(s)..."
+  echo "$staged_py" | xargs uv run ruff check 2>/dev/null
   if [ $? -ne 0 ]; then
-    echo "Warning: ruff lint violations detected"
+    echo "Warning: ruff lint violations in this commit"
   fi
 fi
 
-# --- Type check (mypy) ---
-if command -v uv >/dev/null 2>&1; then
-  echo "Running mypy..."
-  uv run mypy 2>/dev/null
+# --- Type check (mypy), over the staged files only ---
+if command -v uv >/dev/null 2>&1 && [ -n "$staged_py" ]; then
+  echo "Running mypy on the staged Python file(s)..."
+  echo "$staged_py" | xargs uv run mypy 2>/dev/null
   if [ $? -ne 0 ]; then
-    echo "Warning: mypy type errors detected"
+    echo "Warning: mypy type errors in this commit"
   fi
 fi
 
-# --- Doc sync check ---
-stale=$(beadloom sync-check --porcelain 2>/dev/null)
+# --- Doc sync check, over the pairs this commit stages ---
+stale=$(beadloom sync-check --staged --porcelain 2>/dev/null)
 exit_code=$?
 
 if [ $exit_code -eq 2 ]; then
-  echo "Warning: stale documentation detected"
+  echo "Warning: stale documentation in this commit"
   echo "$stale"
   echo ""
   echo "Run: beadloom sync-update <ref_id> to update docs"
@@ -425,12 +493,16 @@ if [ $exit_code -eq 1 ]; then
   echo "Warning: beadloom sync-check failed (index may be stale)"
 fi
 
+# --- What this commit did NOT judge ---
+echo "$outside modified file(s) outside this commit were not judged here;"
+echo "the pre-push Gate (beadloom ci) judges the whole tree."
+
 # --- ACTIVE / tracker coherence ---
 # Guarded no-op: only runs when BOTH `bd` and `beadloom` are installed. In any
 # repo without `bd` (or without ACTIVE tables) this block does nothing and never
 # blocks the commit. Auto-fixes the bead-status tables + tracked issues.jsonl
 # and restages them so the commit is coherent by construction. `--stage` stages
-# EXACTLY the reconciled ACTIVE.md(s) + the exported jsonl — never an unrelated
+# EXACTLY the reconciled ACTIVE.md(s) + the exported jsonl -- never an unrelated
 # concurrently-edited doc in the same subtree.
 if command -v bd >/dev/null 2>&1 && command -v beadloom >/dev/null 2>&1; then
   beadloom active-sync --stage >/dev/null 2>&1
@@ -441,34 +513,34 @@ _HOOK_TEMPLATE_BLOCK = """\
 #!/bin/sh
 # pre-commit hook managed by beadloom
 failed=0
-
-# --- Lint check (ruff) ---
-if command -v uv >/dev/null 2>&1; then
-  echo "Running ruff check..."
-  uv run ruff check src/ tests/ 2>/dev/null
+""" + _HOOK_COMMIT_SCOPE + """
+# --- Lint check (ruff), over the staged files only ---
+if command -v uv >/dev/null 2>&1 && [ -n "$staged_py" ]; then
+  echo "Running ruff check on the staged Python file(s)..."
+  echo "$staged_py" | xargs uv run ruff check 2>/dev/null
   if [ $? -ne 0 ]; then
-    echo "Error: ruff lint violations — commit blocked"
-    echo "Run: uv run ruff check --fix src/ tests/"
+    echo "Error: ruff lint violations in this commit — commit blocked"
+    echo "Run: echo \"$staged_py\" | xargs uv run ruff check --fix"
     failed=1
   fi
 fi
 
-# --- Type check (mypy) ---
-if command -v uv >/dev/null 2>&1; then
-  echo "Running mypy..."
-  uv run mypy 2>/dev/null
+# --- Type check (mypy), over the staged files only ---
+if command -v uv >/dev/null 2>&1 && [ -n "$staged_py" ]; then
+  echo "Running mypy on the staged Python file(s)..."
+  echo "$staged_py" | xargs uv run mypy 2>/dev/null
   if [ $? -ne 0 ]; then
-    echo "Error: mypy type errors — commit blocked"
+    echo "Error: mypy type errors in this commit — commit blocked"
     failed=1
   fi
 fi
 
-# --- Doc sync check ---
-stale=$(beadloom sync-check --porcelain 2>/dev/null)
+# --- Doc sync check, over the pairs this commit stages ---
+stale=$(beadloom sync-check --staged --porcelain 2>/dev/null)
 exit_code=$?
 
 if [ $exit_code -eq 2 ]; then
-  echo "Error: stale documentation detected — commit blocked"
+  echo "Error: stale documentation in this commit — commit blocked"
   echo "$stale"
   echo ""
   echo "Run: beadloom sync-update <ref_id> to update docs"
@@ -479,13 +551,17 @@ if [ $exit_code -eq 1 ]; then
   echo "Warning: beadloom sync-check failed (index may be stale)"
 fi
 
+# --- What this commit did NOT judge ---
+echo "$outside modified file(s) outside this commit were not judged here;"
+echo "the pre-push Gate (beadloom ci) judges the whole tree."
+
 # --- ACTIVE / tracker coherence ---
 # Guarded no-op: only runs when BOTH `bd` and `beadloom` are installed. In any
 # repo without `bd` (or without ACTIVE tables) this block does nothing and never
 # blocks the commit. Auto-fixes the bead-status tables + tracked issues.jsonl
-# and restages them so the commit is coherent by construction (never blocks).
-# `--stage` stages EXACTLY the reconciled ACTIVE.md(s) + the exported jsonl —
-# never an unrelated concurrently-edited doc in the same subtree.
+# and restages them so the commit is coherent by construction. `--stage` stages
+# EXACTLY the reconciled ACTIVE.md(s) + the exported jsonl -- never an unrelated
+# concurrently-edited doc in the same subtree.
 if command -v bd >/dev/null 2>&1 && command -v beadloom >/dev/null 2>&1; then
   beadloom active-sync --stage >/dev/null 2>&1
 fi
@@ -494,6 +570,7 @@ if [ $failed -ne 0 ]; then
   exit 1
 fi
 """
+
 
 # Pre-push hook: the AUTHORITATIVE blocking Beadloom Gate. Runs the full
 # `beadloom ci` Gate (incremental reindex -> lint -> coverage-lint -> sync-check

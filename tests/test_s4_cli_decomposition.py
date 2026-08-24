@@ -67,6 +67,7 @@ EXPECTED_COMMANDS = {
     "tui",
     "ui",
     "watch",
+    "waves",
     "why",
 }
 

@@ -188,8 +188,8 @@ Checks:
 Check doc-code synchronization.
 
 ```bash
-beadloom sync-check [--porcelain] [--json] [--report] [--ref REF_ID] [--since GIT_REF]
-                    [--record-surface] [--project DIR]
+beadloom sync-check [--porcelain] [--json] [--report] [--ref REF_ID] [--staged]
+                    [--since GIT_REF] [--record-surface] [--project DIR]
 ```
 
 Exit codes: 0 = all OK, 1 = error, 2 = a pair is stale **or missing**.
@@ -198,6 +198,7 @@ Exit codes: 0 = all OK, 1 = error, 2 = a pair is stale **or missing**.
 - `--json` -- structured JSON output with summary and pair details. Each pair includes `status`, `ref_id`, `doc_path`, `code_path`, `reason`, `baseline`, and optional `details`.
 - `--report` -- ready-to-post Markdown report for CI (GitHub/GitLab).
 - `--ref` -- filter results by ref_id.
+- `--staged` -- judge only the pairs this commit stages either side of, and state how many were left to the push gate. For a pre-commit hook in a **shared working tree**, where a whole-tree check fails one agent's commit on a neighbour's in-progress file (BDL-UX #118). The narrowing is counted, never silent: `summary.not_checked_outside_commit` and `summary.commit_scope` in `--json` (present in this mode only), a `scope` record in `--porcelain`, and a leading line in the human shape. When git cannot say what is staged, nothing is narrowed and `commit_scope` reads `not_narrowed` -- an absent answer is not "nothing staged". The content compared is the WORKING-TREE content of the staged paths, not the staged blobs.
 - `--record-surface` -- record the declared documentation surface (pair + declared-doc counts) to the committed `.beadloom/sync-surface.json`. A later run compares against it and says so when the surface SHRANK; no ordinary run rewrites it, because a check that silently re-records the number it checks against re-attests without evidence.
 - `--since GIT_REF` -- compute drift against the code state at a **git ref** (e.g. the push's parent commit) instead of the stored `sync_state` baseline. Reports pairs whose code drifted since the ref while the doc was not correspondingly updated. This makes drift detection work on a **fresh CI checkout**: a clean clone reindexes from scratch and re-baselines `sync_state` to the just-pushed code, so without a ref baseline `sync-check` sees 0 stale even when the push left a doc behind. Mirrors `beadloom diff --since`. Used by the AI tech-writer harness (it passes the push parent — `github.event.before` / `$CI_COMMIT_BEFORE_SHA`, falling back to `HEAD~1`).
 
@@ -980,6 +981,79 @@ The path is model-supplied, so its **shape is narrowed rather than repaired**: a
 `--hook HARNESS` reads the harness's own hook event as JSON on stdin and derives the context from it (`claude-code`: `tool_input.file_path`, `tool_name`, `hook_event_name`). The event is read as **bytes** and decoded as UTF-8 strictly, so a payload the harness could not encode is refused (`error`, exit 2) identically under every locale — reading it as text left the decode to `sys.stdin`, whose error handler is `surrogateescape` under `LC_ALL=C`/`PYTHONUTF8=1` (the default in most containers), and there the undecodable bytes silently became a file name the guard then evaluated (BDL-061.36). The emitted adapter (`.claude/hooks/beadloom-guard.sh`, written by `beadloom setup-agentic-flow`) contains no logic — it is one `exec beadloom guard "$1" --hook claude-code` — so a hook and a shell cannot produce different verdicts.
 
 `--liveness` reports, per guard, its effective strictness, how many times it fired, its last outcome, and four ways a gate stops protecting anything: `never-fired` (no firing that reached a verdict — an `error` is counted and shown, but does not clear the flag, because a guard that ran three times and answered none of them is not a live gate), `excluded-everywhere` (every strictness `off`, or nothing escapes the exclusion **list** — decided by matching the patterns against representative paths, not by comparing spellings, and asked of the list because `*` and `*/**` are each narrow and together exempt everything), `matches no file in the project: '<pattern>'` (a declared exclusion that exempts nothing that currently exists — a typo'd `scrpits/**` is safe but was silent), and `exit condition has passed: '<pattern>'` (its `until:` names a date that is behind us). A gate that cannot demonstrate it ran is treated as not having run. Every CLI evaluation appends one line to `.beadloom/guard-firings.jsonl`, which is the only file guards write — never the index they inspect. Decision logic lives in `application/guards/evaluation.py`; the CLI only renders it.
+
+### beadloom waves
+
+Decide which of these beads may run at the same time.
+
+```bash
+beadloom waves BEAD [BEAD ...] [--json] [--project DIR]
+```
+
+Exit codes: `0` = a shape was decided and rests on nothing unstated; `1` = a
+shape was decided and carries findings (a bead that did not declare its scope, an
+override past its exit condition, an override that changed nothing) -- visible,
+never blocking; `2` = no shape could be decided (no index, no answer from the
+tracker, a bead the tracker does not have, a `waves:` block that would not parse).
+
+It **decides**, it does not advise. Parallelism follows from the code-level
+independence of the beads' node scopes, which only the architecture graph holds:
+a tracker knows which beads block which, and nothing else knows which code they
+occupy.
+
+A bead says what it occupies in the tracker, in its own words -- `refs: billing,
+shipping` (also `ref:`, also `area:`). A scope expands downward through
+`part_of`, so a bead scoped to a domain and a bead scoped to one of its
+components do not compare independent while editing the same package. A pair is
+serialised for exactly one named reason: `blocked_by_bead`, `unresolved_scope`,
+`shared_node`, `shared_file`, `dependency_edge` or `override_serial`.
+
+**A bead that declares nothing is serialised against every bead.** An unknown
+scope is not an empty scope -- an empty one compares independent of everything,
+which would make the command's whole claim rest on silence.
+
+Every wave of more than one bead also prints the four media it shares no matter
+what shape is chosen, each with the evidence it comes from: the working tree
+(#181), the commit gate (#118), the doc baseline (#182, #133) and the tracker's
+id space (#171). Each wave names one bead as its `gate_owner` -- the bead that
+measures the combined tree once the wave has landed. It is assigned
+deterministically rather than wisely; the point is that the step belongs to a
+named bead instead of to a coordinator's habit.
+
+A human outranks the decision by declaring it in `.beadloom/flow.yml`, with a
+reason and an exit condition like every other stand-down in this tool:
+
+```yaml
+waves:
+  overrides:
+  - beads: [proj-1, proj-2]
+    decision: parallel        # or: serial
+    reason: "the two touch one vocabulary module and nothing else"
+    until: "2026-09-01"
+```
+
+Every key is required; a missing one is a configuration error rather than a
+lenient default. Each override is reported with the number of decisions it
+changed, and one that changed **none** is a finding -- an override nobody can see
+doing anything is how a check gets switched off without anybody saying so.
+
+```
+$ beadloom waves proj-1 proj-2
+2 wave(s) for 2 bead(s), 1 serialisation(s), 0 finding(s).
+
+Wave 1: proj-1
+Wave 2: proj-2
+
+Serialised because:
+  proj-1 | proj-2 - shared_node: billing
+
+0 declared override(s).
+
+No wave runs more than one bead, so nothing is shared concurrently.
+```
+
+`--json` carries the same facts: `waves[]` (with `gate_owner`), `scopes[]`,
+`conflicts[]`, `overrides[]`, `shared_media[]`, `findings[]` and `exit_code`.
 
 ### beadloom ci
 

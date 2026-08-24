@@ -386,6 +386,21 @@ class TestPrePushHookFailSafe:
         assert "git repository" in result.output
 
 
+def _runs_the_gate(hook: str) -> bool:
+    """True when the hook INVOKES `beadloom ci`, rather than merely naming it.
+
+    Sharpened in BDL-061 S6 from `"beadloom ci" not in content`, which was a
+    proxy for the real claim and could no longer be told apart from the hook's
+    own remediation line ("the pre-push Gate (beadloom ci) judges the tree").
+    The proxy would also have passed a hook that ran `uv run beadloom ci` under
+    a wrapper; this reads the command position instead.
+    """
+    return any(
+        line.strip().startswith(("beadloom ci", "uv run beadloom ci"))
+        for line in hook.splitlines()
+    )
+
+
 class TestPreCommitUnchangedByPrePush:
     """Installing pre-push must not regress the pre-commit hook content."""
 
@@ -401,7 +416,7 @@ class TestPreCommitUnchangedByPrePush:
         assert "mypy" in content
         assert "sync-check" in content
         assert "active-sync" in content  # BDL-053 coherence intact.
-        assert "beadloom ci" not in content  # the Gate lives in pre-push only.
+        assert not _runs_the_gate(content)  # the Gate lives in pre-push only.
 
     def test_pre_commit_block_still_has_full_checks(self, tmp_path: Path) -> None:
         content = self._pre_commit(tmp_path, "--mode", "block")
@@ -409,7 +424,7 @@ class TestPreCommitUnchangedByPrePush:
         assert "mypy" in content
         assert "sync-check" in content
         assert "active-sync" in content
-        assert "beadloom ci" not in content
+        assert not _runs_the_gate(content)
 
     def test_default_install_pre_commit_identical_to_pre_commit_only(
         self, tmp_path: Path

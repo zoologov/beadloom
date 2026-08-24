@@ -23,7 +23,7 @@ from beadloom.infrastructure.surface_registry import register_cli_group
 # Import command modules with no re-exported symbol purely for their
 # registration side effects (decorators attach commands onto ``main`` / its
 # sub-groups at import time).
-from beadloom.services.commands import docs, guard, setup, snapshot, status
+from beadloom.services.commands import docs, guard, setup, snapshot, status, waves
 from beadloom.services.commands._root import main
 
 # Re-export the public + private surface that tests + sibling modules import
@@ -41,7 +41,7 @@ from beadloom.services.commands.index_ops import _detect_link_label
 from beadloom.services.commands.query import _format_markdown
 
 # Mark the side-effect-only imports as used (they register commands on import).
-_REGISTRATION_ONLY = (docs, guard, setup, snapshot, status)
+_REGISTRATION_ONLY = (docs, guard, setup, snapshot, status, waves)
 
 __all__ = [
     "_bd_statuses_from_list",

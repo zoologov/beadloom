@@ -209,6 +209,46 @@ $ beadloom sync-update docs/architecture.md --check
   [surface drift] docs/architecture.md watches cli, graph
 ```
 
+### `--staged`: the commit gate judges the commit
+
+A shared working tree makes a whole-tree check meaningless for any single
+committer. In a multi-agent wave — the mode `/coordinator` prescribes, not an
+exotic one — the pre-commit hook failed one agent's commit on a neighbour's
+half-written file, in a module the committer had never opened (BDL-UX #118).
+Serialising *who* commits does not help: the merge slot orders the commits and
+leaves the tree exactly as shared as it was.
+
+`beadloom sync-check --staged` narrows the run to the pairs this commit stages
+either side of — **either** side, because the commit that fixes a stale pair
+stages the DOC — and states what it therefore did not check:
+
+```
+$ beadloom sync-check --staged
+Scoped to the commit: 1 pair(s) checked, 27 pair(s) outside this commit were
+not checked — the pre-push Gate judges the whole tree.
+```
+
+Three properties make it a narrowing rather than a weakening:
+
+- **Nothing stops being enforced.** The pre-push Gate still runs `beadloom ci`
+  over the whole tree, so no pair reaches `main` unjudged. What moves is *when* a
+  pair is judged, from "whenever a neighbour happens to be mid-edit" to "when the
+  commit that changes it is made".
+- **The narrowing is counted and printed** — in the human shape, as a
+  `scope` record in `--porcelain`, and as `summary.not_checked_outside_commit`
+  plus `summary.commit_scope` in `--json`. The two JSON keys are present only in
+  this mode: without `--staged` nothing was left out, and a key reporting a
+  narrowing that did not happen is a fact about a run that never made it.
+- **An absent answer narrows nothing.** When git cannot say what is staged — no
+  work tree, no `git`, no `HEAD` — every pair is kept and `commit_scope` reads
+  `not_narrowed`. Narrowing on an absent answer would be inventing the scope,
+  which is the same category error as inventing a baseline (BDL-UX #175).
+
+Stated rather than assumed: the content compared is the **working-tree** content
+of the staged paths, not the staged blobs, so a partially staged file is judged
+including the part the commit leaves behind. The hooks `beadloom install-hooks`
+writes use this mode, and both of them say so in their own header.
+
 ## Invariants
 
 - Baselining is explicit (`mark_synced` / `sync-update`); the engine never
