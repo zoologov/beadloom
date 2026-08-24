@@ -155,7 +155,7 @@ others do not, and BDL-061 S4 added three of them.
 |------|--------------------------------|
 | `dev` | TDD (red → green → refactor); the `# beadloom:` annotation discipline that keeps the graph honest; architecture boundaries; cohesion-driven design. **BDD (S4):** acceptance criteria are Gherkin scenarios that RUN, written before the unit test and seen red first, each naming its bead and its node — or the work declares itself non-behavioural with a reason. |
 | `test` | Coverage ≥ 80% on changed code, as a floor rather than a goal; edge cases; fixtures. **Mutation (S4):** the strength check on the scenarios — pure domain cores only, once per slice, never in pre-commit; a survivor is a finding and the fix is a stronger assertion. Beadloom ships no mutation runner, so the tool is the project's choice and the declared target is what gets checked. |
-| `review` | Read-only. Typing, error handling, security, testing, doc freshness through two sources rather than one. **BDD is not ceremony (S4):** reject a scenario that restates the implementation, one whose `Then` asserts nothing, one written after the code and never seen red, and a `non_behavioural` reason that restates the exclusion instead of explaining it. |
+| `review` | Read-only. Typing, error handling, security, testing, doc freshness through two sources rather than one. **BDD is not ceremony (S4):** reject a scenario that restates the implementation, one whose `Then` asserts nothing, one written after the code and never seen red, and a `non_behavioural` reason that restates the exclusion instead of explaining it. **The brief first (S6):** step 1 is `beadloom review-brief <bead>`, both doc-freshness sources are derived from the change rather than from the author's note, and the account is read only after the verdict is recorded. |
 | `tech-writer` | Edits documentation only. Two staleness sources — `sync-check` and the dev's `API CHANGE:` notes — because a `reindex` can re-baseline hashes while the prose stays wrong. |
 | **all four** | **The writing standard (S4).** It moved out of `tech-writer` into the shared `core:_writing` layer, because the roles that produce intent documents had no standard at all, and a team writing in Russian should be held to it in Russian. |
 
@@ -452,6 +452,32 @@ caller it means something to: run `beadloom guard` yourself and a broken
 the edit. The mapping is in the CLI rather than in the generated script, so a
 second harness inherits it instead of re-implementing it.
 
+## Waves, and what a reviewer is handed (BDL-061 S6)
+
+Two decisions the coordinator used to make by hand are now made by the CLI, and both were
+built around what is *not* checkable rather than around what is.
+
+**`beadloom waves <bead>...` decides the wave shape from the graph.** A tracker knows which
+beads block which. Only the architecture graph knows which code they occupy, so parallelism
+follows from the code-level independence of the beads' declared node scopes, and each
+serialised pair carries one named reason. The guarantee, in one sentence: for any two beads
+placed in the same wave, no medium they share can carry one bead's in-progress state into the
+other's result — and where a medium cannot give that guarantee, the wave says so and names the
+one bead that measures the combined outcome. Code independence is decided from the graph. The
+four media a wave shares regardless — one working tree, one pre-commit hook, one doc-freshness
+baseline, one tracker id space — are measured as a **precondition before the wave runs**, and
+the wave's conduct afterwards is checked by nothing here and cannot be.
+
+**`beadloom review-brief <bead>` decides what the reviewer reads first.** It hands over the
+assignment, the declared scope, the specification and the change, and withholds the bead's own
+comments while reporting how many it withheld. `--release` prints them once a verdict is
+recorded. It is enforced for what it can see and documented, not enforced, for two defeats it
+cannot: a reviewer running `bd comments` itself, and a coordinator pasting a summary into the
+launch prompt, which the `coordinator` skill now forbids by name.
+
+Both are described in full, with their measurements and their stated limits, in the
+[Parallel waves guide](parallel-waves.md).
+
 ## Scaffold contents + idempotency
 
 `beadloom setup-agentic-flow` (in the `setup-*` family alongside
@@ -639,4 +665,7 @@ This is stated deliberately, not glossed over:
 - [Guard Hooks component](../domains/onboarding/components/guard-hooks/DOC.md) — the emitted hook adapter and its registration.
 - [Role Composer SPEC](../domains/onboarding/features/role-composer/SPEC.md) — CORE + architecture + stack overlay composition.
 - [Role Adapters SPEC](../domains/onboarding/features/role-adapters/SPEC.md) — per-tool adapter generation + the drift-guard.
+- [Parallel waves guide](./parallel-waves.md) — the wave guarantee, the four shared media and their plan-time checks, and reviewer isolation.
+- [Wave Plan SPEC](../domains/application/features/wave-plan/SPEC.md) — the decision, the serialisation reasons and the override shape.
+- [Review Brief SPEC](../domains/application/features/review-brief/SPEC.md) — what the brief carries and what it cannot enforce.
 - [CI setup guide](./ci-setup.md) — `beadloom ci` as the enforcement gate.

@@ -304,6 +304,8 @@ Request a node's context, and Context Oracle traverses the graph breadth-first, 
 | `lint` | Check the code against the architecture rules (`--strict`, `--format rich/json/porcelain/github`) |
 | `ci` | The single Gate: reindex → lint → sync-check → docs audit → docs-quality → doc-spaces → config-check → doctor → the optional landscape gate |
 | `config-check` | Check (or `--fix`) that the generated agent files match the graph |
+| `waves BEAD ...` | Decide which beads may run at the same time, from the code-level independence of their declared node scopes — one named reason per serialised pair, the media a concurrent wave shares regardless, and a plan-time verdict for each |
+| `review-brief BEAD` | Assemble a reviewer's input — assignment, scope, specification, bound scenarios and changed files — while withholding the author's own comments and reporting how many (`--release` after the verdict) |
 | `guard NAME` | Evaluate one flow guard — `pass`/`warn`/`block`/`skip`/`error` in the exit code (`--liveness` reports which guards ever fired) |
 | `export` | Export the graph as a deterministic artifact for federation |
 | `federate` | Aggregate two or more artifacts into one landscape. `--fail-on` turns on the CI gate |
@@ -367,6 +369,7 @@ def check_freshness(db: sqlite3.Connection, ref_id: str) -> SyncStatus:
 | [getting-started.md](docs/getting-started.md) | Quick-start guide |
 | [Multi-agent development](docs/guides/multi-agent-development.md) | How Beadloom's agentic workflow is built |
 | [Executable acceptance scenarios](docs/guides/bdd-scenarios.md) | Gherkin as the source of truth: scenario/bead/node binding and what `scenario-coverage` reports |
+| [Parallel waves](docs/guides/parallel-waves.md) | What a wave of concurrent agents guarantees, what it only reports, and what nothing can check |
 | [Document kinds](docs/guides/document-kinds.md) | Required sections, the five writing-standard checks, and what each of them cannot decide |
 | [CI Setup](docs/guides/ci-setup.md) | GitHub Actions / GitLab CI integration |
 | [VitePress Site](docs/guides/vitepress-site.md) | Publishing the knowledge base on VitePress |

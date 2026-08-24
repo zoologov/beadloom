@@ -336,10 +336,16 @@ corpus.
 
 ## Current Phase
 
-- **Phase:** Development — S1, S2, S2b, S3 and S4 complete; S5's four beads shipped, with two
-  of its five criteria carried by `.72`
-- **Current bead:** `.20` closes the S5 documentation pass; `.21` opens S6. Live status is in
-  ACTIVE.md and the tracker
+- **Phase:** Development — S1, S2, S2b, S3, S4 and S5 complete (S5 with two of its five
+  criteria carried by `.72`); S6, the last planned slice, is complete with `.24`
+- **Current bead:** `.24` closes the S6 documentation pass and the last planned slice of this
+  epic. Live status is in ACTIVE.md and the tracker
+- **Open after S6, named rather than folded into a green count:** `beadloom-mr2l.81` (the
+  `git add` half of #118, not fixable at the hook layer), `beadloom-mr2l.82` (the commit-scoped
+  hook holds `tests/` to a type standard the project never adopted), a per-pair attestation
+  CLI (the freshness fact is per file while `sync-update` is still per ref), and a stated
+  exclusion for tracker and session files in the `working-tree` medium check, which reports
+  `failed` on this repository on essentially every run
 - **Open at the close of S5, and stated rather than folded into a green count:** the
   `doc-spaces` gate step is warn-only, so an adopter who declares a WORKING root gets a green
   Gate with the objection printed. That is the epic's shipped-as-warn constraint applied

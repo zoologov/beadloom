@@ -128,15 +128,34 @@ and — for every wave of more than one bead — the media that wave shares no m
 what shape was chosen.
 
 **A bead declares its scope in the tracker**, in its own words, so that it can be
-placed at all:
+placed at all. The declaration **opens a line** and its list runs to the end of
+that line, separated by commas or semicolons:
 
 ```bash
 bd update <bead-id> --append-notes "refs: <ref-id>, <ref-id>"
 ```
 
-A bead that declares nothing is serialised against every bead. That is not a
-penalty, it is the honest answer: an unknown scope is not an empty scope, and an
-empty one compares independent of everything.
+A bead whose declaration cannot be read is serialised against every bead. That is
+not a penalty, it is the honest answer: an unknown scope is not an empty scope,
+and an empty one compares independent of everything. Four things count as
+unreadable, each printed with its own remedy — no declaration, a name the graph
+does not have, a `refs:` written inside a sentence, and a second ref written
+without a separator that the graph confirms is a node. The parser fails toward
+serialisation on purpose: a wave shape is acted on, so a parser whose errors
+widen a wave is worse than no parser.
+
+**A concurrent wave must have its media measured to read clean.** Each of the
+four is checked before the wave runs — no path differs from `HEAD` that no bead
+in the plan owns, the installed pre-commit hook judges the paths a commit stages,
+no doc pair is stale already, and no bead's title numbers it differently from the
+id the tracker allocated. A medium nobody could observe reads `unmeasured`, which
+is a finding and reaches exit 1, so a plan of concurrent beads that nobody
+measured is not a clean plan. Read the exit code, never the number of lines.
+
+What is checked is a **precondition, measured before the wave runs**. The wave's
+conduct afterwards is checked by nothing here and cannot be: no command holding a
+plan can know whether the gate owner ran the combined tree. That is why the two
+obligations below belong to a named bead.
 
 **Two obligations the shape hands to named beads rather than to habit:**
 

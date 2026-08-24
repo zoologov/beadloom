@@ -276,11 +276,51 @@ the beads' node scopes; review receives diff and spec without the author's summa
 (shared pre-commit collision) and #133 (per-worktree baseline falsification) close.
 
 **Done when:**
-- [ ] Independent subgraphs run in parallel; shared nodes serialise
-- [ ] A human override is recorded as an exclusion with reason and exit condition
-- [ ] A reviewer's input excludes the author's summary
-- [ ] Integrating a parallel wave does not re-baseline untouched pairs
-- [ ] Parallel agents no longer collide on the shared pre-commit hook
+- [x] Independent subgraphs run in parallel and shared nodes serialise — `beadloom waves`
+      decides from the beads' declared node scopes, with one named reason per serialised pair
+      from a closed vocabulary. Measured on this repository's own S6 beads: three beads, three
+      waves, one of the serialisations (`dependency_edge: cli-commands -> doc-quality`) a
+      decision no tracker holds the facts to make
+- [x] A human override is recorded as an exclusion with reason and exit condition —
+      `.beadloom/flow.yml` `waves.overrides[]`, every key required **by content**, each
+      override reported with the number of decisions it changed, and one that changed none
+      reported as inert
+- [x] A reviewer's input excludes the author's summary — `beadloom review-brief` withholds the
+      bead's comments and reports the count. Its first use (`.23`) ran over five beads with
+      withheld counts of 5/4/4/4/3
+- [x] Integrating a parallel wave does not re-baseline untouched pairs — the freshness fact is
+      now per file. Measured: one changed file gave 69 stale pairs (67 naming a file nobody
+      touched) before and 2 stale plus 67 `unverified/sibling_symbols_changed` after
+- [x] Parallel agents no longer collide on the shared pre-commit hook — **in the half a hook
+      can judge.** The hook judges the commit and states what it did not judge; a neighbour's
+      hunk swept in through `git add` is inside the commit and the index does not record who
+      wrote a line, so that half is filed as `beadloom-mr2l.81` rather than half-fixed
+
+**Open after S6, with the reason, rather than silently carried:**
+
+- `beadloom-mr2l.81` — the `git add` half of #118. Not fixable at the hook layer; the
+  mechanism that can answer it (compare the staged paths against the committing bead's
+  declared scope) needs four decisions made first, and each is a policy choice rather than an
+  implementation detail.
+- `beadloom-mr2l.82` — the commit-scoped hook's mypy leg reports errors in `tests/`, which the
+  project's declared type surface (`uv run mypy src/`) does not cover. A warning nobody is
+  expected to act on is how the next warning gets ignored too.
+- `beadloom-mr2l.85` — a per-pair attestation has no CLI. `sync-update <ref>` still re-baselines
+  every pair of that ref while the freshness fact is per file, which is the residue of #133
+  rather than its return. Named in `.23` as n5 and filed in `.24`, because a gap that lives
+  only in a bead comment is a gap that gets lost.
+- Naming tracker and session files as a stated exclusion for the `working-tree` check. It
+  reports `failed` on this repository on essentially every run, and a check that is always red
+  is a check people learn to scroll past. Named in `.23` as n4.
+- `beadloom-mr2l.84` — the ACTIVE reconcile matches a full bead id against a table written with
+  short ids, so `active-sync --check` reports this epic's own table coherent while it carries a
+  closed bead as "In progress". Found in `.24` and filed there. It is the same class as the
+  epic's other findings: a run that compared nothing reads the same as a run that found nothing.
+- `beadloom-mr2l.86` — `parse_watches` matches the `watches` annotation anywhere in a document,
+  including inside a fenced code block, so a document that shows the syntax opts itself into
+  surface drift. Found in `.24` while judging which reference documents to attest, and it is the
+  same anchoring class `.83` closed for the wave declaration. Stated in the sync-check SPEC
+  rather than left for the next reader to re-find.
 
 ## Notes
 

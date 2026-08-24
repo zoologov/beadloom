@@ -377,11 +377,12 @@ class TestADeclaredKindIsNotShadowedByADefaultList:
         populations = _populations(REPO_ROOT, spaces)
 
         assert populations[SPACE_TO_BE] == 190
-        # 93 -> 94 -> 95 in S6: `docs/domains/application/features/wave-plan/SPEC.md`
-        # then `docs/domains/application/features/review-brief/SPEC.md`. The number
+        # 93 -> 94 -> 95 -> 96 in S6: `docs/domains/application/features/wave-plan/SPEC.md`,
+        # then `docs/domains/application/features/review-brief/SPEC.md`, then
+        # `docs/guides/parallel-waves.md` in the documentation pass `.24`. The number
         # moves when this repository gains a document, which is what makes it a
         # denominator rather than a constant.
-        assert populations[SPACE_AS_IS] == 95
+        assert populations[SPACE_AS_IS] == 96
         assert len(spaces.working_documents(REPO_ROOT)) == 55
 
 

@@ -8,6 +8,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`beadloom waves` — the wave shape is decided from the graph, not guessed (BDL-061 S6).**
+  `beadloom waves BEAD [BEAD ...] [--json]` decides which of the named beads may run at the
+  same time from the code-level independence of their declared node scopes, because a tracker
+  knows which beads block which while only the architecture graph knows which code they
+  occupy. Each serialised pair carries one reason from a closed vocabulary
+  (`blocked_by_bead`, `unresolved_scope`, `shared_node`, `shared_file`, `dependency_edge`,
+  `override_serial`). The guarantee it keeps, in one sentence: for any two beads placed in
+  the same wave, no medium they share can carry one bead's in-progress state into the other's
+  result — and where a medium cannot give that guarantee, the wave says so and names the one
+  bead (`gate_owner`) that measures the combined outcome. Four media are shared no matter
+  what shape is chosen — one working tree, one pre-commit hook, one doc-freshness baseline,
+  one tracker id space — and each now carries a **plan-time verdict** that can come back
+  `failed`, while a medium nobody observed comes back `unmeasured`, which is a finding
+  reaching exit 1 rather than a silent pass. What is checked is a precondition measured
+  before the wave runs; the wave's conduct afterwards is checked by nothing here and cannot
+  be by anything holding a plan. A human outranks the decision through
+  `.beadloom/flow.yml` `waves.overrides[]`, with a mandatory reason and exit condition, and
+  an override that changed no decision is reported as inert. Exit 0 clean / 1 findings / 2
+  undecidable. See the [Parallel waves guide](docs/guides/parallel-waves.md).
+- **`beadloom review-brief` — a reviewer is handed the change and the specification, not the
+  author's account of either (BDL-061 S6).** `beadloom review-brief BEAD [--since REF]
+  [--release] [--json]` assembles the assignment, the declared scope, the graph's
+  specification documents, the bound `@bead:` scenarios and every changed file, and
+  **withholds the bead's own comments**, reporting how many it withheld. The measurement
+  behind the ordering: in hidden-profile tasks a group that hears one member's conclusion
+  first scores 17–36% where a single holder of all the facts scores ~100%. The account is
+  released, not destroyed — `--release` prints it once a verdict comment is recorded, so
+  deferrals and measured numbers stay available after the reviewer's own judgement is on the
+  record. Exit 0 clean / 1 findings / 2 unassemblable / 3 release refused; `3` is distinct
+  from `2` so a caller cannot confuse *refused* with *failed*. Enforced for what it can see;
+  **documented, not enforced** for two defeats it cannot — a reviewer running `bd comments`
+  itself, and a coordinator pasting a summary into the launch prompt, which `coordinator.md`
+  now forbids by name.
+- **`sync-check --staged` — the pre-commit hook judges the commit, not the tree (BDL-061 S6,
+  BDL-UX #118).** The installed hook now runs ruff and mypy over the staged `src/`/`tests/`
+  Python files and `sync-check` over the pairs the commit stages either side of, and prints
+  how many modified or untracked files outside the commit it did not judge. `--staged` adds
+  two summary keys present in that mode only (`not_checked_outside_commit`, `commit_scope`),
+  a `scope` record to `--porcelain` in the existing five-column shape, and a leading line to
+  the human output. The pre-push Gate is unchanged and still judges the whole tree.
+  **Adopters must re-run `beadloom install-hooks`** — an installed hook keeps its old
+  behaviour until they do, and `beadloom waves` now reports `commit-gate: failed` instead of
+  leaving it to be noticed.
+
 - **Three documentation spaces, and a relation between two of them (BDL-061 S5).** Every
   document a project holds is classified TO-BE (`PRD`, `RFC`, `BRIEF`, `CONTEXT`, `PLAN`),
   AS-IS (`SPEC`, `DOC`, `README`) or WORKING (`ACTIVE`). The names are deliberately not
@@ -180,6 +224,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   suite itself rejects.
 
 ### Changed
+- **A doc pair whose sibling file moved is `unverified`, not `stale` (BDL-061 S6, BDL-UX
+  #182, #133, #105).** `symbols_hash` was stored per pair and computed per **node**, so one
+  changed file marked every pair its node owned `stale/symbols_changed` and the followers
+  could only be cleared by the bulk re-attestation BDL-UX #163 exists to prevent. `sync_state`
+  now also carries `file_symbols_hash`, the symbol surface of a pair's own code file, and
+  only that fact can make a pair stale. A follower is reported `unverified` with the new
+  reason `sibling_symbols_changed`, **names the file that moved**, and is offered no
+  `sync-update`, because nobody can revise it. No fifth verdict word was invented and no
+  summary key was added, so `ok + stale + missing + unverified + exempt + incomplete = total`
+  is untouched. Behaviour change: a project whose only finding was follower noise now exits 0
+  instead of 2. Measured in two clean rooms differing only in this change: appending one
+  function to `application/architecture_view.py` gave **69 stale, 67 of them naming an
+  untouched file**, and now gives **2 stale plus 67 `unverified`**, each carrying the moved
+  file in `details`. A row with an empty `file_symbols_hash` keeps the node-level answer, so
+  an un-rebuilt index is never quieter than a rebuilt one. Three filings of one root over
+  eleven weeks close together.
+- **A verdict must open its comment and carry its colon (BDL-061 S6).** `review-brief
+  --release` recognised the marker at a line start and nothing more, so a checkpoint reading
+  `REVIEW ISSUES are still open, will fix` released the author's account — the exact string
+  the code's own docstring named as the case it prevented. The marker must now be the first
+  non-blank line and carry its colon. The verdict comment's author is also compared with the
+  bead's assignee, and the answer is **reported, not enforced**: a self-recorded verdict
+  still releases, prints why its independence cannot be established before the account rather
+  than after it, and exits 1. Refusing was rejected on a measurement — where every role
+  writes under one tracker identity a refusal refuses every release, and a gate nobody can
+  pass is bypassed rather than obeyed.
+- **The wave declaration parser fails toward serialisation (BDL-061 S6).** Every way the
+  parser could be defeated widened a wave, which is the dangerous direction for a shape that
+  is acted on. The declaration must now **open a line**, its list runs to the end of that line
+  and splits on `,` and `;`, and a dropped word the graph confirms is a node is named rather
+  than silently lost. Two new unresolved reasons — `declaration_not_at_a_line_start` and
+  `declaration_dropped_a_node` — join `no_declared_refs` and `ref_not_in_graph`, each with
+  its own remedy, and all four serialise the bead. Measured before the fix: `refs: wave-plan;
+  sync-check` beside `refs: sync-check` gave one wave, zero findings and exit 0. One
+  `compose_declaration` is now shared by `beadloom waves`, `beadloom review-brief` and the
+  MCP `bead_context` tool, so the planner and the tool cannot read one bead differently.
+
 - **`measurable-goal` re-scoped from a numeral detector to a two-leg witness test
   (BDL-061 S5).** As shipped the check looked for a digit and called its absence "no
   measurable clause" — a premise that is false, since an exit code and a named artifact are

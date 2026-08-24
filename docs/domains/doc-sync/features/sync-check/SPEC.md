@@ -278,6 +278,19 @@ $ beadloom sync-update docs/architecture.md --check
   [surface drift] docs/architecture.md watches cli, graph
 ```
 
+**Stated limit: the annotation is matched anywhere in the document.**
+`parse_watches` searches the whole text, so a document that *shows* the syntax
+opts itself in — including inside a fenced code block. Measured on this
+repository: `docs/domains/context-oracle/features/code-indexer/SPEC.md` declares
+no watch of its own and is nevertheless tracked as `watches=cli,graph`, from an
+example in a fenced block whose own caption reads "an EXAMPLE: not read". It is
+the same class BDL-061 S6 closed for the wave declaration, where a `refs:` inside
+a sentence became a scope, and the same repair applies — anchor the annotation to
+the start of a line and ignore fenced content. Filed as `beadloom-mr2l.86`. The
+cost today is one advisory warning on a document that declared nothing, and the
+document is deliberately left un-attested rather than baselined into a
+declaration it never made.
+
 ### `--staged`: the commit gate judges the commit
 
 A shared working tree makes a whole-tree check meaningless for any single

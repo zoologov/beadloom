@@ -1094,6 +1094,83 @@ regardless.
 `conflicts[]`, `overrides[]`, `shared_media[]`, `media_checks[]` (`medium`,
 `status`, `detail`), `findings[]` and `exit_code`.
 
+### beadloom review-brief
+
+Hand a reviewer the change and the specification, and not the author's account of
+either.
+
+```bash
+beadloom review-brief BEAD [--since REF] [--release] [--json] [--project DIR]
+```
+
+Exit codes: `0` = the brief rests on nothing unstated, or `--release` released the
+account; `1` = the brief carries findings (an undeclared scope, an ambiguous one,
+an unknown ref, a change nobody could measure, a change outside the declared
+scope, no bound scenario -- or, under `--release`, a verdict whose independence
+the tracker could not confirm); `2` = no brief could be assembled (no index, no
+answer from the tracker, no such bead); `3` = `--release` was refused because no
+verdict is recorded. `3` is distinct from `2` on purpose: nothing failed, the
+account is simply still withheld, and a caller that could not tell those apart
+would retry the wrong one.
+
+The brief carries the **assignment** (the bead's title and description), the
+**declared scope**, the **specification** (the graph's documents for those nodes
+and every scenario whose `@bead:` tag names the bead) and the **change** (`git
+diff <base>...HEAD`, the working tree, and the untracked files, each path
+carrying the node that owns it). It does not carry the bead's comments. Those are
+counted and never printed (the notice is wrapped for this page):
+
+```
+WITHHELD — 4 author comment(s) withheld
+  reason: the author's account of the change converges the reviewer on the author's framing
+    before the reviewer has looked at the code
+  release: a verdict recorded on the bead; then `beadloom review-brief <bead> --release`
+  if your launch prompt carried anything about this change that you did not derive yourself
+    — the author's summary, or the coordinator's own observation of it — this withholding was
+    defeated before it ran; say so in your verdict, you are the only party that can see it
+```
+
+The measurement behind the ordering: in hidden-profile tasks a group that hears
+one member's conclusion first scores 17-36% where a single holder of all the
+facts scores ~100%. `0 withheld` and `4 withheld` are different facts, so the
+count is always printed -- an absent input is reported rather than left silent.
+
+`--release` prints the account once a verdict comment is on the bead, so the
+deferrals, sabotage tables and measured numbers stay available to a reviewer who
+would otherwise re-derive them. A verdict is a comment whose **first non-blank
+line opens with** `REVIEW PASSED:`, `REVIEW ISSUES:` or `REVIEW FINDINGS:`, the
+colon included -- the exact openings the review role is instructed to write.
+
+The verdict comment's author is compared with the bead's assignee, and the answer
+is **reported, not enforced**. A self-recorded verdict still releases, prints why
+its independence cannot be established before the account rather than after it,
+and exits `1`:
+
+```
+$ beadloom review-brief <bead> --release
+FINDING: the verdict was recorded under the same tracker identity as the bead's own
+author (v.zoologov), so this gate cannot tell an independent verdict from the author's
+own — say which it was in your review
+RELEASED — 5 author comment(s), on the verdict 'REVIEW ISSUES' already recorded.
+```
+
+Refusing was rejected on a measurement: where every role writes under one tracker
+identity, a refusal refuses every release, and a gate nobody can pass is bypassed
+rather than obeyed. What this command withholds is an **input**, not a door -- a
+reviewer with a shell can read the comments directly, and the value is in the
+default and in the count being visible.
+
+The change is measured over the **branch**, not over the bead, because no
+per-bead attribution exists in the commits. On a branch carrying five beads all
+five briefs report the same files, so the `changed-outside-scope` finding names
+its window (`measured over the branch since <ref>`). `--since <ref>` narrows it.
+
+`--json` carries `bead`, `title`, `assignment`, `refs`, `unknown_refs`, `docs`,
+`base_ref`, `change_measured`, `changed`, `scenarios`, `withheld`, `findings` and
+`exit_code`. Under `--release` it carries `withheld_count`, `verdict_marker`,
+`verdict_author`, `independence_note`, `refused_reason`, `released` and
+`exit_code`. The account never appears in the non-release `--json`.
+
 ### beadloom ci
 
 The unified enforcement gate — the single CI convergence point (principle 7: identical for Cursor / Claude Code / human authors).
@@ -1365,7 +1442,8 @@ cohesive module per command group: `_root` (the `main` group + global options),
 (`sync-check`/`sync-update`/`install-hooks`/`active-sync`/`ci`), `federation`
 (`export`/`federate`), `docs` (the `docs` group: `generate`/`site`/`audit`/`polish`),
 `setup` (the `init`/`setup-*`/`mcp` commands), `dashboard` (`tui`/`ui`/`watch`),
-and `snapshot` (the `snapshot` group). The `status` command's data-gathering was
+`snapshot` (the `snapshot` group), `waves` (`waves`) and `review_brief`
+(`review-brief`). The `status` command's data-gathering was
 moved DOWN to the application layer (`application/status.py`:
 `gather_status`/`compute_context_metrics`/`StatusData`); the command keeps only
 the Rich/JSON presentation. The CLI surface (every command, option, help text,
@@ -1401,6 +1479,8 @@ Commands (re-exported from the package via the registration shell):
 - `setup_agentic_flow` -- scaffold the packaged multi-agent dev flow (`.claude/agents/*` + `commands/*` vendored byte-identical + CLAUDE.md auto-regions per-project); idempotent, `--force` overwrites hand-edited flow files; delegates to `onboarding/agentic_flow_setup.py:scaffold()`
 - `config_check` -- AgentConfigAsCode drift gate (`--fix` regenerates); reuses the `setup-rules --refresh` generator; also drift-checks/restores the scaffolded agentic-flow files when the flow is present
 - `ci` -- unified enforcement gate composing reindex -> lint -> sync-check -> docs-audit -> docs-quality -> doc-spaces -> config-check -> doctor -> (optional `--hub`) federate into one exit code; the docs-audit step blocks on stale facts (`stale>0`); honest per-step PASS/WARN/FAIL/SKIP; uniform `--format {rich,json,github}` (github = valid `::error file=,line=` annotations); delegates to `application/gate.py:run_ci_gate()`
+- `waves` -- decide which of the named beads may run at the same time, from the code-level independence of their declared node scopes; prints one named reason per serialised pair, the media a concurrent wave shares, one plan-time verdict per medium and each wave's `gate_owner` (`--json`; exit 0 clean / 1 findings / 2 undecidable); delegates to `application/waves/planner.py:plan_waves()`
+- `review_brief` -- assemble a reviewer's input (assignment, declared scope, specification documents, bound scenarios, changed files) while withholding the bead's own comments and reporting how many; `--release` prints the account once a verdict is recorded and reports whether that verdict's independence can be established (`--since`, `--json`; exit 0 clean / 1 findings / 2 unassemblable / 3 release refused); delegates to `application/review_brief/`
 - `mcp_serve` -- run MCP stdio server
 - `docs` -- Click group for doc commands (`generate`, `polish`, `audit`)
 - `tui` -- launch TUI dashboard (primary command, multi-screen with `--no-watch`)
@@ -1412,4 +1492,4 @@ All commands accept `--project DIR` to specify the project root. The current dir
 
 ## Testing
 
-CLI is tested via `click.testing.CliRunner`. Each command has a corresponding test file in `tests/test_cli_*.py`: `test_cli_reindex.py`, `test_cli_ctx.py`, `test_cli_graph.py`, `test_cli_status.py`, `test_cli_sync_check.py`, `test_cli_sync_update.py`, `test_cli_hooks.py`, `test_cli_link.py`, `test_cli_docs.py`, `test_cli_mcp.py`, `test_cli_watch.py`, `test_cli_diff.py`, `test_cli_why.py`, `test_cli_lint.py`, `test_cli_init.py`, `test_cli_snapshot.py`, `test_cli_config_check.py`, `test_cli_setup_agentic_flow.py`, `test_cli_active_sync.py` (+ `test_cli_active_sync_hardening.py`).
+CLI is tested via `click.testing.CliRunner`. Each command has a corresponding test file in `tests/test_cli_*.py`: `test_cli_reindex.py`, `test_cli_ctx.py`, `test_cli_graph.py`, `test_cli_status.py`, `test_cli_sync_check.py`, `test_cli_sync_update.py`, `test_cli_hooks.py`, `test_cli_link.py`, `test_cli_docs.py`, `test_cli_mcp.py`, `test_cli_watch.py`, `test_cli_diff.py`, `test_cli_why.py`, `test_cli_lint.py`, `test_cli_init.py`, `test_cli_snapshot.py`, `test_cli_config_check.py`, `test_cli_setup_agentic_flow.py`, `test_cli_active_sync.py` (+ `test_cli_active_sync_hardening.py`), `test_cli_waves.py`, `test_cli_review_brief.py`.
