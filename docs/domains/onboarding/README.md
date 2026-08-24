@@ -93,8 +93,9 @@ beadloom docs audit --verbose            # also name every document the scan did
 beadloom docs audit --fail-if unverified>0  # fail when a declared fact was checked against nothing
 beadloom docs spaces     # the three documentation spaces + where intent never reached AS-IS
 beadloom docs spaces --json [--strict]   # machine-readable; --strict exits 1 on any finding
-                         # the JSON names the tracker it read (`tracker_source`) and lists the
+                         # the JSON names the tracker it read (`tracker_source`), lists the
                          # epics that tracker does not name (`epics_unknown_to_tracker`)
+                         # and says why each unresolved epic is unresolved (`unresolved_reasons`)
 beadloom prime           # compact project context for AI agent injection
 beadloom setup-rules     # create IDE adapter files (.cursorrules, etc.)
 beadloom setup-rules --refresh           # refresh auto-managed CLAUDE.md sections

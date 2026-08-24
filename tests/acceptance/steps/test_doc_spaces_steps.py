@@ -24,6 +24,7 @@ from beadloom.application.doc_spaces import (
     FINDING_WORKING_CONTRADICTED,
     FINDING_WORKING_INERT,
     TRACKER_EXPORT,
+    UNRESOLVED_NO_INTENT_DOCUMENT,
     check_spaces,
 )
 from beadloom.application.reindex import reindex
@@ -175,6 +176,30 @@ def _finding_names_tracker(world: dict[str, Any]) -> None:
     ]
     assert findings, [f.rule for f in world["report"].findings]
     assert TRACKER_EXPORT in findings[0].why
+
+
+@given("a planning directory whose only document is a summary")
+def _directory_without_intent(world: dict[str, Any]) -> None:
+    """A directory that holds intent and declares no epic.
+
+    Three of this repository's feature directories look like this, and so does
+    `.claude/development`, which holds the ROADMAP and the issue log. All four
+    were in no field of the report while their documents were in the TO-BE
+    population.
+    """
+    _write(world["root"], f"{_EPIC_ROOT}/PROJ-8/SUMMARY.md", "# SUMMARY\n\nwhat happened.\n")
+
+
+@then("the directory is counted as an epic that carries no intent document")
+def _counted_without_intent(world: dict[str, Any]) -> None:
+    report = world["report"]
+    assert "PROJ-8" in report.unresolved_epics
+    assert report.unresolved_reasons["PROJ-8"] == UNRESOLVED_NO_INTENT_DOCUMENT
+
+
+@then("it is not reported as a finding")
+def _not_a_finding(world: dict[str, Any]) -> None:
+    assert not [f for f in world["report"].findings if "PROJ-8" in f.path]
 
 
 @when("the documentation spaces are checked")

@@ -73,6 +73,13 @@ DOCS_DIR_KEY = "docs_dir"
 #: Where documentation lives when a project declares nothing.
 DEFAULT_DOCS_DIR = "docs"
 
+#: The documents an epic declares its related nodes in, most specific first.
+#: Configuration rather than a constant, because every root around them is:
+#: an adopter whose planning document is named otherwise would lose 100% of its
+#: epics and read a plausible "0 of 0" (`beadloom-mr2l.73`). Declared under
+#: ``doc_roots.to_be.intent_documents``, beside the kinds they are drawn from.
+DEFAULT_INTENT_DOCUMENTS: tuple[str, ...] = ("CONTEXT.md", "BRIEF.md")
+
 #: Where each space lives when a project declares nothing. ``to_be`` points at
 #: the flow's scaffold (``/task-init`` writes there and ``active-sync`` already
 #: reads it); ``as_is`` at the documentation tree ``sync-check`` pairs with code.
@@ -158,6 +165,8 @@ class DocSpaces:
     config_errors: tuple[str, ...] = ()
     docs_dir: str = DEFAULT_DOCS_DIR
     """Where documentation lives, project-relative — see :meth:`project_path`."""
+    intent_documents: tuple[str, ...] = DEFAULT_INTENT_DOCUMENTS
+    """File names an epic declares its related nodes in, most specific first."""
 
     def space_of_kind(self, kind: str) -> str | None:
         """The space claiming *kind*, or ``None`` when no space claims it."""
@@ -294,6 +303,7 @@ def default_doc_spaces(docs_dir: str = DEFAULT_DOCS_DIR) -> DocSpaces:
             exempt_from_freshness=True, reason=DEFAULT_WORKING_REASON, declared=False
         ),
         docs_dir=docs_dir,
+        intent_documents=DEFAULT_INTENT_DOCUMENTS,
     )
 
 
@@ -370,6 +380,7 @@ def _with_errors(docs_dir: str, *errors: str) -> DocSpaces:
         working=base.working,
         config_errors=tuple(errors),
         docs_dir=docs_dir,
+        intent_documents=base.intent_documents,
     )
 
 
@@ -377,6 +388,7 @@ def _from_block(block: dict[str, object], docs_dir: str = DEFAULT_DOCS_DIR) -> D
     """Build the spaces from a ``doc_roots`` mapping, collecting every error."""
     roots: dict[str, tuple[str, ...]] = dict(DEFAULT_ROOTS)
     kinds: dict[str, tuple[str, ...]] = dict(DEFAULT_KINDS)
+    intent_documents: tuple[str, ...] = DEFAULT_INTENT_DOCUMENTS
     errors: list[str] = []
     for space in SPACES:
         settings = block.get(space)
@@ -394,6 +406,10 @@ def _from_block(block: dict[str, object], docs_dir: str = DEFAULT_DOCS_DIR) -> D
         declared_kinds = _string_list(settings.get("kinds"))
         if declared_kinds is not None:
             kinds[space] = declared_kinds
+        if space == SPACE_TO_BE:
+            declared_documents = _string_list(settings.get("intent_documents"))
+            if declared_documents is not None:
+                intent_documents = declared_documents
     unknown = sorted(set(block) - set(SPACES))
     errors.extend(
         f"{CONFIG_KEY}.{name}: not a documentation space — "
@@ -408,6 +424,7 @@ def _from_block(block: dict[str, object], docs_dir: str = DEFAULT_DOCS_DIR) -> D
         working=working,
         config_errors=tuple(errors),
         docs_dir=docs_dir,
+        intent_documents=intent_documents,
     )
 
 

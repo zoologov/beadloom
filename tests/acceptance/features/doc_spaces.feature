@@ -26,6 +26,13 @@ Feature: documentation is named by space, and intent is held against reality
     Then the epic is counted as stating no AS-IS relation
     And the epic is not reported as a finding
 
+  @bead:beadloom-mr2l.73
+  Scenario: A planning directory with no intent document is counted with its reason
+    Given a planning directory whose only document is a summary
+    When the documentation spaces are checked
+    Then the directory is counted as an epic that carries no intent document
+    And it is not reported as a finding
+
   @bead:beadloom-mr2l.74
   Scenario: An epic the tracker does not name is reported rather than skipped
     Given an epic whose CONTEXT names the node "dispatch" and whose beads the tracker never mentions

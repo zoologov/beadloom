@@ -506,7 +506,11 @@ def _step_doc_spaces(project_root: Path) -> GateStep:
     CI checkout with no tracker installed, and a check whose result depends on
     what is on the runner is not a gate.
     """
-    from beadloom.application.doc_spaces import read_tracker_export, spaces_report
+    from beadloom.application.doc_spaces import (
+        describe_unresolved,
+        read_tracker_export,
+        spaces_report,
+    )
     from beadloom.infrastructure.db import open_db
 
     db_path = project_root / ".beadloom" / "beadloom.db"
@@ -556,6 +560,7 @@ def _step_doc_spaces(project_root: Path) -> GateStep:
     if report.epics_declaring_nothing:
         summary += (
             f"; NOT CHECKED: {report.epics_declaring_nothing} epic(s) declare no node"
+            + describe_unresolved(report.unresolved_reasons)
         )
         not_verified = True
     if report.epics_unknown_to_tracker:

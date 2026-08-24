@@ -65,6 +65,7 @@ doc_roots:
   to_be:
     roots: [".claude/development/docs/features/*/*.md"]
     kinds: [PRD, RFC, BRIEF, CONTEXT, PLAN]
+    intent_documents: [CONTEXT.md, BRIEF.md]
   as_is:
     roots: ["docs/**/*.md", "*.md"]
     kinds: [SPEC, DOC, README]
@@ -73,6 +74,13 @@ doc_roots:
     exempt_from_freshness: true
     reason: "an ACTIVE document records progress, not what the code is"
 ```
+
+`intent_documents` names the files an epic declares its related nodes in, most
+specific first. It is configuration for the reason every root beside it is: with
+the pair hardcoded, an adopter whose planning document is named otherwise lost
+100% of its epics and the gate printed a plausible `0 of 0 epic(s) with closed
+beads`. A declared list REPLACES the shipped pair rather than joining it — a
+project's convention is a statement, not an addition to ours.
 
 `reason` is mandatory whenever `exempt_from_freshness` is true — an exemption
 without a stated reason is reported as a configuration error by
@@ -86,14 +94,14 @@ cannot turn into a crashing gate that names the wrong file.
 
 - `SPACE_TO_BE`, `SPACE_AS_IS`, `SPACE_WORKING`, `SPACES` — the vocabulary.
 - `DEFAULT_ROOTS`, `DEFAULT_KINDS`, `DEFAULT_WORKING_REASON`,
-  `DEFAULT_DOCS_DIR`, `DOCS_DIR_KEY` — the shipped defaults and the config key
-  naming the documentation directory.
+  `DEFAULT_DOCS_DIR`, `DOCS_DIR_KEY`, `DEFAULT_INTENT_DOCUMENTS` — the shipped
+  defaults and the config key naming the documentation directory.
 - `document_kind(path)` — the kind a path names (`PRD.md` is a `PRD`).
 - `WorkingExemption` — `exempt_from_freshness` plus its declared `reason`.
 - `DocSpaces` — `space_of(rel_path)`, `space_of_kind(kind)`,
   `project_path(doc_path)`, `documents_in(project_root, space)`,
-  `working_documents(project_root)`, the `docs_dir` it was resolved with, and
-  the `config_errors` found while reading the block.
+  `working_documents(project_root)`, the `docs_dir` and `intent_documents` it
+  was resolved with, and the `config_errors` found while reading the block.
 - `resolve_doc_spaces(project_root)` / `default_doc_spaces(docs_dir)`.
 - `resolve_docs_dir(project_root)` — the documentation directory, project
   relative.

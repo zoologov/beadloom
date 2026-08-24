@@ -329,23 +329,18 @@ class TestADirectoryThatHoldsIntentReachesTheDenominator:
 
         assert report.epics == 1
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING BDL-061.18-1: a TO-BE directory carrying no `CONTEXT.md` and "
-            "no `BRIEF.md` is dropped from every count in the report — not "
-            "`epics`, not `unresolved_epics`, not a NOT CHECKED line — while its "
-            "documents are still counted in the TO-BE population, so one report "
-            "states two incompatible sizes for one tree. Measured on this "
-            "repository: 61 directories hold a TO-BE document and 57 become "
-            "epics; `.claude/development` and the three `SUMMARY.md`-only "
-            "feature directories are invisible. This is the shrink `.17` fixed "
-            "one layer up (a missing Related Files heading) at the layer below "
-            "it, and the fix has the same shape: a directory with no readable "
-            "intent document is unresolved with its own reason, never absent."
-        ),
-    )
     def test_a_directory_whose_documents_name_no_intent_file_is_still_an_epic(self) -> None:
+        """FINDING BDL-061.18-1, closed by `beadloom-mr2l.73`.
+
+        A TO-BE directory carrying no `CONTEXT.md` and no `BRIEF.md` was dropped
+        from every count in the report — not `epics`, not `unresolved_epics`,
+        not a NOT CHECKED line — while its documents stayed in the TO-BE
+        population, so one report stated two incompatible sizes for one tree.
+        Measured here: 61 directories held a TO-BE document and 57 became epics;
+        `.claude/development` and three `SUMMARY.md`-only feature directories
+        were invisible. It is an unresolved epic with its own reason now, which
+        is the shape `.17` applied one layer up.
+        """
         root = _tmp()
         _write(root, f"{_EPICS}/BDL-1/SUMMARY.md", "# SUMMARY\n\nwhat happened.\n")
 
@@ -354,17 +349,14 @@ class TestADirectoryThatHoldsIntentReachesTheDenominator:
         assert report.epics == 1
         assert report.unresolved_epics == ("BDL-1",)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING BDL-061.18-1: the same drop through the decode handler. "
-            "`_read` answers `None` for a document it cannot decode and the "
-            "caller `continue`s, so an epic whose CONTEXT.md is cp1251 is not an "
-            "epic at all — an undecodable planning document should be a finding "
-            "about that document, which is the shape `.68` gave the ledger."
-        ),
-    )
     def test_an_undecodable_intent_document_is_a_finding_and_not_a_disappearance(self) -> None:
+        """FINDING BDL-061.18-1 through the decode handler, closed by `.73`.
+
+        `_read` answers `None` for a document it cannot decode and the caller
+        continued, so an epic whose CONTEXT.md is cp1251 was not an epic at all.
+        It is now reported as `intent_document_unreadable` — a finding about the
+        document, which is the shape `.68` gave the ledger.
+        """
         root = _tmp()
         path = root / _EPICS / "BDL-1" / "CONTEXT.md"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -374,19 +366,17 @@ class TestADirectoryThatHoldsIntentReachesTheDenominator:
 
         assert report.epics == 1
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING BDL-061.18-1: `_INTENT_DOCUMENTS` is hardcoded to "
-            "`CONTEXT.md`/`BRIEF.md` while every root around it is "
-            "configuration. TRUE HERE IS NOT TRUE: an adopter whose planning "
-            "document is named anything else has 100% of its epics vanish, and "
-            "the gate prints a plausible `0 of 0 epic(s) with closed beads` "
-            "rather than saying it recognised no intent document. The document "
-            "names belong in `doc_roots`, beside the kinds they are drawn from."
-        ),
-    )
     def test_an_adopter_whose_intent_document_has_another_name_is_not_zero_epics(self) -> None:
+        """FINDING BDL-061.18-1 on an adopter's tree, closed by `.73`.
+
+        The intent document names were hardcoded to `CONTEXT.md`/`BRIEF.md`
+        while every root around them is configuration. TRUE HERE IS NOT TRUE: an
+        adopter whose planning document is named otherwise had 100% of its epics
+        vanish and the gate printed a plausible `0 of 0 epic(s) with closed
+        beads`. The directory is counted whatever its documents are called, and
+        the names moved into `doc_roots.to_be.intent_documents` beside the kinds
+        they are drawn from.
+        """
         root = _tmp()
         project = typescript_project(root / "orders-web")
         _config(project.root, {"to_be": {"roots": ["design/*/*.md"]}})
@@ -396,16 +386,14 @@ class TestADirectoryThatHoldsIntentReachesTheDenominator:
 
         assert report.epics == 1
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING BDL-061.18-1, measured on the real tree: 61 directories "
-            "contribute a document to the TO-BE population and 57 of them are "
-            "counted as epics. The four that are not appear in no field of the "
-            "report and in no line of the gate summary."
-        ),
-    )
     def test_every_directory_holding_a_to_be_document_is_counted_here(self) -> None:
+        """FINDING BDL-061.18-1 on the real tree, closed by `beadloom-mr2l.73`.
+
+        61 directories contribute a document to the TO-BE population and 57 were
+        counted as epics; the four that were not appeared in no field of the
+        report and in no line of the gate summary. The two sizes are one size
+        now, and this test is the one that holds them together.
+        """
         spaces = resolve_doc_spaces(REPO_ROOT)
         directories = {p.parent for p in spaces.documents_in(REPO_ROOT, SPACE_TO_BE)}
 
@@ -486,16 +474,14 @@ class TestAnEpicTheTrackerDoesNotNameIsNotAnEpicWithOpenBeads:
 
         assert report.epics_without_bead_status == 1
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING BDL-061.18-2 on the real tree: 23 of the 60 directories "
-            "under the feature root are absent from the tracker export — 20 of "
-            "them among the 57 the report counts as epics — and not one is "
-            "reported as unverifiable."
-        ),
-    )
     def test_this_repository_names_the_epics_its_export_forgot(self) -> None:
+        """FINDING BDL-061.18-2 on the real tree, closed by `.74` and `.73`.
+
+        23 of the 60 directories under the feature root are absent from the
+        tracker export and not one was reported as unverifiable. `.74` gave the
+        state its own channel and `.73` widened the population to every
+        directory holding intent, which is why this leg needed both.
+        """
         beads = _repo_beads()
         directories = [p.name for p in sorted((REPO_ROOT / _EPICS).iterdir()) if p.is_dir()]
         forgotten = [name for name in directories if name not in beads]

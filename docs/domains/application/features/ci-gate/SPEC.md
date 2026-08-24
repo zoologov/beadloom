@@ -55,7 +55,10 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    than PASS, because each is a way to print no findings while having checked
    nothing: no tracker export was readable, no epic with closed beads declared a
    node, some epics declare none, and — since `beadloom-mr2l.74` — some epics
-   the tracker does not name at all. That fourth state has its own clause rather
+   the tracker does not name at all. The *declare no node* clause names the
+   composition of that bucket when it holds more than the ordinary case, because
+   a directory carrying no readable intent document (`beadloom-mr2l.73`) is not
+   an epic whose author forgot to declare a node. That fourth state has its own clause rather
    than only the boolean: `not_verified` was already True here for an unrelated
    reason, so a saturated signal said nothing about an epic that had left the
    export. The tracker is read from the committed `.beads/issues.jsonl` export
@@ -72,11 +75,12 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
 
    ```
    doc-spaces WARN | to_be 190, as_is 93, working 55; 17 node declaration(s)
-                     from 37 of 57 epic(s) with closed beads held against the
+                     from 37 of 61 epic(s) with closed beads held against the
                      AS-IS space; tracker read from .beads/issues.jsonl;
-                     NOT CHECKED: 52 epic(s) declare no node;
-                     NOT CHECKED: 20 epic(s) the tracker does not name
-                     (BDL-001, BDL-003, BDL-005, BDL-006, BDL-007 and 15 more);
+                     NOT CHECKED: 56 epic(s) declare no node
+                     (4 carry no readable intent document);
+                     NOT CHECKED: 24 epic(s) the tracker does not name
+                     (BDL-001, BDL-003, BDL-005, BDL-006, BDL-007 and 19 more);
                      55 WORKING document(s) exempt
    ```
 

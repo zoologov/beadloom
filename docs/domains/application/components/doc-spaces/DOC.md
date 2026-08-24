@@ -36,6 +36,36 @@ out was the first implementation: on this repository it removed 34 of 57 epics
 from the denominator and the report then read *16 of 23*, which looks like
 coverage of two thirds where the real figure is under a third.
 
+## An epic is a directory that holds intent
+
+Not "a directory that carries a `CONTEXT.md` or `BRIEF.md`", which is what it
+was. The difference was four of this repository's 61 TO-BE directories, in NO
+field of the report — not `epics`, not `unresolved_epics`, not a NOT CHECKED
+line — while their documents stayed in the TO-BE population. One report stated
+two sizes for one tree: 61 directories held intent and 57 became epics.
+
+Every directory is an epic now, and `unresolved_reasons` says which of three
+situations each unresolved one is in:
+
+| Reason | What it means | Reported? |
+|---|---|---|
+| `no_node_declared` | the intent document was read and declares no node | counted and named |
+| `no_intent_document` | the directory carries none of the configured names | counted and named |
+| `unreadable_intent_document` | it carries one and it is not valid UTF-8 | `intent_document_unreadable` |
+
+Only the third is a finding, and the distinction is the point. A directory that
+carries no intent document is a directory that is not an epic —
+`.claude/development` holds the ROADMAP and the issue log — and reporting it
+would fill the everyday line with things nobody intends to change. A document
+that is there and cannot be decoded is a defect in that document: `_read`
+answered `None` and the caller continued, so a cp1251 planning document used to
+remove its own epic instead of naming itself.
+
+The file names come from `doc_roots.to_be.intent_documents`. With them
+hardcoded, an adopter whose planning document is called anything else lost 100%
+of its epics and the gate printed a plausible `0 of 0 epic(s) with closed
+beads`.
+
 ## What is checked, and what is not
 
 One leg: an epic with at least one closed bead that declares node *X*, where *X*
@@ -86,6 +116,9 @@ it answers the same in a fresh CI checkout, and `beadloom docs spaces` the live
 - `spaces_report(conn, project_root, *, beads)` — the same over a live index.
 - `graph_facts(conn)` — `(known_refs, documented_refs, declared_doc_paths)`.
 - `read_tracker_export(project_root)` — the committed export as a `TrackerRead`.
+- `describe_unresolved(reasons)` — the unresolved bucket's composition as one
+  clause, shared by the gate and the command so one bucket cannot be described
+  two ways.
 - `beads_by_epic(records)` — group tracker records by the epic key their title
   names.
 - `read_epic_intents(...)`, `EpicIntent`, `SpaceFinding`, `SpacesReport`.

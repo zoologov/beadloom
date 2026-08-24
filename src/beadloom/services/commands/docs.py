@@ -826,6 +826,7 @@ def _spaces_json(report: object, tracker: TrackerRead) -> dict[str, object]:
         "epics_declaring_nodes": report.epics_declaring_nodes,  # type: ignore[attr-defined]
         "epics_declaring_nothing": report.epics_declaring_nothing,  # type: ignore[attr-defined]
         "unresolved_epics": list(report.unresolved_epics),  # type: ignore[attr-defined]
+        "unresolved_reasons": dict(report.unresolved_reasons),  # type: ignore[attr-defined]
         "refs_checked": report.refs_checked,  # type: ignore[attr-defined]
         "relation_checked": report.relation_checked,  # type: ignore[attr-defined]
         "tracker_read": tracker.statuses is not None,
@@ -854,6 +855,8 @@ def _spaces_json(report: object, tracker: TrackerRead) -> dict[str, object]:
 # beadloom:component=cli-commands
 def _spaces_rich(report: object, *, tracker: TrackerRead) -> None:
     """The human rendering: every denominator visible beside every count."""
+    from beadloom.application.doc_spaces import describe_unresolved
+
     populations = dict(report.populations)  # type: ignore[attr-defined]
     for space in ("to_be", "as_is", "working"):
         click.echo(f"  {space}: {populations.get(space, 0)} document(s)")
@@ -878,6 +881,7 @@ def _spaces_rich(report: object, *, tracker: TrackerRead) -> None:
         click.echo(
             f"  NOT CHECKED: {report.epics_declaring_nothing} epic(s) declare no "  # type: ignore[attr-defined]
             f"node, so nothing of theirs could be related to the AS-IS space"
+            + describe_unresolved(report.unresolved_reasons)  # type: ignore[attr-defined]
         )
     unknown = report.epics_unknown_to_tracker  # type: ignore[attr-defined]
     if unknown:

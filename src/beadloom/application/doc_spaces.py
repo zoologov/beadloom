@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from beadloom.infrastructure.doc_roots import (
@@ -87,8 +88,19 @@ TRACKER_EXPORT = ".beads/issues.jsonl"
 #: No tracker answered at all — a whole missing denominator, one global cause.
 TRACKER_UNREADABLE = "no tracker was readable"
 
-#: Documents an epic declares its related nodes in, most specific first.
-_INTENT_DOCUMENTS: tuple[str, ...] = ("CONTEXT.md", "BRIEF.md")
+#: A planning document that exists and cannot be decoded. A finding ABOUT the
+#: document, rather than the silent loss of the epic that owns it: the handler
+#: is as wide as the call and says what it could not read (the ledger `.68`
+#: built, and `.14`'s BDL-061.14-3 on the reference leg).
+FINDING_INTENT_UNREADABLE = "intent_document_unreadable"
+
+#: Why an epic declared no node. Three situations, and blurring them is how a
+#: denominator shrinks without saying so: the document was read and declares
+#: nothing, the directory carries no intent document at all, or the document is
+#: there and cannot be decoded.
+UNRESOLVED_NO_NODE_DECLARED = "no_node_declared"
+UNRESOLVED_NO_INTENT_DOCUMENT = "no_intent_document"
+UNRESOLVED_UNREADABLE_INTENT = "unreadable_intent_document"
 
 #: Headings under which an epic declares the nodes it touches.
 _RELATED_HEADINGS = ("related file", "related code", "primary ref")
@@ -126,6 +138,16 @@ class EpicIntent:
     declared_refs: tuple[tuple[str, int], ...]
     bead_statuses: tuple[str, ...] | None
     unknown_status_reason: str | None = None
+    unresolved_reason: str | None = None
+    """Why this epic declares no node, or ``None`` when it declares one.
+
+    A directory holding intent that carries no readable intent document used to
+    be appended to nothing at all — absent from ``epics``, from
+    ``unresolved_epics`` and from every NOT CHECKED line — while its documents
+    stayed in the TO-BE population, so one report stated two sizes for one tree.
+    It is unresolved WITH A REASON now, which is the shape `.17` had already
+    applied one layer up.
+    """
 
     @property
     def has_closed_bead(self) -> bool:
@@ -151,6 +173,8 @@ class SpacesReport:
     working_reason: str
     findings: tuple[SpaceFinding, ...] = ()
     unresolved_epics: tuple[str, ...] = ()
+    unresolved_reasons: Mapping[str, str] = MappingProxyType({})
+    """Why each unresolved epic is unresolved, keyed by epic key."""
     epics_unknown_to_tracker: tuple[str, ...] = ()
     """Epics a READABLE tracker does not name, by key.
 
@@ -229,44 +253,75 @@ def read_epic_intents(
     beads_by_epic: Mapping[str, tuple[str, ...]] | None,
     tracker_source: str = TRACKER_EXPORT,
 ) -> list[EpicIntent]:
-    """Every epic in the TO-BE space, with the nodes it declares.
+    """Every TO-BE directory, with the nodes its intent document declares.
 
-    An epic is a TO-BE directory carrying one of :data:`_INTENT_DOCUMENTS` — the
-    documents whose template has a related-files section.
+    **An epic is a directory that holds a TO-BE document**, and nothing narrower.
+    It was "a directory carrying an intent document" and the difference was four
+    of this repository's 61 directories, in NO field of the report — not
+    ``epics``, not ``unresolved_epics``, not a NOT CHECKED line — while their
+    documents stayed in the TO-BE population. One report, two sizes, one tree.
 
-    An epic whose document has NO such section is still an epic here, and lands
-    in ``unresolved_epics`` with no declared ref. Filtering it out was the first
-    implementation and it was wrong in the way this epic keeps meeting: on this
-    repository it removed 34 of 57 epics from the denominator and the report
-    then said "16 of 23", which reads like coverage of two thirds where the real
-    figure is under a third. Absence is not evidence, and a denominator that
-    shrinks without saying why is BDL-UX #174's equation.
+    An epic whose document declares nothing is unresolved rather than absent, and
+    so is one whose directory carries no readable intent document at all; each
+    carries its own reason. Filtering the first out was the original
+    implementation and it was wrong in the way this epic keeps meeting: it
+    removed 34 of 57 epics from the denominator and the report then said "16 of
+    23", which reads like coverage of two thirds where the real figure is under
+    a third. Absence is not evidence, and a denominator that shrinks without
+    saying why is BDL-UX #174's equation.
     """
     directories: dict[Path, None] = {}
     for path in spaces.documents_in(project_root, SPACE_TO_BE):
         directories.setdefault(path.parent, None)
     intents: list[EpicIntent] = []
     for directory in directories:
-        for name in _INTENT_DOCUMENTS:
-            candidate = directory / name
-            if not candidate.is_file():
-                continue
-            text = _read(candidate)
-            if text is None:
-                continue
-            key = directory.name
-            statuses, unknown = _bead_statuses(key, beads_by_epic, tracker_source)
-            intents.append(
-                EpicIntent(
-                    key=key,
-                    path=_relative(candidate, project_root),
-                    declared_refs=tuple(_related_refs(text, known_refs)),
-                    bead_statuses=statuses,
-                    unknown_status_reason=unknown,
-                )
+        key = directory.name
+        statuses, unknown = _bead_statuses(key, beads_by_epic, tracker_source)
+        declaration = _read_declaration(directory, spaces, known_refs)
+        intents.append(
+            EpicIntent(
+                key=key,
+                path=_relative(declaration.path, project_root),
+                declared_refs=declaration.refs,
+                bead_statuses=statuses,
+                unknown_status_reason=unknown,
+                unresolved_reason=declaration.unresolved_reason,
             )
-            break
+        )
     return sorted(intents, key=lambda i: i.key)
+
+
+@dataclass(frozen=True)
+class _Declaration:
+    """What a directory's intent document declares, and where that was read."""
+
+    path: Path
+    refs: tuple[tuple[str, int], ...]
+    unresolved_reason: str | None
+
+
+def _read_declaration(
+    directory: Path, spaces: DocSpaces, known_refs: frozenset[str]
+) -> _Declaration:
+    """The nodes *directory*'s intent document declares, or why there are none.
+
+    Three outcomes, kept apart because they call for three different actions:
+    the document was read and names nodes; it was read and names none; or there
+    is no readable intent document, either because the directory carries none of
+    the configured names or because the one it carries cannot be decoded.
+    """
+    for name in spaces.intent_documents:
+        candidate = directory / name
+        if not candidate.is_file():
+            continue
+        text = _read(candidate)
+        if text is None:
+            return _Declaration(candidate, (), UNRESOLVED_UNREADABLE_INTENT)
+        refs = tuple(_related_refs(text, known_refs))
+        return _Declaration(
+            candidate, refs, None if refs else UNRESOLVED_NO_NODE_DECLARED
+        )
+    return _Declaration(directory, (), UNRESOLVED_NO_INTENT_DOCUMENT)
 
 
 def _read(path: Path) -> str | None:
@@ -339,6 +394,7 @@ def check_spaces(
     declaring = 0
     no_status = 0
     unresolved: list[str] = []
+    unresolved_reasons: dict[str, str] = {}
     unknown_to_tracker: list[str] = []
     with_closed = 0
     for intent in intents:
@@ -348,6 +404,11 @@ def check_spaces(
             declaring += 1
         else:
             unresolved.append(intent.key)
+            unresolved_reasons[intent.key] = (
+                intent.unresolved_reason or UNRESOLVED_NO_NODE_DECLARED
+            )
+        if intent.unresolved_reason == UNRESOLVED_UNREADABLE_INTENT:
+            findings.append(_unreadable_intent(intent))
         if intent.unknown_status_reason not in (None, TRACKER_UNREADABLE):
             unknown_to_tracker.append(intent.key)
             if intent.declared_refs:
@@ -389,7 +450,66 @@ def check_spaces(
         working_reason=spaces.working.reason,
         findings=tuple(findings),
         unresolved_epics=tuple(sorted(unresolved)),
+        unresolved_reasons=MappingProxyType(dict(sorted(unresolved_reasons.items()))),
         epics_unknown_to_tracker=tuple(sorted(unknown_to_tracker)),
+    )
+
+
+#: How each non-default unresolved reason reads in a summary line.
+_UNRESOLVED_SAID: Mapping[str, str] = MappingProxyType(
+    {
+        UNRESOLVED_NO_INTENT_DOCUMENT: "carry no readable intent document",
+        UNRESOLVED_UNREADABLE_INTENT: "carry one that could not be decoded",
+    }
+)
+
+
+def describe_unresolved(reasons: Mapping[str, str]) -> str:
+    """The unresolved bucket's composition, when it holds more than one case.
+
+    A directory that carries no readable intent document is not an epic whose
+    author forgot to declare a node; it is a directory that is not an epic at
+    all. Both are honestly unresolved, and a single count of 56 tells a reader
+    which of them they are looking at only by accident. Empty when every
+    unresolved epic is the ordinary case, so the everyday line keeps its shape.
+
+    Shared by the gate and the command so one bucket cannot be described two
+    ways — the shape `beadloom-mr2l.75` had to repair one layer down.
+    """
+    counts: dict[str, int] = {}
+    for reason in reasons.values():
+        if reason != UNRESOLVED_NO_NODE_DECLARED:
+            counts[reason] = counts.get(reason, 0) + 1
+    if not counts:
+        return ""
+    parts = [
+        f"{count} {_UNRESOLVED_SAID.get(reason, reason)}"
+        for reason, count in sorted(counts.items())
+    ]
+    return f" ({', '.join(parts)})"
+
+
+def _unreadable_intent(intent: EpicIntent) -> SpaceFinding:
+    """A planning document that exists and cannot be decoded.
+
+    Unlike a directory that carries no intent document — which is a directory
+    that is not an epic, and no defect — a document that is there and unreadable
+    is a defect in that document. Reporting it is the difference between naming
+    the file and losing the epic.
+    """
+    return SpaceFinding(
+        rule=FINDING_INTENT_UNREADABLE,
+        path=intent.path,
+        line=0,
+        why=(
+            f"epic {intent.key}'s intent document is not valid UTF-8, so the nodes "
+            f"it declares could not be read and its intent was held against nothing"
+        ),
+        remediation=(
+            "re-save the document as UTF-8 — a planning document is a UTF-8 "
+            "contract, and a decode failure is a fact about the file rather than "
+            "a reason to drop the epic that owns it"
+        ),
     )
 
 
