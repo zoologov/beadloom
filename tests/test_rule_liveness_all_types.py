@@ -42,10 +42,13 @@ from beadloom.graph.rule_engine import (
     ModuleCoverageRule,
     NodeMatcher,
     RequireRule,
+    ScenarioCoverageRule,
     UnregisteredFeatureCandidateRule,
     Violation,
     evaluate_all,
+    inert_rule_names,
 )
+from beadloom.graph.rules.liveness import evaluate_rule_liveness
 from beadloom.infrastructure.db import create_schema, open_db
 from beadloom.services.cli import main
 
@@ -687,6 +690,137 @@ class TestEveryRuleTypeIsCovered:
         """A fresh clone has nothing indexed; that is a header, not nine warnings."""
         # Act / Assert
         assert _liveness(empty_db, _ONE_OF_EACH, project_root=tmp_path) == []
+
+
+# ---------------------------------------------------------------------------
+# The tenth rule type — counted here, reported by the module that owns it
+# ---------------------------------------------------------------------------
+
+
+_FEATURE_FILE = """\
+@bead:beadloom-mr2l.66 @node:alpha
+Feature: something observable
+
+  Scenario: a thing happens
+    Given a state
+    When a thing happens
+    Then it is observable
+"""
+
+
+def _with_suite(root: Path) -> Path:
+    """A project root carrying one acceptance feature file."""
+    suite = root / "tests" / "acceptance" / "features"
+    suite.mkdir(parents=True, exist_ok=True)
+    (suite / "alpha.feature").write_text(_FEATURE_FILE, encoding="utf-8")
+    return root
+
+
+_SUITE_GLOB = "tests/acceptance/features/**/*.feature"
+
+
+class TestScenarioCoverageIsCountedInert:
+    """`rules_inert` must count the tenth rule type (review `.15` M3).
+
+    The rule REPORTS its own liveness per leg, because only it knows which of
+    the four legs stood down and which glob did it. The COUNT is a different
+    question — *how many of my rules checked nothing* — and it was answered
+    ``0`` while the rule stood down entirely: ``13 rules evaluated, 0 inert``
+    over a rule that checked nothing at all. A GREEN COUNT IS NOT A CHECKED
+    COUNT.
+    """
+
+    def test_an_absent_suite_counts_the_rule_as_inert(
+        self, graph_db: sqlite3.Connection, tmp_path: Path
+    ) -> None:
+        # Arrange — the glob matches no file, which stands every leg down. The
+        # `for` matcher names a node that EXISTS, so the only dead input here is
+        # the suite.
+        rule = ScenarioCoverageRule(
+            name="dead-suite",
+            description="behaviour carries an executable claim",
+            for_matcher=NodeMatcher(ref_id="alpha"),
+            features=_SUITE_GLOB,
+        )
+
+        # Act
+        counted = inert_rule_names(graph_db, [rule], project_root=tmp_path)
+
+        # Assert
+        assert counted == {"dead-suite"}
+
+    def test_a_live_suite_is_not_counted_as_inert(
+        self, graph_db: sqlite3.Connection, tmp_path: Path
+    ) -> None:
+        """The non-vacuity guard: "everything is inert" must not pass."""
+        # Arrange
+        rule = ScenarioCoverageRule(
+            name="live-suite",
+            description="behaviour carries an executable claim",
+            features=_SUITE_GLOB,
+        )
+
+        # Act
+        counted = inert_rule_names(graph_db, [rule], project_root=_with_suite(tmp_path))
+
+        # Assert
+        assert counted == set()
+
+    def test_a_dead_for_matcher_alone_does_not_count_the_rule_as_inert(
+        self, graph_db: sqlite3.Connection, tmp_path: Path
+    ) -> None:
+        """Per-leg liveness is not inertness: three legs still check something."""
+        # Arrange — no node carries this tag, so only the coverage leg is down
+        rule = ScenarioCoverageRule(
+            name="dead-matcher",
+            description="behaviour carries an executable claim",
+            for_matcher=NodeMatcher(tag="ghost-tag"),
+            features=_SUITE_GLOB,
+        )
+
+        # Act
+        counted = inert_rule_names(graph_db, [rule], project_root=_with_suite(tmp_path))
+
+        # Assert
+        assert counted == set(), (
+            "a rule whose suite and reference legs still check something is not "
+            "unable to check anything"
+        )
+
+    def test_the_absent_suite_is_reported_exactly_once(
+        self, graph_db: sqlite3.Connection, tmp_path: Path
+    ) -> None:
+        """Counted here, reported there — an audit that affirms one fact twice is #173."""
+        # Arrange
+        rule = ScenarioCoverageRule(
+            name="dead-suite",
+            description="behaviour carries an executable claim",
+            for_matcher=NodeMatcher(ref_id="alpha"),
+            features=_SUITE_GLOB,
+        )
+
+        # Act
+        findings = _liveness(graph_db, [rule], project_root=tmp_path)
+        generic = evaluate_rule_liveness(graph_db, [rule], project_root=tmp_path)
+
+        # Assert — one finding, and it is the one that names the glob
+        assert len(findings) == 1, [v.message for v in findings]
+        assert _SUITE_GLOB in findings[0].message
+        assert generic == [], (
+            "the generic 'cannot fire' line would be a second finding for one "
+            "fact, and would double the single finding a repointed path is "
+            "measured down to"
+        )
+
+    def test_liveness_stays_silent_without_a_project_root(
+        self, graph_db: sqlite3.Connection
+    ) -> None:
+        """The globs are rooted at it: with no root there is nothing to decide."""
+        # Act / Assert
+        assert inert_rule_names(graph_db, [ScenarioCoverageRule(
+            name="rootless",
+            description="behaviour carries an executable claim",
+        )]) == set()
 
 
 # ---------------------------------------------------------------------------

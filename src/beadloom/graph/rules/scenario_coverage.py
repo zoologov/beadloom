@@ -12,17 +12,25 @@ index against files on disk that no index holds, and it owns its own liveness
 (the same boundary :mod:`.liveness` draws for ``forbid_import``, and for the same
 reason — the dead-glob finding falls out of the scan the evaluation already did).
 
-**Liveness is per LEG, not per rule.** This rule has three independent legs and
-they fail independently: a ``for`` matcher that selects nothing kills the coverage
-leg while the scenario legs still work, and a ``references`` glob that matches no
-document kills only the reference leg. Standing the whole rule down for one dead
-leg would hide two working checks; counting the rule clean would be the false
-green ``.48`` measured. So each dead leg reports itself and the others run.
+**Liveness is per LEG, not per rule — with one exception, named here because a
+note that understates a silence is worse than no note at all.** Four legs run
+(suite, declaration, coverage, reference) and two of the dead-input cases are
+genuinely per-leg: a ``for`` matcher that selects nothing kills the coverage leg
+while the scenario legs still work, and a ``references`` glob that matches no
+document kills only the reference leg. Each reports itself and the others run.
 
-**One deliberate silence:** when the ``features`` glob matches no file at all,
-the coverage leg is skipped rather than reporting every matched node. There is no
-suite to be measured against, and one configuration error printing as N
-architecture findings buries the finding that would fix it.
+**The exception: an ABSENT SUITE stands the WHOLE rule down — all four legs, not
+the coverage leg alone.** When the ``features`` glob matches no file,
+:func:`_evaluate_one` reports the glob and returns, so the suite, declaration,
+coverage and reference legs are all skipped. Measured on this repository,
+repointing ``features:`` at a directory that does not exist takes ``lint`` from
+68 findings to exactly 1, and that 1 is the liveness finding naming the dead
+glob; the 33 reference findings that an empty suite would make definitionally
+true go with it. The reason is unchanged and still holds — one configuration
+error printing as N architecture findings buries the finding that would fix it —
+but the reach was understated for six review cycles, and so was what follows
+from it: in that state the rule is **counted** as inert
+(:func:`inert_reason`), which a per-leg silence would not have been.
 """
 
 from __future__ import annotations
@@ -118,6 +126,40 @@ def _population(suite: ScenarioSuite) -> str:
         f"{scenarios} scenario{'' if scenarios == 1 else 's'} "
         f"in {files} file{'' if files == 1 else 's'}"
     )
+
+
+def inert_reason(
+    rule: ScenarioCoverageRule,
+    project_root: Path,
+    *,
+    suite: ScenarioSuite | None = None,
+) -> str | None:
+    """Why this rule can check NOTHING AT ALL, or ``None`` when it checks something.
+
+    One predicate, two callers, so the count and the control flow it describes
+    cannot drift apart (BDL-UX #171 is one fact with two sources of truth):
+    :func:`_evaluate_one` reports it as a liveness finding naming the glob, and
+    :func:`beadloom.graph.rules.liveness.inert_rules` COUNTS it into
+    ``N rules evaluated, M of them unable to check anything``. Until review
+    ``.15`` M3 the second caller did not exist, so ``lint`` printed
+    ``13 rules, 0 inert`` over a rule that had stood all four legs down.
+
+    Only an ABSENT SUITE stands the whole rule down, because
+    :func:`_evaluate_one` returns as soon as it finds one. A dead ``for`` matcher
+    or a dead ``references`` glob stands ONE leg down while the others still
+    check, and counting that rule as unable to check anything would make the
+    summary line over-claim in the other direction.
+
+    *suite* is passed by the evaluator, which has already loaded it; the liveness
+    caller loads it once more, which is what the counter being true costs.
+    """
+    loaded = suite if suite is not None else load_suite(project_root, rule.features)
+    if loaded.is_empty:
+        return (
+            f"its acceptance suite glob '{rule.features}' matches no file, so no "
+            f"node was checked for a scenario and no scenario for a binding"
+        )
+    return None
 
 
 def _coverage_leg(
@@ -327,7 +369,7 @@ def _evaluate_one(
         )
 
     suite = load_suite(project_root, rule.features)
-    if suite.is_empty:
+    if inert_reason(rule, project_root, suite=suite) is not None:
         findings.append(
             liveness_finding(
                 rule_name=rule.name,
