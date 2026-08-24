@@ -38,6 +38,7 @@ from beadloom.doc_sync.doc_shape import (
 )
 from beadloom.doc_sync.engine import (
     BLOCKING_STATUSES,
+    STATUS_EXEMPT,
     STATUS_MISSING,
     STATUS_OK,
     STATUS_STALE,
@@ -332,14 +333,17 @@ def _sync_summary(
     """The sync-check line, which must never print a count that means nothing.
 
     It says how many pairs were CHECKED and found fresh, how many could not be
-    checked at all, and — when the recorded declared surface moved — that it
-    moved. A bare ``N pair(s) fresh`` was true of a run in which six pairs had
-    just been deleted (BDL-UX #174) and of a run that could not detect staleness
-    at all (BDL-UX #175).
+    checked at all, how many were EXCUSED and on what declaration, and — when
+    the recorded declared surface moved — that it moved. A bare ``N pair(s)
+    fresh`` was true of a run in which six pairs had just been deleted (BDL-UX
+    #174) and of a run that could not detect staleness at all (BDL-UX #175); the
+    ``exempt`` verdict, added after this docstring was written, reintroduced
+    exactly that shape until `beadloom-mr2l.76` (measured: 326 of 330 pair(s)
+    fresh became "326 pair(s) fresh" when a declaration excused four).
     """
     missing = [r for r in results if r.get("status") == STATUS_MISSING]
     stale = [r for r in results if r.get("status") == STATUS_STALE]
-    suffix = f"; {surface.headline}" if surface.headline else ""
+    suffix = _excused_clause(results) + (f"; {surface.headline}" if surface.headline else "")
     if missing or stale:
         parts = []
         if missing:
@@ -355,6 +359,23 @@ def _sync_summary(
     if unverified:
         summary += f", {len(unverified)} NOT VERIFIED (no baseline — index rebuilt)"
     return summary + suffix
+
+
+def _excused_clause(results: list[dict[str, object]]) -> str:
+    """How many pairs a declaration excused, and what it was declared with.
+
+    Empty when nothing was excused, so a project that declares no exemption
+    keeps the line it had. A skip is a first-class outcome and always says why,
+    so the declared reason the row carries travels into the line rather than
+    being left in ``--json`` for somebody to look up.
+    """
+    excused = [r for r in results if r.get("status") == STATUS_EXEMPT]
+    if not excused:
+        return ""
+    reasons = {str(r.get("details", "")).strip() for r in excused}
+    reasons.discard("")
+    stated = f" — {sorted(reasons)[0]}" if len(reasons) == 1 else ""
+    return f", {len(excused)} exempt{stated}"
 
 
 def _step_docs_audit(project_root: Path) -> GateStep:

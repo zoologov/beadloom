@@ -561,15 +561,13 @@ JUDGED_NARROW_DECODES: dict[str, NarrowDecode] = {
         ),
         until=_JUDGED_BY_67,
     ),
-    "doc_sync/engine.py::_resolve_reference_docs_dir#1": NarrowDecode(
-        reads=".beadloom/config.yml, read for its docs_dir key alone",
-        catches="OSError, yaml.YAMLError",
-        reason=(
-            "falls back to an empty config and then to docs/, so a broken config still resolves a "
-            "directory; a decode failure escapes sync-check before one pair is compared"
-        ),
-        until=_JUDGED_BY_67,
-    ),
+    # `doc_sync/engine.py::_resolve_reference_docs_dir#1` was judged here and is
+    # gone: `beadloom-mr2l.75` collapsed three readers of the `docs_dir` key into
+    # `infrastructure/doc_roots.resolve_docs_dir`, whose handler catches
+    # `(OSError, UnicodeDecodeError, yaml.YAMLError)` and is therefore not narrow.
+    # The row is removed rather than repointed, because this test fails on a row
+    # with no block behind it — a list of exclusions that outlives the code it
+    # excused reads as approval for something nobody checked.
     "doc_sync/surface.py::flow_signature#1": NarrowDecode(
         reads=".beadloom/flow.yml, canonicalised and hashed into the surface signature",
         catches="OSError, yaml.YAMLError",

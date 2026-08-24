@@ -22,7 +22,10 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
 1. **reindex** (unless `--no-reindex`) — rebuild the index.
 2. **lint** — `lint --strict`, architecture boundaries. Its summary carries what a `forbid_import` exemption excused (`… 12 rules, 0 violations, 6 crossings suppressed by an exemption`), taken from the linter's own formatter so the Gate line cannot drift from the command it summarises (BDL-061.49). The clause is absent when nothing was suppressed. There is deliberately no matching clause for `rules_inert`: an inert rule always emits a finding, so a non-zero count already flips this summary to the `0 error(s), N warning(s)` branch.
 3. **sync-check** — symbol-pair doc freshness; fails on stale **and missing**
-   pairs, and reports `unverified` ones as `WARN` rather than fresh.
+   pairs, reports `unverified` ones as `WARN` rather than fresh, and states how
+   many pairs a WORKING declaration EXCUSED, with the reason it was declared
+   with (`… 326 pair(s) fresh, 4 exempt — <reason>`). The clause is absent when
+   nothing was excused, so a project that declares no exemption keeps its line.
 4. **docs-audit** — numeric/version fact freshness; fails on `stale>0`, and
    states how much of the declared fact surface it covered.
 5. **docs-quality** — the five writing-standard checks over the project's
@@ -134,7 +137,12 @@ as the code's health (BDL-UX #174/#175):
   `unverified`: the step stays passed but prints `WARN` with the count, because
   a project that cannot supply a baseline is not broken and must not read green
   either. When the committed declared-surface ledger records a larger surface
-  than the run found, that is named too.
+  than the run found, that is named too. And a pair a WORKING declaration
+  excused is counted and its reason stated: the `exempt` verdict was added after
+  this summary was rewritten and reintroduced the same shape, printing
+  `326 pair(s) fresh` where the same tree without the declaration printed 326 of
+  330 (`beadloom-mr2l.76`). Unverifiable, excused and clean are three states and
+  do not print one word.
 - **doctor** counts the CHECKS that ran, not the findings. `run_checks` returns
   one entry per finding, so `len(checks)` counted problems: deleting a declared
   doc added a `nodes_without_docs` warning and the summary read `21 check(s)

@@ -76,7 +76,11 @@ headings, the Progress Log, and non-Status columns are always left untouched.
   The module also hosts the `sync-check` command, which since BDL-061 S4b
   resolves the project's required document sections and passes them into
   `check_sync` — the two `sync-update` paths in the same module deliberately do
-  not, because re-baselining a pair cannot fix a missing section.
+  not, because re-baselining a pair cannot fix a missing section. Its renderers
+  own the verdict vocabulary a reader sees: `_STATUS_MARKER` carries one word
+  per verdict (`[exempt]` among them since `beadloom-mr2l.76`, where an excused
+  pair printed `[ok]`), and the `--json` summary counts every verdict so they
+  sum to the total.
   The `--stage` flag runs `git add` on EXACTLY the reconciled ACTIVE.md paths
   plus the exported jsonl (via `_stage_reconciled`), never staging unrelated
   files. The `--check` mode runs reconcile on a throwaway sandbox copy

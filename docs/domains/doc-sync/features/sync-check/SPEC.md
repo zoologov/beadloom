@@ -74,7 +74,7 @@ print `ok`:
 | `missing` | `doc_missing`, `code_missing`, `declared_doc_missing` | the thing to check is not there | 2 |
 | `unverified` | `no_baseline` | there was nothing to compare against | 0, reported by name |
 | `incomplete` | `missing_sections`, `section_not_in_use` | the document is current and does not carry the shape its kind requires | 0, reported by name |
-| `exempt` | `working_space` | the document is in the WORKING space and is exempt from freshness by declaration | 0, reported by name |
+| `exempt` | `working_space` | the document is in the WORKING space and is exempt from freshness by declaration | 0, reported by name and counted |
 
 Every result also carries `baseline` — `index`, `git:HEAD` or `none` — so a green
 result says what it was green against (BDL-UX #175).
@@ -115,15 +115,26 @@ Two properties make that detection reachable rather than merely present
   gone is reported `missing` before any exemption is applied, so a WORKING
   declaration cannot make a deleted file quieter than a present one.
 
+An excused pair says so on every surface (`beadloom-mr2l.76`). It carries an
+`exempt` key in the `--json` summary, prints `[exempt]` with its declared reason
+rather than `[ok]` in the rich output, and is counted in the gate line
+(`326 pair(s) fresh, 4 exempt — <reason>`). It had none of those: the gate
+printed `326 pair(s) fresh` where the same tree without the declaration printed
+326 of 330, which is the shape the gate summary had already been rewritten
+against once (BDL-UX #174/#175).
+
 `incomplete` does not block either, and for a different reason: it is a NEW
 check (BDL-061 S4b) and every new check ships as `warn`, so no adopter's green
-project turns red on upgrade. **It has no counter in the `--json` summary**, so
-`ok + stale + missing + unverified + unchecked` does not sum to `total` when any
-row is incomplete: the rows are in `pairs` and the rich output prints each one,
-but a machine consumer reading only the summary does not see them. Measured on
-this repository, 2026-08-24: `total 326 = 240 ok + 82 stale + 4 incomplete`, and
-the summary accounts for 322. Review `beadloom-mr2l.15` M5 filed it and it is
-open. It is the only verdict here about a document's
+project turns red on upgrade. It had no counter in the `--json` summary, so
+`ok + stale + missing + unverified` did not sum to `total` when any row was
+incomplete — measured on this repository, 2026-08-24: `total 326 = 240 ok +
+82 stale + 4 incomplete`, with the summary accounting for 322. Review
+`beadloom-mr2l.15` M5 filed it and `beadloom-mr2l.76` closed it together with
+the same gap under `exempt`: **the verdicts now sum to the total**, as
+`ok + stale + missing + unverified + exempt + incomplete`. `unchecked` is
+deliberately outside that sum — it counts NODES that contribute no pair at all,
+a different population from the pairs the verdicts describe. `incomplete` is the
+only verdict here about a document's
 STRUCTURE rather than its currency — the five reasons above all compare content,
 and none of them can see a README edited down to a title. The verdict is never
 written to `sync_state`: the status column would then mean two different things,

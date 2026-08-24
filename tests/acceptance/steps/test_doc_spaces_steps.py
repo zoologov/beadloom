@@ -298,6 +298,23 @@ def _exempt_reason(world: dict[str, Any]) -> None:
     assert all(str(r.get("details", "")).strip() for r in rows), rows
 
 
+@then("the gate line states how many pairs it excused and the declared reason")
+def _line_states_excused(world: dict[str, Any]) -> None:
+    """The count that fell has to be the count that is explained.
+
+    `_sync_summary` exists because a bare `N pair(s) fresh` was true of a run in
+    which six pairs had been deleted; the `exempt` verdict was added after that
+    and printed nothing at all (`beadloom-mr2l.76`).
+    """
+    from beadloom.application.gate import _sync_summary
+    from beadloom.doc_sync.surface_ledger import SurfaceVerdict
+
+    line = _sync_summary(world["rows"], [], SurfaceVerdict(True, False, ""))
+
+    assert "1 exempt" in line, line
+    assert "records progress" in line, line
+
+
 @given("a project that declares a WORKING kind no document uses")
 def _inert_working(world: dict[str, Any]) -> None:
     _write(

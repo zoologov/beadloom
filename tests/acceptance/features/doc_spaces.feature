@@ -46,6 +46,12 @@ Feature: documentation is named by space, and intent is held against reality
     Then the ACTIVE document is exempt rather than stale
     And the exemption states the reason it was declared with
 
+  @bead:beadloom-mr2l.76
+  Scenario: A pair the exemption excused is counted where the other verdicts are
+    Given a graph node whose documentation is an ACTIVE document and whose code changed
+    When freshness is checked
+    Then the gate line states how many pairs it excused and the declared reason
+
   Scenario: A WORKING exemption that matches no document reports itself
     Given a project that declares a WORKING kind no document uses
     When the documentation spaces are checked

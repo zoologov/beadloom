@@ -760,22 +760,18 @@ class TestAnExcusedPairSaysSo:
 
         assert line == "5 pair(s) fresh"
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING BDL-061.18-5: an `exempt` pair appears in no count the gate "
-            "or the CLI prints. Measured on a clean-room worktree at HEAD with "
-            "one WORKING document declared: 341 pairs = 326 ok + 11 exempt + 4 "
-            "incomplete, reported as `total 341, ok 326, stale 0, missing 0, "
-            "unverified 0, unchecked 0`; the gate printed `326 pair(s) fresh` "
-            "where the same tree without the declaration printed 326 of 330, and "
-            "the word `exempt` occurs nowhere in the output. This is the failure "
-            "`_sync_summary`'s own docstring was written against, reintroduced "
-            "by a verdict added after it, and this epic's rule for it is already "
-            "written down: `skip` is a first-class outcome and always says why."
-        ),
-    )
     def test_the_line_states_the_pairs_it_excused(self) -> None:
+        """FINDING BDL-061.18-5, closed by `beadloom-mr2l.76`.
+
+        An `exempt` pair appeared in no count the gate or the CLI printed.
+        Measured in a clean room with one WORKING document declared: 341 pairs =
+        326 ok + 11 exempt + 4 incomplete, reported as `total 341, ok 326,
+        stale 0, missing 0, unverified 0, unchecked 0`, and the gate printed
+        `326 pair(s) fresh` where the same tree without the declaration printed
+        326 of 330. That is the failure `_sync_summary`'s own docstring was
+        written against, reintroduced by a verdict added after it. The line now
+        names the count and the declared reason.
+        """
         from beadloom.doc_sync.surface_ledger import SurfaceVerdict
 
         line = _sync_summary(self._rows(6, 5), [], SurfaceVerdict(True, False, ""))
@@ -783,19 +779,18 @@ class TestAnExcusedPairSaysSo:
         assert "exempt" in line
         assert "6" in line
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING BDL-061.18-5 in the JSON, which is the surface `#148` says a "
-            "caller must read: the summary carries total, ok, stale, missing, "
-            "unverified, unchecked, surface_drift and declared_docs, and the "
-            "verdicts do not add up to the total because `exempt` has no key. A "
-            "consumer computing `total - ok` reads six unexplained pairs."
-        ),
-    )
     def test_the_json_summary_accounts_for_every_pair_it_counted(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """FINDING BDL-061.18-5 in the JSON, closed by `beadloom-mr2l.76`.
+
+        `#148`'s surface: the summary carried total, ok, stale, missing,
+        unverified, unchecked, surface_drift and declared_docs, and the verdicts
+        did not add up to the total because `exempt` had no key — a consumer
+        computing `total - ok` read unexplained pairs. `exempt` and `incomplete`
+        are counted now, and `unchecked` stays out of the sum because it counts
+        nodes rather than pairs.
+        """
         from beadloom.services.cli import main
 
         root = _tmp()
