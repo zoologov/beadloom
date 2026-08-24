@@ -468,21 +468,17 @@ class TestAnEpicTheTrackerDoesNotNameIsNotAnEpicWithOpenBeads:
 
         assert report.epics_without_bead_status == 1
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING BDL-061.18-2: an epic the tracker export does not name is "
-            "indistinguishable from one whose beads are all open. Both are the "
-            "empty tuple, both are skipped, and only the second is an honest "
-            "skip. Measured on this repository: 20 of 57 epic directories are "
-            "unknown to `.beads/issues.jsonl`, and every one of the 37 that IS "
-            "known has a closed bead — so `37 of 57 epic(s) with closed beads` "
-            "is really `37 of 57 epics the export still names`. The fix is the "
-            "one the report already uses for a missing tracker: `None` for "
-            "unknown, counted in `epics_without_bead_status`."
-        ),
-    )
     def test_an_epic_missing_from_the_export_is_counted_as_unknown(self) -> None:
+        """FINDING BDL-061.18-2, closed by `beadloom-mr2l.74`.
+
+        An epic the tracker export does not name was indistinguishable from one
+        whose beads are all open: both the empty tuple, both skipped, and only
+        the second an honest skip. Measured on this repository: 20 of 57 epic
+        directories were unknown to `.beads/issues.jsonl`, and every one of the
+        37 the export DID name had a closed bead — so `37 of 57 epic(s) with
+        closed beads` was really `37 of 57 epics the export still names`. It is
+        now `None` with its reason, counted in `epics_without_bead_status`.
+        """
         root = _tmp()
         _write(root, f"{_EPICS}/BDL-1/CONTEXT.md", _context("`billing`"))
 
@@ -506,19 +502,17 @@ class TestAnEpicTheTrackerDoesNotNameIsNotAnEpicWithOpenBeads:
 
         assert _repo_report().epics_without_bead_status >= len(forgotten)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING BDL-061.18-2, at the gate: removing an epic's records from "
-            "`.beads/issues.jsonl` takes the doc-spaces step from one finding to "
-            "none, `passed` stays True, and `not_verified` does not move — on "
-            "this repository it was already True for an unrelated reason (52 "
-            "epics declare no node), so the one honest signal is saturated and "
-            "carries no information about the deletion. Measured through "
-            "`_step_doc_spaces` on a real index: 1 finding -> 0."
-        ),
-    )
     def test_deleting_an_epics_records_does_not_make_the_gate_quieter(self) -> None:
+        """FINDING BDL-061.18-2 at the gate, closed by `beadloom-mr2l.74`.
+
+        Removing an epic's records from `.beads/issues.jsonl` took the doc-spaces
+        step from one finding to none with `passed` True and `not_verified`
+        unchanged — it was already True for an unrelated reason (52 epics
+        declare no node), so the one honest signal was saturated and carried no
+        information about the deletion. The state has its own channel now: the
+        epic is named in the summary and, because it declares a node, reported
+        as `epic_not_in_tracker`.
+        """
         root = _tmp()
         _write(root, f"{_EPICS}/PROJ-1/CONTEXT.md", _context("`billing`"))
         # A second epic that declares nothing, so `not_verified` is already True
@@ -590,23 +584,19 @@ class TestTheCommandAndTheGateReadOneTracker:
         assert result.exit_code == 0
         assert json.loads(result.output)["refs_checked"] == 1
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING BDL-061.18-3: `docs spaces` prefers `bd list --all --json` "
-            "and `_step_doc_spaces` reads only `.beads/issues.jsonl`, so the two "
-            "answer differently about one tree. Measured on this repository with "
-            "BDL-061's 68 records removed from the export: the command reported "
-            "17 declarations and one finding while the gate reported 4 and none, "
-            "at the same commit. `bd close` writes only the local database, so "
-            "the disagreement is the normal state rather than an incident. "
-            "Whichever source is right they cannot both be, and a check whose "
-            "result depends on which entry point ran is not a gate."
-        ),
-    )
     def test_the_command_and_the_gate_agree_on_one_tree(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """FINDING BDL-061.18-3, closed by `beadloom-mr2l.74`.
+
+        `docs spaces` prefers `bd list --all --json` and `_step_doc_spaces` reads
+        only `.beads/issues.jsonl`, so the two answered differently about one
+        tree: 17 declarations and one finding against 4 and none, at one commit.
+        They still read different trackers — deliberately, since the gate must
+        answer the same in a fresh CI checkout — and each now says which, and an
+        epic its tracker cannot resolve is reported rather than skipped. So the
+        two report the same number of things needing attention.
+        """
         root = self._project()
 
         cli = json.loads(
@@ -1125,25 +1115,47 @@ class TestTheFindingsAreExecutable:
     `.14` left three `xfail(strict=True)` statements and `.57` closed nine of
     `.10`'s; the convention is that a fix reddens the suite. This test keeps the
     convention honest by refusing to let the findings quietly become comments.
+
+    A finding is executable in one of two states, and this counts BOTH: still
+    open, as a strict `xfail` whose reason names it, or closed, as a passing
+    test whose docstring names it and the bead that closed it. The total may not
+    fall — deleting a closed finding's test would lose the only executable
+    record that the defect is gone, which is the same loss as deleting an open
+    one, one step later.
     """
 
-    def test_every_xfail_here_is_strict_and_names_its_finding(self) -> None:
+    #: Twelve findings were filed by `.18`, and twelve statements must remain.
+    _FILED = 12
+
+    def _statements(self) -> tuple[list[tuple[str, pytest.MarkDecorator]], list[str]]:
         import inspect
 
         import tests.test_bead18_s5_relation as module
 
         marks: list[tuple[str, pytest.MarkDecorator]] = []
+        closed: list[str] = []
         for _, obj in inspect.getmembers(module, inspect.isclass):
             for name, function in inspect.getmembers(obj, inspect.isfunction):
                 if not name.startswith("test_"):
                     continue
-                marks.extend(
-                    (name, mark)
+                xfails = [
+                    mark
                     for mark in getattr(function, "pytestmark", [])
                     if mark.name == "xfail"
-                )
+                ]
+                marks.extend((name, mark) for mark in xfails)
+                if not xfails and "FINDING BDL-061.18-" in (function.__doc__ or ""):
+                    closed.append(name)
+        return marks, closed
 
-        assert len(marks) >= 8
+    def test_every_xfail_here_is_strict_and_names_its_finding(self) -> None:
+        marks, _ = self._statements()
+
         for name, mark in marks:
             assert mark.kwargs.get("strict") is True, name
             assert "FINDING BDL-061.18-" in mark.kwargs.get("reason", ""), name
+
+    def test_no_finding_left_the_file_when_it_was_fixed(self) -> None:
+        marks, closed = self._statements()
+
+        assert len(marks) + len(closed) >= self._FILED

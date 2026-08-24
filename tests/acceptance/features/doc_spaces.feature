@@ -26,6 +26,13 @@ Feature: documentation is named by space, and intent is held against reality
     Then the epic is counted as stating no AS-IS relation
     And the epic is not reported as a finding
 
+  @bead:beadloom-mr2l.74
+  Scenario: An epic the tracker does not name is reported rather than skipped
+    Given an epic whose CONTEXT names the node "dispatch" and whose beads the tracker never mentions
+    When the documentation spaces are checked
+    Then the epic is counted as one whose beads could not be resolved
+    And the finding names the tracker that has no record of it
+
   Scenario: A WORKING document is exempt from freshness checks
     Given a graph node whose documentation is an ACTIVE document and whose code changed
     When freshness is checked

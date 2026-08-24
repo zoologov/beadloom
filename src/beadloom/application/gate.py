@@ -506,11 +506,7 @@ def _step_doc_spaces(project_root: Path) -> GateStep:
     CI checkout with no tracker installed, and a check whose result depends on
     what is on the runner is not a gate.
     """
-    from beadloom.application.doc_spaces import (
-        beads_by_epic,
-        jsonl_records,
-        spaces_report,
-    )
+    from beadloom.application.doc_spaces import read_tracker_export, spaces_report
     from beadloom.infrastructure.db import open_db
 
     db_path = project_root / ".beadloom" / "beadloom.db"
@@ -520,10 +516,12 @@ def _step_doc_spaces(project_root: Path) -> GateStep:
             skipped=True,
             summary="skipped — no index at .beadloom/beadloom.db",
         )
-    records = jsonl_records(project_root)
-    beads = None if records is None else beads_by_epic(records)
+    tracker = read_tracker_export(project_root)
+    beads = tracker.statuses
     conn = open_db(db_path)
-    report = spaces_report(conn, project_root, beads=beads)
+    report = spaces_report(
+        conn, project_root, beads=beads, tracker_source=tracker.source
+    )
     if not report.populations.get("to_be"):
         # A named SKIP, never a silent pass: a project with no TO-BE document has
         # no intent recorded anywhere, so there is nothing this step could hold
@@ -550,12 +548,23 @@ def _step_doc_spaces(project_root: Path) -> GateStep:
     if beads is None:
         summary += "; NOT CHECKED: no tracker export was readable"
         not_verified = True
-    elif not report.relation_checked:
-        summary += "; NOT CHECKED: no epic with closed beads declared a node"
-        not_verified = True
+    else:
+        summary += f"; tracker read from {tracker.source}"
+        if not report.relation_checked:
+            summary += "; NOT CHECKED: no epic with closed beads declared a node"
+            not_verified = True
     if report.epics_declaring_nothing:
         summary += (
             f"; NOT CHECKED: {report.epics_declaring_nothing} epic(s) declare no node"
+        )
+        not_verified = True
+    if report.epics_unknown_to_tracker:
+        # Its own channel, and not `not_verified` alone: that boolean was
+        # already True here for an unrelated reason, so a saturated signal
+        # carried no information about an epic the export had lost (`.74`).
+        summary += (
+            f"; NOT CHECKED: {len(report.epics_unknown_to_tracker)} epic(s) the "
+            f"tracker does not name ({_named(report.epics_unknown_to_tracker)})"
         )
         not_verified = True
     if report.working_exempt:
@@ -567,6 +576,17 @@ def _step_doc_spaces(project_root: Path) -> GateStep:
         findings=findings,
         summary=summary,
     )
+
+
+def _named(keys: tuple[str, ...], limit: int = 5) -> str:
+    """Up to *limit* keys by name, then how many more there were.
+
+    A count alone cannot be acted on and a list of sixty cannot be read; the
+    full list is in the report and in ``docs spaces --json``.
+    """
+    if len(keys) <= limit:
+        return ", ".join(keys)
+    return f"{', '.join(keys[:limit])} and {len(keys) - limit} more"
 
 
 def _doc_space_finding(finding: object) -> Finding:

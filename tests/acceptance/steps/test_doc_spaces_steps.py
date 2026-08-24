@@ -19,9 +19,11 @@ import yaml
 from pytest_bdd import given, parsers, scenarios, then, when
 
 from beadloom.application.doc_spaces import (
+    FINDING_EPIC_NOT_IN_TRACKER,
     FINDING_NO_AS_IS,
     FINDING_WORKING_CONTRADICTED,
     FINDING_WORKING_INERT,
+    TRACKER_EXPORT,
     check_spaces,
 )
 from beadloom.application.reindex import reindex
@@ -138,6 +140,41 @@ def _epic_naming_nothing(world: dict[str, Any]) -> None:
         _context("Discover via `beadloom ctx <ref-id>` — never hardcode."),
     )
     world["beads"]["PROJ-3"] = ("closed",)
+
+
+@given(
+    parsers.parse(
+        'an epic whose CONTEXT names the node "{ref}" and whose beads the tracker '
+        "never mentions"
+    )
+)
+def _epic_the_tracker_forgot(world: dict[str, Any], ref: str) -> None:
+    """An epic present on disk and absent from the tracker.
+
+    `bd close` writes only the local database, so this is what a repository
+    looks like when somebody forgot to commit the export — ordinary use, not
+    sabotage.
+    """
+    _write(world["root"], f"{_EPIC_ROOT}/PROJ-7/CONTEXT.md", _context(f"`{ref}`"))
+    world["known"].add(ref)
+    world["documented"].add(ref)
+    world["beads"]["PROJ-OTHER"] = ("closed",)
+
+
+@then("the epic is counted as one whose beads could not be resolved")
+def _counted_unverifiable(world: dict[str, Any]) -> None:
+    report = world["report"]
+    assert "PROJ-7" in report.epics_unknown_to_tracker
+    assert report.epics_without_bead_status >= 1
+
+
+@then("the finding names the tracker that has no record of it")
+def _finding_names_tracker(world: dict[str, Any]) -> None:
+    findings = [
+        f for f in world["report"].findings if f.rule == FINDING_EPIC_NOT_IN_TRACKER
+    ]
+    assert findings, [f.rule for f in world["report"].findings]
+    assert TRACKER_EXPORT in findings[0].why
 
 
 @when("the documentation spaces are checked")

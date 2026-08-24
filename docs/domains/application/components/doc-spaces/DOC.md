@@ -56,6 +56,28 @@ The WORKING declaration is audited two ways, neither inferred from an absence:
   a node's documentation, so one artifact says it describes the code while
   another says it must not be held against it.
 
+## An epic the tracker forgot
+
+`bd close` writes only the local database, so an epic leaves
+`.beads/issues.jsonl` by ordinary use rather than by mistake. Reading its bead
+statuses as the empty tuple made *the tracker has no record of this epic* and
+*this epic's beads are all open* one fact, and only the second is an honest
+skip. They are now three states: statuses known, statuses unknown because the
+tracker does not name this epic, and statuses unknown because no tracker
+answered at all. `EpicIntent.unknown_status_reason` carries which, and
+`SpacesReport.epics_unknown_to_tracker` names the epics of the middle state.
+
+An epic in that middle state **that declares a node** is reported as
+`epic_not_in_tracker` — whether its work finished is unknown, so its intent was
+held against nothing. One that declares nothing is not reported that way: it is
+already counted and named as declaring no node, and one fact under two names
+makes a report unreadable.
+
+`TrackerRead` carries the statuses and the source they came from, because two
+entry points read two trackers deliberately — the gate the committed export, so
+it answers the same in a fresh CI checkout, and `beadloom docs spaces` the live
+`bd` database, which is the more current. Each prints which it read.
+
 ## Public surface
 
 - `check_spaces(project_root, *, spaces, known_refs, documented_refs, declared_doc_paths, beads_by_epic)`
@@ -63,6 +85,7 @@ The WORKING declaration is audited two ways, neither inferred from an absence:
   relation can be exercised against a project that is not this one.
 - `spaces_report(conn, project_root, *, beads)` — the same over a live index.
 - `graph_facts(conn)` — `(known_refs, documented_refs, declared_doc_paths)`.
+- `read_tracker_export(project_root)` — the committed export as a `TrackerRead`.
 - `beads_by_epic(records)` — group tracker records by the epic key their title
   names.
 - `read_epic_intents(...)`, `EpicIntent`, `SpaceFinding`, `SpacesReport`.

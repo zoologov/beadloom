@@ -71,6 +71,22 @@ FINDING_WORKING_INERT = "working_exemption_inert"
 #: The ``doc_roots`` block could not be read as written.
 FINDING_CONFIG = "doc_roots_config"
 
+#: An epic that declares nodes, whose completion the tracker cannot resolve.
+#: Unverifiable, and therefore reported rather than skipped: ``bd close`` writes
+#: only the local database, so an epic leaves ``.beads/issues.jsonl`` by ordinary
+#: use and its intent-to-reality relation stops being checked with nothing said.
+FINDING_EPIC_NOT_IN_TRACKER = "epic_not_in_tracker"
+
+#: Which tracker answered. Named rather than implied, because the command
+#: prefers the live ``bd`` database and the gate reads the committed export, so
+#: the two can differ on one tree at one moment (BDL-UX #171's shape) and a
+#: difference nobody prints is a difference nobody can act on.
+TRACKER_BD = "bd list --all --json"
+TRACKER_EXPORT = ".beads/issues.jsonl"
+
+#: No tracker answered at all — a whole missing denominator, one global cause.
+TRACKER_UNREADABLE = "no tracker was readable"
+
 #: Documents an epic declares its related nodes in, most specific first.
 _INTENT_DOCUMENTS: tuple[str, ...] = ("CONTEXT.md", "BRIEF.md")
 
@@ -96,15 +112,20 @@ class SpaceFinding:
 class EpicIntent:
     """One epic's recorded intent: where it is, what it declares, how far it got.
 
-    ``bead_statuses`` is ``None`` when the tracker could not be read. That is not
-    the same as an epic with no beads, and the report keeps them apart: a skip
-    always says why.
+    ``bead_statuses`` is ``None`` when the tracker could not resolve this epic,
+    and ``unknown_status_reason`` says which of the two ways that happened: the
+    tracker answered nothing at all (:data:`TRACKER_UNREADABLE`), or it answered
+    and does not name this epic (the source it was read from). They are
+    different facts and were one empty tuple before — "the export has no record
+    of this epic" and "this epic's beads are all open" both skipped, and only
+    the second an honest skip. A skip always says why.
     """
 
     key: str
     path: str
     declared_refs: tuple[tuple[str, int], ...]
     bead_statuses: tuple[str, ...] | None
+    unknown_status_reason: str | None = None
 
     @property
     def has_closed_bead(self) -> bool:
@@ -130,6 +151,13 @@ class SpacesReport:
     working_reason: str
     findings: tuple[SpaceFinding, ...] = ()
     unresolved_epics: tuple[str, ...] = ()
+    epics_unknown_to_tracker: tuple[str, ...] = ()
+    """Epics a READABLE tracker does not name, by key.
+
+    Empty when no tracker answered at all: that is one global cause, reported
+    once, and a name per epic would say the same thing as many times as there
+    are epics.
+    """
 
     @property
     def relation_checked(self) -> bool:
@@ -173,12 +201,33 @@ def _related_refs(text: str, known_refs: frozenset[str]) -> list[tuple[str, int]
     return found
 
 
+def _bead_statuses(
+    key: str,
+    beads_by_epic: Mapping[str, tuple[str, ...]] | None,
+    tracker_source: str,
+) -> tuple[tuple[str, ...] | None, str | None]:
+    """This epic's bead statuses, or ``None`` and the reason they are unknown.
+
+    ``beads_by_epic.get(key, ())`` was the defect: it answered the empty tuple
+    for an epic the tracker never heard of and for one whose beads are all open,
+    and only the second is an honest skip. An epic the export forgot is
+    UNVERIFIABLE, not compliant.
+    """
+    if beads_by_epic is None:
+        return None, TRACKER_UNREADABLE
+    statuses = beads_by_epic.get(key)
+    if statuses is None:
+        return None, tracker_source
+    return statuses, None
+
+
 def read_epic_intents(
     project_root: Path,
     *,
     spaces: DocSpaces,
     known_refs: frozenset[str],
     beads_by_epic: Mapping[str, tuple[str, ...]] | None,
+    tracker_source: str = TRACKER_EXPORT,
 ) -> list[EpicIntent]:
     """Every epic in the TO-BE space, with the nodes it declares.
 
@@ -206,14 +255,14 @@ def read_epic_intents(
             if text is None:
                 continue
             key = directory.name
+            statuses, unknown = _bead_statuses(key, beads_by_epic, tracker_source)
             intents.append(
                 EpicIntent(
                     key=key,
                     path=_relative(candidate, project_root),
                     declared_refs=tuple(_related_refs(text, known_refs)),
-                    bead_statuses=(
-                        None if beads_by_epic is None else beads_by_epic.get(key, ())
-                    ),
+                    bead_statuses=statuses,
+                    unknown_status_reason=unknown,
                 )
             )
             break
@@ -253,6 +302,7 @@ def check_spaces(
     documented_refs: frozenset[str],
     declared_doc_paths: frozenset[str],
     beads_by_epic: Mapping[str, tuple[str, ...]] | None,
+    tracker_source: str = TRACKER_EXPORT,
 ) -> SpacesReport:
     """Classify every document, then hold declared intent against the AS-IS space.
 
@@ -271,6 +321,7 @@ def check_spaces(
         spaces=spaces,
         known_refs=known_refs,
         beads_by_epic=beads_by_epic,
+        tracker_source=tracker_source,
     )
     findings: list[SpaceFinding] = [
         SpaceFinding(
@@ -288,6 +339,7 @@ def check_spaces(
     declaring = 0
     no_status = 0
     unresolved: list[str] = []
+    unknown_to_tracker: list[str] = []
     with_closed = 0
     for intent in intents:
         if intent.bead_statuses is None:
@@ -296,6 +348,10 @@ def check_spaces(
             declaring += 1
         else:
             unresolved.append(intent.key)
+        if intent.unknown_status_reason not in (None, TRACKER_UNREADABLE):
+            unknown_to_tracker.append(intent.key)
+            if intent.declared_refs:
+                findings.append(_unverifiable_epic(intent))
         if not intent.has_closed_bead:
             continue
         with_closed += 1
@@ -333,6 +389,32 @@ def check_spaces(
         working_reason=spaces.working.reason,
         findings=tuple(findings),
         unresolved_epics=tuple(sorted(unresolved)),
+        epics_unknown_to_tracker=tuple(sorted(unknown_to_tracker)),
+    )
+
+
+def _unverifiable_epic(intent: EpicIntent) -> SpaceFinding:
+    """An epic that declares nodes and whose completion the tracker cannot say.
+
+    Reported only when the epic DECLARES something. An epic that declares no
+    node is already counted and named in its own bucket, and reporting it a
+    second time under another name would say one thing twice.
+    """
+    return SpaceFinding(
+        rule=FINDING_EPIC_NOT_IN_TRACKER,
+        path=intent.path,
+        line=0,
+        why=(
+            f"epic {intent.key} declares "
+            f"{len(intent.declared_refs)} node(s) and "
+            f"`{intent.unknown_status_reason}` has no record of it, so whether its "
+            f"work finished is unknown and its intent was held against nothing"
+        ),
+        remediation=(
+            "sync the tracker export (`bd close` writes only the local database, "
+            "so a closed bead reaches `.beads/issues.jsonl` only when the export "
+            "is committed), or remove the planning directory if the epic never ran"
+        ),
     )
 
 
@@ -490,11 +572,35 @@ def jsonl_records(project_root: Path) -> list[Mapping[str, object]] | None:
     return records or None
 
 
+@dataclass(frozen=True)
+class TrackerRead:
+    """Bead statuses grouped by epic key, and which tracker answered.
+
+    The source travels with the answer because two entry points read two
+    different trackers on purpose — the gate the committed export, so it gives
+    the same verdict in a fresh CI checkout, and the command the live ``bd``
+    database, which is the more current of the two. Whichever ran, the surface
+    says which, so a disagreement is readable rather than mysterious.
+    """
+
+    statuses: Mapping[str, tuple[str, ...]] | None
+    source: str
+
+
+def read_tracker_export(project_root: Path) -> TrackerRead:
+    """The committed ``.beads/issues.jsonl`` export, grouped by epic key."""
+    records = jsonl_records(project_root)
+    if records is None:
+        return TrackerRead(None, TRACKER_UNREADABLE)
+    return TrackerRead(beads_by_epic(records), TRACKER_EXPORT)
+
+
 def spaces_report(
     conn: sqlite3.Connection,
     project_root: Path,
     *,
     beads: Mapping[str, tuple[str, ...]] | None,
+    tracker_source: str = TRACKER_EXPORT,
 ) -> SpacesReport:
     """The whole report for *project_root*, resolving configuration itself."""
     known, documented, paths = graph_facts(conn)
@@ -505,4 +611,5 @@ def spaces_report(
         documented_refs=documented,
         declared_doc_paths=paths,
         beads_by_epic=beads,
+        tracker_source=tracker_source,
     )

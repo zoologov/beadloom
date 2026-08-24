@@ -13,6 +13,8 @@ import click
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
+    from beadloom.application.doc_spaces import TrackerRead
+
 from beadloom.services.commands._root import main
 
 
@@ -726,26 +728,31 @@ def docs_quality(
 
 
 # beadloom:component=cli-commands
-def epic_bead_statuses(project_root: Path) -> dict[str, tuple[str, ...]] | None:
-    """Bead statuses grouped by epic key, or ``None`` when no tracker was read.
+def epic_bead_statuses(project_root: Path) -> TrackerRead:
+    """Bead statuses grouped by epic key, and which tracker answered.
 
     Two independent sources, tried in order, because a single one makes the
     check quieter the moment it disappears: ``bd list --all --json`` when the
     binary is installed, and the tracked ``.beads/issues.jsonl`` export when it
-    is not. ``None`` means neither answered — reported as such, never as an epic
-    with no closed beads. A skip says why.
+    is not. ``statuses`` is ``None`` when neither answered — reported as such,
+    never as an epic with no closed beads. A skip says why, and so does a read:
+    the gate reads the export alone, so the two entry points can differ on one
+    tree and the source is printed rather than assumed (`beadloom-mr2l.74`).
 
     ``--all`` is load-bearing: ``bd list`` omits closed beads by default, and the
     relation this feeds asks specifically about epics whose beads ARE closed.
     """
-    from beadloom.application.doc_spaces import beads_by_epic, jsonl_records
+    from beadloom.application.doc_spaces import (
+        TRACKER_BD,
+        TrackerRead,
+        beads_by_epic,
+        read_tracker_export,
+    )
 
     records: list[Mapping[str, object]] | None = _bd_records(project_root)
     if records is None:
-        records = jsonl_records(project_root)
-    if records is None:
-        return None
-    return beads_by_epic(records)
+        return read_tracker_export(project_root)
+    return TrackerRead(beads_by_epic(records), TRACKER_BD)
 
 
 # beadloom:component=cli-commands
@@ -794,21 +801,23 @@ def docs_spaces(*, output_json: bool, strict: bool, project: Path | None) -> Non
     from beadloom.infrastructure.db import open_db
 
     project_root = project or Path.cwd()
-    beads = epic_bead_statuses(project_root)
+    tracker = epic_bead_statuses(project_root)
     conn = open_db(project_root / ".beadloom" / "beadloom.db")
-    report = spaces_report(conn, project_root, beads=beads)
+    report = spaces_report(
+        conn, project_root, beads=tracker.statuses, tracker_source=tracker.source
+    )
 
     if output_json:
-        click.echo(json.dumps(_spaces_json(report, beads is not None), indent=2))
+        click.echo(json.dumps(_spaces_json(report, tracker), indent=2))
     else:
-        _spaces_rich(report, tracker_read=beads is not None)
+        _spaces_rich(report, tracker=tracker)
 
     if strict and report.findings:
         sys.exit(1)
 
 
 # beadloom:component=cli-commands
-def _spaces_json(report: object, tracker_read: bool) -> dict[str, object]:
+def _spaces_json(report: object, tracker: TrackerRead) -> dict[str, object]:
     """The report as data, so a caller reads exit codes and JSON, never lines."""
     return {
         "populations": dict(report.populations),  # type: ignore[attr-defined]
@@ -819,7 +828,11 @@ def _spaces_json(report: object, tracker_read: bool) -> dict[str, object]:
         "unresolved_epics": list(report.unresolved_epics),  # type: ignore[attr-defined]
         "refs_checked": report.refs_checked,  # type: ignore[attr-defined]
         "relation_checked": report.relation_checked,  # type: ignore[attr-defined]
-        "tracker_read": tracker_read,
+        "tracker_read": tracker.statuses is not None,
+        "tracker_source": tracker.source,
+        "epics_unknown_to_tracker": list(
+            report.epics_unknown_to_tracker  # type: ignore[attr-defined]
+        ),
         "working": {
             "documents": report.working_documents,  # type: ignore[attr-defined]
             "exempt_from_freshness": report.working_exempt,  # type: ignore[attr-defined]
@@ -839,7 +852,7 @@ def _spaces_json(report: object, tracker_read: bool) -> dict[str, object]:
 
 
 # beadloom:component=cli-commands
-def _spaces_rich(report: object, *, tracker_read: bool) -> None:
+def _spaces_rich(report: object, *, tracker: TrackerRead) -> None:
     """The human rendering: every denominator visible beside every count."""
     populations = dict(report.populations)  # type: ignore[attr-defined]
     for space in ("to_be", "as_is", "working"):
@@ -866,13 +879,21 @@ def _spaces_rich(report: object, *, tracker_read: bool) -> None:
             f"  NOT CHECKED: {report.epics_declaring_nothing} epic(s) declare no "  # type: ignore[attr-defined]
             f"node, so nothing of theirs could be related to the AS-IS space"
         )
-    if not tracker_read:
+    unknown = report.epics_unknown_to_tracker  # type: ignore[attr-defined]
+    if unknown:
+        click.echo(
+            f"  NOT CHECKED: {len(unknown)} epic(s) the tracker does not name "
+            f"({', '.join(unknown)}), so whether their work finished is unknown"
+        )
+    if tracker.statuses is None:
         click.echo(
             "  NOT CHECKED: no tracker was readable (`bd` and "
             "`.beads/issues.jsonl` both silent), so no epic could be shown to "
             "have closed beads"
         )
-    elif not report.relation_checked:  # type: ignore[attr-defined]
+        return
+    click.echo(f"  tracker read from {tracker.source}")
+    if not report.relation_checked:  # type: ignore[attr-defined]
         click.echo(
             "  NOT CHECKED: no epic with closed beads declared a node, so the "
             "TO-BE -> AS-IS relation had nothing to relate"

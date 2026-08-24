@@ -51,21 +51,38 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    declaration the graph contradicts. Every finding is a `warn` and the step is
    `passed` unconditionally, for the same reason as the step above. A project
    with no TO-BE document is a NAMED skip that states the roots it looked under.
-   Three states set `not_verified` and the step then reports **WARN** rather
+   FOUR states set `not_verified` and the step then reports **WARN** rather
    than PASS, because each is a way to print no findings while having checked
    nothing: no tracker export was readable, no epic with closed beads declared a
-   node, or some epics declare none. The tracker is read from the committed
-   `.beads/issues.jsonl` export rather than from a `bd` subprocess, so the gate
-   gives the same answer in a fresh CI checkout with no tracker installed — a
-   check whose result depends on what is on the runner is not a gate. Measured
-   on this repository, 2026-08-24, the step reports:
+   node, some epics declare none, and — since `beadloom-mr2l.74` — some epics
+   the tracker does not name at all. That fourth state has its own clause rather
+   than only the boolean: `not_verified` was already True here for an unrelated
+   reason, so a saturated signal said nothing about an epic that had left the
+   export. The tracker is read from the committed `.beads/issues.jsonl` export
+   rather than from a `bd` subprocess, so the gate gives the same answer in a
+   fresh CI checkout with no tracker installed — a check whose result depends on
+   what is on the runner is not a gate. The line names the tracker it read,
+   because `beadloom docs spaces` prefers the live `bd` database and the two can
+   therefore differ on one tree at one moment. An epic that DECLARES a node and
+   that the tracker cannot resolve is reported as `epic_not_in_tracker`: whether
+   its work finished is unknown, and unknown is not clean. An epic that declares
+   nothing is not reported that way — it is already counted in the *declare no
+   node* clause, and one fact under two names makes the line unreadable.
+   Measured on this repository, 2026-08-24, the step reports:
 
    ```
    doc-spaces WARN | to_be 190, as_is 93, working 55; 17 node declaration(s)
                      from 37 of 57 epic(s) with closed beads held against the
-                     AS-IS space; NOT CHECKED: 52 epic(s) declare no node;
+                     AS-IS space; tracker read from .beads/issues.jsonl;
+                     NOT CHECKED: 52 epic(s) declare no node;
+                     NOT CHECKED: 20 epic(s) the tracker does not name
+                     (BDL-001, BDL-003, BDL-005, BDL-006, BDL-007 and 15 more);
                      55 WORKING document(s) exempt
    ```
+
+   Two findings, both true: `BDL-061` declares `cli-commands`, which has no
+   AS-IS document, and `BDL-030` declares a node while neither tracker has any
+   record of it.
 7. **config-check** — agent-config drift (AgentConfigAsCode). Since BDL-061 S3
    a drift carries its own severity: `error` blocks the step, `warn` is
    reported and does not. The summary has three forms accordingly —
