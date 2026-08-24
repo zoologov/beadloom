@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from beadloom.application.active_table import ReconcileResult
 
 from beadloom.doc_sync.doc_shape import STATUS_INCOMPLETE
-from beadloom.doc_sync.engine import STATUS_EXEMPT
+from beadloom.doc_sync.engine import REASON_SIBLING_SYMBOLS_CHANGED, STATUS_EXEMPT
 from beadloom.services.commands._root import main
 
 
@@ -303,8 +303,7 @@ def sync_check(
                 elif r["status"] == STATUS_UNVERIFIED:
                     click.echo(
                         f"  {marker} {r['ref_id']}: {r['doc_path']} <-> {r['code_path']} "
-                        f"(not checked: no baseline — the index was rebuilt and git "
-                        f"could not supply one)"
+                        f"(not checked: {_unverified_why(str(reason), str(details))})"
                     )
                 elif reason == "untracked_files" and details:
                     click.echo(f"  {marker} {r['ref_id']}: {r['doc_path']} (untracked: {details})")
@@ -370,6 +369,38 @@ _STATUS_MARKER = {
     # `[ok]` — the word for a comparison that happened (`beadloom-mr2l.76`).
     STATUS_EXEMPT: "[exempt]",
 }
+
+#: Why an ``unverified`` pair was not verified, in the reader's terms. Keyed by
+#: the same reason token the JSON and porcelain shapes carry, so the three
+#: surfaces cannot drift apart. One sentence per reason: printing "no baseline"
+#: over a pair that HAS a baseline and simply shares a node with a file that
+#: moved described a different pair (BDL-UX #182).
+_UNVERIFIED_WHY = {
+    "no_baseline": "no baseline — the index was rebuilt and git could not supply one",
+    REASON_SIBLING_SYMBOLS_CHANGED: (
+        "this file's symbols did not move; {details} did — revise the document "
+        "against that file, not against this pair"
+    ),
+}
+
+_UNVERIFIED_WHY_SIBLING_UNNAMED = (
+    "this file's symbols did not move; another file of this node did"
+)
+
+
+def _unverified_why(reason: str, details: str) -> str:
+    """One sentence saying what was not verified, and what to look at instead.
+
+    A sibling row with no named mover keeps the sentence and drops the claim it
+    cannot support, rather than printing an empty list.
+    """
+    if reason == REASON_SIBLING_SYMBOLS_CHANGED and not details:
+        return _UNVERIFIED_WHY_SIBLING_UNNAMED
+    template = _UNVERIFIED_WHY.get(reason)
+    if template is None:
+        return f"not verified ({reason})"
+    return template.format(details=details)
+
 
 # What a ``missing`` verdict means, by reason.
 _MISSING_WHY = {

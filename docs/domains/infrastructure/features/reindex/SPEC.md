@@ -78,7 +78,7 @@ _DEFAULT_SCAN_DIRS = ("src", "lib", "app")
 
 | Step | Action | Module |
 |------|--------|--------|
-| 0 | Snapshot sync baselines (`symbols_hash`, two-phase hashes and baseline PROVENANCE from `sync_state`) | `_snapshot_sync_baselines` |
+| 0 | Snapshot sync baselines (`symbols_hash`, `file_symbols_hash`, two-phase hashes and baseline PROVENANCE from `sync_state`) | `_snapshot_sync_baselines` |
 | 1 | Drop all tables (`_TABLES_TO_DROP`) | `_drop_all_tables` |
 | 2 | Create schema | `infrastructure.db.create_schema` |
 | 3 | Load YAML graph from `.beadloom/_graph/*.yml` | `graph.loader.load_graph` |
@@ -210,7 +210,7 @@ def _snapshot_sync_baselines(
 ) -> tuple[dict[str, str], dict[tuple[str, str], _SyncPairSnapshot]]
 ```
 
-Snapshot `sync_state` before the table drop. Returns `({ref_id: symbols_hash} for entries with a non-empty hash, {(doc_path, code_path): _SyncPairSnapshot})`, or two empty dicts if the table does not exist yet (first run). **Every pair is snapshotted**, not only those carrying two-phase data: the snapshot also carries `baseline_source`, and a baseline that comes back without its provenance is indistinguishable from one that was earned (BDL-UX #175). Both reindex paths call this one function, so they cannot disagree about what survives a rebuild.
+Snapshot `sync_state` before the table drop. Returns `({ref_id: symbols_hash} for entries with a non-empty hash, {(doc_path, code_path): _SyncPairSnapshot})`, or two empty dicts if the table does not exist yet (first run). **Every pair is snapshotted**, not only those carrying two-phase data: the snapshot also carries `baseline_source`, and a baseline that comes back without its provenance is indistinguishable from one that was earned (BDL-UX #175). It also carries `file_symbols_hash`, the pair's own file surface. `_build_initial_sync_state` carries it rather than recomputing it, and where there is none to carry it computes one only when `_node_in_drift` says the node's carried hash still matches the tree — a file fact invented against a node ALREADY in drift would contradict it and silently win, and recomputing a carried one would re-baseline against the tree just indexed, which is how integrating a parallel wave erased the drift it brought in (BDL-UX #133 / #175). Both reindex paths call this one function, so they cannot disagree about what survives a rebuild.
 
 ```python
 def _drop_all_tables(conn: sqlite3.Connection) -> None

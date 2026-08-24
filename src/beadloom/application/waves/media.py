@@ -60,12 +60,13 @@ SHARED_MEDIA: tuple[SharedMedium, ...] = (
     SharedMedium(
         name=MEDIUM_DOC_BASELINE,
         statement=(
-            "One doc-freshness baseline, hashed per node. One bead's changed "
-            "file marks every pair its node owns, including a neighbour's — so "
-            "a wave's doc pass is handed pairs it cannot revise, and bulk "
-            "re-attestation is the only move the tool offers."
+            "One doc-freshness baseline, in one git-ignored index. The freshness "
+            "fact is recorded per FILE, so a bead's change no longer marks the "
+            "pairs its node's other files own — but an attestation still "
+            "re-baselines every pair of the ref it names, so attest by ref and "
+            "never with `--all` while a neighbour is editing."
         ),
-        evidence="BDL-UX #182, #133",
+        evidence="BDL-UX #163, #182, #133",
     ),
     SharedMedium(
         name=MEDIUM_TRACKER_IDS,

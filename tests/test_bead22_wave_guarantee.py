@@ -328,7 +328,11 @@ class TestTheSecondClauseCannotBeSilencedWhileAWaveHoldsTwo:
     def test_every_medium_cites_an_issue_that_exists_in_the_log(self) -> None:
         """TRUE HERE IS NOT TRUE — the evidence has to resolve to a real entry."""
         log = _UX_LOG.read_text(encoding="utf-8")
-        numbered = set(re.findall(r"^(\d+)\. \[", log, flags=re.MULTILINE))
+        # `~~` marks a CLOSED entry, which is still an entry: the citation
+        # resolves to a real observation whether or not the defect is fixed.
+        # Reading only the open form made closing a cited issue delete the
+        # evidence for a medium that is still shared (`beadloom-mr2l.78`).
+        numbered = set(re.findall(r"^(\d+)\. (?:~~)?\[", log, flags=re.MULTILINE))
         historical = set(re.findall(r"Opened #(\d+)", log))
         known = numbered | historical
         assert known, "the UX log yielded no entries — the fixture, not the code, is wrong"

@@ -198,10 +198,12 @@ def _check_commit_gate(environment: WaveEnvironment) -> MediumCheck:
 def _check_doc_baseline(environment: WaveEnvironment) -> MediumCheck:
     """Whether the doc baseline this wave inherits is already reconciled.
 
-    The baseline is hashed per node, so one bead's changed file marks every pair
-    its node owns. A wave that starts with pairs already stale hands its doc pass
-    drift it cannot attribute: the pass cannot tell what this wave moved from
-    what was moved before it (BDL-UX #133, #182).
+    A wave that starts with pairs already stale hands its doc pass drift it
+    cannot attribute: the pass cannot tell what this wave moved from what was
+    moved before it. Since `beadloom-mr2l.78` the freshness fact is recorded per
+    FILE, so the inherited drift is at least attributable to a file once it is
+    reconciled — which is exactly why reconciling it BEFORE the wave starts is
+    now worth requiring (BDL-UX #133, #182).
     """
     if environment.doc_baseline_stale_pairs is None:
         return MediumCheck(

@@ -13,7 +13,7 @@ Doc Sync Engine compares document and code hashes to detect desynchronization th
 
 The sync check pipeline operates in four phases:
 
-- **Phase 1: Hash and symbol drift detection.** For each sync_state entry, compares on-disk file hashes against stored hashes. Also computes a symbols hash (SHA-256 of sorted code_symbols rows) and compares against the stored `symbols_hash`. Detects `hash_changed` and `symbols_changed` drift reasons. A pair whose doc or code file is GONE is `missing`, not `ok`; a pair whose only baseline was fabricated by a rebuild is corroborated against git, or reported `unverified`.
+- **Phase 1: Hash and symbol drift detection.** For each sync_state entry, compares on-disk file hashes against stored hashes. Symbols are compared at two granularities: the stored `symbols_hash` is the whole NODE's surface and says the document's subject moved; the stored `file_symbols_hash` is this pair's OWN code file and says whether it moved here. Only the second makes a pair `stale/symbols_changed` — a pair whose sibling moved is `unverified/sibling_symbols_changed` and names the file that did, because nothing about its own file changed to revise the document against (BDL-UX #182). A row with an empty `file_symbols_hash` keeps the node-level answer, so a node already in drift when the column was added reports exactly what it reported before, until its next attestation. A pair whose doc or code file is GONE is `missing`, not `ok`; a pair whose only baseline was fabricated by a rebuild is corroborated against git, or reported `unverified`.
 - **Phase 2: Source coverage checks** (`check_source_coverage`). For each graph node with a directory-based `source` (ending in `/`), verifies that all Python files on disk are tracked in sync_state or code_symbols. Reports `untracked_files` when gaps are found.
 - **Phase 3: Doc coverage checks** (`check_doc_coverage`). For each graph node with a directory-based `source`, verifies that the linked documentation mentions all Python module names (file stems). Reports `missing_modules` when the doc does not reference a module.
 - **Phase 4: The declared surface** (`find_missing_declared_docs`). Every doc a graph node names in its `docs:` list is checked for existence. The declaration lives in the committed graph YAML, so deleting the file cannot remove it — which is what stops the gate being satisfied by having less to check (BDL-UX #174).
@@ -68,7 +68,8 @@ green result says what it was green against.
 |--------|----------|
 | `ok` | No drift detected |
 | `hash_changed` | File hash on disk differs from stored hash |
-| `symbols_changed` | Code symbols (function/class signatures) changed while doc hash remained the same |
+| `symbols_changed` | THIS pair's own code file changed its symbols (function/class signatures) while the doc hash remained the same |
+| `sibling_symbols_changed` | A different code file of the same node changed its symbols; this pair's own file did not. Reported as `unverified` with the moved file named in `details` -- **not checked**, and `sync-update` is not offered for it |
 | `untracked_files` | Python files in the node's source directory are not tracked in sync_state or code_symbols |
 | `missing_modules` | The linked documentation does not mention one or more module names from the source directory |
 | `hash_changed_since_head` | The code differs from `HEAD` while its doc does not -- drift the rebuilt index had absorbed into its own baseline |

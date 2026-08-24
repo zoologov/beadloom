@@ -109,7 +109,7 @@ evidence it comes from:
 |---|---|
 | `working-tree` | an agent's clean-room green is a claim about N files, not about the tree |
 | `commit-gate` | one pre-commit hook; a commit is judged over the paths it stages, and states the rest |
-| `doc-baseline` | hashed per node, so one bead's changed file marks every pair its node owns |
+| `doc-baseline` | one git-ignored index. The freshness fact is recorded per FILE (`beadloom-mr2l.78`), so a bead's change no longer marks the pairs its node's other files own — but an attestation still re-baselines every pair of the ref it names |
 | `tracker-ids` | allocated at creation, while a title written beforehand carries the id the author predicted |
 
 A wave of one shares nothing concurrently — its clean room *is* the tree — and

@@ -216,7 +216,7 @@ Measured on this repository, 2026-08-24: 330 declared pairs, all of them checked
 
 Human-readable output includes reason-aware formatting:
 - `missing` status: `[missing]` with which side is gone (`the linked doc file is gone`, `the paired code file is gone`, `declared in the graph, not on disk`).
-- `unverified` status: `[not verified]` with the reason there was no baseline.
+- `unverified` status: `[not verified]` with the reason it was not verified — either there was no baseline, or this pair's own file did not move while a named sibling of the same node did (`sibling_symbols_changed`).
 - `incomplete` status: `[warn]` naming either the document and its missing sections, or the node KIND and the ratio behind a section its documents do not use (`Source (5/39)`).
 - `untracked_files` reason: displays list of untracked files in `details`.
 - `missing_modules` reason: displays list of missing modules in `details`.

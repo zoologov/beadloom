@@ -35,17 +35,30 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 
-def _compute_symbols_hash(conn: sqlite3.Connection, ref_id: str) -> str:
-    """Compute SHA-256 of sorted code_symbols for a *ref_id*.
+def _compute_symbols_hash(
+    conn: sqlite3.Connection, ref_id: str, *, file_path: str | None = None
+) -> str:
+    """SHA-256 of the sorted ``code_symbols`` for *ref_id*, optionally in one file.
 
-    Returns an empty string when no symbols are annotated with the given
-    ref_id, allowing callers to skip drift checks for unlinked nodes.
+    Without *file_path* this is the NODE's symbol surface. With it, the surface
+    of that one file under this node — the granularity at which a doc-code pair
+    actually makes its claim, and the fact BDL-UX #182 says the staleness
+    verdict must be computed against.
+
+    Returns an empty string when nothing matches. For the node form that means
+    an unlinked node; for the file form it means this file contributes no
+    annotated symbol to the node (it was paired through the node's declared
+    ``source``, not through an annotation), and the caller must NOT read that as
+    "unchanged".
     """
-    rows = conn.execute(
-        "SELECT file_path, symbol_name, kind FROM code_symbols "
-        "WHERE annotations LIKE ? ORDER BY file_path, symbol_name",
-        (f'%"{ref_id}"%',),
-    ).fetchall()
+    sql = (
+        "SELECT file_path, symbol_name, kind FROM code_symbols WHERE annotations LIKE ?"
+    )
+    params: tuple[str, ...] = (f'%"{ref_id}"%',)
+    if file_path is not None:
+        sql += " AND file_path = ?"
+        params = (*params, file_path)
+    rows = conn.execute(sql + " ORDER BY file_path, symbol_name", params).fetchall()
     if not rows:
         return ""
     data = "|".join(f"{r['file_path']}:{r['symbol_name']}:{r['kind']}" for r in rows)
@@ -238,6 +251,23 @@ STATUS_EXEMPT = "exempt"
 #: the same field it reads for every other outcome.
 REASON_WORKING_SPACE = "working_space"
 
+#: This pair's OWN code file changed its symbol surface. The document describes
+#: something that moved, the writer can see what moved, and revising the document
+#: is an act with evidence behind it.
+REASON_SYMBOLS_CHANGED = "symbols_changed"
+
+#: A DIFFERENT code file of the same node changed its symbol surface; this pair's
+#: own file did not. The pair is ``unverified`` rather than ``stale`` because the
+#: comparison it can make came out equal, and the one it cannot make — whether
+#: the shared document still describes the node — is not a fact about this file.
+#:
+#: The distinction is the whole of BDL-UX #182. While the follower printed
+#: ``stale/symbols_changed``, the only action available for it was re-attestation
+#: without evidence (#163), because nothing about its file had changed to revise
+#: the document against. Measured on this repository: one new package made 72
+#: pairs stale and 10 of them named a modified file.
+REASON_SIBLING_SYMBOLS_CHANGED = "sibling_symbols_changed"
+
 
 def _exempt_reason(doc_path: str, spaces: DocSpaces) -> str | None:
     """The declared reason *doc_path* is exempt from freshness, or ``None``.
@@ -293,6 +323,62 @@ BASELINE_SOURCE_ATTESTED = "attested"
 #: which is git's own answer ("I cannot tell you"), so an unavailable git is
 #: asked once per run rather than once per pair.
 _UNREAD: Any = object()
+
+
+def _files_whose_symbols_moved(conn: sqlite3.Connection, ref_id: str) -> tuple[str, ...]:
+    """The node's own code files whose symbol surface differs from its baseline.
+
+    A follower pair is told which file to look at instead of being handed
+    ``sync-update`` for a document nobody has grounds to re-attest. Two
+    populations count as moved: a paired file whose file-level hash no longer
+    matches, and a file the node has gained since the baseline — the arrival is
+    exactly what moved the node hash, so leaving it unnamed would report an
+    effect with no cause.
+    """
+    baselined: dict[str, str] = {
+        str(row["code_path"]): str(row["file_symbols_hash"] or "")
+        for row in conn.execute(
+            "SELECT code_path, file_symbols_hash FROM sync_state WHERE ref_id = ?",
+            (ref_id,),
+        )
+    }
+    moved = {
+        code_path
+        for code_path, stored in baselined.items()
+        if stored and _compute_symbols_hash(conn, ref_id, file_path=code_path) != stored
+    }
+    moved |= {
+        str(row["file_path"])
+        for row in conn.execute(
+            "SELECT DISTINCT file_path FROM code_symbols WHERE annotations LIKE ?",
+            (f'%"{ref_id}"%',),
+        )
+        if str(row["file_path"]) not in baselined
+    }
+    return tuple(sorted(moved))
+
+
+def _symbol_drift_verdict(
+    conn: sqlite3.Connection,
+    ref_id: str,
+    code_path: str,
+    stored_file_symbols: str,
+    moved: tuple[str, ...],
+) -> tuple[str, str, str]:
+    """Verdict for a pair whose NODE's symbol surface moved: did it move here?
+
+    A row with no file-level baseline (an index written before BDL-061 S6, or a
+    file paired through the node's declared ``source`` rather than through an
+    annotation) keeps the node-level answer. Reading a missing fact as
+    "unchanged" would make an un-rebuilt index quieter than a rebuilt one, which
+    is the one failure worse than the noise this replaces.
+    """
+    if not stored_file_symbols:
+        return STATUS_STALE, REASON_SYMBOLS_CHANGED, ""
+    if _compute_symbols_hash(conn, ref_id, file_path=code_path) != stored_file_symbols:
+        return STATUS_STALE, REASON_SYMBOLS_CHANGED, ""
+    others = ", ".join(Path(f).name for f in moved if f != code_path)
+    return STATUS_UNVERIFIED, REASON_SIBLING_SYMBOLS_CHANGED, others
 
 
 def _missing_side(current_doc_hash: str | None, current_code_hash: str | None) -> str | None:
@@ -371,6 +457,9 @@ def check_sync(
     # Read at most once per run, and only if some pair actually needs it.
     git_changed: frozenset[str] | None = _UNREAD
     spaces = resolve_doc_spaces(project_root)
+    # Which of a node's files moved their symbols, computed at most once per
+    # node: every pair of that node asks the same question about the same set.
+    moved_by_ref: dict[str, tuple[str, ...]] = {}
 
     for row in sync_rows:
         doc_path = row["doc_path"]
@@ -435,6 +524,7 @@ def check_sync(
 
         status = "ok"
         reason = "ok"
+        details = ""
         baseline = BASELINE_INDEX
 
         # --- Two-phase sync detection ---
@@ -486,14 +576,24 @@ def check_sync(
                 (current_doc_hash, doc_path, code_path),
             )
 
-        # Symbol-level drift detection.
+        # Symbol-level drift detection, at the granularity of the file that moved.
+        # The node hash answers "did this document's subject move at all"; the
+        # file hash answers "did it move HERE". Only the second one can make THIS
+        # pair stale (BDL-UX #182).
         stored_symbols_hash = row["symbols_hash"] if "symbols_hash" in row.keys() else ""  # noqa: SIM118 - sqlite3.Row `in` checks values, not keys
-        if stored_symbols_hash:
+        stored_file_symbols: str = (
+            row["file_symbols_hash"] or ""
+            if "file_symbols_hash" in row.keys()  # noqa: SIM118 - sqlite3.Row `in` checks values, not keys
+            else ""
+        )
+        if stored_symbols_hash and status == STATUS_OK:
             current_symbols_hash = _compute_symbols_hash(conn, ref_id)
-            if current_symbols_hash != stored_symbols_hash and status == "ok":
-                # Code symbols changed but doc hash is same -> semantic drift.
-                status = "stale"
-                reason = "symbols_changed"
+            if current_symbols_hash != stored_symbols_hash:
+                if ref_id not in moved_by_ref:
+                    moved_by_ref[ref_id] = _files_whose_symbols_moved(conn, ref_id)
+                status, reason, details = _symbol_drift_verdict(
+                    conn, ref_id, code_path, stored_file_symbols, moved_by_ref[ref_id]
+                )
 
         # A baseline the index invented from the tree it was just built from
         # cannot make a pair fresh: ask git, or say it was not checked.
@@ -518,6 +618,7 @@ def check_sync(
                 "status": status,
                 "reason": reason,
                 "baseline": baseline,
+                **({"details": details} if details else {}),
             }
         )
 
@@ -787,17 +888,24 @@ def mark_synced(
         (doc_path, code_path),
     ).fetchone()
     symbols_hash = _compute_symbols_hash(conn, row["ref_id"]) if row else ""
+    # The pair's OWN file surface, so a later check can tell "this file moved"
+    # from "a sibling moved" (BDL-UX #182). Written by every attestation; a row
+    # that carries only the node hash is one this repair has not reached yet.
+    file_symbols_hash = (
+        _compute_symbols_hash(conn, row["ref_id"], file_path=code_path) if row else ""
+    )
 
     now = datetime.now(tz=timezone.utc).isoformat()
     conn.execute(
         "UPDATE sync_state SET doc_hash_at_sync = ?, code_hash_at_sync = ?, "
-        "symbols_hash = ?, synced_at = ?, status = 'ok', "
+        "symbols_hash = ?, file_symbols_hash = ?, synced_at = ?, status = 'ok', "
         "doc_hash_at_last_edit = ?, baseline_source = ? "
         "WHERE doc_path = ? AND code_path = ?",
         (
             doc_hash,
             code_hash,
             symbols_hash,
+            file_symbols_hash,
             now,
             doc_hash,
             BASELINE_SOURCE_ATTESTED,
@@ -834,15 +942,22 @@ def mark_synced_by_ref(
     for row in rows:
         doc_hash = _file_hash(project_root / docs_dir / row["doc_path"])
         code_hash = _file_hash(project_root / row["code_path"])
+        # One node hash for the ref, but each pair gets ITS OWN file hash — the
+        # whole point of the distinction is lost if every row stores the same
+        # number under a different name.
+        file_symbols_hash = _compute_symbols_hash(
+            conn, ref_id, file_path=str(row["code_path"])
+        )
         conn.execute(
             "UPDATE sync_state SET doc_hash_at_sync = ?, code_hash_at_sync = ?, "
-            "symbols_hash = ?, synced_at = ?, status = 'ok', "
+            "symbols_hash = ?, file_symbols_hash = ?, synced_at = ?, status = 'ok', "
             "doc_hash_at_last_edit = ?, baseline_source = ? "
             "WHERE doc_path = ? AND code_path = ?",
             (
                 doc_hash,
                 code_hash,
                 symbols_hash,
+                file_symbols_hash,
                 now,
                 doc_hash,
                 BASELINE_SOURCE_ATTESTED,

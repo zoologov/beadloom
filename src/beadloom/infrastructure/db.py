@@ -142,6 +142,13 @@ CREATE TABLE IF NOT EXISTS code_symbols (
 -- gone) and ``unverified`` (nothing to compare against) are states in which the
 -- checker cannot know. They used to print the same word as ``ok``.
 --
+-- ``symbols_hash`` is the symbol surface of the whole NODE; ``file_symbols_hash``
+-- is the surface of THIS pair's own code file. Both are kept because they answer
+-- different questions: the node hash says the document's subject moved, the file
+-- hash says whether it moved HERE. Storing only the node hash made one changed
+-- file mark every pair the node owns stale, and the followers could not be
+-- revised (BDL-UX #182). ``''`` means the file-level fact was never recorded
+-- (a pre-BDL-061-S6 row), in which case the node-level answer still stands.
 -- ``baseline_source`` records where this pair's baseline CAME FROM, which is the
 -- fact #175 turned on: a rebuilt index records the current tree as its own
 -- baseline, so a pair marked ``rebuilt`` proves nothing until it is corroborated
@@ -158,6 +165,7 @@ CREATE TABLE IF NOT EXISTS sync_state (
     status          TEXT NOT NULL DEFAULT 'ok'
         CHECK(status IN ('ok','stale','missing','unverified')),
     symbols_hash    TEXT DEFAULT '',
+    file_symbols_hash TEXT DEFAULT '',
     doc_hash_at_last_edit TEXT DEFAULT '',
     baseline_source TEXT NOT NULL DEFAULT '',
     UNIQUE(doc_path, code_path)
@@ -411,6 +419,24 @@ def ensure_schema_migrations(conn: sqlite3.Connection) -> None:
     _migrate_drop_kind_checks(conn)
     _migrate_lifecycle_external(conn)
     _migrate_drop_rule_type_check(conn)
+    # Runs LAST, deliberately: `_migrate_sync_status_verdicts` REBUILDS
+    # `sync_state` from an explicit column list, so a column added before it
+    # would be silently dropped by the rebuild.
+    _migrate_file_symbols_hash(conn)
+
+
+def _migrate_file_symbols_hash(conn: sqlite3.Connection) -> None:
+    """Add ``sync_state.file_symbols_hash`` to a pre-BDL-061-S6 index.
+
+    Additive and empty by default. An empty value is not "no symbols" — it is
+    "the file-level fact was never recorded", and the freshness check reads it
+    that way and falls back to the node-level comparison, so an index that has
+    not been rebuilt keeps reporting exactly what it reported before.
+    """
+    columns = _table_columns(conn, "sync_state")
+    if columns and "file_symbols_hash" not in columns:
+        conn.execute("ALTER TABLE sync_state ADD COLUMN file_symbols_hash TEXT DEFAULT ''")
+        conn.commit()
 
 
 def _ensure_declared_docs_table(conn: sqlite3.Connection) -> None:

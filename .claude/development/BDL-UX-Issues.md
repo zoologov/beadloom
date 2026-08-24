@@ -156,7 +156,9 @@
     > `get_actual_version()` is **unchanged**: it is right about Beadloom (#92) and the defect was always its caller.
     > **The general half, so the class does not need re-finding:** `beadloom_local_facts_in(text)` is a deny-list of this repository's own identifiers — our epic key, our issue numbers, our issue-log filename, bead ids, `src/beadloom`, our `__version__`, our package names — asserted over every composed artifact, and it names the offender it found rather than failing bare.
 
-182. [2026-08-23] [HIGH] 🔴 `symbols_changed` is computed per node, so one changed file marks every pair of that node stale — and the only way through is bulk re-attestation
+182. ~~[2026-08-23] [HIGH] 🔴 `symbols_changed` is computed per node, so one changed file marks every pair of that node stale — and the only way through is bulk re-attestation~~ **CLOSED (BDL-061 S6, `beadloom-mr2l.78`)** — `sync_state` gained `file_symbols_hash`, the symbol surface of a pair's OWN code file, beside the per-node `symbols_hash`. Only the file-level fact can make a pair `stale`; a pair whose sibling moved is `unverified` with the reason `sibling_symbols_changed` and NAMES the file that moved, and `sync-update` is not offered for it. *Stale, unverified and ok are three states*, and the epic's existing vocabulary supplies the second one — no fifth word was invented (#174/#175 `missing`/`unverified`, `.76` `excused`, `.77` `null`). Measured in two clean rooms off `e255a21` differing only in this change: appending one function to `application/architecture_view.py` produced **69 stale pairs, 67 naming a file nobody touched**; the same perturbation now produces **2 stale and 67 `unverified/sibling_symbols_changed`**, each carrying `details: architecture_view.py`. Both exit 2 — the gate still bites, on the pairs somebody can act on. A row with an empty `file_symbols_hash` keeps the node-level answer, and the file fact carries the same provenance as the node fact or is not written, so an existing index sees NO change on the reindex that adds the column and moves to file granularity at its first attestation.
+
+    **This defect was filed three times** — #105 (2026-06-01), #133 (2026-06-15) and #182 (2026-08-23) — over eleven weeks, each time from a fresh measurement and each time without the earlier one being found. Three reports of one root is itself the finding: the log is searched by symptom (`symbols_changed`, `worktree`, `re-baseline`) and the three symptoms share no word.
 
     **Severity:** high (it manufactures the exact situation #163 warns about, on every doc pass, and the tool's own remediation is the unsafe act)
     **Command:** `beadloom sync-check`, `beadloom sync-update`
@@ -584,7 +586,7 @@
     **Expected:** Re-vendoring should preserve the `__BEADLOOM_PROJECT_NAME__` placeholder (re-tokenize the project name on re-vendor), or `--force` should refuse to re-vendor the CLAUDE.md asset from a substituted live copy. Until fixed, do NOT run `setup-agentic-flow --force` in the Beadloom repo to recompose only role adapters — recompose the adapter files without re-vendoring CLAUDE.md, or revert the CLAUDE.md asset afterward.
     **Workaround:** After `--force`, `git checkout` the vendored `agentic_flow/CLAUDE.md.txt` (and the live `.claude/CLAUDE.md`) to restore the placeholder (done in BDL-056).
 
-133. [2026-06-15] [LOW] Per-worktree `beadloom.db` baseline causes mass false re-baseline when integrating parallel worktree waves
+133. ~~[2026-06-15] [LOW] Per-worktree `beadloom.db` baseline causes mass false re-baseline when integrating parallel worktree waves~~ **CLOSED (BDL-061 S6, `beadloom-mr2l.78`)** — the same root as #182, judged and fixed together (as `.46`/`.47` did for their pair): the per-worktree baseline is the OCCASION, the per-node hash is the CAUSE. Integrating a wave changes some of a node's files, the node hash moves, and every pair the node owns — including modules the integration never touched — read `symbols_changed`, so the only remedy was the blanket `sync-update --yes --all` this entry recommends as a workaround. With the fact stored per file, only the pairs whose own file the integration changed are stale and the untouched pairs keep the baseline they were integrated with. The per-file baseline is CARRIED across a reindex rather than recomputed, because recomputing it would re-baseline against the tree just indexed, which is how the integration erased the drift it brought in. Pinned by the executable scenario `Integrating a parallel wave does not re-baseline untouched doc pairs` (`tests/acceptance/features/sibling_baseline.feature`, PRD US-6 criterion 4).
 
     **Severity:** low
     **Command:** `beadloom sync-check` (after integrating worktree-isolated dev beads)
@@ -718,7 +720,7 @@
     **Expected:** Either backfill `symbols_indexed` to the live DB symbol total on the incremental path (consistent with nodes/edges per #88), or label it explicitly as a delta ("Symbols indexed this run: 0").
     **Impact:** None on correctness or any gate — `sync-check` / `lint` / `doctor` / `beadloom ci` all read the DB, not this counter. Purely a cosmetic CLI-display artifact.
 
-105. [2026-06-01] [MEDIUM] Adding a new source file to a domain re-stales the domain doc against ALL its member files
+105. ~~[2026-06-01] [MEDIUM] Adding a new source file to a domain re-stales the domain doc against ALL its member files~~ **CLOSED (BDL-061 S6, `beadloom-mr2l.78`)** — the earliest filing of the defect #182 re-found eleven weeks later. Its **Expected** was right in 2026-06 and is what shipped: "`symbols_changed` should fire only for the pair(s) whose own code symbols changed". A file that ARRIVES on a node whose baseline is carried gets no file-level fact of its own, because its arrival is part of what moved the node hash — so a genuinely-new module is still reported, and its unrelated siblings are not.
 
     **Severity:** medium
     **Command:** `beadloom reindex && beadloom sync-check`
@@ -1710,6 +1712,16 @@ an agent reading this file needs the OPEN items, not the history, and preamble i
 part of a long document that is read least usefully (BDL-UX #156).
 
 <summary><strong>Chronology</strong> — what was opened, closed or verified, newest first</summary>
+
+- **2026-08-24** — (BDL-061 S6, `beadloom-mr2l.78`): CLOSED #182, #133 and #105 — three filings of one
+  root over eleven weeks. `symbols_hash` was stored per pair and computed per node, so one changed file
+  marked every pair the node owns `stale/symbols_changed` and the followers could only be cleared by the
+  bulk re-attestation #163 was filed to prevent. `sync_state` now also carries `file_symbols_hash`, the
+  pair's OWN file surface; only that can make a pair stale, and a follower is `unverified` with the
+  reason `sibling_symbols_changed`, naming the file that moved. Measured in two clean rooms off
+  `e255a21`: one function appended to `application/architecture_view.py` gave **69 stale / 67 of them
+  naming an untouched file** before, and **2 stale + 67 unverified** after. No new verdict word was
+  invented — `unverified` is the one #174/#175 already established for "the checker cannot know".
 
 - **2026-08-20** — (post-2.2.0, turning the release's lessons into checks): Opened #162 (🔴 **doctor should audit the PRODUCED graph, not just the code** — island / unexplained-leaf / claim-without-evidence. The four defects this release fixed all shipped past dev+test+review+tech-writer and a 6/6 gate because every test verified a FUNCTION and none verified the CLAIM the graph makes; the audits that found them were written by hand in ten lines each), #163 (`sync-update` can re-attest a doc nobody read — a re-baseline silences `sync-check` with no evidence the prose still describes reality; plus prose that no symbol pair anchors can never go stale at all) and #164 (LOW — the beads git-hook prints `bd import -i`, a flag that does not exist, on a warning that was itself a false alarm; the #140 shape). Total 161→164, Open 43→46.
 

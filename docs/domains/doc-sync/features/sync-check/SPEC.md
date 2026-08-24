@@ -74,7 +74,7 @@ exemption the project DECLARED:
 | `ok` | `ok` | compared against a baseline and unchanged | 0 |
 | `stale` | `hash_changed`, `symbols_changed`, `hash_changed_since_head`, `untracked_files`, `missing_modules` | compared and drifted | 2 |
 | `missing` | `doc_missing`, `code_missing`, `declared_doc_missing` | the thing to check is not there | 2 |
-| `unverified` | `no_baseline` | there was nothing to compare against | 0, reported by name |
+| `unverified` | `no_baseline`, `sibling_symbols_changed` | there was nothing to compare against, or nothing this pair can settle | 0, reported by name |
 | `incomplete` | `missing_sections`, `section_not_in_use` | the document is current and does not carry the shape its kind requires | 0, reported by name |
 | `exempt` | `working_space` | the document is in the WORKING space and is exempt from freshness by declaration | 0, reported by name and counted |
 
@@ -91,6 +91,75 @@ it.
 
 `unverified` does not block, and is never counted as fresh. `beadloom ci` prints
 the sync-check step as **WARN** with the count, rather than `PASS`.
+
+### The staleness fact is computed per FILE, and a sibling gets a different word
+
+`symbols_hash` is the symbol surface of the whole NODE. `file_symbols_hash` is
+the surface of one pair's OWN code file. Both are stored per pair, and they
+answer different questions: the node hash says the document's subject moved, the
+file hash says whether it moved *here*. Only the second can make a pair `stale`.
+
+While only the node hash existed, one changed file marked every pair the node
+owns `stale/symbols_changed` (BDL-UX #182). The followers could not be revised —
+nothing about their files had changed — so the only remaining action was the
+bulk re-attestation #163 was filed to prevent, and the tool *required* it rather
+than merely permitting it. Measured on this repository at HEAD `e255a21`, in two
+clean rooms differing only in this change: appending one function to
+`application/architecture_view.py` produced **69 stale pairs, 67 of which named
+a file nobody had touched**; the same perturbation now produces **2 stale pairs
+and 67 `unverified/sibling_symbols_changed`**, each carrying
+`details: architecture_view.py`. Both runs exit 2. The gate still bites; it bites
+on the pairs somebody can act on.
+
+The three states are three words:
+
+- **`stale/symbols_changed`** — this pair's own file moved its symbols. The
+  writer can see what moved and revise the document against it.
+- **`unverified/sibling_symbols_changed`** — a different file of the same node
+  moved; this one did not. The comparison this pair *can* make came out equal,
+  and the one it cannot make — whether the shared document still describes the
+  node — is not a fact about this file. The row names the file that did move,
+  and `sync-update` is not offered for it.
+- **`ok`** — nothing under this node moved at all.
+
+A row whose `file_symbols_hash` is empty keeps the node-level answer. Empty is
+not "no symbols": it is "the file-level fact was never recorded" — a pre-BDL-061-S6
+index, or a file paired through the node's declared `source` rather than through
+an annotation. Reading it as *unchanged* would make an un-rebuilt index quieter
+than a rebuilt one, which is the one failure worse than the noise this replaces.
+
+The per-file baseline is CARRIED across a reindex, exactly like the node hash and
+the baseline provenance, and it may never CONTRADICT the node one. A node hash
+carried from an earlier generation that no longer matches the tree, beside a file
+hash computed from that same tree, states two incompatible things — something
+under this node moved, and no file moved — and the second one silently wins.
+Measured on this repository at the first reindex after the column was added:
+**77 pairs read `sibling_symbols_changed` with nothing named in `details`**,
+because every file baseline had just been fabricated from the post-edit tree.
+
+So the file fact is written for a node that is NOT in drift, where "no file moved"
+is what the index already says and recording it adds no claim, and withheld for a
+node that IS in drift, where the node-level answer stands until the drift is
+attested. A file that ARRIVED on a node in drift gets none either: its arrival is
+part of what moved the node hash.
+
+The consequence for an upgrade is worth stating plainly. Every node that is
+currently clean acquires its file-level facts on the reindex that adds the column
+and is judged per file from then on. A node that is already in drift keeps the
+old node-level report until its next attestation — the pass the writer was going
+to make anyway — and converges there. No node pays a storm it was not already
+going to pay. The stricter rule of withholding the facts from every node was
+tried and measured: perturbing one `application` module then left `site-generation`'s
+16 untouched pairs reading `symbols_changed`, because that node had never been
+stale and so had never been attested.
+
+Recomputing a carried file fact would re-baseline against the tree the index was
+just built from, which is how integrating a parallel wave used to erase the drift
+it brought in and re-baseline pairs it never touched (BDL-UX #133). The two issues
+share one root — the fact was stored at the wrong granularity — and one fix: after
+an integration and a reindex, only the pairs whose own file the integration changed
+are reported stale, and the untouched pairs keep the baseline they were integrated
+with.
 
 `exempt` does not block either. The WORKING space — `ACTIVE` by default — is
 exempt from freshness by DECLARATION (`doc_roots.working` in
