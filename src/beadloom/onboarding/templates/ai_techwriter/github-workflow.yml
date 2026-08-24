@@ -184,93 +184,30 @@ jobs:
         run: uv run pytest
 
   # ---------------------------------------------------------------------- #
-  # tests-windows — the PLATFORM dimension. Runs the SAME whole suite as
-  # `tests`, changing exactly ONE thing: the operating system. Separators,
-  # absolute-path parsing, case-folding, file locking and process spawning all
-  # change at once, and a project whose code has no platform branches is either
-  # genuinely portable or has never been asked — two states an all-green Linux
-  # pipeline cannot tell apart.
+  # NO PLATFORM DIMENSION IS SCAFFOLDED, and that is a decision rather than an
+  # oversight. A `windows-latest` leg running this whole suite costs ~2x per
+  # minute at GitHub's Windows billing multiplier and, unlike the locale rows
+  # above, it does not run inside their shadow: it becomes the pipeline's
+  # critical path, so PR-to-merge latency grows by roughly the leg's own
+  # duration. The environment dimension is on-thesis for everyone (a container
+  # is the usual deployment and is usually not UTF-8); the platform dimension is
+  # on-thesis only if your product actually runs on Windows.
   #
-  # THE PROBE BELOW IS NOT OPTIONAL. It fails the leg two ways: VACUOUS (the
-  # runner is not Windows at all) and DEGRADED (it is, but this process cannot
-  # create a symbolic link — on Windows that is SeCreateSymbolicLinkPrivilege,
-  # granted by Developer Mode). Without the second check, every test that needs
-  # a symlink skips and ~all the green is carried by tests that never needed
-  # Windows. `shell: bash` is load-bearing: the default shell on windows-latest
-  # is pwsh, which has no POSIX heredoc.
+  # IF IT DOES, add it as TWO edits that must land together: a `tests-windows`
+  # job (`runs-on: windows-latest`, the same extras and the same whole suite, so
+  # exactly one thing varies) AND the matching required context —
   #
-  # THIS ONE IS NOT ON-THESIS FOR EVERY PROJECT, unlike `tests-locale` (a
-  # container is the default deployment and is usually not UTF-8). If your
-  # product only ever runs on Linux, DELETE THIS JOB **AND** drop the matching
-  # required context, or your `main` becomes unmergeable on a check that never
-  # reports:
+  #     beadloom setup-branch-protection --repo OWNER/NAME \
+  #       --check gate --check 'tests (3.10)' ... \
+  #       --check tests-windows --check site-build --check ai-techwriter
   #
-  #     beadloom setup-branch-protection \
-  #       --check gate --check 'tests (3.10)' --check 'tests (3.11)' \
-  #       --check 'tests (3.12)' --check 'tests (3.13)' \
-  #       --check 'tests-locale (C)' --check 'tests-locale (en_US.ISO-8859-1)' \
-  #       --check site-build --check ai-techwriter
-  #
-  # Deleting the job alone is the lockout; the two edits go together.
-  #
-  # COST: ~8-14 minutes at GitHub's 2x Windows billing multiplier, and unlike
-  # the locale rows it is NOT free in wall-clock — it becomes the pipeline's
-  # critical path. It is deliberately absent from `ai-techwriter`'s `needs:` so
-  # the doc refresh is not held behind it.
+  # Adding the job alone leaves a real check that gates nothing; adding the
+  # context alone is a check-run that never reports, and `main` stops being
+  # mergeable. Give the job a probe that fails it when the runner is not Windows
+  # AND when the process cannot create a symbolic link — without the second
+  # half, every test that needs a link skips and the green is carried entirely
+  # by tests that never needed Windows.
   # ---------------------------------------------------------------------- #
-  tests-windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
-
-      - name: Set up Python 3.13
-        run: uv python install 3.13
-
-      - name: Install dependencies
-        run: uv sync --extra dev --extra languages
-
-      - name: Assert the leg is genuinely Windows and can link
-        shell: bash
-        run: |
-          uv run python - <<'PY'
-          import os
-          import sys
-          import tempfile
-          from pathlib import Path
-
-          if sys.platform != "win32" or os.sep != "\\":
-              raise SystemExit(
-                  f"VACUOUS LEG: this runner reports platform={sys.platform!r} "
-                  f"sep={os.sep!r}, so nothing it measures is a Windows fact."
-              )
-
-          with tempfile.TemporaryDirectory() as raw:
-              root = Path(raw)
-              target = root / "target.txt"
-              target.write_text("probe\n", encoding="utf-8")
-              link = root / "link.txt"
-              try:
-                  os.symlink(target, link)
-              except OSError as exc:
-                  raise SystemExit(
-                      f"DEGRADED LEG: this process cannot create a symbolic link "
-                      f"({exc}). On Windows that is SeCreateSymbolicLinkPrivilege, "
-                      "granted by Developer Mode or an elevated shell; without it "
-                      "every test that needs a link silently skips."
-                  ) from exc
-              if link.resolve() != target.resolve():
-                  raise SystemExit(
-                      "DEGRADED LEG: a symbolic link was created but resolved to "
-                      f"{link.resolve()} instead of {target.resolve()}."
-                  )
-          print(f"platform={sys.platform} sep={os.sep!r} symlinks=yes")
-          PY
-
-      - name: Whole suite on Windows
-        run: uv run pytest
 
   # ---------------------------------------------------------------------- #
   # site-build — regenerate + build the docs site on every PR (the BUILD half,

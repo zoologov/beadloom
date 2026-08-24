@@ -68,18 +68,18 @@ from typing import Protocol
 #:   VARIED rather than pinned. It is required for the same reason the version
 #:   matrix is — a leg that cannot block a merge is advisory, and the defect it
 #:   exists to catch (BDL-061.36) was one every UTF-8 leg agreed was fine;
-#: * ``tests-windows`` — the platform DIMENSION (BDL-061.39): the same whole
-#:   suite on ``windows-latest``. Required on the same argument, with one cost
-#:   stated rather than discovered — unlike the locale rows it is NOT free in
-#:   wall-clock (a 2x-billed runner that becomes the pipeline's critical path),
-#:   and it is EXPECTED RED before it is ever green, because nothing in this
-#:   project had executed on Windows when it was added. A required context is a
-#:   CONSTANT here and not live protection: the repo's actual required checks
-#:   change only when someone RUNS ``setup-branch-protection``, so landing it
-#:   red blocks nothing by itself — see the sequencing note in
-#:   ``docs/services/cli.md``;
 #: * ``site-build`` — the VitePress build job;
 #: * ``ai-techwriter`` — gated on ``needs: [gate, tests, site-build]``.
+#:
+#: There is no PLATFORM dimension in this set, and the absence is a decision
+#: rather than an omission. A ``tests-windows`` context was added in BDL-061.39
+#: and withdrawn by the owner in ``beadloom-mr2l.64`` on a measured cost:
+#: ~16-28 runner-minutes per PR, and — unlike the locale rows, which finish
+#: inside the ubuntu legs' shadow — a Windows leg becomes the pipeline's
+#: critical path and roughly triples PR-to-merge latency. Windows is not in this
+#: project's target audience. If it is ever bought back, the ci.yml job and this
+#: context land in the SAME change: a context whose check-run nothing produces
+#: never reports, and under ``strict: true`` that branch is unmergeable.
 #:
 #: A required status-check context MUST match a real GitHub check-run name
 #: EXACTLY, and must NOT be a **path-filtered** workflow's check: such a check
@@ -97,7 +97,6 @@ DEFAULT_STATUS_CHECK_CONTEXTS: tuple[str, ...] = (
     "tests (3.13)",
     "tests-locale (C)",
     "tests-locale (en_US.ISO-8859-1)",
-    "tests-windows",
     "site-build",
     "ai-techwriter",
 )

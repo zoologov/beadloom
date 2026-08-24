@@ -93,13 +93,15 @@ def test_ci_grants_contents_and_pull_request_write() -> None:
 
 
 def test_ci_has_the_declared_jobs() -> None:
-    """The consolidated four (BDL-050) + the locale DIMENSION (BDL-061.38) + the
-    platform DIMENSION (BDL-061.39).
+    """The consolidated four (BDL-050) plus the locale DIMENSION (BDL-061.38).
 
     Asserted as an exact set: a job added here without a matching required
     status-check context is a check that gates nothing, and one removed is a
     required context that never reports (lockout). Both directions are caught by
-    ``test_required_contexts_match_ci_yml_check_runs``.
+    ``test_required_contexts_match_ci_yml_check_runs``, which is what made the
+    ``tests-windows`` withdrawal (``beadloom-mr2l.64``) a two-sided edit rather
+    than a job deletion — see ``tests/test_ci_windows_dimension.py`` for the
+    decision and its price.
     """
     jobs = _load(CI)["jobs"]
     assert isinstance(jobs, dict)
@@ -107,7 +109,6 @@ def test_ci_has_the_declared_jobs() -> None:
         "gate",
         "tests",
         "tests-locale",
-        "tests-windows",
         "site-build",
         "ai-techwriter",
     }

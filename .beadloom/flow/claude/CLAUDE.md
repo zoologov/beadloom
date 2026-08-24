@@ -11,14 +11,17 @@ branch protection that is false for an adopter (BDL-UX #177).
 
 ### `setup-branch-protection` — not safe to re-run right now
 
-`DEFAULT_STATUS_CHECK_CONTEXTS` ships **ten** contexts; `main`'s live protection
-has **seven**. Running the command today would require checks that do not yet
-report green, making `main` unmergeable.
+`DEFAULT_STATUS_CHECK_CONTEXTS` ships **nine** contexts; `main`'s live protection
+has **seven**. Running the command today would require checks that have not been
+observed green on this repository, which is how `main` becomes unmergeable.
 
-The count has moved twice, which is the thing to notice rather than the number:
-S2 added the two `tests-locale` legs (red until `beadloom-mr2l.42` closed them —
-they are green now), and S4 added `tests-windows`, which is expected red until
-`beadloom-mr2l.60` adjudicates the backslash refusal on a real Windows runner.
+The count has moved three times, which is the thing to notice rather than the
+number: S2 added the two `tests-locale` legs (red until `beadloom-mr2l.42` closed
+them — they are green now), S4 added `tests-windows`, and `beadloom-mr2l.64`
+withdrew it again by owner decision — ~16-28 runner-minutes per PR and the
+pipeline's critical path, for a platform outside this project's audience. So the
+declared set can shrink as well as grow, and a withdrawal moves the ci.yml job
+and the context together or it leaves a lockout behind.
 
 So the rule is not "wait for a named bead" — that reading was wrong within an
 hour of being written. It is: **before running this command, compare the declared

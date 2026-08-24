@@ -1049,7 +1049,7 @@ Idempotently sets `main` (or `--branch`) protection with a declarative
 `PUT repos/{owner}/{repo}/branches/{branch}/protection`: a **PR is required** (no
 direct push), the scaffolded default set of `ci.yml` checks — `gate`, `tests (3.10)`,
 `tests (3.11)`, `tests (3.12)`, `tests (3.13)`, `tests-locale (C)`,
-`tests-locale (en_US.ISO-8859-1)`, `tests-windows`, `site-build`, `ai-techwriter`
+`tests-locale (en_US.ISO-8859-1)`, `site-build`, `ai-techwriter`
 (ci.yml's job names + matrix legs) — are **required status checks**
 (`strict: true`), and `enforce_admins: true` + 0 required reviews so the
 **solo owner is never locked out** (can self-merge). `PUT .../protection` is
@@ -1073,17 +1073,19 @@ DEFAULT set above, and `strict: true` means every context in it must pass before
 a pull request can merge. Requiring a check-run that is red — or that does not
 exist in your pipeline at all — makes the branch permanently unmergeable until it
 is green or the context is removed. **On this repository today that is a live
-constraint, and the reason has moved:** the two `tests-locale` legs added in
-BDL-061.38 were knowingly red (108 ASCII / 83 8-bit locale-attributable failures,
-measured) and BDL-061.42 turned both **green**; the `tests-windows` leg added in
-BDL-061.39 is now the red one, and deliberately so — nothing in this project had
-ever executed on Windows when it landed, so its first runs are the measurement
-rather than a regression. `main` therefore still carries the seven
-pre-BDL-061.38 contexts while `DEFAULT_STATUS_CHECK_CONTEXTS` names ten.
-**Sequencing:** running `beadloom setup-branch-protection` here today would apply
-all ten and block every merge until the Windows leg is green. Re-run it once the
-locale rows and `tests-windows` have all been observed green on a real PR, or
-pass `--check` explicitly for the set your pipeline can actually satisfy.
+constraint, and the gap is now small enough to close deliberately:** the two
+`tests-locale` legs added in BDL-061.38 were knowingly red (108 ASCII / 83 8-bit
+locale-attributable failures, measured) and BDL-061.42 turned both **green**. A
+`tests-windows` leg (BDL-061.39) briefly made the declared set ten and was the
+red one; the owner withdrew it in `beadloom-mr2l.64` on a measured cost — ~16-28
+runner-minutes per PR and the pipeline's critical path, roughly tripling
+PR-to-merge latency, for a platform outside this project's target audience — so
+the declared set is nine again. `main` still carries the seven pre-BDL-061.38
+contexts, and the two it lacks have both been observed green.
+**Sequencing:** before re-running `beadloom setup-branch-protection` here,
+compare the declared contexts against what actually reports green on an open PR
+(`gh pr checks`), because the payload is the whole default set. Alternatively
+pass `--check` explicitly for the set your pipeline can satisfy.
 
 Delegates to `onboarding/branch_protection.py:apply_branch_protection()` (the
 `gh` invocation is injected via a `GhRunner` seam for mockable tests).

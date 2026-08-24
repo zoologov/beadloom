@@ -190,6 +190,16 @@ end. And BDL-UX #170 asks `--liveness` to report the share of write paths a
 binding could have seen, which is what would turn this section from a statement
 into a measurement.
 
+**The surface has only ever been exercised on a POSIX harness**, and that is the
+same class of unknown one axis further out. The adapter, the matcher and every
+firing recorded to date come from macOS and Linux sessions; the path rules below
+are written for a Windows harness (that is what the backslash refusal is *for*)
+and have never run under one. A `windows-latest` leg was built for exactly this
+in BDL-061.39 and withdrawn on cost by the owner in `beadloom-mr2l.64`, so the
+gap is now permanent by decision rather than pending — see *Windows: unverified
+by decision* below, which states what is derived, what is measured by proxy and
+what nobody will look at.
+
 ### The project a guard answers about
 
 With no `--project`, the project root is the **nearest directory at or above the
@@ -479,9 +489,12 @@ legitimate in this project.
 
 What remains outside the shape check, named rather than implied: a bare drive
 letter (`C:/Users/...`) is well-formed POSIX and is read as a relative directory
-called `C:`, because this build of Beadloom resolves paths with POSIX semantics;
-and a homoglyph or a Unicode look-alike names a *different* file, which the guard
-then reports accurately — the over-guarding direction, and not a bypass.
+called `C:` **on a POSIX platform** — measured end to end, and it is the
+platform that decides it, not a property of this build: the same string is
+relative to `PurePosixPath` and absolute to `PureWindowsPath`, so on Windows the
+other branch is taken and the documented answer above is not the answer; and a
+homoglyph or a Unicode look-alike names a *different* file, which the guard then
+reports accurately — the over-guarding direction, and not a bypass.
 
 **A resolution that refuses is a refusal with a reason, on every interpreter**
 (BDL-061.36). `Path.resolve()` does not behave the same across the versions this
@@ -507,6 +520,47 @@ project's tree and cannot speak for anything else, and inheriting a pattern woul
 give an out-of-project write the same reassuring `skip` as an in-project one.
 What is deliberately **not** claimed: no shipped guard decides whether editing
 outside the project is acceptable at all.
+
+#### Windows: unverified by decision
+
+**Every statement this document makes about Windows is derived, not observed.**
+Nothing in this project has ever executed on a Windows machine, and by an owner
+decision taken on 2026-08-24 (`beadloom-mr2l.64`) nothing will: a
+`windows-latest` CI leg was built and priced at ~16-28 runner-minutes per pull
+request, and — unlike the two locale legs, which finish inside the ubuntu legs'
+shadow — it becomes the pipeline's critical path and roughly triples PR-to-merge
+latency. Windows is not in this project's target audience. That is a third
+state, and it is written here because the other two would both be lies: this is
+not *verified*, and it is not *known broken* either.
+
+What **is** measured, without a Windows kernel and on every run of the suite
+(`tests/test_windows_dimension.py`): `PureWindowsPath` implements Windows path
+parsing on every platform, and `pathlib.Path` *is* that class on a real Windows
+build. So `os.path.join("src", "app.py")` there is `src\app.py`, which names
+exactly the file a Windows writer would touch — and the shape gate above refuses
+every backslash, unconditionally, before any call whose behaviour a platform
+could change. `src/` contains no `sys.platform` and no `os.name` branch
+anywhere, which is what makes that a measurement about Windows rather than an
+inference: the refusal is one code path everywhere. **The consequence, stated
+without softening: on a Windows harness every edit target would be `MALFORMED`
+and every guarded edit an `error` at exit 2.** It is fail-closed, so it is not a
+bypass — and a guard that refuses every edit is not usable there, and its stated
+remediation ("supply the target as a POSIX path") is not something the harness
+can do. The refusal's own justification is also false there: "separates
+directories on the harness's platform and is an ordinary file-name character on
+this one" describes two different platforms, and the guard runs in the harness's
+own process tree, where there is only one. Filed as `beadloom-mr2l.60`, open,
+and deliberately not repaired by a `sys.platform` branch — that would replace one
+unverified Windows claim with another.
+
+What is **not** measured and now will not be: everything that needs the
+operating system rather than the path parser — `Path.resolve` over real Windows
+links and junctions, the filesystem's own case-folding (a property of the
+volume), `os.fsencode`'s codec, and whether a Windows harness in fact hands the
+hook a backslashed `tool_input.file_path`. No mark in the suite pins any of it:
+a strict `xfail` that no runner can ever flip is a pin nobody can close, which
+reads like a tracked question and is not one, so the residue is written down
+here instead.
 
 ### Shipped guards
 

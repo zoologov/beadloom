@@ -1,4 +1,12 @@
-"""Every Windows claim this suite makes, and whether anything ever checks it (BDL-061.39).
+"""Every Windows claim this suite makes, and whether anything ever checks it.
+
+BDL-061.39 wrote this file next to a ``tests-windows`` leg; beadloom-mr2l.64
+withdrew that leg on a measured cost (~16-28 runner-minutes per PR, and the
+pipeline's critical path — the reasoning is in ``.github/workflows/ci.yml``
+where the job used to be). Nothing below depended on the leg except the one
+prediction that was pinned for it to adjudicate, and that pin is now a
+measurement — see :meth:`TestWhatPureWindowsPathSettlesWithoutAWindowsKernel.
+test_the_guard_is_told_the_file_the_writer_will_touch`.
 
 THE DEFECT THIS FILE EXISTS FOR. Six guard tests carried
 ``skipif(sys.platform == "win32", reason="POSIX symlink semantics")`` while CI
@@ -27,11 +35,13 @@ WHAT THIS FILE LOCKS, so the class cannot come back:
    There is no "convenience" verdict: a skip that could have been written
    platform-independently has no entry to hide in, so adding one fails the suite.
 
-2. :func:`test_a_win32_xfail_is_always_strict` — the other way to assert
-   nothing. A non-strict ``xfail`` passes whether the prediction holds or not;
-   ``strict=True`` turns an unexpected PASS into a failure, which is what makes
-   a prediction about Windows adjudicable by the runner rather than by the
-   author.
+2. :func:`test_no_platform_xfail_waits_for_a_runner_that_will_not_come` — the
+   other way to assert nothing, and the rule that had to move when the leg went.
+   With a Windows leg, a platform prediction may be pinned as
+   ``xfail(strict=True)`` and the runner adjudicates it. With no such leg the
+   mark is inert on every runner, can never flip and is a pin nobody can close,
+   so no platform prediction may be pinned on a mark at all: it is measured, or
+   it is recorded as a residual.
 
 3. The pure-path half of the Windows story, measured HERE rather than asserted
    in prose — see :class:`TestWhatPureWindowsPathSettlesWithoutAWindowsKernel`.
@@ -39,20 +49,24 @@ WHAT THIS FILE LOCKS, so the class cannot come back:
    the claims ``paths.py``'s docstrings make about separators, drive letters and
    case can be checked on Linux. What it cannot settle is anything that calls
    the operating system — ``resolve``, ``fsencode``, the filesystem's own
-   case-folding — and that residue is precisely what the ``tests-windows`` leg
-   buys.
+   case-folding. Nothing buys that residue now: it is UNVERIFIED BY DECISION,
+   which is a third state next to verified and known-broken, and the SPEC
+   (``docs/domains/application/features/flow-guards/SPEC.md``) says so in those
+   words rather than letting a green pipeline imply Windows support.
 """
 
 from __future__ import annotations
 
 import ast
 import ntpath
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import pytest
 
+from beadloom.application.guards import paths
 from beadloom.application.guards.paths import (
     BACKSLASH_REJECTION,
     PathScope,
@@ -60,9 +74,34 @@ from beadloom.application.guards.paths import (
     resolve_edit_path,
 )
 from tests import symlink_capability
-from tests.symlink_capability import SYMLINK_CAPABILITY, SYMLINK_SKIP_REASON
+from tests.symlink_capability import (
+    SYMLINK_CAPABILITY,
+    SYMLINK_SKIP_REASON,
+    SYMLINKS_UNAVAILABLE,
+)
 
 TESTS_DIR = Path(__file__).resolve().parent
+
+#: The six rows BDL-061.36 item 3 was written about, by node id. Named
+#: individually rather than counted: a count stays right while the rows are
+#: replaced by different ones, and after beadloom-mr2l.64 withdrew the Windows
+#: leg these six plus the ledger above them are the whole surviving deliverable
+#: of BDL-061.39 — so what proves they RAN has to be as specific as they are.
+#: (Five marks, six rows: one is parametrised over two targets.)
+THE_SIX_CAPABILITY_GATED_ROWS = (
+    "tests/test_guards_paths.py::TestTraversalCannotBypassAnExclusion::"
+    "test_a_symlink_out_of_an_excluded_directory_is_guarded",
+    "tests/test_guards_paths.py::TestSymlinksInBothDirections::"
+    "test_a_link_into_the_excluded_tree_is_excluded",
+    "tests/test_guards_paths.py::TestSymlinksInBothDirections::"
+    "test_an_exclusion_stops_applying_when_its_directory_is_a_symlink",
+    "tests/test_guards_paths.py::TestASymlinkLoopEndsInAVerdictAndNeverInATraceback::"
+    "test_a_real_loop_comes_back_as_a_scope_whatever_this_platform_does[a]",
+    "tests/test_guards_paths.py::TestASymlinkLoopEndsInAVerdictAndNeverInATraceback::"
+    "test_a_real_loop_comes_back_as_a_scope_whatever_this_platform_does[a/x.py]",
+    "tests/test_guards_paths.py::TestASymlinkLoopEndsInAVerdictAndNeverInATraceback::"
+    "test_the_guard_reaches_a_verdict_through_a_real_loop",
+)
 
 
 @dataclass(frozen=True)
@@ -221,22 +260,37 @@ def test_no_win32_skip_is_unjudged() -> None:
     )
 
 
-def test_a_win32_xfail_is_always_strict() -> None:
-    """A prediction about Windows must be adjudicable by the Windows runner.
+def test_no_platform_xfail_waits_for_a_runner_that_will_not_come() -> None:
+    """A prediction is pinned on a mark only when something can adjudicate it.
 
-    ``xfail(strict=False)`` passes whether the prediction holds or not, so it is
-    the skip's failure mode wearing a different word. ``strict=True`` makes an
-    unexpected PASS a suite failure — i.e. the runner, not the author, decides
-    whether the reasoning was right.
+    THE RULE MOVED, and it moved because the ground under it did. BDL-061.39
+    wrote it as "a platform xfail must be ``strict=True``", which was right while
+    a ``tests-windows`` leg was landing: strict turns an unexpected PASS into a
+    suite failure, so the RUNNER decides whether the author's reasoning held. The
+    owner withdrew that leg in ``beadloom-mr2l.64``, and a strict xfail with no
+    runner behind it is worse than a lax one — it is inert on every leg, it can
+    never flip, and it is therefore a pin nobody can close while looking exactly
+    like an open question being tracked.
+
+    So while this project runs on no Windows leg, a platform prediction is
+    written as a MEASUREMENT or recorded as a residual, never as a mark. The two
+    ways out are both real and both used in this file:
+    ``PureWindowsPath``/``ntpath`` settle anything about how a path STRING is
+    read (see :class:`TestWhatPureWindowsPathSettlesWithoutAWindowsKernel`), and
+    what genuinely needs a kernel is stated as *unverified by decision* in
+    ``docs/domains/application/features/flow-guards/SPEC.md``.
     """
-    lax = [
-        marker.key
-        for marker in _markers_mentioning_platform("xfail")
-        if marker.keywords.get("strict") != "True"
-    ]
-    assert not lax, (
-        f"platform xfails that cannot report being wrong: {sorted(lax)}. "
-        "Add strict=True so an unexpected pass on that platform fails the suite."
+    pinned = [marker.key for marker in _markers_mentioning_platform("xfail")]
+
+    assert not pinned, (
+        f"platform xfails nothing can adjudicate: {sorted(pinned)}.\n"
+        "No leg of this pipeline runs a platform other than the one you are on "
+        "(beadloom-mr2l.64 withdrew tests-windows on cost), so this mark is "
+        "inert everywhere and cannot report being wrong. Measure the prediction "
+        "with PureWindowsPath/ntpath where it is a question about path "
+        "semantics, or write it down as a residual in the SPEC. If a platform "
+        "leg is ever bought back, restore the earlier rule with it: the mark is "
+        "then allowed and MUST carry strict=True."
     )
 
 
@@ -306,6 +360,36 @@ class TestTheScannerItselfBites:
             "would then be satisfied by an empty set rather than by a judgement"
         )
 
+    @pytest.mark.parametrize("strict", ["True", "False"])
+    def test_a_platform_xfail_is_found_whether_or_not_it_is_strict(
+        self, tmp_path: Path, strict: str
+    ) -> None:
+        """The one rule in this file whose real-tree population is EMPTY.
+
+        ``test_no_platform_xfail_waits_for_a_runner_that_will_not_come`` asserts
+        that nothing in ``tests/`` pins a platform prediction on a mark. That is
+        true, and an assertion about an empty set is exactly the shape this whole
+        family of beads exists to distrust: it passes identically when the scan
+        is broken. So the scan is exercised here on a module that DOES carry the
+        mark — both spellings, because ``strict=True`` is the one the withdrawn
+        leg made legitimate and the one most likely to be re-added by hand.
+        """
+        module = tmp_path / "test_sample.py"
+        module.write_text(
+            "import pytest, sys\n"
+            f'@pytest.mark.xfail(sys.platform == "win32", strict={strict}, reason="x")\n'
+            "def test_it():\n"
+            "    pass\n",
+            encoding="utf-8",
+        )
+        finder = _MarkerFinder("test_sample.py")
+        finder.visit(ast.parse(module.read_text(encoding="utf-8")))
+
+        assert [(m.key, m.kind) for m in finder.markers] == [
+            ("test_sample.py::test_it", "xfail")
+        ]
+        assert "sys.platform" in finder.markers[0].condition
+
 
 class TestWhatPureWindowsPathSettlesWithoutAWindowsKernel:
     """Windows path SEMANTICS are importable; only the system calls need a runner.
@@ -318,9 +402,11 @@ class TestWhatPureWindowsPathSettlesWithoutAWindowsKernel:
     (which calls the OS), ``os.fsencode`` (whose codec is the machine's), and the
     filesystem's own case-folding (a property of the volume, not of the parser).
 
-    That residue is exactly what the ``tests-windows`` leg buys. Everything in
-    this class is bought for free, and every row of it was previously carried
-    only in prose.
+    Everything in this class is bought for free, and every row of it was
+    previously carried only in prose. The residue is bought by nobody: the
+    ``tests-windows`` leg that would have measured it was withdrawn on cost
+    (beadloom-mr2l.64), so it is stated as unverified by decision in the SPEC
+    instead of being pinned on a mark that no runner can ever flip.
     """
 
     def test_a_backslash_is_a_separator_there_and_a_name_character_here(self) -> None:
@@ -335,7 +421,7 @@ class TestWhatPureWindowsPathSettlesWithoutAWindowsKernel:
         assert PurePosixPath("src\\app.py").parts == ("src\\app.py",)
 
     def test_the_shape_gate_refuses_the_spelling_a_windows_harness_produces(
-        self,
+        self, tmp_path: Path
     ) -> None:
         """FINDING, pinned rather than fixed — filed as beadloom-mr2l.60.
 
@@ -349,16 +435,28 @@ class TestWhatPureWindowsPathSettlesWithoutAWindowsKernel:
         "would not be looking at the same file" — is the reverse of true there:
         it is the REFUSAL that stops them looking at the same file.
 
-        Not fixed in BDL-061.39 ON PURPOSE. Relaxing the rule where
-        ``os.sep == "\\\\"`` would replace one unverified Windows claim with
-        another, which is the defect rather than the remedy; it is a product
-        change, and it is beadloom-mr2l.60. What .39 owes is that the leg can
-        ADJUDICATE the prediction, which is what the strict xfail below does.
+        Not fixed in BDL-061.39 ON PURPOSE, and still not fixed here. Relaxing
+        the rule where ``os.sep == "\\\\"`` would replace one unverified Windows
+        claim with another, which is the defect rather than the remedy; it is a
+        product change and it is beadloom-mr2l.60, which stays open.
+
+        WHAT CHANGED IN beadloom-mr2l.64 is who settles the prediction. .39
+        expected the ``tests-windows`` leg to adjudicate a strict xfail; the
+        owner withdrew that leg on cost, so nothing will. The consequence is
+        asserted here instead, one level higher than before: not only the
+        rejection reason but the VERDICT the guard reaches — ``MALFORMED``,
+        refused before any exclusion or check is applied to it.
         """
         native_for_windows = ntpath.join("src", "app.py")
 
         assert native_for_windows == "src\\app.py"
         assert rejection_reason(native_for_windows) == BACKSLASH_REJECTION
+
+        refused = resolve_edit_path(native_for_windows, tmp_path)
+
+        assert refused.scope is PathScope.MALFORMED, refused
+        assert refused.rejection == BACKSLASH_REJECTION, refused
+        assert refused.relative is None, refused
 
     def test_a_drive_letter_is_a_root_there_and_a_directory_name_here(self) -> None:
         """The SPEC's drive-letter paragraph is platform-conditional and says it is not.
@@ -402,17 +500,6 @@ class TestWhatPureWindowsPathSettlesWithoutAWindowsKernel:
         assert PureWindowsPath("SRC/App.py") == PureWindowsPath("src/app.py")
         assert PurePosixPath("SRC/App.py") != PurePosixPath("src/app.py")
 
-    @pytest.mark.xfail(
-        sys.platform == "win32",
-        strict=True,
-        reason=(
-            "PREDICTION, not a measurement: on Windows os.path.join yields "
-            "'src\\\\app.py' and the shape gate refuses every backslash, so the "
-            "guard cannot be told about a native edit target at all. Strict, so "
-            "the runner adjudicates: if this PASSES on windows-latest the "
-            "prediction was wrong and the suite says so. See beadloom-mr2l.60."
-        ),
-    )
     def test_the_guard_is_told_the_file_the_writer_will_touch(
         self, tmp_path: Path
     ) -> None:
@@ -421,8 +508,20 @@ class TestWhatPureWindowsPathSettlesWithoutAWindowsKernel:
         A harness names the file the way its own platform names files. The guard
         must end up pointing at that same file. Written with ``os.path.join``
         rather than a literal so the row means the same sentence everywhere and
-        can be red where the sentence is false — which is the only kind of
-        cross-platform assertion worth adding before a runner exists.
+        is red wherever the sentence is false.
+
+        IT CARRIED A STRICT ``xfail(sys.platform == "win32")`` UNTIL
+        beadloom-mr2l.64, and losing the mark is not the finding being dropped —
+        it is the finding being upgraded. The mark existed so that a
+        ``windows-latest`` runner would ADJUDICATE the prediction: an unexpected
+        PASS there would have failed the suite and said the reasoning was wrong.
+        The owner withdrew that leg on cost, and a strict xfail with no runner
+        behind it can never flip in either direction — a pin nobody can close,
+        which reads like a tracked question and is not one. The prediction is
+        settled by measurement instead, in the two rows below and in the refusal
+        row above: they are enough to compose the Windows verdict without a
+        Windows kernel, and ``test_no_platform_xfail_waits_for_a_runner_that_
+        will_not_come`` keeps the mark from coming back while no leg can judge it.
         """
         # ``str(Path(...))`` renders with THIS platform's separator — the whole
         # point of the row; a literal would hard-code one platform's answer.
@@ -430,6 +529,50 @@ class TestWhatPureWindowsPathSettlesWithoutAWindowsKernel:
 
         assert resolved.scope is PathScope.INSIDE, resolved
         assert resolved.relative == "src/app.py", resolved
+
+    def test_the_module_that_refuses_contains_no_platform_branch(self) -> None:
+        """Why the row above transfers to Windows at all, stated as a measurement.
+
+        A verdict measured here is a claim about there only if the code cannot
+        take a different branch there. ``paths.py`` reads no ``sys.platform`` and
+        no ``os.name`` — nor does anything else under ``src/``, measured
+        repo-wide in BDL-061.39 — so the refusal is one code path on every
+        operating system, and what varies is only the STRING the harness hands
+        it, which ``ntpath`` renders exactly.
+
+        This is the row that turns "the guard would refuse every Windows edit"
+        from reasoning into a composition of measurements. If a platform branch
+        is ever added here, that composition stops holding and this fails, which
+        is the correct moment to be told.
+        """
+        source = Path(paths.__file__).read_text(encoding="utf-8")
+
+        assert "sys.platform" not in source
+        assert "os.name" not in source
+
+    def test_the_backslash_verdict_is_reached_before_any_call_the_platform_owns(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The second half of the licence: the refusal is decided lexically.
+
+        ``rejection_reason`` ends with ``os.fsencode``, whose codec IS the
+        machine's — the one line in the function whose behaviour a Windows
+        kernel could change. The backslash rule is decided before it, so the
+        verdict for a native Windows target cannot depend on that codec.
+        Asserted by making the call fail loudly if it is ever reached, rather
+        than by reading the source and believing the order.
+        """
+
+        def unreachable(_: str) -> bytes:
+            raise AssertionError(
+                "os.fsencode was reached for a backslash target, so the refusal "
+                "is not purely lexical and the Windows verdict measured in this "
+                "class no longer follows from a POSIX run"
+            )
+
+        monkeypatch.setattr(paths.os, "fsencode", unreachable)
+
+        assert rejection_reason(ntpath.join("src", "app.py")) == BACKSLASH_REJECTION
 
 
 class TestTheSymlinkCapabilityProbe:
@@ -523,3 +666,76 @@ class TestTheSymlinkCapabilityProbe:
             "the five capability marks (six collected rows — one is "
             "parametrised over two targets) are the six tests this bead un-skipped"
         )
+
+    def test_the_skip_condition_is_the_measurement_and_not_a_value(self) -> None:
+        """FOUND BY REVIEW `.15` (M7) AND MEASURED HERE BEFORE IT WAS FIXED.
+
+        One line — ``SYMLINKS_UNAVAILABLE = True`` in place of
+        ``not SYMLINK_CAPABILITY.both`` — put all six rows back into the state
+        this family of beads exists to remove, and the suite did not notice:
+        133 passed / 6 skipped / 0 failed, rc 0, with the reader told only
+        "could not create a symbolic link ... no reason recorded". Every
+        assertion in this class was about the CAPABILITY object; none was about
+        the link between the capability and the condition the marks read, so the
+        chain could be cut at exactly that joint.
+
+        It matters more since beadloom-mr2l.64. With the Windows leg withdrawn,
+        these six rows and the ledger are what is left of BDL-061.39, and a
+        withdrawal that quietly took the value along with the cost is not the
+        decision the owner made.
+        """
+        assert (not SYMLINK_CAPABILITY.both) == SYMLINKS_UNAVAILABLE, (
+            "the six guard rows are skipped on something other than the "
+            "measurement: SYMLINKS_UNAVAILABLE must BE `not "
+            "SYMLINK_CAPABILITY.both` and nothing else, or the probe can answer "
+            "'unavailable' everywhere while the suite stays green"
+        )
+
+    def test_the_six_rows_are_observed_to_run_rather_than_inferred_to(self) -> None:
+        """The same guard again, and this time about the OUTCOME, not the wiring.
+
+        The row above closes the one joint the review cut. This one does not
+        care where the cut is: it runs the six by node id in a child pytest and
+        reads what happened to them, so a constant condition, an edited mark, a
+        module-level ``pytestmark``, a ``conftest`` that deselects them or a
+        renamed row all redden it. That is the standard this epic converged on —
+        a check that cannot fail is not a check — applied to the probe itself,
+        which had until now been the one thing checking everything else.
+
+        A machine that genuinely cannot create a symbolic link fails here rather
+        than skipping six guard tests quietly elsewhere. That is deliberate and
+        it is the same stance as
+        ``test_this_machine_can_link_so_the_six_guard_rows_actually_run``: this
+        project's own runners can link, so the honest report of an image that
+        cannot is a red row that names the reason, not a green suite.
+        """
+        completed = subprocess.run(  # noqa: S603
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                *THE_SIX_CAPABILITY_GATED_ROWS,
+                "-p",
+                "no:randomly",
+                "-q",
+                "--no-header",
+                "-rs",
+                "--tb=line",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=TESTS_DIR.parent,
+            check=False,
+        )
+        report = completed.stdout + completed.stderr
+
+        assert completed.returncode == 0, (
+            "the six capability-gated guard rows did not all pass. A non-zero "
+            "exit with no failure below usually means a node id no longer "
+            f"exists — they are named, not counted, on purpose.\n{report}"
+        )
+        assert "skipped" not in report.lower(), (
+            "at least one of the six was SKIPPED on a machine that can create "
+            f"symbolic links, which is the defect BDL-061.39 removed.\n{report}"
+        )
+        assert f"{len(THE_SIX_CAPABILITY_GATED_ROWS)} passed" in report, report
