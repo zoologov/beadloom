@@ -992,8 +992,8 @@ beadloom waves BEAD [BEAD ...] [--json] [--project DIR]
 
 Exit codes: `0` = a shape was decided and rests on nothing unstated; `1` = a
 shape was decided and carries findings (a bead that did not declare its scope, an
-override past its exit condition, an override that changed nothing) -- visible,
-never blocking; `2` = no shape could be decided (no index, no answer from the
+override past its exit condition, an override that changed nothing, a shared
+medium that failed its check or that nobody measured) -- visible, never blocking; `2` = no shape could be decided (no index, no answer from the
 tracker, a bead the tracker does not have, a `waves:` block that would not parse).
 
 It **decides**, it does not advise. Parallelism follows from the code-level
@@ -1020,6 +1020,21 @@ measures the combined tree once the wave has landed. It is assigned
 deterministically rather than wisely; the point is that the step belongs to a
 named bead instead of to a coordinator's habit.
 
+**Each of those media is also checked, and each check can fail.** The command
+measures a precondition per medium before the wave runs: that no path differs
+from `HEAD` which no bead in the plan owns (`git status`), that the installed
+pre-commit hook judges the paths a commit stages (`.git/hooks/pre-commit`), that
+no doc pair is stale already (the doc index), and that no bead's title numbers it
+differently from the id the tracker allocated (the bead records). A medium that
+could not be observed is reported `unmeasured`, which is a finding: a concurrent
+wave nobody measured is not a clean plan, it is an unmeasured one. What is NOT
+checked is the wave's conduct afterwards -- nothing here can know whether the
+gate owner ran the combined tree.
+
+The `tracker-ids` check runs even when the plan is fully serial, because a
+concurrent `bd create` shifts an id out from under the number an author already
+wrote into the title, and that happens before any wave runs (#171).
+
 A human outranks the decision by declaring it in `.beadloom/flow.yml`, with a
 reason and an exit condition like every other stand-down in this tool:
 
@@ -1032,10 +1047,13 @@ waves:
     until: "2026-09-01"
 ```
 
-Every key is required; a missing one is a configuration error rather than a
-lenient default. Each override is reported with the number of decisions it
-changed, and one that changed **none** is a finding -- an override nobody can see
-doing anything is how a check gets switched off without anybody saying so.
+Every key is required, and required by its **content**: a key present but blank
+is a configuration error too, because an override with no reason and no deadline
+outranks the graph permanently by accident. Each override is reported with the
+number of decisions it changed -- the number of its pairs the shape decides
+differently when that entry is removed -- and one that changed **none** is a
+finding, because an override nobody can see doing anything is how a check gets
+switched off without anybody saying so.
 
 ```
 $ beadloom waves proj-1 proj-2
@@ -1053,7 +1071,8 @@ No wave runs more than one bead, so nothing is shared concurrently.
 ```
 
 `--json` carries the same facts: `waves[]` (with `gate_owner`), `scopes[]`,
-`conflicts[]`, `overrides[]`, `shared_media[]`, `findings[]` and `exit_code`.
+`conflicts[]`, `overrides[]`, `shared_media[]`, `media_checks[]` (`medium`,
+`status`, `detail`), `findings[]` and `exit_code`.
 
 ### beadloom ci
 

@@ -21,14 +21,23 @@ The guarantee the shape makes, in one sentence:
 
 > For any two beads placed in the same wave, no medium they share can carry one
 > bead's in-progress state into the other's result — and where a medium cannot
-> give that guarantee, the wave says so and names the one bead that measures the
-> combined outcome.
+> give that guarantee, the wave says so, names the one bead that measures the
+> combined outcome, and checks the medium's plan-time precondition.
 
 The sentence has two halves because measurement says one half is not enough. The
 first half is code independence, which the graph decides. The second is the set
 of media a wave shares whatever shape it takes — one working tree, one
 pre-commit hook, one doc-freshness baseline, one tracker id space — and no
 choice of shape makes any of them independent.
+
+**The split the sentence names.** The second half was a constant tuple until
+BDL-061.80: the four media were printed with the evidence they came from, and
+nothing checked any of them, so a wave asserted a property nothing verified. Each
+medium now carries a verdict that can come back `failed`, and a medium nobody
+measured comes back `unmeasured` rather than passing in silence. What is checked
+is a **precondition**, measured before the wave runs. What is not checked, and
+cannot be by anything holding a plan, is the wave's conduct afterwards: no check
+here knows whether the gate owner ran the combined tree.
 
 ### How a bead says what it occupies
 
@@ -43,6 +52,11 @@ list ends at the first newline or sentence stop. The declaration is parsed in
 one place (`waves.scope.declared_refs`), which is also what the MCP
 `bead_context` tool reads, so the two cannot come to disagree about what a bead
 said.
+
+The separator between the colon and the list is spaces and tabs, not any
+whitespace. A dangling `refs:` with nothing after it used to skip forward to the
+next non-empty line and read that line as the declaration, handing the bead a
+scope it never named.
 
 A scope expands **downward through `part_of`**. A node's own file set excludes a
 nested node's files, so without the expansion a bead scoped to a domain and a
@@ -101,6 +115,32 @@ evidence it comes from:
 A wave of one shares nothing concurrently — its clean room *is* the tree — and
 the plan says that rather than printing the list as a banner.
 
+### What each medium is checked against
+
+One verdict per medium, in `plan.media_checks` and under `media_checks` in
+`--json`. `failed` and `unmeasured` are findings and reach exit 1; `passed` and
+`not_applicable` are not.
+
+| Medium | Precondition checked | Observed from |
+|---|---|---|
+| `working-tree` | no path differs from `HEAD` that no bead in the plan owns | `git status` |
+| `commit-gate` | the installed pre-commit hook judges the paths a commit stages | `.git/hooks/pre-commit` |
+| `doc-baseline` | no doc pair is stale before the wave starts | the doc index |
+| `tracker-ids` | every bead's title numbers it the way the tracker did | the bead records |
+
+The three machine-observed media are gathered by the command and handed to
+`plan_waves` as a `WaveEnvironment`, so the decision stays runnable without git,
+without a repository and without a hook — each absence arrives as a `None` the
+check reports, never as a silent zero. They are reported `not_applicable` when no
+wave holds more than one bead, on the same rule that governs the statements.
+
+The `tracker-ids` check runs whether or not the plan is concurrent. The
+mis-numbering it looks for happens at bead *creation*, before any wave runs, so a
+plan that serialises the beads it mis-wired is exactly the plan whose ids most
+need checking. Only the trailing number is compared: the title convention writes
+`BDL-061.<n>` while the tracker allocates `<project>.<n>`, so comparing whole ids
+would report every bead and comparing prefixes would report none.
+
 ### Overrides
 
 A human may outrank the computation, and records it the way every stand-down in
@@ -120,9 +160,19 @@ default. `until` may name a date or an event, and which it is, is decided by the
 same `exit_condition_deadline` the guard exclusions and the `forbid_import`
 exemptions use.
 
-Each override is reported with the number of decisions it actually changed. One
-that changed **none** is a finding: an override nobody can see doing anything is
-how a check gets switched off without anybody saying so.
+Each override is reported with the number of decisions it actually changed —
+measured as the number of its pairs the **shape** decides differently when the
+override is removed and every other one still applies. Counting edits to the
+conflict set instead reported work an override had not done: deleting a
+`blocked_by_bead` conflict counted as a change while the blocked bead was placed
+behind its blocker anyway. One that changed **none** is a finding: an override
+nobody can see doing anything is how a check gets switched off without anybody
+saying so.
+
+An override speaks only about pairs the plan actually contains. A `serial` entry
+naming beads that have since closed used to create a conflict for the absent
+pair, which was then printed beside the real serialisations where a reader could
+not tell them apart.
 
 ## Invariants
 
@@ -130,17 +180,24 @@ how a check gets switched off without anybody saying so.
 - One reason per serialised pair, taken from a closed named vocabulary.
 - The same inputs produce the same shape, including the order within a wave.
 - A wave of more than one bead always names its shared media and its gate owner.
+- Every medium the plan names carries a verdict, and an unobserved one is
+  `unmeasured` rather than `passed`.
+- A required override field is required by its content: a key present but blank
+  is a configuration error, because an override with no reason and no deadline
+  outranks the graph permanently by accident.
 - The plan is read-only with respect to the index and the tracker.
 
 ## API
 
 | Entry point | Answers |
 |---|---|
-| `plan_waves(records, *, conn, overrides, today)` | the whole shape, as a `WavePlan` |
+| `plan_waves(records, *, conn, overrides, today, environment)` | the whole shape, as a `WavePlan` |
 | `resolve_scope(conn, record)` | what one bead occupies, or why that is unknown |
 | `conflict_between(conn, left, right, *, blockers)` | why one pair may not run together |
 | `load_overrides(project_root)` | the declared overrides in `flow.yml` |
 | `media_for(wave_size)` | what a wave of that size shares |
+| `check_media(records, *, concurrent, owned_paths, environment)` | one verdict per medium |
+| `title_id_mismatches(records)` | every bead whose title numbers it differently |
 
 `plan_waves` takes bead records as **data**, never a tracker handle: the
 application layer does not import the `bd` seam (which lives in `services`), and
@@ -154,6 +211,7 @@ every scenario runs without a `bd` binary on the machine.
 | `scope.py` | resolve a bead to the nodes and files it occupies |
 | `independence.py` | decide whether one pair may run together, and say why not |
 | `media.py` | what a wave shares no matter how independent its code is |
+| `media_checks.py` | whether each medium's plan-time precondition holds |
 | `planner.py` | assign beads to waves, apply overrides, report findings |
 | `config.py` | read and validate the declared `waves:` overrides |
 
@@ -161,8 +219,11 @@ every scenario runs without a `bd` binary on the machine.
 
 `tests/acceptance/features/wave_plan.feature` states the behaviour as executable
 scenarios; `tests/test_wave_plan.py` covers the reasons, the ordering and the
-override arithmetic; `tests/test_cli_waves.py` covers the command's two output
-shapes and its three exit codes.
+override arithmetic; `tests/test_wave_media_checks.py` covers the four medium
+verdicts and the title-against-id comparison; `tests/test_cli_waves.py` covers
+the command's two output shapes and its three exit codes;
+`tests/test_bead22_wave_guarantee.py` holds the guarantee to both of its clauses
+and owns the five findings BDL-061.22 measured.
 
 ## Related
 

@@ -44,7 +44,13 @@ if TYPE_CHECKING:
 #: ``refs:`` (or ``ref:``, or ``area:``) followed by a comma-separated list. The
 #: list ends at the first newline or sentence stop, so a declaration embedded in
 #: prose cannot silently swallow the rest of the paragraph as ref ids.
-_DECLARATION = re.compile(r"\b(?:refs?|area)\s*:\s*([^\n.;]+)", re.IGNORECASE)
+#:
+#: The separators are spaces and tabs, NOT ``\s``. ``\s`` matches newlines, so an
+#: empty ``refs:`` header skipped forward to the next non-empty line and read that
+#: line as the declaration — handing the bead a scope it never named, which every
+#: pairwise verdict then rested on (BDL-061.22-5). A dangling header now ends the
+#: match instead of moving it, and the bead is unresolved, which serialises it.
+_DECLARATION = re.compile(r"\b(?:refs?|area)[ \t]*:[ \t]*([^\n.;]+)", re.IGNORECASE)
 
 #: A ref id as this codebase writes them: letters, digits, dash, underscore, dot.
 #: Anything else in the list is not a ref and is dropped rather than guessed at.

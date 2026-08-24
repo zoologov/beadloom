@@ -249,6 +249,34 @@ of the staged paths, not the staged blobs, so a partially staged file is judged
 including the part the commit leaves behind. The hooks `beadloom install-hooks`
 writes use this mode, and both of them say so in their own header.
 
+#### What the installed hook says about its own scope
+
+Three things, and the third names a limit rather than a repair:
+
+- **How much of the tree it did not judge**, read from `git status --porcelain`
+  rather than from `git diff --name-only`. The second lists only tracked files
+  with unstaged modifications, so a neighbouring agent's brand-new module was not
+  counted — and a new module is the largest unjudged thing a neighbour can leave
+  in a shared tree. The second status column is non-blank for a working-tree
+  modification and `?` for an untracked path, so one call answers both.
+- **What it added to the commit itself.** `beadloom active-sync --stage` stages
+  the reconciled ACTIVE tables and the tracker export while the commit is in
+  flight, and a commit made with an explicit pathspec does not exclude them. The
+  hook now lists the paths it added, because the unjudged count states the
+  remainder and nothing stated the addition.
+- **A marker line, `# beadloom-hook-scope: commit`.** An installed hook keeps its
+  old behaviour until `install-hooks` is re-run, and nothing tells a repository
+  to; `beadloom waves` reads the marker to tell whether the gate a concurrent
+  wave is about to commit through judges the commit or the whole tree.
+
+**What the commit gate cannot do, stated so it is not mistaken for done.** A
+neighbour's hunk swept into a commit — inside a file the committer legitimately
+touches — is not caught and cannot be caught here: the swept hunk is *inside* the
+commit, which is precisely the region the gate judges. The check that would catch
+it compares the staged paths against the scope the committing bead declared,
+which needs the bead's identity at commit time and is therefore a wave-protocol
+question rather than a hook one.
+
 ## Invariants
 
 - Baselining is explicit (`mark_synced` / `sync-update`); the engine never

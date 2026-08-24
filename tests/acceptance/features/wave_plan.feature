@@ -60,3 +60,34 @@ Feature: a wave shape is decided from the graph, and says what it does not decid
     When the wave shape is decided
     Then the wave names the working tree, the commit gate, the doc baseline and the tracker id space
     And exactly one bead of the wave owns the combined-tree result
+
+  # BDL-061.80. Naming the media was the whole of the second clause until `.22`
+  # measured that nothing checked any of them. The three scenarios below are the
+  # difference between a wave that STATES what it shares and one that also says
+  # whether the sharing is currently safe.
+
+  @bead:beadloom-mr2l.80
+  Scenario: Every medium a wave names is also checked
+    Given a bead "alpha" declaring the node scope "billing"
+    And a bead "beta" declaring the node scope "shipping"
+    And the shared media were measured and are clean
+    When the wave shape is decided
+    Then every medium the wave names carries a verdict of its own
+    And the plan is clean
+
+  @bead:beadloom-mr2l.80
+  Scenario: A concurrent wave whose shared media nobody measured is not reported clean
+    Given a bead "alpha" declaring the node scope "billing"
+    And a bead "beta" declaring the node scope "shipping"
+    When the wave shape is decided
+    Then the wave reports "working-tree" as unmeasured
+    And the plan is not clean
+
+  @bead:beadloom-mr2l.80
+  Scenario: A bead whose title numbers it differently from its allocated id is reported
+    Given a bead "alpha" declaring the node scope "billing"
+    And a bead "beta" declaring the node scope "shipping" titled "[BDL-061.39] the other bead"
+    And the shared media were measured and are clean
+    When the wave shape is decided
+    Then the wave reports "tracker-ids" as failed
+    And the plan is not clean

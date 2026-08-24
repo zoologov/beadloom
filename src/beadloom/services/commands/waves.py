@@ -27,6 +27,7 @@ watching will be sampled by a program and silently give it a different answer
 from __future__ import annotations
 
 import json
+import sqlite3
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -36,7 +37,7 @@ import click
 from beadloom.services.commands._root import main
 
 if TYPE_CHECKING:
-    from beadloom.application.waves import BeadRecord, WavePlan
+    from beadloom.application.waves import BeadRecord, WaveEnvironment, WavePlan
 
 #: Exit codes, named so the renderer and the docstring cannot drift apart.
 _EXIT_CLEAN = 0
@@ -97,9 +98,71 @@ def _read_beads(bead_ids: tuple[str, ...], project_root: Path) -> list[BeadRecor
                 bead_id=bead_id,
                 declaration=_declaration(record),
                 blocked_by=_blocked_by(record),
+                title=str(record.get("title", "")),
             )
         )
     return records
+
+
+def _commit_gate(project_root: Path) -> str | None:
+    """What the installed pre-commit hook judges, read where the installer writes.
+
+    The same path ``install-hooks`` writes to, deliberately: a check that looked
+    somewhere else would be a second opinion about one fact. ``None`` means the
+    hook could not be read — no ``.git`` directory, or a hook whose bytes are not
+    text — and it is reported as unmeasured rather than as a missing gate.
+    """
+    from beadloom.application.waves import GATE_ABSENT, GATE_COMMIT_SCOPED, GATE_WHOLE_TREE
+    from beadloom.services.commands.docsync import _HOOK_SCOPE_MARKER
+
+    hooks_dir = project_root / ".git" / "hooks"
+    if not hooks_dir.is_dir():
+        return None
+    hook = hooks_dir / "pre-commit"
+    if not hook.exists():
+        return GATE_ABSENT
+    try:
+        content = hook.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        # An unreadable hook is not an absent one and not a scoped one. Naming
+        # the third answer is the whole reason `unmeasured` is a status.
+        return None
+    return GATE_COMMIT_SCOPED if _HOOK_SCOPE_MARKER in content else GATE_WHOLE_TREE
+
+
+def _stale_pairs(db_path: Path, project_root: Path) -> int | None:
+    """How many doc pairs are stale before the wave starts, or ``None`` if unknown."""
+    from beadloom.doc_sync.engine import check_sync
+    from beadloom.infrastructure.db import open_db
+
+    conn = open_db(db_path)
+    try:
+        return sum(1 for row in check_sync(conn, project_root=project_root)
+                   if row.get("status") == "stale")
+    except sqlite3.Error:
+        # A doc baseline that cannot be read is not a reconciled one.
+        return None
+    finally:
+        conn.close()
+
+
+def _environment(project_root: Path, db_path: Path) -> WaveEnvironment:
+    """Measure the three media the graph cannot see, here at the services edge.
+
+    Gathered here rather than inside the planner so the application layer keeps
+    taking its input as data: the decision stays runnable without git, without a
+    repository and without a hook, and every one of those absences arrives as a
+    ``None`` that the checks report rather than as a silent zero.
+    """
+    from beadloom.application.waves import WaveEnvironment
+    from beadloom.doc_sync.git_baseline import changed_paths
+
+    changed = changed_paths(project_root)
+    return WaveEnvironment(
+        tree_changed_paths=None if changed is None else tuple(sorted(changed)),
+        commit_gate=_commit_gate(project_root),
+        doc_baseline_stale_pairs=_stale_pairs(db_path, project_root),
+    )
 
 
 def _plan_as_dict(plan: WavePlan) -> dict[str, Any]:
@@ -149,6 +212,10 @@ def _plan_as_dict(plan: WavePlan) -> dict[str, Any]:
             {"name": m.name, "statement": m.statement, "evidence": m.evidence}
             for m in plan.shared_media
         ],
+        "media_checks": [
+            {"medium": c.medium, "status": c.status, "detail": c.detail}
+            for c in plan.media_checks
+        ],
         "findings": list(plan.findings),
         "exit_code": plan.exit_code,
     }
@@ -195,6 +262,11 @@ def _render(plan: WavePlan) -> None:
         click.echo(
             "No wave runs more than one bead, so nothing is shared concurrently."
         )
+    if plan.media_checks:
+        click.echo("")
+        click.echo("Plan-time precondition of each shared medium:")
+        for check in plan.media_checks:
+            click.echo(f"  {check.medium}: {check.status} — {check.detail}")
     if plan.findings:
         click.echo("")
         for finding in plan.findings:
@@ -236,9 +308,12 @@ def waves(*, beads: tuple[str, ...], output_json: bool, project: Path | None) ->
         click.echo(f"Error: no wave shape could be decided — {exc}", err=True)
         sys.exit(_EXIT_UNDECIDABLE)
 
+    environment = _environment(project_root, db_path)
     conn = open_db(db_path)
     try:
-        plan = plan_waves(records, conn=conn, overrides=overrides)
+        plan = plan_waves(
+            records, conn=conn, overrides=overrides, environment=environment
+        )
     finally:
         conn.close()
 

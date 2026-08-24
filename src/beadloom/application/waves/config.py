@@ -56,24 +56,48 @@ def _reject_unknown_keys(body: dict[str, object], *, where: str, allowed: tuple[
         raise WaveConfigError(msg)
 
 
+def _is_blank(value: object) -> bool:
+    """True when *value* carries no CONTENT, not merely when the key is absent.
+
+    ``not entry.get(key)`` catches ``''`` and ``null`` and passes ``'   '``, which
+    is then stripped to ``''`` — so the override loaded with an empty reason and
+    an empty ``until``, and an empty ``until`` has no deadline, which makes
+    ``WaveOverride.expired`` False forever (BDL-061.22-3). This epic has shipped
+    two exclusion mechanisms whose fields were decorative already; a required
+    field has to be required by its content or it is not required at all.
+    """
+    if isinstance(value, str):
+        return not value.strip()
+    if isinstance(value, (list, tuple, dict, set)):
+        return not value
+    return value is None
+
+
 def _build_override(entry: object) -> WaveOverride:
     """Validate one override entry — every key required, decision from the pair."""
     if not isinstance(entry, dict):
         msg = "flow.yml: waves.overrides entries must be mappings"
         raise WaveConfigError(msg)
     _reject_unknown_keys(entry, where=f"waves override {entry!r}", allowed=OVERRIDE_KEYS)
-    missing = [key for key in OVERRIDE_KEYS if not entry.get(key)]
+    missing = [key for key in OVERRIDE_KEYS if _is_blank(entry.get(key))]
     if missing:
         msg = (
             f"flow.yml: waves override {entry!r} is missing {missing} — an "
             "override must say which beads it moves, in WHICH direction, WHY, "
             "and UNTIL when (an unnamed, undated override outranks the graph "
-            "permanently by accident)"
+            "permanently by accident). A key present but blank is missing: the "
+            "check reads content, not presence"
         )
         raise WaveConfigError(msg)
     raw_beads = entry["beads"]
     if not isinstance(raw_beads, list) or not all(isinstance(b, str) for b in raw_beads):
         msg = f"flow.yml: waves override {entry!r}: 'beads' must be a list of bead ids"
+        raise WaveConfigError(msg)
+    if any(_is_blank(bead) for bead in raw_beads):
+        msg = (
+            f"flow.yml: waves override {entry!r}: a bead id is blank — an override "
+            "that names an empty id speaks about a bead nobody can find"
+        )
         raise WaveConfigError(msg)
     beads = tuple(str(bead).strip() for bead in raw_beads)
     if len({*beads}) < _MIN_BEADS:

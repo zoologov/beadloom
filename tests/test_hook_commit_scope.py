@@ -73,6 +73,45 @@ class TestTheCommitGateJudgesTheCommit:
         content = _hook(_git_project(tmp_path), mode)
         assert content.index("sync-check") < content.index("ACTIVE / tracker coherence")
 
+    def test_the_hook_states_what_it_itself_added_to_the_commit(
+        self, tmp_path: Path, mode: str
+    ) -> None:
+        """BDL-061.22's OBSERVATION C, measured by `.22`'s own commit.
+
+        `active-sync --stage` stages the reconciled ACTIVE tables and the tracker
+        export while the commit is in flight, and a pathspec commit does not
+        exclude them: `.22` committed one file by explicit path and landed two.
+        The hook then printed a confident count of what it did NOT judge and said
+        nothing about the file it had just put IN. The count states the remainder;
+        this line states the addition.
+        """
+        content = _hook(_git_project(tmp_path), mode)
+        assert "staged_before=$(git diff --cached --name-only)" in content
+        assert "ADDED these path(s) to this commit" in content
+        assert content.index("staged_before=") < content.index("active-sync --stage")
+
+    def test_the_unjudged_count_reads_the_status_rather_than_the_diff(
+        self, tmp_path: Path, mode: str
+    ) -> None:
+        """FINDING BDL-061.22-4: `git diff --name-only` cannot see an untracked file."""
+        content = _hook(_git_project(tmp_path), mode)
+        assert "outside=$(git status --porcelain" in content
+        assert "outside=$(git diff --name-only" not in content
+
+    def test_the_hook_carries_the_marker_that_says_what_it_judges(
+        self, tmp_path: Path, mode: str
+    ) -> None:
+        """An installed hook keeps its old behaviour until install-hooks re-runs.
+
+        Nothing told a repository to re-run it, and `.21` observed its own S6
+        commit judged by the whole-tree hook the change had just replaced. The
+        marker is how `beadloom waves` can tell which hook a concurrent wave is
+        about to commit through.
+        """
+        from beadloom.services.commands.docsync import _HOOK_SCOPE_MARKER
+
+        assert _HOOK_SCOPE_MARKER in _hook(_git_project(tmp_path), mode)
+
 
 class TestNothingStopsBeingEnforced:
     def test_the_push_gate_still_judges_the_whole_tree(self, tmp_path: Path) -> None:

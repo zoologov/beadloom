@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from beadloom.application.waves import (
+    GATE_COMMIT_SCOPED,
     REASON_BLOCKED_BY_BEAD,
     REASON_DEPENDENCY_EDGE,
     REASON_OVERRIDE_SERIAL,
@@ -22,6 +23,7 @@ from beadloom.application.waves import (
     SHARED_MEDIA,
     BeadRecord,
     WaveConfigError,
+    WaveEnvironment,
     WaveOverride,
     declared_refs,
     load_overrides,
@@ -125,7 +127,22 @@ class TestScope:
 
 class TestSerialisationReasons:
     def test_disjoint_scopes_share_a_wave(self, conn: sqlite3.Connection) -> None:
-        plan = plan_waves([_bead("a", "billing"), _bead("b", "shipping")], conn=conn)
+        """Independent subgraphs share a wave, and a measured wave is exit 0.
+
+        The environment is supplied because a concurrent wave whose shared media
+        nobody measured reaches exit 1 by design — the assertion below is about
+        the shape, so it says who measured what rather than relying on a default
+        that no longer means "clean".
+        """
+        plan = plan_waves(
+            [_bead("a", "billing"), _bead("b", "shipping")],
+            conn=conn,
+            environment=WaveEnvironment(
+                tree_changed_paths=(),
+                commit_gate=GATE_COMMIT_SCOPED,
+                doc_baseline_stale_pairs=0,
+            ),
+        )
         assert plan.wave_of("a") == plan.wave_of("b")
         assert plan.conflicts == ()
         assert plan.exit_code == 0

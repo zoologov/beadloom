@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 
 from beadloom.application.waves.independence import conflicts_among
 from beadloom.application.waves.media import media_for
+from beadloom.application.waves.media_checks import check_media, finding_for
 from beadloom.application.waves.models import (
     DECISION_PARALLEL,
     DECISION_SERIAL,
@@ -40,38 +41,73 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from datetime import date
 
-    from beadloom.application.waves.models import BeadRecord, WaveOverride
+    from beadloom.application.waves.models import (
+        BeadRecord,
+        MediumCheck,
+        WaveEnvironment,
+        WaveOverride,
+    )
 
 
-def _apply_overrides(
+def _conflict_set(
     conflicts: Sequence[Conflict],
     overrides: Sequence[WaveOverride],
-    *,
-    today: date | None,
-) -> tuple[tuple[Conflict, ...], tuple[OverrideOutcome, ...]]:
-    """The conflict set a human asked for, plus what each override did."""
+    present: frozenset[str],
+) -> tuple[Conflict, ...]:
+    """The conflict set *overrides* asks for, over the beads the plan contains.
+
+    A ``serial`` override about a bead the plan does not contain used to CREATE a
+    conflict for the absent pair, which was then printed under "Serialised
+    because:" beside the real serialisations, where a reader cannot tell the two
+    apart (BDL-061.22-2). A stale override left behind after its beads closed is
+    the ordinary way that happens, so the pairs are restricted to beads that are
+    actually here.
+    """
     by_pair: dict[tuple[str, str], Conflict] = {
         sorted_pair(c.left, c.right): c for c in conflicts
     }
-    outcomes: list[OverrideOutcome] = []
     for override in overrides:
-        changed = 0
         for pair in override.pairs():
-            if override.decision == DECISION_PARALLEL and pair in by_pair:
-                del by_pair[pair]
-                changed += 1
+            if not present.issuperset(pair):
+                continue
+            if override.decision == DECISION_PARALLEL:
+                by_pair.pop(pair, None)
             elif override.decision == DECISION_SERIAL and pair not in by_pair:
                 by_pair[pair] = Conflict(
                     pair[0], pair[1], REASON_OVERRIDE_SERIAL, override.reason
                 )
-                changed += 1
-        outcomes.append(
-            OverrideOutcome(
-                override=override, changed=changed, expired=override.expired(today)
-            )
-        )
-    ordered = tuple(by_pair[key] for key in sorted(by_pair))
-    return ordered, tuple(outcomes)
+    return tuple(by_pair[key] for key in sorted(by_pair))
+
+
+def _together(waves: Sequence[Wave], pair: tuple[str, str]) -> bool | None:
+    """Whether *pair* shares a wave; ``None`` when either bead was not placed."""
+    placement = {bead: wave.index for wave in waves for bead in wave.beads}
+    left, right = pair
+    if left not in placement or right not in placement:
+        return None
+    return placement[left] == placement[right]
+
+
+def _decisions_changed(
+    override: WaveOverride,
+    planned: Sequence[Wave],
+    counterfactual: Sequence[Wave],
+) -> int:
+    """How many of *override*'s pairs the shape decides differently without it.
+
+    ``changed`` used to count edits to the conflict SET, which is not the same
+    question: deleting a ``blocked_by_bead`` conflict counted as a change while
+    ``_earliest_wave`` put the blocked bead behind its blocker anyway, so an
+    override the tracker overrules reported "changed 1 decision(s)" over a shape
+    it had not moved (BDL-061.22-1). The counterfactual is leave-one-out — this
+    override removed, every other one still applied — because that is the
+    question a reader is asking: what would be different if this entry were gone?
+    """
+    return sum(
+        1
+        for pair in override.pairs()
+        if _together(planned, pair) != _together(counterfactual, pair)
+    )
 
 
 def _earliest_wave(
@@ -146,7 +182,9 @@ def _assign(
 
 
 def _findings(
-    scopes: Sequence[BeadScope], outcomes: Sequence[OverrideOutcome]
+    scopes: Sequence[BeadScope],
+    outcomes: Sequence[OverrideOutcome],
+    checks: Sequence[MediumCheck],
 ) -> tuple[str, ...]:
     """Everything the plan rests on that a reader has to be told about."""
     found: list[str] = []
@@ -173,7 +211,35 @@ def _findings(
                 f"inert_override: [{beads}] changed no decision — the shape is "
                 "the same with it and without it"
             )
+    found.extend(
+        line for line in (finding_for(check) for check in checks) if line is not None
+    )
     return tuple(found)
+
+
+def _outcomes(
+    overrides: Sequence[WaveOverride],
+    *,
+    computed: Sequence[Conflict],
+    present: frozenset[str],
+    blockers: Mapping[str, frozenset[str]],
+    planned: Sequence[Wave],
+    today: date | None,
+) -> tuple[OverrideOutcome, ...]:
+    """What each override did to the shape, measured against the shape without it."""
+    ids = tuple(sorted(present))
+    outcomes: list[OverrideOutcome] = []
+    for index, override in enumerate(overrides):
+        others = [other for position, other in enumerate(overrides) if position != index]
+        without = _assign(ids, _conflict_set(computed, others, present), blockers)
+        outcomes.append(
+            OverrideOutcome(
+                override=override,
+                changed=_decisions_changed(override, planned, without),
+                expired=override.expired(today),
+            )
+        )
+    return tuple(outcomes)
 
 
 def plan_waves(
@@ -182,21 +248,42 @@ def plan_waves(
     conn: sqlite3.Connection,
     overrides: Sequence[WaveOverride] = (),
     today: date | None = None,
+    environment: WaveEnvironment | None = None,
 ) -> WavePlan:
-    """Decide the wave shape for *records* against the indexed graph in *conn*."""
+    """Decide the wave shape for *records* against the indexed graph in *conn*.
+
+    *environment* carries what the machine says about the media the graph cannot
+    see. Leaving it out is allowed and is not silent: the media checks then come
+    back ``unmeasured``, which is a finding, so a concurrent plan nobody measured
+    reaches exit 1 rather than exit 0.
+    """
     scopes = resolve_scopes(conn, records)
     computed = conflicts_among(conn, scopes, records)
-    conflicts, outcomes = _apply_overrides(computed, overrides, today=today)
-    blockers = {
-        record.bead_id: frozenset(record.blocked_by) for record in records
-    }
-    waves = _assign(tuple(scope.bead_id for scope in scopes), conflicts, blockers)
+    present = frozenset(scope.bead_id for scope in scopes)
+    blockers = {record.bead_id: frozenset(record.blocked_by) for record in records}
+    conflicts = _conflict_set(computed, overrides, present)
+    waves = _assign(tuple(sorted(present)), conflicts, blockers)
+    outcomes = _outcomes(
+        overrides,
+        computed=computed,
+        present=present,
+        blockers=blockers,
+        planned=waves,
+        today=today,
+    )
     widest = max((len(wave.beads) for wave in waves), default=0)
+    checks = check_media(
+        records,
+        concurrent=widest > 1,
+        owned_paths=frozenset(path for scope in scopes for path in scope.files),
+        environment=environment,
+    )
     return WavePlan(
         waves=waves,
         scopes=scopes,
         conflicts=conflicts,
         overrides=outcomes,
         shared_media=media_for(widest),
-        findings=_findings(scopes, outcomes),
+        findings=_findings(scopes, outcomes, checks),
+        media_checks=checks,
     )

@@ -20,11 +20,18 @@ reach:
 * the two failures this session actually had, replayed: BDL-UX #181 (four agents
   green, the tree red) and BDL-UX #171 (a valid-but-wrong dependency edge).
 
-Five defects were measured while writing it. Each is stated as the behaviour it
+Five defects were measured while writing it. Each was stated as the behaviour it
 SHOULD have and marked ``xfail(strict=True)`` with ``FINDING BDL-061.22-N`` in
 its docstring — the convention ``.18`` set. A finding that lives only in a review
 report is a finding nobody re-measures, and a non-strict xfail can be an artefact
 of a broken fixture rather than a real defect (TESTS MUST BITE).
+
+``beadloom-mr2l.80`` CLOSED all five. A strict xfail turns red the moment its
+defect is fixed, so closing one means removing the marker, and the five tests
+below are now ordinary regression tests. Each keeps its ``FINDING BDL-061.22-N``
+id, and ``TestEveryFindingHereIsStrictAndNamesItself`` asserts that every id is
+still owned by a test that passes — otherwise a closed finding becomes a test
+nobody can trace back to the defect it was written for.
 """
 
 from __future__ import annotations
@@ -38,6 +45,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from beadloom.application.waves import (
+    GATE_COMMIT_SCOPED,
     MEDIUM_COMMIT_GATE,
     MEDIUM_DOC_BASELINE,
     MEDIUM_TRACKER_IDS,
@@ -50,6 +58,7 @@ from beadloom.application.waves import (
     UNRESOLVED_UNKNOWN_REF,
     BeadRecord,
     WaveConfigError,
+    WaveEnvironment,
     WaveOverride,
     WavePlan,
     declared_refs,
@@ -103,6 +112,21 @@ def _bead(
         bead_id=bead_id,
         declaration=f"work. refs: {refs}" if refs else "work.",
         blocked_by=blocked_by,
+    )
+
+
+def _measured() -> WaveEnvironment:
+    """An environment in which all three machine-observed media check out.
+
+    Spelled once, because a test that wants to talk about the SHAPE should not
+    have to restate what a clean tree looks like — and because the default
+    (nothing observed) is deliberately not clean, so every shape test that wants
+    exit 0 has to say who measured what.
+    """
+    return WaveEnvironment(
+        tree_changed_paths=(),
+        commit_gate=GATE_COMMIT_SCOPED,
+        doc_baseline_stale_pairs=0,
     )
 
 
@@ -207,21 +231,19 @@ class TestTheFirstClauseUnderOverlapsThatAreNotEquality:
         """Node lookup is exact, so `Billing` is unknown and serialises."""
         assert resolve_scope(conn, _bead("a", "Billing")).unknown_refs == ("Billing",)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="FINDING BDL-061.22-5: an empty `refs:` header adopts a later line",
-    )
     def test_a_declaration_header_with_nothing_after_it_declares_nothing(
         self, conn: sqlite3.Connection
     ) -> None:
-        """FINDING BDL-061.22-5 — the separator after the colon may be a newline.
+        """FINDING BDL-061.22-5, closed by `.80` — the separator is spaces and tabs.
 
-        `_DECLARATION` is `\\b(?:refs?|area)\\s*:\\s*([^\\n.;]+)`. The comment above
-        it says the list "ends at the first newline", and the capture does — but
-        the `\\s*` between the colon and the capture matches newlines, so an empty
-        `refs:` header skips forward to the next non-empty line and reads THAT as
-        the declaration. Measured: `"Scope\\nrefs:\\nbilling is the one we mean"`
-        resolves to `("billing",)`, and a blank line in between does not stop it.
+        `_DECLARATION` was `\\b(?:refs?|area)\\s*:\\s*([^\\n.;]+)`. The comment above
+        it said the list "ends at the first newline", and the capture did — but
+        the `\\s*` between the colon and the capture matched newlines, so an empty
+        `refs:` header skipped forward to the next non-empty line and read THAT as
+        the declaration. Measured before the fix: `"Scope\\nrefs:\\nbilling is the
+        one we mean"` resolved to `("billing",)`, and a blank line in between did
+        not stop it. The separator is now `[ \\t]*`, so a dangling header ends the
+        match rather than moving it.
 
         The harmless version of this is a bead whose adopted word is not a node:
         the scope is unresolved and it serialises, which is the fail-closed
@@ -397,25 +419,21 @@ class TestTheOverridePathIsRecordedRatherThanSilent:
         with pytest.raises(WaveConfigError, match="reason"):
             load_overrides(tmp_path)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="FINDING BDL-061.22-3: a blank-but-present reason/until is accepted",
-    )
     def test_a_reason_of_only_whitespace_is_a_configuration_error(
         self, tmp_path: Path
     ) -> None:
-        """FINDING BDL-061.22-3 — the required-field check reads truthiness, not content.
+        """FINDING BDL-061.22-3, closed by `.80` — the check reads content, not presence.
 
-        `config.py` rejects a missing key with `not entry.get(key)`, which catches
-        `''` and `null` and passes `'   '`. The value is then `.strip()`ped to
-        `''`, so the loader returns an override whose reason is empty and whose
-        `until` is empty — and an empty `until` has no deadline, so
-        `WaveOverride.expired` is False forever. The error message the loader
+        `config.py` rejected a missing key with `not entry.get(key)`, which catches
+        `''` and `null` and passed `'   '`. The value was then `.strip()`ped to
+        `''`, so the loader returned an override whose reason was empty and whose
+        `until` was empty — and an empty `until` has no deadline, so
+        `WaveOverride.expired` was False forever. The error message the loader
         would have printed names this exact outcome: "an unnamed, undated override
-        outranks the graph permanently by accident". Measured: the override loads,
-        and `beadloom waves` renders it as `(until )`.
+        outranks the graph permanently by accident". Measured before the fix: the
+        override loaded, and `beadloom waves` rendered it as `(until )`.
 
-        This is `.49`'s shape on a third surface — an exit condition that is
+        This was `.49`'s shape on a third surface — an exit condition that is
         present in the file and absent in effect.
         """
         (tmp_path / ".beadloom").mkdir()
@@ -530,24 +548,22 @@ class TestTheOverridePathIsRecordedRatherThanSilent:
         assert _wave(with_override, "a") < _wave(with_override, "b")
         assert [w.beads for w in with_override.waves] == [w.beads for w in without.waves]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="FINDING BDL-061.22-1: an override that changed nothing reports changed=1",
-    )
     def test_an_override_the_tracker_overrules_is_reported_inert(
         self, conn: sqlite3.Connection
     ) -> None:
-        """FINDING BDL-061.22-1 — `changed` counts conflict-set edits, not decisions.
+        """FINDING BDL-061.22-1, closed by `.80` — `changed` counts shape changes.
 
-        `_apply_overrides` deletes the `blocked_by_bead` conflict and counts one
-        change. `_assign` then places the blocked bead after its blocker anyway,
-        via `_earliest_wave`, which reads the blockers directly. Measured: the
-        wave shape is identical with and without the override, and it is reported
-        as `changed 1 decision(s)`, is not `inert`, and raises no finding.
+        `_apply_overrides` deleted the `blocked_by_bead` conflict and counted one
+        change. `_assign` then placed the blocked bead after its blocker anyway,
+        via `_earliest_wave`, which reads the blockers directly. Measured before
+        the fix: the wave shape was identical with and without the override, and
+        it was reported as `changed 1 decision(s)`, was not `inert`, and raised no
+        finding. `changed` is now the number of pairs whose co-wave status differs
+        between the shape as planned and the shape with this override removed.
 
         `OverrideOutcome.inert` exists because "an override nobody can see doing
         anything is how a check gets switched off without anybody saying so" —
-        and this is one nobody can see doing anything. It is `.48`'s dead-entry
+        and this was one nobody could see doing anything. It is `.48`'s dead-entry
         shape, arriving through the arithmetic rather than through the absence.
         """
         beads = [_bead("a", "billing"), _bead("b", "shipping", frozenset({"a"}))]
@@ -567,22 +583,19 @@ class TestTheOverridePathIsRecordedRatherThanSilent:
         assert plan.overrides[0].inert
         assert any("inert_override" in finding for finding in plan.findings)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="FINDING BDL-061.22-2: a serial override about absent beads reports work",
-    )
     def test_a_serial_override_naming_absent_beads_is_reported_inert(
         self, conn: sqlite3.Connection
     ) -> None:
-        """FINDING BDL-061.22-2 — the same dead override, caught one way and not the other.
+        """FINDING BDL-061.22-2, closed by `.80` — the dead override, caught both ways.
 
         A `parallel` override about beads the plan does not contain finds no
-        conflict to delete, counts zero, and is correctly reported inert. A
-        `serial` one about the same absent beads finds no conflict either — and
-        CREATES one, counts it, and is reported as having changed a decision.
-        Measured: the plan's `conflicts` then carries a pair nobody asked about,
-        and `beadloom waves` prints it under "Serialised because:" beside the
-        real serialisations, where a reader cannot tell the two apart.
+        conflict to delete, counts zero, and was already correctly reported inert.
+        A `serial` one about the same absent beads found no conflict either — and
+        CREATED one, counted it, and was reported as having changed a decision.
+        Measured before the fix: the plan's `conflicts` then carried a pair nobody
+        asked about, and `beadloom waves` printed it under "Serialised because:"
+        beside the real serialisations, where a reader cannot tell the two apart.
+        An override now speaks only about pairs the plan actually contains.
 
         A stale override left behind after its beads closed is the ordinary way
         this happens, which is exactly the entry `.48` had to learn to report.
@@ -611,6 +624,11 @@ class TestThisSessionsOwnWaveFailuresReplayed:
         bead". So what is checked is that a four-bead wave produces exactly one
         wave, exactly one gate owner, and a working-tree statement that
         distinguishes the two claims #181 says were reported with one word.
+
+        `.80` added the half `.22` found missing: the same plan without a measured
+        environment does not reach exit 0 at all. The two runs below are the same
+        four beads, and the only difference between them is whether anybody looked
+        at the tree.
         """
         _node(conn, "reporting", "src/reporting/")
         _file(conn, "src/reporting/core.py")
@@ -621,7 +639,7 @@ class TestThisSessionsOwnWaveFailuresReplayed:
             _bead("d3", "invoices"),
             _bead("d4", "reporting"),
         ]
-        plan = plan_waves(beads, conn=conn)
+        plan = plan_waves(beads, conn=conn, environment=_measured())
         assert len(plan.waves) == 1
         assert plan.waves[0].beads == ("d1", "d2", "d3", "d4")
         assert plan.waves[0].gate_owner in plan.waves[0].beads
@@ -629,6 +647,13 @@ class TestThisSessionsOwnWaveFailuresReplayed:
         tree = next(m for m in plan.shared_media if m.name == MEDIUM_WORKING_TREE)
         assert "clean room" in tree.statement
         assert tree.evidence == "BDL-UX #181"
+
+        unmeasured = plan_waves(beads, conn=conn)
+        assert unmeasured.exit_code == 1
+        assert any(
+            f.startswith(f"medium_unmeasured: {MEDIUM_WORKING_TREE}")
+            for f in unmeasured.findings
+        )
 
     def test_bdlux_181_the_gate_owner_is_the_same_bead_on_every_recomputation(
         self, conn: sqlite3.Connection
@@ -800,25 +825,22 @@ class TestTheCommitGateAndTheHunkItCannotSee:
         assert answer["outside"] == "0"
         assert answer["staged_py"] == "src/shared.py"
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="FINDING BDL-061.22-4: the unjudged count omits a neighbour's new file",
-    )
     def test_a_neighbours_untracked_module_is_counted_as_not_judged(
         self, tmp_path: Path
     ) -> None:
-        """FINDING BDL-061.22-4 — A GREEN COUNT IS NOT A CHECKED COUNT, including this one.
+        """FINDING BDL-061.22-4, closed by `.80` — A GREEN COUNT IS NOT A CHECKED COUNT.
 
-        `outside=$(git diff --name-only | wc -l)` lists tracked files with
+        `outside=$(git diff --name-only | wc -l)` listed tracked files with
         unstaged modifications. A neighbouring agent's brand-new module is
-        untracked, so it is not listed. Measured: with one tracked neighbour edit
-        and one untracked neighbour module present, the hook reports 1.
+        untracked, so it was not listed. Measured before the fix: with one tracked
+        neighbour edit and one untracked neighbour module present, the hook
+        reported 1.
 
-        The word the hook prints is "modified", and an untracked file is
-        literally not modified — so the line is not a lie. But the line exists to
+        The word the hook printed was "modified", and an untracked file is
+        literally not modified — so the line was not a lie. But the line exists to
         state the unjudged remainder, and a new module is the largest unjudged
         thing a neighbour can leave in a shared tree. `git status --porcelain`
-        answers both in one call.
+        answers both in one call, and is what the hook now reads.
         """
         project = _repo_with_one_committed_module(tmp_path)
         (project / "src" / "shared.py").write_text("mine = 2\ntheirs = 1\n", encoding="utf-8")
@@ -828,23 +850,58 @@ class TestTheCommitGateAndTheHunkItCannotSee:
         assert _run_scope_block(project)["outside"] == "2"
 
 
+#: The five findings this module pinned. `.80` closed all five, so each pin is
+#: now a regression test rather than an expected failure — but the id must
+#: survive the transition, or a closed finding becomes a test nobody can trace
+#: back to the defect it was written for.
+CLOSED_FINDINGS: tuple[str, ...] = tuple(f"FINDING BDL-061.22-{n}" for n in range(1, 6))
+
+
+def _test_functions() -> list[tuple[str, Any]]:
+    """Every test function this module defines, with its owning class's name."""
+    import inspect
+    import sys
+
+    module = sys.modules[__name__]
+    found: list[tuple[str, Any]] = []
+    for _, klass in inspect.getmembers(module, inspect.isclass):
+        if not klass.__name__.startswith("Test"):
+            continue
+        found.extend(inspect.getmembers(klass, inspect.isfunction))
+    return found
+
+
 class TestEveryFindingHereIsStrictAndNamesItself:
-    """The meta-check `.18` introduced: an xfail must be a finding, not a habit."""
+    """The meta-check `.18` introduced, carried through the transition `.80` made.
+
+    A strict xfail turns red the moment the defect is fixed, which is what makes
+    it a finding rather than a habit. That property has a consequence nobody
+    stated until `.80` had to act on it: closing the finding means REMOVING the
+    marker, and a module that removes its last marker also loses the only record
+    that the finding ever existed. So the meta-check now asserts two things — any
+    marker still here is strict and cites a finding, and every finding this module
+    ever pinned is still named by a test that now passes.
+    """
 
     def test_every_xfail_in_this_module_is_strict_and_cites_a_finding(self) -> None:
-        import inspect
-        import sys
+        for name, function in _test_functions():
+            for mark in getattr(function, "pytestmark", []):
+                if mark.name != "xfail":
+                    continue
+                assert mark.kwargs.get("strict") is True, f"{name}: xfail is not strict"
+                assert "FINDING BDL-061.22-" in mark.kwargs.get("reason", ""), name
 
-        module = sys.modules[__name__]
-        marked: list[tuple[str, Any]] = []
-        for _, klass in inspect.getmembers(module, inspect.isclass):
-            if not klass.__name__.startswith("Test"):
-                continue
-            for name, function in inspect.getmembers(klass, inspect.isfunction):
-                for mark in getattr(function, "pytestmark", []):
-                    if mark.name == "xfail":
-                        marked.append((name, mark))
-        assert marked, "no xfail found — this module claims five findings"
-        for name, mark in marked:
-            assert mark.kwargs.get("strict") is True, f"{name}: xfail is not strict"
-            assert "FINDING BDL-061.22-" in mark.kwargs.get("reason", ""), name
+    @pytest.mark.parametrize("finding", CLOSED_FINDINGS)
+    def test_every_closed_finding_is_still_named_by_a_passing_test(
+        self, finding: str
+    ) -> None:
+        """The finding id outlives its marker, and the test that owns it passes."""
+        owners = [
+            (name, function)
+            for name, function in _test_functions()
+            if finding in (function.__doc__ or "")
+        ]
+        assert owners, f"{finding} is named by no test — it cannot be traced"
+        for name, function in owners:
+            marks = [m.name for m in getattr(function, "pytestmark", [])]
+            assert "xfail" not in marks, f"{name}: {finding} is claimed closed but is xfail"

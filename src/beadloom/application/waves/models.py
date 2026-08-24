@@ -72,6 +72,15 @@ class BeadRecord:
     declaration: str = ""
     blocked_by: frozenset[str] = field(default_factory=frozenset)
 
+    #: The bead's title, held apart from the rest of its words because ONE check
+    #: needs it on its own: the id a title numbers a bead with, against the id the
+    #: tracker allocated (BDL-UX #171). Recovering it by slicing the first line
+    #: off ``declaration`` would make the composition order of that string a
+    #: second source of truth for the same fact. A caller that has no separate
+    #: title leaves it empty and the check falls back to the first line, which is
+    #: how the CLI composes the declaration.
+    title: str = ""
+
 
 @dataclass(frozen=True)
 class BeadScope:
@@ -169,6 +178,56 @@ class SharedMedium:
     evidence: str
 
 
+#: The four verdicts a medium's plan-time check can return. ``unmeasured`` is a
+#: verdict of its own rather than a lenient ``passed``, because "not checked" and
+#: "checked and fine" are the two answers this codebase refuses to print with one
+#: word — and printing them with one word is how clause two stayed prose.
+STATUS_PASSED = "passed"
+STATUS_FAILED = "failed"
+STATUS_UNMEASURED = "unmeasured"
+STATUS_NOT_APPLICABLE = "not_applicable"
+
+#: What the installed pre-commit hook judges, as the commit-gate check reads it.
+GATE_COMMIT_SCOPED = "commit-scoped"
+GATE_WHOLE_TREE = "whole-tree"
+GATE_ABSENT = "absent"
+
+
+@dataclass(frozen=True)
+class WaveEnvironment:
+    """What the machine says about the three media the graph cannot see.
+
+    Every field is ``None`` by default and ``None`` means *not observed*. A caller
+    that gathers nothing therefore gets three ``unmeasured`` checks and an exit
+    code of 1, which is the intended outcome: a concurrent wave whose shared media
+    nobody measured is not a clean plan, it is an unmeasured one.
+    """
+
+    #: Paths that differ from ``HEAD``, as
+    #: :func:`beadloom.doc_sync.git_baseline.changed_paths` reports them.
+    tree_changed_paths: tuple[str, ...] | None = None
+
+    #: What the installed pre-commit hook judges — one of the ``GATE_*`` constants.
+    commit_gate: str | None = None
+
+    #: How many doc pairs are stale before the wave starts.
+    doc_baseline_stale_pairs: int | None = None
+
+
+@dataclass(frozen=True)
+class MediumCheck:
+    """One medium's plan-time verdict, and the measurement behind it."""
+
+    medium: str
+    status: str
+    detail: str
+
+    @property
+    def is_finding(self) -> bool:
+        """A failed check and an unmeasured one are both findings."""
+        return self.status in (STATUS_FAILED, STATUS_UNMEASURED)
+
+
 @dataclass(frozen=True)
 class Wave:
     """One wave: the beads that run at once, and who measures the tree after.
@@ -196,6 +255,11 @@ class WavePlan:
     overrides: tuple[OverrideOutcome, ...]
     shared_media: tuple[SharedMedium, ...]
     findings: tuple[str, ...]
+
+    #: One verdict per shared medium — what turns the second half of the guarantee
+    #: from a printed tuple into something that can fail. See
+    #: :mod:`beadloom.application.waves.media_checks`.
+    media_checks: tuple[MediumCheck, ...] = ()
 
     @property
     def exit_code(self) -> int:

@@ -17,13 +17,18 @@ import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
 from beadloom.application.waves import (
+    GATE_COMMIT_SCOPED,
     MEDIUM_COMMIT_GATE,
     MEDIUM_DOC_BASELINE,
     MEDIUM_TRACKER_IDS,
     MEDIUM_WORKING_TREE,
     REASON_SHARED_NODE,
     REASON_UNRESOLVED_SCOPE,
+    STATUS_FAILED,
+    STATUS_NOT_APPLICABLE,
+    STATUS_UNMEASURED,
     BeadRecord,
+    WaveEnvironment,
     WaveOverride,
     plan_waves,
 )
@@ -51,7 +56,13 @@ def world(tmp_path: Path) -> dict[str, Any]:
             (f"src/{ref}/core.py", f"h-{ref}", "code", "2026-08-24T00:00:00Z"),
         )
     conn.commit()
-    return {"conn": conn, "beads": [], "overrides": [], "plan": None}
+    return {
+        "conn": conn,
+        "beads": [],
+        "overrides": [],
+        "plan": None,
+        "environment": None,
+    }
 
 
 def _declare(world: dict[str, Any], bead: str, declaration: str) -> None:
@@ -61,6 +72,31 @@ def _declare(world: dict[str, Any], bead: str, declaration: str) -> None:
 @given(parsers.parse('a bead "{bead}" declaring the node scope "{ref}"'))
 def given_bead_with_scope(world: dict[str, Any], bead: str, ref: str) -> None:
     _declare(world, bead, f"Do the work. refs: {ref}")
+
+
+@given(
+    parsers.parse(
+        'a bead "{bead}" declaring the node scope "{ref}" titled "{title}"'
+    )
+)
+def given_bead_with_scope_and_title(
+    world: dict[str, Any], bead: str, ref: str, title: str
+) -> None:
+    world["beads"].append(
+        BeadRecord(
+            bead_id=bead, declaration=f"Do the work. refs: {ref}", title=title
+        )
+    )
+
+
+@given("the shared media were measured and are clean")
+def given_media_measured(world: dict[str, Any]) -> None:
+    """Somebody looked at the tree, the hook and the doc baseline, and said so."""
+    world["environment"] = WaveEnvironment(
+        tree_changed_paths=(),
+        commit_gate=GATE_COMMIT_SCOPED,
+        doc_baseline_stale_pairs=0,
+    )
 
 
 @given(parsers.parse('a bead "{bead}" declaring no node scope at all'))
@@ -88,7 +124,10 @@ def given_parallel_override(world: dict[str, Any], left: str, right: str) -> Non
 @when("the wave shape is decided")
 def when_decided(world: dict[str, Any]) -> None:
     world["plan"] = plan_waves(
-        world["beads"], conn=world["conn"], overrides=world["overrides"]
+        world["beads"],
+        conn=world["conn"],
+        overrides=world["overrides"],
+        environment=world["environment"],
     )
 
 
@@ -166,3 +205,42 @@ def then_names_media(world: dict[str, Any]) -> None:
 def then_one_gate_owner(world: dict[str, Any]) -> None:
     for wave in world["plan"].waves:
         assert wave.gate_owner in wave.beads
+
+
+@then("every medium the wave names carries a verdict of its own")
+def then_every_medium_checked(world: dict[str, Any]) -> None:
+    """A medium stated and not checked is the defect BDL-061.80 closed."""
+    plan = world["plan"]
+    stated = {medium.name for medium in plan.shared_media}
+    checked = {check.medium for check in plan.media_checks}
+    assert stated
+    assert stated <= checked
+    for check in plan.media_checks:
+        assert check.status != STATUS_NOT_APPLICABLE
+        assert check.detail
+
+
+@then(parsers.parse('the wave reports "{medium}" as unmeasured'))
+def then_medium_unmeasured(world: dict[str, Any], medium: str) -> None:
+    check = next(c for c in world["plan"].media_checks if c.medium == medium)
+    assert check.status == STATUS_UNMEASURED
+    assert any(f"medium_unmeasured: {medium}" in f for f in world["plan"].findings)
+
+
+@then(parsers.parse('the wave reports "{medium}" as failed'))
+def then_medium_failed(world: dict[str, Any], medium: str) -> None:
+    check = next(c for c in world["plan"].media_checks if c.medium == medium)
+    assert check.status == STATUS_FAILED
+    assert any(f"medium_failed: {medium}" in f for f in world["plan"].findings)
+
+
+@then("the plan is clean")
+def then_plan_clean(world: dict[str, Any]) -> None:
+    assert world["plan"].findings == ()
+    assert world["plan"].exit_code == 0
+
+
+@then("the plan is not clean")
+def then_plan_not_clean(world: dict[str, Any]) -> None:
+    assert world["plan"].findings
+    assert world["plan"].exit_code == 1

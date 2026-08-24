@@ -125,11 +125,15 @@ beadloom install-hooks --pre-push
 beadloom install-hooks --remove
 ```
 
-**Pre-commit hook** runs:
-- Ruff lint check (via `uv run ruff check`)
-- Mypy type check (via `uv run mypy`)
-- `beadloom sync-check --porcelain` (stale doc detection)
+**Pre-commit hook** judges THE COMMIT rather than the working tree (BDL-UX #118), and runs:
+- Ruff lint check over the staged `src/`/`tests/` Python files
+- Mypy type check over the same staged files
+- `beadloom sync-check --staged --porcelain` (stale doc detection, narrowed to the pairs this commit stages)
 - `beadloom active-sync --stage` (ACTIVE/table coherence; guarded no-op when `bd` is unavailable)
+
+It also states three things about its own scope: how much of the tree it did NOT judge (read from `git status --porcelain`, so an untracked neighbour module is counted too), which paths `active-sync --stage` added to the commit while it was in flight, and a `# beadloom-hook-scope: commit` marker that `beadloom waves` reads to tell whether an installed hook is the commit-scoped one. An installed hook keeps its old behaviour until `install-hooks` is re-run.
+
+What it cannot do: a neighbour's hunk swept into a commit, inside a file the committer legitimately touches, is not caught and cannot be caught here — the swept hunk is inside the commit, which is the region the gate judges.
 
 In `warn` mode, violations print warnings but do not block the commit. In `block` mode, ruff/mypy/sync-check violations exit non-zero and prevent the commit.
 

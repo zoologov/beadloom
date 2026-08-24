@@ -9,6 +9,7 @@ confident shape built on nothing (BDL-UX #148).
 from __future__ import annotations
 
 import json
+import subprocess
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -16,6 +17,7 @@ from click.testing import CliRunner
 
 from beadloom.infrastructure.db import create_schema, open_db
 from beadloom.services.cli import main
+from beadloom.services.commands.docsync import _HOOK_TEMPLATE_WARN
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -37,6 +39,37 @@ def _project(tmp_path: Path) -> Path:
         )
     conn.commit()
     conn.close()
+    return project
+
+
+def _measured_project(tmp_path: Path) -> Path:
+    """A project in which all three machine-observed media can be measured clean.
+
+    A real git repository with one commit, `.beadloom/` ignored so the index is
+    not read as an uncommitted change, and a pre-commit hook carrying the scope
+    marker. The command reads all three from the machine, so a double would prove
+    the double — this is the same reason the commit-scope scenarios run against a
+    real repository rather than a fake one.
+    """
+    project = _project(tmp_path)
+    (project / ".gitignore").write_text(".beadloom/\n", encoding="utf-8")
+    (project / ".git" / "hooks").mkdir(parents=True)
+    (project / ".git" / "hooks" / "pre-commit").write_text(
+        _HOOK_TEMPLATE_WARN, encoding="utf-8"
+    )
+    for args in (
+        ["init"],
+        ["config", "user.email", "t@example.com"],
+        ["config", "user.name", "t"],
+        ["add", ".gitignore"],
+        ["commit", "-m", "base", "--no-verify"],
+    ):
+        subprocess.run(  # noqa: S603
+            ["git", *args],  # noqa: S607
+            cwd=project,
+            check=True,
+            capture_output=True,
+        )
     return project
 
 
@@ -87,7 +120,8 @@ class TestShape:
     def test_independent_beads_land_in_one_wave_at_exit_zero(
         self, tmp_path: Path, bd: Any
     ) -> None:
-        project = _project(tmp_path)
+        """The shape is decided AND every shared medium was measured clean."""
+        project = _measured_project(tmp_path)
         bd({"a": _record("a", "billing"), "b": _record("b", "shipping")})
         result = CliRunner().invoke(
             main, ["waves", "a", "b", "--project", str(project)]
@@ -95,6 +129,28 @@ class TestShape:
         assert result.exit_code == _EXIT_CLEAN
         assert "1 wave(s) for 2 bead(s)" in result.output
         assert "Wave 1: a, b" in result.output
+
+    def test_a_concurrent_wave_nobody_measured_does_not_reach_exit_zero(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        """The same two beads outside a git repository: same shape, exit 1.
+
+        Nothing about the wave changed — what changed is that neither the tree nor
+        the hook could be observed. Before `.80` this ran at exit 0 with the four
+        media printed as a constant tuple beside it. The doc baseline is measured
+        even here, because it is read from the index rather than from git, and it
+        is reported as measured rather than folded in with the two that were not.
+        """
+        project = _project(tmp_path)
+        bd({"a": _record("a", "billing"), "b": _record("b", "shipping")})
+        result = CliRunner().invoke(
+            main, ["waves", "a", "b", "--project", str(project)]
+        )
+        assert result.exit_code == _EXIT_FINDINGS
+        assert "Wave 1: a, b" in result.output
+        for medium in ("working-tree", "commit-gate"):
+            assert f"medium_unmeasured: {medium}" in result.output
+        assert "doc-baseline: passed" in result.output
 
     def test_a_shared_node_serialises_and_the_reason_is_printed(
         self, tmp_path: Path, bd: Any

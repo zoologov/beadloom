@@ -440,7 +440,18 @@ _HOOK_ENCODING = "utf-8"
 #: *who* commits does not help — the merge slot orders the commits and leaves the
 #: tree exactly as shared as it was — so the boundary has to be what each check
 #: is asked about.
-_HOOK_COMMIT_SCOPE = """\
+_HOOK_SCOPE_MARKER = "# beadloom-hook-scope: commit"
+
+_HOOK_COMMIT_SCOPE = (
+    _HOOK_SCOPE_MARKER
+    + """
+# The line above is a MARKER, not a comment: an installed hook keeps its old
+# behaviour until `beadloom install-hooks` is re-run, and nothing tells a
+# repository to. `beadloom waves` reads this marker to decide whether the gate a
+# concurrent wave is about to commit through judges the commit or the whole tree.
+# Measured on this project's own S6 commit, which was judged by the whole-tree
+# hook the change had just replaced.
+
 # This hook judges THE COMMIT, not the working tree. In a tree shared by several
 # agents -- the mode a multi-agent flow prescribes, not an exotic one -- a
 # whole-tree check fails one agent's commit on a neighbour's half-written file,
@@ -451,9 +462,41 @@ _HOOK_COMMIT_SCOPE = """\
 # Stated rather than assumed: the content read below is the WORKING-TREE content
 # of the staged paths, not the staged blobs, so a partially staged file is judged
 # including the part this commit leaves behind.
+#
+# `outside` reads `git status --porcelain` rather than `git diff --name-only`,
+# because the second lists only TRACKED files with unstaged modifications: a
+# neighbouring agent's brand-new module is untracked and was not counted, and a
+# new module is the largest unjudged thing a neighbour can leave in a shared tree
+# (BDL-061.22-4). The second status column is non-blank for a working-tree
+# modification and is `?` for an untracked path, so one call answers both.
 
 staged_py=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^(src|tests)/.*[.]py$')
-outside=$(git diff --name-only | wc -l | tr -d ' ')
+outside=$(git status --porcelain | awk 'substr($0, 2, 1) != " "' | wc -l | tr -d ' ')
+"""
+)
+
+#: The coherence block, and the one thing it has to say about itself. `active-sync
+#: --stage` ADDS paths to a commit that is already in flight, and this project
+#: measured it doing so on its own S6 test commit: the hook printed a confident
+#: count of what it did not judge and said nothing about the file it had just put
+#: IN. The count states the remainder; this states the addition.
+_HOOK_COHERENCE = """\
+# --- ACTIVE / tracker coherence ---
+# Guarded no-op: only runs when BOTH `bd` and `beadloom` are installed. In any
+# repo without `bd` (or without ACTIVE tables) this block does nothing and never
+# blocks the commit. Auto-fixes the bead-status tables + tracked issues.jsonl
+# and restages them so the commit is coherent by construction. `--stage` stages
+# EXACTLY the reconciled ACTIVE.md(s) + the exported jsonl -- never an unrelated
+# concurrently-edited doc in the same subtree.
+if command -v bd >/dev/null 2>&1 && command -v beadloom >/dev/null 2>&1; then
+  staged_before=$(git diff --cached --name-only)
+  beadloom active-sync --stage >/dev/null 2>&1
+  staged_added=$(git diff --cached --name-only | grep -vxF "$staged_before")
+  if [ -n "$staged_added" ]; then
+    echo "beadloom active-sync ADDED these path(s) to this commit:"
+    echo "$staged_added" | sed 's/^/  /'
+  fi
+fi
 """
 
 _HOOK_TEMPLATE_WARN = """\
@@ -494,20 +537,11 @@ if [ $exit_code -eq 1 ]; then
 fi
 
 # --- What this commit did NOT judge ---
-echo "$outside modified file(s) outside this commit were not judged here;"
+echo "$outside modified or untracked file(s) outside this commit were not judged here;"
 echo "the pre-push Gate (beadloom ci) judges the whole tree."
 
-# --- ACTIVE / tracker coherence ---
-# Guarded no-op: only runs when BOTH `bd` and `beadloom` are installed. In any
-# repo without `bd` (or without ACTIVE tables) this block does nothing and never
-# blocks the commit. Auto-fixes the bead-status tables + tracked issues.jsonl
-# and restages them so the commit is coherent by construction. `--stage` stages
-# EXACTLY the reconciled ACTIVE.md(s) + the exported jsonl -- never an unrelated
-# concurrently-edited doc in the same subtree.
-if command -v bd >/dev/null 2>&1 && command -v beadloom >/dev/null 2>&1; then
-  beadloom active-sync --stage >/dev/null 2>&1
-fi
-"""
+""" + _HOOK_COHERENCE
+
 
 _HOOK_TEMPLATE_BLOCK = """\
 #!/bin/sh
@@ -552,20 +586,10 @@ if [ $exit_code -eq 1 ]; then
 fi
 
 # --- What this commit did NOT judge ---
-echo "$outside modified file(s) outside this commit were not judged here;"
+echo "$outside modified or untracked file(s) outside this commit were not judged here;"
 echo "the pre-push Gate (beadloom ci) judges the whole tree."
 
-# --- ACTIVE / tracker coherence ---
-# Guarded no-op: only runs when BOTH `bd` and `beadloom` are installed. In any
-# repo without `bd` (or without ACTIVE tables) this block does nothing and never
-# blocks the commit. Auto-fixes the bead-status tables + tracked issues.jsonl
-# and restages them so the commit is coherent by construction. `--stage` stages
-# EXACTLY the reconciled ACTIVE.md(s) + the exported jsonl -- never an unrelated
-# concurrently-edited doc in the same subtree.
-if command -v bd >/dev/null 2>&1 && command -v beadloom >/dev/null 2>&1; then
-  beadloom active-sync --stage >/dev/null 2>&1
-fi
-
+""" + _HOOK_COHERENCE + """
 if [ $failed -ne 0 ]; then
   exit 1
 fi
