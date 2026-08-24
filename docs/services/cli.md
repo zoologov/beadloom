@@ -205,7 +205,9 @@ Exit codes: 0 = all OK, 1 = error, 2 = a pair is stale **or missing**.
 
 Measured on this repository: of 279 declared pairs, 275 are checked and the other 4 are listed with their reason.
 
-**Four verdicts, because unverifiable is not clean.** `ok` and `stale` are outcomes of a comparison that happened. `missing` (the doc file, the code file, or a doc the graph DECLARES is not on disk) fails the check at exit 2 — the gate is not satisfied by having less to check. `unverified` (`reason=no_baseline`) means nothing could be compared; it is printed as `[not verified]`, counted separately, and never counted as fresh. Every pair also reports `baseline` — `index`, `git:HEAD` or `none` — so a green result says what it was green against.
+**Five verdicts, because unverifiable is not clean.** `ok` and `stale` are outcomes of a comparison that happened. `missing` (the doc file, the code file, or a doc the graph DECLARES is not on disk) fails the check at exit 2 — the gate is not satisfied by having less to check. `unverified` (`reason=no_baseline`) means nothing could be compared; it is printed as `[not verified]`, counted separately, and never counted as fresh. `incomplete` (`missing_sections`, `section_not_in_use`, BDL-061 S4) is the only verdict about a document's STRUCTURE rather than its currency: the four content reasons all measure bytes changing, so none of them can see a README edited down to a title. It never blocks and is never written to `sync_state`. Every pair also reports `baseline` — `index`, `git:HEAD` or `none` — so a green result says what it was green against.
+
+**`incomplete` has no summary counter.** The rows appear in `pairs` and each is printed by name, but `ok + stale + missing + unverified + unchecked` does not sum to `total` when any row is incomplete, so a machine consumer reading only the summary does not see them. Measured on this repository, 2026-08-24: `total 326 = 240 ok + 82 stale + 4 incomplete`, summary accounts for 322.
 
 **Where the baseline lives, and why a rebuild no longer blinds it.** `.beadloom/beadloom.db` is a cache, not the record: a database built from scratch used to store the current tree AS the baseline, so `sync-check` reported every pair fresh, including pairs whose doc was never updated (measured before the fix: incremental reindex → exit 2 with 6 stale; `rm .beadloom/beadloom.db*` + reindex → exit 0 with 0 stale, same tree). Each pair now records where its baseline came from, and a pair whose baseline was fabricated at index-build time is corroborated against **git `HEAD`** — the baseline a rebuild cannot destroy, because it is committed. Where git cannot answer (not a repository, no commit, no git binary), the pair reads `unverified` rather than fresh. `--since <ref>` remains the strongest form and is what the CI harness passes on a fresh checkout. A clean database is still the right instrument for `lint`, and it is no longer a way to get a green `sync-check` for free.
 
@@ -214,6 +216,7 @@ Measured on this repository: of 279 declared pairs, 275 are checked and the othe
 Human-readable output includes reason-aware formatting:
 - `missing` status: `[missing]` with which side is gone (`the linked doc file is gone`, `the paired code file is gone`, `declared in the graph, not on disk`).
 - `unverified` status: `[not verified]` with the reason there was no baseline.
+- `incomplete` status: `[warn]` naming either the document and its missing sections, or the node KIND and the ratio behind a section its documents do not use (`Source (5/39)`).
 - `untracked_files` reason: displays list of untracked files in `details`.
 - `missing_modules` reason: displays list of missing modules in `details`.
 - Other stale reasons (e.g. `symbols_changed`, `content_changed`): displays `reason` next to the code path.
@@ -317,7 +320,8 @@ or without ACTIVE tables — the block is a complete no-op (see
 **Pre-push hook (Beadloom Gate)** is the authoritative blocking enforcement of
 the hard invariant *"no code in `main` without current docs."* On every push it
 runs the full Gate (`beadloom ci` — incremental reindex → `lint --strict`
-(module-coverage included) → sync-check → docs-audit → config-check → doctor) and **exits
+(module-coverage included) → sync-check → docs-audit → docs-quality → config-check →
+doctor) and **exits
 non-zero to block the push** on red, printing an
 actionable message ("Beadloom Gate failed … run the tech-writer (or
 `/coordinator`) then re-push; `git push --no-verify` to override"). It is
@@ -503,7 +507,16 @@ Exit codes: 0 = clean (or violations without `--strict`/`--fail-on-warn`), 1 = v
 
 **A deny rule can only check a file it can place.** An import's source end is attributed to a node by annotation OR by ownership — the same most-specific-`source` rule that derives the `depends_on` edges — so a file with no annotation, or one written where the extractor could not read it, is no longer invisible to every deny rule (measured before the fix on this repository: 22 of 128 import-source files, BDL-061.50). What still belongs to no node is counted rather than skipped: `Files: N scanned, M imports resolved, K attributable to no node` on the rich header, `summary.files_unattributed` in `--format json`, and the same clause on the no-violations summary line. The clause is absent when K is zero. A deny rule that never saw a file did not clear it.
 
-**A rule that cannot check anything reports itself.** All nine rule types the loader dispatches are covered: a matcher that selects no node, a `has_edge_to` naming a node the graph does not contain, an edge kind that never runs between two layered nodes, a `check` with no threshold set, a `from:`/`to:` glob matching zero candidates anywhere in the index, a `source_root` with no module under it. Each is a `rule_liveness` finding, always `warn` — it describes the configuration rather than the code, so one mistyped glob cannot turn an adopter's green project red — and it is printed by default, typed in `--format json` as `kind: rule_liveness`, and counted in `summary.rules_inert`. The rich summary line carries the count only when it is non-zero (`N rules evaluated, M of them unable to check anything`), so the advertised rule count cannot over-claim while the everyday line keeps its shape (BDL-061.48). Two silences are deliberate and are properties of the INDEX rather than of any rule: an index with zero resolved imports makes every `deny` rule inert, which the header's `0 imports resolved` already says, and an empty graph silences the pass entirely so a fresh clone does not light up nine warnings.
+**A rule that cannot check anything reports itself.** All ten rule types the loader dispatches are covered: a matcher that selects no node, a `has_edge_to` naming a node the graph does not contain, an edge kind that never runs between two layered nodes, a `check` with no threshold set, a `from:`/`to:` glob matching zero candidates anywhere in the index, a `source_root` with no module under it. Each is a `rule_liveness` finding, always `warn` — it describes the configuration rather than the code, so one mistyped glob cannot turn an adopter's green project red — and it is printed by default, typed in `--format json` as `kind: rule_liveness`, and counted in `summary.rules_inert`. The rich summary line carries the count only when it is non-zero (`N rules evaluated, M of them unable to check anything`), so the advertised rule count cannot over-claim while the everyday line keeps its shape (BDL-061.48). Two silences are deliberate and are properties of the INDEX rather than of any rule: an index with zero resolved imports makes every `deny` rule inert, which the header's `0 imports resolved` already says, and an empty graph silences the pass entirely so a fresh clone does not light up one warning per rule. Two rule types state their own diagnosis instead of the generic one, because a generic "cannot fire" cannot name which glob or which leg did it: `forbid_import` reports from the import scan it already runs, and `scenario_coverage` reports per leg. `scenario_coverage` is still COUNTED in `summary.rules_inert` — the report and the count are two questions, and one predicate answers both so they cannot disagree (BDL-061.66).
+
+**Behaviour bound to an executable claim (BDL-061 S4).** `lint` also evaluates the
+`scenario_coverage` rule: a behaviour-bearing node with no scenario, a scenario naming no bead,
+a scenario naming a `@node:` the graph does not contain, and a scenario a PRD or BRIEF
+references and the acceptance suite does not contain. All `warn`, each carrying the population
+it is a fraction of (`none of 19 scenarios in 6 files carries @node:agent-prime`). Measured on
+this repository, 2026-08-24: 68 findings. 35 of them, each naming a `feature` node that no
+scenario in the suite binds to; 33, each naming a scenario a document references and the suite
+does not contain. See the [BDD guide](../guides/bdd-scenarios.md).
 
 **What an exemption excused is part of the answer.** A `forbid_import` rule may carry `exempt:` entries that baseline a pre-existing crossing (see the [rule-engine SPEC](../domains/graph/features/rule-engine/SPEC.md)). Every run says how many crossings they suppressed — `", N crossings suppressed by an exemption"` on the summary line, `violations_suppressed` plus the `suppressed` array under `--format json`, and the same clause on the `0 violations, N rules evaluated` line printed when a piped run has nothing to report. Without it, `0 violations` reads as "nothing crossed" when it means "what crossed was excused" (BDL-061.49). An entry whose `until:` leads with an ISO date that has passed, and which is still suppressing something, is reported as a `rule_liveness` finding (`warn`); it keeps suppressing, so no build reddens because a day passed. `--fail-on-warn` is the lever for a project that wants that deadline enforced.
 
@@ -664,9 +677,37 @@ The exit code is **0 even with findings** — no adopter's green project turns r
 on upgrade. `--strict` exits 1 when anything is reported, for a project that
 wants to enforce it.
 
+**`measurable-goal` is a numeral detector, and its individual findings are not yet
+trustworthy.** It looks for a digit; the premise that a number is *necessary* for
+a measurable clause is false, and an exit-code criterion — the most checkable
+goal this project knows how to write — is reported as unmeasurable. Read the
+count, not the rows, until the criterion is re-scoped (`beadloom-mr2l.65`). The
+other four checks state their own limits in the
+[doc-quality SPEC](../domains/doc-sync/features/doc-quality/SPEC.md).
+
 The report ends with a per-check line stating how much there was to READ, and
 names any check that found nothing at all: a green count over documents that
 state no risks is not a statement about risks.
+
+**And per document KIND**, because the line above is an OR over the whole corpus
+and goes silent the moment one document carries one row — so it can see a check
+that is blind everywhere and not one that is blind on an entire document kind.
+`NO CHECK READS: <kind>` names each kind no *content* check enters, with its
+document count. The judgement is made over the four checks that read items;
+`unfilled-placeholder` counts documents OPENED and would report every kind as
+read. Measured on this repository, 2026-08-24: `measurable-goal` 154 over 235,
+`pending-in-approved` 2 over 69, 0 over 269 / 138 / 243 for the other three, and
+`NO CHECK READS: BRIEF, PLAN, SUMMARY` — 56 of 243 documents (23%).
+
+**A document nobody could read is named, not dropped.** A planning document is a
+UTF-8 contract; one that does not decode is counted, printed as
+`UNREADABLE: <path> — <reason>; judged by nothing`, and left out of its kind's
+denominators. Counting a file nobody read as a file carrying nothing would turn
+an encoding accident into evidence about a project's templates.
+
+`--check` accepts the five check names above and nothing else; an unknown name
+is an error and exits 1. `--json` carries `checks`, `read_nothing`, `kinds`,
+`kinds_read_by_nothing`, `unreadable` and `findings`.
 
 Documents are found under `.claude/development/docs/features/*/*.md` by default;
 a project with another layout declares its own globs:
@@ -855,7 +896,7 @@ Composes the existing checkers, in order, into ONE verdict with a single exit co
 2. `lint --strict` — architecture boundary rules at error severity.
 3. `sync-check` — doc↔code freshness (stale pairs fail).
 4. `docs audit` — stale numeric facts in documentation (`stale>0` fails). The step line also states its coverage — `M/N declared fact(s) verified` plus the names of the facts it checked nothing for — because a count of findings says nothing about the facts nobody stated.
-5. `docs-quality` — the five writing-standard checks over the project's planning documents. Warn only: it never fails the gate, a project with no planning document is a NAMED skip stating the globs, and a check that read nothing sets the step to `WARN`.
+5. `docs-quality` — the five writing-standard checks over the project's planning documents. Warn only: it never fails the gate, and a project with no planning document is a NAMED skip stating the globs. Three states set the step to `WARN` rather than `PASS`: a check that read nothing anywhere (`NOT CHECKED`), a document KIND no content check enters (`NO CHECK READS`), and a document nothing could decode (`UNREADABLE: N`). Measured on this repository, 2026-08-24: `WARN | 243 document(s) read; measurable-goal 154, pending-in-approved 2; NO CHECK READS: BRIEF, PLAN, SUMMARY`.
 6. `config-check` — AgentConfigAsCode drift, plus the mutation-SCOPE findings (a declared `mutation.targets` entry outside `scan_paths`, absent from disk, or holding no source a runner could mutate). All `warn`.
 7. `doctor` — graph/data integrity; ONLY `ERROR`-severity checks fail the gate (WARNING/INFO advisories never block — no false gate).
 8. `federate --fail-on` — the cross-service landscape gate, only when `--hub` export(s) are given (safe-default fail-set `breaking,drift,orphaned_consumer,undeclared_producer`; no-false-gate verdicts rejected).

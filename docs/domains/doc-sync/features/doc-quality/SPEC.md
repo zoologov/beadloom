@@ -32,9 +32,19 @@ the `docs-quality` gate step never blocks.
 
 Stated here rather than discovered by a reader who trusted it.
 
-- **A number is necessary for a measurable clause and not sufficient.** `#142 and #146 close` is a
-  checkable claim and `we improved 3 things` is not, and nothing here tells them apart. A goal
-  whose criterion is a binary event with no quantity in it is reported although it is checkable.
+- **`measurable-goal` is closer to a numeral detector than a measurability detector, and its
+  findings are not yet trustworthy.** It looks for a digit not preceded by a word character, dot
+  or hyphen. `#142 and #146 close` is a checkable claim and `we improved 3 things` is not, and
+  nothing here tells them apart — but the stronger half of the original claim, that a number is
+  *necessary* for a measurable clause, is false. An exit code, a named artifact that either
+  exists or does not, and a binary capability are all measurable without a digit. Review
+  `beadloom-mr2l.15` sampled 18 of this repository's 154 findings and could defend **one** as a
+  true positive; among the false ones are `beadloom lint --strict fails (non-zero)` and
+  `beadloom federate --fail-on <verdicts>` exits non-zero — the exit-code form BDL-UX #148 exists
+  to insist on. Read the COUNT, which is a real statement about a corpus; do not act on an
+  individual finding until the criterion is re-scoped. `beadloom-mr2l.65` carries the re-scope,
+  and the owner's decision is to re-scope before paying the debt, because inserting numerals into
+  goals that are already checkable would satisfy the regex and improve nothing.
 - **A reason is checked for EXISTENCE.** The standard also asks that a reason explain *why*
   rather than restate the decision; no checker decides that, and pretending otherwise would be
   the vacuous green this epic exists to remove.
@@ -84,13 +94,37 @@ the four checks that read ITEMS — a goal, a decision row, a risk row, an open 
 construction; judging over all five would report every kind as read, which is a second vacuous
 guard in place of the first.
 
-**Measured on this repository, 2026-08-24: 56 of 243 documents (23%) are in a kind no content
-check enters**, and `checks_that_read_nothing` was `()` throughout.
+**Measured on this repository, 2026-08-24**, over 243 planning documents:
+
+| Check | Findings | Read |
+|-------|----------|------|
+| `measurable-goal` | 154 | 235 goal statements |
+| `decision-reason` | 0 | 269 decision rows |
+| `risk-mitigation` | 0 | 138 risk rows |
+| `pending-in-approved` | 2 | 69 open-question rows |
+| `unfilled-placeholder` | 0 | 243 documents |
+
+Three of those checks report nothing here, and that is a CHECKED green rather than a vacuous one:
+each was shown to fire on a real document of this repository under a single reverse-editable edit
+made in memory — a blanked reason cell in `BDL-061/CONTEXT.md`, a mitigation replaced by
+*Monitor it* in `BDL-040/RFC.md`, and `[Name]` put back into `BDL-061/PRD.md`'s title — 0
+findings before, 1 after.
+What that demonstration proves is that the check CAN fire on a real document; it does not prove
+the population is complete, which is what the per-kind report below is for.
+
+**The corpus includes the documents that publish these numbers.** These counts are measured over
+this repository's own planning documents, so writing a decision row into a CONTEXT moves the
+`decision-reason` denominator by one. Re-measure with `beadloom docs quality --json` rather than
+quoting a table; what is durable here is the SHAPE of the report — findings over a stated
+population, per check and per kind — not any particular row.
+
+**56 of 243 documents (23%) are in a kind no content check enters**, and
+`checks_that_read_nothing` was `()` throughout.
 
 | Kind | Documents | goals | decision rows | risk rows | open questions |
 |------|-----------|-------|---------------|-----------|----------------|
-| ACTIVE | 55 | 1 | 3 | 0 | 0 |
-| CONTEXT | 46 | 33 | 210 | 0 | 0 |
+| ACTIVE | 55 | 1 | 10 | 0 | 0 |
+| CONTEXT | 46 | 33 | 211 | 0 | 0 |
 | RFC | 45 | 0 | 41 | 121 | 65 |
 | PLAN | 42 | 0 | 0 | 0 | 0 |
 | PRD | 41 | 201 | 7 | 17 | 4 |

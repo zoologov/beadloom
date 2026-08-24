@@ -146,6 +146,29 @@ artifact unable to differ from one project's local text. Nothing now writes back
 into the shipped core, and Beadloom's own project-specific rules live in its
 `.beadloom/flow/claude/CLAUDE.md` like everyone else's.
 
+### What each role is held to
+
+The role protocols are not four descriptions of the same job. Each carries duties the
+others do not, and BDL-061 S4 added three of them.
+
+| Role | Duties the shipped CORE states |
+|------|--------------------------------|
+| `dev` | TDD (red → green → refactor); the `# beadloom:` annotation discipline that keeps the graph honest; architecture boundaries; cohesion-driven design. **BDD (S4):** acceptance criteria are Gherkin scenarios that RUN, written before the unit test and seen red first, each naming its bead and its node — or the work declares itself non-behavioural with a reason. |
+| `test` | Coverage ≥ 80% on changed code, as a floor rather than a goal; edge cases; fixtures. **Mutation (S4):** the strength check on the scenarios — pure domain cores only, once per slice, never in pre-commit; a survivor is a finding and the fix is a stronger assertion. Beadloom ships no mutation runner, so the tool is the project's choice and the declared target is what gets checked. |
+| `review` | Read-only. Typing, error handling, security, testing, doc freshness through two sources rather than one. **BDD is not ceremony (S4):** reject a scenario that restates the implementation, one whose `Then` asserts nothing, one written after the code and never seen red, and a `non_behavioural` reason that restates the exclusion instead of explaining it. |
+| `tech-writer` | Edits documentation only. Two staleness sources — `sync-check` and the dev's `API CHANGE:` notes — because a `reindex` can re-baseline hashes while the prose stays wrong. |
+| **all four** | **The writing standard (S4).** It moved out of `tech-writer` into the shared `core:_writing` layer, because the roles that produce intent documents had no standard at all, and a team writing in Russian should be held to it in Russian. |
+
+Two of those duties have a mechanism behind them and one deliberately does not. The BDD
+duty is checked by the `scenario_coverage` rule
+([BDD guide](bdd-scenarios.md)); the writing standard is checked by
+`beadloom docs quality` ([document kinds](document-kinds.md)). The mutation duty has no
+runner and no score: what Beadloom checks is that a **declared** mutation target lies
+inside the configured source paths, exists, and holds a file in an indexed language — the
+failure worth catching is a target that runs zero mutants and reports a clean score. Owning
+a mutation runner would break tool-agnosticism, so the duty is stated, the scope is declared
+in `flow.yml`, and the number goes in the bead comment.
+
 ## The role configurator (BDL-052)
 
 The flow is no longer hardcoded to Python + Claude Code. A repo declares its
@@ -199,14 +222,28 @@ one implementation instead of three:
 
 1. **CORE** — the universal, stack/tool-neutral fragment (the single source of
    truth).
-2. one **ARCHITECTURE** overlay — `ddd` or `fsd` (peers): the methodology's
+2. the **SHARED** core fragments (`SHARED_ROLE_FRAGMENTS`, BDL-061 S4), composed
+   as a labelled `core:<name>` layer. Today that is `_writing`, the writing
+   standard, carried by all four roles instead of by `tech-writer` alone: the
+   roles that produce intent documents had no standard at all. It is a layer and
+   not a role, so `compose_role("_writing", …)` raises, and it is
+   language-selectable like every other layer (`_writing.ru.md.txt` ships).
+3. one **ARCHITECTURE** overlay — `ddd` or `fsd` (peers): the methodology's
    layer/boundary rules + the `# beadloom:` annotation vocabulary. FSD is at
    **parity** with DDD (every role has both overlays).
-3. one+ **STACK** overlays in **sorted** order: stack idioms + lint/type/test
+4. one+ **STACK** overlays in **sorted** order: stack idioms + lint/type/test
    commands.
-4. the **PROJECT** fragment from the adopting repository —
-   `.beadloom/flow/roles/<role>.md`, `.beadloom/flow/commands/<cmd>.md` or
-   `.beadloom/flow/claude/CLAUDE.md`.
+5. the **PROJECT** fragment from the adopting repository —
+   `.beadloom/flow/roles/<role>.md`, `.beadloom/flow/commands/<cmd>.md`,
+   `.beadloom/flow/claude/CLAUDE.md` or `.beadloom/flow/docs/<kind>.md`.
+
+A fourth artifact kind, `docs`, composes the same way (BDL-061 S4b): the five
+document skeletons `beadloom docs generate` writes moved out of
+`doc_generator.py`'s string literals into `templates/docs/`, so an adopter can
+extend the shape of their architecture documentation exactly as they extend a
+role — and a section the project fragment appends becomes a **required** section
+of that document kind by the same act. See
+[Document kinds and the writing standard](document-kinds.md).
 
 A missing per-role overlay fragment contributes nothing (overlays are additive
 and never break an unrelated role). Because the stack overlays are sorted, the

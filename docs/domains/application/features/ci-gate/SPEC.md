@@ -31,9 +31,20 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    an `Approved` document, and no unfilled template placeholder. Every finding is
    a `warn` and the step is `passed` unconditionally, so a project whose
    documents predate the checks does not go red on upgrade. A project with no
-   planning document is a NAMED skip that states the globs it looked under, and
-   a check that found no document with anything to read sets `not_verified` —
-   *unverifiable is not clean*.
+   planning document is a NAMED skip that states the globs it looked under.
+   Three states set `not_verified`, and the step then reports **WARN** rather
+   than PASS — *unverifiable is not clean*: a check that found no document with
+   anything to read (`NOT CHECKED: <checks>`), a document KIND no content check
+   enters (`NO CHECK READS: <kinds>`), and a document nothing could decode
+   (`UNREADABLE: N`). The second exists because the first is a global OR over
+   the corpus and goes silent as soon as one document carries one row, so it
+   cannot see a check that is blind on an entire shipped document kind.
+   Measured on this repository, 2026-08-24, the step reports:
+
+   ```
+   docs-quality WARN | 243 document(s) read; measurable-goal 154,
+                       pending-in-approved 2; NO CHECK READS: BRIEF, PLAN, SUMMARY
+   ```
 6. **config-check** — agent-config drift (AgentConfigAsCode). Since BDL-061 S3
    a drift carries its own severity: `error` blocks the step, `warn` is
    reported and does not. The summary has three forms accordingly —

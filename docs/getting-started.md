@@ -123,7 +123,7 @@ beadloom install-hooks
 Installs **both** hooks by default:
 
 - **pre-commit** (lighter) — runs `sync-check`, lint, and the ACTIVE/tracker coherence step (`warn` or `block` via `--mode`).
-- **pre-push Beadloom Gate** (authoritative) — runs the full `beadloom ci` (reindex → `lint --strict` → sync-check → docs-audit → config-check → doctor) and **blocks the push on red**. It is fail-safe (a no-op when `beadloom` isn't on `PATH`); `git push --no-verify` is the documented escape hatch.
+- **pre-push Beadloom Gate** (authoritative) — runs the full `beadloom ci` (reindex → `lint --strict` → sync-check → docs-audit → docs-quality → config-check → doctor) and **blocks the push on red**. It is fail-safe (a no-op when `beadloom` isn't on `PATH`); `git push --no-verify` is the documented escape hatch.
 
 Select one with `--pre-commit` / `--pre-push`; remove with `--remove`.
 
@@ -250,7 +250,13 @@ beadloom sync-check          # doc↔code freshness (exit 2 = stale)
 beadloom sync-update <ref>   # review/apply the fix for a node (--yes to auto-apply)
 beadloom docs audit          # detect stale numeric/version facts in prose docs (--stale-only, --json); also the docs-audit gate step
                              # a claim is a whitespace-delimited token whose whole core is a number ("6,390" counts, "BDL-061.33" and "v2.2.0" do not)
+beadloom docs quality        # check planning documents against the writing standard (--check NAME, --json, --strict)
+                             # exit 0 with findings unless --strict; also the docs-quality gate step
 ```
+
+`sync-check` also reports an `incomplete` row for a document that is current and no longer
+carries the sections its kind's peers carry. It never blocks. See
+[Document kinds](guides/document-kinds.md).
 
 ## Limits
 
@@ -262,5 +268,7 @@ beadloom docs audit          # detect stale numeric/version facts in prose docs 
 ## Next steps
 
 - [Architecture](architecture.md) — system design, the node-kind model, the rules engine, the agentic-flow configurator.
+- [Executable acceptance scenarios](guides/bdd-scenarios.md) — Gherkin as the source of truth, and what `scenario-coverage` reports.
+- [Document kinds](guides/document-kinds.md) — required sections and the five writing-standard checks.
 - [CI Setup](guides/ci-setup.md) — GitHub Actions / GitLab CI integration.
 - [VitePress Site](guides/vitepress-site.md) — publish the knowledge base.

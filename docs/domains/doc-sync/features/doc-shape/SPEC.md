@@ -34,6 +34,16 @@ presence-of-one rule reported the 35 documents that follow the project's actual 
 inverts the finding. The majority rule reports the convention once, with its denominator
 (`Parent (1/36)`), because the fix is in the template rather than in 35 files.
 
+Re-measured 2026-08-24, after S4 added six nodes: `Source (0/7)` and `Dependencies (0/7)` for
+`domain`, `Source (5/39)` / `Dependencies (3/39)` / `Parent (4/39)` for `feature`, and
+`Source (0/4)` / `Dependencies (0/4)` for `service`. Exactly one document is reported —
+`docs/domains/infrastructure/README.md`, missing `Features`, which six of its seven peers carry.
+**That row is left standing rather than satisfied.** `infrastructure` has eight components and no
+feature, so it announces its children under `## Components`; renaming the heading to match the
+matcher would trade a true finding for a false green, which is the trade this check exists to
+prevent. It is a live instance of the limit stated below: the check decides whether a fact is
+stated under a heading that names it, never whether the name is the right one.
+
 ### A section is matched by its name, as a whole-word phrase
 
 `## Features and components` is not a document that lost its Features section. String equality

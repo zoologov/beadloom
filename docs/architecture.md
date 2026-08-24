@@ -128,7 +128,7 @@ Default parameters:
 
 Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3) and enforce boundaries between graph nodes. The YAML key on each rule selects its type.
 
-**Rule types** (7, parsed and evaluated by the `graph/rules/` package, orchestrated by `graph/linter.py`):
+**Rule types** — the ten authoring keys `load_rules` dispatches, parsed and evaluated by the `graph/rules/` package and orchestrated by `graph/linter.py`. A rule declares exactly one of them; this repository configures 13 rules across them:
 
 | YAML key | Semantics | Example |
 |----------|-----------|---------|
@@ -138,7 +138,10 @@ Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3
 | `layers` | Enforce layered architecture direction | Top-down: services → domains → infrastructure |
 | `forbid_cycles` | Detect circular dependencies in the graph | No cycles on `uses`/`depends_on` edges |
 | `forbid_import` | Control file-level import boundaries | Files in `src/beadloom/tui/**` must not import `beadloom/infrastructure/**` — note the two vocabularies: `from` matches the **file path**, `to` the **dotted import path with dots → slashes** (no source root). A `src/`-prefixed `to` matches nothing (BDL-UX #172) |
-| `check` | Enforce complexity / coverage limits per node | `max_symbols: 180` per domain — counting the symbols a node OWNS, nested nodes excluded (Beadloom's `domain-size-limit`; see the recalibration note below); `module-coverage` (every src module tracked) |
+| `check` | Enforce complexity / coverage limits per node | `max_symbols: 180` per domain — counting the symbols a node OWNS, nested nodes excluded (Beadloom's `domain-size-limit`; see the recalibration note below) |
+| `unregistered_feature_candidate` | Report a source directory with enough symbols to deserve a node and no node declaring it (BDL-051) | default severity `warn` |
+| `module_coverage` | Report a source module under `source_root` that no node tracks (BDL-051) | default severity `warn`; `exempt` entries carry a reason |
+| `scenario_coverage` | Bind behaviour-bearing nodes to executable Gherkin scenarios, both ways (BDL-061 S4) | default severity `warn`; `for` / `features` / `references` / `non_behavioural` — see the [BDD guide](guides/bdd-scenarios.md) |
 
 > Internally each parsed rule carries a `rule_type` string (`deny` / `require` / `forbid` / `layer` / `forbid_import` / `cardinality` / `scenario_coverage` / …) used by the evaluators; the **authoring key** in `rules.yml` is the column above.
 
@@ -266,8 +269,8 @@ Snapshots are stored in SQLite and enable architecture drift detection across re
 
 `application/gate.py` powers `beadloom ci` — the unified gate that composes the
 existing checkers into one verdict with a single exit code: **reindex → `lint
---strict` → sync-check → docs audit → config-check → doctor → (optional) federate
-landscape gate**. Every step's honest result is printed (PASS / WARN / FAIL / SKIP) —
+--strict` → sync-check → docs audit → docs-quality → config-check → doctor →
+(optional) federate landscape gate**. Every step's honest result is printed (PASS / WARN / FAIL / SKIP) —
 never a green that silently skipped a step. `--format rich|json|github` applies
 uniformly; `--hub <export>` arms the cross-service landscape gate. The same gate
 runs as the **pre-push Beadloom Gate** hook (`install-hooks --pre-push`) and in
@@ -319,9 +322,10 @@ under `.beadloom/flow/`:
                                       ▼
                               composer.py  compose(kind, name, config=, project_root=)
                                       │   1. CORE fragment (stack-neutral)
-                                      │   2. ONE architecture overlay (ddd|fsd)
-                                      │   3. sorted stack overlays
-                                      │   4. .beadloom/flow/<kind>/<name>.md   ← the project
+                                      │   2. SHARED core fragments (core:_writing)
+                                      │   3. ONE architecture overlay (ddd|fsd)
+                                      │   4. sorted stack overlays
+                                      │   5. .beadloom/flow/<kind>/<name>.md   ← the project
                                       │   + the overlays.suppress notice
                                       ▼
               ┌───────────────────────┼────────────────────────┐
@@ -337,8 +341,8 @@ under `.beadloom/flow/`:
 ```
 
 - **`flow_config.py`** — `FlowConfig` (frozen) + `resolve_flow_config` (flag → `flow.yml` → default) + `detect_stack`; strict validation. Supported: tools `claude`/`cursor`; architecture `ddd`/`fsd` (exactly one); stack `python`/`fastapi`/`javascript`/`typescript`/`vuejs`. `language` is validated for shape, not against a closed list; `overlays.suppress` is validated through `flow_suppression`.
-- **`composer.py`** — `compose(kind, name, *, config, project_root)` for the three kinds `roles` / `commands` / `claude`. Deterministic: the same inputs always yield the same bytes, with no dependence on the clock or on ambient state. That property is what licenses `config-check` to compare against a composition rather than against stored bytes. The CORE fragments live at `onboarding/templates/roles/core/<role>.md.txt`, `onboarding/templates/agentic_flow/commands/<cmd>.md.txt` and `onboarding/templates/agentic_flow/CLAUDE.md.txt`; the overlays live under `onboarding/templates/{roles,commands,claude}/{architecture/<arch>,stack/<stack>}/`. The commands and `CLAUDE.md` kept their vendored location as the CORE and gained an overlay root beside it, because moving them would have churned the whole scaffold for no signal.
-- **`role_composer.py`** — `compose_role(role, *, architecture, stack, language, suppressions, project_root)`, the roles-shaped door onto `compose`; FSD at parity with DDD.
+- **`composer.py`** — `compose(kind, name, *, config, project_root)` for the four kinds `roles` / `commands` / `claude` / `docs` (BDL-061 S4b moved the document skeletons out of `doc_generator.py`'s string literals into `templates/docs/`; `docs` is the one kind composed with `carries_suppressions=False`, because a suppression stands down a rule addressed to an agent and a generated README has none). Deterministic: the same inputs always yield the same bytes, with no dependence on the clock or on ambient state. That property is what licenses `config-check` to compare against a composition rather than against stored bytes. The CORE fragments live at `onboarding/templates/roles/core/<role>.md.txt`, `onboarding/templates/agentic_flow/commands/<cmd>.md.txt` and `onboarding/templates/agentic_flow/CLAUDE.md.txt`; the overlays live under `onboarding/templates/{roles,commands,claude}/{architecture/<arch>,stack/<stack>}/`. The commands and `CLAUDE.md` kept their vendored location as the CORE and gained an overlay root beside it, because moving them would have churned the whole scaffold for no signal.
+- **`role_composer.py`** — `compose_role(role, *, architecture, stack, language, suppressions, project_root)`, the roles-shaped door onto `compose`; FSD at parity with DDD. `SHARED_ROLE_FRAGMENTS = ("_writing",)` (BDL-061 S4) composes the writing standard into all four roles as a labelled `core:_writing` layer, so the roles that produce intent documents are held to the same bar as the one that produces reality documents — one text rather than four copies, and language-selectable like every other layer.
 - **`role_adapters.py`** — `generate_adapters(config, project_root)` writes the per-tool adapter set(s). `beadloom setup-agentic-flow --tool/--architecture/--stack` is the CLI entrypoint.
 - **`flow_manifest.py`** — the sha256 of every composed write, which is what lets a later run tell `stale` (recomposable) from `hand_edited` (reported, never rewritten) from `missing` from `unverified`. `.beadloom/flow-manifest.json` is generated state and belongs in git.
 - **`flow_suppression.py`** — a declared stand-down of a core rule (`rule` + `reason` + `until`, all mandatory), rendered as a visible notice into every composed artifact. Expiry is a `config-check` finding rather than a byte, so the composition stays a function of its inputs.

@@ -91,7 +91,13 @@ the sync-check step as **WARN** with the count, rather than `PASS`.
 
 `incomplete` does not block either, and for a different reason: it is a NEW
 check (BDL-061 S4b) and every new check ships as `warn`, so no adopter's green
-project turns red on upgrade. It is the only verdict here about a document's
+project turns red on upgrade. **It has no counter in the `--json` summary**, so
+`ok + stale + missing + unverified + unchecked` does not sum to `total` when any
+row is incomplete: the rows are in `pairs` and the rich output prints each one,
+but a machine consumer reading only the summary does not see them. Measured on
+this repository, 2026-08-24: `total 326 = 240 ok + 82 stale + 4 incomplete`, and
+the summary accounts for 322. Review `beadloom-mr2l.15` M5 filed it and it is
+open. It is the only verdict here about a document's
 STRUCTURE rather than its currency — the five reasons above all compare content,
 and none of them can see a README edited down to a title. The verdict is never
 written to `sync_state`: the status column would then mean two different things,
