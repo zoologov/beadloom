@@ -24,6 +24,16 @@ sixth shares nothing with them. The seam was called before the ROADMAP half was 
   `doc_shape`'s required sections and `docs audit`'s fact registry — so the halves share a
   vocabulary and no code. Same call `.13` made in S4, on the same evidence.
 
+**`.18` CLOSED (2026-08-24) — the numbers hold and the population does not.** The relation's
+denominators are recomputable: an independent recount of the three spaces, the declarations, the
+epics with closed beads and the unresolved bucket agrees with the report exactly, so the figures
+below are not in dispute. What the figures cover is. Two populations leave the report without
+saying so — a TO-BE directory that carries no `CONTEXT.md` or `BRIEF.md` (four of them here,
+including `.claude/development` itself), and an epic the tracker export no longer names (23 of 60
+directories, all of them finished work). Both are BDL-UX #174's equation at a layer nobody had
+looked at: an editor's deletion makes the check quieter. Filed as `.73`–`.76` with an executable
+`xfail(strict=True)` each, so a fix reddens the suite rather than passing in silence.
+
 **What `docs spaces` reports on this repository today: ONE finding, and it is true.** BDL-061
 declares `cli-commands` in its CONTEXT's *Related Files*, has 60+ closed beads, and
 `cli-commands` has no `docs:` entry at all — a node that shipped without documentation, which
@@ -629,7 +639,9 @@ header comment, where a reader of a red check will look first.
 | .69 | Pending | Filed by `.16`: `_writing.md.txt` and `_writing.ru.md.txt` tell every role that `beadloom lint` reports the five section-quality checks. It reports none of them — measured: 68 lint findings, all `scenario_coverage`, and 156 doc-quality findings from the other command |
 | .17 | Done | S5 dev: three documentation spaces and the TO-BE → AS-IS relation. `infrastructure/doc_roots.py` (the vocabulary, configurable roots, kind wins over root) and `application/doc_spaces.py` (the relation, read only from the epic's declared *Related Files*). WORKING exempt from freshness by declaration — `check_sync` verdict `exempt` carrying the declared reason — with a wrong declaration detectable two ways. TO-BE indexed IN PLACE on both reindex paths and searchable (`docs.space` + an FTS row per unlinked document). `beadloom docs spaces` and a warn-only `doc-spaces` gate step. **Measured here: to_be 190 / as_is 93 / working 55; 17 node declarations from 37 of 57 epics with closed beads; ONE finding — BDL-061 declares `cli-commands`, which has no AS-IS document at all.** 52 epics declare no node and are named as not checked. **REPORTED AS TWO BEADS:** the ROADMAP/issue-log half shares no module with these five mechanisms and became `.72` |
 | .72 | Pending | Split out of `.17`: the `ROADMAP` and issue-log kinds, and counts a mechanism computes so the hand-written tally cannot return. `.19` and `.20` will need it; the DAG was NOT rewired — that is the owner's call |
-| .18–.20 | Pending | S5 test / review / tech-writer |
+| .18 | Done | S5 test: 62 tests (50 passing + 12 `xfail(strict=True)`) attacking the POPULATION rather than the arithmetic. Every denominator `.17` reported is recounted here from the filesystem and the export by code sharing no function with the code under test, and all five recount exactly — to_be 190 / as_is 93 / working 55, 17 declarations, 5 declaring epics, 37 of 57, 52 unresolved. **Five findings filed as `.73`–`.76`**, each an executable `xfail(strict=True)` rather than prose: a TO-BE directory carrying no intent document leaves every count (61 directories hold intent, 57 become epics); an epic the tracker export forgot is indistinguishable from one whose beads are open (23 of 60 directories, and deleting an epic's records took the gate step from 1 finding to 0 with `not_verified` already saturated); the command and the gate read different trackers and answered 17/1 against 4/0 at one commit; a WORKING root means one thing to `check_sync` and another to `check_spaces`, so a root-declared exemption took `sync-check` rc 2 → rc 0 with zero contradiction findings; and an `exempt` pair is in no count any surface prints |
+| .19–.20 | Pending | S5 review / tech-writer |
+| .73–.76 | Pending | The five findings `.18` measured, filed rather than absorbed. `.75` (one spelling for a doc path) is the one `.71` and `.72` inherit; the DAG was NOT rewired |
 | .21–.24 | Pending | S6 waves from the graph (#155, #118, #133) |
 
 ## Notes
