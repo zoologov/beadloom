@@ -20,6 +20,11 @@ Codes (the contract a caller may rely on):
   ``2`` on purpose: nothing failed, the account is simply still withheld, and a
   caller that could not tell those apart would retry the wrong one.
 
+``--release`` shares that scale rather than having one of its own. It exits ``1``
+when the account was released and the gate could not confirm that the verdict was
+recorded by anyone other than the bead's own author — released, and a finding, on
+the same rule that makes an unmeasured medium a finding instead of a silent pass.
+
 **Every fact is printed in both shapes.** The human output and ``--json`` carry
 the same counts and the same withholding, and neither depends on whether stdout
 is a terminal — a surface whose shape depends on whether a human is watching will
@@ -132,16 +137,14 @@ def _changed_since(project_root: Path, ref: str) -> frozenset[str] | None:
     return frozenset(paths)
 
 
-def _bead_record(bead_id: str, project_root: Path) -> tuple[Any, str]:
-    """The bead as data, and the ASSIGNMENT string, read through the ``bd`` seam.
+def _bead_fields(bead_id: str, project_root: Path) -> dict[str, Any]:
+    """The tracker's record for *bead_id*, read once through the ``bd`` seam.
 
-    Two strings come back because they answer different questions. The
-    declaration carries everything the bead says about itself so the ``refs:``
-    token is found wherever the author wrote it — this epic's own beads put it in
-    ``notes`` as often as in the description. The assignment is the title and the
-    description alone, because ``notes`` is also where a dev appends progress.
+    One call, because three different questions are asked of the same record —
+    what the bead was asked to do, what it says it occupies, and who is working
+    on it — and asking the tracker three times is how three answers come to
+    disagree about one bead.
     """
-    from beadloom.application.waves import BeadRecord
     from beadloom.services.bd_seam import run_bd
 
     result = run_bd(["show", bead_id, "--json"], cwd=str(project_root))
@@ -153,16 +156,41 @@ def _bead_record(bead_id: str, project_root: Path) -> tuple[Any, str]:
     if not isinstance(record, dict):
         msg = f"the tracker's answer for {bead_id!r} was not a bead record"
         raise LookupError(msg)
-    title = str(record.get("title", ""))
-    description = str(record.get("description", ""))
+    return record
+
+
+def _bead_record(bead_id: str, fields: dict[str, Any]) -> tuple[Any, str]:
+    """The bead as data, and the ASSIGNMENT string.
+
+    Two strings come back because they answer different questions. The
+    declaration carries everything the bead says about itself so the ``refs:``
+    token is found wherever the author wrote it — this epic's own beads put it in
+    ``notes`` as often as in the description — and it is composed by
+    :func:`compose_declaration`, the one composer all three callers of the parser
+    share. The assignment is the title and the description alone, because
+    ``notes`` is also where a dev appends progress.
+    """
+    from beadloom.application.waves import BeadRecord, compose_declaration
+
+    title = str(fields.get("title", ""))
+    description = str(fields.get("description", ""))
     assignment = f"{title}\n\n{description}".strip()
-    declaration = "\n".join(
-        str(record.get(key, "")) for key in ("title", "description", "design", "notes")
-    )
     return (
-        BeadRecord(bead_id=bead_id, declaration=declaration, title=title),
+        BeadRecord(
+            bead_id=bead_id, declaration=compose_declaration(fields), title=title
+        ),
         assignment,
     )
+
+
+def _bead_author(fields: dict[str, Any]) -> str:
+    """The party whose account is being withheld — the tracker's assignee.
+
+    Empty when the tracker names none, and the release reports that rather than
+    reading it as an independent verdict: an unknown identity is not a different
+    one.
+    """
+    return str(fields.get("assignee", "") or "")
 
 
 def _author_notes(bead_id: str, project_root: Path) -> tuple[AuthorNote, ...]:
@@ -221,7 +249,7 @@ def _suite_scenarios(project_root: Path) -> tuple[Any, ...]:
     return load_suite(project_root, glob).scenarios
 
 
-def _brief_as_dict(brief: ReviewBrief, *, base_ref: str) -> dict[str, Any]:
+def _brief_as_dict(brief: ReviewBrief) -> dict[str, Any]:
     """The whole brief as data — the same facts the human shape prints."""
     return {
         "bead": brief.bead_id,
@@ -230,7 +258,7 @@ def _brief_as_dict(brief: ReviewBrief, *, base_ref: str) -> dict[str, Any]:
         "refs": list(brief.refs),
         "unknown_refs": list(brief.unknown_refs),
         "docs": [{"ref": d.ref, "path": d.path, "kind": d.kind} for d in brief.docs],
-        "base_ref": base_ref,
+        "base_ref": brief.measured_since,
         "change_measured": brief.change_measured,
         "changed": [
             {"path": c.path, "owner": c.owner, "in_scope": c.in_scope}
@@ -268,7 +296,8 @@ def _render_specification(brief: ReviewBrief) -> None:
         click.echo(f"  {scenario.path}:{scenario.line} — {scenario.name}")
 
 
-def _render_change(brief: ReviewBrief, base_ref: str) -> None:
+def _render_change(brief: ReviewBrief) -> None:
+    base_ref = brief.measured_since
     click.echo("")
     if not brief.change_measured:
         click.echo(
@@ -293,7 +322,7 @@ def _render_withholding(brief: ReviewBrief) -> None:
     click.echo(f"  {brief.withheld.defeat_notice}")
 
 
-def _render_brief(brief: ReviewBrief, base_ref: str) -> None:
+def _render_brief(brief: ReviewBrief) -> None:
     """Print the change, the specification, and what was held back."""
     click.echo(f"Review brief for {brief.bead_id} — {brief.title}")
     click.echo(
@@ -301,7 +330,7 @@ def _render_brief(brief: ReviewBrief, base_ref: str) -> None:
         f"{len(brief.scenarios)} bound scenario(s), {len(brief.findings)} finding(s)."
     )
     _render_specification(brief)
-    _render_change(brief, base_ref)
+    _render_change(brief)
     _render_withholding(brief)
     if brief.findings:
         click.echo("")
@@ -321,6 +350,11 @@ def _render_release(outcome: ReleaseOutcome, notes: Sequence[AuthorNote]) -> Non
         f"RELEASED — {len(outcome.released)} author comment(s), on the verdict "
         f"{outcome.verdict_marker!r} already recorded."
     )
+    if outcome.independence_note is not None:
+        # Before the account, not after it: a reviewer reads top-down, and a
+        # caveat printed under the thing it qualifies arrives too late to qualify
+        # anything.
+        click.echo(f"FINDING: {outcome.independence_note}", err=True)
     for note in outcome.released:
         click.echo("")
         click.echo(f"--- {note.author} {note.created}".rstrip())
@@ -331,13 +365,27 @@ def _release_as_dict(outcome: ReleaseOutcome, notes: Sequence[AuthorNote]) -> di
     return {
         "withheld_count": len(notes),
         "verdict_marker": outcome.verdict_marker,
+        "verdict_author": outcome.verdict_author,
+        "independence_note": outcome.independence_note,
         "refused_reason": outcome.refused_reason,
         "released": [
             {"author": n.author, "created": n.created, "text": n.text}
             for n in outcome.released
         ],
-        "exit_code": _EXIT_WITHHELD if outcome.refused_reason else _EXIT_CLEAN,
+        "exit_code": _release_exit_code(outcome),
     }
+
+
+def _release_exit_code(outcome: ReleaseOutcome) -> int:
+    """The one place the release's exit code is decided, for both output shapes.
+
+    Three answers, not two. A refused release is exit 3; a release resting on a
+    verdict whose independence the tracker could not confirm is exit 1, released
+    and reported; anything else is 0.
+    """
+    if outcome.refused_reason is not None:
+        return _EXIT_WITHHELD
+    return _EXIT_FINDINGS if outcome.independence_note is not None else _EXIT_CLEAN
 
 
 def _run_release(bead: str, project_root: Path, *, output_json: bool) -> int:
@@ -345,12 +393,12 @@ def _run_release(bead: str, project_root: Path, *, output_json: bool) -> int:
     from beadloom.application.review_brief import release_notes
 
     notes = _author_notes(bead, project_root)
-    outcome = release_notes(notes)
+    outcome = release_notes(notes, bead_author=_bead_author(_bead_fields(bead, project_root)))
     if output_json:
         click.echo(json.dumps(_release_as_dict(outcome, notes), indent=2))
     else:
         _render_release(outcome, notes)
-    return _EXIT_WITHHELD if outcome.refused_reason is not None else _EXIT_CLEAN
+    return _release_exit_code(outcome)
 
 
 def _run_brief(
@@ -365,7 +413,7 @@ def _run_brief(
         click.echo("Error: database not found. Run `beadloom reindex` first.", err=True)
         return _EXIT_UNASSEMBLABLE
 
-    record, assignment = _bead_record(bead, project_root)
+    record, assignment = _bead_record(bead, _bead_fields(bead, project_root))
     notes = _author_notes(bead, project_root)
     base_ref = since or _base_ref(project_root)
     conn = open_db(db_path)
@@ -375,6 +423,7 @@ def _run_brief(
             record,
             assignment=assignment,
             changed_paths=_changed_since(project_root, base_ref),
+            measured_since=base_ref,
             notes=notes,
             scenarios=_suite_scenarios(project_root),
         )
@@ -382,9 +431,9 @@ def _run_brief(
         conn.close()
 
     if output_json:
-        click.echo(json.dumps(_brief_as_dict(brief, base_ref=base_ref), indent=2))
+        click.echo(json.dumps(_brief_as_dict(brief), indent=2))
     else:
-        _render_brief(brief, base_ref)
+        _render_brief(brief)
     return _EXIT_FINDINGS if brief.findings else _EXIT_CLEAN
 
 

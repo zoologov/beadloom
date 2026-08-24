@@ -56,7 +56,7 @@ CLEAN = WaveEnvironment(
 def _bead(bead_id: str, refs: str = "", title: str = "") -> BeadRecord:
     return BeadRecord(
         bead_id=bead_id,
-        declaration=f"work. refs: {refs}" if refs else "work.",
+        declaration=f"work.\nrefs: {refs}" if refs else "work.",
         title=title,
     )
 

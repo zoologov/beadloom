@@ -68,3 +68,18 @@ Feature: the reviewer's input carries the change and the specification, never th
     When the reviewer's brief is assembled
     Then the brief carries 1 bound scenario
     And the brief is clean
+
+  # BDL-061.83. The gate read the verdict comment's author out of the tracker and
+  # never compared it, so the author of a bead released the author's own account.
+  # The comparison is made now. It reports rather than refuses, because the dev
+  # agent and the review agent of this project write under one tracker identity
+  # and a gate nobody can pass is bypassed rather than obeyed.
+
+  @bead:beadloom-mr2l.83
+  Scenario: A verdict recorded by the bead's own author releases with its independence unverified
+    Given a bead "alpha" declaring the node scope "billing"
+    And the author recorded 3 comments on "alpha"
+    And the verdict on "alpha" was recorded by the bead's own author
+    When the author's account is requested
+    Then the author's account is released
+    And the release says it cannot tell the verdict from the author's own

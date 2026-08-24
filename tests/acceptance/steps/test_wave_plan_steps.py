@@ -71,7 +71,7 @@ def _declare(world: dict[str, Any], bead: str, declaration: str) -> None:
 
 @given(parsers.parse('a bead "{bead}" declaring the node scope "{ref}"'))
 def given_bead_with_scope(world: dict[str, Any], bead: str, ref: str) -> None:
-    _declare(world, bead, f"Do the work. refs: {ref}")
+    _declare(world, bead, f"Do the work.\nrefs: {ref}")
 
 
 @given(
@@ -84,7 +84,7 @@ def given_bead_with_scope_and_title(
 ) -> None:
     world["beads"].append(
         BeadRecord(
-            bead_id=bead, declaration=f"Do the work. refs: {ref}", title=title
+            bead_id=bead, declaration=f"Do the work.\nrefs: {ref}", title=title
         )
     )
 
@@ -102,6 +102,34 @@ def given_media_measured(world: dict[str, Any]) -> None:
 @given(parsers.parse('a bead "{bead}" declaring no node scope at all'))
 def given_bead_without_scope(world: dict[str, Any], bead: str) -> None:
     _declare(world, bead, "Do the work.")
+
+
+@given(
+    parsers.parse(
+        'a bead "{bead}" that mentions "{ref}" in a sentence about declarations'
+    )
+)
+def given_bead_that_only_mentions_a_ref(
+    world: dict[str, Any], bead: str, ref: str
+) -> None:
+    """Bead `.80` wrote exactly this while describing the parser, and was scoped."""
+    _declare(
+        world,
+        bead,
+        f"It is serialised until it declares `refs: <ref_id>`, {ref} being "
+        "the example.",
+    )
+
+
+@given(
+    parsers.parse(
+        'a bead "{bead}" declaring the node scopes "{first} {second}" without a comma'
+    )
+)
+def given_bead_declaring_two_refs_without_a_comma(
+    world: dict[str, Any], bead: str, first: str, second: str
+) -> None:
+    _declare(world, bead, f"Do the work.\nrefs: {first} {second}")
 
 
 @given(

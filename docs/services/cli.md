@@ -991,9 +991,10 @@ beadloom waves BEAD [BEAD ...] [--json] [--project DIR]
 ```
 
 Exit codes: `0` = a shape was decided and rests on nothing unstated; `1` = a
-shape was decided and carries findings (a bead that did not declare its scope, an
-override past its exit condition, an override that changed nothing, a shared
-medium that failed its check or that nobody measured) -- visible, never blocking; `2` = no shape could be decided (no index, no answer from the
+shape was decided and carries findings (a bead whose declared scope could not be
+read, an override past its exit condition, an override that changed nothing, a
+shared medium that failed its check or that nobody measured) -- visible, never
+blocking; `2` = no shape could be decided (no index, no answer from the
 tracker, a bead the tracker does not have, a `waves:` block that would not parse).
 
 It **decides**, it does not advise. Parallelism follows from the code-level
@@ -1002,15 +1003,24 @@ a tracker knows which beads block which, and nothing else knows which code they
 occupy.
 
 A bead says what it occupies in the tracker, in its own words -- `refs: billing,
-shipping` (also `ref:`, also `area:`). A scope expands downward through
-`part_of`, so a bead scoped to a domain and a bead scoped to one of its
-components do not compare independent while editing the same package. A pair is
-serialised for exactly one named reason: `blocked_by_bead`, `unresolved_scope`,
-`shared_node`, `shared_file`, `dependency_edge` or `override_serial`.
+shipping` (also `ref:`, also `area:`). The declaration **opens a line** and its
+list runs to the end of that line, separated by commas or semicolons; a `refs:`
+written inside a sentence is prose. A scope expands downward through `part_of`,
+so a bead scoped to a domain and a bead scoped to one of its components do not
+compare independent while editing the same package. A pair is serialised for
+exactly one named reason: `blocked_by_bead`, `unresolved_scope`, `shared_node`,
+`shared_file`, `dependency_edge` or `override_serial`.
 
-**A bead that declares nothing is serialised against every bead.** An unknown
-scope is not an empty scope -- an empty one compares independent of everything,
-which would make the command's whole claim rest on silence.
+**A bead whose declaration cannot be read is serialised against every bead.** An
+unknown scope is not an empty scope -- an empty one compares independent of
+everything, which would make the command's whole claim rest on silence. Four
+things count as unreadable, each printed with its own remedy: no declaration
+(`no_declared_refs`), a name the graph does not have (`ref_not_in_graph`), a
+`refs:` written inside a sentence (`declaration_not_at_a_line_start`), and a
+second ref written without a comma that the graph confirms is a node
+(`declaration_dropped_a_node`). The parser fails toward serialisation on purpose:
+a wave shape is acted on, so a parser whose errors widen a wave is worse than no
+parser.
 
 Every wave of more than one bead also prints the four media it shares no matter
 what shape is chosen, each with the evidence it comes from: the working tree
@@ -1068,7 +1078,17 @@ Serialised because:
 0 declared override(s).
 
 No wave runs more than one bead, so nothing is shared concurrently.
+
+Plan-time precondition of each shared medium:
+  working-tree: not_applicable - no wave runs more than one bead, so nothing is carried between beads through this medium
+  commit-gate: not_applicable - no wave runs more than one bead, so nothing is carried between beads through this medium
+  doc-baseline: not_applicable - no wave runs more than one bead, so nothing is carried between beads through this medium
+  tracker-ids: passed - every bead's title agrees with the number the tracker allocated
 ```
+
+Every plan prints that block, a fully serial one included: three media are
+`not_applicable` because nothing runs concurrently, and `tracker-ids` is checked
+regardless.
 
 `--json` carries the same facts: `waves[]` (with `gate_owner`), `scopes[]`,
 `conflicts[]`, `overrides[]`, `shared_media[]`, `media_checks[]` (`medium`,

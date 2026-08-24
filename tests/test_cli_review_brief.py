@@ -110,12 +110,28 @@ class _FakeBd:
         return BdResult(returncode=0, stdout=json.dumps([self.record]), stderr="")
 
 
-def _record(bead: str = "a", refs: str = "billing", notes: str = "") -> dict[str, Any]:
+def _record(
+    bead: str = "a",
+    refs: str = "billing",
+    notes: str = "",
+    assignee: str = "dev",
+    description: str | None = None,
+) -> dict[str, Any]:
+    """A bead as `bd show --json` gives it.
+
+    ``assignee`` is not decoration: it is the party whose account the brief
+    withholds, and `--release` compares it with the author of the verdict comment.
+    """
     return {
         "id": bead,
         "title": f"[{bead}] make the billing total round once",
-        "description": f"Round the total once, at the boundary. refs: {refs}",
+        "description": (
+            description
+            if description is not None
+            else f"Round the total once, at the boundary.\nrefs: {refs}"
+        ),
         "notes": notes,
+        "assignee": assignee,
     }
 
 
@@ -233,21 +249,98 @@ class TestRelease:
         assert result.exit_code == _EXIT_CLEAN
         assert _AUTHOR_TEXT in result.output
 
+    @pytest.mark.parametrize(
+        "comment",
+        [
+            f"{_AUTHOR_TEXT} — the REVIEW PASSED comment is still to come",
+            "REVIEW ISSUES are still open, will fix",
+            f"COMPLETED: shipped it\nREVIEW PASSED: I checked my own work\n{_AUTHOR_TEXT}",
+        ],
+        ids=["mid-line", "line-start-without-a-colon", "buried-in-a-checkpoint"],
+    )
     def test_a_comment_that_merely_mentions_a_review_does_not_release(
-        self, tmp_path: Path, bd: Any
+        self, tmp_path: Path, bd: Any, comment: str
     ) -> None:
-        """The marker is matched at a line start, so prose about a review is prose."""
+        """A verdict OPENS a comment and carries its colon; anything else is prose.
+
+        The middle case is the one `.79`'s honesty note listed under ENFORCED and
+        the code did not have: the marker was anchored to a line start and the
+        colon was never required (BDL-061.23 M1).
+        """
         project = _repo_with_change(tmp_path)
-        bd(
-            _record(),
-            [_comment(f"{_AUTHOR_TEXT} — the REVIEW PASSED comment is still to come")],
-        )
+        bd(_record(), [_comment(comment)])
         result = CliRunner().invoke(
             main,
             ["review-brief", "a", "--release", "--since", "main", "--project", str(project)],
         )
         assert result.exit_code == _EXIT_WITHHELD
         assert _AUTHOR_TEXT not in result.output
+
+    def test_a_verdict_by_the_beads_own_author_releases_and_costs_the_exit_code(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        """`AuthorNote.author` was read from the tracker and never compared.
+
+        The account is still released — this repository's roles share one tracker
+        identity, so refusing would refuse every release — but the run says what
+        it could not establish, and its exit code is no longer 0.
+        """
+        project = _repo_with_change(tmp_path)
+        bd(
+            _record(assignee="dev"),
+            [_comment(_AUTHOR_TEXT), _comment("REVIEW PASSED: my own work", author="dev")],
+        )
+        result = CliRunner().invoke(
+            main,
+            ["review-brief", "a", "--release", "--since", "main", "--project", str(project)],
+        )
+        assert result.exit_code == _EXIT_FINDINGS
+        assert _AUTHOR_TEXT in result.output
+        assert "same tracker identity" in result.output
+
+    def test_both_shapes_carry_the_same_release_verdict(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        """BDL-UX #148 — the machine shape must not be quieter than the human one."""
+        project = _repo_with_change(tmp_path)
+        bd(
+            _record(assignee="dev"),
+            [_comment(_AUTHOR_TEXT), _comment("REVIEW PASSED: my own work", author="dev")],
+        )
+        machine = CliRunner().invoke(
+            main,
+            [
+                "review-brief", "a", "--release", "--since", "main",
+                "--project", str(project), "--json",
+            ],
+        )
+        payload = json.loads(machine.output)
+        assert payload["exit_code"] == _EXIT_FINDINGS
+        assert payload["verdict_author"] == "dev"
+        assert "same tracker identity" in payload["independence_note"]
+
+
+class TestOneDeclarationForEveryCaller:
+    """`.23` M5, at the caller a reviewer meets."""
+
+    def test_a_dangling_refs_header_at_a_field_boundary_declares_nothing(
+        self, tmp_path: Path, bd: Any
+    ) -> None:
+        """The fields are joined with newlines, so a field boundary is a boundary.
+
+        Joined with spaces — which the MCP caller did — `billing` would sit
+        directly behind the dangling header and the bead would be handed a scope
+        it never declared.
+        """
+        project = _repo_with_change(tmp_path)
+        bd(_record(description="Scope\nrefs:", notes="billing is the one we mean"), [])
+        result = CliRunner().invoke(
+            main,
+            ["review-brief", "a", "--since", "main", "--project", str(project), "--json"],
+        )
+        payload = json.loads(result.output)
+        assert payload["refs"] == []
+        assert "no-declared-scope" in payload["findings"]
 
 
 class TestFindingsAndCodes:
@@ -261,6 +354,7 @@ class TestFindingsAndCodes:
         )
         assert result.exit_code == _EXIT_FINDINGS
         assert "changed-outside-scope" in result.output
+        assert "measured over the branch since main" in result.output
         assert "src/shipping/core.py" in result.output
 
     def test_a_file_that_was_written_but_never_added_is_still_in_the_change(

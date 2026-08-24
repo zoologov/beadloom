@@ -9,6 +9,7 @@ withheld.
 from beadloom.application.review_brief.assembly import assemble_brief
 from beadloom.application.review_brief.models import (
     DEFEAT_NOTICE,
+    FINDING_AMBIGUOUS_SCOPE,
     FINDING_NO_SCENARIO,
     FINDING_NO_SCOPE,
     FINDING_OUTSIDE_SCOPE,
@@ -26,6 +27,8 @@ from beadloom.application.review_brief.models import (
 )
 from beadloom.application.review_brief.release import (
     REFUSED_NO_VERDICT,
+    SELF_RECORDED_VERDICT,
+    UNNAMED_VERDICT_AUTHOR,
     VERDICT_MARKERS,
     release_notes,
     verdict_recorded,
@@ -33,6 +36,7 @@ from beadloom.application.review_brief.release import (
 
 __all__ = [
     "DEFEAT_NOTICE",
+    "FINDING_AMBIGUOUS_SCOPE",
     "FINDING_NO_SCENARIO",
     "FINDING_NO_SCOPE",
     "FINDING_OUTSIDE_SCOPE",
@@ -40,6 +44,8 @@ __all__ = [
     "FINDING_UNMEASURED_CHANGE",
     "REFUSED_NO_VERDICT",
     "RELEASE_CONDITION",
+    "SELF_RECORDED_VERDICT",
+    "UNNAMED_VERDICT_AUTHOR",
     "VERDICT_MARKERS",
     "WITHHELD_REASON",
     "AuthorNote",

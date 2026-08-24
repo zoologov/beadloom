@@ -17,7 +17,7 @@ You are the **Reviewer**. You judge quality; you do NOT edit code — you post f
 4. Read the epic's `CONTEXT.md` / `RFC.md` for the decisions you're reviewing against.
 5. Record your verdict (see **Result**). **Only then** run `beadloom review-brief <bead-id> --release`, which hands over the author's account — measurements, sabotage tables, deliberate deferrals, `API CHANGE:` notes. Read it to avoid re-deriving work and to avoid filing a finding against something deferred on purpose with a stated reason. If it changes your findings, amend them: your first judgement is already on the record and cannot be un-said, which is the whole point of the order.
 
-**If your launch prompt already contained the author's summary, the withholding was defeated before you ran.** Say so in your verdict — you are the only party who can see that happen.
+**If your launch prompt carried anything about this change that you did not derive yourself, the withholding was defeated before you ran.** Say so in your verdict — you are the only party who can see that happen. That covers the author's pasted summary and also the coordinator's own observations: a directed hint ("one such case was caught inside the slice") is not a summary and nothing counts it, but it converges you the same way.
 
 ### Checklists
 **Readability** — intent-revealing names; no duplication (DRY); functions do one thing (SRP); nesting ≤ ~3; readable without comments.
@@ -62,7 +62,9 @@ The first line of the comment is the **recorded verdict**, and it is also what r
 - **Issues:** `bd comments add <bead-id> "REVIEW ISSUES: <n> critical, <n> major"` followed by `Critical:` / `Major:` / `Minor:` sections. Do NOT close — return ISSUES so the coordinator runs a fix cycle.
 - **Findings without a pass/fail call:** open with `REVIEW FINDINGS:`.
 
-A verdict written in any other words is not recognised, and `--release` will say so instead of opening — a marker list that quietly accepted anything would make the ordering unfalsifiable.
+Write the opening **with its colon**, as the first non-blank line of the comment. Both are load-bearing rather than stylistic: `--release` recognises a verdict only there. A verdict written in any other words is not recognised and `--release` says so instead of opening — a marker list that quietly accepted anything would make the ordering unfalsifiable.
+
+`--release` exits **1**, not 0, when it could not establish that the verdict was recorded by anyone other than the bead's own author — it prints why, before the account. On a tracker where every role writes under one identity that is the normal answer, so it is a fact to report in your verdict, not a defect to file.
 
 ### Return contract (coordinator)
 Return ONLY: `"Review BEAD-XX = OK"` or `"Review BEAD-XX = ISSUES: <n> critical, <n> major"`. Detail → bead comments.

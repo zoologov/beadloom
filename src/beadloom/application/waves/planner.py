@@ -27,6 +27,7 @@ from beadloom.application.waves.models import (
     DECISION_PARALLEL,
     DECISION_SERIAL,
     REASON_OVERRIDE_SERIAL,
+    UNRESOLVED_REMEDIES,
     BeadScope,
     Conflict,
     OverrideOutcome,
@@ -191,13 +192,17 @@ def _findings(
     for scope in scopes:
         if scope.resolved:
             continue
-        detail = (
-            f" ({', '.join(scope.unknown_refs)})" if scope.unknown_refs else ""
-        )
+        named = scope.unknown_refs or scope.dropped_refs
+        detail = f" ({', '.join(named)})" if named else ""
+        remedy = UNRESOLVED_REMEDIES.get(scope.unresolved or "", "declare `refs: <ref_id>`")
+        # What the finding may claim is what HAPPENED — no pairwise comparison was
+        # made for this bead — not where the bead ended up. A `parallel` override
+        # can legitimately place an unresolved bead beside another, and the older
+        # wording ("it is serialised against every bead") was then contradicted by
+        # the wave list printed beside it (BDL-061.23 M10).
         found.append(
             f"unresolved_scope: {scope.bead_id} — {scope.unresolved}{detail}; "
-            "it is serialised against every bead until it declares "
-            "`refs: <ref_id>`"
+            f"its scope was compared with no bead's — {remedy}"
         )
     for outcome in outcomes:
         beads = ", ".join(outcome.override.beads)

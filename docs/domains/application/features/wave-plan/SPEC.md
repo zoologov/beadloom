@@ -47,16 +47,49 @@ A bead declares its node scope in its own words, in the tracker:
 refs: wave-plan, sync-check
 ```
 
-`ref:`, `refs:` and `area:` are all accepted, every occurrence is read, and the
-list ends at the first newline or sentence stop. The declaration is parsed in
-one place (`waves.scope.declared_refs`), which is also what the MCP
-`bead_context` tool reads, so the two cannot come to disagree about what a bead
-said.
+`ref:`, `refs:` and `area:` are all accepted and every occurrence is read. The
+declaration **opens a line** — optionally behind list or quote markup — and its
+list runs to the end of that line, separated by commas or semicolons.
+
+The declaration is parsed in one place (`waves.scope.parse_declaration`) and
+composed in one place (`waves.scope.compose_declaration`), and both are shared by
+`beadloom waves`, `beadloom review-brief` and the MCP `bead_context` tool, so the
+three cannot come to disagree about what a bead said. The composer is not
+decoration: the four tracker fields are joined with newlines, and a caller that
+joined them with a space put the next field's first word directly behind a
+dangling `refs:` header.
 
 The separator between the colon and the list is spaces and tabs, not any
 whitespace. A dangling `refs:` with nothing after it used to skip forward to the
 next non-empty line and read that line as the declaration, handing the bead a
 scope it never named.
+
+### The parser fails toward serialisation
+
+Every way the declaration cannot be read with confidence leaves the bead
+unresolved, which serialises it. That is the direction, and it is the point: the
+wave shape is acted on, so a parser whose errors *widen* a wave is worse than no
+parser at all.
+
+| Reason | What the bead wrote | Remedy |
+|---|---|---|
+| `no_declared_refs` | nothing about its scope | declare `refs: <ref_id>` on a line of its own |
+| `ref_not_in_graph` | a name the graph does not have | name a real node, or add it |
+| `declaration_not_at_a_line_start` | `refs:` inside a sentence | move the declaration to the start of its own line |
+| `declaration_dropped_a_node` | a second ref without a comma | separate the names with a comma |
+
+The last two were silent narrowings before `beadloom-mr2l.83`. A `refs:` written
+inside a sentence handed the bead the next word as a genuine, fully *resolved*
+scope — a bead discussing this parser acquired one that way — and a second ref
+written after a space or a semicolon was dropped, so `refs: wave-plan;
+sync-check` beside `refs: sync-check` shared one wave at exit 0 with no findings.
+
+Only the first word of a list item is read as a ref, because a declaration is
+written inside prose and reading every following word as an id found nothing at
+all. The words that rule throws away are checked against the graph: one the graph
+confirms is a node is a ref the bead declared and this parser did not read, so it
+is named and the bead serialises. One the graph does not have is prose and costs
+nothing, which is what keeps the rule usable on beads that explain themselves.
 
 A scope expands **downward through `part_of`**. A node's own file set excludes a
 nested node's files, so without the expansion a bead scoped to a domain and a
@@ -71,7 +104,7 @@ reason would not change the shape. They are tried in this order:
 | Reason | What it means |
 |---|---|
 | `blocked_by_bead` | the tracker says one blocks the other; ordering the tracker owns, restated here so the shape cannot contradict it in silence |
-| `unresolved_scope` | one of the two did not say what it occupies, or named a ref the graph does not have |
+| `unresolved_scope` | one of the two did not say what it occupies, named a ref the graph does not have, or wrote a declaration this parser will not read |
 | `shared_node` | the expanded scopes intersect |
 | `shared_file` | distinct nodes, but the index says a source file belongs to both |
 | `dependency_edge` | a `depends_on` edge runs between the scopes, in either direction |
@@ -81,7 +114,12 @@ reason would not change the shape. They are tried in this order:
 is not an empty scope**: an empty one compares independent of everything, so a
 bead that says nothing would be placed in every wave and the command's whole
 claim would rest on silence. It is serialised against every bead, and the
-remedy — declare `refs:` — is printed.
+remedy is printed — one remedy per reason, because the four differ.
+
+The finding says what *happened* rather than where the bead ended up: "its scope
+was compared with no bead's". A `parallel` override may legitimately place an
+unresolved bead beside another, and a finding claiming it was "serialised against
+every bead" was then contradicted by the wave list printed beside it.
 
 ### The shape
 
@@ -176,7 +214,9 @@ not tell them apart.
 
 ## Invariants
 
-- An unresolved scope never reads as an independent one.
+- An unresolved scope never reads as an independent one, and every way the
+  declaration cannot be read lands there.
+- One composition of a bead's declaration, shared by every caller of the parser.
 - One reason per serialised pair, taken from a closed named vocabulary.
 - The same inputs produce the same shape, including the order within a wave.
 - A wave of more than one bead always names its shared media and its gate owner.
@@ -193,6 +233,8 @@ not tell them apart.
 |---|---|
 | `plan_waves(records, *, conn, overrides, today, environment)` | the whole shape, as a `WavePlan` |
 | `resolve_scope(conn, record)` | what one bead occupies, or why that is unknown |
+| `parse_declaration(text)` | the refs a declaration names, the words it dropped, and whether it was anchored |
+| `compose_declaration(record)` | the tracker's four fields as the one string the parser reads |
 | `conflict_between(conn, left, right, *, blockers)` | why one pair may not run together |
 | `load_overrides(project_root)` | the declared overrides in `flow.yml` |
 | `media_for(wave_size)` | what a wave of that size shares |
@@ -223,7 +265,9 @@ override arithmetic; `tests/test_wave_media_checks.py` covers the four medium
 verdicts and the title-against-id comparison; `tests/test_cli_waves.py` covers
 the command's two output shapes and its three exit codes;
 `tests/test_bead22_wave_guarantee.py` holds the guarantee to both of its clauses
-and owns the five findings BDL-061.22 measured.
+and owns the five findings BDL-061.22 measured;
+`tests/test_bead83_failure_direction.py` pins the DIRECTION each of the two S6
+decisions fails in.
 
 ## Related
 

@@ -59,6 +59,9 @@ def world(tmp_path: Path) -> dict[str, Any]:
         "scenarios": [],
         "brief": None,
         "release": None,
+        # The party whose account is withheld, as the tracker names it. The
+        # release compares the verdict comment's author with this.
+        "bead_author": "dev",
     }
 
 
@@ -103,6 +106,13 @@ def _verdict(world: dict[str, Any], bead: str) -> None:
     )
 
 
+@given(parsers.parse("the verdict on \"{bead}\" was recorded by the bead's own author"))
+def _self_verdict(world: dict[str, Any], bead: str) -> None:
+    world["notes"].append(
+        AuthorNote(text=f"REVIEW PASSED: {bead} reads correct", author="dev")
+    )
+
+
 @given(parsers.parse('a scenario bound to "{bead}"'))
 def _bound_scenario(world: dict[str, Any], bead: str) -> None:
     world["scenarios"].append(
@@ -136,7 +146,9 @@ def _assemble_step(world: dict[str, Any]) -> None:
 @when("the author's account is requested")
 def _request_release(world: dict[str, Any]) -> None:
     world["brief"] = _assemble(world)
-    world["release"] = release_notes(world["notes"])
+    world["release"] = release_notes(
+        world["notes"], bead_author=world["bead_author"]
+    )
 
 
 @then(parsers.parse('the brief carries the changed file "{path}"'))
@@ -176,6 +188,14 @@ def _released(world: dict[str, Any]) -> None:
     assert [note.text for note in outcome.released] == [
         note.text for note in world["notes"]
     ]
+
+
+@then("the release says it cannot tell the verdict from the author's own")
+def _independence_unverified(world: dict[str, Any]) -> None:
+    outcome = world["release"]
+    assert outcome is not None
+    assert outcome.independence_note is not None
+    assert world["bead_author"] in outcome.independence_note
 
 
 @then("the release is refused")

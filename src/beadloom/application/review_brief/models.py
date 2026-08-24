@@ -25,6 +25,7 @@ FINDING_UNKNOWN_REF = "unknown-ref"
 FINDING_UNMEASURED_CHANGE = "unmeasured-change"
 FINDING_OUTSIDE_SCOPE = "changed-outside-scope"
 FINDING_NO_SCENARIO = "no-bound-scenario"
+FINDING_AMBIGUOUS_SCOPE = "ambiguous-scope"
 
 #: Why the author's comments are not in the brief, in the words a reviewer reads.
 WITHHELD_REASON = (
@@ -45,10 +46,18 @@ RELEASE_CONDITION = (
 #: throughout this epic's own S5 wave, deliberately, to save cycles. Nothing in
 #: this process can see that happen except the agent reading the prompt, so the
 #: duty to report it is placed where the observation is.
+#:
+#: It asks about anything the reviewer did not derive, not only a pasted summary.
+#: The first review to run under this notice reported that its prompt carried the
+#: coordinator's own observation of the wave — not the author's account, so
+#: nothing here modelled it — and that two of its findings came from that hint. A
+#: notice that named only the paste would have been answered truthfully and would
+#: have missed it.
 DEFEAT_NOTICE = (
-    "if your launch prompt already carried the author's summary, this withholding "
-    "was defeated before it ran — say so in your verdict; you are the only party "
-    "that can see it"
+    "if your launch prompt carried anything about this change that you did not "
+    "derive yourself — the author's summary, or the coordinator's own observation "
+    "of it — this withholding was defeated before it ran; say so in your verdict, "
+    "you are the only party that can see it"
 )
 
 
@@ -87,11 +96,18 @@ class ReleaseOutcome:
 
     ``released`` is empty exactly when ``refused_reason`` is set, so a caller
     cannot read a partial release as a full one.
+
+    ``independence_note`` is the third answer, and it is why the type is not a
+    boolean: a release can happen and still rest on a verdict whose independence
+    the tracker cannot confirm. Reporting that as a plain success is the silent
+    false-green this whole feature exists to remove.
     """
 
     released: tuple[AuthorNote, ...] = ()
     refused_reason: str | None = None
     verdict_marker: str | None = None
+    verdict_author: str = ""
+    independence_note: str | None = None
 
 
 @dataclass(frozen=True)
@@ -141,6 +157,12 @@ class ReviewBrief:
     bead_id: str
     title: str = ""
     assignment: str = ""
+
+    #: The ref the change was measured AGAINST, carried on the brief rather than
+    #: passed beside it. The window is part of what the change inventory means:
+    #: a branch holding five beads reports all five beads' files to each of them,
+    #: so a finding about the change has to name what it was measured over.
+    measured_since: str = ""
     refs: tuple[str, ...] = ()
     unknown_refs: tuple[str, ...] = ()
     docs: tuple[SpecDocument, ...] = ()

@@ -75,7 +75,7 @@ def conn(tmp_path: Path) -> sqlite3.Connection:
 def _bead(bead_id: str, refs: str = "", blocked_by: frozenset[str] = frozenset()) -> BeadRecord:
     return BeadRecord(
         bead_id=bead_id,
-        declaration=f"work. refs: {refs}" if refs else "work.",
+        declaration=f"work.\nrefs: {refs}" if refs else "work.",
         blocked_by=blocked_by,
     )
 
@@ -89,7 +89,10 @@ class TestDeclaredRefs:
             ("refs: a, b", ("a", "b")),
             ("ref: a", ("a",)),
             ("area: a", ("a",)),
-            ("refs: a\nand then refs: b", ("a", "b")),
+            ("refs: a\nrefs: b", ("a", "b")),
+            # Every OCCURRENCE is read, but only where one opens a line: the
+            # second `refs:` below sits inside a sentence and is prose.
+            ("refs: a\nand then refs: b", ("a",)),
             ("refs: a. Then some prose about b", ("a",)),
             # A declaration written inside prose: the id, then talk about it.
             ("ref: FEAT-1 Touches FEAT-1", ("FEAT-1",)),

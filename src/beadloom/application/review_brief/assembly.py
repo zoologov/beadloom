@@ -24,6 +24,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from beadloom.application.review_brief.models import (
+    FINDING_AMBIGUOUS_SCOPE,
     FINDING_NO_SCENARIO,
     FINDING_NO_SCOPE,
     FINDING_OUTSIDE_SCOPE,
@@ -35,7 +36,11 @@ from beadloom.application.review_brief.models import (
     SpecDocument,
     WithheldNotes,
 )
-from beadloom.application.waves import UNRESOLVED_NO_DECLARATION, resolve_scope
+from beadloom.application.waves import (
+    UNRESOLVED_NO_DECLARATION,
+    UNRESOLVED_REMEDIES,
+    resolve_scope,
+)
 from beadloom.infrastructure.repository import get_docs_for_ref, get_owning_ref_id
 
 if TYPE_CHECKING:
@@ -87,6 +92,7 @@ def assemble_brief(
     *,
     assignment: str,
     changed_paths: frozenset[str] | None,
+    measured_since: str = "",
     notes: Sequence[AuthorNote] = (),
     scenarios: Sequence[Scenario] = (),
 ) -> ReviewBrief:
@@ -106,11 +112,28 @@ def assemble_brief(
     as an empty change set: "nothing changed" and "nobody looked" reaching the
     reviewer as the same brief is the silent false-green this command exists to
     remove.
+
+    ``measured_since`` is the ref the caller measured that change against, and it
+    is required by the ``changed-outside-scope`` finding rather than by the
+    inventory. The change is everything the BRANCH did, not everything the BEAD
+    did — no per-bead attribution exists in the commits — so on a branch carrying
+    five beads all five briefs report the same files and four of them would
+    otherwise accuse a bead of a sibling's work (BDL-061.23 M8). The finding names
+    its window instead of claiming an attribution it cannot make.
     """
     scope = resolve_scope(conn, record)
     findings: list[str] = []
     if scope.unresolved == UNRESOLVED_NO_DECLARATION:
         findings.append(FINDING_NO_SCOPE)
+    elif scope.unresolved is not None and not scope.unknown_refs:
+        # Every OTHER way the declaration could not be read: written inside a
+        # sentence, or naming a second ref the parser had to throw away. Both are
+        # findings here for the same reason they serialise the bead in a wave —
+        # the reviewer is being handed a scope that is narrower than the bead's.
+        findings.append(
+            f"{FINDING_AMBIGUOUS_SCOPE}: {scope.unresolved} — "
+            f"{UNRESOLVED_REMEDIES.get(scope.unresolved, '')}"
+        )
     if scope.unknown_refs:
         findings.append(f"{FINDING_UNKNOWN_REF}: {', '.join(scope.unknown_refs)}")
 
@@ -121,7 +144,11 @@ def assemble_brief(
         inventory = _change_inventory(conn, changed_paths, scope.refs)
         outside = [item.path for item in inventory if item.owner is not None and not item.in_scope]
         if outside:
-            findings.append(f"{FINDING_OUTSIDE_SCOPE}: {', '.join(outside)}")
+            findings.append(
+                f"{FINDING_OUTSIDE_SCOPE}: measured over the branch since "
+                f"{measured_since or 'the base ref'}, so a sibling bead's file "
+                f"appears here too — {', '.join(outside)}"
+            )
 
     bound = _bound_scenarios(scenarios, record.bead_id)
     if not bound:
@@ -131,6 +158,7 @@ def assemble_brief(
         bead_id=record.bead_id,
         title=record.title,
         assignment=assignment,
+        measured_since=measured_since,
         refs=tuple(sorted(scope.refs)),
         unknown_refs=scope.unknown_refs,
         docs=_spec_documents(conn, scope.refs),

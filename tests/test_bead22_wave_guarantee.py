@@ -110,7 +110,7 @@ def _bead(
 ) -> BeadRecord:
     return BeadRecord(
         bead_id=bead_id,
-        declaration=f"work. refs: {refs}" if refs else "work.",
+        declaration=f"work.\nrefs: {refs}" if refs else "work.",
         blocked_by=blocked_by,
     )
 
@@ -268,47 +268,62 @@ class TestTheFirstClauseUnderOverlapsThatAreNotEquality:
         assert [c.reason for c in plan.conflicts] == [REASON_SHARED_NODE]
 
 
-class TestTheParserNarrowsAScopeRatherThanRefusingIt:
-    """What the declaration parser does with a separator it does not accept."""
+class TestTheParserRefusesRatherThanNarrows:
+    """What the declaration parser does with a separator it does not accept.
+
+    OBSERVATION BDL-061.22-A was pinned here as behaviour rather than filed as a
+    defect, because the trade-off looked real in both directions: a declaration is
+    written inside prose, and reading every following word as a ref id found
+    nothing at all. `beadloom-mr2l.23` R1 ruled it a defect and named the repair
+    the observation itself had identified — report a dropped word that IS a node
+    in the graph — which has neither horn: it needs no guess at prose and it fails
+    closed. `beadloom-mr2l.83` closed it.
+    """
+
+    def test_a_second_ref_after_a_semicolon_is_a_second_ref(self) -> None:
+        """OBSERVATION BDL-061.22-A, first half: `;` separates a list."""
+        assert declared_refs("refs: billing; shipping") == ("billing", "shipping")
 
     @pytest.mark.parametrize(
         ("declaration", "kept", "dropped"),
         [
-            ("refs: billing; shipping", ("billing",), "shipping"),
             ("refs: billing shipping", ("billing",), "shipping"),
             ("refs: billing. shipping too", ("billing",), "shipping"),
         ],
     )
-    def test_a_second_ref_written_without_a_comma_is_dropped_in_silence(
-        self, declaration: str, kept: tuple[str, ...], dropped: str
+    def test_a_second_ref_written_without_a_comma_is_dropped_but_not_in_silence(
+        self,
+        conn: sqlite3.Connection,
+        declaration: str,
+        kept: tuple[str, ...],
+        dropped: str,
     ) -> None:
-        """OBSERVATION BDL-061.22-A — the parser's error mode is a NARROWER scope.
+        """OBSERVATION BDL-061.22-A, second half — the narrowing is now reported.
 
         Every other unknown in this command fails closed: no declaration and an
-        absent ref both serialise the bead against everything. A ref written
-        after `;`, after a sentence stop, or after a space is instead dropped, and
-        a narrower scope compares INDEPENDENT of more beads than the true one
-        does — the same silent false-green decision 3 exists to remove, arriving
-        by a different door.
-
-        The trade-off is real in both directions, which is why this is pinned as
-        behaviour rather than filed as a defect: a declaration is written inside
-        prose, and reading every following word as a ref id found nothing at all.
-        The narrow repair available is to report a dropped word that IS a node in
-        the graph, which is checkable without guessing at prose.
+        absent ref both serialise the bead against everything. A ref written after
+        a sentence stop or a space is still not read as a ref — that rule cannot
+        change without breaking every declaration written inside prose — but the
+        word is checked against the graph, and one the graph confirms is a node
+        leaves the scope UNRESOLVED, which serialises the bead.
         """
         assert declared_refs(declaration) == kept
-        assert dropped not in declared_refs(declaration)
+        scope = resolve_scope(conn, BeadRecord("a", declaration))
+        assert scope.dropped_refs == (dropped,)
+        assert not scope.resolved
 
-    def test_a_narrowed_scope_lets_two_beads_share_a_wave_over_one_node(
+    def test_a_narrowed_scope_no_longer_lets_two_beads_share_a_wave(
         self, conn: sqlite3.Connection
     ) -> None:
-        """The consequence of OBSERVATION BDL-061.22-A, measured on the planner."""
-        both = _bead("a")
-        both = BeadRecord("a", "work. refs: shipping; billing")
+        """The consequence of OBSERVATION BDL-061.22-A, measured on the planner.
+
+        Before the fix: `plan.conflicts == ()`, one wave, exit 0, and two beads
+        that both declared `billing` were placed side by side with nothing said.
+        """
+        both = BeadRecord("a", "work.\nrefs: shipping; billing")
         plan = plan_waves([both, _bead("b", "billing")], conn=conn)
-        assert plan.conflicts == ()
-        assert plan.wave_of("a") == plan.wave_of("b")
+        assert plan.conflicts != ()
+        assert plan.wave_of("a") != plan.wave_of("b")
 
 
 class TestTheSecondClauseCannotBeSilencedWhileAWaveHoldsTwo:

@@ -101,7 +101,7 @@ def _record(bead: str, refs: str = "", deps: list[dict[str, str]] | None = None)
     return {
         "id": bead,
         "title": f"[{bead}] work",
-        "description": f"do the work. refs: {refs}" if refs else "do the work.",
+        "description": f"do the work.\nrefs: {refs}" if refs else "do the work.",
         "dependencies": deps or [],
     }
 
@@ -268,12 +268,13 @@ class TestTrackerSeam:
         Pinned here because the double above cannot fail when the tracker's
         vocabulary moves. The names come from bd 1.0.4's own output.
         """
-        from beadloom.services.commands.waves import _blocked_by, _declaration
+        from beadloom.application.waves import compose_declaration
+        from beadloom.services.commands.waves import _blocked_by
 
         record = {
             "id": "x.1",
             "title": "t",
-            "description": "d. refs: billing",
+            "description": "d.\nrefs: billing",
             "notes": "n",
             "dependencies": [
                 {"id": "x", "dependency_type": "parent-child", "status": "open"},
@@ -282,7 +283,7 @@ class TestTrackerSeam:
             ],
         }
         assert _blocked_by(record) == frozenset({"x.2"})
-        assert "refs: billing" in _declaration(record)
+        assert "refs: billing" in compose_declaration(record)
 
     def test_an_open_parent_link_never_blocks_its_child(self) -> None:
         from beadloom.services.commands.waves import _blocked_by

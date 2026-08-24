@@ -65,7 +65,7 @@ independently and recorded; the hidden-profile risk is in the first pass.
 | Specification | the graph's documents for those nodes | authored against the design, held to the code by `sync-check` |
 | Scenarios | the acceptance suite's `@bead:` tags | executable; it either runs or it does not |
 | Change | `git diff <base>...HEAD`, the working tree, and the untracked files | measured from the repository |
-| Withheld | a count, a reason, a release condition | the account itself is not printed |
+| Withheld | a count, a reason, a release condition, a defeat notice | the account itself is not printed |
 
 The `refs:` token is read from the title, the description, the design field and
 the `notes` field, because this epic's own beads declare their scope in `notes`
@@ -110,7 +110,7 @@ reviewer as work.
 | Code | Meaning |
 |---|---|
 | `0` | the brief rests on nothing unstated, or `--release` released the account |
-| `1` | the brief carries findings: undeclared scope, unknown ref, unmeasured change, a change outside the scope, no bound scenario. Visible, never blocking |
+| `1` | the brief carries findings: undeclared scope, an ambiguous one, unknown ref, unmeasured change, a change outside the scope, no bound scenario. Under `--release`: the account was released on a verdict whose independence the tracker could not confirm |
 | `2` | no brief could be assembled: no index, no answer from the tracker, no such bead |
 | `3` | `--release` was refused because no verdict is recorded |
 
@@ -119,13 +119,39 @@ withheld, and a caller that could not tell those apart would retry the wrong one
 
 ### How a verdict is recognised
 
-A comment whose line starts with `REVIEW PASSED`, `REVIEW ISSUES` or `REVIEW
-FINDINGS`. These are the exact openings the review role is instructed to write,
-so recognising them here and emitting them there are one convention rather than
-two. The match is anchored to a line start, so a checkpoint that *mentions* a
-review does not read as one being recorded. A verdict written in other words is
-not recognised and the release says so by name, because a marker list that
-quietly accepted anything would make the gate unfalsifiable.
+A comment whose **first non-blank line opens with** `REVIEW PASSED:`, `REVIEW
+ISSUES:` or `REVIEW FINDINGS:` — **the colon included**. These are the exact
+openings the review role is instructed to write, so recognising them here and
+emitting them there are one convention rather than two. A verdict written in
+other words is not recognised and the release says so by name, because a marker
+list that quietly accepted anything would make the gate unfalsifiable.
+
+Both conditions were bought with a defect. The match used to be anchored to a
+line start and nothing more, and the docstring that described it named the case
+it did not catch: `REVIEW ISSUES are still open, will fix` released the account,
+measured. Requiring the colon closes that. Requiring the marker to open the
+comment closes the second: a checkpoint reading `COMPLETED: shipped it` with a
+verdict line beneath it opened the gate from the middle of the author's own
+progress note.
+
+### Who recorded the verdict
+
+The author of the verdict comment is compared with the tracker's assignee for the
+bead — the party whose account is being withheld. The answer is **reported, not
+enforced**: a verdict recorded under the bead author's own identity still
+releases, and the release prints the reason it cannot be called independent,
+before the account, and exits `1`.
+
+Refusing was rejected on a measurement. In this repository every comment on every
+bead carries the one tracker identity `v.zoologov`, which is also every bead's
+assignee: the dev agent, the review agent and the human all write under it. A
+gate that refused a self-recorded verdict would refuse every release here, and a
+gate nobody can pass is bypassed rather than obeyed — the reviewer would run `bd
+comments` directly, which this command has never been able to prevent. So the
+comparison is made and its answer costs the run its exit code, on the same rule
+that makes an unmeasured medium a finding rather than a silent pass. On a tracker
+where the roles hold separate accounts the same code reports an independent
+verdict with nothing to say.
 
 ### Honest limits
 
@@ -145,7 +171,34 @@ report unmeasured for a reason that is not a defect.
 **The scenarios are matched by tag, not verified to assert anything.** A scenario
 that binds to the bead and asserts nothing appears in the brief as specification.
 Judging that is the reviewer's work, and `scenario-coverage` reports the binding,
-not the content.
+not the content. `N bound scenario(s)` is therefore a count the reviewer must
+still open.
+
+**The change is measured over the branch, not over the bead.** `git diff
+<base>...HEAD` plus the working tree plus the untracked files is everything the
+whole branch did, and no per-bead attribution exists in the commits. On a branch
+carrying five beads all five briefs report the same files, so the
+`changed-outside-scope` finding names its window — `measured over the branch
+since <ref>` — instead of claiming an attribution it cannot make. `--since <the
+sibling's landing point>` narrows the window when a caller knows one.
+
+**The withholding models the author's comments and the coordinator's paste of
+them; it does not model the coordinator's own observations.** A launch prompt
+carrying a directed hint is not a pasted summary and nothing counts it, yet it
+converges a reviewer the same way — two findings of this feature's own first
+review came from one. The duty the brief places on the reviewer therefore covers
+anything in the prompt the reviewer did not derive itself.
+
+**"Description-against-comment is structural" holds for a bead written before the
+work.** It does not hold for a fix bead, whose description *is* the previous
+review handed over as the assignment. That is correct — it is the assignment —
+and it also means a fix bead's reviewer is converged on the previous reviewer's
+framing by design. The mechanism cannot separate those two and does not claim to.
+
+**The findings go to stderr while the brief goes to stdout.** A reviewer piping
+the brief to a file keeps the body and loses the findings. Every other command
+here does the same, and on this one the findings are the part a reviewer is least
+able to re-derive.
 
 ## Modules
 

@@ -91,3 +91,25 @@ Feature: a wave shape is decided from the graph, and says what it does not decid
     When the wave shape is decided
     Then the wave reports "tracker-ids" as failed
     And the plan is not clean
+
+  # BDL-061.83. The parser the whole decision rests on failed toward MORE
+  # parallelism: a `refs:` written inside a sentence adopted the next word as a
+  # real scope, and a second ref written without a comma was dropped. Both made
+  # two beads MORE likely to share a wave, which is the direction that costs.
+
+  @bead:beadloom-mr2l.83
+  Scenario: A bead that only mentions refs in a sentence is unresolved, not scoped
+    Given a bead "alpha" declaring the node scope "billing"
+    And a bead "essay" that mentions "billing" in a sentence about declarations
+    When the wave shape is decided
+    Then "alpha" and "essay" are in different waves
+    And the decision names "unresolved_scope" for "essay"
+
+  @bead:beadloom-mr2l.83
+  Scenario: A second ref the parser had to drop is named rather than silently lost
+    Given a bead "alpha" declaring the node scope "billing"
+    And a bead "terse" declaring the node scopes "shipping billing" without a comma
+    When the wave shape is decided
+    Then "alpha" and "terse" are in different waves
+    And the decision names "unresolved_scope" for "terse"
+    And the plan is not clean

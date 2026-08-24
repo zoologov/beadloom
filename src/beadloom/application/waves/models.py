@@ -47,11 +47,41 @@ REASON_BLOCKED_BY_BEAD = "blocked_by_bead"
 #: A declared override put the pair apart on purpose.
 REASON_OVERRIDE_SERIAL = "override_serial"
 
-#: Why a bead's scope could not be resolved. Two causes, kept apart because their
-#: remedies differ: one bead has to say something, the other has to say something
-#: TRUE.
+#: Why a bead's scope could not be resolved. Four causes, kept apart because their
+#: remedies differ: one bead has to say something, one has to say something TRUE,
+#: one has to say it where a parser can see it, and one has to say it in a list.
+#:
+#: Every one of them SERIALISES the bead, which is the whole direction of this
+#: parser: a declaration nobody can read with confidence must not widen a wave.
+#: The two added by `beadloom-mr2l.83` were both silent narrowings before it — a
+#: `refs:` written inside a sentence handed the bead the next word as a scope, and
+#: a second ref written without a comma was dropped — and a narrower scope
+#: compares INDEPENDENT of more beads than the true one does.
 UNRESOLVED_NO_DECLARATION = "no_declared_refs"
 UNRESOLVED_UNKNOWN_REF = "ref_not_in_graph"
+UNRESOLVED_UNANCHORED = "declaration_not_at_a_line_start"
+UNRESOLVED_DROPPED_NODE = "declaration_dropped_a_node"
+
+#: What to do about each unresolved reason, in the words the finding prints. A
+#: reason without a remedy is a verdict a reader cannot act on, and the four
+#: remedies genuinely differ, so one sentence for all four would be wrong three
+#: times.
+UNRESOLVED_REMEDIES: dict[str, str] = {
+    UNRESOLVED_NO_DECLARATION: (
+        "declare `refs: <ref_id>` on a line of its own"
+    ),
+    UNRESOLVED_UNKNOWN_REF: (
+        "name a ref the graph has, or add the node — `refs: <ref_id>`"
+    ),
+    UNRESOLVED_UNANCHORED: (
+        "move the declaration to the start of its own line; a `refs:` inside a "
+        "sentence is prose, and reading it would hand the bead the next word"
+    ),
+    UNRESOLVED_DROPPED_NODE: (
+        "separate the names with a comma — `refs: <ref_id>, <ref_id>`; only the "
+        "first word of a list item is read, so the rest was thrown away"
+    ),
+}
 
 #: The two directions a human override may push a decision.
 DECISION_PARALLEL = "parallel"
@@ -91,6 +121,13 @@ class BeadScope:
     files: frozenset[str]
     unresolved: str | None = None
     unknown_refs: tuple[str, ...] = ()
+
+    #: Words the declaration named that the parser did not read as refs AND that
+    #: the graph does have as nodes. Held rather than discarded because that is
+    #: the difference between a scope that was narrowed in silence and one that
+    #: says so: a word the graph cannot confirm is prose, a word it can confirm
+    #: is a ref the bead declared and this parser threw away.
+    dropped_refs: tuple[str, ...] = ()
 
     @property
     def resolved(self) -> bool:

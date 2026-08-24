@@ -9,9 +9,12 @@ becomes lines on a stream and one exit code.
 Codes (the contract a caller may rely on):
 
 * ``0`` — a shape was decided and it rests on nothing unstated.
-* ``1`` — a shape was decided and carries findings: a bead that did not declare
-  its scope, an override past its exit condition, an override that changed
-  nothing. Visible, never blocking — the shape is still usable.
+* ``1`` — a shape was decided and carries findings: a bead whose declared scope
+  could not be read (it declared none, named a ref the graph does not have, wrote
+  the declaration inside a sentence, or wrote a second ref the parser had to drop),
+  an override past its exit condition, an override that changed nothing, a shared
+  medium whose precondition failed, a shared medium nobody measured. Visible,
+  never blocking — the shape is still usable.
 * ``2`` — no shape could be decided: no index, no answer from the tracker, a
   bead the tracker does not have, or a ``waves:`` block that would not parse.
 
@@ -49,13 +52,6 @@ _EXIT_UNDECIDABLE = 2
 _PARENT_CHILD = "parent-child"
 
 
-def _declaration(record: dict[str, Any]) -> str:
-    """Everything the bead says about itself, in one string for the scope parser."""
-    return "\n".join(
-        str(record.get(key, "")) for key in ("title", "description", "design", "notes")
-    )
-
-
 def _blocked_by(record: dict[str, Any]) -> frozenset[str]:
     """The OPEN, non-parent dependencies of *record* — beads that must land first."""
     deps = record.get("dependencies")
@@ -79,7 +75,7 @@ def _read_beads(bead_ids: tuple[str, ...], project_root: Path) -> list[BeadRecor
     serialised with a finding pointing at the author, when the thing to fix is the
     id or the tracker.
     """
-    from beadloom.application.waves import BeadRecord
+    from beadloom.application.waves import BeadRecord, compose_declaration
     from beadloom.services.bd_seam import run_bd
 
     records: list[BeadRecord] = []
@@ -96,7 +92,7 @@ def _read_beads(bead_ids: tuple[str, ...], project_root: Path) -> list[BeadRecor
         records.append(
             BeadRecord(
                 bead_id=bead_id,
-                declaration=_declaration(record),
+                declaration=compose_declaration(record),
                 blocked_by=_blocked_by(record),
                 title=str(record.get("title", "")),
             )

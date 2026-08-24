@@ -26,7 +26,7 @@ from beadloom.application.active_table import (
 )
 from beadloom.application.gate import run_ci_gate
 from beadloom.application.reindex import incremental_reindex
-from beadloom.application.waves import declared_refs
+from beadloom.application.waves import compose_declaration, declared_refs
 from beadloom.context_oracle.builder import bfs_subgraph, build_context
 from beadloom.context_oracle.cache import (
     ContextCache,
@@ -690,16 +690,18 @@ def handle_bead_context(
         record = _bd_show(bead, project_root)
     except BdUnavailableError as exc:
         return {"status": "ERROR", "error": str(exc)}
-    # ONE parser for a bead's declared scope, shared with `beadloom waves`
-    # (BDL-061 S6). Two readings of one declaration is how a tool and a planner
-    # come to disagree about what a bead said — the id-in-two-places defect this
-    # epic has now met three times (BDL-UX #171, #177, #179).
-    declared = declared_refs(
-        " ".join(
-            str(record.get(key, ""))
-            for key in ("design", "description", "title", "notes")
-        )
-    )
+    # ONE parser for a bead's declared scope AND one composer for the string it
+    # parses, both shared with `beadloom waves` and `beadloom review-brief`. The
+    # composer is the half this tool used to own privately: it joined the fields
+    # with a space where both CLI callers joined them with a newline, which put
+    # the next field's first word directly behind a dangling `refs:` header and
+    # made this tool read a scope the planner did not (BDL-061.23 M5). Two
+    # readings of one declaration is how a tool and a planner come to disagree
+    # about what a bead said (BDL-UX #171, #177, #179).
+    declared = declared_refs(compose_declaration(record))
+    # Sorted by the parser, so this is the ALPHABETICALLY first declared ref and
+    # not the author's first. Stated because `docs/services/mcp.md` said the
+    # other thing.
     ref_id = declared[0] if declared else None
     if ref_id is None:
         return {
