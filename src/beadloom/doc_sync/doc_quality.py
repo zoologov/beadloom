@@ -33,6 +33,17 @@ not, and nothing here can tell them apart); a reason is checked for EXISTENCE,
 not for explaining rather than restating the decision, which no checker decides;
 and a mitigation is judged against a named set of empty ones rather than on
 whether it would work.
+
+**Applicability is reported PER DOCUMENT KIND, not only per check.**
+``checks_that_read_nothing`` is a global OR over the corpus, so it goes silent
+the moment one document carries one row: it can see a check that is blind
+everywhere and not one that is blind on an entire shipped document kind.
+Measured on this repository, all eleven ``BRIEF.md`` contribute zero to all four
+content checks by template construction, and that guard was green throughout —
+the blind spot it was built to prevent, one level down (review BDL-061.15 M2).
+:attr:`QualityReport.by_kind` states the population each kind entered, and
+:attr:`QualityReport.kinds_that_read_nothing` names the ones no content check
+enters at all.
 """
 
 from __future__ import annotations
@@ -58,6 +69,19 @@ CHECK_NAMES: tuple[str, ...] = (
     RISK_MITIGATION,
     PENDING_IN_APPROVED,
     UNFILLED_PLACEHOLDER,
+)
+
+#: The four checks whose population is ITEMS a document states — a goal, a
+#: decision row, a risk row, an open question. ``unfilled-placeholder`` is
+#: deliberately not one: its population is documents OPENED, so it reads every
+#: document by construction and can never tell one kind from another. Judging
+#: "was this kind entered" over all five would report every kind as read, which
+#: is a second vacuous guard in place of the first (review `.15` n1).
+CONTENT_CHECKS: tuple[str, ...] = (
+    MEASURABLE_GOAL,
+    DECISION_REASON,
+    RISK_MITIGATION,
+    PENDING_IN_APPROVED,
 )
 
 #: A status whose first word means the document was agreed, not drafted. Only
@@ -107,6 +131,42 @@ class QualityFinding:
 
 
 @dataclass(frozen=True)
+class KindCoverage:
+    """What the checks read in one kind of document — ``PRD``, ``BRIEF``, ….
+
+    ``documents`` counts the documents of this kind that were READ, and
+    ``unreadable`` those that could not be decoded. They are separate because a
+    file nobody read is not evidence about what its kind carries: counting an
+    undecodable ``BRIEF.md`` as a BRIEF with nothing read would turn an encoding
+    accident into a statement about the project's templates.
+    """
+
+    kind: str
+    documents: int = 0
+    applicable: dict[str, int] = field(default_factory=dict)
+    unreadable: int = 0
+
+    @property
+    def checks_that_read_nothing(self) -> tuple[str, ...]:
+        """Checks that found nothing to judge in any document of this kind."""
+        return tuple(
+            name for name in CHECK_NAMES if not self.applicable.get(name, 0)
+        )
+
+    @property
+    def is_unread(self) -> bool:
+        """Whether no CONTENT check enters this kind — a population never entered.
+
+        Judged over :data:`CONTENT_CHECKS`, and only over documents that were
+        actually read: a kind whose every document is undecodable is
+        *unverified*, which is a different fact and has a different remedy.
+        """
+        return bool(self.documents) and not any(
+            self.applicable.get(name, 0) for name in CONTENT_CHECKS
+        )
+
+
+@dataclass(frozen=True)
 class QualityReport:
     """Findings over a set of documents, plus what the run could NOT judge.
 
@@ -119,6 +179,15 @@ class QualityReport:
     findings: tuple[QualityFinding, ...] = ()
     documents: int = 0
     applicable: dict[str, int] = field(default_factory=dict)
+    by_kind: tuple[KindCoverage, ...] = ()
+    """Applicability per document kind — the question the global count cannot ask.
+
+    ``checks_that_read_nothing`` is an OR over the whole corpus and goes silent
+    the moment ONE document carries ONE row, so it cannot see a check that is
+    blind on an entire document kind. This is the same shape ``missing_sections``
+    already reports (``Source (5/39)``), one level down.
+    """
+
     unreadable: tuple[tuple[str, str], ...] = ()
     """Documents that could not be read, as ``(path, reason)``.
 
@@ -134,6 +203,11 @@ class QualityReport:
         return tuple(
             name for name in CHECK_NAMES if not self.applicable.get(name, 0)
         )
+
+    @property
+    def kinds_that_read_nothing(self) -> tuple[str, ...]:
+        """Document kinds no CONTENT check enters — a population never entered."""
+        return tuple(cov.kind for cov in self.by_kind if cov.is_unread)
 
 
 # ---------------------------------------------------------------------------
@@ -497,16 +571,32 @@ def check_document(
     )
 
 
+def document_kind(path: str) -> str:
+    """The kind of document a path names — ``PRD.md`` is a ``PRD``.
+
+    The stem, because that is how the shipped flow names a document and it needs
+    no configuration to derive. A project whose documents are ``prd.md`` gets
+    ``prd`` as a kind of its own, which is honest: nothing here was told the two
+    are the same thing.
+    """
+    name = path.replace("\\", "/").rsplit("/", 1)[-1]
+    stem, _, _ = name.rpartition(".")
+    return (stem or name).strip()
+
+
 def check_documents(
     paths: Iterable[Path],
     *,
     project_root: Path,
     placeholders: Sequence[str] = (),
 ) -> QualityReport:
-    """Run all five checks over every document in *paths*."""
+    """Run all five checks over every document in *paths*, and per document kind."""
     findings: list[QualityFinding] = []
     applicable: dict[str, int] = dict.fromkeys(CHECK_NAMES, 0)
     unreadable: list[tuple[str, str]] = []
+    per_kind: dict[str, dict[str, int]] = {}
+    kind_documents: dict[str, int] = {}
+    kind_unreadable: dict[str, int] = {}
     documents = 0
     for path in sorted(paths):
         try:
@@ -523,20 +613,36 @@ def check_documents(
             except ValueError:
                 where = str(path)
             unreadable.append((where, f"{type(exc).__name__}: {exc}"))
+            kind = document_kind(where)
+            kind_unreadable[kind] = kind_unreadable.get(kind, 0) + 1
+            per_kind.setdefault(kind, dict.fromkeys(CHECK_NAMES, 0))
             continue
         documents += 1
         try:
             relative = str(path.relative_to(project_root))
         except ValueError:
             relative = str(path)
+        kind = document_kind(relative)
+        kind_documents[kind] = kind_documents.get(kind, 0) + 1
+        counts = per_kind.setdefault(kind, dict.fromkeys(CHECK_NAMES, 0))
         report = check_document(text, path=relative, placeholders=placeholders)
         findings.extend(report.findings)
         for name, count in report.applicable.items():
             applicable[name] = applicable.get(name, 0) + count
+            counts[name] = counts.get(name, 0) + count
     findings.sort(key=lambda f: (f.path, f.line, f.check))
     return QualityReport(
         findings=tuple(findings),
         documents=documents,
         applicable=applicable,
+        by_kind=tuple(
+            KindCoverage(
+                kind=kind,
+                documents=kind_documents.get(kind, 0),
+                applicable=per_kind[kind],
+                unreadable=kind_unreadable.get(kind, 0),
+            )
+            for kind in sorted(per_kind)
+        ),
         unreadable=tuple(unreadable),
     )

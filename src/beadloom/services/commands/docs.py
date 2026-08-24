@@ -561,6 +561,29 @@ def _docs_audit_rich(
         console.print()
 
 
+def _echo_per_kind(report: object) -> None:
+    """Say what each document KIND contributed, and what nobody could read.
+
+    The global ``NOT CHECKED`` line above is an OR over the corpus: it goes
+    silent the moment one document carries one row, so it can see a check that is
+    blind everywhere and not one that is blind on a whole document kind (review
+    BDL-061.15 M2 — all eleven ``BRIEF.md`` here contribute zero to all four
+    content checks, and that line was green throughout).
+
+    Both trailing lines are silent when they have nothing to say. A per-kind
+    block that prints "all read" for every kind on every run is how the one line
+    that matters goes unread.
+    """
+    for cov in report.by_kind:  # type: ignore[attr-defined]
+        if cov.is_unread:
+            click.echo(
+                f"  NO CHECK READS: {cov.kind} — {cov.documents} document(s), "
+                f"and no goal, decision, risk or open question in any of them"
+            )
+    for path, reason in report.unreadable:  # type: ignore[attr-defined]
+        click.echo(f"  UNREADABLE: {path} — {reason}; judged by nothing")
+
+
 @docs.command("quality")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON.")
 @click.option(
@@ -638,6 +661,22 @@ def docs_quality(
                         for name in CHECK_NAMES
                     },
                     "read_nothing": list(report.checks_that_read_nothing),
+                    # Per KIND, because the list above is an OR over the whole
+                    # corpus and cannot see a check blind on one document kind.
+                    "kinds": {
+                        cov.kind: {
+                            "documents": cov.documents,
+                            "unreadable": cov.unreadable,
+                            "read": dict(cov.applicable),
+                            "read_nothing": list(cov.checks_that_read_nothing),
+                        }
+                        for cov in report.by_kind
+                    },
+                    "kinds_read_by_nothing": list(report.kinds_that_read_nothing),
+                    "unreadable": [
+                        {"path": path, "reason": reason}
+                        for path, reason in report.unreadable
+                    ],
                     "findings": [
                         {
                             "check": f.check,
@@ -679,6 +718,7 @@ def docs_quality(
                 f"  NOT CHECKED: {', '.join(blind)} — no document carried "
                 f"anything for these to read"
             )
+        _echo_per_kind(report)
         click.echo(f"  {report.documents} document(s) read")
 
     if strict and findings:

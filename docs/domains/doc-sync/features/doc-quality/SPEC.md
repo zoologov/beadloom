@@ -74,14 +74,57 @@ matching reported three real headings of BDL-030's RFC (`Step 1 (12.12.1): Detec
 documents that state no risks is not a statement about risks — the same discipline `docs audit`
 applies to a fact no document mentions (BDL-UX #173).
 
+**And per document KIND, because the check count structurally cannot see a per-kind hole.**
+`checks_that_read_nothing` is a global OR over the corpus: it goes silent the moment ONE document
+carries ONE row, so it can detect a check that is blind everywhere and not one that is blind on an
+entire shipped document kind. `QualityReport.by_kind` states what each kind contributed and
+`kinds_that_read_nothing` names the kinds no **content** check enters. The judgement is made over
+the four checks that read ITEMS — a goal, a decision row, a risk row, an open question — because
+`unfilled-placeholder`'s population is documents OPENED and it therefore reads every kind by
+construction; judging over all five would report every kind as read, which is a second vacuous
+guard in place of the first.
+
+**Measured on this repository, 2026-08-24: 56 of 243 documents (23%) are in a kind no content
+check enters**, and `checks_that_read_nothing` was `()` throughout.
+
+| Kind | Documents | goals | decision rows | risk rows | open questions |
+|------|-----------|-------|---------------|-----------|----------------|
+| ACTIVE | 55 | 1 | 3 | 0 | 0 |
+| CONTEXT | 46 | 33 | 210 | 0 | 0 |
+| RFC | 45 | 0 | 41 | 121 | 65 |
+| PLAN | 42 | 0 | 0 | 0 | 0 |
+| PRD | 41 | 201 | 7 | 17 | 4 |
+| BRIEF | 11 | 0 | 0 | 0 | 0 |
+| SUMMARY | 3 | 0 | 0 | 0 | 0 |
+
+**This is a report, not yet a decision.** BRIEF, PLAN and SUMMARY read zero *by template
+construction* — the shipped BRIEF template carries no Goal section, no Reason column, no Risks and
+no Open Questions, and it is the kind every `bug`, `task` and `chore` uses. Whether to give those
+templates the rows or to state that they are outside these four checks is a product decision with
+a migration behind it, and it is open. What has changed is that the state is now printed by
+`docs quality` and by the `docs-quality` gate step rather than inferred by a reviewer.
+
+**A kind is judged on the documents that were READ.** `KindCoverage.unreadable` counts the
+documents of that kind nothing could decode and they are excluded from `documents`, so a kind
+whose every file is undecodable is reported as *unverified* and never as *a kind no check enters*.
+Counting a file nobody read as a document carrying nothing would turn an encoding accident into
+evidence about the project's templates.
+
+**A document nobody could read is named.** `QualityReport.unreadable` carries `(path, reason)` for
+every document the globs matched and the checks could not decode; the CLI prints one line per
+document and the gate step prints `UNREADABLE: N` and reports `WARN`. Until BDL-061.66 that
+channel was populated and printed nowhere, which left the document silently absent from
+`N documents read` — the state the critical fix existed to end.
+
 ## Public API
 
 | Symbol | Kind |
 |--------|------|
 | `CHECK_NAMES` and the five check constants | constant |
+| `CONTENT_CHECKS` — the four that read items | constant |
 | `APPROVED_STATUSES` | constant |
-| `QualityFinding` / `QualityReport` | dataclass |
-| `document_status` / `is_approved` | function |
+| `QualityFinding` / `QualityReport` / `KindCoverage` | dataclass |
+| `document_status` / `is_approved` / `document_kind` | function |
 | `check_document` / `check_documents` | function |
 
 ## Dependencies
@@ -98,3 +141,11 @@ applies to a fact no document mentions (BDL-UX #173).
 `tests/test_doc_quality.py` — every check proved on a document that violates it and one that does
 not, the CLI and gate surfaces, and a class that fires all five at this repository's own planning
 documents and fails if any of them reads nothing.
+
+The per-kind rows are proved on a two-kind corpus where every check reads something and one kind
+is still entered by none — so `checks_that_read_nothing == ()` and `kinds_that_read_nothing` is
+not empty in the same assertion, which is the blind spot stated as a test rather than as prose.
+The repository-level rows assert the INVARIANT (every document falls in exactly one kind, and the
+per-kind counts sum to the global ones) and not the instance: pinning "BRIEF reads nothing here"
+would redden the day the template gains a Goal, which is the outcome the report exists to
+produce.

@@ -428,8 +428,15 @@ def _step_docs_quality(project_root: Path) -> GateStep:
     ``passed=True`` unconditionally and deliberately: every check here ships as
     ``warn``, so a project whose documents predate them does not go red on
     upgrade. ``not_verified`` carries the honest half — a check that found no
-    document with anything to read has verified nothing and must not be counted
-    as a pass (BDL-UX #173).
+    document with anything to read, a whole document KIND no check enters, or a
+    document nobody could decode has verified nothing and must not be counted as
+    a pass (BDL-UX #173).
+
+    The kind clause is the one the check count cannot supply.
+    ``checks_that_read_nothing`` is a global OR over the corpus and goes silent
+    the moment one document carries one row, so on this repository it was ``()``
+    while 56 of 243 documents were in a kind no content check enters (review
+    BDL-061.15 M2).
     """
     from beadloom.application.doc_shape import (
         planning_document_globs,
@@ -453,6 +460,9 @@ def _step_docs_quality(project_root: Path) -> GateStep:
     )
     findings = [_doc_quality_finding(f) for f in report.findings]
     blind = report.checks_that_read_nothing
+    # A whole document kind no check enters is a population never ENTERED, which
+    # the global OR above structurally cannot see.
+    unread_kinds = report.kinds_that_read_nothing
     counts = ", ".join(
         f"{name} {sum(1 for f in report.findings if f.check == name)}"
         for name in CHECK_NAMES
@@ -463,10 +473,14 @@ def _step_docs_quality(project_root: Path) -> GateStep:
         summary += f"; {counts}"
     if blind:
         summary += f"; NOT CHECKED: {', '.join(blind)}"
+    if unread_kinds:
+        summary += f"; NO CHECK READS: {', '.join(unread_kinds)}"
+    if report.unreadable:
+        summary += f"; UNREADABLE: {len(report.unreadable)}"
     return GateStep(
         "docs-quality",
         passed=True,
-        not_verified=bool(blind),
+        not_verified=bool(blind or unread_kinds or report.unreadable),
         findings=findings,
         summary=summary,
     )
