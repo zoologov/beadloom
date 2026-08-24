@@ -49,6 +49,31 @@ in an epic's documents that matches a ref id — was written first and thrown aw
 it attributed the node `status` to nine whose documents merely used the English word. The
 declared *Related Files* section is the join that shipped.
 
+**`.19` and `.77` CLOSED (2026-08-24) — the population's THIRD hole, found by probing rather
+than by reading.** The reviewer did not look for a mistake in the classifier; it planted a
+`README.md`-only planning directory and watched what the population did with it. Measured: the
+directory left every count and nothing reported the drop, which is the same shape `.17`'s first
+denominator had (34 epics silently removed) and `.18`'s (four directories carrying no intent
+document) and `.73`'s widening. Three recounts of the same rule had agreed with it exactly,
+because an independent recount of a rule cannot find a hole in the rule.
+
+`.77` therefore did not patch the third case. What a document's KIND and its space's ROOTS
+disagreeing means is settled once — kind wins, the document is counted, and the disagreement is
+itself a finding — and the property pinned is arithmetic rather than a list of known holes:
+`sum(populations) == |files any declared root matched|` on any tree. The two other majors were
+the same sentence one field over. A `working.kinds` declaration covering 39 SPEC files reported
+nothing, because liveness was asked of the declaration as a whole and because `space_of_kind`
+reused the report's reading order as a classification precedence; liveness is per declared item
+now and prints what each half reached. And one word named two populations, so `sync-check --json`
+said `exempt: 0` while the doc-spaces line said `55 WORKING document(s) exempt` about one tree —
+the two are named apart, and the pair count is carried from the step that measured it rather than
+computed twice.
+
+**One defect the full-suite run caught in `.77`'s own change**, stated because it is the cost
+`.76` had already recorded for targeted runs: hoisting the sync-check step out of the gate's step
+list made it run before `reindex`, so a fresh project's gate reported `database missing`. Six
+tests reddened.
+
 ---
 
 **Slice: S4** on `features/BDL-061-S4`.
