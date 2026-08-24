@@ -600,10 +600,35 @@ def _parse_scenario_coverage_rule(
     ``reason`` is mandatory on every declaration: an unnamed exclusion is how a
     gate is quietly switched off (BDL-061 CONTEXT), so a declaration without one
     is a configuration error rather than a silent pass.
+
+    For the same reason there is exactly ONE way to take a node out of this
+    rule's population, and ``for.exclude`` is not it. An ``exclude`` entry
+    carries no reason, is never reported and never expires, and
+    ``_matcher_description`` does not even print it — so a matcher excluded down
+    to nothing reports only that it selects no node. The error below routes the
+    author to ``non_behavioural``, which requires the reason and reports the
+    declaration when it stops excusing anything.
+
+    Scoped to this rule type deliberately: ``exclude`` is shared by every rule
+    type, and requiring a reason everywhere would turn an adopter's green project
+    red on upgrade for rules this epic never touched. That widening is its own
+    decision with its own migration; this rule type ships in the same release as
+    the requirement, so no adopter has written one yet.
     """
     for_data = data.get("for", {"kind": "feature"})
     if not isinstance(for_data, dict):
         msg = f"Rule '{name}': scenario_coverage.for must be a mapping"
+        raise ValueError(msg)
+    excluded = for_data.get("exclude")
+    if excluded is not None:
+        listed = excluded if isinstance(excluded, list) else [excluded]
+        names = ", ".join(str(item) for item in listed)
+        msg = (
+            f"Rule '{name}': scenario_coverage.for.exclude ({names}) carries no "
+            f"reason and is never reported — declare each node under "
+            f"scenario_coverage.non_behavioural with a 'reason' instead, which is "
+            f"reported when it stops excusing anything"
+        )
         raise ValueError(msg)
     for_matcher = _parse_node_matcher(for_data, f"Rule '{name}' scenario_coverage.for")
 

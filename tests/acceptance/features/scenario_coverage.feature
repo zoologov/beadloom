@@ -31,12 +31,13 @@ Feature: behaviour that carries no executable claim is reported
     When the scenario-coverage rule is evaluated
     Then "invoicing" is reported as not being a node in the graph
 
-  Scenario: a node declared non-behavioural with a reason is accepted
+  Scenario: a node declared non-behavioural with a reason is accepted, and the reason is stated
     Given a graph with the feature nodes "billing" and "shipping"
     And an acceptance suite whose only scenario is tagged "@node:billing @bead:proj-1"
     And "shipping" is declared non-behavioural because "it is a vocabulary module"
     When the scenario-coverage rule is evaluated
-    Then nothing is reported
+    Then "shipping" is not reported as carrying no scenario
+    And the run states that 1 of 2 nodes is excused, naming "it is a vocabulary module"
 
   Scenario: a rule that cannot see a suite reports itself
     Given a graph with the feature nodes "billing" and "shipping"

@@ -305,6 +305,55 @@ def _reference_leg(
     return findings
 
 
+def _excused_statement(
+    rule: ScenarioCoverageRule, *, matched: set[str], covered: set[str]
+) -> list[Violation]:
+    """What the population lost to declarations, said out loud once per rule.
+
+    PLAN's criterion is that a node MAY declare itself non-behavioural *with a
+    named reason* and is accepted. Accepted in SILENCE is not that: the excused
+    nodes leave the population, the coverage fraction improves, and nothing said
+    the denominator had moved. So a run that excuses anything states how many of
+    how many, and each reason — ``.63``'s option 2, the denominator printed
+    beside the fraction.
+
+    Silent when nothing is excused. A line about zero excused nodes on every lint
+    of every project is noise, and noise is how a real one goes unread.
+
+    Always ``warn``, whatever the rule declares, for the reason
+    :func:`~beadloom.graph.rules.types.liveness_finding` is: this is a statement
+    about the CONFIGURATION and not about the code, and doing the thing PLAN says
+    is accepted must never redden a pipeline.
+    """
+    reasons = {d.node: d.reason for d in rule.non_behavioural}
+    excused = sorted(node for node in reasons if node in matched and node not in covered)
+    if not excused:
+        return []
+    named = ", ".join(f"`{node}` ({reasons[node]})" for node in excused)
+    return [
+        Violation(
+            rule_name=rule.name,
+            rule_description=rule.description,
+            rule_type=SCENARIO_COVERAGE_RULE_TYPE,
+            severity="warn",
+            file_path=None,
+            line_number=None,
+            from_ref_id=None,
+            to_ref_id=None,
+            message=(
+                f"{len(excused)} of {len(matched)} node(s) in this rule's population "
+                f"are excused as non-behavioural, so every coverage figure below is "
+                f"a fraction of {len(matched) - len(excused)}: {named}"
+            ),
+            remediation=(
+                "keep each declaration only while its reason holds — an excused "
+                "node is outside every count this rule reports, and a declaration "
+                "that stops being true is how a population shrinks quietly"
+            ),
+        )
+    ]
+
+
 def _declaration_leg(
     rule: ScenarioCoverageRule, *, matched: set[str], covered: set[str]
 ) -> list[Violation]:
@@ -392,6 +441,9 @@ def _evaluate_one(
     findings.extend(_suite_leg(rule, suite=suite, known_refs=_all_ref_ids(conn)))
     findings.extend(
         _declaration_leg(rule, matched=set(matched), covered=covered)
+    )
+    findings.extend(
+        _excused_statement(rule, matched=set(matched), covered=covered)
     )
     findings.extend(
         _coverage_leg(

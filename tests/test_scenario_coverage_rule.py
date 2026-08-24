@@ -319,7 +319,10 @@ class TestReferencedScenarios:
 
 
 class TestNonBehavioural:
-    def test_a_declared_node_is_accepted(self, tmp_path: Path) -> None:
+    def test_a_declared_node_is_accepted_and_not_reported_as_uncovered(
+        self, tmp_path: Path
+    ) -> None:
+        """Accepted means the coverage leg lets it through — the bite of the mechanism."""
         conn = _db(tmp_path, (("alpha", "feature"), ("types", "feature")))
         _feature(
             tmp_path,
@@ -335,7 +338,95 @@ class TestNonBehavioural:
             violations = evaluate_scenario_coverage_rules(conn, [rule], project_root=tmp_path)
         finally:
             conn.close()
+        assert not [v for v in violations if v.from_ref_id == "types"], _messages(violations)
+
+    def test_a_live_declaration_states_what_it_took_out_of_the_population(
+        self, tmp_path: Path
+    ) -> None:
+        """PLAN's criterion was "accepted WITH A NAMED REASON" (review `.15` M1b).
+
+        Accepted in silence is not that: the excused node leaves the population,
+        the coverage fraction improves, and until now nothing said the
+        denominator had moved. `.63`'s option 2 — print the denominator beside
+        the fraction — was implemented in no form at all.
+        """
+        conn = _db(tmp_path, (("alpha", "feature"), ("types", "feature")))
+        _feature(
+            tmp_path,
+            "tests/acceptance/features/a.feature",
+            "@bead:proj-1 @node:alpha\nFeature: F\n  Scenario: S\n    Given a step\n",
+        )
+        rule = _rule(
+            non_behavioural=(
+                NonBehaviouralNode(node="types", reason="frozen dataclasses; no behaviour"),
+            )
+        )
+        try:
+            violations = evaluate_scenario_coverage_rules(conn, [rule], project_root=tmp_path)
+        finally:
+            conn.close()
+        assert len(violations) == 1, _messages(violations)
+        message = violations[0].message
+        assert "1 of 2" in message, message
+        assert "frozen dataclasses; no behaviour" in message, message
+
+    def test_nothing_is_said_when_nothing_is_excused(self, tmp_path: Path) -> None:
+        """A line about zero excused nodes on every lint is how a real one goes unread."""
+        conn = _db(tmp_path, (("alpha", "feature"),))
+        _feature(
+            tmp_path,
+            "tests/acceptance/features/a.feature",
+            "@bead:proj-1 @node:alpha\nFeature: F\n  Scenario: S\n    Given a step\n",
+        )
+        try:
+            violations = evaluate_scenario_coverage_rules(
+                conn, [_rule()], project_root=tmp_path
+            )
+        finally:
+            conn.close()
         assert violations == []
+
+    def test_a_dead_declaration_excuses_nothing_and_is_not_counted_as_excusing(
+        self, tmp_path: Path
+    ) -> None:
+        """The non-vacuity guard: "state something for every declaration" must not pass."""
+        conn = _db(tmp_path, (("alpha", "feature"),))
+        _feature(
+            tmp_path,
+            "tests/acceptance/features/a.feature",
+            "@bead:proj-1 @node:alpha\nFeature: F\n  Scenario: S\n    Given a step\n",
+        )
+        rule = _rule(
+            non_behavioural=(NonBehaviouralNode(node="gone", reason="it was deleted"),)
+        )
+        try:
+            violations = evaluate_scenario_coverage_rules(conn, [rule], project_root=tmp_path)
+        finally:
+            conn.close()
+        assert len(violations) == 1, _messages(violations)
+        assert "excuses nothing" in violations[0].message
+
+    def test_the_statement_is_warn_even_when_the_rule_declares_error(
+        self, tmp_path: Path
+    ) -> None:
+        """Doing the thing PLAN says is accepted must never redden a pipeline."""
+        conn = _db(tmp_path, (("alpha", "feature"), ("types", "feature")))
+        _feature(
+            tmp_path,
+            "tests/acceptance/features/a.feature",
+            "@bead:proj-1 @node:alpha\nFeature: F\n  Scenario: S\n    Given a step\n",
+        )
+        rule = _rule(
+            severity="error",
+            non_behavioural=(
+                NonBehaviouralNode(node="types", reason="frozen dataclasses; no behaviour"),
+            ),
+        )
+        try:
+            violations = evaluate_scenario_coverage_rules(conn, [rule], project_root=tmp_path)
+        finally:
+            conn.close()
+        assert [v.severity for v in violations] == ["warn"], _messages(violations)
 
     def test_a_declaration_naming_a_node_outside_the_population_is_reported(
         self, tmp_path: Path
@@ -523,6 +614,79 @@ class TestYamlParsing:
         )
         with pytest.raises(ValueError, match="node"):
             load_rules(rules_path)
+
+    def test_a_bare_for_exclude_is_a_configuration_error(self, tmp_path: Path) -> None:
+        """The same rule as `non_behavioural`, applied to the other exit (review `.15` M1a).
+
+        `NodeMatcher.exclude` takes a node out of the population with no reason,
+        no report and no expiry, and `_matcher_description` does not even print
+        it — so a matcher excluded down to nothing reports "the `for` matcher
+        (kind=feature) selects no node" without saying why. CONTEXT's standing
+        decision is that every exclusion carries a reason.
+        """
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\nrules:\n"
+            "  - name: scenario-coverage\n"
+            "    description: d\n"
+            "    scenario_coverage:\n"
+            "      for: { kind: feature, exclude: [types] }\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError, match="non_behavioural"):
+            load_rules(rules_path)
+
+    def test_the_error_names_the_excluded_nodes(self, tmp_path: Path) -> None:
+        """An author must be able to move each one without re-reading the file."""
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\nrules:\n"
+            "  - name: scenario-coverage\n"
+            "    description: d\n"
+            "    scenario_coverage:\n"
+            "      for: { kind: feature, exclude: [types, vocabulary] }\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError, match="types, vocabulary"):
+            load_rules(rules_path)
+
+    def test_a_for_matcher_without_exclude_still_parses(self, tmp_path: Path) -> None:
+        """The non-vacuity guard: rejecting every `for` block would pass the two above."""
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\nrules:\n"
+            "  - name: scenario-coverage\n"
+            "    description: d\n"
+            "    scenario_coverage:\n"
+            "      for: { kind: feature }\n",
+            encoding="utf-8",
+        )
+        rule = load_rules(rules_path)[0]
+        assert isinstance(rule, ScenarioCoverageRule)
+        assert rule.for_matcher == NodeMatcher(kind="feature")
+
+    def test_exclude_is_still_accepted_on_every_other_rule_type(
+        self, tmp_path: Path
+    ) -> None:
+        """Scoped deliberately: `exclude` is shared, and widening is its own decision.
+
+        Requiring a reason on every rule type would turn an adopter's green
+        project red on upgrade for rules this epic never touched. This rule type
+        ships in the same release as the requirement, so nobody has written one
+        yet.
+        """
+        rules_path = tmp_path / "rules.yml"
+        rules_path.write_text(
+            "version: 3\nrules:\n"
+            "  - name: no-peer-domains\n"
+            "    description: d\n"
+            "    deny:\n"
+            "      from: { kind: domain, exclude: [types] }\n"
+            "      to: { kind: domain }\n",
+            encoding="utf-8",
+        )
+        rule = load_rules(rules_path)[0]
+        assert rule.from_matcher.exclude == ("types",)  # type: ignore[union-attr]
 
     def test_not_a_mapping_is_rejected(self, tmp_path: Path) -> None:
         rules_path = tmp_path / "rules.yml"

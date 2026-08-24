@@ -165,9 +165,28 @@ def _unknown_node(world: dict[str, Any], node: str) -> None:
     assert any(v.to_ref_id == node for v in world["violations"]), _text(world)
 
 
-@then("nothing is reported")
-def _nothing(world: dict[str, Any]) -> None:
-    assert world["violations"] == [], _text(world)
+@then(parsers.parse('"{node}" is not reported as carrying no scenario'))
+def _not_reported_uncovered(world: dict[str, Any], node: str) -> None:
+    reported = [v.from_ref_id for v in world["violations"] if "no scenario binds" in v.message]
+    assert node not in reported, _text(world)
+
+
+@then(
+    parsers.parse(
+        'the run states that {excused:d} of {population:d} nodes is excused, '
+        'naming "{reason}"'
+    )
+)
+def _excused_stated(
+    world: dict[str, Any], excused: int, population: int, reason: str
+) -> None:
+    """Accepted WITH A NAMED REASON — accepted in silence is a different promise."""
+    statements = [
+        v.message for v in world["violations"] if "excused as non-behavioural" in v.message
+    ]
+    assert len(statements) == 1, _text(world)
+    assert f"{excused} of {population} node(s)" in statements[0], statements[0]
+    assert reason in statements[0], statements[0]
 
 
 @then("the rule reports that it could not fire")
