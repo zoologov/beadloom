@@ -572,6 +572,7 @@ class TestHonestGate:
             "sync-check",
             "docs-audit",
             "docs-quality",
+            "doc-spaces",
             "config-check",
             "doctor",
             "federate",

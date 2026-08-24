@@ -524,6 +524,18 @@ def _step_doc_spaces(project_root: Path) -> GateStep:
     beads = None if records is None else beads_by_epic(records)
     conn = open_db(db_path)
     report = spaces_report(conn, project_root, beads=beads)
+    if not report.populations.get("to_be"):
+        # A named SKIP, never a silent pass: a project with no TO-BE document has
+        # no intent recorded anywhere, so there is nothing this step could hold
+        # against reality and saying "PASS" would claim otherwise.
+        from beadloom.infrastructure.doc_roots import SPACE_TO_BE, resolve_doc_spaces
+
+        roots = ", ".join(resolve_doc_spaces(project_root).roots.get(SPACE_TO_BE, ()))
+        return GateStep(
+            "doc-spaces",
+            skipped=True,
+            summary=f"skipped — no TO-BE document matches {roots or '(no root declared)'}",
+        )
     findings = [_doc_space_finding(f) for f in report.findings]
     populations = ", ".join(
         f"{space} {report.populations.get(space, 0)}"

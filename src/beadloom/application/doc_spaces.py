@@ -352,7 +352,9 @@ def _working_findings(
     * it excuses **nothing** — declared kinds that no document uses. An exclusion
       that quietly stops applying is how a gate is switched off, so it reports
       itself, the shape `.48`'s rule liveness and `.49`'s expired exemption both
-      carry.
+      carry. Scoped to a declaration the PROJECT made: a project that inherited
+      the default and simply has no ephemeral documents has switched nothing off,
+      and firing on it would make the finding a greeting rather than a finding.
     * it is **contradicted** — the graph declares one of these documents as a
       node's documentation, so one artifact says "this describes the code" while
       another says "this is exempt from being held against it".
@@ -361,7 +363,7 @@ def _working_findings(
         return []
     declared_kinds = spaces.kinds.get(SPACE_WORKING, ())
     findings: list[SpaceFinding] = []
-    if declared_kinds and not working_docs:
+    if spaces.working.declared and declared_kinds and not working_docs:
         findings.append(
             SpaceFinding(
                 rule=FINDING_WORKING_INERT,

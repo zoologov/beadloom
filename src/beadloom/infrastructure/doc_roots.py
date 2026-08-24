@@ -28,7 +28,9 @@ which is the defect class :mod:`tests.adopter_project` exists to catch.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -114,6 +116,15 @@ class WorkingExemption:
 
     exempt_from_freshness: bool
     reason: str
+    declared: bool = False
+    """Whether the PROJECT declared this, rather than inheriting the default.
+
+    The liveness finding ("this exemption excused nothing") applies to a
+    declaration and not to a shipped default: a project that simply has no
+    ephemeral documents has not switched a gate off, and reporting it would make
+    the finding fire on every clean adopter. What stays visible either way is the
+    COUNT of documents excused, which is what a shrinking denominator would show.
+    """
 
 
 @dataclass(frozen=True)
@@ -146,12 +157,9 @@ class DocSpaces:
         if by_kind is not None:
             return by_kind
         posix = rel_path.replace("\\", "/")
-        from fnmatch import fnmatch
-
         for space in SPACES:
-            for pattern in self.roots.get(space, ()):
-                if fnmatch(posix, pattern) or _matches_recursive(posix, pattern):
-                    return space
+            if any(path_matches(posix, p) for p in self.roots.get(space, ())):
+                return space
         return None
 
     def documents_in(self, project_root: Path, space: str) -> list[Path]:
@@ -198,20 +206,44 @@ def _relative(path: Path, project_root: Path) -> str:
         return path.as_posix()
 
 
-def _matches_recursive(posix: str, pattern: str) -> bool:
-    """Whether *posix* matches a ``**`` glob, which ``fnmatch`` cannot express.
+@lru_cache(maxsize=256)
+def _pattern_regex(pattern: str) -> re.Pattern[str]:
+    """*pattern* as a regex with the same reach ``Path.glob`` gives it.
 
-    ``fnmatch`` treats ``*`` as matching separators too, so ``docs/**/*.md``
-    already matches ``docs/a/b.md`` — but not ``docs/b.md``, because the pattern
-    demands a literal slash the path does not have. ``Path.glob`` accepts both,
-    so classification must as well: a document found by a root glob and then
-    classified into no space is the check disagreeing with itself.
+    ``fnmatch`` is deliberately not used: it lets ``*`` cross a path separator,
+    so the root glob ``*.md`` would classify ``vendor/lib/notes.md`` as a
+    top-level document. Classification has to agree with the glob that FOUND the
+    file — a document a root finds and the classifier then puts in no space (or
+    the reverse) is the check disagreeing with itself, and the disagreement is
+    invisible in every count it produces.
+
+    ``**/`` matches zero or more segments, ``*`` and ``?`` stop at a separator.
     """
-    from fnmatch import fnmatch
+    out = ["(?s:"]
+    i = 0
+    while i < len(pattern):
+        if pattern.startswith("**/", i):
+            out.append("(?:[^/]+/)*")
+            i += 3
+        elif pattern.startswith("**", i):
+            out.append(".*")
+            i += 2
+        elif pattern[i] == "*":
+            out.append("[^/]*")
+            i += 1
+        elif pattern[i] == "?":
+            out.append("[^/]")
+            i += 1
+        else:
+            out.append(re.escape(pattern[i]))
+            i += 1
+    out.append(r")\Z")
+    return re.compile("".join(out))
 
-    if "**/" not in pattern:
-        return False
-    return fnmatch(posix, pattern.replace("**/", "", 1))
+
+def path_matches(posix: str, pattern: str) -> bool:
+    """Whether a project-relative POSIX path is matched by a root glob."""
+    return _pattern_regex(pattern).match(posix) is not None
 
 
 #: Returned when configuration is absent or unreadable — the shipped defaults.
@@ -221,7 +253,7 @@ def default_doc_spaces() -> DocSpaces:
         roots=dict(DEFAULT_ROOTS),
         kinds=dict(DEFAULT_KINDS),
         working=WorkingExemption(
-            exempt_from_freshness=True, reason=DEFAULT_WORKING_REASON
+            exempt_from_freshness=True, reason=DEFAULT_WORKING_REASON, declared=False
         ),
     )
 
@@ -320,7 +352,9 @@ def _working_from(settings: object) -> tuple[WorkingExemption, list[str]]:
         ]
     reason = settings.get("reason")
     if exempt and not (isinstance(reason, str) and reason.strip()):
-        return WorkingExemption(exempt_from_freshness=True, reason=""), [
+        return WorkingExemption(
+            exempt_from_freshness=True, reason="", declared=True
+        ), [
             f"{CONFIG_KEY}.{SPACE_WORKING}.reason: an exemption without a stated "
             f"reason is how a gate is switched off without saying so"
         ]
@@ -328,6 +362,7 @@ def _working_from(settings: object) -> tuple[WorkingExemption, list[str]]:
         WorkingExemption(
             exempt_from_freshness=exempt,
             reason=reason.strip() if isinstance(reason, str) else "",
+            declared=True,
         ),
         [],
     )
