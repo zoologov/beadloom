@@ -172,13 +172,19 @@ class TestLayer1GateIntegration:
             "lint",
             "sync-check",
             "docs-audit",
+            "docs-quality",
             "config-check",
             "doctor",
         ]
-        assert all(s.status in {"PASS", "FAIL", "SKIP"} for s in result.steps)
+        assert all(s.status in {"PASS", "FAIL", "WARN", "SKIP"} for s in result.steps)
         after = names[names.index("docs-audit") + 1 :]
-        assert after == ["config-check", "doctor"]
-        for name in after:
+        assert after == ["docs-quality", "config-check", "doctor"]
+        # ``docs-quality`` is allowed its NAMED skip — this fixture holds no
+        # planning document, and a skip that says why is the honest outcome
+        # (BDL-061 S1). The invariant under test is that a failing docs-audit
+        # does not short-circuit the steps after it, so every OTHER later step
+        # must have run.
+        for name in ("config-check", "doctor"):
             assert next(s for s in result.steps if s.name == name).status != "SKIP"
 
     def test_ci_command_exits_nonzero_on_stale_fact(self, tmp_path: Path) -> None:

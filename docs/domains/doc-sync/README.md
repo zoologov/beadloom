@@ -17,6 +17,7 @@ The sync check pipeline operates in four phases:
 - **Phase 2: Source coverage checks** (`check_source_coverage`). For each graph node with a directory-based `source` (ending in `/`), verifies that all Python files on disk are tracked in sync_state or code_symbols. Reports `untracked_files` when gaps are found.
 - **Phase 3: Doc coverage checks** (`check_doc_coverage`). For each graph node with a directory-based `source`, verifies that the linked documentation mentions all Python module names (file stems). Reports `missing_modules` when the doc does not reference a module.
 - **Phase 4: The declared surface** (`find_missing_declared_docs`). Every doc a graph node names in its `docs:` list is checked for existence. The declaration lives in the committed graph YAML, so deleting the file cannot remove it — which is what stops the gate being satisfied by having less to check (BDL-UX #174).
+- **Phase 5: The document's SHAPE** (`check_section_shape`, BDL-061 S4b). The four phases above all compare CONTENT; this one compares structure, and it is the only phase that can see a document edited down to a title. It runs only when the caller supplies `section_requirements` — the required sections are derived from the composed doc templates in the `onboarding` PEER domain, so they are passed in rather than read here. Nothing is written to `sync_state`. See [`doc-shape`](features/doc-shape/SPEC.md).
 
 ### Where the baseline lives
 
@@ -55,6 +56,7 @@ class SyncPair:
 | `stale` | Compared and drifted -- update needed | 2 |
 | `missing` | The doc or code file is gone, or the graph declares a doc that is not on disk | 2 |
 | `unverified` | There was nothing to compare against (rebuilt index, no git baseline). Reported by name; never counted as fresh | 0 |
+| `incomplete` | The document is current and does not carry the shape its kind requires. A `warn`: reported, never blocking | 0 |
 
 Every result also carries `baseline` -- `index`, `git:HEAD` or `none` -- so a
 green result says what it was green against.
@@ -72,6 +74,8 @@ green result says what it was green against.
 | `doc_missing` / `code_missing` | One side of the pair no longer exists on disk |
 | `declared_doc_missing` | The graph declares this doc and the tree does not hold it |
 | `no_baseline` | The index was rebuilt (its baseline is the tree it indexed) and git could not supply one -- **not checked** |
+| `missing_sections` | The document lacks sections a MAJORITY of its peers of the same kind carry |
+| `section_not_in_use` | A required section no majority of a kind's documents carries — reported once against the KIND, with its ratio, because the fix is in the template and not in every document |
 | `surface_drift` | **Advisory warning** (severity `warning`, never a hard failure / exit 2). A reference / overview doc that declared `<!-- beadloom:watches=... -->` has had a watched surface (`cli` / `graph` / `flow.yml`) change since its baseline. Stored in the separate `reference_state` table; cleared with `beadloom sync-update <doc> --yes`. |
 
 ### Modules
@@ -82,6 +86,8 @@ green result says what it was green against.
 - **surface_ledger.py** -- The committed record (`.beadloom/sync-surface.json`) of how much there was to check last time, so a shrinking surface is reported rather than silently smaller
 - **surface.py** -- Layer 2 reference surface-drift: parses the in-doc `<!-- beadloom:watches=cli,graph,flow.yml -->` annotation and computes coarse, deterministic per-surface signatures (`cli` command+flag tree, `graph` node+edge identity set, normalized `flow.yml`) plus the order-sensitive aggregate hash
 - **doc_indexer.py** -- Markdown scanning, chunking by H2 headings, section classification, and SQLite population
+- **doc_shape.py** -- Whether a document still carries the sections its kind requires; peer-relative by majority, so a convention is reported once and an outlier per document ([SPEC](features/doc-shape/SPEC.md))
+- **doc_quality.py** -- The five writing-standard checks over planning documents: a measurable goal, a decision with a reason, a risk with a mitigation, no `Pending` question in an `Approved` document, no unfilled template placeholder ([SPEC](features/doc-quality/SPEC.md))
 - **audit.py** -- Documentation audit: fact registry, comparator, and audit facade for detecting stale numeric facts
 - **scanner.py** -- Document scanner: which markdown files are in scope (and which are skipped, with the reason), and keyword-proximity extraction of numeric fact mentions from them
 - **audit_coverage.py** -- Per-fact coverage of an audit run: whether anything was checked for each declared fact (`verified` / `not_covered` / `unreadable`), so a count of findings can no longer read as a verdict on facts nobody stated

@@ -305,7 +305,7 @@ Module `src/beadloom/tui/data_providers.py`:
 
 - `GraphDataProvider` -- `get_nodes()`, `get_edges()`, `get_node(ref_id)`, `get_node_with_source(ref_id)`, `get_hierarchy()`, `get_edge_counts()`, `get_doc_ref_ids()`, `get_source_paths()`, `get_symbols(ref_id)`
 - `LintDataProvider` -- `get_violations()`, `get_violation_count()`
-- `SyncDataProvider` -- `get_sync_results()`, `get_stale_count()`, `get_coverage()`
+- `SyncDataProvider` -- `get_sync_results()`, `get_stale_count()`, `get_coverage()`. Since BDL-061 S4b it passes the project's resolved document-section requirements into `check_sync`, so the dashboard sees the `incomplete` document-shape rows the CI gate sees rather than a quieter view of the same project
 - `DebtDataProvider` -- `get_debt_report()`, `get_score()`
 - `ActivityDataProvider` -- `get_activity()`; reads git activity through `application/graph_reads.analyze_git_activity`, never `infrastructure.git_activity` directly — the `tui-no-direct-infra` boundary forbids it, and since BDL-UX #172 the rule can actually say so
 - `WhyDataProvider` -- `analyze(ref_id, reverse=False)`

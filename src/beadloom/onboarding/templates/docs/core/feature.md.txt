@@ -1,0 +1,18 @@
+# {{ref_id}}
+
+> {{summary}}
+
+## Source
+
+`{{source}}`
+
+{{symbols_section}}## Dependencies
+
+- Depends on: {{depends_on}}
+- Used by: {{used_by}}
+
+## Parent
+
+{{parent}}
+
+<!-- enrich with: beadloom docs polish -->

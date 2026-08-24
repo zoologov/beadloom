@@ -148,7 +148,15 @@ def handle_sync_check(
     project_root: Path | None = None,
 ) -> list[dict[str, str]]:
     """Check sync status, optionally for a specific ref_id."""
-    results = check_sync(conn, project_root=project_root)
+    from beadloom.application.doc_shape import section_requirements
+
+    results = check_sync(
+        conn,
+        project_root=project_root,
+        section_requirements=(
+            section_requirements(project_root) if project_root is not None else None
+        ),
+    )
     if ref_id:
         results = [r for r in results if r["ref_id"] == ref_id]
     return results

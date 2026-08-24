@@ -53,6 +53,13 @@ language-selectable like every other one.
 | `roles` | `templates/roles/core/<role>.md.txt` | `templates/roles/` | `.beadloom/flow/roles/<role>.md` |
 | `commands` | `templates/agentic_flow/commands/<cmd>.md.txt` | `templates/commands/` | `.beadloom/flow/commands/<cmd>.md` |
 | `claude` | `templates/agentic_flow/CLAUDE.md.txt` | `templates/claude/` | `.beadloom/flow/claude/CLAUDE.md` |
+| `docs` | `templates/docs/core/<kind>.md.txt` | `templates/docs/` | `.beadloom/flow/docs/<kind>.md` |
+
+`docs` (BDL-061 S4b) is the only kind with `carries_suppressions=False`: a
+declared suppression stands down a rule addressed to an AGENT, and a generated
+README has no rules to stand down, so appending the notice would publish flow
+configuration as documentation. See
+[`doc-templates`](../doc-templates/SPEC.md).
 
 The commands and `CLAUDE.md` keep their vendored location as the CORE and gain
 an overlay root beside it; moving them would have churned the whole scaffold for
@@ -94,7 +101,7 @@ Module `src/beadloom/onboarding/composer.py`:
 - `compose(kind, name, *, config, project_root=None)` → `Composition`
 - `Composition.text` → the composed body
 - `templates_dir()`, `project_fragment_path(kind, name, project_root)`
-- `ARTIFACT_KINDS`, `CLAUDE_ARTIFACT_NAME`, `COMPOSED_MARKER`,
+- `ARTIFACT_KINDS` (`roles`, `commands`, `claude`, `docs`), `CLAUDE_ARTIFACT_NAME`, `COMPOSED_MARKER`,
   `PROJECT_FLOW_DIRNAME`
 
 ## Testing

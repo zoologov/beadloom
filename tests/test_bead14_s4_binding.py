@@ -61,7 +61,7 @@ from beadloom.graph.rules import (
     evaluate_scenario_coverage_rules,
     load_rules,
 )
-from beadloom.graph.scenarios import load_suite
+from beadloom.graph.scenarios import DEFAULT_FEATURE_GLOB, load_suite
 from beadloom.infrastructure.db import create_schema, open_db
 from beadloom.services.cli import main
 
@@ -628,17 +628,30 @@ def _run_pytest(args: list[str], *, cwd: Path, report: Path) -> tuple[int, list[
     return completed.returncode, outcomes
 
 
+def _shipped_scenario_count() -> int:
+    """How many scenarios the shipped suite declares, READ from the suite.
+
+    Counted rather than written down (`beadloom-b0xl`): the number was 7 when
+    `.13` shipped and every later slice that adds a scenario would otherwise
+    redden two tests that have nothing to do with it. The count comes from the
+    project's own parser, which `.13` cross-checked against gherkin-official, so
+    a parser that started disagreeing with the runner still shows up here.
+    """
+    suite = load_suite(REPO_ROOT, DEFAULT_FEATURE_GLOB)
+    return len(suite.scenarios)
+
+
 class TestTheScenariosExecute:
     """A `.feature` file nothing runs is prose, and the rule would be checking text."""
 
     def test_the_shipped_acceptance_suite_runs_every_scenario_and_skips_none(
         self, tmp_path: Path
     ) -> None:
-        """Seven scenarios, and each one RAN.
+        """Every declared scenario RAN.
 
-        `.13` reports seven executable scenarios. Collected-and-skipped would give
-        the same reassuring green with nothing executed, so the outcome of every row
-        is read individually and a skip is a failure of this test.
+        Collected-and-skipped would give the same reassuring green with nothing
+        executed, so the outcome of every row is read individually and a skip is a
+        failure of this test. The expected number is the number the suite declares.
         """
         code, outcomes = _run_pytest(
             ["tests/acceptance"], cwd=REPO_ROOT, report=tmp_path / "report.xml"
@@ -647,7 +660,7 @@ class TestTheScenariosExecute:
         assert code == 0, outcomes
         assert [name for name, outcome in outcomes if outcome == "skipped"] == []
         passed = [name for name, outcome in outcomes if outcome == "passed"]
-        assert len(passed) == 7, outcomes
+        assert len(passed) == _shipped_scenario_count(), outcomes
 
     def test_a_step_the_suite_no_longer_implements_reddens_the_run(self, tmp_path: Path) -> None:
         """Sabotage as a test: the runner must adjudicate the scenario, not host it.
@@ -682,10 +695,17 @@ class TestTheScenariosExecute:
             f"that fails for the wrong reason proves nothing: {failures}"
         )
         survivors = [name for name, outcome in outcomes if outcome == "passed"]
-        assert len(survivors) < 7, (
+        assert len(survivors) < len(outcomes), (
             "every scenario still passed while a step was missing, which would mean "
             f"the Gherkin is not what drives the run: {outcomes}"
         )
+        # And the ones that died are the sabotaged file's, not collateral: a
+        # sabotage that reddens somebody else's scenario proves nothing about
+        # this binding.
+        assert all(
+            "scenario_coverage.feature" in outcome
+            for outcome in failures
+        ), failures
 
 
 # --------------------------------------------------------------------------- #

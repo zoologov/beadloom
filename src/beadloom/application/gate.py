@@ -31,6 +31,11 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from beadloom.doc_sync.declared_docs import count_declared_docs
+from beadloom.doc_sync.doc_shape import (
+    REASON_MISSING_SECTIONS,
+    REASON_SECTION_NOT_IN_USE,
+    STATUS_INCOMPLETE,
+)
 from beadloom.doc_sync.engine import (
     BLOCKING_STATUSES,
     STATUS_MISSING,
@@ -39,6 +44,7 @@ from beadloom.doc_sync.engine import (
     STATUS_UNVERIFIED,
 )
 from beadloom.doc_sync.surface_ledger import SurfaceVerdict, compare_surface, read_ledger
+from beadloom.onboarding.flow_config import FLOW_CONFIG_RELPATH
 
 if TYPE_CHECKING:
     import sqlite3
@@ -162,6 +168,7 @@ def run_ci_gate(
         _step_lint(project_root),
         _step_sync_check(project_root),
         _step_docs_audit(project_root),
+        _step_docs_quality(project_root),
         _step_config_check(project_root),
         _step_doctor(project_root),
     ]
@@ -223,6 +230,7 @@ def _step_lint(project_root: Path) -> GateStep:
 
 def _step_sync_check(project_root: Path) -> GateStep:
     """``sync-check`` — doc<->code freshness; stale pairs fail the gate."""
+    from beadloom.application.doc_shape import section_requirements
     from beadloom.doc_sync.engine import check_sync
     from beadloom.infrastructure.db import connection
 
@@ -242,12 +250,17 @@ def _step_sync_check(project_root: Path) -> GateStep:
             summary="database missing",
         )
     with connection(db_path) as conn:
-        results = check_sync(conn, project_root=project_root)
+        results = check_sync(
+            conn,
+            project_root=project_root,
+            section_requirements=section_requirements(project_root),
+        )
         declared_docs = count_declared_docs(conn)
 
     pairs = [r for r in results if r.get("code_path")]
     blocking = [r for r in results if r.get("status") in BLOCKING_STATUSES]
     unverified = [r for r in results if r.get("status") == STATUS_UNVERIFIED]
+    incomplete = [r for r in results if r.get("status") == STATUS_INCOMPLETE]
     surface = compare_surface(
         read_ledger(project_root),
         declared_pairs=len(pairs),
@@ -256,6 +269,7 @@ def _step_sync_check(project_root: Path) -> GateStep:
 
     findings = [_sync_finding(r) for r in blocking]
     findings.extend(_sync_unverified_finding(r) for r in unverified)
+    findings.extend(_sync_shape_finding(r) for r in incomplete)
     if surface.shrank:
         findings.append(_surface_finding(surface.message))
 
@@ -266,6 +280,47 @@ def _step_sync_check(project_root: Path) -> GateStep:
         findings=findings,
         summary=_sync_summary(results, unverified, surface),
     )
+
+
+def _sync_shape_finding(row: dict[str, object]) -> Finding:
+    """A document that lost its shape — reported, and never blocking.
+
+    Two reasons read differently and must not be collapsed: a document missing
+    sections its PEERS carry is an outlier the author can fix, while a required
+    section no document of its kind uses is a statement about the project's
+    convention and is fixed in the template, not in seventy files.
+    """
+    doc_path = str(row.get("doc_path", ""))
+    ref_id = str(row.get("ref_id", ""))
+    details = str(row.get("details", ""))
+    locations: list[Finding] = [{"file": doc_path}] if doc_path else []
+    if str(row.get("reason")) == REASON_SECTION_NOT_IN_USE:
+        return {
+            "kind": "sync-check",
+            "rule": REASON_SECTION_NOT_IN_USE,
+            "severity": "warning",
+            "locations": [],
+            "why": (
+                f"required section(s) {details} — not carried by a majority of "
+                f"{ref_id}, so this is a statement about the convention and no "
+                f"document is reported for them"
+            ),
+            "remediation": (
+                "drop the section from the doc template, or add it to the "
+                "project layer in .beadloom/flow/docs/ if it belongs there"
+            ),
+        }
+    return {
+        "kind": "sync-check",
+        "rule": REASON_MISSING_SECTIONS,
+        "severity": "warning",
+        "locations": locations,
+        "why": (
+            f"{ref_id}: the document is missing section(s) its peers carry — "
+            f"{details}"
+        ),
+        "remediation": f"add the section(s) to {doc_path or 'the document'}",
+    }
 
 
 def _sync_summary(
@@ -367,10 +422,87 @@ def _audit_summary(result: AuditResult, stale: list[AuditFinding]) -> str:
     return f"{head}; {coverage}"
 
 
+def _step_docs_quality(project_root: Path) -> GateStep:
+    """``docs quality`` — the five writing-standard checks; reports, never blocks.
+
+    ``passed=True`` unconditionally and deliberately: every check here ships as
+    ``warn``, so a project whose documents predate them does not go red on
+    upgrade. ``not_verified`` carries the honest half — a check that found no
+    document with anything to read has verified nothing and must not be counted
+    as a pass (BDL-UX #173).
+    """
+    from beadloom.application.doc_shape import (
+        planning_document_globs,
+        planning_documents,
+        shipped_placeholders,
+    )
+    from beadloom.doc_sync.doc_quality import CHECK_NAMES, check_documents
+
+    documents = planning_documents(project_root)
+    if not documents:
+        globs = ", ".join(planning_document_globs(project_root))
+        return GateStep(
+            "docs-quality",
+            skipped=True,
+            summary=f"skipped — no planning document matches {globs}",
+        )
+    report = check_documents(
+        documents,
+        project_root=project_root,
+        placeholders=shipped_placeholders(project_root),
+    )
+    findings = [_doc_quality_finding(f) for f in report.findings]
+    blind = report.checks_that_read_nothing
+    counts = ", ".join(
+        f"{name} {sum(1 for f in report.findings if f.check == name)}"
+        for name in CHECK_NAMES
+        if any(f.check == name for f in report.findings)
+    )
+    summary = f"{report.documents} document(s) read"
+    if counts:
+        summary += f"; {counts}"
+    if blind:
+        summary += f"; NOT CHECKED: {', '.join(blind)}"
+    return GateStep(
+        "docs-quality",
+        passed=True,
+        not_verified=bool(blind),
+        findings=findings,
+        summary=summary,
+    )
+
+
+def _doc_quality_finding(finding: object) -> Finding:
+    """Project a :class:`QualityFinding` onto the shared finding shape."""
+    return {
+        "kind": "docs-quality",
+        "rule": finding.check,  # type: ignore[attr-defined]
+        "severity": "warning",
+        "locations": [
+            {
+                "file": finding.path,  # type: ignore[attr-defined]
+                "line": finding.line,  # type: ignore[attr-defined]
+            }
+        ],
+        "why": f"{finding.why}: {finding.excerpt}",  # type: ignore[attr-defined]
+        "remediation": finding.remediation,  # type: ignore[attr-defined]
+    }
+
+
 def _step_config_check(project_root: Path) -> GateStep:
     """``config-check`` (AgentConfigAsCode) — generated agent-config freshness."""
+    from beadloom.application.mutation_scope import check_mutation_scope
     from beadloom.infrastructure.db import connection
     from beadloom.onboarding import check_config_drift
+
+    # The declared mutation SCOPE rides with config-check because it is the same
+    # subject — a flow declaration checked against the project it describes —
+    # and because Beadloom owns no mutation runner to hang a step on (Q5). It is
+    # computed BEFORE the database guard: a declaration is checkable against the
+    # tree whether or not the index was built, and dropping it on a missing
+    # database would make the finding disappear exactly when it is least likely
+    # to be noticed.
+    scope = [_mutation_scope_finding(f) for f in check_mutation_scope(project_root)]
 
     db_path = project_root / ".beadloom" / "beadloom.db"
     if not db_path.exists():
@@ -387,7 +519,8 @@ def _step_config_check(project_root: Path) -> GateStep:
                     "error",
                     "database not found",
                     "run `beadloom reindex` first",
-                )
+                ),
+                *scope,
             ],
             summary="database missing",
         )
@@ -397,8 +530,9 @@ def _step_config_check(project_root: Path) -> GateStep:
     findings = [
         _config_finding(d.file, d.reason, d.severity, d.remediation) for d in drifts
     ]
+    findings.extend(scope)
     blocking = [d for d in drifts if d.severity == "error"]
-    warned = len(drifts) - len(blocking)
+    warned = len(drifts) - len(blocking) + len(scope)
     passed = not blocking
     # Three states, three summaries. `agent-config in sync` printed over a
     # reported-but-non-blocking finding is the shape BDL-061 S2b spent itself on.
@@ -682,6 +816,23 @@ def _config_finding(
         "why": reason,
         "remediation": remediation
         or "run `beadloom setup-rules --refresh` (or `config-check --fix`)",
+    }
+
+
+def _mutation_scope_finding(finding: object) -> Finding:
+    """Project a mutation-scope finding onto the shared finding shape.
+
+    It keeps its OWN rule name rather than borrowing ``config-drift``: the
+    remedy is a different one (edit the declared scope, not re-run ``--fix``),
+    and a reader filtering the gate's JSON on ``rule`` must be able to find it.
+    """
+    return {
+        "kind": "config-check",
+        "rule": finding.check,  # type: ignore[attr-defined]
+        "severity": "warning",
+        "locations": [{"file": str(FLOW_CONFIG_RELPATH)}],
+        "why": finding.why,  # type: ignore[attr-defined]
+        "remediation": finding.remediation,  # type: ignore[attr-defined]
     }
 
 

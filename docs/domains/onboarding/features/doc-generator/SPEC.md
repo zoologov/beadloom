@@ -26,6 +26,14 @@ structured data for AI agents to enrich those skeletons. Part of the
 | Path | Node Kind | Content |
 |------|-----------|---------|
 | `docs/architecture.md` | — | Domains table, services table, Mermaid dependency map |
+
+Since BDL-061 S4b the SHAPE of every document above comes from a composed
+template in [`doc-templates`](../doc-templates/SPEC.md), not from a string
+literal here. The render functions compute the VALUES and call `render_doc`; the
+extraction is behaviour-preserving and pinned by byte-identity tests. The
+practical consequence for an adopter: `.beadloom/flow/docs/<kind>.md` appends
+their own sections to a generated document, and those sections then become
+required sections that `sync-check` reports when one goes missing.
 | `docs/domains/{name}/README.md` | domain | Summary, source, public API, dependencies, features list |
 | `docs/services/{name}.md` | service | Summary, source, public API, dependencies |
 | `docs/domains/{parent}/features/{name}/SPEC.md` | feature | Summary, source, public API, dependencies, parent domain |
@@ -75,10 +83,12 @@ When SQLite database exists (post-reindex), skeletons include:
 | `_doc_path_for_node` | Resolve doc path from `docs:` field or convention |
 | `_load_symbols_by_source` | Best-effort SQLite symbol loading |
 | `_render_symbols_section` | Markdown table from public symbols |
-| `_render_architecture` | Domains + services tables + Mermaid |
+| `_render_architecture` | Values for the `overview` template: domains + services tables + Mermaid |
+| `_node_values` | The placeholder values every node document shares |
 | `_render_domain_readme` | Domain page with features list |
 | `_render_service` | Service page with dependencies |
 | `_render_feature_spec` | Feature page with parent link |
+| `_resolved_config` | The flow config to compose with when the caller named no project root |
 | `_generate_mermaid` | `graph LR` from `depends_on`/`part_of` edges |
 | `_write_if_missing` | Idempotent file writer |
 | `_patch_docs_field` | Write `docs:` back to graph YAML for newly created files |

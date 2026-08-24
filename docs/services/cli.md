@@ -641,6 +641,57 @@ beadloom docs audit --json --stale-only
 beadloom docs audit --path "docs/**/*.md" --path "README.md"
 ```
 
+### beadloom docs quality
+
+Check the project's planning documents against the shipped writing standard
+(BDL-061 S4b).
+
+```bash
+beadloom docs quality [--json] [--check NAME]... [--strict] [--project DIR]
+```
+
+Five checks, all `warn`:
+
+| Check | Reports | Where it looks |
+|-------|---------|----------------|
+| `measurable-goal` | a goal statement with no number in it | the `## Goal` / `## Goals` section |
+| `decision-reason` | a decision row whose reason cell is empty | any table with a Reason / Rationale / Why column |
+| `risk-mitigation` | a risk row with no mitigation, or one that names no action (`monitor it`) | any table with a Mitigation column |
+| `pending-in-approved` | a question still answered `Pending` | `## Open Questions`, in a document whose status is `Approved` or `Accepted` |
+| `unfilled-placeholder` | a shipped template token nobody replaced | the whole document, outside fenced blocks and inline code |
+
+The exit code is **0 even with findings** — no adopter's green project turns red
+on upgrade. `--strict` exits 1 when anything is reported, for a project that
+wants to enforce it.
+
+The report ends with a per-check line stating how much there was to READ, and
+names any check that found nothing at all: a green count over documents that
+state no risks is not a statement about risks.
+
+Documents are found under `.claude/development/docs/features/*/*.md` by default;
+a project with another layout declares its own globs:
+
+```yaml
+# .beadloom/config.yml
+doc_quality:
+  paths:
+    - docs/rfcs/*.md
+```
+
+A run that matches no document says so and names the globs it looked under,
+rather than printing a clean bill of health over nothing.
+
+```bash
+# Everything, as a warning report
+beadloom docs quality
+
+# One check, machine-readable
+beadloom docs quality --check pending-in-approved --json
+
+# Enforce it
+beadloom docs quality --strict
+```
+
 ### beadloom docs polish
 
 Generate structured data for AI-driven documentation enrichment.
@@ -804,9 +855,10 @@ Composes the existing checkers, in order, into ONE verdict with a single exit co
 2. `lint --strict` — architecture boundary rules at error severity.
 3. `sync-check` — doc↔code freshness (stale pairs fail).
 4. `docs audit` — stale numeric facts in documentation (`stale>0` fails). The step line also states its coverage — `M/N declared fact(s) verified` plus the names of the facts it checked nothing for — because a count of findings says nothing about the facts nobody stated.
-5. `config-check` — AgentConfigAsCode drift.
-6. `doctor` — graph/data integrity; ONLY `ERROR`-severity checks fail the gate (WARNING/INFO advisories never block — no false gate).
-7. `federate --fail-on` — the cross-service landscape gate, only when `--hub` export(s) are given (safe-default fail-set `breaking,drift,orphaned_consumer,undeclared_producer`; no-false-gate verdicts rejected).
+5. `docs-quality` — the five writing-standard checks over the project's planning documents. Warn only: it never fails the gate, a project with no planning document is a NAMED skip stating the globs, and a check that read nothing sets the step to `WARN`.
+6. `config-check` — AgentConfigAsCode drift, plus the mutation-SCOPE findings (a declared `mutation.targets` entry outside `scan_paths`, absent from disk, or holding no source a runner could mutate). All `warn`.
+7. `doctor` — graph/data integrity; ONLY `ERROR`-severity checks fail the gate (WARNING/INFO advisories never block — no false gate).
+8. `federate --fail-on` — the cross-service landscape gate, only when `--hub` export(s) are given (safe-default fail-set `breaking,drift,orphaned_consumer,undeclared_producer`; no-false-gate verdicts rejected).
 
 **What `--no-reindex` changes about the verdict.** It skips step 1, so every later step describes the INDEX rather than the working tree. With an index older than the tree, the `lint` step reports `PASS` over a live error-severity violation that the same gate catches after a reindex (measured), and the `sync-check` step compares against whatever baseline the index holds. Use it only where something else has just reindexed.
 

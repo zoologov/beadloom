@@ -20,3 +20,15 @@ guards:
       default: warn
     options:
       trunk: main
+
+# Mutation SCOPE, not a mutation runner (BDL-061 S4b, CONTEXT Q5). Beadloom does
+# not own a runner — the tool is the project's choice — so what is declared here
+# is the scope a run must cover, and `config-check` verifies each target lies
+# inside `scan_paths` and holds source a runner could mutate. CONTEXT's rule for
+# what belongs here: pure domain cores only, where a surviving mutant is a real
+# gap in the tests rather than an untested I/O branch.
+mutation:
+  targets:
+  - src/beadloom/doc_sync/doc_quality.py
+  - src/beadloom/doc_sync/doc_shape.py
+  - src/beadloom/graph/rules/

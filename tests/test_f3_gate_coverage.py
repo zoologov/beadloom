@@ -540,6 +540,7 @@ class TestHonestGate:
         "lint",
         "sync-check",
         "docs-audit",
+        "docs-quality",
         "config-check",
         "doctor",
     }
@@ -570,6 +571,7 @@ class TestHonestGate:
             "lint",
             "sync-check",
             "docs-audit",
+            "docs-quality",
             "config-check",
             "doctor",
             "federate",

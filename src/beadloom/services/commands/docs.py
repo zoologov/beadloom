@@ -559,3 +559,127 @@ def _docs_audit_rich(
                 f' "{mention.value}" -- no keyword match (skipped)[/dim]'
             )
         console.print()
+
+
+@docs.command("quality")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON.")
+@click.option(
+    "--check",
+    "only_checks",
+    multiple=True,
+    help="Report only these checks (repeatable).",
+)
+@click.option(
+    "--strict",
+    is_flag=True,
+    help="Exit 1 when any finding is reported (default: warn, exit 0).",
+)
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: current directory).",
+)
+def docs_quality(
+    *,
+    output_json: bool,
+    only_checks: tuple[str, ...],
+    strict: bool,
+    project: Path | None,
+) -> None:
+    """Check planning documents against the shipped writing standard.
+
+    Five properties, each a ``warn``: a goal with a measurable clause, a
+    decision carrying a reason, a risk carrying a mitigation, no ``Pending``
+    question inside an ``Approved`` document, and no unfilled template
+    placeholder. Exits 0 with findings unless ``--strict`` is given, so no
+    adopter's green project turns red on upgrade.
+    """
+    from beadloom.application.doc_shape import (
+        planning_document_globs,
+        planning_documents,
+        shipped_placeholders,
+    )
+    from beadloom.doc_sync.doc_quality import CHECK_NAMES, check_documents
+
+    project_root = project or Path.cwd()
+    unknown = [c for c in only_checks if c not in CHECK_NAMES]
+    if unknown:
+        click.echo(
+            f"Error: unknown check(s) {', '.join(unknown)} — "
+            f"allowed: {', '.join(CHECK_NAMES)}",
+            err=True,
+        )
+        sys.exit(1)
+
+    documents = planning_documents(project_root)
+    report = check_documents(
+        documents,
+        project_root=project_root,
+        placeholders=shipped_placeholders(project_root),
+    )
+    findings = [
+        f for f in report.findings if not only_checks or f.check in only_checks
+    ]
+
+    if output_json:
+        click.echo(
+            json.dumps(
+                {
+                    "documents": report.documents,
+                    "globs": list(planning_document_globs(project_root)),
+                    "checks": {
+                        name: {
+                            "findings": sum(
+                                1 for f in report.findings if f.check == name
+                            ),
+                            "read": report.applicable.get(name, 0),
+                        }
+                        for name in CHECK_NAMES
+                    },
+                    "read_nothing": list(report.checks_that_read_nothing),
+                    "findings": [
+                        {
+                            "check": f.check,
+                            "path": f.path,
+                            "line": f.line,
+                            "excerpt": f.excerpt,
+                            "why": f.why,
+                            "remediation": f.remediation,
+                        }
+                        for f in findings
+                    ],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+    elif not documents:
+        # A skip always says why (S1's discipline): "no findings" over no
+        # documents is not a clean bill of health.
+        click.echo(
+            "No planning documents found under "
+            f"{', '.join(planning_document_globs(project_root))} — nothing checked. "
+            "Set `doc_quality.paths` in .beadloom/config.yml to point at yours."
+        )
+    else:
+        for f in findings:
+            click.echo(f"  [warn] {f.path}:{f.line} ({f.check}) {f.why}")
+            click.echo(f"         {f.excerpt}")
+        click.echo("")
+        for name in CHECK_NAMES:
+            count = sum(1 for f in report.findings if f.check == name)
+            read = report.applicable.get(name, 0)
+            click.echo(f"  {name}: {count} finding(s) over {read} read")
+        blind = report.checks_that_read_nothing
+        if blind:
+            # Unverifiable is not clean — the same statement `docs audit` makes
+            # about a fact no document states (BDL-UX #173).
+            click.echo(
+                f"  NOT CHECKED: {', '.join(blind)} — no document carried "
+                f"anything for these to read"
+            )
+        click.echo(f"  {report.documents} document(s) read")
+
+    if strict and findings:
+        sys.exit(1)

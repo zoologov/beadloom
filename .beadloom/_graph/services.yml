@@ -53,6 +53,15 @@ nodes:
     docs:
       - docs/domains/onboarding/features/doc-generator/SPEC.md
 
+  # Feature: Doc Templates (BDL-061 S4b) — the shape of a generated document,
+  # out of the generator's string literals and into composable package data.
+  - ref_id: doc-templates
+    kind: feature
+    summary: "Composed document templates: render a skeleton and derive the sections it requires"
+    source: src/beadloom/onboarding/doc_templates.py
+    docs:
+      - docs/domains/onboarding/features/doc-templates/SPEC.md
+
   # Domain: Infrastructure
   - ref_id: infrastructure
     kind: domain
@@ -299,6 +308,24 @@ nodes:
     docs:
       - docs/domains/doc-sync/features/sync-check/SPEC.md
 
+  # Feature: Doc Shape (BDL-061 S4b) — the structural half of freshness. Every
+  # other sync reason compares CONTENT; this one compares the document's shape
+  # against the sections its kind requires.
+  - ref_id: doc-shape
+    kind: feature
+    summary: "Document structure check — sections a document's peers carry and this one lost"
+    source: src/beadloom/doc_sync/doc_shape.py
+    docs:
+      - docs/domains/doc-sync/features/doc-shape/SPEC.md
+
+  # Feature: Doc Quality (BDL-061 S4b) — the writing standard, read back.
+  - ref_id: doc-quality
+    kind: feature
+    summary: "Five writing-standard checks over planning documents: measurable goal, decision reason, risk mitigation, no pending question in an approved document, no unfilled placeholder"
+    source: src/beadloom/doc_sync/doc_quality.py
+    docs:
+      - docs/domains/doc-sync/features/doc-quality/SPEC.md
+
   - ref_id: snapshot
     kind: feature
     summary: "Architecture snapshot store — save, list, and compare graph states over time"
@@ -461,6 +488,24 @@ nodes:
     source: src/beadloom/context_oracle/builder.py
     docs:
       - docs/domains/context-oracle/components/context-builder/DOC.md
+
+  # Component: the shape a project's documents are held to (BDL-061 S4b). Joins
+  # onboarding's composed templates to doc-sync's checks, which are peer domains.
+  - ref_id: doc-shape-requirements
+    kind: component
+    summary: "Resolve required document sections and the shipped placeholder vocabulary for a project"
+    source: src/beadloom/application/doc_shape.py
+    docs:
+      - docs/domains/application/components/doc-shape-requirements/DOC.md
+
+  # Component: the mutation SCOPE check (BDL-061 S4b, CONTEXT Q5). Beadloom owns
+  # no mutation runner; it owns the check that a declared target could run one.
+  - ref_id: mutation-scope
+    kind: component
+    summary: "Check a declared mutation target lies inside the configured source paths and would run more than zero mutants"
+    source: src/beadloom/application/mutation_scope.py
+    docs:
+      - docs/domains/application/components/mutation-scope/DOC.md
 
   - ref_id: doc-indexer
     kind: component
@@ -647,6 +692,21 @@ edges:
     kind: part_of
   - src: rule-engine
     dst: graph
+    kind: part_of
+  - src: doc-shape
+    dst: doc-sync
+    kind: part_of
+  - src: doc-quality
+    dst: doc-sync
+    kind: part_of
+  - src: doc-templates
+    dst: onboarding
+    kind: part_of
+  - src: doc-shape-requirements
+    dst: application
+    kind: part_of
+  - src: mutation-scope
+    dst: application
     kind: part_of
   - src: scenario-binding
     dst: graph

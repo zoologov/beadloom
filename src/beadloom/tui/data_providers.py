@@ -203,10 +203,15 @@ class SyncDataProvider:
 
     def refresh(self) -> None:
         """Re-run sync check and cache results."""
+        from beadloom.application.doc_shape import section_requirements
         from beadloom.doc_sync.engine import check_sync
 
         try:
-            self._results = check_sync(self.conn, project_root=self.project_root)
+            self._results = check_sync(
+                self.conn,
+                project_root=self.project_root,
+                section_requirements=section_requirements(self.project_root),
+            )
         except (OSError, ValueError, sqlite3.OperationalError) as exc:
             logger.warning("Sync check failed: %s", exc)
             self._results = []

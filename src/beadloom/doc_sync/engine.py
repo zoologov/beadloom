@@ -15,11 +15,18 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from beadloom.doc_sync.declared_docs import find_missing_declared_docs
+from beadloom.doc_sync.doc_shape import (
+    REASON_MISSING_SECTIONS,
+    REASON_SECTION_NOT_IN_USE,
+    STATUS_INCOMPLETE,
+    check_section_shape,
+)
 from beadloom.doc_sync.git_baseline import changed_paths
 from beadloom.infrastructure.repository import covering_prefix, get_owned_code_files
 
 if TYPE_CHECKING:
     import sqlite3
+    from collections.abc import Mapping
 
 
 def _compute_symbols_hash(conn: sqlite3.Connection, ref_id: str) -> str:
@@ -225,6 +232,15 @@ BASELINE_NONE = "none"
 #: cannot supply a baseline is not thereby broken.
 BLOCKING_STATUSES = frozenset({STATUS_STALE, STATUS_MISSING})
 
+#: Re-exported so a caller that already imports the status vocabulary from the
+#: engine finds the structural one beside the five content ones, rather than
+#: having to know which module each verdict was born in.
+_SHAPE_VOCABULARY = (
+    STATUS_INCOMPLETE,
+    REASON_MISSING_SECTIONS,
+    REASON_SECTION_NOT_IN_USE,
+)
+
 #: Where a pair's stored baseline came from, written by the reindex that built
 #: it. ``index_build`` is a baseline copied from the tree at build time and
 #: therefore worth nothing on its own; ``carried`` came from an earlier index
@@ -275,6 +291,8 @@ def _corroborate_with_git(
 def check_sync(
     conn: sqlite3.Connection,
     project_root: Path | None = None,
+    *,
+    section_requirements: Mapping[str, tuple[str, ...]] | None = None,
 ) -> list[dict[str, Any]]:
     """Check sync_state entries against actual file hashes on disk.
 
@@ -289,6 +307,12 @@ def check_sync(
         Open SQLite connection.
     project_root:
         Project root directory. If None, inferred from DB path.
+    section_requirements:
+        Required document sections keyed by GRAPH node kind, from
+        :func:`beadloom.onboarding.doc_templates.required_sections_by_node_kind`.
+        ``None`` means structure is NOT checked — the reason is passed in rather
+        than read here because the templates live in the ``onboarding`` peer
+        domain, which this one must not import.
 
     Returns list of dicts with doc_path, code_path, ref_id, status,
     reason, and optional details.
@@ -537,6 +561,15 @@ def check_sync(
         }
         for missing in find_missing_declared_docs(conn, project_root)
     )
+
+    # --- Phase 5: the document's SHAPE, which no content hash can see --------
+    # Read-only and never written to ``sync_state``: ``incomplete`` is a warn
+    # about structure, and recording it would make the status column mean two
+    # different things (BDL-061 S4b).
+    if section_requirements is not None:
+        results.extend(
+            check_section_shape(conn, project_root, section_requirements)
+        )
 
     conn.commit()
     return results

@@ -516,6 +516,7 @@ def config_check(*, fix: bool, project: Path | None) -> None:
     every file it changed, declines to overwrite any body it cannot prove is
     its own, and re-checks.
     """
+    from beadloom.application.mutation_scope import check_mutation_scope
     from beadloom.infrastructure.db import connection
     from beadloom.onboarding import check_config_drift
     from beadloom.onboarding.config_sync import FixReport, apply_config_fixes
@@ -538,6 +539,13 @@ def config_check(*, fix: bool, project: Path | None) -> None:
         click.echo(f"  ! {drift.file}: {drift.reason}", err=True)
         if drift.remediation:
             click.echo(f"    -> {drift.remediation}", err=True)
+
+    # The declared mutation scope, checked against the project it describes.
+    # Warn-only and printed here rather than in a step of its own: Beadloom owns
+    # no mutation runner to hang one on (CONTEXT Q5).
+    for scope in check_mutation_scope(project_root):
+        click.echo(f"  ! {scope.target}: {scope.why}", err=True)
+        click.echo(f"    -> {scope.remediation}", err=True)
 
     if not blocking:
         # A warning is a real finding and is printed above; it does not block,
