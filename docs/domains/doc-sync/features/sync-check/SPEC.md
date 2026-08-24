@@ -74,6 +74,7 @@ print `ok`:
 | `missing` | `doc_missing`, `code_missing`, `declared_doc_missing` | the thing to check is not there | 2 |
 | `unverified` | `no_baseline` | there was nothing to compare against | 0, reported by name |
 | `incomplete` | `missing_sections`, `section_not_in_use` | the document is current and does not carry the shape its kind requires | 0, reported by name |
+| `exempt` | `working_space` | the document is in the WORKING space and is exempt from freshness by declaration | 0, reported by name |
 
 Every result also carries `baseline` — `index`, `git:HEAD` or `none` — so a green
 result says what it was green against (BDL-UX #175).
@@ -88,6 +89,18 @@ it.
 
 `unverified` does not block, and is never counted as fresh. `beadloom ci` prints
 the sync-check step as **WARN** with the count, rather than `PASS`.
+
+`exempt` does not block either. The WORKING space — `ACTIVE` by default — is
+exempt from freshness by DECLARATION (`doc_roots.working` in
+`.beadloom/config.yml`), and the row carries the declared reason in `details`
+so a skip always says why. It is a declaration rather than an inference from a
+missing pair, because deleting a pair must not make a check quieter
+(BDL-UX #174). An ACTIVE document records progress within a bead rather than
+what the code is, so holding it against the code would compare a document to
+something it never described. A wrong declaration is detectable — `beadloom
+docs spaces` reports an exemption that excuses nothing and a document the graph
+declares as a node's documentation while the config declares its kind
+ephemeral.
 
 `incomplete` does not block either, and for a different reason: it is a NEW
 check (BDL-061 S4b) and every new check ships as `warn`, so no adopter's green

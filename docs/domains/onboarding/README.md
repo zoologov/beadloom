@@ -91,6 +91,8 @@ beadloom docs polish     # structured data for AI enrichment (text or JSON)
 beadloom docs audit      # check documented facts against project state (text or JSON)
 beadloom docs audit --verbose            # also name every document the scan did not read
 beadloom docs audit --fail-if unverified>0  # fail when a declared fact was checked against nothing
+beadloom docs spaces     # the three documentation spaces + where intent never reached AS-IS
+beadloom docs spaces --json [--strict]   # machine-readable; --strict exits 1 on any finding
 beadloom prime           # compact project context for AI agent injection
 beadloom setup-rules     # create IDE adapter files (.cursorrules, etc.)
 beadloom setup-rules --refresh           # refresh auto-managed CLAUDE.md sections

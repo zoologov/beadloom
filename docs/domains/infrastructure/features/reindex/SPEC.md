@@ -85,6 +85,12 @@ _DEFAULT_SCAN_DIRS = ("src", "lib", "app")
 | 3b | Store deep config in root node's `extra` | `onboarding.config_reader.read_deep_config` |
 | 4 | Index Markdown documents from docs directory | `doc_sync.doc_indexer.index_docs` |
 | 4b | Cache the DECLARED doc surface (every `docs:` entry, existing or not) | `read_declared_docs` / `store_declared_docs` |
+| 4c | Index the TO-BE space in place, from the configured `doc_roots` | `index_to_be_space` → `doc_sync.doc_indexer.index_space_documents` |
+
+Step 4c runs on BOTH paths. The incremental path rebuilds the TO-BE space
+wholesale rather than tracking it in `file_index`: the planning tree is
+small, and the two reindex paths disagreeing about what is in the index is a
+defect class this project has already paid for twice (BDL-UX #142, #146).
 | 5 | Extract and index code symbols from source files | `context_oracle.code_indexer.extract_symbols` |
 | 5b | Extract code imports and create `depends_on` edges | `graph.import_resolver.index_imports` |
 | 5c | Load architecture rules from `.beadloom/_graph/rules.yml` | `graph.rule_engine.load_rules` |

@@ -31,6 +31,7 @@ from beadloom.application.reindex.indexing import (
     _index_single_code_file,
     _index_single_doc,
     _resolve_docs_dir,
+    index_to_be_space,
     read_declared_docs,
     store_declared_docs,
 )
@@ -44,6 +45,7 @@ from beadloom.application.reindex.sync_state import (
     _snapshot_sync_baselines,
 )
 from beadloom.infrastructure.db import create_schema, get_meta, open_db, set_meta
+from beadloom.infrastructure.doc_roots import SPACE_TO_BE
 from beadloom.infrastructure.health import take_snapshot
 
 if TYPE_CHECKING:
@@ -252,6 +254,16 @@ def incremental_reindex(
     from beadloom.doc_sync.engine import build_reference_state
 
     build_reference_state(conn, project_root)
+
+    # Re-index the TO-BE space (BDL-061 S5). Rebuilt wholesale rather than
+    # tracked in `file_index`: the planning tree is small, and the two reindex
+    # paths disagreeing about what is in the index is a defect class this
+    # project has already paid for twice (BDL-UX #142, #146). `chunks` cascades
+    # on the doc delete.
+    conn.execute("DELETE FROM docs WHERE space = ?", (SPACE_TO_BE,))
+    to_be = index_to_be_space(project_root, conn)
+    result.docs_indexed += to_be.docs_indexed
+    result.chunks_indexed += to_be.chunks_indexed
 
     # Rebuild FTS5 search index.
     from beadloom.context_oracle.search import populate_search_index

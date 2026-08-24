@@ -430,7 +430,13 @@ FTS5 MATCH search. Returns list of result dicts with `ref_id`, `kind`, `summary`
 def populate_search_index(conn: sqlite3.Connection) -> int
 ```
 
-Clear and rebuild the `search_index` FTS5 table from `nodes` and `chunks`. Returns row count.
+Clear and rebuild the `search_index` FTS5 table. One row per node, plus one row per
+document bound to NO node — the second half is what makes the TO-BE space searchable
+(BDL-061 S5). A planning document describes intent rather than one node's code, so it
+carries no `ref_id`, and a node-only index could never return it however well it was
+chunked. Such a row keys `ref_id` on the document's path (the only identifier it has,
+and the one a reader needs to open the file) and `kind` on its SPACE, so
+`search --kind to_be` narrows to intent without a second index. Returns row count.
 
 ```python
 def has_fts5(conn: sqlite3.Connection) -> bool

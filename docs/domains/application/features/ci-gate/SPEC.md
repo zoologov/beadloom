@@ -45,7 +45,28 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    docs-quality WARN | 243 document(s) read; measurable-goal 154,
                        pending-in-approved 2; NO CHECK READS: BRIEF, PLAN, SUMMARY
    ```
-6. **config-check** — agent-config drift (AgentConfigAsCode). Since BDL-061 S3
+6. **doc-spaces** — the TO-BE → AS-IS relation (BDL-061 S5). Reports an epic
+   with at least one closed bead that declared a graph node with no AS-IS
+   document, plus a WORKING exemption that excuses nothing and a WORKING
+   declaration the graph contradicts. Every finding is a `warn` and the step is
+   `passed` unconditionally, for the same reason as the step above. A project
+   with no TO-BE document is a NAMED skip that states the roots it looked under.
+   Three states set `not_verified` and the step then reports **WARN** rather
+   than PASS, because each is a way to print no findings while having checked
+   nothing: no tracker export was readable, no epic with closed beads declared a
+   node, or some epics declare none. The tracker is read from the committed
+   `.beads/issues.jsonl` export rather than from a `bd` subprocess, so the gate
+   gives the same answer in a fresh CI checkout with no tracker installed — a
+   check whose result depends on what is on the runner is not a gate. Measured
+   on this repository, 2026-08-24, the step reports:
+
+   ```
+   doc-spaces WARN | to_be 190, as_is 93, working 55; 17 node declaration(s)
+                     from 16 of 23 epic(s) with closed beads held against the
+                     AS-IS space; NOT CHECKED: 18 epic(s) declare no node;
+                     55 WORKING document(s) exempt
+   ```
+7. **config-check** — agent-config drift (AgentConfigAsCode). Since BDL-061 S3
    a drift carries its own severity: `error` blocks the step, `warn` is
    reported and does not. The summary has three forms accordingly —
    `N drifted artifact(s)`, `no blocking drift; N artifact(s) reported (warn)`,
@@ -55,8 +76,8 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    name and severity `warning`; they are computed BEFORE the step's database
    guard, because a declaration is checkable against the tree whether or not the
    index was built.
-7. **doctor** — graph integrity.
-8. **federate** — `federate --fail-on` when hub exports are supplied.
+8. **doctor** — graph integrity.
+9. **federate** — `federate --fail-on` when hub exports are supplied.
 
 The **docs-audit** step (BDL-057 Layer 1) reuses
 `beadloom.doc_sync.audit.run_audit` — the same path `beadloom docs audit` calls —

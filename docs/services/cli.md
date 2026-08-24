@@ -733,6 +733,49 @@ beadloom docs quality --check pending-in-approved --json
 beadloom docs quality --strict
 ```
 
+### beadloom docs spaces
+
+Report the three documentation spaces, and where recorded intent never reached
+the documentation of reality.
+
+```bash
+beadloom docs spaces [--json] [--strict] [--project DIR]
+```
+
+- **TO-BE** — `PRD`, `RFC`, `BRIEF`, `CONTEXT`, `PLAN`. What the system is to
+  become.
+- **AS-IS** — `SPEC`, `DOC`, `README`. What it is; the space `sync-check` holds
+  against the code.
+- **WORKING** — `ACTIVE`. Ephemeral, exempt from freshness by declaration.
+
+The names are deliberately not TODO/DONE. Nothing changes status: a planning
+document stays the record of what was intended, and a *different* artifact is
+what gets updated — so the checkable claim is a relation between two artifacts.
+
+An epic with at least one closed bead that declared a graph node with no AS-IS
+document is reported: intent was recorded, the work finished, and reality was
+never written down. The node list is read only from the epic's *Related Files*
+section, because that list is a declaration; an epic that declares nothing is
+counted as unresolved and named, never counted as clean.
+
+Roots and kinds are configurable under `doc_roots` in `.beadloom/config.yml`
+(see the [Doc Roots component](../domains/infrastructure/components/doc-roots/DOC.md)).
+
+Exits 0 with findings unless `--strict` is given, so no adopter's green project
+turns red on upgrade. The same check runs as the `doc-spaces` step of
+`beadloom ci`, where it reports and never blocks.
+
+```bash
+# The report, with every denominator beside every count
+beadloom docs spaces
+
+# Machine-readable
+beadloom docs spaces --json
+
+# Enforce it
+beadloom docs spaces --strict
+```
+
 ### beadloom docs polish
 
 Generate structured data for AI-driven documentation enrichment.
