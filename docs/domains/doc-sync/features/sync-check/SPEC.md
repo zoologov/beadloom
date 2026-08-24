@@ -16,8 +16,8 @@ broad interface surface. Two layers cooperate without interfering:
 
 - **Symbol-pair freshness** pairs a node's `docs:` entries with the source files
   attributed to that node, computes a freshness signal from the code
-  `symbols_hash` (plus git state), and reports each pair with one of four
-  verdicts — `ok`, `stale`, `missing`, `unverified`.
+  `symbols_hash` (plus git state), and reports each pair with one of six
+  verdicts — `ok`, `stale`, `missing`, `unverified`, `incomplete`, `exempt`.
 - **The declared surface** is checked against the tree, so a doc the graph names
   and the tree does not hold is a failure rather than one less thing to check.
 - **Unchecked accounting** names every node that declares a doc but contributes
@@ -61,11 +61,13 @@ to catch untracked files and missing module mentions. `mark_synced` (and
 `mark_synced_by_ref`) re-baselines a pair once its doc is brought up to date.
 `check_sync_since` compares against a git ref for diff-based checks.
 
-### The four verdicts — unverifiable is not clean
+### The six verdicts — unverifiable is not clean
 
-`ok` and `stale` are outcomes of a comparison that HAPPENED. The other two are
-states in which the checker cannot know, and they exist because they used to
-print `ok`:
+`ok` and `stale` are outcomes of a comparison that HAPPENED. `missing` and
+`unverified` are states in which the checker cannot know, and they exist because
+they used to print `ok`. `incomplete` and `exempt` were added later and each
+answers a different question again — the document's SHAPE, and a freshness
+exemption the project DECLARED:
 
 | Verdict | Reason | Meaning | Exit |
 |---|---|---|---|

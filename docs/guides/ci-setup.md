@@ -129,7 +129,8 @@ writes the index.
 ## Unified Gate (`beadloom ci`)
 
 `beadloom ci` composes, in order, **reindex -> lint --strict -> sync-check ->
-docs audit -> config-check -> doctor -> (optional) federate landscape gate** into a single
+docs audit -> docs-quality -> doc-spaces -> config-check -> doctor -> (optional) federate
+landscape gate** into a single
 verdict with one exit code (0 = every step passed, 1 = any step failed). It never
 short-circuits — every step runs and contributes findings — and it names every
 step that ran with its honest result (PASS/WARN/FAIL/SKIP); a green is never a silently
@@ -144,14 +145,25 @@ when piped — emits `::error` annotations so violations show inline on the PR).
 | `lint --strict` | architecture-boundary violations | — |
 | `sync-check` | doc-code freshness (stale docs) | — |
 | `docs audit` | stale numeric facts stated in documentation | — |
+| `docs-quality` | the writing standard over planning documents — **warn only** | no planning document matched (NAMED skip) |
+| `doc-spaces` | recorded intent that never reached a document of reality — **warn only** | no TO-BE document matched (NAMED skip) |
 | `config-check` | AgentConfigAsCode — generated agent-config matches the graph | — |
 | `doctor` | graph integrity | — |
 | `federate --fail-on` | cross-service landscape gate | no `--hub` exports given |
 
 Beadloom dogfoods this gate on its own CI: the per-repo gate (`reindex` →
-`lint --strict` → `sync-check` → `docs audit` → `config-check` → `doctor`) shipped
-and runs on every Beadloom PR. The cross-service landscape step is opt-in via
-`--hub`.
+`lint --strict` → `sync-check` → `docs audit` → `docs-quality` → `doc-spaces` →
+`config-check` → `doctor`) shipped and runs on every Beadloom PR. The cross-service
+landscape step is opt-in via `--hub`.
+
+**Two steps are warn-only by design, and stay so.** `docs-quality` and `doc-spaces`
+set `passed` unconditionally: every finding is a warning and the exit code does not
+move. A check that turns an adopter's green project red on upgrade is a check that
+gets disabled, and a disabled check reports nothing at all. The consequence is worth
+stating rather than discovering: a project can carry findings from either step and
+still push through a green Gate. What those steps guarantee is that the findings are
+**printed by name** with the population behind them, and that a step which could not
+decide reports `WARN` rather than `PASS`.
 
 **What `--no-reindex` costs the verdict.** Skipping the reindex step makes every
 later step describe the index rather than the working tree: `lint` can pass over a

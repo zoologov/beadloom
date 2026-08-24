@@ -8,6 +8,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Three documentation spaces, and a relation between two of them (BDL-061 S5).** Every
+  document a project holds is classified TO-BE (`PRD`, `RFC`, `BRIEF`, `CONTEXT`, `PLAN`),
+  AS-IS (`SPEC`, `DOC`, `README`) or WORKING (`ACTIVE`). The names are deliberately not
+  TODO/DONE, because **nothing changes status**: a PRD stays the record of what was intended
+  while a *different* artifact is updated to describe the new reality, so the checkable claim
+  is a relation between two artifacts rather than a flag on one — a flag has nothing to be
+  verified against. `beadloom docs spaces [--json] [--strict]` reports an epic that recorded
+  intent in its `CONTEXT.md`/`BRIEF.md` *Related Files* section, has at least one closed
+  bead, and declared a graph node with **no AS-IS document**. Measured on this repository:
+  one finding, and it is true — this epic declares the `cli-commands` node, which carries no
+  `docs:` entry at all. No other check could see it: `lint` asks whether modules reach nodes,
+  and `sync-check` compares pairs, so an undeclared document has no pair to go stale. Roots,
+  kinds and intent documents are configurable under `doc_roots` in `.beadloom/config.yml`
+  from the first release, and `beadloom search --kind {to_be,as_is,working}` searches the
+  planning tree in place. New `beadloom ci` step `doc-spaces`, warn-only. See the
+  [Document Kinds guide](docs/guides/document-kinds.md).
+- **`exempt` — a WORKING document is excused from freshness by DECLARATION (BDL-061 S5).** A
+  sixth `sync-check` verdict. The exemption is a config declaration carrying a mandatory
+  reason, never an inference from a missing pair, because deleting a pair must not make a
+  check quieter. A wrong declaration is detectable two ways: `working_exemption_inert` names
+  each declared kind and each declared root that matched no document, and
+  `working_declaration_contradicted` names a document the config calls ephemeral that the
+  graph also declares as a node's documentation. `missing` is decided before any exemption
+  applies, so a deleted file is never made quieter by a declaration.
+- **`sync-check --json` counts every verdict (BDL-061 S5).** The summary gains `exempt` and
+  `incomplete`, so `ok + stale + missing + unverified + exempt + incomplete` sums to `total`;
+  a consumer computing `total - ok` no longer reads unexplained pairs. The rich output gains
+  an `[exempt]` marker with the declared reason, and the Gate's sync-check line gains
+  `, M exempt — <reason>`. The `--since` shape is unchanged.
 - **A project layer for the agentic flow — every artifact composes (BDL-061 S3).**
   `compose(kind, name, config, project_root)` assembles the role protocols, the slash
   commands and `CLAUDE.md` from four layers in a fixed order: the shipped stack-neutral
@@ -151,6 +180,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   suite itself rejects.
 
 ### Changed
+- **`measurable-goal` re-scoped from a numeral detector to a two-leg witness test
+  (BDL-061 S5).** As shipped the check looked for a digit and called its absence "no
+  measurable clause" — a premise that is false, since an exit code and a named artifact are
+  measurable without one. It now reports a goal only when its predicate is an **unbounded
+  improvement** (`improve`, `establish`, `clean up`, `make` something *better*) AND it
+  **names no witness** — no quantity, no named artifact, no observable outcome. Measured on
+  this repository: **154 of 235 goal statements became 4 of 232**, and all four are in
+  closed epics, which is why the remaining debt is a historical exclusion rather than a
+  rewrite. `doc_quality` gains the public `names_a_witness(statement)` and
+  `states_an_unbounded_improvement(statement)`; the check name, the report shapes, the CLI
+  and the gate step are unchanged. Stated limit, measured: 27 of the 150 newly-accepted
+  statements name no witness either, so the check now decides nothing about them —
+  precision was bought with recall, deliberately.
+- **`beadloom ci` gained an eighth step (BDL-061 S5).** `doc-spaces` runs between
+  `docs-quality` and `config-check` and never blocks. Four states set it to **WARN** rather
+  than PASS: no tracker was readable, no epic with closed beads declared a node, some epics
+  declare none, and some epics the tracker does not name. Its line states both WORKING
+  populations apart — `N WORKING document(s) in the exempt space, M sync pair(s) excused` —
+  because one word for two populations is how a reader takes the document count as the
+  excused-pair count. Anything asserting the exact step list needs the new name.
+- **Every document a declared root matched is in exactly one population (BDL-061 S5).** When
+  a document's kind places it in a space whose declared roots exclude it, it is now counted
+  in that space and reported as `document_outside_declared_root`; it used to fall out of
+  every count in silence. The invariant that holds is
+  `sum(populations) == |files any declared root matched|` on any tree. Populations therefore
+  grow on a project whose file stems disagree with its roots. Among kinds, and among roots,
+  the WORKING space is consulted first, so a project's explicit declaration is honoured over
+  a shipped default — the three shipped kind lists are disjoint, so nothing changes for a
+  project that declares nothing.
+- **An epic the tracker export does not name is not an epic whose beads are open
+  (BDL-061 S5).** The two used to be the same empty tuple and both were skipped; only the
+  second is an honest skip. Such an epic now has `bead_statuses` of `None`, is counted in
+  `epics_without_bead_status`, and — when it declares a node — is reported as an
+  `epic_not_in_tracker` warning. `docs spaces --json` gains `tracker_source` and
+  `epics_unknown_to_tracker`.
+- **`unspecified-encoding` is enforced by ruff, on three settings that travel together
+  (BDL-061 S5).** `[tool.ruff.lint]` carries `preview = true`, `explicit-preview-rules =
+  true` and `PLW1514` in `select`. The middle one is not optional bookkeeping: selecting a
+  preview rule **without** it is not an error — ruff prints "has no effect because preview
+  is not enabled" and exits 0, which is a config line that reads as a gate and checks
+  nothing. `explicit-preview-rules` keeps every other preview rule out. The rule's reach was
+  measured rather than read off its description: it reports `Path.read_text` only where a
+  `Path` receiver can be inferred and does not look at `subprocess(text=True)` at all, so
+  the receiver-agnostic AST sweep still covers `src/` and `PLW1514` adds `tests/`. This is a
+  contributor-facing lint contract; no product API, CLI flag or schema moved.
 - **The rules table no longer restates the loader's vocabulary (BDL-061 S4).** The
   `rules.rule_type` CHECK constraint is removed and an existing database is migrated in
   place, row for row. A `rule_type` the loader knows and the database did not used to fail

@@ -292,13 +292,15 @@ written down nowhere. Measured on this repository with `--json` and exit codes, 
   0 by construction. Repointing `features:` at a directory that does not exist takes the number
   to **1**, and that 1 is the liveness finding naming the dead glob — the proof the rule cannot
   be silently zeroed by moving a path.
-- The 19 scenarios in 6 `.feature` files **run** under `pytest-bdd`, 0 skipped, and a test binds
-  the executed count to the project's own parser count, so a seventh file with no step module
-  reddens instead of counting as coverage.
-- The five section-quality checks read real populations: `measurable-goal` 154 over 235,
-  `pending-in-approved` 2 over 69, and 0 over 269 / 138 / 243 for the other three. Each of the
-  three zero rows was shown to fire on a real document of this repository under one
-  reverse-editable edit, so it is a checked green rather than a vacuous one.
+- The acceptance scenarios **run** under `pytest-bdd`, 0 skipped, and a test binds the executed
+  count to the project's own parser count, so a feature file with no step module reddens instead
+  of counting as coverage. Measured 2026-08-24: 33 scenarios in 7 `.feature` files (19 in 6 when
+  S4 closed; S5's `doc_spaces.feature` is the seventh).
+- The five section-quality checks read real populations. Measured 2026-08-24, after `.70`
+  re-scoped the first of them: `measurable-goal` 4 over 232, `pending-in-approved` 2 over 69,
+  and 0 over 272 / 138 / 243 for the other three. When S4 closed the first row read 154 over
+  235. Each of the three zero rows was shown to fire on a real document of this repository under
+  one reverse-editable edit, so it is a checked green rather than a vacuous one.
 - **56 of 243 documents (23%) are in a kind no content check enters** — BRIEF 11, PLAN 42,
   SUMMARY 3 — while the global `checks_that_read_nothing` read `()` throughout. The global count
   is an OR over the corpus and structurally cannot see that; per-kind coverage can.
@@ -306,13 +308,15 @@ written down nowhere. Measured on this repository with `--json` and exit codes, 
 Three limits are stated in the shipped documentation rather than omitted, because each is a
 property of the design and not a bead waiting to be done:
 
-- **`measurable-goal` is closer to a numeral detector than a measurability detector, and its
-  individual findings are not yet trustworthy.** Review `.15` measured roughly 1-in-18 precision
-  on a sample of 18 and found it flags `beadloom lint --strict fails (non-zero)`, which is
-  exactly the exit-code form standing note #148 demands. The count is a real statement about a
-  corpus; a row is not yet actionable. The owner's decision is to re-scope the criterion before
-  paying the debt — `beadloom-mr2l.65` carries it — because inserting numerals into goals that
-  are already checkable would satisfy the regex and improve nothing.
+- **`measurable-goal` decides one named form, not measurability in general.** It was a numeral
+  detector at roughly 1-in-18 precision — review `.15` measured that on a sample of 18 and found
+  it flags `beadloom lint --strict fails (non-zero)`, exactly the exit-code form standing note
+  #148 demands. `.70` re-scoped it to a two-leg test: an unbounded improvement in the predicate
+  AND no witness named. The count fell from 154 of 235 to **4 of 232**, and the remaining limit
+  is stated rather than closed — 27 of the 150 newly-accepted statements name no witness either,
+  so the check decides nothing about them. Precision was bought with recall, deliberately. All
+  four remaining findings sit in closed epics, which is why `beadloom-mr2l.71` (a historical
+  exclusion) exists rather than a rewrite of the record of what was intended.
 - **Windows is unverified by decision.** `.64` withdrew the CI leg on a measured cost (~16-28
   runner-minutes and roughly 3x PR-to-merge latency) and the Windows verdict for the flow guards
   is composed from `ntpath` plus a refusal proved branchless, never observed on a runner. The
@@ -332,8 +336,21 @@ corpus.
 
 ## Current Phase
 
-- **Phase:** Development — S1, S2, S2b, S3 and S4 complete; S5 next
-- **Current bead:** `.16` closes S4; `.17` opens S5. Live status is in ACTIVE.md and the tracker
+- **Phase:** Development — S1, S2, S2b, S3 and S4 complete; S5's four beads shipped, with two
+  of its five criteria carried by `.72`
+- **Current bead:** `.20` closes the S5 documentation pass; `.21` opens S6. Live status is in
+  ACTIVE.md and the tracker
+- **Open at the close of S5, and stated rather than folded into a green count:** the
+  `doc-spaces` gate step is warn-only, so an adopter who declares a WORKING root gets a green
+  Gate with the objection printed. That is the epic's shipped-as-warn constraint applied
+  consistently, not a regression — the alternative breaks "no adopter's green project turns red
+  on upgrade". The only thing standing between a one-line `working.roots: ["docs/**/*.md"]` and
+  a whole tree excused from freshness is that kind beats root for the `SPEC`/`DOC`/`README`
+  stems, which is a property of the shipped kind list rather than a guard. Honouring a
+  declaration is the design; what `.75` and `.77` fixed is that it can no longer happen in
+  silence — `docs spaces` names the contradicted documents, and review `.19` measured in a clean
+  room that the 28 excused pairs map onto exactly the 6 documents it names, so the coverage is
+  structural rather than partial
 - **Blockers:** none. `main`'s live protection still requires the seven pre-`.38` contexts while
   the scaffolded default declares nine, so `setup-branch-protection` is not re-run here until
   every declared context is observed green — see ACTIVE.md

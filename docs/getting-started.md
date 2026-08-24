@@ -166,6 +166,8 @@ reindex        PASS
 lint           PASS
 sync-check     PASS
 docs-audit     PASS
+docs-quality   WARN
+doc-spaces     WARN
 config-check   PASS
 doctor         PASS
 ✓ CI gate passed
@@ -173,6 +175,12 @@ doctor         PASS
 
 > `sync-check` exits 2 when docs are stale. `beadloom sync-update <ref> --yes`
 > walks you through (or auto-applies) the fix until the stale count reaches 0.
+>
+> `docs-quality` and `doc-spaces` are **warn-only**: they report and never change the
+> exit code, so adding Beadloom to a project with existing documents cannot turn a
+> green build red. `WARN` there means the step ran and part of what it reports on was
+> not verifiable — it is not a softer PASS. See the
+> [Document Kinds guide](guides/document-kinds.md).
 
 ### B. The agentic dev flow walkthrough
 

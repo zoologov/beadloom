@@ -45,9 +45,17 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    Measured on this repository, 2026-08-24, the step reports:
 
    ```
-   docs-quality WARN | 243 document(s) read; measurable-goal 154,
+   docs-quality WARN | 243 document(s) read; measurable-goal 4,
                        pending-in-approved 2; NO CHECK READS: BRIEF, PLAN, SUMMARY
    ```
+
+   **The line prints findings, not what the check stopped deciding about.** After
+   `beadloom-mr2l.70` re-scoped `measurable-goal`, 27 of the 150 newly-accepted
+   goal statements name no witness either and this check now decides nothing
+   about them. That limit is stated in the doc-quality SPEC and is not carried on
+   this line — filed by review `beadloom-mr2l.19` as a MINOR, and left as a
+   stated limit rather than a silent one.
+   
 6. **doc-spaces** — the TO-BE → AS-IS relation (BDL-061 S5). Reports an epic
    with at least one closed bead that declared a graph node with no AS-IS
    document, plus a WORKING exemption that excuses nothing and a WORKING

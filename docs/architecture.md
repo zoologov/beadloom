@@ -12,10 +12,10 @@ The system is organized into six DDD domain packages, an application (use-case o
 
 **Domains:**
 1. **Context Oracle** (`context_oracle/`) — BFS graph traversal, context bundle assembly, code indexing, two-tier caching, FTS5 search, `why` impact analysis
-2. **Doc Sync** (`doc_sync/`) — doc↔code synchronization tracking, stale detection, symbol-level hashing, docs audit
+2. **Doc Sync** (`doc_sync/`) — doc↔code synchronization tracking, stale detection, symbol-level hashing, docs audit, document shape and writing-standard quality checks
 3. **Graph** (`graph/`) — YAML graph loader, diff engine, rule engine, import resolver (9 languages), architecture linter, C4 diagram emitter, federation
 4. **Onboarding** (`onboarding/`) — project bootstrap, doc generation/polishing, architecture-aware presets, AGENTS.md / IDE-rules generation, config sync, and the **agentic-flow composer** (`flow_config.py`, `composer.py`, `role_composer.py`, `role_adapters.py`, `flow_manifest.py`, `flow_suppression.py`), which assembles every flow artifact from CORE + architecture + stack + the project layer in `.beadloom/flow/`
-5. **Infrastructure** (`infrastructure/`) — domain-agnostic SQLite database layer, health metrics, git-activity tracking
+5. **Infrastructure** (`infrastructure/`) — domain-agnostic SQLite database layer, health metrics, git-activity tracking, and the configuration readers for where source (`scan_paths`) and documentation (`docs_dir`, `doc_roots`) live
 6. **AI Agents** (`ai_agents/`) — governed AI-agent harnesses that ship inside the wheel; hosts the deterministic, seam-isolated **AI tech-writer** (`ai_agents/ai_techwriter/`, run via `python -m beadloom.ai_agents.ai_techwriter`). A **leaf consumer**: it may read `application`/`context_oracle`/`graph`/`doc_sync` APIs but must never be imported by the core domains or services (enforced by the `core-no-import-ai-agents` / `application-no-import-ai-agents` `forbid_import` rules).
 
 **Application (use-case orchestration)** (`application/`) — composes the domains into end-to-end use cases. It owns:
@@ -24,7 +24,7 @@ The system is organized into six DDD domain packages, an application (use-case o
 - `status.py` — the read-side of `beadloom status` (index/coverage/health/trend counts + context-bundle metrics)
 - `debt_report/` — architecture-debt aggregation, scoring, trend tracking, CI gating, a cohesion-split package
 - `watcher.py` — file watcher for auto-reindex on change
-- `gate.py` — the unified `beadloom ci` gate (reindex → lint → sync-check → docs audit → config-check → doctor → optional federate)
+- `gate.py` — the unified `beadloom ci` gate (reindex → lint → sync-check → docs audit → docs-quality → doc-spaces → config-check → doctor → optional federate)
 - `guards/` — the flow-guard primitive behind `beadloom guard` (BDL-061 S1): a verdict per named guard, the `guards:` block of `.beadloom/flow.yml`, one invocation boundary, and the firing record `--liveness` reads
 - the VitePress site generators — `site.py` (orchestrator), `site_pages.py`, `site_nav.py`, `site_about.py`, `site_dashboard/` (a cohesion-split package), `site_landscape.py`, `site_published.py`, `site_mermaid_guard.py`, `site_metrics_history.py`
 
@@ -269,8 +269,8 @@ Snapshots are stored in SQLite and enable architecture drift detection across re
 
 `application/gate.py` powers `beadloom ci` — the unified gate that composes the
 existing checkers into one verdict with a single exit code: **reindex → `lint
---strict` → sync-check → docs audit → docs-quality → config-check → doctor →
-(optional) federate landscape gate**. Every step's honest result is printed (PASS / WARN / FAIL / SKIP) —
+--strict` → sync-check → docs audit → docs-quality → doc-spaces → config-check →
+doctor → (optional) federate landscape gate**. Every step's honest result is printed (PASS / WARN / FAIL / SKIP) —
 never a green that silently skipped a step. `--format rich|json|github` applies
 uniformly; `--hub <export>` arms the cross-service landscape gate. The same gate
 runs as the **pre-push Beadloom Gate** hook (`install-hooks --pre-push`) and in
@@ -373,6 +373,8 @@ see the `ai_agents` domain README + the `ai-techwriter` feature SPEC.
 - **Code indexer** supports `.py`, `.js`, `.jsx`, `.ts`, `.tsx`, `.go`, `.rs` (tree-sitter)
 - **Import analysis** supports 9 languages: Python, TypeScript, JavaScript, Go, Rust, Kotlin, Java, Swift, Objective-C, C/C++ (16 file extensions total)
 - Documentation root is configurable via `docs_dir` in `.beadloom/config.yml` (default: `docs/`)
+- Documentation SPACES (TO-BE / AS-IS / WORKING) — their roots, kinds, intent documents and the
+  WORKING freshness exemption — are configurable via `doc_roots` in `.beadloom/config.yml`
 - Source scan paths are configurable via `scan_paths` in `.beadloom/config.yml` (default: `src`, `lib`, `app`)
 - Graph is read only from `.beadloom/_graph/*.yml`
 - Rules are read from `.beadloom/_graph/rules.yml`
@@ -390,4 +392,5 @@ see the `ai_agents` domain README + the `ai-techwriter` feature SPEC.
 | `languages` | all supported | File extensions to parse (e.g. `[".py", ".ts"]`) |
 | `scan_paths` | `["src", "lib", "app"]` | Source directories to scan |
 | `docs_dir` | `docs/` | Documentation root directory |
+| `doc_roots` | see the [Document Kinds guide](guides/document-kinds.md) | Per-space roots, kinds, intent documents and the WORKING freshness exemption |
 | `sync.hook_mode` | `warn` | Pre-commit hook mode: `warn` or `block` |

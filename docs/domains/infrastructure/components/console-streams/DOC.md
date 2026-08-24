@@ -87,15 +87,40 @@ took the `docs quality` gate down the same way. Five repairs did not reach the
 sixth author, so the rule is now enforced by two mechanisms rather than
 remembered.
 
-**The codec is stated:** ruff's `PLW1514` is selected in `pyproject.toml`. It is a
-preview rule in `ruff==0.16.3`, the release `uv.lock` pins, so `preview` and
-`explicit-preview-rules` travel with the selection — selecting a preview rule without
-them makes `ruff check` print a warning and exit 0, which is a gate that reads as
-configured and checks nothing. Its reach was measured, not read off the rule description: it reports
-`Path.read_text` only where it can infer a `Path` receiver, and it does not look
-at `subprocess(text=True)` at all. The receiver-agnostic AST sweep in
+**The codec is stated:** ruff reports text I/O that names no codec. That takes
+**three** settings in `pyproject.toml`, and they travel together — any one of them
+alone is inert:
+
+| Setting | What it does | What its absence costs |
+|---|---|---|
+| `select = [..., "PLW1514"]` | asks for `unspecified-encoding` | without it, nothing is reported |
+| `preview = true` | `PLW1514` is a preview rule in `ruff==0.16.3`, the release `uv.lock` pins | **selecting a preview rule without it is not an error**: ruff prints `Selection PLW1514 has no effect because preview is not enabled` and exits 0 |
+| `explicit-preview-rules = true` | keeps every *other* preview rule out of the selection | without it, enabling preview opts the project into the whole preview rule set at once |
+
+The middle row is the reason all three are named here rather than one. A
+config line that reads as a gate, warns, and exits 0 is a gate that checks
+nothing — the same class as BDL-UX #172 and #173, measured with `--isolated`
+rather than read off the documentation.
+
+`explicit-preview-rules` bounds the rule set; it does **not** stop preview from
+changing a STABLE rule's behaviour, and that cost was measured rather than
+argued: exactly one new finding on this tree, `RUF002` on the deliberate
+latin-1 mojibake docstring in `tests/test_decoding_symmetry.py`, answered with a
+line `noqa` carrying its reason rather than by editing the measurement that row
+records. Further preview drift arrives with a reviewed lockfile bump, because
+ruff is pinned by `uv.lock`. **When the rule graduates:** delete the two knobs,
+keep the `select` line — the `noqa` then becomes unused, which `RUF100` says out
+loud rather than leaving behind.
+
+Its reach was measured, not read off the rule description: it reports
+`Path.read_text` only where it can infer a `Path` receiver — an unannotated
+parameter hides the call from it — and it does not look at
+`subprocess(text=True)` at all. Over `src/` the reach is broad because
+`mypy --strict` makes annotations mandatory there; over `tests/`, type-checked
+by nothing, it is partial. The receiver-agnostic AST sweep in
 `tests/test_locale_independent_io.py` therefore still covers `src/`, and
-`PLW1514` adds `tests/`, which that sweep does not read.
+`PLW1514` adds `tests/`, which that sweep does not read. Neither instrument
+contains the other.
 
 **The handler is wide enough:** `tests/test_decode_handlers.py` holds an AST
 ledger of every `try` or `contextlib.suppress` block in `src/beadloom` whose body
