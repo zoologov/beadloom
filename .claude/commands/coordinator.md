@@ -261,11 +261,30 @@ bd merge-slot release
   ```
   (Gate types: `human`, `timer --timeout`, `gh:run`, `gh:pr`.) Use this to bridge to the STRATEGY-3 CI gate.
 
+### Launching a REVIEW subagent: paste nothing the author wrote
+
+A review that reads what the author said it did is not an independent check. Measured: in hidden-profile tasks a group that hears one member's conclusion first scores 17-36% where a single holder of all the facts scores ~100%. So the review prompt carries **the bead id and nothing else about the change** — no summary, no measurement table, no "the dev reports N tests added", however much time quoting it would save. The reviewer runs `beadloom review-brief <bead-id>` itself, which hands it the assignment, the specification and the change while withholding the author's comments and reporting how many it withheld.
+
+```
+Agent(
+  description="BEAD-XX review",
+  subagent_type="review",
+  run_in_background=True,
+  prompt="Review bead <bead-id>. Run `beadloom review-brief <bead-id>` for your input. "
+         "Epic context: CONTEXT.md + RFC.md at <docs path>. "
+         "Follow your role protocol. RETURN CONTRACT: the verdict line only.",
+)
+```
+
+This is the one launch prompt where being helpful is the defect. If a measurement genuinely must reach the reviewer before its verdict — because re-deriving it would cost more than the independence is worth — say in the prompt that you are doing it and why, so the reviewer can record that the withholding was defeated. An undeclared paste is invisible to everyone including the reviewer.
+
 ### Review feedback loop
 
 When the review subagent returns:
 - **OK** → coordinator proceeds to the docs wave.
 - **ISSUES** → coordinator: read findings (`bd comments <review-bead>`), create fix beads under the parent (`bd create --type task --parent <parent-id>`; `bd dep add <fix-bead> <review-bead>`), re-run dev→test→review until OK. Docs bead MUST NOT start until review is clean.
+
+A re-review after a fix cycle does NOT re-impose the withholding: the verdict already on the bead releases the author's account to `beadloom review-brief <bead-id> --release`. The independence that mattered was established on the first pass.
 
 ---
 

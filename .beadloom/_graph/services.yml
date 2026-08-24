@@ -357,6 +357,16 @@ nodes:
     docs:
       - docs/domains/application/features/wave-plan/SPEC.md
 
+  # Feature: what a reviewer is handed (BDL-061 S6). A review that reads what the
+  # author said it did is not an independent check — hidden-profile groups scored
+  # 17-36% against ~100% for a single holder of all the facts (BDL-UX #155 C).
+  - ref_id: review-brief
+    kind: feature
+    summary: "Assemble a reviewer's input from the change and the specification, count the author's comments rather than print them, and release them once a verdict is recorded"
+    source: src/beadloom/application/review_brief/
+    docs:
+      - docs/domains/application/features/review-brief/SPEC.md
+
   - ref_id: graph-reads
     kind: feature
     summary: "Application read facade over the infrastructure repository — lets the TUI read the graph index without a presentation->infrastructure import"
@@ -887,6 +897,9 @@ edges:
     dst: application
     kind: part_of
   - src: wave-plan
+    dst: application
+    kind: part_of
+  - src: review-brief
     dst: application
     kind: part_of
   - src: guard-probes
