@@ -354,18 +354,32 @@ class TestOnThisRepositorysOwnDocuments:
     def test_the_checks_read_this_repositorys_documents(self, _report: object) -> None:
         assert _report.documents > 100  # type: ignore[attr-defined]
 
-    def test_our_approved_rfc_still_carries_pending_questions(
+    def test_a_pending_row_in_an_approved_document_is_reported(
         self, _report: object
     ) -> None:
-        """BDL-061's own RFC is Approved and leaves four questions Pending —
-        every one of them decided in CONTEXT and never resolved back."""
-        pending = [
-            f
-            for f in _report.findings  # type: ignore[attr-defined]
-            if f.check == PENDING_IN_APPROVED
-        ]
-        assert pending, "the check read nothing on this repo"
-        assert any("BDL-061" in f.path for f in pending)
+        """The MECHANISM, not the instance.
+
+        This test used to assert that BDL-061's own RFC still carried four
+        `Pending` rows — Q1, Q2, Q3 and Q5, each decided in CONTEXT and never
+        written back. That was true when the check shipped, and the check
+        reporting it is what caused the debt to be paid (commit ``2ddbcf9``),
+        which then reddened this test.
+
+        A test that pins an instance dies the moment the instance is fixed, and
+        takes the coverage with it. So it now asserts that the check reads a
+        real population and reports the rows it finds, whatever they are — the
+        two surviving ones live in BDL-021 and BDL-034, and when those are paid
+        too, the assertion still holds on an empty result because the
+        population, not the finding count, is what proves the check ran.
+        """
+        report = _report  # type: ignore[attr-defined]
+        pending = [f for f in report.findings if f.check == PENDING_IN_APPROVED]
+        assert PENDING_IN_APPROVED not in report.checks_that_read_nothing, (
+            "the check read no rows at all — it is unproven on this repo, "
+            "which is a different fact from finding nothing"
+        )
+        for finding in pending:
+            assert finding.path, "a finding must name the document it came from"
 
     def test_no_check_reads_nothing_at_all(self, _report: object) -> None:
         """A check with no applicable document here would be unproven, and the
