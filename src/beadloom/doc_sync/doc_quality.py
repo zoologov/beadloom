@@ -119,6 +119,14 @@ class QualityReport:
     findings: tuple[QualityFinding, ...] = ()
     documents: int = 0
     applicable: dict[str, int] = field(default_factory=dict)
+    unreadable: tuple[tuple[str, str], ...] = ()
+    """Documents that could not be read, as ``(path, reason)``.
+
+    A document nobody could read is UNVERIFIED, not absent. Dropping it would
+    make every count in this report quietly smaller and still green -- the
+    equation BDL-UX #174 and #175 turn on, and the one CONTEXT states as
+    *unverifiable is not clean*.
+    """
 
     @property
     def checks_that_read_nothing(self) -> tuple[str, ...]:
@@ -498,11 +506,23 @@ def check_documents(
     """Run all five checks over every document in *paths*."""
     findings: list[QualityFinding] = []
     applicable: dict[str, int] = dict.fromkeys(CHECK_NAMES, 0)
+    unreadable: list[tuple[str, str]] = []
     documents = 0
     for path in sorted(paths):
         try:
             text = path.read_text(encoding="utf-8")
-        except OSError:
+        except (OSError, UnicodeDecodeError) as exc:
+            # A planning document is a UTF-8 CONTRACT, so a decode failure is a
+            # real answer about the document -- not a reason to abandon the run.
+            # `UnicodeDecodeError` is a `ValueError`, so the old `except OSError`
+            # let it escape `beadloom ci` entirely: one such file produced a
+            # traceback and NO step results at all, for every check in the gate.
+            # Fifth instance of this family in BDL-061 (.36, .37, .40, .42).
+            try:
+                where = str(path.relative_to(project_root))
+            except ValueError:
+                where = str(path)
+            unreadable.append((where, f"{type(exc).__name__}: {exc}"))
             continue
         documents += 1
         try:
@@ -515,5 +535,8 @@ def check_documents(
             applicable[name] = applicable.get(name, 0) + count
     findings.sort(key=lambda f: (f.path, f.line, f.check))
     return QualityReport(
-        findings=tuple(findings), documents=documents, applicable=applicable
+        findings=tuple(findings),
+        documents=documents,
+        applicable=applicable,
+        unreadable=tuple(unreadable),
     )

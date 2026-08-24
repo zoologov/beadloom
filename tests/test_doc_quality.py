@@ -397,3 +397,59 @@ class TestOnThisRepositorysOwnDocuments:
             if f.check == UNFILLED_PLACEHOLDER
         ]
         assert unfilled == []
+
+class TestAnUnreadableDocumentIsUnverifiedNotAbsent:
+    """BDL-061.66 / review .15's critical.
+
+    `check_documents` caught only `OSError`. `UnicodeDecodeError` is a
+    `ValueError`, so a single non-UTF-8 planning document raised straight out of
+    the `docs-quality` gate step and took down the whole `beadloom ci` run: a
+    traceback and NO step results, for every check in the gate. Measured by the
+    reviewer at rc 1.
+
+    Fifth instance of one family in this epic -- a handler narrower than what its
+    call can raise, around text decoded without an explicit rule (.36 found two,
+    .37 the probes, .40 four call sites, .42 swept ~40). This module was written
+    after all four.
+    """
+
+    def _docs(self, tmp_path: Path) -> list[Path]:
+        good = tmp_path / "GOOD.md"
+        good.write_text(
+            "# Goal\n\nShip it in under 200ms.\n", encoding="utf-8"
+        )
+        bad = tmp_path / "BAD.md"
+        bad.write_bytes(b"# Goal\n\n\xff\xfe not utf-8 at all\n")
+        return [good, bad]
+
+    def test_an_undecodable_document_does_not_escape_the_run(
+        self, tmp_path: Path
+    ) -> None:
+        """The whole point: no exception leaves this call."""
+        report = check_documents(
+            self._docs(tmp_path), project_root=tmp_path
+        )
+        assert report is not None
+
+    def test_the_readable_document_is_still_judged(self, tmp_path: Path) -> None:
+        """A run must not lose its other answers to one bad file."""
+        report = check_documents(self._docs(tmp_path), project_root=tmp_path)
+        assert report.documents == 1
+
+    def test_the_undecodable_document_is_named_with_its_reason(
+        self, tmp_path: Path
+    ) -> None:
+        """Unverifiable is not clean: it is reported, not dropped."""
+        report = check_documents(self._docs(tmp_path), project_root=tmp_path)
+        assert [where for where, _ in report.unreadable] == ["BAD.md"]
+        reason = report.unreadable[0][1]
+        assert "UnicodeDecodeError" in reason
+
+    def test_a_readable_only_run_reports_nothing_unreadable(
+        self, tmp_path: Path
+    ) -> None:
+        """The channel must be silent when there is nothing to say."""
+        good = tmp_path / "GOOD.md"
+        good.write_text("# Goal\n\nShip it in under 200ms.\n", encoding="utf-8")
+        report = check_documents([good], project_root=tmp_path)
+        assert report.unreadable == ()
