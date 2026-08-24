@@ -21,17 +21,20 @@ from pytest_bdd import given, parsers, scenarios, then, when
 from beadloom.application.doc_spaces import (
     FINDING_EPIC_NOT_IN_TRACKER,
     FINDING_NO_AS_IS,
+    FINDING_OUTSIDE_DECLARED_ROOT,
     FINDING_WORKING_CONTRADICTED,
     FINDING_WORKING_INERT,
     TRACKER_EXPORT,
     UNRESOLVED_NO_INTENT_DOCUMENT,
     check_spaces,
 )
+from beadloom.application.gate import _step_doc_spaces, _step_sync_check
 from beadloom.application.reindex import reindex
 from beadloom.context_oracle.search import search_fts5
 from beadloom.doc_sync.engine import check_sync
 from beadloom.infrastructure.db import create_schema, open_db
 from beadloom.infrastructure.doc_roots import (
+    SPACE_AS_IS,
     SPACE_TO_BE,
     resolve_doc_spaces,
 )
@@ -443,3 +446,96 @@ def _configured_used(world: dict[str, Any]) -> None:
     assert [f.path for f in report.findings if f.rule == FINDING_NO_AS_IS] == [
         "planning/RIDE-9/CONTEXT.md"
     ]
+
+
+# ---------------------------------------------------------------------------
+# Kind and root disagreeing — the population's third hole (`beadloom-mr2l.77`)
+# ---------------------------------------------------------------------------
+
+
+@given("a planning directory whose only document is a README")
+def _readme_only_planning_directory(world: dict[str, Any]) -> None:
+    """The reviewer's probe: a convention an adopter has and Beadloom does not.
+
+    ``README.md`` is an AS-IS kind, and the AS-IS roots do not reach into the
+    planning tree — so before `.77` the file was found by the TO-BE glob,
+    classified AS-IS, and looked for by nobody.
+    """
+    _write(world["root"], f"{_EPIC_ROOT}/ZALPHA/README.md", "# the ZALPHA epic\n")
+
+
+@then("the README is counted in the space its kind names")
+def _readme_counted(world: dict[str, Any]) -> None:
+    spaces = resolve_doc_spaces(world["root"])
+    found = [p.name for p in spaces.documents_in(world["root"], SPACE_AS_IS)]
+    assert found == ["README.md"], found
+    assert world["report"].populations[SPACE_AS_IS] == 1
+
+
+@then("the disagreement between the kind and that space's roots is reported")
+def _disagreement_reported(world: dict[str, Any]) -> None:
+    report = world["report"]
+    assert FINDING_OUTSIDE_DECLARED_ROOT in [f.rule for f in report.findings]
+    assert report.documents_outside_declared_root == (
+        f"{_EPIC_ROOT}/ZALPHA/README.md",
+    )
+
+
+@given("a project that declares two WORKING kinds and uses only one of them")
+def _half_inert_declaration(world: dict[str, Any]) -> None:
+    root: Path = world["root"]
+    _write(
+        root,
+        ".beadloom/config.yml",
+        yaml.safe_dump(
+            {
+                "doc_roots": {
+                    "working": {
+                        "kinds": ["ACTIVE", "JOURNAL"],
+                        "exempt_from_freshness": True,
+                        "reason": "progress notes, not descriptions of the code",
+                    }
+                }
+            }
+        ),
+    )
+    _write(root, f"{_EPIC_ROOT}/BDL-1/ACTIVE.md", "# ACTIVE\n")
+
+
+@then("the report names the inert half and how many documents the live half excused")
+def _half_named(world: dict[str, Any]) -> None:
+    report = world["report"]
+    inert = [f for f in report.findings if f.rule == FINDING_WORKING_INERT]
+    assert len(inert) == 1, [f.why for f in inert]
+    assert "JOURNAL" in inert[0].why
+    assert "ACTIVE" not in inert[0].why
+    assert dict(report.working_reach) == {"kind ACTIVE": 1, "kind JOURNAL": 0}
+
+
+@given("the project records intent in a planning document")
+def _project_records_intent(world: dict[str, Any]) -> None:
+    """Without a TO-BE document the gate step is a NAMED skip, not a report."""
+    _write(world["root"], f"{_EPIC_ROOT}/BDL-1/CONTEXT.md", _context("nothing yet"))
+
+
+@when("the gate checks freshness and then the documentation spaces")
+def _gate_two_steps(world: dict[str, Any]) -> None:
+    world["conn"].close()
+    world["sync_step"] = _step_sync_check(world["root"])
+    world["spaces_step"] = _step_doc_spaces(
+        world["root"], pairs_excused=world["sync_step"].pairs_excused
+    )
+
+
+@then("the doc-spaces line names the exempt space and the excused pair count")
+def _line_names_both(world: dict[str, Any]) -> None:
+    summary = world["spaces_step"].summary
+    assert "WORKING document(s) in the exempt space" in summary, summary
+    assert "sync pair(s) excused" in summary, summary
+
+
+@then("the excused pair count is the number the freshness check produced")
+def _one_number(world: dict[str, Any]) -> None:
+    excused = world["sync_step"].pairs_excused
+    assert excused == 1, world["sync_step"].summary
+    assert f"{excused} sync pair(s) excused" in world["spaces_step"].summary

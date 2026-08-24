@@ -61,6 +61,27 @@ SPACES: tuple[str, ...] = (SPACE_TO_BE, SPACE_AS_IS, SPACE_WORKING)
 #: documentation is reported as `working_declaration_contradicted`.
 _ROOT_PRECEDENCE: tuple[str, ...] = (SPACE_WORKING, SPACE_TO_BE, SPACE_AS_IS)
 
+#: The order KINDS are consulted in when two spaces claim one kind. Separate
+#: from :data:`SPACES` on purpose: that constant is the order a report reads
+#: best, and it was being asked to double as a classification precedence, so
+#: AS-IS's DEFAULT list silently beat a project's explicit WORKING declaration —
+#: one constant meaning two things, which is the defect `_ROOT_PRECEDENCE` was
+#: created against one field over.
+#:
+#: The order is WORKING first, and the reason is not symmetry with the roots. A
+#: kind a project declares for WORKING is the one declaration that changes what
+#: a check DOES rather than where it looks, so a shipped default shadowing it
+#: switches nothing on and says nothing — while WORKING winning is reported
+#: three ways: every such document the graph also declares fires
+#: `working_declaration_contradicted`, the exemption prints how many documents
+#: each declared half reached, and ``sync-check`` states the excused count and
+#: the declared reason. The space that wins is the space whose win is visible.
+#:
+#: Safe by construction for a project that declares nothing: the three shipped
+#: kind lists are disjoint, so no shipped classification depends on this order —
+#: asserted by a test rather than left as a claim.
+_KIND_PRECEDENCE: tuple[str, ...] = (SPACE_WORKING, SPACE_TO_BE, SPACE_AS_IS)
+
 #: ``.beadloom/config.yml`` key holding a project's own spaces.
 CONFIG_KEY = "doc_roots"
 
@@ -144,6 +165,16 @@ class WorkingExemption:
 
     exempt_from_freshness: bool
     reason: str
+    kinds_declared: bool = False
+    """Whether the project wrote ``working.kinds``, rather than inheriting it.
+
+    Liveness is asked of each item the PROJECT declared. An inherited default is
+    not a statement a project made, so reporting "you declared kind ACTIVE and it
+    matched nothing" to a project that declared a ROOT would be false about the
+    only thing the finding names.
+    """
+    roots_declared: bool = False
+    """Whether the project wrote ``working.roots``, rather than inheriting it."""
     declared: bool = False
     """Whether the PROJECT declared this, rather than inheriting the default.
 
@@ -153,6 +184,31 @@ class WorkingExemption:
     the finding fire on every clean adopter. What stays visible either way is the
     COUNT of documents excused, which is what a shrinking denominator would show.
     """
+
+
+@dataclass(frozen=True)
+class Classification:
+    """Every document a project's declared roots found, placed in one pass.
+
+    ``by_space`` holds a bucket per space and **nothing falls between them**:
+    every file some declared root matched appears in exactly one bucket, so
+    ``sum(len(b) for b in by_space.values())`` equals the number of files the
+    roots found, on any tree. That arithmetic is the property, not the three
+    known ways it used to fail.
+
+    ``outside_declared_root`` names the documents whose KIND placed them in a
+    space whose own roots exclude them. They are counted — kind wins, and it has
+    since the vocabulary was written — and the disagreement is reported, because
+    a classifier overruling a project's roots without saying so is how an
+    adopter's whole planning tree left the population while the gate printed a
+    plausible number (review `.19` M1, found by planting a file). A space that
+    declares NO root has said nothing about where its documents live and so
+    contradicts nothing: WORKING ships an empty root list because ACTIVE.md
+    lives inside the TO-BE tree by design.
+    """
+
+    by_space: Mapping[str, tuple[Path, ...]]
+    outside_declared_root: tuple[Path, ...]
 
 
 @dataclass(frozen=True)
@@ -169,9 +225,15 @@ class DocSpaces:
     """File names an epic declares its related nodes in, most specific first."""
 
     def space_of_kind(self, kind: str) -> str | None:
-        """The space claiming *kind*, or ``None`` when no space claims it."""
+        """The space claiming *kind*, or ``None`` when no space claims it.
+
+        Consulted in :data:`_KIND_PRECEDENCE`, which is a decision with its own
+        reason. It used to walk :data:`SPACES` — the order a report reads best —
+        so a project declaring ``working.kinds: [ACTIVE, SPEC]`` had the SPEC
+        half beaten by the AS-IS default and nothing said so.
+        """
         wanted = kind.strip().upper()
-        for space in SPACES:
+        for space in _KIND_PRECEDENCE:
             if any(k.upper() == wanted for k in self.kinds.get(space, ())):
                 return space
         return None
@@ -209,40 +271,59 @@ class DocSpaces:
         prefix = self.docs_dir.strip("/")
         return f"{prefix}/{posix}" if prefix else posix
 
-    def documents_in(self, project_root: Path, space: str) -> list[Path]:
-        """Files under *space*'s roots whose kind does not move them elsewhere.
+    def classify(self, project_root: Path) -> Classification:
+        """Place every document the declared roots found, in one scan.
 
-        Deterministically ordered and de-duplicated, because two globs may name
-        one file and a report that counts it twice is wrong about its own
-        population.
+        One scan and one classifier, so a space cannot be handed a population its
+        own glob assembled. The old shape globbed a space's roots and then kept
+        only what :meth:`space_of` returned to that same space, which meant a
+        document whose kind sent it elsewhere was found by one glob, rejected by
+        one classifier and looked for by nobody — in no population, its directory
+        in no epic list, and nothing reporting the drop.
+
+        WORKING never had that hole because it alone was computed by a full
+        scan. That special case is the rule now, and the two other spaces read
+        off it.
+
+        Deterministically ordered and de-duplicated: two globs may name one file
+        and a report that counts it twice is wrong about its own population.
         """
-        found: set[Path] = set()
-        for pattern in self.roots.get(space, ()):
-            found.update(p for p in project_root.glob(pattern) if p.is_file())
-        kept = []
-        for path in sorted(found):
+        found: dict[Path, str] = {}
+        for space in _ROOT_PRECEDENCE:
+            for pattern in self.roots.get(space, ()):
+                for path in project_root.glob(pattern):
+                    if path.is_file():
+                        found.setdefault(path, space)
+        buckets: dict[str, list[Path]] = {space: [] for space in SPACES}
+        outside: list[Path] = []
+        for path, by_root in sorted(found.items()):
             rel = _relative(path, project_root)
-            if self.space_of(rel) == space:
-                kept.append(path)
-        return kept
+            # `space_of` cannot answer None for a path a root matched — it falls
+            # back to the roots itself — and the found-by space is carried anyway
+            # so the loop has no branch that can drop a document.
+            space = self.space_of(rel) or by_root
+            buckets.setdefault(space, []).append(path)
+            declared = self.roots.get(space, ())
+            if declared and not any(path_matches(rel, p) for p in declared):
+                outside.append(path)
+        return Classification(
+            by_space={space: tuple(paths) for space, paths in buckets.items()},
+            outside_declared_root=tuple(outside),
+        )
+
+    def documents_in(self, project_root: Path, space: str) -> list[Path]:
+        """*space*'s population — every document the classifier placed there."""
+        return list(self.classify(project_root).by_space.get(space, ()))
 
     def working_documents(self, project_root: Path) -> list[Path]:
-        """Every WORKING-kind document found anywhere under the declared roots.
+        """Every document in the WORKING space, wherever its root found it.
 
-        WORKING declares no root of its own, so its population is drawn from the
-        other spaces' trees and filtered by kind. A search that looked only under
-        ``roots[working]`` would find nothing and read exactly like a project
-        with no ephemeral documents at all.
+        WORKING declares no root of its own by default, so its population is
+        drawn from the other spaces' trees and decided by kind. A search that
+        looked only under ``roots[working]`` would find nothing and read exactly
+        like a project with no ephemeral documents at all.
         """
-        found: set[Path] = set()
-        for space in SPACES:
-            for pattern in self.roots.get(space, ()):
-                found.update(p for p in project_root.glob(pattern) if p.is_file())
-        return sorted(
-            p
-            for p in found
-            if self.space_of(_relative(p, project_root)) == SPACE_WORKING
-        )
+        return self.documents_in(project_root, SPACE_WORKING)
 
 
 def _relative(path: Path, project_root: Path) -> str:
@@ -390,6 +471,8 @@ def _from_block(block: dict[str, object], docs_dir: str = DEFAULT_DOCS_DIR) -> D
     kinds: dict[str, tuple[str, ...]] = dict(DEFAULT_KINDS)
     intent_documents: tuple[str, ...] = DEFAULT_INTENT_DOCUMENTS
     errors: list[str] = []
+    working_kinds_declared = False
+    working_roots_declared = False
     for space in SPACES:
         settings = block.get(space)
         if settings is None:
@@ -406,6 +489,9 @@ def _from_block(block: dict[str, object], docs_dir: str = DEFAULT_DOCS_DIR) -> D
         declared_kinds = _string_list(settings.get("kinds"))
         if declared_kinds is not None:
             kinds[space] = declared_kinds
+        if space == SPACE_WORKING:
+            working_kinds_declared = declared_kinds is not None
+            working_roots_declared = declared_roots is not None
         if space == SPACE_TO_BE:
             declared_documents = _string_list(settings.get("intent_documents"))
             if declared_documents is not None:
@@ -416,7 +502,11 @@ def _from_block(block: dict[str, object], docs_dir: str = DEFAULT_DOCS_DIR) -> D
         f"expected one of {', '.join(SPACES)}"
         for name in unknown
     )
-    working, working_errors = _working_from(block.get(SPACE_WORKING))
+    working, working_errors = _working_from(
+        block.get(SPACE_WORKING),
+        kinds_declared=working_kinds_declared,
+        roots_declared=working_roots_declared,
+    )
     errors.extend(working_errors)
     return DocSpaces(
         roots=roots,
@@ -428,7 +518,9 @@ def _from_block(block: dict[str, object], docs_dir: str = DEFAULT_DOCS_DIR) -> D
     )
 
 
-def _working_from(settings: object) -> tuple[WorkingExemption, list[str]]:
+def _working_from(
+    settings: object, *, kinds_declared: bool = False, roots_declared: bool = False
+) -> tuple[WorkingExemption, list[str]]:
     """The WORKING exemption a project declared, and what was wrong with it.
 
     An exemption declared without a reason is a **config error**, the shape every
@@ -451,7 +543,11 @@ def _working_from(settings: object) -> tuple[WorkingExemption, list[str]]:
     reason = settings.get("reason")
     if exempt and not (isinstance(reason, str) and reason.strip()):
         return WorkingExemption(
-            exempt_from_freshness=True, reason="", declared=True
+            exempt_from_freshness=True,
+            reason="",
+            kinds_declared=kinds_declared,
+            roots_declared=roots_declared,
+            declared=True,
         ), [
             f"{CONFIG_KEY}.{SPACE_WORKING}.reason: an exemption without a stated "
             f"reason is how a gate is switched off without saying so"
@@ -460,6 +556,8 @@ def _working_from(settings: object) -> tuple[WorkingExemption, list[str]]:
         WorkingExemption(
             exempt_from_freshness=exempt,
             reason=reason.strip() if isinstance(reason, str) else "",
+            kinds_declared=kinds_declared,
+            roots_declared=roots_declared,
             declared=True,
         ),
         [],

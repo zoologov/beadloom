@@ -74,3 +74,25 @@ Feature: documentation is named by space, and intent is held against reality
     Given a project whose doc roots are configured away from the shipped defaults
     When the documentation spaces are checked
     Then the documents under the configured roots are the ones classified
+
+  @bead:beadloom-mr2l.77
+  Scenario: A planning directory named the project's own way is counted rather than dropped
+    Given a planning directory whose only document is a README
+    When the documentation spaces are checked
+    Then the README is counted in the space its kind names
+    And the disagreement between the kind and that space's roots is reported
+
+  @bead:beadloom-mr2l.77
+  Scenario: A declaration whose second half matches nothing names that half
+    Given a project that declares two WORKING kinds and uses only one of them
+    When the documentation spaces are checked
+    Then the WORKING exemption is reported as matching no document
+    And the report names the inert half and how many documents the live half excused
+
+  @bead:beadloom-mr2l.77
+  Scenario: One run counts excused documents and excused pairs under two names
+    Given a project that declares its whole documentation tree exempt from freshness
+    And the project records intent in a planning document
+    When the gate checks freshness and then the documentation spaces
+    Then the doc-spaces line names the exempt space and the excused pair count
+    And the excused pair count is the number the freshness check produced

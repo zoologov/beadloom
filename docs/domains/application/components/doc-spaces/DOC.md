@@ -78,13 +78,48 @@ saying the same thing from another angle would double one finding.
 
 The WORKING declaration is audited two ways, neither inferred from an absence:
 
-- `working_exemption_inert` — declared kinds **or roots** that no document
-  matches, so the exemption excused nothing. A root reaches the exemption
-  exactly as a kind does, and which half of a declaration carries it changes
-  nothing about an exclusion that quietly stops applying.
+- `working_exemption_inert` — one declared kind **or** one declared root that no
+  document matches, so that half of the exemption excused nothing. Per declared
+  item, because liveness asked of a declaration as a whole is answered by its
+  luckiest half: one `ACTIVE.md` made a `kinds: [ACTIVE, SPEC]` line covering 39
+  `SPEC.md` files report nothing at all. `SpacesReport.working_reach` carries
+  the count each declared half reached, so a single configuration line that
+  excuses 39 documents has to print the number 39.
 - `working_declaration_contradicted` — the graph declares a WORKING document as
   a node's documentation, so one artifact says it describes the code while
   another says it must not be held against it.
+
+## A document counted twice is wrong; a document counted nowhere is worse
+
+`document_outside_declared_root` reports a document whose **kind** places it in a
+space whose own **roots** exclude it. Kind still wins — that ordering is
+load-bearing, because `ACTIVE.md` lives inside the TO-BE tree — and the document
+is counted in the space its kind names, so the populations add up to the number
+of files the declared roots matched on any tree. Before this, such a document was
+in no population at all, its directory was in no epic list, and nothing said so:
+a project whose planning directories carry a `README.md` lost every epic while
+the gate printed a plausible small count.
+
+One finding per kind rather than one per document: sixty directories named the
+same way are one convention decided once, and the finding carries the count, up
+to five paths, and the roots that failed to reach them.
+`SpacesReport.documents_outside_declared_root` holds the full list.
+
+## Two populations that were called by one word
+
+`working_documents` counts documents in the exempt space.
+`SpacesReport.pairs_excused` counts the **sync pairs** the exemption excused.
+One `beadloom ci` run reported `exempt: 0` from `sync-check --json` and `55
+WORKING document(s) exempt` from the doc-spaces line, about one tree, because
+one word stood for both: on this repository the 55 `ACTIVE.md` documents live
+outside the documentation directory the indexer walks, so none of them is a sync
+pair at all.
+
+The pair count is never computed here. Whoever ran `check_sync` supplies it —
+`beadloom ci` passes its own sync-check step's number into the doc-spaces step —
+and a caller that ran no freshness check supplies `None`, so `beadloom docs
+spaces` prints the document count under the name of its own population and makes
+no pair claim it did not measure.
 
 ## An epic the tracker forgot
 
@@ -110,20 +145,30 @@ it answers the same in a fresh CI checkout, and `beadloom docs spaces` the live
 
 ## Public surface
 
-- `check_spaces(project_root, *, spaces, known_refs, documented_refs, declared_doc_paths, beads_by_epic)`
-  — the pure core. Every graph and tracker fact arrives as an argument, so the
-  relation can be exercised against a project that is not this one.
-- `spaces_report(conn, project_root, *, beads)` — the same over a live index.
+- `check_spaces(project_root, *, spaces, known_refs, documented_refs,
+  declared_doc_paths, beads_by_epic, tracker_source, pairs_excused)` — the pure
+  core. Every graph, tracker and freshness fact arrives as an argument, so the
+  relation can be exercised against a project that is not this one and no count
+  it prints is computed a second way here.
+- `spaces_report(conn, project_root, *, beads, tracker_source, pairs_excused)` —
+  the same over a live index.
 - `graph_facts(conn)` — `(known_refs, documented_refs, declared_doc_paths)`.
 - `read_tracker_export(project_root)` — the committed export as a `TrackerRead`.
+- `jsonl_records(project_root)` — the tracked export as records, or `None` when
+  no file was readable.
 - `describe_unresolved(reasons)` — the unresolved bucket's composition as one
   clause, shared by the gate and the command so one bucket cannot be described
   two ways.
 - `beads_by_epic(records)` — group tracker records by the epic key their title
   names.
-- `read_epic_intents(...)`, `EpicIntent`, `SpaceFinding`, `SpacesReport`.
+- `read_epic_intents(...)`, `EpicIntent`, `SpaceFinding`, `SpacesReport`,
+  `TrackerRead`.
 - `FINDING_NO_AS_IS`, `FINDING_WORKING_CONTRADICTED`, `FINDING_WORKING_INERT`,
-  `FINDING_CONFIG`.
+  `FINDING_CONFIG`, `FINDING_EPIC_NOT_IN_TRACKER`, `FINDING_INTENT_UNREADABLE`,
+  `FINDING_OUTSIDE_DECLARED_ROOT`.
+- `TRACKER_BD`, `TRACKER_EXPORT`, `TRACKER_UNREADABLE` — which tracker answered.
+- `UNRESOLVED_NO_NODE_DECLARED`, `UNRESOLVED_NO_INTENT_DOCUMENT`,
+  `UNRESOLVED_UNREADABLE_INTENT` — why an epic declares no node.
 
 `SpacesReport.relation_checked` is false when nothing was related. A relation
 check over an empty population reports nothing and reads exactly like one that

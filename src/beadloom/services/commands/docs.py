@@ -13,7 +13,7 @@ import click
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from beadloom.application.doc_spaces import TrackerRead
+    from beadloom.application.doc_spaces import SpacesReport, TrackerRead
 
 from beadloom.services.commands._root import main
 
@@ -817,27 +817,32 @@ def docs_spaces(*, output_json: bool, strict: bool, project: Path | None) -> Non
 
 
 # beadloom:component=cli-commands
-def _spaces_json(report: object, tracker: TrackerRead) -> dict[str, object]:
+def _spaces_json(report: SpacesReport, tracker: TrackerRead) -> dict[str, object]:
     """The report as data, so a caller reads exit codes and JSON, never lines."""
     return {
-        "populations": dict(report.populations),  # type: ignore[attr-defined]
-        "epics": report.epics,  # type: ignore[attr-defined]
-        "epics_with_closed_beads": report.epics_with_closed_beads,  # type: ignore[attr-defined]
-        "epics_declaring_nodes": report.epics_declaring_nodes,  # type: ignore[attr-defined]
-        "epics_declaring_nothing": report.epics_declaring_nothing,  # type: ignore[attr-defined]
-        "unresolved_epics": list(report.unresolved_epics),  # type: ignore[attr-defined]
-        "unresolved_reasons": dict(report.unresolved_reasons),  # type: ignore[attr-defined]
-        "refs_checked": report.refs_checked,  # type: ignore[attr-defined]
-        "relation_checked": report.relation_checked,  # type: ignore[attr-defined]
+        "populations": dict(report.populations),
+        "epics": report.epics,
+        "epics_with_closed_beads": report.epics_with_closed_beads,
+        "epics_declaring_nodes": report.epics_declaring_nodes,
+        "epics_declaring_nothing": report.epics_declaring_nothing,
+        "unresolved_epics": list(report.unresolved_epics),
+        "unresolved_reasons": dict(report.unresolved_reasons),
+        "refs_checked": report.refs_checked,
+        "relation_checked": report.relation_checked,
         "tracker_read": tracker.statuses is not None,
         "tracker_source": tracker.source,
-        "epics_unknown_to_tracker": list(
-            report.epics_unknown_to_tracker  # type: ignore[attr-defined]
-        ),
+        "epics_unknown_to_tracker": list(report.epics_unknown_to_tracker),
+        "documents_outside_declared_root": list(report.documents_outside_declared_root),
         "working": {
-            "documents": report.working_documents,  # type: ignore[attr-defined]
-            "exempt_from_freshness": report.working_exempt,  # type: ignore[attr-defined]
-            "reason": report.working_reason,  # type: ignore[attr-defined]
+            "documents": report.working_documents,
+            "exempt_from_freshness": report.working_exempt,
+            "reason": report.working_reason,
+            "reach": dict(report.working_reach),
+            # Null rather than absent, and never a second computation of the
+            # count: this command runs no freshness check, so it does not know
+            # how many PAIRS the exemption excused. `beadloom ci` does, because
+            # its sync-check step measured it in the same run.
+            "pairs_excused": report.pairs_excused,
         },
         "findings": [
             {
@@ -847,43 +852,53 @@ def _spaces_json(report: object, tracker: TrackerRead) -> dict[str, object]:
                 "why": f.why,
                 "remediation": f.remediation,
             }
-            for f in report.findings  # type: ignore[attr-defined]
+            for f in report.findings
         ],
     }
 
 
 # beadloom:component=cli-commands
-def _spaces_rich(report: object, *, tracker: TrackerRead) -> None:
+def _spaces_rich(report: SpacesReport, *, tracker: TrackerRead) -> None:
     """The human rendering: every denominator visible beside every count."""
     from beadloom.application.doc_spaces import describe_unresolved
 
-    populations = dict(report.populations)  # type: ignore[attr-defined]
+    populations = dict(report.populations)
     for space in ("to_be", "as_is", "working"):
         click.echo(f"  {space}: {populations.get(space, 0)} document(s)")
-    if report.working_exempt:  # type: ignore[attr-defined]
+    if report.working_exempt:
+        # "N WORKING document(s) exempt" was read as a count of excused sync
+        # pairs, which was 0 on the tree where this line said 55. The space is
+        # named, so the number cannot stand in for the other population.
         click.echo(
-            f"  {report.working_documents} WORKING document(s) exempt from "  # type: ignore[attr-defined]
-            f"freshness — {report.working_reason}"  # type: ignore[attr-defined]
+            f"  {report.working_documents} WORKING document(s) in the exempt "
+            f"space — {report.working_reason}"
+        )
+        for label, reached in report.working_reach.items():
+            click.echo(f"    {label}: {reached} document(s) excused")
+    if report.documents_outside_declared_root:
+        click.echo(
+            f"  {len(report.documents_outside_declared_root)} document(s) placed by "
+            f"kind outside their space's declared roots"
         )
     click.echo("")
-    for finding in report.findings:  # type: ignore[attr-defined]
+    for finding in report.findings:
         click.echo(f"  [warn] {finding.path}:{finding.line} ({finding.rule}) {finding.why}")
         click.echo(f"         {finding.remediation}")
     click.echo("")
     click.echo(
-        f"  {report.epics_with_closed_beads} of {report.epics} epic(s) have closed "  # type: ignore[attr-defined]
-        f"beads; {report.epics_declaring_nodes} declare a node; "  # type: ignore[attr-defined]
-        f"{report.refs_checked} node declaration(s) held against the AS-IS space"  # type: ignore[attr-defined]
+        f"  {report.epics_with_closed_beads} of {report.epics} epic(s) have closed "
+        f"beads; {report.epics_declaring_nodes} declare a node; "
+        f"{report.refs_checked} node declaration(s) held against the AS-IS space"
     )
-    if report.epics_declaring_nothing:  # type: ignore[attr-defined]
+    if report.epics_declaring_nothing:
         # The denominator that moved, said out loud. A count that gets smaller
         # without saying why is BDL-UX #174's equation.
         click.echo(
-            f"  NOT CHECKED: {report.epics_declaring_nothing} epic(s) declare no "  # type: ignore[attr-defined]
+            f"  NOT CHECKED: {report.epics_declaring_nothing} epic(s) declare no "
             f"node, so nothing of theirs could be related to the AS-IS space"
-            + describe_unresolved(report.unresolved_reasons)  # type: ignore[attr-defined]
+            + describe_unresolved(report.unresolved_reasons)
         )
-    unknown = report.epics_unknown_to_tracker  # type: ignore[attr-defined]
+    unknown = report.epics_unknown_to_tracker
     if unknown:
         click.echo(
             f"  NOT CHECKED: {len(unknown)} epic(s) the tracker does not name "
@@ -897,7 +912,7 @@ def _spaces_rich(report: object, *, tracker: TrackerRead) -> None:
         )
         return
     click.echo(f"  tracker read from {tracker.source}")
-    if not report.relation_checked:  # type: ignore[attr-defined]
+    if not report.relation_checked:
         click.echo(
             "  NOT CHECKED: no epic with closed beads declared a node, so the "
             "TO-BE -> AS-IS relation had nothing to relate"

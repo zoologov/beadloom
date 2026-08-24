@@ -31,6 +31,30 @@ domain reaching UP into `application`.
 inside the TO-BE tree, so a root-first answer would classify every WORKING
 document as intent and the exemption would apply to nothing.
 
+**When kind and root disagree, kind wins and the disagreement is reported.** A
+document whose kind places it in a space whose own roots exclude it is counted in
+that space, and `beadloom docs spaces` reports
+`document_outside_declared_root` naming the kind, the space, the count and up to
+five paths. Before BDL-061 S5's `.77` such a document was in *no* population at
+all: found by one glob, rejected by one classifier, and looked for by nobody —
+so a project whose planning directories hold a `README.md` lost every one of its
+epics and their documents while the gate printed a plausible number. A space
+that declares **no** root has said nothing about where its documents live and
+contradicts nothing, which is why the shipped `ACTIVE.md` layout is silent.
+
+**One scan places every document.** `DocSpaces.classify(project_root)` globs
+every declared root once and classifies each file once, so
+`sum(len(bucket) for bucket in by_space.values())` equals the number of files the
+roots matched, on any tree. `documents_in` and `working_documents` read off that
+classification rather than assembling a population from a space's own glob.
+
+**Among kinds, WORKING is consulted first** (`_KIND_PRECEDENCE`, separate from
+`SPACES`, which is the order a report reads best). A kind a project declares for
+WORKING is the one declaration that changes what a check *does* rather than where
+it looks, so a shipped default shadowing it switches nothing on and says nothing.
+The three shipped kind lists are disjoint, so no shipped classification depends
+on this order.
+
 **Among roots, WORKING is consulted first.** Its shipped root list is empty, so
 the only way a document reaches WORKING by root is a project declaring it, while
 the AS-IS default is the catch-all `docs/**/*.md`. If the catch-all won, a
@@ -71,9 +95,18 @@ doc_roots:
     kinds: [SPEC, DOC, README]
   working:
     kinds: [ACTIVE]
+    roots: []
     exempt_from_freshness: true
     reason: "an ACTIVE document records progress, not what the code is"
 ```
+
+Each half a project **declares** answers for itself. `beadloom docs spaces`
+prints how many documents every declared kind and every declared root excused,
+and reports `working_exemption_inert` for each one that excused nothing. A
+declaration covering 39 documents therefore has to print the number 39, and a
+`kinds: [ACTIVE, SPEC]` line whose `SPEC` half reaches nothing says so instead of
+being silenced by its live sibling. A project that declares the exemption without
+a list of its own is asked the same question about the WORKING space as a whole.
 
 `intent_documents` names the files an epic declares its related nodes in, most
 specific first. It is configuration for the reason every root beside it is: with
@@ -97,11 +130,17 @@ cannot turn into a crashing gate that names the wrong file.
   `DEFAULT_DOCS_DIR`, `DOCS_DIR_KEY`, `DEFAULT_INTENT_DOCUMENTS` — the shipped
   defaults and the config key naming the documentation directory.
 - `document_kind(path)` — the kind a path names (`PRD.md` is a `PRD`).
-- `WorkingExemption` — `exempt_from_freshness` plus its declared `reason`.
+- `WorkingExemption` — `exempt_from_freshness` plus its declared `reason`,
+  `declared`, and `kinds_declared` / `roots_declared` saying which halves the
+  project wrote rather than inherited.
+- `Classification` — `by_space` (a bucket per space) and
+  `outside_declared_root` (the documents whose kind overruled their space's
+  roots).
 - `DocSpaces` — `space_of(rel_path)`, `space_of_kind(kind)`,
-  `project_path(doc_path)`, `documents_in(project_root, space)`,
-  `working_documents(project_root)`, the `docs_dir` and `intent_documents` it
-  was resolved with, and the `config_errors` found while reading the block.
+  `project_path(doc_path)`, `classify(project_root)`,
+  `documents_in(project_root, space)`, `working_documents(project_root)`, the
+  `docs_dir` and `intent_documents` it was resolved with, and the
+  `config_errors` found while reading the block.
 - `resolve_doc_spaces(project_root)` / `default_doc_spaces(docs_dir)`.
 - `resolve_docs_dir(project_root)` — the documentation directory, project
   relative.

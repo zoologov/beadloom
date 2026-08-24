@@ -74,6 +74,21 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    its work finished is unknown, and unknown is not clean. An epic that declares
    nothing is not reported that way — it is already counted in the *declare no
    node* clause, and one fact under two names makes the line unreadable.
+
+   The exemption clause names **two** populations rather than one word for both.
+   `N WORKING document(s) in the exempt space` counts documents; `M sync pair(s)
+   excused` counts pairs, and that number is the one the gate's own sync-check
+   step measured in the same run — it is carried on `GateStep.pairs_excused`
+   and never recomputed, because one run printed `exempt: 0` from `sync-check
+   --json` and `55 WORKING document(s) exempt` two lines apart about one tree.
+   On this repository the 55 `ACTIVE.md` documents live outside the
+   documentation directory the indexer walks, so none of them is a sync pair and
+   0 is the honest pair count. When a project DECLARED the exemption, the line
+   also states how many documents each declared half reached, so a one-line
+   declaration covering 39 documents prints the number 39. A document whose kind
+   places it in a space whose roots exclude it adds a final clause with its
+   count (`beadloom-mr2l.77`).
+
    Measured on this repository, 2026-08-24, the step reports:
 
    ```
@@ -84,7 +99,8 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
                      (4 carry no readable intent document);
                      NOT CHECKED: 24 epic(s) the tracker does not name
                      (BDL-001, BDL-003, BDL-005, BDL-006, BDL-007 and 19 more);
-                     55 WORKING document(s) exempt
+                     55 WORKING document(s) in the exempt space,
+                     0 sync pair(s) excused
    ```
 
    Two findings, both true: `BDL-061` declares `cli-commands`, which has no

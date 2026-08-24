@@ -112,6 +112,15 @@ class GateStep:
     findings: list[Finding] = field(default_factory=list)
     summary: str = ""
     not_verified: bool = False
+    pairs_excused: int | None = None
+    """Sync pairs a declaration excused, for the step that MEASURED it.
+
+    Carried on the step rather than recomputed by the later step that also
+    prints it: one run said ``exempt: 0`` and ``55 WORKING document(s) exempt``
+    about one tree, and a second implementation of "how many were excused" is
+    exactly how two adjacent lines came to contradict. ``None`` means no step in
+    this run measured it, and a surface that was not told makes no pair claim.
+    """
 
     @property
     def status(self) -> str:
@@ -164,16 +173,22 @@ def run_ci_gate(
     (``breaking,drift,orphaned_consumer,undeclared_producer``) — the no-false-gate
     verdicts are never included.
     """
+    # Built in execution order rather than as one literal: `sync-check` needs the
+    # index `reindex` writes, and the doc-spaces step needs the excused-pair count
+    # `sync-check` measured. Order is behaviour here, not layout.
     steps: list[GateStep] = [
         _step_reindex(project_root, no_reindex=no_reindex),
         _step_lint(project_root),
-        _step_sync_check(project_root),
-        _step_docs_audit(project_root),
-        _step_docs_quality(project_root),
-        _step_doc_spaces(project_root),
-        _step_config_check(project_root),
-        _step_doctor(project_root),
     ]
+    sync = _step_sync_check(project_root)
+    steps.append(sync)
+    steps.append(_step_docs_audit(project_root))
+    steps.append(_step_docs_quality(project_root))
+    # The excused-pair count travels from the step that produced it, so the two
+    # lines of one run cannot say different numbers about one word.
+    steps.append(_step_doc_spaces(project_root, pairs_excused=sync.pairs_excused))
+    steps.append(_step_config_check(project_root))
+    steps.append(_step_doctor(project_root))
     if hub_exports:
         steps.append(_step_federate(project_root, hub_exports, fail_on))
     return GateResult(steps=steps)
@@ -281,6 +296,7 @@ def _step_sync_check(project_root: Path) -> GateStep:
         not_verified=bool(unverified) or surface.shrank,
         findings=findings,
         summary=_sync_summary(results, unverified, surface),
+        pairs_excused=sum(1 for r in results if r.get("status") == STATUS_EXEMPT),
     )
 
 
@@ -508,7 +524,7 @@ def _step_docs_quality(project_root: Path) -> GateStep:
     )
 
 
-def _step_doc_spaces(project_root: Path) -> GateStep:
+def _step_doc_spaces(project_root: Path, *, pairs_excused: int | None = None) -> GateStep:
     """``docs spaces`` — the TO-BE -> AS-IS relation; reports, never blocks.
 
     ``passed=True`` unconditionally and deliberately, like its sibling above: the
@@ -545,7 +561,11 @@ def _step_doc_spaces(project_root: Path) -> GateStep:
     beads = tracker.statuses
     conn = open_db(db_path)
     report = spaces_report(
-        conn, project_root, beads=beads, tracker_source=tracker.source
+        conn,
+        project_root,
+        beads=beads,
+        tracker_source=tracker.source,
+        pairs_excused=pairs_excused,
     )
     if not report.populations.get("to_be"):
         # A named SKIP, never a silent pass: a project with no TO-BE document has
@@ -594,7 +614,24 @@ def _step_doc_spaces(project_root: Path) -> GateStep:
         )
         not_verified = True
     if report.working_exempt:
-        summary += f"; {report.working_documents} WORKING document(s) exempt"
+        # Two populations, two names. "N WORKING document(s) exempt" beside a
+        # sync-check line whose own excused count was 0 was one word standing
+        # for both, and a reader took the number that was not the pairs.
+        summary += (
+            f"; {report.working_documents} WORKING document(s) in the exempt space"
+        )
+        if report.pairs_excused is not None:
+            summary += f", {report.pairs_excused} sync pair(s) excused"
+        if report.working_reach:
+            summary += (
+                "; the declaration reaches "
+                + ", ".join(f"{label} ({n})" for label, n in report.working_reach.items())
+            )
+    if report.documents_outside_declared_root:
+        summary += (
+            f"; {len(report.documents_outside_declared_root)} document(s) placed "
+            f"by kind outside their space's declared roots"
+        )
     return GateStep(
         "doc-spaces",
         passed=True,

@@ -45,10 +45,13 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from beadloom.infrastructure.doc_roots import (
+    SPACE_AS_IS,
     SPACE_TO_BE,
     SPACE_WORKING,
     SPACES,
     DocSpaces,
+    document_kind,
+    path_matches,
     resolve_doc_spaces,
 )
 
@@ -66,8 +69,18 @@ FINDING_NO_AS_IS = "intent_without_as_is"
 #: DETECTABLE rather than merely believed.
 FINDING_WORKING_CONTRADICTED = "working_declaration_contradicted"
 
-#: The WORKING exemption matched no document — declared and excusing nothing.
+#: One declared half of the WORKING exemption matched no document — declared and
+#: excusing nothing. Reported PER declared item: liveness asked of the whole
+#: declaration meant one live half silenced every other, so a `kinds:` line
+#: covering ACTIVE and SPEC said nothing at all while the SPEC half was inert.
 FINDING_WORKING_INERT = "working_exemption_inert"
+
+#: A document whose KIND places it in a space whose own declared roots exclude
+#: it. Kind wins — that ordering is load-bearing and unchanged — and the
+#: disagreement between the two halves of one configuration is reported instead
+#: of being resolved in silence. Before this the document was in no population
+#: at all: found by one glob, rejected by one classifier, looked for by nobody.
+FINDING_OUTSIDE_DECLARED_ROOT = "document_outside_declared_root"
 
 #: The ``doc_roots`` block could not be read as written.
 FINDING_CONFIG = "doc_roots_config"
@@ -181,6 +194,34 @@ class SpacesReport:
     Empty when no tracker answered at all: that is one global cause, reported
     once, and a name per epic would say the same thing as many times as there
     are epics.
+    """
+    documents_outside_declared_root: tuple[str, ...] = ()
+    """Documents whose kind placed them in a space whose roots exclude them.
+
+    They ARE in ``populations`` — kind wins — and they are named here because a
+    classification that overrules a project's own roots without saying so is how
+    a whole planning tree left the population while the count stayed plausible.
+    """
+    working_reach: Mapping[str, int] = MappingProxyType({})
+    """How many documents each DECLARED half of the WORKING exemption excused.
+
+    Keyed ``kind ACTIVE`` / ``root docs/**/*.md``, and empty for a project that
+    inherited the shipped default: a project that declared nothing has switched
+    nothing off, and printing its reach would make the line a greeting. The
+    vocabulary is lint's — ``rules_inert`` qualifies a rule count so it cannot
+    over-claim, and the suppressed count prints on every run — because a third
+    way of saying "this exclusion reached N things" would be a third way to
+    drift.
+    """
+    pairs_excused: int | None = None
+    """Sync pairs the exemption excused, or ``None`` when nobody measured it.
+
+    A count of PAIRS, which is a different population from
+    :attr:`working_documents`: one ``beadloom ci`` run printed ``exempt: 0`` and
+    ``55 WORKING document(s) exempt`` about one tree, because one word named
+    both. The number is never recomputed here — the caller that ran
+    ``check_sync`` supplies it, and a caller that did not run it supplies
+    ``None`` and the surface makes no pair claim at all.
     """
 
     @property
@@ -358,18 +399,23 @@ def check_spaces(
     declared_doc_paths: frozenset[str],
     beads_by_epic: Mapping[str, tuple[str, ...]] | None,
     tracker_source: str = TRACKER_EXPORT,
+    pairs_excused: int | None = None,
 ) -> SpacesReport:
     """Classify every document, then hold declared intent against the AS-IS space.
 
-    Every input the graph supplies arrives as an argument. ``doc_spaces`` reads
-    no database of its own so the relation can be exercised against a project
-    that is not this one — the axis :mod:`tests.adopter_project` exists for.
+    Every input the graph supplies arrives as an argument, and so does
+    *pairs_excused* — the count of sync pairs the exemption excused, measured by
+    whoever ran ``check_sync``. ``doc_spaces`` reads no database of its own so
+    the relation can be exercised against a project that is not this one — the
+    axis :mod:`tests.adopter_project` exists for — and computing the pair count
+    here would make it a second reader of a fact that already has one.
     """
+    classified = spaces.classify(project_root)
     populations = {
-        space: len(spaces.documents_in(project_root, space)) for space in SPACES
+        space: len(classified.by_space.get(space, ())) for space in SPACES
     }
-    working_docs = spaces.working_documents(project_root)
-    populations[SPACE_WORKING] = len(working_docs)
+    working_docs = list(classified.by_space.get(SPACE_WORKING, ()))
+    outside = tuple(_relative(p, project_root) for p in classified.outside_declared_root)
 
     intents = read_epic_intents(
         project_root,
@@ -389,6 +435,7 @@ def check_spaces(
         for error in spaces.config_errors
     ]
     findings.extend(_working_findings(spaces, working_docs, declared_doc_paths, project_root))
+    findings.extend(_outside_root_findings(spaces, classified.outside_declared_root, project_root))
 
     checked = 0
     declaring = 0
@@ -452,6 +499,9 @@ def check_spaces(
         unresolved_epics=tuple(sorted(unresolved)),
         unresolved_reasons=MappingProxyType(dict(sorted(unresolved_reasons.items()))),
         epics_unknown_to_tracker=tuple(sorted(unknown_to_tracker)),
+        documents_outside_declared_root=outside,
+        working_reach=MappingProxyType(_working_reach(spaces, working_docs, project_root)),
+        pairs_excused=pairs_excused,
     )
 
 
@@ -538,6 +588,99 @@ def _unverifiable_epic(intent: EpicIntent) -> SpaceFinding:
     )
 
 
+#: How a declared half of the WORKING exemption is named in a report.
+_REACH_KIND = "kind"
+_REACH_ROOT = "root"
+
+#: The label for an exemption declared with no list of its own. The project
+#: stated the exemption and inherited where it applies, so the whole space is
+#: the one item there is to ask about — the question the check asked of every
+#: declaration before it learned to ask per item.
+_REACH_WHOLE = "the WORKING space"
+
+
+def _working_reach(
+    spaces: DocSpaces, working_docs: Sequence[Path], project_root: Path
+) -> dict[str, int]:
+    """How many WORKING documents each declared half of the exemption reached.
+
+    Per declared ITEM, because liveness asked of a declaration as a whole is
+    answered by its luckiest half: one ACTIVE.md made a ``kinds: [ACTIVE, SPEC]``
+    line covering 39 SPEC files report nothing at all. The count is printed and
+    not only the emptiness, so a single configuration line that switches
+    freshness off for 39 documents has to say the number 39.
+
+    Empty for a project that inherited the shipped default, for the reason the
+    liveness finding is scoped the same way: inheriting a default is not
+    switching a gate off.
+    """
+    if not (spaces.working.exempt_from_freshness and spaces.working.declared):
+        return {}
+    rels = [_relative(path, project_root) for path in working_docs]
+    reach: dict[str, int] = {}
+    if spaces.working.kinds_declared:
+        for kind in spaces.kinds.get(SPACE_WORKING, ()):
+            wanted = kind.strip().upper()
+            reach[f"{_REACH_KIND} {kind}"] = sum(
+                1 for rel in rels if document_kind(rel).upper() == wanted
+            )
+    if spaces.working.roots_declared:
+        for root in spaces.roots.get(SPACE_WORKING, ()):
+            reach[f"{_REACH_ROOT} {root}"] = sum(
+                1 for rel in rels if path_matches(rel, root)
+            )
+    return reach or {_REACH_WHOLE: len(rels)}
+
+
+def _outside_root_findings(
+    spaces: DocSpaces, outside: Sequence[Path], project_root: Path
+) -> list[SpaceFinding]:
+    """The documents whose kind overruled their space's own roots, by kind.
+
+    One finding per kind rather than one per document: sixty planning
+    directories named ``README.md`` are one convention decided once, and sixty
+    identical lines would bury the diagnosis the way a count with no names buries
+    it the other way. The shape is `.74`'s — a count, up to five names, and the
+    full list in ``--json``.
+    """
+    grouped: dict[tuple[str, str], list[str]] = {}
+    for path in outside:
+        rel = _relative(path, project_root)
+        kind = document_kind(rel)
+        space = spaces.space_of(rel) or SPACE_AS_IS
+        grouped.setdefault((kind, space), []).append(rel)
+    findings: list[SpaceFinding] = []
+    for (kind, space), rels in sorted(grouped.items()):
+        roots = ", ".join(spaces.roots.get(space, ())) or "(no root declared)"
+        findings.append(
+            SpaceFinding(
+                rule=FINDING_OUTSIDE_DECLARED_ROOT,
+                path=rels[0],
+                line=0,
+                why=(
+                    f"{len(rels)} document(s) of kind `{kind}` are counted in the "
+                    f"{space} space because kind wins over root, while {space}'s "
+                    f"own roots ({roots}) match none of them "
+                    f"({_first_named(rels)}) — the two halves of `doc_roots` "
+                    f"disagree about where these documents live"
+                ),
+                remediation=(
+                    f"add `{kind}` to `doc_roots.{space}.kinds` if the space is "
+                    f"right, move the kind to the space whose roots reach these "
+                    f"files, or widen `doc_roots.{space}.roots` to include them"
+                ),
+            )
+        )
+    return findings
+
+
+def _first_named(rels: Sequence[str], limit: int = 5) -> str:
+    """Up to *limit* paths by name, then how many more there were."""
+    if len(rels) <= limit:
+        return ", ".join(rels)
+    return f"{', '.join(rels[:limit])} and {len(rels) - limit} more"
+
+
 def _working_findings(
     spaces: DocSpaces,
     working_docs: Sequence[Path],
@@ -560,35 +703,34 @@ def _working_findings(
     """
     if not spaces.working.exempt_from_freshness:
         return []
-    declared_kinds = spaces.kinds.get(SPACE_WORKING, ())
-    declared_roots = spaces.roots.get(SPACE_WORKING, ())
     findings: list[SpaceFinding] = []
-    # A root reaches the exemption exactly as a kind does, so an exemption
-    # declared only by root and matching nothing reports itself too: an
-    # exclusion that quietly stops applying is how a gate is switched off, and
-    # which half of the declaration carries it changes nothing about that.
-    if spaces.working.declared and (declared_kinds or declared_roots) and not working_docs:
-        declares = " and ".join(
-            part
-            for part in (
-                f"kind(s) {', '.join(declared_kinds)}" if declared_kinds else "",
-                f"root(s) {', '.join(declared_roots)}" if declared_roots else "",
-            )
-            if part
-        )
+    # A root reaches the exemption exactly as a kind does, and each declared item
+    # answers for itself: an exclusion that quietly stops applying is how a gate
+    # is switched off, and a half that stopped applying is silenced completely by
+    # a sibling that still does. Which half carries it changes nothing.
+    for label, reached in _working_reach(spaces, working_docs, project_root).items():
+        if reached:
+            continue
         findings.append(
             SpaceFinding(
                 rule=FINDING_WORKING_INERT,
                 path=".beadloom/config.yml",
                 line=0,
                 why=(
-                    f"the WORKING exemption declares {declares} but no document "
-                    f"was found under them, so it excused nothing"
+                    "the WORKING exemption is declared but no document was "
+                    "found in the WORKING space, so it excused nothing"
+                    if label == _REACH_WHOLE
+                    else (
+                        f"the WORKING exemption declares {label} but no document "
+                        f"was found under it, so that half of the declaration "
+                        f"excused nothing"
+                    )
                 ),
                 remediation=(
                     "point `doc_roots` at the tree the ephemeral documents live in, or "
-                    "drop the declaration — an exemption that matches nothing reports "
-                    "no problem and reads exactly like one that found none"
+                    "drop this half of the declaration — an exemption that matches "
+                    "nothing reports no problem and reads exactly like one that "
+                    "found none"
                 ),
             )
         )
@@ -721,8 +863,14 @@ def spaces_report(
     *,
     beads: Mapping[str, tuple[str, ...]] | None,
     tracker_source: str = TRACKER_EXPORT,
+    pairs_excused: int | None = None,
 ) -> SpacesReport:
-    """The whole report for *project_root*, resolving configuration itself."""
+    """The whole report for *project_root*, resolving configuration itself.
+
+    *pairs_excused* is passed through untouched: a caller that ran ``check_sync``
+    knows how many pairs the exemption excused, and a caller that did not says
+    ``None`` rather than a number computed a second way.
+    """
     known, documented, paths = graph_facts(conn)
     return check_spaces(
         project_root,
@@ -732,4 +880,5 @@ def spaces_report(
         declared_doc_paths=paths,
         beads_by_epic=beads,
         tracker_source=tracker_source,
+        pairs_excused=pairs_excused,
     )
