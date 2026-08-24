@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from beadloom.application.reindex.models import _CODE_EXTENSIONS
 from beadloom.context_oracle.code_indexer import extract_symbols
-from beadloom.doc_sync.doc_indexer import chunk_markdown
+from beadloom.doc_sync.doc_indexer import DocIndexResult, chunk_markdown
 from beadloom.infrastructure.scan_paths import resolve_scan_paths
 
 if TYPE_CHECKING:
@@ -283,3 +283,28 @@ def _index_single_code_file(
 
     conn.commit()
     return count
+
+
+def index_to_be_space(project_root: Path, conn: sqlite3.Connection) -> DocIndexResult:
+    """Index the TO-BE space in place, from the project's configured doc roots.
+
+    Configurable from the start rather than hardcoded to ``.claude/development``:
+    a project that keeps its planning documents elsewhere would otherwise have an
+    empty TO-BE space and no way to say so, and the check built on it would be
+    true here and unknown everywhere else.
+
+    WORKING documents live inside the same tree and are deliberately NOT indexed
+    here — ``documents_in`` classifies by kind first, so an ACTIVE.md is excluded
+    by the same rule that exempts it from freshness rather than by a second list
+    that could disagree with it.
+    """
+    from beadloom.doc_sync.doc_indexer import index_space_documents
+    from beadloom.infrastructure.doc_roots import SPACE_TO_BE, resolve_doc_spaces
+
+    spaces = resolve_doc_spaces(project_root)
+    return index_space_documents(
+        spaces.documents_in(project_root, SPACE_TO_BE),
+        conn,
+        project_root=project_root,
+        space=SPACE_TO_BE,
+    )

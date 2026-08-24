@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 import click
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
 from beadloom.services.commands._root import main
 
@@ -723,3 +723,157 @@ def docs_quality(
 
     if strict and findings:
         sys.exit(1)
+
+
+# beadloom:component=cli-commands
+def epic_bead_statuses(project_root: Path) -> dict[str, tuple[str, ...]] | None:
+    """Bead statuses grouped by epic key, or ``None`` when no tracker was read.
+
+    Two independent sources, tried in order, because a single one makes the
+    check quieter the moment it disappears: ``bd list --all --json`` when the
+    binary is installed, and the tracked ``.beads/issues.jsonl`` export when it
+    is not. ``None`` means neither answered — reported as such, never as an epic
+    with no closed beads. A skip says why.
+
+    ``--all`` is load-bearing: ``bd list`` omits closed beads by default, and the
+    relation this feeds asks specifically about epics whose beads ARE closed.
+    """
+    from beadloom.application.doc_spaces import beads_by_epic, jsonl_records
+
+    records: list[Mapping[str, object]] | None = _bd_records(project_root)
+    if records is None:
+        records = jsonl_records(project_root)
+    if records is None:
+        return None
+    return beads_by_epic(records)
+
+
+# beadloom:component=cli-commands
+def _bd_records(project_root: Path) -> list[Mapping[str, object]] | None:
+    """Every tracker record ``bd`` knows about, or ``None`` when it cannot say."""
+    from beadloom.services.bd_seam import BdUnavailableError, run_bd
+
+    try:
+        result = run_bd(["list", "--all", "--json"], cwd=str(project_root))
+    except BdUnavailableError:
+        return None
+    if not result.ok:
+        return None
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, list):
+        return None
+    return [r for r in payload if isinstance(r, dict)]
+
+
+@docs.command("spaces")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON.")
+@click.option(
+    "--strict",
+    is_flag=True,
+    help="Exit 1 when any finding is reported (default: warn, exit 0).",
+)
+@click.option(
+    "--project",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: current directory).",
+)
+def docs_spaces(*, output_json: bool, strict: bool, project: Path | None) -> None:
+    """Report the three documentation spaces and where intent did not reach reality.
+
+    TO-BE records intent, AS-IS records reality and is what ``sync-check`` holds
+    against the code, and WORKING is ephemeral and exempt from freshness by
+    declaration. An epic with closed beads that declared a node with no AS-IS
+    document is reported. Exits 0 with findings unless ``--strict`` is given, so
+    no adopter's green project turns red on upgrade.
+    """
+    from beadloom.application.doc_spaces import spaces_report
+    from beadloom.infrastructure.db import open_db
+
+    project_root = project or Path.cwd()
+    beads = epic_bead_statuses(project_root)
+    conn = open_db(project_root / ".beadloom" / "beadloom.db")
+    report = spaces_report(conn, project_root, beads=beads)
+
+    if output_json:
+        click.echo(json.dumps(_spaces_json(report, beads is not None), indent=2))
+    else:
+        _spaces_rich(report, tracker_read=beads is not None)
+
+    if strict and report.findings:
+        sys.exit(1)
+
+
+# beadloom:component=cli-commands
+def _spaces_json(report: object, tracker_read: bool) -> dict[str, object]:
+    """The report as data, so a caller reads exit codes and JSON, never lines."""
+    return {
+        "populations": dict(report.populations),  # type: ignore[attr-defined]
+        "epics": report.epics,  # type: ignore[attr-defined]
+        "epics_with_closed_beads": report.epics_with_closed_beads,  # type: ignore[attr-defined]
+        "epics_declaring_nodes": report.epics_declaring_nodes,  # type: ignore[attr-defined]
+        "epics_declaring_nothing": report.epics_declaring_nothing,  # type: ignore[attr-defined]
+        "unresolved_epics": list(report.unresolved_epics),  # type: ignore[attr-defined]
+        "refs_checked": report.refs_checked,  # type: ignore[attr-defined]
+        "relation_checked": report.relation_checked,  # type: ignore[attr-defined]
+        "tracker_read": tracker_read,
+        "working": {
+            "documents": report.working_documents,  # type: ignore[attr-defined]
+            "exempt_from_freshness": report.working_exempt,  # type: ignore[attr-defined]
+            "reason": report.working_reason,  # type: ignore[attr-defined]
+        },
+        "findings": [
+            {
+                "rule": f.rule,
+                "path": f.path,
+                "line": f.line,
+                "why": f.why,
+                "remediation": f.remediation,
+            }
+            for f in report.findings  # type: ignore[attr-defined]
+        ],
+    }
+
+
+# beadloom:component=cli-commands
+def _spaces_rich(report: object, *, tracker_read: bool) -> None:
+    """The human rendering: every denominator visible beside every count."""
+    populations = dict(report.populations)  # type: ignore[attr-defined]
+    for space in ("to_be", "as_is", "working"):
+        click.echo(f"  {space}: {populations.get(space, 0)} document(s)")
+    if report.working_exempt:  # type: ignore[attr-defined]
+        click.echo(
+            f"  {report.working_documents} WORKING document(s) exempt from "  # type: ignore[attr-defined]
+            f"freshness — {report.working_reason}"  # type: ignore[attr-defined]
+        )
+    click.echo("")
+    for finding in report.findings:  # type: ignore[attr-defined]
+        click.echo(f"  [warn] {finding.path}:{finding.line} ({finding.rule}) {finding.why}")
+        click.echo(f"         {finding.remediation}")
+    click.echo("")
+    click.echo(
+        f"  {report.epics_with_closed_beads} of {report.epics} epic(s) have closed "  # type: ignore[attr-defined]
+        f"beads; {report.epics_declaring_nodes} declare a node; "  # type: ignore[attr-defined]
+        f"{report.refs_checked} node declaration(s) held against the AS-IS space"  # type: ignore[attr-defined]
+    )
+    if report.epics_declaring_nothing:  # type: ignore[attr-defined]
+        # The denominator that moved, said out loud. A count that gets smaller
+        # without saying why is BDL-UX #174's equation.
+        click.echo(
+            f"  NOT CHECKED: {report.epics_declaring_nothing} epic(s) declare no "  # type: ignore[attr-defined]
+            f"node, so nothing of theirs could be related to the AS-IS space"
+        )
+    if not tracker_read:
+        click.echo(
+            "  NOT CHECKED: no tracker was readable (`bd` and "
+            "`.beads/issues.jsonl` both silent), so no epic could be shown to "
+            "have closed beads"
+        )
+    elif not report.relation_checked:  # type: ignore[attr-defined]
+        click.echo(
+            "  NOT CHECKED: no epic with closed beads declared a node, so the "
+            "TO-BE -> AS-IS relation had nothing to relate"
+        )

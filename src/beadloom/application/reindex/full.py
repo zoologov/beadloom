@@ -30,6 +30,7 @@ from beadloom.application.reindex.indexing import (
     _build_doc_ref_map,
     _index_code_files,
     _resolve_docs_dir,
+    index_to_be_space,
     read_declared_docs,
     store_declared_docs,
 )
@@ -154,6 +155,14 @@ def reindex(project_root: Path, *, docs_dir: Path | None = None) -> ReindexResul
         doc_result = index_docs(docs_dir, conn, ref_id_map=ref_map)
         result.docs_indexed = doc_result.docs_indexed
         result.chunks_indexed = doc_result.chunks_indexed
+
+    # 2b. Index the TO-BE space in place (BDL-061 S5). Runs whether or not a
+    # docs directory exists: a project may record intent before it has written
+    # a line of reference documentation, and skipping the planning tree because
+    # `docs/` is absent would make the newest projects the least visible.
+    to_be = index_to_be_space(project_root, conn)
+    result.docs_indexed += to_be.docs_indexed
+    result.chunks_indexed += to_be.chunks_indexed
 
     # 3. Index code symbols.
     symbols_count, sym_warnings = _index_code_files(project_root, conn, seen_ref_ids)

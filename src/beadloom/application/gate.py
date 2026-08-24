@@ -169,6 +169,7 @@ def run_ci_gate(
         _step_sync_check(project_root),
         _step_docs_audit(project_root),
         _step_docs_quality(project_root),
+        _step_doc_spaces(project_root),
         _step_config_check(project_root),
         _step_doctor(project_root),
     ]
@@ -484,6 +485,93 @@ def _step_docs_quality(project_root: Path) -> GateStep:
         findings=findings,
         summary=summary,
     )
+
+
+def _step_doc_spaces(project_root: Path) -> GateStep:
+    """``docs spaces`` — the TO-BE -> AS-IS relation; reports, never blocks.
+
+    ``passed=True`` unconditionally and deliberately, like its sibling above: the
+    check ships as ``warn`` so a project whose planning documents predate it does
+    not go red on upgrade.
+
+    ``not_verified`` carries the honest half, and here it has three causes rather
+    than one. No tracker readable means no epic could be shown to have closed
+    beads; no epic declaring a node means the relation had nothing to relate; and
+    epics that declare nothing are a denominator that left without saying so.
+    Each is a way for this step to print no findings while having checked
+    nothing, which is the vacuity `.48` and `.68` exist to make visible.
+
+    The tracker is read from the committed ``.beads/issues.jsonl`` export rather
+    than from a ``bd`` subprocess: the gate must give the same answer in a fresh
+    CI checkout with no tracker installed, and a check whose result depends on
+    what is on the runner is not a gate.
+    """
+    from beadloom.application.doc_spaces import (
+        beads_by_epic,
+        jsonl_records,
+        spaces_report,
+    )
+    from beadloom.infrastructure.db import open_db
+
+    db_path = project_root / ".beadloom" / "beadloom.db"
+    if not db_path.is_file():
+        return GateStep(
+            "doc-spaces",
+            skipped=True,
+            summary="skipped — no index at .beadloom/beadloom.db",
+        )
+    records = jsonl_records(project_root)
+    beads = None if records is None else beads_by_epic(records)
+    conn = open_db(db_path)
+    report = spaces_report(conn, project_root, beads=beads)
+    findings = [_doc_space_finding(f) for f in report.findings]
+    populations = ", ".join(
+        f"{space} {report.populations.get(space, 0)}"
+        for space in ("to_be", "as_is", "working")
+    )
+    summary = (
+        f"{populations}; {report.refs_checked} node declaration(s) from "
+        f"{report.epics_with_closed_beads} of {report.epics} epic(s) with closed "
+        f"beads held against the AS-IS space"
+    )
+    not_verified = False
+    if beads is None:
+        summary += "; NOT CHECKED: no tracker export was readable"
+        not_verified = True
+    elif not report.relation_checked:
+        summary += "; NOT CHECKED: no epic with closed beads declared a node"
+        not_verified = True
+    if report.epics_declaring_nothing:
+        summary += (
+            f"; NOT CHECKED: {report.epics_declaring_nothing} epic(s) declare no node"
+        )
+        not_verified = True
+    if report.working_exempt:
+        summary += f"; {report.working_documents} WORKING document(s) exempt"
+    return GateStep(
+        "doc-spaces",
+        passed=True,
+        not_verified=not_verified,
+        findings=findings,
+        summary=summary,
+    )
+
+
+def _doc_space_finding(finding: object) -> Finding:
+    """Project a :class:`SpaceFinding` onto the shared finding shape."""
+    return {
+        "kind": "doc-spaces",
+        "rule": finding.rule,  # type: ignore[attr-defined]
+        "severity": "warning",
+        "locations": [
+            {
+                "file": finding.path,  # type: ignore[attr-defined]
+                "line": finding.line,  # type: ignore[attr-defined]
+            }
+        ],
+        "why": finding.why,  # type: ignore[attr-defined]
+        "remediation": finding.remediation,  # type: ignore[attr-defined]
+    }
 
 
 def _doc_quality_finding(finding: object) -> Finding:

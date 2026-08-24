@@ -73,9 +73,14 @@ def search_fts5(
 
 
 def populate_search_index(conn: sqlite3.Connection) -> int:
-    """Populate the ``search_index`` FTS5 table from nodes + chunks.
+    """Populate the ``search_index`` FTS5 table from nodes + unlinked documents.
 
     Clears existing data and rebuilds.  Returns row count.
+
+    A row per node, plus a row per document bound to no node. The second half is
+    what makes the TO-BE space searchable (BDL-061 S5): a planning document
+    describes intent rather than one node's code, so it carries no ``ref_id``,
+    and a node-only index could never return it however well it was chunked.
     """
     conn.execute("DELETE FROM search_index")
 
@@ -100,8 +105,31 @@ def populate_search_index(conn: sqlite3.Connection) -> int:
         )
         count += 1
 
+    count += _index_unlinked_documents(conn)
     conn.commit()
     return count
+
+
+def _index_unlinked_documents(conn: sqlite3.Connection) -> int:
+    """One FTS row per document bound to no node, keyed by its path.
+
+    ``ref_id`` holds the document's path — the only identifier such a row has,
+    and the one a reader needs to open the file. ``kind`` holds its SPACE, so
+    ``search --kind to_be`` narrows to intent without a second index.
+    """
+    rows = conn.execute(
+        "SELECT d.id, d.path, d.space, "
+        "       (SELECT group_concat(c.content, char(10)) FROM chunks c "
+        "        WHERE c.doc_id = d.id) AS content "
+        "FROM docs d WHERE d.ref_id IS NULL ORDER BY d.path"
+    ).fetchall()
+    for row in rows:
+        conn.execute(
+            "INSERT INTO search_index (ref_id, kind, summary, content) "
+            "VALUES (?, ?, ?, ?)",
+            (row["path"], row["space"], row["path"], row["content"] or ""),
+        )
+    return len(rows)
 
 
 def has_fts5(conn: sqlite3.Connection) -> bool:

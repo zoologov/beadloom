@@ -498,6 +498,15 @@ nodes:
     docs:
       - docs/domains/application/components/doc-shape-requirements/DOC.md
 
+  # Component: the TO-BE -> AS-IS relation (BDL-061 S5). Joins the graph, the
+  # tracker and the space vocabulary — three readers no single domain owns.
+  - ref_id: doc-spaces
+    kind: component
+    summary: "Hold an epic's declared intent against the AS-IS space, and report what the WORKING exemption excused"
+    source: src/beadloom/application/doc_spaces.py
+    docs:
+      - docs/domains/application/components/doc-spaces/DOC.md
+
   # Component: the mutation SCOPE check (BDL-061 S4b, CONTEXT Q5). Beadloom owns
   # no mutation runner; it owns the check that a declared target could run one.
   - ref_id: mutation-scope
@@ -576,6 +585,16 @@ nodes:
     source: src/beadloom/infrastructure/scan_paths.py
     docs:
       - docs/domains/infrastructure/components/scan-paths/DOC.md
+
+  # Component: where each documentation space lives (BDL-061 S5). A config
+  # reader beside scan-paths, so a domain resolves doc roots without importing
+  # application.
+  - ref_id: doc-roots
+    kind: component
+    summary: "Documentation space resolution — TO-BE / AS-IS / WORKING roots and kinds from config.yml, and which space a document belongs to"
+    source: src/beadloom/infrastructure/doc_roots.py
+    docs:
+      - docs/domains/infrastructure/components/doc-roots/DOC.md
 
   - ref_id: bd-seam
     kind: component
@@ -703,6 +722,9 @@ edges:
     dst: onboarding
     kind: part_of
   - src: doc-shape-requirements
+    dst: application
+    kind: part_of
+  - src: doc-spaces
     dst: application
     kind: part_of
   - src: mutation-scope
@@ -840,6 +862,9 @@ edges:
     dst: infrastructure
     kind: part_of
   - src: scan-paths
+    dst: infrastructure
+    kind: part_of
+  - src: doc-roots
     dst: infrastructure
     kind: part_of
   - src: bd-seam

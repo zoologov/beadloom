@@ -22,6 +22,11 @@ from beadloom.doc_sync.doc_shape import (
     check_section_shape,
 )
 from beadloom.doc_sync.git_baseline import changed_paths
+from beadloom.infrastructure.doc_roots import (
+    SPACE_WORKING,
+    DocSpaces,
+    resolve_doc_spaces,
+)
 from beadloom.infrastructure.repository import covering_prefix, get_owned_code_files
 
 if TYPE_CHECKING:
@@ -219,6 +224,35 @@ STATUS_STALE = "stale"
 STATUS_MISSING = "missing"
 STATUS_UNVERIFIED = "unverified"
 
+#: A pair whose document is in the WORKING space and is exempt from freshness by
+#: DECLARATION (BDL-061 S5). Not ``ok`` — nothing was verified — and deliberately
+#: absent from :data:`BLOCKING_STATUSES`: an ACTIVE.md records progress within a
+#: bead rather than what the code is, so holding it against the code would
+#: compare a document to something it never described. The exemption is read from
+#: ``doc_roots`` and never inferred from a missing pair, because an absence is
+#: evidence of nothing and deleting a pair must not make a check quieter.
+STATUS_EXEMPT = "exempt"
+
+#: Why an exempt pair was not checked — one reason token, so a caller reads
+#: the same field it reads for every other outcome.
+REASON_WORKING_SPACE = "working_space"
+
+
+def _exempt_reason(doc_path: str, spaces: DocSpaces) -> str | None:
+    """The declared reason *doc_path* is exempt from freshness, or ``None``.
+
+    A skip always says why (this epic's S1 discipline), so the declaration's
+    own reason travels with the row. An exemption declared without one is a
+    config error reported by ``docs spaces``; it still applies here, because
+    making the remedy for a missing sentence a wave of stale documents would
+    teach a reader to delete the declaration instead of writing the sentence.
+    """
+    if not spaces.working.exempt_from_freshness:
+        return None
+    if spaces.space_of(doc_path) != SPACE_WORKING:
+        return None
+    return spaces.working.reason or "declared exempt without a stated reason"
+
 #: Which baseline produced a verdict. Reported on every pair so a green result
 #: says what it was green against, instead of printing a count that means
 #: nothing (BDL-UX #175).
@@ -331,6 +365,7 @@ def check_sync(
     results: list[dict[str, Any]] = []
     # Read at most once per run, and only if some pair actually needs it.
     git_changed: frozenset[str] | None = _UNREAD
+    spaces = resolve_doc_spaces(project_root)
 
     for row in sync_rows:
         doc_path = row["doc_path"]
@@ -348,6 +383,20 @@ def check_sync(
             if "baseline_source" in row.keys()  # noqa: SIM118 - sqlite3.Row `in` checks values, not keys
             else ""
         )
+
+        if _exempt_reason(doc_path, spaces) is not None:
+            results.append(
+                {
+                    "doc_path": doc_path,
+                    "code_path": code_path,
+                    "ref_id": ref_id,
+                    "status": STATUS_EXEMPT,
+                    "reason": REASON_WORKING_SPACE,
+                    "baseline": BASELINE_NONE,
+                    "details": _exempt_reason(doc_path, spaces),
+                }
+            )
+            continue
 
         # Hash actual files on disk.
         current_doc_hash = _file_hash(project_root / "docs" / doc_path)
