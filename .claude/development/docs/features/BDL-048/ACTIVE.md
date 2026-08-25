@@ -15,13 +15,13 @@
 
 | Bead | Role | Status |
 |------|------|--------|
-| beadloom-jxz2.1 | dev — setup-agentic-flow scaffold + vendor + drift-guard | W1 in progress |
-| beadloom-jxz2.2 | dev — config-check integration | blocked ← 1 |
-| beadloom-jxz2.3 | dev — MCP process-tools + bd seam | W1 in progress |
-| beadloom-jxz2.4 | test | blocked ← 1,2,3 |
-| beadloom-jxz2.5 | review | blocked ← 4 |
-| beadloom-jxz2.6 | dogfood | blocked ← 5 |
-| beadloom-jxz2.7 | tech-writer | blocked ← 6 |
+| beadloom-jxz2.1 | dev — setup-agentic-flow scaffold + vendor + drift-guard | ✓ done |
+| beadloom-jxz2.2 | dev — config-check integration | ✓ done |
+| beadloom-jxz2.3 | dev — MCP process-tools + bd seam | ✓ done |
+| beadloom-jxz2.4 | test | ✓ done |
+| beadloom-jxz2.5 | review | ✓ done |
+| beadloom-jxz2.6 | dogfood | ✓ done |
+| beadloom-jxz2.7 | tech-writer | ✓ done |
 
 ## Waves
 

@@ -16,8 +16,8 @@
 | Bead | Role | Status | Depends |
 |------|------|--------|---------|
 | beadloom-7gxi.1 | dev | ✓ done | — |
-| beadloom-7gxi.2 | tech-writer | in_progress | .1 |
-| beadloom-7gxi.3 | review | ready | .2 |
+| beadloom-7gxi.2 | tech-writer | ✓ done | .1 |
+| beadloom-7gxi.3 | review | ✓ done | .2 |
 
 ## Plan notes
 

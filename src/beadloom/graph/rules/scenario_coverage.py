@@ -264,10 +264,27 @@ def _reference_leg(
     """Scenarios a TO-BE document claims exist, checked against the suite."""
     if not rule.references:
         return []
-    references, dead_globs = load_references(project_root, rule.references)
+    found = load_references(project_root, rule.references)
     findings: list[Violation] = []
     names = {scenario.name for scenario in suite.scenarios}
-    for reference in references:
+    for unreadable in found.unreadable:
+        findings.append(
+            _finding(
+                rule,
+                file_path=unreadable.path,
+                message=(
+                    f"the scenarios this document references are UNKNOWN: "
+                    f"{unreadable.reason}"
+                ),
+                remediation=(
+                    "save the document as UTF-8, or drop it from `references:` — a "
+                    "document that cannot be read states no intent, and reading that "
+                    "as intent fully met is how a check gets quieter when a file "
+                    "gets worse"
+                ),
+            )
+        )
+    for reference in found.references:
         if reference.name in names:
             continue
         findings.append(
@@ -286,7 +303,7 @@ def _reference_leg(
                 ),
             )
         )
-    for glob in dead_globs:
+    for glob in found.dead_globs:
         findings.append(
             liveness_finding(
                 rule_name=rule.name,

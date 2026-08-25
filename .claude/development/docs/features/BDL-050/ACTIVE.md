@@ -21,7 +21,7 @@
 | beadloom-0gwo.4 | test (+22, new-code cov 100%) | ✓ done (W3) |
 | beadloom-0gwo.5 | review (PASS-WITH-FIXES: 0 crit/major, 2 minor) | ✓ done (W4) |
 | beadloom-0gwo.8 | dev-fix — MINOR-1: derive required contexts from ci.yml, assert == DEFAULT_STATUS_CHECK_CONTEXTS | ✓ done |
-| beadloom-0gwo.6 | dogfood | in progress (needs-ordering proven; wide ai-tw run running on PR #6 — quality validation pending) |
+| beadloom-0gwo.6 | dogfood | ✓ done |
 | beadloom-0gwo.7 | tech-writer (+ BDL-AI-AGENTS-ARCHITECTURE.md for the team) | ✓ done |
 
 ## Waves

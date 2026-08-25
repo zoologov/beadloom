@@ -17,11 +17,11 @@
 
 | Bead | Role | Status | Depends |
 |------|------|--------|---------|
-| beadloom-sq4a.1 | dev | open (ready) | — |
-| beadloom-sq4a.2 | dev | open (ready) | — |
-| beadloom-sq4a.3 | test | in progress | .1, .2 |
-| beadloom-sq4a.4 | review | blocked | .3 |
-| beadloom-sq4a.5 | tech-writer | in progress | .4 |
+| beadloom-sq4a.1 | dev | ✓ done | — |
+| beadloom-sq4a.2 | dev | ✓ done | — |
+| beadloom-sq4a.3 | test | ✓ done | .1, .2 |
+| beadloom-sq4a.4 | review | ✓ done | .3 |
+| beadloom-sq4a.5 | tech-writer | ✓ done | .4 |
 
 ## Plan notes
 

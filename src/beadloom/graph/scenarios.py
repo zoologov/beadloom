@@ -127,15 +127,21 @@ class Scenario:
 
 
 @dataclass(frozen=True)
-class UnreadableFeatureFile:
-    """A file in the suite whose scenarios could not be known, and why.
+class UnreadableDocument:
+    """A file this module could not read, and why.
 
     Never silently an empty file: an unread file with no finding is how a
-    coverage check reports the whole suite missing and calls it a clean zero.
+    coverage check reports the whole suite missing and calls it a clean zero. The
+    same vocabulary serves both readers here — a `.feature` whose scenarios are
+    unknown, and a planning document whose intent is unknown (`.66`, `.62`).
     """
 
     path: str
     reason: str
+
+
+#: The name this class shipped under in 2.2.0, when only the suite reader used it.
+UnreadableFeatureFile = UnreadableDocument
 
 
 @dataclass(frozen=True)
@@ -151,7 +157,7 @@ class ScenarioSuite:
     scenarios: tuple[Scenario, ...] = ()
     files: tuple[str, ...] = ()
     empty_files: tuple[str, ...] = ()
-    unreadable: tuple[UnreadableFeatureFile, ...] = ()
+    unreadable: tuple[UnreadableDocument, ...] = ()
 
     @property
     def is_empty(self) -> bool:
@@ -356,7 +362,7 @@ def load_suite(project_root: Path, glob: str) -> ScenarioSuite:
     scenarios: list[Scenario] = []
     files: list[str] = []
     empty: list[str] = []
-    unreadable: list[UnreadableFeatureFile] = []
+    unreadable: list[UnreadableDocument] = []
     for path in sorted(project_root.glob(glob)):
         if not path.is_file():
             continue
@@ -366,7 +372,7 @@ def load_suite(project_root: Path, glob: str) -> ScenarioSuite:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as exc:
             unreadable.append(
-                UnreadableFeatureFile(
+                UnreadableDocument(
                     relative,
                     f"could not be read as utf-8 text: {exc.__class__.__name__}: {exc}",
                 )
@@ -374,7 +380,7 @@ def load_suite(project_root: Path, glob: str) -> ScenarioSuite:
             continue
         parsed, reason = parse_feature(text, path=relative)
         if reason is not None:
-            unreadable.append(UnreadableFeatureFile(relative, reason))
+            unreadable.append(UnreadableDocument(relative, reason))
             continue
         if not parsed:
             empty.append(relative)
@@ -406,8 +412,8 @@ _REFERENCE_KEYWORDS: tuple[str, ...] = tuple(
 _LIST_MARKER = re.compile(r"^(?:>\s*)*(?:[-*+]\s+|\d+[.)]\s+)?(?:\[[ xX]\]\s+)?")
 
 
-def _normalise_reference_line(line: str) -> str:
-    """The candidate reference text, with the markdown around it removed.
+def _normalise_reference_line(line: str) -> tuple[str, bool]:
+    """The candidate reference text and whether the author MARKED it as one.
 
     **A backticked span is delimited by its backticks.** The form this project's
     own PRD uses puts the whole reference in code style and the commentary
@@ -415,12 +421,20 @@ def _normalise_reference_line(line: str) -> str:
     #147)``. Stripping backticks globally and taking the rest of the line would
     fold that commentary into the scenario NAME, and the check would then report
     every one of those references as missing under a name nobody wrote.
+
+    *marked* is True when the line carried a list bullet, a quote marker or a
+    backticked span — the forms an author uses to say "this is a name, not a
+    sentence". It is what the prose-shaped keywords are held to (see
+    :data:`_PROSE_SHAPED_KEYWORDS`); every one of this repository's 33 real
+    references is marked.
     """
-    text = _LIST_MARKER.sub("", line.replace("**", "").replace("__", "").strip()).strip()
+    stripped = line.replace("**", "").replace("__", "").strip()
+    text = _LIST_MARKER.sub("", stripped).strip()
+    marked = text != stripped
     if text.startswith("`"):
         closing = text.find("`", 1)
-        return text[1:] if closing == -1 else text[1:closing]
-    return text.replace("`", "")
+        return (text[1:] if closing == -1 else text[1:closing]), True
+    return text.replace("`", ""), marked
 
 
 #: Emphasis and sentence punctuation that may wrap a referenced name. Trimmed to
@@ -439,13 +453,24 @@ def _trim_reference_name(rest: str) -> str | None:
     return name or None
 
 
-def _reference_name(text: str) -> str | None:
+#: Scenario keywords that are also ordinary words. Gherkin's ``Example`` (en) and
+#: ``Пример`` (ru) open an explanatory paragraph in any PRD ever written, so a
+#: bare line starting with one is prose until the author MARKS it — bulleted,
+#: quoted or backticked. Measured (`.14`): ``Example: a nested import inside a
+#: function is still an import.`` yielded the reference ``a nested import inside a
+#: function``, which the rule then demanded someone write a scenario for. This
+#: repository has zero such lines and an adopter's PRD has many.
+_PROSE_SHAPED_KEYWORDS: frozenset[str] = frozenset({"Example", "Пример"})
+
+
+def _reference_name(text: str, *, marked: bool) -> str | None:
     """The scenario name *text* references, or ``None`` when it references none.
 
     The keyword must LEAD the line once markdown is stripped. Prose that mentions
     a scenario in passing — ``proved by one scenario: the inert one`` — is not a
     reference, and a check that treated it as one would report a document for a
-    sentence rather than for a claim.
+    sentence rather than for a claim. A prose-shaped keyword additionally needs
+    the line to be *marked*.
     """
     for keyword in _REFERENCE_KEYWORDS:
         if not text.startswith(keyword):
@@ -453,12 +478,41 @@ def _reference_name(text: str) -> str | None:
         rest = text[len(keyword) :].lstrip()
         if not rest.startswith(":"):
             continue
+        if keyword in _PROSE_SHAPED_KEYWORDS and not marked:
+            return None
         return _trim_reference_name(rest[1:])
     return None
 
 
+def _is_indented_code(raw: str) -> bool:
+    """True for a line markdown reads as an indented code block.
+
+    Markdown has two code-block syntaxes and this reader knew one. The reason for
+    skipping a fence — a FORM is not a claim that a scenario exists — applies
+    identically to four spaces of indentation, and ``templates.md`` is exactly the
+    kind of document that carries the Gherkin form that way (`.14`).
+
+    A deeply nested list item is not code: it is indented, but it opens with a
+    bullet or a quote marker, and an author who bulleted a reference meant it as
+    one. That is the discriminator, rather than CommonMark's full rule about which
+    paragraph an indented chunk continues, which needs a block parser this reader
+    is not.
+    """
+    body = raw.expandtabs(4)
+    if len(body) - len(body.lstrip(" ")) < 4:
+        return False
+    marker = _LIST_MARKER.match(body.strip())
+    return marker is None or marker.end() == 0
+
+
 def parse_scenario_references(text: str, *, path: str) -> tuple[ScenarioReference, ...]:
-    """Every scenario a document claims exists, in document order."""
+    """Every scenario a document claims exists, in document order.
+
+    A form is skipped in both of markdown's code syntaxes — fenced and indented —
+    and a keyword that is also an ordinary word is read only when the line is
+    marked as a name. Both are false-positive removals, and a false positive here
+    reports an author for a sentence they wrote rather than for a claim they made.
+    """
     references: list[ScenarioReference] = []
     fence: str | None = None
     for number, raw in enumerate(text.splitlines(), start=1):
@@ -470,38 +524,66 @@ def parse_scenario_references(text: str, *, path: str) -> tuple[ScenarioReferenc
             elif marker == fence:
                 fence = None
             continue
-        if fence is not None:
+        if fence is not None or _is_indented_code(raw):
             continue
-        name = _reference_name(_normalise_reference_line(raw))
+        candidate, marked = _normalise_reference_line(raw)
+        name = _reference_name(candidate, marked=marked)
         if name is not None:
             references.append(ScenarioReference(name=name, path=path, line=number))
     return tuple(references)
 
 
-def load_references(
-    project_root: Path, globs: Sequence[str]
-) -> tuple[tuple[ScenarioReference, ...], tuple[str, ...]]:
+@dataclass(frozen=True)
+class ReferenceSet:
+    """Everything the documents that state intent say about themselves.
+
+    ``dead_globs`` matched no document; ``unreadable`` matched and could not be
+    read. Both are kept because the alternative for either is an empty
+    ``references`` tuple, which is also what a document with nothing wrong in it
+    returns. The suite reader has held this shape since `.66`; the reference
+    reader did not, and swallowed ``OSError`` and ``UnicodeDecodeError`` with a
+    bare ``continue`` one function away from it.
+    """
+
+    references: tuple[ScenarioReference, ...] = ()
+    dead_globs: tuple[str, ...] = ()
+    unreadable: tuple[UnreadableDocument, ...] = ()
+
+
+def load_references(project_root: Path, globs: Sequence[str]) -> ReferenceSet:
     """Read scenario references from every document the globs match.
 
-    Returns ``(references, dead_globs)``. A glob that matched no document is
-    returned rather than ignored: a reference check whose documents moved reports
-    nothing and looks exactly like one that found no problem (BDL-UX #172).
+    A glob that matched no document is reported rather than ignored: a reference
+    check whose documents moved reports nothing and looks exactly like one that
+    found no problem (BDL-UX #172). A document that matched and could not be
+    DECODED is reported for the same reason and it is the sharper case, because
+    the remedy is invisible: measured (`.14`), a cp1251 PRD naming one scenario
+    yielded no reference, no dead glob and no finding, so the rule stated that
+    document's intent was fully met. Adding one file in the wrong encoding took a
+    document out of the checked population and nothing said so.
     """
     references: list[ScenarioReference] = []
     dead: list[str] = []
+    unreadable: list[UnreadableDocument] = []
     for glob in globs:
         matched = False
         for path in sorted(project_root.glob(glob)):
             if not path.is_file():
                 continue
             matched = True
+            relative = _relative_posix(path, project_root)
             try:
                 text = path.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError):
+            except (OSError, UnicodeDecodeError) as exc:
+                unreadable.append(
+                    UnreadableDocument(
+                        relative,
+                        f"could not be read as utf-8 text: "
+                        f"{exc.__class__.__name__}: {exc}",
+                    )
+                )
                 continue
-            references.extend(
-                parse_scenario_references(text, path=_relative_posix(path, project_root))
-            )
+            references.extend(parse_scenario_references(text, path=relative))
         if not matched:
             dead.append(glob)
-    return tuple(references), tuple(dead)
+    return ReferenceSet(tuple(references), tuple(dead), tuple(unreadable))

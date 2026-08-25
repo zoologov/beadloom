@@ -7,6 +7,7 @@ Owns ``sync-check``, ``install-hooks``, ``active-sync``, and ``sync-update``.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -797,9 +798,46 @@ def _bd_statuses_from_list(beads: list[dict[str, object]]) -> dict[str, str]:
     return statuses
 
 
+#: The tracker view the reconcile needs, stated as ``bd``'s own flags. ``bd list``
+#: defaults to open beads capped at 50 rows: measured on this repository that is
+#: 41 of 709 beads with every closed one missing, so the reconcile could never
+#: write ``✓ done`` — the correction BDL-061.84 was filed for — and resolved every
+#: short id against a view most of the tracker was absent from.
+_BD_LIST_ARGV: list[str] = ["list", "--all", "--json", "-n", "0"]
+
+#: The epic key an epic bead's title carries, in this flow's title convention:
+#: ``[BDL-061] Enforced agentic flow``. It is the name of the epic's document
+#: directory, which is how a short row id is tied to the epic that allocated it.
+_EPIC_KEY_RE = re.compile(r"^\s*\[([A-Za-z][A-Za-z0-9_-]*)\]")
+
+
 # beadloom:component=active-table
-def _query_bd_statuses(project_root: Path) -> dict[str, str] | None:
-    """Return bead-id -> status from ``bd list --json``, or None if bd unavailable.
+def _bd_epic_prefixes(beads: list[dict[str, object]]) -> dict[str, str]:
+    """Map each epic's DOCUMENT directory name onto the tracker id of its bead.
+
+    ``{"BDL-061": "beadloom-mr2l"}``. Only beads of type ``epic`` are read, so a
+    child bead whose title also carries ``[BDL-061]`` never claims the prefix. A
+    key claimed by two epics is dropped rather than guessed — a wrong prefix
+    writes one epic's tracker state into another epic's table.
+    """
+    claimed: dict[str, set[str]] = {}
+    for bead in beads:
+        if bead.get("issue_type") != "epic":
+            continue
+        bead_id = bead.get("id")
+        title = bead.get("title")
+        if not isinstance(bead_id, str) or not isinstance(title, str):
+            continue
+        match = _EPIC_KEY_RE.match(title)
+        if match is None:
+            continue
+        claimed.setdefault(match.group(1), set()).add(bead_id)
+    return {key: next(iter(ids)) for key, ids in claimed.items() if len(ids) == 1}
+
+
+# beadloom:component=active-table
+def _query_bd_beads(project_root: Path) -> list[dict[str, object]] | None:
+    """Return every bead ``bd`` knows, or ``None`` when ``bd`` cannot be read.
 
     Funnels through :func:`bd_seam.run_bd` (mockable). Returns ``None`` when ``bd``
     is not installed (``BdUnavailableError``) or the call/JSON fails — the caller
@@ -808,7 +846,7 @@ def _query_bd_statuses(project_root: Path) -> dict[str, str] | None:
     from beadloom.services.bd_seam import BdUnavailableError, run_bd
 
     try:
-        result = run_bd(["list", "--json"], cwd=str(project_root))
+        result = run_bd(_BD_LIST_ARGV, cwd=str(project_root))
     except BdUnavailableError:
         return None
     if not result.ok:
@@ -819,7 +857,15 @@ def _query_bd_statuses(project_root: Path) -> dict[str, str] | None:
         return None
     if not isinstance(payload, list):
         return None
-    beads = [b for b in payload if isinstance(b, dict)]
+    return [b for b in payload if isinstance(b, dict)]
+
+
+# beadloom:component=active-table
+def _query_bd_statuses(project_root: Path) -> dict[str, str] | None:
+    """Return bead-id -> status from the tracker, or None if bd unavailable."""
+    beads = _query_bd_beads(project_root)
+    if beads is None:
+        return None
     return _bd_statuses_from_list(beads)
 
 
@@ -960,16 +1006,26 @@ def active_sync(
         click.echo("active-sync: no ACTIVE.md bead tables — nothing to reconcile (skipped).")
         return
 
-    bd_statuses = _query_bd_statuses(project_root)
-    if bd_statuses is None:
+    beads = _query_bd_beads(project_root)
+    if beads is None:
         click.echo("active-sync: bd unavailable — skipped.")
         return
+    bd_statuses = _bd_statuses_from_list(beads)
+    prefixes = _bd_epic_prefixes(beads)
 
     if check_only:
-        _active_sync_check(project_root, bd_statuses, epic=epic, output_json=output_json)
+        _active_sync_check(
+            project_root,
+            bd_statuses,
+            epic=epic,
+            output_json=output_json,
+            epic_prefixes=prefixes,
+        )
         return
 
-    result = reconcile_active_tables(project_root, bd_statuses, epic=epic)
+    result = reconcile_active_tables(
+        project_root, bd_statuses, epic=epic, epic_prefixes=prefixes
+    )
     exported = False if no_export else _export_jsonl(project_root)
     if stage:
         _stage_reconciled(project_root, result.changed_files, exported_jsonl=exported)
@@ -1001,6 +1057,7 @@ def _active_sync_check(
     *,
     epic: str | None,
     output_json: bool,
+    epic_prefixes: dict[str, str] | None = None,
 ) -> None:
     """``--check`` mode: detect drift on a throwaway copy, never write; exit 1 on drift."""
     import shutil
@@ -1013,10 +1070,17 @@ def _active_sync_check(
             shutil.copytree(src, sandbox / ".claude" / "development" / "docs" / "features")
         from beadloom.application.active_table import reconcile_active_tables
 
-        result = reconcile_active_tables(sandbox, bd_statuses, epic=epic)
-    drift = bool(result.drifted_rows)
+        result = reconcile_active_tables(
+            sandbox, bd_statuses, epic=epic, epic_prefixes=epic_prefixes
+        )
     _emit_active_sync(result, output_json=output_json, check=True)
-    if drift:
+    if result.drifted_rows or result.is_inert:
+        # An inert run exits with the drift code deliberately (BDL-061.84): a run
+        # that read rows and resolved none of them compared nothing, and reporting
+        # that as a pass is how this mechanism stayed broken for its whole life.
+        # A run that resolved SOME rows does not fail on the rest — the unresolved
+        # rows are printed, and a permanent failure over an old epic's table is how
+        # a channel stops being read.
         sys.exit(1)
 
 
@@ -1027,7 +1091,13 @@ def _emit_active_sync(
     output_json: bool,
     check: bool,
 ) -> None:
-    """Print the reconcile outcome (JSON or human-readable)."""
+    """Print the reconcile outcome (JSON or human-readable).
+
+    Every form states how many rows it RESOLVED out of how many it read
+    (BDL-061.84). Without the denominator, ``already coherent`` is printed both by
+    a run in which every row agreed with the tracker and by a run that compared
+    nothing at all, and the second is what this command did on this repository.
+    """
     if output_json:
         payload = {
             "changed_files": [str(p) for p in result.changed_files],
@@ -1035,9 +1105,24 @@ def _emit_active_sync(
                 {"path": str(p), "bead_id": bid, "old": old, "new": new}
                 for (p, bid, old, new) in result.drifted_rows
             ],
+            "rows_read": result.rows_read,
+            "rows_resolved": result.rows_resolved,
+            "unresolved_rows": [
+                {"path": str(p), "cell": cell, "reason": reason}
+                for (p, cell, reason) in result.unresolved_rows
+            ],
         }
         click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
         return
+    if result.is_inert:
+        click.echo(
+            f"active-sync: read {result.rows_read} row(s) and resolved NONE against "
+            f"bd — nothing was compared, so this is not a coherent table:"
+        )
+        _echo_unresolved(result)
+        return
+    click.echo(f"active-sync: resolved {result.rows_resolved} of {result.rows_read} row(s) read.")
+    _echo_unresolved(result)
     if not result.drifted_rows:
         click.echo("active-sync: ACTIVE tables already coherent.")
         return
@@ -1045,6 +1130,25 @@ def _emit_active_sync(
     click.echo(f"active-sync: {verb} {len(result.drifted_rows)} row(s):")
     for path, bead_id, old, new in result.drifted_rows:
         click.echo(f"  {path}: {bead_id}  {old!r} -> {new!r}")
+
+
+#: How many unresolved rows are named before the list states its remainder. An
+#: older epic's table can hold dozens, and a wall of them on every run is how a
+#: channel stops being read; the COUNT is never truncated.
+_UNRESOLVED_SHOWN = 5
+
+
+# beadloom:component=active-table
+def _echo_unresolved(result: ReconcileResult) -> None:
+    """Name the rows the reconcile could not map onto a bead, with their reasons."""
+    if not result.unresolved_rows:
+        return
+    click.echo(f"active-sync: {len(result.unresolved_rows)} row(s) resolved to no bead:")
+    for path, cell, reason in result.unresolved_rows[:_UNRESOLVED_SHOWN]:
+        click.echo(f"  {path}: {cell!r} — {reason}")
+    remainder = len(result.unresolved_rows) - _UNRESOLVED_SHOWN
+    if remainder > 0:
+        click.echo(f"  … and {remainder} more")
 
 
 # beadloom:domain=doc-sync

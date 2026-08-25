@@ -887,71 +887,63 @@ class TestTheReferenceLegsWidestSurface:
             "space where intent is written"
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING BDL-061.14-1: `Example:` is a Gherkin scenario keyword, so a "
-            "bare prose line starting with it is read as a claim that a scenario "
-            "exists. Measured: `Example: a nested import inside a function` yields "
-            "the reference 'a nested import inside a function'. Zero false "
-            "positives on this repo today (all 33 come from `Scenario:` lines) and "
-            "a large one for any adopter, because `Example:` opens an ordinary "
-            "explanatory paragraph. Every real reference in this project is either "
-            "backticked or bulleted, so that is the discriminator the keyword needs."
-        ),
-    )
     def test_a_prose_paragraph_opening_with_example_is_not_a_reference(self) -> None:
+        """FINDING BDL-061.14-1, fixed in `.62`.
+
+        `Example:` is a Gherkin scenario keyword, so a bare prose line opening
+        with it was read as a claim that a scenario exists — measured on
+        `Example: a nested import inside a function`, which yielded the reference
+        'a nested import inside a function'. Zero false positives on this repo (all
+        33 references came from `Scenario:` lines) and a large one for any adopter,
+        because `Example:` opens an ordinary explanatory paragraph. Every real
+        reference in this project is backticked or bulleted, and that is the
+        discriminator the prose-shaped keywords now require.
+        """
         from beadloom.graph.scenarios import parse_scenario_references
 
         text = "Example: a nested import inside a function is still an import.\n"
 
         assert parse_scenario_references(text, path="PRD.md") == ()
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING BDL-061.14-2: an indented code block is read as a reference "
-            "while a fenced one is not. Markdown has two code-block syntaxes and "
-            "the parser knows one. The docstring's own reason — a form is not a "
-            "claim that a scenario exists — applies identically to four-space "
-            "indentation, and `templates.md` is exactly the kind of document that "
-            "carries a Gherkin form."
-        ),
-    )
     def test_an_indented_code_block_is_a_form_and_not_a_reference(self) -> None:
+        """FINDING BDL-061.14-2, fixed in `.62`.
+
+        An indented code block was read as a reference while a fenced one was not.
+        Markdown has two code-block syntaxes and the parser knew one. The module's
+        own reason for skipping fences — a form is not a claim that a scenario
+        exists — applies identically to four-space indentation, and `templates.md`
+        is exactly the kind of document that carries a Gherkin form.
+        """
         from beadloom.graph.scenarios import parse_scenario_references
 
         text = "The shape to write:\n\n    Scenario: an order is placed\n        Given a cart\n"
 
         assert parse_scenario_references(text, path="PRD.md") == ()
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "FINDING BDL-061.14-3: a document the reference leg cannot DECODE "
-            "contributes zero references and nothing is reported — not a dead "
-            "glob (the glob matched), not an unreadable file. `load_suite` reports "
-            "an undecodable `.feature`; `load_references` swallows the same failure "
-            "one function away. Measured: a cp1251 PRD naming one scenario yields "
-            "`refs=() dead=()`, so the rule states the document's intent is fully "
-            "met. That is BDL-061 CONTEXT's 'absence is not evidence' — nothing an "
-            "editor's encoding does may make a check quieter."
-        ),
-    )
     def test_a_document_that_cannot_be_decoded_is_reported_rather_than_read_as_empty(
         self, tmp_path: Path
     ) -> None:
+        """FINDING BDL-061.14-3, fixed in `.62`.
+
+        A document the reference leg could not DECODE contributed zero references
+        and nothing was reported — not a dead glob (the glob matched), not an
+        unreadable file. `load_suite` reported an undecodable `.feature`;
+        `load_references` swallowed the same failure one function away. Measured: a
+        cp1251 PRD naming one scenario yielded `refs=() dead=()`, so the rule stated
+        that document's intent was fully met. That is BDL-061 CONTEXT's 'absence is
+        not evidence' — nothing an editor's encoding does may make a check quieter.
+        """
         from beadloom.graph.scenarios import load_references
 
         document = tmp_path / "docs" / "PRD.md"
         document.parent.mkdir(parents=True)
         document.write_bytes("- `Сценарий: заказ размещён`\n".encode("cp1251"))
 
-        references, dead = load_references(tmp_path, ["docs/**/PRD.md"])
+        found = load_references(tmp_path, ["docs/**/PRD.md"])
 
-        assert (references, dead) != ((), ()), (
-            "an undecodable document read as a document with no intent in it"
-        )
+        assert (found.references, found.dead_globs) == ((), ())
+        assert [item.path for item in found.unreadable] == ["docs/PRD.md"]
+        assert "cp1251" in found.unreadable[0].reason or "utf-8" in found.unreadable[0].reason
 
 
 # --------------------------------------------------------------------------- #
@@ -999,10 +991,11 @@ class TestTheReadersAtTheirEdges:
 
         (tmp_path / "docs" / "PRD.md").mkdir(parents=True)
 
-        references, dead = load_references(tmp_path, ["docs/**/PRD.md"])
+        found = load_references(tmp_path, ["docs/**/PRD.md"])
 
-        assert references == ()
-        assert dead == ("docs/**/PRD.md",)
+        assert found.references == ()
+        assert found.dead_globs == ("docs/**/PRD.md",)
+        assert found.unreadable == ()
 
     def test_a_keyword_without_its_colon_is_prose(self) -> None:
         """`Scenario Outline of the release` is a sentence, not a claim.

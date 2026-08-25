@@ -56,9 +56,7 @@ selection, whereas a comment is understood by nobody but us.
 def parse_feature(text: str, *, path: str) -> tuple[tuple[Scenario, ...], str | None]
 def load_suite(project_root: Path, glob: str) -> ScenarioSuite
 def parse_scenario_references(text: str, *, path: str) -> tuple[ScenarioReference, ...]
-def load_references(
-    project_root: Path, globs: Sequence[str]
-) -> tuple[tuple[ScenarioReference, ...], tuple[str, ...]]
+def load_references(project_root: Path, globs: Sequence[str]) -> ReferenceSet
 ```
 
 `parse_feature` returns `(scenarios, reason)`. A `reason` that is not `None` means the file's
@@ -72,7 +70,10 @@ scenarios are **unknown**, and the empty tuple beside it is "nothing could be re
 | `files` | what the glob matched — the denominator of any statement about the suite |
 | `scenarios` | what was read |
 | `empty_files` | parsed cleanly, declared no scenario |
-| `unreadable` | could not be parsed at all, with the reason |
+| `unreadable` | could not be parsed at all, with the reason (`UnreadableDocument`) |
+
+`UnreadableDocument` carries `path` and `reason`. It shipped as `UnreadableFeatureFile` in
+2.2.0, when only the suite reader used it; that name is kept as an alias.
 
 ### Where the suite lives
 
@@ -108,16 +109,31 @@ emphasis and backticks are stripped, *begins* with a scenario keyword and a colo
 - [ ] Scenario: `a behaviour-bearing node with no scenario is reported`
 ```
 
-Two deliberate exclusions keep the check about claims rather than sentences:
+Four deliberate exclusions keep the check about claims rather than sentences:
 
 - **Prose is not a reference.** `proved by one scenario: the inert one` does not begin with the
   keyword, and does not match.
 - **A fenced block is a form, not a claim.** `templates.md` ships the scenario shape inside a
   fence; the reader skips fenced blocks so a template is never read as a promise.
+- **An indented block is a form too.** Markdown has two code syntaxes, and the reason for
+  skipping one applies identically to the other: four spaces of indentation (tabs expanded) is a
+  form. A line that is indented AND opens with a bullet or a quote marker is a deeply nested
+  list item, not code, and is read as a reference — an author who bulleted a reference meant one.
+- **A prose-shaped keyword needs a mark.** `Example:` (en) and `Пример:` (ru) are Gherkin
+  scenario keywords and also ordinary words that open an explanatory paragraph in any PRD. A
+  bare line starting with one is prose; bulleted, quoted or backticked, it is a reference.
+  Measured (`.62`): `Example: a nested import inside a function is still an import.` yielded the
+  reference `a nested import inside a function`, which the rule then demanded a scenario for.
+  This repository has 33 references before and after the change, so nothing an author wrote
+  stopped being read.
 
-`load_references` returns the globs that matched **no document** alongside the references. A
-reference check whose documents moved reports nothing and reads exactly like one that found no
-problem (BDL-UX #172).
+`load_references` returns a `ReferenceSet`: the `references`, the `dead_globs` that matched **no
+document**, and the `unreadable` documents that matched and could not be decoded. A reference
+check whose documents moved reports nothing and reads exactly like one that found no problem
+(BDL-UX #172), and an undecodable document is the sharper case of the same thing — before `.62`
+a cp1251 PRD naming one scenario yielded no reference, no dead glob and no finding, so the rule
+stated that document's intent was fully met. `scenario-coverage` reports each unreadable
+document as a finding naming the reason.
 
 ### Honest limits
 

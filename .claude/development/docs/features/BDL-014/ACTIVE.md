@@ -24,8 +24,8 @@
 
 | Bead | Deliverable | Status | Tests |
 |------|-------------|--------|-------|
-| beadloom-4j8.1 | D3: AGENTS.md v2 | closed | +4 new, 815 pass |
-| beadloom-4j8.2 | D4: setup-rules | closed | +10 new, 825 pass |
+| beadloom-4j8.1 | D3: AGENTS.md v2 | ✓ done | +4 new, 815 pass |
+| beadloom-4j8.2 | D4: setup-rules | ✓ done | +10 new, 825 pass |
 
 ## Wave 2 — COMPLETE
 
