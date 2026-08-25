@@ -509,6 +509,17 @@ nodes:
     docs:
       - docs/domains/context-oracle/components/context-builder/DOC.md
 
+  # Component: the intent half of a context bundle (BDL-061 `.87`). Pure policy —
+  # which recorded intent belongs to a node, and which of the three answers a
+  # bundle carries. No filesystem, so the port types live here and the adapter
+  # that fills them lives one layer up.
+  - ref_id: node-intent
+    kind: component
+    summary: "Decide which recorded intent a node's context bundle carries, and keep 'nobody declared it' apart from 'nobody looked'"
+    source: src/beadloom/context_oracle/intent.py
+    docs:
+      - docs/domains/context-oracle/components/node-intent/DOC.md
+
   # Component: the shape a project's documents are held to (BDL-061 S4b). Joins
   # onboarding's composed templates to doc-sync's checks, which are peer domains.
   - ref_id: doc-shape-requirements
@@ -517,6 +528,15 @@ nodes:
     source: src/beadloom/application/doc_shape.py
     docs:
       - docs/domains/application/components/doc-shape-requirements/DOC.md
+
+  # Component: the adapter that feeds `node-intent` (BDL-061 `.87`). It reads the
+  # TO-BE space through `doc-spaces`' declaration join rather than a second one.
+  - ref_id: intent-reader
+    kind: component
+    summary: "Read the TO-BE space's node declarations into the shape a context bundle consumes"
+    source: src/beadloom/application/intent_reader.py
+    docs:
+      - docs/domains/application/components/intent-reader/DOC.md
 
   # Component: the TO-BE -> AS-IS relation (BDL-061 S5). Joins the graph, the
   # tracker and the space vocabulary — three readers no single domain owns.
@@ -852,6 +872,12 @@ edges:
     kind: part_of
   - src: context-builder
     dst: context-oracle
+    kind: part_of
+  - src: node-intent
+    dst: context-oracle
+    kind: part_of
+  - src: intent-reader
+    dst: application
     kind: part_of
   - src: doc-indexer
     dst: doc-sync

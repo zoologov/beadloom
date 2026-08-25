@@ -20,6 +20,8 @@ CacheKey = tuple[str, int, int, int]  # (ref_id, depth, max_nodes, max_chunks)
 
 L1 uses the tuple directly as a dict key. L2 serializes it to a string column `cache_key`.
 
+L2 keys carry a fifth dimension: `bundle_cache_key(..., with_intent=True)` appends `:intent`. A bundle built with the project's TO-BE space read is a different bundle from one built without it, and sharing one entry would let a caller that opted out serve its *not checked* answer to a caller that asked. The suffix is appended only when intent was read, so every key a caller without it produces is byte-identical to the ones already stored.
+
 ### Data Structures
 
 #### CacheEntry (dataclass)
@@ -29,12 +31,14 @@ L1 uses the tuple directly as a dict key. L2 serializes it to a string column `c
 | `bundle` | `dict[str, Any]` | The full context bundle JSON structure |
 | `created_at` | `float` | `time.monotonic()` timestamp at insertion |
 | `graph_mtime` | `float` | mtime of graph directory at insertion time |
-| `docs_mtime` | `float` | mtime of docs directory at insertion time |
+| `docs_mtime` | `float` | mtime of the docs directory **and the TO-BE space** at insertion time |
 | `created_at_iso` | `str` | UTC ISO-8601 timestamp (default `""`) |
 
 ### Invalidation Algorithm
 
 Both L1 and L2 use the same mtime-based invalidation strategy. No TTL is involved.
+
+`compute_bundle_mtimes(project_root)` folds the TO-BE space into `docs_mtime`, because a bundle carries the intent recorded about its focus nodes and an edited `CONTEXT.md` therefore changes the bundle. A freshness input that does not cover every input to the answer is a cache that serves a stale one until something unrelated moves.
 
 On `get()`:
 

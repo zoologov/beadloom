@@ -105,14 +105,27 @@ def handle_get_context(
     depth: int = 2,
     max_nodes: int = 20,
     max_chunks: int = 10,
+    project_root: Path | None = None,
 ) -> dict[str, Any]:
-    """Get context bundle for a ref_id."""
+    """Get context bundle for a ref_id.
+
+    *project_root* is what lets the bundle carry the intent recorded about the
+    node; without it the bundle reports intent as *not checked*, which is a
+    different statement from "no epic declares this node" and stays a different
+    statement here.
+    """
+    intent = None
+    if project_root is not None:
+        from beadloom.application.intent_reader import read_node_intent
+
+        intent = read_node_intent(conn, project_root)
     return build_context(
         conn,
         [ref_id],
         depth=depth,
         max_nodes=max_nodes,
         max_chunks=max_chunks,
+        intent=intent,
     )
 
 
@@ -715,7 +728,7 @@ def handle_bead_context(
     conn = open_db(db_path)
     try:
         try:
-            context = handle_get_context(conn, ref_id=ref_id)
+            context = handle_get_context(conn, ref_id=ref_id, project_root=project_root)
             impact = handle_why(conn, ref_id=ref_id)
         except LookupError:
             return {
@@ -1395,6 +1408,7 @@ def _dispatch_tool(
             depth=depth,
             max_nodes=max_nodes,
             max_chunks=max_chunks,
+            project_root=project_root,
         )
 
         if cache is not None:

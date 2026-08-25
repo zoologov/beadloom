@@ -121,6 +121,9 @@ _RELATED_HEADINGS = ("related file", "related code", "primary ref")
 _HEADING_RE = re.compile(r"^#{1,6}\s+(.*?)\s*$")
 _TICKED_RE = re.compile(r"`([A-Za-z0-9][A-Za-z0-9._-]*)`")
 
+#: Longest epic title carried into a context bundle, in characters.
+_MAX_TITLE = 100
+
 
 @dataclass(frozen=True)
 class SpaceFinding:
@@ -151,6 +154,15 @@ class EpicIntent:
     declared_refs: tuple[tuple[str, int], ...]
     bead_statuses: tuple[str, ...] | None
     unknown_status_reason: str | None = None
+    title: str | None = None
+    """The intent document's own first heading, or ``None`` when it has none.
+
+    Read in the pass that already reads the document, so it costs no second
+    open and no second source. It exists because an issue key on its own is
+    opaque: ``BDL-061`` says nothing, ``BDL-061 — Enforced agentic flow`` says
+    what the node is for, and the reader of a context bundle gets one line.
+    """
+
     unresolved_reason: str | None = None
     """Why this epic declares no node, or ``None`` when it declares one.
 
@@ -331,6 +343,7 @@ def read_epic_intents(
                 bead_statuses=statuses,
                 unknown_status_reason=unknown,
                 unresolved_reason=declaration.unresolved_reason,
+                title=declaration.title,
             )
         )
     return sorted(intents, key=lambda i: i.key)
@@ -343,6 +356,7 @@ class _Declaration:
     path: Path
     refs: tuple[tuple[str, int], ...]
     unresolved_reason: str | None
+    title: str | None = None
 
 
 def _read_declaration(
@@ -364,9 +378,23 @@ def _read_declaration(
             return _Declaration(candidate, (), UNRESOLVED_UNREADABLE_INTENT)
         refs = tuple(_related_refs(text, known_refs))
         return _Declaration(
-            candidate, refs, None if refs else UNRESOLVED_NO_NODE_DECLARED
+            candidate,
+            refs,
+            None if refs else UNRESOLVED_NO_NODE_DECLARED,
+            title=_first_heading(text),
         )
     return _Declaration(directory, (), UNRESOLVED_NO_INTENT_DOCUMENT)
+
+
+def _first_heading(text: str) -> str | None:
+    """The document's first heading, trimmed to a length a bundle can afford."""
+    for line in text.splitlines():
+        heading = _HEADING_RE.match(line)
+        if heading is not None:
+            title = heading.group(1).strip()
+            if title:
+                return title[:_MAX_TITLE]
+    return None
 
 
 def _read(path: Path) -> str | None:

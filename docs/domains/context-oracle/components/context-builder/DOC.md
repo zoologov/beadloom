@@ -15,9 +15,12 @@ the relevant docs into one structured bundle. This is the machinery behind
 
 ## Public surface
 
-- `build_context(conn, ref_ids, *, depth=2, max_nodes=20, max_chunks=10)` —
+- `build_context(conn, ref_ids, *, depth=2, max_nodes=20, max_chunks=10, intent=None)` —
   build a full versioned context bundle for the focus ref_ids; raises
-  `LookupError` if any focus ref_id is unknown.
+  `LookupError` if any focus ref_id is unknown. `intent` is a read of the
+  project's TO-BE space supplied by the caller: this builder takes a connection
+  and no project root, so it cannot read that space itself and `None` produces
+  `intent.status = "not_checked"` rather than an absence of intent.
 - `bfs_subgraph(conn, focus_ref_ids, depth=2, max_nodes=20)` — the bounded
   bidirectional BFS that expands neighbors by edge priority; returns
   `(nodes, edges)`.
@@ -37,5 +40,10 @@ the graph-loader, doc-indexer, and code-indexer) plus the architecture `rules`.
 It is the engine behind the `ctx` / `prime` surfaces and feeds the `cache`
 feature; the full bundle shape and the BFS / chunk-priority tables live in the
 [context-oracle README](../../README.md).
+
+The bundle's `intent` section is decided by the `node-intent` component, which
+this module calls with the **focus** ref ids only: the traversal reaches up to
+twenty nodes and the question was asked about one or two of them. See
+[node-intent](../node-intent/DOC.md).
 
 > Component doc (BDL-051). Public surface verified against `builder.py`.

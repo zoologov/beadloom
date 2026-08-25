@@ -9,10 +9,13 @@ import json
 from collections import deque
 from typing import TYPE_CHECKING, Any
 
+from beadloom.context_oracle.intent import select_intent
 from beadloom.infrastructure.db import get_meta
 
 if TYPE_CHECKING:
     import sqlite3
+
+    from beadloom.context_oracle.intent import IntentReading
 
 
 def estimate_tokens(text: str) -> int:
@@ -382,6 +385,7 @@ def build_context(
     depth: int = DEFAULT_DEPTH,
     max_nodes: int = DEFAULT_MAX_NODES,
     max_chunks: int = DEFAULT_MAX_CHUNKS,
+    intent: IntentReading | None = None,
 ) -> dict[str, Any]:
     """Build a full context bundle for the given focus ref_ids.
 
@@ -397,6 +401,12 @@ def build_context(
         Maximum nodes in subgraph (default 20).
     max_chunks:
         Maximum text chunks in bundle (default 10).
+    intent:
+        A read of the project's TO-BE space, or ``None`` when the caller did not
+        read it.  ``None`` is reported as *not checked* rather than as an
+        absence of intent — this builder takes no filesystem and no project
+        root, so it cannot read the space itself and must not pretend the
+        question was asked.
 
     Returns
     -------
@@ -471,6 +481,10 @@ def build_context(
     if activity_info:
         focus_dict["activity"] = activity_info
 
+    # Step 13: The recorded intent for the FOCUS nodes only.  The version stays
+    # 2: the key is additive and no existing key changes meaning, and a consumer
+    # asking whether a bundle carries intent reads `intent.status`, which
+    # answers more precisely than a version bump would.
     return {
         "version": 2,
         "focus": focus_dict,
@@ -485,6 +499,7 @@ def build_context(
             "last_reindex": last_reindex,
         },
         "constraints": constraints,
+        "intent": select_intent(intent, ref_ids),
         "routes": routes_info,
         "tests": tests_info,
         "warning": warning,

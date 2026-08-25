@@ -138,6 +138,10 @@ def _format_markdown(bundle: dict[str, object]) -> str:
                 )
             lines.append("")
 
+    intent_section = bundle.get("intent")
+    if isinstance(intent_section, dict):
+        lines.extend(_intent_lines(intent_section))
+
     # Sync status.
     stale = sync_status.get("stale_docs", [])
     if stale:
@@ -150,6 +154,57 @@ def _format_markdown(bundle: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
+def _intent_label(declaration: dict[str, Any]) -> str:
+    """The epic key and its title, without saying the key twice.
+
+    A planning document's own heading usually opens with the key it belongs to
+    (``CONTEXT: BDL-061 — Enforced agentic flow``), so prefixing it again reads
+    as ``BDL-061 — CONTEXT: BDL-061 — …``. When the title already carries the
+    key, the title stands alone.
+    """
+    epic = str(declaration["epic"])
+    title = declaration.get("title")
+    if not title:
+        return epic
+    return str(title) if epic.lower() in str(title).lower() else f"{epic} — {title}"
+
+
+def _intent_lines(intent: dict[str, Any]) -> list[str]:
+    """The TO-BE section of the Markdown bundle: what this node is FOR.
+
+    Three answers, printed as three different things. The one that matters is
+    the middle one: "no epic declares this node" is a MEASUREMENT and prints the
+    population it was measured over, so it cannot be misread as "nobody looked".
+    """
+    from beadloom.context_oracle.intent import (
+        INTENT_DECLARED,
+        INTENT_NONE_DECLARED,
+        describe_intent_reason,
+    )
+
+    lines = ["## Intent (TO-BE)", ""]
+    status = intent.get("status")
+    if status == INTENT_DECLARED:
+        for declaration in intent.get("declared_by", []):
+            lines.append(
+                f"- {_intent_label(declaration)} "
+                f"→ {declaration['document']}:{declaration['line']} "
+                f"(declares `{declaration['ref_id']}`)"
+            )
+        also = intent.get("also_declared_by", [])
+        if also:
+            lines.append(f"- also declared by: {', '.join(also)}")
+    elif status == INTENT_NONE_DECLARED:
+        lines.append(
+            f"No epic declares this node. {intent['epics_read']} epic(s) read, "
+            f"{intent['epics_declaring_nodes']} of them declare a node."
+        )
+    else:
+        lines.append(f"Not checked: {describe_intent_reason(str(intent.get('reason')))}.")
+    lines.append("")
+    return lines
+
+
 # beadloom:domain=context-oracle
 @main.command()
 @click.argument("ref_ids", nargs=-1, required=True)
@@ -158,6 +213,12 @@ def _format_markdown(bundle: dict[str, object]) -> str:
 @click.option("--depth", default=2, type=int, help="Graph traversal depth.")
 @click.option("--max-nodes", default=20, type=int, help="Max nodes in subgraph.")
 @click.option("--max-chunks", default=10, type=int, help="Max text chunks.")
+@click.option(
+    "--intent/--no-intent",
+    "with_intent",
+    default=True,
+    help="Include the intent recorded about the focus nodes (default: on).",
+)
 @click.option(
     "--project",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
@@ -172,9 +233,11 @@ def ctx(
     depth: int,
     max_nodes: int,
     max_chunks: int,
+    with_intent: bool,
     project: Path | None,
 ) -> None:
     """Get context bundle for one or more ref_ids."""
+    from beadloom.application.intent_reader import read_node_intent
     from beadloom.context_oracle.cache import (
         SqliteCache,
         build_context_cached,
@@ -201,6 +264,7 @@ def ctx(
             max_chunks=max_chunks,
             graph_mtime=graph_mtime,
             docs_mtime=docs_mtime,
+            intent=read_node_intent(conn, project_root) if with_intent else None,
         )
     except LookupError as exc:
         click.echo(f"Error: {exc}", err=True)

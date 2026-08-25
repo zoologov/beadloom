@@ -143,7 +143,7 @@ beadloom search QUERY [--kind KIND] [--limit N] [--json] [--project DIR]
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `QUERY` | `str` (argument) | required | Search query string |
-| `--kind` | `Choice: domain, feature, service, entity, adr` | `None` | Filter results by node kind |
+| `--kind` | `Choice: domain, feature, service, entity, adr, to_be, as_is, working` | `None` | Filter results by node kind, or by documentation space |
 | `--limit` | `int` | `10` | Maximum results to return |
 | `--json` | flag | `False` | Output results as JSON array |
 | `--project` | `Path` | current directory | Project root |

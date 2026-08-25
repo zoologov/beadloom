@@ -198,7 +198,7 @@ class TestCtxCacheTransparency:
         try:
             row = conn.execute(
                 "SELECT cache_key FROM bundle_cache WHERE cache_key = ?",
-                (bundle_cache_key(["PROJ-1"], 2, 20, 10),),
+                (bundle_cache_key(["PROJ-1"], 2, 20, 10, with_intent=True),),
             ).fetchone()
         finally:
             conn.close()

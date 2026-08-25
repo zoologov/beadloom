@@ -82,10 +82,32 @@ The incremental path re-extracts imports for the code files it touched, deletes 
 Get a context bundle for the specified ref_id(s).
 
 ```bash
-beadloom ctx REF_ID [REF_ID...] [--json|--markdown] [--depth N] [--max-nodes N] [--max-chunks N] [--project DIR]
+beadloom ctx REF_ID [REF_ID...] [--json|--markdown] [--depth N] [--max-nodes N] [--max-chunks N] [--intent|--no-intent] [--project DIR]
 ```
 
 Outputs Markdown by default. `--json` for machine-readable format.
+
+The bundle carries an **Intent (TO-BE)** section: the epics whose planning
+documents declared this node, with the document and line to read the reason at.
+So the one command an agent is told to run before touching an area answers what
+the code IS and what it is FOR, rather than only the first.
+
+It is on by default because a flag nobody passes protects nothing, and the cost
+is small and measured: on this repository the section adds about 330 bytes to a
+157 KB bundle, and reading the whole TO-BE space costs 25 ms on a cold bundle
+and nothing on a cached one, since an edited planning document is now one of the
+inputs the bundle cache is invalidated by. `--no-intent` skips the read; the
+bundle then reports `not_checked`, which is not the same statement as *no epic
+declares this node*.
+
+A node no epic declared — 69 of this repository's 84 — prints the size of what
+was searched instead of nothing:
+
+```
+## Intent (TO-BE)
+
+No epic declares this node. 61 epic(s) read, 5 of them declare a node.
+```
 
 ### beadloom graph
 
