@@ -7,7 +7,87 @@
 
 ## Current Bead
 
-**Slice: S5** on `features/BDL-061-S5`.
+**Slice: S6** on `features/BDL-061-S6`. **`.24` closes it, and with it the last planned slice
+of this epic.**
+
+**`.24` — the guide is written around the sentence, not around the feature list.** What S6
+earned is one sentence: *for any two beads placed in the same wave, no medium they share can
+carry one bead's in-progress state into the other's result — and where a medium cannot give
+that guarantee, the wave says so and names the one bead that measures the combined outcome.*
+`docs/guides/parallel-waves.md` is built on the split inside it. Code independence is decided
+from the graph. The working tree, the commit gate, the doc baseline and the tracker id space
+are measured as a **precondition before the wave runs**. The wave's conduct afterwards is
+checked by nothing here and cannot be by anything holding a plan, and the guide says so in
+those words rather than letting a reader infer a stronger claim. The two directions `.83`
+fixed are the guide's real content, because both were wrong and both were fixed toward safety:
+the parser now fails toward serialisation, and the release gate toward withholding — the
+latter *reporting* rather than refusing, because every role in this repository writes under
+one tracker identity and a rule that gets worked around is worse than one that reports. The
+first use of `beadloom review-brief` is recorded as evidence rather than as anecdote: `.23`
+ran under it with withheld counts of 5/4/4/4/3, and its sharpest finding was a sincere,
+careful, wrong sentence in `.79`'s own honesty note that the reviewer said it would have
+accepted as the specification had it read it first. `.78`'s verdict vocabulary closed three
+filings of one root over eleven weeks (#182, #133, #105), which is the clearest case this
+epic has that the issue log earns its keep — and the clearest statement of how it fails, since
+the three entries are searched by symptom and the three symptoms share no word.
+
+**`.83` — the third occurrence of one shape, and this time it is named.** `.23`'s two clusters
+were not nine separate parses; each was a mechanism whose every failure mode pushed one way.
+The parser's errors all widened a wave, and the wave shape is acted on, so a parser wrong in
+that direction is worse than no parser. The gate's errors all opened it early. What both fixes
+change is the DIRECTION, and the tests are written against the direction rather than the three
+measured strings. The shape underneath M2 is the one worth naming: `validate_rules()` computed
+the right answer while the linter discarded it (`.48`), `waves` held the allocated id and the
+title id without comparing them (`.80`), and `release.py` read the verdict comment's author and
+never used it. Three occurrences of DATA PRESENT AND UNUSED in one epic.
+
+**`.21` — `beadloom waves` decides, and #118 closes. REPORTED AS THREE BEADS**, the third time
+this epic has met the shape and the one PLAN named in advance. The bead carried four
+deliverables; two of them share the wave decision's own question and two do not.
+
+- **`.21` (shipped) — the wave shape, and the commit gate that makes it runnable.**
+  `beadloom waves <bead>...` decides parallelism from the code-level independence of the beads'
+  node scopes, with one named reason per serialised pair and a human override recorded as an
+  exclusion carrying a reason and an exit condition. #118 ships with it rather than after it,
+  because a wave the tooling then breaks is an advisory wave shape — the failure the decision
+  exists to remove. The pre-commit hook now judges the commit and states the tree it did not
+  judge; the pre-push Gate is unchanged.
+- **`.78` — a doc pair says whose own file moved (#133/#182).** Split on a measurement taken on
+  this bead's own tree: one new package made `sync-check` report **72 stale pairs, 10 of which
+  had a file this tree modified**, and the fixpoint cost 3 revisions and 65 deliberate
+  re-attestations. #133 is #182 observed at integration time — the per-worktree baseline is the
+  occasion, the per-node `symbols_hash` is the cause — and the repair needs a verdict-vocabulary
+  decision the wave bead does not own.
+- **`.79` (shipped) — the reviewer's input excludes the author's advocacy (#155 C).** Split
+  because it shares no module with the wave decision: it changes what a role is HANDED, not
+  which beads may run at once. The split it ships is BEFORE and AFTER, not summary against
+  measurement: a bead's description is the assignment and is handed over, its comments are the
+  report and are withheld until a verdict is recorded, then released. Claim-against-measurement
+  was rejected as unbuildable — this epic's six understated honesty notes were each accurate
+  about their stated aim and silent about the gap, so the two arrive in one sentence.
+
+**The guarantee the shape makes**, written down because half of it is what this session
+measured rather than what the graph knows: *for any two beads placed in the same wave, no medium
+they share can carry one bead's in-progress state into the other's result — and where a medium
+cannot give that guarantee, the wave says so, names the one bead that measures the combined
+outcome, and checks the medium's plan-time precondition.* Code independence is the half the graph
+decides. The other half — one working tree (#181), one commit gate (#118), one doc baseline
+(#182/#133), one tracker id space (#171) — is not decidable by any shape, so every wave of more
+than one bead prints it with its evidence and assigns a `gate_owner`.
+
+**The last clause is `.80`'s, and it is why the sentence changed.** `.22` measured that the
+second half was a constant tuple: the four media were printed and nothing checked any of them, so
+the wave asserted a property it did not verify. Each medium now carries a verdict that can come
+back `failed`, and a medium nobody observed comes back `unmeasured` — a finding, not a pass. What
+is checked is a PRECONDITION, measured before the wave runs; the wave's conduct afterwards is
+checked by nothing here and cannot be by anything holding a plan. The sentence names that split
+wherever it is written down, because the prose is what a reader trusts.
+
+**Dogfooded on this epic's own beads.** Asked about `.21` and `.72`, the command refused to call
+them parallel: neither had declared a scope, and an unknown scope is not an empty one. Asked
+about the two beads it just filed, it decided cleanly — `.78` before `.79`, because
+`cli-commands` depends on `doc-quality`, which is part of the `doc-sync` domain `.78` rewrites.
+
 
 **`.17` CLOSED (2026-08-24) — and REPORTED AS TWO BEADS, the second time this epic has met
 the shape.** PLAN sized S5's dev work as one slice and named it a likely candidate for the
@@ -673,13 +753,22 @@ header comment, where a reader of a red check will look first.
 | .77 | Done | S5 dev: review `.19`'s three majors, closed as one classification decision rather than as three patches. **M1 — the population's third hole.** `documents_in` globbed a space's own roots and kept only what the classifier returned to that same space, so a document whose KIND sent it to a space whose ROOTS exclude it was in no population, its directory in no epic list, and nothing said so. `DocSpaces.classify` now places every document one declared root found in one bucket, so `sum(populations) == |files any declared root matched|` on any tree — the invariant, not the three known holes. Kind still wins, and the disagreement is itself a finding (`document_outside_declared_root`, one per kind with the count and up to five paths). **Measured through the real CLI on this repository**, planting the reviewer's two probes and reverting them: `.claude/.../ZALPHA/README.md` + `docs/PLAN.md` took to_be 190 → 191, as_is 93 → 94, epics 61 → 62 and printed **2** findings where both files had been in nothing; reverted, the numbers return to 190 / 93 / 55 / 61 with 0 findings. **M2 — a half-inert declaration.** `space_of_kind` walked `SPACES`, a reporting order, so AS-IS's DEFAULT kind list shadowed a project's explicit `working.kinds`; `_KIND_PRECEDENCE` is now its own constant with its own reason, and the three shipped kind lists are disjoint so nothing shipped moves. Liveness is per DECLARED item — `working_reach` prints how many documents each declared half excused, so a one-line declaration covering 39 files prints 39, and a `[ACTIVE, SPEC]` line whose SPEC half is inert says which half. **M3 — two adjacent lines contradicting.** Reproduced, in the split form the coordinator suspected: `sync-check --json` reads `exempt: 0` and `docs spaces` printed `55 WORKING document(s) exempt`, while inside one `beadloom ci` run only the second half printed because `.76` omits the excused clause when nothing was excused. The gate line now reads `55 WORKING document(s) in the exempt space, 0 sync pair(s) excused`, and the pair count is CARRIED on `GateStep.pairs_excused` from the step that measured it rather than computed a second time; `docs spaces`, which runs no freshness check, states `pairs_excused: null` and makes no pair claim. 30 tests + 3 acceptance scenarios; three sabotage rounds, all bit (9 / 4 / 5 reddened). Review Minor 1 and Minor 3 closed in passing, in the files this bead already had to edit: 27 of the repository's 61 `# type: ignore[attr-defined]` removed by typing the two `docs spaces` renderers, and the doc-spaces DOC's "public surface verified" list made true |
 | .20 | Done | S5 tech-writer: the spec-space guide, written for an adopter and led by the decision — TO-BE / AS-IS / WORKING deliberately not TODO/DONE, because nothing changes status, so the checkable claim is a relation between two artifacts and not a flag on one. The 11 advisory `surface_drift` reference documents `.17` left un-re-baselined were read one by one: **9 revised** (CHANGELOG, both READMEs, `docs/architecture.md`, `docs/getting-started.md`, `docs/guides/{document-kinds,bdd-scenarios}.md`, `docs/services/cli.md`, the sync-check SPEC) and **2 deliberately re-attested** with the reason recorded — the code-indexer SPEC and the project-overlays guide drifted because the CLI tree grew, and S5 changed nothing either of them describes. `.75`'s two residuals are STATED LIMITS in the guide, not omissions: `beadloom ci` stays rc 0 on every doc-spaces finding because the step is warn-only by design, and the shipped kind list is the only thing between an adopter and a one-line `working.roots` that excuses a whole tree — with the measurement that makes honouring the declaration defensible (28 excused pairs mapping onto exactly the 6 documents `docs spaces` names, review `.19`, clean room). Review `.19`'s Minor 2 is answered as a stated limit in the ci-gate SPEC and the CLI reference: the gate line prints `measurable-goal 4` and not the 27 goals the re-scope stopped deciding about. `.68`'s three ruff settings are explained where a reader meets the rule, including the false green — selecting a preview rule without `preview = true` exits 0 with a warning. `.70`'s seven stale documents corrected to 4 over 232. **NOT done, and reported rather than hidden:** the ROADMAP and issue-log restructure in this bead's own title is blocked on `.72` — there is no `ROADMAP` kind, no required sections and no computed fact to render, so restructuring them now would validate them against nothing |
 | .73–.76 | Done | The five findings `.18` measured, filed rather than absorbed and all four beads closed. `.75` (one spelling for a doc path) is the one `.71` and `.72` inherit; the DAG was NOT rewired |
-| .21–.24 | Pending | S6 waves from the graph (#155, #118, #133) |
+| .21 | Done | S6 dev: `beadloom waves` decides the shape from the graph; the pre-commit hook judges the commit (#118) |
+| .22 | Done | S6 test: the guarantee held to both clauses — clause one enforced, clause two measured as prose; five findings pinned as strict xfails. Left open deliberately: `.78` and `.79` have not shipped |
+| .80 | Done | S6 fix: clause two ENFORCED — each of the four shared media gets a plan-time check that can fail, and a medium nobody measured is `unmeasured`, which is a finding rather than a pass. The sentence in `waves/__init__.py`, the SPEC and `cli.md` now names the split it ships: what is checked is a PRECONDITION measured before the wave runs, and the wave's conduct afterwards is checked by nothing here and cannot be. #171 closes — `waves` held the allocated id and the id written into the title and never compared them; it does now, and the first dogfood run found a live one (`beadloom-mr2l.72` titled `BDL-061.17b`). All five `.22` pins pass. #118 JUDGED rather than patched: the `git add` half is not fixable at the hook layer (the swept hunk is inside the region the gate judges) and is filed as `.81` with its mechanism and its four preceding decisions; the `active-sync --stage` half IS fixed — the hook now lists what it added to a commit in flight |
+| .23 | Done | S6 review of `.21`/`.22`/`.78`/`.79`/`.80`: 0 critical, 9 major (10 filed, one withdrawn on the withheld accounts). Verdict recorded BEFORE `--release` and amended after, which is the ordering the mechanism argues for and it corrected a Major. Two clusters, each named by the direction it fails in, and three deferred rulings decided (R1 fix the parser, R2 leave the tracker-ids statement conditional, R3 the 13 bound scenarios do assert) |
+| .83 | Done | S6 fix: both S6 clusters now fail in the safe direction. The DECLARATION PARSER failed toward MORE parallelism — a `refs:` inside a sentence adopted the next word as a real scope, a second ref after `;` or a space was dropped, and the MCP caller space-joined the tracker fields where both CLI callers newline-joined, so `refs: wave-plan; sync-check` beside `refs: sync-check` shared one wave at exit 0 with zero findings. Four unresolved reasons now cover every way the declaration can defeat the parser and each serialises, with its own remedy; one composer (`compose_declaration`) is shared by all three callers. The RELEASE GATE failed toward LESS independence — the marker matched without its colon, so the exact string its own docstring named as prevented opened it, and `AuthorNote.author` was read from the tracker and never compared. Both closed: the marker must open the comment and carry its colon, and the author comparison is made and REPORTED (exit 1) rather than enforced, because every role in this repository writes under one tracker identity and a gate nobody can pass is bypassed rather than obeyed. `.23` M7/M8/M9/M10 close with them |
+| .24 | Done | S6 tech-writer: the parallelism guide written around the sentence the slice earned rather than around the feature list — `docs/guides/parallel-waves.md` says which half of the guarantee the graph decides, which half is a PRECONDITION measured before the wave runs, and that the wave's conduct afterwards is checked by nothing and cannot be. Both fixed directions are its real content: the declaration parser now fails toward SERIALISATION and the release gate toward WITHHOLDING, with the reason refusal was rejected (every role here writes under one tracker identity, so a refusal would refuse every release and be bypassed). `beadloom review-brief` documented with its boundary as sharply as its purpose — enforced for what it can see, documented-not-enforced for the two defeats it cannot — and its first use recorded as evidence: withheld counts 5/4/4/4/3, and the finding that `.79`'s honesty note listed under ENFORCED a protection the code did not provide. `.78`'s verdict vocabulary written down where a reader meets it. M6 closed: `review-brief` now has its CLI reference section, its README rows in both languages and its CHANGELOG entry. Filed while writing: `.84` (the ACTIVE reconcile is inert on this repository's own table and reports coherent), `.85` (`.23` n5, the per-pair attestation gap) and `.86` (`parse_watches` matches inside a fenced code block, so a document that shows the syntax opts itself in — the same anchoring class `.83` closed for `refs:`) |
+| .78 | Done | S6 dev: a doc pair says whose own file moved. The decision the split existed for is the VOCABULARY, and it reuses the epic's own rather than inventing a fifth word: `stale` stays the word for a pair whose OWN file moved, and a pair whose sibling moved is `unverified` — the verdict #174/#175 already established for "the checker cannot know" — with the reason `sibling_symbols_changed` and the moved file NAMED in `details`. `sync_state` gained `file_symbols_hash` beside the per-node `symbols_hash`, and only the file-level fact can make a pair stale. **Measured in two clean rooms off `e255a21` differing only in the five changed source files, each run against its own code: one function appended to `application/architecture_view.py` gave 69 stale (67 naming a file nobody touched) before, and 2 stale + 67 `unverified/sibling_symbols_changed` after, every one carrying `details: architecture_view.py`.** Both exit 2 — the gate still bites, on the two pairs somebody can act on. The file fact carries the same PROVENANCE as the node fact or is not written at all, so an existing index sees no change on the reindex that adds the column and moves to file granularity at its first attestation; the contrary rule was tried and measured 77 sibling rows with nothing named. #182, #133 and #105 close together — three filings of one root over eleven weeks. 19 tests + 3 acceptance scenarios |
+| .79 | Done | S6 dev: `beadloom review-brief <bead>` is what a reviewer is handed — the assignment (title + description), the declared scope, the specification (the graph's documents for those nodes and every scenario tagged `@bead:`) and the change, each path carrying its owning node and whether the bead declared it. The comments are COUNTED, never printed. The pivot is a RECORDED VERDICT: `--release` prints them once a comment opens `REVIEW PASSED` / `REVIEW ISSUES` / `REVIEW FINDINGS` at a line start, so the deferrals and measurements this session's reviews leaned on are read after the reviewer's own judgement is on the record rather than never — exit 3 for a refused release, distinct from 2 so "still withheld" cannot be read as "failed". **Enforced in code; NOT a lock, and it says so**: a reviewer with a shell can read the tracker and a coordinator can paste the summary into the launch prompt, which is what happened all through the S5 wave, deliberately. The brief therefore carries the duty to REPORT the paste to the only party that can observe it, and the coordinator template now says the review prompt carries the bead id and nothing else. The role file's first step was the defect — it told the reviewer to read `bd comments` and hunt `API CHANGE:` notes before looking at anything; doc-freshness source (1) is now the brief's own changed-file inventory, which an author cannot forget to write. **Dogfooded on this bead and it found one: `git diff` never lists an untracked path, so the first brief showed every file the change touched and none of the four it added.** 21 tests, nine sabotage edits all red |
+| .81–.82 | Pending | S6 follow-ups: the committed-scope comparison (#118 remainder), and the hook's mypy leg checking a surface the project never declared typed |
+| .84–.86 | Pending | S6 follow-ups filed in `.24`: the ACTIVE reconcile is inert on this repository's own table and reports coherent (found while correcting the `.22` row by hand), the per-pair attestation gap `.23` named as n5, and a document that SHOWS the `watches` syntax opting itself into surface drift — the same anchoring class `.83` closed for `refs:`, found while judging which reference documents to attest |
 
 ## Notes
 
-**Branch:** `features/BDL-061-S5` for the current slice. Earlier slices ran on
-`features/BDL-061-S4`, `features/BDL-061-S3`, `features/BDL-061-S2b`, `features/BDL-061-S2`
-and `features/BDL-061`.
+**Branch:** `features/BDL-061-S6` for the current slice. Earlier slices ran on
+`features/BDL-061-S5`, `features/BDL-061-S4`, `features/BDL-061-S3`, `features/BDL-061-S2b`,
+`features/BDL-061-S2` and `features/BDL-061`.
 A slice boundary is a PR boundary — each slice green on `main` before the next begins, as
 BDL-060 ran.
 

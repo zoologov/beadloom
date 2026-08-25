@@ -50,7 +50,8 @@ documents are the ones `sync-check` pairs with code — that pairing is what "as
 operationally. WORKING documents are excused from freshness, which is a declaration and never
 an inference from a missing pair (see below).
 
-Measured on this repository, 2026-08-24: `to_be 190`, `as_is 93`, `working 55` documents.
+Measured on this repository, 2026-08-24 after BDL-061 S6: `to_be 190`, `as_is 96`,
+`working 55` documents.
 
 ### Kind wins over root, and a disagreement is a finding
 
@@ -343,7 +344,7 @@ templates (`Source`, `Dependencies` for every kind, plus `Features` for `domain`
 | Kind | In use | Not in use, reported once with its ratio |
 |------|--------|------------------------------------------|
 | domain | `Features` | `Source (0/7)`, `Dependencies (0/7)` |
-| feature | — | `Source (5/39)`, `Dependencies (3/39)`, `Parent (4/39)` |
+| feature | — | `Source (5/41)`, `Dependencies (3/41)`, `Parent (4/41)` |
 | service | — | `Source (0/4)`, `Dependencies (0/4)` |
 
 One document is reported: `docs/domains/infrastructure/README.md` carries no heading naming

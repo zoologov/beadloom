@@ -87,6 +87,36 @@ def changed_paths(project_root: Path) -> frozenset[str] | None:
     return frozenset(_project_relative(_parse_porcelain_z(raw), prefix.strip()))
 
 
+def staged_paths(project_root: Path) -> frozenset[str] | None:
+    """Project-relative paths this commit would record, or ``None`` if unknown.
+
+    The same question as :func:`changed_paths`, asked of the index rather than of
+    the working tree: *what is this commit about?* It exists because a commit
+    gate that judges the whole tree fails one agent's commit on a neighbour's
+    in-progress work (BDL-UX #118) — the tree is shared, the index is not.
+
+    Added, copied, modified and renamed entries are included; a deletion is not,
+    because there is no content left to compare a document against and the pair's
+    own ``missing`` verdict already covers it.
+
+    ``None`` means git could not answer — no work tree, no ``git``, no ``HEAD``
+    yet — and callers must treat it as *not checked*, never as *nothing staged*.
+    """
+    prefix = _run_git(project_root, ["rev-parse", "--show-prefix"])
+    if prefix is None:
+        return None
+    if _run_git(project_root, ["rev-parse", "--verify", "HEAD"]) is None:
+        return None  # a repository with no commit stages against nothing
+    raw = _run_git(
+        project_root,
+        ["diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR"],
+    )
+    if raw is None:
+        return None
+    paths = [field for field in raw.split("\0") if field]
+    return frozenset(_project_relative(paths, prefix.strip()))
+
+
 def _parse_porcelain_z(raw: str) -> list[str]:
     """Paths out of ``git status --porcelain -z`` (repository-relative).
 

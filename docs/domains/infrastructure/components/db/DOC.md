@@ -30,6 +30,8 @@ definitions the rest of Beadloom depends on.
 - `ensure_schema_migrations(conn)` — apply the additive, idempotent migrations
   (the `lifecycle` column + `external` CHECK rebuild, `edges.contract_key`,
   `foreign_edges`, the free-form `kind` rebuild, `sync_state.baseline_source`,
+  `sync_state.file_symbols_hash` (added after the table rebuilds, which copy an
+  explicit column list and would drop a column added before them),
   the four-verdict `sync_state.status` rebuild, `declared_docs`, the
   `docs.space` column, …). `docs.space` records which documentation space a
   file belongs to — `to_be`, `as_is` or `working` — and defaults to `as_is`,

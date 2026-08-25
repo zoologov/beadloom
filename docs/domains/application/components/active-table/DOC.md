@@ -83,7 +83,12 @@ headings, the Progress Log, and non-Status columns are always left untouched.
   sum to the total.
   The `--stage` flag runs `git add` on EXACTLY the reconciled ACTIVE.md paths
   plus the exported jsonl (via `_stage_reconciled`), never staging unrelated
-  files. The `--check` mode runs reconcile on a throwaway sandbox copy
+  files. It nonetheless ADDS paths to a commit that is already in flight, and a
+  commit made with an explicit pathspec does not exclude them — measured on
+  BDL-061.22's own commit, which named one file and landed two. Since
+  BDL-061.80 the installed pre-commit hook lists what this step added, because
+  the hook's unjudged count states the remainder and nothing stated the
+  addition. The `--check` mode runs reconcile on a throwaway sandbox copy
   (`_active_sync_check`) so it never writes to the real tree; it exits 1 on
   drift, 0 when clean.
 - **`services/mcp_server.py` — S4 process-tools.** `checkpoint` and

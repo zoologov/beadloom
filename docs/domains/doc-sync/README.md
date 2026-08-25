@@ -13,7 +13,7 @@ Doc Sync Engine compares document and code hashes to detect desynchronization th
 
 The sync check pipeline operates in four phases:
 
-- **Phase 1: Hash and symbol drift detection.** For each sync_state entry, compares on-disk file hashes against stored hashes. Also computes a symbols hash (SHA-256 of sorted code_symbols rows) and compares against the stored `symbols_hash`. Detects `hash_changed` and `symbols_changed` drift reasons. A pair whose doc or code file is GONE is `missing`, not `ok`; a pair whose only baseline was fabricated by a rebuild is corroborated against git, or reported `unverified`.
+- **Phase 1: Hash and symbol drift detection.** For each sync_state entry, compares on-disk file hashes against stored hashes. Symbols are compared at two granularities: the stored `symbols_hash` is the whole NODE's surface and says the document's subject moved; the stored `file_symbols_hash` is this pair's OWN code file and says whether it moved here. Only the second makes a pair `stale/symbols_changed` — a pair whose sibling moved is `unverified/sibling_symbols_changed` and names the file that did, because nothing about its own file changed to revise the document against (BDL-UX #182). A row with an empty `file_symbols_hash` keeps the node-level answer, so a node already in drift when the column was added reports exactly what it reported before, until its next attestation. A pair whose doc or code file is GONE is `missing`, not `ok`; a pair whose only baseline was fabricated by a rebuild is corroborated against git, or reported `unverified`.
 - **Phase 2: Source coverage checks** (`check_source_coverage`). For each graph node with a directory-based `source` (ending in `/`), verifies that all Python files on disk are tracked in sync_state or code_symbols. Reports `untracked_files` when gaps are found.
 - **Phase 3: Doc coverage checks** (`check_doc_coverage`). For each graph node with a directory-based `source`, verifies that the linked documentation mentions all Python module names (file stems). Reports `missing_modules` when the doc does not reference a module.
 - **Phase 4: The declared surface** (`find_missing_declared_docs`). Every doc a graph node names in its `docs:` list is checked for existence. The declaration lives in the committed graph YAML, so deleting the file cannot remove it — which is what stops the gate being satisfied by having less to check (BDL-UX #174).
@@ -68,7 +68,8 @@ green result says what it was green against.
 |--------|----------|
 | `ok` | No drift detected |
 | `hash_changed` | File hash on disk differs from stored hash |
-| `symbols_changed` | Code symbols (function/class signatures) changed while doc hash remained the same |
+| `symbols_changed` | THIS pair's own code file changed its symbols (function/class signatures) while the doc hash remained the same |
+| `sibling_symbols_changed` | A different code file of the same node changed its symbols; this pair's own file did not. Reported as `unverified` with the moved file named in `details` -- **not checked**, and `sync-update` is not offered for it |
 | `untracked_files` | Python files in the node's source directory are not tracked in sync_state or code_symbols |
 | `missing_modules` | The linked documentation does not mention one or more module names from the source directory |
 | `hash_changed_since_head` | The code differs from `HEAD` while its doc does not -- drift the rebuilt index had absorbed into its own baseline |
@@ -84,6 +85,7 @@ green result says what it was green against.
 - **engine.py** -- Core sync engine: sync state building, multi-phase sync checking, hash computation, coverage analysis, and reference-doc surface-drift state (build/check/clear)
 - **git_baseline.py** -- The baseline that cannot be lost: which paths differ from `HEAD`. Answers `None` for *git could not tell*, never for *nothing changed*
 - **declared_docs.py** -- The declared documentation surface checked against disk: which declarations the tree no longer satisfies
+- **commit_scope.py** -- Which sync pairs a commit is about, and how many it therefore left unjudged (BDL-061 S6, BDL-UX #118). The commit gate judges the commit; the push gate judges the tree. `scope_to_commit(pairs, staged, docs_dir)` keeps the pairs either side of which this commit stages -- either side, because the commit that FIXES a stale pair stages the doc -- and carries the number it left out so the caller can print it. A `staged` of `None` means git did not answer: nothing is narrowed and the reason says so, since narrowing on an absent answer would be inventing the scope
 - **surface_ledger.py** -- The committed record (`.beadloom/sync-surface.json`) of how much there was to check last time, so a shrinking surface is reported rather than silently smaller
 - **surface.py** -- Layer 2 reference surface-drift: parses the in-doc `<!-- beadloom:watches=cli,graph,flow.yml -->` annotation and computes coarse, deterministic per-surface signatures (`cli` command+flag tree, `graph` node+edge identity set, normalized `flow.yml`) plus the order-sensitive aggregate hash
 - **doc_indexer.py** -- Markdown scanning, chunking by H2 headings, section classification, and SQLite population
@@ -124,11 +126,15 @@ beadloom install-hooks --pre-push
 beadloom install-hooks --remove
 ```
 
-**Pre-commit hook** runs:
-- Ruff lint check (via `uv run ruff check`)
-- Mypy type check (via `uv run mypy`)
-- `beadloom sync-check --porcelain` (stale doc detection)
+**Pre-commit hook** judges THE COMMIT rather than the working tree (BDL-UX #118), and runs:
+- Ruff lint check over the staged `src/`/`tests/` Python files
+- Mypy type check over the same staged files
+- `beadloom sync-check --staged --porcelain` (stale doc detection, narrowed to the pairs this commit stages)
 - `beadloom active-sync --stage` (ACTIVE/table coherence; guarded no-op when `bd` is unavailable)
+
+It also states three things about its own scope: how much of the tree it did NOT judge (read from `git status --porcelain`, so an untracked neighbour module is counted too), which paths `active-sync --stage` added to the commit while it was in flight, and a `# beadloom-hook-scope: commit` marker that `beadloom waves` reads to tell whether an installed hook is the commit-scoped one. An installed hook keeps its old behaviour until `install-hooks` is re-run.
+
+What it cannot do: a neighbour's hunk swept into a commit, inside a file the committer legitimately touches, is not caught and cannot be caught here — the swept hunk is inside the commit, which is the region the gate judges.
 
 In `warn` mode, violations print warnings but do not block the commit. In `block` mode, ruff/mypy/sync-check violations exit non-zero and prevent the commit.
 

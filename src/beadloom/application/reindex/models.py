@@ -109,6 +109,11 @@ class _SyncPairSnapshot:
     doc_hash_at_last_edit: str
     code_hash_at_sync: str
     baseline_source: str = ""
+    #: The symbol surface of THIS pair's own code file at the baseline. Carried
+    #: across a rebuild for the same reason the node hash is: a rebuild that
+    #: recomputed it would record the tree it was just built from and the drift
+    #: would vanish into the index (BDL-UX #182).
+    file_symbols_hash: str = ""
 
 
 def _is_missing_table_error(exc: sqlite3.OperationalError) -> bool:

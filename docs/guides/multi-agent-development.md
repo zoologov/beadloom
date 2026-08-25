@@ -565,3 +565,4 @@ The typical 2.0.0 scenario looks like this. On the task branch the documentation
 - **RFC BDL-047** — the initial orchestrator architecture
 - [`agentic-flow.md`](./agentic-flow.md) — the guide to the packaged workflow and the role configurator
 - [`ai-techwriter.md`](./ai-techwriter.md) — the operator's guide to the server-side AI tech-writer
+- [`parallel-waves.md`](./parallel-waves.md) — what a wave of concurrent agents guarantees, the four media it shares regardless of the shape, and reviewer isolation

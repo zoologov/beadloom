@@ -185,22 +185,25 @@ trusted the check.
   a scenario keyword after markdown stripping. `Example:` is a scenario keyword in Gherkin, so a
   prose line opening with it is read as a claim that a scenario exists, and an indented code
   block is read while a fenced one is not. Both are filed as `beadloom-mr2l.62` with a failing
-  test pinned to each, so the fix reddens the suite. Zero of the 33 reference findings on this
+  test pinned to each, so the fix reddens the suite. Zero of the 26 reference findings on this
   repository come from that class today.
 
 ## What this repository ships with, and why the number is not zero
 
-`beadloom lint` reports **68** `scenario-coverage` findings here — measured 2026-08-24, with
-`--json`, on the shipped `rules.yml`:
+`beadloom lint` reports **60** `scenario-coverage` findings here — measured 2026-08-24 after
+BDL-061 S6, with `--json`, on the shipped `rules.yml`:
 
 | Findings | What they are |
 |----------|---------------|
-| 35 | no scenario in the suite binds to a `feature` node the graph declares |
-| 33 | scenarios that BDL-061's own PRD names and the suite does not contain |
+| 34 | no scenario in the suite binds to a `feature` node the graph declares |
+| 26 | scenarios that BDL-061's own PRD names and the suite does not contain |
 
-The population is the honest one: `for: {kind: feature}` selects all **40** declared feature
-nodes, of which 5 are covered (`rule-engine`, `scenario-binding`, `doc-quality`, `doc-shape`,
-`doc-templates`). A hand-picked `ref_id` list would report 0 by construction, which is the false
+The population is the honest one: `for: {kind: feature}` selects all **42** declared feature
+nodes, of which 8 are covered (`rule-engine`, `scenario-binding`, `doc-quality`, `doc-shape`,
+`doc-templates`, `sync-check`, `wave-plan`, `review-brief`). The suite holds 59 scenarios in 11
+files. Both numbers moved in the same direction and for the same reason: S6 added two feature
+nodes and bound scenarios to all three of the nodes its work touched, so the population grew by
+two while the uncovered count fell by one. A hand-picked `ref_id` list would report 0 by construction, which is the false
 green the whole mechanism exists to remove. `component`, `domain`, `service` and `site` nodes are
 outside the population by the architecture model's own definition — a feature is a capability, a
 component is plumbing. Reclassifying a feature as a component is therefore a **silent** exit from

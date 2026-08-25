@@ -103,6 +103,25 @@ and all three describe the same failure: a mutation score computed over an empty
 denominator reads as evidence of test strength and is evidence of nothing.
 Declare nothing and nothing is reported.
 
+## Declaring a wave override
+
+`flow.yml` also records the human decisions that outrank `beadloom waves`, which decides
+from the graph which beads may run at the same time:
+
+```yaml
+# .beadloom/flow.yml
+waves:
+  overrides:
+    - beads: [proj-1, proj-2]
+      decision: parallel        # or: serial
+      reason: "the two touch one vocabulary module and nothing else"
+      until: "2026-09-01"
+```
+
+Every key is required, and required by its content: a key present but blank is a
+configuration error, on the same rule that governs a suppression. An override that changed
+no decision is reported as inert. See the [Parallel waves guide](parallel-waves.md).
+
 `.beadloom/flow/` is source, belongs in git, and is never covered by the ignore block
 `beadloom init` writes. So does `.beadloom/flow.yml`, and so does
 `.beadloom/flow-manifest.json` — the record of what Beadloom wrote, which is one of

@@ -122,8 +122,8 @@ beadloom install-hooks
 
 Installs **both** hooks by default:
 
-- **pre-commit** (lighter) — runs `sync-check`, lint, and the ACTIVE/tracker coherence step (`warn` or `block` via `--mode`).
-- **pre-push Beadloom Gate** (authoritative) — runs the full `beadloom ci` (reindex → `lint --strict` → sync-check → docs-audit → docs-quality → config-check → doctor) and **blocks the push on red**. It is fail-safe (a no-op when `beadloom` isn't on `PATH`); `git push --no-verify` is the documented escape hatch.
+- **pre-commit** (lighter) — judges **the commit, not the tree**: lint and type-check over the staged source files, `sync-check --staged` over the pairs the commit stages either side of, and the ACTIVE/tracker coherence step (`warn` or `block` via `--mode`). It prints how many modified or untracked files outside the commit it did not judge, so a narrow green is not read as a whole-tree green. Re-run `beadloom install-hooks` after upgrading — an already-installed hook keeps its old whole-tree behaviour until you do.
+- **pre-push Beadloom Gate** (authoritative) — runs the full `beadloom ci` (reindex → `lint --strict` → sync-check → docs-audit → docs-quality → doc-spaces → config-check → doctor) over the whole tree and **blocks the push on red**. It is fail-safe (a no-op when `beadloom` isn't on `PATH`); `git push --no-verify` is the documented escape hatch.
 
 Select one with `--pre-commit` / `--pre-push`; remove with `--remove`.
 
@@ -189,10 +189,10 @@ gated waves. The process roles live in your editor adapters (`.claude/commands/*
 for Claude Code); the four work roles are subagents:
 
 1. **`/task-init`** — scaffold the work item (PRD/RFC/CONTEXT/PLAN/ACTIVE or BRIEF) and create the beads (tracked in `bd`).
-2. **`/coordinator`** — orchestrate the waves, gated by bead dependencies:
+2. **`/coordinator`** — orchestrate the waves, gated by bead dependencies. `beadloom waves <bead>...` decides which of the ready beads may run at the same time from the code they occupy, and states the media a concurrent wave shares regardless:
    - **dev** — implement the bead (TDD), update its `SPEC.md`/`DOC.md`.
    - **test** — write/extend tests, verify coverage.
-   - **review** — read-only quality + boundary check (`beadloom diff`, `lint`).
+   - **review** — read-only quality + boundary check (`beadloom review-brief`, `beadloom diff`, `lint`); the brief withholds the author's own comments until a verdict is recorded.
    - **tech-writer** — refresh the docs the change touched (`sync-update`).
 3. **Push** — the **pre-push Beadloom Gate** runs `beadloom ci`; a red gate blocks the push ("no code reaches `main` without current docs and clean boundaries").
 4. **PR** — opening the PR triggers CI *and* the AI tech-writer (below); a human merges once green.
@@ -278,5 +278,6 @@ carries the sections its kind's peers carry. It never blocks. See
 - [Architecture](architecture.md) — system design, the node-kind model, the rules engine, the agentic-flow configurator.
 - [Executable acceptance scenarios](guides/bdd-scenarios.md) — Gherkin as the source of truth, and what `scenario-coverage` reports.
 - [Document kinds](guides/document-kinds.md) — required sections and the five writing-standard checks.
+- [Parallel waves](guides/parallel-waves.md) — what a wave of concurrent agents guarantees, and what it only reports.
 - [CI Setup](guides/ci-setup.md) — GitHub Actions / GitLab CI integration.
 - [VitePress Site](guides/vitepress-site.md) — publish the knowledge base.

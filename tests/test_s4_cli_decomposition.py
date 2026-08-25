@@ -54,6 +54,7 @@ EXPECTED_COMMANDS = {
     "mcp-serve",
     "prime",
     "reindex",
+    "review-brief",
     "search",
     "setup-agentic-flow",
     "setup-ai-techwriter",
@@ -67,6 +68,7 @@ EXPECTED_COMMANDS = {
     "tui",
     "ui",
     "watch",
+    "waves",
     "why",
 }
 

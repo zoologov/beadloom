@@ -266,11 +266,25 @@ the defensive instructions written around them can be deleted.
 that** parallelism helps where the subgraphs are independent and is refused where they are not.
 
 **Acceptance criteria:**
-- [ ] `Scenario: Two beads touching independent subgraphs are allowed to run in parallel`
-- [ ] `Scenario: Two beads touching the same node are serialised`
-- [ ] `Scenario: A reviewer receives the diff and the spec without the author's summary` (#155)
-- [ ] `Scenario: Integrating a parallel wave does not re-baseline untouched doc pairs` (#133)
-- [ ] Non-behavioral: parallel agents no longer collide on the shared pre-commit hook (#118)
+- [x] `Scenario: Two beads touching independent subgraphs are allowed to run in parallel` —
+      `tests/acceptance/features/wave_plan.feature:15`
+- [x] `Scenario: Two beads touching the same node are serialised` — same file, line 21
+- [x] `Scenario: A reviewer receives the diff and the spec without the author's summary` (#155)
+      — `tests/acceptance/features/review_brief.feature:19`
+- [x] `Scenario: Integrating a parallel wave does not re-baseline untouched doc pairs` (#133)
+      — `tests/acceptance/features/sibling_baseline.feature:29`
+- [x] Parallel agents no longer collide on the shared pre-commit hook (#118), **in the half a
+      hook can judge**. The hook now judges the commit rather than the tree and states what it
+      did not judge; the other half — a neighbour's hunk swept in through `git add` — is inside
+      the commit, which is the region the gate judges, and the index does not record who wrote
+      a line. Filed as `beadloom-mr2l.81` with its mechanism and the four decisions that must
+      precede it.
+
+      **Correction to this criterion, made in `.24` (2026-08-24).** It was written as
+      "Non-behavioral". It is not: the repair carries three executable scenarios
+      (`tests/acceptance/features/commit_scope.feature`). The classification was an assumption
+      about a change nobody had scoped yet, and it is corrected here rather than reported as
+      met, on the same rule S2's criterion was corrected under.
 
 ## Acceptance Criteria (overall)
 

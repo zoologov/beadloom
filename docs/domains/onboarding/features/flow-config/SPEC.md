@@ -81,6 +81,33 @@ that answers `error`. The block's schema, strictness resolution and exclusion
 rules live in the
 [flow-guards SPEC](../../../application/features/flow-guards/SPEC.md).
 
+### The `waves:` block is a third reader (BDL-061 S6)
+
+`.beadloom/flow.yml` also carries the wave overrides that let a human outrank
+`beadloom waves`:
+
+```yaml
+waves:
+  overrides:
+    - beads: [proj-1, proj-2]
+      decision: parallel        # or: serial
+      reason: "the two touch one vocabulary module and nothing else"
+      until: "2026-09-01"
+```
+
+`FlowConfig` neither validates nor carries it, on the same terms as `guards:`.
+`application/waves/config.py:load_overrides()` reads the block on its own, and
+every key is required **by content** — a key present but blank is a
+`WaveConfigError`, because an override with no reason and no deadline outranks
+the graph permanently by accident. A project with no `waves:` block is
+unaffected. The block's semantics live in the
+[wave-plan SPEC](../../../application/features/wave-plan/SPEC.md).
+
+So the file now has **three** readers with three validators, which is the cost of
+the ignore-unknown-top-level-keys rule below. It is paid deliberately: the
+alternative is a configurator that must know about every feature that ever wants
+project policy.
+
 ### Modules
 
 - **flow_config.py** — `FlowConfig` (frozen dataclass), `build_flow_config()`
@@ -99,8 +126,9 @@ rules live in the
 - An absent `flow.yml` falls back to a default (resolve/or-default); a present
   but malformed one always raises (the `config-check` signal).
 - Unknown **top-level** keys are ignored rather than rejected, which is what lets
-  `guards:` live in the same file with its own reader and its own validation.
-  Unknown values inside the four configurator keys are still errors.
+  `guards:` and `waves:` live in the same file, each with its own reader and its
+  own validation. Unknown values inside the four configurator keys are still
+  errors.
 
 ## API
 

@@ -74,7 +74,7 @@ exemption the project DECLARED:
 | `ok` | `ok` | compared against a baseline and unchanged | 0 |
 | `stale` | `hash_changed`, `symbols_changed`, `hash_changed_since_head`, `untracked_files`, `missing_modules` | compared and drifted | 2 |
 | `missing` | `doc_missing`, `code_missing`, `declared_doc_missing` | the thing to check is not there | 2 |
-| `unverified` | `no_baseline` | there was nothing to compare against | 0, reported by name |
+| `unverified` | `no_baseline`, `sibling_symbols_changed` | there was nothing to compare against, or nothing this pair can settle | 0, reported by name |
 | `incomplete` | `missing_sections`, `section_not_in_use` | the document is current and does not carry the shape its kind requires | 0, reported by name |
 | `exempt` | `working_space` | the document is in the WORKING space and is exempt from freshness by declaration | 0, reported by name and counted |
 
@@ -91,6 +91,75 @@ it.
 
 `unverified` does not block, and is never counted as fresh. `beadloom ci` prints
 the sync-check step as **WARN** with the count, rather than `PASS`.
+
+### The staleness fact is computed per FILE, and a sibling gets a different word
+
+`symbols_hash` is the symbol surface of the whole NODE. `file_symbols_hash` is
+the surface of one pair's OWN code file. Both are stored per pair, and they
+answer different questions: the node hash says the document's subject moved, the
+file hash says whether it moved *here*. Only the second can make a pair `stale`.
+
+While only the node hash existed, one changed file marked every pair the node
+owns `stale/symbols_changed` (BDL-UX #182). The followers could not be revised —
+nothing about their files had changed — so the only remaining action was the
+bulk re-attestation #163 was filed to prevent, and the tool *required* it rather
+than merely permitting it. Measured on this repository at HEAD `e255a21`, in two
+clean rooms differing only in this change: appending one function to
+`application/architecture_view.py` produced **69 stale pairs, 67 of which named
+a file nobody had touched**; the same perturbation now produces **2 stale pairs
+and 67 `unverified/sibling_symbols_changed`**, each carrying
+`details: architecture_view.py`. Both runs exit 2. The gate still bites; it bites
+on the pairs somebody can act on.
+
+The three states are three words:
+
+- **`stale/symbols_changed`** — this pair's own file moved its symbols. The
+  writer can see what moved and revise the document against it.
+- **`unverified/sibling_symbols_changed`** — a different file of the same node
+  moved; this one did not. The comparison this pair *can* make came out equal,
+  and the one it cannot make — whether the shared document still describes the
+  node — is not a fact about this file. The row names the file that did move,
+  and `sync-update` is not offered for it.
+- **`ok`** — nothing under this node moved at all.
+
+A row whose `file_symbols_hash` is empty keeps the node-level answer. Empty is
+not "no symbols": it is "the file-level fact was never recorded" — a pre-BDL-061-S6
+index, or a file paired through the node's declared `source` rather than through
+an annotation. Reading it as *unchanged* would make an un-rebuilt index quieter
+than a rebuilt one, which is the one failure worse than the noise this replaces.
+
+The per-file baseline is CARRIED across a reindex, exactly like the node hash and
+the baseline provenance, and it may never CONTRADICT the node one. A node hash
+carried from an earlier generation that no longer matches the tree, beside a file
+hash computed from that same tree, states two incompatible things — something
+under this node moved, and no file moved — and the second one silently wins.
+Measured on this repository at the first reindex after the column was added:
+**77 pairs read `sibling_symbols_changed` with nothing named in `details`**,
+because every file baseline had just been fabricated from the post-edit tree.
+
+So the file fact is written for a node that is NOT in drift, where "no file moved"
+is what the index already says and recording it adds no claim, and withheld for a
+node that IS in drift, where the node-level answer stands until the drift is
+attested. A file that ARRIVED on a node in drift gets none either: its arrival is
+part of what moved the node hash.
+
+The consequence for an upgrade is worth stating plainly. Every node that is
+currently clean acquires its file-level facts on the reindex that adds the column
+and is judged per file from then on. A node that is already in drift keeps the
+old node-level report until its next attestation — the pass the writer was going
+to make anyway — and converges there. No node pays a storm it was not already
+going to pay. The stricter rule of withholding the facts from every node was
+tried and measured: perturbing one `application` module then left `site-generation`'s
+16 untouched pairs reading `symbols_changed`, because that node had never been
+stale and so had never been attested.
+
+Recomputing a carried file fact would re-baseline against the tree the index was
+just built from, which is how integrating a parallel wave used to erase the drift
+it brought in and re-baseline pairs it never touched (BDL-UX #133). The two issues
+share one root — the fact was stored at the wrong granularity — and one fix: after
+an integration and a reindex, only the pairs whose own file the integration changed
+are reported stale, and the untouched pairs keep the baseline they were integrated
+with.
 
 `exempt` does not block either. The WORKING space — `ACTIVE` by default — is
 exempt from freshness by DECLARATION (`doc_roots.working` in
@@ -208,6 +277,87 @@ no `UPDATE` and no `commit`.
 $ beadloom sync-update docs/architecture.md --check
   [surface drift] docs/architecture.md watches cli, graph
 ```
+
+**Stated limit: the annotation is matched anywhere in the document.**
+`parse_watches` searches the whole text, so a document that *shows* the syntax
+opts itself in — including inside a fenced code block. Measured on this
+repository: `docs/domains/context-oracle/features/code-indexer/SPEC.md` declares
+no watch of its own and is nevertheless tracked as `watches=cli,graph`, from an
+example in a fenced block whose own caption reads "an EXAMPLE: not read". It is
+the same class BDL-061 S6 closed for the wave declaration, where a `refs:` inside
+a sentence became a scope, and the same repair applies — anchor the annotation to
+the start of a line and ignore fenced content. Filed as `beadloom-mr2l.86`. The
+cost today is one advisory warning on a document that declared nothing, and the
+document is deliberately left un-attested rather than baselined into a
+declaration it never made.
+
+### `--staged`: the commit gate judges the commit
+
+A shared working tree makes a whole-tree check meaningless for any single
+committer. In a multi-agent wave — the mode `/coordinator` prescribes, not an
+exotic one — the pre-commit hook failed one agent's commit on a neighbour's
+half-written file, in a module the committer had never opened (BDL-UX #118).
+Serialising *who* commits does not help: the merge slot orders the commits and
+leaves the tree exactly as shared as it was.
+
+`beadloom sync-check --staged` narrows the run to the pairs this commit stages
+either side of — **either** side, because the commit that fixes a stale pair
+stages the DOC — and states what it therefore did not check:
+
+```
+$ beadloom sync-check --staged
+Scoped to the commit: 1 pair(s) checked, 27 pair(s) outside this commit were
+not checked — the pre-push Gate judges the whole tree.
+```
+
+Three properties make it a narrowing rather than a weakening:
+
+- **Nothing stops being enforced.** The pre-push Gate still runs `beadloom ci`
+  over the whole tree, so no pair reaches `main` unjudged. What moves is *when* a
+  pair is judged, from "whenever a neighbour happens to be mid-edit" to "when the
+  commit that changes it is made".
+- **The narrowing is counted and printed** — in the human shape, as a
+  `scope` record in `--porcelain`, and as `summary.not_checked_outside_commit`
+  plus `summary.commit_scope` in `--json`. The two JSON keys are present only in
+  this mode: without `--staged` nothing was left out, and a key reporting a
+  narrowing that did not happen is a fact about a run that never made it.
+- **An absent answer narrows nothing.** When git cannot say what is staged — no
+  work tree, no `git`, no `HEAD` — every pair is kept and `commit_scope` reads
+  `not_narrowed`. Narrowing on an absent answer would be inventing the scope,
+  which is the same category error as inventing a baseline (BDL-UX #175).
+
+Stated rather than assumed: the content compared is the **working-tree** content
+of the staged paths, not the staged blobs, so a partially staged file is judged
+including the part the commit leaves behind. The hooks `beadloom install-hooks`
+writes use this mode, and both of them say so in their own header.
+
+#### What the installed hook says about its own scope
+
+Three things, and the third names a limit rather than a repair:
+
+- **How much of the tree it did not judge**, read from `git status --porcelain`
+  rather than from `git diff --name-only`. The second lists only tracked files
+  with unstaged modifications, so a neighbouring agent's brand-new module was not
+  counted — and a new module is the largest unjudged thing a neighbour can leave
+  in a shared tree. The second status column is non-blank for a working-tree
+  modification and `?` for an untracked path, so one call answers both.
+- **What it added to the commit itself.** `beadloom active-sync --stage` stages
+  the reconciled ACTIVE tables and the tracker export while the commit is in
+  flight, and a commit made with an explicit pathspec does not exclude them. The
+  hook now lists the paths it added, because the unjudged count states the
+  remainder and nothing stated the addition.
+- **A marker line, `# beadloom-hook-scope: commit`.** An installed hook keeps its
+  old behaviour until `install-hooks` is re-run, and nothing tells a repository
+  to; `beadloom waves` reads the marker to tell whether the gate a concurrent
+  wave is about to commit through judges the commit or the whole tree.
+
+**What the commit gate cannot do, stated so it is not mistaken for done.** A
+neighbour's hunk swept into a commit — inside a file the committer legitimately
+touches — is not caught and cannot be caught here: the swept hunk is *inside* the
+commit, which is precisely the region the gate judges. The check that would catch
+it compares the staged paths against the scope the committing bead declared,
+which needs the bead's identity at commit time and is therefore a wave-protocol
+question rather than a hook one.
 
 ## Invariants
 

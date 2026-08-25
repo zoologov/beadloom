@@ -36,7 +36,7 @@ def _snapshot_sync_baselines(
     """
     try:
         rows = conn.execute(
-            "SELECT ref_id, symbols_hash, doc_path, code_path, "
+            "SELECT ref_id, symbols_hash, file_symbols_hash, doc_path, code_path, "
             "doc_hash_at_last_edit, code_hash_at_sync, baseline_source FROM sync_state"
         ).fetchall()
     except sqlite3.OperationalError as exc:  # sync_state may not exist on first run
@@ -58,10 +58,12 @@ def _snapshot_sync_baselines(
         # PROVENANCE must survive the drop even when there is no two-phase data,
         # otherwise a rebuilt (fabricated) baseline comes back indistinguishable
         # from one that was actually earned.
+        has_file_col = "file_symbols_hash" in row.keys()  # noqa: SIM118
         pairs[(row["doc_path"], row["code_path"])] = _SyncPairSnapshot(
             doc_hash_at_last_edit=edit_hash,
             code_hash_at_sync=row["code_hash_at_sync"],
             baseline_source=provenance,
+            file_symbols_hash=(row["file_symbols_hash"] or "") if has_file_col else "",
         )
     return symbols, pairs
 
@@ -85,6 +87,26 @@ def _baseline_provenance(snapshot: _SyncPairSnapshot | None) -> str:
     if snapshot is None:
         return BASELINE_SOURCE_INDEX_BUILD
     return snapshot.baseline_source or BASELINE_SOURCE_CARRIED
+
+
+def _node_in_drift(
+    conn: sqlite3.Connection,
+    ref_id: str,
+    preserved_symbols: dict[str, str] | None,
+    cache: dict[str, bool],
+) -> bool:
+    """Whether *ref_id* carries a symbol baseline the current tree no longer matches.
+
+    A node with no carried baseline is not in drift: there is nothing for the
+    tree to disagree with. The answer is cached because every pair of a node
+    asks the same question about the same node.
+    """
+    from beadloom.doc_sync.engine import _compute_symbols_hash
+
+    if ref_id not in cache:
+        carried = (preserved_symbols or {}).get(ref_id, "")
+        cache[ref_id] = bool(carried) and carried != _compute_symbols_hash(conn, ref_id)
+    return cache[ref_id]
 
 
 def _build_initial_sync_state(
@@ -118,6 +140,9 @@ def _build_initial_sync_state(
 
     now = datetime.now(tz=timezone.utc).isoformat()
     pairs = build_sync_state(conn)
+    # Whether each node's carried hash still matches the tree, asked once per
+    # node rather than once per pair.
+    drift_by_ref: dict[str, bool] = {}
     for pair in pairs:
         pair_key = (pair.doc_path, pair.code_path)
         snapshot = (preserved_pairs or {}).get(pair_key)
@@ -155,12 +180,36 @@ def _build_initial_sync_state(
         else:
             symbols_hash = _compute_symbols_hash(conn, pair.ref_id)
 
+        # The per-FILE baseline may never CONTRADICT the node one. A carried node
+        # hash that no longer matches the tree beside a file hash computed from
+        # that same tree states two incompatible things — something under this
+        # node moved, and no file moved — and the second one silently wins
+        # (BDL-UX #175, reached from a new side). So the file fact is written
+        # only when the node is NOT in drift, where "no file moved" is what the
+        # index already says and recording it adds no claim. A node that IS in
+        # drift keeps an empty file fact, which leaves the node-level answer
+        # standing until the drift is attested.
+        if snapshot is not None and snapshot.file_symbols_hash:
+            file_symbols_hash = snapshot.file_symbols_hash
+        elif _node_in_drift(conn, pair.ref_id, preserved_symbols, drift_by_ref):
+            file_symbols_hash = ""
+        else:
+            file_symbols_hash = _compute_symbols_hash(
+                conn, pair.ref_id, file_path=pair.code_path
+            )
+
         # Preserve doc_hash_at_last_edit from previous state.
         doc_hash_at_last_edit = snapshot.doc_hash_at_last_edit if snapshot else ""
 
         conn.execute(
-            "UPDATE sync_state SET symbols_hash = ?, doc_hash_at_last_edit = ? "
-            "WHERE doc_path = ? AND code_path = ?",
-            (symbols_hash, doc_hash_at_last_edit, pair.doc_path, pair.code_path),
+            "UPDATE sync_state SET symbols_hash = ?, file_symbols_hash = ?, "
+            "doc_hash_at_last_edit = ? WHERE doc_path = ? AND code_path = ?",
+            (
+                symbols_hash,
+                file_symbols_hash,
+                doc_hash_at_last_edit,
+                pair.doc_path,
+                pair.code_path,
+            ),
         )
     conn.commit()

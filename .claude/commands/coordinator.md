@@ -111,6 +111,82 @@ Dependencies ARE the gates: a downstream bead never appears in `bd ready` until 
 
 ---
 
+## The wave shape is decided, not guessed (`beadloom waves`)
+
+Before launching a wave, ask the graph which of the ready beads may run at the
+same time:
+
+```bash
+beadloom waves <bead-id> <bead-id> ...      # exit 0 = clean, 1 = findings, 2 = undecidable
+beadloom waves <bead-id> ... --json         # the same facts, for a script
+```
+
+A tracker knows which beads block which; only the architecture graph knows which
+**code** they occupy, and that is what decides whether parallel agents pay off or
+rot. The command returns the wave shape, one named reason per serialised pair,
+and — for every wave of more than one bead — the media that wave shares no matter
+what shape was chosen.
+
+**A bead declares its scope in the tracker**, in its own words, so that it can be
+placed at all. The declaration **opens a line** and its list runs to the end of
+that line, separated by commas or semicolons:
+
+```bash
+bd update <bead-id> --append-notes "refs: <ref-id>, <ref-id>"
+```
+
+A bead whose declaration cannot be read is serialised against every bead. That is
+not a penalty, it is the honest answer: an unknown scope is not an empty scope,
+and an empty one compares independent of everything. Four things count as
+unreadable, each printed with its own remedy — no declaration, a name the graph
+does not have, a `refs:` written inside a sentence, and a second ref written
+without a separator that the graph confirms is a node. The parser fails toward
+serialisation on purpose: a wave shape is acted on, so a parser whose errors
+widen a wave is worse than no parser.
+
+**A concurrent wave must have its media measured to read clean.** Each of the
+four is checked before the wave runs — no path differs from `HEAD` that no bead
+in the plan owns, the installed pre-commit hook judges the paths a commit stages,
+no doc pair is stale already, and no bead's title numbers it differently from the
+id the tracker allocated. A medium nobody could observe reads `unmeasured`, which
+is a finding and reaches exit 1, so a plan of concurrent beads that nobody
+measured is not a clean plan. Read the exit code, never the number of lines.
+
+What is checked is a **precondition, measured before the wave runs**. The wave's
+conduct afterwards is checked by nothing here and cannot be: no command holding a
+plan can know whether the gate owner ran the combined tree. That is why the two
+obligations below belong to a named bead.
+
+**Two obligations the shape hands to named beads rather than to habit:**
+
+- Each wave's `gate_owner` runs the combined-tree Gate once that wave has landed.
+  Every agent verifying in its own clean room is correct and blind by
+  construction to any interaction between beads — four agents once each reported
+  green on a tree that was red, and none of them was wrong.
+- An agent reports its result in the words that say which measurement it made:
+  "green in a clean room over N files" is a different claim from "green on the
+  tree". Reporting them with one word is what makes the discrepancy read as a
+  contradiction.
+
+**If a human overrules the shape, it is recorded, not remembered** — in
+`.beadloom/flow.yml`, with a reason and an exit condition, exactly like every
+other stand-down:
+
+```yaml
+waves:
+  overrides:
+  - beads: [proj-1, proj-2]
+    decision: parallel
+    reason: "the two touch one vocabulary module and nothing else"
+    until: "2026-09-01"
+```
+
+An override that changes no decision is reported as inert, because an override
+nobody can see doing anything is how a rule gets switched off without anybody
+saying so.
+
+---
+
 ## Wave-based execution
 
 Launch each wave from `bd ready` (filtered to this epic); `bd swarm status` adds a grouped view for `epic`-type parents:
@@ -204,11 +280,30 @@ bd merge-slot release
   ```
   (Gate types: `human`, `timer --timeout`, `gh:run`, `gh:pr`.) Use this to bridge to the STRATEGY-3 CI gate.
 
+### Launching a REVIEW subagent: paste nothing the author wrote
+
+A review that reads what the author said it did is not an independent check. Measured: in hidden-profile tasks a group that hears one member's conclusion first scores 17-36% where a single holder of all the facts scores ~100%. So the review prompt carries **the bead id and nothing else about the change** — no summary, no measurement table, no "the dev reports N tests added", however much time quoting it would save. The reviewer runs `beadloom review-brief <bead-id>` itself, which hands it the assignment, the specification and the change while withholding the author's comments and reporting how many it withheld.
+
+```
+Agent(
+  description="BEAD-XX review",
+  subagent_type="review",
+  run_in_background=True,
+  prompt="Review bead <bead-id>. Run `beadloom review-brief <bead-id>` for your input. "
+         "Epic context: CONTEXT.md + RFC.md at <docs path>. "
+         "Follow your role protocol. RETURN CONTRACT: the verdict line only.",
+)
+```
+
+This is the one launch prompt where being helpful is the defect. If a measurement genuinely must reach the reviewer before its verdict — because re-deriving it would cost more than the independence is worth — say in the prompt that you are doing it and why, so the reviewer can record that the withholding was defeated. An undeclared paste is invisible to everyone including the reviewer.
+
 ### Review feedback loop
 
 When the review subagent returns:
 - **OK** → coordinator proceeds to the docs wave.
 - **ISSUES** → coordinator: read findings (`bd comments <review-bead>`), create fix beads under the parent (`bd create --type task --parent <parent-id>`; `bd dep add <fix-bead> <review-bead>`), re-run dev→test→review until OK. Docs bead MUST NOT start until review is clean.
+
+A re-review after a fix cycle does NOT re-impose the withholding: the verdict already on the bead releases the author's account to `beadloom review-brief <bead-id> --release`. The independence that mattered was established on the first pass.
 
 ---
 

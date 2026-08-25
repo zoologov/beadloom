@@ -26,6 +26,8 @@ The system is organized into six DDD domain packages, an application (use-case o
 - `watcher.py` — file watcher for auto-reindex on change
 - `gate.py` — the unified `beadloom ci` gate (reindex → lint → sync-check → docs audit → docs-quality → doc-spaces → config-check → doctor → optional federate)
 - `guards/` — the flow-guard primitive behind `beadloom guard` (BDL-061 S1): a verdict per named guard, the `guards:` block of `.beadloom/flow.yml`, one invocation boundary, and the firing record `--liveness` reads
+- `waves/` — the wave decision behind `beadloom waves` (BDL-061 S6): resolve each bead's declared node scope, decide from the graph which beads may run at once with one named reason per serialised pair, and check the plan-time precondition of each medium a concurrent wave shares regardless of the shape, a cohesion-split package
+- `review_brief/` — the reviewer's input behind `beadloom review-brief` (BDL-061 S6): assemble the assignment, the declared scope, the specification documents, the bound scenarios and the changed files, and withhold the bead's own comments until a verdict is recorded
 - the VitePress site generators — `site.py` (orchestrator), `site_pages.py`, `site_nav.py`, `site_about.py`, `site_dashboard/` (a cohesion-split package), `site_landscape.py`, `site_published.py`, `site_mermaid_guard.py`, `site_metrics_history.py`
 
 **Interface layers:**
@@ -87,7 +89,7 @@ The database is stored in `.beadloom/beadloom.db` and uses WAL mode for concurre
 | `docs` | id (PK), path (UNIQUE), kind, ref_id (FK→nodes), hash, metadata | Document index |
 | `chunks` | id (PK), doc_id (FK→docs), chunk_index, heading, section, content, node_ref_id | Document chunks (max 2000 chars) |
 | `code_symbols` | id (PK), file_path, symbol_name, kind, line_start, line_end, annotations, file_hash | Code symbols (function, class, type, route, component) |
-| `sync_state` | id (PK), doc_path, code_path, ref_id (FK→nodes), code_hash_at_sync, doc_hash_at_sync, doc_hash_at_last_edit, synced_at, status, symbols_hash, baseline_source | Doc↔code sync state. Four verdicts (`ok`, `stale`, `missing`, `unverified`); `baseline_source` records where the row's baseline came from — `index_build`, `carried` or `attested` — and is carried verbatim across a reindex, never promoted |
+| `sync_state` | id (PK), doc_path, code_path, ref_id (FK→nodes), code_hash_at_sync, doc_hash_at_sync, doc_hash_at_last_edit, synced_at, status, symbols_hash, file_symbols_hash, baseline_source | Doc↔code sync state. Four verdicts (`ok`, `stale`, `missing`, `unverified`); `baseline_source` records where the row's baseline came from — `index_build`, `carried` or `attested` — and is carried verbatim across a reindex, never promoted. `symbols_hash` is the whole NODE's symbol surface, `file_symbols_hash` this pair's OWN code file: only the second makes a pair stale, and a pair whose sibling moved is `unverified/sibling_symbols_changed` rather than a `stale` verdict nobody can discharge (BDL-UX #182) |
 | `declared_docs` | declared_path (PK), doc_path, ref_id (FK→nodes) | Every doc path a node DECLARES in its `docs:` list, whether or not the file is on disk. A cache of the committed graph YAML, refreshed on reindex, so a declaration outlives the file it names |
 | `reference_state` | doc_path (PK), watches, aggregate_hash, status | Surface-drift baseline for reference docs that opt in with `<!-- beadloom:watches=... -->`. Kept apart from `sync_state` so the symbol-pair logic is untouched |
 | `meta` | key (PK), value | Index metadata (key-value) |

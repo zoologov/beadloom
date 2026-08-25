@@ -188,8 +188,8 @@ Checks:
 Check doc-code synchronization.
 
 ```bash
-beadloom sync-check [--porcelain] [--json] [--report] [--ref REF_ID] [--since GIT_REF]
-                    [--record-surface] [--project DIR]
+beadloom sync-check [--porcelain] [--json] [--report] [--ref REF_ID] [--staged]
+                    [--since GIT_REF] [--record-surface] [--project DIR]
 ```
 
 Exit codes: 0 = all OK, 1 = error, 2 = a pair is stale **or missing**.
@@ -198,6 +198,7 @@ Exit codes: 0 = all OK, 1 = error, 2 = a pair is stale **or missing**.
 - `--json` -- structured JSON output with summary and pair details. Each pair includes `status`, `ref_id`, `doc_path`, `code_path`, `reason`, `baseline`, and optional `details`.
 - `--report` -- ready-to-post Markdown report for CI (GitHub/GitLab).
 - `--ref` -- filter results by ref_id.
+- `--staged` -- judge only the pairs this commit stages either side of, and state how many were left to the push gate. For a pre-commit hook in a **shared working tree**, where a whole-tree check fails one agent's commit on a neighbour's in-progress file (BDL-UX #118). The narrowing is counted, never silent: `summary.not_checked_outside_commit` and `summary.commit_scope` in `--json` (present in this mode only), a `scope` record in `--porcelain`, and a leading line in the human shape. When git cannot say what is staged, nothing is narrowed and `commit_scope` reads `not_narrowed` -- an absent answer is not "nothing staged". The content compared is the WORKING-TREE content of the staged paths, not the staged blobs.
 - `--record-surface` -- record the declared documentation surface (pair + declared-doc counts) to the committed `.beadloom/sync-surface.json`. A later run compares against it and says so when the surface SHRANK; no ordinary run rewrites it, because a check that silently re-records the number it checks against re-attests without evidence.
 - `--since GIT_REF` -- compute drift against the code state at a **git ref** (e.g. the push's parent commit) instead of the stored `sync_state` baseline. Reports pairs whose code drifted since the ref while the doc was not correspondingly updated. This makes drift detection work on a **fresh CI checkout**: a clean clone reindexes from scratch and re-baselines `sync_state` to the just-pushed code, so without a ref baseline `sync-check` sees 0 stale even when the push left a doc behind. Mirrors `beadloom diff --since`. Used by the AI tech-writer harness (it passes the push parent — `github.event.before` / `$CI_COMMIT_BEFORE_SHA`, falling back to `HEAD~1`).
 
@@ -215,7 +216,7 @@ Measured on this repository, 2026-08-24: 330 declared pairs, all of them checked
 
 Human-readable output includes reason-aware formatting:
 - `missing` status: `[missing]` with which side is gone (`the linked doc file is gone`, `the paired code file is gone`, `declared in the graph, not on disk`).
-- `unverified` status: `[not verified]` with the reason there was no baseline.
+- `unverified` status: `[not verified]` with the reason it was not verified — either there was no baseline, or this pair's own file did not move while a named sibling of the same node did (`sibling_symbols_changed`).
 - `incomplete` status: `[warn]` naming either the document and its missing sections, or the node KIND and the ratio behind a section its documents do not use (`Source (5/39)`).
 - `untracked_files` reason: displays list of untracked files in `details`.
 - `missing_modules` reason: displays list of missing modules in `details`.
@@ -981,6 +982,195 @@ The path is model-supplied, so its **shape is narrowed rather than repaired**: a
 
 `--liveness` reports, per guard, its effective strictness, how many times it fired, its last outcome, and four ways a gate stops protecting anything: `never-fired` (no firing that reached a verdict — an `error` is counted and shown, but does not clear the flag, because a guard that ran three times and answered none of them is not a live gate), `excluded-everywhere` (every strictness `off`, or nothing escapes the exclusion **list** — decided by matching the patterns against representative paths, not by comparing spellings, and asked of the list because `*` and `*/**` are each narrow and together exempt everything), `matches no file in the project: '<pattern>'` (a declared exclusion that exempts nothing that currently exists — a typo'd `scrpits/**` is safe but was silent), and `exit condition has passed: '<pattern>'` (its `until:` names a date that is behind us). A gate that cannot demonstrate it ran is treated as not having run. Every CLI evaluation appends one line to `.beadloom/guard-firings.jsonl`, which is the only file guards write — never the index they inspect. Decision logic lives in `application/guards/evaluation.py`; the CLI only renders it.
 
+### beadloom waves
+
+Decide which of these beads may run at the same time.
+
+```bash
+beadloom waves BEAD [BEAD ...] [--json] [--project DIR]
+```
+
+Exit codes: `0` = a shape was decided and rests on nothing unstated; `1` = a
+shape was decided and carries findings (a bead whose declared scope could not be
+read, an override past its exit condition, an override that changed nothing, a
+shared medium that failed its check or that nobody measured) -- visible, never
+blocking; `2` = no shape could be decided (no index, no answer from the
+tracker, a bead the tracker does not have, a `waves:` block that would not parse).
+
+It **decides**, it does not advise. Parallelism follows from the code-level
+independence of the beads' node scopes, which only the architecture graph holds:
+a tracker knows which beads block which, and nothing else knows which code they
+occupy.
+
+A bead says what it occupies in the tracker, in its own words -- `refs: billing,
+shipping` (also `ref:`, also `area:`). The declaration **opens a line** and its
+list runs to the end of that line, separated by commas or semicolons; a `refs:`
+written inside a sentence is prose. A scope expands downward through `part_of`,
+so a bead scoped to a domain and a bead scoped to one of its components do not
+compare independent while editing the same package. A pair is serialised for
+exactly one named reason: `blocked_by_bead`, `unresolved_scope`, `shared_node`,
+`shared_file`, `dependency_edge` or `override_serial`.
+
+**A bead whose declaration cannot be read is serialised against every bead.** An
+unknown scope is not an empty scope -- an empty one compares independent of
+everything, which would make the command's whole claim rest on silence. Four
+things count as unreadable, each printed with its own remedy: no declaration
+(`no_declared_refs`), a name the graph does not have (`ref_not_in_graph`), a
+`refs:` written inside a sentence (`declaration_not_at_a_line_start`), and a
+second ref written without a comma that the graph confirms is a node
+(`declaration_dropped_a_node`). The parser fails toward serialisation on purpose:
+a wave shape is acted on, so a parser whose errors widen a wave is worse than no
+parser.
+
+Every wave of more than one bead also prints the four media it shares no matter
+what shape is chosen, each with the evidence it comes from: the working tree
+(#181), the commit gate (#118), the doc baseline (#182, #133) and the tracker's
+id space (#171). Each wave names one bead as its `gate_owner` -- the bead that
+measures the combined tree once the wave has landed. It is assigned
+deterministically rather than wisely; the point is that the step belongs to a
+named bead instead of to a coordinator's habit.
+
+**Each of those media is also checked, and each check can fail.** The command
+measures a precondition per medium before the wave runs: that no path differs
+from `HEAD` which no bead in the plan owns (`git status`), that the installed
+pre-commit hook judges the paths a commit stages (`.git/hooks/pre-commit`), that
+no doc pair is stale already (the doc index), and that no bead's title numbers it
+differently from the id the tracker allocated (the bead records). A medium that
+could not be observed is reported `unmeasured`, which is a finding: a concurrent
+wave nobody measured is not a clean plan, it is an unmeasured one. What is NOT
+checked is the wave's conduct afterwards -- nothing here can know whether the
+gate owner ran the combined tree.
+
+The `tracker-ids` check runs even when the plan is fully serial, because a
+concurrent `bd create` shifts an id out from under the number an author already
+wrote into the title, and that happens before any wave runs (#171).
+
+A human outranks the decision by declaring it in `.beadloom/flow.yml`, with a
+reason and an exit condition like every other stand-down in this tool:
+
+```yaml
+waves:
+  overrides:
+  - beads: [proj-1, proj-2]
+    decision: parallel        # or: serial
+    reason: "the two touch one vocabulary module and nothing else"
+    until: "2026-09-01"
+```
+
+Every key is required, and required by its **content**: a key present but blank
+is a configuration error too, because an override with no reason and no deadline
+outranks the graph permanently by accident. Each override is reported with the
+number of decisions it changed -- the number of its pairs the shape decides
+differently when that entry is removed -- and one that changed **none** is a
+finding, because an override nobody can see doing anything is how a check gets
+switched off without anybody saying so.
+
+```
+$ beadloom waves proj-1 proj-2
+2 wave(s) for 2 bead(s), 1 serialisation(s), 0 finding(s).
+
+Wave 1: proj-1
+Wave 2: proj-2
+
+Serialised because:
+  proj-1 | proj-2 - shared_node: billing
+
+0 declared override(s).
+
+No wave runs more than one bead, so nothing is shared concurrently.
+
+Plan-time precondition of each shared medium:
+  working-tree: not_applicable - no wave runs more than one bead, so nothing is carried between beads through this medium
+  commit-gate: not_applicable - no wave runs more than one bead, so nothing is carried between beads through this medium
+  doc-baseline: not_applicable - no wave runs more than one bead, so nothing is carried between beads through this medium
+  tracker-ids: passed - every bead's title agrees with the number the tracker allocated
+```
+
+Every plan prints that block, a fully serial one included: three media are
+`not_applicable` because nothing runs concurrently, and `tracker-ids` is checked
+regardless.
+
+`--json` carries the same facts: `waves[]` (with `gate_owner`), `scopes[]`,
+`conflicts[]`, `overrides[]`, `shared_media[]`, `media_checks[]` (`medium`,
+`status`, `detail`), `findings[]` and `exit_code`.
+
+### beadloom review-brief
+
+Hand a reviewer the change and the specification, and not the author's account of
+either.
+
+```bash
+beadloom review-brief BEAD [--since REF] [--release] [--json] [--project DIR]
+```
+
+Exit codes: `0` = the brief rests on nothing unstated, or `--release` released the
+account; `1` = the brief carries findings (an undeclared scope, an ambiguous one,
+an unknown ref, a change nobody could measure, a change outside the declared
+scope, no bound scenario -- or, under `--release`, a verdict whose independence
+the tracker could not confirm); `2` = no brief could be assembled (no index, no
+answer from the tracker, no such bead); `3` = `--release` was refused because no
+verdict is recorded. `3` is distinct from `2` on purpose: nothing failed, the
+account is simply still withheld, and a caller that could not tell those apart
+would retry the wrong one.
+
+The brief carries the **assignment** (the bead's title and description), the
+**declared scope**, the **specification** (the graph's documents for those nodes
+and every scenario whose `@bead:` tag names the bead) and the **change**
+(`git diff <base>...HEAD`, the working tree, and the untracked files, each
+path carrying the node that owns it). It does not carry the bead's comments. Those are
+counted and never printed (the notice is wrapped for this page):
+
+```
+WITHHELD — 4 author comment(s) withheld
+  reason: the author's account of the change converges the reviewer on the author's framing
+    before the reviewer has looked at the code
+  release: a verdict recorded on the bead; then `beadloom review-brief <bead> --release`
+  if your launch prompt carried anything about this change that you did not derive yourself
+    — the author's summary, or the coordinator's own observation of it — this withholding was
+    defeated before it ran; say so in your verdict, you are the only party that can see it
+```
+
+The measurement behind the ordering: in hidden-profile tasks a group that hears
+one member's conclusion first scores 17-36% where a single holder of all the
+facts scores ~100%. `0 withheld` and `4 withheld` are different facts, so the
+count is always printed -- an absent input is reported rather than left silent.
+
+`--release` prints the account once a verdict comment is on the bead, so the
+deferrals, sabotage tables and measured numbers stay available to a reviewer who
+would otherwise re-derive them. A verdict is a comment whose **first non-blank
+line opens with** `REVIEW PASSED:`, `REVIEW ISSUES:` or `REVIEW FINDINGS:`, the
+colon included -- the exact openings the review role is instructed to write.
+
+The verdict comment's author is compared with the bead's assignee, and the answer
+is **reported, not enforced**. A self-recorded verdict still releases, prints why
+its independence cannot be established before the account rather than after it,
+and exits `1`:
+
+```
+$ beadloom review-brief <bead> --release
+FINDING: the verdict was recorded under the same tracker identity as the bead's own
+author (v.zoologov), so this gate cannot tell an independent verdict from the author's
+own — say which it was in your review
+RELEASED — 5 author comment(s), on the verdict 'REVIEW ISSUES' already recorded.
+```
+
+Refusing was rejected on a measurement: where every role writes under one tracker
+identity, a refusal refuses every release, and a gate nobody can pass is bypassed
+rather than obeyed. What this command withholds is an **input**, not a door -- a
+reviewer with a shell can read the comments directly, and the value is in the
+default and in the count being visible.
+
+The change is measured over the **branch**, not over the bead, because no
+per-bead attribution exists in the commits. On a branch carrying five beads all
+five briefs report the same files, so the `changed-outside-scope` finding names
+its window (`measured over the branch since <ref>`). `--since <ref>` narrows it.
+
+`--json` carries `bead`, `title`, `assignment`, `refs`, `unknown_refs`, `docs`,
+`base_ref`, `change_measured`, `changed`, `scenarios`, `withheld`, `findings` and
+`exit_code`. Under `--release` it carries `withheld_count`, `verdict_marker`,
+`verdict_author`, `independence_note`, `refused_reason`, `released` and
+`exit_code`. The account never appears in the non-release `--json`.
+
 ### beadloom ci
 
 The unified enforcement gate — the single CI convergence point (principle 7: identical for Cursor / Claude Code / human authors).
@@ -1252,7 +1442,8 @@ cohesive module per command group: `_root` (the `main` group + global options),
 (`sync-check`/`sync-update`/`install-hooks`/`active-sync`/`ci`), `federation`
 (`export`/`federate`), `docs` (the `docs` group: `generate`/`site`/`audit`/`polish`),
 `setup` (the `init`/`setup-*`/`mcp` commands), `dashboard` (`tui`/`ui`/`watch`),
-and `snapshot` (the `snapshot` group). The `status` command's data-gathering was
+`snapshot` (the `snapshot` group), `waves` (`waves`) and `review_brief`
+(`review-brief`). The `status` command's data-gathering was
 moved DOWN to the application layer (`application/status.py`:
 `gather_status`/`compute_context_metrics`/`StatusData`); the command keeps only
 the Rich/JSON presentation. The CLI surface (every command, option, help text,
@@ -1288,6 +1479,8 @@ Commands (re-exported from the package via the registration shell):
 - `setup_agentic_flow` -- scaffold the packaged multi-agent dev flow (`.claude/agents/*` + `commands/*` vendored byte-identical + CLAUDE.md auto-regions per-project); idempotent, `--force` overwrites hand-edited flow files; delegates to `onboarding/agentic_flow_setup.py:scaffold()`
 - `config_check` -- AgentConfigAsCode drift gate (`--fix` regenerates); reuses the `setup-rules --refresh` generator; also drift-checks/restores the scaffolded agentic-flow files when the flow is present
 - `ci` -- unified enforcement gate composing reindex -> lint -> sync-check -> docs-audit -> docs-quality -> doc-spaces -> config-check -> doctor -> (optional `--hub`) federate into one exit code; the docs-audit step blocks on stale facts (`stale>0`); honest per-step PASS/WARN/FAIL/SKIP; uniform `--format {rich,json,github}` (github = valid `::error file=,line=` annotations); delegates to `application/gate.py:run_ci_gate()`
+- `waves` -- decide which of the named beads may run at the same time, from the code-level independence of their declared node scopes; prints one named reason per serialised pair, the media a concurrent wave shares, one plan-time verdict per medium and each wave's `gate_owner` (`--json`; exit 0 clean / 1 findings / 2 undecidable); delegates to `application/waves/planner.py:plan_waves()`
+- `review_brief` -- assemble a reviewer's input (assignment, declared scope, specification documents, bound scenarios, changed files) while withholding the bead's own comments and reporting how many; `--release` prints the account once a verdict is recorded and reports whether that verdict's independence can be established (`--since`, `--json`; exit 0 clean / 1 findings / 2 unassemblable / 3 release refused); delegates to `application/review_brief/`
 - `mcp_serve` -- run MCP stdio server
 - `docs` -- Click group for doc commands (`generate`, `polish`, `audit`)
 - `tui` -- launch TUI dashboard (primary command, multi-screen with `--no-watch`)
@@ -1299,4 +1492,4 @@ All commands accept `--project DIR` to specify the project root. The current dir
 
 ## Testing
 
-CLI is tested via `click.testing.CliRunner`. Each command has a corresponding test file in `tests/test_cli_*.py`: `test_cli_reindex.py`, `test_cli_ctx.py`, `test_cli_graph.py`, `test_cli_status.py`, `test_cli_sync_check.py`, `test_cli_sync_update.py`, `test_cli_hooks.py`, `test_cli_link.py`, `test_cli_docs.py`, `test_cli_mcp.py`, `test_cli_watch.py`, `test_cli_diff.py`, `test_cli_why.py`, `test_cli_lint.py`, `test_cli_init.py`, `test_cli_snapshot.py`, `test_cli_config_check.py`, `test_cli_setup_agentic_flow.py`, `test_cli_active_sync.py` (+ `test_cli_active_sync_hardening.py`).
+CLI is tested via `click.testing.CliRunner`. Each command has a corresponding test file in `tests/test_cli_*.py`: `test_cli_reindex.py`, `test_cli_ctx.py`, `test_cli_graph.py`, `test_cli_status.py`, `test_cli_sync_check.py`, `test_cli_sync_update.py`, `test_cli_hooks.py`, `test_cli_link.py`, `test_cli_docs.py`, `test_cli_mcp.py`, `test_cli_watch.py`, `test_cli_diff.py`, `test_cli_why.py`, `test_cli_lint.py`, `test_cli_init.py`, `test_cli_snapshot.py`, `test_cli_config_check.py`, `test_cli_setup_agentic_flow.py`, `test_cli_active_sync.py` (+ `test_cli_active_sync_hardening.py`), `test_cli_waves.py`, `test_cli_review_brief.py`.
