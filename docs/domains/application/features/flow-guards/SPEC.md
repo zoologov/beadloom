@@ -581,10 +581,25 @@ append-only, so committing it makes every guarded edit a working-tree change and
 every branch a conflict on the same last line. It is evidence, and a team may
 reasonably want that evidence committed — so the default is overridable, by
 deleting the line from the ignore block Beadloom wrote once and never rewrites.
-Ignoring it settles nothing about its size: the record is **not rotated** and
-`--liveness` parses it whole on every run (review minor m7, filed as
-`beadloom-mr2l.56`). The block says so, in the adopter's own file, rather than
-letting the ignore entry make the growth invisible.
+Ignoring a file settles nothing about its size, and until BDL-061.56 nothing did:
+the record grew without bound and `--liveness` parsed it whole on every run.
+
+**The record is bounded by FIRINGS, and rotation loses no count.** The active
+file rolls over at `ACTIVE_FIRINGS_CAP` (2000) records into
+`guard-firings.1.jsonl`, so the parse is bounded and the disk cost is bounded at
+twice the cap. What is bounded is the number of records rather than bytes or
+age: a byte cap truncates mid-record, and an age cap loses "how often" on a
+long-lived project and makes a quiet month read like a dead guard.
+
+Nothing `--liveness` reads is lost. The firings that leave the active file are
+folded into a carried summary that keeps, per guard, the count, how many of
+those reached a verdict, and the first and last moment and outcome — so
+`fired_count`, `never-fired` and the last outcome are the same numbers after a
+rotation as before it. What rotation costs is per-firing `why` text older than
+one generation: the detail stays readable in `guard-firings.1.jsonl` until the
+next rollover replaces it, and after that only the counts remain. A row whose
+count rests on a summary rather than on readable lines says so —
+`carried_count`, printed as `N carried from rotated records`.
 
 | Flag | Means | Computed from |
 |---|---|---|

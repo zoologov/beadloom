@@ -214,7 +214,10 @@ class TestThePopulationIsHonest:
             conn.close()
 
         assert sorted(str(v.from_ref_id) for v in honest) == ["invoicing", "shipping"]
-        assert [v.from_ref_id for v in picked] == []
+        assert [v.from_ref_id for v in picked] == [None]
+        # Since BDL-061.63 the hand-picked population states its own cost in the
+        # same breath as its clean count: two of the three nodes are outside it.
+        assert "1 of 3 graph node(s)" in picked[0].message
 
     def test_a_node_outside_the_population_is_not_reported_and_is_not_counted_covered(
         self, tmp_path: Path
@@ -225,6 +228,12 @@ class TestThePopulationIsHonest:
         architecture model's own definition — plumbing rather than a capability. The
         check is that they are ABSENT from the verdict, not that they pass it: a rule
         that counted them clean would report a coverage figure it never measured.
+
+        BDL-061.63 added the other half. Absent from the verdict was also absent
+        from the arithmetic: a node moved from `feature` to `component` left the
+        population with no finding of any sort. It is still not reported as
+        uncovered — that would be 24 findings nobody decided on — but it is now
+        COUNTED, on the line the fraction is printed on.
         """
         conn = _db(tmp_path, (("billing", "feature"), ("db", "component")))
         _feature_file(
@@ -237,7 +246,9 @@ class TestThePopulationIsHonest:
         finally:
             conn.close()
 
-        assert violations == [], _messages(violations)
+        assert [v.from_ref_id for v in violations] == [None], _messages(violations)
+        assert "db" not in violations[0].message
+        assert "component (1)" in violations[0].message
 
 
 # --------------------------------------------------------------------------- #

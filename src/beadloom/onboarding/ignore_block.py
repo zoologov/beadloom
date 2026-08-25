@@ -30,14 +30,17 @@ what the flow did and a team could reasonably want it committed: it is
 machine-local and append-only, so committing it makes every guarded edit a
 working-tree change and every branch a conflict on the same last line. The reason
 is written into the block itself rather than only into these docs, because the
-adopter meets the line in their own file. And the block names what ignoring does
-NOT fix: the record is not rotated and ``guard --liveness`` parses it whole, so
-this keeps the growth out of git, not off the disk.
+adopter meets the line in their own file. The block also says what ignoring does
+not settle on its own: keeping a file out of git says nothing about its size.
+Since BDL-061.56 the size is settled elsewhere — the record rolls over at
+:data:`~beadloom.application.guards.firing.ACTIVE_FIRINGS_CAP` firings — and the
+pattern covers the rotated generation as well, so ignoring the record does not
+leave its archive to show up as untracked churn.
 
 The patterns are the measured set: on this repository the only paths under
-``.beadloom/`` that are not source are the ``.db`` family and
-``guard-firings.jsonl``; the graph and ``flow.yml`` are tracked and must stay
-committable.
+``.beadloom/`` that are not source are the ``.db`` family and the
+``guard-firings*.jsonl`` pair; the graph and ``flow.yml`` are tracked and must
+stay committable.
 """
 
 from __future__ import annotations
@@ -89,15 +92,16 @@ GENERATED_WORKING_SET: tuple[IgnoreEntry, ...] = (
         why="SQLite's shared-memory sidecar for the same, and equally short-lived.",
     ),
     IgnoreEntry(
-        pattern=".beadloom/guard-firings.jsonl",
+        pattern=".beadloom/guard-firings*.jsonl",
         why=(
-            "The guard firing record: evidence that a gate ran, appended on every guarded "
-            "edit. Ignored by default because it is machine-local and append-only - "
-            "committing it makes every edit a working-tree change and every branch a "
-            "conflict on the same last line. A team that wants the audit trail deletes "
-            "this line, once. Note this hides nothing about size: the record is not "
-            "rotated and `beadloom guard --liveness` parses it whole, so ignoring it "
-            "keeps the growth out of git, not off the disk."
+            "The guard firing record and its rotated generation. "
+            "Evidence that a gate ran, appended on every guarded edit; ignored by "
+            "default because it is machine-local and append-only - committing it makes "
+            "every edit a working-tree change and every branch a conflict on the same "
+            "last line. A team that wants the audit trail deletes this line, once. The "
+            "size is bounded since BDL-061.56: the active record rolls over at 2000 "
+            "firings into `guard-firings.1.jsonl`, so both files together are bounded "
+            "and `beadloom guard --liveness` parses only the active one."
         ),
     ),
 )

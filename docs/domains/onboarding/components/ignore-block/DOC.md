@@ -68,9 +68,11 @@ every guarded edit a working-tree change, and every branch a conflict on the sam
 line. The reason is written into the block itself, not only here — the adopter meets the
 line in their own file, not in our docs.
 
-**What ignoring does not fix, stated in the block:** the record is not rotated and
-`beadloom guard --liveness` parses it whole (review minor m7, filed as `beadloom-mr2l.56`). Ignoring it
-keeps the growth out of git, not off the disk.
+**What ignoring settles, and what settles the rest:** keeping a file out of git says nothing
+about its size. Since `beadloom-mr2l.56` the size is bounded in the guard domain rather than
+here — the record rolls over at 2000 firings — and this block's pattern is
+`.beadloom/guard-firings*.jsonl` so the rotated generation is ignored beside the active one
+rather than surfacing as untracked churn.
 
 ## Invariants
 

@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from typing import Any
 
     from beadloom.application.active_table import ReconcileResult
+    from beadloom.doc_sync.engine import Attestation
 
 from beadloom.doc_sync.doc_shape import STATUS_INCOMPLETE
 from beadloom.doc_sync.engine import REASON_SIBLING_SYMBOLS_CHANGED, STATUS_EXEMPT
@@ -1152,32 +1153,75 @@ def _echo_unresolved(result: ReconcileResult) -> None:
 
 
 # beadloom:domain=doc-sync
+def _grounded_pairs(
+    results: list[dict[str, Any]], ref_id: str
+) -> set[tuple[str, str]]:
+    """The pairs of *ref_id* a run has grounds to attest.
+
+    Grounds are the verdicts ``sync-check`` demands action on — ``stale`` and
+    ``missing``. A pair the check calls ``unverified`` because a SIBLING moved
+    is exactly the pair bead ``.78`` said nobody can revise, so a re-baseline
+    that claimed it would record a reading that did not happen (BDL-UX #163).
+    """
+    from beadloom.doc_sync.engine import BLOCKING_STATUSES
+
+    return {
+        (str(r["doc_path"]), str(r["code_path"]))
+        for r in results
+        if r["ref_id"] == ref_id and r["status"] in BLOCKING_STATUSES and r["code_path"]
+    }
+
+
+def _report_attestation(ref_id: str, attestation: Attestation) -> None:
+    """Say what was claimed and, in the same breath, what was not."""
+    claimed = len(attestation.attested)
+    carried = len(attestation.carried)
+    if claimed == 0:
+        click.echo(
+            f"Nothing to attest for {ref_id}: no pair of its {carried} pair(s) is "
+            f"stale, so no document has been revised for this run to record. "
+            f"Use `--pair <doc_path>` for a document you have read, or "
+            f"`--all-pairs` to attest the whole ref deliberately."
+        )
+        return
+    click.echo(f"Re-baselined {ref_id}: attested {claimed} pair(s).")
+    if carried:
+        click.echo(
+            f"  Left unclaimed: {carried} pair(s) nobody read — their baseline "
+            f"stands. Use `--pair <doc_path>` per document, or `--all-pairs` to "
+            f"attest every pair of the ref."
+        )
+
+
 def _mark_synced_noninteractive(
     conn: sqlite3.Connection,
     project_root: Path,
     *,
     ref_id: str | None,
     all_refs: bool,
+    pair_docs: tuple[str, ...] = (),
+    pair_codes: tuple[str, ...] = (),
+    all_pairs: bool = False,
 ) -> None:
     """Re-baseline freshness for a ref (or every stale ref) without prompting.
 
-    Wraps ``mark_synced_by_ref``: recomputes hashes + symbols_hash and records
-    ``status='ok'``. Prints a concise, deterministic summary and exits 0.
+    Wraps ``attest_ref``. The default scope is the pairs the check reports as
+    stale; ``pair_docs`` and ``pair_codes`` name what the operator read, and
+    ``all_pairs`` is the deliberate whole-ref attestation. Prints a deterministic summary and
+    exits 0.
     """
-    from beadloom.doc_sync.engine import (
-        check_sync,
-        mark_reference_synced,
-        mark_synced_by_ref,
-    )
+    from beadloom.doc_sync.engine import attest_ref, check_sync, mark_reference_synced
 
     if all_refs:
         results = check_sync(conn, project_root=project_root)
         stale_refs = sorted({r["ref_id"] for r in results if r["status"] == "stale"})
         total = 0
         for ref in stale_refs:
-            rows = mark_synced_by_ref(conn, ref, project_root)
-            total += rows
-            click.echo(f"Re-baselined {ref}: {rows} pair(s).")
+            attestation = attest_ref(
+                conn, ref, project_root, scope=_grounded_pairs(results, ref)
+            )
+            total += len(attestation.attested)
+            _report_attestation(ref, attestation)
         # Also clear any reference-doc surface drift (BDL-057 Layer 2; advisory).
         ref_docs = mark_reference_synced(conn, None, project_root, all_docs=True)
         if not stale_refs and not ref_docs:
@@ -1197,11 +1241,96 @@ def _mark_synced_noninteractive(
         click.echo(f"Re-baselined reference doc {ref_id}.")
         return
 
-    rows = mark_synced_by_ref(conn, ref_id, project_root)
-    if rows == 0:
+    scope = _resolve_scope(
+        conn,
+        project_root,
+        ref_id=ref_id,
+        pair_docs=pair_docs,
+        pair_codes=pair_codes,
+        all_pairs=all_pairs,
+    )
+    attestation = attest_ref(conn, ref_id, project_root, scope=scope)
+    if not attestation.attested and not attestation.carried:
         click.echo(f"No sync pairs found for {ref_id}; nothing to re-baseline.")
         return
-    click.echo(f"Re-baselined {ref_id}: {rows} pair(s).")
+    _report_attestation(ref_id, attestation)
+
+
+def _resolve_scope(
+    conn: sqlite3.Connection,
+    project_root: Path,
+    *,
+    ref_id: str,
+    pair_docs: tuple[str, ...],
+    pair_codes: tuple[str, ...],
+    all_pairs: bool,
+) -> set[tuple[str, str]] | None:
+    """Which pairs of *ref_id* this invocation may claim.
+
+    ``None`` is the whole ref and is reached only by an explicit ``--all-pairs``:
+    the operator saying they looked at all of it is a different statement from
+    the tool assuming it.
+    """
+    from beadloom.doc_sync.engine import check_sync
+
+    if all_pairs:
+        return None
+    if pair_docs or pair_codes:
+        return _named_pairs(
+            conn, ref_id=ref_id, pair_docs=pair_docs, pair_codes=pair_codes
+        )
+    return _grounded_pairs(check_sync(conn, project_root=project_root), ref_id)
+
+
+def _named_pairs(
+    conn: sqlite3.Connection,
+    *,
+    ref_id: str,
+    pair_docs: tuple[str, ...],
+    pair_codes: tuple[str, ...],
+) -> set[tuple[str, str]]:
+    """Expand ``--pair`` and ``--code`` into the pairs they name.
+
+    **A pair is named by document, by code file, or by both**, and the third
+    form is not decoration. A document is the artifact somebody reads, so the
+    document is the usual unit of an attestation. But a document paired with
+    several code files of one node is a document several people can be changing
+    at once: measured on this branch, `domains/doc-sync/README.md` was stale
+    against one agent's `engine.py` and another agent's `surface.py` in the same
+    run, and claiming the document as a whole would have recorded a reading of a
+    change the operator had not seen. Given together the two options intersect,
+    which is the only scope that is true in a shared working tree.
+    """
+    from beadloom.doc_sync.engine import pairs_of_ref
+
+    owned = pairs_of_ref(conn, ref_id)
+    _reject_unknown(ref_id, named=pair_docs, known={doc for doc, _ in owned}, side="doc")
+    _reject_unknown(
+        ref_id, named=pair_codes, known={code for _, code in owned}, side="code"
+    )
+    return {
+        (doc, code)
+        for doc, code in owned
+        if (not pair_docs or doc in set(pair_docs))
+        and (not pair_codes or code in set(pair_codes))
+    }
+
+
+def _reject_unknown(
+    ref_id: str, *, named: tuple[str, ...], known: set[str], side: str
+) -> None:
+    """Refuse a path this ref does not pair, and say which ones it does.
+
+    A typo that silently selected nothing would attest nothing and report
+    "nothing to attest", which reads exactly like a ref that needed no work.
+    """
+    unknown = sorted(set(named) - known)
+    if not unknown:
+        return
+    raise click.UsageError(
+        f"{ref_id} has no {side} pair named {', '.join(unknown)}. "
+        f"Its {side} paths are: {', '.join(sorted(known)) or '(none)'}."
+    )
 
 
 @main.command("sync-update")
@@ -1221,6 +1350,30 @@ def _mark_synced_noninteractive(
     help="With --yes: re-baseline every currently-stale ref (for the fixpoint loop).",
 )
 @click.option(
+    "--pair",
+    "pair_docs",
+    multiple=True,
+    metavar="DOC_PATH",
+    help="Attest only this document's pairs of the ref (repeatable). Name the "
+    "document you actually read — an attestation is the claim that somebody did.",
+)
+@click.option(
+    "--code",
+    "pair_codes",
+    multiple=True,
+    metavar="CODE_PATH",
+    help="Narrow --pair to this code file (repeatable). A document paired with "
+    "several files can be attested for the one whose change you looked at.",
+)
+@click.option(
+    "--all-pairs",
+    "all_pairs",
+    is_flag=True,
+    help="Attest EVERY pair the ref owns, including documents this run has no "
+    "grounds for. The deliberate whole-ref attestation; without it, only the "
+    "stale pairs are claimed.",
+)
+@click.option(
     "--project",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     default=None,
@@ -1232,6 +1385,9 @@ def sync_update(
     check_only: bool,
     assume_yes: bool,
     all_refs: bool,
+    pair_docs: tuple[str, ...],
+    pair_codes: tuple[str, ...],
+    all_pairs: bool,
     project: Path | None,
 ) -> None:
     """Show sync status and update docs for a ref_id.
@@ -1241,6 +1397,11 @@ def sync_update(
     Use --yes (-y) for a non-interactive re-baseline (no editor/prompt): records
     that the doc(s) match the code now. Add --all to re-baseline every stale ref
     in one call (useful for an automated fixpoint loop).
+
+    The claim is scoped to the pairs the run has grounds for — the STALE ones.
+    A pair whose own file did not move is left unclaimed and its baseline
+    stands. Name a document you have read with --pair, narrow it to one code
+    file with --code, or attest the whole ref deliberately with --all-pairs.
 
     For automated doc updates, use your AI agent (Claude Code, Cursor, etc.)
     with Beadloom's MCP tools (update_node, mark_synced).
@@ -1254,6 +1415,18 @@ def sync_update(
         raise click.UsageError("--all and an explicit REF_ID are mutually exclusive.")
     if not all_refs and ref_id is None:
         raise click.UsageError("Provide a REF_ID (or use --all with --yes).")
+    if (pair_docs or pair_codes) and all_pairs:
+        raise click.UsageError(
+            "--pair/--code and --all-pairs are mutually exclusive: one names "
+            "what you read, the other says you read all of it."
+        )
+    if (pair_docs or pair_codes or all_pairs) and all_refs:
+        raise click.UsageError(
+            "--pair/--code and --all-pairs scope ONE ref; --all crosses every "
+            "stale ref."
+        )
+    if (pair_docs or pair_codes or all_pairs) and not assume_yes:
+        raise click.UsageError("--pair, --code and --all-pairs require --yes.")
 
     project_root = project or Path.cwd()
     db_path = project_root / ".beadloom" / "beadloom.db"
@@ -1265,7 +1438,15 @@ def sync_update(
     conn = open_db(db_path)
 
     if assume_yes:
-        _mark_synced_noninteractive(conn, project_root, ref_id=ref_id, all_refs=all_refs)
+        _mark_synced_noninteractive(
+            conn,
+            project_root,
+            ref_id=ref_id,
+            all_refs=all_refs,
+            pair_docs=pair_docs,
+            pair_codes=pair_codes,
+            all_pairs=all_pairs,
+        )
         conn.close()
         return
 

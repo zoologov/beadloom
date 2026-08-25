@@ -136,6 +136,10 @@ class TestNodeWithoutScenario:
         assert violations == []
 
     def test_a_node_the_matcher_excludes_is_not_the_rules_business(self, tmp_path: Path) -> None:
+        """Outside the population is not a finding ABOUT THE NODE — and since
+        BDL-061.63 it is not silence either: the node is counted where the
+        coverage fraction is printed, so a population that shrinks by one line of
+        graph shows up beside the fraction that improves."""
         conn = _db(tmp_path, (("alpha", "feature"), ("infra", "domain")))
         _feature(
             tmp_path,
@@ -148,7 +152,9 @@ class TestNodeWithoutScenario:
             )
         finally:
             conn.close()
-        assert violations == []
+        assert [v.from_ref_id for v in violations] == [None]
+        assert "1 of 2 graph node(s)" in violations[0].message
+        assert "domain (1)" in violations[0].message
 
     def test_severity_is_the_rules_and_defaults_to_warn(self, tmp_path: Path) -> None:
         conn = _db(tmp_path, (("alpha", "feature"),))

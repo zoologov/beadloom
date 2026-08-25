@@ -141,9 +141,18 @@ def _emit_liveness(rows: tuple[GuardLiveness, ...], *, output_json: bool) -> Non
         source = "flow.yml" if row.declared else "default"
         suffix = f" [{', '.join(flags)}]" if flags else ""
         last = f", last {row.last_outcome} at {row.last_fired_at}" if row.last_fired_at else ""
+        # Where the count came from, not only what it is: after a rotation the
+        # firings behind it are a summary rather than readable lines, and a
+        # reader who cannot tell the two apart cannot judge the evidence
+        # (BDL-061.56).
+        carried = (
+            f", {row.carried_count} carried from rotated records"
+            if row.carried_count
+            else ""
+        )
         click.echo(
             f"{row.guard}: strictness={row.strictness} ({source}), "
-            f"fired={row.fired_count}{last}{suffix}"
+            f"fired={row.fired_count}{carried}{last}{suffix}"
         )
 
 

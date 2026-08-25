@@ -35,7 +35,7 @@ from typing import TYPE_CHECKING
 
 from beadloom.application.guards.checks import GUARD_NAMES
 from beadloom.application.guards.config import load_guards_config
-from beadloom.application.guards.firing import read_firings
+from beadloom.application.guards.firing import read_carried, read_firings
 from beadloom.application.guards.models import GuardOutcome
 
 if TYPE_CHECKING:
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from beadloom.application.guards.config import GuardsConfig, GuardSpec
-    from beadloom.application.guards.firing import FiringRecord
+    from beadloom.application.guards.firing import Carried, FiringRecord
 
 #: Directories never descended when listing the project's own files. Vendor and
 #: build trees are not what an exclusion is written about, and walking them turns
@@ -87,6 +87,11 @@ class GuardLiveness:
     last_outcome: str = ""
     dead_exclusions: tuple[str, ...] = ()
     expired_exclusions: tuple[str, ...] = ()
+    #: How many of ``fired_count`` come from the carried summary rather than
+    #: from a record still on the active file (BDL-061.56). Reported so a reader
+    #: can tell a count backed by readable firings from one backed by a rotated
+    #: total — the number is the same, the evidence behind it is not.
+    carried_count: int = 0
 
     @property
     def idle(self) -> bool:
@@ -107,6 +112,7 @@ class GuardLiveness:
             "idle": self.idle,
             "dead_exclusions": list(self.dead_exclusions),
             "expired_exclusions": list(self.expired_exclusions),
+            "carried_count": self.carried_count,
         }
 
 
@@ -174,27 +180,39 @@ def _row(
     config: GuardsConfig,
     firings: tuple[FiringRecord, ...],
     files: tuple[str, ...],
+    carried: Carried,
 ) -> GuardLiveness:
-    """Build one liveness row from the config, the recorded firings and the tree."""
+    """Build one liveness row from the config, the recorded firings and the tree.
+
+    *carried* holds the firings that have rotated out of the active record
+    (BDL-061.56). It is added to every answer this row gives, because a rotation
+    that reduced ``fired_count`` would let a bounded file report a live guard as
+    ``never-fired`` — the exact silence the report exists to break.
+    """
     spec = config.spec_for(name)
     own = [record for record in firings if record.guard == name]
+    summary = carried.for_guard(name)
     last = own[-1] if own else None
     # An `error` record is evidence the guard RAN and did NOT answer, so it is
     # counted in fired_count and does not clear `never-fired`. Counting it as a
     # firing would let a guard that has never once reached a verdict read as a
     # live gate — the same silence the report exists to break.
     answered = [record for record in own if record.outcome != GuardOutcome.ERROR.value]
+    carried_answered = summary.answered if summary else 0
+    last_at = last.at if last else (summary.last_at if summary else "")
+    last_outcome = last.outcome if last else (summary.last_outcome if summary else "")
     return GuardLiveness(
         guard=name,
         declared=spec.declared,
         strictness=spec.strictness_for(None),
-        fired_count=len(own),
-        never_fired=not answered,
+        fired_count=len(own) + (summary.count if summary else 0),
+        never_fired=not answered and not carried_answered,
         excluded_everywhere=spec.excluded_everywhere(),
-        last_fired_at=last.at if last else "",
-        last_outcome=last.outcome if last else "",
+        last_fired_at=last_at,
+        last_outcome=last_outcome,
         dead_exclusions=dead_exclusions(spec, files),
         expired_exclusions=expired_exclusions(spec),
+        carried_count=summary.count if summary else 0,
     )
 
 
@@ -202,7 +220,8 @@ def build_liveness(project_root: Path) -> tuple[GuardLiveness, ...]:
     """Liveness rows for every registered guard, in deterministic name order."""
     config = load_guards_config(project_root)
     firings = read_firings(project_root)
+    carried = read_carried(project_root)
     files = project_files(project_root) if any(
         config.spec_for(name).exclusions for name in GUARD_NAMES
     ) else ()
-    return tuple(_row(name, config, firings, files) for name in GUARD_NAMES)
+    return tuple(_row(name, config, firings, files, carried) for name in GUARD_NAMES)
