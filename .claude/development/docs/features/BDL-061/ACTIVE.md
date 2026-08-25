@@ -7,6 +7,29 @@
 
 ## Current Bead
 
+**`.90` — release 3.0.0.** On `release/3.0.0`, off `main` at `32e16a2`. **MAJOR by owner
+decision**, and the second reason is the deciding one. By semver it is breaking: `sync-check`
+fails where it passed, `sync-update <ref>` attests less than it did, and
+`DEFAULT_STATUS_CHECK_CONTEXTS` went 7 → 9. And this is the release of a tool that spent an
+epic on *do not claim more than you did* — numbering a behaviour-changing release as a minor
+would be that failure in the version number.
+
+**The BREAKING section is the deliverable, not the bump.** An adopter must be able to answer,
+before upgrading, *will my CI go red and why*: a declared document that is gone is `missing`
+and exits 2 (restore the file or delete the `docs:` entry), `sync-update <ref>` claims only the
+pairs a run had grounds for (`--all-pairs` restores the old scope, and the narrower default is
+BDL-UX #163), and `setup-branch-protection` must not be re-run until all nine declared contexts
+report green — this repository's own `main` requires seven, measured today.
+
+**What the release does NOT claim.** Seventeen beads of this epic are open in the tracker, and
+the eight an adopter will meet are listed as Known limitations: BDL-UX #191 (a re-scaffold
+recomposes a hand-edited role adapter), #187 of 2026-08-25 (`bd list --json` filters silently —
+External), `.81` (the commit gate cannot see a neighbour's hunk), `.82` (the hook's mypy leg
+holds `tests/` to a standard the Gate does not), `.60` (Windows unverified by decision), the
+`measurable-goal` recall cost and its unpaid historical exclusion (`.71`), the 56 of 243
+documents no content check enters, and `scenario-coverage` never checking that a named bead
+exists. Filed while writing them: `.91` — this log has two issues numbered 187.
+
 **`.87` — `ctx` answers what a node IS and now also what it is FOR.** On
 `features/BDL-061-ctx-intent`, off `main` at `7572c19`. `beadloom ctx <ref-id>` is step 4 of
 BEFORE ANY WORK, so it is the one moment an agent is guaranteed to ask about a node — and it
@@ -280,6 +303,13 @@ image — .6's uncounted 26-vs-11 — which is a third dimension and its own mec
 
 ## Progress
 
+- [x] `.90` release 3.0.0 (2026-08-26) — version, CHANGELOG BREAKING + Known limitations,
+      ROADMAP, issue-log entry. Suite 7076 passed / 0 failed, `beadloom ci` rc 0. Verified on
+      the BUILT WHEEL in a fresh 3.12 venv: the installed package reports 3.0.0 on all three
+      surfaces, and two scratch adopter projects compose their OWN version (0.4.1 / 3.7.0)
+      with the string `3.0.0` nowhere in either file — #183 still fixed at 3.0.0. Filed by
+      the verification: BDL-UX #192 (a virgin `init` leaves `ci` red), `.91` (two issues
+      numbered 187), `.92` (the guard read-only test accuses the guard when `bd` flushes)
 - [x] `.87` dev (2026-08-26) — intent delivered into `ctx` and the MCP `get_context`;
       33 tests (30 unit + 3 acceptance), suite 7043 → 7076, `beadloom ci` rc 0, green in a
       clean room over 985 archived files plus the 24 this bead touched

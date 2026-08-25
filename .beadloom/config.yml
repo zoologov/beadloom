@@ -61,3 +61,14 @@ docs_audit:
     - path: docs/guides/multi-agent-development.ru.md
       fact: version
       value: "2.0.0"
+    # cli.md's `docs audit` reference: the token `v2.2.0` is the EXAMPLE of a
+    # token the claim extractor must not read as a claim, printed inside the
+    # sentence that states the rule. `_extract_versions` does not share that
+    # tokenizer — it matches every `\bv?\d+\.\d+\.\d+\b` outside a pin — so
+    # the sentence explaining the rule is the one the rule cannot survive
+    # (BDL-UX #190, open). Suppressed by triple rather than reworded, because
+    # the illustration is the point of the sentence. It becomes inert the day
+    # #190 lands, and an inert rule is reported.
+    - path: docs/services/cli.md
+      fact: version
+      value: "v2.2.0"
