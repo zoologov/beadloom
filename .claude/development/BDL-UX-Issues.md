@@ -35,6 +35,25 @@
 
 ## Open Issues
 
+187. [2026-08-25] [HIGH] External (steveyegge/beads): `bd list --json` returns a filtered view as a bare list, with nothing saying it filtered
+
+    **Severity:** high (a consumer cannot tell a complete answer from a partial one, and the partial one looks complete) — **External**
+    **Command:** `bd list --json`
+    **Context:** found while fixing `beadloom-mr2l.84`, where the ACTIVE reconcile could never write `✓ done` for a closed bead. The lookup bug was real, but fixing it alone would have changed nothing.
+    **Measured on this repository:**
+
+    ```
+    bd list --json                 → 38 rows   {open: 34, in_progress: 3, deferred: 1}
+    bd list --json --status closed → 50 rows
+    .beads/issues.jsonl            → 709 records
+    ```
+
+    **Issue:** the default omits every closed bead, and the payload is a **bare JSON list** — there is no envelope, so there is nowhere for the command to state that it filtered, and it does not. A program reading it receives 38 items that are indistinguishable from "all of them". Ours did exactly that.
+    **Why it is HIGH despite being another project's default:** the human default is defensible (`list` shows open work). The machine one is not, because the caller is a program and the omission is silent. It is the same equation this log records against our own tools — a green result that describes the checker's ignorance rather than the state of the world — arriving through a dependency instead of through our code.
+    **Expected:** with `--json`, either return everything and let the caller filter, or wrap the rows in an envelope that names the filter applied (`{"filter": {"status": ["open", "in_progress", "deferred"]}, "issues": [...]}`). A bare list is a shape that *cannot* carry the qualification the answer needs.
+    **Ours to fix regardless:** any Beadloom code reading `bd list` must pass an explicit `--status` or read `.beads/issues.jsonl`, and must not treat the default as the tracker's contents. `beadloom-mr2l.84` did that for the reconcile; nothing sweeps the rest.
+    **Related:** #97 (`bd close --suggest-next` lists still-blocked beads), #165 (`bd create` is O(N) processes), #174/#175 (unverifiable is not clean).
+
 191. [2026-08-23] [MEDIUM] `setup-agentic-flow` without `--force` still recomposes a hand-edited ROLE adapter — the asymmetry `--fix` no longer has
 
     **Severity:** medium (it is the #139/#151/#186 data-loss shape in the sibling command, and it is now the only door left open)
