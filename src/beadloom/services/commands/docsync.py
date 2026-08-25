@@ -7,6 +7,7 @@ Owns ``sync-check``, ``install-hooks``, ``active-sync``, and ``sync-update``.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +21,7 @@ if TYPE_CHECKING:
     from typing import Any
 
     from beadloom.application.active_table import ReconcileResult
+    from beadloom.doc_sync.engine import Attestation
 
 from beadloom.doc_sync.doc_shape import STATUS_INCOMPLETE
 from beadloom.doc_sync.engine import REASON_SIBLING_SYMBOLS_CHANGED, STATUS_EXEMPT
@@ -797,9 +799,46 @@ def _bd_statuses_from_list(beads: list[dict[str, object]]) -> dict[str, str]:
     return statuses
 
 
+#: The tracker view the reconcile needs, stated as ``bd``'s own flags. ``bd list``
+#: defaults to open beads capped at 50 rows: measured on this repository that is
+#: 41 of 709 beads with every closed one missing, so the reconcile could never
+#: write ``✓ done`` — the correction BDL-061.84 was filed for — and resolved every
+#: short id against a view most of the tracker was absent from.
+_BD_LIST_ARGV: list[str] = ["list", "--all", "--json", "-n", "0"]
+
+#: The epic key an epic bead's title carries, in this flow's title convention:
+#: ``[BDL-061] Enforced agentic flow``. It is the name of the epic's document
+#: directory, which is how a short row id is tied to the epic that allocated it.
+_EPIC_KEY_RE = re.compile(r"^\s*\[([A-Za-z][A-Za-z0-9_-]*)\]")
+
+
 # beadloom:component=active-table
-def _query_bd_statuses(project_root: Path) -> dict[str, str] | None:
-    """Return bead-id -> status from ``bd list --json``, or None if bd unavailable.
+def _bd_epic_prefixes(beads: list[dict[str, object]]) -> dict[str, str]:
+    """Map each epic's DOCUMENT directory name onto the tracker id of its bead.
+
+    ``{"BDL-061": "beadloom-mr2l"}``. Only beads of type ``epic`` are read, so a
+    child bead whose title also carries ``[BDL-061]`` never claims the prefix. A
+    key claimed by two epics is dropped rather than guessed — a wrong prefix
+    writes one epic's tracker state into another epic's table.
+    """
+    claimed: dict[str, set[str]] = {}
+    for bead in beads:
+        if bead.get("issue_type") != "epic":
+            continue
+        bead_id = bead.get("id")
+        title = bead.get("title")
+        if not isinstance(bead_id, str) or not isinstance(title, str):
+            continue
+        match = _EPIC_KEY_RE.match(title)
+        if match is None:
+            continue
+        claimed.setdefault(match.group(1), set()).add(bead_id)
+    return {key: next(iter(ids)) for key, ids in claimed.items() if len(ids) == 1}
+
+
+# beadloom:component=active-table
+def _query_bd_beads(project_root: Path) -> list[dict[str, object]] | None:
+    """Return every bead ``bd`` knows, or ``None`` when ``bd`` cannot be read.
 
     Funnels through :func:`bd_seam.run_bd` (mockable). Returns ``None`` when ``bd``
     is not installed (``BdUnavailableError``) or the call/JSON fails — the caller
@@ -808,7 +847,7 @@ def _query_bd_statuses(project_root: Path) -> dict[str, str] | None:
     from beadloom.services.bd_seam import BdUnavailableError, run_bd
 
     try:
-        result = run_bd(["list", "--json"], cwd=str(project_root))
+        result = run_bd(_BD_LIST_ARGV, cwd=str(project_root))
     except BdUnavailableError:
         return None
     if not result.ok:
@@ -819,7 +858,15 @@ def _query_bd_statuses(project_root: Path) -> dict[str, str] | None:
         return None
     if not isinstance(payload, list):
         return None
-    beads = [b for b in payload if isinstance(b, dict)]
+    return [b for b in payload if isinstance(b, dict)]
+
+
+# beadloom:component=active-table
+def _query_bd_statuses(project_root: Path) -> dict[str, str] | None:
+    """Return bead-id -> status from the tracker, or None if bd unavailable."""
+    beads = _query_bd_beads(project_root)
+    if beads is None:
+        return None
     return _bd_statuses_from_list(beads)
 
 
@@ -960,16 +1007,26 @@ def active_sync(
         click.echo("active-sync: no ACTIVE.md bead tables — nothing to reconcile (skipped).")
         return
 
-    bd_statuses = _query_bd_statuses(project_root)
-    if bd_statuses is None:
+    beads = _query_bd_beads(project_root)
+    if beads is None:
         click.echo("active-sync: bd unavailable — skipped.")
         return
+    bd_statuses = _bd_statuses_from_list(beads)
+    prefixes = _bd_epic_prefixes(beads)
 
     if check_only:
-        _active_sync_check(project_root, bd_statuses, epic=epic, output_json=output_json)
+        _active_sync_check(
+            project_root,
+            bd_statuses,
+            epic=epic,
+            output_json=output_json,
+            epic_prefixes=prefixes,
+        )
         return
 
-    result = reconcile_active_tables(project_root, bd_statuses, epic=epic)
+    result = reconcile_active_tables(
+        project_root, bd_statuses, epic=epic, epic_prefixes=prefixes
+    )
     exported = False if no_export else _export_jsonl(project_root)
     if stage:
         _stage_reconciled(project_root, result.changed_files, exported_jsonl=exported)
@@ -1001,6 +1058,7 @@ def _active_sync_check(
     *,
     epic: str | None,
     output_json: bool,
+    epic_prefixes: dict[str, str] | None = None,
 ) -> None:
     """``--check`` mode: detect drift on a throwaway copy, never write; exit 1 on drift."""
     import shutil
@@ -1013,10 +1071,17 @@ def _active_sync_check(
             shutil.copytree(src, sandbox / ".claude" / "development" / "docs" / "features")
         from beadloom.application.active_table import reconcile_active_tables
 
-        result = reconcile_active_tables(sandbox, bd_statuses, epic=epic)
-    drift = bool(result.drifted_rows)
+        result = reconcile_active_tables(
+            sandbox, bd_statuses, epic=epic, epic_prefixes=epic_prefixes
+        )
     _emit_active_sync(result, output_json=output_json, check=True)
-    if drift:
+    if result.drifted_rows or result.is_inert:
+        # An inert run exits with the drift code deliberately (BDL-061.84): a run
+        # that read rows and resolved none of them compared nothing, and reporting
+        # that as a pass is how this mechanism stayed broken for its whole life.
+        # A run that resolved SOME rows does not fail on the rest — the unresolved
+        # rows are printed, and a permanent failure over an old epic's table is how
+        # a channel stops being read.
         sys.exit(1)
 
 
@@ -1027,7 +1092,13 @@ def _emit_active_sync(
     output_json: bool,
     check: bool,
 ) -> None:
-    """Print the reconcile outcome (JSON or human-readable)."""
+    """Print the reconcile outcome (JSON or human-readable).
+
+    Every form states how many rows it RESOLVED out of how many it read
+    (BDL-061.84). Without the denominator, ``already coherent`` is printed both by
+    a run in which every row agreed with the tracker and by a run that compared
+    nothing at all, and the second is what this command did on this repository.
+    """
     if output_json:
         payload = {
             "changed_files": [str(p) for p in result.changed_files],
@@ -1035,9 +1106,24 @@ def _emit_active_sync(
                 {"path": str(p), "bead_id": bid, "old": old, "new": new}
                 for (p, bid, old, new) in result.drifted_rows
             ],
+            "rows_read": result.rows_read,
+            "rows_resolved": result.rows_resolved,
+            "unresolved_rows": [
+                {"path": str(p), "cell": cell, "reason": reason}
+                for (p, cell, reason) in result.unresolved_rows
+            ],
         }
         click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
         return
+    if result.is_inert:
+        click.echo(
+            f"active-sync: read {result.rows_read} row(s) and resolved NONE against "
+            f"bd — nothing was compared, so this is not a coherent table:"
+        )
+        _echo_unresolved(result)
+        return
+    click.echo(f"active-sync: resolved {result.rows_resolved} of {result.rows_read} row(s) read.")
+    _echo_unresolved(result)
     if not result.drifted_rows:
         click.echo("active-sync: ACTIVE tables already coherent.")
         return
@@ -1047,33 +1133,95 @@ def _emit_active_sync(
         click.echo(f"  {path}: {bead_id}  {old!r} -> {new!r}")
 
 
+#: How many unresolved rows are named before the list states its remainder. An
+#: older epic's table can hold dozens, and a wall of them on every run is how a
+#: channel stops being read; the COUNT is never truncated.
+_UNRESOLVED_SHOWN = 5
+
+
+# beadloom:component=active-table
+def _echo_unresolved(result: ReconcileResult) -> None:
+    """Name the rows the reconcile could not map onto a bead, with their reasons."""
+    if not result.unresolved_rows:
+        return
+    click.echo(f"active-sync: {len(result.unresolved_rows)} row(s) resolved to no bead:")
+    for path, cell, reason in result.unresolved_rows[:_UNRESOLVED_SHOWN]:
+        click.echo(f"  {path}: {cell!r} — {reason}")
+    remainder = len(result.unresolved_rows) - _UNRESOLVED_SHOWN
+    if remainder > 0:
+        click.echo(f"  … and {remainder} more")
+
+
 # beadloom:domain=doc-sync
+def _grounded_pairs(
+    results: list[dict[str, Any]], ref_id: str
+) -> set[tuple[str, str]]:
+    """The pairs of *ref_id* a run has grounds to attest.
+
+    Grounds are the verdicts ``sync-check`` demands action on — ``stale`` and
+    ``missing``. A pair the check calls ``unverified`` because a SIBLING moved
+    is exactly the pair bead ``.78`` said nobody can revise, so a re-baseline
+    that claimed it would record a reading that did not happen (BDL-UX #163).
+    """
+    from beadloom.doc_sync.engine import BLOCKING_STATUSES
+
+    return {
+        (str(r["doc_path"]), str(r["code_path"]))
+        for r in results
+        if r["ref_id"] == ref_id and r["status"] in BLOCKING_STATUSES and r["code_path"]
+    }
+
+
+def _report_attestation(ref_id: str, attestation: Attestation) -> None:
+    """Say what was claimed and, in the same breath, what was not."""
+    claimed = len(attestation.attested)
+    carried = len(attestation.carried)
+    if claimed == 0:
+        click.echo(
+            f"Nothing to attest for {ref_id}: no pair of its {carried} pair(s) is "
+            f"stale, so no document has been revised for this run to record. "
+            f"Use `--pair <doc_path>` for a document you have read, or "
+            f"`--all-pairs` to attest the whole ref deliberately."
+        )
+        return
+    click.echo(f"Re-baselined {ref_id}: attested {claimed} pair(s).")
+    if carried:
+        click.echo(
+            f"  Left unclaimed: {carried} pair(s) nobody read — their baseline "
+            f"stands. Use `--pair <doc_path>` per document, or `--all-pairs` to "
+            f"attest every pair of the ref."
+        )
+
+
 def _mark_synced_noninteractive(
     conn: sqlite3.Connection,
     project_root: Path,
     *,
     ref_id: str | None,
     all_refs: bool,
+    pair_docs: tuple[str, ...] = (),
+    pair_codes: tuple[str, ...] = (),
+    all_pairs: bool = False,
 ) -> None:
     """Re-baseline freshness for a ref (or every stale ref) without prompting.
 
-    Wraps ``mark_synced_by_ref``: recomputes hashes + symbols_hash and records
-    ``status='ok'``. Prints a concise, deterministic summary and exits 0.
+    Wraps ``attest_ref``. The default scope is the pairs the check reports as
+    stale; ``pair_docs`` and ``pair_codes`` name what the operator read, and
+    ``all_pairs`` is the deliberate whole-ref attestation. Prints a deterministic summary and
+    exits 0.
     """
-    from beadloom.doc_sync.engine import (
-        check_sync,
-        mark_reference_synced,
-        mark_synced_by_ref,
-    )
+    from beadloom.doc_sync.engine import attest_ref, check_sync, mark_reference_synced
 
     if all_refs:
         results = check_sync(conn, project_root=project_root)
         stale_refs = sorted({r["ref_id"] for r in results if r["status"] == "stale"})
         total = 0
         for ref in stale_refs:
-            rows = mark_synced_by_ref(conn, ref, project_root)
-            total += rows
-            click.echo(f"Re-baselined {ref}: {rows} pair(s).")
+            attestation = attest_ref(
+                conn, ref, project_root, scope=_grounded_pairs(results, ref)
+            )
+            total += len(attestation.attested)
+            _report_attestation(ref, attestation)
         # Also clear any reference-doc surface drift (BDL-057 Layer 2; advisory).
         ref_docs = mark_reference_synced(conn, None, project_root, all_docs=True)
         if not stale_refs and not ref_docs:
@@ -1093,11 +1241,96 @@ def _mark_synced_noninteractive(
         click.echo(f"Re-baselined reference doc {ref_id}.")
         return
 
-    rows = mark_synced_by_ref(conn, ref_id, project_root)
-    if rows == 0:
+    scope = _resolve_scope(
+        conn,
+        project_root,
+        ref_id=ref_id,
+        pair_docs=pair_docs,
+        pair_codes=pair_codes,
+        all_pairs=all_pairs,
+    )
+    attestation = attest_ref(conn, ref_id, project_root, scope=scope)
+    if not attestation.attested and not attestation.carried:
         click.echo(f"No sync pairs found for {ref_id}; nothing to re-baseline.")
         return
-    click.echo(f"Re-baselined {ref_id}: {rows} pair(s).")
+    _report_attestation(ref_id, attestation)
+
+
+def _resolve_scope(
+    conn: sqlite3.Connection,
+    project_root: Path,
+    *,
+    ref_id: str,
+    pair_docs: tuple[str, ...],
+    pair_codes: tuple[str, ...],
+    all_pairs: bool,
+) -> set[tuple[str, str]] | None:
+    """Which pairs of *ref_id* this invocation may claim.
+
+    ``None`` is the whole ref and is reached only by an explicit ``--all-pairs``:
+    the operator saying they looked at all of it is a different statement from
+    the tool assuming it.
+    """
+    from beadloom.doc_sync.engine import check_sync
+
+    if all_pairs:
+        return None
+    if pair_docs or pair_codes:
+        return _named_pairs(
+            conn, ref_id=ref_id, pair_docs=pair_docs, pair_codes=pair_codes
+        )
+    return _grounded_pairs(check_sync(conn, project_root=project_root), ref_id)
+
+
+def _named_pairs(
+    conn: sqlite3.Connection,
+    *,
+    ref_id: str,
+    pair_docs: tuple[str, ...],
+    pair_codes: tuple[str, ...],
+) -> set[tuple[str, str]]:
+    """Expand ``--pair`` and ``--code`` into the pairs they name.
+
+    **A pair is named by document, by code file, or by both**, and the third
+    form is not decoration. A document is the artifact somebody reads, so the
+    document is the usual unit of an attestation. But a document paired with
+    several code files of one node is a document several people can be changing
+    at once: measured on this branch, `domains/doc-sync/README.md` was stale
+    against one agent's `engine.py` and another agent's `surface.py` in the same
+    run, and claiming the document as a whole would have recorded a reading of a
+    change the operator had not seen. Given together the two options intersect,
+    which is the only scope that is true in a shared working tree.
+    """
+    from beadloom.doc_sync.engine import pairs_of_ref
+
+    owned = pairs_of_ref(conn, ref_id)
+    _reject_unknown(ref_id, named=pair_docs, known={doc for doc, _ in owned}, side="doc")
+    _reject_unknown(
+        ref_id, named=pair_codes, known={code for _, code in owned}, side="code"
+    )
+    return {
+        (doc, code)
+        for doc, code in owned
+        if (not pair_docs or doc in set(pair_docs))
+        and (not pair_codes or code in set(pair_codes))
+    }
+
+
+def _reject_unknown(
+    ref_id: str, *, named: tuple[str, ...], known: set[str], side: str
+) -> None:
+    """Refuse a path this ref does not pair, and say which ones it does.
+
+    A typo that silently selected nothing would attest nothing and report
+    "nothing to attest", which reads exactly like a ref that needed no work.
+    """
+    unknown = sorted(set(named) - known)
+    if not unknown:
+        return
+    raise click.UsageError(
+        f"{ref_id} has no {side} pair named {', '.join(unknown)}. "
+        f"Its {side} paths are: {', '.join(sorted(known)) or '(none)'}."
+    )
 
 
 @main.command("sync-update")
@@ -1117,6 +1350,30 @@ def _mark_synced_noninteractive(
     help="With --yes: re-baseline every currently-stale ref (for the fixpoint loop).",
 )
 @click.option(
+    "--pair",
+    "pair_docs",
+    multiple=True,
+    metavar="DOC_PATH",
+    help="Attest only this document's pairs of the ref (repeatable). Name the "
+    "document you actually read — an attestation is the claim that somebody did.",
+)
+@click.option(
+    "--code",
+    "pair_codes",
+    multiple=True,
+    metavar="CODE_PATH",
+    help="Narrow --pair to this code file (repeatable). A document paired with "
+    "several files can be attested for the one whose change you looked at.",
+)
+@click.option(
+    "--all-pairs",
+    "all_pairs",
+    is_flag=True,
+    help="Attest EVERY pair the ref owns, including documents this run has no "
+    "grounds for. The deliberate whole-ref attestation; without it, only the "
+    "stale pairs are claimed.",
+)
+@click.option(
     "--project",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     default=None,
@@ -1128,6 +1385,9 @@ def sync_update(
     check_only: bool,
     assume_yes: bool,
     all_refs: bool,
+    pair_docs: tuple[str, ...],
+    pair_codes: tuple[str, ...],
+    all_pairs: bool,
     project: Path | None,
 ) -> None:
     """Show sync status and update docs for a ref_id.
@@ -1137,6 +1397,11 @@ def sync_update(
     Use --yes (-y) for a non-interactive re-baseline (no editor/prompt): records
     that the doc(s) match the code now. Add --all to re-baseline every stale ref
     in one call (useful for an automated fixpoint loop).
+
+    The claim is scoped to the pairs the run has grounds for — the STALE ones.
+    A pair whose own file did not move is left unclaimed and its baseline
+    stands. Name a document you have read with --pair, narrow it to one code
+    file with --code, or attest the whole ref deliberately with --all-pairs.
 
     For automated doc updates, use your AI agent (Claude Code, Cursor, etc.)
     with Beadloom's MCP tools (update_node, mark_synced).
@@ -1150,6 +1415,18 @@ def sync_update(
         raise click.UsageError("--all and an explicit REF_ID are mutually exclusive.")
     if not all_refs and ref_id is None:
         raise click.UsageError("Provide a REF_ID (or use --all with --yes).")
+    if (pair_docs or pair_codes) and all_pairs:
+        raise click.UsageError(
+            "--pair/--code and --all-pairs are mutually exclusive: one names "
+            "what you read, the other says you read all of it."
+        )
+    if (pair_docs or pair_codes or all_pairs) and all_refs:
+        raise click.UsageError(
+            "--pair/--code and --all-pairs scope ONE ref; --all crosses every "
+            "stale ref."
+        )
+    if (pair_docs or pair_codes or all_pairs) and not assume_yes:
+        raise click.UsageError("--pair, --code and --all-pairs require --yes.")
 
     project_root = project or Path.cwd()
     db_path = project_root / ".beadloom" / "beadloom.db"
@@ -1161,7 +1438,15 @@ def sync_update(
     conn = open_db(db_path)
 
     if assume_yes:
-        _mark_synced_noninteractive(conn, project_root, ref_id=ref_id, all_refs=all_refs)
+        _mark_synced_noninteractive(
+            conn,
+            project_root,
+            ref_id=ref_id,
+            all_refs=all_refs,
+            pair_docs=pair_docs,
+            pair_codes=pair_codes,
+            all_pairs=all_pairs,
+        )
         conn.close()
         return
 

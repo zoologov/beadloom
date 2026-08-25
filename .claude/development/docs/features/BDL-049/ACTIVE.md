@@ -19,13 +19,13 @@ GitHub runs `pull_request` workflows from the BASE branch (main) version → the
 
 | Bead | Role | Status |
 |------|------|--------|
-| beadloom-j72g.1 | dev — harness pr-branch publish mode | W1 in progress |
-| beadloom-j72g.2 | dev — CI configs (pull_request) + GitLab MR + templates + re-vendor | blocked ← 1 |
-| beadloom-j72g.3 | dev — trunk-based vendored flow + branch protection | W1 in progress |
-| beadloom-j72g.4 | test | blocked ← 1,2,3 |
-| beadloom-j72g.5 | review | blocked ← 4 |
-| beadloom-j72g.6 | dogfood (separate post-merge PR) | blocked ← 5 |
-| beadloom-j72g.7 | tech-writer | blocked ← 6 |
+| beadloom-j72g.1 | dev — harness pr-branch publish mode | ✓ done |
+| beadloom-j72g.2 | dev — CI configs (pull_request) + GitLab MR + templates + re-vendor | ✓ done |
+| beadloom-j72g.3 | dev — trunk-based vendored flow + branch protection | ✓ done |
+| beadloom-j72g.4 | test | ✓ done |
+| beadloom-j72g.5 | review | ✓ done |
+| beadloom-j72g.6 | dogfood (separate post-merge PR) | ✓ done |
+| beadloom-j72g.7 | tech-writer | ✓ done |
 
 ## Waves
 

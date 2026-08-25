@@ -60,15 +60,15 @@
 
 | Bead | Status | Details |
 |------|--------|---------|
-| beadloom-5ge.1 | Pending | — |
+| beadloom-5ge.1 | ✓ done | — |
 | beadloom-5ge.2 | Done | #88 true totals on incremental path; #94 narrowed to sqlite3.OperationalError (missing-table only). 4 tests added. |
 | beadloom-5ge.3 | Done | #91 split: 4 orchestrators → application/; rules→error; lint --strict 0 violations; doctor clean; 2604 tests pass (1 pre-existing #98 flake). |
-| beadloom-5ge.4 | Pending | — |
-| beadloom-5ge.5 | Pending | — |
-| beadloom-5ge.6 | Pending | — |
-| beadloom-5ge.7 | Pending | — |
-| beadloom-5ge.8 | Pending | — |
-| beadloom-5ge.9 | Pending | — |
+| beadloom-5ge.4 | ✓ done | — |
+| beadloom-5ge.5 | ✓ done | — |
+| beadloom-5ge.6 | ✓ done | — |
+| beadloom-5ge.7 | ✓ done | — |
+| beadloom-5ge.8 | ✓ done | — |
+| beadloom-5ge.9 | ✓ done | — |
 
 ## Notes
 

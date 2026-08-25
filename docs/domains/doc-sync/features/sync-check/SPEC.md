@@ -220,6 +220,46 @@ and the site publisher deliberately do not, because re-baselining a pair cannot
 fix a missing section and publishing a site does not judge one. See
 [`doc-shape`](../doc-shape/SPEC.md).
 
+### The scope of an attestation
+
+Bead `.78` moved the freshness FACT to the file. The CLAIM stayed on the ref:
+`sync-update <ref> --yes` re-baselined every pair the ref owned, so a run that
+revised one document recorded a reading of its siblings. Measured over one epic
+of this repository: 1 pair revised against 27 re-attested, then 13 against 20,
+26 against 56 and 15 against 10. Every one of those runs was honest and none was
+evidence — which is exactly the hazard BDL-UX #163 was filed for, alive one layer
+below where `.78` closed it.
+
+`attest_ref` splits the two things that were one `UPDATE`:
+
+- the node-level `symbols_hash` is a **fact about the index** and is carried
+  forward for every pair of the ref. Left behind, the
+  `unverified/sibling_symbols_changed` verdict would stand forever on a pair
+  whose mover has since been re-baselined and can therefore no longer be named,
+  and a signal that reading cannot clear is a signal people clear with a bulk
+  re-attestation;
+- `doc_hash_at_sync`, `code_hash_at_sync`, `file_symbols_hash`, `synced_at` and
+  `baseline_source = attested` are a **claim about a document somebody read**,
+  and are written only inside the scope.
+
+The default scope of `sync-update <ref> --yes` is the pairs the check reports as
+`stale` or `missing` — the ones it demands action on. What withholding the claim
+buys is not cosmetic: a pair whose baseline stays `index_build` is corroborated
+against git rather than trusted (step 1 above), so the bulk form used to switch
+the harder check off for every document nobody had opened.
+
+A pair is addressable **by document, by code file, or by both**. The document is
+the usual unit, because a document is the artifact somebody reads. The code file
+is a separate axis because a document paired with several files of one node is a
+document several agents can be changing at once: measured on the BDL-061 drift
+branch, `domains/doc-sync/README.md` was stale against one agent's `engine.py`
+and another's `surface.py` in the same run, and claiming the document as a whole
+would have recorded a reading of a change the operator had not seen.
+
+`--all-pairs` is the deliberate whole-ref attestation and is kept, because an
+operator who really did read all of a ref's documents must be able to say so in
+one command; taking that away would be its own cost.
+
 ### Where the baseline lives
 
 **Not in the database.** `.beadloom/beadloom.db` is a derived cache: git-ignored,
@@ -430,7 +470,11 @@ Module `src/beadloom/doc_sync/engine.py`:
   `BLOCKING_STATUSES`, `BASELINE_INDEX` / `BASELINE_GIT` / `BASELINE_NONE`,
   `BASELINE_SOURCE_INDEX_BUILD` / `_CARRIED` / `_ATTESTED` — the verdict and
   baseline vocabulary, owned by the domain that interprets it.
-- `mark_synced(...)` / `mark_synced_by_ref(...)` — re-baseline a symbol pair.
+- `mark_synced(...)` / `mark_synced_by_ref(...)` / `attest_ref(..., scope=...)`
+  / `pairs_of_ref(...)` — re-baseline a symbol pair, a scope of pairs, or a
+  whole ref. See *The scope of an attestation* below.
+- `Attestation(attested, carried)` — the two populations one re-baseline
+  produced, named separately.
 - `build_reference_state(conn, project_root) -> int` — baseline every
   `watches`-annotated reference doc; returns the count recorded.
 - `describe_reference_doc(conn, doc_path, project_root) -> dict | None` — the

@@ -39,22 +39,66 @@ VALID_SURFACES: tuple[str, ...] = ("cli", "graph", "flow.yml")
 
 # In-doc annotation: ``<!-- beadloom:watches=cli,graph,flow.yml -->``. The value
 # is a comma list; surrounding whitespace per item is tolerated.
-_WATCHES_RE = re.compile(r"beadloom:watches\s*=\s*([^\->]+)")
+#
+# The annotation OPENS the line, with at most three spaces of indentation —
+# markdown's own boundary, since a fourth space starts a code block. Anchoring is
+# what separates a document that MAKES this declaration from one that SHOWS it:
+# the two are byte-identical as syntax, and only position tells them apart
+# (BDL-061.86, and BDL-061.83 for the same shape in the wave declaration).
+_WATCHES_RE = re.compile(r"^ {0,3}<!--\s*beadloom:watches\s*=\s*([^\->]+)")
+
+#: A markdown fence, either delimiter. What is inside one is a SAMPLE: a document
+#: that shows a reader how to declare a watch is not thereby declaring one.
+_FENCE_RE = re.compile(r"^\s*(```|~~~)")
 
 
 def parse_watches(text: str) -> list[str] | None:
-    """Parse the ``<!-- beadloom:watches=... -->`` annotation from *text*.
+    """Parse the ``<!-- beadloom:watches=... -->`` declaration from *text*.
 
     Returns the ordered, de-duplicated list of *known* watched surfaces in the
-    order declared, or ``None`` when the annotation is absent or names no known
-    surface. Unknown surface tokens are silently dropped (forward-compatible).
+    order declared, or ``None`` when no declaration is present or it names no
+    known surface. Unknown surface tokens are silently dropped
+    (forward-compatible). The FIRST declaration decides; declared order is part of
+    the contract, because the aggregate hash is order-sensitive.
+
+    **A declaration opens a line, outside a fenced block.** Read over the whole
+    text, this function enrolled four of this repository's documents in a check
+    none of them had asked for — a changelog entry describing the feature, two
+    SPECs mentioning it in a sentence, and the code-indexer SPEC's own fenced
+    example, whose caption said it was not read. A false positive here is
+    permanent: the operator's only remedies are to attest a declaration the
+    document never made, or to leave a standing advisory warning that teaches
+    everyone to ignore the ``surface_drift`` channel.
+
+    What position cannot decide is an unfenced, unindented example written in
+    prose. That shape is read as a declaration, and this is stated rather than
+    hidden: a document showing markdown syntax fences it anyway, and inventing an
+    escape marker for the remaining case would add a second syntax to get wrong.
     """
-    match = _WATCHES_RE.search(text)
-    if match is None:
-        return None
+    fence: str | None = None
+    for line in text.splitlines():
+        fence_match = _FENCE_RE.match(line)
+        if fence_match is not None:
+            marker = fence_match.group(1)
+            if fence is None:
+                fence = marker
+            elif marker == fence:
+                fence = None
+            continue
+        if fence is not None:
+            continue
+        match = _WATCHES_RE.match(line)
+        if match is None:
+            continue
+        return _known_surfaces(match.group(1))
+    return None
+
+
+def _known_surfaces(declared: str) -> list[str] | None:
+    """The known surfaces named in a declaration's comma list, in declared order."""
     seen: set[str] = set()
     surfaces: list[str] = []
-    for raw in match.group(1).split(","):
+    for raw in declared.split(","):
         token = raw.strip()
         if token in VALID_SURFACES and token not in seen:
             seen.add(token)

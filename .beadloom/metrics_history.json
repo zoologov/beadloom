@@ -398,5 +398,15 @@
     "symbols": 1157,
     "sync_pct": 100.0,
     "ts": "2026-08-20T12:37:30.582912+00:00"
+  },
+  {
+    "coverage_pct": 96.3,
+    "debt_score": 19.5,
+    "edges": 413,
+    "lint_violations": 60,
+    "nodes": 82,
+    "symbols": 1661,
+    "sync_pct": 99.1,
+    "ts": "2026-08-25T06:48:41.860227+00:00"
   }
 ]

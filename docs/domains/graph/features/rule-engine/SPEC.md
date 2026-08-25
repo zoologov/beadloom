@@ -208,6 +208,7 @@ through [`scenario-binding`](../scenario-binding/SPEC.md).
 | reference | a scenario a `references` document claims exists and the suite does not contain |
 | declaration | a `non_behavioural` entry naming a node outside the population, or one that has a scenario anyway |
 | excused | one statement per run naming how many of how many nodes left the population and why — silent when nothing is excused |
+| population | one statement per run naming how many graph nodes the rule's `for` matcher reaches, and how many are outside it, by kind — silent when the population is the whole graph |
 
 **`reason` is mandatory on a declaration** and there is deliberately **no `until`**: unlike an
 import exemption this is not a debt that expires but a classification that is either true or
@@ -222,6 +223,19 @@ figure below is a fraction of 1: ...` — carrying each node with its reason. It
 the rule declares: doing the thing PLAN says is accepted must never redden a pipeline. It is
 **silent when nothing is excused**, because a line about zero on every lint of every project is
 how a real one goes unread.
+
+**The population states its own reach.** The population is defined by KIND, and a node's kind is
+one line in `services.yml`: changing `kind: feature` to `kind: component` removes a node from the
+rule with no finding of any sort, so the count falls by one and the run stays the same colour
+(BDL-061.63, measured by `.14`). Widening the rule to components is not the answer — excluding
+plumbing is the architecture model's own definition of the split, and it would have added 24
+findings to 68 without a decision having been taken. What the rule can do is print the denominator
+beside the fraction: `this rule's population is 37 of 61 graph node(s) (kind=feature); the other 24
+are outside it and no finding of this rule reaches them: component (24)`. It does not catch the
+reclassification — an evaluator that remembered its own past population would be a writer, the
+shape BDL-UX #147/#189 were filed for — but it puts a shrinking denominator on the same line as an
+improving fraction. `warn` whatever the rule declares, and **silent when nothing is outside**, for
+the same two reasons the excused statement is.
 
 **`for.exclude` is rejected on this rule type**, with the error naming the excluded nodes and
 routing the author to `non_behavioural`. An `exclude` entry carries no reason, is never reported

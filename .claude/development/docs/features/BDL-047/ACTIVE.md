@@ -19,13 +19,13 @@
 | beadloom-zqlr.2 | dev — harness + adapter + run-record | ✓ done (W2) |
 | beadloom-zqlr.3 | dev — Goose recipe + Qwen | ✓ done (W3) |
 | beadloom-zqlr.4 | dev — both CI wrappers (GH+GL) | ✓ done (W4) |
-| beadloom-zqlr.5 | dev — setup-ai-techwriter | ✓ dev-done (W5, vendor approach; not committed/closed — awaiting coordinator) |
+| beadloom-zqlr.5 | dev — setup-ai-techwriter | ✓ done |
 | beadloom-zqlr.6 | dev — dashboard widget (G9) | ✓ done (W3) |
 | beadloom-zqlr.7 | test | ✓ done |
 | beadloom-zqlr.8 | review | ✓ done (ISSUES) |
-| beadloom-zqlr.11 | dev-fix (review) | in progress |
-| beadloom-zqlr.9 | dogfood (needs key) | blocked ← 11 |
-| beadloom-zqlr.10 | tech-writer | blocked ← 9 |
+| beadloom-zqlr.11 | dev-fix (review) | ✓ done |
+| beadloom-zqlr.9 | dogfood (needs key) | ✓ done |
+| beadloom-zqlr.10 | tech-writer | ✓ done |
 
 ## Waves
 

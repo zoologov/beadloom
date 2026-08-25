@@ -264,10 +264,27 @@ def _reference_leg(
     """Scenarios a TO-BE document claims exist, checked against the suite."""
     if not rule.references:
         return []
-    references, dead_globs = load_references(project_root, rule.references)
+    found = load_references(project_root, rule.references)
     findings: list[Violation] = []
     names = {scenario.name for scenario in suite.scenarios}
-    for reference in references:
+    for unreadable in found.unreadable:
+        findings.append(
+            _finding(
+                rule,
+                file_path=unreadable.path,
+                message=(
+                    f"the scenarios this document references are UNKNOWN: "
+                    f"{unreadable.reason}"
+                ),
+                remediation=(
+                    "save the document as UTF-8, or drop it from `references:` — a "
+                    "document that cannot be read states no intent, and reading that "
+                    "as intent fully met is how a check gets quieter when a file "
+                    "gets worse"
+                ),
+            )
+        )
+    for reference in found.references:
         if reference.name in names:
             continue
         findings.append(
@@ -286,7 +303,7 @@ def _reference_leg(
                 ),
             )
         )
-    for glob in dead_globs:
+    for glob in found.dead_globs:
         findings.append(
             liveness_finding(
                 rule_name=rule.name,
@@ -303,6 +320,69 @@ def _reference_leg(
             )
         )
     return findings
+
+
+def _population_statement(
+    conn: sqlite3.Connection, rule: ScenarioCoverageRule, *, matched: list[str]
+) -> list[Violation]:
+    """The nodes this rule cannot reach, counted where its fraction is printed.
+
+    **The population is defined by KIND, and a kind is one line in the graph.**
+    Changing ``kind: feature`` to ``kind: component`` removes a node from this
+    rule with no finding of any sort: the count falls by one and the run stays
+    the same colour. The rule cannot see history, so it cannot report the
+    reclassification itself — an evaluator that remembered its own past
+    population would be a writer, which is the shape ``.147``/``.189`` were
+    filed for. What it CAN do is state the denominator beside the fraction, so a
+    shrinking population and an improving coverage figure appear on the same
+    screen instead of one hiding behind the other (``.63``'s option (b)).
+
+    Widening the rule to components is deliberately NOT what this does:
+    excluding plumbing is the architecture model's own definition of the
+    feature/component split, and 24 more findings is a decision nobody took.
+
+    Silent when the population is the whole graph — there is then nothing the
+    rule cannot reach, and a line saying so on every run of every project is the
+    noise that trains a reader to skip the real one.
+
+    ``warn`` whatever the rule declares, for :func:`~beadloom.graph.rules.types.
+    liveness_finding`'s reason: this states a fact about the CONFIGURATION, not
+    about the code.
+    """
+    outside: dict[str, int] = {}
+    for row in conn.execute("SELECT ref_id, kind FROM nodes ORDER BY ref_id"):
+        if str(row[0]) in set(matched):
+            continue
+        kind = str(row[1])
+        outside[kind] = outside.get(kind, 0) + 1
+    if not outside:
+        return []
+    total = len(matched) + sum(outside.values())
+    by_kind = ", ".join(f"{kind} ({count})" for kind, count in sorted(outside.items()))
+    return [
+        Violation(
+            rule_name=rule.name,
+            rule_description=rule.description,
+            rule_type=SCENARIO_COVERAGE_RULE_TYPE,
+            severity="warn",
+            file_path=None,
+            line_number=None,
+            from_ref_id=None,
+            to_ref_id=None,
+            message=(
+                f"this rule's population is {len(matched)} of {total} graph node(s) "
+                f"({_matcher_description(rule.for_matcher)}); the other "
+                f"{sum(outside.values())} are outside it and no finding of this rule "
+                f"reaches them: {by_kind}"
+            ),
+            remediation=(
+                "a node's kind is one line in the graph, so a node leaves this "
+                "population with no other finding — if a node counted here bears "
+                "behaviour, change its kind or widen the rule's `for` matcher; "
+                "otherwise read this number as the reach the rule does not claim"
+            ),
+        )
+    ]
 
 
 def _excused_statement(
@@ -442,6 +522,7 @@ def _evaluate_one(
     findings.extend(
         _declaration_leg(rule, matched=set(matched), covered=covered)
     )
+    findings.extend(_population_statement(conn, rule, matched=matched))
     findings.extend(
         _excused_statement(rule, matched=set(matched), covered=covered)
     )

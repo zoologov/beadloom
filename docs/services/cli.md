@@ -1,5 +1,7 @@
 # CLI Reference
 
+<!-- beadloom:watches=cli,graph,flow.yml -->
+
 Beadloom CLI is built on Click and provides a set of commands for managing the knowledge index.
 
 ## Specification

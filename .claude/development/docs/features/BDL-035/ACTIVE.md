@@ -39,9 +39,9 @@
 | beadloom-ji9.3 | Done | coordinator.md rewritten |
 | beadloom-ji9.4 | Done | CLAUDE.md modernized |
 | beadloom-ji9.5 | Done | checkpoint.md + task-init.md |
-| beadloom-ji9.6 | Pending | — |
-| beadloom-ji9.7 | Pending | — |
-| beadloom-ji9.8 | Pending | — |
+| beadloom-ji9.6 | ✓ done | — |
+| beadloom-ji9.7 | ✓ done | — |
+| beadloom-ji9.8 | ✓ done | — |
 
 ## Notes
 

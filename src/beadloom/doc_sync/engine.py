@@ -32,7 +32,7 @@ from beadloom.infrastructure.repository import covering_prefix, get_owned_code_f
 
 if TYPE_CHECKING:
     import sqlite3
-    from collections.abc import Mapping
+    from collections.abc import Collection, Mapping
 
 
 def _compute_symbols_hash(
@@ -916,38 +916,87 @@ def mark_synced(
     conn.commit()
 
 
-def mark_synced_by_ref(
+@dataclass(frozen=True)
+class Attestation:
+    """What one re-baseline CLAIMED, and which pairs it deliberately did not.
+
+    Two populations because the run has grounds for one and not the other, and
+    a summary that reported only the first would hide the size of the second —
+    which is the whole of BDL-UX #163.
+    """
+
+    #: ``(doc_path, code_path)`` pairs recorded as read: ``baseline_source``
+    #: becomes ``attested`` and ``synced_at`` moves.
+    attested: tuple[tuple[str, str], ...]
+    #: Pairs whose node-level ``symbols_hash`` was carried forward and about
+    #: which nothing was claimed.
+    carried: tuple[tuple[str, str], ...]
+
+
+def pairs_of_ref(conn: sqlite3.Connection, ref_id: str) -> list[tuple[str, str]]:
+    """Every ``(doc_path, code_path)`` pair the ref owns, in stable order."""
+    return [
+        (str(row["doc_path"]), str(row["code_path"]))
+        for row in conn.execute(
+            "SELECT doc_path, code_path FROM sync_state WHERE ref_id = ? "
+            "ORDER BY doc_path, code_path",
+            (ref_id,),
+        )
+    ]
+
+
+def attest_ref(
     conn: sqlite3.Connection,
     ref_id: str,
     project_root: Path,
-) -> int:
-    """Mark all doc-code pairs for *ref_id* as synced.
+    *,
+    scope: Collection[tuple[str, str]] | None = None,
+) -> Attestation:
+    """Re-baseline *ref_id*, claiming only the pairs in *scope*.
 
-    Recomputes current file hashes and ``symbols_hash``, establishing a new
-    baseline for symbol drift detection.
-    Returns the number of rows updated.
+    **A fact and a claim were one UPDATE, and this splits them.** The node-level
+    ``symbols_hash`` is a fact about the index — what the node's symbol surface
+    was when this ran — and it is carried forward for EVERY pair the ref owns,
+    so the ``unverified``/``sibling_symbols_changed`` verdict bead ``.78``
+    created clears once the file that caused it has been re-baselined. Leaving
+    it behind would leave a verdict that names no mover (its cause is now
+    re-baselined) standing on every later run, and a signal that cannot be
+    cleared by reading is a signal people clear with ``--all-pairs``.
+
+    The attestation is a claim about a DOCUMENT somebody read: ``doc_hash_at_sync``,
+    ``code_hash_at_sync``, ``file_symbols_hash``, ``synced_at`` and
+    ``baseline_source = attested``. It is written only for the pairs in *scope*.
+    An un-attested pair keeps whatever baseline it had, which is not cosmetic:
+    :func:`check_sync` corroborates an ``index_build`` baseline against git
+    instead of trusting it, and a bulk re-attestation used to switch that harder
+    check off for documents nobody had opened.
+
+    *scope* ``None`` means every pair — the deliberate whole-ref attestation,
+    reached from the CLI by ``sync-update <ref> --yes --all-pairs``.
     """
-    rows = conn.execute(
-        "SELECT doc_path, code_path FROM sync_state WHERE ref_id = ?",
-        (ref_id,),
-    ).fetchall()
+    pairs = pairs_of_ref(conn, ref_id)
+    if not pairs:
+        return Attestation(attested=(), carried=())
 
-    if not rows:
-        return 0
-
+    claimed = set(pairs) if scope is None else {p for p in pairs if p in set(scope)}
     symbols_hash = _compute_symbols_hash(conn, ref_id)
     now = datetime.now(tz=timezone.utc).isoformat()
     docs_dir = resolve_docs_dir(project_root)
-    count = 0
-    for row in rows:
-        doc_hash = _file_hash(project_root / docs_dir / row["doc_path"])
-        code_hash = _file_hash(project_root / row["code_path"])
+
+    for doc_path, code_path in pairs:
+        if (doc_path, code_path) not in claimed:
+            conn.execute(
+                "UPDATE sync_state SET symbols_hash = ? "
+                "WHERE doc_path = ? AND code_path = ?",
+                (symbols_hash, doc_path, code_path),
+            )
+            continue
+        doc_hash = _file_hash(project_root / docs_dir / doc_path)
+        code_hash = _file_hash(project_root / code_path)
         # One node hash for the ref, but each pair gets ITS OWN file hash — the
         # whole point of the distinction is lost if every row stores the same
         # number under a different name.
-        file_symbols_hash = _compute_symbols_hash(
-            conn, ref_id, file_path=str(row["code_path"])
-        )
+        file_symbols_hash = _compute_symbols_hash(conn, ref_id, file_path=code_path)
         conn.execute(
             "UPDATE sync_state SET doc_hash_at_sync = ?, code_hash_at_sync = ?, "
             "symbols_hash = ?, file_symbols_hash = ?, synced_at = ?, status = 'ok', "
@@ -961,14 +1010,30 @@ def mark_synced_by_ref(
                 now,
                 doc_hash,
                 BASELINE_SOURCE_ATTESTED,
-                row["doc_path"],
-                row["code_path"],
+                doc_path,
+                code_path,
             ),
         )
-        count += 1
 
     conn.commit()
-    return count
+    return Attestation(
+        attested=tuple(p for p in pairs if p in claimed),
+        carried=tuple(p for p in pairs if p not in claimed),
+    )
+
+
+def mark_synced_by_ref(
+    conn: sqlite3.Connection,
+    ref_id: str,
+    project_root: Path,
+) -> int:
+    """Mark all doc-code pairs for *ref_id* as synced; return the rows updated.
+
+    The whole-ref attestation, kept as its own name because that is what every
+    caller outside the ``sync-update`` command means. Scoped attestation is
+    :func:`attest_ref`.
+    """
+    return len(attest_ref(conn, ref_id, project_root, scope=None).attested)
 
 
 # ---------------------------------------------------------------------------

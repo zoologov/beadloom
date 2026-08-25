@@ -361,6 +361,7 @@ class TestScenarioReferences:
 
     def test_load_references_reports_the_globs_that_matched_nothing(self, tmp_path: Path) -> None:
         _write(tmp_path / "docs/PRD.md", "- [ ] Scenario: a real claim\n")
-        refs, dead = load_references(tmp_path, ("docs/**/PRD.md", "nowhere/**/*.md"))
+        found = load_references(tmp_path, ("docs/**/PRD.md", "nowhere/**/*.md"))
+        refs, dead = found.references, found.dead_globs
         assert [r.name for r in refs] == ["a real claim"]
         assert dead == ("nowhere/**/*.md",)

@@ -51,8 +51,8 @@
 
 | Bead | Status |
 |------|--------|
-| beadloom-eeo.1 | Pending |
-| beadloom-eeo.2 | Pending |
+| beadloom-eeo.1 | ✓ done |
+| beadloom-eeo.2 | ✓ done |
 | beadloom-eeo.3..8 | Pending |
 
 ## Notes

@@ -411,6 +411,10 @@ class TestLivenessOutput:
             "idle",
             "dead_exclusions",
             "expired_exclusions",
+            # How much of `fired_count` rests on a rotated summary rather than on
+            # readable firings (BDL-061.56) — the count is the same after a
+            # rollover, the evidence behind it is not.
+            "carried_count",
         }
 
     def test_the_text_report_names_a_dead_exclusion_and_its_pattern(

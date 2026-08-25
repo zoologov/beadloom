@@ -26,7 +26,7 @@ from beadloom.onboarding.ignore_block import (
 if TYPE_CHECKING:
     from pathlib import Path
 
-FIRINGS_PATTERN = ".beadloom/guard-firings.jsonl"
+FIRINGS_PATTERN = ".beadloom/guard-firings*.jsonl"
 
 
 def _git(cwd: Path, *args: str) -> None:
@@ -94,11 +94,23 @@ class TestEveryPatternCarriesItsReason:
         assert "machine-local" in why
         assert "deletes this line" in why
 
-    def test_the_firing_record_names_that_it_is_never_rotated(self, tmp_path: Path) -> None:
-        """m7 is named, not hidden: ignoring the file removes it from git, not from disk."""
+    def test_the_firing_record_names_its_rotation_and_the_pattern_covers_it(
+        self, tmp_path: Path
+    ) -> None:
+        """This test used to pin the opposite fact, and the inversion is the point.
+
+        Review minor m7 was named in the block rather than hidden: the record was
+        NOT rotated, so ignoring it removed it from git and not from disk.
+        `beadloom-mr2l.56` bounded it, so the block now says where the size is
+        settled — and the pattern is a glob, because ignoring the active record
+        while leaving `guard-firings.1.jsonl` untracked would reintroduce exactly
+        the churn the entry exists to remove.
+        """
         why = next(e.why for e in GENERATED_WORKING_SET if e.pattern == FIRINGS_PATTERN)
         assert "rotated" in why
         assert "--liveness" in why
+        assert "2000" in why
+        assert FIRINGS_PATTERN.endswith("guard-firings*.jsonl")
 
 
 class TestWrittenOnceNeverRewritten:
