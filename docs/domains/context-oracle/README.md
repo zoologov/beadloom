@@ -38,6 +38,7 @@ When an AI agent or developer requests context for a `ref_id`, Context Oracle:
 |--------|--------|-------------|
 | `builder` | `builder.py` | BFS subgraph traversal, chunk collection, context bundle assembly |
 | `cache` | `cache.py` | L1 in-memory and L2 SQLite-backed context bundle caching |
+| `intent` | `intent.py` | Which recorded intent a node's bundle carries, and the three answers absence can have |
 | `code_indexer` | `code_indexer.py` | Tree-sitter parsing and `beadloom:` annotation extraction for 12 languages |
 | `search` | `search.py` | FTS5 full-text search over architecture graph nodes and documentation |
 | `route_extractor` | `route_extractor.py` | API route extraction via regex for 12 frameworks, with self-exclusion and display formatting |
@@ -261,10 +262,49 @@ def build_context(
     depth: int = 2,
     max_nodes: int = 20,
     max_chunks: int = 10,
+    intent: IntentReading | None = None,
 ) -> dict[str, Any]
 ```
 
 Build a full context bundle for the given focus ref_ids. Raises `LookupError` if any focus ref_id is not found.
+
+`intent` is a read of the project's TO-BE space, supplied by the caller. This
+builder takes a connection and no project root, so it cannot read that space
+itself; `None` therefore produces `intent.status = "not_checked"` rather than an
+absence of intent. The bundle version stays `2` — the key is additive, no
+existing key changes meaning, and a consumer asking whether a bundle carries
+intent reads `intent.status`, which answers more precisely than a version bump.
+
+### intent.py -- Public Functions
+
+```python
+def select_intent(
+    reading: IntentReading | None,
+    ref_ids: Sequence[str],
+    *,
+    limit: int = MAX_DECLARATIONS,
+) -> dict[str, Any]
+```
+
+The `intent` section of a bundle: which epics declared the **focus** nodes, out
+of a reading of the TO-BE space. Pure policy — it opens no file and runs no
+query, which is what lets it live in the domain while the adapter that reads the
+space lives in `application/intent_reader.py`.
+
+Three statuses, and the last two are deliberately not one. `declared` names the
+epics with the document and line to read them at. `none_declared` says the space
+was read and nothing in it declares this node, carrying `epics_read` and
+`epics_declaring_nodes` so it is a measurement rather than a claim.
+`not_checked` says nobody looked, with one of four reasons —
+`intent_space_not_read`, `no_intent_documents`, `no_epic_declares_any_node`,
+`doc_roots_config_error`. `describe_intent_reason` renders each as prose.
+
+At most `MAX_DECLARATIONS` (5) declarations carry their document and line; the
+rest keep their names in `also_declared_by`, because a cap that truncated in
+silence would be the same defect at a smaller scale. Order is descending
+**natural** key, so `ORD-31` sorts above `ORD-4`.
+
+See `components/node-intent/DOC.md`.
 
 ### cache.py -- Public Classes and Functions
 

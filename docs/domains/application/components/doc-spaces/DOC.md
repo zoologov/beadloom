@@ -162,7 +162,11 @@ it answers the same in a fresh CI checkout, and `beadloom docs spaces` the live
 - `beads_by_epic(records)` — group tracker records by the epic key their title
   names.
 - `read_epic_intents(...)`, `EpicIntent`, `SpaceFinding`, `SpacesReport`,
-  `TrackerRead`.
+  `TrackerRead`. `EpicIntent.title` is the intent document's own first heading,
+  read in the pass that already reads the document, so it costs no second open
+  and no second source. It exists for the reader of a context bundle, where an
+  issue key on its own is opaque and `BDL-061 — Enforced agentic flow` says what
+  the node is for in one line.
 - `FINDING_NO_AS_IS`, `FINDING_WORKING_CONTRADICTED`, `FINDING_WORKING_INERT`,
   `FINDING_CONFIG`, `FINDING_EPIC_NOT_IN_TRACKER`, `FINDING_INTENT_UNREADABLE`,
   `FINDING_OUTSIDE_DECLARED_ROOT`.
@@ -180,5 +184,8 @@ found no problem, so the report says which of the two it is.
 - `application/gate.py` — the `doc-spaces` step, which reports and never blocks.
 - `services/bd_seam.py` supplies the tracker records the service layer converts
   with `beads_by_epic`.
+- `application/intent_reader.py` reads `read_epic_intents` a second time for a
+  second purpose — delivering an epic's declaration to `beadloom ctx` — through
+  this join rather than through a second one.
 
 > Component doc (BDL-061 S5). Public surface verified against `doc_spaces.py`.

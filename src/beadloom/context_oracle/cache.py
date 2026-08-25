@@ -14,7 +14,10 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import sqlite3
+    from collections.abc import Sequence
     from pathlib import Path
+
+    from beadloom.context_oracle.intent import IntentReading
 
 # Cache key: (ref_id, depth, max_nodes, max_chunks)
 CacheKey = tuple[str, int, int, int]
@@ -214,6 +217,17 @@ class SqliteCache:
         self._conn.commit()
 
 
+def _files_mtime(paths: Sequence[Path]) -> float:
+    """Return the max mtime over *paths* (0.0 when there are none)."""
+    max_mtime = 0.0
+    for path in paths:
+        try:
+            max_mtime = max(max_mtime, path.stat().st_mtime)
+        except OSError:
+            continue
+    return max_mtime
+
+
 def _dir_mtime(directory: Path) -> float:
     """Return the max mtime of all files under *directory* (0.0 if absent)."""
     max_mtime = 0.0
@@ -230,10 +244,20 @@ def _dir_mtime(directory: Path) -> float:
 
 
 def compute_bundle_mtimes(project_root: Path) -> tuple[float, float]:
-    """Compute ``(graph_mtime, docs_mtime)`` used for bundle-cache freshness."""
+    """Compute ``(graph_mtime, docs_mtime)`` used for bundle-cache freshness.
+
+    The TO-BE space counts toward ``docs_mtime``. A bundle now carries the
+    intent recorded about its focus nodes, so an edited ``CONTEXT.md`` changes
+    the bundle; a freshness input that does not cover every input to the answer
+    is a cache that serves a stale one until something unrelated moves.
+    """
+    from beadloom.infrastructure.doc_roots import SPACE_TO_BE, resolve_doc_spaces
+
     graph_dir = project_root / ".beadloom" / "_graph"
     docs_dir = project_root / "docs"
-    return _dir_mtime(graph_dir), _dir_mtime(docs_dir)
+    spaces = resolve_doc_spaces(project_root)
+    intent_mtime = _files_mtime(spaces.documents_in(project_root, SPACE_TO_BE))
+    return _dir_mtime(graph_dir), max(_dir_mtime(docs_dir), intent_mtime)
 
 
 def bundle_cache_key(
@@ -241,15 +265,25 @@ def bundle_cache_key(
     depth: int,
     max_nodes: int,
     max_chunks: int,
+    *,
+    with_intent: bool = False,
 ) -> str:
     """Build the canonical L2 cache key for a context bundle.
 
     Matches the ``ref_id:depth:max_nodes:max_chunks`` scheme the MCP server
     already uses for single-focus bundles; for multi-focus requests the focus
     ref_ids are joined with ``,`` so distinct focus sets never collide.
+
+    A bundle built with the intent space read is a DIFFERENT bundle from one
+    built without it, so ``with_intent`` extends the key. Sharing one entry
+    would let a caller that opted out serve its *not checked* answer to a caller
+    that asked, which is the one confusion this whole surface exists to prevent.
+    The suffix is only appended when intent was read, so every key a caller
+    without it produces is byte-identical to the ones already in the cache.
     """
     focus = ",".join(ref_ids)
-    return f"{focus}:{depth}:{max_nodes}:{max_chunks}"
+    key = f"{focus}:{depth}:{max_nodes}:{max_chunks}"
+    return f"{key}:intent" if with_intent else key
 
 
 def build_context_cached(
@@ -262,6 +296,7 @@ def build_context_cached(
     max_chunks: int,
     graph_mtime: float = 0.0,
     docs_mtime: float = 0.0,
+    intent: IntentReading | None = None,
 ) -> dict[str, Any]:
     """Build a context bundle, going through the L2 :class:`SqliteCache`.
 
@@ -277,7 +312,9 @@ def build_context_cached(
     # at import time (builder imports remain one-directional).
     from beadloom.context_oracle.builder import build_context
 
-    cache_key = bundle_cache_key(ref_ids, depth, max_nodes, max_chunks)
+    cache_key = bundle_cache_key(
+        ref_ids, depth, max_nodes, max_chunks, with_intent=intent is not None
+    )
 
     cached = cache.get(cache_key, graph_mtime=graph_mtime, docs_mtime=docs_mtime)
     if cached is not None:
@@ -289,6 +326,7 @@ def build_context_cached(
         depth=depth,
         max_nodes=max_nodes,
         max_chunks=max_chunks,
+        intent=intent,
     )
     cache.put(cache_key, bundle, graph_mtime=graph_mtime, docs_mtime=docs_mtime)
     return bundle

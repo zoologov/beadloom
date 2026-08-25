@@ -1,11 +1,37 @@
 # ACTIVE: BDL-061 — Enforced agentic flow
 
-> **Last updated:** 2026-08-25
+> **Last updated:** 2026-08-26
 > **Phase:** Development
 
 ---
 
 ## Current Bead
+
+**`.87` — `ctx` answers what a node IS and now also what it is FOR.** On
+`features/BDL-061-ctx-intent`, off `main` at `7572c19`. `beadloom ctx <ref-id>` is step 4 of
+BEFORE ANY WORK, so it is the one moment an agent is guaranteed to ask about a node — and it
+returned reality with no intent. The bundle now carries an `intent` section: the epics whose
+planning documents **declared** the focus node, with the document and line to read the reason
+at. The join is `.17`'s, read through a port rather than copied: `context_oracle/intent.py`
+holds the policy and the port types, `application/intent_reader.py` fills them, so the domain
+never reaches up into application.
+
+Three decisions, with their reasons. **Which intent belongs to a node:** the epics that
+declared it in *Related Files*, because `.17` already measured the alternative and threw it
+away. **What a node with no declaration shows** — 69 of this repository's 84 nodes, so the
+common case — is `none_declared` **with the size of what was searched**: "61 epic(s) read, 5 of
+them declare a node". That is a measurement, and it is deliberately not the same status as
+`not_checked`, which is what `--no-intent`, an empty TO-BE space, a population that declares
+nothing anywhere, and an unreadable `doc_roots` each report with their own reason. **Default,
+not opt-in**, on measured numbers: the section costs 306 B on `flow-guards` and 713 B on `why`
+against bundles of 124 KB and 150 KB, the mean cost of turning it on is 22 B per bundle
+(0.015%), and reading the whole TO-BE space is 26 ms on a cold bundle and nothing on a cached
+one — `compute_bundle_mtimes` now folds the TO-BE tree into the bundle cache's freshness
+inputs, so an edited `CONTEXT.md` invalidates the bundles that carry it.
+
+No bead status is claimed. `bd close` writes only the local database, so the committed export
+and the live tracker disagree on a branch, and the export costs 2.7 MB per cold bundle for a
+fact that does not change which epic declared the node.
 
 **Drift wave** on `features/BDL-061-drift`, off `main` at `91d0120`. Six defects raised from P2
 to P1 for one reason: **they get worse with use.** A latent defect that fires only on a non-UTF-8
@@ -254,6 +280,9 @@ image — .6's uncounted 26-vs-11 — which is a third dimension and its own mec
 
 ## Progress
 
+- [x] `.87` dev (2026-08-26) — intent delivered into `ctx` and the MCP `get_context`;
+      33 tests (30 unit + 3 acceptance), suite 7043 → 7076, `beadloom ci` rc 0, green in a
+      clean room over 985 archived files plus the 24 this bead touched
 - [x] PRD → Approved (2026-08-22)
 - [x] RFC → Approved (2026-08-22)
 - [x] CONTEXT + PLAN → Approved (2026-08-22)

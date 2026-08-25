@@ -92,7 +92,9 @@ Get a context bundle for a set of ref_id(s).
 }
 ```
 
-Returns JSON with fields: version, focus, graph (nodes + edges), text_chunks, code_symbols, sync_status. Supports L1/L2 caching -- returns `{"cached": true, "etag": ..., "hint": ...}` when unchanged.
+Returns JSON with fields: version, focus, graph (nodes + edges), text_chunks, code_symbols, sync_status, constraints, intent, routes, tests. Supports L1/L2 caching -- returns `{"cached": true, "etag": ..., "hint": ...}` when unchanged.
+
+The `intent` field carries the epics whose planning documents declared the focus node, so an agent asking what a node IS also learns what it is FOR. It is filled when the server knows the project root, and reports `{"status": "not_checked", "reason": "intent_space_not_read"}` when it does not -- a different statement from "no epic declares this node", which is `{"status": "none_declared"}` and carries the number of epics that were read. See `docs/domains/context-oracle/components/node-intent/DOC.md`.
 
 #### get_graph
 
@@ -385,7 +387,7 @@ hands it to the runner, so `create_server` classifies a dispatch failure
 - `_is_index_stale(project_root, conn)` -- check staleness by comparing graph/docs mtimes
 
 Handler functions (sync, testable without MCP transport):
-- `handle_get_context(conn, *, ref_id, depth=2, max_nodes=20, max_chunks=10)` -- context bundle
+- `handle_get_context(conn, *, ref_id, depth=2, max_nodes=20, max_chunks=10, project_root=None)` -- context bundle; `project_root` is what lets the bundle carry recorded intent, and without it the bundle says intent was not checked rather than absent
 - `handle_get_graph(conn, *, ref_id, depth=2)` -- subgraph
 - `handle_list_nodes(conn, kind=None)` -- list nodes
 - `handle_sync_check(conn, ref_id=None, project_root=None)` -- sync status, including the `incomplete` document-shape rows when `project_root` is given (the required sections are resolved from that root, so they cannot be resolved without one)
