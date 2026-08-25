@@ -1115,9 +1115,9 @@ would retry the wrong one.
 
 The brief carries the **assignment** (the bead's title and description), the
 **declared scope**, the **specification** (the graph's documents for those nodes
-and every scenario whose `@bead:` tag names the bead) and the **change** (`git
-diff <base>...HEAD`, the working tree, and the untracked files, each path
-carrying the node that owns it). It does not carry the bead's comments. Those are
+and every scenario whose `@bead:` tag names the bead) and the **change**
+(`git diff <base>...HEAD`, the working tree, and the untracked files, each
+path carrying the node that owns it). It does not carry the bead's comments. Those are
 counted and never printed (the notice is wrapped for this page):
 
 ```

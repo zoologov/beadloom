@@ -174,13 +174,15 @@ Judging that is the reviewer's work, and `scenario-coverage` reports the binding
 not the content. `N bound scenario(s)` is therefore a count the reviewer must
 still open.
 
-**The change is measured over the branch, not over the bead.** `git diff
-<base>...HEAD` plus the working tree plus the untracked files is everything the
-whole branch did, and no per-bead attribution exists in the commits. On a branch
-carrying five beads all five briefs report the same files, so the
-`changed-outside-scope` finding names its window — `measured over the branch
-since <ref>` — instead of claiming an attribution it cannot make. `--since <the
-sibling's landing point>` narrows the window when a caller knows one.
+**The change is measured over the branch, not over the bead.**
+`git diff <base>...HEAD` plus the working tree plus the untracked files is
+everything the whole branch did, and no per-bead attribution exists in the
+commits. On a branch carrying five beads all five briefs report the same files,
+so the `changed-outside-scope` finding names its window
+(`measured over the branch since <ref>`) instead of claiming an attribution it
+cannot make.
+`--since <the sibling's landing point>` narrows the window when a caller knows
+one.
 
 **The withholding models the author's comments and the coordinator's paste of
 them; it does not model the coordinator's own observations.** A launch prompt
