@@ -155,7 +155,7 @@ class TestLintCommand:
         runner = CliRunner()
         result = runner.invoke(main, ["lint", "--project", str(project), "--format", "json"])
         assert result.exit_code == 0, result.output
-        parsed = json.loads(result.output)
+        parsed = json.loads(result.stdout)
         assert "violations" in parsed
         assert "summary" in parsed
 

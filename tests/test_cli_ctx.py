@@ -60,7 +60,7 @@ class TestCtxCommand:
         runner = CliRunner()
         result = runner.invoke(main, ["ctx", "PROJ-1", "--json", "--project", str(project)])
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["version"] == 2
         assert data["focus"]["ref_id"] == "PROJ-1"
 
@@ -79,7 +79,7 @@ class TestCtxCommand:
             main, ["ctx", "PROJ-1", "routing", "--json", "--project", str(project)]
         )
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         node_ids = {n["ref_id"] for n in data["graph"]["nodes"]}
         assert "PROJ-1" in node_ids
         assert "routing" in node_ids
@@ -91,7 +91,7 @@ class TestCtxCommand:
             main, ["ctx", "PROJ-1", "--depth", "1", "--json", "--project", str(project)]
         )
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["version"] == 2
 
     def test_ctx_max_nodes_flag(self, tmp_path: Path) -> None:
@@ -173,8 +173,8 @@ class TestCtxCacheTransparency:
         )
         assert second.exit_code == 0, second.output
 
-        first_bundle = json.loads(first.output)
-        second_bundle = json.loads(second.output)
+        first_bundle = json.loads(first.stdout)
+        second_bundle = json.loads(second.stdout)
         # Parsed bundles are equal (transparent cache).
         assert second_bundle == first_bundle
         # Etag (canonical serialization) is identical → byte-stable payload.

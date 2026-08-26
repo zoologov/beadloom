@@ -326,7 +326,7 @@ class TestCtxDeliversIntent:
             main, ["ctx", "PROJ-1", "--json", "--project", str(project)]
         )
         assert result.exit_code == 0, result.output
-        intent = json.loads(result.output)["intent"]
+        intent = json.loads(result.stdout)["intent"]
         assert intent["status"] == INTENT_DECLARED
         assert intent["declared_by"][0]["epic"] == "ORD-4"
         assert intent["declared_by"][0]["document"].endswith("ORD-4/CONTEXT.md")
@@ -364,7 +364,7 @@ class TestCtxDeliversIntent:
             main, ["ctx", "PROJ-1", "--json", "--project", str(project)]
         )
         assert result.exit_code == 0, result.output
-        intent = json.loads(result.output)["intent"]
+        intent = json.loads(result.stdout)["intent"]
         assert intent["status"] == INTENT_NONE_DECLARED
         assert intent["epics_read"] == 1
         assert intent["epics_declaring_nodes"] == 1
@@ -376,7 +376,7 @@ class TestCtxDeliversIntent:
             main, ["ctx", "PROJ-1", "--json", "--no-intent", "--project", str(project)]
         )
         assert result.exit_code == 0, result.output
-        intent = json.loads(result.output)["intent"]
+        intent = json.loads(result.stdout)["intent"]
         assert intent["status"] == INTENT_NOT_CHECKED
         assert intent["reason"] == REASON_NOT_READ
 
@@ -386,7 +386,7 @@ class TestCtxDeliversIntent:
             main, ["ctx", "PROJ-1", "--json", "--project", str(project)]
         )
         assert result.exit_code == 0, result.output
-        intent = json.loads(result.output)["intent"]
+        intent = json.loads(result.stdout)["intent"]
         assert intent["status"] == INTENT_NOT_CHECKED
         assert intent["reason"] == REASON_NO_INTENT_DOCUMENTS
 

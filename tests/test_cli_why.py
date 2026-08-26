@@ -71,7 +71,7 @@ class TestCliWhy:
         runner = CliRunner()
         result = runner.invoke(main, ["why", "PROJ-1", "--json", "--project", str(project)])
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["node"]["ref_id"] == "PROJ-1"
         assert "upstream" in data
         assert "downstream" in data
@@ -85,7 +85,7 @@ class TestCliWhy:
             main, ["why", "PROJ-1", "--depth", "1", "--json", "--project", str(project)]
         )
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["node"]["ref_id"] == "PROJ-1"
 
     def test_cli_why_not_found(self, tmp_path: Path) -> None:
@@ -123,7 +123,7 @@ class TestCliWhy:
             main, ["why", "PROJ-1", "--reverse", "--json", "--project", str(project)]
         )
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["node"]["ref_id"] == "PROJ-1"
 
     def test_cli_why_format_tree(self, tmp_path: Path) -> None:

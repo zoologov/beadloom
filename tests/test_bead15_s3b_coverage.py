@@ -376,7 +376,7 @@ class TestSiteGenerationCluster:
         result = runner.invoke(
             main, ["lint", "--format", "json", "--project", str(REPO_ROOT), "--no-reindex"]
         )
-        payload = json.loads(result.output)
+        payload = json.loads(result.stdout)
         coverage_files = {
             str(v["file_path"])
             for v in payload["violations"]
@@ -394,7 +394,7 @@ class TestSiteGenerationCluster:
             main, ["ctx", "site-generation", "--project", str(REPO_ROOT), "--json"]
         )
         assert result.exit_code == 0, result.output
-        bundle = json.loads(result.output)
+        bundle = json.loads(result.stdout)
         assert bundle["focus"]["ref_id"] == "site-generation"
         assert bundle["focus"]["kind"] == "feature"
 
@@ -439,7 +439,7 @@ class TestNewNodesResolve:
             main, ["ctx", ref_id, "--project", str(REPO_ROOT), "--json"]
         )
         assert result.exit_code == 0, result.output
-        bundle = json.loads(result.output)
+        bundle = json.loads(result.stdout)
         assert bundle["focus"]["ref_id"] == ref_id
         assert bundle["focus"]["kind"] == "feature"
 
@@ -451,7 +451,7 @@ class TestNewNodesResolve:
             main, ["ctx", ref_id, "--project", str(REPO_ROOT), "--json"]
         )
         assert result.exit_code == 0, result.output
-        bundle = json.loads(result.output)
+        bundle = json.loads(result.stdout)
         assert bundle["focus"]["ref_id"] == ref_id
         assert bundle["focus"]["kind"] == "component"
 
@@ -572,7 +572,7 @@ class TestSyncCheckNewPairs:
             main, ["sync-check", "--json", "--project", str(REPO_ROOT)]
         )
         assert result.exit_code == 0, result.output
-        pairs: list[dict[str, object]] = json.loads(result.output)["pairs"]
+        pairs: list[dict[str, object]] = json.loads(result.stdout)["pairs"]
         return pairs
 
     def test_new_node_docs_are_tracked_pairs(self) -> None:

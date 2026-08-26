@@ -69,7 +69,7 @@ class TestGraphCommand:
         runner = CliRunner()
         result = runner.invoke(main, ["graph", "--json", "--project", str(project)])
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "nodes" in data
         assert "edges" in data
 
@@ -78,7 +78,7 @@ class TestGraphCommand:
         runner = CliRunner()
         result = runner.invoke(main, ["graph", "FEAT-1", "--json", "--project", str(project)])
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         node_ids = {n["ref_id"] for n in data["nodes"]}
         assert "FEAT-1" in node_ids
 

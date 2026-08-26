@@ -342,7 +342,7 @@ class TestCliToleranceOutput:
         )
 
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
 
         # Check that fresh items include tolerance field
         for item in data["fresh"]:

@@ -361,7 +361,7 @@ def test_json_drifted_row_fields_are_accurate(tmp_path: Path) -> None:
             ["active-sync", "--json", "--project", str(tmp_path), "--no-export"],
         )
     assert result.exit_code == 0, result.output
-    payload = json.loads(result.output)
+    payload = json.loads(result.stdout)
     row = next(r for r in payload["drifted_rows"] if r["bead_id"] == "demo-a.1")
     assert row["old"] == "ready"
     assert row["new"] == "✓ done"
@@ -380,7 +380,7 @@ def test_json_clean_has_empty_drift(tmp_path: Path) -> None:
             main, ["active-sync", "--json", "--project", str(tmp_path), "--no-export"]
         )
     assert result.exit_code == 0, result.output
-    payload = json.loads(result.output)
+    payload = json.loads(result.stdout)
     assert payload["changed_files"] == []
     assert payload["drifted_rows"] == []
 

@@ -251,7 +251,7 @@ class TestCli:
             ["setup-branch-protection", "--repo", "acme/widget", "--dry-run"],
         )
         assert result.exit_code == 0, result.output
-        payload = json.loads(result.output.split("--- payload (stdin) ---", 1)[1])
+        payload = json.loads(result.stdout.split("--- payload (stdin) ---", 1)[1])
         assert payload["required_pull_request_reviews"] == {
             "required_approving_review_count": 0
         }
@@ -270,7 +270,7 @@ class TestCli:
             ["setup-branch-protection", "--repo", "acme/widget", "--dry-run"],
         )
         assert result.exit_code == 0, result.output
-        payload = json.loads(result.output.split("--- payload (stdin) ---", 1)[1])
+        payload = json.loads(result.stdout.split("--- payload (stdin) ---", 1)[1])
         assert payload["required_status_checks"]["contexts"] == [
             "gate",
             "tests (3.10)",
@@ -299,7 +299,7 @@ class TestCli:
             ],
         )
         assert result.exit_code == 0, result.output
-        payload = json.loads(result.output.split("--- payload (stdin) ---", 1)[1])
+        payload = json.loads(result.stdout.split("--- payload (stdin) ---", 1)[1])
         assert payload["required_status_checks"]["contexts"] == ["a", "b"]
 
     def test_dry_run_honors_custom_branch_and_checks(self) -> None:
@@ -321,5 +321,5 @@ class TestCli:
         )
         assert result.exit_code == 0, result.output
         assert "repos/acme/widget/branches/trunk/protection" in result.output
-        payload = json.loads(result.output.split("--- payload (stdin) ---", 1)[1])
+        payload = json.loads(result.stdout.split("--- payload (stdin) ---", 1)[1])
         assert payload["required_status_checks"]["contexts"] == ["Beadloom Gate", "lint"]

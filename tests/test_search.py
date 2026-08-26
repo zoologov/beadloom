@@ -230,7 +230,7 @@ class TestSearchCLI:
         runner = CliRunner()
         result = runner.invoke(main, ["search", "OAuth2", "--json", "--project", str(project)])
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert isinstance(data, list)
 
     def test_search_no_results(self, tmp_path: Path) -> None:

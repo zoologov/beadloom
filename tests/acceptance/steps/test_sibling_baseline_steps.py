@@ -99,7 +99,7 @@ def _run(world: dict[str, Any]) -> None:
 def _pairs(world: dict[str, Any]) -> list[dict[str, Any]]:
     """The doc-code pairs only — the structural `incomplete` rows are a different
     population and carry no code file to attribute a verdict to."""
-    return [p for p in json.loads(world["result"].output)["pairs"] if p["code_path"]]
+    return [p for p in json.loads(world["result"].stdout)["pairs"] if p["code_path"]]
 
 
 @given("a document paired with three code files of one node")

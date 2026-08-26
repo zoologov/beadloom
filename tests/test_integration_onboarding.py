@@ -229,7 +229,7 @@ class TestDocsPolishIntegration:
         )
         assert result.exit_code == 0, result.output
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "nodes" in data
         assert isinstance(data["nodes"], list)
         assert len(data["nodes"]) > 0

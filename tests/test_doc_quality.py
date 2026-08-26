@@ -651,7 +651,7 @@ class TestTheCliAndTheGateReportIt:
 
         # Assert — one JSON document on stdout and nothing after it
         assert result.exit_code == 0, result.output
-        payload = _json.loads(result.output)
+        payload = _json.loads(result.stdout)
         assert payload["kinds_read_by_nothing"] == ["BRIEF"]
         assert payload["kinds"]["BRIEF"]["documents"] == 1
         assert payload["kinds"]["PRD"]["read"][MEASURABLE_GOAL] == 1

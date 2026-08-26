@@ -2202,7 +2202,7 @@ class TestPrimeCli:
         runner = CliRunner()
         result = runner.invoke(main, ["prime", "--json", "--project", str(tmp_path)])
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "project" in data
 
     def test_prime_cli_update_flag(self, tmp_path: Path) -> None:

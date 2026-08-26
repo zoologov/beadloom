@@ -1148,7 +1148,7 @@ class TestCliDebtReport:
             main, ["status", "--json", "--project", str(project)]
         )
         assert result.exit_code == 0, result.output
-        data = _json.loads(result.output)
+        data = _json.loads(result.stdout)
         assert "debt_score" not in data
 
     def test_no_db_returns_error(self, tmp_path: Path) -> None:
@@ -1428,7 +1428,7 @@ class TestCliDebtReportJson:
             ["status", "--debt-report", "--json", "--project", str(project)],
         )
         assert result.exit_code == 0, result.output
-        data = _json.loads(result.output)
+        data = _json.loads(result.stdout)
         assert "debt_score" in data
         assert "severity" in data
         assert "categories" in data
@@ -1448,7 +1448,7 @@ class TestCliDebtReportJson:
             ["status", "--debt-report", "--json", "--project", str(project)],
         )
         assert result.exit_code == 0, result.output
-        data = _json.loads(result.output)
+        data = _json.loads(result.stdout)
         assert isinstance(data["debt_score"], (int, float))
         assert isinstance(data["severity"], str)
         assert isinstance(data["categories"], list)
@@ -1471,7 +1471,7 @@ class TestCliDebtReportJson:
             ["status", "--json", "--project", str(project)],
         )
         assert result.exit_code == 0, result.output
-        data = _json.loads(result.output)
+        data = _json.loads(result.stdout)
         # Regular status JSON has nodes_count, not debt_score
         assert "nodes_count" in data
         assert "debt_score" not in data
@@ -1596,7 +1596,7 @@ class TestCliFailIf:
         )
         # Should still produce valid JSON and exit 1
         assert result.exit_code == 1
-        data = _json.loads(result.output)
+        data = _json.loads(result.stdout)
         assert "debt_score" in data
 
     def test_fail_if_requires_debt_report(self, tmp_path: Path) -> None:
@@ -1684,7 +1684,7 @@ class TestCliCategoryFilter:
              "--project", str(project)],
         )
         assert result.exit_code == 0, result.output
-        data = _json.loads(result.output)
+        data = _json.loads(result.stdout)
         assert len(data["categories"]) == 1
         assert data["categories"][0]["name"] == "doc_gaps"
 
@@ -2528,7 +2528,7 @@ class TestCliFailIfEdgeCases:
             main,
             ["status", "--debt-report", "--json", "--project", str(project)],
         )
-        score = _json.loads(result.output)["debt_score"]
+        score = _json.loads(result.stdout)["debt_score"]
 
         # Now test with threshold exactly at score
         threshold = int(score)

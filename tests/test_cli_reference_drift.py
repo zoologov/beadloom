@@ -91,7 +91,7 @@ def test_sync_check_json_reports_reference_drift(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(main, ["sync-check", "--json", "--project", str(project)])
     assert result.exit_code == 0
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["summary"]["surface_drift"] == 1
     refs = data["references"]
     assert len(refs) == 1
@@ -116,7 +116,7 @@ def test_sync_update_clears_surface_drift(tmp_path: Path) -> None:
     assert "reference doc" in update.output.lower()
 
     after = runner.invoke(main, ["sync-check", "--json", "--project", str(project)])
-    data = json.loads(after.output)
+    data = json.loads(after.stdout)
     assert data["summary"]["surface_drift"] == 0
     assert data["references"][0]["status"] == "ok"
 
@@ -131,7 +131,7 @@ def test_sync_update_all_clears_surface_drift(tmp_path: Path) -> None:
     assert update.exit_code == 0
 
     after = runner.invoke(main, ["sync-check", "--json", "--project", str(project)])
-    data = json.loads(after.output)
+    data = json.loads(after.stdout)
     assert data["summary"]["surface_drift"] == 0
 
 
@@ -145,6 +145,6 @@ def test_no_reference_docs_is_noop(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(main, ["sync-check", "--json", "--project", str(project)])
     assert result.exit_code == 0
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["references"] == []
     assert data["summary"]["surface_drift"] == 0

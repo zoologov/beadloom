@@ -115,7 +115,7 @@ def when_scoped(world: dict[str, Any]) -> None:
 
 
 def _payload(world: dict[str, Any]) -> dict[str, Any]:
-    return json.loads(world["result"].output)
+    return json.loads(world["result"].stdout)
 
 
 @then("the check reports the staged pair as stale")

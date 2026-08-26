@@ -110,7 +110,7 @@ class TestCliDiffJson:
         runner = CliRunner()
         result = runner.invoke(main, ["diff", "--json", "--project", str(project)])
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "since_ref" in data
         assert "nodes" in data
         assert "edges" in data

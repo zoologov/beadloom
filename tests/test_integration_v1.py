@@ -75,7 +75,7 @@ class TestSelfLint:
         runner = CliRunner()
         result = runner.invoke(main, ["lint", "--project", str(_PROJECT_ROOT), "--format", "json"])
         assert result.exit_code == 0, result.output
-        parsed = json.loads(result.output)
+        parsed = json.loads(result.stdout)
         assert parsed["summary"]["error_count"] == 0
         assert parsed["summary"]["rules_evaluated"] >= 7
 

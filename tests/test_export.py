@@ -448,7 +448,7 @@ class TestExportCli:
         runner = CliRunner()
         result = runner.invoke(main, ["export", "--project", str(project)])
         assert result.exit_code == 0, result.output
-        parsed = json.loads(result.output)
+        parsed = json.loads(result.stdout)
         assert parsed["schema_version"] == 2
         assert len(parsed["nodes"]) == 2
         assert len(parsed["edges"]) == 2

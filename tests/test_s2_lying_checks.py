@@ -250,7 +250,7 @@ class TestDeclaredDocsAreGenuinelyChecked:
 
         runner = CliRunner()
         result = runner.invoke(main, ["sync-check", "--json", "--project", str(project)])
-        payload = json.loads(result.output)
+        payload = json.loads(result.stdout)
         stale = [p for p in payload["pairs"] if p["status"] == "stale" and p["ref_id"] == "alpha"]
         assert stale, payload
         # It must be the PAIR that went stale — a coverage-gap entry carries no
@@ -269,7 +269,7 @@ class TestDeclaredDocsAreGenuinelyChecked:
 
         runner = CliRunner()
         result = runner.invoke(main, ["sync-check", "--json", "--project", str(project)])
-        payload = json.loads(result.output)
+        payload = json.loads(result.stdout)
         assert payload["summary"]["unchecked"] == 1
         assert [u["ref_id"] for u in payload["unchecked"]] == ["gamma"]
 

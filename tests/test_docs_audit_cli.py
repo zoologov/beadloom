@@ -402,7 +402,7 @@ class TestCliDocsAudit:
         result = runner.invoke(main, ["docs", "audit", "--json", "--project", str(proj)])
 
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "facts" in data
         assert "stale" in data
         assert "fresh" in data
@@ -474,7 +474,7 @@ class TestCliDocsAudit:
         result = runner.invoke(main, ["docs", "audit", "--json", "--project", str(proj)])
 
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
 
         # Verify facts structure
         for _fact_name, fact_val in data["facts"].items():

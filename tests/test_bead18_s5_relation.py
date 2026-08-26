@@ -568,7 +568,7 @@ class TestTheCommandAndTheGateReadOneTracker:
         )
 
         assert result.exit_code == 0
-        assert json.loads(result.output)["refs_checked"] == 1
+        assert json.loads(result.stdout)["refs_checked"] == 1
 
     def test_the_command_and_the_gate_agree_on_one_tree(
         self, monkeypatch: pytest.MonkeyPatch
@@ -588,7 +588,7 @@ class TestTheCommandAndTheGateReadOneTracker:
         cli = json.loads(
             self._cli(
                 root, monkeypatch, [{"title": "[PROJ-1.1][dev] ship it", "status": "closed"}]
-            ).output
+            ).stdout
         )
         gate = _step_doc_spaces(root)
 
@@ -802,7 +802,7 @@ class TestAnExcusedPairSaysSo:
         monkeypatch.chdir(root)
 
         result = CliRunner().invoke(main, ["sync-check", "--json"])
-        summary = json.loads(result.output)["summary"]
+        summary = json.loads(result.stdout)["summary"]
 
         assert summary["total"] == sum(
             summary[key] for key in ("ok", "stale", "missing", "unverified", "unchecked", "exempt")

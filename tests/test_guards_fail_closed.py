@@ -116,7 +116,7 @@ class TestUnderAHarnessTheClassBlocks:
             stdin="{}",
         )
 
-        payload = json.loads(result.output)
+        payload = json.loads(result.stdout)
         assert payload["outcome"] == GuardOutcome.ERROR.value, label
         assert payload["why"].strip(), label
         assert payload["not_covered"], label
