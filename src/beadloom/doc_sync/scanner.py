@@ -292,13 +292,36 @@ class DocScanner:
             if in_code_block:
                 continue
 
-            # Extract version strings (special handling, no proximity needed)
-            mentions.extend(self._extract_versions(line, file_path, line_num))
-
-            # Extract number-based mentions via keyword proximity
-            mentions.extend(self._extract_number_mentions(line, file_path, line_num))
+            mentions.extend(self.scan_line(line, origin=file_path, line_number=line_num))
 
         return mentions
+
+    def scan_line(
+        self, line: str, *, origin: Path, line_number: int = 1
+    ) -> list[Mention]:
+        """Every fact mention one line of prose states.
+
+        The seam :meth:`scan_file` is written in terms of, and the entry point
+        for prose that is not in a file at all — a node ``summary`` in the
+        architecture graph is one line of exactly this kind, and the
+        ``graph-summary-facts`` lint rule reads it here (BDL-062 ``.1``).
+
+        It exists so there is ONE notion of "a version" and ONE keyword table in
+        this codebase. A second extractor built beside this one would agree with
+        it on the day it was written and diverge on the first token-boundary or
+        clause-scope repair that landed on only one of the two, which is how the
+        next drift class starts.
+
+        *origin* is what the returned :class:`Mention` records as its source and
+        the only thing the low-confidence filename check reads. A caller whose
+        prose has no file passes the identifier the reader needs to find it.
+        """
+        return [
+            # Version strings: matched by pattern, no proximity needed.
+            *self._extract_versions(line, origin, line_number),
+            # Counts: matched by keyword proximity within the number's clause.
+            *self._extract_number_mentions(line, origin, line_number),
+        ]
 
     def _extract_versions(
         self, line: str, file_path: Path, line_num: int

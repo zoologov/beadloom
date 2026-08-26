@@ -61,6 +61,10 @@ from beadloom.graph.rules.scenario_coverage import (
     SCENARIO_COVERAGE_RULE_TYPE,
     evaluate_scenario_coverage_rules,
 )
+from beadloom.graph.rules.summary_facts import (
+    SUMMARY_FACTS_RULE_TYPE,
+    evaluate_summary_facts_rules,
+)
 from beadloom.graph.rules.types import (
     DEFAULT_DOC_AREA_MIN_SUPPORT,
     DEFAULT_DOC_AREA_THRESHOLD,
@@ -86,6 +90,7 @@ from beadloom.graph.rules.types import (
     RequireRule,
     Rule,
     ScenarioCoverageRule,
+    SummaryFactsRule,
     UnregisteredFeatureCandidateRule,
     Violation,
     exit_condition_deadline,
@@ -193,6 +198,7 @@ def evaluate_all(
     module_coverage_rules: list[ModuleCoverageRule] = []
     scenario_coverage_rules: list[ScenarioCoverageRule] = []
     doc_area_rules: list[DocAreaCoherenceRule] = []
+    summary_facts_rules: list[SummaryFactsRule] = []
 
     for rule in rules:
         if isinstance(rule, DenyRule):
@@ -217,6 +223,8 @@ def evaluate_all(
             scenario_coverage_rules.append(rule)
         elif isinstance(rule, DocAreaCoherenceRule):
             doc_area_rules.append(rule)
+        elif isinstance(rule, SummaryFactsRule):
+            summary_facts_rules.append(rule)
 
     violations = (
         evaluate_deny_rules(conn, deny_rules)
@@ -232,6 +240,9 @@ def evaluate_all(
             conn, scenario_coverage_rules, project_root=project_root
         )
         + evaluate_doc_area_coherence_rules(conn, doc_area_rules)
+        + evaluate_summary_facts_rules(
+            conn, summary_facts_rules, project_root=project_root
+        )
         # Last: what the rules above could NOT look at. A rule with an empty
         # candidate set contributes 0 violations and 1 to `N rules evaluated`,
         # which reads exactly like a rule that passed (BDL-UX #172 / .48).
@@ -258,6 +269,7 @@ __all__ = [
     "LIVE_EDGE_LIFECYCLES",
     "MATCHING_FORM_HINT",
     "SCENARIO_COVERAGE_RULE_TYPE",
+    "SUMMARY_FACTS_RULE_TYPE",
     "SUPPORTED_SCHEMA_VERSIONS",
     "VALID_EDGE_KINDS",
     "VALID_NODE_KINDS",
@@ -278,6 +290,7 @@ __all__ = [
     "RequireRule",
     "Rule",
     "ScenarioCoverageRule",
+    "SummaryFactsRule",
     "SuppressedCrossing",
     "UnregisteredFeatureCandidateRule",
     "Violation",
@@ -294,6 +307,7 @@ __all__ = [
     "evaluate_require_rules",
     "evaluate_rule_liveness",
     "evaluate_scenario_coverage_rules",
+    "evaluate_summary_facts_rules",
     "evaluate_unregistered_feature_candidate_rules",
     "exit_condition_deadline",
     "inert_rule_names",

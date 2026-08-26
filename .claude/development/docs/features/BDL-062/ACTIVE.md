@@ -10,7 +10,7 @@
 | Bead | Role | Status | Note |
 |---|---|---|---|
 | `beadloom-viaj` | feature | open | parent |
-| `.1` | dev | **in progress** | `graph_summary_facts` — unblocked, contract delivered |
+| `.1` | dev | done | `graph_summary_facts` — RED captured on 3 nodes; 32 tests; 12 neuterings verified |
 | `.2` | dev | done | `doc_area_coherence` — names exactly the four drifting nodes; 9 live-repo tests left red for `.4` |
 | `.3` | dev | done | audit stops describing itself — three populations; `FactRegistry.collect_set()` is `.1`'s contract |
 | `.4` | dev | blocked | the corrections |
@@ -224,3 +224,54 @@ on this repository and on every single-framework project.
 
 On the evidence the **rename** candidate is the better one. It has prose consequences, so it
 belongs with `.4`/`.7`, not with `.3`. #193 updated accordingly.
+
+**2026-08-26** — `.1` complete. `graph-summary-facts` ships in `graph/rules/summary_facts.py`,
+wired through the loader, the liveness counter, `evaluate_all`, the `rule_engine` shim and the
+reindex serializer. It owns neither the extraction nor the comparison: `DocScanner.scan_line`
+reads the summary and `compare_facts` judges it, so this codebase keeps one notion of "a version"
+and one keyword table.
+
+**The red was captured before anything corrected it** — `beadloom lint --format json` on the
+working tree at `157eb8a`, three findings at `error`:
+
+- `beadloom` — states version `v1.5.0`, project computes `3.0.0` (pyproject.toml)
+- `mcp-server` — states `mcp_tool_count` 14, project computes 18 (MCP tool catalog)
+- `route-extraction` — states `framework_count` 12, project computes 84 (graph DB)
+
+Every message carries the population it is a fraction of: "read from 84 node summaries: 3 state
+a checkable fact (0 agree, 3 disagree, 0 could not be verified) and 81 state none". The same
+three reproduce in a clean room (`git archive HEAD` plus 16 files), so they are a property of the
+graph and not of this working tree.
+
+**A third finding, not on `.4`'s list.** `route-extraction`'s "12 web frameworks" is BDL-UX #193
+reaching the graph: `framework_count` computes 84 (nodes declaring a framework) while the summary
+means the parsers the route extractor ships. Fixing #193 to the distinct count (1) would not clear
+it either, so the honest resolutions are to reword the summary or to add a graph-side suppression.
+The identical sentence in prose is already suppressed for `docs/domains/context-oracle/README.md`
+by a `docs_audit.ignore` triple. **No suppression mechanism was built** — building the silencer
+before the owner has ruled is the wrong order, and it would have been a mechanism with no caller.
+
+**Two deviations from the brief, both deliberate.** `DocScanner` gained a public `scan_line`
+seam and `scan_file` is now written in terms of it, because the alternative was reaching into two
+private methods across a domain boundary or forking the extractor. And `graph` now imports
+`doc_sync`; that is domain-to-domain, unenforced here, and `graph -> context_oracle` was already
+the precedent.
+
+**Tests bite, measured by 12 explicit neuterings**, each reverted to a clean diff — dropping the
+unverifiable findings (4 fail), collapsing unverifiable into inertness (5), returning `[]` instead
+of "checked nothing" (3), forking the comparison to raw string equality (2), dropping the
+population clause (1), hardcoding severity (1), rewording the decline reason (3), pasting a second
+version regex (1), bypassing `scan_line` (1), removing the `evaluate_all` dispatch (1), accepting
+a `summary_facts` key that does nothing (1), and bare-integer matching (15, including all six
+false-positive tests).
+
+**Inherited redness, unchanged by this bead.** The failing test set is byte-identical with the
+rule enabled and disabled — measured, not assumed. It is now **10**, down from 12: the two
+`TestSyncCheckNewPairs` failures went green because `sync-update -y` re-baselined the pairs this
+bead's own doc edits made stale, which brought `sync-check` back to rc 0. `beadloom ci` is red at
+`HEAD` too, verified in the clean room, on `architecture.md:133`, `doc-sync/README.md:95` and
+`.beadloom/AGENTS.md` config-drift — none of them introduced here.
+
+**Moved for `.4` to pick up:** `rule_type_count` is now **15**, not 14, so `architecture.md:133`
+(which says 13) is two behind. `.beadloom/AGENTS.md` config-drift was already an error at `HEAD`
+and this rule makes it staler; `beadloom setup-rules --refresh` is its remedy.

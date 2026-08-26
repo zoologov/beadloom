@@ -35,6 +35,7 @@ from beadloom.graph.rules.types import (
     RequireRule,
     Rule,
     ScenarioCoverageRule,
+    SummaryFactsRule,
     UnregisteredFeatureCandidateRule,
 )
 from beadloom.graph.scenarios import DEFAULT_FEATURE_GLOB
@@ -741,6 +742,41 @@ def _parse_min_support(rule_name: str, raw: object) -> int:
     return raw
 
 
+def _parse_summary_facts_rule(
+    name: str,
+    description: str,
+    data: dict[str, object],
+    *,
+    severity: str = "error",
+) -> SummaryFactsRule:
+    """Parse the 'summary_facts' block of a rule.
+
+    YAML example::
+
+        - name: graph-summary-facts
+          description: "a number in a node summary agrees with the project"
+          severity: error
+          summary_facts: {}
+
+    The block takes no keys, and the empty mapping is the whole configuration
+    surface on purpose: what counts as a version, what counts as a claim about a
+    count and how close a count has to be are decided once by the documentation
+    audit, and a knob here would be a second answer to a question already
+    answered. An unknown key is REJECTED rather than ignored — a setting that
+    looks configured and does nothing is the failure this rule family exists to
+    catch.
+    """
+    unknown = sorted(data)
+    if unknown:
+        msg = (
+            f"Rule '{name}': 'summary_facts' takes no keys, got {unknown}. The "
+            f"extraction and the comparison come from the documentation audit, so "
+            f"there is nothing here to tune"
+        )
+        raise ValueError(msg)
+    return SummaryFactsRule(name=name, description=description, severity=severity)
+
+
 def _parse_non_behavioural(
     rule_name: str, index: int, entry: object
 ) -> NonBehaviouralNode:
@@ -849,6 +885,7 @@ def load_rules(rules_path: Path) -> list[Rule]:
         has_check = "check" in rule_data
         has_scenario_coverage = "scenario_coverage" in rule_data
         has_doc_area = "doc_area_coherence" in rule_data
+        has_summary_facts = "summary_facts" in rule_data
 
         rule_type_count = sum(
             [
@@ -863,6 +900,7 @@ def load_rules(rules_path: Path) -> list[Rule]:
                 has_module_coverage,
                 has_scenario_coverage,
                 has_doc_area,
+                has_summary_facts,
             ]
         )
         if rule_type_count != 1:
@@ -870,7 +908,8 @@ def load_rules(rules_path: Path) -> list[Rule]:
                 f"rules.yml: rule '{name}' must have exactly one of "
                 f"'deny', 'require', 'forbid_cycles', 'forbid_import', "
                 f"'forbid', 'layers', 'check', 'unregistered_feature_candidate', "
-                f"'module_coverage', 'scenario_coverage', or 'doc_area_coherence'"
+                f"'module_coverage', 'scenario_coverage', 'doc_area_coherence', "
+                f"or 'summary_facts'"
             )
             raise ValueError(msg)
 
@@ -941,6 +980,14 @@ def load_rules(rules_path: Path) -> list[Rule]:
                 raise ValueError(msg)
             rules.append(
                 _parse_doc_area_coherence_rule(name, description, da_data, severity=severity)
+            )
+        elif has_summary_facts:
+            sf_data = rule_data["summary_facts"]
+            if not isinstance(sf_data, dict):
+                msg = f"Rule '{name}': 'summary_facts' must be a mapping"
+                raise ValueError(msg)
+            rules.append(
+                _parse_summary_facts_rule(name, description, sf_data, severity=severity)
             )
         else:
             cycle_data = rule_data["forbid_cycles"]

@@ -19,6 +19,8 @@ The audit pipeline has three stages:
 
 2. **DocScanner** (`scanner.py`) -- Scans markdown files for numeric and version string mentions. A line is tokenized on whitespace first, and only a token whose whole core is a number is a candidate (Layer 0); each candidate is then associated with a fact type based on nearby keywords within a configurable proximity window. False positives (dates, hex colors, issue IDs, line references, version pins) are masked before extraction.
 
+   `scan_line` is the seam `scan_file` is written in terms of, and the entry point for prose that is not in a file at all. A node `summary` in the architecture graph is one line of exactly this kind, and the `graph-summary-facts` lint rule reads it here (BDL-062 `.1`). It exists so this codebase holds ONE notion of "a version" and ONE keyword table: a second extractor built beside this one would agree with it on the day it was written and diverge on the first token-boundary or clause-scope repair that landed on only one of the two. `origin` is what the returned `Mention` records as its source and the only thing the low-confidence filename check reads, so a caller whose prose has no file passes the identifier a reader needs to find it.
+
 3. **Comparator** (`compare_facts` in `audit.py`) -- Matches mentions against facts and applies configurable tolerances. Version strings require exact match; numeric facts support percentage-based tolerances (e.g., +/-10% for growing metrics like node_count).
 
 4. **Coverage** (`audit_coverage.py`) -- Reports, for every declared fact, whether the run checked anything at all, and the scan surface it ran over. A count of findings describes what the audit FOUND; coverage describes what it COVERED, and the two were measured to differ by a factor of nine (see *Coverage reporting*).
@@ -464,6 +466,7 @@ class FactRegistry:
 class DocScanner:
     def scan(self, paths: list[Path]) -> list[Mention]: ...
     def scan_file(self, file_path: Path) -> list[Mention]: ...
+    def scan_line(self, line: str, *, origin: Path, line_number: int = 1) -> list[Mention]: ...
     def resolve_paths(self, project_root: Path, scan_globs: list[str] | None = None) -> list[Path]: ...
     def resolve_surface(self, project_root: Path, scan_globs: list[str] | None = None) -> ScanSurface: ...
 

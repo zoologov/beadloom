@@ -14,6 +14,7 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 - `rules/exemptions.py` — what a `forbid_import` exemption is doing: which crossings it covers, how many it swallows, and whether its exit condition has passed (BDL-061.49).
 - `rules/cycles.py` — cycle detection (WHITE/GREY/BLACK colored DFS, path-as-set membership) + edge-liveness SQL helpers.
 - `rules/doc_area.py` — `doc_area_coherence`: the source-to-docs placement convention read OUT of the graph under test, and the nodes that contradict it. No layout literal appears in it (BDL-062 `.2`).
+- `rules/summary_facts.py` — `summary_facts`: the numeric and version claims a node `summary` states, checked against the same fact the project computes. The extraction and the comparison are the documentation audit's, so there is no second notion of "a version" here (BDL-062 `.1`).
 - `rules/__init__.py` — `evaluate_all` orchestration + the remediation post-pass + stable public re-exports.
 
 ---
@@ -22,7 +23,7 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 
 ### Purpose
 
-Enforce architectural constraints declaratively. Rules are defined in a YAML file and evaluated against the graph database (nodes, edges, code_imports, code_symbols, file_index, and sync_state tables). **Ten** rule types exist — `load_rules` dispatched nine from BDL-051 S3a until BDL-061 S4 added `scenario_coverage`; this table listed seven until BDL-061.48 counted them against the loader:
+Enforce architectural constraints declaratively. Rules are defined in a YAML file and evaluated against the graph database (nodes, edges, code_imports, code_symbols, file_index, and sync_state tables). **Twelve** rule types exist — `load_rules` dispatched nine from BDL-051 S3a, BDL-061 S4 added `scenario_coverage`, and BDL-062 added `doc_area_coherence` (`.2`) and `summary_facts` (`.1`). This table listed seven until BDL-061.48 counted them against the loader, and ten until BDL-062 `.1` counted them again; the count and the rows are checked against the loader's own dispatch, not against each other:
 
 | Type | Keyword | Semantics |
 |------|---------|-----------|
@@ -36,6 +37,8 @@ Enforce architectural constraints declaratively. Rules are defined in a YAML fil
 | **unregistered_feature_candidate** | `unregistered_feature_candidate` | Flag substantial domain-only modules that model no feature |
 | **module_coverage** | `module_coverage` | Require every `src/` module to be a tracked node or explicitly exempt |
 | **scenario_coverage** | `scenario_coverage` | Bind behaviour-bearing nodes to executable scenarios, both ways |
+| **doc_area_coherence** | `doc_area_coherence` | Document a node where this graph's own convention documents nodes like it |
+| **summary_facts** | `summary_facts` | Check a number or version stated in a node `summary` against the project |
 
 ### Constants
 
@@ -163,7 +166,7 @@ A blanket `from: "*" / to: "*"` entry therefore cannot hide either: it suppresse
 
 #### Rule liveness (a rule that cannot fire)
 
-**A rule that cannot match is indistinguishable from a rule that passed.** Both contribute `0` violations and `1` to `N rules evaluated`. Every rule type therefore reports its own inertness instead of counting as clean — `rules/liveness.py` for the eight matcher/graph-based types, `evaluate_import_boundary_rules` for `forbid_import` (whose diagnosis falls out of the import scan it already runs), `scenario_coverage.py` for `scenario_coverage` (whose legs are decided by files on disk that no index holds), and `doc_area.py` for `doc_area_coherence` (whose applicability is decided by the graph's own data rather than by its configuration).
+**A rule that cannot match is indistinguishable from a rule that passed.** Both contribute `0` violations and `1` to `N rules evaluated`. Every rule type therefore reports its own inertness instead of counting as clean — `rules/liveness.py` for the eight matcher/graph-based types, `evaluate_import_boundary_rules` for `forbid_import` (whose diagnosis falls out of the import scan it already runs), `scenario_coverage.py` for `scenario_coverage` (whose legs are decided by files on disk that no index holds), `doc_area.py` for `doc_area_coherence` (whose applicability is decided by the graph's own data rather than by its configuration), and `summary_facts.py` for `summary_facts` (for the same reason, and because it reports a second kind of ignorance no other rule has: one node whose claim cannot be checked, while the rule itself is live).
 
 **Reporting a rule and counting it are two questions, and for `scenario_coverage` and `doc_area_coherence` two modules answer them.** The finding says *what stood down and which glob did it*; `LintResult.rules_inert` says *how many of my rules checked nothing*. `liveness.py` counts `scenario_coverage` through that module's own `inert_reason` predicate and `doc_area_coherence` through `doc_area_inert_reason` — not second copies of them — and does not report either a second time. Until BDL-061.66 the count had no branch for the type at all: `13 rules evaluated, 0 inert` printed over a rule that had stood all four legs down.
 
@@ -182,6 +185,7 @@ A blanket `from: "*" / to: "*"` entry therefore cannot hide either: it suppresse
 | `module_coverage` | its `source_root` holds **0** modules, on disk or in the index — "complete coverage" of nothing | `liveness.py` |
 | `scenario_coverage` | **per leg**: its `for` matcher selects **0** nodes (coverage leg) or a `references` glob matches **0** documents (reference leg). Its `features` glob matching **0** files is the exception — that stands **all four** legs down, and only that state is counted in `rules_inert` | reported by `scenario_coverage.py`, counted by `liveness.py` |
 | `doc_area_coherence` | **no** source area in the graph reaches the majority `threshold` over `min_support` observations, so the convention the rule enforces cannot be read off the graph at all — a flat docs tree, a project mid-migration, a graph too small to hold a convention | reported by `doc_area.py`, counted by `liveness.py` |
+| `summary_facts` | **no** node `summary` in the graph states a number or version the project computes a fact for, so there is no claim to check. A claim naming a fact the project DECLINED to compute is a separate report — that node is unverifiable while the rule as a whole is still live | reported by `summary_facts.py`, counted by `liveness.py` |
 
 ### `scenario_coverage` — behaviour bound to an executable claim (BDL-061 S4)
 
@@ -386,6 +390,45 @@ configuration that reads as a rule and behaves as a silence.
 **Severity ships `warn`.** A convention check that fails an adopter's first `beadloom ci` on their
 own house style is a check they switch off. This repository sets `error`, because its layout has
 been settled since BDL-051 and a contradiction there is a defect rather than a matter of taste.
+
+### `summary_facts` — a number in a node summary checked against the project (BDL-062 `.1`)
+
+**A `summary` is the sentence every other surface quotes** — `beadloom ctx`, `prime`, the
+generated site, the agent adapters — and until this rule nothing compared it against anything.
+Measured on this repository at BDL-062: the root node claimed `v1.5.0` against a computed
+`3.0.0` and `mcp-server` claimed `14 tools` against a catalogue of 18, both wrong across three
+major releases with no check going red.
+
+```yaml
+  - name: graph-summary-facts
+    description: "A number or version stated in a node summary agrees with the project"
+    severity: error          # the shipped default
+    summary_facts: {}        # no keys: an unknown key is REJECTED, not ignored
+```
+
+**The block takes no keys, and that is the design.** What counts as a version, what counts as a
+claim about a count, and how close a count has to be are decided once by the documentation
+audit — `DocScanner.scan_line` for the extraction, `compare_facts` for the comparison and its
+per-fact tolerances. A knob here would be a second answer to a question already answered, and a
+second notion of "a version" beside the audit's is how the next drift class starts. The loader
+rejects an unknown key rather than ignoring it: a setting that looks configured and does nothing
+is the failure this rule family exists to catch.
+
+| Outcome | What it means |
+|---------|---------------|
+| a finding | the claim differs from the computed fact; the message names the node, both values, the fact's provenance, the summary verbatim and the population the verdict rests on |
+| silence | the claim agrees, or the summary states no number this project computes a fact for |
+| `rule_liveness`, per node | the claim names a fact the project **declined** to compute; the finding carries the registry's own reason verbatim (`FactSet.not_applicable`), never a wording invented here |
+| `rule_liveness`, whole rule | **no** summary in the graph states a checkable number, so nothing was verified and nothing was cleared |
+
+**`unverifiable` never folds into a pass.** A project whose version cannot be resolved and a
+project whose every summary checked out must not be described by the same word. The two
+`rule_liveness` shapes above are deliberately distinct: one node nobody can check is not the same
+report as a whole graph nobody checked.
+
+**Severity ships `error`**, unlike the `warn` a convention check gets. A number that contradicts
+the project it describes is wrong in every house style, and the value sits in the adopter's own
+graph, so there is no house preference to respect.
 
 ### rules.yml Schema
 

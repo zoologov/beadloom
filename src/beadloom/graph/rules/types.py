@@ -460,6 +460,28 @@ class DocAreaCoherenceRule:
     severity: str = "warn"
 
 
+@dataclass(frozen=True)
+class SummaryFactsRule:
+    """Hold every node summary to the numbers the project computes about itself.
+
+    :mod:`.summary_facts` reads each node's ``summary`` with the documentation
+    audit's own extractor and compares what it finds against the audit's own fact
+    registry. There is nothing to configure: what counts as a version, what
+    counts as a claim about a count, and how close a count has to be are all
+    decided by the audit, and a knob here would be a second answer to a question
+    already answered once.
+
+    ``severity`` defaults to ``error`` rather than the ``warn`` a convention
+    check ships with. A summary that contradicts the project it describes is
+    wrong in every house style, so there is no adopter preference to respect —
+    and the value is in the graph the adopter wrote, so it is theirs to fix.
+    """
+
+    name: str
+    description: str
+    severity: str = "error"
+
+
 Rule = (
     DenyRule
     | RequireRule
@@ -472,6 +494,7 @@ Rule = (
     | ModuleCoverageRule
     | ScenarioCoverageRule
     | DocAreaCoherenceRule
+    | SummaryFactsRule
 )
 
 

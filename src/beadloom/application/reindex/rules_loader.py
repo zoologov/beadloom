@@ -43,7 +43,7 @@ def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
     Supports all v3 rule types: DenyRule, RequireRule, CycleRule,
     ImportBoundaryRule, ForbidEdgeRule, LayerRule, CardinalityRule,
     UnregisteredFeatureCandidateRule, ModuleCoverageRule, ScenarioCoverageRule,
-    DocAreaCoherenceRule.
+    DocAreaCoherenceRule, SummaryFactsRule.
     """
     from beadloom.graph.rule_engine import (
         CardinalityRule,
@@ -56,6 +56,7 @@ def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
         ModuleCoverageRule,
         RequireRule,
         ScenarioCoverageRule,
+        SummaryFactsRule,
         UnregisteredFeatureCandidateRule,
     )
 
@@ -183,6 +184,12 @@ def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
             "min_support": rule.min_support,
         }
         return ("doc_area_coherence", rule_def)
+
+    if isinstance(rule, SummaryFactsRule):
+        # The rule carries no configuration: the extraction and the comparison
+        # both come from the documentation audit, so an empty definition IS the
+        # whole rule and a reader of the `rules` table sees no less than runs.
+        return ("summary_facts", {})
 
     # Should never happen with known Rule types, but guard against future additions.
     msg = f"Unknown rule type: {type(rule).__name__}"
