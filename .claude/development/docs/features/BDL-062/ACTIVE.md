@@ -19,6 +19,7 @@
 | `.7` | tech-writer | blocked | README en+ru + guides |
 | `.8` | chore | blocked | release 3.0.1 |
 | `.9` | dev | done | the source root tolerates a minority; a total stand-down is no longer silent — found by a coordinator challenge to `.4`'s #195 |
+| `.11` | dev | done | `doc_area.py`'s docstring stopped describing `_common_prefix`; sweep of 11 modules / 32 named references found 0 more, and the sweep is now a test |
 
 ## Deviation from PLAN — wave 1 is split
 
@@ -179,6 +180,27 @@ population made visible in the one place it was invisible before.
 The identity gate reads the declared distribution name from the manifest with **no
 directory-name fallback** — a clone in a directory called `beadloom` is not beadloom, and
 unknown is not a match. That is the right shape.
+
+**2026-08-26** — `.11` done. `doc_area.py`'s module docstring still said the source root is
+"the longest directory prefix every node source shares", which is `_common_prefix` — the
+function `.9` deleted at `c9f8325`. `docs/domains/graph/README.md` and the rule-engine SPEC
+both describe `_source_root` correctly, so the document was right and the code's own prose was
+wrong. `sync-check` cannot see this: a docstring is not a doc pair, it lives inside the file
+whose hash defines the pair's freshness, and a file is always fresh with respect to itself.
+
+The rejected alternative is now measured rather than asserted. Swapping the support-governed
+descent for a `0.60` majority fails **5 of the 21** tests in `tests/test_doc_area_coherence.py`,
+among them `.2`'s founding `test_a_node_documented_outside_its_area_is_named` — because a modal
+segment covering 6 of 10 sources is accepted, the root settles one level below where the areas
+start, and every pair is compared on the wrong segment.
+
+Sweep: **11 of 11** modules under `src/beadloom/graph/rules/` carry a module docstring; **32**
+named symbol references across them; **0** further dead references (two apparent hits were
+false — `` `__init__` `` names the module file, and `FactSet.not_applicable` is a real dataclass
+field that `hasattr` cannot see). The sweep is now `tests/test_rules_docstring_references.py`
+so it does not decay, and that test states in its own docstring that it closes only the
+*named-reference* half of the class — it could not have caught `.11`'s own defect, which
+described the deleted function in prose without naming it.
 
 ## A diagnosis corrected before it became a bead
 

@@ -14,11 +14,43 @@ Everything this module compares is derived from the graph it is handed.
 How the two sides of a pair are reduced to one comparable segment:
 
 * **The source area** is the segment directly below the *source root*, and the
-  source root is the longest directory prefix every node source shares. On a
-  package-per-domain tree that root is ``src/<package>`` and the area is the
-  package; on a feature-sliced tree it is ``src`` and the area is ``features`` or
-  ``entities``. Neither spelling is known to this module — both fall out of the
-  common prefix.
+  source root is derived by :func:`_source_root`, which descends one segment for
+  as long as there is exactly one **supported** way down — supported meaning at
+  least ``min_support`` sources agree on the next segment. On a
+  package-per-domain tree that root comes out as ``src/<package>`` and the area
+  is the package; on a feature-sliced tree it is ``src`` and the area is
+  ``features`` or ``entities``. Neither spelling is known to this module — both
+  fall out of the descent.
+
+  ``min_support`` here is the dial the dominant-mapping half below already
+  declares, reused rather than doubled: a second threshold governing the same
+  question in a different unit is a knob whose two settings can quietly
+  disagree. A genuine fork — two or more supported next segments — ends the
+  descent, which is the whole point of the test, because a fork is where the
+  areas begin and that depth is exactly what is being looked for.
+
+  **A root is not a majority. It is the level above where the areas begin.**
+  Governing the descent by ``threshold`` instead was tried and rejected
+  (BDL-062 ``.9``), and it is worth writing down because it reads like the
+  obvious symmetry with the dominance test below. At the shipped ``0.60`` a
+  modal segment covering 6 of 10 sources is accepted, so the descent walks INTO
+  the largest area and the root settles one level below where the areas start;
+  every pair is then compared on the wrong segment. Measured by swapping the
+  descent for a ``0.60`` majority: 5 of the 21 tests in
+  ``tests/test_doc_area_coherence.py`` fail, among them the rule's founding
+  ``test_a_node_documented_outside_its_area_is_named``. Support answers *is
+  there one shared way down*; a majority answers *which way down is most
+  popular*, and only the first question has a root for its answer.
+
+  Two populations consequently do not compare, and neither is dropped. A source
+  **too short** to have a segment below the root is ``rootless`` (see
+  :attr:`Convention.rootless`) — a node whose source IS the root. A source lying
+  **outside** the root altogether, a second source tree too small to establish
+  one of its own, is excluded from the comparison and counted in
+  :attr:`Convention.outside_root`, which is why the population clause every
+  finding carries ends ``"; N sit outside the source root"``. Under the old
+  unanimity rule either one held a veto over the entire derivation; now each
+  holds a count.
 * **The docs area** is the doc-path segment at the *area depth*, and the area
   depth is itself derived. It is NOT the segment below the common prefix of the
   doc paths, and the reason is measured: on this repository documents sit at
