@@ -686,13 +686,19 @@ nodes:
       no sync pair — it would be prose no check can reach (BDL-UX #163). What is
       committed here is the VitePress theme (22 files: the Vue components, the
       composables, the theme CSS/JS and `.vitepress/config.mjs`); everything else
-      under `site/` is generated output. That committed surface is described in
-      `docs/guides/vitepress-site.md`, which is linked to no node for the same
-      reason. Attaching that guide here was measured to be worse than leaving it:
-      `site/` shares no directory prefix with any other node's source, so it
-      collapses `doc-area-coherence`'s derived source root from `src/beadloom` to
-      nothing — 6 false positives and the 4 true findings lost (BDL-UX #195).
-      Revisit when either `scan_paths` covers `site/` or #195 is fixed.
+      under `site/` is generated output. That committed surface is described by
+      `docs/guides/vitepress-site.md`, which is linked to no node because it
+      describes the GENERATOR (`beadloom docs site`, the `site-generation`
+      node's `application/site.py`) far more than the committed theme, so
+      attaching it here would trade an absence for a mis-description.
+      Revisit when `scan_paths` covers `site/`, or when this node's own theme
+      files are worth a document that something can check.
+      An earlier version of this reason also cited BDL-UX #195 — that a document
+      here collapsed `doc-area-coherence` for the whole graph. **That clause is
+      withdrawn: #195 is fixed** (BDL-062 `.9`). A source outside the derived
+      root is now excluded from the comparison and counted, and attaching a
+      document here changes nothing but `outside_root` 0 -> 1. Nothing about
+      this rule constrains the decision any more.
     # No node document, by decision (BDL-062 `.4`). Reported by `doctor` at INFO
     # with this reason rather than as an unexplained gap, and reported again as
     # inert the day a `docs:` entry is added here.

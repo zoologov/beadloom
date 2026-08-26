@@ -18,6 +18,7 @@
 | `.6` | review | blocked | clean room |
 | `.7` | tech-writer | blocked | README en+ru + guides |
 | `.8` | chore | blocked | release 3.0.1 |
+| `.9` | dev | done | the source root tolerates a minority; a total stand-down is no longer silent — found by a coordinator challenge to `.4`'s #195 |
 
 ## Deviation from PLAN — wave 1 is split
 
@@ -426,19 +427,39 @@ Two couplings the rename would have broken in silence, both made explicit instea
   framework" sits one word from both `node` and the five-word phrase, and `node_count` won
   because it is listed first. The score gained `-len(kw_words)`: the longer phrase wins.
 
-## `vitepress-site` — the probe that changed the answer
+## `vitepress-site` — the probe that changed the answer, then changed it back
 
-Attaching ANY document to `vitepress-site` collapses `doc-area-coherence` for the whole graph.
-Its source is `site/`, which shares no prefix with `src/beadloom/...`, and the rule derives the
-source root as the prefix every paired node shares. **Measured, not reasoned:** 4 true findings
-become 6 false ones (`beadloom`, `cli`, `bd-seam`, `guard-probes`, `mcp-server`, `tui`, all at
-`error`), and the rule reports MORE confidently afterwards — 81 of 82 pairs under a dominant
-mapping, against 77. **BDL-UX #195, HIGH.** A defect in `.2`'s rule, not in the correction.
+**Superseded by `.9`. The paragraph that stood here was wrong on its evidence, and the wrong
+number was acted on, so it is corrected rather than deleted.**
 
-So the node records `docs_absent` with a reason whose PRIMARY clause is not that measurement:
-`site/` is outside `scan_paths`, so no sync pair can anchor a document there and it would be
-prose no check can reach (#163). The #195 collapse is recorded as a **workaround**, in that word,
-with an exit condition. Shaping the graph to keep a checker quiet is what this feature is against.
+It said: attaching any document to `vitepress-site` collapses `doc-area-coherence`, turning
+*"4 true findings into 6 false ones"*. There were no 4. The `services.yml` backup taken
+immediately before the probe shows the four misfiled nodes were **already corrected**; the
+measured baseline was **0**, and the 6 were manufactured from a clean graph. The claim compared
+against `.2`'s pre-correction baseline instead of the one actually measured — a green count that
+was not a checked count, written into the record of the feature about exactly that.
+
+The coordinator could not reproduce it, which is how it surfaced. Both measurements were correct:
+the collapse has **two faces**, and which one appears depends only on where the minority node's
+document sits.
+
+| document | outcome before `.9` |
+|---|---|
+| `site/vitepress-site/DOC.md` | area depth still found, bogus convention, **7 nodes reported wrong at `error`** |
+| `guides/vitepress-site.md` | no area depth exists, **0 of 86 pairs compared, rule reports it checked nothing** |
+
+The second is the worse one, and it is what made #195 HIGH: the stand-down went out at `warn`
+because `liveness_finding` hardcoded it, so a rule this project escalated to `error` stood down
+over its whole population with `lint --strict` at rc 0.
+
+**`.9` fixed both.** Measured on this repository, both documents now give the identical answer —
+derivable, 8 dominant areas, **0 contradicting**, `outside_root` 1 — against a baseline of the
+same 8 areas and `outside_root` 0.
+
+So the `docs_absent` reason no longer cites #195 at all: that clause is **withdrawn in the node
+itself**, in those words. What remains is that `site/` is outside `scan_paths`, so no sync pair
+can anchor a document there (#163), and that `docs/guides/vitepress-site.md` describes the
+generator rather than the committed theme. Nothing about the rule constrains the decision now.
 
 ## Absence and excusal now print different words
 
@@ -491,4 +512,78 @@ then ran it and **diffed** rather than trusting: two rules added, `## Custom` in
   (this ACTIVE.md). The test's own comment already declares these as moving denominators.
 - `--record-surface` still deliberately unrun. The declared surface is 344 → **352** pairs.
 - `.beads/*.jsonl` were excluded from the clean room: they are tracker state, not this bead's work.
+
+**2026-08-26** — `.9` complete. Opened by the coordinator failing to reproduce `.4`'s BDL-UX #195
+and asking for conditions rather than assuming either side was wrong. Both measurements were
+right; the issue text was not.
+
+**Two defects, one trigger.** `_common_prefix` derived the source root from what EVERY paired
+source shares, so a single `site/` vetoed the derivation for all 85 other pairs. `min_support`
+guarded the dominant-mapping half and nothing guarded the prefix. `_source_root` replaces it: it
+descends while there is **exactly one supported way down**, supported meaning `min_support`
+sources agree on the next segment — the dial already declared, not a second threshold. A genuine
+fork ends the descent, which is where the areas begin; a source too short for that depth is
+`rootless` rather than a veto.
+
+A pair outside the derived root is excluded from the comparison and **counted**:
+`Convention.population()` now ends `"; N sit outside the source root"`, and `examined` adds up to
+the pairs the graph offered. Measured on this repository, both of the two document paths now give
+the identical answer — derivable, 8 dominant areas, 0 contradicting, `outside_root` 1 — against a
+baseline of the same 8 areas and `outside_root` 0.
+
+**The second defect is the one that blocked the release.** `liveness_finding` hardcoded
+`severity="warn"`, so a rule this project escalated to `error` could stand down over 100% of its
+population with `lint --strict` at rc 0. It now takes a keyword-only `severity` defaulting to
+`warn`, so every existing caller is byte-identical, and `doc_area` passes the rule's declared
+severity for a **total** stand-down. A **partial** inertness stays advisory, and the distinction
+is the whole argument: a dead glob beside nine live ones is a configuration smell, while a rule
+that checked none of its population is indistinguishable from one that never ran. It costs an
+adopter nothing — the rule ships `warn`, so a small graph still reports `warn`.
+
+**The test that is the point of the bead:**
+`test_the_gate_cannot_pass_while_the_rule_checked_nothing` runs the real linter over an
+underivable graph with the rule declared blocking, and fails if `has_errors` is not set. Its
+sibling asserts the shipped default still leaves the Gate green, so the adopter guarantee is a
+check and not a claim.
+
+Both document paths are permanent fixtures (`TestBothFacesOfTheCollapse`). They produced
+different observables from one cause, and nothing but the doc path varies between them —
+which is exactly what neither of us would have thought to vary.
+
+**Captured RED before the fix**, in the fixtures' own miniature: the first face reported
+`['gateway-0', 'gateway-1']` — correct nodes called wrong — and the second reported
+*"checked nothing: ... of 12 pairs ... 12 have a doc path with no segment at the depth this
+project names areas"*. The fixture needed a second top-level docs bucket to exhibit face one at
+all; a single-bucket fixture passed either way and proved nothing, which is why the first version
+of it was rewritten.
+
+**Three texts corrected, and the false line struck rather than quietly replaced:** #195 (closed,
+with the "4 true findings" evidence explicitly marked false and the real baseline of 0 stated),
+the `docs_absent` reason on `vitepress-site` (the #195 clause **withdrawn in the node itself**),
+and the `ACTIVE.md` paragraph above.
+
+**#197 opened for the named residual:** `summary_facts`, `scenario_coverage`, `module_coverage`
+and `unregistered_feature_candidate` still report a total stand-down at `warn`. Only
+`doc_area_coherence` was measured, and escalating four more rule types on one rule's evidence
+would be shipping four untested changes inside a fix.
+
+**Green in a clean room over 12 files**, and the clean room had to be built properly before it
+could say anything. `git archive HEAD` plus only this bead's files gives a tree that is **not a
+git work tree**, and `git_baseline` then answers *"git could not tell"* for every pair: all **363**
+came back `unverified`, and `TestSyncCheckNewPairs` failed for that reason alone. Running
+`git init` + one commit inside the clean room removes the artifact — 363 `ok` — and the result is
+`beadloom ci` rc 0 with **7189 passed, 0 failed**. A clean room that is not a work tree measures
+the absence of git, not the health of the change.
+
+The one failure on the shared tree (`test_guards_parity.py::…::test_the_live_repo_index_is_byte_identical_after_a_real_evaluation`)
+is a concurrency artifact and is now shown to be one: it hashes `.beads/issues.jsonl` and the live
+index among its tracked files, both of which any concurrent `bd` or `beadloom` call mutates while
+`.5` runs. It passes in isolation and it does not appear in the clean room at all.
+
+**One representation trap, recorded because both of us nearly fell into it.** The index stores
+doc paths **relative to the docs root** — `domains/graph/README.md`, not `docs/domains/...`. A
+scratch probe that inserts a row by hand with the `docs/` prefix shifts the area depth by one and
+produces a third, entirely spurious answer. `.4`'s first reproduction did exactly that and was
+caught. **The fix itself depends on no such thing:** `_source_root` reads only `nodes.source`
+segments, and nothing in it assumes a `docs/` prefix, a docs root, or any directory name.
 

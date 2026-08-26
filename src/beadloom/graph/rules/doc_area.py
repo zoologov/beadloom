@@ -66,6 +66,7 @@ from beadloom.graph.rules.types import Violation, liveness_finding
 
 if TYPE_CHECKING:
     import sqlite3
+    from collections.abc import Sequence
 
     from beadloom.graph.rules.types import DocAreaCoherenceRule
 
@@ -107,17 +108,53 @@ def _directory_segments(path: str) -> tuple[str, ...]:
     return tuple(segments)
 
 
-def _common_prefix(paths: list[tuple[str, ...]]) -> tuple[str, ...]:
-    """The longest leading run of segments every entry of *paths* shares."""
-    if not paths:
-        return ()
-    shared: list[str] = []
-    for column in zip(*paths, strict=False):
-        first = column[0]
-        if any(segment != first for segment in column):
-            break
-        shared.append(first)
-    return tuple(shared)
+def _source_root(
+    sources: Sequence[tuple[str, ...]], *, min_support: int
+) -> tuple[str, ...]:
+    """The prefix the project's sources share, tolerating a minority that does not.
+
+    This used to be the longest prefix EVERY source shares. That is a unanimity
+    rule, and unanimity hands each individual source a veto over the whole
+    derivation: one node whose source is ``site/`` — a committed asset tree
+    beside the code — collapsed the root from ``src/beadloom`` to nothing for all
+    85 other pairs of this repository, and the rule then either invented findings
+    against a bogus convention or compared nothing at all (BDL-062 ``.9``,
+    BDL-UX #195). Any project with a second source tree meets it on first contact.
+
+    The descent takes one step for as long as there is **exactly one supported
+    way down**, where supported means ``min_support`` sources agree on the next
+    segment. That reuses the dial the dominant-mapping half already declares
+    rather than inventing a second threshold, and it reads the same way there:
+    *a fact resting on fewer than min_support observations is not a convention.*
+
+    Three things end the descent, and each is the right answer to a different
+    graph. **A genuine fork** — two or more supported next segments — is where
+    the areas begin, which is precisely the depth being looked for. **No
+    supported segment at all** means every candidate is a minority, so there is
+    no shared root to speak of. And a source **too short to have this depth** is
+    simply not counted here; it is a node whose source IS the root, and it is
+    reported as ``rootless`` rather than allowed to stop the descent, because
+    stopping on it would be the same veto in a different costume.
+
+    A source that falls outside the returned root is never silently discarded:
+    :func:`_placements` counts it, and :meth:`Convention.population` states it.
+    """
+    root: list[str] = []
+    cluster = [segments for segments in sources if segments]
+    depth = 0
+    while True:
+        counts = Counter(segments[depth] for segments in cluster if len(segments) > depth)
+        supported = [segment for segment, count in counts.items() if count >= min_support]
+        if len(supported) != 1:
+            return tuple(root)
+        segment = supported[0]
+        root.append(segment)
+        cluster = [
+            segments
+            for segments in cluster
+            if len(segments) > depth and segments[depth] == segment
+        ]
+        depth += 1
 
 
 @dataclass(frozen=True)
@@ -159,6 +196,12 @@ class Convention:
     rootless: int
     #: Pairs whose doc path names no source area anywhere in it.
     unnamed: int
+    #: Pairs whose source lies OUTSIDE the derived source root — a second source
+    #: tree too small to establish one of its own. They are excluded from the
+    #: comparison and counted here rather than dropped, because a reader cannot
+    #: otherwise tell a graph with no outliers from one whose outliers vanished
+    #: (BDL-062 `.9`).
+    outside_root: int = 0
 
     @property
     def sampled(self) -> int:
@@ -168,7 +211,7 @@ class Convention:
     @property
     def examined(self) -> int:
         """Every node/doc pair the graph offered, compared or not."""
-        return self.sampled + self.rootless + self.unnamed
+        return self.sampled + self.rootless + self.unnamed + self.outside_root
 
     @property
     def checked(self) -> tuple[Placement, ...]:
@@ -194,7 +237,8 @@ class Convention:
             f"derived from {self.examined} node/doc pairs: {self.sampled} compare, "
             f"{len(self.checked)} fall under a dominant mapping "
             f"(majority {self.threshold:.2f} over at least {self.min_support} "
-            f"observations) and {agreeing} of those agree"
+            f"observations) and {agreeing} of those agree; "
+            f"{self.outside_root} sit outside the source root"
         )
 
     def unverifiable_reason(self) -> str:
@@ -203,7 +247,8 @@ class Convention:
             return (
                 f"no node/doc pair yields a comparable area — of "
                 f"{self.examined} pairs, {self.rootless} have no source area below "
-                f"the source root and {self.unnamed} have a doc path with no segment "
+                f"the source root, {self.outside_root} sit outside it, and "
+                f"{self.unnamed} have a doc path with no segment "
                 f"at the depth this project names areas"
             )
         areas = len({p.source_area for p in self.placements})
@@ -235,8 +280,16 @@ def _area_depth(doc_segments: list[tuple[str, ...]], vocabulary: set[str]) -> in
     return min(depths, key=lambda index: (-depths[index], index))
 
 
-def _placements(conn: sqlite3.Connection) -> tuple[list[Placement], int, int]:
-    """Every comparable node/doc pair in the index, plus what could not compare."""
+def _placements(
+    conn: sqlite3.Connection, *, min_support: int
+) -> tuple[list[Placement], int, int, int]:
+    """Every comparable node/doc pair in the index, plus what could not compare.
+
+    Returns the comparable placements and the three populations that are not
+    comparable and must not be silently dropped: pairs whose source sits
+    ``outside_root``, pairs that are ``rootless``, and pairs whose doc path is
+    ``unnamed`` at the area depth.
+    """
     rows = conn.execute(
         "SELECT n.ref_id, n.source, d.path FROM nodes n "
         "JOIN docs d ON d.ref_id = n.ref_id "
@@ -247,19 +300,25 @@ def _placements(conn: sqlite3.Connection) -> tuple[list[Placement], int, int]:
     pairs = [(str(row[0]), str(row[1]), str(row[2])) for row in rows]
 
     sources = {source: _directory_segments(source) for _, source, _ in pairs}
-    source_depth = len(_common_prefix(sorted(sources.values())))
-    vocabulary = {
-        _normalise(segments[source_depth])
-        for segments in sources.values()
-        if len(segments) > source_depth
-    }
+    root = _source_root(sorted(sources.values()), min_support=min_support)
+    source_depth = len(root)
 
-    rooted = [
-        (ref_id, source, doc_path)
-        for ref_id, source, doc_path in pairs
-        if len(sources[source]) > source_depth
-    ]
-    rootless = len(pairs) - len(rooted)
+    rooted: list[tuple[str, str, str]] = []
+    outside_root = 0
+    rootless = 0
+    for ref_id, source, doc_path in pairs:
+        segments = sources[source]
+        if segments[:source_depth] != root:
+            outside_root += 1
+        elif len(segments) > source_depth:
+            rooted.append((ref_id, source, doc_path))
+        else:
+            rootless += 1
+
+    # Built from the ROOTED sources alone. A source outside the root contributes
+    # no area, and letting it into the vocabulary is how a single `site/` used to
+    # decide the area depth for every doc path in the graph.
+    vocabulary = {_normalise(sources[source][source_depth]) for _, source, _ in rooted}
 
     docs = {doc_path: _directory_segments(doc_path) for _, _, doc_path in rooted}
     depth = _area_depth([docs[doc_path] for _, _, doc_path in rooted], vocabulary)
@@ -267,7 +326,7 @@ def _placements(conn: sqlite3.Connection) -> tuple[list[Placement], int, int]:
         # No doc path names any source area, so there is no depth at which this
         # project writes an area down. Nothing compares — which is a fact the
         # caller reports, not one it rounds down to "everything is fine".
-        return [], rootless, len(rooted)
+        return [], rootless, len(rooted), outside_root
 
     placements: list[Placement] = []
     unnamed = 0
@@ -285,7 +344,7 @@ def _placements(conn: sqlite3.Connection) -> tuple[list[Placement], int, int]:
                 docs_area=_normalise(segments[depth]),
             )
         )
-    return placements, rootless, unnamed
+    return placements, rootless, unnamed, outside_root
 
 
 def derive_convention(
@@ -296,7 +355,7 @@ def derive_convention(
     Pure derivation: nothing here knows a directory name, and the same call on a
     feature-sliced graph learns that graph's areas instead.
     """
-    placements, rootless, unnamed = _placements(conn)
+    placements, rootless, unnamed, outside_root = _placements(conn, min_support=min_support)
 
     observed: dict[str, Counter[str]] = {}
     for placement in placements:
@@ -319,6 +378,7 @@ def derive_convention(
         min_support=min_support,
         rootless=rootless,
         unnamed=unnamed,
+        outside_root=outside_root,
     )
 
 
@@ -387,6 +447,12 @@ def evaluate_doc_area_coherence_rules(
                         "docs area, or lower `min_support`/`threshold` if the graph "
                         "is genuinely too small to hold a convention"
                     ),
+                    # A TOTAL stand-down carries the severity the project
+                    # declared. This rule ships `warn`, so an adopter is
+                    # unaffected; a project that escalated it to `error` gets an
+                    # escalation that does not evaporate the moment the rule
+                    # stops working (BDL-062 `.9`).
+                    severity=rule.severity,
                 )
             )
             continue

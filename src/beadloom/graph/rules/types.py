@@ -526,6 +526,7 @@ def liveness_finding(
     rule_description: str,
     message: str,
     remediation: str,
+    severity: str = "warn",
 ) -> Violation:
     """Build one advisory finding about a rule being unable to do its job.
 
@@ -534,15 +535,26 @@ def liveness_finding(
     rule types and :mod:`.evaluators` for ``forbid_import`` — and the two must not
     drift in shape.
 
-    Always ``warn``, whatever the rule's own severity: an inert rule is a
-    configuration smell, not a boundary breach, and promoting it to ``error``
-    would turn an adopter's green pipeline red on upgrade (BDL-061 CONTEXT).
+    ``warn`` by default, and that default is the right answer for a PARTIAL
+    inertness — a dead glob, an exemption that excuses nothing, a matcher
+    selecting no node while the rule's other legs still fire. Such a rule is a
+    configuration smell, not a boundary breach, and promoting it would turn an
+    adopter's green pipeline red on upgrade (BDL-061 CONTEXT).
+
+    A **total** stand-down is a different thing and callers may say so by passing
+    *severity*. When a rule could check NONE of its population, "the rule found
+    nothing wrong" and "the rule never ran" are the same output, and a project
+    that deliberately escalated that rule to ``error`` has had its escalation
+    quietly evaporate at exactly the moment it mattered (BDL-062 ``.9``,
+    BDL-UX #195). Passing the rule's declared severity costs an adopter nothing:
+    a rule that ships ``warn`` still reports ``warn``, so nobody's first
+    ``beadloom ci`` goes red on a graph that is merely small.
     """
     return Violation(
         rule_name=rule_name,
         rule_description=rule_description,
         rule_type=LIVENESS_RULE_TYPE,
-        severity="warn",
+        severity=severity,
         file_path=None,
         line_number=None,
         from_ref_id=None,

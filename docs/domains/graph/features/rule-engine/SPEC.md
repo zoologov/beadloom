@@ -282,7 +282,7 @@ verified.
 
 `forbid_import` additionally reports a stale `exempt` entry — dead or expired, at most one finding per entry (`rules/exemptions.py`, from the counts the import scan already produced). That is a statement about an exemption, not about the rule, so it is **not** counted in `LintResult.rules_inert`; what those entries suppressed is counted separately, as `LintResult.violations_suppressed`. Two counters, because they answer two questions: *which of my rules cannot check anything* and *what did my checks catch and excuse*.
 
-**Severity is always `warn`, whatever the rule declares.** A liveness finding is a statement about the *configuration*, never about the code: `error` would conflate "your architecture is broken" with "your check is broken", and would turn an adopter's green pipeline red on upgrade the moment they update Beadloom (BDL-061 CONTEXT). Being `warn` is not the same as being quiet — the finding is printed by default, appears in `--json` under `kind: "rule_liveness"`, and `LintResult.rules_inert` qualifies the rule count on the summary line (`13 rules evaluated, 2 of them unable to check anything`), so a green run cannot advertise checks that never looked.
+**Severity depends on how much the rule stood down.** A **partial** inertness — one dead glob beside nine live ones, an exemption that excuses nothing, a matcher selecting no node while the rule's other legs still fire — is `warn` whatever the rule declares: it describes the *configuration*, not the code, and `error` would turn an adopter's green pipeline red on upgrade. A **total** stand-down, where the rule could check NONE of its population, carries the severity the project declared. At that point "found nothing wrong" and "never ran" are the same output, and a project that deliberately escalated the rule has had its escalation evaporate exactly when it mattered (BDL-062 `.9`, BDL-UX #195). This costs an adopter nothing, because a rule that ships `warn` still reports `warn`. Today only `doc_area_coherence` passes its declared severity; the other rule types still report a total stand-down at `warn` (BDL-UX #197). A `warn` here is not the same as being quiet — the finding is printed by default, appears in `--json` under `kind: "rule_liveness"`, and `LintResult.rules_inert` qualifies the rule count on the summary line (`13 rules evaluated, 2 of them unable to check anything`), so a green run cannot advertise checks that never looked.
 
 **Two deliberate limits, named rather than left to be discovered:**
 
@@ -379,12 +379,28 @@ Each node/doc pair is reduced to two comparable segments:
 
 | Side | How the segment is found |
 |------|--------------------------|
-| source area | the segment directly below the **source root**, the source root being the longest directory prefix every node `source` shares |
+| source area | the segment directly below the **source root**, and the root is derived too: the descent takes one segment for as long as there is exactly one *supported* way down, supported meaning `min_support` sources agree on the next segment |
 | docs area | the segment at the **area depth**, and the depth is derived too: each doc path is asked where in it a source area is named, and the depth that answer lands at most often is read for **every** doc path, whatever the segment is called there |
 
 The second pass is what lets the rule see a document filed under a directory that names no source
 area at all — the commonest shape of the drift it exists to catch, and the case a first cut of the
 rule (vocabulary matching alone) could not see.
+
+**The source root is not what every source shares.** It was, until BDL-062 `.9`, and that is a
+unanimity rule: unanimity hands each individual source a veto over the whole derivation. One node
+whose `source` was `site/` — a committed asset tree beside the code — collapsed this repository's
+root from `src/beadloom` to nothing for all 85 other pairs, and the rule then either invented
+findings against a bogus convention or compared nothing at all (BDL-UX #195). Three things end the
+descent, and each is the right answer to a different graph: a **genuine fork** (two or more
+supported next segments) is where the areas begin, which is the depth being looked for; **no
+supported segment at all** means there is no shared root to speak of; and a source **too short to
+have that depth** is a node whose source IS the root, reported as `rootless` rather than allowed to
+stop the descent.
+
+A pair whose source falls outside the derived root is excluded from the comparison and **counted**,
+never dropped: the population sentence ends `"; N sit outside the source root"`, and `examined`
+adds up to every pair the graph offered. A reader who cannot see the exclusions cannot tell a graph
+with no outliers from one whose outliers vanished.
 
 A mapping `source area -> docs area` is **dominant** when it covers at least `threshold` of that
 area's pairs *and* rests on at least `min_support` of them. `min_support` is not decoration:

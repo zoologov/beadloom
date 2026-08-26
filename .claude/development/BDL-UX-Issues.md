@@ -35,34 +35,58 @@
 
 ## Open Issues
 
-195. [2026-08-26] [HIGH] One node whose source lies outside the common source root collapses `doc-area-coherence` for the whole graph
+197. [2026-08-26] [MEDIUM] Four other rule types still report a TOTAL stand-down as `warn`, so an escalation still evaporates for them
 
-    **Severity:** high (it does not weaken the rule, it inverts it: the four true findings disappear and six false ones take their place, at `error`)
+    **Severity:** medium (it is #195's second defect, unfixed for every rule type but the one that was measured)
     **Command:** `beadloom lint --strict`
-    **Context:** found in BDL-062 `.4` while deciding whether the `vitepress-site` node should carry a document. Measured by attaching one, reindexing, and reading the rule's own output — not reasoned about.
+    **Context:** the named residual of BDL-062 `.9`. #195 established that a rule which could check NONE of its population must not report that at `warn` when the project declared it blocking, and fixed it for `doc_area_coherence`.
+    **Measured:** `liveness_finding` now takes a keyword-only `severity` defaulting to `warn`. Exactly one caller passes anything else. `summary_facts`, `scenario_coverage`, `module_coverage` and `unregistered_feature_candidate` all still emit their stand-down at the default, so a project that escalated any of them to `error` gets the same evaporation #195 describes.
 
-    **Measured on this branch.** `doc_area._placements` derives the source root as the longest directory prefix EVERY node/doc pair's source shares, and only paired nodes enter that computation. `vitepress-site`'s source is `site/`, which shares no prefix with `src/beadloom/...`. Attaching a `docs:` entry to it therefore drops the source root from `src/beadloom` to nothing in one step:
+    **Why it was not simply fixed in the same bead.** Only `doc_area_coherence` was measured. Each of the others has to be checked for what its "total stand-down" actually means — `scenario_coverage` stands legs down individually, and a rule that is partly inert is a different case from one that is wholly inert, which is the distinction the fix rests on. Escalating four rule types on one rule's evidence would be shipping four untested changes inside a fix, which is the shape this epic exists to remove.
+
+    **Expected:** decide per rule type whether its stand-down is total or partial, and pass the declared severity where it is total. The seam already exists and needs no further design.
+
+    **Related:** #195 (the measured half), #172 (rule liveness), BDL-062.
+
+195. ~~[2026-08-26] [HIGH] One node whose source lies outside the common source root collapses `doc-area-coherence` for the whole graph~~ **CLOSED (BDL-062 `.9`)**
+
+    **Severity:** high (a rule the project declared blocking could stand down over its entire population while the Gate stayed green)
+    **Command:** `beadloom lint --strict`
+    **Context:** opened by BDL-062 `.4` while deciding whether the `vitepress-site` node should carry a document; **rewritten after the coordinator failed to reproduce it and both measurements were compared.**
+
+    **The trigger.** `doc_area._placements` derived the source root as the longest directory prefix EVERY node/doc pair's source shares. That is a unanimity rule, and unanimity hands each individual source a veto. `vitepress-site`'s source is `site/`, which shares no prefix with `src/beadloom/...`, so attaching any document to it dropped the root from `src/beadloom` to nothing in one step — for all 85 other pairs. `min_support` guarded the dominant-mapping half; nothing guarded the prefix.
+
+    **Two faces, and which one you see depends only on where the minority node's document sits.** Measured on the same tree, same commit, by two people who then disagreed:
 
     ```
-    before   4 findings   `debt-report` `doctor` `reindex` `watcher`
-             "this graph places 12 of 16 `application` nodes under `application`
-              — derived from 83 node/doc pairs: 77 compare"
+    doc at site/vitepress-site/DOC.md   -> the doc path carries the outlier's own
+                                           segment, an area depth is still found, a
+                                           bogus convention is derived:
+                                           84 compared, 7 nodes reported WRONG at error
+                                           (bd-seam, beadloom, cli, cli-commands,
+                                            guard-probes, mcp-server, tui)
 
-    after    6 findings   `beadloom` `cli` `bd-seam` `guard-probes` `mcp-server` `tui`
-             "has its source under `src` but is documented under `services`;
-              this graph places 75 of 81 `src` nodes under `domains`
-              — derived from 84 node/doc pairs: 82 compare"
+    doc at guides/vitepress-site.md     -> no doc path carries any segment of the
+                                           collapsed vocabulary, no area depth exists:
+                                           0 compared, 86 unnamed,
+                                           rule reports it CHECKED NOTHING
     ```
 
-    Every one of the six is a false positive — `docs/services/cli.md` is where a service document belongs on this repository — and all four true findings are gone. The rule reports MORE confidently after the collapse than before (81 of 82 pairs "fall under a dominant mapping", against 77), so nothing in the output signals that the derivation lost its footing.
+    **The second face is the worse one and it is why this was HIGH.** That report went out through `liveness_finding`, which hardcoded `severity="warn"` whatever the rule declared. This repository escalates `doc-area-coherence` to `error`; the escalation evaporated at exactly the moment the rule stopped working, and `lint --strict` exited 0 over a check that had run on nothing. Filtering `lint --format json` by `rule_type == doc_area_coherence` cannot see it either, because the stand-down carries `rule_type: rule_liveness` — filter by `rule_name` instead.
 
-    **Why it is not a corner case.** Any project that documents something outside its main source tree meets it: a `site/`, an `infra/`, a `docs-tooling/`, a sibling package. The rule's whole design principle is that no layout is written down in it, and this is the cost of the version it shipped with — a single-observation prefix has no support requirement, unlike the `min_support: 2` that guards the dominant-mapping half.
+    **STRUCK — the evidence line in the original filing was false.** It read *"4 true findings become 6 false ones"*. There were no 4. The `services.yml` backup taken immediately before the probe shows the four misfiled nodes were **already corrected**, so the measured baseline was **0 doc-area findings**, and the 6 were manufactured from a clean graph. The original compared against `.2`'s pre-correction baseline rather than the one actually measured — a green count that was not a checked count, inside the issue filed about green counts that are not checked counts. Recorded rather than quietly replaced, because the wrong number was acted on.
 
-    **Expected:** the source root should not be decided by a prefix one pair can veto. Two candidates, neither measured: derive the root as the prefix a MAJORITY of sources share (the `min_support`/`threshold` machinery the rule already has, applied one level up), or treat sources that fall outside the derived root as their own area rather than folding everything into one — a project with two source trees has two conventions, and reporting "checked nothing" for the second is honest where reporting six false positives is not.
+    **Not exotic:** any project with a `site/`, `scripts/`, `tooling/` or a second package root meets this on first contact.
 
-    **Workaround in force:** `vitepress-site` carries no `docs:` entry, and records `docs_absent` with this measurement as part of its reason. That is a workaround and is written down as one — the node is not undocumented because documenting it is wrong.
-
-    **Related:** BDL-062 `.2` (the rule), #163 (prose no pair anchors).
+    > **CLOSED — the root tolerates a minority, and a total stand-down is no longer silent.**
+    >
+    > `_source_root` replaces `_common_prefix`. It descends one segment while there is **exactly one supported way down**, where supported means `min_support` sources agree on the next segment — the dial the dominant-mapping half already declares, not a second threshold. A genuine fork ends the descent (that is where the areas begin); no supported segment at all ends it too; and a source too short to have that depth is `rootless` rather than a veto. Measured on this repository, both faces now give the identical answer: **derivable, 8 dominant areas, 0 contradicting, `outside_root` 1**, against a baseline of the same 8 areas and `outside_root` 0. A pair outside the root is excluded from comparison and **counted** — `Convention.population()` ends `"; N sit outside the source root"`, and `examined` adds up to the pairs the graph offered.
+    >
+    > `liveness_finding` gained a keyword-only `severity`, defaulting to `warn` so every existing caller is byte-identical. A **total** stand-down passes the rule's declared severity; a **partial** inertness stays advisory. The distinction is the point: a dead glob beside nine live ones is a configuration smell, while a rule that checked none of its population is indistinguishable from a rule that never ran. This costs an adopter nothing — the rule ships `warn`, so a small graph still reports `warn` and no first `beadloom ci` goes red.
+    >
+    > `tests/test_source_root_minority.py::TestATotalStandDownCarriesTheDeclaredSeverity::test_the_gate_cannot_pass_while_the_rule_checked_nothing` runs the real linter and fails if a blocking rule stands down without `has_errors` being set. Both document paths are kept as permanent fixtures in `TestBothFacesOfTheCollapse`: one cause, two observables, and nothing but the doc path varies between them.
+    >
+    > **Residual, deliberately not fixed here and worth its own decision (#197):** `summary_facts` and `scenario_coverage` report their own total stand-down through the same seam and still hardcode `warn`. Only `doc_area_coherence` was measured, and escalating five rule types on one bead's evidence would be shipping four untested changes.
 
 194. [2026-08-26] [HIGH] [External: bd 1.0.4] `bd merge-slot` is not an exclusion primitive — every agent is the same actor, and `release` is not owner-checked
 
