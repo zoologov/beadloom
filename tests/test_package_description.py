@@ -28,17 +28,24 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import tomllib
-
 import beadloom
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+#: The manifest's `description` line. Read by pattern rather than by a TOML
+#: parser because `tomllib` is 3.11+ and this project supports 3.10; the one
+#: line this module is about is a plain top-level string, and the pattern is
+#: anchored to the start of a line so a `description` indented under some other
+#: table is not what it finds. The count is asserted, so a second top-level
+#: `description` is a failure rather than a silent first match.
+_DESCRIPTION_RE = re.compile(r'^description\s*=\s*"([^"]*)"', re.MULTILINE)
+
 
 def _manifest_description() -> str:
-    with (REPO_ROOT / "pyproject.toml").open("rb") as handle:
-        data = tomllib.load(handle)
-    description: str = data["project"]["description"]
+    text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    matches = _DESCRIPTION_RE.findall(text)
+    assert len(matches) == 1, f"expected one top-level description, found {len(matches)}"
+    description: str = matches[0]
     return description
 
 
