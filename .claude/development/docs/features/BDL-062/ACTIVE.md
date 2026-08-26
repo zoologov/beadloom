@@ -10,7 +10,7 @@
 | Bead | Role | Status | Note |
 |---|---|---|---|
 | `beadloom-viaj` | feature | open | parent |
-| `.1` | dev | open | `graph_summary_facts` — waits on `.3`'s fact contract (see below) |
+| `.1` | dev | **in progress** | `graph_summary_facts` — unblocked, contract delivered |
 | `.2` | dev | done | `doc_area_coherence` — names exactly the four drifting nodes; 9 live-repo tests left red for `.4` |
 | `.3` | dev | done | audit stops describing itself — three populations; `FactRegistry.collect_set()` is `.1`'s contract |
 | `.4` | dev | blocked | the corrections |
@@ -165,3 +165,62 @@ to the same actor (`BEADS_ACTOR` unset → `git user.name` → `$USER`, all `v.z
 it succeeded. The working-tree discipline in the project CLAUDE.md rests on this. Mitigation
 adopted: a distinct `BEADS_ACTOR` per subagent, which restores acquire-time refusal and does
 nothing about the release hazard.
+
+**2026-08-26** — `.3` CLOSED, `.1` launched (wave 1b).
+
+Coordinator verified the central claim on a real foreign project rather than accepting the
+report: built `invoice-svc` (own `pyproject.toml`, one source file), ran `beadloom init` and
+`docs audit` from this working copy. **`mcp_tool_count` and `cli_command_count` are gone from
+its output.** Denominator moved 9 → 7 and says so, and every remaining fact names why it is
+unverified — including `version: 0.4.1 -- NOT VERIFIED: no document states it`, the third
+population made visible in the one place it was invisible before.
+
+The identity gate reads the declared distribution name from the manifest with **no
+directory-name fallback** — a clone in a directory called `beadloom` is not beadloom, and
+unknown is not a match. That is the right shape.
+
+## A diagnosis corrected before it became a bead
+
+`.3` reported that `lint --json` "emits a trailing warning line onto stdout that breaks JSON
+parsing in four test files" and suggested a bead. Two things are wrong with that and one is
+right:
+
+- There is no `--json` flag; it is `--format json`. `lint --json` exits 2 with a usage error.
+- **The CLI does not pollute stdout.** Verified by redirection: JSON on stdout, `warning: 4
+  error-severity violation(s)…` on stderr, `json.load` succeeds. No CLI bead is warranted.
+- The observation underneath is real, and the mechanism is the test harness:
+
+```
+CliRunner().invoke(...)   result.output  len=78474  -> JSONDecodeError  (stderr merged in)
+                          result.stdout  len=78384  -> PARSES
+                          result.stderr  len=   90  -> the warning line
+```
+
+Click 8.4's `result.output` merges stderr. So `json.loads(result.output)` — the pattern in
+`test_integration_v1.py::TestSelfLint::test_self_lint_clean` and its siblings — is safe only
+while nothing warns. It will go green again on its own once `.4` corrects the four nodes and
+the warning stops firing, which is exactly why it must NOT be left as is: the fragility
+survives the symptom. **`.5` owns it — parse `result.stdout`.**
+
+The coordinator's own first reading ("Click 8.4 no longer merges streams") was wrong and is
+withdrawn here rather than left standing in chat.
+
+## Handed on by `.3`, owned elsewhere
+
+- `rule_type_count` moved 13 → 14, which makes `architecture.md:133` stale — **`.4`**.
+- `test_count` moved 7494 → 7529 (both wave-1a beads' tests) — expected, not a defect.
+- Clean room not claimable by `.3` (`git archive` blocked in its sandbox, and HEAD carried
+  two agents' work by then) — **`.6`**, and it must be a real clean room, not a re-run.
+- Surface ledger grew 344 → 347 pairs; `--record-surface` deliberately NOT run, so no ledger
+  mixes two beads' work. Whoever integrates records it once.
+
+## `framework_count` (#193) — `.3` judged it separate, with a reason that changes the fix
+
+Not a scope preference. Changing its value breaks the equality `.3` had to hold fixed. And
+`.3` measured that the "count DISTINCT frameworks" candidate makes it **worse**:
+`unverifiable_reason('framework_count', 1)` returns *"its value is 1: 0 and 1 are too common
+in prose to be read as claims"* — so that candidate renders the fact structurally uncheckable
+on this repository and on every single-framework project.
+
+On the evidence the **rename** candidate is the better one. It has prose consequences, so it
+belongs with `.4`/`.7`, not with `.3`. #193 updated accordingly.
