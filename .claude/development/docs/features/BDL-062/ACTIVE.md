@@ -13,7 +13,7 @@
 | `.1` | dev | done | `graph_summary_facts` — RED captured on 3 nodes; 32 tests; 12 neuterings verified |
 | `.2` | dev | done | `doc_area_coherence` — names exactly the four drifting nodes; 9 live-repo tests left red for `.4` |
 | `.3` | dev | done | audit stops describing itself — three populations; `FactRegistry.collect_set()` is `.1`'s contract |
-| `.4` | dev | blocked | the corrections |
+| `.4` | dev | **ready** | the corrections — worklist grew, see below |
 | `.5` | test | blocked | bite tests + non-Beadloom fixture |
 | `.6` | review | blocked | clean room |
 | `.7` | tech-writer | blocked | README en+ru + guides |
@@ -275,3 +275,79 @@ bead's own doc edits made stale, which brought `sync-check` back to rc 0. `beadl
 **Moved for `.4` to pick up:** `rule_type_count` is now **15**, not 14, so `architecture.md:133`
 (which says 13) is two behind. `.beadloom/AGENTS.md` config-drift was already an error at `HEAD`
 and this rule makes it staler; `beadloom setup-rules --refresh` is its remedy.
+
+**2026-08-26** — `.1` CLOSED. Wave 1 complete; all three mechanisms exist.
+
+The red captured before any correction, three `error` findings:
+
+```
+beadloom          states version v1.5.0        computes 3.0.0   (pyproject.toml)
+mcp-server        states mcp_tool_count 14     computes 18      (MCP tool catalog)
+route-extraction  states framework_count 12    computes 84      (graph DB)
+```
+
+Each message ends with its own denominator — *"read from 84 node summaries: 3 state a
+checkable fact (0 agree, 3 disagree, 0 could not be verified) and 81 state none"*. That is
+A GREEN COUNT IS NOT A CHECKED COUNT discharged by the rule itself.
+
+## The third finding was on nobody's list, and it decides #193
+
+`route-extraction`'s summary is **factually correct** — the coordinator verified 12 framework
+literals in `context_oracle/route_extractor.py`: `echo, express, fastapi, fiber, flask, gin,
+graphql_python, graphql_schema, graphql_ts, grpc, nestjs, spring`. Two unrelated meanings of
+"framework" collide under one fact name: *web frameworks a component parses* vs *nodes
+declaring a test framework*.
+
+A true positive for the defect, a false positive for the node. `.1` built **no** suppression
+mechanism and was right to — silencing a correct sentence to protect a misnamed fact is
+backwards, and a silencer built before the owner ruled would have had no caller.
+
+**Decision, made on the evidence rather than deferred:** rename `framework_count` →
+`nodes_with_framework` with keywords that mean that. It clears the latent prose landmine,
+this live finding, and the collision, all three, without suppressing anything true. The
+DISTINCT alternative was measured worse by `.3` (value 1 is structurally uncheckable).
+Added to `.4`. #193 updated with both measurements.
+
+## `.4`'s worklist has grown since PLAN
+
+Beyond the five originally scoped:
+
+- `docs/architecture.md:133` says 13 rule types; the graph now has **15** (`.2` and `.1` each
+  added one). Two behind, not one.
+- `docs/domains/doc-sync/README.md:95` states version `3.0.1` — a version that does not exist
+  yet. Pre-existing at `HEAD`, unrelated to this branch.
+- `.beadloom/AGENTS.md` config-drift, an error at `HEAD` already; `beadloom setup-rules
+  --refresh` is the remedy, unverified by `.1`.
+- the `framework_count` rename above.
+
+`beadloom ci` is rc 1 **at `HEAD` too**, on exactly those three. `.1` verified that in a clean
+room and added zero failing tests — measured by removing its own rule, reindexing, and
+diffing the failing set, which was byte-identical.
+
+## Two scope deviations by `.1`, both accepted
+
+**`DocScanner.scan_line(line, *, origin, line_number=1)` is now public**, and `scan_file` is
+written in terms of it — same two calls, same order, behaviour unchanged. Reusing only
+`_VERSION_RE` and `FACT_KEYWORDS` would have meant reimplementing the clause-scoped proximity,
+the token-boundary policy and the modifier blocklist around them — precisely the fork the
+brief forbade. The alternative was reaching into two privates across a domain boundary.
+
+**`graph` now imports `doc_sync`** — domain-to-domain, unenforced here, with
+`graph → context_oracle` (and `onboarding → graph`, `onboarding → context_oracle`) as
+precedent. No graph edge added, because the model does not declare those peer imports either.
+
+## The `lint --format json` misreading has now happened twice
+
+`.1` reported it as "appends a non-JSON warning line to stdout". It does not — the warning
+goes to stderr and `json.load` succeeds from a shell. `.1` was launched before the note
+correcting this was written, so it could not have read it. **Every later bead's brief must
+carry the correction inline**, not rely on ACTIVE.md having been read: the real mechanism is
+Click 8.4's `CliRunner` merging stderr into `result.output`, and `result.stdout` is clean.
+
+## Attestation to know about
+
+`.1` ran `sync-update -y`, which attested `domains/graph/README.md ↔ graph/scenarios.py` — a
+pair it did not cause. It says it read the code before attesting but did not author that
+prose. Flagged for `.6`.
+
+Ledger: `--record-surface` still deliberately unrun. Whoever integrates records it once.

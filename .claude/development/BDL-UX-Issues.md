@@ -86,7 +86,22 @@
 
     Same family as BDL-062's subject: a fact whose name does not describe what it computes, sitting green because nothing exercises it. Distinct from #187/#190 — this is semantics, not extraction.
 
-    **Fix candidates:** count `DISTINCT extra.tests.framework`, or rename the fact to `nodes_with_framework` and give it keywords that mean that. The first matches the keywords already shipped; the second matches the value already computed. Choosing is the work.
+    **Fix decided — rename.** Two later measurements settled it, so this is no longer an open choice.
+
+    *The DISTINCT candidate is worse, measured by `.3`:* `unverifiable_reason('framework_count', 1)` returns *"its value is 1: 0 and 1 are too common in prose to be read as claims"*. Counting distinct frameworks yields 1 here, which renders the fact structurally uncheckable on this repository and on every single-framework project. It buys correct semantics at the price of never being verifiable again.
+
+    *The defect is no longer latent — it reached the graph,* found by `.1`'s new `graph_summary_facts` rule:
+
+    ```
+    route-extraction summary states framework_count 12 but this project computes 84 (graph DB)
+    summary: "API route extraction — tree-sitter AST + regex fallback across 12 web frameworks"
+    ```
+
+    The summary is **factually correct**: the extractor carries exactly 12 framework literals — `echo, express, fastapi, fiber, flask, gin, graphql_python, graphql_schema, graphql_ts, grpc, nestjs, spring`. Two unrelated meanings of "framework" collide under one fact name: *web frameworks a component parses* versus *nodes declaring a test framework*.
+
+    So the finding is a true positive for the defect and a false positive for the node. The `.1` agent deliberately built **no** suppression mechanism, and was right to: silencing a correct sentence to protect a misnamed fact is backwards, and a silencer built before the owner has ruled would have had no caller.
+
+    Renaming to `nodes_with_framework`, with scanner keywords that mean that, clears all three at once — the latent prose landmine, this live finding, and the collision itself. It has prose consequences, so it lands with `.4`/`.7` of BDL-062.
 
 192. [2026-08-26] [HIGH] A virgin `beadloom init --yes` leaves `beadloom ci` RED — the bootstrap writes a domain with no `part_of` edge and a rule that requires one
 
