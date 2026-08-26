@@ -35,6 +35,27 @@
 
 ## Open Issues
 
+193. [2026-08-26] [MEDIUM] `framework_count` counts nodes that declare a framework, not frameworks — the name and its keywords promise the other number
+
+    **Severity:** medium (dormant today; it becomes a false mismatch the moment any document states the true number)
+    **Command:** `beadloom docs audit --json`
+    **Context:** found while scoping BDL-062, checking why `framework_count` equalled `node_count` exactly.
+    **Measured on `main`@`cdc16de`:**
+
+    ```
+    facts.framework_count.value = 84        # == node_count, exactly
+    nodes carrying a framework  = 84
+    DISTINCT frameworks         = 1         # {'pytest': 84}
+    ```
+
+    `_collect_framework_count` counts nodes whose `extra.tests.framework` is non-empty. The fact is named `framework_count` and the scanner matches it on the keywords `["framework", "supported framework"]` — both of which promise *how many frameworks*, not *how many nodes declare one*.
+
+    So a document stating the true fact — "Beadloom supports 1 test framework" — would be reported as disagreeing with 84. The audit is currently `not_covered` on it only because no document happens to phrase it that way. The defect is latent in the prose, not in the code path.
+
+    Same family as BDL-062's subject: a fact whose name does not describe what it computes, sitting green because nothing exercises it. Distinct from #187/#190 — this is semantics, not extraction.
+
+    **Fix candidates:** count `DISTINCT extra.tests.framework`, or rename the fact to `nodes_with_framework` and give it keywords that mean that. The first matches the keywords already shipped; the second matches the value already computed. Choosing is the work.
+
 192. [2026-08-26] [HIGH] A virgin `beadloom init --yes` leaves `beadloom ci` RED — the bootstrap writes a domain with no `part_of` edge and a rule that requires one
 
     **Severity:** high (the first gate an adopter runs fails on a repository nobody has touched, and the failing rule was written by the same command one step earlier)

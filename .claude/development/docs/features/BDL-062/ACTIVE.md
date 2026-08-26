@@ -55,3 +55,27 @@ Known-red instances at baseline:
 authorised the whole chain in one instruction rather than four sequential approvals).
 Parent + 8 beads created, dependencies wired, `bd ready` confirms only `.1`/`.2`/`.3` open.
 Branch cut from `main` @ `cdc16de`.
+
+**2026-08-26** — Wave 1a launched: `.2` (`doc_area_coherence`) and `.3` (audit stops
+describing itself) running concurrently on disjoint files. `.1` held for `.3`'s fact contract.
+
+Coordinator scoping pass while the wave runs (read-only, no files the agents own):
+
+- **`.7`'s scope is smaller than the owner's audit suggested.** The "14 tools" drift does NOT
+  exist in prose — README, guides and `docs/services/mcp.md` all say 18, and "14 graph
+  read/write tools" is a documented subset with an `ignore` triple explaining it. The only
+  stale 14 is the graph summary, already owned by `.4`.
+- **`.7`'s real target found instead:** `docs/guides/multi-agent-development.md` and its `.ru`
+  twin are pinned to 2.0.0 — "the core principle of 2.0.0", seven such framings each. Three
+  majors of content (guards, waves, doc spaces, federation) are absent from the guide that
+  claims to describe the process.
+- **A false defect avoided, recorded because the reasoning nearly shipped.** `version` at
+  `not_covered` with zero mentions looked like a broken scanner. It is not: every version
+  literal in the repo is a dependency pin or an explicitly suppressed historical reference
+  with a stated reason. The audit correctly reports that no document states the current
+  version as a claim. `.3`'s requirement is unchanged; the "extraction is broken" theory is
+  withdrawn. (REPORTS ARE NOT EVIDENCE, applied to the coordinator's own reasoning.)
+- **BDL-UX #193 opened** — `framework_count` returns 84 (nodes declaring a framework) while
+  the distinct count is 1 (pytest), and both the fact name and its scanner keywords promise
+  the latter. Dormant until a document states the true number, then a false mismatch. Same
+  family as this feature; handed to `.3` with two fix candidates and the choice left open.
