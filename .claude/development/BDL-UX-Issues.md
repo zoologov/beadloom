@@ -35,6 +35,120 @@
 
 ## Open Issues
 
+208. [2026-08-26] [LOW] A module docstring can describe code that no longer exists, and nothing in this project can see it
+
+    **Severity:** low individually; the point is that the class has no checker at all
+    **Context:** `beadloom-viaj.11`, which fixed one instance and named two more it could not fix by the same method.
+
+    **The inversion worth recording.** `doc_area.py`'s module docstring described `_common_prefix`, a function `.9` had deleted the same morning — while `docs/domains/graph/README.md:117` described the replacement `_source_root` **correctly**. The document was current and the code's own docstring was stale. This project's entire thesis is the other way round.
+
+    **Why no check catches it:** a docstring is not a doc pair. It lives inside the file whose hash defines the pair's freshness, so **a file is always fresh with respect to itself.** `sync-check` cannot ever see this class, by construction rather than by omission.
+
+    `.11` swept all **11** modules under `graph/rules/`, resolving the **32** symbols their docstrings name, and found 0 further dead *references* — now pinned by `tests/test_rules_docstring_references.py`. Two false hits are worth knowing for anyone building the same checker: in that package `` `__init__` `` names a module file rather than a symbol, and `FactSet.not_applicable` is a real dataclass field that `hasattr` cannot see, because `field(default_factory=…)` leaves no class attribute behind. A naive checker reports a live field as dead.
+
+    **But the name-resolution sweep is the weaker half, and two findings prove it.** Found by reading, naming no dead symbol, catchable by nothing:
+
+    - `graph/rules/evaluators.py` — its docstring claims it produces violations *"for every rule kind except cycles"*. False since `doc_area`, `summary_facts` and `scenario_coverage` moved into their own modules.
+    - `graph/rules/__init__.py` — lists **4** submodules of **11**, a historical BDL-059 S3 list.
+
+    Both left unfixed as out of scope for a docstring bead. They are the residue: a symbol-resolving checker finds *deleted names*, and prose goes stale without ever naming one.
+
+207. [2026-08-26] [MEDIUM] The pre-commit hook re-stages `.beads/issues.jsonl` after an agent deliberately unstages it
+
+    **Severity:** medium (it defeats the one discipline that keeps concurrent waves from committing each other's work)
+    **Context:** self-reported by `.7` of BDL-062, unprompted, as "one thing to know before the next agent commits".
+
+    `.7` unstaged `.beads/issues.jsonl` on purpose — it was another agent's tracker export — and `active-sync --stage` in the pre-commit hook **added it back**, saying so on stderr.
+
+    The project CLAUDE.md instructs every agent, in these words: *"Commit only your own files, by explicit path — never `git add -A`."* That instruction is **not sufficient on its own**, because a hook stages a file after the agent has decided not to. An agent following the rule exactly still commits another agent's state.
+
+    Same family as #194 (`bd merge-slot` is not an exclusion primitive): the concurrency discipline this project documents rests on primitives that do not enforce it. Two independent mechanisms, one gap.
+
+206. [2026-08-26] [MEDIUM] `docs/**/features/*/SPEC.md` is excluded from `docs audit` outright, so declared facts drift freely there
+
+    **Severity:** medium (SPECs are where a node's contract is written, and they are the one doc class nothing fact-checks)
+    **Context:** `.7` swept 97 documents and found what `.4`'s narrower sweep could not reach.
+
+    `scanner._EXCLUDE_PATTERNS` drops `docs/**/features/*/SPEC.md` and `docs/**/features/**/SPEC.md` from the audit's surface entirely. Consequence, measured by `.7`: **three forward references to `3.0.1`** — a release that did not exist — survived in SPEC files, the same defect `.4` had removed from `doc-sync/README.md:95` hours earlier. It removed the instance it could see.
+
+    Also found in the same sweep: stale gate step lists in **eight** files, one naming a `coverage-lint` step that does not exist.
+
+    The exclusion is presumably deliberate (SPECs are generated skeletons in some projects). But "excluded" and "verified" print the same way in the coverage report, which is this feature's whole subject one level up. At minimum the audit should name the class it does not read.
+
+205. [2026-08-26] [MEDIUM] Writing a factually correct number can manufacture a false stale fact — keyword binding collides across senses
+
+    **Severity:** medium (it punishes correcting documentation, which is the behaviour the tool exists to encourage)
+    **Context:** `.7` hit this twice while fixing counts the reviewer had asked it to fix. `beadloom ci` went rc 1 on both.
+
+    ```
+    "supports 11 languages"          -> binds to language_count  = 1   (languages the PROJECT is written in)
+    "Rules support 12 authoring keys" -> binds to rule_type_count = 15  (COUNT(*) FROM rules)
+    ```
+
+    Both sentences are true. Neither number is what the bound fact computes. The parser breadth of the code indexer is not "the languages this project is written in"; the count of authoring keys is not the count of rules.
+
+    Note the near-miss that shows how fine the edge is: `architecture.md:133` uses the phrase "authoring keys" **safely**, because no `rule` token falls inside the five-word proximity window. The same phrase 254 lines later is unsafe. Whether a true sentence trips the audit depends on a neighbouring word.
+
+    This is the general form of #193 (`framework_count`: web frameworks parsed vs nodes declaring a test framework) and #202 (`cli_command_count`: 34 top-level vs 43 recursive). Three instances now, in three subsystems — it is a property of keyword-proximity binding, not three coincidences.
+
+    `.7`'s rule, which belongs in the writing guidance either way: **measure the audit's answer, do not predict it.**
+
+204. [2026-08-26] [MEDIUM] `review-brief` reports "0 withheld" and cannot know what the coordinator's prompt contained
+
+    **Severity:** medium (a number that describes the mechanism's ignorance rather than the reviewer's; the exact class BDL-062 exists to close)
+    **Context:** self-reported by the `.6` review agent as the FIRST line of its verdict, unprompted.
+
+    The withholding mechanism exists so a reviewer meets the work without the authors' account of it. `review-brief` printed **"0 withheld"**. The account had already arrived — through the coordinator's launch prompt, which carried `.4`'s "14 corrections, none of the 9 self-lint tests edited", `.5`'s "113 parses / 49 files / zero non-stream lines", `.5`'s two self-caught neutered-passing tests, `.9`'s severity fix, #198's 363/363 and #199/#200 by number.
+
+    So several review checks were **verifications of stated claims rather than independent discoveries**, and the tool said withholding was in force. `--release` could not establish independence either: one tracker identity (#194).
+
+    The mechanism measures its own channel and reports as if it measured the reviewer's knowledge. It has no way to see the prompt, and it does not say so — it says `0`.
+
+    **This is the coordinator's process failure and the tool's honesty failure at once**, which is why it is filed rather than merely noted. Fix candidates: `review-brief` states the surface it can and cannot see instead of a bare count; or the coordinator's brief is itself passed through the withholding surface. Choosing is the work.
+
+203. [2026-08-26] [LOW] Two stated behaviours in `doc_area` survive mutation — the rationale is documented and observed by nothing
+
+    **Severity:** low (both are supporting decisions, not headline behaviour)
+    **Context:** the `.6` reviewer ran the mutation testing `.5` did not: 8 mutations, 6 killed, 2 survived the full 7257-test suite.
+
+    ```
+    _area_depth tie-break flipped shallower -> deeper   7257 passed, 0 behavioural kills
+    _normalise  hyphen/underscore folding removed       7257 passed, 0 behavioural kills
+    ```
+
+    Both docstrings state a rationale; no test observes it. Folding is not load-bearing on THIS repository because the rule learns a per-area vocabulary — which is exactly the TRUE HERE IS NOT TRUE shape: it will be load-bearing on the first adopter whose directories are spelled the other way.
+
+    The reviewer's judgement, which is worth keeping: the missing mutation run would have added precisely these — *"the supporting decisions nobody thought to neuter because they are not the headline. Low yield, real, and cheap enough that it should become routine rather than a bead-by-bead choice."*
+
+202. [2026-08-26] [MEDIUM] One `beadloom ci` run prints two different numbers for "CLI commands" under one name
+
+    **Severity:** medium (#193's collision, live for a second fact and already shipped)
+    **Context:** `.6` review, M5.
+
+    ```
+    doctor : "CLI has 34 commands registered"   (top-level only)
+    audit  : cli_command_count: 43              (_count_click_commands recurses into groups)
+    ```
+
+    Both call it "CLI commands", in the same run, to the same reader. Neither is wrong; they count different things under one name — the same defect shape as #193's `framework_count`, which BDL-062 `.4` resolved by renaming. This one was not caught because nothing compares two subsystems' facts to each other.
+
+201. [2026-08-26] [MEDIUM] `--format porcelain` drops `message` — and porcelain is the default whenever stdout is not a terminal
+
+    **Severity:** medium (the machine-readable path is the one that loses the distinction)
+    **Context:** `.6` review, M2. Fourth instance of one class in one day. Measured on `warehouse-svc`, a project the reviewer built from scratch — not a fixture.
+
+    `graph/linter.py:459-480` emits `rule_name:rule_type:severity:file_path:line:from_ref:to_ref` with no message field. So a `summary_facts` **total stand-down** and a **per-claim unverifiable** are byte-identical:
+
+    ```
+    summary-facts:rule_liveness:warn::::
+    ```
+
+    Everything distinguishing them lives in `message`, which porcelain does not carry — and `lint` selects porcelain **by default when stdout is not a TTY**, so every pipe, script and CI capture gets the collapsed form while an interactive run looks fine.
+
+    Related and deliberately not merged: #198 (`sync-check` verified 0 of 363, Gate rc 0), #199 (the Gate's lint line reads identically for "checked nothing" and "one warning"), #197 (four rule types still hardcode `warn`). Four layers, one shape: **a reader cannot tell "checked nothing" from "nothing wrong".** BDL-062 fixed it at the rule layer and named it at the other three.
+
+    Also here: `graph/linter.py:462`'s docstring states the format without `severity`, which the emitter does include (`m7`).
+
 200. [2026-08-26] [LOW] An inert `docs_audit.ignore` triple is neither computed nor reported — the check exists one layer up and was never built here
 
     **Severity:** low (nothing is currently inert; the defect is that nothing would notice if something were)
