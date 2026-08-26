@@ -129,3 +129,39 @@ tests assert `lint --strict` exits 0 and now fail on the four `error` findings
 failing with the rule disabled: `TestSyncCheckNewPairs` ×2 (stale pairs owned by `.3`'s files)
 and `test_bead77_kind_and_root_disagree::test_this_repository_keeps_its_three_populations`
 (190 -> 194 planning documents, this feature's own PRD/RFC/CONTEXT/PLAN).
+
+**2026-08-26** — `.2` CLOSED. `doc_area_coherence` fires on exactly `debt-report`, `doctor`,
+`reindex`, `watcher` at `error`; 24 tests (21 unit + 3 scenarios); 77 pairs compared,
+73 agree, 4 differ.
+
+Coordinator verified independently rather than accepting the report: injected
+`_FALLBACK_AREA_ROOT = "domains"` into the rule module and the layout-literal guard failed
+as designed (`assert not ({'domains'} & {...})`), then reverted to a clean `git diff`. The
+rule's own live output names the four and nothing else.
+
+**Design change accepted, RFC superseded on one point.** RFC R2 said "the segment below the
+docs root". Not implementable: `architecture.md` sits at the docs root and collapses the
+common prefix, making the compared segment the `domains`/`services` bucket, which cannot
+disagree. The agent's replacement derives the area *depth* in two passes — modal depth at
+which a doc path names a source area, then read that depth everywhere — which also catches
+drift INTO a directory naming no source area, a case its first cut missed. `min_support: 2`
+is the agent's addition and closes PLAN's "graph of six nodes reports a clean sweep having
+compared nothing".
+
+**Brief correction:** severity escalation lives in `.beadloom/_graph/rules.yml`, not
+`config.yml` — rule severity is a per-rule field and `config.yml` has no severity mechanism.
+My brief said otherwise; the agent was right.
+
+**Expected redness, owned by `.4`:** 9 live-repo tests assert `lint --strict` rc 0 and now
+fail. They must go green again *by the corrections*, not by being relaxed — a test that
+stops asserting the repo self-lints is the defect this feature exists to prevent. Three
+further failures are NOT this bead's: `TestSyncCheckNewPairs` ×2 (stale pairs under `.3`'s
+files) and `test_this_repository_keeps_its_three_populations` (190→194 planning documents —
+this feature's own docs moved the count).
+
+**BDL-UX #194 opened** — `bd merge-slot` is not an exclusion primitive. Every agent resolves
+to the same actor (`BEADS_ACTOR` unset → `git user.name` → `$USER`, all `v.zoologov`), and
+`release` is not owner-checked: a distinct `agent-B` unlocked `agent-A`'s hold and was told
+it succeeded. The working-tree discipline in the project CLAUDE.md rests on this. Mitigation
+adopted: a distinct `BEADS_ACTOR` per subagent, which restores acquire-time refusal and does
+nothing about the release hazard.

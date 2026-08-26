@@ -35,6 +35,38 @@
 
 ## Open Issues
 
+194. [2026-08-26] [HIGH] [External: bd 1.0.4] `bd merge-slot` is not an exclusion primitive — every agent is the same actor, and `release` is not owner-checked
+
+    **Severity:** high (CLAUDE.md mandates this primitive before every commit in a shared working tree; it cannot deliver what it is relied on for)
+    **Command:** `bd merge-slot acquire` / `release`
+    **Context:** reported by the `.2` dev agent of BDL-062 — its second `acquire` queued rather than granted, it committed and released anyway, and the release may have freed the concurrent `.3` agent's hold. Reproduced by the coordinator immediately after.
+
+    **Two independent defects, both measured.**
+
+    *One — identity collapse.* The actor chain is `$BEADS_ACTOR` → `git user.name` → `$USER`. On this machine:
+
+    ```
+    BEADS_ACTOR=<unset>   git user.name=v.zoologov   USER=v.zoologov
+    ```
+
+    Every concurrent agent in this repository resolves to the same actor, so `acquire` cannot tell a sibling agent from the holder itself.
+
+    *Two — `release` accepts any caller.* This survives the first defect being fixed:
+
+    ```
+    BEADS_ACTOR=agent-A bd merge-slot acquire   ✓ Acquired    Holder: agent-A
+    BEADS_ACTOR=agent-B bd merge-slot acquire   ✗ Slot held by: agent-A     <- correct
+    BEADS_ACTOR=agent-B bd merge-slot release   ✓ Released                  <- NOT correct
+    ```
+
+    `agent-B` unlocked `agent-A`'s hold and was told it succeeded. The primitive is advisory in both directions: it can refuse an acquire, and it cannot defend a hold.
+
+    **Why it matters here.** `.beadloom/flow/claude/CLAUDE.md` instructs every agent to `acquire --wait` before committing and `release` after, because concurrent waves share one working tree. That rule rests on mutual exclusion this primitive does not provide. Two agents can commit interleaved after any stray release — which is exactly what the `.2` agent suspects happened.
+
+    **Partial mitigation, adopted now:** the coordinator exports a distinct `BEADS_ACTOR` per subagent, which restores acquire-time refusal. It does **not** address the release hazard, and saying otherwise would overstate it. A caller-checked release has to come from `bd`.
+
+    Related: #187 of 2026-08-25 (`bd list --json`), also External, also a default of the tracker rather than of Beadloom.
+
 193. [2026-08-26] [MEDIUM] `framework_count` counts nodes that declare a framework, not frameworks — the name and its keywords promise the other number
 
     **Severity:** medium (dormant today; it becomes a false mismatch the moment any document states the true number)
