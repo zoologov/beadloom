@@ -5,9 +5,102 @@ All notable changes to Beadloom are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.0.0] - 2026-08-26
+
+**The flow is enforced, and what cannot be checked says so.** BDL-061 ships six slices and a
+drift wave: flow guards, the false-green residue S2 measured and left open, a project layer for
+the agentic flow, executable scenarios plus document quality, three document spaces, and a wave
+shape decided from the architecture graph rather than guessed. The version is **major** for two
+reasons. By semver it is breaking — `sync-check` fails where it passed, `sync-update <ref>`
+attests less than it did, and the scaffolded required-context set went from seven to nine. And
+this is the release of a tool that spent an entire epic on *do not claim more than you did*:
+numbering a behaviour-changing release as a minor would be that same failure, in the version
+number.
+
+### BREAKING
+
+Three changes can turn a green project red, or make a command that still passes claim less than
+it used to. Each is stated with its remedy.
+
+- **A document the graph declares and the tree does not hold is `missing`, and `sync-check`
+  exits 2 (BDL-UX #174).** Before this release, deleting a declared document made the check
+  *quieter*: the reindex that followed removed that document's pairs, so nothing was left to
+  miss and the Gate stayed green. Declarations are now cached from the committed graph YAML in
+  a `declared_docs` table and outlive the file they name, so the pair is reported `missing`
+  with the reason `declared_doc_missing`, `missing` is a blocking status, and `beadloom ci`
+  fails on it. **A project whose graph declares a document it no longer holds goes red on
+  upgrade, and that is the intended fix** — the check was passing because it had less to check.
+  **The remedy is one of two:** restore the file at the declared path, or delete the `docs:`
+  entry naming it from `.beadloom/_graph/*.yml` and run `beadloom reindex`. **Before
+  upgrading**, run `beadloom sync-check --json` against 3.0.0 in a scratch clone and read
+  `summary.missing`; every such pair is listed by path under `pairs`, and that count is what
+  your pipeline will exit 2 on.
+
+- **`sync-update <ref> --yes` attests the STALE pairs of the ref, not all of them (BDL-UX
+  #163).** A script calling it keeps working and keeps exiting 0; what changed is how much it
+  claims. The command records that somebody read a document and that the document still
+  describes the code, and the whole-ref form made that claim for every pair of the ref,
+  including pairs the run had no grounds for. That is not bookkeeping: `check_sync`
+  corroborates an `index_build` baseline against `HEAD` rather than trusting it, and writing
+  `baseline_source = attested` switches that harder check off — so the bulk form was silencing
+  the stricter path for documents nobody had opened. The default scope is now the pairs
+  `sync-check` reports `stale` or `missing`. `--pair <doc_path>` names one document, `--code
+  <file>` narrows a document to one of its code files, and **`--all-pairs` restores the old
+  whole-ref scope**, kept because an operator who has read all of it must still be able to say
+  so in one command. A fixpoint loop that re-baselines what `sync-check` reports stale needs no
+  change. A script that used `sync-update <ref>` to clear an `unverified` row must now read the
+  document and name it with `--pair`, or say `--all-pairs` and own the claim. Measured on the
+  change that introduced it: 7 pairs revised and 7 attested, against ratios of 1/27, 13/20,
+  26/56 and 15/10 recorded earlier in the same epic, with `unverified` falling from 107 to 0.
+
+- **`beadloom setup-branch-protection` declares nine required contexts, up from seven — do not
+  re-run it until all nine report green.** The two environment-dimension legs `tests-locale
+  (C)` and `tests-locale (en_US.ISO-8859-1)` joined `DEFAULT_STATUS_CHECK_CONTEXTS`. The
+  command is a declarative `PUT`, so it always settles the same state — and that is the hazard
+  rather than the reassurance, because the state it settles is **the set this version
+  declares**, not the set your repository already has. Under `strict: true` a required context
+  that no workflow produces makes the branch permanently unmergeable. **The remedy, in order:**
+  re-scaffold the pipeline (`beadloom setup-ai-techwriter`) so a `tests-locale` job exists,
+  open a pull request and confirm both contexts actually report (`gh pr checks <pr>`), compare
+  that against what is live (`gh api repos/:owner/:repo/branches/main/protection --jq
+  '.required_status_checks.contexts'`), and only then re-run the command — or pass the set your
+  pipeline can satisfy through the repeatable `--check`, which replaces the default entirely.
+  `--dry-run` prints the exact `gh api` call and payload without touching GitHub. This is not
+  hypothetical: this repository's own `main` requires **seven** contexts against the **nine**
+  this version declares, measured on the day of the release.
+
+Three further changes can surprise a script without turning a correct project red. The
+freshness baseline moved out of `.beadloom/beadloom.db` into git, so `rm .beadloom/beadloom.db
+&& beadloom reindex` no longer reaches a green `sync-check`. The `rules.rule_type` CHECK
+constraint was dropped and existing databases are migrated in place, so a consumer that relied
+on the database to reject an unknown rule type must rely on `load_rules` instead. And an
+installed pre-commit hook keeps its old whole-tree behaviour until you re-run `beadloom
+install-hooks`.
 
 ### Added
+- **`beadloom ctx` carries intent — the reason a node exists, beside what it is (BDL-061
+  `.87`).** `beadloom ctx <ref-id>` is step 4 of the start-of-work protocol, so it is the one
+  moment an agent is guaranteed to ask about a node, and it returned reality with no intent.
+  The bundle now carries an `intent` section: the epics whose planning documents **declared**
+  the focus node, with the document and the line to read the reason at. A node nothing declares
+  — 69 of this repository's 84, so the common case — reports `none_declared` **with the size of
+  what was searched** (`61 epic(s) read, 5 of them declare a node`). That is a measurement, and
+  it is deliberately not the status `not_checked`, which `--no-intent`, an empty TO-BE space, a
+  population that declares nothing anywhere and an unreadable `doc_roots` each carry with their
+  own reason. On by default on measured cost: 306 B on `flow-guards` and 713 B on `why` against
+  bundles of 124 KB and 150 KB, a mean of 22 B per bundle (0.015%), and 26 ms on a cold bundle
+  against nothing on a cached one. The TO-BE tree is folded into the bundle cache's freshness
+  inputs, so an edited `CONTEXT.md` invalidates the bundles that carry it.
+- **The guard firing record is bounded, and rotation loses no count (BDL-061 `.56`).** Bounded
+  by RECORDS (2000) rather than by bytes or by age: a byte cap truncates mid-record, and an age
+  cap loses *how often* on a long-lived project and makes a quiet month read like a dead guard.
+  Firings that leave the active file fold into a carried summary holding, per guard, the count,
+  how many reached a verdict, and the first and last moment and outcome — every input
+  `beadloom guard --liveness` reads — so `fired_count`, `never-fired` and the last outcome are
+  unchanged across a rollover. What rotation costs is per-firing `why` text older than one
+  generation, and `carried_count` states how much of a count rests on a summary rather than on
+  readable lines. The scaffolded ignore pattern widened to `guard-firings*.jsonl` so the
+  archive is not left as untracked churn.
 - **`beadloom waves` — the wave shape is decided from the graph, not guessed (BDL-061 S6).**
   `beadloom waves BEAD [BEAD ...] [--json]` decides which of the named beads may run at the
   same time from the code-level independence of their declared node scopes, because a tracker
@@ -224,6 +317,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   suite itself rejects.
 
 ### Changed
+- **An attestation covers only the documents a run had grounds for (BDL-061 `.85`, BDL-UX
+  #163).** See BREAKING above for what a caller must change. What moved underneath it: a FACT
+  and a CLAIM used to be one `UPDATE`. The node-level `symbols_hash` is what the index saw, so
+  `attest_ref` carries it forward for every pair of the ref and `.78`'s
+  `sibling_symbols_changed` verdict clears once its cause is re-baselined; `baseline_source =
+  attested` is a claim about a document somebody read and is written only inside the scope.
+  Both axes of the new vocabulary were decided by measurement rather than by taste —
+  `domains/doc-sync/README.md` was stale against two agents' files in one run, so naming the
+  document alone would have recorded a reading of a change nobody had seen, which is why
+  `--code` exists beside `--pair`.
+- **`scenario-coverage` states the reach of its own population (BDL-061 `.63`).** The
+  population is defined by node kind, and a kind is one line in `services.yml`, so
+  reclassifying a node `feature` → `component` removed it from the rule with no finding of any
+  sort. Reporting the reclassification was rejected with its reason: an evaluator that
+  remembered its own past population would be a writer, which is the BDL-UX #147/#189 shape.
+  Widening the rule to components was rejected too — excluding plumbing is the architecture
+  model's own definition, and 24 further findings is a decision nobody took. So the
+  denominator is printed beside the fraction: measured on this repository at release, `42 of
+  84 graph node(s) (kind=feature); the other 42 are outside it … component (30), domain (7),
+  service (4), site (1)`.
 - **A doc pair whose sibling file moved is `unverified`, not `stale` (BDL-061 S6, BDL-UX
   #182, #133, #105).** `symbols_hash` was stored per pair and computed per **node**, so one
   changed file marked every pair its node owned `stale/symbols_changed` and the followers
@@ -318,7 +431,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   findings) grew `prime`'s output from 2.6 KB to 13.1 KB, which is an agent's context budget
   spent on one rule's backlog.
 - **The scaffolded branch protection declares nine required contexts, not ten (BDL-061 S4).**
-  A `tests-windows` context was added and withdrawn inside this same unreleased cycle, so no
+  A `tests-windows` context was added and withdrawn while this cycle was unreleased, so no
   released version ever carried it. **Windows is unverified by decision**: the leg was
   measured at ~16-28 runner-minutes per pull request and, unlike the two `tests-locale` rows,
   it becomes the pipeline's critical path and roughly triples PR-to-merge latency, for a
@@ -405,6 +518,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unchanged so no adopter's pipeline turns red on upgrade.
 
 ### Fixed
+- **A document that SHOWS the `watches` syntax opted itself into surface drift (BDL-061
+  `.86`).** `parse_watches` searched the whole text, so four documents were enrolled in a check
+  none of them asked for: a CHANGELOG entry describing the feature, two SPECs mentioning it in
+  a sentence, and the code-indexer SPEC's fenced example whose own caption reads *also an
+  example: not read*. A declaration must now open a line and sit outside a fenced block, and
+  what position cannot decide is stated rather than hidden. `docs/services/cli.md` was enrolled
+  the same way and genuinely wants the watch, so it declares one in its header; the other three
+  leave the reference population. Measured: reference documents 12 → 9, unattestable
+  `surface_drift` entries 1 → 0.
+- **The `reference` leg read two forms as claims (BDL-061 `.62`).** `Example:` and `Пример:`
+  are Gherkin keywords and ordinary words at the same time, so a bare line opening with one now
+  needs the author's own mark — a bullet, a quote or backticks — before it is read as a claim
+  that a scenario exists. An indented block is markdown's other code syntax and is skipped like
+  a fence, unless the line opens with a list or quote marker. Measured: 33 references before
+  the change and 33 after. A document that cannot be DECODED is now reported with its reason
+  instead of contributing nothing — `load_references` returns a `ReferenceSet` carrying
+  `unreadable` beside `dead_globs`, and `scenario-coverage` reports each one.
+- **`beadloom active-sync` was inert on the repository that authored it (BDL-061 `.84`).** Four
+  faults kept it that way. The lookup compared a full tracker id against a table written in
+  short form, so it matched no row and printed `already coherent` over a comparison of zero.
+  The scan gave up at the first `Bead`-headed table, and this epic's own `ACTIVE.md` carries a
+  deferral table 480 lines above its status table. `bd list --json` returns open beads capped
+  at 50 rows — 41 of this repository's 709, every closed one missing — so `✓ done` could never
+  be written; the query now asks for `--all -n 0`. And a short id is resolved against the
+  epic's own tracker prefix, because eight beads here are numbered `.17` and the first working
+  run resolved this epic's `.17`–`.24` rows onto another epic's beads. A run now states how
+  many rows it RESOLVED out of how many it read, names every row it could not resolve with a
+  reason, and `--check` exits 1 when it resolved none. `Done`, `✓ done` and `**DONE**
+  (a1b2c3d)` are compared as one state, so a first working run corrects drift instead of
+  rewriting 78 rows to add a checkmark. The first working run: 191 of 283 rows resolved, **56
+  rows corrected across 12 `ACTIVE.md` files**, 92 rows named as resolving to no bead — two of
+  the corrections being beads closed in the tracker and still reading `Pending` and `Open` in
+  the epic's own table.
 - **One undecodable planning document no longer takes the whole `beadloom ci` gate down
   (BDL-061 S4).** `check_documents` caught `OSError` and `read_text(encoding="utf-8")` raises
   `UnicodeDecodeError`, which is a `ValueError`. Measured: a single cp1251 document under the
@@ -436,7 +582,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   content check enters, while the global count read `()` throughout.
 - **Five documentation-only staleness classes carried over from BDL-061 S3 are closed
   (BDL-061 S4).** BDL-UX #183, #186, #187, #188 and #189 were listed as known limitations of
-  S3 in this same unreleased cycle and are fixed within it; the list below is S4's.
+  S3 while this cycle was unreleased and are fixed within this release. (Two entries in the
+  issue log carry the number 187; the one closed here is the `setup-agentic-flow` scaffold
+  leaving `config-check` red, not the `bd list --json` item under Known limitations below.)
 - **Five states that read as a pass because nothing could check them (BDL-061 S2b).** One
   sentence, four fixes: *unverifiable is not clean*. A **deleted declared document** left the
   Gate green — the reindex that followed simply removed its pairs, so there was nothing left to
@@ -499,42 +647,95 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rather than taken from each writer's account of itself, and the closing advice stops
   offering `--fix` for a finding it will decline.
 
-### Known limitations (BDL-061 S4)
+### Known limitations
 
-Measured and open at the time of writing, listed here rather than left to be discovered. The
-three S3 limitations this section previously carried — BDL-UX #183, #187 and #188 — are closed
-above, inside this same unreleased cycle.
+Measured and open at release, listed here rather than left to be discovered. **Seventeen beads of
+this epic are open in the tracker** (counted with `bd list --status open --json`, excluding the
+epic row and the swarm placeholder); the nine below are the ones an adopter will meet.
+Three limitations this section carried while the cycle was unreleased — the `incomplete`
+verdict having no `--json` counter, the `measurable-goal` numeral detector, and the reference
+leg reading a line rather than a sentence — are fixed above, inside this same cycle.
 
-- **`measurable-goal` is closer to a numeral detector than a measurability detector.** It looks
-  for a digit, and its stated premise that a number is *necessary* for a measurable clause is
-  false: an exit code, a named artifact that either exists or does not, and a binary capability
-  are all measurable without one. On a sample of 18 of this repository's 154 findings, one was
-  defensible as a true positive, and among the false ones is `beadloom lint --strict fails
-  (non-zero)` — the exit-code form the project's own standing note demands. Read the count; do
-  not act on an individual finding until the criterion is re-scoped.
-- **Windows is unverified by decision.** The product carries zero `sys.platform` and zero
-  `os.name` branches, so it is either genuinely portable or has never been asked, and an
-  all-green Linux pipeline cannot tell those apart. A Windows CI leg was built and withdrawn on
-  cost, and the Windows verdict for the flow guards is composed from `ntpath` plus a refusal
-  proved branchless rather than measured on a runner. Nothing here claims Windows support.
-- **56 of 243 planning documents (23%) are in a kind no content check enters** — BRIEF, PLAN
-  and SUMMARY — because the shipped templates for those kinds carry no Goal section, no Reason
-  column, no Risks and no Open Questions, and BRIEF is the kind every `bug`, `task` and `chore`
-  uses. Whether to give those templates the rows or to place them outside these four checks is
-  a product decision with a migration behind it and **it has not been taken**. What has changed
-  is that the state is now printed rather than inferred.
-- **`incomplete` has no counter in `sync-check --json`.** The rows are in `pairs` and each is
-  printed by name, but `ok + stale + missing + unverified + unchecked` does not sum to `total`
-  when any row is incomplete, so a machine consumer reading only the summary does not see them.
+- **A virgin `beadloom init` leaves `beadloom ci` red (BDL-UX #192, filed by this release's own
+  artifact verification).** Measured on the built 3.0.0 wheel in a fresh virtual environment,
+  against a scratch TypeScript project with one file under `src/`: `beadloom init --yes --mode
+  bootstrap` exits 0 and writes a graph of 2 nodes and **0 edges**, then `beadloom lint
+  --strict` exits 1 with `domain-needs-parent:require:error:::src:` and `beadloom ci` exits 1.
+  The two halves of one command disagree — the classifier writes a `src` node of kind `domain`
+  and no edges at all, while the rule generator writes `domain-needs-parent` whenever any node
+  is a domain. It is not new in 3.0.0; it had never been measured, because everything this
+  project measures runs on this project, whose graph has been hand-authored since BDL-008.
+  **Remedy until it is fixed:** add the edge by hand — an `edges:` entry `{src: <domain>, dst:
+  <root ref_id>, kind: part_of}` in `.beadloom/_graph/services.yml` — and run `beadloom
+  reindex`. Plain `beadloom lint` (without `--strict`) exits 0 throughout, so a pipeline that
+  has not adopted the Gate is unaffected.
+- **`bd list --json` returns a filtered view as a bare list, and nothing says it filtered
+  (BDL-UX #187 of 2026-08-25 — External, `steveyegge/beads`).** Measured while fixing `beadloom active-sync`:
+  the default returns 38 rows of this repository's 709 with zero closed beads, while
+  `--status closed` returns 50, and the payload is a bare JSON array with no envelope — so
+  there is nowhere for the tool to say a filter was applied, and nothing does. A consumer
+  cannot tell a complete answer from a partial one, and the partial one looks complete.
+  Beadloom's own reads now ask for `--all -n 0`; **a project scripting `bd list --json` must do
+  the same**, and any count computed from the default is a count of the first page.
+- **`beadloom setup-agentic-flow` recomposes a hand-edited role adapter without asking (BDL-UX
+  #191), which is the command an upgrader runs.** `config-check --fix` learned one rule in this
+  release — rewrite only what Beadloom can prove it wrote — and declines a hand-edited
+  `.claude/agents/<role>.md`. The scaffold did not learn it: `setup-agentic-flow` calls
+  `generate_adapters(config, project_root)` with no `preserve=`, so the same hand edit `--fix`
+  declines is overwritten by the command `--fix`'s own remediation points at. It is recorded as
+  undecided rather than as a defect with an obvious fix, because the two commands have
+  genuinely different contracts — a repair must not destroy, while a scaffold may reasonably
+  reinstate the shipped flow — and nothing today states which is intended for the third
+  artifact kind. **Until it is decided: copy any hand-edited role adapter aside before you
+  re-scaffold**, or keep your additions in the project layer under `.beadloom/flow/roles/`,
+  which is appended verbatim and never overwritten.
+- **The commit gate cannot see a neighbour's hunk inside a file the committer owns
+  (`beadloom-mr2l.81`).** `sync-check --staged` judges the paths a commit stages, so work
+  swept in from a shared working tree — inside a file the committer legitimately touches,
+  because `git add -p` is not available to an agent — is *inside* the region the gate judges.
+  Measured: `not_checked_outside_commit` reads 0 and the file is named as staged, so the hook
+  prints a confident "0 file(s) outside this commit were not judged" over a commit carrying
+  someone else's work. Nothing the hook can read distinguishes the two, because the index does
+  not record who wrote a line. The mechanism that would catch it — comparing the staged paths
+  against the scope the committing bead declared — needs four decisions taken first, starting
+  with how the hook learns whose bead is committing.
+- **The commit-scoped hook type-checks a surface the project never declared typed
+  (`beadloom-mr2l.82`).** Its mypy leg runs over the staged `src/` **and** `tests/` files,
+  while this project's declared type surface, its `pyproject.toml` strictness and its CI are
+  `src/` alone. Measured on the commit that exposed it: eight mypy errors in two files, all
+  eight pre-existing and reproducing byte for byte on the previous revision, printed over a
+  commit that introduced none of them. So the hook holds `tests/` to a standard the Gate does
+  not enforce and will warn on nearly every commit that touches a test — and a warning nobody
+  is expected to act on is how the next warning gets read. The leg is `warn` in the default
+  mode and blocks nothing; **under `--mode block` it blocks**, which is what raises this for an
+  adopter who installed the blocking hook.
+- **Windows is unverified by decision (`beadloom-mr2l.60`).** The product carries zero
+  `sys.platform` and zero `os.name` branches, so it is either genuinely portable or has never
+  been asked, and an all-green Linux pipeline cannot tell those apart. A Windows CI leg was
+  built and withdrawn on measured cost (~16-28 runner-minutes per pull request, and the
+  pipeline's critical path), so the Windows verdict for the flow guards is composed from
+  `ntpath` plus a refusal proved branchless rather than measured on a runner — and the known
+  defect it points at, a backslash refusal that would refuse every edit on a Windows harness,
+  is pinned as a strict `xfail` rather than fixed. **Nothing here claims Windows support.**
+- **`measurable-goal` bought precision with recall, and its historical debt is unpaid
+  (`beadloom-mr2l.71`).** The re-scope above took this repository from 154 findings of 235
+  goal statements to **4 of 232**, measured. The stated cost: 27 of the 150 newly-accepted
+  statements name no witness either, so the check now decides nothing about them. And the four
+  that remain are all in closed epics, whose goals cannot be made measurable retroactively —
+  the historical exclusion that would resolve them is a design decision that has not been
+  taken, so the four stand as findings.
+- **56 of 243 planning documents (23%) are in a kind none of the four content checks enters** —
+  BRIEF (11), PLAN (42) and SUMMARY (3), measured at release — because the shipped templates
+  for those kinds carry no Goal section, no Reason column, no Risks and no Open Questions, and
+  BRIEF is the kind every `bug`, `task` and `chore` uses. Whether to give those templates the
+  rows or to place those kinds outside the four checks is a product decision with a migration
+  behind it, and **it has not been taken**. What changed in this release is that the state is
+  printed rather than inferred.
 - **`scenario-coverage` checks that a scenario NAMES a bead, never that the bead exists.**
   Reading the tracker from the rule engine would make a domain depend on the application layer.
   The limit travels on the findings that would otherwise imply otherwise. Only structure is
   parsed, so a scenario that binds correctly and asserts nothing counts as coverage — whether
-  its assertions would notice a defect is the mutation duty's question.
-- **The reference leg reads a line, not a sentence.** `Example:` is a Gherkin scenario keyword,
-  so a prose line opening with it is read as a claim that a scenario exists, and an indented
-  code block is read while a fenced one is not. Measured as zero occurrences on this repository
-  today; both classes are pinned by failing tests so a fix reddens the suite.
+  its assertions would notice a defect is the mutation duty's question, not this rule's.
 
 ## [2.2.0] - 2026-08-20
 

@@ -35,6 +35,25 @@
 
 ## Open Issues
 
+192. [2026-08-26] [HIGH] A virgin `beadloom init --yes` leaves `beadloom ci` RED — the bootstrap writes a domain with no `part_of` edge and a rule that requires one
+
+    **Severity:** high (the first gate an adopter runs fails on a repository nobody has touched, and the failing rule was written by the same command one step earlier)
+    **Command:** `beadloom init --yes --mode bootstrap` then `beadloom ci`
+    **Context:** measured while verifying the 3.0.0 BUILT ARTIFACT (`beadloom-mr2l.90`) against a scratch adopter project — a TypeScript service at `0.4.1` with one file under `src/`, installed from the wheel into a fresh venv. Not introduced by 3.0.0: `rules_gen.py` and the bootstrap classifier both predate it. It had never been measured, because everything this project measures runs on this project, whose graph has been hand-authored since BDL-008.
+    **Measured, on the built wheel:**
+
+    ```
+    beadloom init --yes --mode bootstrap   ->  rc 0   Graph: 2 nodes, 0 edges (preset: monolith)
+    beadloom lint                          ->  rc 0
+    beadloom lint --strict                 ->  rc 1   domain-needs-parent:require:error:::src:
+    beadloom ci                            ->  rc 1
+    ```
+
+    **Issue:** the classifier writes a `src` node of kind `domain` and **no edges at all** (`services.yml` has no `edges:` key), while `generate_rules` writes `domain-needs-parent` whenever any node is a domain. The two halves of one command disagree, so the scaffold fails its own gate immediately.
+    **Why the existing guard does not cover it:** `rules_gen.py` already carries this exact worry for `feature` — BDL-UX #71 made `has_edge_to` an empty matcher so a feature nested under a service is not flagged, and the comment says requiring a domain parent *"makes a clean bootstrap fail its own `lint --strict` gate out of the box"*. An empty matcher relaxes WHERE the edge may point; it does not excuse a node that has no edge. The `service-needs-parent` rule was removed outright for the same class. So the fix was applied twice, to the two neighbours, and the middle case is what ships.
+    **Expected:** one command's output must pass that command's own rules. Two candidate fixes, and the choice is a decision rather than a patch: (a) the bootstrap emits `part_of` edges from every classified domain to the root service node, which makes the graph structurally complete and is what a hand-authored graph looks like; or (b) `generate_rules` omits `domain-needs-parent` when the bootstrap produced no `part_of` edge to require, which keeps the graph honest about what was inferred but ships a project with one fewer structural rule. (a) states a structure the classifier did not verify; (b) leaves the rule to be added when the human authors the parent. Whichever is chosen, `init` must not print `rc 0` over a graph that fails the rules it just wrote.
+    **Workaround:** add the edge by hand — `edges: [{src: src, dst: <root-ref-id>, kind: part_of}]` in `.beadloom/_graph/services.yml`, then `beadloom reindex`.
+
 187. [2026-08-25] [HIGH] External (steveyegge/beads): `bd list --json` returns a filtered view as a bare list, with nothing saying it filtered
 
     **Severity:** high (a consumer cannot tell a complete answer from a partial one, and the partial one looks complete) — **External**
@@ -1731,6 +1750,8 @@ an agent reading this file needs the OPEN items, not the history, and preamble i
 part of a long document that is read least usefully (BDL-UX #156).
 
 <summary><strong>Chronology</strong> — what was opened, closed or verified, newest first</summary>
+
+- **2026-08-26** — (v3.0.0 release, `beadloom-mr2l.90`): **opened #192** — verifying the BUILT wheel against a project that is not us found that a virgin `beadloom init --yes` exits 0 over a graph of 2 nodes and 0 edges and then fails its own `beadloom ci` on `domain-needs-parent`, a rule the same command wrote one step earlier. It is not new; it had never been measured, because everything measured here runs on a repository whose graph has been hand-authored since BDL-008. The rest of what the release did was make the OPEN set adopter-visible. The CHANGELOG's Known limitations name eight items an adopter will meet, and three of them live only here rather than in the tracker: **#191** (`setup-agentic-flow` recomposes a hand-edited role adapter — the #139/#151/#186 shape in the sibling command, and the command an upgrader runs), **#187 of 2026-08-25** (`bd list --json` returns a filtered view as a bare list — External, and it stays open because it is `bd`'s default, not ours) and the `measurable-goal` recall cost. **Found while writing the release notes and not fixed here: this log has two issues numbered 187** — the closed `setup-agentic-flow`/`config-check` one of 2026-08-23 and the open External one of 2026-08-25 — so a reference to "#187" is ambiguous in both directions. Filed as a bead rather than renumbered, because renumbering breaks every reference already written in the CHANGELOG, the tracker and this file. Measured at release: **seventeen** beads of this epic open in the tracker (`bd list --status open --json`, excluding the epic row and the swarm placeholder).
 
 - **2026-08-24** — (BDL-061 S6, `beadloom-mr2l.78`): CLOSED #182, #133 and #105 — three filings of one
   root over eleven weeks. `symbols_hash` was stored per pair and computed per node, so one changed file

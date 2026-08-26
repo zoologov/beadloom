@@ -667,10 +667,13 @@ class TestAnUnknownKeyInAGuardBodyIsRejected:
     def test_the_config_this_repository_ships_still_parses(self) -> None:
         """No adopter's green project turns red on upgrade — starting with our own.
 
-        The guards feature is unreleased (CHANGELOG ``[Unreleased]``), so no
-        published ``flow.yml`` carries a ``guards:`` block at all; the one file
-        that does is this repository's, and it is checked here rather than
-        assumed.
+        Guards shipped in 3.0.0, so an adopter's ``flow.yml`` can now carry a
+        ``guards:`` block — which is what makes this check load-bearing rather
+        than a note about our own file. Every guard this repository declares
+        must still be a built-in and must still parse, and it is checked here
+        rather than assumed. (Until 3.0.0 the reason given was that no
+        published ``flow.yml`` had the block at all; that sentence stopped being
+        true at the release and is replaced rather than left standing.)
         """
         repo_root = Path(__file__).resolve().parents[1]
 
