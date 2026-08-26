@@ -35,6 +35,35 @@
 
 ## Open Issues
 
+200. [2026-08-26] [LOW] An inert `docs_audit.ignore` triple is neither computed nor reported — the check exists one layer up and was never built here
+
+    **Severity:** low (nothing is currently inert; the defect is that nothing would notice if something were)
+    **Context:** found by `beadloom-viaj.5` while testing the seams between this feature's beads.
+
+    `.4` retired the `context-oracle` suppression **by hand** after the `framework_count` rename made it inert, and measured the inertness by hand (0 framework-family mentions over 58 documents). Nothing in the product would have told it. `config_sync._suppression_drifts` performs the equivalent check for a different suppression surface, so the pattern exists in the codebase — it was simply never applied to `docs_audit.ignore`.
+
+    Current state, measured: 10 triples, 59 documents, 41 mentions, **all live**. So this is dormant, and the only reason it stayed dormant is that a person swept it manually this morning.
+
+    This is `rule_liveness` applied to a suppression rather than a rule, and BDL-061 established the contract: *a rule, exclusion or glob that cannot match anything reports itself.* An `ignore` triple is an exclusion. It was left out of that sweep.
+
+199. [2026-08-26] [LOW] The Gate's lint line cannot distinguish "the rule checked nothing" from "the rule found one warning"
+
+    **Severity:** low (the information is not lost — the annotation lines below distinguish them, and `beadloom lint`'s own summary carries the qualifier; the one line a CI reader scans does not)
+    **Context:** found by `beadloom-viaj.5`. Third instance of one class in one day, at a third layer.
+
+    `application/gate.py:240-244` builds the step summary as `"N error(s), M warning(s)"` whenever any violation exists. A rule that stood down over its whole population emits one liveness finding at `warn`, so the line reads `0 error(s), 1 warning(s)` — byte-identical to a run where one ordinary warn-severity violation was found.
+
+    The code comment explains the intent, and it is the fix for the *previous* instance of this class:
+
+    ```
+    # an inert rule always emits a finding, so `rules_inert > 0` already flips
+    # this summary to the "0 error(s), N warning(s)" branch (BDL-061.48/.49)
+    ```
+
+    That change made inertness visible as *not clean*. It did not make it distinguishable from *warned*. `beadloom lint`'s rich summary carries the `rules_inert` qualifier; the Gate drops it on the way to the line a person actually reads in CI.
+
+    **Not fixed, and not blocking 3.0.1** — deliberately, with the reasoning recorded so it can be overruled. Unlike `beadloom-viaj.9`, where `lint --strict` exited **0** while a blocking rule checked nothing, here the Gate does warn and the detail is one line below. That is an ambiguous summary, not a false verdict. Related: #198 (the same shape at `sync-check`), #197 (four rule types still hardcoding `warn`).
+
 198. [2026-08-26] [MEDIUM] `sync-check` verified 0 of 363 pairs and `beadloom ci` exited 0 — the shape `.9` just ruled unacceptable one rule below
 
     **Severity:** medium (the Gate is honest in words and green in its exit code; only the words distinguish "checked nothing" from "nothing wrong")
