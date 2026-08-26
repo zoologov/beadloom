@@ -23,7 +23,16 @@ silently rewrote a commit message during that epic:
 - **REPORTS ARE NOT EVIDENCE** — including the coordinator's own reports. Verify the claim,
   not the summary of the claim.
 - **CLEAN-ROOM REVERT** — verify over `git archive HEAD` plus only your files; say "green in
-  a clean room over N files" when that is what was done.
+  a clean room over N files" when that is what was done. **Amended 2026-08-26, and the
+  amendment is the point: `git archive HEAD | tar -x` produces a tree that is not a git work
+  tree, so `git_baseline` can answer nothing and every doc pair returns `unverified`.**
+  Measured on the same tree: 363 `unverified` without `git init`, 363 `ok` with it. `beadloom
+  ci` exits 0 in both and says `0 pair(s) fresh, 363 NOT VERIFIED` in the one — so a check
+  reading the exit code accepted a room that verified nothing. **Run `git init` plus one commit
+  inside the clean room before measuring, and quote the sync-check line, not the rc.** Every
+  clean-room claim in BDL-061 and earlier in this feature was, on the doc-freshness axis, a
+  measurement of the absence of git. The tool said so on every run; nobody read the line.
+  (See #198.)
 - **NO CALLER NO CAPABILITY** — a function nothing calls is not a feature.
 - **A GREEN COUNT IS NOT A CHECKED COUNT** — state the denominator and name what was skipped.
 - **CAPTURE, DON'T RE-RUN** — capture failing output on first sight; an intermittent failure
@@ -35,6 +44,18 @@ Added by this feature:
 - **UNCHECKED IS NOT CLEAN, AND THE CHECKER MUST SAY WHICH.** The whole feature is one
   instance of the epic's class: a green result describing the checker's ignorance rather
   than the code's health. Every rule here reports `unverifiable` as its own state.
+- **A TOTAL STAND-DOWN IS NOT A PARTIAL GAP.** A check that verified *none* of its
+  population states a different fact from one with a hole in it, and must not reach the reader
+  through the same channel or the same severity. Established by `.9`: `liveness_finding`
+  hardcoded `severity = "warn"`, so a rule this project escalated to `error` could stop
+  checking all 86 of its pairs while `lint --strict` exited 0. The same shape survives one
+  layer up in `sync-check` (#198), recorded rather than fixed.
+
+- **A FILTER THAT CANNOT SEE THE FAILURE IS NOT A MEASUREMENT.** The coordinator failed to
+  reproduce #195 because it filtered on `rule_type == doc_area_coherence`, and the stand-down
+  publishes under the liveness type. The probe returned 0 while the defect was live. Before
+  concluding *absent*, prove the instrument could have shown *present*.
+
 - **A SELF-FACT IS NOT A PROJECT FACT.** A value read from the running package describes the
   tool. If it appears in a report about someone else's project, it is a defect, and being
   correct about Beadloom does not excuse it.

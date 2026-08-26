@@ -35,6 +35,29 @@
 
 ## Open Issues
 
+198. [2026-08-26] [MEDIUM] `sync-check` verified 0 of 363 pairs and `beadloom ci` exited 0 — the shape `.9` just ruled unacceptable one rule below
+
+    **Severity:** medium (the Gate is honest in words and green in its exit code; only the words distinguish "checked nothing" from "nothing wrong")
+    **Command:** `beadloom ci` in a tree that is not a git work tree
+    **Context:** found while verifying `.9`'s clean-room report, which is also how the procedural half came to light.
+
+    **Measured**, `git archive HEAD | tar -x` with no `git init`:
+
+    ```
+    sync-check WARN: 0 pair(s) fresh, 363 NOT VERIFIED (no baseline — index rebuilt)
+    beadloom ci rc=0
+    ```
+
+    With `git init` + one commit in the same extracted tree: 363 `ok`, rc 0.
+
+    **The product is not lying.** It names the population, names the reason, and names three remedies — *"reindex incrementally on the existing index, run inside a git work tree, or attest the pair"*. By this epic's own standard that is correct behaviour: `unverified` is a distinct state and it says which.
+
+    **What is questionable is the exit code.** `beadloom-viaj.9` decided, one layer down, that a rule which checks *none* of its population is a different fact from one with a partial gap — a total stand-down now carries the rule's declared severity, while partial inertness stays advisory. `sync-check` at the Gate has the identical shape and the opposite answer: 0 of 363 verified is a WARN, indistinguishable in `rc` from 362 of 363.
+
+    Not obviously a bug. A tree with no git legitimately cannot be verified, and blocking there would punish an adopter for a checkout style. But the asymmetry is now deliberate-looking and is not deliberate, so it should be decided rather than inherited.
+
+    **Procedural half, and the reason this was invisible for two epics.** The standing rule CLEAN-ROOM REVERT says to verify over `git archive HEAD` plus only the agent's files. Every such clean room was **structurally unable to verify a single doc pair** — 363 came back `unverified`, and any check reading `rc` rather than the summary line accepted it. Every "green in a clean room" claim in BDL-061 and in this feature was, on the doc-freshness axis, a measurement of the absence of git. The tool said so in words on every run. Nobody read the line. Corrected in BDL-062 `CONTEXT.md`; recorded here because the claims it weakens are spread across two epics' commit messages.
+
 197. [2026-08-26] [MEDIUM] Four other rule types still report a TOTAL stand-down as `warn`, so an escalation still evaporates for them
 
     **Severity:** medium (it is #195's second defect, unfixed for every rule type but the one that was measured)
