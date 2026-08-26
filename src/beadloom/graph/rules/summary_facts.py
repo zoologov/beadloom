@@ -201,10 +201,25 @@ def collect_claims(conn: sqlite3.Connection, fact_set: FactSet) -> SummaryClaims
         )
         (agreeing if finding.status == "fresh" else disagreeing).append(claim)
 
-    # `unmatched` is every mention whose fact the registry produced no value
-    # for, which is exactly the population `not_applicable` explains. A fact
-    # neither computed nor declined is a fact this project never declared, and
-    # its reason says so rather than leaving the entry blank.
+    # `unmatched` is every mention whose fact carried no computed value, and the
+    # provenance says which of two things that means.
+    #
+    # For a `FactSet` the REGISTRY built, `not_applicable` always has the answer:
+    # every name `DocScanner` scans for is computed or declined on every path.
+    # Measured across five project shapes for BDL-062.10 (m2), including a
+    # database with no schema at all — 0 computed, 9 declined — the difference
+    # was empty in both directions every time, and
+    # `test_every_registry_built_fact_set_covers_every_scanned_keyword` now
+    # fails if that ever stops holding.
+    #
+    # The fallback is therefore NOT for the registry. It is for a `FactSet` a
+    # caller injects through the public `fact_set=` parameter, which is under no
+    # obligation to cover the scanner's vocabulary — a fact neither computed nor
+    # declined is one that caller never declared, and the reason says so rather
+    # than leaving the entry blank. Deleting it raises `KeyError` on that path,
+    # measured: the review proposed the deletion on the strength of the registry
+    # half alone, and `test_a_claim_naming_a_fact_the_project_never_declared_says_so`
+    # is the caller the deletion would have broken.
     unverifiable = [
         Claim(
             ref_id=str(mention.file),
@@ -279,6 +294,7 @@ def _unverifiable(rule: SummaryFactsRule, claims: SummaryClaims, claim: Claim) -
             f"is neither confirmed nor contradicted — {claims.population()}"
         ),
         remediation=UNVERIFIABLE_HINT,
+        from_ref_id=claim.ref_id,
     )
 
 

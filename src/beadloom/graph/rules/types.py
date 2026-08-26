@@ -527,6 +527,7 @@ def liveness_finding(
     message: str,
     remediation: str,
     severity: str = "warn",
+    from_ref_id: str | None = None,
 ) -> Violation:
     """Build one advisory finding about a rule being unable to do its job.
 
@@ -549,6 +550,15 @@ def liveness_finding(
     BDL-UX #195). Passing the rule's declared severity costs an adopter nothing:
     a rule that ships ``warn`` still reports ``warn``, so nobody's first
     ``beadloom ci`` goes red on a graph that is merely small.
+
+    *from_ref_id* names the node the finding is about, for the callers that have
+    one. Most do not: a liveness finding is usually about a RULE that could not
+    run, and a node id would be an invention. ``graph-summary-facts`` is the
+    exception — it reports per node, and its two states were reaching consumers
+    differently, a disagreement carrying ``claim.ref_id`` and an unverifiable
+    claim carrying nothing, from the same rule about the same node (BDL-062.10,
+    m1). Added the same way *severity* was, and for the same reason: a default
+    that preserves every existing caller's output byte for byte.
     """
     return Violation(
         rule_name=rule_name,
@@ -557,7 +567,7 @@ def liveness_finding(
         severity=severity,
         file_path=None,
         line_number=None,
-        from_ref_id=None,
+        from_ref_id=from_ref_id,
         to_ref_id=None,
         message=message,
         remediation=remediation,

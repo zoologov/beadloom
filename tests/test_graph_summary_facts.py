@@ -311,6 +311,92 @@ class TestUnverifiable:
         assert claims.disagreeing == ()
         assert claims.silent == 0
 
+    def test_an_unverifiable_finding_names_the_node_it_is_about(
+        self, tmp_path: Path
+    ) -> None:
+        """A machine consumer can attribute it, exactly as it can a disagreement.
+
+        Both states are produced by the same rule about the same node, so a
+        consumer that groups findings by ``from_ref_id`` must not get one of
+        them anonymously (BDL-062.10, m1). Before the correction ``_unverifiable``
+        went through :func:`liveness_finding`, which hardcoded ``from_ref_id=None``,
+        while ``_disagreement`` set ``claim.ref_id`` — same rule, same node, two
+        answers to "which node is this about".
+        """
+        conn = _graph(tmp_path, {"atlas": "The atlas, indexing 42 nodes"})
+        found = _findings(
+            evaluate_summary_facts_rules(
+                conn,
+                [_rule()],
+                fact_set=_declining(node_count="the nodes table could not be read"),
+            ),
+            LIVENESS_RULE_TYPE,
+        )
+        assert [v.from_ref_id for v in found] == ["atlas"]
+
+    def test_the_two_states_attribute_the_same_node_the_same_way(
+        self, tmp_path: Path
+    ) -> None:
+        """The parity itself, so the two paths cannot drift apart again."""
+        conn = _graph(tmp_path, {"atlas": "The atlas, indexing 42 nodes"})
+        disagreement = _findings(
+            evaluate_summary_facts_rules(conn, [_rule()], fact_set=_facts(node_count=7)),
+            SUMMARY_FACTS_RULE_TYPE,
+        )
+        unverifiable = _findings(
+            evaluate_summary_facts_rules(conn, [_rule()], fact_set=_facts()),
+            LIVENESS_RULE_TYPE,
+        )
+        assert [v.from_ref_id for v in disagreement] == ["atlas"]
+        assert [v.from_ref_id for v in unverifiable] == ["atlas"]
+
+    def test_a_liveness_finding_stays_anonymous_unless_a_caller_names_a_node(
+        self,
+    ) -> None:
+        """Default-preserving: the parameter adds a capability, it changes nobody.
+
+        The other liveness producers report about a RULE, not a node, and must
+        keep answering ``None`` — the same shape the ``severity`` parameter was
+        added in (BDL-062 ``.9``).
+        """
+        from beadloom.graph.rules.types import liveness_finding
+
+        anonymous = liveness_finding(
+            rule_name="r", rule_description="d", message="m", remediation="h"
+        )
+        assert anonymous.from_ref_id is None
+        assert anonymous.severity == "warn"
+        named = liveness_finding(
+            rule_name="r",
+            rule_description="d",
+            message="m",
+            remediation="h",
+            from_ref_id="atlas",
+        )
+        assert named.from_ref_id == "atlas"
+
+    def test_every_registry_built_fact_set_covers_every_scanned_keyword(
+        self, tmp_path: Path
+    ) -> None:
+        """The m2 measurement, pinned as a check rather than left as a comment.
+
+        The fallback provenance in :func:`collect_claims` cannot fire for a
+        ``FactSet`` the registry built: every name ``DocScanner`` scans for is
+        computed or declined on every path, which was measured across five
+        project shapes including a database with no schema at all (0 computed,
+        9 declined). It fires only for a ``FactSet`` a CALLER injects through
+        the public ``fact_set=`` parameter, which is why it is kept rather than
+        deleted. If the two sets ever diverge, this fails here — loudly, at test
+        time — instead of being papered over at runtime by a string.
+        """
+        from beadloom.doc_sync.audit import FactRegistry
+        from beadloom.doc_sync.scanner import DocScanner
+
+        conn = _graph(tmp_path, {"atlas": "The atlas"})
+        collected = FactRegistry().collect_set(tmp_path, conn)
+        covered = set(collected.facts) | set(collected.not_applicable)
+        assert not set(DocScanner.FACT_KEYWORDS) - covered
+
     def test_a_claim_naming_a_fact_the_project_never_declared_says_so(
         self, tmp_path: Path
     ) -> None:
