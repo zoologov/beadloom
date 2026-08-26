@@ -36,9 +36,11 @@ every adopter twice, the second time over the correction (BDL-UX #177).
 
 Composition answers both. The shipped core stays stack-neutral and is verified; the
 project layer is a separate file that composes after it and is never overwritten.
-Measured on the shipped artifact: the core `CLAUDE.md` went from **440 to 376 lines**.
-A project composing `ddd` + `python` gets **406** back; a project composing neither keeps
-the 376, and its critical rules name no Python tooling.
+Measured on the shipped artifact by composing it: the core `CLAUDE.md` went from **440 lines
+to 371**. A project composing `ddd` + `python` gets **401** back; a project composing neither
+keeps the 371, and its critical rules name no Python tooling. S3 landed the core at 376 and
+S3b removed five more lines, so the reduction is measured against the shipped template of the
+day rather than quoted from the bead that first reported it.
 
 ## The four layers
 

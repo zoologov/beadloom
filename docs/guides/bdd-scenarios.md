@@ -119,7 +119,7 @@ parser that read nothing.
 | reference | a scenario a `references` document claims exists and the suite does not contain |
 | declaration | a `non_behavioural` entry that excuses nothing, or one whose node has a scenario anyway |
 
-Every coverage finding carries the population it is a fraction of — `none of 19 scenarios in 6
+Every coverage finding carries the population it is a fraction of — `none of 92 scenarios in 20
 files carries @node:agent-prime` — so a shrinking suite cannot improve a number by making the
 denominator smaller without saying so.
 
@@ -190,20 +190,22 @@ trusted the check.
 
 ## What this repository ships with, and why the number is not zero
 
-`beadloom lint` reports **60** `scenario-coverage` findings here — measured 2026-08-24 after
-BDL-061 S6, with `--json`, on the shipped `rules.yml`:
+`beadloom lint` reports **59** `scenario-coverage` findings here — measured 2026-08-26 during
+BDL-062, with `--json`, on the shipped `rules.yml`:
 
 | Findings | What they are |
 |----------|---------------|
-| 34 | no scenario in the suite binds to a `feature` node the graph declares |
-| 26 | scenarios that BDL-061's own PRD names and the suite does not contain |
+| 32 | no scenario in the suite binds to a `feature` node the graph declares |
+| 26 | scenarios a planning document names and the suite does not contain |
+| 1 | the rule stating the reach of its own population (see below) |
 
 The population is the honest one: `for: {kind: feature}` selects all **42** declared feature
-nodes, of which 8 are covered (`rule-engine`, `scenario-binding`, `doc-quality`, `doc-shape`,
-`doc-templates`, `sync-check`, `wave-plan`, `review-brief`). The suite holds 59 scenarios in 11
-files. Both numbers moved in the same direction and for the same reason: S6 added two feature
-nodes and bound scenarios to all three of the nodes its work touched, so the population grew by
-two while the uncovered count fell by one. A hand-picked `ref_id` list would report 0 by construction, which is the false
+nodes, of which 10 are covered (`doc-quality`, `doc-shape`, `doc-templates`, `docs-audit`,
+`flow-guards`, `review-brief`, `rule-engine`, `scenario-binding`, `sync-check`, `wave-plan`).
+The suite holds 92 scenarios in 20 files. The uncovered count falls whenever a bead binds a
+scenario to a node its work touched, and the population grows whenever a feature node is
+declared, so the two move independently and neither is a target. A hand-picked `ref_id` list
+would report 0 by construction, which is the false
 green the whole mechanism exists to remove. `component`, `domain`, `service` and `site` nodes are
 outside the population by the architecture model's own definition — a feature is a capability, a
 component is plumbing. Reclassifying a feature as a component is therefore a **silent** exit from

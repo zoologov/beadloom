@@ -13,7 +13,7 @@ The system is organized into six DDD domain packages, an application (use-case o
 **Domains:**
 1. **Context Oracle** (`context_oracle/`) — BFS graph traversal, context bundle assembly, code indexing, two-tier caching, FTS5 search, `why` impact analysis
 2. **Doc Sync** (`doc_sync/`) — doc↔code synchronization tracking, stale detection, symbol-level hashing, docs audit, document shape and writing-standard quality checks
-3. **Graph** (`graph/`) — YAML graph loader, diff engine, rule engine, import resolver (9 languages), architecture linter, C4 diagram emitter, federation
+3. **Graph** (`graph/`) — YAML graph loader, diff engine, rule engine, import resolver (eleven languages, `_EXTENSION_LOADERS`), architecture linter, C4 diagram emitter, federation
 4. **Onboarding** (`onboarding/`) — project bootstrap, doc generation/polishing, architecture-aware presets, AGENTS.md / IDE-rules generation, config sync, and the **agentic-flow composer** (`flow_config.py`, `composer.py`, `role_composer.py`, `role_adapters.py`, `flow_manifest.py`, `flow_suppression.py`), which assembles every flow artifact from CORE + architecture + stack + the project layer in `.beadloom/flow/`
 5. **Infrastructure** (`infrastructure/`) — domain-agnostic SQLite database layer, health metrics, git-activity tracking, and the configuration readers for where source (`scan_paths`) and documentation (`docs_dir`, `doc_roots`) live
 6. **AI Agents** (`ai_agents/`) — governed AI-agent harnesses that ship inside the wheel; hosts the deterministic, seam-isolated **AI tech-writer** (`ai_agents/ai_techwriter/`, run via `python -m beadloom.ai_agents.ai_techwriter`). A **leaf consumer**: it may read `application`/`context_oracle`/`graph`/`doc_sync` APIs but must never be imported by the core domains or services (enforced by the `core-no-import-ai-agents` / `application-no-import-ai-agents` `forbid_import` rules).
@@ -354,7 +354,7 @@ under `.beadloom/flow/`:
 - **`flow_suppression.py`** — a declared stand-down of a core rule (`rule` + `reason` + `until`, all mandatory), rendered as a visible notice into every composed artifact. Expiry is a `config-check` finding rather than a byte, so the composition stays a function of its inputs.
 - **`config_sync.py`** — compares each artifact against its composition, maps the manifest state onto a severity, names the project layer in effect and reports suppression liveness.
 
-The core `CLAUDE.md` measures **376 lines** (down from 440), with each removed line
+The core `CLAUDE.md` measures **371 lines** (down from 440), with each removed line
 mapped to a replacement in a stack overlay or in `§0 CRITICAL RULES`. The project
 layer is what makes that shrinkage possible: a project's own rules have a home that
 survives an upgrade instead of being appended to a drift-guarded shipped file.
@@ -376,15 +376,15 @@ see the `ai_agents` domain README + the `ai-techwriter` feature SPEC.
 
 ## Constraints
 
-- **Code indexer** supports `.py`, `.js`, `.jsx`, `.ts`, `.tsx`, `.go`, `.rs` (tree-sitter)
-- **Import analysis** supports 9 languages: Python, TypeScript, JavaScript, Go, Rust, Kotlin, Java, Swift, Objective-C, C/C++ (16 file extensions total)
+- **Code indexer** parses every extension in `_EXTENSION_LOADERS` via tree-sitter: `.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.go`, `.rs`, `.kt`, `.kts`, `.java`, `.swift`, `.m`, `.mm`, `.c`, `.h`, `.cpp`, `.hpp`. Reindex change detection reads the same set
+- **Import analysis** covers Python, TypeScript, JavaScript, Go, Rust, Kotlin, Java, Swift, Objective-C, C and C++ over 17 file extensions — the keys of `context_oracle.code_indexer._EXTENSION_LOADERS`. `supported_extensions()` narrows that set to the grammars actually installed, so a missing optional tree-sitter package removes an extension rather than failing the walk. The count of parsed languages is deliberately not written as a digit here: `language_count` in the audit's fact vocabulary means the languages this project is WRITTEN in (1), so a digit beside the word `languages` is read as a claim about that and reported stale
 - Documentation root is configurable via `docs_dir` in `.beadloom/config.yml` (default: `docs/`)
 - Documentation SPACES (TO-BE / AS-IS / WORKING) — their roots, kinds, intent documents and the
   WORKING freshness exemption — are configurable via `doc_roots` in `.beadloom/config.yml`
 - Source scan paths are configurable via `scan_paths` in `.beadloom/config.yml` (default: `src`, `lib`, `app`)
 - Graph is read only from `.beadloom/_graph/*.yml`
 - Rules are read from `.beadloom/_graph/rules.yml`
-- Rules support 7 authoring keys: `deny`, `require`, `forbid`, `layers`, `forbid_cycles`, `forbid_import`, `check`
+- The 12 authoring keys `load_rules` dispatches: `deny`, `require`, `forbid`, `layers`, `forbid_cycles`, `forbid_import`, `check`, `unregistered_feature_candidate`, `module_coverage`, `scenario_coverage`, `doc_area_coherence`, `summary_facts`. A rule declares exactly one of them, and `graph.rules.loader.AUTHORING_KEYS` is the single definition of the set
 - `ai_agents` is a leaf consumer — never imported by core domains/services (`forbid_import` enforced)
 - Maximum chunk size: 2000 characters
 - Levenshtein suggestions: maximum 5, distance threshold = max(len/2, 3)

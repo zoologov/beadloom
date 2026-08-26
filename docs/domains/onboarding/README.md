@@ -129,11 +129,15 @@ opened, and both of those used to read as a clean bill of health (BDL-UX #173).
   the reason the value cannot be read (a value of `0` or `1` is too common in prose to be read as
   a claim).
 - One summary line gives the fraction and names the shortfall. Measured on this repository:
-  `4 of 9 declared fact(s) verified; NOT VERIFIED: edge_count, language_count,
-  nodes_with_framework, test_count, version`. `version` is in that list because no
-  document in this repository states the current version as a claim -- every version
-  literal here is a dependency pin or an explicitly suppressed historical reference.
-  That is the audit reporting what it did not check, not a broken extractor.
+  `5 of 9 declared fact(s) verified; NOT VERIFIED: edge_count, language_count,
+  nodes_with_framework, test_count`. `version` left that list in BDL-062 `.7`: the install
+  section of `docs/getting-started.md` now states the current release as a claim, which is the
+  ONE place a document does so, and the audit compares it against `pyproject.toml` on every run.
+  Before that no document stated it at all, and the audit said so rather than passing quietly --
+  which is the point of the line. The four that remain are unverified for two different reasons,
+  and the line distinguishes them: `edge_count`, `nodes_with_framework` and `test_count` are
+  simply not stated anywhere, while `language_count` cannot be verified at all here because its
+  value is 1, and 0 and 1 are too common in prose to be read as claims.
 - A second line publishes the scan surface — `59 document(s) scanned, 43 not read, 1 scanned for
   versions only (file-type heuristic)` on this repository — and `--verbose` names each excluded
   document with the pattern that skipped it. Those two numbers move whenever a document is added

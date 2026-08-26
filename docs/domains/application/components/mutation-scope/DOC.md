@@ -10,7 +10,7 @@ Whether a declared mutation target could run a single mutant.
 
 BDL-061's CONTEXT settled question Q5: **the mutation tool is the project's choice.** Owning a
 runner would break tool-agnosticism and put a Python-only dependency inside a product that indexes
-twelve languages. What Beadloom ships is the role duty (the dev and test role templates state
+eleven languages. What Beadloom ships is the role duty (the dev and test role templates state
 it), the scope convention, and this check.
 
 **The failure worth catching is a declared target that runs zero mutants.** A mutation score is a

@@ -97,23 +97,28 @@ and never short-circuits, so a later failure is never hidden by an earlier one.
    places it in a space whose roots exclude it adds a final clause with its
    count (`beadloom-mr2l.77`).
 
-   Measured on this repository, 2026-08-24, the step reports:
+   Measured on this repository, 2026-08-26, the step reports:
 
    ```
-   doc-spaces WARN | to_be 190, as_is 93, working 55; 17 node declaration(s)
-                     from 37 of 61 epic(s) with closed beads held against the
+   doc-spaces WARN | to_be 194, as_is 100, working 56; 17 node declaration(s)
+                     from 38 of 62 epic(s) with closed beads held against the
                      AS-IS space; tracker read from .beads/issues.jsonl;
-                     NOT CHECKED: 56 epic(s) declare no node
+                     NOT CHECKED: 57 epic(s) declare no node
                      (4 carry no readable intent document);
                      NOT CHECKED: 24 epic(s) the tracker does not name
                      (BDL-001, BDL-003, BDL-005, BDL-006, BDL-007 and 19 more);
-                     55 WORKING document(s) in the exempt space,
+                     56 WORKING document(s) in the exempt space,
                      0 sync pair(s) excused
    ```
 
-   Two findings, both true: `BDL-061` declares `cli-commands`, which has no
-   AS-IS document, and `BDL-030` declares a node while neither tracker has any
-   record of it.
+   Every count on that line is a moving denominator — this repository's own
+   planning tree changes it — so the shape is the point and the numbers are
+   whatever `beadloom ci` prints today.
+
+   One finding: `BDL-030` declares a node while the tracker export has no record
+   of it. `BDL-061`'s `cli-commands` declaration was the second one and closed
+   when BDL-062 `.4` gave that node an AS-IS document
+   (`docs/services/components/cli-commands/DOC.md`).
 7. **config-check** — agent-config drift (AgentConfigAsCode). Since BDL-061 S3
    a drift carries its own severity: `error` blocks the step, `warn` is
    reported and does not. The summary has three forms accordingly —
@@ -145,8 +150,8 @@ project would carry on every run would spend the channel `sync-check` needs for 
 genuinely missing baseline. `beadloom docs audit --fail-if unverified>N` is the
 opt-in for a project that wants every declared fact stated somewhere.
 
-Since 3.0.1 the line also names the facts the audit declared no value for in this
-project: `..., NOT APPLICABLE to this project: cli_command_count`. A fact that
+Since BDL-062 `.3` the line also names the facts the audit declared no value for in
+this project: `..., NOT APPLICABLE to this project: cli_command_count`. A fact that
 could not be computed used to leave no trace, so the denominator moved in
 silence — measured in-process on this repository, an unregistered CLI surface
 turned `3/9 declared fact(s) verified` into `3/8` with nothing naming the fact

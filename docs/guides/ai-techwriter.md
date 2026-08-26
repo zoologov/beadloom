@@ -42,7 +42,8 @@ open / update a PR to main/master  (pull_request: opened, synchronize, reopened)
         → beadloom sync-update <ref> --yes   (re-baseline)
         → re-check --since <since>           (still drifted? retry ≤ 2)
   → global fixpoint: repeat until stable 0 (or round/budget cap)
-  → gate: beadloom ci   (reindex → lint --strict → sync-check → config-check → doctor)
+  → gate: beadloom ci   (reindex → lint --strict → sync-check → docs audit →
+                         docs-quality → doc-spaces → config-check → doctor)
   → publish (--target pr-branch):
         commit the refresh ONTO the PR head branch with a
           "[skip ai-techwriter] docs: AI tech-writer refresh (N doc(s))" message

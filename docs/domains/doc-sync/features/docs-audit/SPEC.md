@@ -44,7 +44,7 @@ The audit pipeline has three stages:
 Two of the nine facts are read out of the **running Beadloom package**, not out of the
 project being audited: `mcp_tool_count` comes from `MCP_TOOL_CATALOG` and `cli_command_count`
 from the live Click group. Both are true of Beadloom and false of everybody else, and until
-3.0.1 both were collected unconditionally -- so in every adopter repository `docs audit`
+BDL-062 `.3` both were collected unconditionally -- so in every adopter repository `docs audit`
 declared two facts about the tool as facts about their documentation, and counted them in the
 denominator of "N of 9 verified". Measured: a project named `invoice-svc` was told it had 18
 MCP tools and 43 CLI commands.
@@ -373,7 +373,7 @@ suppressed. `--json` carries `coverage`, `verified_facts`, `unverified_facts`,
 `not_applicable`, `scan_surface`, and a `summary` with `declared_fact_count` /
 `verified_fact_count` / `unverified_count` / `unreadable_count` / `not_applicable_count`
 alongside the existing counts. `verified_facts`, `not_applicable` and
-`summary.not_applicable_count` were added in 3.0.1; nothing was removed, so a consumer
+`summary.not_applicable_count` were added by BDL-062 `.3`. Nothing was removed, so a consumer
 parsing the 3.0.0 payload keeps working.
 
 ### Configuration

@@ -148,7 +148,7 @@ Module `src/beadloom/application/site_published.py`:
 Module `src/beadloom/application/gate.py`:
 - `GateStep` — dataclass: `name`, `passed`, `skipped`, `findings`, `summary`, `not_verified`; `.status` -> `PASS`/`WARN`/`FAIL`/`SKIP`. `not_verified` keeps `passed` True (a project that cannot supply a baseline is not thereby broken) while stopping the step reading green
 - `GateResult` — dataclass: `steps`; `.ok` (all steps passed), `.findings` (all findings across steps)
-- `run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex)` -> `GateResult` — composes reindex → lint → sync-check → docs audit → config-check → doctor → (optional) federate; never short-circuits
+- `run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex)` -> `GateResult` — composes reindex → lint → sync-check → docs audit → docs-quality → doc-spaces → config-check → doctor → (optional) federate; never short-circuits
 - The **sync-check step** fails on `stale` AND `missing` pairs (`BLOCKING_STATUSES`), emits warning findings for `unverified` pairs and for a declared surface smaller than the committed ledger records, and its summary names what it could not check instead of printing a bare pair count (BDL-UX #174/#175)
 - The **doctor step** summary counts the CHECKS that ran, by severity — `run_checks` returns one entry per FINDING, so the old `len(checks)` counted problems and ROSE from 20 to 21 while a declared doc was being deleted. The word *clean* is printed only when every check is OK
 

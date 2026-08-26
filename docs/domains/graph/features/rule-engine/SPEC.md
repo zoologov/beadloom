@@ -355,7 +355,7 @@ Rule = DenyRule | RequireRule | CycleRule | ImportBoundaryRule | ForbidEdgeRule 
 | `severity`         | `str`          | `"error"` or `"warn"`.                          |
 | `file_path`        | `str \| None`  | Source file path (for deny/import violations).   |
 | `line_number`      | `int \| None`  | Line number (for deny/import violations).        |
-| `from_ref_id`      | `str \| None`  | Source node ref_id.                              |
+| `from_ref_id`      | `str \| None`  | Source node ref_id; on a per-node `rule_liveness` finding it is the node the finding is about. |
 | `to_ref_id`        | `str \| None`  | Target node ref_id.                              |
 | `message`          | `str`          | Human-readable explanation of the violation.     |
 
@@ -447,13 +447,31 @@ is the failure this rule family exists to catch.
 |---------|---------------|
 | a finding | the claim differs from the computed fact; the message names the node, both values, the fact's provenance, the summary verbatim and the population the verdict rests on |
 | silence | the claim agrees, or the summary states no number this project computes a fact for |
-| `rule_liveness`, per node | the claim names a fact the project **declined** to compute; the finding carries the registry's own reason verbatim (`FactSet.not_applicable`), never a wording invented here |
+| `rule_liveness`, per node | the claim names a fact the project **declined** to compute; the finding carries the registry's own reason verbatim (`FactSet.not_applicable`), never a wording invented here, and names the node in `from_ref_id` |
 | `rule_liveness`, whole rule | **no** summary in the graph states a checkable number, so nothing was verified and nothing was cleared |
 
 **`unverifiable` never folds into a pass.** A project whose version cannot be resolved and a
 project whose every summary checked out must not be described by the same word. The two
 `rule_liveness` shapes above are deliberately distinct: one node nobody can check is not the same
 report as a whole graph nobody checked.
+
+**Both per-node outcomes name the node in the same field.** A disagreement always carried the
+claim's `ref_id`, and until BDL-062 `.10` an unverifiable claim carried nothing, because
+`liveness_finding` hardcoded `from_ref_id=None` — the same rule reporting on the same node,
+attributable through one channel and anonymous through the other. `liveness_finding` now takes a
+keyword-only `from_ref_id` defaulting to `None`, the same shape `.9` added `severity` in and for
+the same reason: every caller that has no node to name keeps its output byte for byte, because a
+liveness finding is usually about a rule that could not run and a node id there would be an
+invention.
+
+**The `not_applicable` fallback in `collect_claims` serves the injected `FactSet`, not the
+registry's.** A `FactSet` the registry builds covers every name `DocScanner` scans for — measured
+across five project shapes, including a database with no schema at all, where the set difference
+was empty in both directions every time, and a test fails the day it stops being — so on that
+path the fallback cannot fire. `fact_set=` is public and a caller passing one is under no such
+obligation, so the branch is reachable, and removing it raises `KeyError` on exactly that
+caller. The reason it states is *this caller never declared the fact*, which is a different
+sentence from the registry's *this project declined to compute it*.
 
 **Severity ships `error`**, unlike the `warn` a convention check gets. A number that contradicts
 the project it describes is wrong in every house style, and the value sits in the adopter's own
@@ -883,7 +901,7 @@ One **pair** per rule type — an inert rule that must be reported, and a live r
 
 - **Every rule type reports its own inertness.** Nine rules, one of each type, all inert on a populated graph. Assert the reported set equals all nine names — a gap says *which* type is missing rather than "some count differs".
 - **Exactly once.** Assert one finding per inert rule (an audit that affirms one fact twice is BDL-UX #173).
-- **Always `warn`.** Nine `severity: error` rules, all inert. Assert every finding is `warn` and `has_errors` is `False` — the adopter-safety invariant, asserted rather than assumed.
+- **`warn` for a PARTIAL stand-down.** Nine `severity: error` rules, all inert on a populated graph. Assert every finding is `warn` and `has_errors` is `False` — the adopter-safety invariant, asserted rather than assumed. The file covers the nine types `rules/liveness.py` (eight matcher/graph-based types) and `rules/evaluators.py` (`forbid_import`) report between them. The TOTAL stand-down that carries the declared severity is `doc_area_coherence`'s, and it is asserted in its own suite, `tests/test_source_root_minority.py` — see the severity paragraph above.
 - **Silent on an empty index.** Assert the same nine rules produce nothing against an empty schema.
 - **End to end.** Drive the reproduction from `beadloom-mr2l.7` (a `require` naming `no-such-node-at-all`) through the real CLI; assert the unknown ref_id is named, `lint --strict` exits **0**, and the JSON payload carries `kind: "rule_liveness"` and `summary.rules_inert == 1`. Exit codes and `--json` only, never piped line counts (BDL-UX #148).
 

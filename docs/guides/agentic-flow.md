@@ -254,7 +254,7 @@ state. That is the entire licence for `config-check` to compare against a
 composition rather than against stored bytes.
 
 **The core shrank because of layer 4.** Measured on the shipped artifact: the
-core `CLAUDE.md` went from **440 to 376 lines**, with each removed line mapped to
+core `CLAUDE.md` went from **440 lines to 371**, with each removed line mapped to
 a replacement — the Quick Reference and Agent Checklist sections restated §0
 command for command, and the Python anti-patterns and the `uv run pytest` /
 `ruff` / `mypy` block moved into the Python stack overlay, where a TypeScript
@@ -550,8 +550,9 @@ Read-only and deterministic; reuses `context_oracle` (ctx/why) and
 
 ### `complete_bead(bead, run_tests=true)`
 
-The **refusing completion gate**. It runs `beadloom ci` (reindex → lint →
-sync-check → config-check → doctor, via `application/gate.run_ci_gate`) and, by
+The **refusing completion gate**. It runs `beadloom ci` (reindex → lint → sync-check →
+docs audit → docs-quality → doc-spaces → config-check → doctor, via
+`application/gate.run_ci_gate`) and, by
 default, the test suite. Then:
 
 - **On PASS** it closes the bead (`bd close --suggest-next`) and returns the
@@ -645,7 +646,7 @@ This is stated deliberately, not glossed over:
   harness binding, not by the guard — see
   [the binding](#the-binding-and-what-it-does-not-cover).
 - **CI is the single source of true enforcement.** `beadloom ci` runs
-  independently in CI (reindex → lint → sync-check → docs audit → config-check → doctor) as a
+  independently in CI (reindex → lint → sync-check → docs audit → docs-quality → doc-spaces → config-check → doctor) as a
   required check on `main`; that is the gate nothing can route around (no
   `--no-verify`).
 
