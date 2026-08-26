@@ -13,7 +13,7 @@
 | `.1` | dev | done | `graph_summary_facts` — RED captured on 3 nodes; 32 tests; 12 neuterings verified |
 | `.2` | dev | done | `doc_area_coherence` — names exactly the four drifting nodes; 9 live-repo tests left red for `.4` |
 | `.3` | dev | done | audit stops describing itself — three populations; `FactRegistry.collect_set()` is `.1`'s contract |
-| `.4` | dev | **ready** | the corrections — worklist grew, see below |
+| `.4` | dev | done | the corrections — 14 landed, each proved by reverting it alone; 2 BDL-UX opened, 1 withdrawn |
 | `.5` | test | blocked | bite tests + non-Beadloom fixture |
 | `.6` | review | blocked | clean room |
 | `.7` | tech-writer | blocked | README en+ru + guides |
@@ -351,3 +351,144 @@ pair it did not cause. It says it read the code before attesting but did not aut
 prose. Flagged for `.6`.
 
 Ledger: `--record-surface` still deliberately unrun. Whoever integrates records it once.
+
+**2026-08-26** — `.4` complete. `beadloom ci` rc 0; 7175 passed, 0 failed (from 10 failing at
+`HEAD`). All 9 of `.2`'s live-repo `lint --strict` tests went green **by the corrections** —
+no test that asserts this repository self-lints was edited.
+
+**Green in a clean room over 33 files** (`git archive HEAD`, the four rename sources removed,
+plus only this bead's files; every one `cmp`-identical to the working tree). One caveat stated
+rather than glossed: the `beadloom` on `PATH` is the editable install, so the clean room
+exercises the working tree's `src/` against the clean room's DATA. Since `src/` is byte-identical
+between the two, the answer is the same, but the claim is about the graph and the documents, not
+about a separately built package.
+
+## Every correction, and what reverting it alone does
+
+| # | Correction | Revert it alone → |
+|---|---|---|
+| 1 | root summary `v1.5.0` → `v3.0.0`, `Doc Sync v2 Engine` → the four current parts | `lint --strict` rc 1, 1 error naming `beadloom`, `v1.5.0` and `3.0.0` |
+| 2 | `mcp-server` 14 → 18 tools | rc 1, 1 error naming `mcp-server`, 14 and 18 |
+| 3 | four SPEC dirs `git mv`'d to `application/`, `docs:` following | rc 1, 4 errors naming each node and both areas |
+| 4 | `framework_count` → `nodes_with_framework` + keywords that mean nodes | rc 1 on `route-extraction`, and 5 tests fail |
+| 5 | the distance tie-break (`-len(kw_words)`) | 3 tests fail, including the acceptance scenario |
+| 6 | `is_count_fact()` replacing the `_count` suffix | 3 tests fail |
+| 7 | `docs_absent` read in `doctor` | 3 tests fail; `vitepress-site` prints as an unexplained gap |
+| 8 | `vitepress-site`'s recorded reason | `doctor` prints `has no doc linked` — the same word as a gap |
+| 9 | `_detect_rule_type`'s two new keys | 2 tests fail |
+| 10 | `architecture.md:133` 13 → 15 rules | `docs audit` reports it stale |
+| 11 | `doc-sync/README.md:95` version reword | `docs audit` reports `version "3.0.1" -> 3.0.0` |
+| 12 | `.beadloom/AGENTS.md` refresh | `config-check` reports agent-config drift |
+| 13 | the SPEC rule-type table | 1 test fails (shown twice: a dropped row, a wrong cardinal) |
+| 14 | the package description | manifest/docstring agreement fails — **and see below** |
+
+**14 is the one that cannot be fully checked, measured rather than asserted.** Reverting BOTH
+copies to the 1.x sentence leaves `tests/test_package_description.py` GREEN. Agreement between
+the manifest and the package docstring is checkable; currency is not, by any test, and that is
+exactly how the 1.x description survived three majors. The module says so in its own docstring.
+A retired-phrase blocklist was written there and then removed: `Doc Sync v2 Engine` lived in the
+graph's root summary and never in the manifest, so it could not have fired on what it guarded.
+
+## The brief was wrong about `doc-sync/README.md:95`, and the correction changes who owns it
+
+The brief said the `3.0.1` line is "Pre-existing at `HEAD`, not from this branch". Measured:
+`git show main:docs/domains/doc-sync/README.md | grep -c 3.0.1` returns **0**, and
+`git log -S "Until 3.0.1"` names `7087465` — `.3`'s own commit, this morning, on this branch.
+It is not an inherited forward reference to adjudicate; it is a sibling bead's prose written for
+a release that has not happened.
+
+Reworded rather than suppressed, because a domain README asserting a version that does not exist
+is a claim nothing can hold it to, and `CHANGELOG.md` is where a release is named.
+
+**Consequence `.7`/`.8` must know:** with that mention gone, **no document in this repository
+states the current version as a claim**. `docs audit` now reads
+`version: 3.0.0 -- NOT VERIFIED: no document states it` and the fraction moved 5/9 → 4/9. That
+is the audit being honest — the coordinator already withdrew the "extraction is broken" theory
+for the same observation — and the onboarding README's worked example was updated to the
+measured output, including a sentence saying why `version` is in that list.
+
+## `route-extraction` is fixed by the rename, with no suppression anywhere
+
+`framework_count` → `nodes_with_framework`, keywords that name NODES
+(`node with framework`, `node declar a test framework`, …). "across 12 web frameworks" now
+matches nothing, so a correct summary stopped being reported and the summary was not touched.
+
+**The `docs_audit.ignore` triple for `docs/domains/context-oracle/README.md` DID go inert.**
+Measured after the rename: 0 framework-family mentions over 58 documents repo-wide. Retired from
+`config.yml` with its reason, following the BDL-061.44/.45 precedent already recorded there.
+
+Two couplings the rename would have broken in silence, both made explicit instead:
+
+- `MIN_READABLE_COUNT` was gated on `fact_name.endswith("_count")`, so the new name would have
+  dropped out of the single-digit floor. Now `scanner.is_count_fact()`, with a test asserting
+  EVERY registered fact except `version` is recognised.
+- The winner of a distance tie was `FACT_KEYWORDS` insertion order. "84 nodes declare a test
+  framework" sits one word from both `node` and the five-word phrase, and `node_count` won
+  because it is listed first. The score gained `-len(kw_words)`: the longer phrase wins.
+
+## `vitepress-site` — the probe that changed the answer
+
+Attaching ANY document to `vitepress-site` collapses `doc-area-coherence` for the whole graph.
+Its source is `site/`, which shares no prefix with `src/beadloom/...`, and the rule derives the
+source root as the prefix every paired node shares. **Measured, not reasoned:** 4 true findings
+become 6 false ones (`beadloom`, `cli`, `bd-seam`, `guard-probes`, `mcp-server`, `tui`, all at
+`error`), and the rule reports MORE confidently afterwards — 81 of 82 pairs under a dominant
+mapping, against 77. **BDL-UX #195, HIGH.** A defect in `.2`'s rule, not in the correction.
+
+So the node records `docs_absent` with a reason whose PRIMARY clause is not that measurement:
+`site/` is outside `scan_paths`, so no sync pair can anchor a document there and it would be
+prose no check can reach (#163). The #195 collapse is recorded as a **workaround**, in that word,
+with an exit condition. Shaping the graph to keep a checker quiet is what this feature is against.
+
+## Absence and excusal now print different words
+
+`doctor`'s `nodes_without_docs` printed one WARNING for `cli-commands`, `status` and
+`vitepress-site` alike. Three outcomes now: WARNING for an unexplained absence, **INFO with the
+reason printed** for a decision, and WARNING again for a reason on a node that HAS a document,
+because a suppression that suppresses nothing reads as coverage it does not have. A blank reason
+is not a reason. **No schema change:** the loader already stores an unmapped key in `nodes.extra`.
+
+`status` and `cli-commands` got real documents instead — `status` has three public symbols and
+`cli-commands` fourteen modules, so absence there was a gap, not a decision.
+
+## Found while correcting, and fixed: three of fifteen rules were `(unknown)` to every agent
+
+`.beadloom/AGENTS.md` is what an agent reads to learn this project's rules, and
+`rules_gen._detect_rule_type` mapped 7 of the loader's 12 authoring keys, so `module-coverage`,
+`scenario-coverage` and `doc-area-coherence` were labelled `(unknown)`. The keys are now named
+once as `graph.rules.loader.AUTHORING_KEYS` — the loader's own "must have exactly one of" message
+is built from it — and two tests hold the readers to it.
+
+`rule-engine/SPEC.md` claimed "the count and the rows are checked against the loader's own
+dispatch". **Nothing checked it.** `TestTheSpecTableIsCheckedAgainstTheLoader` does now, proved
+to bite twice.
+
+`docs/architecture.md:133` had TWO stale numbers, not one: "the **ten** authoring keys" (12) and
+"configures **13** rules" (15). Only the second was ever visible to `docs audit`, because
+**"ten" is spelled as a word and the extractor reads digits**. The type count went stale twice
+and no check could see it either time. Folded into BDL-UX #179.
+
+## `setup-rules --refresh` does NOT carry #191's hazard — checked before running
+
+#191 is about `generate_adapters(...)` recomposing a hand-edited role adapter. `setup-rules
+--refresh` calls `refresh_claude_md()` + `generate_agents_md()` and never `generate_adapters`.
+Ran `--dry-run` first (`.claude/CLAUDE.md: no changes needed` — the project layer untouched),
+then ran it and **diffed** rather than trusting: two rules added, `## Custom` intact, nothing else.
+
+## BDL-UX: two opened, one withdrawn before it was committed
+
+- **#195** HIGH — `doc-area-coherence` collapses on a source outside the common root.
+- **#179** re-measured — the SPEC table and the AGENTS.md map are both fixed and both now held to
+  `AUTHORING_KEYS`; what stays open is the `rule_type_count` rename, and the new reason is that a
+  count spelled as a word is invisible to the audit.
+- **#196 withdrawn.** It duplicated #179's own last paragraph, and this log already has two
+  issues numbered 187. Its content went into #179 instead.
+
+## Handed on
+
+- `test_bead77`'s three denominators updated with reasons: TO-BE 190 → **194** (this feature's
+  own PRD/RFC/CONTEXT/PLAN), AS-IS 98 → **100** (`status`, `cli-commands`), WORKING 55 → **56**
+  (this ACTIVE.md). The test's own comment already declares these as moving denominators.
+- `--record-surface` still deliberately unrun. The declared surface is 344 → **352** pairs.
+- `.beads/*.jsonl` were excluded from the clean room: they are tracker state, not this bead's work.
+

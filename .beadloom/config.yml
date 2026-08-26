@@ -9,8 +9,8 @@ docs_audit:
   # triple silences exactly one keyword-proximity false match — it does NOT mask
   # genuine stale facts of the same type elsewhere (those stay flagged). Confirmed
   # false positives by review (BDL-057.4):
-  #  - context-oracle/README: "12 supported languages" / "12 frameworks" describe
-  #    parser breadth, not the in-repo language_count(1)/framework_count(53).
+  #  - context-oracle/README: "12 supported languages" describes parser breadth,
+  #    not the in-repo language_count(1).
   #  - "14 graph read/write tools" is the graph subset of the 18 MCP tools
   #    (the full 18 is stated in the same sentence) — not a stale total.
   #  - README "20 ms" is a latency figure, not the node_count.
@@ -26,12 +26,15 @@ docs_audit:
   # mcp_tool_count=14 and SECURITY mcp_tool_count=14 were all "N tools: 14 over
   # the graph" breakdowns, which the extractor no longer binds to the noun on
   # the other side of the separator. 0 matching mentions repo-wide afterwards.
+  # Retired by BDL-062.4 (BDL-UX #193) for the same reason, measured the same
+  # way: context-oracle/README framework_count=12. The fact was renamed to
+  # `nodes_with_framework` with keywords that mean nodes rather than
+  # frameworks, so "12 frameworks" is no longer read as a claim about it at
+  # all and the triple named a fact that no longer exists. Measured: 0
+  # framework-family mentions over 58 documents repo-wide afterwards.
   ignore:
     - path: docs/domains/context-oracle/README.md
       fact: language_count
-      value: 12
-    - path: docs/domains/context-oracle/README.md
-      fact: framework_count
       value: 12
     - path: README.md
       fact: node_count

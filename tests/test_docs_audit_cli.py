@@ -914,8 +914,8 @@ class TestFactRegistryCollectors:
         assert "test_count" in facts
         assert facts["test_count"].value == 42
 
-    def test_collect_framework_count(self, tmp_path: Path) -> None:
-        """framework_count counts nodes with non-empty framework in extra."""
+    def test_collect_nodes_with_framework(self, tmp_path: Path) -> None:
+        """nodes_with_framework counts nodes with a non-empty framework in extra."""
         from beadloom.doc_sync.audit import FactRegistry
         from beadloom.infrastructure.db import create_schema, open_db
 
@@ -934,11 +934,11 @@ class TestFactRegistryCollectors:
 
         registry = FactRegistry()
         facts: dict[str, Fact] = {}
-        registry._collect_framework_count(conn, facts, {})
+        registry._collect_nodes_with_framework(conn, facts, {})
         conn.close()
 
-        assert "framework_count" in facts
-        assert facts["framework_count"].value == 1
+        assert "nodes_with_framework" in facts
+        assert facts["nodes_with_framework"].value == 1
 
     def test_collect_rule_type_count(self, tmp_path: Path) -> None:
         """rule_type_count counts rules in the rules table."""

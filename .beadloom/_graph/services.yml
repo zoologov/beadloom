@@ -2,7 +2,7 @@ nodes:
   # Root service
   - ref_id: beadloom
     kind: service
-    summary: "Beadloom CLI + MCP server — Context Oracle + Doc Sync v2 Engine (v1.5.0)"
+    summary: "Beadloom CLI + MCP server — architecture graph, Context Oracle, Doc Sync Engine, architecture rules and the Gate (v3.0.0)"
     source: src/beadloom/
     docs:
       - docs/architecture.md
@@ -113,6 +113,8 @@ nodes:
     summary: "Cohesive Click command groups: query, index_ops, status, docsync, federation, docs, setup, dashboard, snapshot"
     source: src/beadloom/services/commands/
     tags: [layer-service]
+    docs:
+      - docs/services/components/cli-commands/DOC.md
 
   # Component: the concrete read-only probes the flow guards read the world
   # through (bd + git). In the SERVICES layer because the bd seam is, and the
@@ -128,7 +130,7 @@ nodes:
   # Service: MCP Server
   - ref_id: mcp-server
     kind: service
-    summary: "MCP stdio server with 14 tools for AI agents"
+    summary: "MCP stdio server with 18 tools for AI agents"
     source: src/beadloom/services/mcp_server.py
     tags: [layer-service]
     docs:
@@ -149,7 +151,7 @@ nodes:
     summary: "Validation checks for graph and data integrity"
     source: src/beadloom/application/doctor.py
     docs:
-      - docs/domains/infrastructure/features/doctor/SPEC.md
+      - docs/domains/application/features/doctor/SPEC.md
 
   # Feature: Why (Impact Analysis)
   - ref_id: why
@@ -165,13 +167,15 @@ nodes:
     summary: "File watcher for auto-reindex on changes"
     source: src/beadloom/application/watcher.py
     docs:
-      - docs/domains/infrastructure/features/watcher/SPEC.md
+      - docs/domains/application/features/watcher/SPEC.md
 
   # Feature: Status (data-gathering for `beadloom status`; BDL-059 S4)
   - ref_id: status
     kind: feature
     summary: "Status data-gathering — index/coverage/health/trend counts + context-bundle metrics for the status command"
     source: src/beadloom/application/status.py
+    docs:
+      - docs/domains/application/features/status/SPEC.md
 
   # Feature: Search
   - ref_id: search
@@ -255,7 +259,7 @@ nodes:
     summary: "Architecture debt aggregation, scoring, trend tracking, and CI gating (debt_report/ package: models, config, collect, scoring, trend, render)"
     source: src/beadloom/application/debt_report/
     docs:
-      - docs/domains/infrastructure/features/debt-report/SPEC.md
+      - docs/domains/application/features/debt-report/SPEC.md
 
   # Feature: Reindex (reindex/ package — decomposed by cohesion in BDL-059 S4:
   # models / rules_loader / indexing / enrichment / sync_state / change_detection
@@ -266,7 +270,7 @@ nodes:
     summary: "Full + incremental reindex pipeline (reindex/ package: models, indexing, enrichment, sync-state, change-detection, full, incremental)"
     source: src/beadloom/application/reindex/
     docs:
-      - docs/domains/infrastructure/features/reindex/SPEC.md
+      - docs/domains/application/features/reindex/SPEC.md
 
   # Feature: Docs Audit
   - ref_id: docs-audit
@@ -673,6 +677,25 @@ nodes:
     kind: site
     summary: "VitePress documentation site — renders the beadloom-produced site data (graph pages, dashboard.data.json, landscape Mermaid)"
     source: site/
+    # No node document, by decision (BDL-062 `.4`). Reported by `doctor` at INFO
+    # with this reason rather than as an unexplained gap, and reported again as
+    # inert the day a `docs:` entry is added here.
+    docs_absent: >-
+      `site/` is outside `scan_paths` (`src`), so nothing under it is indexed as
+      a symbol and a document attached to this node could be held to the code by
+      no sync pair — it would be prose no check can reach (BDL-UX #163). What is
+      committed here is the VitePress theme (22 files: the Vue components, the
+      composables, the theme CSS/JS and `.vitepress/config.mjs`); everything else
+      under `site/` is generated output. That committed surface is described in
+      `docs/guides/vitepress-site.md`, which is linked to no node for the same
+      reason. Attaching that guide here was measured to be worse than leaving it:
+      `site/` shares no directory prefix with any other node's source, so it
+      collapses `doc-area-coherence`'s derived source root from `src/beadloom` to
+      nothing — 6 false positives and the 4 true findings lost (BDL-UX #195).
+      Revisit when either `scan_paths` covers `site/` or #195 is fixed.
+    # No node document, by decision (BDL-062 `.4`). Reported by `doctor` at INFO
+    # with this reason rather than as an unexplained gap, and reported again as
+    # inert the day a `docs:` entry is added here.
 
 edges:
   # Root service: self-referencing to satisfy service-needs-parent rule

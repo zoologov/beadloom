@@ -7,7 +7,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom.doc_sync.scanner import DocScanner, Mention
+from beadloom.doc_sync.scanner import (
+    DocScanner,
+    Mention,
+    is_count_fact,
+    unreadable_reason,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -599,7 +604,7 @@ class TestBlocklistModifiers:
     def test_capped_at_modifier_suppresses_match(
         self, scanner: DocScanner, tmp_path: Path
     ) -> None:
-        """'capped at 100' near 'route' should NOT match framework_count."""
+        """'capped at 100' is an upper bound, not a count of anything."""
         md = _write_md(
             tmp_path, "test.md",
             "Routes are capped at 100 per file.\n",
@@ -706,14 +711,28 @@ class TestBlocklistModifiers:
     def test_plus_modifier_suppresses_match(
         self, scanner: DocScanner, tmp_path: Path
     ) -> None:
-        """'20+' (approximate) should NOT match framework_count."""
+        """'20+' (approximate) should NOT match nodes_with_framework.
+
+        The sentence without the modifier DOES match (asserted below), so the
+        suppression is what this test measures rather than the absence of any
+        keyword at all.
+        """
         md = _write_md(
             tmp_path, "test.md",
-            "Detects 20+ framework patterns in the project.\n",
+            "Detects 20+ nodes with a framework.\n",
         )
         result = scanner.scan_file(md)
-        fw_matches = [m for m in result if m.fact_name == "framework_count"]
+        fw_matches = [m for m in result if m.fact_name == "nodes_with_framework"]
         assert len(fw_matches) == 0
+
+        exact = _write_md(
+            tmp_path, "exact.md",
+            "Detects 20 nodes with a framework.\n",
+        )
+        assert [
+            m.value for m in scanner.scan_file(exact)
+            if m.fact_name == "nodes_with_framework"
+        ] == [20]
 
     def test_backtick_code_ref_not_treated_as_keyword(
         self, scanner: DocScanner, tmp_path: Path
@@ -869,3 +888,77 @@ class TestFileTypeHeuristics:
         paths = scanner.resolve_paths(tmp_path)
         spec_in_docs = [p for p in paths if "SPEC.md" in str(p)]
         assert len(spec_in_docs) == 0
+
+
+class TestKeywordSpecificity:
+    """A distance tie between two facts is broken by the longer keyword phrase.
+
+    Before BDL-UX #193 the tie was broken by ``FACT_KEYWORDS`` insertion order,
+    which is not a property of the sentence. "84 nodes declare a test framework"
+    sits one word from both ``node`` and ``node declar a test framework``.
+    """
+
+    def test_longer_phrase_wins_a_distance_tie(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        md = _write_md(
+            tmp_path, "test.md", "The graph has 84 nodes declaring a framework.\n"
+        )
+        result = scanner.scan_file(md)
+        assert [(m.fact_name, m.value) for m in result] == [
+            ("nodes_with_framework", 84)
+        ]
+
+    def test_the_shorter_phrase_still_wins_when_it_is_the_only_match(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        md = _write_md(tmp_path, "test.md", "The graph has 84 nodes.\n")
+        result = scanner.scan_file(md)
+        assert [(m.fact_name, m.value) for m in result] == [("node_count", 84)]
+
+    def test_a_sentence_about_web_frameworks_states_no_fact(
+        self, scanner: DocScanner, tmp_path: Path
+    ) -> None:
+        """The live BDL-UX #193 instance: `route-extraction`'s node summary."""
+        md = _write_md(
+            tmp_path,
+            "test.md",
+            "API route extraction — tree-sitter AST + regex fallback across "
+            "12 web frameworks\n",
+        )
+        assert scanner.scan_file(md) == []
+
+
+class TestCountFactPredicate:
+    """Which facts the MIN_READABLE_COUNT floor applies to.
+
+    The floor used to be derived from the ``_count`` suffix alone, so renaming
+    a count fact to say what it counts would have taken it out of the policy
+    without anybody deciding that (BDL-UX #193).
+    """
+
+    def test_suffix_named_facts_are_counts(self) -> None:
+        assert is_count_fact("node_count")
+        assert is_count_fact("mcp_tool_count")
+
+    def test_a_count_named_for_what_it_counts_is_a_count(self) -> None:
+        assert is_count_fact("nodes_with_framework")
+
+    def test_a_version_is_not_a_count(self) -> None:
+        assert not is_count_fact("version")
+
+    def test_every_registered_count_fact_is_recognised(self) -> None:
+        """No fact may fall out of the floor by being renamed."""
+        not_counts = {"version"}
+        for fact_name in DocScanner.FACT_KEYWORDS:
+            if fact_name in not_counts:
+                continue
+            assert is_count_fact(fact_name), (
+                f"{fact_name} is a count fact the MIN_READABLE_COUNT floor "
+                "would not reach"
+            )
+
+    def test_a_single_digit_count_is_declared_unreadable(self) -> None:
+        reason = unreadable_reason("nodes_with_framework", 3)
+        assert reason is not None
+        assert "single-digit counts are not extracted" in reason

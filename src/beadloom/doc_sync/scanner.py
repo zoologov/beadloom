@@ -191,6 +191,24 @@ _CLAUSE_SEPARATORS = frozenset(",;:\u2014\u2013")
 MIN_READABLE_NUMBER = 2
 MIN_READABLE_COUNT = 10
 
+#: Count facts whose NAME says what they count rather than ending in
+#: ``_count``. The suffix decides for every other fact, and a rename that drops
+#: it would silently take the fact out of the MIN_READABLE_COUNT floor —
+#: which is what ``framework_count`` -> ``nodes_with_framework`` would have
+#: done (BDL-UX #193).
+_COUNT_FACTS_WITHOUT_SUFFIX: frozenset[str] = frozenset({"nodes_with_framework"})
+
+
+def is_count_fact(fact_name: str) -> bool:
+    """Whether *fact_name*'s value is a count of things.
+
+    A count is subject to the MIN_READABLE_COUNT floor: single-digit counts are
+    not extracted, because ordinals, table cells and category breakdowns swamp
+    genuine claims below ten. A version is not a count and is never floored.
+    """
+    return fact_name.endswith("_count") or fact_name in _COUNT_FACTS_WITHOUT_SUFFIX
+
+
 # ---------------------------------------------------------------------------
 # Layer 1: Blocklist modifier words — numbers near these are NOT factual claims
 # ---------------------------------------------------------------------------
@@ -258,7 +276,18 @@ class DocScanner:
         "node_count": ["node", "module", "domain", "component"],
         "edge_count": ["edge", "dependency", "connection"],
         "test_count": ["test", "spec", "assertion"],
-        "framework_count": ["framework", "supported framework"],
+        # Every keyword names NODES that declare a framework, never a
+        # framework on its own. "12 web frameworks" is a sentence about
+        # frameworks and is not a claim about how many nodes declare one
+        # (BDL-UX #193). Matching is prefix-based per word, so "node" covers
+        # "nodes" and "declar" covers "declare"/"declares"/"declaring".
+        "nodes_with_framework": [
+            "node with framework",
+            "node with a framework",
+            "node with a test framework",
+            "node declar a framework",
+            "node declar a test framework",
+        ],
     }
 
     PROXIMITY_WINDOW: ClassVar[int] = 5
@@ -425,8 +454,14 @@ class DocScanner:
             # (disambiguates when multiple fact keywords appear nearby)
             # Score is (distance, is_before_number) — lower distance wins;
             # on ties, keywords AFTER the number (is_before=0) beat BEFORE (1).
+            # The third component breaks a distance tie in favour of the LONGER
+            # keyword phrase: "84 nodes declare a test framework" is one word
+            # from both `node` and `node declar a test framework`, and the
+            # phrase that accounts for more of the sentence is the one the
+            # sentence is about. Without it the winner was whichever fact the
+            # keyword table happened to list first (BDL-UX #193).
             best_fact: str | None = None
-            best_score: tuple[int, int] = (self.PROXIMITY_WINDOW + 1, 1)
+            best_score: tuple[int, int, int] = (self.PROXIMITY_WINDOW + 1, 1, 0)
 
             for fact_name, keywords in self.FACT_KEYWORDS.items():
                 if fact_name == "version":
@@ -436,15 +471,18 @@ class DocScanner:
                 # ordinals, table cells and category breakdowns far more often
                 # than counts (see MIN_READABLE_COUNT).  The cost is reported
                 # per fact by :func:`unreadable_reason`, never silent.
-                if number_val < MIN_READABLE_COUNT and fact_name.endswith("_count"):
+                if number_val < MIN_READABLE_COUNT and is_count_fact(fact_name):
                     continue
 
                 for keyword in keywords:
                     kw_words = keyword.lower().split()
-                    score = self._keyword_distance(
+                    distance = self._keyword_distance(
                         kw_words, word_positions, num_idx, in_clause=in_clause,
                     )
-                    if score is not None and score < best_score:
+                    if distance is None:
+                        continue
+                    score = (*distance, -len(kw_words))
+                    if score < best_score:
                         best_score = score
                         best_fact = fact_name
 
@@ -823,7 +861,7 @@ def unreadable_reason(fact_name: str, value: str | int) -> str | None:
             "as claims, so no statement of this fact can be verified"
         )
 
-    if number < MIN_READABLE_COUNT and fact_name.endswith("_count"):
+    if number < MIN_READABLE_COUNT and is_count_fact(fact_name):
         return (
             f"its value is {number}: single-digit counts are not extracted "
             "(measured: ordinals, table cells and category breakdowns swamp "

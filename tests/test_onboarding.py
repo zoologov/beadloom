@@ -2774,8 +2774,35 @@ class TestDetectRuleType:
         assert _detect_rule_type({"check": {}}) == "cardinality"
         assert _detect_rule_type({"forbid_import": {}}) == "forbid_import"
         assert _detect_rule_type({"forbid": {}}) == "forbid_edge"
+        assert _detect_rule_type({"unregistered_feature_candidate": {}}) == (
+            "unregistered_feature_candidate"
+        )
+        assert _detect_rule_type({"module_coverage": {}}) == "module_coverage"
+        assert _detect_rule_type({"scenario_coverage": {}}) == "scenario_coverage"
+        assert _detect_rule_type({"doc_area_coherence": {}}) == "doc_area_coherence"
+        assert _detect_rule_type({"summary_facts": {}}) == "summary_facts"
         # Unknown falls back to "unknown"
         assert _detect_rule_type({"name": "x"}) == "unknown"
+
+    def test_every_authoring_key_the_loader_accepts_has_a_type(self) -> None:
+        """A rule kind the agent instructions call "unknown" is one they mis-describe.
+
+        `.beadloom/AGENTS.md` lists each configured rule with its kind. Three of
+        this repository's fifteen rules read `(unknown)` because `_detect_rule_type`
+        had not learned the keys added after it was written, and nothing failed
+        (BDL-062 `.4`). Asserting against the loader's own key set means the next
+        rule type cannot join the graph and silently become "unknown".
+        """
+        from beadloom.graph.rules.loader import AUTHORING_KEYS
+        from beadloom.onboarding.scanner import _detect_rule_type
+
+        undescribed = sorted(
+            key for key in AUTHORING_KEYS if _detect_rule_type({key: {}}) == "unknown"
+        )
+        assert undescribed == [], (
+            f"authoring key(s) the agent instructions would call 'unknown': "
+            f"{undescribed}"
+        )
 
     def test_agents_md_shows_all_rule_types(self, tmp_path: Path) -> None:
         """generate_agents_md should show correct types for all v3 rules."""

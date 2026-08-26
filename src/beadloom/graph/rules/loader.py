@@ -335,6 +335,30 @@ def _parse_forbid_rule(
     )
 
 
+#: Every key a rule may declare to select its type. A rule declares exactly one.
+#:
+#: Named once so the set has a single reader-visible definition: the validation
+#: message below is built from it, and `onboarding.scanner.rules_gen` is held to
+#: it by a test, because a key added here and not there makes the generated agent
+#: instructions call the rule's kind "unknown" and nothing fails (BDL-062 `.4`).
+AUTHORING_KEYS: frozenset[str] = frozenset(
+    {
+        "deny",
+        "require",
+        "forbid_cycles",
+        "forbid_import",
+        "forbid",
+        "layers",
+        "check",
+        "unregistered_feature_candidate",
+        "module_coverage",
+        "scenario_coverage",
+        "doc_area_coherence",
+        "summary_facts",
+    }
+)
+
+
 _VALID_LAYER_ENFORCEMENTS: frozenset[str] = frozenset({"top-down"})
 
 
@@ -904,13 +928,8 @@ def load_rules(rules_path: Path) -> list[Rule]:
             ]
         )
         if rule_type_count != 1:
-            msg = (
-                f"rules.yml: rule '{name}' must have exactly one of "
-                f"'deny', 'require', 'forbid_cycles', 'forbid_import', "
-                f"'forbid', 'layers', 'check', 'unregistered_feature_candidate', "
-                f"'module_coverage', 'scenario_coverage', 'doc_area_coherence', "
-                f"or 'summary_facts'"
-            )
+            listed = ", ".join(f"'{key}'" for key in sorted(AUTHORING_KEYS))
+            msg = f"rules.yml: rule '{name}' must have exactly one of {listed}"
             raise ValueError(msg)
 
         if has_deny:

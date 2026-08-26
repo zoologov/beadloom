@@ -35,6 +35,35 @@
 
 ## Open Issues
 
+195. [2026-08-26] [HIGH] One node whose source lies outside the common source root collapses `doc-area-coherence` for the whole graph
+
+    **Severity:** high (it does not weaken the rule, it inverts it: the four true findings disappear and six false ones take their place, at `error`)
+    **Command:** `beadloom lint --strict`
+    **Context:** found in BDL-062 `.4` while deciding whether the `vitepress-site` node should carry a document. Measured by attaching one, reindexing, and reading the rule's own output — not reasoned about.
+
+    **Measured on this branch.** `doc_area._placements` derives the source root as the longest directory prefix EVERY node/doc pair's source shares, and only paired nodes enter that computation. `vitepress-site`'s source is `site/`, which shares no prefix with `src/beadloom/...`. Attaching a `docs:` entry to it therefore drops the source root from `src/beadloom` to nothing in one step:
+
+    ```
+    before   4 findings   `debt-report` `doctor` `reindex` `watcher`
+             "this graph places 12 of 16 `application` nodes under `application`
+              — derived from 83 node/doc pairs: 77 compare"
+
+    after    6 findings   `beadloom` `cli` `bd-seam` `guard-probes` `mcp-server` `tui`
+             "has its source under `src` but is documented under `services`;
+              this graph places 75 of 81 `src` nodes under `domains`
+              — derived from 84 node/doc pairs: 82 compare"
+    ```
+
+    Every one of the six is a false positive — `docs/services/cli.md` is where a service document belongs on this repository — and all four true findings are gone. The rule reports MORE confidently after the collapse than before (81 of 82 pairs "fall under a dominant mapping", against 77), so nothing in the output signals that the derivation lost its footing.
+
+    **Why it is not a corner case.** Any project that documents something outside its main source tree meets it: a `site/`, an `infra/`, a `docs-tooling/`, a sibling package. The rule's whole design principle is that no layout is written down in it, and this is the cost of the version it shipped with — a single-observation prefix has no support requirement, unlike the `min_support: 2` that guards the dominant-mapping half.
+
+    **Expected:** the source root should not be decided by a prefix one pair can veto. Two candidates, neither measured: derive the root as the prefix a MAJORITY of sources share (the `min_support`/`threshold` machinery the rule already has, applied one level up), or treat sources that fall outside the derived root as their own area rather than folding everything into one — a project with two source trees has two conventions, and reporting "checked nothing" for the second is honest where reporting six false positives is not.
+
+    **Workaround in force:** `vitepress-site` carries no `docs:` entry, and records `docs_absent` with this measurement as part of its reason. That is a workaround and is written down as one — the node is not undocumented because documenting it is wrong.
+
+    **Related:** BDL-062 `.2` (the rule), #163 (prose no pair anchors).
+
 194. [2026-08-26] [HIGH] [External: bd 1.0.4] `bd merge-slot` is not an exclusion primitive — every agent is the same actor, and `release` is not owner-checked
 
     **Severity:** high (CLAUDE.md mandates this primitive before every commit in a shared working tree; it cannot deliver what it is relied on for)
@@ -319,6 +348,24 @@
     - Correct the SPEC table and #172's text to nine.
     - More generally: a number that appears in both code and prose is a fact to be audited, not a sentence to be maintained. #173 already showed the audit is weaker than it looks (a green result covered 1 declared fact of 9), so registering more facts and fixing the audit are the same piece of work.
     **Related:** #171, #177 (one fact, several sources), #172, #173.
+
+    **RE-MEASURED 2026-08-26 (BDL-062 `.4`). Two of the three asks are now done; the third grew a reason nobody had.**
+
+    ```
+    facts.rule_type_count.value        = 15   # SELECT COUNT(*) FROM rules
+    COUNT(DISTINCT rule_type)          = 10   # the types this repo uses
+    graph.rules.loader.AUTHORING_KEYS  = 12   # the types that exist
+    ```
+
+    Three numbers, and the fact's name claims the wrong one of them. That is unchanged since this entry was written; only the values moved.
+
+    *Done.* The SPEC table now lists all twelve keys, and its claim to be "checked against the loader's own dispatch" is true for the first time — `test_rule_engine.py::TestTheSpecTableIsCheckedAgainstTheLoader` asserts the Keyword column equals `AUTHORING_KEYS` and that the stated cardinal is `len(AUTHORING_KEYS)`. Both were proved to bite by dropping a row and by mis-spelling the count. The loader's authoring keys are named once, as `AUTHORING_KEYS`, and its own "must have exactly one of" message is built from that set rather than from a second hand-written list.
+
+    *Also done, and it was a second reader of the same stale knowledge:* `onboarding.scanner.rules_gen._detect_rule_type` mapped seven of the twelve keys, so `.beadloom/AGENTS.md` described three of this repository's fifteen rules to every agent that reads it as kind `(unknown)`. All twelve are mapped, and `test_every_authoring_key_the_loader_accepts_has_a_type` holds the map to `AUTHORING_KEYS`.
+
+    **The new reason, and it is the sharp part.** The SPEC had said "the **ten** authoring keys" since the count was ten — spelled as a word. `_iter_number_tokens` reads digits, so a number written in letters is invisible to `docs audit`. The type count went stale twice (`doc_area_coherence`, then `summary_facts`) and no check could see it either time, while the instance count in the same sentence — written as a digit — was caught on the first run. So this fact is not merely misnamed: **a document can hold a stale number indefinitely by spelling it out**, and `unreadable_reason` does not name that limit. Matching number words would swamp the extractor with ambiguity, so the fix is probably not there; but the gate currently says nothing at all about it.
+
+    **Still open, unchanged:** rename `rule_type_count` to `rule_count` with keywords meaning "rules this project declares", and give the type count its own fact if it is worth auditing. It remains a breaking change to `docs_audit.tolerances` / `docs_audit.ignore` keys in every adopter's config, which is why it is still a bead of its own. BDL-062 `.4` did exactly the same rename for `framework_count` -> `nodes_with_framework` (#193), so the shape of the work is now demonstrated rather than proposed.
     **MEASURED AGAINST THE FIXED AUDIT (`beadloom-mr2l.45`, 2026-08-24), and it changes the ask.** Registering the fact is necessary but NOT sufficient here, for two reasons the coverage report makes visible: (1) the document that states the number — `docs/domains/graph/features/rule-engine/SPEC.md` — matches `docs/**/features/*/SPEC.md` and is **never scanned**, so a registered fact would still read `not_covered` while the SPEC drifted; (2) the existing `rule_type_count` fact is a MISNOMER — it counts rows in the `rules` table (12 configured rules on this repo), not the loader's nine dispatch KINDS, and `FACT_KEYWORDS` maps `rule`, `rule type` and `rule kind` all to that one fact. Registering the dispatch count therefore means splitting the keywords and renaming the existing fact, which is a breaking change to `docs_audit.tolerances` / `docs_audit.ignore` keys in every adopter's config. That is a bead of its own, not a line in #173's fix.
 
 178. [2026-08-23] [HIGH] 🔴 A REQUIRED check reports `pass` while its own output says it verified nothing

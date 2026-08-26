@@ -221,10 +221,10 @@ class TestDbCountFacts:
         facts = registry.collect(project, conn)
         assert facts["test_count"].value == 15
 
-    def test_collect_framework_count(
+    def test_collect_nodes_with_framework(
         self, project: Path, conn: sqlite3.Connection
     ) -> None:
-        """Framework count = nodes with non-empty tests.framework in extra."""
+        """nodes_with_framework = nodes with non-empty tests.framework in extra."""
         extra_with_fw = json.dumps(
             {"tests": {"framework": "pytest", "test_count": 5, "test_files": []}}
         )
@@ -246,7 +246,7 @@ class TestDbCountFacts:
 
         registry = FactRegistry()
         facts = registry.collect(project, conn)
-        assert facts["framework_count"].value == 1
+        assert facts["nodes_with_framework"].value == 1
 
     def test_collect_empty_db_returns_zero_counts(
         self, project: Path, conn: sqlite3.Connection
@@ -258,7 +258,7 @@ class TestDbCountFacts:
         assert facts["edge_count"].value == 0
         assert facts["language_count"].value == 0
         assert facts["test_count"].value == 0
-        assert facts["framework_count"].value == 0
+        assert facts["nodes_with_framework"].value == 0
 
     def test_collect_rule_type_count(
         self, project: Path, conn: sqlite3.Connection

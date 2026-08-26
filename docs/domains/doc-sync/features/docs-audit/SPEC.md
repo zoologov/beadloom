@@ -34,7 +34,7 @@ The audit pipeline has three stages:
 | `edge_count` | graph DB `edges` table | 0.10 (+/-10%) | Total graph edges |
 | `language_count` | `code_symbols` file extensions | 0.0 (exact) | Distinct programming languages |
 | `test_count` | `nodes.extra` JSON `tests.test_count` | 0.05 (+/-5%) | Total test count |
-| `framework_count` | `nodes.extra` JSON `tests.framework` | 0.0 (exact) | Nodes with detected test frameworks |
+| `nodes_with_framework` | `nodes.extra` JSON `tests.framework` | 0.0 (exact) | Nodes with detected test frameworks |
 | `mcp_tool_count` | `infrastructure.mcp_tools.MCP_TOOL_CATALOG` | 0.0 (exact) | Number of MCP tools. **Declared only for Beadloom itself** -- see Facts about the running package |
 | `cli_command_count` | Click main group recursive traversal | 0.0 (exact) | Number of CLI commands. **Declared only for Beadloom itself** -- see Facts about the running package |
 | `rule_type_count` | graph DB `rules` table | 0.0 (exact) | Number of architecture rules |
@@ -200,13 +200,20 @@ the output** rather than left implicit. Nothing here is silenced by a tolerance 
 | Blind spot | Resolution |
 |------------|------------|
 | A Layer 1 modifier word suppressed a number it did not modify (`316 edges, one per import`) | **Fixed** -- windows are clause-scoped (see *Clause scope*) |
-| Counts below `MIN_READABLE_COUNT` (10) are not extracted for `*_count` facts, and 0/1 are never extracted at all | **Kept, and reported.** Removing the floor was re-measured: binding a single digit to an immediately following keyword yields 14 extra mentions on this repo, 13 of them ordinals (`5. Domain list`), table cells (`\| 5 \| tests \|`) and category breakdowns (`(4 tools):`) -- several of which would have failed the Gate. The floor stays; the facts it costs are now named `unreadable` in the coverage report, so nothing reads green about them |
+| Counts below `MIN_READABLE_COUNT` (10) are not extracted for count facts, and 0/1 are never extracted at all | **Kept, and reported.** Removing the floor was re-measured: binding a single digit to an immediately following keyword yields 14 extra mentions on this repo, 13 of them ordinals (`5. Domain list`), table cells (`\| 5 \| tests \|`) and category breakdowns (`(4 tools):`) -- several of which would have failed the Gate. The floor stays; the facts it costs are now named `unreadable` in the coverage report, so nothing reads green about them |
 | `SPEC.md` / `CONTRIBUTING.md` suppress count facts, and `docs/**/features/*/SPEC.md` is excluded outright (33 of 79 markdown files on this repo) | **Reported.** Every skipped file is named on the scan surface with the reason it was skipped |
 
 The residual, and it is stated rather than hidden: a doc claim written below the floor
 (`indexes 7 languages`) is invisible whether it is right or wrong. The floor is a property of
 the extractor, so `unreadable_reason()` states it against the fact rather than leaving the
 reader to infer it from a zero.
+
+Which facts the floor applies to is `scanner.is_count_fact()`, not the `_count` suffix. The
+suffix names most of them and decides by default; `_COUNT_FACTS_WITHOUT_SUFFIX` names the ones
+whose own name says what they count instead. Renaming `framework_count` to
+`nodes_with_framework` (BDL-UX #193) would otherwise have taken that fact out of the floor
+without anybody deciding it, and `test_every_registered_count_fact_is_recognised` fails the
+moment a registered fact other than `version` falls outside the predicate.
 
 ### Coverage reporting
 
@@ -251,9 +258,14 @@ Each fact type has a list of associated keywords:
 | `node_count` | node, module, domain, component |
 | `edge_count` | edge, dependency, connection |
 | `test_count` | test, spec, assertion |
-| `framework_count` | framework, supported framework |
+| `nodes_with_framework` | node with framework, node with a framework, node with a test framework, node declar a framework, node declar a test framework |
 
-Keywords use prefix matching (e.g., "language" matches "languages").
+Keywords use prefix matching (e.g., "language" matches "languages", and
+"declar" matches "declare", "declares" and "declaring"). A multi-word keyword
+matches only consecutive words. When two facts sit the same distance from a
+number, the longer keyword phrase wins: "84 nodes declare a test framework" is
+one word from both `node` and `node declar a test framework`, and the phrase
+that accounts for more of the sentence is what the sentence is about.
 
 ### Tolerance System
 

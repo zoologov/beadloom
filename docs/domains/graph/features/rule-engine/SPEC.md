@@ -52,7 +52,20 @@ VALID_EDGE_KINDS: frozenset[str] = frozenset({
 })
 
 SUPPORTED_SCHEMA_VERSIONS: frozenset[int] = frozenset({1, 2, 3})
+
+# Every key a rule may declare to select its type. A rule declares exactly one.
+AUTHORING_KEYS: frozenset[str] = frozenset({
+    "deny", "require", "forbid_cycles", "forbid_import", "forbid", "layers",
+    "check", "unregistered_feature_candidate", "module_coverage",
+    "scenario_coverage", "doc_area_coherence", "summary_facts",
+})
 ```
+
+`AUTHORING_KEYS` is the single definition of that set. The loader's own "must have exactly one
+of" message is built from it, the rule-type table above is asserted equal to it, and
+`onboarding.scanner.rules_gen._detect_rule_type` is held to it -- because a key the loader
+accepts and that map does not know becomes the word `unknown` in the generated
+`.beadloom/AGENTS.md`, and nothing failed when it did (BDL-062 `.4`, BDL-UX #179).
 
 ### Data Structures
 

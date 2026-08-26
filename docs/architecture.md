@@ -130,7 +130,7 @@ Default parameters:
 
 Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3) and enforce boundaries between graph nodes. The YAML key on each rule selects its type.
 
-**Rule types** — the ten authoring keys `load_rules` dispatches, parsed and evaluated by the `graph/rules/` package and orchestrated by `graph/linter.py`. A rule declares exactly one of them; this repository configures 13 rules across them:
+**Rule types** — the 12 authoring keys `load_rules` dispatches, parsed and evaluated by the `graph/rules/` package and orchestrated by `graph/linter.py`. A rule declares exactly one of them; this repository configures 15 rules across them:
 
 | YAML key | Semantics | Example |
 |----------|-----------|---------|
@@ -144,8 +144,12 @@ Architecture rules are defined in `.beadloom/_graph/rules.yml` (schema version 3
 | `unregistered_feature_candidate` | Report a source directory with enough symbols to deserve a node and no node declaring it (BDL-051) | default severity `warn` |
 | `module_coverage` | Report a source module under `source_root` that no node tracks (BDL-051) | default severity `warn`; `exempt` entries carry a reason |
 | `scenario_coverage` | Bind behaviour-bearing nodes to executable Gherkin scenarios, both ways (BDL-061 S4) | default severity `warn`; `for` / `features` / `references` / `non_behavioural` — see the [BDD guide](guides/bdd-scenarios.md) |
+| `doc_area_coherence` | Hold a graph to the source-to-docs placement convention derived from the graph itself (BDL-062) | default severity `warn`, raised to `error` here; `threshold` / `min_support` — no layout literal appears in the rule |
+| `summary_facts` | Check a number stated in a node `summary` against the fact the project computes (BDL-062) | default severity `warn`, raised to `error` here; a fact the project cannot compute is reported `unverifiable`, never clean |
 
-> Internally each parsed rule carries a `rule_type` string (`deny` / `require` / `forbid` / `layer` / `forbid_import` / `cardinality` / `scenario_coverage` / …) used by the evaluators; the **authoring key** in `rules.yml` is the column above.
+> Internally each parsed rule carries a `rule_type` string (`deny` / `require` / `forbid` / `layer` / `forbid_import` / `cardinality` / `scenario_coverage` / `doc_area_coherence` / `summary_facts` / …) used by the evaluators; the **authoring key** in `rules.yml` is the column above.
+>
+> The two counts above differ because they count different things: 12 is how many keys the loader accepts, 15 is how many rules this repository declares. Only the second is checked by `docs audit` — the fact it is checked against is named `rule_type_count` and computes `SELECT COUNT(*) FROM rules`, which is the instance count, not the type count (BDL-UX #179).
 
 **Evaluation:**
 - `deny` rules are checked against the `code_imports` table: resolved import ref_ids are matched against rule patterns

@@ -43,7 +43,7 @@ DEFAULT_TOLERANCES: dict[str, float] = {
     "edge_count": 0.10,       # +/-10% (growing metric)
     "language_count": 0.0,    # exact (rarely changes)
     "test_count": 0.05,       # +/-5% (fluctuates)
-    "framework_count": 0.0,   # exact (rarely changes)
+    "nodes_with_framework": 0.0,  # exact (rarely changes)
     "mcp_tool_count": 0.0,    # exact
     "cli_command_count": 0.0, # exact
     "rule_type_count": 0.0,   # exact
@@ -638,7 +638,7 @@ class FactRegistry:
         self._collect_db_counts(db, facts, declined)
         self._collect_language_count(db, facts, declined)
         self._collect_test_count(db, facts, declined)
-        self._collect_framework_count(db, facts, declined)
+        self._collect_nodes_with_framework(db, facts, declined)
         self._collect_rule_type_count(db, facts, declined)
         self._collect_mcp_tool_count(project_root, facts, declined)
         self._collect_cli_command_count(project_root, facts, declined)
@@ -900,7 +900,7 @@ class FactRegistry:
             logger.warning("Cannot query nodes for test count")
             declined["test_count"] = _unreadable_table("nodes")
 
-    def _collect_framework_count(
+    def _collect_nodes_with_framework(
         self,
         db: sqlite3.Connection,
         facts: dict[str, Fact],
@@ -923,14 +923,14 @@ class FactRegistry:
                         if framework:
                             count += 1
 
-            facts["framework_count"] = Fact(
-                name="framework_count",
+            facts["nodes_with_framework"] = Fact(
+                name="nodes_with_framework",
                 value=count,
                 source="graph DB",
             )
         except Exception:
             logger.warning("Cannot query nodes for framework count")
-            declined["framework_count"] = _unreadable_table("nodes")
+            declined["nodes_with_framework"] = _unreadable_table("nodes")
 
     def _collect_rule_type_count(
         self,

@@ -56,12 +56,14 @@
 - **no-dependency-cycles** (forbid_cycles): No circular depends_on chains
 - **architecture-layers** (layers): Services → application → domains → infrastructure — not reverse
 - **domain-size-limit** (cardinality): Domains should not have too many symbols
-- **module-coverage** (unknown): Every src module must be a tracked node (feature/component/…) or explicitly exempt
+- **module-coverage** (module_coverage): Every src module must be a tracked node (feature/component/…) or explicitly exempt
 - **tui-no-direct-infra** (forbid_import): TUI must not import infrastructure directly
 - **onboarding-no-direct-infra** (forbid_import): Onboarding must not import infrastructure directly
 - **core-no-import-ai-agents** (forbid_import): Core domains/services must not import the ai_agents domain
 - **application-no-import-ai-agents** (forbid_import): Application must not import the ai_agents domain (leaf consumer only)
-- **scenario-coverage** (unknown): Behaviour-bearing nodes carry an executable scenario; a scenario names its bead
+- **scenario-coverage** (scenario_coverage): Behaviour-bearing nodes carry an executable scenario; a scenario names its bead
+- **doc-area-coherence** (doc_area_coherence): A node is documented where this graph documents nodes from its source area
+- **graph-summary-facts** (summary_facts): A number or version stated in a node summary agrees with the project
 
 ## Custom
 
