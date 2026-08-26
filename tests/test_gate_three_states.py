@@ -44,7 +44,7 @@ import pytest
 from click.testing import CliRunner
 
 from beadloom.services.cli import main
-from tests.adopter_project import indexed_python_project
+from tests.adopter_project import IndexedProjectSpec, indexed_python_project
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -61,7 +61,7 @@ SUMMARY_FACTS_ONLY = (
 
 #: The four states, as ``(id, kwargs)``. Each differs from ``agrees`` in one
 #: field, so a difference in the Gate's output has one possible cause.
-STATES: dict[str, dict[str, object]] = {
+STATES: dict[str, IndexedProjectSpec] = {
     "agrees": {"summaries": {"billing-m0": "The billing module of release v3.7.0"}},
     "disagrees": {"summaries": {"billing-m0": "The billing module of release v9.9.9"}},
     "unverifiable": {
@@ -80,7 +80,9 @@ def _gate(tmp_path: Path, state: str) -> tuple[str, dict[str, object]]:
     reads in CI, the JSON is what a machine consumer reads, and a distinction
     that survives in one and not the other has still been lost.
     """
-    project = indexed_python_project(tmp_path / state, rules=SUMMARY_FACTS_ONLY, **STATES[state])
+    spec: IndexedProjectSpec = {"rules": SUMMARY_FACTS_ONLY}
+    spec.update(STATES[state])
+    project = indexed_python_project(tmp_path / state, **spec)
     runner = CliRunner()
     human = runner.invoke(main, ["ci", "--project", str(project.root)])
     machine = runner.invoke(main, ["ci", "--project", str(project.root), "--format", "json"])
@@ -290,7 +292,7 @@ DOC_AREA_ONLY = (
 )
 
 #: Three projects differing only in where their documents are filed.
-PLACEMENTS: dict[str, dict[str, object]] = {
+PLACEMENTS: dict[str, IndexedProjectSpec] = {
     "coherent": {},
     "contradicted": {"misfiled": ("billing-m0",)},
     "no-convention": {"docs_layout": "flat"},
@@ -305,9 +307,9 @@ def _doc_area_gate(tmp_path: Path, placement: str) -> str:
     would satisfy an assertion about a node being named without the rule having
     said anything at all.
     """
-    project = indexed_python_project(
-        tmp_path / placement, rules=DOC_AREA_ONLY, **PLACEMENTS[placement]
-    )
+    spec: IndexedProjectSpec = {"rules": DOC_AREA_ONLY}
+    spec.update(PLACEMENTS[placement])
+    project = indexed_python_project(tmp_path / placement, **spec)
     output = CliRunner().invoke(main, ["ci", "--project", str(project.root)]).stdout
     return "\n".join(line for line in output.splitlines() if "doc-area-coherence" in line)
 

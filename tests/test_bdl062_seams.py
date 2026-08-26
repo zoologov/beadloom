@@ -54,7 +54,7 @@ from beadloom.doc_sync.scanner import _COUNT_FACTS_WITHOUT_SUFFIX, DocScanner
 from beadloom.graph.rules import LIVENESS_RULE_TYPE, evaluate_all, load_rules
 from beadloom.graph.rules.summary_facts import SUMMARY_FACTS_RULE_TYPE
 from beadloom.infrastructure.db import create_schema, open_db
-from tests.adopter_project import indexed_python_project
+from tests.adopter_project import IndexedProjectSpec, indexed_python_project
 
 if TYPE_CHECKING:
     import sqlite3
@@ -94,14 +94,19 @@ SUMMARY_FACTS_ONLY = (
 )
 
 
-def _indexed(root: Path, **kwargs: object) -> tuple[Path, sqlite3.Connection]:
+def _indexed(
+    root: Path, spec: IndexedProjectSpec | None = None
+) -> tuple[Path, sqlite3.Connection]:
     """An indexed adopter project and an open connection to its graph.
 
-    Defaults to :data:`SUMMARY_FACTS_ONLY`; a caller wanting another rule set
-    passes ``rules=`` through.
+    *spec* is the fixture's own keyword shape (``tests.adopter_project``), taken
+    as one argument rather than as ``**kwargs`` so the keys stay type-checked at
+    every call site. It defaults to :data:`SUMMARY_FACTS_ONLY`; a caller wanting
+    another rule set passes ``rules`` through.
     """
-    kwargs.setdefault("rules", SUMMARY_FACTS_ONLY)
-    project = indexed_python_project(root, **kwargs)  # type: ignore[arg-type]
+    merged: IndexedProjectSpec = {"rules": SUMMARY_FACTS_ONLY}
+    merged.update(spec or {})
+    project = indexed_python_project(root, **merged)
     reindex(project.root)
     return project.root, open_db(project.root / ".beadloom" / "beadloom.db")
 
@@ -142,8 +147,7 @@ class TestTheDeclineReasonCrossesTheSeamVerbatim:
         """
         root, conn = _indexed(
             tmp_path / "invoice-svc",
-            version=None,
-            summaries={"billing-m0": summary},
+            {"version": None, "summaries": {"billing-m0": summary}},
         )
         declared = FactRegistry().collect_set(root, conn)
         expected = declared.not_applicable[fact_name]
@@ -159,7 +163,7 @@ class TestTheDeclineReasonCrossesTheSeamVerbatim:
         A registry that returned one sentence for every decline would make the
         pair look like two passes and be one.
         """
-        root, conn = _indexed(tmp_path / "invoice-svc", version=None)
+        root, conn = _indexed(tmp_path / "invoice-svc", {"version": None})
 
         declared = FactRegistry().collect_set(root, conn)
 
@@ -171,8 +175,10 @@ class TestTheDeclineReasonCrossesTheSeamVerbatim:
         """UNCHECKED IS NOT CLEAN: the claim produces a finding, not silence."""
         root, conn = _indexed(
             tmp_path / "invoice-svc",
-            version=None,
-            summaries={"billing-m0": "The billing module of release v3.7.0"},
+            {
+                "version": None,
+                "summaries": {"billing-m0": "The billing module of release v3.7.0"},
+            },
         )
 
         violations = _findings(root, conn)
@@ -187,8 +193,10 @@ class TestTheDeclineReasonCrossesTheSeamVerbatim:
         every claim, and "could not be verified" would mean nothing."""
         root, conn = _indexed(
             tmp_path / "invoice-svc",
-            version="3.7.0",
-            summaries={"billing-m0": "The billing module of release v3.7.0"},
+            {
+                "version": "3.7.0",
+                "summaries": {"billing-m0": "The billing module of release v3.7.0"},
+            },
         )
 
         violations = _findings(root, conn)
@@ -246,7 +254,7 @@ class TestNoPathStillResolvesTheRetiredFactName:
         """End to end through `.1`'s rule, not only through the scanner."""
         root, conn = _indexed(
             tmp_path / "invoice-svc",
-            summaries={"billing-m0": "84 nodes declare a test framework"},
+            {"summaries": {"billing-m0": "84 nodes declare a test framework"}},
         )
 
         found = _of_type(_findings(root, conn), SUMMARY_FACTS_RULE_TYPE)
@@ -272,7 +280,7 @@ class TestNoPathStillResolvesTheRetiredFactName:
         """
         root, conn = _indexed(
             tmp_path / "invoice-svc",
-            summaries={"billing-m0": "regex fallback across 37 web frameworks"},
+            {"summaries": {"billing-m0": "regex fallback across 37 web frameworks"}},
         )
 
         violations = _findings(root, conn)

@@ -25,7 +25,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from beadloom.application.doctor import get_actual_version
 
@@ -210,11 +210,28 @@ def beadloom_local_facts_in(text: str) -> list[str]:
 # the same summaries and the same rule report a clean check when the tree is
 # nested — otherwise the fixture might simply be broken.
 
+
 #: The areas every indexed adopter is built with, and how many modules each
 #: holds. Four is not arbitrary: ``doc-area-coherence`` needs ``min_support``
 #: (2) observations before a mapping counts, and misfiling one of four leaves
 #: 3/4 = 0.75 agreement, above the 0.6 default threshold, so the misfiled node
 #: is reported rather than dissolving the convention it contradicts.
+class IndexedProjectSpec(TypedDict, total=False):
+    """The keyword arguments :func:`indexed_python_project` accepts.
+
+    Published as a type rather than left implicit because callers hold tables of
+    states and splat them (``indexed_python_project(root, **STATES[name])``). A
+    bare ``dict[str, object]`` makes that splat unverifiable, and the alternative
+    to naming the shape was a ``type: ignore`` at every call site.
+    """
+
+    docs_layout: str
+    version: str | None
+    misfiled: tuple[str, ...]
+    summaries: dict[str, str]
+    rules: str | None
+
+
 ADOPTER_AREAS: tuple[str, ...] = ("billing", "ledger", "reporting")
 ADOPTER_MODULES_PER_AREA = 4
 
