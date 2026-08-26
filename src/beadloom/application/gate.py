@@ -457,6 +457,16 @@ def _audit_summary(result: AuditResult, stale: list[AuditFinding]) -> str:
     coverage = f"{declared - len(unverified)}/{declared} declared fact(s) verified"
     if unverified:
         coverage += f", NOT VERIFIED: {', '.join(unverified)}"
+    if result.not_applicable:
+        # A fact the registry declined leaves the denominator, and a denominator
+        # that shrinks in silence is the defect this line exists to prevent:
+        # measured in-process on this repository, an unregistered CLI surface
+        # turned 3/9 into 3/8 with nothing naming the fact that left.
+        names = ", ".join(sorted(result.not_applicable))
+        coverage += (
+            f", NOT APPLICABLE to this project: {names}"
+            " (`beadloom docs audit` states the reason)"
+        )
     return f"{head}; {coverage}"
 
 

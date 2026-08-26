@@ -54,12 +54,29 @@ def _project(tmp_path: Path, readme: str = "") -> Path:
 
     An empty database yields count facts of 0, which the extractor is
     deliberately unable to read — so the same fixture exercises ``unreadable``
-    and (via the MCP/CLI surface facts, which are large) ``verified``.
+    and (via the two surface facts, which are large) ``verified``.
+
+    The project is ``demo``, not Beadloom, so it declares its OWN MCP and CLI
+    counts under ``docs_audit.extra_facts``.  Before BDL-062 `.3` the fixture
+    got Beadloom's counts for free, which is the defect that bead removed: the
+    numbers below are the adopter's, and the audit no longer has any others to
+    offer them.
     """
     from beadloom.infrastructure.db import create_schema, open_db
 
     proj = tmp_path / "proj"
     (proj / ".beadloom").mkdir(parents=True)
+    (proj / ".beadloom" / "config.yml").write_text(
+        "docs_audit:\n"
+        "  extra_facts:\n"
+        "    mcp_tool_count:\n"
+        "      value: 18\n"
+        '      source: "demo MCP server"\n'
+        "    cli_command_count:\n"
+        "      value: 39\n"
+        '      source: "demo CLI"\n',
+        encoding="utf-8",
+    )
     (proj / "pyproject.toml").write_text(
         '[project]\nname = "demo"\nversion = "3.0.0"\n', encoding="utf-8"
     )

@@ -135,9 +135,16 @@ opened, and both of those used to read as a clean bill of health (BDL-UX #173).
   versions only (file-type heuristic)` on this repository — and `--verbose` names each excluded
   document with the pattern that skipped it. Those two numbers move whenever a document is added
   or an exclude pattern changes; they describe a run, not a property of the tool.
-- `--json` gains `coverage`, `unverified_facts` and `scan_surface` beside the existing arrays,
-  and four counts under `summary` (`declared_fact_count`, `verified_fact_count`,
-  `unverified_count`, `unreadable_count`). `--fail-if` accepts `unverified>N` / `unverified>=N`
+- A line per fact the audit declared no value for in this project, with the reason:
+  `NOT APPLICABLE to this project: mcp_tool_count — the MCP tool catalog describes the running
+  beadloom package, not this project (this project declares itself as 'invoice-svc', not
+  'beadloom'); declare docs_audit.extra_facts.mcp_tool_count in .beadloom/config.yml to audit
+  this project's own`. The lines appear only when something was declined, so this repository's
+  output is unchanged.
+- `--json` gains `coverage`, `verified_facts`, `unverified_facts`, `not_applicable` and
+  `scan_surface` beside the existing arrays, and five counts under `summary`
+  (`declared_fact_count`, `verified_fact_count`, `unverified_count`, `unreadable_count`,
+  `not_applicable_count`). `--fail-if` accepts `unverified>N` / `unverified>=N`
   alongside `stale>N` / `stale>=N`; coverage is reported on every run and enforced only when
   asked for.
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -12,7 +13,9 @@ from beadloom.infrastructure.db import create_schema, open_db
 
 if TYPE_CHECKING:
     import sqlite3
-    from pathlib import Path
+
+#: This repository's root — the one project whose own surfaces the audit reports.
+BEADLOOM_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture()
@@ -281,32 +284,53 @@ class TestDbCountFacts:
 
 
 class TestMcpToolCount:
-    """Tests for MCP tool count fact."""
+    """The MCP tool count is Beadloom's own surface, so only Beadloom gets it.
 
-    def test_collect_mcp_tool_count(
+    These two tests used to assert the opposite — that ANY project, including a
+    bare temporary directory, is handed the running catalog's length. That is
+    the defect BDL-062 `.3` removed, and the assertions are inverted here rather
+    than deleted so the leak cannot come back unnoticed.
+    """
+
+    def test_a_project_that_is_not_beadloom_is_not_told_our_tool_count(
         self, project: Path, conn: sqlite3.Connection
     ) -> None:
-        """Counts MCP tools from the _TOOLS list in mcp_server module."""
-        registry = FactRegistry()
-        facts = registry.collect(project, conn)
-        # MCP tools are introspected from the actual module; count should be >= 0
-        assert "mcp_tool_count" in facts
-        assert isinstance(facts["mcp_tool_count"].value, int)
-        assert facts["mcp_tool_count"].value >= 0
+        fact_set = FactRegistry().collect_set(project, conn)
+        assert "mcp_tool_count" not in fact_set.facts
+        assert "mcp_tool_count" in fact_set.not_applicable
+
+    def test_beadloom_itself_still_reports_the_catalog_length(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        from beadloom.infrastructure.mcp_tools import MCP_TOOL_CATALOG
+
+        fact_set = FactRegistry().collect_set(BEADLOOM_ROOT, conn)
+        fact = fact_set.facts["mcp_tool_count"]
+        assert fact.value == len(MCP_TOOL_CATALOG)
+        assert fact.source == "MCP tool catalog"
 
 
 class TestCliCommandCount:
-    """Tests for CLI command count fact."""
+    """The CLI command count, likewise, describes the package that provides it."""
 
-    def test_collect_cli_command_count(
+    def test_a_project_that_is_not_beadloom_is_not_told_our_command_count(
         self, project: Path, conn: sqlite3.Connection
     ) -> None:
-        """Counts CLI commands from the Click main group."""
-        registry = FactRegistry()
-        facts = registry.collect(project, conn)
-        assert "cli_command_count" in facts
-        assert isinstance(facts["cli_command_count"].value, int)
-        assert facts["cli_command_count"].value >= 0
+        fact_set = FactRegistry().collect_set(project, conn)
+        assert "cli_command_count" not in fact_set.facts
+        assert "cli_command_count" in fact_set.not_applicable
+
+    def test_beadloom_itself_still_reports_the_registered_commands(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        import beadloom.services.cli  # noqa: F401  — registers the CLI surface
+        from beadloom.infrastructure.surface_registry import get_cli_group
+
+        group = get_cli_group()
+        assert group is not None, "the CLI surface must be live for this test"
+        fact = FactRegistry().collect_set(BEADLOOM_ROOT, conn).facts["cli_command_count"]
+        assert fact.value == FactRegistry._count_click_commands(group)
+        assert fact.source == "CLI"
 
 
 class TestExtraFacts:

@@ -145,6 +145,14 @@ project would carry on every run would spend the channel `sync-check` needs for 
 genuinely missing baseline. `beadloom docs audit --fail-if unverified>N` is the
 opt-in for a project that wants every declared fact stated somewhere.
 
+Since 3.0.1 the line also names the facts the audit declared no value for in this
+project: `..., NOT APPLICABLE to this project: cli_command_count`. A fact that
+could not be computed used to leave no trace, so the denominator moved in
+silence — measured in-process on this repository, an unregistered CLI surface
+turned `3/9 declared fact(s) verified` into `3/8` with nothing naming the fact
+that had left. The clause appears only when something was declined, so a project
+where every declared fact applies reads exactly as it did before.
+
 Each step reports a `GateStep` with `PASS` / `WARN` / `FAIL` / `SKIP` — never an
 ambiguous green — and its findings in the shared finding shape. `GateResult.ok`
 is True only when every step passed.

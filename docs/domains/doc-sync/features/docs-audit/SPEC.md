@@ -15,7 +15,7 @@ The documentation audit feature detects stale numeric facts in markdown document
 
 The audit pipeline has three stages:
 
-1. **FactRegistry** (`audit.py`) -- Collects ground-truth facts from multiple project data sources: `pyproject.toml` (version), graph DB (node/edge/test/framework/rule counts), MCP server introspection (tool count), Click CLI introspection (command count), and code_symbols (language count). Extra facts can be injected via `config.yml`.
+1. **FactRegistry** (`audit.py`) -- Collects ground-truth facts from multiple project data sources: `pyproject.toml` (version), graph DB (node/edge/test/framework/rule counts), the MCP tool catalog (tool count), Click CLI introspection (command count), and code_symbols (language count). Extra facts can be injected via `config.yml`. A source that cannot produce a value records the reason instead of dropping the fact, and the two surface facts are gated by `audit_self_surface.py` so they are declared only for the project that provides them.
 
 2. **DocScanner** (`scanner.py`) -- Scans markdown files for numeric and version string mentions. A line is tokenized on whitespace first, and only a token whose whole core is a number is a candidate (Layer 0); each candidate is then associated with a fact type based on nearby keywords within a configurable proximity window. False positives (dates, hex colors, issue IDs, line references, version pins) are masked before extraction.
 
@@ -33,9 +33,55 @@ The audit pipeline has three stages:
 | `language_count` | `code_symbols` file extensions | 0.0 (exact) | Distinct programming languages |
 | `test_count` | `nodes.extra` JSON `tests.test_count` | 0.05 (+/-5%) | Total test count |
 | `framework_count` | `nodes.extra` JSON `tests.framework` | 0.0 (exact) | Nodes with detected test frameworks |
-| `mcp_tool_count` | MCP server `_TOOLS` introspection | 0.0 (exact) | Number of MCP tools |
-| `cli_command_count` | Click main group recursive traversal | 0.0 (exact) | Number of CLI commands |
+| `mcp_tool_count` | `infrastructure.mcp_tools.MCP_TOOL_CATALOG` | 0.0 (exact) | Number of MCP tools. **Declared only for Beadloom itself** -- see Facts about the running package |
+| `cli_command_count` | Click main group recursive traversal | 0.0 (exact) | Number of CLI commands. **Declared only for Beadloom itself** -- see Facts about the running package |
 | `rule_type_count` | graph DB `rules` table | 0.0 (exact) | Number of architecture rules |
+
+### Facts about the running package
+
+Two of the nine facts are read out of the **running Beadloom package**, not out of the
+project being audited: `mcp_tool_count` comes from `MCP_TOOL_CATALOG` and `cli_command_count`
+from the live Click group. Both are true of Beadloom and false of everybody else, and until
+3.0.1 both were collected unconditionally -- so in every adopter repository `docs audit`
+declared two facts about the tool as facts about their documentation, and counted them in the
+denominator of "N of 9 verified". Measured: a project named `invoice-svc` was told it had 18
+MCP tools and 43 CLI commands.
+
+`doc_sync/audit_self_surface.py` gates both. A surface fact is declared only when the project
+under audit **is** the distribution whose surfaces this process can introspect, decided from
+the name the project declares for itself (`pyproject.toml`, `package.json`, `Cargo.toml`)
+against the running package's name. There is deliberately no directory-name fallback: a
+project that names itself nowhere is unknown, and unknown must not resolve to a match.
+
+A project with its own MCP server or CLI declares the count itself:
+
+```yaml
+docs_audit:
+  extra_facts:
+    mcp_tool_count:
+      value: 7
+      source: "our MCP server"
+```
+
+An `extra_facts` value withdraws the decline -- the fact is audited like any other. This is
+the escape hatch every decline reason names in its own text.
+
+### Three populations
+
+A fact that could not be computed used to be dropped without trace, so the denominator moved
+in silence: measured in-process on this repository, an unregistered CLI surface turned
+`3 of 9 declared fact(s) verified` into `3 of 8` and nothing named the fact that left. Every
+collector now records why it declared nothing, and the audit reports three populations:
+
+| Population | Where it appears | Meaning |
+|------------|------------------|---------|
+| verified | `verified_facts`, `coverage[*].status == "verified"` | A document stated the fact and it was judged |
+| not applicable to this project | `not_applicable[name].reason` | The audit declared no value here, and says why. Outside the denominator entirely |
+| declared but unverified | `unverified_facts` | A value exists and nothing checked it. Named, never counted as fine |
+
+`version` on this repository sits in the third population with zero mentions -- every version
+literal in the tree is a dependency pin or a `docs_audit.ignore` triple with a stated reason,
+so the audit is correctly reporting that no document states the current version as a claim.
 
 ### False-Positive Filtering
 
@@ -256,8 +302,17 @@ Tolerances are merged in order: built-in defaults, then user overrides from `con
 | `unmatched` | `list[Mention]` | Mentions with no corresponding fact |
 | `coverage` | `dict[str, FactCoverage]` | Per-fact coverage -- what the run checked |
 | `surface` | `ScanSurface \| None` | Documents read and skipped (`None` when built from mentions directly) |
+| `not_applicable` | `dict[str, str]` | Fact name -> the reason no value was declared for it here |
 
-`unverified_facts` (property) names the declared facts the run verified nothing for, sorted.
+`verified_facts` and `unverified_facts` (properties) name the first and third populations,
+sorted; `not_applicable` carries the second with its reasons.
+
+#### FactSet (frozen dataclass)
+
+What `FactRegistry.collect_set()` returns: `facts` (`dict[str, Fact]`) and `not_applicable`
+(`dict[str, str]`, fact name -> reason). The two are disjoint -- a name is in exactly one.
+`FactRegistry.collect()` returns `facts` alone and cannot tell an absent fact from a declined
+one, which is why a caller that reports coverage wants `collect_set()`.
 
 #### FactCoverage (frozen dataclass)
 
@@ -300,9 +355,12 @@ operators. When the condition is met, the command exits with code 1.
   enforces it here.
 
 `--verbose` additionally names the documents that were not read and those whose counts were
-suppressed. `--json` carries `coverage`, `unverified_facts`, `scan_surface`, and a `summary`
-with `declared_fact_count` / `verified_fact_count` / `unverified_count` / `unreadable_count`
-alongside the existing counts.
+suppressed. `--json` carries `coverage`, `verified_facts`, `unverified_facts`,
+`not_applicable`, `scan_surface`, and a `summary` with `declared_fact_count` /
+`verified_fact_count` / `unverified_count` / `unreadable_count` / `not_applicable_count`
+alongside the existing counts. `verified_facts`, `not_applicable` and
+`summary.not_applicable_count` were added in 3.0.1; nothing was removed, so a consumer
+parsing the 3.0.0 payload keeps working.
 
 ### Configuration
 
@@ -321,6 +379,8 @@ docs_audit:
 
 - `tolerances`: Per-fact tolerance overrides merged on top of built-in defaults.
 - `extra_facts`: User-defined facts with a `value` (str or int) and optional `source` label.
+  A project declares its own `mcp_tool_count` or `cli_command_count` here; the value
+  withdraws the decline described under Facts about the running package.
 
 ### Debt Report Integration
 
@@ -355,9 +415,20 @@ def compare_facts(
     facts: dict[str, Fact],
     mentions: list[Mention],
     tolerances: dict[str, float] | None = None,
+    ignore: list[IgnoreRule] | None = None,
+    not_applicable: dict[str, str] | None = None,
 ) -> AuditResult
 ```
-Compare mentions against ground-truth facts with configurable tolerances.
+Compare mentions against ground-truth facts with configurable tolerances. `not_applicable` is
+carried through to the result unchanged, so the report can name the facts no value was
+declared for.
+
+```python
+def foreign_project_reason(project_root: Path) -> str | None
+```
+Why Beadloom's own surfaces do not describe `project_root` -- `None` when the project under
+audit is this distribution. `declared_project_name(project_root)` is the manifest read it
+rests on, and returns `None` rather than a directory-name fallback.
 
 ```python
 def parse_fail_condition(expr: str) -> tuple[str, str, int]
@@ -387,6 +458,7 @@ The scanner's own statement of why no document could state this fact readably --
 
 ```python
 class FactRegistry:
+    def collect_set(self, project_root: Path, db: sqlite3.Connection) -> FactSet: ...
     def collect(self, project_root: Path, db: sqlite3.Connection) -> dict[str, Fact]: ...
 
 class DocScanner:
@@ -397,6 +469,9 @@ class DocScanner:
 
 @dataclass(frozen=True)
 class Fact: ...
+
+@dataclass(frozen=True)
+class FactSet: ...
 
 @dataclass(frozen=True)
 class Mention: ...
@@ -419,7 +494,12 @@ class ExcludedDoc: ...
 
 ## Invariants
 
-- `FactRegistry.collect` never raises; each data source is wrapped in try/except and silently omitted on failure.
+- `FactRegistry.collect_set` never raises; each data source is wrapped in try/except, and a
+  source that fails records its reason in `not_applicable` rather than dropping the fact.
+- A fact is in `facts` or in `not_applicable`, never in both and never in neither.
+- A fact read from the running Beadloom package is declared only when the project under
+  audit is that distribution. Being correct about Beadloom does not excuse stating it
+  about somebody else.
 - Version extraction uses a priority fallback: `pyproject.toml` > `package.json` > `Cargo.toml` (first match wins).
 - The DocScanner skips code blocks (lines between triple-backtick fences).
 - False-positive masking replaces matched patterns with spaces of equal length to preserve character positions.

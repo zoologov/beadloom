@@ -626,13 +626,13 @@ class TestDynamicVersioning:
         create_schema(conn)
 
         registry = FactRegistry()
-        facts: dict[str, object] = {}
-        registry._collect_version(proj, facts)  # type: ignore[arg-type]
+        facts: dict[str, Fact] = {}
+        registry._collect_version(proj, facts, {})
         conn.close()
 
         assert "version" in facts
         fact = facts["version"]
-        assert fact.value == "4.2.0"  # type: ignore[union-attr]
+        assert fact.value == "4.2.0"
 
     def test_importlib_metadata_fallback(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -656,12 +656,12 @@ class TestDynamicVersioning:
         )
 
         registry = FactRegistry()
-        facts: dict[str, object] = {}
-        registry._collect_version(proj, facts)  # type: ignore[arg-type]
+        facts: dict[str, Fact] = {}
+        registry._collect_version(proj, facts, {})
 
         assert "version" in facts
         fact = facts["version"]
-        assert fact.value == "5.0.0"  # type: ignore[union-attr]
+        assert fact.value == "5.0.0"
 
     def test_static_version_still_works(self, tmp_path: Path) -> None:
         """Static version in pyproject.toml should still be detected."""
@@ -681,13 +681,13 @@ class TestDynamicVersioning:
         create_schema(conn)
 
         registry = FactRegistry()
-        facts: dict[str, object] = {}
-        registry._collect_version(proj, facts)  # type: ignore[arg-type]
+        facts: dict[str, Fact] = {}
+        registry._collect_version(proj, facts, {})
         conn.close()
 
         assert "version" in facts
         fact = facts["version"]
-        assert fact.value == "1.0.0"  # type: ignore[union-attr]
+        assert fact.value == "1.0.0"
 
 
 # ---------------------------------------------------------------------------
@@ -848,8 +848,8 @@ class TestFactRegistryCollectors:
         conn.commit()
 
         registry = FactRegistry()
-        facts: dict[str, object] = {}
-        registry._collect_db_counts(conn, facts)
+        facts: dict[str, Fact] = {}
+        registry._collect_db_counts(conn, facts, {})
         conn.close()
 
         assert "node_count" in facts
@@ -882,7 +882,7 @@ class TestFactRegistryCollectors:
 
         registry = FactRegistry()
         facts: dict[str, Fact] = {}
-        registry._collect_language_count(conn, facts)
+        registry._collect_language_count(conn, facts, {})
         conn.close()
 
         assert "language_count" in facts
@@ -908,7 +908,7 @@ class TestFactRegistryCollectors:
 
         registry = FactRegistry()
         facts: dict[str, Fact] = {}
-        registry._collect_test_count(conn, facts)
+        registry._collect_test_count(conn, facts, {})
         conn.close()
 
         assert "test_count" in facts
@@ -934,7 +934,7 @@ class TestFactRegistryCollectors:
 
         registry = FactRegistry()
         facts: dict[str, Fact] = {}
-        registry._collect_framework_count(conn, facts)
+        registry._collect_framework_count(conn, facts, {})
         conn.close()
 
         assert "framework_count" in facts
@@ -959,7 +959,7 @@ class TestFactRegistryCollectors:
 
         registry = FactRegistry()
         facts: dict[str, Fact] = {}
-        registry._collect_rule_type_count(conn, facts)
+        registry._collect_rule_type_count(conn, facts, {})
         conn.close()
 
         assert "rule_type_count" in facts
@@ -1038,7 +1038,7 @@ class TestFactRegistryCollectors:
 
         registry = FactRegistry()
         facts: dict[str, Fact] = {}
-        registry._collect_version(proj, facts)  # type: ignore[arg-type]
+        registry._collect_version(proj, facts, {})
 
         assert "version" in facts
         assert facts["version"].value == "2.5.0"
@@ -1057,7 +1057,7 @@ class TestFactRegistryCollectors:
 
         registry = FactRegistry()
         facts: dict[str, Fact] = {}
-        registry._collect_version(proj, facts)  # type: ignore[arg-type]
+        registry._collect_version(proj, facts, {})
 
         assert "version" in facts
         assert facts["version"].value == "0.3.1"
