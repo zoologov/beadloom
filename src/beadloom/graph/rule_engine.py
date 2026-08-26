@@ -25,6 +25,9 @@ from __future__ import annotations
 
 from beadloom.graph.rules import (
     BEAD_NOT_VERIFIED,
+    DEFAULT_DOC_AREA_MIN_SUPPORT,
+    DEFAULT_DOC_AREA_THRESHOLD,
+    DOC_AREA_RULE_TYPE,
     EXPIRED_EXEMPTION_HINT,
     INERT_RULE_HINT,
     LIVE_EDGE_LIFECYCLES,
@@ -38,6 +41,7 @@ from beadloom.graph.rules import (
     CardinalityRule,
     CycleRule,
     DenyRule,
+    DocAreaCoherenceRule,
     FileAttribution,
     ForbidEdgeRule,
     ImportBoundaryRule,
@@ -59,6 +63,7 @@ from beadloom.graph.rules import (
     evaluate_cardinality_rules,
     evaluate_cycle_rules,
     evaluate_deny_rules,
+    evaluate_doc_area_coherence_rules,
     evaluate_forbid_edge_rules,
     evaluate_import_boundary_rules,
     evaluate_layer_rules,
@@ -77,6 +82,9 @@ from beadloom.graph.rules import (
 
 __all__ = [
     "BEAD_NOT_VERIFIED",
+    "DEFAULT_DOC_AREA_MIN_SUPPORT",
+    "DEFAULT_DOC_AREA_THRESHOLD",
+    "DOC_AREA_RULE_TYPE",
     "EXPIRED_EXEMPTION_HINT",
     "INERT_RULE_HINT",
     "LIVENESS_RULE_TYPE",
@@ -90,6 +98,7 @@ __all__ = [
     "CardinalityRule",
     "CycleRule",
     "DenyRule",
+    "DocAreaCoherenceRule",
     "FileAttribution",
     "ForbidEdgeRule",
     "ImportBoundaryRule",
@@ -111,6 +120,7 @@ __all__ = [
     "evaluate_cardinality_rules",
     "evaluate_cycle_rules",
     "evaluate_deny_rules",
+    "evaluate_doc_area_coherence_rules",
     "evaluate_forbid_edge_rules",
     "evaluate_import_boundary_rules",
     "evaluate_layer_rules",

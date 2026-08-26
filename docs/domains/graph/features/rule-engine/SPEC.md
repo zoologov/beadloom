@@ -13,6 +13,7 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 - `rules/liveness.py` — rule liveness: whether a rule *can* fire at all, for every rule type (BDL-061.48). It answers about the CONFIGURATION, never about the code.
 - `rules/exemptions.py` — what a `forbid_import` exemption is doing: which crossings it covers, how many it swallows, and whether its exit condition has passed (BDL-061.49).
 - `rules/cycles.py` — cycle detection (WHITE/GREY/BLACK colored DFS, path-as-set membership) + edge-liveness SQL helpers.
+- `rules/doc_area.py` — `doc_area_coherence`: the source-to-docs placement convention read OUT of the graph under test, and the nodes that contradict it. No layout literal appears in it (BDL-062 `.2`).
 - `rules/__init__.py` — `evaluate_all` orchestration + the remediation post-pass + stable public re-exports.
 
 ---
@@ -162,9 +163,9 @@ A blanket `from: "*" / to: "*"` entry therefore cannot hide either: it suppresse
 
 #### Rule liveness (a rule that cannot fire)
 
-**A rule that cannot match is indistinguishable from a rule that passed.** Both contribute `0` violations and `1` to `N rules evaluated`. Every rule type therefore reports its own inertness instead of counting as clean — `rules/liveness.py` for the eight matcher/graph-based types, `evaluate_import_boundary_rules` for `forbid_import` (whose diagnosis falls out of the import scan it already runs), and `scenario_coverage.py` for `scenario_coverage` (whose legs are decided by files on disk that no index holds).
+**A rule that cannot match is indistinguishable from a rule that passed.** Both contribute `0` violations and `1` to `N rules evaluated`. Every rule type therefore reports its own inertness instead of counting as clean — `rules/liveness.py` for the eight matcher/graph-based types, `evaluate_import_boundary_rules` for `forbid_import` (whose diagnosis falls out of the import scan it already runs), `scenario_coverage.py` for `scenario_coverage` (whose legs are decided by files on disk that no index holds), and `doc_area.py` for `doc_area_coherence` (whose applicability is decided by the graph's own data rather than by its configuration).
 
-**Reporting a rule and counting it are two questions, and for `scenario_coverage` two modules answer them.** The finding says *what stood down and which glob did it*; `LintResult.rules_inert` says *how many of my rules checked nothing*. `liveness.py` counts `scenario_coverage` through that module's own `inert_reason` predicate — not a second copy of it — and does not report it a second time. Until BDL-061.66 the count had no branch for the type at all: `13 rules evaluated, 0 inert` printed over a rule that had stood all four legs down.
+**Reporting a rule and counting it are two questions, and for `scenario_coverage` and `doc_area_coherence` two modules answer them.** The finding says *what stood down and which glob did it*; `LintResult.rules_inert` says *how many of my rules checked nothing*. `liveness.py` counts `scenario_coverage` through that module's own `inert_reason` predicate and `doc_area_coherence` through `doc_area_inert_reason` — not second copies of them — and does not report either a second time. Until BDL-061.66 the count had no branch for the type at all: `13 rules evaluated, 0 inert` printed over a rule that had stood all four legs down.
 
 **What "cannot fire" means, per rule type.** This table is the contract: a liveness check narrower than the invariant it names is the defect this section exists to close (BDL-UX #172, BDL-061.48).
 
@@ -180,6 +181,7 @@ A blanket `from: "*" / to: "*"` entry therefore cannot hide either: it suppresse
 | `unregistered_feature_candidate` | its `for` selects **0** nodes, or none of the nodes it selects declares a `source`, so it has no files to inspect | `liveness.py` |
 | `module_coverage` | its `source_root` holds **0** modules, on disk or in the index — "complete coverage" of nothing | `liveness.py` |
 | `scenario_coverage` | **per leg**: its `for` matcher selects **0** nodes (coverage leg) or a `references` glob matches **0** documents (reference leg). Its `features` glob matching **0** files is the exception — that stands **all four** legs down, and only that state is counted in `rules_inert` | reported by `scenario_coverage.py`, counted by `liveness.py` |
+| `doc_area_coherence` | **no** source area in the graph reaches the majority `threshold` over `min_support` observations, so the convention the rule enforces cannot be read off the graph at all — a flat docs tree, a project mid-migration, a graph too small to hold a convention | reported by `doc_area.py`, counted by `liveness.py` |
 
 ### `scenario_coverage` — behaviour bound to an executable claim (BDL-061 S4)
 
@@ -339,6 +341,51 @@ Rule = DenyRule | RequireRule | CycleRule | ImportBoundaryRule | ForbidEdgeRule 
 | `from_ref_id`      | `str \| None`  | Source node ref_id.                              |
 | `to_ref_id`        | `str \| None`  | Target node ref_id.                              |
 | `message`          | `str`          | Human-readable explanation of the violation.     |
+
+### `doc_area_coherence` — a node documented where its own graph says it should (BDL-062 `.2`)
+
+**The convention is derived from the graph under test, never declared.** A literal such as
+`docs/domains/<package>/` would ship one project's tree as every adopter's and be wrong for a
+feature-sliced project on the day it is installed, so no directory name appears in the rule, in
+its defaults, or in its configuration block.
+
+```yaml
+  - name: doc-area-coherence
+    description: "A node is documented where this graph documents nodes from its source area"
+    severity: error          # ships `warn`; a project whose layout has settled raises it
+    doc_area_coherence:
+      threshold: 0.6         # default: the share of an area's pairs a mapping must cover
+      min_support: 2         # default: the observations a dominant mapping must rest on
+```
+
+Each node/doc pair is reduced to two comparable segments:
+
+| Side | How the segment is found |
+|------|--------------------------|
+| source area | the segment directly below the **source root**, the source root being the longest directory prefix every node `source` shares |
+| docs area | the segment at the **area depth**, and the depth is derived too: each doc path is asked where in it a source area is named, and the depth that answer lands at most often is read for **every** doc path, whatever the segment is called there |
+
+The second pass is what lets the rule see a document filed under a directory that names no source
+area at all — the commonest shape of the drift it exists to catch, and the case a first cut of the
+rule (vocabulary matching alone) could not see.
+
+A mapping `source area -> docs area` is **dominant** when it covers at least `threshold` of that
+area's pairs *and* rests on at least `min_support` of them. `min_support` is not decoration:
+without it every area holding a single documented node is unanimous at one observation, and a
+graph of six nodes in six areas reports a clean sweep having compared nothing that could disagree.
+
+| Outcome | What it means |
+|---------|---------------|
+| a finding | the node's docs area is not the one its source area agreed on; the message names both, the strength of the mapping, and the sample the verdict rests on |
+| silence | every compared pair agrees with a dominant mapping |
+| `rule_liveness` | **no** mapping is dominant: the rule states it checked nothing, and `lint`'s summary counts it in `N of them unable to check anything` |
+
+`threshold` at or below `0.5` and `min_support` below `2` are rejected by the loader: both are
+configuration that reads as a rule and behaves as a silence.
+
+**Severity ships `warn`.** A convention check that fails an adopter's first `beadloom ci` on their
+own house style is a check they switch off. This repository sets `error`, because its layout has
+been settled since BDL-051 and a contradiction there is a defect rather than a matter of taste.
 
 ### rules.yml Schema
 

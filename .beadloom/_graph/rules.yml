@@ -225,3 +225,18 @@ rules:
       references:
         - ".claude/development/docs/features/**/PRD.md"
         - ".claude/development/docs/features/**/BRIEF.md"
+
+  # A node documents itself where this graph says nodes like it are documented
+  # (BDL-062 `.2`). The convention is DERIVED from the graph — no directory name
+  # appears here or in the rule — so what is configured is only how much
+  # agreement counts as a convention. `error` rather than the shipped `warn`:
+  # this repository's layout has been settled since BDL-051 and a contradiction
+  # is a defect, not a matter of taste. An adopter gets `warn`, because a
+  # convention check that fails a green project's first run on its own house
+  # style is a check that gets switched off.
+  - name: doc-area-coherence
+    description: "A node is documented where this graph documents nodes from its source area"
+    severity: error
+    doc_area_coherence:
+      threshold: 0.6
+      min_support: 2

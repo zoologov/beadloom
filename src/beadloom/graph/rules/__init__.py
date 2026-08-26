@@ -27,6 +27,10 @@ from beadloom.graph.rules.attribution import (
     count_unattributed_import_files,
 )
 from beadloom.graph.rules.cycles import evaluate_cycle_rules
+from beadloom.graph.rules.doc_area import (
+    DOC_AREA_RULE_TYPE,
+    evaluate_doc_area_coherence_rules,
+)
 from beadloom.graph.rules.evaluators import (
     evaluate_cardinality_rules,
     evaluate_deny_rules,
@@ -58,6 +62,8 @@ from beadloom.graph.rules.scenario_coverage import (
     evaluate_scenario_coverage_rules,
 )
 from beadloom.graph.rules.types import (
+    DEFAULT_DOC_AREA_MIN_SUPPORT,
+    DEFAULT_DOC_AREA_THRESHOLD,
     LIVE_EDGE_LIFECYCLES,
     LIVENESS_RULE_TYPE,
     MATCHING_FORM_HINT,
@@ -68,6 +74,7 @@ from beadloom.graph.rules.types import (
     CardinalityRule,
     CycleRule,
     DenyRule,
+    DocAreaCoherenceRule,
     ForbidEdgeRule,
     ImportBoundaryRule,
     ImportExemption,
@@ -125,6 +132,10 @@ def _remediation_for(rule_type: str, violation: Violation) -> str | None:
             f"annotation + SPEC.md), or accept it as domain-level plumbing "
             f"(list it in the domain README and add it to the rule's `exclude`)"
         )
+    if rule_type == DOC_AREA_RULE_TYPE:
+        # The evaluator always writes its own: the fix names the docs area the
+        # graph agreed on, which a hint derived from the rule kind cannot know.
+        return None
     if rule_type == SCENARIO_COVERAGE_RULE_TYPE:
         # The evaluator always writes its own: a scenario finding's remedy depends
         # on WHICH of the three bindings is missing, and a hint derived from the
@@ -181,6 +192,7 @@ def evaluate_all(
     unregistered_rules: list[UnregisteredFeatureCandidateRule] = []
     module_coverage_rules: list[ModuleCoverageRule] = []
     scenario_coverage_rules: list[ScenarioCoverageRule] = []
+    doc_area_rules: list[DocAreaCoherenceRule] = []
 
     for rule in rules:
         if isinstance(rule, DenyRule):
@@ -203,6 +215,8 @@ def evaluate_all(
             module_coverage_rules.append(rule)
         elif isinstance(rule, ScenarioCoverageRule):
             scenario_coverage_rules.append(rule)
+        elif isinstance(rule, DocAreaCoherenceRule):
+            doc_area_rules.append(rule)
 
     violations = (
         evaluate_deny_rules(conn, deny_rules)
@@ -217,6 +231,7 @@ def evaluate_all(
         + evaluate_scenario_coverage_rules(
             conn, scenario_coverage_rules, project_root=project_root
         )
+        + evaluate_doc_area_coherence_rules(conn, doc_area_rules)
         # Last: what the rules above could NOT look at. A rule with an empty
         # candidate set contributes 0 violations and 1 to `N rules evaluated`,
         # which reads exactly like a rule that passed (BDL-UX #172 / .48).
@@ -234,6 +249,9 @@ def evaluate_all(
 
 __all__ = [
     "BEAD_NOT_VERIFIED",
+    "DEFAULT_DOC_AREA_MIN_SUPPORT",
+    "DEFAULT_DOC_AREA_THRESHOLD",
+    "DOC_AREA_RULE_TYPE",
     "EXPIRED_EXEMPTION_HINT",
     "INERT_RULE_HINT",
     "LIVENESS_RULE_TYPE",
@@ -247,6 +265,7 @@ __all__ = [
     "CardinalityRule",
     "CycleRule",
     "DenyRule",
+    "DocAreaCoherenceRule",
     "FileAttribution",
     "ForbidEdgeRule",
     "ImportBoundaryRule",
@@ -267,6 +286,7 @@ __all__ = [
     "evaluate_cardinality_rules",
     "evaluate_cycle_rules",
     "evaluate_deny_rules",
+    "evaluate_doc_area_coherence_rules",
     "evaluate_forbid_edge_rules",
     "evaluate_import_boundary_rules",
     "evaluate_layer_rules",

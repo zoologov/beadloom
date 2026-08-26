@@ -11,8 +11,8 @@
 |---|---|---|---|
 | `beadloom-viaj` | feature | open | parent |
 | `.1` | dev | open | `graph_summary_facts` — waits on `.3`'s fact contract (see below) |
-| `.2` | dev | open | `doc_area_coherence` |
-| `.3` | dev | open | audit stops describing itself |
+| `.2` | dev | done | `doc_area_coherence` — names exactly the four drifting nodes; 9 live-repo tests left red for `.4` |
+| `.3` | dev | done | audit stops describing itself — three populations; `FactRegistry.collect_set()` is `.1`'s contract |
 | `.4` | dev | blocked | the corrections |
 | `.5` | test | blocked | bite tests + non-Beadloom fixture |
 | `.6` | review | blocked | clean room |
@@ -79,3 +79,53 @@ Coordinator scoping pass while the wave runs (read-only, no files the agents own
   the distinct count is 1 (pytest), and both the fact name and its scanner keywords promise
   the latter. Dormant until a document states the true number, then a false mismatch. Same
   family as this feature; handed to `.3` with two fix candidates and the choice left open.
+
+**2026-08-26** — `.3` complete. The leak was captured before it was closed: a project named
+`invoice-svc` was handed `mcp_tool_count=18` and `cli_command_count=43`, Beadloom's own
+numbers, as facts about its documentation. Both surface facts are now gated on the audited
+project's declared manifest name (`doc_sync/audit_self_surface.py`), and every collector that
+cannot compute a value records the reason instead of dropping the fact.
+
+The contract `.1` waits on: `FactRegistry().collect_set(project_root, db) -> FactSet`, where
+`FactSet.facts` is `dict[str, Fact]` and `FactSet.not_applicable` is `dict[str, str]` mapping
+a fact name to the reason no value was declared. The two are disjoint. `collect()` still
+returns `facts` alone and cannot tell an absent fact from a declined one.
+
+This repository's audit output was diffed against the 3.0.0 payload rather than asserted to
+be unchanged: gained `not_applicable`, `verified_facts` and `summary.not_applicable_count`,
+lost nothing, and the human output is byte-identical. Two facts moved for reasons outside
+this bead — `test_count` 7494 -> 7529 (tests added by both wave-1a beads) and
+`rule_type_count` 13 -> 14 with `architecture.md:133` now stale, which is `.2`'s new rule
+arriving and belongs to `.4`.
+
+**2026-08-26** — `.2` complete. `doc-area-coherence` ships in `graph/rules/doc_area.py`, wired
+through the loader, the liveness counter, `evaluate_all`, the `rule_engine` shim and the
+reindex serializer. No layout literal appears in it, and an AST test over the module's
+non-docstring string constants fails the moment one does.
+
+The derivation changed once mid-flight, and the reason is worth keeping. The first cut located
+the docs area by matching each doc-path segment against the source-area vocabulary, which made
+drift INTO a directory naming no source area invisible — the commonest shape of the defect.
+It is now two passes: the vocabulary decides at what DEPTH this project names an area, and
+that depth is then read for every doc path, whatever the segment is called there.
+
+Measured on this repository: 83 node/doc pairs, 77 compare, 73 agree, **4 differ** —
+`debt-report`, `doctor`, `reindex`, `watcher`, all `src/beadloom/application/…` documented
+under `domains/infrastructure/…`. Exactly the four the bead names. The sample differs from
+PLAN's stated 69/73 because this derivation drops 3 pairs whose source is the package root and
+3 whose doc path is too short to carry an area segment (`services/{cli,mcp,tui}.md`), and
+keeps the 7 domain READMEs; the four violations are identical either way.
+
+`min_support` (default 2) was added to the design and is not decoration: without it every area
+holding a single documented node is unanimous at one observation, and PLAN's "graph of six
+nodes" would report a clean sweep having compared nothing that could disagree.
+
+Left deliberately red for `.4`, measured with the rule disabled and re-enabled: **9** live-repo
+tests assert `lint --strict` exits 0 and now fail on the four `error` findings
+(`test_integration_v1::TestSelfLint` ×2, `test_s3_decomposition::TestLintRecalibrationGuard`
+×4, `test_module_coverage_hardening::TestRealRepoCoveragePromoted` ×2,
+`test_bead15_s3b_coverage::TestSiteGenerationCluster::test_no_site_module_is_flagged_by_coverage`).
+`beadloom ci` is red for the same reason. Three further failures are NOT this bead's and were
+failing with the rule disabled: `TestSyncCheckNewPairs` ×2 (stale pairs owned by `.3`'s files)
+and `test_bead77_kind_and_root_disagree::test_this_repository_keeps_its_three_populations`
+(190 -> 194 planning documents, this feature's own PRD/RFC/CONTEXT/PLAN).

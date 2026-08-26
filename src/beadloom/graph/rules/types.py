@@ -417,6 +417,49 @@ class ScenarioCoverageRule:
     severity: str = "warn"
 
 
+#: Default share of a source area's pairs a mapping must cover to be dominant.
+#: 0.6 rather than a bare majority: a convention that only just outvotes its
+#: alternative is a migration in progress, and reporting the losing half of one
+#: as violations is how a rule earns a blanket disable.
+DEFAULT_DOC_AREA_THRESHOLD = 0.6
+
+#: Default number of agreeing pairs a dominant mapping must rest on. Two, because
+#: one observation is not a convention — it is a single fact that cannot disagree
+#: with itself, and a graph of areas holding one node each would otherwise report
+#: unanimous agreement having verified nothing.
+DEFAULT_DOC_AREA_MIN_SUPPORT = 2
+
+
+@dataclass(frozen=True)
+class DocAreaCoherenceRule:
+    """Hold every node to the docs placement the rest of the graph already keeps.
+
+    The convention is **derived from the graph under test**, never declared here:
+    :mod:`.doc_area` reads the source area of each node and the docs area of each
+    of its documents, counts the agreements, and calls a mapping dominant when it
+    covers ``threshold`` of that area's pairs over at least ``min_support`` of
+    them. A node contradicting a dominant mapping is a violation; a node under no
+    dominant mapping is not, and a graph with no dominant mapping at all makes the
+    rule report that it checked nothing rather than that everything is fine.
+
+    Both knobs are configurable because "how much agreement is a convention" is a
+    property of a project's size and history, not of Beadloom. Neither has a
+    layout in it, which is the point: no directory name appears in this rule, in
+    its defaults, or in the module that evaluates it.
+
+    ``severity`` defaults to ``warn`` and is meant to stay there for an adopter.
+    A finding here is about house style, and an ``error`` would fail a green
+    project's first run on a convention it never agreed to; a project that has
+    settled its layout raises it in its own ``rules.yml``.
+    """
+
+    name: str
+    description: str
+    threshold: float = DEFAULT_DOC_AREA_THRESHOLD
+    min_support: int = DEFAULT_DOC_AREA_MIN_SUPPORT
+    severity: str = "warn"
+
+
 Rule = (
     DenyRule
     | RequireRule
@@ -428,6 +471,7 @@ Rule = (
     | UnregisteredFeatureCandidateRule
     | ModuleCoverageRule
     | ScenarioCoverageRule
+    | DocAreaCoherenceRule
 )
 
 

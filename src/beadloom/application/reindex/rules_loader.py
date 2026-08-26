@@ -42,12 +42,14 @@ def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
 
     Supports all v3 rule types: DenyRule, RequireRule, CycleRule,
     ImportBoundaryRule, ForbidEdgeRule, LayerRule, CardinalityRule,
-    UnregisteredFeatureCandidateRule, ModuleCoverageRule, ScenarioCoverageRule.
+    UnregisteredFeatureCandidateRule, ModuleCoverageRule, ScenarioCoverageRule,
+    DocAreaCoherenceRule.
     """
     from beadloom.graph.rule_engine import (
         CardinalityRule,
         CycleRule,
         DenyRule,
+        DocAreaCoherenceRule,
         ForbidEdgeRule,
         ImportBoundaryRule,
         LayerRule,
@@ -171,6 +173,16 @@ def _serialize_rule(rule: object) -> tuple[str, dict[str, object]]:
                 {"node": d.node, "reason": d.reason} for d in rule.non_behavioural
             ]
         return ("scenario_coverage", rule_def)
+
+    if isinstance(rule, DocAreaCoherenceRule):
+        # Stored so a reader of the `rules` table sees the whole rule: how much
+        # agreement this project calls a convention is the rule, since the
+        # convention itself is derived and there is no layout to store.
+        rule_def = {
+            "threshold": rule.threshold,
+            "min_support": rule.min_support,
+        }
+        return ("doc_area_coherence", rule_def)
 
     # Should never happen with known Rule types, but guard against future additions.
     msg = f"Unknown rule type: {type(rule).__name__}"
