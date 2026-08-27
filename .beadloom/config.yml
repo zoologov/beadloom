@@ -62,16 +62,17 @@ docs_audit:
     - path: SECURITY.md
       fact: mcp_tool_count
       value: 12
-    # multi-agent-development guide (EN/RU): a narrative architecture doc whose
-    # "2.0.0" mentions are historical ("feature X shipped in 2.0.0", corroborated
-    # by the BDL-### chronology), not a current-version claim. The title + intro
-    # are version-neutral; these suppress the historical body references.
-    - path: docs/guides/multi-agent-development.md
-      fact: version
-      value: "2.0.0"
-    - path: docs/guides/multi-agent-development.ru.md
-      fact: version
-      value: "2.0.0"
+    # Retired 2026-08-27 (BDL-064, multi-agent-development rewrite), measured
+    # with a real DocScanner: 0 matching mentions in either file, and 1 mention
+    # total across the pair (`mcp_tool_count=18`, which is correct and stays
+    # checked). The two triples covered the guide's `version=2.0.0` sentences --
+    # "since 2.0.0 the orchestrator lives in the package", "since 2.0.0 the
+    # packaged workflow is not tied to one tool", "in 2.0.0 Beadloom applied its
+    # own thesis to itself". All three were release archaeology addressed to a
+    # reader on 3.0.2, and the rewrite states what the orchestrator IS rather
+    # than which release it moved in, so the sentences are gone rather than
+    # reworded. `TestEverySuppressionStillSuppresses` caught both the moment
+    # they went inert, which is what that test exists for (#200).
     # cli.md's `docs audit` reference: the token `v2.2.0` is the EXAMPLE of a
     # token the claim extractor must not read as a claim, printed inside the
     # sentence that states the rule. `_extract_versions` does not share that
