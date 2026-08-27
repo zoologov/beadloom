@@ -20,6 +20,7 @@
 | `.8` | chore | blocked | release 3.0.1 |
 | `.9` | dev | done | the source root tolerates a minority; a total stand-down is no longer silent — found by a coordinator challenge to `.4`'s #195 |
 | `.11` | dev | done | `doc_area.py`'s docstring stopped describing `_common_prefix`; sweep of 11 modules / 32 named references found 0 more, and the sweep is now a test |
+| `.14` | dev | done | `graph-summary-facts` ships `error` and stood down at `warn` — measured TOTAL four ways, fixed, and the test that pinned the defect replaced with evidence; 6 documents corrected, #197 amended |
 
 ## Deviation from PLAN — wave 1 is split
 
