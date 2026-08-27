@@ -152,6 +152,10 @@
     README.ru.md   fact mentions found: 0   {}
     ```
 
+    **AMENDED 2026-08-27, and the amendment narrows the claim I filed.** The BDL-064 writer measured what actually binds and I confirmed it: a **Latin-script** keyword reaches through Russian prose. `Сервер MCP отдаёт 18 инструментов` yields `mcp_tool_count=18`, and `_VERSION_RE` is language-independent — it had been catching the guides' `2.0.0` all along. So the audit is **not** blind to a non-English document. What is dead there is the English-*word* half of the table: `tool`, `rule`, `node`, `command`, `language`, `edge`, `test`.
+
+    The measurement that produced the original filing — 0 mentions in `README.ru.md` — was true of that file and does not generalise the way I wrote it. A page that names a Latin-script term near its number is checked; a page that does not, is not, and the difference is invisible to the reader. That is still worth fixing, and it is a smaller and more precise defect than "verifies nothing".
+
     `DocScanner.FACT_KEYWORDS` is English by construction — `["MCP", "tool", "server tool"]`, `["rule type", "rule kind", "rule"]`, `["language", "lang", "programming language"]` and so on. A document written in any other language contains none of those tokens near its numbers, so no claim is ever extracted from it.
 
     **The document is not excluded.** It matches the `*.md` glob, enters the scan surface, and is counted among the files scanned. It simply yields nothing. So the audit's own summary — `20 mention(s) fresh` — is true and says nothing about the half of this repository's front page that cannot be checked at all.
