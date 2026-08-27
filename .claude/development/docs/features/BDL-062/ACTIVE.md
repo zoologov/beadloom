@@ -17,7 +17,7 @@
 | beadloom-viaj.5 | test | ✓ done | bite tests + a fixture that is genuinely not Beadloom |
 | beadloom-viaj.6 | review | ✓ done | clean room; 8 mutations, 6 killed, 2 survived (#203) |
 | beadloom-viaj.7 | tech-writer | ✓ done | README en+ru + guides; 97 documents swept, 128 numeric claims reviewed |
-| beadloom-viaj.8 | chore | in progress | release 3.0.1 |
+| beadloom-viaj.8 | chore | ✓ done | release 3.0.1 |
 | beadloom-viaj.9 | dev | ✓ done | the source root tolerates a minority; a total stand-down is no longer silent — found by a coordinator challenge to `.4`'s #195 |
 | beadloom-viaj.10 | dev | ✓ done | the review's cheap true fixes, including two that damage our own verification |
 | beadloom-viaj.11 | dev | ✓ done | `doc_area.py`'s docstring stopped describing `_common_prefix`; sweep of 11 modules / 32 named references found 0 more, and the sweep is now a test |
