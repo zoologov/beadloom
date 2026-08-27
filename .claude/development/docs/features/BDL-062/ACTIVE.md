@@ -9,18 +9,21 @@
 
 | Bead | Role | Status | Note |
 |---|---|---|---|
-| `beadloom-viaj` | feature | open | parent |
-| `.1` | dev | done | `graph_summary_facts` — RED captured on 3 nodes; 32 tests; 12 neuterings verified |
-| `.2` | dev | done | `doc_area_coherence` — names exactly the four drifting nodes; 9 live-repo tests left red for `.4` |
-| `.3` | dev | done | audit stops describing itself — three populations; `FactRegistry.collect_set()` is `.1`'s contract |
-| `.4` | dev | done | the corrections — 14 landed, each proved by reverting it alone; 2 BDL-UX opened, 1 withdrawn |
-| `.5` | test | blocked | bite tests + non-Beadloom fixture |
-| `.6` | review | blocked | clean room |
-| `.7` | tech-writer | blocked | README en+ru + guides |
-| `.8` | chore | blocked | release 3.0.1 |
-| `.9` | dev | done | the source root tolerates a minority; a total stand-down is no longer silent — found by a coordinator challenge to `.4`'s #195 |
-| `.11` | dev | done | `doc_area.py`'s docstring stopped describing `_common_prefix`; sweep of 11 modules / 32 named references found 0 more, and the sweep is now a test |
-| `.14` | dev | done | `graph-summary-facts` ships `error` and stood down at `warn` — measured TOTAL four ways, fixed, and the test that pinned the defect replaced with evidence; 6 documents corrected, #197 amended |
+| beadloom-viaj | feature | ready | parent |
+| beadloom-viaj.1 | dev | ✓ done | `graph_summary_facts` — RED captured on 3 nodes; 32 tests; 12 neuterings verified |
+| beadloom-viaj.2 | dev | ✓ done | `doc_area_coherence` — names exactly the four drifting nodes; 9 live-repo tests left red for `.4` |
+| beadloom-viaj.3 | dev | ✓ done | audit stops describing itself — three populations; `FactRegistry.collect_set()` is `.1`'s contract |
+| beadloom-viaj.4 | dev | ✓ done | the corrections — 14 landed, each proved by reverting it alone; 2 BDL-UX opened, 1 withdrawn |
+| beadloom-viaj.5 | test | ✓ done | bite tests + a fixture that is genuinely not Beadloom |
+| beadloom-viaj.6 | review | ✓ done | clean room; 8 mutations, 6 killed, 2 survived (#203) |
+| beadloom-viaj.7 | tech-writer | ✓ done | README en+ru + guides; 97 documents swept, 128 numeric claims reviewed |
+| beadloom-viaj.8 | chore | in progress | release 3.0.1 |
+| beadloom-viaj.9 | dev | ✓ done | the source root tolerates a minority; a total stand-down is no longer silent — found by a coordinator challenge to `.4`'s #195 |
+| beadloom-viaj.10 | dev | ✓ done | the review's cheap true fixes, including two that damage our own verification |
+| beadloom-viaj.11 | dev | ✓ done | `doc_area.py`'s docstring stopped describing `_common_prefix`; sweep of 11 modules / 32 named references found 0 more, and the sweep is now a test |
+| beadloom-viaj.12 | tech-writer | ✓ done | README leads with harness governance (owner decision 2026-08-27) |
+| beadloom-viaj.13 | tech-writer | ✓ done | all eleven guides read in full against current functionality; 9 changed, 2 left |
+| beadloom-viaj.14 | dev | ✓ done | `graph-summary-facts` ships `error` and stood down at `warn` — measured TOTAL four ways, fixed, and the test that pinned the defect replaced with evidence; 6 documents corrected, #197 amended |
 
 ## Deviation from PLAN — wave 1 is split
 
