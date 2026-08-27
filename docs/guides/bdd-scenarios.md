@@ -128,8 +128,10 @@ tags, names. A suite that parses and never runs would satisfy every finding abov
 asserting nothing. That is why this repository ships `pytest-bdd` in its `dev` extra, runs every
 `.feature` file as part of the ordinary suite, and holds a test that binds the number of
 executed scenarios to the project's own parser count, so a feature file with no step module
-reddens instead of quietly counting as coverage. Measured on this repository, 2026-08-24: 33
-scenarios in 7 files, the newest being `doc_spaces.feature` (BDL-061 S5).
+reddens instead of quietly counting as coverage. The expected number is read from the suite
+rather than written into the test, so a slice that adds a scenario does not redden a test it
+has nothing to do with. The suite's current size is the one quoted below, measured on the same
+run: 92 scenarios in 20 files.
 
 ## Work with no behaviour says so
 

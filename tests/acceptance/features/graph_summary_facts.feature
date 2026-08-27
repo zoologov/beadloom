@@ -47,3 +47,37 @@ Feature: a number stated in a node summary is checked against the project
     When the graph-summary-facts rule is evaluated
     Then no node is reported
     And the rule reports that it checked nothing
+
+  # BDL-062 `.14`. The three scenarios below are about the SEVERITY the four
+  # answers reach the reader with, which is a different question from which
+  # answer is given. A TOTAL STAND-DOWN IS NOT A PARTIAL GAP: the rule ships
+  # `error`, and a rule that could check none of its population must not report
+  # that at `warn` — "the numbers are fine" and "no number was read" would then
+  # be the same green. A single unverifiable claim is the partial case and stays
+  # advisory, which is why the third scenario is here beside the first two.
+
+  @bead:beadloom-viaj.14
+  Scenario: a graph that checked nothing reports it at the severity the rule declares
+    Given a project whose computed node_count is 30
+    And a node "widgets" whose summary reads "Widgets, and the handling thereof"
+    When the graph-summary-facts rule is evaluated
+    Then the rule reports that it checked nothing
+    And that report carries the severity "error"
+
+  @bead:beadloom-viaj.14
+  Scenario: an adopter who declared the rule advisory gets an advisory stand-down
+    Given the graph-summary-facts rule is declared with severity "warn"
+    And a project whose computed node_count is 30
+    And a node "widgets" whose summary reads "Widgets, and the handling thereof"
+    When the graph-summary-facts rule is evaluated
+    Then the rule reports that it checked nothing
+    And that report carries the severity "warn"
+
+  @bead:beadloom-viaj.14
+  Scenario: one claim the project cannot compute stays advisory though the rule blocks
+    Given a project that declines to compute node_count because "the nodes table could not be read"
+    And a node "atlas" whose summary reads "The atlas, indexing 42 nodes"
+    And a node "ledger" whose summary reads "Double-entry ledger"
+    When the graph-summary-facts rule is evaluated
+    Then the rule reports that it could not verify a claim
+    And that report carries the severity "warn"

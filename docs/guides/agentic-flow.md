@@ -258,8 +258,9 @@ core `CLAUDE.md` went from **440 lines to 371**, with each removed line mapped t
 a replacement — the Quick Reference and Agent Checklist sections restated §0
 command for command, and the Python anti-patterns and the `uv run pytest` /
 `ruff` / `mypy` block moved into the Python stack overlay, where a TypeScript
-adopter no longer meets them. A `ddd` + `python` project composes **406** lines;
-a project selecting neither gets 376.
+adopter no longer meets them. Composing the shipped template today, a `ddd` +
+`python` project gets **401** lines back and a project selecting neither keeps the
+**371**, its critical rules naming no Python tooling.
 
 ### Per-tool adapters
 
@@ -339,8 +340,9 @@ no-op).
 `beadloom install-hooks --pre-push` installs the **Beadloom Gate** — the
 authoritative *blocking* enforcement of the hard invariant *"no code in `main`
 without current docs."* On every `git push` it runs the full Gate
-(`beadloom ci` — incremental reindex → `lint --strict` → sync-check →
-config-check → doctor) and **exits non-zero to block the push** on red, printing
+(`beadloom ci` — incremental reindex → `lint --strict` → sync-check → docs audit →
+docs-quality → doc-spaces → config-check → doctor) and **exits non-zero to block
+the push** on red, printing
 an actionable message that points at the tech-writer / `/coordinator` to fix the
 drift, then re-push.
 
