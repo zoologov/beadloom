@@ -870,7 +870,7 @@ class TestEveryRefusalNamesWhatItDidNotCheck:
         root = _project(tmp_path, flow)
 
         result = _cli(["guard", "bead-claimed", "--project", str(root), "--json"])
-        payload = json.loads(result.output)
+        payload = json.loads(result.stdout)
 
         assert result.exit_code == 3, label
         assert payload["outcome"] == "error", label
@@ -895,7 +895,7 @@ class TestEveryRefusalNamesWhatItDidNotCheck:
         root = _project(tmp_path, _BLOCKING_WITH_EXCLUSION)
 
         result = _cli(["guard", "bead-claimed", "--project", str(root), "--json"])
-        payload = json.loads(result.output)
+        payload = json.loads(result.stdout)
 
         assert result.exit_code == 2
         assert payload["not_covered"] == [
@@ -1430,7 +1430,7 @@ class TestTheAdversarialTable:
                 "--json",
             ]
         )
-        payload = json.loads(result.output)
+        payload = json.loads(result.stdout)
 
         assert payload["outcome"] == "block", label
         assert any("outside the project root" in note for note in payload["not_covered"]), (

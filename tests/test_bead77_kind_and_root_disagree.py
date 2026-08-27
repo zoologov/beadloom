@@ -376,15 +376,19 @@ class TestADeclaredKindIsNotShadowedByADefaultList:
         spaces = resolve_doc_spaces(REPO_ROOT)
         populations = _populations(REPO_ROOT, spaces)
 
-        assert populations[SPACE_TO_BE] == 190
+        # 190 -> 194 in BDL-062: this feature's own PRD, RFC, CONTEXT and PLAN.
+        assert populations[SPACE_TO_BE] == 194
         # 93 -> 94 -> 95 -> 96 in S6: `docs/domains/application/features/wave-plan/SPEC.md`,
         # then `docs/domains/application/features/review-brief/SPEC.md`, then
         # `docs/guides/parallel-waves.md` in the documentation pass `.24`. 96 -> 98 in
         # `.87`, which added the two components that carry intent into a context
-        # bundle. The number moves when this repository gains a document, which is
-        # what makes it a denominator rather than a constant.
-        assert populations[SPACE_AS_IS] == 98
-        assert len(spaces.working_documents(REPO_ROOT)) == 55
+        # bundle. 98 -> 100 in BDL-062 `.4`, which documented the two undocumented
+        # nodes that could be documented (`status`, `cli-commands`). The number moves
+        # when this repository gains a document, which is what makes it a denominator
+        # rather than a constant.
+        assert populations[SPACE_AS_IS] == 100
+        # 55 -> 56 in BDL-062: this feature's ACTIVE.md.
+        assert len(spaces.working_documents(REPO_ROOT)) == 56
 
 
 class TestEachDeclaredHalfReportsWhatItReached:

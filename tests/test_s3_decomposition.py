@@ -52,7 +52,7 @@ class TestLintRecalibrationGuard:
         # 0 = clean, 1 = violations present (e.g. a warn under --fail-on-warn);
         # here we run neither --strict nor --fail-on-warn, so exit is 0.
         assert result.exit_code in (0, 1), result.output
-        payload = json.loads(result.output)
+        payload = json.loads(result.stdout)
         violations = payload["violations"]
         assert isinstance(violations, list)
         return violations

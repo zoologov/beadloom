@@ -45,6 +45,14 @@ Rule type                        Inert when
                                  WHOLE rule down. A dead ``for`` matcher or ``references``
                                  glob stands ONE leg down and is not inertness. Counted
                                  here, reported by :mod:`.scenario_coverage`
+``doc_area_coherence``           no source-to-docs mapping in the graph reaches the
+                                 majority threshold over the minimum support, so the
+                                 convention the rule enforces cannot be read off the graph
+                                 at all. Counted here, reported by :mod:`.doc_area`
+``summary_facts``                no node ``summary`` in the graph states a number or a
+                                 version the project computes a fact for, so there is no
+                                 claim to check. Counted here, reported by
+                                 :mod:`.summary_facts`
 ===============================  =========================================================
 
 Two deliberate boundaries, named rather than left to be discovered:
@@ -56,6 +64,15 @@ Two deliberate boundaries, named rather than left to be discovered:
   cost a second scan and separate two halves of one diagnosis. This module owns
   the shared *shape* of a liveness finding (:func:`liveness_finding`) so the two
   channels cannot drift.
+* ``doc_area_coherence`` liveness is REPORTED by :mod:`.doc_area`, for the same
+  reason and by the same split: the finding must state the sample size and the
+  threshold the graph failed to reach, which a generic "cannot fire" cannot, and
+  the predicate counted with here is that module's own
+  :func:`~beadloom.graph.rules.doc_area.doc_area_inert_reason`.
+* ``summary_facts`` liveness is REPORTED by :mod:`.summary_facts`, by the same
+  split again, and it carries a second kind of finding this module has no shape
+  for: a claim naming a fact the project DECLINED to compute is unverifiable on
+  its own, one node at a time, while the rule as a whole is still live.
 * ``scenario_coverage`` liveness is REPORTED by :mod:`.scenario_coverage`, per
   leg, because the finding must name which of the four legs stood down and which
   glob or matcher did it — and because those legs are decided by files on disk
@@ -79,12 +96,14 @@ from beadloom.graph.rules.types import (
     CardinalityRule,
     CycleRule,
     DenyRule,
+    DocAreaCoherenceRule,
     ForbidEdgeRule,
     LayerRule,
     ModuleCoverageRule,
     NodeMatcher,
     RequireRule,
     ScenarioCoverageRule,
+    SummaryFactsRule,
     UnregisteredFeatureCandidateRule,
     liveness_finding,
 )
@@ -350,15 +369,45 @@ def _scenario_coverage_reasons(
     return [reason] if reason is not None else []
 
 
+def _doc_area_reasons(rule: DocAreaCoherenceRule, conn: sqlite3.Connection) -> list[str]:
+    """Whether the rule can check anything, asked of the module that owns it.
+
+    Delegated to :func:`~beadloom.graph.rules.doc_area.doc_area_inert_reason` for
+    the same reason ``scenario_coverage`` is: the predicate IS the derivation, and
+    a second implementation of "does this graph agree on anything" would be free
+    to say the rule fired on a run where it stood down.
+    """
+    from beadloom.graph.rules.doc_area import doc_area_inert_reason
+
+    reason = doc_area_inert_reason(conn, rule)
+    return [reason] if reason is not None else []
+
+
+def _summary_facts_reasons(conn: sqlite3.Connection, project_root: Path | None) -> list[str]:
+    """Whether the rule can check anything, asked of the module that owns it.
+
+    Delegated to
+    :func:`~beadloom.graph.rules.summary_facts.summary_facts_inert_reason` for the
+    same reason ``doc_area_coherence`` is: the predicate IS the extraction, and a
+    second implementation of "does any summary here state a number" would be free
+    to say the rule fired on a run where it stood down.
+    """
+    from beadloom.graph.rules.summary_facts import summary_facts_inert_reason
+
+    reason = summary_facts_inert_reason(conn, project_root)
+    return [reason] if reason is not None else []
+
+
 def _reasons_for_rule(
     rule: Rule, facts: _GraphFacts, conn: sqlite3.Connection, project_root: Path | None
 ) -> list[str]:
     """Every reason *rule* cannot fire, or an empty list when it can.
 
     ``forbid_import`` is absent by design: :mod:`.evaluators` reports it from the
-    import scan it already runs (see the module docstring). ``scenario_coverage``
-    is present for the COUNT and absent from :func:`evaluate_rule_liveness`,
-    which is the other half of the same boundary.
+    import scan it already runs (see the module docstring). ``scenario_coverage``,
+    ``doc_area_coherence`` and ``summary_facts`` are present for the COUNT and
+    absent from :func:`evaluate_rule_liveness`, which is the other half of the
+    same boundary.
     """
     if isinstance(rule, DenyRule):
         return _deny_reasons(rule, facts)
@@ -378,6 +427,10 @@ def _reasons_for_rule(
         return _module_coverage_reasons(rule, facts, project_root)
     if isinstance(rule, ScenarioCoverageRule):
         return _scenario_coverage_reasons(rule, project_root)
+    if isinstance(rule, DocAreaCoherenceRule):
+        return _doc_area_reasons(rule, conn)
+    if isinstance(rule, SummaryFactsRule):
+        return _summary_facts_reasons(conn, project_root)
     # An unknown-ref_id diagnosis the loader can make about a rule kind this
     # module does not model yet is still worth printing: `validate_rules`
     # computes it, and dropping its return value is how #172 stayed open.
@@ -423,7 +476,11 @@ def inert_rule_names(
 #: findings for one fact is the affirm-it-twice defect of BDL-UX #173, and it
 #: would double the single finding a repointed ``features:`` path is measured
 #: down to.
-_SELF_REPORTING: tuple[type, ...] = (ScenarioCoverageRule,)
+_SELF_REPORTING: tuple[type, ...] = (
+    ScenarioCoverageRule,
+    DocAreaCoherenceRule,
+    SummaryFactsRule,
+)
 
 
 def evaluate_rule_liveness(

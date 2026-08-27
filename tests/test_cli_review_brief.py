@@ -195,7 +195,7 @@ class TestWhatIsHandedOver:
             main,
             ["review-brief", "a", "--since", "main", "--project", str(project), "--json"],
         )
-        assert json.loads(machine.output)["withheld"]["count"] == 2
+        assert json.loads(machine.stdout)["withheld"]["count"] == 2
 
     def test_the_notes_field_gives_the_scope_without_giving_its_prose(
         self, tmp_path: Path, bd: Any
@@ -215,7 +215,7 @@ class TestWhatIsHandedOver:
             main,
             ["review-brief", "a", "--since", "main", "--project", str(project), "--json"],
         )
-        payload = json.loads(result.output)
+        payload = json.loads(result.stdout)
         assert payload["refs"] == ["billing"]
         assert _AUTHOR_TEXT not in result.output
 
@@ -314,7 +314,7 @@ class TestRelease:
                 "--project", str(project), "--json",
             ],
         )
-        payload = json.loads(machine.output)
+        payload = json.loads(machine.stdout)
         assert payload["exit_code"] == _EXIT_FINDINGS
         assert payload["verdict_author"] == "dev"
         assert "same tracker identity" in payload["independence_note"]
@@ -338,7 +338,7 @@ class TestOneDeclarationForEveryCaller:
             main,
             ["review-brief", "a", "--since", "main", "--project", str(project), "--json"],
         )
-        payload = json.loads(result.output)
+        payload = json.loads(result.stdout)
         assert payload["refs"] == []
         assert "no-declared-scope" in payload["findings"]
 
@@ -374,7 +374,7 @@ class TestFindingsAndCodes:
             main,
             ["review-brief", "a", "--since", "main", "--project", str(project), "--json"],
         )
-        payload = json.loads(result.output)
+        payload = json.loads(result.stdout)
         assert "src/billing/rounding.py" in {c["path"] for c in payload["changed"]}
 
     def test_an_ignored_file_is_not_offered_as_part_of_the_change(
@@ -388,7 +388,7 @@ class TestFindingsAndCodes:
             main,
             ["review-brief", "a", "--since", "main", "--project", str(project), "--json"],
         )
-        payload = json.loads(result.output)
+        payload = json.loads(result.stdout)
         assert not [c for c in payload["changed"] if c["path"].startswith(".beadloom/")]
 
     def test_a_base_ref_that_does_not_resolve_is_unmeasured_not_empty(
@@ -400,7 +400,7 @@ class TestFindingsAndCodes:
             main,
             ["review-brief", "a", "--since", "no-such-ref", "--project", str(project), "--json"],
         )
-        payload = json.loads(result.output)
+        payload = json.loads(result.stdout)
         assert payload["change_measured"] is False
         assert payload["changed"] == []
         assert "unmeasured-change" in payload["findings"]

@@ -81,14 +81,15 @@ def generate_rules(
 def _detect_rule_type(rule: dict[str, object]) -> str:
     """Detect the rule type from a rules.yml rule entry.
 
-    Maps YAML keys to canonical type strings used in DB and display:
-    - ``require`` -> ``"require"``
-    - ``deny`` -> ``"deny"``
-    - ``forbid_cycles`` -> ``"forbid_cycles"``
-    - ``layers`` -> ``"layers"``
-    - ``check`` -> ``"cardinality"``
-    - ``forbid_import`` -> ``"forbid_import"``
-    - ``forbid`` -> ``"forbid_edge"``
+    Maps YAML keys to canonical type strings used in DB and display. Three keys
+    differ from their type string for historical reasons (``check`` is stored as
+    ``cardinality``, ``forbid`` as ``forbid_edge``); the rest are their own name.
+
+    Every key `graph.rules.loader.AUTHORING_KEYS` accepts must appear here, and
+    `test_every_authoring_key_the_loader_accepts_has_a_type` holds it to that.
+    A key missing from this map is not an error anywhere — it becomes the word
+    "unknown" in the generated `.beadloom/AGENTS.md`, which describes the rule to
+    every agent that reads it.
     """
     yaml_key_to_type: dict[str, str] = {
         "require": "require",
@@ -98,6 +99,11 @@ def _detect_rule_type(rule: dict[str, object]) -> str:
         "check": "cardinality",
         "forbid_import": "forbid_import",
         "forbid": "forbid_edge",
+        "unregistered_feature_candidate": "unregistered_feature_candidate",
+        "module_coverage": "module_coverage",
+        "scenario_coverage": "scenario_coverage",
+        "doc_area_coherence": "doc_area_coherence",
+        "summary_facts": "summary_facts",
     }
     for key, rule_type in yaml_key_to_type.items():
         if key in rule:

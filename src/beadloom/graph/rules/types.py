@@ -417,6 +417,71 @@ class ScenarioCoverageRule:
     severity: str = "warn"
 
 
+#: Default share of a source area's pairs a mapping must cover to be dominant.
+#: 0.6 rather than a bare majority: a convention that only just outvotes its
+#: alternative is a migration in progress, and reporting the losing half of one
+#: as violations is how a rule earns a blanket disable.
+DEFAULT_DOC_AREA_THRESHOLD = 0.6
+
+#: Default number of agreeing pairs a dominant mapping must rest on. Two, because
+#: one observation is not a convention — it is a single fact that cannot disagree
+#: with itself, and a graph of areas holding one node each would otherwise report
+#: unanimous agreement having verified nothing.
+DEFAULT_DOC_AREA_MIN_SUPPORT = 2
+
+
+@dataclass(frozen=True)
+class DocAreaCoherenceRule:
+    """Hold every node to the docs placement the rest of the graph already keeps.
+
+    The convention is **derived from the graph under test**, never declared here:
+    :mod:`.doc_area` reads the source area of each node and the docs area of each
+    of its documents, counts the agreements, and calls a mapping dominant when it
+    covers ``threshold`` of that area's pairs over at least ``min_support`` of
+    them. A node contradicting a dominant mapping is a violation; a node under no
+    dominant mapping is not, and a graph with no dominant mapping at all makes the
+    rule report that it checked nothing rather than that everything is fine.
+
+    Both knobs are configurable because "how much agreement is a convention" is a
+    property of a project's size and history, not of Beadloom. Neither has a
+    layout in it, which is the point: no directory name appears in this rule, in
+    its defaults, or in the module that evaluates it.
+
+    ``severity`` defaults to ``warn`` and is meant to stay there for an adopter.
+    A finding here is about house style, and an ``error`` would fail a green
+    project's first run on a convention it never agreed to; a project that has
+    settled its layout raises it in its own ``rules.yml``.
+    """
+
+    name: str
+    description: str
+    threshold: float = DEFAULT_DOC_AREA_THRESHOLD
+    min_support: int = DEFAULT_DOC_AREA_MIN_SUPPORT
+    severity: str = "warn"
+
+
+@dataclass(frozen=True)
+class SummaryFactsRule:
+    """Hold every node summary to the numbers the project computes about itself.
+
+    :mod:`.summary_facts` reads each node's ``summary`` with the documentation
+    audit's own extractor and compares what it finds against the audit's own fact
+    registry. There is nothing to configure: what counts as a version, what
+    counts as a claim about a count, and how close a count has to be are all
+    decided by the audit, and a knob here would be a second answer to a question
+    already answered once.
+
+    ``severity`` defaults to ``error`` rather than the ``warn`` a convention
+    check ships with. A summary that contradicts the project it describes is
+    wrong in every house style, so there is no adopter preference to respect —
+    and the value is in the graph the adopter wrote, so it is theirs to fix.
+    """
+
+    name: str
+    description: str
+    severity: str = "error"
+
+
 Rule = (
     DenyRule
     | RequireRule
@@ -428,6 +493,8 @@ Rule = (
     | UnregisteredFeatureCandidateRule
     | ModuleCoverageRule
     | ScenarioCoverageRule
+    | DocAreaCoherenceRule
+    | SummaryFactsRule
 )
 
 
@@ -459,6 +526,8 @@ def liveness_finding(
     rule_description: str,
     message: str,
     remediation: str,
+    severity: str = "warn",
+    from_ref_id: str | None = None,
 ) -> Violation:
     """Build one advisory finding about a rule being unable to do its job.
 
@@ -467,18 +536,38 @@ def liveness_finding(
     rule types and :mod:`.evaluators` for ``forbid_import`` — and the two must not
     drift in shape.
 
-    Always ``warn``, whatever the rule's own severity: an inert rule is a
-    configuration smell, not a boundary breach, and promoting it to ``error``
-    would turn an adopter's green pipeline red on upgrade (BDL-061 CONTEXT).
+    ``warn`` by default, and that default is the right answer for a PARTIAL
+    inertness — a dead glob, an exemption that excuses nothing, a matcher
+    selecting no node while the rule's other legs still fire. Such a rule is a
+    configuration smell, not a boundary breach, and promoting it would turn an
+    adopter's green pipeline red on upgrade (BDL-061 CONTEXT).
+
+    A **total** stand-down is a different thing and callers may say so by passing
+    *severity*. When a rule could check NONE of its population, "the rule found
+    nothing wrong" and "the rule never ran" are the same output, and a project
+    that deliberately escalated that rule to ``error`` has had its escalation
+    quietly evaporate at exactly the moment it mattered (BDL-062 ``.9``,
+    BDL-UX #195). Passing the rule's declared severity costs an adopter nothing:
+    a rule that ships ``warn`` still reports ``warn``, so nobody's first
+    ``beadloom ci`` goes red on a graph that is merely small.
+
+    *from_ref_id* names the node the finding is about, for the callers that have
+    one. Most do not: a liveness finding is usually about a RULE that could not
+    run, and a node id would be an invention. ``graph-summary-facts`` is the
+    exception — it reports per node, and its two states were reaching consumers
+    differently, a disagreement carrying ``claim.ref_id`` and an unverifiable
+    claim carrying nothing, from the same rule about the same node (BDL-062.10,
+    m1). Added the same way *severity* was, and for the same reason: a default
+    that preserves every existing caller's output byte for byte.
     """
     return Violation(
         rule_name=rule_name,
         rule_description=rule_description,
         rule_type=LIVENESS_RULE_TYPE,
-        severity="warn",
+        severity=severity,
         file_path=None,
         line_number=None,
-        from_ref_id=None,
+        from_ref_id=from_ref_id,
         to_ref_id=None,
         message=message,
         remediation=remediation,

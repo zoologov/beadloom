@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -82,13 +83,18 @@ def test_command_result_ok() -> None:
 
 def test_run_command_invokes_real_subprocess(tmp_path: Path) -> None:
     # Exercise the one real subprocess seam with a harmless, portable command.
-    res = commands.run_command(["python", "-c", "print('hi')"], cwd=tmp_path)
+    # `sys.executable`, not "python": the latter resolves through PATH, so this
+    # test failed in a clean room whose venv is not on it — for a reason having
+    # nothing to do with the seam under test (BDL-062.10, m6).
+    res = commands.run_command([sys.executable, "-c", "print('hi')"], cwd=tmp_path)
     assert res.ok is True
     assert res.stdout.strip() == "hi"
 
 
 def test_run_command_captures_nonzero_without_raising(tmp_path: Path) -> None:
-    res = commands.run_command(["python", "-c", "import sys; sys.exit(3)"], cwd=tmp_path)
+    res = commands.run_command(
+        [sys.executable, "-c", "import sys; sys.exit(3)"], cwd=tmp_path
+    )
     assert res.returncode == 3
     assert res.ok is False
 

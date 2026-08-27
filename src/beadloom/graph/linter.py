@@ -459,7 +459,7 @@ def format_github(result: LintResult) -> str:
 def format_porcelain(result: LintResult) -> str:
     """Format a LintResult as machine-readable one-line-per-violation output.
 
-    Format: ``rule_name:rule_type:file_path:line:from_ref:to_ref``
+    Format: ``rule_name:rule_type:severity:file_path:line:from_ref:to_ref``
 
     Empty file_path/line_number/ref_ids are represented as empty strings.
     Returns empty string when there are no violations.

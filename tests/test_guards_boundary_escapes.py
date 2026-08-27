@@ -666,9 +666,9 @@ class TestADeclaredProjectMustBeAProject:
         wandered = _cli([*argv, "--project", str(not_a_project)])
 
         assert blocked.exit_code == 2, blocked.output
-        assert json.loads(blocked.output)["outcome"] == "block"
+        assert json.loads(blocked.stdout)["outcome"] == "block"
         assert wandered.exit_code == 2, wandered.output
-        assert json.loads(wandered.output)["outcome"] == "error"
+        assert json.loads(wandered.stdout)["outcome"] == "error"
 
     def test_the_module_says_what_the_code_does_about_manufacturing_a_root(
         self,
@@ -737,8 +737,8 @@ class TestTheRowsThisRoundAddedAreNowEnumerated:
         result = _cli(["guard", "", "--project", str(root), "--json"])
 
         assert result.exit_code == 3, result.output
-        assert json.loads(result.output)["guard"] == ""
-        assert "''" in json.loads(result.output)["not_recorded_because"]
+        assert json.loads(result.stdout)["guard"] == ""
+        assert "''" in json.loads(result.stdout)["not_recorded_because"]
         assert read_firings(root) == ()
 
     def test_a_hook_payload_of_zero_bytes_is_an_ordinary_evaluation(
@@ -775,7 +775,7 @@ class TestTheRowsThisRoundAddedAreNowEnumerated:
             ]
         )
 
-        assert json.loads(result.output)["context"]["path"] == "app.py"
+        assert json.loads(result.stdout)["context"]["path"] == "app.py"
         assert "the last occurrence wins" in _SPEC.read_text(encoding="utf-8")
 
     def test_a_closed_standard_input_states_a_cause_instead_of_an_internal_repr(

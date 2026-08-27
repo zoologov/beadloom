@@ -175,7 +175,7 @@ def _annotations_of(project: Path, file_path: str) -> list[dict[str, str]]:
 
 def _sync_check_json(project: Path) -> dict[str, object]:
     result = CliRunner().invoke(main, ["sync-check", "--json", "--project", str(project)])
-    return dict(json.loads(result.output))
+    return dict(json.loads(result.stdout))
 
 
 # ---------------------------------------------------------------------------
@@ -313,7 +313,7 @@ class TestASymbollessModuleIsChecked:
         result = CliRunner().invoke(
             main, ["sync-check", "--json", "--project", str(project)]
         )
-        payload = json.loads(result.output)
+        payload = json.loads(result.stdout)
         stale = [
             p for p in payload["pairs"] if p["ref_id"] == "facade" and p["status"] == "stale"
         ]
@@ -603,7 +603,7 @@ class TestDenyRulesSeeEveryIndexedFile:
         as_json = runner.invoke(
             main, ["lint", "--no-reindex", "--format", "json", "--project", str(project)]
         )
-        payload = json.loads(as_json.output)
+        payload = json.loads(as_json.stdout)
         human = runner.invoke(main, ["lint", "--no-reindex", "--project", str(project)])
 
         assert payload["summary"]["files_unattributed"] == 1

@@ -25,7 +25,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from beadloom.application.doctor import get_actual_version
 
@@ -183,3 +183,165 @@ def beadloom_local_facts_in(text: str) -> list[str]:
         if f"`{package}/`" in text:
             found.append(f"{package}/ (a Beadloom DDD package)")
     return found
+
+
+# --------------------------------------------------------------------------- #
+# An adopter project Beadloom can actually index (BDL-062 `.5`)
+# --------------------------------------------------------------------------- #
+#
+# The factories above build manifests, which is all the CLAUDE.md renderer
+# reads. BDL-062's three rules read the *index*: `graph-summary-facts` reads
+# `nodes.summary`, `doc-area-coherence` reads node source against doc path, and
+# the audit's three populations are computed from the project's own facts. None
+# of those can be pointed at a manifest alone.
+#
+# :func:`indexed_python_project` is the same "not Beadloom" idea one layer
+# deeper — a project with a graph, a docs tree and a config, whose every knob is
+# a parameter so one factory covers the states the rules must keep apart:
+#
+#   docs_layout="by-area"  a derivable convention        -> the rule can check
+#   docs_layout="flat"     no convention to derive       -> the rule checked nothing
+#   misfiled=(...)         a node contradicting it       -> the rule found something
+#   version=None           a version nothing can resolve -> the fact is declined
+#   summaries={...}        a claim in a node summary     -> agrees/disagrees/unverifiable
+#
+# FAKES PROVE FAKES: the "by-area" spelling is a control, not decoration. A
+# stand-down reported on the flat tree proves nothing unless the same nodes,
+# the same summaries and the same rule report a clean check when the tree is
+# nested — otherwise the fixture might simply be broken.
+
+
+#: The areas every indexed adopter is built with, and how many modules each
+#: holds. Four is not arbitrary: ``doc-area-coherence`` needs ``min_support``
+#: (2) observations before a mapping counts, and misfiling one of four leaves
+#: 3/4 = 0.75 agreement, above the 0.6 default threshold, so the misfiled node
+#: is reported rather than dissolving the convention it contradicts.
+class IndexedProjectSpec(TypedDict, total=False):
+    """The keyword arguments :func:`indexed_python_project` accepts.
+
+    Published as a type rather than left implicit because callers hold tables of
+    states and splat them (``indexed_python_project(root, **STATES[name])``). A
+    bare ``dict[str, object]`` makes that splat unverifiable, and the alternative
+    to naming the shape was a ``type: ignore`` at every call site.
+    """
+
+    docs_layout: str
+    version: str | None
+    misfiled: tuple[str, ...]
+    summaries: dict[str, str]
+    rules: str | None
+
+
+ADOPTER_AREAS: tuple[str, ...] = ("billing", "ledger", "reporting")
+ADOPTER_MODULES_PER_AREA = 4
+
+
+def _adopter_pyproject(version: str | None) -> str:
+    """The manifest, with or without a resolvable version.
+
+    ``version=None`` omits the field entirely rather than writing an empty
+    string: an empty ``version = ""`` is a declaration, and the state under test
+    is a project that declares none.
+    """
+    body = '[project]\nname = "invoice-svc"\n'
+    if version is not None:
+        body += f'version = "{version}"\n'
+    return body + 'dependencies = ["fastapi", "sqlalchemy"]\n'
+
+
+def indexed_python_project(
+    root: Path,
+    *,
+    docs_layout: str = "by-area",
+    version: str | None = "3.7.0",
+    misfiled: tuple[str, ...] = (),
+    summaries: dict[str, str] | None = None,
+    rules: str | None = None,
+) -> AdopterProject:
+    """A project that is not Beadloom, complete enough to reindex and lint.
+
+    Parameters
+    ----------
+    docs_layout:
+        ``"by-area"`` files each document under ``docs/<area>/``, which is a
+        convention ``doc-area-coherence`` can derive. ``"flat"`` files every
+        document directly under ``docs/``, which is a tree with no area segment
+        to read — the rule's ``unverifiable`` path.
+    version:
+        What the manifest declares. ``None`` declares nothing, so the audit
+        declines the ``version`` fact and any summary claiming a version becomes
+        ``unverifiable`` rather than wrong.
+    misfiled:
+        ``ref_id``s whose document is filed under a neighbouring area, so the
+        rule has a contradiction to name.
+    summaries:
+        ``ref_id`` → the node's ``summary:``. Anything not named here gets a
+        summary that states no number, so a test's claims are the only claims.
+    rules:
+        The body of ``rules.yml``. Defaults to the two rules BDL-062 added.
+    """
+    if docs_layout not in {"by-area", "flat"}:
+        raise ValueError(f"unknown docs_layout {docs_layout!r}")
+
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "pyproject.toml").write_text(_adopter_pyproject(version), encoding="utf-8")
+
+    beadloom_dir = root / ".beadloom"
+    graph_dir = beadloom_dir / "_graph"
+    graph_dir.mkdir(parents=True, exist_ok=True)
+    (beadloom_dir / "config.yml").write_text(
+        "languages:\n- .py\nscan_paths:\n- src\n", encoding="utf-8"
+    )
+
+    claimed = summaries or {}
+    lines = ["nodes:"]
+    for position, area in enumerate(ADOPTER_AREAS):
+        elsewhere = ADOPTER_AREAS[(position + 1) % len(ADOPTER_AREAS)]
+        for index in range(ADOPTER_MODULES_PER_AREA):
+            ref_id = f"{area}-m{index}"
+            source = f"src/invoice_svc/{area}/m{index}.py"
+            filed_under = elsewhere if ref_id in misfiled else area
+            doc = (
+                f"docs/{filed_under}-{ref_id}.md"
+                if docs_layout == "flat"
+                else f"docs/{filed_under}/{ref_id}.md"
+            )
+
+            code = root / source
+            code.parent.mkdir(parents=True, exist_ok=True)
+            code.write_text(f"# beadloom:domain={area}\n", encoding="utf-8")
+
+            page = root / doc
+            page.parent.mkdir(parents=True, exist_ok=True)
+            page.write_text(
+                f"# {ref_id}\n\nA module of the invoicing service.\n", encoding="utf-8"
+            )
+
+            summary = claimed.get(ref_id, f"The {ref_id} module of the invoicing service")
+            lines += [
+                f"  - ref_id: {ref_id}",
+                "    kind: component",
+                f"    summary: {summary}",
+                f"    source: {source}",
+                "    docs:",
+                f"      - {doc}",
+            ]
+    lines.append("edges: []")
+    (graph_dir / "services.yml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    (graph_dir / "rules.yml").write_text(
+        rules
+        if rules is not None
+        else (
+            "version: 3\n"
+            "rules:\n"
+            "  - name: doc-area-coherence\n"
+            "    description: a node documents itself where the graph says it should\n"
+            "    doc_area_coherence: {}\n"
+            "  - name: graph-summary-facts\n"
+            "    description: a number in a node summary matches what the project computes\n"
+            "    summary_facts: {}\n"
+        ),
+        encoding="utf-8",
+    )
+    return AdopterProject(root=root, name="invoice-svc", version=version, stack="python")

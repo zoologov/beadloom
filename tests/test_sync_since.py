@@ -185,7 +185,7 @@ class TestSyncCheckSinceCli:
             main, ["sync-check", "--since", "HEAD", "--json", "--project", str(project)]
         )
         assert result.exit_code == 2, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert set(data.keys()) == {"summary", "pairs"}
         assert set(data["summary"].keys()) == {"total", "ok", "stale"}
         assert data["summary"]["stale"] == 1

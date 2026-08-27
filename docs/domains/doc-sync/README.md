@@ -91,7 +91,8 @@ green result says what it was green against.
 - **doc_indexer.py** -- Markdown scanning, chunking by H2 headings, section classification, and SQLite population
 - **doc_shape.py** -- Whether a document still carries the sections its kind requires; peer-relative by majority, so a convention is reported once and an outlier per document ([SPEC](features/doc-shape/SPEC.md))
 - **doc_quality.py** -- The five writing-standard checks over planning documents: a measurable goal, a decision with a reason, a risk with a mitigation, no `Pending` question in an `Approved` document, no unfilled template placeholder ([SPEC](features/doc-quality/SPEC.md))
-- **audit.py** -- Documentation audit: fact registry, comparator, and audit facade for detecting stale numeric facts
+- **audit.py** -- Documentation audit: fact registry, comparator, and audit facade for detecting stale numeric facts. `FactRegistry.collect_set()` returns a `FactSet` -- the facts computed for the project AND, for each fact no value was declared for, the reason -- so a collector that cannot answer no longer drops the fact and shrinks the denominator in silence
+- **audit_self_surface.py** -- Whether Beadloom's own surfaces describe the project under audit. `mcp_tool_count` and `cli_command_count` are read out of the RUNNING package, so they are declared only when the audited project IS that distribution, decided from the name the project declares for itself with no directory-name fallback. Both used to be collected unconditionally, so every adopter was told Beadloom's numbers about their own documentation (measured: `invoice-svc`, 18 tools and 43 commands). The release that changed it is named in the CHANGELOG, which is where a version belongs -- a domain README stating a version that does not exist yet is a claim nothing can hold it to
 - **scanner.py** -- Document scanner: which markdown files are in scope (and which are skipped, with the reason), and keyword-proximity extraction of numeric fact mentions from them
 - **audit_coverage.py** -- Per-fact coverage of an audit run: whether anything was checked for each declared fact (`verified` / `not_covered` / `unreadable`), so a count of findings can no longer read as a verdict on facts nobody stated
 - **docsync.py** (in `services/commands/`) -- CLI commands: `beadloom sync-check`, `beadloom sync-update`, `beadloom install-hooks`, and `beadloom active-sync` (the ACTIVE-table reconcile command; annotated as `component=active-table` but housed in this module after the BDL-059 split of `services/cli.py` into `services/commands/`)
@@ -138,7 +139,7 @@ What it cannot do: a neighbour's hunk swept into a commit, inside a file the com
 
 In `warn` mode, violations print warnings but do not block the commit. In `block` mode, ruff/mypy/sync-check violations exit non-zero and prevent the commit.
 
-**Pre-push hook** runs the full Beadloom Gate (`beadloom ci`): incremental reindex → lint → coverage-lint → sync-check → doctor. This is the authoritative blocking gate; it exits non-zero on any failure, preventing the push. Fail-safe: if `beadloom` is not on PATH, the hook is a no-op.
+**Pre-push hook** runs the full Beadloom Gate (`beadloom ci`): incremental reindex → lint → sync-check → docs audit → docs-quality → doc-spaces → config-check → doctor, plus the landscape gate when the project declares satellites. This is the authoritative blocking gate; it exits non-zero on any failure, preventing the push. Fail-safe: if `beadloom` is not on PATH, the hook is a no-op.
 
 ## Invariants
 

@@ -250,7 +250,7 @@ class TestGateBlocksConfigDrift:
         )
         # Assert: non-zero exit + the config-check step reported as failing.
         assert result.exit_code == 1
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["ok"] is False
         cfg = next(s for s in data["steps"] if s["name"] == "config-check")
         assert cfg["status"] == "FAIL"

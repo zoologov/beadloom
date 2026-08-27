@@ -541,16 +541,16 @@ Exit codes: 0 = clean (or violations without `--strict`/`--fail-on-warn`), 1 = v
 
 **A deny rule can only check a file it can place.** An import's source end is attributed to a node by annotation OR by ownership — the same most-specific-`source` rule that derives the `depends_on` edges — so a file with no annotation, or one written where the extractor could not read it, is no longer invisible to every deny rule (measured before the fix on this repository: 22 of 128 import-source files, BDL-061.50). What still belongs to no node is counted rather than skipped: `Files: N scanned, M imports resolved, K attributable to no node` on the rich header, `summary.files_unattributed` in `--format json`, and the same clause on the no-violations summary line. The clause is absent when K is zero. A deny rule that never saw a file did not clear it.
 
-**A rule that cannot check anything reports itself.** All ten rule types the loader dispatches are covered: a matcher that selects no node, a `has_edge_to` naming a node the graph does not contain, an edge kind that never runs between two layered nodes, a `check` with no threshold set, a `from:`/`to:` glob matching zero candidates anywhere in the index, a `source_root` with no module under it. Each is a `rule_liveness` finding, always `warn` — it describes the configuration rather than the code, so one mistyped glob cannot turn an adopter's green project red — and it is printed by default, typed in `--format json` as `kind: rule_liveness`, and counted in `summary.rules_inert`. The rich summary line carries the count only when it is non-zero (`N rules evaluated, M of them unable to check anything`), so the advertised rule count cannot over-claim while the everyday line keeps its shape (BDL-061.48). Two silences are deliberate and are properties of the INDEX rather than of any rule: an index with zero resolved imports makes every `deny` rule inert, which the header's `0 imports resolved` already says, and an empty graph silences the pass entirely so a fresh clone does not light up one warning per rule. Two rule types state their own diagnosis instead of the generic one, because a generic "cannot fire" cannot name which glob or which leg did it: `forbid_import` reports from the import scan it already runs, and `scenario_coverage` reports per leg. `scenario_coverage` is still COUNTED in `summary.rules_inert` — the report and the count are two questions, and one predicate answers both so they cannot disagree (BDL-061.66).
+**A rule that cannot check anything reports itself.** All 12 authoring keys the loader dispatches are covered: a matcher that selects no node, a `has_edge_to` naming a node the graph does not contain, an edge kind that never runs between two layered nodes, a `check` with no threshold set, a `from:`/`to:` glob matching zero candidates anywhere in the index, a `source_root` with no module under it. Each is a `rule_liveness` finding. A partial inertness is `warn` — it describes the configuration rather than the code, so one mistyped glob cannot turn an adopter's green project red — while a rule that could check NONE of its population reports at the severity the project declared, because at that point a pass and a no-op are the same output (BDL-062 `.9`; `doc_area_coherence` only, so far — BDL-UX #197). Either way it is printed by default, typed in `--format json` as `kind: rule_liveness`, and counted in `summary.rules_inert`. The rich summary line carries the count only when it is non-zero (`N rules evaluated, M of them unable to check anything`), so the advertised rule count cannot over-claim while the everyday line keeps its shape (BDL-061.48). Two silences are deliberate and are properties of the INDEX rather than of any rule: an index with zero resolved imports makes every `deny` rule inert, which the header's `0 imports resolved` already says, and an empty graph silences the pass entirely so a fresh clone does not light up one warning per rule. Two rule types state their own diagnosis instead of the generic one, because a generic "cannot fire" cannot name which glob or which leg did it: `forbid_import` reports from the import scan it already runs, and `scenario_coverage` reports per leg. `scenario_coverage` is still COUNTED in `summary.rules_inert` — the report and the count are two questions, and one predicate answers both so they cannot disagree (BDL-061.66).
 
 **Behaviour bound to an executable claim (BDL-061 S4).** `lint` also evaluates the
 `scenario_coverage` rule: a behaviour-bearing node with no scenario, a scenario naming no bead,
 a scenario naming a `@node:` the graph does not contain, and a scenario a PRD or BRIEF
 references and the acceptance suite does not contain. All `warn`, each carrying the population
-it is a fraction of (`none of 19 scenarios in 6 files carries @node:agent-prime`). Measured on
-this repository, 2026-08-24: 68 findings. 35 of them, each naming a `feature` node that no
-scenario in the suite binds to; 33, each naming a scenario a document references and the suite
-does not contain. See the [BDD guide](../guides/bdd-scenarios.md).
+it is a fraction of (`none of 92 scenarios in 20 files carries @node:agent-prime`). Measured on
+this repository, 2026-08-26: 59 findings. 32 of them, each naming a `feature` node that no
+scenario in the suite binds to; 26, each naming a scenario a document references and the suite
+does not contain; and one stating the rule's own reach: the `feature` nodes it selects, of the whole graph. See the [BDD guide](../guides/bdd-scenarios.md).
 
 **What an exemption excused is part of the answer.** A `forbid_import` rule may carry `exempt:` entries that baseline a pre-existing crossing (see the [rule-engine SPEC](../domains/graph/features/rule-engine/SPEC.md)). Every run says how many crossings they suppressed — `", N crossings suppressed by an exemption"` on the summary line, `violations_suppressed` plus the `suppressed` array under `--format json`, and the same clause on the `0 violations, N rules evaluated` line printed when a piped run has nothing to report. Without it, `0 violations` reads as "nothing crossed" when it means "what crossed was excused" (BDL-061.49). An entry whose `until:` leads with an ISO date that has passed, and which is still suppressing something, is reported as a `rule_liveness` finding (`warn`); it keeps suppressing, so no build reddens because a day passed. `--fail-on-warn` is the lever for a project that wants that deadline enforced.
 
@@ -851,11 +851,13 @@ half. `working.pairs_excused` is **`null`** from this command rather than `0`:
 not print one. The `beadloom ci` doc-spaces line does carry it, because the
 sync-check step in the same run measured it and hands it over.
 
-Measured on this repository, 2026-08-24: `to_be 190`, `as_is 93`, `working 55`;
-`epics 61`, `epics_with_closed_beads 37`, `epics_declaring_nodes 5`,
-`refs_checked 17`; `epics_declaring_nothing 56` and
+Measured on this repository, 2026-08-26: `to_be 194`, `as_is 100`, `working 56`;
+`epics 62`, `epics_with_closed_beads 38`, `epics_declaring_nodes 5`,
+`refs_checked 17`; `epics_declaring_nothing 57` and
 `epics_unknown_to_tracker 24`, every one of them named rather than folded into a
-green count; and one `intent_without_as_is` finding.
+green count; and one `epic_not_in_tracker` finding. Every number here moves with
+the repository's own planning tree, so read them as a shape and re-run the command
+for a current value.
 
 ### beadloom docs polish
 

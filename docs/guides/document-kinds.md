@@ -50,8 +50,10 @@ documents are the ones `sync-check` pairs with code — that pairing is what "as
 operationally. WORKING documents are excused from freshness, which is a declaration and never
 an inference from a missing pair (see below).
 
-Measured on this repository, 2026-08-24 after BDL-061 S6: `to_be 190`, `as_is 96`,
-`working 55` documents.
+Measured on this repository, 2026-08-26 during BDL-062: `to_be 194`, `as_is 100`,
+`working 56` documents. All three are moving denominators — this feature's own PRD, RFC,
+CONTEXT and PLAN moved TO-BE by four, and its ACTIVE.md moved WORKING by one — so re-run
+`beadloom docs spaces` rather than quoting the numbers.
 
 ### Kind wins over root, and a disagreement is a finding
 
@@ -163,10 +165,13 @@ the relation could not decide is named rather than folded into a green number. M
 the same run:
 
 ```
-37 of 61 epic(s) have closed beads; 5 declare a node; 17 node declaration(s) held against AS-IS
-NOT CHECKED: 56 epic(s) declare no node (4 carry no readable intent document)
+38 of 62 epic(s) have closed beads; 5 declare a node; 17 node declaration(s) held against AS-IS
+NOT CHECKED: 57 epic(s) declare no node (4 carry no readable intent document)
 NOT CHECKED: 24 epic(s) the tracker does not name
 ```
+
+Read the shape rather than the numbers: every one of them moves with this repository's own
+planning tree, and `beadloom docs spaces --json` prints the current values.
 
 Each `NOT CHECKED` line is a different way of knowing nothing, and each has its own reason code
 in `--json` under `unresolved_reasons`: `no_node_declared`, `no_intent_document`,

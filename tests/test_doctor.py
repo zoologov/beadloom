@@ -338,3 +338,89 @@ class TestDoctorCli:
         runner = CliRunner()
         result = runner.invoke(main, ["doctor", "--project", str(project)])
         assert result.exit_code != 0
+
+
+class TestDocsAbsentByDecision:
+    """A node with no document, and a node that decided it needs none, differ.
+
+    BDL-062 `.4`. `nodes_without_docs` printed one WARNING for both, so a gap
+    nobody had looked at and a gap somebody had ruled on read identically —
+    absence and excusal printing the same word. A node records `docs_absent:
+    <reason>` in its graph YAML; the loader stores any unmapped key in `extra`,
+    so this needs no schema column.
+    """
+
+    def _node(
+        self, conn: sqlite3.Connection, ref_id: str, extra: str | None = None
+    ) -> None:
+        conn.execute(
+            "INSERT INTO nodes (ref_id, kind, summary, extra) VALUES (?, ?, ?, ?)",
+            (ref_id, "feature", f"{ref_id} summary", extra),
+        )
+        conn.commit()
+
+    def _findings(self, conn: sqlite3.Connection) -> list[Check]:
+        return [c for c in run_checks(conn) if c.name == "nodes_without_docs"]
+
+    def test_a_recorded_reason_is_reported_as_a_decision_not_a_gap(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        self._node(conn, "F1", '{"docs_absent": "its source is not indexed"}')
+        findings = self._findings(conn)
+        assert len(findings) == 1
+        assert findings[0].severity == Severity.INFO
+        assert "F1" in findings[0].description
+        assert "its source is not indexed" in findings[0].description
+
+    def test_an_unexplained_absence_is_still_a_warning(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        self._node(conn, "F2")
+        findings = self._findings(conn)
+        assert len(findings) == 1
+        assert findings[0].severity == Severity.WARNING
+
+    def test_the_two_do_not_print_the_same_word(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        """The point of the mechanism, asserted directly."""
+        self._node(conn, "F1", '{"docs_absent": "its source is not indexed"}')
+        self._node(conn, "F2")
+        severities = {c.description.split()[1]: c.severity for c in self._findings(conn)}
+        assert severities["'F1'"] != severities["'F2'"]
+
+    def test_a_blank_reason_is_not_a_reason(self, conn: sqlite3.Connection) -> None:
+        """An excusal with nothing written in it excuses nothing."""
+        self._node(conn, "F3", '{"docs_absent": "   "}')
+        findings = self._findings(conn)
+        assert len(findings) == 1
+        assert findings[0].severity == Severity.WARNING
+
+    def test_a_reason_on_a_node_that_has_a_doc_is_reported_as_inert(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        """The liveness half: a declaration that excuses nothing must be reported."""
+        self._node(conn, "F4", '{"docs_absent": "no longer true"}')
+        conn.execute(
+            "INSERT INTO docs (path, kind, ref_id, hash) VALUES (?, ?, ?, ?)",
+            ("docs/f4.md", "feature", "F4", "abc"),
+        )
+        conn.commit()
+        findings = self._findings(conn)
+        assert len(findings) == 1
+        assert findings[0].severity == Severity.WARNING
+        assert "F4" in findings[0].description
+        assert "docs/f4.md" in findings[0].description
+
+    def test_a_graph_with_neither_still_reports_all_nodes_documented(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        self._node(conn, "F5")
+        conn.execute(
+            "INSERT INTO docs (path, kind, ref_id, hash) VALUES (?, ?, ?, ?)",
+            ("docs/f5.md", "feature", "F5", "abc"),
+        )
+        conn.commit()
+        findings = self._findings(conn)
+        assert len(findings) == 1
+        assert findings[0].severity == Severity.OK

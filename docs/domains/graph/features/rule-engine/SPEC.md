@@ -13,6 +13,8 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 - `rules/liveness.py` — rule liveness: whether a rule *can* fire at all, for every rule type (BDL-061.48). It answers about the CONFIGURATION, never about the code.
 - `rules/exemptions.py` — what a `forbid_import` exemption is doing: which crossings it covers, how many it swallows, and whether its exit condition has passed (BDL-061.49).
 - `rules/cycles.py` — cycle detection (WHITE/GREY/BLACK colored DFS, path-as-set membership) + edge-liveness SQL helpers.
+- `rules/doc_area.py` — `doc_area_coherence`: the source-to-docs placement convention read OUT of the graph under test, and the nodes that contradict it. No layout literal appears in it (BDL-062 `.2`).
+- `rules/summary_facts.py` — `summary_facts`: the numeric and version claims a node `summary` states, checked against the same fact the project computes. The extraction and the comparison are the documentation audit's, so there is no second notion of "a version" here (BDL-062 `.1`).
 - `rules/__init__.py` — `evaluate_all` orchestration + the remediation post-pass + stable public re-exports.
 
 ---
@@ -21,7 +23,7 @@ The package is decomposed by responsibility (BDL-059 S3, cohesion-driven):
 
 ### Purpose
 
-Enforce architectural constraints declaratively. Rules are defined in a YAML file and evaluated against the graph database (nodes, edges, code_imports, code_symbols, file_index, and sync_state tables). **Ten** rule types exist — `load_rules` dispatched nine from BDL-051 S3a until BDL-061 S4 added `scenario_coverage`; this table listed seven until BDL-061.48 counted them against the loader:
+Enforce architectural constraints declaratively. Rules are defined in a YAML file and evaluated against the graph database (nodes, edges, code_imports, code_symbols, file_index, and sync_state tables). **Twelve** rule types exist — `load_rules` dispatched nine from BDL-051 S3a, BDL-061 S4 added `scenario_coverage`, and BDL-062 added `doc_area_coherence` (`.2`) and `summary_facts` (`.1`). This table listed seven until BDL-061.48 counted them against the loader, and ten until BDL-062 `.1` counted them again; the count and the rows are checked against the loader's own dispatch, not against each other:
 
 | Type | Keyword | Semantics |
 |------|---------|-----------|
@@ -35,6 +37,8 @@ Enforce architectural constraints declaratively. Rules are defined in a YAML fil
 | **unregistered_feature_candidate** | `unregistered_feature_candidate` | Flag substantial domain-only modules that model no feature |
 | **module_coverage** | `module_coverage` | Require every `src/` module to be a tracked node or explicitly exempt |
 | **scenario_coverage** | `scenario_coverage` | Bind behaviour-bearing nodes to executable scenarios, both ways |
+| **doc_area_coherence** | `doc_area_coherence` | Document a node where this graph's own convention documents nodes like it |
+| **summary_facts** | `summary_facts` | Check a number or version stated in a node `summary` against the project |
 
 ### Constants
 
@@ -48,7 +52,20 @@ VALID_EDGE_KINDS: frozenset[str] = frozenset({
 })
 
 SUPPORTED_SCHEMA_VERSIONS: frozenset[int] = frozenset({1, 2, 3})
+
+# Every key a rule may declare to select its type. A rule declares exactly one.
+AUTHORING_KEYS: frozenset[str] = frozenset({
+    "deny", "require", "forbid_cycles", "forbid_import", "forbid", "layers",
+    "check", "unregistered_feature_candidate", "module_coverage",
+    "scenario_coverage", "doc_area_coherence", "summary_facts",
+})
 ```
+
+`AUTHORING_KEYS` is the single definition of that set. The loader's own "must have exactly one
+of" message is built from it, the rule-type table above is asserted equal to it, and
+`onboarding.scanner.rules_gen._detect_rule_type` is held to it -- because a key the loader
+accepts and that map does not know becomes the word `unknown` in the generated
+`.beadloom/AGENTS.md`, and nothing failed when it did (BDL-062 `.4`, BDL-UX #179).
 
 ### Data Structures
 
@@ -162,9 +179,9 @@ A blanket `from: "*" / to: "*"` entry therefore cannot hide either: it suppresse
 
 #### Rule liveness (a rule that cannot fire)
 
-**A rule that cannot match is indistinguishable from a rule that passed.** Both contribute `0` violations and `1` to `N rules evaluated`. Every rule type therefore reports its own inertness instead of counting as clean — `rules/liveness.py` for the eight matcher/graph-based types, `evaluate_import_boundary_rules` for `forbid_import` (whose diagnosis falls out of the import scan it already runs), and `scenario_coverage.py` for `scenario_coverage` (whose legs are decided by files on disk that no index holds).
+**A rule that cannot match is indistinguishable from a rule that passed.** Both contribute `0` violations and `1` to `N rules evaluated`. Every rule type therefore reports its own inertness instead of counting as clean — `rules/liveness.py` for the eight matcher/graph-based types, `evaluate_import_boundary_rules` for `forbid_import` (whose diagnosis falls out of the import scan it already runs), `scenario_coverage.py` for `scenario_coverage` (whose legs are decided by files on disk that no index holds), `doc_area.py` for `doc_area_coherence` (whose applicability is decided by the graph's own data rather than by its configuration), and `summary_facts.py` for `summary_facts` (for the same reason, and because it reports a second kind of ignorance no other rule has: one node whose claim cannot be checked, while the rule itself is live).
 
-**Reporting a rule and counting it are two questions, and for `scenario_coverage` two modules answer them.** The finding says *what stood down and which glob did it*; `LintResult.rules_inert` says *how many of my rules checked nothing*. `liveness.py` counts `scenario_coverage` through that module's own `inert_reason` predicate — not a second copy of it — and does not report it a second time. Until BDL-061.66 the count had no branch for the type at all: `13 rules evaluated, 0 inert` printed over a rule that had stood all four legs down.
+**Reporting a rule and counting it are two questions, and for `scenario_coverage` and `doc_area_coherence` two modules answer them.** The finding says *what stood down and which glob did it*; `LintResult.rules_inert` says *how many of my rules checked nothing*. `liveness.py` counts `scenario_coverage` through that module's own `inert_reason` predicate and `doc_area_coherence` through `doc_area_inert_reason` — not second copies of them — and does not report either a second time. Until BDL-061.66 the count had no branch for the type at all: `13 rules evaluated, 0 inert` printed over a rule that had stood all four legs down.
 
 **What "cannot fire" means, per rule type.** This table is the contract: a liveness check narrower than the invariant it names is the defect this section exists to close (BDL-UX #172, BDL-061.48).
 
@@ -180,6 +197,8 @@ A blanket `from: "*" / to: "*"` entry therefore cannot hide either: it suppresse
 | `unregistered_feature_candidate` | its `for` selects **0** nodes, or none of the nodes it selects declares a `source`, so it has no files to inspect | `liveness.py` |
 | `module_coverage` | its `source_root` holds **0** modules, on disk or in the index — "complete coverage" of nothing | `liveness.py` |
 | `scenario_coverage` | **per leg**: its `for` matcher selects **0** nodes (coverage leg) or a `references` glob matches **0** documents (reference leg). Its `features` glob matching **0** files is the exception — that stands **all four** legs down, and only that state is counted in `rules_inert` | reported by `scenario_coverage.py`, counted by `liveness.py` |
+| `doc_area_coherence` | **no** source area in the graph reaches the majority `threshold` over `min_support` observations, so the convention the rule enforces cannot be read off the graph at all — a flat docs tree, a project mid-migration, a graph too small to hold a convention | reported by `doc_area.py`, counted by `liveness.py` |
+| `summary_facts` | **no** node `summary` in the graph states a number or version the project computes a fact for, so there is no claim to check. A claim naming a fact the project DECLINED to compute is a separate report — that node is unverifiable while the rule as a whole is still live | reported by `summary_facts.py`, counted by `liveness.py` |
 
 ### `scenario_coverage` — behaviour bound to an executable claim (BDL-061 S4)
 
@@ -263,7 +282,7 @@ verified.
 
 `forbid_import` additionally reports a stale `exempt` entry — dead or expired, at most one finding per entry (`rules/exemptions.py`, from the counts the import scan already produced). That is a statement about an exemption, not about the rule, so it is **not** counted in `LintResult.rules_inert`; what those entries suppressed is counted separately, as `LintResult.violations_suppressed`. Two counters, because they answer two questions: *which of my rules cannot check anything* and *what did my checks catch and excuse*.
 
-**Severity is always `warn`, whatever the rule declares.** A liveness finding is a statement about the *configuration*, never about the code: `error` would conflate "your architecture is broken" with "your check is broken", and would turn an adopter's green pipeline red on upgrade the moment they update Beadloom (BDL-061 CONTEXT). Being `warn` is not the same as being quiet — the finding is printed by default, appears in `--json` under `kind: "rule_liveness"`, and `LintResult.rules_inert` qualifies the rule count on the summary line (`13 rules evaluated, 2 of them unable to check anything`), so a green run cannot advertise checks that never looked.
+**Severity depends on how much the rule stood down.** A **partial** inertness — one dead glob beside nine live ones, an exemption that excuses nothing, a matcher selecting no node while the rule's other legs still fire — is `warn` whatever the rule declares: it describes the *configuration*, not the code, and `error` would turn an adopter's green pipeline red on upgrade. A **total** stand-down, where the rule could check NONE of its population, carries the severity the project declared. At that point "found nothing wrong" and "never ran" are the same output, and a project that deliberately escalated the rule has had its escalation evaporate exactly when it mattered (BDL-062 `.9`, BDL-UX #195). This costs an adopter nothing, because a rule that ships `warn` still reports `warn`. Today only `doc_area_coherence` passes its declared severity; the other rule types still report a total stand-down at `warn` (BDL-UX #197). A `warn` here is not the same as being quiet — the finding is printed by default, appears in `--json` under `kind: "rule_liveness"`, and `LintResult.rules_inert` qualifies the rule count on the summary line (`13 rules evaluated, 2 of them unable to check anything`), so a green run cannot advertise checks that never looked.
 
 **Two deliberate limits, named rather than left to be discovered:**
 
@@ -336,9 +355,127 @@ Rule = DenyRule | RequireRule | CycleRule | ImportBoundaryRule | ForbidEdgeRule 
 | `severity`         | `str`          | `"error"` or `"warn"`.                          |
 | `file_path`        | `str \| None`  | Source file path (for deny/import violations).   |
 | `line_number`      | `int \| None`  | Line number (for deny/import violations).        |
-| `from_ref_id`      | `str \| None`  | Source node ref_id.                              |
+| `from_ref_id`      | `str \| None`  | Source node ref_id; on a per-node `rule_liveness` finding it is the node the finding is about. |
 | `to_ref_id`        | `str \| None`  | Target node ref_id.                              |
 | `message`          | `str`          | Human-readable explanation of the violation.     |
+
+### `doc_area_coherence` — a node documented where its own graph says it should (BDL-062 `.2`)
+
+**The convention is derived from the graph under test, never declared.** A literal such as
+`docs/domains/<package>/` would ship one project's tree as every adopter's and be wrong for a
+feature-sliced project on the day it is installed, so no directory name appears in the rule, in
+its defaults, or in its configuration block.
+
+```yaml
+  - name: doc-area-coherence
+    description: "A node is documented where this graph documents nodes from its source area"
+    severity: error          # ships `warn`; a project whose layout has settled raises it
+    doc_area_coherence:
+      threshold: 0.6         # default: the share of an area's pairs a mapping must cover
+      min_support: 2         # default: the observations a dominant mapping must rest on
+```
+
+Each node/doc pair is reduced to two comparable segments:
+
+| Side | How the segment is found |
+|------|--------------------------|
+| source area | the segment directly below the **source root**, and the root is derived too: the descent takes one segment for as long as there is exactly one *supported* way down, supported meaning `min_support` sources agree on the next segment |
+| docs area | the segment at the **area depth**, and the depth is derived too: each doc path is asked where in it a source area is named, and the depth that answer lands at most often is read for **every** doc path, whatever the segment is called there |
+
+The second pass is what lets the rule see a document filed under a directory that names no source
+area at all — the commonest shape of the drift it exists to catch, and the case a first cut of the
+rule (vocabulary matching alone) could not see.
+
+**The source root is not what every source shares.** It was, until BDL-062 `.9`, and that is a
+unanimity rule: unanimity hands each individual source a veto over the whole derivation. One node
+whose `source` was `site/` — a committed asset tree beside the code — collapsed this repository's
+root from `src/beadloom` to nothing for all 85 other pairs, and the rule then either invented
+findings against a bogus convention or compared nothing at all (BDL-UX #195). Three things end the
+descent, and each is the right answer to a different graph: a **genuine fork** (two or more
+supported next segments) is where the areas begin, which is the depth being looked for; **no
+supported segment at all** means there is no shared root to speak of; and a source **too short to
+have that depth** is a node whose source IS the root, reported as `rootless` rather than allowed to
+stop the descent.
+
+A pair whose source falls outside the derived root is excluded from the comparison and **counted**,
+never dropped: the population sentence ends `"; N sit outside the source root"`, and `examined`
+adds up to every pair the graph offered. A reader who cannot see the exclusions cannot tell a graph
+with no outliers from one whose outliers vanished.
+
+A mapping `source area -> docs area` is **dominant** when it covers at least `threshold` of that
+area's pairs *and* rests on at least `min_support` of them. `min_support` is not decoration:
+without it every area holding a single documented node is unanimous at one observation, and a
+graph of six nodes in six areas reports a clean sweep having compared nothing that could disagree.
+
+| Outcome | What it means |
+|---------|---------------|
+| a finding | the node's docs area is not the one its source area agreed on; the message names both, the strength of the mapping, and the sample the verdict rests on |
+| silence | every compared pair agrees with a dominant mapping |
+| `rule_liveness` | **no** mapping is dominant: the rule states it checked nothing, and `lint`'s summary counts it in `N of them unable to check anything` |
+
+`threshold` at or below `0.5` and `min_support` below `2` are rejected by the loader: both are
+configuration that reads as a rule and behaves as a silence.
+
+**Severity ships `warn`.** A convention check that fails an adopter's first `beadloom ci` on their
+own house style is a check they switch off. This repository sets `error`, because its layout has
+been settled since BDL-051 and a contradiction there is a defect rather than a matter of taste.
+
+### `summary_facts` — a number in a node summary checked against the project (BDL-062 `.1`)
+
+**A `summary` is the sentence every other surface quotes** — `beadloom ctx`, `prime`, the
+generated site, the agent adapters — and until this rule nothing compared it against anything.
+Measured on this repository at BDL-062: the root node claimed `v1.5.0` against a computed
+`3.0.0` and `mcp-server` claimed `14 tools` against a catalogue of 18, both wrong across three
+major releases with no check going red.
+
+```yaml
+  - name: graph-summary-facts
+    description: "A number or version stated in a node summary agrees with the project"
+    severity: error          # the shipped default
+    summary_facts: {}        # no keys: an unknown key is REJECTED, not ignored
+```
+
+**The block takes no keys, and that is the design.** What counts as a version, what counts as a
+claim about a count, and how close a count has to be are decided once by the documentation
+audit — `DocScanner.scan_line` for the extraction, `compare_facts` for the comparison and its
+per-fact tolerances. A knob here would be a second answer to a question already answered, and a
+second notion of "a version" beside the audit's is how the next drift class starts. The loader
+rejects an unknown key rather than ignoring it: a setting that looks configured and does nothing
+is the failure this rule family exists to catch.
+
+| Outcome | What it means |
+|---------|---------------|
+| a finding | the claim differs from the computed fact; the message names the node, both values, the fact's provenance, the summary verbatim and the population the verdict rests on |
+| silence | the claim agrees, or the summary states no number this project computes a fact for |
+| `rule_liveness`, per node | the claim names a fact the project **declined** to compute; the finding carries the registry's own reason verbatim (`FactSet.not_applicable`), never a wording invented here, and names the node in `from_ref_id` |
+| `rule_liveness`, whole rule | **no** summary in the graph states a checkable number, so nothing was verified and nothing was cleared |
+
+**`unverifiable` never folds into a pass.** A project whose version cannot be resolved and a
+project whose every summary checked out must not be described by the same word. The two
+`rule_liveness` shapes above are deliberately distinct: one node nobody can check is not the same
+report as a whole graph nobody checked.
+
+**Both per-node outcomes name the node in the same field.** A disagreement always carried the
+claim's `ref_id`, and until BDL-062 `.10` an unverifiable claim carried nothing, because
+`liveness_finding` hardcoded `from_ref_id=None` — the same rule reporting on the same node,
+attributable through one channel and anonymous through the other. `liveness_finding` now takes a
+keyword-only `from_ref_id` defaulting to `None`, the same shape `.9` added `severity` in and for
+the same reason: every caller that has no node to name keeps its output byte for byte, because a
+liveness finding is usually about a rule that could not run and a node id there would be an
+invention.
+
+**The `not_applicable` fallback in `collect_claims` serves the injected `FactSet`, not the
+registry's.** A `FactSet` the registry builds covers every name `DocScanner` scans for — measured
+across five project shapes, including a database with no schema at all, where the set difference
+was empty in both directions every time, and a test fails the day it stops being — so on that
+path the fallback cannot fire. `fact_set=` is public and a caller passing one is under no such
+obligation, so the branch is reachable, and removing it raises `KeyError` on exactly that
+caller. The reason it states is *this caller never declared the fact*, which is a different
+sentence from the registry's *this project declined to compute it*.
+
+**Severity ships `error`**, unlike the `warn` a convention check gets. A number that contradicts
+the project it describes is wrong in every house style, and the value sits in the adopter's own
+graph, so there is no house preference to respect.
 
 ### rules.yml Schema
 
@@ -764,7 +901,7 @@ One **pair** per rule type — an inert rule that must be reported, and a live r
 
 - **Every rule type reports its own inertness.** Nine rules, one of each type, all inert on a populated graph. Assert the reported set equals all nine names — a gap says *which* type is missing rather than "some count differs".
 - **Exactly once.** Assert one finding per inert rule (an audit that affirms one fact twice is BDL-UX #173).
-- **Always `warn`.** Nine `severity: error` rules, all inert. Assert every finding is `warn` and `has_errors` is `False` — the adopter-safety invariant, asserted rather than assumed.
+- **`warn` for a PARTIAL stand-down.** Nine `severity: error` rules, all inert on a populated graph. Assert every finding is `warn` and `has_errors` is `False` — the adopter-safety invariant, asserted rather than assumed. The file covers the nine types `rules/liveness.py` (eight matcher/graph-based types) and `rules/evaluators.py` (`forbid_import`) report between them. The TOTAL stand-down that carries the declared severity is `doc_area_coherence`'s, and it is asserted in its own suite, `tests/test_source_root_minority.py` — see the severity paragraph above.
 - **Silent on an empty index.** Assert the same nine rules produce nothing against an empty schema.
 - **End to end.** Drive the reproduction from `beadloom-mr2l.7` (a `require` naming `no-such-node-at-all`) through the real CLI; assert the unknown ref_id is named, `lint --strict` exits **0**, and the JSON payload carries `kind: "rule_liveness"` and `summary.rules_inert == 1`. Exit codes and `--json` only, never piped line counts (BDL-UX #148).
 

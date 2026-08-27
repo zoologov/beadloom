@@ -191,6 +191,24 @@ _CLAUSE_SEPARATORS = frozenset(",;:\u2014\u2013")
 MIN_READABLE_NUMBER = 2
 MIN_READABLE_COUNT = 10
 
+#: Count facts whose NAME says what they count rather than ending in
+#: ``_count``. The suffix decides for every other fact, and a rename that drops
+#: it would silently take the fact out of the MIN_READABLE_COUNT floor —
+#: which is what ``framework_count`` -> ``nodes_with_framework`` would have
+#: done (BDL-UX #193).
+_COUNT_FACTS_WITHOUT_SUFFIX: frozenset[str] = frozenset({"nodes_with_framework"})
+
+
+def is_count_fact(fact_name: str) -> bool:
+    """Whether *fact_name*'s value is a count of things.
+
+    A count is subject to the MIN_READABLE_COUNT floor: single-digit counts are
+    not extracted, because ordinals, table cells and category breakdowns swamp
+    genuine claims below ten. A version is not a count and is never floored.
+    """
+    return fact_name.endswith("_count") or fact_name in _COUNT_FACTS_WITHOUT_SUFFIX
+
+
 # ---------------------------------------------------------------------------
 # Layer 1: Blocklist modifier words — numbers near these are NOT factual claims
 # ---------------------------------------------------------------------------
@@ -258,7 +276,18 @@ class DocScanner:
         "node_count": ["node", "module", "domain", "component"],
         "edge_count": ["edge", "dependency", "connection"],
         "test_count": ["test", "spec", "assertion"],
-        "framework_count": ["framework", "supported framework"],
+        # Every keyword names NODES that declare a framework, never a
+        # framework on its own. "12 web frameworks" is a sentence about
+        # frameworks and is not a claim about how many nodes declare one
+        # (BDL-UX #193). Matching is prefix-based per word, so "node" covers
+        # "nodes" and "declar" covers "declare"/"declares"/"declaring".
+        "nodes_with_framework": [
+            "node with framework",
+            "node with a framework",
+            "node with a test framework",
+            "node declar a framework",
+            "node declar a test framework",
+        ],
     }
 
     PROXIMITY_WINDOW: ClassVar[int] = 5
@@ -292,13 +321,36 @@ class DocScanner:
             if in_code_block:
                 continue
 
-            # Extract version strings (special handling, no proximity needed)
-            mentions.extend(self._extract_versions(line, file_path, line_num))
-
-            # Extract number-based mentions via keyword proximity
-            mentions.extend(self._extract_number_mentions(line, file_path, line_num))
+            mentions.extend(self.scan_line(line, origin=file_path, line_number=line_num))
 
         return mentions
+
+    def scan_line(
+        self, line: str, *, origin: Path, line_number: int = 1
+    ) -> list[Mention]:
+        """Every fact mention one line of prose states.
+
+        The seam :meth:`scan_file` is written in terms of, and the entry point
+        for prose that is not in a file at all — a node ``summary`` in the
+        architecture graph is one line of exactly this kind, and the
+        ``graph-summary-facts`` lint rule reads it here (BDL-062 ``.1``).
+
+        It exists so there is ONE notion of "a version" and ONE keyword table in
+        this codebase. A second extractor built beside this one would agree with
+        it on the day it was written and diverge on the first token-boundary or
+        clause-scope repair that landed on only one of the two, which is how the
+        next drift class starts.
+
+        *origin* is what the returned :class:`Mention` records as its source and
+        the only thing the low-confidence filename check reads. A caller whose
+        prose has no file passes the identifier the reader needs to find it.
+        """
+        return [
+            # Version strings: matched by pattern, no proximity needed.
+            *self._extract_versions(line, origin, line_number),
+            # Counts: matched by keyword proximity within the number's clause.
+            *self._extract_number_mentions(line, origin, line_number),
+        ]
 
     def _extract_versions(
         self, line: str, file_path: Path, line_num: int
@@ -402,8 +454,14 @@ class DocScanner:
             # (disambiguates when multiple fact keywords appear nearby)
             # Score is (distance, is_before_number) — lower distance wins;
             # on ties, keywords AFTER the number (is_before=0) beat BEFORE (1).
+            # The third component breaks a distance tie in favour of the LONGER
+            # keyword phrase: "84 nodes declare a test framework" is one word
+            # from both `node` and `node declar a test framework`, and the
+            # phrase that accounts for more of the sentence is the one the
+            # sentence is about. Without it the winner was whichever fact the
+            # keyword table happened to list first (BDL-UX #193).
             best_fact: str | None = None
-            best_score: tuple[int, int] = (self.PROXIMITY_WINDOW + 1, 1)
+            best_score: tuple[int, int, int] = (self.PROXIMITY_WINDOW + 1, 1, 0)
 
             for fact_name, keywords in self.FACT_KEYWORDS.items():
                 if fact_name == "version":
@@ -413,15 +471,18 @@ class DocScanner:
                 # ordinals, table cells and category breakdowns far more often
                 # than counts (see MIN_READABLE_COUNT).  The cost is reported
                 # per fact by :func:`unreadable_reason`, never silent.
-                if number_val < MIN_READABLE_COUNT and fact_name.endswith("_count"):
+                if number_val < MIN_READABLE_COUNT and is_count_fact(fact_name):
                     continue
 
                 for keyword in keywords:
                     kw_words = keyword.lower().split()
-                    score = self._keyword_distance(
+                    distance = self._keyword_distance(
                         kw_words, word_positions, num_idx, in_clause=in_clause,
                     )
-                    if score is not None and score < best_score:
+                    if distance is None:
+                        continue
+                    score = (*distance, -len(kw_words))
+                    if score < best_score:
                         best_score = score
                         best_fact = fact_name
 
@@ -800,7 +861,7 @@ def unreadable_reason(fact_name: str, value: str | int) -> str | None:
             "as claims, so no statement of this fact can be verified"
         )
 
-    if number < MIN_READABLE_COUNT and fact_name.endswith("_count"):
+    if number < MIN_READABLE_COUNT and is_count_fact(fact_name):
         return (
             f"its value is {number}: single-digit counts are not extracted "
             "(measured: ordinals, table cells and category breakdowns swamp "

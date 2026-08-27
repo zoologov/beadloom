@@ -100,7 +100,7 @@ class TestCliSnapshotList:
         runner.invoke(main, ["snapshot", "save", "--label", "j", "--project", str(project)])
         result = runner.invoke(main, ["snapshot", "list", "--json", "--project", str(project)])
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert len(data) == 1
         assert data[0]["label"] == "j"
 
@@ -126,7 +126,7 @@ class TestCliSnapshotCompare:
             main, ["snapshot", "compare", "1", "2", "--json", "--project", str(project)]
         )
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["has_changes"] is False
 
     def test_compare_with_changes(self, tmp_path: Path) -> None:

@@ -4,7 +4,7 @@
 
 > This document describes **where each part runs**, **who is responsible for what**, and **how the parts interact** — in the current, released state.
 >
-> Change history: BDL-047 (the first AI tech-writer in CI) → BDL-048 (packaging the multi-agent workflow and the MCP tools) → BDL-049 (the move to trunk-based and pull-request triggering) → BDL-050 (consolidating CI into a single `ci.yml` and the verdict system) → BDL-051 ("Beadloom governs itself") → BDL-053 (tracker / `ACTIVE.md` coherence) → BDL-052 (the configurable, tool-agnostic agentic workflow and the pre-push Gate).
+> Change history: BDL-047 (the first AI tech-writer in CI) → BDL-048 (packaging the multi-agent workflow and the MCP tools) → BDL-049 (the move to trunk-based and pull-request triggering) → BDL-050 (consolidating CI into a single `ci.yml` and the verdict system) → BDL-051 ("Beadloom governs itself") → BDL-053 (tracker / `ACTIVE.md` coherence) → BDL-052 (the configurable, tool-agnostic agentic workflow and the pre-push Gate) → BDL-057 (`docs audit` joins the Gate) → BDL-061 (flow guards, the project layer under `.beadloom/flow/`, executable scenarios and document quality, the three documentation spaces, `beadloom waves` and `beadloom review-brief`) → BDL-062 (a node `summary` is held to the numbers the project computes, and a document is held to the placement convention the graph already keeps).
 
 ---
 
@@ -12,14 +12,14 @@
 
 Beadloom keeps a project's architecture and its documentation in a single graph and watches that the two don't drift apart. When the code changes, `sync-check` says plainly: "this documentation section no longer matches the code." But then someone has to sit down and rewrite the section — and that is exactly the step that gets put off in real life, so the documentation falls badly out of date.
 
-Beadloom 2.0.0 closes that gap: updating the documentation becomes part of the ordinary development workflow.
+Beadloom closes that gap: updating the documentation becomes part of the ordinary development workflow.
 
 The core principle:
 **No code reaches `main` without up-to-date documentation.** This isn't a matter of discipline — tools watch for it: the deterministic Beadloom Gate before push and on the CI side. You can't forget to update the documentation — the Gate simply won't let the change through.
 
 ---
 
-## The core principle of 2.0.0: two layers, one invariant
+## Two layers, one invariant
 
 Documentation is written in two places, but it is checked by the same deterministic barrier.
 
@@ -49,7 +49,7 @@ The system is split into parts on purpose: Beadloom stays the core — a supplie
 
 Beadloom **supplies the primitives**. The orchestrator **assembles them into a loop**. Goose **only writes documentation** — and only within the bounds the orchestrator gives it.
 
-An important change in 2.0.0: the server-side AI tech-writer orchestrator moved out of the utility `tools/` directory and straight into the package — into the `ai_agents` domain. It is now a full, graph-tracked component of Beadloom (with its own node, symbols, `sync-check`, and architectural boundaries), not an external add-on. It is invoked as `python -m beadloom.ai_agents.ai_techwriter` and ships inside the installable package — no more copying sources into someone else's repository.
+Since 2.0.0 the server-side AI tech-writer orchestrator lives in the package rather than in the utility `tools/` directory — in the `ai_agents` domain. It is a full, graph-tracked component of Beadloom (with its own node, symbols, `sync-check`, and architectural boundaries), not an external add-on. It is invoked as `python -m beadloom.ai_agents.ai_techwriter` and ships inside the installable package — no more copying sources into someone else's repository.
 
 **Process tools for MCP (BDL-048).** Separately from the AI tech-writer, Beadloom exposes the deterministic process steps as MCP tools (`services/mcp_server.py`): `task_init`, `bead_context`, `complete_bead`, `checkpoint`. This is **not orchestration** — see the [Limitations](#limitations) section.
 
@@ -57,7 +57,7 @@ An important change in 2.0.0: the server-side AI tech-writer orchestrator moved 
 
 ## The configurable agentic workflow: the role configurator (BDL-052)
 
-The main 2.0.0 advance for teams is that the packaged workflow is no longer tied to one programming language or one tool. Roles are now composed from parts according to configuration.
+Since 2.0.0 the packaged workflow has not been tied to one programming language or one tool: roles are composed from parts according to configuration. Since BDL-061 S3 the composition has a fourth layer that belongs to your repository and survives an upgrade — see [Project overlays](./project-overlays.md).
 
 ```mermaid
 flowchart TB
@@ -133,6 +133,22 @@ The context without which the two-layer model would make no sense: in 2.0.0 Bead
 - Every module in the project is classified and documented.
 
 This is exactly why Beadloom is the first and strictest consumer of its own workflow: the "no code without documentation" rule applies to its own code too.
+
+---
+
+## What the flow gained after 2.0.0
+
+Four mechanisms joined the loop above. Each has its own guide; this section says what it is for and where it sits in the workflow, and does not repeat the guide.
+
+**Flow guards — the flow's rules stop being prose a model may ignore (BDL-061 S1).** A guard answers one process question about one situation — *is this edit covered by a claimed work item?*, *is this happening off the protected trunk?* — and returns a verdict a harness acts on without parsing anything. The condition is declared under `guards:` in `.beadloom/flow.yml`, Beadloom evaluates it, and the tool adapter carries no logic of its own. `beadloom guard <name>` exits `0` for pass or skip, `1` for warn and `2` for block. One code differs between the shell and a harness hook, deliberately: a defect in the declared configuration, or a command line that could not be used, exits `3` in the shell and `2` under `--hook`, because `3` does not stop a tool call and **a guard that cannot answer must never read as one that passed**. `beadloom guard --liveness` reports which guards have fired and which protect nothing. This repository runs `bead-claimed` and `working-branch`, both at the shipped `warn`.
+
+**`beadloom waves` — the wave shape is decided from the graph, not guessed (BDL-061 S6).** A tracker knows which beads block which; only the architecture graph knows which code they occupy. `beadloom waves BEAD [BEAD ...]` decides which of the named beads may run at the same time from the code-level independence of their declared node scopes, and every serialised pair carries one reason from a closed vocabulary (`blocked_by_bead`, `unresolved_scope`, `shared_node`, `shared_file`, `dependency_edge`, `override_serial`). Four media are shared no matter which shape is chosen — one working tree, one pre-commit hook, one doc-freshness baseline, one tracker id space — and each carries a plan-time verdict that can come back `failed`, while a medium nobody observed comes back `unmeasured`, which is a finding reaching exit 1 rather than a silent pass. Exit `0` clean, `1` findings, `2` undecidable. What is checked is a precondition measured before the wave runs; the wave's conduct afterwards is checked by nothing here. See the [Parallel waves guide](./parallel-waves.md).
+
+**Three documentation spaces — the checkable claim is a relation, not a status flag.** Every document sits in TO-BE (`PRD`, `RFC`, `BRIEF`, `CONTEXT`, `PLAN`), AS-IS (`SPEC`, `DOC`, `README`) or WORKING (`ACTIVE`). The names are deliberately not TODO and DONE, because nothing here changes status: a PRD does not become done, and what happens when the work lands is that a *different* artifact — the AS-IS document — is written. A flag has nothing to be verified against, since `status: done` is true because somebody typed it and no later change to the code can make it false. A relation has both ends on disk: *this epic recorded intent, its beads closed, and the node it named still has no document describing what was built*. `beadloom docs spaces` decides that, and it is a step of `beadloom ci`. AS-IS documents are the ones `sync-check` pairs with code, and WORKING documents are excused from freshness **by declaration** rather than by an inference from a missing pair. See the [Document kinds guide](./document-kinds.md).
+
+**`beadloom review-brief` — the reviewer gets the change and the specification, not the author's account of either (BDL-061 S6).** It assembles the assignment, the declared scope, the graph's specification documents, the bound `@bead:` scenarios and every changed file, and **withholds the bead's own comments**, reporting how many it withheld. The account is not destroyed: `--release` prints it once a verdict comment is recorded. The ordering is the point — an agent that reads the author's conclusion first tends to verify that conclusion rather than the change.
+
+Beside the four, `beadloom export` and `beadloom federate` extend the same intent-versus-reality question across repositories: each service publishes a deterministic, commit-pinned artifact, and the hub aggregates two or more of them into a federated graph with per-edge and per-contract verdicts. It is not part of the single-repository loop above, and `beadloom ci` runs `federate` only when the project declares satellites.
 
 ---
 
@@ -249,7 +265,7 @@ flowchart LR
     ACTIVE["active-sync (ACTIVE.md + tracker coherence)"]
     SETUP["setup-agentic-flow / setup-ai-techwriter"]
     HOOKS["install-hooks (pre-commit + pre-push Gate)"]
-    BP["branch_protection.py (7 required checks)"]
+    BP["branch_protection.py<br/>9 declared contexts, 7 live here"]
     MCP["mcp_server.py (process tools, BDL-048)"]
   end
 
@@ -417,7 +433,7 @@ The takeaway is simple. A dead VPS or an exhausted plan quota does **not** freez
 
 ## Tracker / ACTIVE.md coherence (BDL-053)
 
-This feature solves a similar problem, only now for task state rather than code and documentation. The workflow tracks it in two places — the `bd` tracker and a status table inside `ACTIVE.md`. Previously both were maintained by hand and gradually drifted from reality. Beadloom 2.0.0 makes them coherent by construction.
+This feature solves a similar problem, only now for task state rather than code and documentation. The workflow tracks it in two places — the `bd` tracker and a status table inside `ACTIVE.md`. Previously both were maintained by hand and gradually drifted from reality. `beadloom active-sync` makes them coherent by construction.
 
 `beadloom active-sync` takes `bd` as the source of truth. It re-reads the task identifiers straight from the table in `ACTIVE.md`, asks `bd` for their real status, and rewrites only the status cell. It does so carefully: it doesn't touch headings, prose, or the progress log, and it preserves a meaningful maintainer note. It also exports the tracker state into the tracked `.beads/issues.jsonl` file so that task closures survive a branch merge. All of this is wired into the pre-commit hook as an auto-fix — so a stale status table simply can't be committed. In a repository without the tracker or without `ACTIVE.md` files, the command does nothing.
 
@@ -462,7 +478,10 @@ flowchart LR
   CI["beadloom ci"] --> R["reindex"]
   R --> L["lint --strict"]
   L --> S["sync-check"]
-  S --> C["config-check"]
+  S --> DA["docs audit"]
+  DA --> DQ["docs quality"]
+  DQ --> DS["doc spaces"]
+  DS --> C["config-check"]
   C --> D["doctor"]
 
   D --> GREEN{"all green?"}
@@ -470,7 +489,9 @@ flowchart LR
   GREEN -->|no| FLAG["contributes verdict: flagged"]
 ```
 
-`sync-check = 0` proves **freshness** — a documentation section references current code symbols. It is not a text-quality check: a human on the pull-request review is responsible for the wording being correct. And `lint --strict` now checks not only architectural boundaries but also the absence of "shadow" code (the `module-coverage` check in error mode).
+The eight steps run in that order, and `federate` is a ninth when the project declares satellites. `sync-check = 0` proves **freshness** — a documentation section references current code symbols. It is not a text-quality check: a human on the pull-request review is responsible for the wording being correct. `lint --strict` checks not only architectural boundaries but also the absence of "shadow" code (the `module-coverage` check in error mode). The three document steps between them are what the Gate gained after 2.0.0: `docs audit` compares numbers and versions stated in prose against the same numbers computed from the project, `docs quality` reads planning documents against the writing standard, and `doc spaces` checks the relation between the intent a TO-BE document recorded and the AS-IS document that should describe what was built.
+
+Each step states what it did **not** check beside what it did. `docs quality` names the kinds no check reads; `doc spaces` names the epics that declare no node and the epics the tracker does not know; `lint` qualifies its rule count with how many rules were unable to check anything. That is the thesis of the release this guide describes, in the Gate's own output: a green step that examined nothing must not read like a green step that examined everything.
 
 ---
 
@@ -503,7 +524,7 @@ flowchart TD
   K --> M["push: main → deploy-site.yml<br/>publishes VitePress; the knowledge base is fresh"]
 ```
 
-The typical 2.0.0 scenario looks like this. On the task branch the documentation is written locally, together with the code. Before push the Beadloom Gate checks it. Then — one pull request to `main`, and CI runs `gate`, `tests`, and `site-build`. The server-side `ai-techwriter` usually does nothing here: the documentation is already fresh, and it finishes instantly. It really kicks in only when updating the documentation locally was forgotten. A merge to `main` triggers `deploy-site.yml` — the only thing that runs on `push: main`.
+The typical scenario looks like this. On the task branch the documentation is written locally, together with the code. Before push the Beadloom Gate checks it. Then — one pull request to `main`, and CI runs `gate`, `tests`, and `site-build`. The server-side `ai-techwriter` usually does nothing here: the documentation is already fresh, and it finishes instantly. It really kicks in only when updating the documentation locally was forgotten. A merge to `main` triggers `deploy-site.yml` — the only thing that runs on `push: main`.
 
 ---
 
@@ -566,3 +587,5 @@ The typical 2.0.0 scenario looks like this. On the task branch the documentation
 - [`agentic-flow.md`](./agentic-flow.md) — the guide to the packaged workflow and the role configurator
 - [`ai-techwriter.md`](./ai-techwriter.md) — the operator's guide to the server-side AI tech-writer
 - [`parallel-waves.md`](./parallel-waves.md) — what a wave of concurrent agents guarantees, the four media it shares regardless of the shape, and reviewer isolation
+- [`document-kinds.md`](./document-kinds.md) — the three documentation spaces, the architecture documents held against code, and the planning documents held against the writing standard
+- [`project-overlays.md`](./project-overlays.md) — the four composition layers and the project layer that survives an upgrade

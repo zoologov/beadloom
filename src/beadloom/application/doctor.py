@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import enum
 import importlib.metadata
+import json
 import logging
 import re
 from dataclasses import dataclass
@@ -76,21 +77,92 @@ def _check_unlinked_docs(conn: sqlite3.Connection) -> list[Check]:
     ]
 
 
+#: Node key recording WHY a node carries no document. Any key the loader does
+#: not map to a column is stored in ``nodes.extra``, so declaring it in the
+#: graph YAML needs no schema change.
+DOCS_ABSENT_KEY = "docs_absent"
+
+
+def _docs_absent_reason(raw_extra: object) -> str | None:
+    """The reason this node declares for having no document, if it declares one.
+
+    A blank reason is not a reason: an excusal with nothing written in it excuses
+    nothing, and returning it would let an empty string buy the silence a
+    sentence has to earn.
+    """
+    if not isinstance(raw_extra, str) or not raw_extra:
+        return None
+    try:
+        extra = json.loads(raw_extra)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(extra, dict):
+        return None
+    reason = extra.get(DOCS_ABSENT_KEY)
+    if not isinstance(reason, str) or not reason.strip():
+        return None
+    return reason.strip()
+
+
 def _check_nodes_without_docs(conn: sqlite3.Connection) -> list[Check]:
-    """Nodes that have no associated documentation."""
+    """Nodes with no document, kept apart from nodes that decided they need none.
+
+    Three outcomes, not two. An undocumented node nobody has ruled on is a gap
+    (``WARNING``). A node that records ``docs_absent`` with a reason is a
+    decision, and is reported at ``INFO`` WITH that reason — reported, never
+    hidden, because a reader has to be able to disagree with it. A node that
+    records a reason and HAS a document is an inert declaration and goes back to
+    ``WARNING``: a suppression that suppresses nothing reads as coverage it does
+    not have (BDL-062 `.4`).
+    """
     rows = conn.execute(
-        "SELECT n.ref_id FROM nodes n LEFT JOIN docs d ON d.ref_id = n.ref_id WHERE d.id IS NULL"
+        "SELECT n.ref_id, n.extra, d.path FROM nodes n "
+        "LEFT JOIN docs d ON d.ref_id = n.ref_id "
+        "ORDER BY n.ref_id, d.path"
     ).fetchall()
-    if not rows:
+
+    documented: dict[str, str] = {}
+    reasons: dict[str, str | None] = {}
+    for row in rows:
+        ref_id = str(row["ref_id"])
+        reasons.setdefault(ref_id, _docs_absent_reason(row["extra"]))
+        if row["path"] is not None and ref_id not in documented:
+            documented[ref_id] = str(row["path"])
+
+    checks: list[Check] = []
+    for ref_id, reason in reasons.items():
+        doc_path = documented.get(ref_id)
+        if doc_path is not None:
+            if reason is not None:
+                checks.append(
+                    Check(
+                        "nodes_without_docs",
+                        Severity.WARNING,
+                        f"Node '{ref_id}' declares {DOCS_ABSENT_KEY} but has a doc "
+                        f"linked ({doc_path}); the declaration is inert -- remove it.",
+                    )
+                )
+            continue
+        if reason is not None:
+            checks.append(
+                Check(
+                    "nodes_without_docs",
+                    Severity.INFO,
+                    f"Node '{ref_id}' has no doc by decision: {reason}",
+                )
+            )
+        else:
+            checks.append(
+                Check(
+                    "nodes_without_docs",
+                    Severity.WARNING,
+                    f"Node '{ref_id}' has no doc linked.",
+                )
+            )
+
+    if not checks:
         return [Check("nodes_without_docs", Severity.OK, "All nodes have documentation.")]
-    return [
-        Check(
-            "nodes_without_docs",
-            Severity.WARNING,
-            f"Node '{r['ref_id']}' has no doc linked.",
-        )
-        for r in rows
-    ]
+    return checks
 
 
 def _check_isolated_nodes(conn: sqlite3.Connection) -> list[Check]:

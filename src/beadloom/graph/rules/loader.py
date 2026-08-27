@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING
 import yaml
 
 from beadloom.graph.rules.types import (
+    DEFAULT_DOC_AREA_MIN_SUPPORT,
+    DEFAULT_DOC_AREA_THRESHOLD,
     SUPPORTED_SCHEMA_VERSIONS,
     VALID_EDGE_KINDS,
     VALID_NODE_KINDS,
@@ -21,6 +23,7 @@ from beadloom.graph.rules.types import (
     CardinalityRule,
     CycleRule,
     DenyRule,
+    DocAreaCoherenceRule,
     ForbidEdgeRule,
     ImportBoundaryRule,
     ImportExemption,
@@ -32,6 +35,7 @@ from beadloom.graph.rules.types import (
     RequireRule,
     Rule,
     ScenarioCoverageRule,
+    SummaryFactsRule,
     UnregisteredFeatureCandidateRule,
 )
 from beadloom.graph.scenarios import DEFAULT_FEATURE_GLOB
@@ -329,6 +333,30 @@ def _parse_forbid_rule(
         edge_kind=edge_kind,
         severity=severity,
     )
+
+
+#: Every key a rule may declare to select its type. A rule declares exactly one.
+#:
+#: Named once so the set has a single reader-visible definition: the validation
+#: message below is built from it, and `onboarding.scanner.rules_gen` is held to
+#: it by a test, because a key added here and not there makes the generated agent
+#: instructions call the rule's kind "unknown" and nothing fails (BDL-062 `.4`).
+AUTHORING_KEYS: frozenset[str] = frozenset(
+    {
+        "deny",
+        "require",
+        "forbid_cycles",
+        "forbid_import",
+        "forbid",
+        "layers",
+        "check",
+        "unregistered_feature_candidate",
+        "module_coverage",
+        "scenario_coverage",
+        "doc_area_coherence",
+        "summary_facts",
+    }
+)
 
 
 _VALID_LAYER_ENFORCEMENTS: frozenset[str] = frozenset({"top-down"})
@@ -664,6 +692,115 @@ def _parse_scenario_coverage_rule(
     )
 
 
+def _parse_doc_area_coherence_rule(
+    name: str,
+    description: str,
+    data: dict[str, object],
+    *,
+    severity: str = "warn",
+) -> DocAreaCoherenceRule:
+    """Parse the 'doc_area_coherence' block of a rule.
+
+    YAML example::
+
+        - name: doc-area-coherence
+          description: "a node documents itself where its graph says it should"
+          doc_area_coherence:
+            threshold: 0.6
+            min_support: 2
+
+    Both keys are optional and neither names a directory: the convention the rule
+    enforces is read off the graph, so there is nothing about a layout to
+    configure. What IS configurable is how much agreement counts as a convention,
+    which depends on the project's size rather than on Beadloom.
+    """
+    threshold = _parse_threshold(name, data.get("threshold", DEFAULT_DOC_AREA_THRESHOLD))
+    min_support = _parse_min_support(
+        name, data.get("min_support", DEFAULT_DOC_AREA_MIN_SUPPORT)
+    )
+    return DocAreaCoherenceRule(
+        name=name,
+        description=description,
+        threshold=threshold,
+        min_support=min_support,
+        severity=severity,
+    )
+
+
+def _parse_threshold(rule_name: str, raw: object) -> float:
+    """The majority share, rejected unless it is a fraction that can be a majority.
+
+    A threshold at or below 0.5 is not a majority and a threshold above 1 can
+    never be met, so both are configuration that reads as a rule and behaves as a
+    silence — the class of defect this rule exists to refuse.
+    """
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        msg = f"Rule '{rule_name}': doc_area_coherence.threshold must be a number"
+        raise ValueError(msg)
+    threshold = float(raw)
+    if not (0.5 < threshold <= 1.0):
+        msg = (
+            f"Rule '{rule_name}': doc_area_coherence.threshold must be greater than "
+            f"0.5 and at most 1.0, got {threshold}"
+        )
+        raise ValueError(msg)
+    return threshold
+
+
+def _parse_min_support(rule_name: str, raw: object) -> int:
+    """The number of agreeing pairs a convention must rest on, at least two.
+
+    One observation cannot disagree with itself, so a ``min_support`` of 1 would
+    make every area holding a single documented node unanimous and let a graph too
+    small to hold a convention report a clean sweep.
+    """
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        msg = f"Rule '{rule_name}': doc_area_coherence.min_support must be an integer"
+        raise ValueError(msg)
+    if raw < 2:
+        msg = (
+            f"Rule '{rule_name}': doc_area_coherence.min_support must be at least 2, "
+            f"got {raw} — one observation is not a convention"
+        )
+        raise ValueError(msg)
+    return raw
+
+
+def _parse_summary_facts_rule(
+    name: str,
+    description: str,
+    data: dict[str, object],
+    *,
+    severity: str = "error",
+) -> SummaryFactsRule:
+    """Parse the 'summary_facts' block of a rule.
+
+    YAML example::
+
+        - name: graph-summary-facts
+          description: "a number in a node summary agrees with the project"
+          severity: error
+          summary_facts: {}
+
+    The block takes no keys, and the empty mapping is the whole configuration
+    surface on purpose: what counts as a version, what counts as a claim about a
+    count and how close a count has to be are decided once by the documentation
+    audit, and a knob here would be a second answer to a question already
+    answered. An unknown key is REJECTED rather than ignored — a setting that
+    looks configured and does nothing is the failure this rule family exists to
+    catch.
+    """
+    unknown = sorted(data)
+    if unknown:
+        msg = (
+            f"Rule '{name}': 'summary_facts' takes no keys, got {unknown}. The "
+            f"extraction and the comparison come from the documentation audit, so "
+            f"there is nothing here to tune"
+        )
+        raise ValueError(msg)
+    return SummaryFactsRule(name=name, description=description, severity=severity)
+
+
 def _parse_non_behavioural(
     rule_name: str, index: int, entry: object
 ) -> NonBehaviouralNode:
@@ -743,9 +880,15 @@ def load_rules(rules_path: Path) -> list[Rule]:
         # checks default to "warn" when severity is omitted (they must never fail
         # the build until S3b classifies every module).
         has_scenario_coverage_block = "scenario_coverage" in rule_data
+        has_doc_area_block = "doc_area_coherence" in rule_data
         default_severity = (
             "warn"
-            if (has_unregistered or has_module_coverage or has_scenario_coverage_block)
+            if (
+                has_unregistered
+                or has_module_coverage
+                or has_scenario_coverage_block
+                or has_doc_area_block
+            )
             else "error"
         )
         severity_raw = rule_data.get("severity", default_severity)
@@ -765,6 +908,8 @@ def load_rules(rules_path: Path) -> list[Rule]:
         has_layers = "layers" in rule_data
         has_check = "check" in rule_data
         has_scenario_coverage = "scenario_coverage" in rule_data
+        has_doc_area = "doc_area_coherence" in rule_data
+        has_summary_facts = "summary_facts" in rule_data
 
         rule_type_count = sum(
             [
@@ -778,15 +923,13 @@ def load_rules(rules_path: Path) -> list[Rule]:
                 has_unregistered,
                 has_module_coverage,
                 has_scenario_coverage,
+                has_doc_area,
+                has_summary_facts,
             ]
         )
         if rule_type_count != 1:
-            msg = (
-                f"rules.yml: rule '{name}' must have exactly one of "
-                f"'deny', 'require', 'forbid_cycles', 'forbid_import', "
-                f"'forbid', 'layers', 'check', 'unregistered_feature_candidate', "
-                f"'module_coverage', or 'scenario_coverage'"
-            )
+            listed = ", ".join(f"'{key}'" for key in sorted(AUTHORING_KEYS))
+            msg = f"rules.yml: rule '{name}' must have exactly one of {listed}"
             raise ValueError(msg)
 
         if has_deny:
@@ -848,6 +991,22 @@ def load_rules(rules_path: Path) -> list[Rule]:
                 raise ValueError(msg)
             rules.append(
                 _parse_scenario_coverage_rule(name, description, sc_data, severity=severity)
+            )
+        elif has_doc_area:
+            da_data = rule_data["doc_area_coherence"]
+            if not isinstance(da_data, dict):
+                msg = f"Rule '{name}': 'doc_area_coherence' must be a mapping"
+                raise ValueError(msg)
+            rules.append(
+                _parse_doc_area_coherence_rule(name, description, da_data, severity=severity)
+            )
+        elif has_summary_facts:
+            sf_data = rule_data["summary_facts"]
+            if not isinstance(sf_data, dict):
+                msg = f"Rule '{name}': 'summary_facts' must be a mapping"
+                raise ValueError(msg)
+            rules.append(
+                _parse_summary_facts_rule(name, description, sf_data, severity=severity)
             )
         else:
             cycle_data = rule_data["forbid_cycles"]

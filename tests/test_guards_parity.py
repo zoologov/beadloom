@@ -18,7 +18,9 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from click.testing import CliRunner
@@ -28,7 +30,37 @@ from beadloom.application.guards.evaluation import evaluate_guard
 from beadloom.application.guards.firing import FIRINGS_RELPATH
 from beadloom.services.cli import main
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
+
+#: Floor for the control window that decides "the guard wrote" from "somebody
+#: else did". The measurement window is normally ~1s of real ``bd``/``git``
+#: calls; a control shorter than that would be a weaker probe than the thing it
+#: is checking, and would rule out a concurrent writer it never had time to see.
+_CONTROL_WINDOW_FLOOR_S = 0.5
+
+
+def _differing(before: dict[str, str], after: dict[str, str]) -> list[str]:
+    """Names whose digest changed, appeared, or vanished between two snapshots."""
+    return sorted(n for n in set(before) | set(after) if before.get(n) != after.get(n))
+
+
+def _moved_with_nothing_running(
+    snapshot: Callable[[], dict[str, str]], window_s: float
+) -> list[str]:
+    """Names that change over an idle window — evidence of another writer.
+
+    Non-empty means the repository is being written by a process this test does
+    not control, so a change seen during the measurement window cannot be
+    charged to the guard. Empty means the repository is quiescent and the
+    evaluation is the only candidate left.
+    """
+    before = snapshot()
+    time.sleep(max(window_s, _CONTROL_WINDOW_FLOOR_S))
+    return _differing(before, snapshot())
+
 
 
 @pytest.fixture()
@@ -390,6 +422,28 @@ class TestGuardsAreReadOnly:
         not, which is why the read-only claim is measured here rather than
         assumed from the absence of a visible write.
 
+        **This test reads four files the REPOSITORY owns, not four files it
+        owns**, which is the whole difficulty and was for a while mistaken for
+        flakiness (BDL-062.10, m4). A byte change in ``beadloom.db`` means
+        "somebody wrote the index", and the guard is only one of the candidates:
+        a concurrent ``beadloom lint`` is another, and writing the index is that
+        command's documented behaviour. Measured on this repository with a plain
+        ``beadloom lint --project .`` looping alongside: **4 failures in 4
+        consecutive runs**, ``beadloom.db`` differing in all four and
+        ``.beads/issues.jsonl`` in one — none of them a guard, all of them
+        reported as one. A red that a session cannot act on is worse than no
+        check, because it teaches the reader to discount the next one.
+
+        The confound is removed by ATTRIBUTION rather than by dropping the
+        files or loosening the comparison. When the measurement window shows a
+        change, a control window of at least the same duration runs with no
+        evaluation in it. If the repository moves then too, another writer is
+        active and this test honestly cannot attribute the change — it skips,
+        naming the files. If the repository is still, the evaluation is the only
+        candidate left and the assertion fails exactly as it always did. A guard
+        that writes therefore still turns this red on a quiescent repository,
+        which is the condition the test was written for.
+
         The ``-wal`` check is stated RELATIVE to what was there before, and the
         reason is measured rather than defensive (BDL-061.36): the file belongs
         to the repository, not to this test, and any earlier test in the session
@@ -425,6 +479,7 @@ class TestGuardsAreReadOnly:
         before = digest()
         wal = Path(f"{db}-wal")
         wal_before = wal.exists()
+        started = time.monotonic()
         for name in ("bead-claimed", "working-branch"):
             verdict = evaluate_guard(
                 name,
@@ -433,6 +488,20 @@ class TestGuardsAreReadOnly:
                 probes=build_probes(_REPO_ROOT),
             )
             assert verdict.why
+        window_s = time.monotonic() - started
+        after = digest()
+
+        moved = _differing(before, after)
+        if moved or wal.exists() != wal_before:
+            elsewhere = _moved_with_nothing_running(digest, window_s)
+            if elsewhere:
+                pytest.skip(
+                    "cannot attribute: this repository is being written by another "
+                    f"process right now — {', '.join(elsewhere)} changed over an "
+                    f"idle {max(window_s, _CONTROL_WINDOW_FLOOR_S):.2f}s control "
+                    "window with no guard running. `beadloom lint` writes the "
+                    "index by design (#147), and so does a concurrent `bd`."
+                )
 
         assert digest() == before
         assert wal.exists() == wal_before, (
@@ -440,6 +509,48 @@ class TestGuardsAreReadOnly:
             if wal.exists()
             else "the evaluation checkpointed another connection's log"
         )
+
+
+class TestAttributionDistinguishesTheWriter:
+    """The m4 apparatus itself, because a wrong verdict here hides a real write.
+
+    These are unit checks on the two helpers the live-index test leans on. If
+    ``_differing`` under-reports, a guard that writes reads green; if
+    ``_moved_with_nothing_running`` over-reports, every run skips and the
+    read-only invariant is never measured at all. Both directions are checked.
+    """
+
+    def test_a_changed_digest_is_reported(self) -> None:
+        assert _differing({"a": "1"}, {"a": "2"}) == ["a"]
+
+    def test_an_appearing_and_a_vanishing_file_are_both_reported(self) -> None:
+        assert _differing({}, {"wal": "1"}) == ["wal"]
+        assert _differing({"wal": "1"}, {}) == ["wal"]
+
+    def test_identical_snapshots_report_nothing(self) -> None:
+        assert _differing({"a": "1", "b": "2"}, {"a": "1", "b": "2"}) == []
+
+    def test_a_still_repository_yields_no_excuse_to_skip(self) -> None:
+        """A stable snapshot must NOT look like a concurrent writer."""
+        assert _moved_with_nothing_running(lambda: {"a": "1"}, 0.0) == []
+
+    def test_a_moving_repository_is_detected_as_another_writer(self) -> None:
+        """A snapshot that changes over the idle window names what moved."""
+        counter = iter(range(10))
+        assert _moved_with_nothing_running(lambda: {"a": str(next(counter))}, 0.0) == ["a"]
+
+    def test_the_control_window_is_never_shorter_than_the_floor(self) -> None:
+        """A zero-length control would rule out a writer it never waited for."""
+        started = time.monotonic()
+        _moved_with_nothing_running(lambda: {"a": "1"}, 0.0)
+        assert time.monotonic() - started >= _CONTROL_WINDOW_FLOOR_S
+
+    def test_the_control_window_covers_the_measurement_window(self) -> None:
+        """A long evaluation gets an equally long control, not just the floor."""
+        window = _CONTROL_WINDOW_FLOOR_S + 0.2
+        started = time.monotonic()
+        _moved_with_nothing_running(lambda: {"a": "1"}, window)
+        assert time.monotonic() - started >= window
 
 
 class _FixedTracker:

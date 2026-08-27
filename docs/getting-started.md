@@ -42,6 +42,13 @@ uv tool install "beadloom[graphql]"     # typed GraphQL contract checking (graph
 uv tool install "beadloom[all]"         # everything
 ```
 
+The current release is **3.0.0**. `beadloom --version` reports the build you actually
+installed. This line is the one place a document states the version as a claim, and
+`beadloom docs audit` compares it against `pyproject.toml` on every run — so a release that
+bumps the manifest and forgets the prose is reported instead of merely being wrong. Every
+other version literal in the documentation is a dependency pin or a historical reference to
+the release a feature arrived in.
+
 ## Initialize
 
 ```bash

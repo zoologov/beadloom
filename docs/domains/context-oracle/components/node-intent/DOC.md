@@ -43,8 +43,9 @@ whole subgraph would spend the budget on nodes nobody named.
 `none_declared` is the common case — this repository holds 84 nodes and only
 fifteen of them are declared by any epic — so it carries `epics_read` and
 `epics_declaring_nodes`. That turns it from a claim into a measurement: an empty
-answer over 61 epics and an empty answer over none are the same sentence about
-two different worlds.
+answer over 62 epics and an empty answer over none are the same sentence about
+two different worlds. The epic count moves whenever a planning directory is
+added, which is why the answer carries it instead of the reader assuming one.
 
 Collapsing `none_declared` into `not_checked` would re-earn what this epic spent
 two slices on (BDL-UX #174, #175). An absence with a stated reason is a decision;

@@ -264,7 +264,7 @@ class TestBothSurfacesSayWhichTrackerTheyRead:
     def test_the_command_names_the_tracker_it_read(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        payload = json.loads(_cli(tmp_path, monkeypatch, closed="PROJ-1").output)
+        payload = json.loads(_cli(tmp_path, monkeypatch, closed="PROJ-1").stdout)
 
         assert payload["tracker_source"] == TRACKER_BD
 
@@ -272,7 +272,7 @@ class TestBothSurfacesSayWhichTrackerTheyRead:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """`bd` knows PROJ-1 closed and the export does not; both report once."""
-        cli = json.loads(_cli(tmp_path, monkeypatch, closed="PROJ-1").output)
+        cli = json.loads(_cli(tmp_path, monkeypatch, closed="PROJ-1").stdout)
         gate = _step_doc_spaces(tmp_path)
 
         assert cli["refs_checked"] == 1

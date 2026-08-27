@@ -283,7 +283,7 @@ def _load_rules_into_db(
 ) -> None
 ```
 
-Load architecture rules from `rules.yml` into the `rules` table. Supports `DenyRule` and `RequireRule` types.
+Load architecture rules from `rules.yml` into the `rules` table. `_serialize_rule` covers **every** rule type the loader produces — deny, require, cycle, import-boundary, forbid-edge, layer, cardinality, unregistered-feature-candidate, module-coverage, scenario-coverage, doc-area-coherence and summary-facts — and raises `TypeError` on a type it does not know, so a rule type added to the loader without a serializer fails loudly instead of vanishing from the `rules` table. Each rule is stored WHOLE: a `forbid_import` exemption, a `scenario_coverage.non_behavioural` declaration and a `doc_area_coherence` threshold are all part of what the rule currently means, and a reader of the table must not see a stricter rule than the one that runs. `summary_facts` stores an empty definition because it has no configuration to store.
 
 ```python
 def _store_test_mappings(project_root: Path, conn: sqlite3.Connection) -> None

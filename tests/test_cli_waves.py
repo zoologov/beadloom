@@ -187,7 +187,7 @@ class TestOneContractForEveryCaller:
         machine = runner.invoke(
             main, ["waves", "a", "b", "--json", "--project", str(project)]
         )
-        payload = json.loads(machine.output)
+        payload = json.loads(machine.stdout)
         assert machine.exit_code == human.exit_code == payload["exit_code"]
         assert f"{len(payload['waves'])} wave(s)" in human.output
         assert f"{len(payload['conflicts'])} serialisation(s)" in human.output
@@ -213,7 +213,7 @@ class TestOneContractForEveryCaller:
         result = CliRunner().invoke(
             main, ["waves", "a", "b", "--json", "--project", str(project)]
         )
-        payload = json.loads(result.output)
+        payload = json.loads(result.stdout)
         assert {m["name"] for m in payload["shared_media"]} == {
             "working-tree",
             "commit-gate",

@@ -904,7 +904,7 @@ class TestThroughTheRealCli:
 
         # Assert
         assert invocation.exit_code == 0, invocation.output
-        payload = json.loads(invocation.output)
+        payload = json.loads(invocation.stdout)
         assert any(f["kind"] == LIVENESS for f in payload["findings"]), invocation.output
 
     def test_the_json_payload_names_the_inert_rule_and_counts_it(self, tmp_path: Path) -> None:

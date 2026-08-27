@@ -170,7 +170,7 @@ def test_json_output_shape(tmp_path: Path) -> None:
             main, ["active-sync", "--json", "--project", str(tmp_path), "--no-export"]
         )
     assert result.exit_code == 0, result.output
-    payload = json.loads(result.output)
+    payload = json.loads(result.stdout)
     assert "changed_files" in payload
     assert "drifted_rows" in payload
     assert any(row["bead_id"] == "demo-a.1" for row in payload["drifted_rows"])

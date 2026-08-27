@@ -256,7 +256,7 @@ class TestTheSurfacesSayWhyAnEpicIsUnresolved:
             main, ["docs", "spaces", "--json", "--project", str(root)]
         )
 
-        assert json.loads(result.output)["unresolved_reasons"] == {
+        assert json.loads(result.stdout)["unresolved_reasons"] == {
             "PROJ-1": UNRESOLVED_NO_NODE_DECLARED,
             "PROJ-2": UNRESOLVED_NO_INTENT_DOCUMENT,
         }

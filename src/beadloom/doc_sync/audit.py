@@ -20,6 +20,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from beadloom.doc_sync.audit_coverage import FactCoverage, assess_coverage
+from beadloom.doc_sync.audit_self_surface import (
+    RUNNING_DISTRIBUTION,
+    foreign_project_reason,
+)
 from beadloom.doc_sync.scanner import DocScanner, Mention, ScanSurface
 from beadloom.infrastructure.mcp_tools import MCP_TOOL_CATALOG
 from beadloom.infrastructure.surface_registry import get_cli_group
@@ -39,7 +43,7 @@ DEFAULT_TOLERANCES: dict[str, float] = {
     "edge_count": 0.10,       # +/-10% (growing metric)
     "language_count": 0.0,    # exact (rarely changes)
     "test_count": 0.05,       # +/-5% (fluctuates)
-    "framework_count": 0.0,   # exact (rarely changes)
+    "nodes_with_framework": 0.0,  # exact (rarely changes)
     "mcp_tool_count": 0.0,    # exact
     "cli_command_count": 0.0, # exact
     "rule_type_count": 0.0,   # exact
@@ -89,6 +93,29 @@ class Fact:
 
 
 @dataclass(frozen=True)
+class FactSet:
+    """What a project declares, and what the audit refused to declare for it.
+
+    A collector that cannot compute a fact used to omit it, which left the
+    denominator of "N of M declared fact(s) verified" moving silently: measured
+    in this repository, an unregistered CLI surface turned nine declared facts
+    into eight and nothing said which one left.  A decline is now a value in its
+    own right, carrying the reason a reader needs to judge it.
+
+    Attributes
+    ----------
+    facts:
+        The facts the audit computed for this project, keyed by fact name.
+    not_applicable:
+        Fact name → the reason no value was declared for it.  Disjoint from
+        ``facts``: a name is in exactly one of the two.
+    """
+
+    facts: dict[str, Fact]
+    not_applicable: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class AuditFinding:
     """A single audit finding: a mention compared against a ground-truth fact.
 
@@ -132,6 +159,11 @@ class AuditResult:
         Which documents were read and which were skipped, with reasons.
         ``None`` when the result was built from mentions directly rather than
         by scanning a project.
+    not_applicable:
+        Fact name → the reason the audit declared no value for it in THIS
+        project.  These facts are outside the denominator entirely; they are
+        neither verified nor unverified, and naming them is what keeps the
+        denominator from shrinking in silence.
     """
 
     facts: dict[str, Fact]
@@ -139,6 +171,12 @@ class AuditResult:
     unmatched: list[Mention]
     coverage: dict[str, FactCoverage] = field(default_factory=dict)
     surface: ScanSurface | None = None
+    not_applicable: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def verified_facts(self) -> list[str]:
+        """Declared facts at least one document stated and the run judged."""
+        return sorted(name for name, cov in self.coverage.items() if cov.verified)
 
     @property
     def unverified_facts(self) -> list[str]:
@@ -196,6 +234,29 @@ class IgnoreRule:
 _SUPPORTED_METRICS = frozenset({"stale", "unverified"})
 _SUPPORTED_OPS = frozenset({">", ">="})
 _FAIL_IF_RE = re.compile(r"^\s*(\w+)\s*(>=?)\s*(\d+)\s*$")
+
+
+def _unreadable_table(table: str) -> str:
+    """The reason a graph-database fact could not be computed."""
+    return (
+        f"the {table} table could not be read from the graph database — "
+        "run `beadloom reindex`"
+    )
+
+
+def _foreign_surface_reason(surface: str, fact: str, clause: str) -> str:
+    """The reason a surface of the running package says nothing about this project.
+
+    ``clause`` is :func:`foreign_project_reason`'s statement of the identity
+    mismatch.  The reason names the escape hatch as well as the refusal: a
+    project with its own MCP server or CLI can declare the count under
+    ``docs_audit.extra_facts`` and have it audited like any other fact.
+    """
+    return (
+        f"{surface} describes the running {RUNNING_DISTRIBUTION} package, not "
+        f"this project ({clause}); declare docs_audit.extra_facts.{fact} in "
+        ".beadloom/config.yml to audit this project's own"
+    )
 
 
 def parse_fail_condition(expr: str) -> tuple[str, str, int]:
@@ -271,6 +332,7 @@ def compare_facts(
     mentions: list[Mention],
     tolerances: dict[str, float] | None = None,
     ignore: list[IgnoreRule] | None = None,
+    not_applicable: dict[str, str] | None = None,
 ) -> AuditResult:
     """Compare mentions against ground-truth facts.
 
@@ -293,6 +355,10 @@ def compare_facts(
         matching any rule's ``{path, fact, value}`` triple is dropped entirely
         (neither a finding nor unmatched) — this silences a known false match
         without masking genuine stale facts of the same type elsewhere.
+    not_applicable:
+        Fact name → the reason the registry declared no value for it here.
+        Carried through to the result so the report can name the population it
+        did not check, instead of leaving the denominator quietly smaller.
 
     Returns
     -------
@@ -340,6 +406,7 @@ def compare_facts(
         findings=findings,
         unmatched=unmatched,
         coverage=assess_coverage(facts, findings),
+        not_applicable=dict(not_applicable or {}),
     )
 
 
@@ -517,7 +584,7 @@ def run_audit(
         Full audit result with facts, findings, and unmatched mentions.
     """
     registry = FactRegistry()
-    facts = registry.collect(project_root, db)
+    fact_set = registry.collect_set(project_root, db)
 
     scanner = DocScanner()
     surface = scanner.resolve_surface(project_root, scan_paths)
@@ -525,23 +592,30 @@ def run_audit(
 
     tolerances = _load_tolerances_from_config(project_root)
     ignore = _load_ignore_from_config(project_root)
-    result = compare_facts(facts, mentions, tolerances=tolerances, ignore=ignore)
+    result = compare_facts(
+        fact_set.facts,
+        mentions,
+        tolerances=tolerances,
+        ignore=ignore,
+        not_applicable=fact_set.not_applicable,
+    )
     return replace(result, surface=surface)
 
 
 class FactRegistry:
     """Auto-computes project facts from existing data sources.
 
-    All facts are collected via :meth:`collect`; each source is wrapped
-    in a try/except so missing data is gracefully skipped.
+    All facts are collected via :meth:`collect_set`.  A source that cannot
+    produce a value does not vanish: it records why, so the audit can report
+    the facts it declined alongside the facts it declared.
     """
 
-    def collect(
+    def collect_set(
         self,
         project_root: Path,
         db: sqlite3.Connection,
-    ) -> dict[str, Fact]:
-        """Collect all facts from available sources.
+    ) -> FactSet:
+        """Collect every fact this project declares, and every one it does not.
 
         Parameters
         ----------
@@ -552,23 +626,45 @@ class FactRegistry:
 
         Returns
         -------
-        dict[str, Fact]
-            Mapping of fact name to ``Fact`` instance.  Facts that cannot
-            be computed are silently omitted.
+        FactSet
+            ``facts`` — what was computed for THIS project.  ``not_applicable``
+            — fact name → the reason nothing was computed, which is the half
+            that used to be dropped without trace.
         """
         facts: dict[str, Fact] = {}
+        declined: dict[str, str] = {}
 
-        self._collect_version(project_root, facts)
-        self._collect_db_counts(db, facts)
-        self._collect_language_count(db, facts)
-        self._collect_test_count(db, facts)
-        self._collect_framework_count(db, facts)
-        self._collect_rule_type_count(db, facts)
-        self._collect_mcp_tool_count(facts)
-        self._collect_cli_command_count(facts)
+        self._collect_version(project_root, facts, declined)
+        self._collect_db_counts(db, facts, declined)
+        self._collect_language_count(db, facts, declined)
+        self._collect_test_count(db, facts, declined)
+        self._collect_nodes_with_framework(db, facts, declined)
+        self._collect_rule_type_count(db, facts, declined)
+        self._collect_mcp_tool_count(project_root, facts, declined)
+        self._collect_cli_command_count(project_root, facts, declined)
         self._collect_extra_facts(project_root, facts)
 
-        return facts
+        # A project that declares its own value for a surface fact (the escape
+        # hatch every decline reason names) has answered the question, so the
+        # decline is withdrawn rather than reported beside a value.
+        for name in facts:
+            declined.pop(name, None)
+
+        return FactSet(facts=facts, not_applicable=declined)
+
+    def collect(
+        self,
+        project_root: Path,
+        db: sqlite3.Connection,
+    ) -> dict[str, Fact]:
+        """The computed facts only — :meth:`collect_set` without the declines.
+
+        Kept because it is the published entry point callers already use.  A
+        caller that needs to report what the audit could not compute wants
+        :meth:`collect_set`; this one cannot tell an absent fact from a
+        declined one.
+        """
+        return self.collect_set(project_root, db).facts
 
     # ------------------------------------------------------------------
     # Version from manifest files
@@ -578,6 +674,7 @@ class FactRegistry:
         self,
         project_root: Path,
         facts: dict[str, Fact],
+        declined: dict[str, str],
     ) -> None:
         """Extract version from project manifests with priority fallback.
 
@@ -610,6 +707,11 @@ class FactRegistry:
                     source=source_label,
                 )
                 return  # first match wins
+
+        declined["version"] = (
+            "no manifest under this project declares a version "
+            "(looked in pyproject.toml, package.json, Cargo.toml)"
+        )
 
     @staticmethod
     def _parse_version(
@@ -716,6 +818,7 @@ class FactRegistry:
         self,
         db: sqlite3.Connection,
         facts: dict[str, Fact],
+        declined: dict[str, str],
     ) -> None:
         """Collect node_count and edge_count from graph DB."""
         source = "graph DB"
@@ -727,6 +830,7 @@ class FactRegistry:
             )
         except Exception:
             logger.warning("Cannot query nodes table")
+            declined["node_count"] = _unreadable_table("nodes")
 
         try:
             row = db.execute("SELECT COUNT(*) AS cnt FROM edges").fetchone()
@@ -735,11 +839,13 @@ class FactRegistry:
             )
         except Exception:
             logger.warning("Cannot query edges table")
+            declined["edge_count"] = _unreadable_table("edges")
 
     def _collect_language_count(
         self,
         db: sqlite3.Connection,
         facts: dict[str, Fact],
+        declined: dict[str, str],
     ) -> None:
         """Count distinct languages from file extensions in code_symbols."""
         try:
@@ -762,11 +868,13 @@ class FactRegistry:
             )
         except Exception:
             logger.warning("Cannot query code_symbols for language count")
+            declined["language_count"] = _unreadable_table("code_symbols")
 
     def _collect_test_count(
         self,
         db: sqlite3.Connection,
         facts: dict[str, Fact],
+        declined: dict[str, str],
     ) -> None:
         """Sum test_count from nodes.extra JSON tests.test_count."""
         try:
@@ -790,11 +898,13 @@ class FactRegistry:
             )
         except Exception:
             logger.warning("Cannot query nodes for test count")
+            declined["test_count"] = _unreadable_table("nodes")
 
-    def _collect_framework_count(
+    def _collect_nodes_with_framework(
         self,
         db: sqlite3.Connection,
         facts: dict[str, Fact],
+        declined: dict[str, str],
     ) -> None:
         """Count nodes with non-empty framework detection data in extra."""
         try:
@@ -813,18 +923,20 @@ class FactRegistry:
                         if framework:
                             count += 1
 
-            facts["framework_count"] = Fact(
-                name="framework_count",
+            facts["nodes_with_framework"] = Fact(
+                name="nodes_with_framework",
                 value=count,
                 source="graph DB",
             )
         except Exception:
             logger.warning("Cannot query nodes for framework count")
+            declined["nodes_with_framework"] = _unreadable_table("nodes")
 
     def _collect_rule_type_count(
         self,
         db: sqlite3.Connection,
         facts: dict[str, Fact],
+        declined: dict[str, str],
     ) -> None:
         """Count rules from the rules table."""
         try:
@@ -836,19 +948,31 @@ class FactRegistry:
             )
         except Exception:
             logger.warning("Cannot query rules table")
+            declined["rule_type_count"] = _unreadable_table("rules")
 
     # ------------------------------------------------------------------
-    # MCP tool count
+    # MCP tool count — a surface of the RUNNING package, not of every project
     # ------------------------------------------------------------------
 
     def _collect_mcp_tool_count(
         self,
+        project_root: Path,
         facts: dict[str, Fact],
+        declined: dict[str, str],
     ) -> None:
-        """Count MCP tools from the server definition module."""
-        # The canonical catalog lives in infrastructure and is pinned equal to
-        # the server's live registry by a test, so this fact never depends on
-        # whether the server module happens to be imported in this process.
+        """Count MCP tools — only when the audited project provides that surface.
+
+        The catalog is canonical for Beadloom and pinned equal to the server's
+        live registry by a test, so the value never depends on whether the
+        server module happens to be imported.  It is still a fact about
+        Beadloom, which is why it is declared only for Beadloom.
+        """
+        foreign = foreign_project_reason(project_root)
+        if foreign is not None:
+            declined["mcp_tool_count"] = _foreign_surface_reason(
+                "the MCP tool catalog", "mcp_tool_count", foreign
+            )
+            return
         facts["mcp_tool_count"] = Fact(
             name="mcp_tool_count",
             value=len(MCP_TOOL_CATALOG),
@@ -856,17 +980,29 @@ class FactRegistry:
         )
 
     # ------------------------------------------------------------------
-    # CLI command count
+    # CLI command count — likewise a surface of the RUNNING package
     # ------------------------------------------------------------------
 
     def _collect_cli_command_count(
         self,
+        project_root: Path,
         facts: dict[str, Fact],
+        declined: dict[str, str],
     ) -> None:
-        """Count CLI commands from the Click main group."""
+        """Count CLI commands from the Click main group, for that project only."""
+        foreign = foreign_project_reason(project_root)
+        if foreign is not None:
+            declined["cli_command_count"] = _foreign_surface_reason(
+                "the CLI command tree", "cli_command_count", foreign
+            )
+            return
         group = get_cli_group()
         if group is None:
             logger.warning("CLI surface unavailable — command count not audited")
+            declined["cli_command_count"] = (
+                "no CLI surface is registered in this process, so the command "
+                "tree could not be counted — an absent surface is not an empty one"
+            )
             return
         facts["cli_command_count"] = Fact(
             name="cli_command_count",

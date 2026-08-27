@@ -134,7 +134,7 @@ class TestDocsPolish:
         )
 
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "nodes" in data
         assert "architecture" in data
         assert "instructions" in data
@@ -152,7 +152,7 @@ class TestDocsPolish:
         )
 
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert len(data["nodes"]) == 1
         assert data["nodes"][0]["ref_id"] == "auth"
 
@@ -167,5 +167,5 @@ class TestDocsPolish:
         )
 
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["nodes"] == []

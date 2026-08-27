@@ -433,7 +433,7 @@ class TestEveryExitPathEndsWithAVerdictAndARecord:
 
         if result.exit_code != 1:
             return
-        assert json.loads(result.output)["outcome"] == "warn", label
+        assert json.loads(result.stdout)["outcome"] == "warn", label
 
     def test_the_liveness_report_records_nothing_though_a_project_was_located(
         self, tmp_path, stub_probes
@@ -1754,7 +1754,7 @@ class TestTheShapeIsJudgedBeforeAnythingIsRemoved:
             ]
         )
 
-        assert json.loads(result.output)["outcome"] == "error", label
+        assert json.loads(result.stdout)["outcome"] == "error", label
         assert result.exit_code == 2, label
 
     @pytest.mark.parametrize(
@@ -1786,7 +1786,7 @@ class TestTheShapeIsJudgedBeforeAnythingIsRemoved:
             ]
         )
 
-        payload = json.loads(result.output)
+        payload = json.loads(result.stdout)
         exclusion = GuardExclusion(path="src/*.py", reason="r", until="u")
         if not filesystem_can_name(f"src/app.py{suffix}"):
             # Where the filesystem cannot spell the character, the name cannot

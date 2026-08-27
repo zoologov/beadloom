@@ -247,10 +247,16 @@ Releases are cut by a maintainer (trunk-based; `main` is always green):
 
 1. **Bump the version** in `src/beadloom/__init__.py` (`__version__`) — the single
    source of truth, read by `[tool.hatch.version]` and `beadloom --version`. Update
-   the `Current version` line in `.claude/CLAUDE.md` to match. Follow
+   the `Current version` line in `.claude/CLAUDE.md` to match, and the `(vX.Y.Z)` in
+   the root node's `summary` in `.beadloom/_graph/services.yml` — that one is a
+   CHECKED claim since BDL-062, so `beadloom lint --strict` fails on it rather than
+   letting it fall two majors behind unnoticed, which is what it did. Follow
    [Semantic Versioning](https://semver.org): MAJOR for breaking changes, MINOR for
    backward-compatible features, PATCH for fixes.
 2. **Update `CHANGELOG.md`** — move `[Unreleased]` into a dated `[X.Y.Z]` section.
+   The CHANGELOG is where a release is NAMED. A domain document that says "until
+   X.Y.Z ..." before X.Y.Z exists states a version nothing can hold it to, and
+   `docs audit` reports it stale.
 3. **Open one PR to `main`** and merge when `beadloom ci` (the required check) is green.
 4. **Create a GitHub Release** tagged `vX.Y.Z` — this triggers `.github/workflows/pypi-publish.yml`
    (build → TestPyPI → PyPI). The version is read from `__version__`.

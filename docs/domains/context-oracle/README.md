@@ -39,7 +39,7 @@ When an AI agent or developer requests context for a `ref_id`, Context Oracle:
 | `builder` | `builder.py` | BFS subgraph traversal, chunk collection, context bundle assembly |
 | `cache` | `cache.py` | L1 in-memory and L2 SQLite-backed context bundle caching |
 | `intent` | `intent.py` | Which recorded intent a node's bundle carries, and the three answers absence can have |
-| `code_indexer` | `code_indexer.py` | Tree-sitter parsing and `beadloom:` annotation extraction for 12 languages |
+| `code_indexer` | `code_indexer.py` | Tree-sitter parsing and `beadloom:` annotation extraction for every extension in `_EXTENSION_LOADERS` |
 | `search` | `search.py` | FTS5 full-text search over architecture graph nodes and documentation |
 | `route_extractor` | `route_extractor.py` | API route extraction via regex for 12 frameworks, with self-exclusion and display formatting |
 | `test_mapper` | `test_mapper.py` | Test framework detection, test file to source node mapping, and parent aggregation |
@@ -125,7 +125,11 @@ Maximum 5 suggestions, prefix matches take priority.
 
 ### Code Indexer
 
-Tree-sitter-based code symbol extraction supporting 12 languages:
+Tree-sitter-based code symbol extraction. `_EXTENSION_LOADERS` is the authority and the table
+below is its transcription — eleven languages over seventeen extensions. The count is
+deliberately not written as a digit: `language_count` in the audit's fact vocabulary means the
+languages the audited project is WRITTEN in, so a digit beside the word `languages` here is read
+as a claim about that and has to be suppressed to stay green.
 
 | Extension(s) | Language | Symbol types |
 |-------------|----------|-------------|

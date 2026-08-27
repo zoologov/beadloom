@@ -5,12 +5,17 @@ from beadloom.doc_sync.audit import (
     AuditResult,
     Fact,
     FactRegistry,
+    FactSet,
     compare_facts,
     run_audit,
 )
 from beadloom.doc_sync.audit_coverage import (
     FactCoverage,
     assess_coverage,
+)
+from beadloom.doc_sync.audit_self_surface import (
+    declared_project_name,
+    foreign_project_reason,
 )
 from beadloom.doc_sync.doc_indexer import (
     DocIndexResult,
@@ -51,6 +56,7 @@ __all__ = [
     "Fact",
     "FactCoverage",
     "FactRegistry",
+    "FactSet",
     "Mention",
     "ScanSurface",
     "SyncPair",
@@ -63,6 +69,8 @@ __all__ = [
     "chunk_markdown",
     "classify_section",
     "compare_facts",
+    "declared_project_name",
+    "foreign_project_reason",
     "index_docs",
     "mark_reference_synced",
     "mark_synced",

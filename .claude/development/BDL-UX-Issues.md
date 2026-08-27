@@ -35,6 +35,293 @@
 
 ## Open Issues
 
+208. [2026-08-26] [LOW] A module docstring can describe code that no longer exists, and nothing in this project can see it
+
+    **Severity:** low individually; the point is that the class has no checker at all
+    **Context:** `beadloom-viaj.11`, which fixed one instance and named two more it could not fix by the same method.
+
+    **The inversion worth recording.** `doc_area.py`'s module docstring described `_common_prefix`, a function `.9` had deleted the same morning — while `docs/domains/graph/README.md:117` described the replacement `_source_root` **correctly**. The document was current and the code's own docstring was stale. This project's entire thesis is the other way round.
+
+    **Why no check catches it:** a docstring is not a doc pair. It lives inside the file whose hash defines the pair's freshness, so **a file is always fresh with respect to itself.** `sync-check` cannot ever see this class, by construction rather than by omission.
+
+    `.11` swept all **11** modules under `graph/rules/`, resolving the **32** symbols their docstrings name, and found 0 further dead *references* — now pinned by `tests/test_rules_docstring_references.py`. Two false hits are worth knowing for anyone building the same checker: in that package `` `__init__` `` names a module file rather than a symbol, and `FactSet.not_applicable` is a real dataclass field that `hasattr` cannot see, because `field(default_factory=…)` leaves no class attribute behind. A naive checker reports a live field as dead.
+
+    **But the name-resolution sweep is the weaker half, and two findings prove it.** Found by reading, naming no dead symbol, catchable by nothing:
+
+    - `graph/rules/evaluators.py` — its docstring claims it produces violations *"for every rule kind except cycles"*. False since `doc_area`, `summary_facts` and `scenario_coverage` moved into their own modules.
+    - `graph/rules/__init__.py` — lists **4** submodules of **11**, a historical BDL-059 S3 list.
+
+    Both left unfixed as out of scope for a docstring bead. They are the residue: a symbol-resolving checker finds *deleted names*, and prose goes stale without ever naming one.
+
+207. [2026-08-26] [MEDIUM] The pre-commit hook re-stages `.beads/issues.jsonl` after an agent deliberately unstages it
+
+    **Severity:** medium (it defeats the one discipline that keeps concurrent waves from committing each other's work)
+    **Context:** self-reported by `.7` of BDL-062, unprompted, as "one thing to know before the next agent commits".
+
+    `.7` unstaged `.beads/issues.jsonl` on purpose — it was another agent's tracker export — and `active-sync --stage` in the pre-commit hook **added it back**, saying so on stderr.
+
+    The project CLAUDE.md instructs every agent, in these words: *"Commit only your own files, by explicit path — never `git add -A`."* That instruction is **not sufficient on its own**, because a hook stages a file after the agent has decided not to. An agent following the rule exactly still commits another agent's state.
+
+    Same family as #194 (`bd merge-slot` is not an exclusion primitive): the concurrency discipline this project documents rests on primitives that do not enforce it. Two independent mechanisms, one gap.
+
+206. [2026-08-26] [MEDIUM] `docs/**/features/*/SPEC.md` is excluded from `docs audit` outright, so declared facts drift freely there
+
+    **Severity:** medium (SPECs are where a node's contract is written, and they are the one doc class nothing fact-checks)
+    **Context:** `.7` swept 97 documents and found what `.4`'s narrower sweep could not reach.
+
+    `scanner._EXCLUDE_PATTERNS` drops `docs/**/features/*/SPEC.md` and `docs/**/features/**/SPEC.md` from the audit's surface entirely. Consequence, measured by `.7`: **three forward references to `3.0.1`** — a release that did not exist — survived in SPEC files, the same defect `.4` had removed from `doc-sync/README.md:95` hours earlier. It removed the instance it could see.
+
+    Also found in the same sweep: stale gate step lists in **eight** files, one naming a `coverage-lint` step that does not exist.
+
+    The exclusion is presumably deliberate (SPECs are generated skeletons in some projects). But "excluded" and "verified" print the same way in the coverage report, which is this feature's whole subject one level up. At minimum the audit should name the class it does not read.
+
+205. [2026-08-26] [MEDIUM] Writing a factually correct number can manufacture a false stale fact — keyword binding collides across senses
+
+    **Severity:** medium (it punishes correcting documentation, which is the behaviour the tool exists to encourage)
+    **Context:** `.7` hit this twice while fixing counts the reviewer had asked it to fix. `beadloom ci` went rc 1 on both.
+
+    ```
+    "supports 11 languages"          -> binds to language_count  = 1   (languages the PROJECT is written in)
+    "Rules support 12 authoring keys" -> binds to rule_type_count = 15  (COUNT(*) FROM rules)
+    ```
+
+    Both sentences are true. Neither number is what the bound fact computes. The parser breadth of the code indexer is not "the languages this project is written in"; the count of authoring keys is not the count of rules.
+
+    Note the near-miss that shows how fine the edge is: `architecture.md:133` uses the phrase "authoring keys" **safely**, because no `rule` token falls inside the five-word proximity window. The same phrase 254 lines later is unsafe. Whether a true sentence trips the audit depends on a neighbouring word.
+
+    This is the general form of #193 (`framework_count`: web frameworks parsed vs nodes declaring a test framework) and #202 (`cli_command_count`: 34 top-level vs 43 recursive). Three instances now, in three subsystems — it is a property of keyword-proximity binding, not three coincidences.
+
+    `.7`'s rule, which belongs in the writing guidance either way: **measure the audit's answer, do not predict it.**
+
+204. [2026-08-26] [MEDIUM] `review-brief` reports "0 withheld" and cannot know what the coordinator's prompt contained
+
+    **Severity:** medium (a number that describes the mechanism's ignorance rather than the reviewer's; the exact class BDL-062 exists to close)
+    **Context:** self-reported by the `.6` review agent as the FIRST line of its verdict, unprompted.
+
+    The withholding mechanism exists so a reviewer meets the work without the authors' account of it. `review-brief` printed **"0 withheld"**. The account had already arrived — through the coordinator's launch prompt, which carried `.4`'s "14 corrections, none of the 9 self-lint tests edited", `.5`'s "113 parses / 49 files / zero non-stream lines", `.5`'s two self-caught neutered-passing tests, `.9`'s severity fix, #198's 363/363 and #199/#200 by number.
+
+    So several review checks were **verifications of stated claims rather than independent discoveries**, and the tool said withholding was in force. `--release` could not establish independence either: one tracker identity (#194).
+
+    The mechanism measures its own channel and reports as if it measured the reviewer's knowledge. It has no way to see the prompt, and it does not say so — it says `0`.
+
+    **This is the coordinator's process failure and the tool's honesty failure at once**, which is why it is filed rather than merely noted. Fix candidates: `review-brief` states the surface it can and cannot see instead of a bare count; or the coordinator's brief is itself passed through the withholding surface. Choosing is the work.
+
+203. [2026-08-26] [LOW] Two stated behaviours in `doc_area` survive mutation — the rationale is documented and observed by nothing
+
+    **Severity:** low (both are supporting decisions, not headline behaviour)
+    **Context:** the `.6` reviewer ran the mutation testing `.5` did not: 8 mutations, 6 killed, 2 survived the full 7257-test suite.
+
+    ```
+    _area_depth tie-break flipped shallower -> deeper   7257 passed, 0 behavioural kills
+    _normalise  hyphen/underscore folding removed       7257 passed, 0 behavioural kills
+    ```
+
+    Both docstrings state a rationale; no test observes it. Folding is not load-bearing on THIS repository because the rule learns a per-area vocabulary — which is exactly the TRUE HERE IS NOT TRUE shape: it will be load-bearing on the first adopter whose directories are spelled the other way.
+
+    The reviewer's judgement, which is worth keeping: the missing mutation run would have added precisely these — *"the supporting decisions nobody thought to neuter because they are not the headline. Low yield, real, and cheap enough that it should become routine rather than a bead-by-bead choice."*
+
+202. [2026-08-26] [MEDIUM] One `beadloom ci` run prints two different numbers for "CLI commands" under one name
+
+    **Severity:** medium (#193's collision, live for a second fact and already shipped)
+    **Context:** `.6` review, M5.
+
+    ```
+    doctor : "CLI has 34 commands registered"   (top-level only)
+    audit  : cli_command_count: 43              (_count_click_commands recurses into groups)
+    ```
+
+    Both call it "CLI commands", in the same run, to the same reader. Neither is wrong; they count different things under one name — the same defect shape as #193's `framework_count`, which BDL-062 `.4` resolved by renaming. This one was not caught because nothing compares two subsystems' facts to each other.
+
+201. [2026-08-26] [MEDIUM] `--format porcelain` drops `message` — and porcelain is the default whenever stdout is not a terminal
+
+    **Severity:** medium (the machine-readable path is the one that loses the distinction)
+    **Context:** `.6` review, M2. Fourth instance of one class in one day. Measured on `warehouse-svc`, a project the reviewer built from scratch — not a fixture.
+
+    `graph/linter.py:459-480` emits `rule_name:rule_type:severity:file_path:line:from_ref:to_ref` with no message field. So a `summary_facts` **total stand-down** and a **per-claim unverifiable** are byte-identical:
+
+    ```
+    summary-facts:rule_liveness:warn::::
+    ```
+
+    Everything distinguishing them lives in `message`, which porcelain does not carry — and `lint` selects porcelain **by default when stdout is not a TTY**, so every pipe, script and CI capture gets the collapsed form while an interactive run looks fine.
+
+    Related and deliberately not merged: #198 (`sync-check` verified 0 of 363, Gate rc 0), #199 (the Gate's lint line reads identically for "checked nothing" and "one warning"), #197 (four rule types still hardcode `warn`). Four layers, one shape: **a reader cannot tell "checked nothing" from "nothing wrong".** BDL-062 fixed it at the rule layer and named it at the other three.
+
+    Also here: `graph/linter.py:462`'s docstring states the format without `severity`, which the emitter does include (`m7`).
+
+200. [2026-08-26] [LOW] An inert `docs_audit.ignore` triple is neither computed nor reported — the check exists one layer up and was never built here
+
+    **Severity:** low (nothing is currently inert; the defect is that nothing would notice if something were)
+    **Context:** found by `beadloom-viaj.5` while testing the seams between this feature's beads.
+
+    `.4` retired the `context-oracle` suppression **by hand** after the `framework_count` rename made it inert, and measured the inertness by hand (0 framework-family mentions over 58 documents). Nothing in the product would have told it. `config_sync._suppression_drifts` performs the equivalent check for a different suppression surface, so the pattern exists in the codebase — it was simply never applied to `docs_audit.ignore`.
+
+    Current state, measured: 10 triples, 59 documents, 41 mentions, **all live**. So this is dormant, and the only reason it stayed dormant is that a person swept it manually this morning.
+
+    This is `rule_liveness` applied to a suppression rather than a rule, and BDL-061 established the contract: *a rule, exclusion or glob that cannot match anything reports itself.* An `ignore` triple is an exclusion. It was left out of that sweep.
+
+199. [2026-08-26] [LOW] The Gate's lint line cannot distinguish "the rule checked nothing" from "the rule found one warning"
+
+    **Severity:** low (the information is not lost — the annotation lines below distinguish them, and `beadloom lint`'s own summary carries the qualifier; the one line a CI reader scans does not)
+    **Context:** found by `beadloom-viaj.5`. Third instance of one class in one day, at a third layer.
+
+    `application/gate.py:240-244` builds the step summary as `"N error(s), M warning(s)"` whenever any violation exists. A rule that stood down over its whole population emits one liveness finding at `warn`, so the line reads `0 error(s), 1 warning(s)` — byte-identical to a run where one ordinary warn-severity violation was found.
+
+    The code comment explains the intent, and it is the fix for the *previous* instance of this class:
+
+    ```
+    # an inert rule always emits a finding, so `rules_inert > 0` already flips
+    # this summary to the "0 error(s), N warning(s)" branch (BDL-061.48/.49)
+    ```
+
+    That change made inertness visible as *not clean*. It did not make it distinguishable from *warned*. `beadloom lint`'s rich summary carries the `rules_inert` qualifier; the Gate drops it on the way to the line a person actually reads in CI.
+
+    **Not fixed, and not blocking 3.0.1** — deliberately, with the reasoning recorded so it can be overruled. Unlike `beadloom-viaj.9`, where `lint --strict` exited **0** while a blocking rule checked nothing, here the Gate does warn and the detail is one line below. That is an ambiguous summary, not a false verdict. Related: #198 (the same shape at `sync-check`), #197 (four rule types still hardcoding `warn`).
+
+198. [2026-08-26] [MEDIUM] `sync-check` verified 0 of 363 pairs and `beadloom ci` exited 0 — the shape `.9` just ruled unacceptable one rule below
+
+    **Severity:** medium (the Gate is honest in words and green in its exit code; only the words distinguish "checked nothing" from "nothing wrong")
+    **Command:** `beadloom ci` in a tree that is not a git work tree
+    **Context:** found while verifying `.9`'s clean-room report, which is also how the procedural half came to light.
+
+    **Measured**, `git archive HEAD | tar -x` with no `git init`:
+
+    ```
+    sync-check WARN: 0 pair(s) fresh, 363 NOT VERIFIED (no baseline — index rebuilt)
+    beadloom ci rc=0
+    ```
+
+    With `git init` + one commit in the same extracted tree: 363 `ok`, rc 0.
+
+    **The product is not lying.** It names the population, names the reason, and names three remedies — *"reindex incrementally on the existing index, run inside a git work tree, or attest the pair"*. By this epic's own standard that is correct behaviour: `unverified` is a distinct state and it says which.
+
+    **What is questionable is the exit code.** `beadloom-viaj.9` decided, one layer down, that a rule which checks *none* of its population is a different fact from one with a partial gap — a total stand-down now carries the rule's declared severity, while partial inertness stays advisory. `sync-check` at the Gate has the identical shape and the opposite answer: 0 of 363 verified is a WARN, indistinguishable in `rc` from 362 of 363.
+
+    Not obviously a bug. A tree with no git legitimately cannot be verified, and blocking there would punish an adopter for a checkout style. But the asymmetry is now deliberate-looking and is not deliberate, so it should be decided rather than inherited.
+
+    **Procedural half, and the reason this was invisible for two epics.** The standing rule CLEAN-ROOM REVERT says to verify over `git archive HEAD` plus only the agent's files. Every such clean room was **structurally unable to verify a single doc pair** — 363 came back `unverified`, and any check reading `rc` rather than the summary line accepted it. Every "green in a clean room" claim in BDL-061 and in this feature was, on the doc-freshness axis, a measurement of the absence of git. The tool said so in words on every run. Nobody read the line. Corrected in BDL-062 `CONTEXT.md`; recorded here because the claims it weakens are spread across two epics' commit messages.
+
+197. [2026-08-26] [MEDIUM] Four other rule types still report a TOTAL stand-down as `warn`, so an escalation still evaporates for them
+
+    **Severity:** medium (it is #195's second defect, unfixed for every rule type but the one that was measured)
+    **Command:** `beadloom lint --strict`
+    **Context:** the named residual of BDL-062 `.9`. #195 established that a rule which could check NONE of its population must not report that at `warn` when the project declared it blocking, and fixed it for `doc_area_coherence`.
+    **Measured:** `liveness_finding` now takes a keyword-only `severity` defaulting to `warn`. Exactly one caller passes anything else. `summary_facts`, `scenario_coverage`, `module_coverage` and `unregistered_feature_candidate` all still emit their stand-down at the default, so a project that escalated any of them to `error` gets the same evaporation #195 describes.
+
+    **Why it was not simply fixed in the same bead.** Only `doc_area_coherence` was measured. Each of the others has to be checked for what its "total stand-down" actually means — `scenario_coverage` stands legs down individually, and a rule that is partly inert is a different case from one that is wholly inert, which is the distinction the fix rests on. Escalating four rule types on one rule's evidence would be shipping four untested changes inside a fix, which is the shape this epic exists to remove.
+
+    **Expected:** decide per rule type whether its stand-down is total or partial, and pass the declared severity where it is total. The seam already exists and needs no further design.
+
+    **Related:** #195 (the measured half), #172 (rule liveness), BDL-062.
+
+195. ~~[2026-08-26] [HIGH] One node whose source lies outside the common source root collapses `doc-area-coherence` for the whole graph~~ **CLOSED (BDL-062 `.9`)**
+
+    **Severity:** high (a rule the project declared blocking could stand down over its entire population while the Gate stayed green)
+    **Command:** `beadloom lint --strict`
+    **Context:** opened by BDL-062 `.4` while deciding whether the `vitepress-site` node should carry a document; **rewritten after the coordinator failed to reproduce it and both measurements were compared.**
+
+    **The trigger.** `doc_area._placements` derived the source root as the longest directory prefix EVERY node/doc pair's source shares. That is a unanimity rule, and unanimity hands each individual source a veto. `vitepress-site`'s source is `site/`, which shares no prefix with `src/beadloom/...`, so attaching any document to it dropped the root from `src/beadloom` to nothing in one step — for all 85 other pairs. `min_support` guarded the dominant-mapping half; nothing guarded the prefix.
+
+    **Two faces, and which one you see depends only on where the minority node's document sits.** Measured on the same tree, same commit, by two people who then disagreed:
+
+    ```
+    doc at site/vitepress-site/DOC.md   -> the doc path carries the outlier's own
+                                           segment, an area depth is still found, a
+                                           bogus convention is derived:
+                                           84 compared, 7 nodes reported WRONG at error
+                                           (bd-seam, beadloom, cli, cli-commands,
+                                            guard-probes, mcp-server, tui)
+
+    doc at guides/vitepress-site.md     -> no doc path carries any segment of the
+                                           collapsed vocabulary, no area depth exists:
+                                           0 compared, 86 unnamed,
+                                           rule reports it CHECKED NOTHING
+    ```
+
+    **The second face is the worse one and it is why this was HIGH.** That report went out through `liveness_finding`, which hardcoded `severity="warn"` whatever the rule declared. This repository escalates `doc-area-coherence` to `error`; the escalation evaporated at exactly the moment the rule stopped working, and `lint --strict` exited 0 over a check that had run on nothing. Filtering `lint --format json` by `rule_type == doc_area_coherence` cannot see it either, because the stand-down carries `rule_type: rule_liveness` — filter by `rule_name` instead.
+
+    **STRUCK — the evidence line in the original filing was false.** It read *"4 true findings become 6 false ones"*. There were no 4. The `services.yml` backup taken immediately before the probe shows the four misfiled nodes were **already corrected**, so the measured baseline was **0 doc-area findings**, and the 6 were manufactured from a clean graph. The original compared against `.2`'s pre-correction baseline rather than the one actually measured — a green count that was not a checked count, inside the issue filed about green counts that are not checked counts. Recorded rather than quietly replaced, because the wrong number was acted on.
+
+    **Not exotic:** any project with a `site/`, `scripts/`, `tooling/` or a second package root meets this on first contact.
+
+    > **CLOSED — the root tolerates a minority, and a total stand-down is no longer silent.**
+    >
+    > `_source_root` replaces `_common_prefix`. It descends one segment while there is **exactly one supported way down**, where supported means `min_support` sources agree on the next segment — the dial the dominant-mapping half already declares, not a second threshold. A genuine fork ends the descent (that is where the areas begin); no supported segment at all ends it too; and a source too short to have that depth is `rootless` rather than a veto. Measured on this repository, both faces now give the identical answer: **derivable, 8 dominant areas, 0 contradicting, `outside_root` 1**, against a baseline of the same 8 areas and `outside_root` 0. A pair outside the root is excluded from comparison and **counted** — `Convention.population()` ends `"; N sit outside the source root"`, and `examined` adds up to the pairs the graph offered.
+    >
+    > `liveness_finding` gained a keyword-only `severity`, defaulting to `warn` so every existing caller is byte-identical. A **total** stand-down passes the rule's declared severity; a **partial** inertness stays advisory. The distinction is the point: a dead glob beside nine live ones is a configuration smell, while a rule that checked none of its population is indistinguishable from a rule that never ran. This costs an adopter nothing — the rule ships `warn`, so a small graph still reports `warn` and no first `beadloom ci` goes red.
+    >
+    > `tests/test_source_root_minority.py::TestATotalStandDownCarriesTheDeclaredSeverity::test_the_gate_cannot_pass_while_the_rule_checked_nothing` runs the real linter and fails if a blocking rule stands down without `has_errors` being set. Both document paths are kept as permanent fixtures in `TestBothFacesOfTheCollapse`: one cause, two observables, and nothing but the doc path varies between them.
+    >
+    > **Residual, deliberately not fixed here and worth its own decision (#197):** `summary_facts` and `scenario_coverage` report their own total stand-down through the same seam and still hardcode `warn`. Only `doc_area_coherence` was measured, and escalating five rule types on one bead's evidence would be shipping four untested changes.
+
+194. [2026-08-26] [HIGH] [External: bd 1.0.4] `bd merge-slot` is not an exclusion primitive — every agent is the same actor, and `release` is not owner-checked
+
+    **Severity:** high (CLAUDE.md mandates this primitive before every commit in a shared working tree; it cannot deliver what it is relied on for)
+    **Command:** `bd merge-slot acquire` / `release`
+    **Context:** reported by the `.2` dev agent of BDL-062 — its second `acquire` queued rather than granted, it committed and released anyway, and the release may have freed the concurrent `.3` agent's hold. Reproduced by the coordinator immediately after.
+
+    **Two independent defects, both measured.**
+
+    *One — identity collapse.* The actor chain is `$BEADS_ACTOR` → `git user.name` → `$USER`. On this machine:
+
+    ```
+    BEADS_ACTOR=<unset>   git user.name=v.zoologov   USER=v.zoologov
+    ```
+
+    Every concurrent agent in this repository resolves to the same actor, so `acquire` cannot tell a sibling agent from the holder itself.
+
+    *Two — `release` accepts any caller.* This survives the first defect being fixed:
+
+    ```
+    BEADS_ACTOR=agent-A bd merge-slot acquire   ✓ Acquired    Holder: agent-A
+    BEADS_ACTOR=agent-B bd merge-slot acquire   ✗ Slot held by: agent-A     <- correct
+    BEADS_ACTOR=agent-B bd merge-slot release   ✓ Released                  <- NOT correct
+    ```
+
+    `agent-B` unlocked `agent-A`'s hold and was told it succeeded. The primitive is advisory in both directions: it can refuse an acquire, and it cannot defend a hold.
+
+    **Why it matters here.** `.beadloom/flow/claude/CLAUDE.md` instructs every agent to `acquire --wait` before committing and `release` after, because concurrent waves share one working tree. That rule rests on mutual exclusion this primitive does not provide. Two agents can commit interleaved after any stray release — which is exactly what the `.2` agent suspects happened.
+
+    **Partial mitigation, adopted now:** the coordinator exports a distinct `BEADS_ACTOR` per subagent, which restores acquire-time refusal. It does **not** address the release hazard, and saying otherwise would overstate it. A caller-checked release has to come from `bd`.
+
+    Related: #187 of 2026-08-25 (`bd list --json`), also External, also a default of the tracker rather than of Beadloom.
+
+193. [2026-08-26] [MEDIUM] `framework_count` counts nodes that declare a framework, not frameworks — the name and its keywords promise the other number
+
+    **Severity:** medium (dormant today; it becomes a false mismatch the moment any document states the true number)
+    **Command:** `beadloom docs audit --json`
+    **Context:** found while scoping BDL-062, checking why `framework_count` equalled `node_count` exactly.
+    **Measured on `main`@`cdc16de`:**
+
+    ```
+    facts.framework_count.value = 84        # == node_count, exactly
+    nodes carrying a framework  = 84
+    DISTINCT frameworks         = 1         # {'pytest': 84}
+    ```
+
+    `_collect_framework_count` counts nodes whose `extra.tests.framework` is non-empty. The fact is named `framework_count` and the scanner matches it on the keywords `["framework", "supported framework"]` — both of which promise *how many frameworks*, not *how many nodes declare one*.
+
+    So a document stating the true fact — "Beadloom supports 1 test framework" — would be reported as disagreeing with 84. The audit is currently `not_covered` on it only because no document happens to phrase it that way. The defect is latent in the prose, not in the code path.
+
+    Same family as BDL-062's subject: a fact whose name does not describe what it computes, sitting green because nothing exercises it. Distinct from #187/#190 — this is semantics, not extraction.
+
+    **Fix decided — rename.** Two later measurements settled it, so this is no longer an open choice.
+
+    *The DISTINCT candidate is worse, measured by `.3`:* `unverifiable_reason('framework_count', 1)` returns *"its value is 1: 0 and 1 are too common in prose to be read as claims"*. Counting distinct frameworks yields 1 here, which renders the fact structurally uncheckable on this repository and on every single-framework project. It buys correct semantics at the price of never being verifiable again.
+
+    *The defect is no longer latent — it reached the graph,* found by `.1`'s new `graph_summary_facts` rule:
+
+    ```
+    route-extraction summary states framework_count 12 but this project computes 84 (graph DB)
+    summary: "API route extraction — tree-sitter AST + regex fallback across 12 web frameworks"
+    ```
+
+    The summary is **factually correct**: the extractor carries exactly 12 framework literals — `echo, express, fastapi, fiber, flask, gin, graphql_python, graphql_schema, graphql_ts, grpc, nestjs, spring`. Two unrelated meanings of "framework" collide under one fact name: *web frameworks a component parses* versus *nodes declaring a test framework*.
+
+    So the finding is a true positive for the defect and a false positive for the node. The `.1` agent deliberately built **no** suppression mechanism, and was right to: silencing a correct sentence to protect a misnamed fact is backwards, and a silencer built before the owner has ruled would have had no caller.
+
+    Renaming to `nodes_with_framework`, with scanner keywords that mean that, clears all three at once — the latent prose landmine, this live finding, and the collision itself. It has prose consequences, so it lands with `.4`/`.7` of BDL-062.
+
 192. [2026-08-26] [HIGH] A virgin `beadloom init --yes` leaves `beadloom ci` RED — the bootstrap writes a domain with no `part_of` edge and a rule that requires one
 
     **Severity:** high (the first gate an adopter runs fails on a repository nobody has touched, and the failing rule was written by the same command one step earlier)
@@ -88,6 +375,8 @@
     **Command:** `beadloom docs audit` / the `docs-audit` step of `beadloom ci`
     **Measured** while documenting BDL-UX #183. The sentence *"a JavaScript project at `0.4.1` was told `2.2.0`"* — an illustration of the defect being fixed, in backticks — failed the Gate twice: `doc-fact-stale: version: doc says '0.4.1' but project state is '2.2.0'`. `doc_sync/scanner.py::_extract_versions` matches every `\bv?\d+\.\d+\.\d+\b` outside a version pin and hands each one to an exact-match comparison against the project's own version; there is no notion of a version that is *about something else*.
     **Why it is worth an entry:** the sentences this blocks are exactly the ones this epic keeps needing to write — "an adopter at X was told our Y". It is also the version-shaped cousin of #169, which drew the token boundary for counts and left versions to their own regex. The workaround used in `.58` was to rephrase (*"a JavaScript project a major version behind was told ours"*), which is weaker prose than the measurement deserved. Recorded rather than worked around silently, because the next writer will meet it and reach for `docs_audit.ignore`, which is the wrong door.
+    **FOURTH INSTANCE, 2026-08-26 (BDL-062 `.4`), and this one is the sharpest.** The bead that made the root node's `(vX.Y.Z)` a checked claim then added a line to `CONTRIBUTING.md`'s release process explaining WHY the bump matters -- *"rather than letting it drift the way it drifted from 1.5.0 to 3.0.0 unnoticed"*. `beadloom ci` went rc 1 on `CONTRIBUTING.md:253: version "1.5.0" -> 3.0.0`. The sentence describing the drift the release checklist exists to prevent is a sentence the checker cannot survive, and the workaround was the same weakening this entry already recorded: *"letting it fall two majors behind unnoticed"*, which does not say what the two majors were. Three instances were prose about the epic; this one is prose about the RELEASE PROCESS, which every adopter reads.
+
     **Expected:** treat a version as a claim about THIS project only when the mention is attributive — near a project-version keyword, or in a line that does not already name another subject — the same clause-scoping `.45` gave the count facts. Failing that, an explicit inline escape (a fenced block, or a marker) so a doc can quote a foreign version without a tolerance entry.
     **Related:** #169 (the token boundary for counts), #161, BDL-057 (the audit surface).
 
@@ -251,6 +540,24 @@
     - Correct the SPEC table and #172's text to nine.
     - More generally: a number that appears in both code and prose is a fact to be audited, not a sentence to be maintained. #173 already showed the audit is weaker than it looks (a green result covered 1 declared fact of 9), so registering more facts and fixing the audit are the same piece of work.
     **Related:** #171, #177 (one fact, several sources), #172, #173.
+
+    **RE-MEASURED 2026-08-26 (BDL-062 `.4`). Two of the three asks are now done; the third grew a reason nobody had.**
+
+    ```
+    facts.rule_type_count.value        = 15   # SELECT COUNT(*) FROM rules
+    COUNT(DISTINCT rule_type)          = 10   # the types this repo uses
+    graph.rules.loader.AUTHORING_KEYS  = 12   # the types that exist
+    ```
+
+    Three numbers, and the fact's name claims the wrong one of them. That is unchanged since this entry was written; only the values moved.
+
+    *Done.* The SPEC table now lists all twelve keys, and its claim to be "checked against the loader's own dispatch" is true for the first time — `test_rule_engine.py::TestTheSpecTableIsCheckedAgainstTheLoader` asserts the Keyword column equals `AUTHORING_KEYS` and that the stated cardinal is `len(AUTHORING_KEYS)`. Both were proved to bite by dropping a row and by mis-spelling the count. The loader's authoring keys are named once, as `AUTHORING_KEYS`, and its own "must have exactly one of" message is built from that set rather than from a second hand-written list.
+
+    *Also done, and it was a second reader of the same stale knowledge:* `onboarding.scanner.rules_gen._detect_rule_type` mapped seven of the twelve keys, so `.beadloom/AGENTS.md` described three of this repository's fifteen rules to every agent that reads it as kind `(unknown)`. All twelve are mapped, and `test_every_authoring_key_the_loader_accepts_has_a_type` holds the map to `AUTHORING_KEYS`.
+
+    **The new reason, and it is the sharp part.** The SPEC had said "the **ten** authoring keys" since the count was ten — spelled as a word. `_iter_number_tokens` reads digits, so a number written in letters is invisible to `docs audit`. The type count went stale twice (`doc_area_coherence`, then `summary_facts`) and no check could see it either time, while the instance count in the same sentence — written as a digit — was caught on the first run. So this fact is not merely misnamed: **a document can hold a stale number indefinitely by spelling it out**, and `unreadable_reason` does not name that limit. Matching number words would swamp the extractor with ambiguity, so the fix is probably not there; but the gate currently says nothing at all about it.
+
+    **Still open, unchanged:** rename `rule_type_count` to `rule_count` with keywords meaning "rules this project declares", and give the type count its own fact if it is worth auditing. It remains a breaking change to `docs_audit.tolerances` / `docs_audit.ignore` keys in every adopter's config, which is why it is still a bead of its own. BDL-062 `.4` did exactly the same rename for `framework_count` -> `nodes_with_framework` (#193), so the shape of the work is now demonstrated rather than proposed.
     **MEASURED AGAINST THE FIXED AUDIT (`beadloom-mr2l.45`, 2026-08-24), and it changes the ask.** Registering the fact is necessary but NOT sufficient here, for two reasons the coverage report makes visible: (1) the document that states the number — `docs/domains/graph/features/rule-engine/SPEC.md` — matches `docs/**/features/*/SPEC.md` and is **never scanned**, so a registered fact would still read `not_covered` while the SPEC drifted; (2) the existing `rule_type_count` fact is a MISNOMER — it counts rows in the `rules` table (12 configured rules on this repo), not the loader's nine dispatch KINDS, and `FACT_KEYWORDS` maps `rule`, `rule type` and `rule kind` all to that one fact. Registering the dispatch count therefore means splitting the keywords and renaming the existing fact, which is a breaking change to `docs_audit.tolerances` / `docs_audit.ignore` keys in every adopter's config. That is a bead of its own, not a line in #173's fix.
 
 178. [2026-08-23] [HIGH] 🔴 A REQUIRED check reports `pass` while its own output says it verified nothing

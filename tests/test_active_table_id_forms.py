@@ -345,7 +345,7 @@ class TestAnInertRunDoesNotReadLikeACleanOne:
                 main, ["active-sync", "--check", "--json", "--project", str(tmp_path)]
             )
 
-        payload = json.loads(result.output)
+        payload = json.loads(result.stdout)
         assert payload["rows_read"] == 2
         assert payload["rows_resolved"] == 1
         assert payload["unresolved_rows"][0]["cell"] == ".9 Something"

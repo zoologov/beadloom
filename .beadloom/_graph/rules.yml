@@ -225,3 +225,34 @@ rules:
       references:
         - ".claude/development/docs/features/**/PRD.md"
         - ".claude/development/docs/features/**/BRIEF.md"
+
+  # A node documents itself where this graph says nodes like it are documented
+  # (BDL-062 `.2`). The convention is DERIVED from the graph — no directory name
+  # appears here or in the rule — so what is configured is only how much
+  # agreement counts as a convention. `error` rather than the shipped `warn`:
+  # this repository's layout has been settled since BDL-051 and a contradiction
+  # is a defect, not a matter of taste. An adopter gets `warn`, because a
+  # convention check that fails a green project's first run on its own house
+  # style is a check that gets switched off.
+  - name: doc-area-coherence
+    description: "A node is documented where this graph documents nodes from its source area"
+    severity: error
+    doc_area_coherence:
+      threshold: 0.6
+      min_support: 2
+
+  # A number stated in a node's `summary` agrees with the same fact computed
+  # from the project (BDL-062 `.1`). A summary is the sentence `ctx`, `prime`,
+  # the generated site and every agent adapter quote, and until this rule nothing
+  # compared it against anything: the root node claimed `v1.5.0` across three
+  # major releases and `mcp-server` claimed 14 tools against a catalogue of 18.
+  # `summary_facts` takes no keys — what counts as a version, what counts as a
+  # claim about a count and how close a count has to be all come from the
+  # documentation audit, so a knob here would be a second answer to a question
+  # already answered. `error` is the shipped default rather than the `warn` a
+  # convention check gets: a number that contradicts the project it describes is
+  # wrong in every house style, and the value is in the adopter's own graph.
+  - name: graph-summary-facts
+    description: "A number or version stated in a node summary agrees with the project"
+    severity: error
+    summary_facts: {}

@@ -381,7 +381,7 @@ class TestNoRegressionSymbolPairWithSurfaceDrift:
         result = CliRunner().invoke(
             main, ["sync-check", "--json", "--project", str(project)]
         )
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         # Assert: symbol pair is `stale` (error semantics, exit 2) ...
         assert result.exit_code == 2
         assert data["summary"]["stale"] >= 1
@@ -407,7 +407,7 @@ class TestNoRegressionSymbolPairWithSurfaceDrift:
         result = CliRunner().invoke(
             main, ["sync-check", "--json", "--project", str(project)]
         )
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         # Assert: the symbol pair keeps its genuine reason — the additive
         # reference path never overwrites/masks `pairs[].reason`.
         stale_pairs = [p for p in data["pairs"] if p["status"] == "stale"]
@@ -512,7 +512,7 @@ class TestBackwardCompatNoOp:
         result = CliRunner().invoke(
             main, ["sync-check", "--json", "--project", str(project)]
         )
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         # Assert: additive keys are present but empty/zero — no behavior change.
         assert result.exit_code == 0
         assert data["references"] == []
@@ -631,7 +631,7 @@ class TestSyncCheckJsonAdditiveShape:
         result = CliRunner().invoke(
             main, ["sync-check", "--json", "--project", str(project)]
         )
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         # Assert: the additive keys exist with the documented shape.
         assert "surface_drift" in data["summary"]
         assert isinstance(data["references"], list)
@@ -654,7 +654,7 @@ class TestSyncCheckJsonAdditiveShape:
         result = CliRunner().invoke(
             main, ["sync-check", "--json", "--project", str(project)]
         )
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         # Assert: the symbol-pair `pairs` array keeps its full per-pair shape;
         # the additive `references` block does not bleed into it.
         assert "pairs" in data
@@ -676,7 +676,7 @@ class TestSyncCheckJsonAdditiveShape:
         # `--since HEAD` requires a git repo; when absent the command errors out
         # cleanly (exit 1) — either way it must never emit a reference block.
         if result.exit_code == 0:
-            data = json.loads(result.output)
+            data = json.loads(result.stdout)
             assert "references" not in data
             assert "surface_drift" not in data["summary"]
         else:

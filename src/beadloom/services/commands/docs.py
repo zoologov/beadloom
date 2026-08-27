@@ -321,6 +321,14 @@ def _docs_audit_json(
         for name, cov in sorted(result.coverage.items())
     }
     unverified = result.unverified_facts
+    # The three populations, each named rather than left to be derived: what was
+    # checked, what this project declares no value for, and what it declares and
+    # nobody stated. Added in 3.0.1 beside the existing keys, never instead of
+    # them — anything parsing the 3.0.0 payload keeps working.
+    not_applicable_out: dict[str, dict[str, str]] = {
+        name: {"reason": reason}
+        for name, reason in sorted(result.not_applicable.items())
+    }
 
     data: dict[str, object] = {
         "facts": facts_out,
@@ -328,7 +336,9 @@ def _docs_audit_json(
         "fresh": fresh_out,
         "unmatched": unmatched_out,
         "coverage": coverage_out,
+        "verified_facts": result.verified_facts,
         "unverified_facts": unverified,
+        "not_applicable": not_applicable_out,
         "scan_surface": _scan_surface_json(result.surface, project_root),
         "summary": {
             "stale_count": len(stale_out),
@@ -340,6 +350,7 @@ def _docs_audit_json(
             "unreadable_count": sum(
                 1 for cov in result.coverage.values() if cov.status == "unreadable"
             ),
+            "not_applicable_count": len(not_applicable_out),
         },
     }
 
@@ -396,6 +407,10 @@ def _print_coverage_summary(console: object, result: object) -> None:
     about the facts nothing was found for and about the documents that were
     never opened.  Both are printed here, because a number whose coverage is
     unstated reads as a clean bill of health (BDL-UX #173).
+
+    The third population is printed only when it is non-empty.  A project all of
+    whose declared facts apply — this repository is one — reads exactly as it
+    did before 3.0.1, and a project that lost a fact is told which one and why.
     """
     from rich.console import Console
 
@@ -413,6 +428,9 @@ def _print_coverage_summary(console: object, result: object) -> None:
         + (f"; NOT VERIFIED: {', '.join(unverified)}" if unverified else "")
         + f"[/{style}]"
     )
+
+    for name, reason in sorted(result.not_applicable.items()):
+        console.print(f"[yellow]-- NOT APPLICABLE to this project: {name} — {reason}[/yellow]")
 
     surface = result.surface
     if surface is not None:

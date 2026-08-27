@@ -566,7 +566,7 @@ class TestTheConfiguredLocationCannotBuyASilentGreen:
             runner = CliRunner()
             result = runner.invoke(main, ["lint", "--format", "json", "--project", str(project)])
             assert result.exit_code == 0, result.output
-            return json.loads(result.output)  # type: ignore[no-any-return]
+            return json.loads(result.stdout)  # type: ignore[no-any-return]
 
         _write_rules("tests/acceptance/features/**/*.feature")
         before = _lint()

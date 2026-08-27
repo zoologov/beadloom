@@ -35,7 +35,7 @@ Stated here rather than discovered by a reader who trusted it.
 - **`measurable-goal` decides one named form, not measurability in general.** A goal is reported
   when BOTH legs hold: its predicate is an unbounded improvement — `improve`, `enhance`,
   `establish`, `clean up`, or `make`/`keep` something *better / faster / simpler / useful /
-  intuitive* — and it names no witness. A witness is a quantity (`440 -> 376 lines`), a named
+  intuitive* — and it names no witness. A witness is a quantity (`440 -> 371 lines`), a named
   artifact (an inline code span, a `--flag`, a file name, a `snake_case` identifier), or an
   observable outcome (`exits`, `fails`, `passes`, `detects`, `renders`, `produces`, `green`). The
   three sibling checks all work this way — name the empty form, do not guess at the good one —

@@ -694,6 +694,27 @@ def _audit(project: Path) -> tuple[set[str], set[str]]:
     return set(result.facts), {f.mention.fact_name for f in result.findings}
 
 
+def _declare_own_mcp_tool_count(project: Path, value: int = 18) -> None:
+    """Give the fixture project its OWN MCP tool count.
+
+    Until BDL-062 `.3` the audit handed every project the running Beadloom's
+    catalog length, so this fixture got a large, scanner-readable fact for free
+    — a fact about Beadloom, in an adopter's report. The count is now declared
+    the way an adopter with their own MCP server declares it, which is the same
+    escape hatch the audit's decline reason names.
+    """
+    config = project / ".beadloom" / "config.yml"
+    config.write_text(
+        config.read_text(encoding="utf-8")
+        + "docs_audit:\n"
+        + "  extra_facts:\n"
+        + "    mcp_tool_count:\n"
+        + f"      value: {value}\n"
+        + '      source: "the fixture project\'s own MCP server"\n',
+        encoding="utf-8",
+    )
+
+
 def _state_a_fact(project: Path, fact_name: str, sentence: str) -> None:
     """Write a doc that states *fact_name* truthfully, at its current value.
 
@@ -723,6 +744,7 @@ class TestDocsAuditNamesWhatItVerifiedNothingFor:
         # Arrange — state one declared fact truthfully, reading its value from the
         # audit itself so the test does not hard-code a number that will move
         project = _indexed(tmp_path)
+        _declare_own_mcp_tool_count(project)
         _state_a_fact(project, "mcp_tool_count", "This project exposes {} MCP tools.")
 
         # Act
@@ -737,6 +759,7 @@ class TestDocsAuditNamesWhatItVerifiedNothingFor:
     def test_the_audit_names_the_facts_it_verified_nothing_for(self, tmp_path: Path) -> None:
         # Arrange
         project = _indexed(tmp_path)
+        _declare_own_mcp_tool_count(project)
         _state_a_fact(project, "mcp_tool_count", "This project exposes {} MCP tools.")
         declared, verified = _audit(project)
         unverified = declared - verified

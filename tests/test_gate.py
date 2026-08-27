@@ -424,7 +424,7 @@ class TestCiCommand:
             main, ["ci", "--format", "json", "--project", str(tmp_path)]
         )
         assert result.exit_code == 1
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "ok" in data and data["ok"] is False
         assert "steps" in data
         step_names = {s["name"] for s in data["steps"]}

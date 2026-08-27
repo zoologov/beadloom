@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "beadloom"
 dynamic = ["version"]
-description = "Context Oracle + Doc Sync Engine for AI-assisted development"
+description = "The architecture graph of your codebase, and the gate that holds documentation, boundaries, cross-repo contracts and the agentic workflow to it"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"

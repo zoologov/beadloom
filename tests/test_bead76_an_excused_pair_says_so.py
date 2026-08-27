@@ -151,7 +151,7 @@ class TestTheJsonAccountsForEveryPairItCounted:
 
         monkeypatch.chdir(root)
         result = CliRunner().invoke(main, ["sync-check", "--json"])
-        return dict(json.loads(result.output)["summary"])
+        return dict(json.loads(result.stdout)["summary"])
 
     def test_the_verdicts_sum_to_the_total(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

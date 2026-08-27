@@ -237,7 +237,7 @@ class TestCtx:
 
         # Assert
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["version"] == 2
         assert data["focus"]["ref_id"] == "myapp"
         assert data["focus"]["kind"] == "service"
@@ -260,7 +260,7 @@ class TestCtx:
 
         # Assert
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert len(data["text_chunks"]) >= 1, "doc chunks should be included"
 
     def test_ctx_includes_code_symbols(self, tmp_path: Path) -> None:
@@ -275,7 +275,7 @@ class TestCtx:
 
         # Assert
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert len(data["code_symbols"]) >= 1, "code symbols should be present"
         symbol_names = {s["symbol_name"] for s in data["code_symbols"]}
         assert "process" in symbol_names
@@ -330,7 +330,7 @@ class TestGraph:
 
         # Assert
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "nodes" in data
         assert "edges" in data
         assert len(data["nodes"]) == 2
@@ -351,7 +351,7 @@ class TestGraph:
 
         # Assert
         assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         node_ids = {n["ref_id"] for n in data["nodes"]}
         assert "myapp" in node_ids
 
@@ -620,7 +620,7 @@ class TestFullPipeline:
         # -- 3. ctx (JSON) — verify full bundle -------------------------
         result = runner.invoke(main, ["ctx", "myapp", "--json", "--project", str(project)])
         assert result.exit_code == 0, f"ctx failed: {result.output}"
-        bundle = json.loads(result.output)
+        bundle = json.loads(result.stdout)
         assert bundle["version"] == 2
         assert bundle["focus"]["ref_id"] == "myapp"
         assert len(bundle["graph"]["nodes"]) >= 2
@@ -634,7 +634,7 @@ class TestFullPipeline:
         # -- 5. graph (JSON) --------------------------------------------
         result = runner.invoke(main, ["graph", "--json", "--project", str(project)])
         assert result.exit_code == 0, f"graph --json failed: {result.output}"
-        graph_data = json.loads(result.output)
+        graph_data = json.loads(result.stdout)
         assert len(graph_data["nodes"]) == 2
         assert len(graph_data["edges"]) >= 1
 

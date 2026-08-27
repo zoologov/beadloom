@@ -140,7 +140,7 @@ class TestStatusContextMetrics:
 
         import json
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "context_metrics" in data
         metrics = data["context_metrics"]
         assert "avg_bundle_tokens" in metrics
@@ -157,7 +157,7 @@ class TestStatusContextMetrics:
 
         import json
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         metrics = data["context_metrics"]
         assert isinstance(metrics["avg_bundle_tokens"], int)
         assert isinstance(metrics["largest_bundle_tokens"], int)

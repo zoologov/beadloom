@@ -151,7 +151,7 @@ class TestComponentKindRoundTrip:
         runner.invoke(main, ["reindex", "--project", str(project)])
         result = runner.invoke(main, ["ctx", "graph-loader", "--project", str(project), "--json"])
         assert result.exit_code == 0, result.output
-        bundle = json.loads(result.output)
+        bundle = json.loads(result.stdout)
         # Public behavior: the bundle is for the component we asked for.
         blob = json.dumps(bundle)
         assert "graph-loader" in blob
@@ -525,7 +525,7 @@ class TestRealRepoCoveragePromoted:
             ["lint", "--format", "json", "--project", str(live_repo_reindexed), "--no-reindex"],
         )
         assert result.exit_code in (0, 1), result.output
-        payload = json.loads(result.output)
+        payload = json.loads(result.stdout)
         findings = payload["violations"]
         coverage = [f for f in findings if f.get("rule_name") == "module-coverage"]
         assert coverage == [], coverage
