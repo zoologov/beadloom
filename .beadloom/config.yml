@@ -43,12 +43,13 @@ docs_audit:
   # all and the triple named a fact that no longer exists. Measured: 0
   # framework-family mentions over 58 documents repo-wide afterwards.
   ignore:
-    - path: README.md
-      fact: node_count
-      value: 20
-    - path: README.md
-      fact: mcp_tool_count
-      value: 14
+    # Retired 2026-08-27 (BDL-062, README restructure), measured: 0 matching
+    # mentions repo-wide. Both guarded sentences are gone, not reworded. The
+    # README's "20 ms" latency figure that node_count=20 covered went with the
+    # comparison table it stood in; the "14 graph read/write tools" breakdown
+    # that mcp_tool_count=14 covered went when the MCP section became a link to
+    # docs/services/mcp.md. `TestEverySuppressionStillSuppresses` caught both in
+    # CI the moment they went inert, which is what that test exists for (#200).
     - path: docs/architecture.md
       fact: mcp_tool_count
       value: 14
