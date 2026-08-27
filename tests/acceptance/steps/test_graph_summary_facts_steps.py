@@ -48,6 +48,10 @@ def world(tmp_path: Path) -> dict[str, Any]:
         "facts": {},
         "not_applicable": {},
         "violations": [],
+        # What the PROJECT declared for this rule. `error` is the shipped
+        # default, so a scenario that says nothing about severity is measuring
+        # what an adopter who wrote no `severity:` key actually gets.
+        "severity": "error",
     }
 
 
@@ -85,6 +89,15 @@ def _declined_fact(world: dict[str, Any], fact_name: str, reason: str) -> None:
     world["not_applicable"][fact_name] = reason
 
 
+@given(
+    parsers.parse(
+        'the graph-summary-facts rule is declared with severity "{severity}"'
+    )
+)
+def _declared_severity(world: dict[str, Any], severity: str) -> None:
+    world["severity"] = severity
+
+
 @given(parsers.parse('a node "{ref_id}" whose summary reads "{summary}"'))
 def _node(world: dict[str, Any], ref_id: str, summary: str) -> None:
     world["nodes"].append((ref_id, summary))
@@ -104,7 +117,7 @@ def _evaluate(world: dict[str, Any]) -> None:
     rule = SummaryFactsRule(
         name="graph-summary-facts",
         description="A number stated in a node summary agrees with the project",
-        severity="error",
+        severity=world["severity"],
     )
     world["violations"] = evaluate_summary_facts_rules(conn, [rule], fact_set=fact_set)
     conn.close()
@@ -144,6 +157,13 @@ def _severity(world: dict[str, Any]) -> None:
     findings = _findings(world["violations"], SUMMARY_FACTS_RULE_TYPE)
     assert findings
     assert all(v.severity == "error" for v in findings)
+
+
+@then(parsers.parse('that report carries the severity "{severity}"'))
+def _liveness_severity(world: dict[str, Any], severity: str) -> None:
+    findings = _findings(world["violations"], LIVENESS_RULE_TYPE)
+    assert findings, "no liveness finding to carry a severity"
+    assert [v.severity for v in findings] == [severity] * len(findings)
 
 
 @then("no node is reported")

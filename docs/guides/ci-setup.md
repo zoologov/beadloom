@@ -218,8 +218,12 @@ would redden an adopter's pipeline on an upgrade that changed none of their code
 **total** stand-down, where a rule could check none of its population, is a different
 fact: "found nothing wrong" and "never ran" are then the same output, and a project
 that raised the rule to `error` has had its escalation evaporate exactly when it
-mattered. `doc-area-coherence` therefore reports a total stand-down at the severity
-the project declared. An adopter is unaffected, because that rule ships `warn`.
+mattered. `doc-area-coherence` and `graph-summary-facts` therefore report a total
+stand-down at the severity the project declared. What that costs depends on the
+severity each ships: `doc-area-coherence` ships `warn`, so an adopter is unaffected,
+while `graph-summary-facts` ships `error` and will fail the gate for a project whose
+node summaries state no checkable number. Set `severity: warn` on that rule if the
+report is wanted without the block (BDL-062 `.14`).
 
 **What `--no-reindex` costs the verdict.** Skipping the reindex step makes every
 later step describe the index rather than the working tree: `lint` can pass over a

@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from beadloom.doc_sync import Fact, FactSet
+from beadloom.graph.linter import lint
 from beadloom.graph.rules import (
     LIVENESS_RULE_TYPE,
     SUMMARY_FACTS_RULE_TYPE,
@@ -45,6 +46,7 @@ from beadloom.infrastructure.db import create_schema, open_db
 if TYPE_CHECKING:
     import sqlite3
 
+    from beadloom.graph.linter import LintResult
     from beadloom.graph.rules import Violation
 
 #: The rule module, read as text by the "no second notion" guard.
@@ -216,7 +218,10 @@ class TestAgreementAndSilence:
         )
         assert len(found) == 1
         assert "checked nothing" in found[0].message
-        assert found[0].severity == "warn"
+        assert found[0].from_ref_id is None, (
+            "a total stand-down is a fact about the RULE; naming a node would "
+            "make it indistinguishable from the per-claim unverifiable finding"
+        )
 
     def test_a_live_rule_does_not_also_claim_it_checked_nothing(
         self, tmp_path: Path
@@ -526,6 +531,163 @@ class TestOneNotionOfAVersion:
         finally:
             scanner_module.DocScanner.scan_line = original  # type: ignore[method-assign]
         assert not _findings(silenced, SUMMARY_FACTS_RULE_TYPE)
+
+
+# --------------------------------------------------------------------------- #
+# the severity a stand-down reaches the reader with
+# --------------------------------------------------------------------------- #
+
+
+class TestATotalStandDownCarriesTheDeclaredSeverity:
+    """BDL-062 `.14` — A TOTAL STAND-DOWN IS NOT A PARTIAL GAP, for this rule.
+
+    `.9` established the distinction and fixed it for ``doc-area-coherence``,
+    which ships ``warn``. This rule ships ``error``, so until this class the
+    escalation did not have to be deliberate for the defect to bite: EVERY
+    project enabling the rule got a check declared blocking that reported its own
+    total stand-down at ``warn``, and ``lint --strict`` exited 0 over a rule that
+    read no number at all.
+
+    **Measured before the change, through the real linter** (BDL-UX #197): a
+    project whose ``rules.yml`` carries ``summary_facts: {}`` and no ``severity:``
+    key, over two numberless summaries, gave ``rules_inert=1``, one finding at
+    ``warn`` and ``has_errors=False``. Writing ``severity: error`` explicitly gave
+    byte-identical output, which is what made it invisible.
+
+    **What the replaced assertion was protecting.** The original
+    ``test_a_graph_stating_no_number_reports_that_it_checked_nothing`` asserted
+    ``severity == "warn"`` (`.1`, commit 09bf9a1). It was written before the
+    severity seam existed — `liveness_finding` then took no ``severity`` at all
+    and every liveness finding in the codebase was ``warn`` — so the assertion
+    recorded the CHANNEL the stand-down travels by (an advisory liveness finding,
+    not a disagreement carrying the rule's severity), not a choice between two
+    available values. That intent is kept and made explicit here:
+    :meth:`test_an_adopter_who_declared_the_rule_advisory_is_not_blocked` asserts
+    it with a fixture that actually declares ``warn``, and the original test now
+    pins the other half of the channel — a total stand-down names no node.
+    """
+
+    NUMBERLESS = "Widgets, and the handling thereof"
+
+    def test_the_stand_down_carries_the_severity_the_rule_declares(
+        self, tmp_path: Path
+    ) -> None:
+        conn = _graph(tmp_path, {"widgets": self.NUMBERLESS})
+        found = _findings(
+            evaluate_summary_facts_rules(
+                conn, [_rule(severity="error")], fact_set=_facts(node_count=30)
+            ),
+            LIVENESS_RULE_TYPE,
+        )
+        assert [v.severity for v in found] == ["error"]
+
+    def test_the_shipped_default_is_the_blocking_one(self, tmp_path: Path) -> None:
+        """`_rule()` takes no severity, so this is what an adopter gets."""
+        conn = _graph(tmp_path, {"widgets": self.NUMBERLESS})
+        found = _findings(
+            evaluate_summary_facts_rules(
+                conn, [_rule()], fact_set=_facts(node_count=30)
+            ),
+            LIVENESS_RULE_TYPE,
+        )
+        assert [v.severity for v in found] == ["error"]
+
+    def test_an_adopter_who_declared_the_rule_advisory_is_not_blocked(
+        self, tmp_path: Path
+    ) -> None:
+        """The intent of the assertion this bead replaced, asserted properly.
+
+        One key in `rules.yml` is the whole escape hatch for a project whose
+        summaries state no numbers and which does not want that to block.
+        """
+        conn = _graph(tmp_path, {"widgets": self.NUMBERLESS})
+        found = _findings(
+            evaluate_summary_facts_rules(
+                conn, [_rule(severity="warn")], fact_set=_facts(node_count=30)
+            ),
+            LIVENESS_RULE_TYPE,
+        )
+        assert [v.severity for v in found] == ["warn"]
+
+    def test_the_gate_cannot_pass_while_the_rule_checked_nothing(
+        self, tmp_path: Path
+    ) -> None:
+        """TESTS MUST BITE — the real linter, the real exit condition.
+
+        `lint --strict` exits non-zero on ``result.has_errors``. Revert the
+        ``severity=rule.severity`` in `summary_facts.evaluate_summary_facts_rules`
+        and this fails: the Gate reports a pass for a rule that read no number.
+        """
+        result = _lint_over_numberless_summaries(tmp_path, severity_line="")
+
+        assert result.rules_inert == 1, "the rule did not stand down; fixture is wrong"
+        assert result.has_errors, (
+            "the Gate would pass: a rule that ships `error` checked NONE of its "
+            "population and lint --strict would still exit 0"
+        )
+
+    def test_the_gate_stays_green_when_the_adopter_declared_warn(
+        self, tmp_path: Path
+    ) -> None:
+        """The same run with one key added: reported, counted, not blocking."""
+        result = _lint_over_numberless_summaries(
+            tmp_path, severity_line="    severity: warn\n"
+        )
+
+        assert result.rules_inert == 1
+        assert not result.has_errors
+
+    def test_one_unverifiable_claim_stays_advisory_though_the_rule_blocks(
+        self, tmp_path: Path
+    ) -> None:
+        """The partial half of the distinction, pinned so it is not swept along.
+
+        A claim naming a fact the project declined is a gap in what the PROJECT
+        computes, not a summary contradicting it, and the rule still read every
+        other summary. It stays ``warn`` and names its node, while a total
+        stand-down carries ``error`` and names none — the two states reach the
+        reader through neither the same severity nor the same shape.
+        """
+        conn = _graph(
+            tmp_path,
+            {"atlas": "The atlas, indexing 42 nodes", "ledger": "Double-entry ledger"},
+        )
+        found = _findings(
+            evaluate_summary_facts_rules(
+                conn,
+                [_rule(severity="error")],
+                fact_set=_declining(node_count="the nodes table could not be read"),
+            ),
+            LIVENESS_RULE_TYPE,
+        )
+        assert [(v.severity, v.from_ref_id) for v in found] == [("warn", "atlas")]
+
+
+def _lint_over_numberless_summaries(tmp_path: Path, *, severity_line: str) -> LintResult:
+    """Run the real linter on a project whose summaries state no number.
+
+    The project is built the way an adopter's is — a `rules.yml` on disk and an
+    index beside it — because the defect this class exists for lives between the
+    declared severity and the finding, and a call to the rule function alone
+    cannot show the Gate's verdict.
+    """
+    project = tmp_path / "project"
+    (project / ".beadloom" / "_graph").mkdir(parents=True)
+    (project / ".beadloom" / "_graph" / "rules.yml").write_text(
+        "version: 3\nrules:\n"
+        "  - name: graph-summary-facts\n"
+        '    description: "a number in a node summary agrees with the project"\n'
+        f"{severity_line}"
+        "    summary_facts: {}\n",
+        encoding="utf-8",
+    )
+    conn = _graph(
+        project / ".beadloom",
+        {"widgets": "Widgets, and the handling thereof", "ledger": "Double-entry ledger"},
+    )
+    conn.close()
+    (project / ".beadloom" / "graph.db").rename(project / ".beadloom" / "beadloom.db")
+    return lint(project)
 
 
 # --------------------------------------------------------------------------- #

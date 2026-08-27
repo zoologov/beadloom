@@ -336,6 +336,25 @@ def evaluate_summary_facts_rules(
                         f"verified, it has been skipped"
                     ),
                     remediation=NO_CLAIM_HINT,
+                    # A TOTAL stand-down carries the severity the project
+                    # declared (BDL-062 `.9`, BDL-UX #197). Unlike
+                    # `doc-area-coherence`, which ships `warn` and could make
+                    # that change at no cost to anyone, this rule ships `error`
+                    # — so the cost is real and is stated rather than waved
+                    # past: a project that enables the rule over summaries
+                    # stating no number now goes RED. Measured on a graph
+                    # `beadloom init --mode bootstrap` produced, 0 of 3
+                    # summaries state a checkable fact, so that is a reachable
+                    # first run and not a corner.
+                    #
+                    # It is still the right answer, because the alternative is
+                    # worse and is what shipped: the rule delivered nothing and
+                    # said so at `warn`, so "every number checks out" and "no
+                    # number was read" left `lint --strict` with the same exit
+                    # code. An adopter who does not want that blocking writes
+                    # `severity: warn` — one key, in the file where they already
+                    # declared the rule.
+                    severity=rule.severity,
                 )
             )
             continue

@@ -301,14 +301,26 @@ upgrade that changed none of their code.
 **A rule that could check *none* of its population is a different fact.** When a rule
 verified nothing, "the rule found nothing wrong" and "the rule never ran" are the
 same output, and a project that deliberately raised that rule to `error` has had its
-escalation evaporate at exactly the moment it mattered. `doc-area-coherence`
-therefore passes its own declared severity on a total stand-down. That costs an
-adopter nothing — the rule ships `warn`, so it still reports `warn` — while a
-project that settled its layout and said so keeps the answer it asked for.
+escalation evaporate at exactly the moment it mattered. `doc-area-coherence` and
+`graph-summary-facts` therefore pass their own declared severity on a total
+stand-down, while a project that settled its layout and said so keeps the answer it
+asked for.
 
-`graph-summary-facts` does **not** do this today, and the difference is measurable
-rather than a matter of reading: with the rule declared `error`, a graph whose
-summaries state no checkable number still reports its stand-down at `warn`, and a
-test asserts that severity. Only its **disagreements** carry the declared severity;
-both liveness answers — the per-node `unverifiable` and the whole-population stand-down
-— report `warn`. The asymmetry is recorded here rather than described away.
+**What the two rules cost an adopter differs, and the difference is the severity they
+ship.** `doc-area-coherence` ships `warn`, so it still reports `warn` and no
+adopter's run changes. `graph-summary-facts` ships `error`, so a project that enables
+it over summaries stating no checkable number now goes red rather than green. That is
+a real cost and it was measured before the change was made: a graph
+`beadloom init --mode bootstrap` produced from a two-module project had **0 of 3**
+summaries stating a checkable fact, so the stand-down is a reachable first run rather
+than a corner. It is still the better answer, because the alternative shipped in
+3.0.0 was worse — the rule read no number and said so at `warn`, so "every number
+checks out" and "no number was read" left `lint --strict` with the same exit code.
+The escape hatch is one key: `severity: warn` on the rule, in the same `rules.yml`
+entry that enabled it.
+
+The rule's **per-node** `unverifiable` answer stays `warn` whatever the rule is
+declared as, and deliberately so. A claim naming a fact the project declined to
+compute is a gap in what the project computes, not a summary contradicting it, and
+the rule read every other summary in the graph — that is the partial case, and it
+names its node while a total stand-down names none (BDL-062 `.14`).

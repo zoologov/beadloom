@@ -64,6 +64,8 @@
 
     Same family as #194 (`bd merge-slot` is not an exclusion primitive): the concurrency discipline this project documents rests on primitives that do not enforce it. Two independent mechanisms, one gap.
 
+    **Strengthened 2026-08-27 by BDL-062 `.12`.** An explicit pathspec commit — `git commit -- README.md README.ru.md`, which builds a temporary index and normally ignores hook staging — **did not** prevent it: `beadloom active-sync ADDED these path(s) to this commit: .beads/issues.jsonl`. So the pathspec form is not a workaround, and "commit only your own files by explicit path" cannot be satisfied by any agent following it exactly.
+
 206. [2026-08-26] [MEDIUM] `docs/**/features/*/SPEC.md` is excluded from `docs audit` outright, so declared facts drift freely there
 
     **Severity:** medium (SPECs are where a node's contract is written, and they are the one doc class nothing fact-checks)
@@ -212,6 +214,45 @@
 
     **Expected:** decide per rule type whether its stand-down is total or partial, and pass the declared severity where it is total. The seam already exists and needs no further design.
 
+    **AMENDED 2026-08-27 by BDL-062 `.14`, and the amendment is the reason it was P0.**
+    The filing treated the four as one population differing only in which had been measured.
+    They are not one population, and the difference is the shipped default: `summary_facts`
+    ships `error` while `module_coverage`, `scenario_coverage` and
+    `unregistered_feature_candidate` all ship `warn` (read off the dataclass defaults). So
+    for those three the evaporation reaches only a project that deliberately escalated the
+    rule, whereas for `summary_facts` it reached **every** project that enabled it — and
+    that rule is new in 3.0.1, so the defect was about to ship at blocking severity for the
+    first time. "Medium, unfixed for every rule type but the one that was measured" was the
+    wrong reading of the same facts.
+
+    `summary_facts` measured and fixed in `.14`. The stand-down is TOTAL in `.9`'s sense on
+    four independent measurements: `SummaryFactsRule` carries no legs (name, description,
+    severity — nothing a partial inertness could be about), `is_live` is false exactly when
+    the whole population yielded zero claims, the guard `continue`s past both emitters, and
+    the real linter reported `rules_inert=1` with one finding at `warn` and
+    `has_errors=False` on a `rules.yml` carrying no `severity:` key.
+
+    **What the fix costs, stated because `.9`'s "costs an adopter nothing" does not
+    transfer.** A graph `beadloom init -y --mode bootstrap` produced from a two-module
+    project has 0 of 3 summaries stating a checkable fact, so a project enabling this rule
+    on a small graph now goes red where it went green. The opt-out is `severity: warn` on
+    the rule. The alternative was worse and is what 3.0.0 would have shipped: the rule read
+    no number, said so at `warn`, and left `lint --strict` at the same exit code as a run
+    where every number checked out.
+
+    **Still open, narrower than the original filing.** Three rule types, all shipping
+    `warn`, each needing its own total-vs-partial measurement — `scenario_coverage` stands
+    legs down individually and is the one most likely to be *partial* rather than total.
+
+    **A second question `.14` found and did not fix.** `summary_facts` counts a claim it
+    could not verify as evidence of liveness: `is_live` is `bool(agreeing + disagreeing +
+    unverifiable)`. A graph whose every claim is unverifiable therefore confirms and
+    contradicts nothing while `rules_inert` reports 0, and each claim is reported at `warn`
+    naming its node. That is not `.9`'s false green — the findings are printed and each
+    names a node — so it is recorded rather than changed, and the per-claim `warn` is
+    deliberate: an unverifiable claim is a gap in what the PROJECT computes, not a summary
+    contradicting it.
+
     **Related:** #195 (the measured half), #172 (rule liveness), BDL-062.
 
 195. ~~[2026-08-26] [HIGH] One node whose source lies outside the common source root collapses `doc-area-coherence` for the whole graph~~ **CLOSED (BDL-062 `.9`)**
@@ -285,6 +326,17 @@
     **Partial mitigation, adopted now:** the coordinator exports a distinct `BEADS_ACTOR` per subagent, which restores acquire-time refusal. It does **not** address the release hazard, and saying otherwise would overstate it. A caller-checked release has to come from `bd`.
 
     Related: #187 of 2026-08-25 (`bd list --json`), also External, also a default of the tracker rather than of Beadloom.
+
+    **Third defect, measured 2026-08-27 — the queue admits the holder as its own waiter.** The coordinator held the slot as `coordinator` and ran `acquire --wait` again; instead of being recognised as the holder it was appended to its own queue:
+
+    ```
+    holder : coordinator
+    waiters: ["v.zoologov", "coordinator", "agent-viaj-12", "agent-viaj-13"]
+    ```
+
+    Every `release` then handed the slot back to the same identity, so the queue could not drain and the hold looked permanent from outside. Two agents queued behind it; `.12` polled ~18 minutes across two rounds, saw the holder never change, and committed without the slot — declaring the excursion, and reasoning correctly that leaving finished work uncommitted in a shared tree is the larger version of the hazard the slot exists to prevent.
+
+    **The coordinator caused this**, by treating `acquire --wait` as idempotent. But a mutual-exclusion primitive that enqueues its own holder behind itself is a deadlock the caller cannot see: `bd merge-slot check` reports a live-looking holder and a growing queue, with nothing distinguishing that from a legitimately busy slot. Combined with the two defects above, an agent following the documented discipline exactly can be blocked indefinitely by a peer that has already finished.
 
 193. [2026-08-26] [MEDIUM] `framework_count` counts nodes that declare a framework, not frameworks — the name and its keywords promise the other number
 
