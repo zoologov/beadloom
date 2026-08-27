@@ -4,9 +4,13 @@
 
 > Read this in other languages: [Русский](README.ru.md)
 
-**Beadloom is the source of truth about your code: its architecture, its contracts, and its documentation.**
+**An agent writes code faster than you can check it.** Beadloom directs it, verifies the result, and achieves stability of execution — by mechanisms, not instructions.
 
-It keeps all of that from drifting away from the code and highlights whatever has gone stale. At its core is a queryable graph derived from the code itself, and on top of that graph it builds tools — cross-service federation, integrity checks, an agentic dev workflow, and more. A single Gate lets nothing into `main` that breaks architectural boundaries and rules, ships stale or missing documentation, or carries a broken contract — the same for people and for agents.
+Rules the harness can ignore become checks it must pass. One Gate, the same for a human and for an agent.
+
+It does not matter which agent you run, because Beadloom is not part of any agent. The declared architecture, the documentation bound to it, and the contracts between services live in a graph inside your repository, and every check over that graph is a command with an exit code. Claude Code, Cursor, an editor that speaks MCP, a CI job, and a person at a keyboard all meet the same `beadloom ci`. The truth about the code is the code. Beadloom holds the other side — what you declared the system to be — and stops the two diverging in silence.
+
+**Where to start.** The graph is the foundation: `beadloom init --bootstrap` raises it from the code you already have, and `beadloom ctx <ref-id>` reads it back. What the graph enables comes next — documentation freshness and architectural boundaries inside one repository, and [federation](#federation-cross-service-contract-checking) across many, where each contract between services is checked against both of its sides. What binds them is [a single Gate](#a-single-gate): `beadloom ci` puts every check under one exit code, in a pre-push hook, in CI, and in an agent's hands. Run `init --bootstrap` first, then `beadloom ci`, and read the states it prints for whatever it could not check.
 
 It is one free, MIT-licensed tool, with no cloud: a single CLI and a single SQLite file. The graph lives in Git next to the code, so knowledge of how the system is built outlives team turnover instead of leaving with people.
 
@@ -57,46 +61,6 @@ On that same graph Beadloom builds tools that work across the whole system:
 - **A configurable, tool-agnostic agentic workflow.** `beadloom setup-agentic-flow` composes a multi-agent workflow (dev → test → review → tech-writer) and writes adapters for Claude Code and Cursor at parity.
 - **A published knowledge base.** `beadloom docs site` builds a portal (VitePress) — a metrics dashboard, the architecture and the cross-service landscape as interactive graphs with per-node and per-contract cards, and documentation tagged with its freshness. A static Mermaid fallback of each graph is generated alongside, so the pages still read with JavaScript disabled.
 
-## A single Gate
-
-Documentation, boundary, and contract checks converge into one Gate. `beadloom ci` runs the full set — reindex, `lint --strict`, sync-check, docs audit, docs-quality, doc-spaces, config-check, doctor, and the optional landscape gate — and works in three places: in a pre-push hook locally, as a required check in CI, and in the agent's hands.
-
-So the rule is simple and the same for everyone. Nothing reaches `main` that breaks architectural boundaries and rules, ships stale or missing documentation, or carries a broken cross-service contract — whether the author is a person or an AI agent. `beadloom install-hooks` installs a pre-push hook that blocks the push on a red Gate (use the documented `git push --no-verify` to bypass), and that same `beadloom ci` stays a required check in CI. There is one gate, and it is deterministic.
-
-### Unverifiable is not clean
-
-A check that cannot answer must not print the same word as a check that answered *fine*. Seven
-states used to be indistinguishable from a pass, and each now names itself:
-
-- **A declared document that is not on disk** is `missing`, not absent. The gate fails at exit 2,
-  because it is not satisfied by having less to check.
-- **A pair with no baseline** is `unverified`. It is printed by name, counted separately, and never
-  counted as fresh; the gate step reads `WARN` and the exit code is unchanged, because nothing about
-  your tree is wrong — the checker cannot speak.
-- **A rule that cannot match anything** is a `rule_liveness` warning, and the summary line says how
-  many of the evaluated rules were unable to check anything.
-- **An exemption whose `until:` has passed** is a warning, and the number of crossings the
-  remaining exemptions excused is printed on every run. Expiry never changes what is suppressed: a
-  build that reddens because a calendar day passed has no commit behind it.
-- **A fact the audit never checked** is named. `docs audit` reports how many declared facts it
-  verified out of how many it declares, lists the shortfall, and publishes the documents it never
-  opened.
-- **An intent that never reached a document of reality** is reported by `docs spaces`. An epic
-  whose work finished and whose declared node has no document reads clean to every other check:
-  `lint` asks whether modules reach nodes, and `sync-check` compares pairs, so a node that
-  declares no document has no pair to go stale.
-- **A pair a configuration excused** says so. Documentation a project declares ephemeral is
-  exempt from freshness by that declaration — never by inference from a missing pair — and the
-  excused count and the declared reason are printed beside the fresh count, so the denominator
-  cannot fall in silence.
-
-Freshness itself rests on **git**, not on the index. `.beadloom/beadloom.db` is a derived cache —
-git-ignored, per-machine, absent on every fresh CI checkout — so a rebuilt index used to adopt the
-current tree as its own baseline and report every pair fresh. Each pair now records where its
-baseline came from and is corroborated against `HEAD`; the declared surface size lives in the
-committed `.beadloom/sync-surface.json`, which only the explicit `sync-check --record-surface`
-writes. Deleting the database and rebuilding is no longer a way to reach a green `sync-check`.
-
 ## What it solves
 
 The architecture you intended and the code you actually shipped drift apart over time — and no one is watching that gap. Inside a repository, documentation quietly goes stale and architectural boundaries blur. Between services, contracts break just as quietly: a renamed queue listener, a dependency declared in the plan but never built, an endpoint with no consumer left. Each specialized check covers its own protocol, but no one is responsible for the landscape as a whole — so the break surfaces in production, in another service, not where the change was made.
@@ -137,6 +101,46 @@ beadloom federate service-a.json service-b.json service-c.json
 > **What's ready.** AMQP and GraphQL contracts with presence-based breaking-change detection, federation that is language- and product-agnostic, and CI enforcement — the contract graph can be gated through `federate --fail-on` and the single `beadloom ci` (proven on Beadloom's own CI). Validated end-to-end on a real landscape: a real `BREAKING` GraphQL mismatch caught before release, and a separate FSD product completed the `export`/`federate` round trip without loss. The landscape is drawn as a visual map on the published VitePress portal.
 > **Not yet:** REST/OpenAPI and gRPC contracts — that's planned. The hub works on collected artifacts following a documented schema, with no hosted service.
 
+## A single Gate
+
+Documentation, boundary, and contract checks converge into one Gate. `beadloom ci` runs the full set — reindex, `lint --strict`, sync-check, docs audit, docs-quality, doc-spaces, config-check, doctor, and the optional landscape gate — and works in three places: in a pre-push hook locally, as a required check in CI, and in the agent's hands.
+
+So the rule is simple and the same for everyone. Nothing reaches `main` that breaks architectural boundaries and rules, ships stale or missing documentation, or carries a broken cross-service contract — whether the author is a person or an AI agent. `beadloom install-hooks` installs a pre-push hook that blocks the push on a red Gate (use the documented `git push --no-verify` to bypass), and that same `beadloom ci` stays a required check in CI. There is one gate, and it is deterministic.
+
+### Unverifiable is not clean
+
+A check that cannot answer must not print the same word as a check that answered *fine*. Seven
+states used to be indistinguishable from a pass, and each now names itself:
+
+- **A declared document that is not on disk** is `missing`, not absent. The gate fails at exit 2,
+  because it is not satisfied by having less to check.
+- **A pair with no baseline** is `unverified`. It is printed by name, counted separately, and never
+  counted as fresh; the gate step reads `WARN` and the exit code is unchanged, because nothing about
+  your tree is wrong — the checker cannot speak.
+- **A rule that cannot match anything** is a `rule_liveness` warning, and the summary line says how
+  many of the evaluated rules were unable to check anything.
+- **An exemption whose `until:` has passed** is a warning, and the number of crossings the
+  remaining exemptions excused is printed on every run. Expiry never changes what is suppressed: a
+  build that reddens because a calendar day passed has no commit behind it.
+- **A fact the audit never checked** is named. `docs audit` reports how many declared facts it
+  verified out of how many it declares, lists the shortfall, and publishes the documents it never
+  opened.
+- **An intent that never reached a document of reality** is reported by `docs spaces`. An epic
+  whose work finished and whose declared node has no document reads clean to every other check:
+  `lint` asks whether modules reach nodes, and `sync-check` compares pairs, so a node that
+  declares no document has no pair to go stale.
+- **A pair a configuration excused** says so. Documentation a project declares ephemeral is
+  exempt from freshness by that declaration — never by inference from a missing pair — and the
+  excused count and the declared reason are printed beside the fresh count, so the denominator
+  cannot fall in silence.
+
+Freshness itself rests on **git**, not on the index. `.beadloom/beadloom.db` is a derived cache —
+git-ignored, per-machine, absent on every fresh CI checkout — so a rebuilt index used to adopt the
+current tree as its own baseline and report every pair fresh. Each pair now records where its
+baseline came from and is corroborated against `HEAD`; the declared surface size lives in the
+committed `.beadloom/sync-surface.json`, which only the explicit `sync-check --record-surface`
+writes. Deleting the database and rebuilding is no longer a way to reach a green `sync-check`.
+
 ## Agentic dev workflow — configurable, tool-agnostic
 
 The same graph that answers `prime` and `ctx` also powers a packaged multi-agent dev workflow. You describe what the project is once — in `.beadloom/flow.yml`:
@@ -157,7 +161,7 @@ The workflow is local-first and goes through the same Gate. A pull-request-trigg
 
 Because the same workflow runs on Claude Code and Cursor, and the architecture and stack are set by configuration rather than hand-written text, the workflow rolls out without being rewritten for each project.
 
-## Beadloom governs itself
+## No shadow code — Beadloom under its own rules
 
 Beadloom applies its own thesis to its own code — there is no shadow code. The `module-coverage` lint is raised to `severity: error`: every source module is either a tracked graph node (a `feature` with a `SPEC.md` or a `component` with a `DOC.md`) or an entry in a small, visible exemption list, so a new untracked module **fails `beadloom ci`**. Internal building blocks get a full `component` node kind (the infrastructure counterpart of `feature`), and even the AI tech-writer orchestrator lives in the graph-tracked `ai_agents` domain. The architecture-as-code thesis here is enforced, not declared.
 
