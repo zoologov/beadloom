@@ -35,6 +35,51 @@
 
 ## Open Issues
 
+211. [2026-08-27] [HIGH] The 1.x description was fixed in two copies of four, and `beadloom --help` still shows the old one
+
+    **Severity:** high (`beadloom --help` is the sentence every CLI user reads first, and 3.0.1 was released specifically to replace this sentence)
+    **Command:** `beadloom --help`
+    **Context:** found by `beadloom-viaj.8` verifying the PUBLISHED 3.0.1 wheel in a fresh virtual environment — the check that was the reason for the release.
+
+    **Measured on the published artifact**, not the local build:
+
+    ```
+    importlib.metadata.metadata('beadloom')['Summary']
+      -> The architecture graph of your codebase, and the gate that holds ...   CORRECT
+    beadloom --help, line 3
+      -> Beadloom - Context Oracle + Doc Sync Engine.                           THE 1.x SENTENCE
+    ```
+
+    **Four copies of the product's one-line description exist. `.4` found two.**
+
+    | Copy | State after 3.0.1 | Who reads it |
+    |---|---|---|
+    | `pyproject.toml` `description` | corrected | the PyPI project page |
+    | `beadloom/__init__.py` docstring | corrected | `help(beadloom)` |
+    | `services/commands/_root.py:44` | **still 1.x** | `beadloom --help` |
+    | `onboarding/templates/docs/core/beadloom-readme.md.txt:9` | **still 1.x** | every project scaffolded by `beadloom init` |
+
+    **The check that exists could not have caught it, and its own docstring predicted why.**
+    `tests/test_package_description.py` asserts that the manifest and the package docstring
+    AGREE, and states plainly that agreement is checkable while currency is not — "both copies
+    were in perfect agreement while both were three majors out of date". The residual it did not
+    name is the one that bit: **agreement over a subset of the copies.** Two were corrected
+    together, the test compared exactly those two, and it went green over a product whose most
+    visible surface still said the retired sentence.
+
+    Worse for an adopter than for us: the fourth copy is a **template**, so every project
+    `beadloom init` scaffolds from 3.0.1 onward is seeded with the 1.x sentence in its own
+    documentation.
+
+    **Expected:** the description has one home and the others are derived from it, or the check
+    enumerates every copy rather than the two it was written against. `_root.py`'s Click group
+    docstring cannot import the manifest cheaply, but it can read `beadloom.__doc__`, which is
+    already one of the checked copies.
+
+    **Not fixed in 3.0.1** — found after the tag was pushed and the wheel published. Re-cutting a
+    published artifact to change a help string is the more expensive error. It is the first item
+    for 3.0.2.
+
 210. [2026-08-27] [MEDIUM] `active-sync` resolves no row when a bead id is written as a Markdown code span, and blames the id
 
     **Severity:** medium (the reconcile exists so ACTIVE.md cannot drift from the tracker by hand; where it is inert, the drift it prevents is exactly what happens)
