@@ -85,6 +85,9 @@ When SQLite database exists (post-reindex), skeletons include:
 | `_render_symbols_section` | Markdown table from public symbols |
 | `_render_architecture` | Values for the `overview` template: domains + services tables + Mermaid |
 | `_node_values` | The placeholder values every node document shares |
+| `beadloom_readme_values` | Every placeholder `beadloom-readme` needs, in one place — public because `render_doc` raises on a missing value, so every caller must agree on the whole set (BDL-062 `.15`) |
+| `_beadloom_description` | Beadloom's own one-line description, read from the package docstring rather than written into the scaffold template (BDL-UX #211) |
+| `_mcp_tool_list` | Every MCP tool name as inline code, from the catalogue — the template had named 8 of 18 |
 | `_render_domain_readme` | Domain page with features list |
 | `_render_service` | Service page with dependencies |
 | `_render_feature_spec` | Feature page with parent link |

@@ -3,4 +3,4 @@ holds documentation, boundaries, cross-repo contracts and the agentic
 workflow to it.
 """
 
-__version__ = "3.0.1"
+__version__ = "3.0.2"

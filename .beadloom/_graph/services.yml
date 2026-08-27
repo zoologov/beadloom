@@ -2,7 +2,7 @@ nodes:
   # Root service
   - ref_id: beadloom
     kind: service
-    summary: "Beadloom CLI + MCP server — architecture graph, Context Oracle, Doc Sync Engine, architecture rules and the Gate (v3.0.1)"
+    summary: "Beadloom CLI + MCP server — architecture graph, Context Oracle, Doc Sync Engine, architecture rules and the Gate (v3.0.2)"
     source: src/beadloom/
     docs:
       - docs/architecture.md

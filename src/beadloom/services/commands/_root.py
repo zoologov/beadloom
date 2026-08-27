@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import click
 
+from beadloom import __doc__ as _package_description
 from beadloom import __version__
 from beadloom.infrastructure.console_streams import tolerate_unencodable_output
 
@@ -35,13 +36,29 @@ class TolerantOutputGroup(click.Group):
         return super().main(*args, **kwargs)
 
 
-@click.group(cls=TolerantOutputGroup)
+#: What ``beadloom --help`` prints under the usage line. DERIVED from the package
+#: docstring rather than written again here, and that is the fix rather than a
+#: tidiness: this docstring WAS a third hand-written copy of the product's
+#: one-line description, and BDL-062 `.4` corrected the two copies that
+#: `tests/test_package_description.py` compared while this one -- the most
+#: visible of them -- shipped the 1.x sentence through both 3.0 patch releases
+#: (BDL-UX #211).
+#: A copy that cannot drift is better than a copy a check remembers to read.
+_HELP = " ".join((_package_description or "").split())
+
+
+@click.group(cls=TolerantOutputGroup, help=_HELP)
 @click.version_option(version=__version__, prog_name="beadloom")
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output.")
 @click.option("--quiet", "-q", is_flag=True, help="Minimal output (errors only).")
 @click.pass_context
 def main(ctx: click.Context, *, verbose: bool, quiet: bool) -> None:
-    """Beadloom - Context Oracle + Doc Sync Engine."""
+    """Dispatch a subcommand, carrying the verbosity flags on the context.
+
+    The user-facing summary is ``_HELP`` above, not this docstring: Click prefers
+    an explicit ``help=`` over ``__doc__``, so the sentence a reader sees has one
+    home and this text can describe the callback instead.
+    """
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose
     ctx.obj["quiet"] = quiet

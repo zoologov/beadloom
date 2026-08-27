@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from beadloom.onboarding.composer import PROJECT_FLOW_DIRNAME, compose
+from beadloom.onboarding.doc_generator import beadloom_readme_values
 from beadloom.onboarding.doc_templates import (
     DOC_ARTIFACT_KIND,
     DOC_KIND_FOR_NODE_KIND,
@@ -285,8 +286,13 @@ class TestRenderedForAProjectThatIsNotBeadloom:
         """No fact computed about Beadloom may appear in an adopter's document."""
         project = typescript_project(tmp_path / "acme")
 
+        # Rendered through the value map the generator uses, not a hand-built
+        # one: `.15` gave the scaffold two derived placeholders, and a test that
+        # supplied its own set would stop exercising what an adopter is given.
         text = render_doc(
-            "beadloom-readme", {"project_name": project.name}, config=_config()
+            "beadloom-readme",
+            beadloom_readme_values(project.name),
+            config=_config(),
         )
 
         assert project.name in text
