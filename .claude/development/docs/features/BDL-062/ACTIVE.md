@@ -24,6 +24,7 @@
 | beadloom-viaj.12 | tech-writer | ✓ done | README leads with harness governance (owner decision 2026-08-27) |
 | beadloom-viaj.13 | tech-writer | ✓ done | all eleven guides read in full against current functionality; 9 changed, 2 left |
 | beadloom-viaj.14 | dev | ✓ done | `graph-summary-facts` ships `error` and stood down at `warn` — measured TOTAL four ways, fixed, and the test that pinned the defect replaced with evidence; 6 documents corrected, #197 amended |
+| beadloom-viaj.15 | dev | in progress | the description was fixed in 2 copies of 4 — swept and found 5, three removed rather than corrected, the check now sweeps 372 files and records its population; released as 3.0.2 (BDL-UX #211) |
 
 ## Deviation from PLAN — wave 1 is split
 

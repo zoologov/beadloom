@@ -35,7 +35,7 @@
 
 ## Open Issues
 
-211. [2026-08-27] [HIGH] The 1.x description was fixed in two copies of four, and `beadloom --help` still shows the old one
+211. ~~[2026-08-27] [HIGH] The 1.x description was fixed in two copies of four, and `beadloom --help` still shows the old one~~ **CLOSED (BDL-062 `.15`, released in 3.0.2)**
 
     **Severity:** high (`beadloom --help` is the sentence every CLI user reads first, and 3.0.1 was released specifically to replace this sentence)
     **Command:** `beadloom --help`
@@ -76,9 +76,46 @@
     docstring cannot import the manifest cheaply, but it can read `beadloom.__doc__`, which is
     already one of the checked copies.
 
-    **Not fixed in 3.0.1** — found after the tag was pushed and the wheel published. Re-cutting a
-    published artifact to change a help string is the more expensive error. It is the first item
-    for 3.0.2.
+    **CLOSED in 3.0.2** (`beadloom-viaj.15`), and the closing measurement is on the PUBLISHED
+    artifact rather than the local build, because that distinction is what this issue is about.
+    Fresh virtual environment, `beadloom==3.0.2` installed from PyPI:
+
+    ```
+    beadloom --version           -> beadloom, version 3.0.2
+    beadloom --help, line 3      -> Beadloom - the architecture graph of your codebase, ...  CORRECT
+    importlib.metadata Summary   -> The architecture graph of your codebase, ...             CORRECT
+    grep 'Context Oracle + Doc Sync Engine' over the installed package (269 files) -> 0 hits
+    ```
+
+    **The count in this entry was wrong, and that is the finding rather than a correction.** It said
+    FOUR copies. Sweeping 372 files found **five**: the fifth is this repository's own
+    `.beadloom/README.md`, which `init` had scaffolded from the same template. An issue about a
+    check that read a smaller population than the fact had was itself written from a population
+    somebody had listed by hand.
+
+    **Three copies were removed rather than corrected**, which is why this is not a typo fix.
+    `_root.py` derives `help=` from the package docstring; the scaffold template takes
+    `{{beadloom_description}}` and `{{mcp_tool_list}}`, filled by `beadloom_readme_values()` from
+    the package docstring and `MCP_TOOL_CATALOG`; and `.beadloom/README.md` is generator output.
+    Two literal copies remain — the manifest and the package docstring — which the pre-existing
+    agreement test already holds together.
+
+    **Reading the scaffold end to end**, which nobody had done this cycle, found three more items of
+    the same class: it named **8 of the 18** MCP tools as though that were the list (and states no
+    number, so `mcp_tool_count` could never have bound to it), `Directory Contents` omitted
+    `AGENTS.md`, and `Essential Commands` omitted `prime` and `ci`. Verified on the published wheel
+    by scaffolding a project with it: all 18 tools, `AGENTS.md` present, both commands present.
+
+    **What is still NOT checked, measured rather than asserted.** Setting the manifest and the
+    package docstring to `A cloud-hosted spreadsheet for tracking invoices` and regenerating the
+    scaffold leaves all 7 checks green. Currency has no test and this issue did not give it one. The
+    check now guards a banned phrase, agreement across every copy the sweep finds, and the SIZE of
+    the population — and that last is what closes the class, because a sixth copy stating the
+    correct sentence turns the suite red until somebody records it.
+
+    **What an adopter still has to do.** `.beadloom/README.md` is written once and never
+    overwritten, so a project scaffolded on 3.0.0 or 3.0.1 keeps the 1.x sentence and the 8-tool
+    list until that file is deleted and regenerated. Named in the 3.0.2 CHANGELOG under Upgrading.
 
 210. [2026-08-27] [MEDIUM] `active-sync` resolves no row when a bead id is written as a Markdown code span, and blames the id
 
