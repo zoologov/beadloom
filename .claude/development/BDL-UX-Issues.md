@@ -465,6 +465,17 @@
 
     Every `release` then handed the slot back to the same identity, so the queue could not drain and the hold looked permanent from outside. Two agents queued behind it; `.12` polled ~18 minutes across two rounds, saw the holder never change, and committed without the slot — declaring the excursion, and reasoning correctly that leaving finished work uncommitted in a shared tree is the larger version of the hazard the slot exists to prevent.
 
+    **Deterministic reproduction, 2026-08-27, one actor, two commands:**
+
+    ```
+    BEADS_ACTOR=probe bd merge-slot acquire         -> acquired
+    BEADS_ACTOR=probe bd merge-slot acquire --wait  -> "Slot held by probe, added to waiters queue (position 5)"
+    ```
+
+    The holder is enqueued behind itself. `position 5` also shows that waiters from earlier sessions survive a release, so the queue accumulates identities that will never wake.
+
+    **This is not misuse.** The project CLAUDE.md tells every agent to run `acquire --wait` before committing, and an agent that commits twice runs it twice. Following the documented discipline exactly is what corrupts the primitive. The coordinator drained the queue once, used the slot normally for several more commits, and recreated the same deadlock — which then blocked the 3.0.2 release agent, who checked the slot rather than trusting the coordinator's assurance that it had been cleared, and was right to.
+
     **The coordinator caused this**, by treating `acquire --wait` as idempotent. But a mutual-exclusion primitive that enqueues its own holder behind itself is a deadlock the caller cannot see: `bd merge-slot check` reports a live-looking holder and a growing queue, with nothing distinguishing that from a legitimately busy slot. Combined with the two defects above, an agent following the documented discipline exactly can be blocked indefinitely by a peer that has already finished.
 
 193. [2026-08-26] [MEDIUM] `framework_count` counts nodes that declare a framework, not frameworks — the name and its keywords promise the other number
