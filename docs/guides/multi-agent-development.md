@@ -124,21 +124,23 @@ The loop itself is described in `/coordinator` as an explicit sequence of steps,
 
 ---
 
-## Beadloom governs itself (BDL-051)
+## The model applied to Beadloom's own source (BDL-051)
 
 The context without which the two-layer model would make no sense: in 2.0.0 Beadloom applied its own thesis to itself.
 
 - A **component** node kind appeared (an internal building block alongside feature) and a **module-coverage** check in **error** mode: every module in `src/` is either a graph node (feature or component) or an explicitly listed exemption. No "shadow" code the graph doesn't know about: a new untracked module fails `beadloom ci`.
 - The server-side AI tech-writer became a first-class `ai_agents` domain inside the package (rather than an external directory), with its own import boundaries.
-- Every module in the project is classified and documented.
+- Every module in the project is classified, and every module's classification is checked rather than asserted.
 
-This is exactly why Beadloom is the first and strictest consumer of its own workflow: the "no code without documentation" rule applies to its own code too.
+BDL-062 carried the same idea from the modules onto the nodes themselves. A node is now held to documenting itself where this graph documents nodes from its source area, and to stating no number in its `summary` that the project contradicts. A node that genuinely should carry no document records that decision with its reason in the graph, and `doctor` prints the reason — so an absence somebody ruled on and an absence nobody examined stop reading alike.
+
+This is why Beadloom is the first and strictest consumer of its own workflow: the "no code without documentation" rule applies to its own code too.
 
 ---
 
-## What the flow gained after 2.0.0
+## What has since joined the loop
 
-Four mechanisms joined the loop above. Each has its own guide; this section says what it is for and where it sits in the workflow, and does not repeat the guide.
+Five mechanisms joined the loop above after the release that first packaged it. Each has its own guide; this section says what it is for and where it sits in the workflow, and does not repeat the guide.
 
 **Flow guards — the flow's rules stop being prose a model may ignore (BDL-061 S1).** A guard answers one process question about one situation — *is this edit covered by a claimed work item?*, *is this happening off the protected trunk?* — and returns a verdict a harness acts on without parsing anything. The condition is declared under `guards:` in `.beadloom/flow.yml`, Beadloom evaluates it, and the tool adapter carries no logic of its own. `beadloom guard <name>` exits `0` for pass or skip, `1` for warn and `2` for block. One code differs between the shell and a harness hook, deliberately: a defect in the declared configuration, or a command line that could not be used, exits `3` in the shell and `2` under `--hook`, because `3` does not stop a tool call and **a guard that cannot answer must never read as one that passed**. `beadloom guard --liveness` reports which guards have fired and which protect nothing. This repository runs `bead-claimed` and `working-branch`, both at the shipped `warn`.
 
@@ -148,7 +150,9 @@ Four mechanisms joined the loop above. Each has its own guide; this section says
 
 **`beadloom review-brief` — the reviewer gets the change and the specification, not the author's account of either (BDL-061 S6).** It assembles the assignment, the declared scope, the graph's specification documents, the bound `@bead:` scenarios and every changed file, and **withholds the bead's own comments**, reporting how many it withheld. The account is not destroyed: `--release` prints it once a verdict comment is recorded. The ordering is the point — an agent that reads the author's conclusion first tends to verify that conclusion rather than the change.
 
-Beside the four, `beadloom export` and `beadloom federate` extend the same intent-versus-reality question across repositories: each service publishes a deterministic, commit-pinned artifact, and the hub aggregates two or more of them into a federated graph with per-edge and per-contract verdicts. It is not part of the single-repository loop above, and `beadloom ci` runs `federate` only when the project declares satellites.
+**The graph's own metadata is checked against the project (BDL-062).** Until this slice every rule read the graph's *edges* — which module reaches which node, which layer may import which. Nothing read the fields the graph carries about itself, and two of them were wrong here for three major releases without a check going red. `graph-summary-facts` reads the numeric and version claims out of every node `summary` — the sentence `ctx`, `prime`, the generated site and every agent adapter quote — and compares each against the same fact the project computes about itself. `doc-area-coherence` asks whether a node documents itself where this graph's *own* convention says it should, and derives that convention from the graph under test rather than from any written-down layout, which is why it works on a feature-sliced project as well as on this package-per-domain one. Both are ordinary entries in `.beadloom/_graph/rules.yml` and both report `unverifiable` as a state of its own: a graph whose summaries state no numbers, or whose documents agree on no convention, is told it was **skipped** rather than cleared. See [The architecture model](./architecture-model.md).
+
+Beside the five, `beadloom export` and `beadloom federate` extend the same intent-versus-reality question across repositories: each service publishes a deterministic, commit-pinned artifact, and the hub aggregates two or more of them into a federated graph with per-edge and per-contract verdicts. It is not part of the single-repository loop above, and `beadloom ci` runs `federate` only when the project declares satellites.
 
 ---
 
@@ -489,9 +493,11 @@ flowchart LR
   GREEN -->|no| FLAG["contributes verdict: flagged"]
 ```
 
-The eight steps run in that order, and `federate` is a ninth when the project declares satellites. `sync-check = 0` proves **freshness** — a documentation section references current code symbols. It is not a text-quality check: a human on the pull-request review is responsible for the wording being correct. `lint --strict` checks not only architectural boundaries but also the absence of "shadow" code (the `module-coverage` check in error mode). The three document steps between them are what the Gate gained after 2.0.0: `docs audit` compares numbers and versions stated in prose against the same numbers computed from the project, `docs quality` reads planning documents against the writing standard, and `doc spaces` checks the relation between the intent a TO-BE document recorded and the AS-IS document that should describe what was built.
+The eight steps run in that order, and `federate` is a ninth when the project declares satellites. `sync-check = 0` proves **freshness** — a documentation section references current code symbols. It is not a text-quality check: a human on the pull-request review is responsible for the wording being correct. `lint --strict` checks not only architectural boundaries but also the absence of "shadow" code (the `module-coverage` check in error mode). Three of the steps are about documents rather than about code: `docs audit` compares numbers and versions stated in prose against the same numbers computed from the project, `docs quality` reads planning documents against the writing standard, and `doc spaces` checks the relation between the intent a TO-BE document recorded and the AS-IS document that should describe what was built.
 
-Each step states what it did **not** check beside what it did. `docs quality` names the kinds no check reads; `doc spaces` names the epics that declare no node and the epics the tracker does not know; `lint` qualifies its rule count with how many rules were unable to check anything. That is the thesis of the release this guide describes, in the Gate's own output: a green step that examined nothing must not read like a green step that examined everything.
+Each step states what it did **not** check beside what it did. `docs quality` names the kinds no check reads; `doc spaces` names the epics that declare no node and the epics the tracker does not know; `lint` qualifies its rule count with how many rules were unable to check anything. `docs audit` reports three populations rather than one — the facts a document stated and the run judged, the facts this project declares no value for with the reason it declined, and the facts the project computes that no document states — so a fact leaving the denominator is named rather than silently subtracted. That is the thesis of this whole line of work, in the Gate's own output: a green step that examined nothing must not read like a green step that examined everything.
+
+The severity of saying so is deliberately not uniform, and the asymmetry is the useful part. A rule whose *part* went inert reports a warning whatever it is declared as, because a configuration smell must not redden a pipeline on an upgrade that changed no code. A rule that could check **none** of its population is a different fact: "found nothing wrong" and "never ran" are then the same output, and an escalation that evaporates the moment the rule stops working is an escalation nobody has. `doc-area-coherence` therefore reports a total stand-down at the severity the project declared. It is the only rule that does so far, and [the architecture model](./architecture-model.md) names the one that does not.
 
 ---
 
@@ -589,3 +595,4 @@ The typical scenario looks like this. On the task branch the documentation is wr
 - [`parallel-waves.md`](./parallel-waves.md) — what a wave of concurrent agents guarantees, the four media it shares regardless of the shape, and reviewer isolation
 - [`document-kinds.md`](./document-kinds.md) — the three documentation spaces, the architecture documents held against code, and the planning documents held against the writing standard
 - [`project-overlays.md`](./project-overlays.md) — the four composition layers and the project layer that survives an upgrade
+- [`architecture-model.md`](./architecture-model.md) — domain, feature and component, the no-shadow-code check, and the two rules that read the graph's own metadata

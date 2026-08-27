@@ -155,9 +155,11 @@ Three things to know about the result:
   reorder it. Start it with a horizontal rule and a heading if you want the seam to
   read cleanly.
 - **It cannot delete core text.** Overlays are append-only in bytes: concatenation is
-  the only operation, and all 34 shipped fragments were measured to end with a
-  newline, so a project layer cannot even rewrite the core's last line. To stand a
-  core rule down, declare it — see the next section.
+  the only operation, and every shipped fragment — 41 of them today — was measured to
+  end with a newline, so a project layer cannot even rewrite the core's last line. The
+  test is parametrised over whatever the package ships rather than over a written-down
+  list, so a fragment added tomorrow is measured too. To stand a core rule down,
+  declare it — see the next section.
 - **A fragment named after nothing is inert.** `.beadloom/flow/roles/dev.md` composes;
   `.beadloom/flow/roles/devs.md` composes into nothing and is not reported. The
   scanner looks for the names that compose, so a typo is silent.

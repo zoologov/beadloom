@@ -349,10 +349,12 @@ rebuilt site reproducible.
   removed), and the local contract-graph landscape with safe (page-aware) clicks.
   Dogfooded on Beadloom's own site (real `vitepress build` exit 0, render
   browser-confirmed). F4 and F4.4 ship together.
-- **Deferred (F4.1):** the AI tech-writer in CI — orchestrating an *external*
-  model to refresh drifted docs, scoped by `sync-check` / `docs polish --json`,
-  with team review on a PR. The published-docs showcase intentionally does NOT
-  rewrite prose today; badges are computed, not generated.
+- **Shipped since (F4.1, BDL-047 onward):** the AI tech-writer in CI —
+  orchestrating an *external* model to refresh drifted docs, scoped by
+  `sync-check --since` and symbol-level narrowing, with team review on the PR it
+  commits into. It is not part of this generator: the published-docs showcase
+  still does **not** rewrite prose, and the badges are computed rather than
+  generated. See the [AI tech-writer guide](./ai-techwriter.md).
 - **Deferred:** a richer JS graph library for the landscape map (Cytoscape / D3)
   beyond the current clickable Mermaid thin slice; REST/OpenAPI + gRPC contracts
   in the federated map.

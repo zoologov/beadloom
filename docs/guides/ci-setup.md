@@ -156,6 +156,48 @@ Beadloom dogfoods this gate on its own CI: the per-repo gate (`reindex` →
 `config-check` → `doctor`) shipped and runs on every Beadloom PR. The cross-service
 landscape step is opt-in via `--hub`.
 
+### What `docs audit` reports: three populations, not one
+
+The `docs audit` step compares numbers and versions stated in prose against the same
+facts computed from the project. Its headline is not the finding count but the
+coverage line beside it, and that line names **three** populations rather than
+folding them together:
+
+| Population | What it means | Where a fact goes |
+|------------|---------------|-------------------|
+| **verified** | at least one document states the fact and the run judged it | inside the denominator, counted as checked |
+| **not applicable to this project** | the registry declined to compute a value here, with a stated reason | **outside** the denominator entirely — neither verified nor unverified |
+| **declared but unverified** | the project computes the fact and no document states it, or the scanner cannot read a claim of it | inside the denominator, named rather than counted as clean |
+
+The third population is the one a finding count cannot express: a run that reports
+`19 mention(s) fresh` may have restated one fact nineteen times while eight others
+were never touched. Naming it is what stops a green audit reading as a clean bill of
+health.
+
+The second exists because a denominator that shrinks in silence is worse than one
+that is wrong. A collector that could not compute a fact used to omit it, so an
+unregistered CLI surface turned `3 of 9 declared fact(s) verified` into `3 of 8`
+with nothing saying which fact left. A decline is now a value carrying its own
+reason, and the reason names the escape hatch: declare the project's own value under
+`docs_audit.extra_facts` in `.beadloom/config.yml`.
+
+Two facts are about the **running package** rather than about every project — the MCP
+tool catalogue and the CLI command surface — and are computed only when the audited
+project declares itself to be that package. Every other project sees them under *not
+applicable* with the reason, instead of being told it has a surface it does not have.
+
+```bash
+beadloom docs audit                          # the report, with every population named
+beadloom docs audit --json                   # `verified_facts`, `unverified_facts`, `not_applicable`
+beadloom docs audit --fail-if unverified>3   # turn coverage into a gate of your own
+```
+
+Coverage does not fail or warn the step by default. Silence in the documentation
+about a fact is not a defect in the code, and a warning every project would carry on
+every run would spend the channel `sync-check` needs for a real missing baseline.
+
+### Two steps are warn-only, and one severity rule spans every rule
+
 **Two steps are warn-only by design, and stay so.** `docs-quality` and `doc-spaces`
 set `passed` unconditionally: every finding is a warning and the exit code does not
 move. A check that turns an adopter's green project red on upgrade is a check that
@@ -164,6 +206,20 @@ stating rather than discovering: a project can carry findings from either step a
 still push through a green Gate. What those steps guarantee is that the findings are
 **printed by name** with the population behind them, and that a step which could not
 decide reports `WARN` rather than `PASS`.
+
+**A rule that checked nothing reports that, and how loudly depends on how much it
+missed.** `lint --strict` counts the rules that were unable to check anything and
+prints the count beside the rules it evaluated, so a green line cannot advertise a
+check that looked at nothing. The severity of saying so is deliberately not uniform.
+**Partial** inertness — a dead glob, an exemption that excuses nothing, a matcher
+selecting no node while the rule's other legs still fire — always reports `warn`,
+because it is a configuration smell rather than a boundary breach and promoting it
+would redden an adopter's pipeline on an upgrade that changed none of their code. A
+**total** stand-down, where a rule could check none of its population, is a different
+fact: "found nothing wrong" and "never ran" are then the same output, and a project
+that raised the rule to `error` has had its escalation evaporate exactly when it
+mattered. `doc-area-coherence` therefore reports a total stand-down at the severity
+the project declared. An adopter is unaffected, because that rule ships `warn`.
 
 **What `--no-reindex` costs the verdict.** Skipping the reindex step makes every
 later step describe the index rather than the working tree: `lint` can pass over a

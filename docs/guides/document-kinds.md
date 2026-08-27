@@ -83,7 +83,7 @@ invariant, pinned by a test on this repository and on the TypeScript fixture in
 The finding is reported **once per kind** with a count, up to five example paths and the roots
 that failed to reach them: sixty directories following one convention are one decision to make,
 not sixty lines to read. A space that declares **no** root has said nothing about where its
-documents live and therefore contradicts nothing — which is why this repository's 55
+documents live and therefore contradicts nothing — which is why this repository's 56
 `ACTIVE.md` files are silent and `documents_outside_declared_root` reads empty here.
 
 Roots have their own precedence for the case where two of them name one file, and it points the
@@ -139,7 +139,11 @@ work finished, and the node it named has no AS-IS document.
 2. The tracker says at least one of the epic's beads is closed.
 3. The declared node's `docs:` list is checked against the AS-IS space.
 
-Measured on this repository, 2026-08-24, the relation reports **one** finding, and it is true:
+The first finding this relation produced on this repository is the clearest statement of what
+it is for. BDL-061 named `cli-commands` in its CONTEXT's *Related Files*, the epic had more than
+sixty closed beads, and `cli-commands` was a real declared node in `.beadloom/_graph/services.yml`
+with **no `docs:` entry at all** — the `cli` service beside it declared `docs/services/cli.md`
+while the component holding every command implementation declared nothing:
 
 ```
 [warn] .claude/development/docs/features/BDL-061/CONTEXT.md:125 (intent_without_as_is)
@@ -147,16 +151,26 @@ Measured on this repository, 2026-08-24, the relation reports **one** finding, a
        has no AS-IS document
 ```
 
-BDL-061 names `cli-commands` in its CONTEXT's *Related Files*, the epic has more than sixty
-closed beads, and `cli-commands` is a real declared node in `.beadloom/_graph/services.yml` —
-with **no `docs:` entry at all**. The `cli` service beside it declares `docs/services/cli.md`
-while the component holding every command implementation declares nothing.
-
-**No other check could see this.** `lint` judges import boundaries and module coverage — it
+**No other check could have seen it.** `lint` judges import boundaries and module coverage — it
 asks whether modules reach nodes, not whether nodes reach documents. `sync-check` compares
 *pairs*, so a node that declares no document contributes no pair, and a document that does not
 exist cannot go stale. The absence is invisible to both by construction, which is the whole
 reason the relation exists.
+
+That finding was answered in BDL-062: `cli-commands` was given a document, and so was `status`.
+Measured on this repository, 2026-08-27, the relation reports no `intent_without_as_is` finding
+and one of the second kind instead:
+
+```
+[warn] .claude/development/docs/features/BDL-030/CONTEXT.md:0 (epic_not_in_tracker)
+       epic BDL-030 declares 1 node(s) and `bd list --all --json` has no record of it, so
+       whether its work finished is unknown and its intent was held against nothing
+```
+
+The two findings are not variants of one another. The first says intent reached no document.
+The second says the run could not tell whether the intent's work had finished, so the intent was
+held against nothing at all — an epic the tracker export has lost is not an epic whose beads are
+open, and reporting them alike would let a lost export read as work in progress.
 
 ### What the relation does not check, and says so
 
@@ -205,11 +219,11 @@ And the exemption covers freshness only: a pair whose document or code file is g
 `missing` before any exemption applies, so a WORKING declaration cannot make a deleted file
 quieter than a present one.
 
-Measured here: the shipped exemption reaches 55 documents and excuses **0** sync pairs, because
+Measured here: the shipped exemption reaches 56 documents and excuses **0** sync pairs, because
 `ACTIVE.md` lives outside the docs directory the indexer walks, so none of those documents is a
-sync pair at all. The gate prints both numbers apart — `55 WORKING document(s) in the exempt
-space, 0 sync pair(s) excused` — because one word for two populations is how a reader takes 55
-as the number of excused pairs. `beadloom docs spaces` runs no freshness check and therefore
+sync pair at all. The gate prints both numbers apart — `56 WORKING document(s) in the exempt
+space, 0 sync pair(s) excused` — because one word for two populations is how a reader takes the
+first number as the number of excused pairs. `beadloom docs spaces` runs no freshness check and therefore
 reports `pairs_excused: null` rather than `0`: **unknown is not zero**, in the tool's own
 output.
 
@@ -342,14 +356,14 @@ So a required section counts as in use for a node kind only when a **majority** 
 documents carry it. A minority — including none — reports the KIND once, with the ratio, because
 the fix is then in the template rather than in every file.
 
-Measured on this repository, 2026-08-24, with the requirements derived from the composed
+Measured on this repository, 2026-08-27, with the requirements derived from the composed
 templates (`Source`, `Dependencies` for every kind, plus `Features` for `domain` and `Parent` for
 `feature`):
 
 | Kind | In use | Not in use, reported once with its ratio |
 |------|--------|------------------------------------------|
 | domain | `Features` | `Source (0/7)`, `Dependencies (0/7)` |
-| feature | — | `Source (5/41)`, `Dependencies (3/41)`, `Parent (4/41)` |
+| feature | — | `Source (5/42)`, `Dependencies (3/42)`, `Parent (4/42)` |
 | service | — | `Source (0/4)`, `Dependencies (0/4)` |
 
 One document is reported: `docs/domains/infrastructure/README.md` carries no heading naming
@@ -457,23 +471,23 @@ names the kinds no **content** check enters. The judgement is made over the four
 items — a goal, a decision row, a risk row, an open question — because `unfilled-placeholder`
 counts documents *opened* and would report every kind as read.
 
-Measured on this repository, 2026-08-24, over 243 planning documents:
+Measured on this repository, 2026-08-27, over 248 planning documents:
 
 | Check | Findings | Read |
 |-------|----------|------|
-| `measurable-goal` | 4 | 232 goal statements |
+| `measurable-goal` | 4 | 238 goal statements |
 | `decision-reason` | 0 | 272 decision rows |
 | `risk-mitigation` | 0 | 138 risk rows |
 | `pending-in-approved` | 2 | 69 open-question rows |
-| `unfilled-placeholder` | 0 | 243 documents |
+| `unfilled-placeholder` | 0 | 248 documents |
 
 | Kind | Documents | goals | decision rows | risk rows | open questions |
 |------|-----------|-------|---------------|-----------|----------------|
-| ACTIVE | 55 | 1 | 10 | 0 | 0 |
-| CONTEXT | 46 | 31 | 214 | 0 | 0 |
-| RFC | 45 | 0 | 41 | 121 | 65 |
-| PLAN | 42 | 0 | 0 | 0 | 0 |
-| PRD | 41 | 200 | 7 | 17 | 4 |
+| ACTIVE | 56 | 1 | 10 | 0 | 0 |
+| CONTEXT | 47 | 31 | 214 | 0 | 0 |
+| RFC | 46 | 0 | 41 | 121 | 65 |
+| PLAN | 43 | 0 | 0 | 0 | 0 |
+| PRD | 42 | 206 | 7 | 17 | 4 |
 | BRIEF | 11 | 0 | 0 | 0 | 0 |
 | SUMMARY | 3 | 0 | 0 | 0 | 0 |
 
@@ -483,7 +497,7 @@ this repository's own planning documents, so writing a decision row into a CONTE
 quoting a table; what is durable here is the SHAPE of the report — findings over a stated
 population, per check and per kind — not any particular row.
 
-**56 of 243 documents (23%) are in a kind no content check enters** — BRIEF, PLAN and SUMMARY —
+**57 of 248 documents (23%) are in a kind no content check enters** — BRIEF, PLAN and SUMMARY —
 while `checks_that_read_nothing` read `()` throughout. The three zero rows above are a genuinely
 checked green: each of `decision-reason`, `risk-mitigation` and `unfilled-placeholder` was shown
 to fire on a real document of this repository under a single reverse-editable edit, so they are
@@ -515,10 +529,10 @@ with a traceback.
 `beadloom ci` runs `docs-quality` as its fifth step. It never blocks: `passed` is unconditionally
 true and every finding is a warning. It reports **WARN** rather than PASS when any of three
 things is true — a check read nothing anywhere, a document kind no content check enters, or a
-document nobody could decode. On this repository, measured 2026-08-24:
+document nobody could decode. On this repository, measured 2026-08-27:
 
 ```
-docs-quality WARN | 243 document(s) read; measurable-goal 4, pending-in-approved 2;
+docs-quality WARN | 248 document(s) read; measurable-goal 4, pending-in-approved 2;
                     NO CHECK READS: BRIEF, PLAN, SUMMARY
 ```
 

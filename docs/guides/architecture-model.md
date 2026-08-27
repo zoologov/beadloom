@@ -130,9 +130,15 @@ src/beadloom/onboarding/branch_protection.py (6 symbols): not covered by any
   node and not exempt — classify as a feature/component or add to exempt.
 ```
 
-The lint's severity is **`warn` for now**: it appears in `beadloom lint` output
-but does **not** make `beadloom lint --strict` exit non-zero. (Once every module
-is classified, S3b promotes it to `error` so any new shadow module fails CI.)
+(That file now carries `# beadloom:feature=branch-protection` and produces no
+finding; the shape of the message is what the example shows.)
+
+The lint's severity is **`error`** in this repository's `rules.yml`, so a new
+shadow module makes `beadloom lint --strict` exit non-zero and fails the Gate. It
+ran at `warn` while the tree was being classified and was raised once every
+module had been. An adopter's own `rules.yml` chooses, and `warn` is the sane
+setting until their tree is classified — a check that fails a first run on a tree
+nobody has swept yet is a check that gets deleted rather than answered.
 The intended response to a finding is one of:
 
 1. **Model it as a feature** — a user-facing capability: add a `feature` node, a
@@ -152,6 +158,157 @@ A module may be exempted only when **all** of:
 - it is **internal-only** (a docstring-only module is enough).
 
 The list is seeded **minimally** with the genuinely-trivial — `**/__init__.py`,
-`onboarding/config_reader.py`, `onboarding/presets.py` — and grows only by
-deliberate, reviewable edits in `rules.yml`. Everything else must become a
+`**/__main__.py`, `onboarding/config_reader.py`, `onboarding/presets.py` — and
+grows only by deliberate, reviewable edits in `rules.yml`. One entry is not
+trivial glue and carries its reason in the file: `graph/rule_engine.py` is a
+back-compat re-export shim with no symbols of its own, and the `rule-engine` node
+is sourced at the package where the engine lives, so the exemption covers only
+the shim's lack of code and not its membership. Everything else must become a
 feature or a component.
+
+## Two rules that read the graph's own metadata
+
+`module-coverage` asks whether every module reaches a node. Two further rules ask
+the questions on the other side of the same edge: whether a node's `summary` says
+anything true, and whether a node's document sits where this graph puts documents.
+Both were added in BDL-062 and both live in `.beadloom/_graph/rules.yml` beside the
+boundary rules, because they query the same indexed schema and are therefore
+generic over any project's graph.
+
+### `graph-summary-facts` — a number in a summary is checked
+
+A node's `summary:` is the sentence every other surface quotes: `beadloom ctx`,
+`beadloom prime`, the generated site, the agent adapters. Until this rule nothing
+compared it against anything. Measured on this repository at the time it landed,
+the root node named a release three majors behind the one the project computes and
+`mcp-server` named a tool total four short of its own catalogue. Both had been wrong
+across three major releases without a single check going red.
+
+```yaml
+  - name: graph-summary-facts
+    description: "A number or version stated in a node summary agrees with the project"
+    severity: error
+    summary_facts: {}
+```
+
+The rule owns neither the extraction nor the comparison. `DocScanner.scan_line`
+reads the summary and `compare_facts` judges it — the same version pattern, the
+same keyword table, the same clause-scoped proximity and the same per-fact
+tolerances the [documentation audit](./ci-setup.md#unified-gate-beadloom-ci) uses
+on prose. A second, subtly different notion of "a version" beside the first is how
+the next drift class starts, so `summary_facts` takes no configuration keys at all.
+
+Each summary lands in one of four answers, and the fourth is why the rule exists:
+
+| Answer | What it means | Reported as |
+|--------|---------------|-------------|
+| agrees | a claim was found and it matches | counted, no finding |
+| disagrees | a claim was found and it differs | a finding at the rule's severity, naming the node, both values and the fact's provenance |
+| no claim | the summary states nothing checkable | counted **apart** from agreement |
+| unverifiable | a claim was found for a fact this project could not compute | a `rule_liveness` finding carrying the registry's own reason verbatim |
+
+**`unverifiable` never folds into a pass.** A project whose version cannot be
+resolved and a project whose every summary checked out must not be described by the
+same word. Every finding also carries the population it is a fraction of, so a rule
+that found two claims in eighty-four summaries cannot report "no violations" as
+though it had cleared eighty-four of anything.
+
+Severity ships `error`, unlike the convention check below. A number that contradicts
+the project it describes is wrong in every house style, so there is no adopter
+preference to respect, and the value is in the adopter's own graph rather than in
+Beadloom's.
+
+Measured here: two summaries state a checkable fact and both agree, the rest state
+none.
+
+### `doc-area-coherence` — the convention is read off the graph
+
+A node should document itself where its own graph documents nodes like it. The
+interesting part is not the check but where the convention comes from: **no layout
+is written down in the rule, anywhere.** A literal such as `docs/domains/<package>/`
+would ship one project's tree as every adopter's, would be wrong for a
+feature-sliced project the day it was installed, and would turn a check about the
+graph into a check about Beadloom. An AST test over the module's non-docstring
+string constants fails the moment a directory name is written into it.
+
+```yaml
+  # As this repository declares it. The shipped default is `warn` — see below.
+  - name: doc-area-coherence
+    description: "A node is documented where this graph documents nodes from its source area"
+    severity: error
+    doc_area_coherence:
+      threshold: 0.6
+      min_support: 2
+```
+
+Both sides of a pair are reduced to one comparable segment, and both are derived:
+
+- **The source area** is the segment directly below the *source root*, and the root
+  is found by descending one segment for as long as there is exactly one
+  **supported** way down. On a package-per-domain tree that root comes out as
+  `src/<package>` and the area is the package; on a feature-sliced tree it is `src`
+  and the area is `features` or `entities`. Neither spelling is known to the rule.
+  A root is the level above where the areas begin, which is why the descent is
+  governed by support rather than by a majority: support answers *is there one
+  shared way down*, a majority answers *which way down is most popular*, and only
+  the first question has a root for its answer.
+- **The docs area** is the doc-path segment at the *area depth*, and that depth is
+  itself derived in two passes. The first asks each doc path where in it a source
+  area is named, using the vocabulary the source side already produced, and takes
+  the depth that answer lands at most often. The second reads **every** doc path's
+  segment at that depth, whatever it is called there — which is what lets the rule
+  see a document filed under a directory that names no source area at all, the
+  commonest shape of the drift it exists to catch.
+
+A mapping from one source area to one docs area is **dominant** when it covers at
+least `threshold` of that area's observed pairs *and* rests on at least
+`min_support` of them. The support condition is not decoration: without it every
+area holding a single documented node is unanimous at one observation, and a graph
+of six areas holding one node each reports a clean sweep having compared nothing
+that could disagree.
+
+**A graph with no dominant mapping reports that it checked nothing**, and is counted
+in `LintResult.rules_inert` so the summary line cannot advertise a check that looked
+at nothing. A flat docs tree, a project mid-migration and a graph too small to hold
+a convention are all legitimately unverifiable, and none of them is clean.
+
+Severity ships `warn`. A convention check is a check about house style, and one that
+fails an adopter's first `beadloom ci` on their own house style is a rule they will
+switch off. This repository raises it to `error`, where the layout has been settled
+since BDL-051.
+
+Two populations deliberately do not compare and neither is dropped. A source too
+short to have a segment below the root is *rootless* — a node whose source **is** the
+root. A source lying outside the root altogether is excluded from the comparison and
+counted, which is why every finding's population clause ends with how many sit
+outside the source root. Under an earlier unanimity rule either one held a veto over
+the whole derivation; now each holds a count.
+
+Measured here: 79 of the 85 pairs compare, all 79 agree and none contradicts. The
+six that do not compare are three sources that are the root itself and three doc
+paths with no segment at the derived depth.
+
+### A total stand-down is not a partial gap
+
+The two answers are deliberately not symmetric, and the asymmetry is the point.
+
+**Partial inertness stays advisory.** A dead glob, an exemption that excuses nothing,
+a matcher selecting no node while the rule's other legs still fire — each is a
+configuration smell rather than a boundary breach, and each reports `warn` whatever
+the rule declares. Promoting them would turn an adopter's green pipeline red on an
+upgrade that changed none of their code.
+
+**A rule that could check *none* of its population is a different fact.** When a rule
+verified nothing, "the rule found nothing wrong" and "the rule never ran" are the
+same output, and a project that deliberately raised that rule to `error` has had its
+escalation evaporate at exactly the moment it mattered. `doc-area-coherence`
+therefore passes its own declared severity on a total stand-down. That costs an
+adopter nothing — the rule ships `warn`, so it still reports `warn` — while a
+project that settled its layout and said so keeps the answer it asked for.
+
+`graph-summary-facts` does **not** do this today, and the difference is measurable
+rather than a matter of reading: with the rule declared `error`, a graph whose
+summaries state no checkable number still reports its stand-down at `warn`, and a
+test asserts that severity. Only its **disagreements** carry the declared severity;
+both liveness answers — the per-node `unverifiable` and the whole-population stand-down
+— report `warn`. The asymmetry is recorded here rather than described away.
