@@ -6,13 +6,17 @@ boundaries, and provides structured context to AI agents.
 
 ## What is Beadloom?
 
-Beadloom is a Context Oracle + Doc Sync Engine designed for AI-assisted
-development. It maintains a queryable architecture graph over your codebase,
-so agents spend less time searching and more time building.
+{{beadloom_description}}
+
+It maintains a queryable architecture graph over your codebase, so agents
+spend less time searching and more time building.
 
 ## Quick Start
 
 ### Essential Commands
+
+    # Compact context for an AI agent, at the start of a session
+    beadloom prime
 
     # Project overview
     beadloom status
@@ -35,6 +39,9 @@ so agents spend less time searching and more time building.
     # Rebuild index after changes
     beadloom reindex
 
+    # Every check at once, and the one command CI runs
+    beadloom ci
+
 ### For AI Agents (MCP)
 
 Beadloom exposes tools via Model Context Protocol (MCP):
@@ -42,8 +49,7 @@ Beadloom exposes tools via Model Context Protocol (MCP):
     beadloom mcp-serve             # start MCP server (stdio)
     beadloom setup-mcp             # configure your editor
 
-MCP tools: `get_context`, `get_graph`, `list_nodes`, `sync_check`,
-`search`, `update_node`, `mark_synced`, `generate_docs`.
+MCP tools: {{mcp_tool_list}}.
 
 ## Directory Contents
 
@@ -51,6 +57,7 @@ MCP tools: `get_context`, `get_graph`, `list_nodes`, `sync_check`,
     ├── _graph/
     │   ├── services.yml    # Architecture graph (nodes + edges)
     │   └── rules.yml       # Architecture lint rules
+    ├── AGENTS.md           # What an AI agent reads first
     ├── config.yml          # Project configuration
     ├── beadloom.db         # SQLite index (gitignored)
     └── README.md           # This file
@@ -59,5 +66,6 @@ MCP tools: `get_context`, `get_graph`, `list_nodes`, `sync_check`,
 
 - **Agent Native** — structured context for LLMs, not another LLM wrapper
 - **Doc Sync** — detects when docs go stale after code changes
-- **AaC Lint** — enforces architectural boundaries via deny/require rules
+- **AaC Lint** — enforces architectural boundaries, and reports a rule that
+  could check nothing rather than passing it
 - **Local-first** — SQLite + YAML, no cloud services, no API keys

@@ -38,7 +38,7 @@ is what holds that line.
 
 | Module | Commands |
 |---|---|
-| `_root.py` | the shared `main` group and the missing-parser warning helper — no command of its own |
+| `_root.py` | the shared `main` group and the missing-parser warning helper — no command of its own. The summary `beadloom --help` prints is `help=_HELP`, derived from the package docstring rather than written as the group's own docstring: it was a third hand-written copy of the product description and shipped the 1.x sentence through both 3.0 patch releases (BDL-UX #211) |
 | `query.py` | `ctx`, `graph`, `why`, `search`, `prime` |
 | `index_ops.py` | `reindex`, `doctor`, `diff`, `link` |
 | `status.py` | `status` |

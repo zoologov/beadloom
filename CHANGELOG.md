@@ -5,6 +5,90 @@ All notable changes to Beadloom are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.2] - 2026-08-27
+
+**A check whose population was smaller than the fact's, printing the word a complete check prints.**
+3.0.1 was released for one reason: the package description on the PyPI page still read the 1.x
+sentence. It shipped, the page was correct, and `beadloom --help` still said
+`Beadloom - Context Oracle + Doc Sync Engine.` The description was written in four places, BDL-062
+`.4` corrected two, and `tests/test_package_description.py` compared **exactly those two**. Nothing
+was wrong with what it checked. What was wrong is that it read a smaller population than the fact
+had and reported in a shape indistinguishable from having read all of it — the class BDL-062
+existed to close, in the release about closing it (BDL-UX #211).
+
+Swept at this release rather than taken on report: the retired sentence stood in **five** live
+surfaces, not four. The fifth is this repository's own `.beadloom/README.md`, which `init` had
+scaffolded from the same template that carried it.
+
+### Fixed
+
+- **`beadloom --help` states the current description.** The Click group's docstring was a third
+  hand-written copy. It is now `help=` derived from the package docstring, so the copy cannot drift
+  because it no longer exists. Measured on the published wheel before the change: `importlib.
+  metadata` carried the current sentence while line 3 of `--help` carried the 1.x one.
+
+- **The scaffold template no longer states Beadloom's prose at all** — the copy that mattered most,
+  because it propagates. `beadloom init` writes `.beadloom/README.md` into the adopter's repository,
+  so a sentence written into the template goes stale in every project that ever ran the command.
+  Two values are now placeholders the generator fills from the surface that defines them:
+  `{{beadloom_description}}` from the package docstring, and `{{mcp_tool_list}}` from
+  `MCP_TOOL_CATALOG`. **An adopter who ran `init` on 3.0.0 or 3.0.1 has the stale text in their own
+  repository**; `.beadloom/README.md` is written once and never overwritten, so it must be deleted
+  and regenerated (`beadloom docs generate`) or edited by hand.
+
+- **The scaffold named 8 of the 18 MCP tools as though that were the list.** Missing:
+  `bead_context`, `checkpoint`, `complete_bead`, `diff`, `get_debt_report`, `get_status`, `lint`,
+  `prime`, `task_init`, `why`. None of the eight it named was wrong, which is why it read as a list
+  rather than as a subset — and it states no number, so the documentation audit's `mcp_tool_count`
+  could never have seen it. It is now rendered from the catalogue.
+
+- **Three further staleness items in the same scaffold**, found by reading it end to end because
+  nobody had this cycle: the `Directory Contents` tree omitted `AGENTS.md`, which `init` writes and
+  which is the file an AI agent reads first; `Essential Commands` omitted `beadloom prime` and
+  `beadloom ci`, the two commands the product now leads with; and `AaC Lint` was described as
+  enforcing boundaries "via deny/require rules", the 1.x vocabulary, against 12 authoring keys
+  today.
+
+### Changed
+
+- **The description check sweeps instead of naming copies.** Three checks with three different
+  failures, and the denominator is stated in each message: **372 files swept** across `src/`,
+  `docs/`, `.beadloom/`, both READMEs and the manifest.
+  1. No shipped surface states a retired description. This is the check whose absence let 3.0.1
+     ship; measured, it goes red on the exact commit that missed the three copies.
+  2. Every occurrence of the current description agrees with the manifest, matched across line
+     breaks and case-insensitively — a line-based, case-sensitive sweep found 1 of the 5 copies,
+     including missing one `.4` had already corrected, and a check that cannot see a correct copy
+     cannot see an incorrect one either.
+  3. **The population is recorded rather than assumed.** The number of live copies is asserted, so
+     adding one is a deliberate act that updates the record. Modelled on `sync-check`'s
+     "declared surface grew" line, for the same reason. Verified by adding a sixth copy stating the
+     **correct** sentence: the check goes red and names the count.
+
+  `.4` wrote a retired-phrase blocklist here and deleted it, correctly — the phrase it guarded
+  (`Doc Sync v2 Engine`) lived in the graph root summary and never in a guarded copy, so it could
+  not have fired on what it guarded. That reasoning does not carry to this sweep, and the
+  difference is measured rather than argued: `Context Oracle + Doc Sync Engine` **was** in the
+  guarded copies.
+
+### Known limitations
+
+The six named in 3.0.1 stand unchanged — **#209** (a non-English document yields no facts and is
+counted as scanned), **#205** (a correct number binding to a fact that computes something else),
+**#206** (SPEC files excluded from the audit outright), **#210** (`active-sync` resolves no row
+whose bead id is a Markdown code span), **#194** (`bd merge-slot` is not an exclusion primitive)
+and **#192** (a virgin `beadloom init --yes` leaves `beadloom ci` red). One is added:
+
+- **The sweep guards a sentence, not a claim.** It reports a description the product has retired
+  and it holds every copy of the current one to the manifest, so a copy that drifts or a phrase
+  that was banned is caught. It cannot tell whether the current sentence is *true of the product* —
+  that judgement has no test, it belongs to a reader at release time, and `CONTRIBUTING.md`'s
+  release process is where it is asked for. Measured, so the limit is not theoretical: setting the
+  manifest and the package docstring to `A cloud-hosted spreadsheet for tracking invoices` and
+  regenerating the scaffolded `.beadloom/README.md` leaves **all 7** checks in this release green.
+  The regeneration is part of the measurement rather than a detail — without it the population
+  check goes red, so a false sentence is caught only for as long as one copy has not caught up.
+
 ## [3.0.1] - 2026-08-27
 
 **A patch that grew past its scope, and says so.** BDL-062 set out to close one gap — the graph's

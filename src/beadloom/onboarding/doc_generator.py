@@ -85,17 +85,59 @@ def _generate_beadloom_readme(
     *,
     config: FlowConfig | None = None,
 ) -> Path:
-    """Generate ``.beadloom/README.md`` with quick-start instructions."""
+    """Generate ``.beadloom/README.md`` with quick-start instructions.
+
+    Two of the values are DERIVED rather than written into the template, and the
+    reason is BDL-UX #211: the template is the copy of Beadloom's own prose that
+    propagates into other people's repositories, so a sentence written there
+    goes stale in every project that ever ran ``beadloom init``. Measured at
+    BDL-062 `.15`: it carried the 1.x product description three majors after the
+    product stopped being that, and named 8 of the 18 MCP tools as though that
+    were the list. Both now come from the surface that defines them.
+    """
     readme_path = project_root / ".beadloom" / "README.md"
     content = render_doc(
         "beadloom-readme",
-        {"project_name": project_name},
+        beadloom_readme_values(project_name),
         config=config or doc_flow_config(project_root),
         project_root=project_root,
     )
     if _write_if_missing(readme_path, content):
         logger.info("Created: %s", readme_path)
     return readme_path
+
+
+def beadloom_readme_values(project_name: str) -> dict[str, str]:
+    """Every placeholder ``beadloom-readme`` needs, in one place.
+
+    Public and named because ``render_doc`` raises on a placeholder with no
+    value, so every caller must agree on the whole set — and a caller that
+    quietly disagreed would be a second answer to what the scaffold says.
+    """
+    return {
+        "project_name": project_name,
+        "beadloom_description": _beadloom_description(),
+        "mcp_tool_list": _mcp_tool_list(),
+    }
+
+
+def _beadloom_description() -> str:
+    """Beadloom's own one-line description, from the package docstring.
+
+    The package docstring is one of the two copies
+    ``tests/test_package_description.py`` holds to the manifest, so reading it
+    here puts the scaffold inside that check rather than beside it.
+    """
+    from beadloom import __doc__ as package_description
+
+    return " ".join((package_description or "").split()).rstrip(".") + "."
+
+
+def _mcp_tool_list() -> str:
+    """Every MCP tool name, as inline code, from the catalogue itself."""
+    from beadloom.infrastructure.mcp_tools import mcp_tool_names
+
+    return ", ".join(f"`{name}`" for name in mcp_tool_names())
 
 
 def _find_root_node(
