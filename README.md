@@ -4,15 +4,7 @@
 
 > Read this in other languages: [Русский](README.ru.md)
 
-**An agent writes code faster than you can check it.** Beadloom directs it, verifies the result, and achieves stability of execution — by mechanisms, not instructions.
-
-Rules the harness can ignore become checks it must pass. One Gate, the same for a human and for an agent.
-
-It does not matter which agent you run, because Beadloom is not part of any agent. The declared architecture, the documentation bound to it, and the contracts between services live in a graph inside your repository, and every check over that graph is a command with an exit code. Claude Code, Cursor, an editor that speaks MCP, a CI job, and a person at a keyboard all meet the same `beadloom ci`. The truth about the code is the code. Beadloom holds the other side — what you declared the system to be — and stops the two diverging in silence.
-
-**Where to start.** The graph is the foundation: `beadloom init --bootstrap` raises it from the code you already have, and `beadloom ctx <ref-id>` reads it back. What the graph enables comes next — documentation freshness and architectural boundaries inside one repository, and [federation](#federation-cross-service-contract-checking) across many, where each contract between services is checked against both of its sides. What binds them is [a single Gate](#a-single-gate): `beadloom ci` puts every check under one exit code, in a pre-push hook, in CI, and in an agent's hands. Run `init --bootstrap` first, then `beadloom ci`, and read the states it prints for whatever it could not check.
-
-It is one free, MIT-licensed tool, with no cloud: a single CLI and a single SQLite file. The graph lives in Git next to the code, so knowledge of how the system is built outlives team turnover instead of leaving with people.
+**Rules for architecture, documentation and contracts, as checks with an exit code. The same for a human and for an agent.**
 
 [![License: MIT](https://img.shields.io/github/license/zoologov/beadloom)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/zoologov/beadloom?include_prereleases&sort=semver)](https://github.com/zoologov/beadloom/releases)
@@ -24,342 +16,233 @@ It is one free, MIT-licensed tool, with no cloud: a single CLI and a single SQLi
 [![coverage: 80%+](https://img.shields.io/badge/coverage-80%25%2B-green)](pyproject.toml)
 [![Docs portal](https://img.shields.io/badge/docs-portal-8A2BE2)](https://zoologov.github.io/beadloom/)
 
-📖 **Documentation portal:** [zoologov.github.io/beadloom](https://zoologov.github.io/beadloom/) — the architecture and the cross-service landscape as clickable graphs (click a node for its card and blast radius; filter by kind, layer or health), a metrics dashboard, and documentation tagged with its freshness. Every page is generated from the indexed graph, never hand-drawn.
+🔎 **See what it produces:** [the interactive architecture graph of Beadloom](https://zoologov.github.io/beadloom/architecture.html) — click a node to open its card and blast radius. The page is built from this repository's own graph by `beadloom docs site`, not drawn by hand.
 
 **Platforms:** macOS and Linux, verified on every CI run &nbsp;|&nbsp; **Python:** 3.10+
 
-Windows is **unverified by decision**, which is a third state and not a synonym for either of the other two: nothing in this project has ever executed on Windows, a `windows-latest` CI leg was built and then withdrawn because it becomes the pipeline's critical path, and Beadloom is therefore neither verified nor known broken there. The section *Windows: unverified by decision* in the [flow-guards SPEC](docs/domains/application/features/flow-guards/SPEC.md) states what is measured without a Windows kernel and what follows from it.
-
 ---
 
-## At the core — the graph
+## The agent forgets what you wrote
 
-Everything Beadloom does rests on one data structure: the architecture graph of your system. The graph is bootstrapped from the code itself (`beadloom init --bootstrap`), lives in Git as YAML, and is checked against the real sources on every reindex. You can query it, and it always answers the same question the same way — it is ordinary data you can review and version.
+An agent writes code faster than you can read it. At the start of a session it remembers the instruction in `CLAUDE.md`. In a long session it forgets.
 
-Three parts keep the graph honest:
+The reason is known and it is called context rot: the longer the conversation and the larger the file of rules, the harder those instructions compete for the model's attention. Rules weaken exactly when the session has grown long and you need them most. Adding one more paragraph to the file makes it worse.
 
-1. **Context Oracle** — a graph traversal returns a deterministic context bundle for any node in under 20 ms: the code, the documentation, and the rules in force.
-2. **Doc Sync Engine** — knows which documentation describes which code and catches drift on every commit. No more "the spec says one thing, the code does another."
-3. **Architecture Rules** — boundaries and rules in YAML, checked by `beadloom lint`. A boundary holds at build time, not "at review, if someone notices."
+So you cannot rely on the instruction being read and remembered. You need something that does not depend on memory.
 
-For an AI agent the same three parts are packed into a single bundle under 2K tokens by `beadloom prime` — instead of the usual grep-read-guess loop. Over MCP the agent gets that same context and the rules in force for the part it is working on, so it stays within your architectural boundaries by default.
+## A rule becomes a command
 
-|  | Semantic search (IDE) | Beadloom |
-|---|---|---|
-| **Answers** | "Where is this class?" | "What is this feature and how does it fit?" |
-| **Method** | Embeddings and model ranking | Explicit graph and traversal |
-| **Result** | Probabilistic | Deterministic |
-| **Documentation** | Doesn't track freshness | Catches stale docs on every commit |
-| **Boundaries** | Doesn't check | Enforces, blocks violations |
-| **Knowledge** | Dies with the session | Lives in Git, outlives team turnover |
+Beadloom keeps rules in an **architecture graph**. The graph is a description of your system that lives in the repository as ordinary YAML: what parts it has, how they connect, what may reach what. One property of it matters here: you can run a command over the graph.
 
-## On top of the graph — the tools
+The rule lives in the graph. There is a command over the graph. The command returns an exit code. An exit code is not forgotten — not by an agent, not by a person, not in CI.
 
-On that same graph Beadloom builds tools that work across the whole system:
+Every check converges into a single Gate. Here is its output on this repository:
 
-- **Cross-service federation.** The graphs of individual repositories combine into one landscape, where Beadloom checks what each service promises to provide against what its consumers actually use.
-- **A configurable, tool-agnostic agentic workflow.** `beadloom setup-agentic-flow` composes a multi-agent workflow (dev → test → review → tech-writer) and writes adapters for Claude Code and Cursor at parity.
-- **A published knowledge base.** `beadloom docs site` builds a portal (VitePress) — a metrics dashboard, the architecture and the cross-service landscape as interactive graphs with per-node and per-contract cards, and documentation tagged with its freshness. A static Mermaid fallback of each graph is generated alongside, so the pages still read with JavaScript disabled.
-
-## What it solves
-
-The architecture you intended and the code you actually shipped drift apart over time — and no one is watching that gap. Inside a repository, documentation quietly goes stale and architectural boundaries blur. Between services, contracts break just as quietly: a renamed queue listener, a dependency declared in the plan but never built, an endpoint with no consumer left. Each specialized check covers its own protocol, but no one is responsible for the landscape as a whole — so the break surfaces in production, in another service, not where the change was made.
-
-Beadloom makes that gap visible and checkable: documentation and boundaries inside each repository, contracts between services. An AI agent can read your code, but it does not know the architecture you intended or the state of contracts outside the repository — and that is exactly the part that is hard to get any other way.
-
-## Federation: cross-service contract checking
-
-The most dangerous bugs hide **between** services — where the compiler and the tests of a single repository can't reach, and specialized checks are tied to one protocol. An event goes to a queue whose only listener was renamed in a neighboring repository — a broker has neither a schema nor a registry to notice. One service is built against a dependency that was declared in the plan but never built. An endpoint keeps being maintained even though its last consumer was removed long ago. Beadloom brings contracts of every kind — AMQP messages, GraphQL, declared cross-service dependencies — into one landscape graph and checks both sides of each, with an eye on lifecycle: `planned` need not exist yet and raises no false alarm, while `deprecated` that is still in use is plain debt. Not the schema of one protocol, but a map of the whole landscape's intent against what was actually built.
-
-Each service exports its graph as a deterministic, commit-pinned artifact. A hub aggregates them into one landscape and checks the contracts:
-
-```bash
-# In each service repo — a deterministic, commit-pinned artifact:
-beadloom export --out service-a.json
-
-# At the hub — aggregate the landscape and check the contracts:
-beadloom federate service-a.json service-b.json service-c.json
+```
+reindex      PASS: up to date
+lint         PASS: 0 error(s), 59 warning(s), 6 crossings suppressed by an exemption
+sync-check   PASS: 363 pair(s) fresh
+docs-audit   PASS: 20 mention(s) fresh; 5/9 declared fact(s) verified,
+                   NOT VERIFIED: edge_count, language_count, nodes_with_framework, test_count
+docs-quality WARN: 248 document(s) read; NO CHECK READS: BRIEF, PLAN, SUMMARY
+doc-spaces   WARN: to_be 194, as_is 100, working 56
+config-check PASS: no blocking drift
+doctor       PASS: 13 check(s): 0 error(s), 204 warning(s), 1 info
 ```
 
-- **Cross-repository references.** A graph edge can point to a node in another service as `@<repo>:<ref_id>` (for example, `consumes @backend:WebAPI`). Local references stay local. A wrong reference is surfaced by Beadloom, not silently dropped.
-- **Contracts over AMQP and GraphQL.** Contracts are first-class entities with a language-neutral key: AMQP as `amqp:<broker>/<routing>:<message type>`, GraphQL as `graphql:<schema>`. A TypeScript client and the backend match by the contract's **name**.
-- **Intent vs. reality for every contract.** Each contract gets a verdict:
+What to look at here is not `PASS` but what stands next to it. Every step names **how much** it checked and **what it did not look at**. A check that had nothing to check does not read as a successful one — [a separate section](#when-a-check-cannot-answer-beadloom-says-so) is about that, and it is the main thing that separates Beadloom from a pile of linters.
 
-  | Verdict | Meaning |
-  |---------|---------|
-  | `CONFIRMED` | Producer and consumer are both present and compatible. |
-  | `BREAKING` | A consumer uses a name no longer present in the producer's current GraphQL schema. Caught **before** release — a presence check, not a version comparison. |
-  | `ORPHANED_CONSUMER` | Something consumes a contract that no one produces. |
-  | `UNDECLARED_PRODUCER` | Something produces a contract that no one consumes. |
-  | `EXTERNAL` | Marked "present, but not ours" (for example, a native bridge) — no false alarms. |
-  | `DRIFT` | A cross-repo dependency declared active whose target cannot be found. |
+One Gate stands in three places: in the pre-push hook, in CI, and in an agent's hands. It does not matter which agent provider you use, because Beadloom is universal and is part of none of them. Claude Code, Cursor, an editor that speaks MCP, a CI job, a person at a keyboard — all of them meet the same `beadloom ci`.
 
-- **Lifecycle-aware.** Every node and edge has a status — `active`, `planned`, `deprecated`, `dead`, or `external`. A planned but not-yet-built contract reads as expected, not as a failure. And a `deprecated` one still in use is flagged as a removal candidate.
-- **Product and company scale.** `federate` aggregates either a single product (its backend, frontend, infrastructure, integrations) or a whole company landscape of several products. Products with no shared contracts don't generate noise about each other, and a cross-product contract appears only where the integration is real.
-- **Freshness.** Every artifact carries a commit SHA and a timestamp, so the hub shows how stale each service's contract export is. When there is no data, it honestly says "unknown" rather than inventing a SHA.
+Some rules cannot be turned into a command. They stay as text the agent reads, and Beadloom tries not to let that text grow. Your project's rules live in a separate layer in `.beadloom/flow/`, the shipped core lives apart from it, and an upgrade changes only the core.
 
-> **What's ready.** AMQP and GraphQL contracts with presence-based breaking-change detection, federation that is language- and product-agnostic, and CI enforcement — the contract graph can be gated through `federate --fail-on` and the single `beadloom ci` (proven on Beadloom's own CI). Validated end-to-end on a real landscape: a real `BREAKING` GraphQL mismatch caught before release, and a separate FSD product completed the `export`/`federate` round trip without loss. The landscape is drawn as a visual map on the published VitePress portal.
-> **Not yet:** REST/OpenAPI and gRPC contracts — that's planned. The hub works on collected artifacts following a documented schema, with no hosted service.
+## How the Gate knows what is correct
 
-## A single Gate
+Any indexing of code — embeddings in an IDE, a search over the repository, an agent reading the sources — answers questions about **what is in the code**. Beadloom answers questions about **what you decided about the code**. You cannot read that out of the sources: the decision lives in your head, in a discussion, in a ticket, and the code knows nothing about it.
 
-Documentation, boundary, and contract checks converge into one Gate. `beadloom ci` runs the full set — reindex, `lint --strict`, sync-check, docs audit, docs-quality, doc-spaces, config-check, doctor, and the optional landscape gate — and works in three places: in a pre-push hook locally, as a required check in CI, and in the agent's hands.
+| Question | Where the answer comes from |
+|---|---|
+| Where is this class implemented? | visible in the code |
+| What does this module import? | visible in the code |
+| Is it **allowed** to import that? | only if you wrote it down |
+| Does this document still describe the current code? | you wrote down which document describes which code, and Beadloom checks it |
+| Who else uses the contract we are about to delete? | written down in a neighbouring repository |
+| Is this dependency built already, or only planned? | only if you wrote it down |
 
-So the rule is simple and the same for everyone. Nothing reaches `main` that breaks architectural boundaries and rules, ships stale or missing documentation, or carries a broken cross-service contract — whether the author is a person or an AI agent. `beadloom install-hooks` installs a pre-push hook that blocks the push on a red Gate (use the documented `git push --no-verify` to bypass), and that same `beadloom ci` stays a required check in CI. There is one gate, and it is deterministic.
+Any good indexer will answer the first two. None will answer the rest, and that is not about its quality: the answer is simply not in the sources.
 
-### Unverifiable is not clean
+You write it down once, in that same graph. Inside, it is simple: **nodes** (services, domains, features, components) and **edges** between them (`part_of`, `uses`, `depends_on`). The graph can be raised from code you already have with `beadloom init --bootstrap`, then reviewed and maintained by hand.
 
-A check that cannot answer must not print the same word as a check that answered *fine*. Seven
-states used to be indistinguishable from a pass, and each now names itself:
+On reindex, Beadloom merges three sources into one SQLite database: the graph itself, the documentation bound to its nodes, and the code parsed through tree-sitter for symbols. After that the graph can be questioned: `beadloom ctx <node>` returns everything about a node at once, `beadloom why <node>` shows what breaks if you touch it.
 
-- **A declared document that is not on disk** is `missing`, not absent. The gate fails at exit 2,
-  because it is not satisfied by having less to check.
-- **A pair with no baseline** is `unverified`. It is printed by name, counted separately, and never
-  counted as fresh; the gate step reads `WARN` and the exit code is unchanged, because nothing about
-  your tree is wrong — the checker cannot speak.
-- **A rule that cannot match anything** is a `rule_liveness` warning, and the summary line says how
-  many of the evaluated rules were unable to check anything.
-- **An exemption whose `until:` has passed** is a warning, and the number of crossings the
-  remaining exemptions excused is printed on every run. Expiry never changes what is suppressed: a
-  build that reddens because a calendar day passed has no commit behind it.
-- **A fact the audit never checked** is named. `docs audit` reports how many declared facts it
-  verified out of how many it declares, lists the shortfall, and publishes the documents it never
-  opened.
-- **An intent that never reached a document of reality** is reported by `docs spaces`. An epic
-  whose work finished and whose declared node has no document reads clean to every other check:
-  `lint` asks whether modules reach nodes, and `sync-check` compares pairs, so a node that
-  declares no document has no pair to go stale.
-- **A pair a configuration excused** says so. Documentation a project declares ephemeral is
-  exempt from freshness by that declaration — never by inference from a missing pair — and the
-  excused count and the declared reason are printed beside the fresh count, so the denominator
-  cannot fall in silence.
+## What is built on the graph
 
-Freshness itself rests on **git**, not on the index. `.beadloom/beadloom.db` is a derived cache —
-git-ignored, per-machine, absent on every fresh CI checkout — so a rebuilt index used to adopt the
-current tree as its own baseline and report every pair fresh. Each pair now records where its
-baseline came from and is corroborated against `HEAD`; the declared surface size lives in the
-committed `.beadloom/sync-surface.json`, which only the explicit `sync-check --record-surface`
-writes. Deleting the database and rebuilding is no longer a way to reach a green `sync-check`.
+The graph on its own is just data. What makes it useful is what stands on top of it.
 
-## Agentic dev workflow — configurable, tool-agnostic
+- **[One Gate, and checks per step](#a-rule-becomes-a-command).** Every check under a single exit code. And `beadloom guard` checks one step of the process on its own, with four outcomes: passed, warning, blocked, could not check.
+- **[The agentic development flow](#the-agentic-development-flow)** — configurable and tool-agnostic. Roles dev → test → review → tech-writer, with adapters for Claude Code and Cursor as equals.
+- **Context on request, for people and agents alike.** `ctx` returns the code, documentation and rules in force for a node. `why` computes the blast radius. `prime` packs an overview of the project into under 2K tokens. `search` runs full-text over nodes, documentation and code symbols.
+- **[Architecture as code](#architecture-as-code).** Boundaries and rules in YAML, checked by `beadloom lint` and blocked by the Gate.
+- **Spec-Driven: the spec first, the code after.** Three documentation spaces: **TO-BE** — what you intend to build, **AS-IS** — what is built, **WORKING** — working notes taken as a task proceeds. The last are exempt from the freshness check on purpose: a progress note describes the work, not the code. `beadloom docs spaces` shows all three and finds tasks whose work is finished while the promised document never appeared.
+- **[Federation across repositories](#federation-contracts-between-services).** One landscape assembled from the graphs of individual services, with every contract checked against both of its sides.
+- **Documentation portal.** `beadloom docs site` builds a VitePress site: [interactive graphs](https://zoologov.github.io/beadloom/architecture.html), a metrics dashboard, and documentation tagged with its freshness.
+- **Terminal dashboard.** `beadloom tui` — three screens in the console: dashboard, graph explorer, documentation status.
 
-The same graph that answers `prime` and `ctx` also powers a packaged multi-agent dev workflow. You describe what the project is once — in `.beadloom/flow.yml`:
-
-```yaml
-tools:        [claude, cursor]   # generate adapters for one or both
-architecture: [ddd]              # ddd | fsd (exactly one)
-stack:        [python]           # python, fastapi, javascript, typescript, vuejs
-quality:      [clean-code, tdd]
-language:     en                 # the language the flow's documents are written in
-```
-
-`beadloom setup-agentic-flow` composes every flow artifact — the four role protocols, the four slash commands and `CLAUDE.md` — from four layers in a fixed order: a stack-neutral CORE, the architecture overlay, the stack overlays, and **your project's own fragment** under `.beadloom/flow/`. It writes the adapter set for each tool at parity, `.claude/agents/*` for Claude Code and `.cursor/agents/*` for Cursor. `config-check` compares each artifact against that composition, so the workflow never drifts unnoticed while your additions remain part of the expected result rather than drift.
-
-The project layer is what makes the shipped core small enough to survive a long session: it went from **440 lines to 371**, with every removed line mapped to a replacement (376 when S3 landed; five more went in the pass that made the remaining text true for a project that is not this one). A project that selects no stack overlay keeps that smaller core, and its critical rules name no Python tooling at all. Your own rules live in `.beadloom/flow/`, so an upgrade moves the core underneath them and leaves them untouched. Standing a core rule down is a declaration with a mandatory reason and exit condition, rendered as a visible notice into every composed file, and `config-check` reports it once the exit condition's deadline has passed — see the [Project Overlays guide](docs/guides/project-overlays.md).
-
-The workflow is local-first and goes through the same Gate. A pull-request-triggered AI tech-writer orchestrator (shipped inside the package, `python -m beadloom.ai_agents.ai_techwriter`) fixes stale documentation right in the pull-request branch — at the symbol level. A symbol is a named code entity: a function, class, method, or constant (extracted by tree-sitter when it parses the sources). A document is rewritten only when a symbol it references actually changed, not on every edit to a file. The orchestrator has bounded parallelism and verdict classification, so a dead runner or an exhausted quota doesn't freeze the merge. CI stays the real enforcement, and the agent's edit is a proposal that a human reviews and merges.
-
-Because the same workflow runs on Claude Code and Cursor, and the architecture and stack are set by configuration rather than hand-written text, the workflow rolls out without being rewritten for each project.
-
-## No shadow code — Beadloom under its own rules
-
-Beadloom applies its own thesis to its own code — there is no shadow code. The `module-coverage` lint is raised to `severity: error`: every source module is either a tracked graph node (a `feature` with a `SPEC.md` or a `component` with a `DOC.md`) or an entry in a small, visible exemption list, so a new untracked module **fails `beadloom ci`**. Internal building blocks get a full `component` node kind (the infrastructure counterpart of `feature`), and even the AI tech-writer orchestrator lives in the graph-tracked `ai_agents` domain. The architecture-as-code thesis here is enforced, not declared.
-
-## Who it's for
-
-- **Tech leads and architects** — make the architecture explicit, versioned, and able to outlive team turnover, with boundaries enforced in CI.
-- **Platform and DevEx engineers** — give CI working freshness and boundary checks, and give agents structural context out of the box over MCP.
-- **Developers** — stop spending the first hour of every task working out or recalling how things fit: `beadloom ctx <feature>` or the VitePress portal answer in minutes.
-- **People working with AI** — so agents work inside the architecture instead of breaking it.
-
-## Installation
+## The first five minutes
 
 ```bash
 uv tool install beadloom        # recommended
 pipx install beadloom           # alternative
 ```
 
-## Quick start
-
 ```bash
-# 1. Scan the code and generate an initial architecture graph
-#    (in progress: accuracy is being refined on real projects)
-beadloom init --bootstrap
-
-# 2. Review the generated graph (fix domains, rename nodes, add edges)
-vi .beadloom/_graph/services.yml
-
-# 3. Build the index and start using it
-beadloom reindex
-beadloom ctx search        # get context for a feature
-beadloom sync-check        # are the docs up to date?
-beadloom lint              # are the architecture rules satisfied?
-
-# 4. Set up context for AI agents
-beadloom setup-rules       # create IDE adapter files
-beadloom prime             # see exactly what the agent will see
+beadloom init --bootstrap          # raise the graph from code you already have
+vi .beadloom/_graph/services.yml   # review it: fix domains, rename nodes, add edges
+beadloom reindex                   # build the index
+beadloom ci                        # run every check at once
 ```
 
-You don't need any starter documentation — Beadloom raises a basic skeleton from the code structure alone. From there you can refine and fill it by hand or with any AI agent (see `beadloom docs polish`), and Beadloom keeps it fresh.
+Three things are worth looking at next: `beadloom ctx <node>` — what the tool knows about a piece of the system, `beadloom prime` — exactly what an agent will see, `beadloom docs site` — how it looks on the portal.
 
-## Architecture as Code
+You need no documentation to start: the skeleton is raised from the structure of the code alone. Filling it in can be done by hand or by any AI agent (see `beadloom docs polish`), and keeping it current is Beadloom's job from then on.
 
-Beadloom doesn't just describe the architecture — it defends it. You write boundary rules in YAML, check them with `beadloom lint`, and block violations in CI. For example, this project's rules:
+## Beadloom has a steep setup cost
+
+The graph has to be raised, reviewed and then maintained. The rules have to be written. The Gate has to go into CI. On a project of ten files, or on a one-off task, that work will not pay for itself: you remember everything anyway, and an agent will manage with what it reads on its own.
+
+The return starts where the system stops fitting in one person's head. When it has been written for years, when several team line-ups have passed through it, when there is more than one service and they live in different repositories. That is when knowledge leaves with people, documentation drifts from the code unnoticed, and a contract breaks in someone else's repository and surfaces in production. The longer the system lives and the more moving parts it has, the sooner the setup pays off.
+
+Who this is usually for:
+
+- **People who run agents in batches.** So that several agents working at once stay predictable. `beadloom waves` works out which tasks can run in parallel and which have to be serialised, and names the reason for every serialised pair. Each agent gets its own context and its own boundaries, and the result of any of them goes through the same Gate. See the [guide to parallel waves](docs/guides/parallel-waves.md).
+- **Tech leads and architects.** So that the architecture is explicit, versioned, and outlives team turnover.
+- **Platform and DevEx engineers.** So that CI carries working checks on documentation freshness and boundaries, and agents get structural context through MCP.
+- **Developers.** So that the first hour of every task is not spent rebuilding the picture.
+
+---
+
+## Federation: contracts between services
+
+The most dangerous bugs hide **between** services. Neither the compiler nor the tests of a single repository reach there, and specialised checks are each built for one protocol.
+
+An event goes to a queue whose only listener was renamed in a neighbouring repository. The broker has no schema and no registry to notice it. A service is built against a dependency that was declared in a plan and never built. An endpoint is still maintained although its last consumer was deleted long ago.
+
+Beadloom brings contracts of every kind — AMQP messages, GraphQL, declared cross-service dependencies — into one landscape graph and checks both sides of each:
+
+```bash
+beadloom export --out service-a.json          # in every service repository
+beadloom federate service-*.json              # on the hub
+```
+
+| Verdict | What it means |
+|---------|---------------|
+| `CONFIRMED` | Producer and consumer are both present and compatible. |
+| `BREAKING` | The consumer uses a name that is no longer in the producer's schema. Caught **before** release, on presence, without comparing versions. |
+| `ORPHANED_CONSUMER` | Something consumes a contract nobody produces. |
+| `UNDECLARED_PRODUCER` | Something produces a contract nobody consumes. |
+| `EXTERNAL` | Marked as "it exists, but it is not ours" (a native bridge, for example), with no false alarms. |
+| `DRIFT` | A cross-repository dependency declared active whose target cannot be found. |
+
+The verdict takes lifecycle into account: `planned` is not required to exist yet and raises no false alarm, while `deprecated` that is still in use is plain debt. The hub assembles either a single product or a company landscape of several — products with no shared contracts do not create noise about each other. Every artifact carries a commit SHA and a timestamp, so you can see how stale each service's export is. When the data is missing, the hub writes "unknown" and does not invent a SHA.
+
+> **What is ready:** AMQP and GraphQL with breaking-change checking, federation that is indifferent to language and product, and a gate in CI through `federate --fail-on`. Verified end to end: a divergence with the status `BREAKING` was caught before release.
+> **Not yet:** REST/OpenAPI and gRPC. The hub works on assembled artifacts, with no hosted service.
+
+## When a check cannot answer, Beadloom says so
+
+A documentation check answers "all fresh". That sounds good, but two very different facts can stand behind that answer. Either the documentation really does match the code. Or there was nothing to check, and nobody told you.
+
+The second happens more often than it seems. A document is named in the graph and somebody deleted it from disk. A rule has a typo in its path pattern, so it matches no file at all. In CI the repository was just cloned and there is nothing to compare against yet. Beadloom used to answer all of this the same way: "all fresh".
+
+From here on, a "pair" means a document and the code it describes: Beadloom knows which file which document explains, and watches that the two do not drift apart.
+
+| What happened | What Beadloom says |
+|---|---|
+| A document is declared in the graph but is not on disk | `missing`, and the Gate fails with exit code 2. Deleting the document is not a way to close the question |
+| Nothing to compare against: the repository was just cloned | `unverified`. Such a pair is counted separately and never joins the fresh ones. The Gate shows `WARN` and leaves the exit code alone: the code is fine, it is the check that cannot answer |
+| A rule matches no file and no node | a `rule_liveness` warning. The summary line says how many of the rules that ran were unable to check anything |
+| A temporary exemption from the rules has expired | a warning, and every run prints how many violations that exemption is hiding. The exemption itself keeps working: a build should not go red because the date changed |
+| A number in the README that the audit never verified | `docs audit` reports how many declared facts it confirmed out of how many, names the rest, and lists the documents it never opened |
+| A task's work is finished and the document it promised never appeared | `docs spaces` shows it. To every other check such a node looks clean: there is nothing to go stale when there is no document at all |
+| Documentation marked in the config as temporary and exempt from the freshness check | the number of exempt pairs and the reason are printed next to the number of fresh ones, so an exemption cannot be mistaken for a check |
+
+Separately, about how Beadloom knows a document is stale. It looks at **git**, not at its own index.
+
+This matters because there used to be an easy way to get a green report: delete the local `.beadloom/beadloom.db`. It is in `.gitignore`, lives on one machine, and is absent in CI. Beadloom would rebuild it from scratch, take the current state of the code as its point of reference, and declare all documentation fresh. Now every pair remembers which commit it was checked against, and is compared with `HEAD`. Deleting the database no longer buys anything.
+
+## The agentic development flow
+
+The same graph that answers `prime` and `ctx` also feeds the packaged multi-agent flow. What your project is, you describe once:
 
 ```yaml
-version: 3
+# .beadloom/flow.yml
+tools:        [claude, cursor]   # adapters for one or both
+architecture: [ddd]              # ddd | fsd (exactly one)
+stack:        [python]           # python, fastapi, javascript, typescript, vuejs
+quality:      [clean-code, tdd]
+language:     en                 # the language the flow documents are written in
+```
 
-tags:
-  layer-service: [cli, mcp-server, tui]
-  layer-domain: [context-oracle, doc-sync, graph, onboarding]
-  layer-infra: [infrastructure]
+`beadloom setup-agentic-flow` composes from this the protocols of four roles, the slash commands and `CLAUDE.md`, and `config-check` watches that what was composed does not drift from the graph. Your project's rules live in a separate layer in `.beadloom/flow/` and survive an upgrade: the upgrade moves the core underneath them. A core rule can be overridden only by a declaration carrying a reason and an expiry, and once it expires `config-check` reports it. Details are in the [guide to project overlays](docs/guides/project-overlays.md).
 
+The flow is local first and goes through the same Gate. On a pull request an AI tech-writer runs: it repairs stale documentation right in the branch, at the level of symbols — a document is rewritten only when the symbol it refers to has changed. The real control stays with CI, and the agent's edit is a proposal that a person reviews and merges.
+
+## Architecture as code
+
+You write boundaries in YAML, and `beadloom lint` checks them:
+
+```yaml
 rules:
-  - name: domain-needs-parent
-    description: "Every domain must be part_of the beadloom service"
-    require:
-      for: { kind: domain }
-      has_edge_to: { ref_id: beadloom }
-      edge_kind: part_of
-
-  - name: no-domain-depends-on-service
-    description: "Domains must not depend on services"
+  - name: no-domain-depends-on-service    # domains may not depend on services
     deny:
       from: { kind: domain }
-      to: { kind: service }
+      to:   { kind: service }
       unless_edge: [part_of]
 
-  # Enforce layer direction (services → domains → infrastructure)
-  - name: architecture-layers
-    severity: warn
-    layers:
-      - { name: services, tag: layer-service }
-      - { name: domains, tag: layer-domain }
-      - { name: infrastructure, tag: layer-infra }
-    enforce: top-down
-
-  # Keep the TUI out of the database layer directly
-  - name: tui-no-direct-infra
+  - name: tui-no-direct-infra             # the TUI does not reach the database directly
     forbid_import:
-      # `from` matches the FILE path, `to` the dotted IMPORT path (dots -> slashes)
       from: "src/beadloom/tui/**"
-      to: "beadloom/infrastructure/**"
-
-  # Warn when a node grows too large
-  - name: domain-size-limit
-    severity: warn
-    check:
-      for: { kind: domain }
-      max_symbols: 200      # too much code in one node
+      to:   "beadloom/infrastructure/**"
 ```
 
-A rule declares exactly one of the 12 authoring keys: `require`, `deny`, `forbid`, `layers`, `forbid_cycles`, `forbid_import`, `check`, `unregistered_feature_candidate`, `module_coverage`, `scenario_coverage` (behaviour-bearing nodes carry an executable Gherkin scenario, and a scenario names its bead), `doc_area_coherence` (the source-to-docs placement convention read out of your own graph, and the nodes that contradict it — no layout is written down in the rule) and `summary_facts` (the numbers and versions a node's `summary` states, checked against the same facts `beadloom docs audit` computes for the project).
+Each entry declares exactly one of 12 authoring keys: `require`, `deny`, `forbid`, `layers`, `forbid_cycles`, `forbid_import`, `check`, `unregistered_feature_candidate`, `module_coverage`, `scenario_coverage`, `doc_area_coherence` and `summary_facts`. The full reference is in [docs/architecture.md](docs/architecture.md).
 
-A rule that **cannot match anything** reports itself. A matcher that selects no node, an edge kind the graph does not have, a `check` with no threshold, a glob that matches no file, an exemption that suppresses nothing — each is a `rule_liveness` warning rather than a silent pass, and `lint`'s summary carries the count (`N rules evaluated, M of them unable to check anything`) so the advertised rule count cannot over-claim. A rule that stood down only in part — one dead glob beside nine live ones — is a warning, because it describes your configuration rather than your code and one mistyped glob must not turn a green project red. A rule that could check **none** of its population carries the severity you declared for it, because at that point "found nothing wrong" and "never ran" are the same output. That costs you nothing on a fresh install: every rule ships `warn`, so only a rule you deliberately raised to `error` can fail the Gate by standing down. What a `forbid_import` exemption excused is counted the same way — `0 violations, 6 crossings suppressed by an exemption` — because `0 violations` must not be able to mean *0 violations we counted*.
+A rule that **cannot match anything** reports itself: a matcher that selects no node, a typo in a path pattern, an exemption that suppresses nothing. Their count appears in `lint`'s summary line, so the declared number of rules cannot promise more than was checked.
 
-```bash
-beadloom lint                 # human-readable terminal output
-beadloom lint --strict        # exit code 1 on violations (for CI)
-beadloom lint --format json   # machine-readable output
-```
+Beadloom applies its own thesis to itself: the `module-coverage` lint is raised to `error`, so every source module has to be a graph node or an explicit exemption, and a new untracked module fails `beadloom ci`.
 
-When an agent requests context for a node, the rules that apply to it come back in the response, so it respects boundaries by default rather than by accident. Import analysis works for **Python, TypeScript/JavaScript, Go, Rust, Kotlin, Java, Swift, C/C++, and Objective-C**.
+Import analysis works for **Python, TypeScript/JavaScript, Go, Rust, Kotlin, Java, Swift, C/C++ and Objective-C**.
 
-## Key features
+---
 
-- **Cross-service contract graph** — `export` in each repository, `federate` combines two or more services into one landscape with a per-contract verdict (`CONFIRMED` / `BREAKING` / `ORPHANED_CONSUMER` / `UNDECLARED_PRODUCER` / `EXTERNAL`) over AMQP and GraphQL, plus a per-service freshness tag. Product and company scale.
-- **A single Gate** — `beadloom ci` runs reindex → lint → sync-check → docs audit → docs-quality → doc-spaces → config-check → doctor → the optional landscape gate under one exit code. Ships as a ready-made GitHub Action and a pre-push hook.
-- **Context Oracle** — deterministic graph traversal, a compact JSON bundle in under 20 ms.
-- **Doc Sync Engine** — tracks the code-to-doc link, catches stale docs, hooks into git.
-- **Agent context** — `beadloom prime` (under 2K tokens), `setup-rules` for IDE adapters, an MCP server with 18 tools, and `config-check` that keeps the agent files in agreement with the graph.
-- **Agentic dev workflow** — `setup-agentic-flow` composes a configurable, tool-agnostic multi-agent workflow (Claude Code and Cursor; DDD/FSD and stack overlays) from `.beadloom/flow.yml`, extensible by a project layer in `.beadloom/flow/` that survives every upgrade, enforced through the pre-push Gate and a pull-request-triggered AI tech-writer.
-- **No shadow code** — the `module-coverage` lint (`error`) requires every source module to be a graph node or an explicit exemption, and the `component` node kind tracks internal building blocks alongside `feature` nodes.
-- **Full-text search** — FTS5 over nodes, documentation, and code symbols.
-- **Impact analysis** — `beadloom why` shows what a node depends on and what breaks if it changes.
-- **Code-first start** — raise the graph from the code structure alone, with no documentation.
-- **Snapshots and debt** — `snapshot` compares architecture over time, and `status --debt-report` rolls lint, sync, and complexity into a single 0–100 score with a CI gate.
-- **C4 diagrams** — auto-generated Context / Container / Component in Mermaid and PlantUML.
-- **Published site** — `beadloom docs site` builds a knowledge base on VitePress (dashboard, interactive architecture, landscape map, up-to-date documentation).
-- **Local and dependency-free** — a single CLI and a single SQLite file. No Docker, no cloud.
+## Commands
 
-## How it works
+| Command | What it does |
+|---------|--------------|
+| `init --bootstrap` | Raise the graph from the structure of the code |
+| `reindex` | Rebuild the index from the graph, documentation and code |
+| `ctx REF_ID` | A context pack for a node (Markdown or `--json`) |
+| `why REF_ID` | What depends on a node and what breaks when it changes |
+| `search QUERY` | Full-text search over nodes, documentation and symbols |
+| `lint` | Check the architecture rules (`--strict` for CI) |
+| `sync-check` | Documentation freshness against the code |
+| `ci` | The single Gate: every check under one exit code |
+| `export` / `federate` | Export the graph and assemble a landscape from several services |
+| `docs site` | Build the VitePress portal |
 
-Beadloom keeps the architecture graph in YAML under `.beadloom/_graph/` — **nodes** (features, services, domains, entities) connected by **edges** (`part_of`, `uses`, `depends_on`, and so on). A reindex merges three sources into a single SQLite database:
+The full reference is **[docs/services/cli.md](docs/services/cli.md)**: every command with every flag, including `guard`, `waves`, `review-brief`, `docs spaces`, `snapshot`, `status --debt-report`, and hook setup through `install-hooks`.
 
-1. **Graph YAML** — the nodes and edges that describe the architecture.
-2. **Documentation** — Markdown bound to graph nodes and chunked for search.
-3. **Code** — sources parsed via tree-sitter for symbols and `# beadloom:domain=...` annotations.
+## MCP, configuration, Beads
 
-Request a node's context, and Context Oracle traverses the graph breadth-first, gathers the relevant subgraph, documentation, and code symbols, and returns a compact data bundle.
-
-## CLI commands
-
-| Command | Description |
-|---------|-------------|
-| `init --bootstrap` | Scan the code and generate an initial architecture graph |
-| `init --import DIR` | Import and classify existing documentation |
-| `reindex` | Rebuild the SQLite index from the graph, docs, and code |
-| `ctx REF_ID` | Get a context bundle (Markdown or `--json`) |
-| `graph [REF_ID]` | Show the architecture graph (Mermaid or JSON) |
-| `search QUERY` | Full-text search over nodes, documentation, and code symbols |
-| `status` | Index stats, documentation coverage, and a debt report |
-| `doctor` | Validate the architecture graph |
-| `sync-check` | Check doc-code freshness — `ok` / `stale` / `missing` / `unverified` / `exempt` / `incomplete`; `--record-surface` pins the declared surface size |
-| `sync-update REF_ID` | Review and update stale documentation |
-| `why REF_ID` | Impact analysis — what it depends on and what depends on it |
-| `lint` | Check the code against the architecture rules (`--strict`, `--format rich/json/porcelain/github`) |
-| `ci` | The single Gate: reindex → lint → sync-check → docs audit → docs-quality → doc-spaces → config-check → doctor → the optional landscape gate |
-| `config-check` | Check (or `--fix`) that the generated agent files match the graph |
-| `waves BEAD ...` | Decide which beads may run at the same time, from the code-level independence of their declared node scopes — one named reason per serialised pair, the media a concurrent wave shares regardless, and a plan-time verdict for each |
-| `review-brief BEAD` | Assemble a reviewer's input — assignment, scope, specification, bound scenarios and changed files — while withholding the author's own comments and reporting how many (`--release` after the verdict) |
-| `guard NAME` | Evaluate one flow guard — `pass`/`warn`/`block`/`skip`/`error` in the exit code (`--liveness` reports which guards ever fired) |
-| `export` | Export the graph as a deterministic artifact for federation |
-| `federate` | Aggregate two or more artifacts into one landscape. `--fail-on` turns on the CI gate |
-| `docs generate` | Generate documentation skeletons from the graph |
-| `docs polish` | Emit structured data for AI documentation enrichment |
-| `docs site` | Build the VitePress site (dashboard, architecture, landscape map, validated docs) |
-| `docs audit` | Find stale facts in overview documentation (README, guides) |
-| `docs quality` | Check planning documents against the writing standard — a measurable goal, a decision with a reason, a risk with a mitigation, no `Pending` question in an approved document, no unfilled placeholder (`--check`, `--strict`) |
-| `docs spaces` | Report the TO-BE / AS-IS / WORKING documentation spaces and the epics whose recorded intent never reached a document of reality (`--strict`) |
-| `diff` | Show graph changes since a git ref |
-| `snapshot` | Save and compare architecture snapshots |
-| `link REF_ID [URL]` | Manage links to external trackers on nodes |
-| `prime` | Emit compact project context for AI agents |
-| `active-sync` | Reconcile each epic's bead-status table in `ACTIVE.md` with the tracker (`bd`) |
-| `setup-rules` | Create IDE adapter files (`.cursorrules`, `.windsurfrules`, `.clinerules`) |
-| `setup-mcp` | Configure the MCP server for AI agents |
-| `setup-agentic-flow` | Compose and write the multi-agent workflow — role adapters, slash commands and `CLAUDE.md` — from `.beadloom/flow.yml` plus the project layer (`--tool`/`--architecture`/`--stack`/`--force`) |
-| `mcp-serve` | Start the MCP server (stdio transport) |
-| `tui` / `ui` | Interactive terminal dashboard (needs `beadloom[tui]`) |
-| `watch` | Auto-reindex on file changes (needs `beadloom[watch]`) |
-| `install-hooks` | Install the pre-commit hook and the pre-push Beadloom Gate (full `beadloom ci`) |
-
-## MCP tools
-
-`beadloom mcp-serve` gives AI agents 18 tools: 14 graph read/write tools — `prime`, `get_context`, `get_graph`, `list_nodes`, `sync_check`, `get_status`, `update_node`, `mark_synced`, `search`, `generate_docs`, `why`, `diff`, `lint`, `get_debt_report` — plus four process tools that drive the agentic workflow: `task_init`, `bead_context`, `checkpoint`, `complete_bead`. Works with Claude Code, Cursor, Windsurf, Cline, and any MCP-compatible tool. To connect:
+`beadloom mcp-serve` gives agents **18 tools**: fourteen read and write the graph, four drive the agentic flow. It works with Claude Code, Cursor, Windsurf, Cline and any MCP-compatible tool. The whole catalog is in [docs/services/mcp.md](docs/services/mcp.md).
 
 ```json
-{
-  "mcpServers": {
-    "beadloom": { "command": "beadloom", "args": ["mcp-serve"] }
-  }
-}
+{ "mcpServers": { "beadloom": { "command": "beadloom", "args": ["mcp-serve"] } } }
 ```
 
-## Configuration
+Everything Beadloom knows about you lives in `.beadloom/` at the root of the repository: `config.yml` (scan paths and languages), `flow.yml` (the agentic flow declaration), `flow/` (your layer of the flow), `_graph/*.yml` (the graph and the rules, under version control), `AGENTS.md` (conventions for agents). The `beadloom.db` index is generated and does not belong in git.
 
-Everything lives under `.beadloom/` at the repository root:
-
-- **`config.yml`** — scan paths, languages, sync settings.
-- **`flow.yml`** — the agentic-workflow declaration: `tools` (claude/cursor), `architecture` (ddd/fsd), `stack` and `quality` overlays, `language`, and `overlays.suppress` (read by `setup-agentic-flow`).
-- **`flow/`** — your project's own flow fragments (`roles/`, `commands/`, `claude/`), composed after the shipped core and never overwritten.
-- **`flow-manifest.json`** — the sha256 of every composed artifact Beadloom wrote, so a later run tells its own output from a hand edit. Generated, and it belongs in git.
-- **`_graph/*.yml`** — the architecture graph (version-controlled).
-- **`_graph/rules.yml`** — the boundary rules.
-- **`AGENTS.md`** — conventions and the MCP tool catalog for agents.
-- **`beadloom.db`** — the SQLite index (auto-generated; `beadloom init` adds it to `.gitignore` for you, once).
-
-You can link code to a graph node with a one-line annotation:
+Code can be bound to a graph node with a one-line annotation:
 
 ```python
 # beadloom:domain=doc-sync
@@ -367,34 +250,32 @@ def check_freshness(db: sqlite3.Connection, ref_id: str) -> SyncStatus:
     ...
 ```
 
+Beadloom complements [Beads](https://github.com/steveyegge/beads): worker agents call `get_context(feature_id)` over MCP and get a ready pack instead of searching the code from scratch. The integration is optional.
+
+**Windows is unverified.** Nothing in this project has ever been run on it. The `windows-latest` CI leg was built and then withdrawn, because it became the critical path of the pipeline. Details are in the *Windows: unverified by decision* section of the [flow guards SPEC](docs/domains/application/features/flow-guards/SPEC.md).
+
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
 | [architecture.md](docs/architecture.md) | System design and component overview |
-| [getting-started.md](docs/getting-started.md) | Quick-start guide |
-| [Multi-agent development](docs/guides/multi-agent-development.md) | How Beadloom's agentic workflow is built |
-| [Executable acceptance scenarios](docs/guides/bdd-scenarios.md) | Gherkin as the source of truth: scenario/bead/node binding and what `scenario-coverage` reports |
-| [Parallel waves](docs/guides/parallel-waves.md) | What a wave of concurrent agents guarantees, what it only reports, and what nothing can check |
-| [Document kinds](docs/guides/document-kinds.md) | Required sections, the five writing-standard checks, and what each of them cannot decide |
-| [CI Setup](docs/guides/ci-setup.md) | GitHub Actions / GitLab CI integration |
+| [getting-started.md](docs/getting-started.md) | Quick start guide |
+| [Multi-agent development](docs/guides/multi-agent-development.md) | How Beadloom's agentic flow is built |
+| [Executable acceptance scenarios](docs/guides/bdd-scenarios.md) | Gherkin as the source of truth and what `scenario-coverage` reports |
+| [Parallel waves](docs/guides/parallel-waves.md) | What a wave of parallel agents guarantees and what nothing here checks |
+| [Document kinds](docs/guides/document-kinds.md) | Mandatory sections and the five writing-standard checks |
+| [CI Setup](docs/guides/ci-setup.md) | Integration with GitHub Actions / GitLab CI |
 | [VitePress Site](docs/guides/vitepress-site.md) | Publishing the knowledge base on VitePress |
 | **Domains** | [Context Oracle](docs/domains/context-oracle/README.md) · [Graph](docs/domains/graph/README.md) · [Doc Sync](docs/domains/doc-sync/README.md) · [Onboarding](docs/domains/onboarding/README.md) · [Infrastructure](docs/domains/infrastructure/README.md) |
 | **Services** | [CLI Reference](docs/services/cli.md) · [MCP Server](docs/services/mcp.md) · [TUI Dashboard](docs/services/tui.md) |
-
-## Beads integration
-
-*Beadloom is the architecture context for [beads](https://github.com/steveyegge/beads).*
-
-Beadloom complements [Beads](https://github.com/steveyegge/beads): worker agents call `get_context(feature_id)` over MCP and get a ready bundle instead of searching the code from scratch. The integration is optional — Beadloom works perfectly well on its own.
 
 ## Development
 
 ```bash
 uv sync --dev              # install with dev dependencies
-uv run pytest              # run the tests
+uv run pytest              # tests
 uv run ruff check src/     # linter
-uv run mypy                # type checking (strict mode)
+uv run mypy                # type checking (strict)
 ```
 
 ## License

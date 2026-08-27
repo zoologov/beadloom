@@ -35,6 +35,30 @@
 
 ## Open Issues
 
+209. [2026-08-27] [HIGH] `docs audit` verifies nothing in a non-English document and counts it as scanned anyway
+
+    **Severity:** high (for an adopter who documents in their own language the fact check is inert, and nothing says so)
+    **Context:** found while syncing README.md to the rewritten README.ru.md. The English README went RED on a keyword collision (#205) while the Russian one carrying the same true sentence stayed green. That asymmetry was the clue.
+
+    **Measured** with the shipped `DocScanner` on both halves of one translation pair:
+
+    ```
+    README.md      fact mentions found: 1   {'mcp_tool_count': 1}
+    README.ru.md   fact mentions found: 0   {}
+    ```
+
+    `DocScanner.FACT_KEYWORDS` is English by construction — `["MCP", "tool", "server tool"]`, `["rule type", "rule kind", "rule"]`, `["language", "lang", "programming language"]` and so on. A document written in any other language contains none of those tokens near its numbers, so no claim is ever extracted from it.
+
+    **The document is not excluded.** It matches the `*.md` glob, enters the scan surface, and is counted among the files scanned. It simply yields nothing. So the audit's own summary — `20 mention(s) fresh` — is true and says nothing about the half of this repository's front page that cannot be checked at all.
+
+    Every number in `README.ru.md` is therefore unverified: 18 MCP tools, under 2K tokens, 12 authoring keys, three documentation spaces. They are correct today because a person kept them correct.
+
+    **Same class as the rest of BDL-062**, one layer out: a population that cannot be checked, reported in a shape indistinguishable from one that was. And it is worse for adopters than for us, because `.beadloom/flow.yml` already carries a `language:` key for flow documents while the audit has no notion of language at all.
+
+    **Fix candidates.** (a) Per-language keyword tables, selected by a declared document language — the most work, the only one that actually checks. (b) Report the gap: a scanned document from which zero claims were extracted is named, so `N mention(s) fresh` can never stand in for a document nothing read. (c) Both. Candidate (b) alone is cheap and would have surfaced this years earlier, which is an argument for doing it first regardless.
+
+    Related: #205 (keyword-proximity collisions), #206 (SPEC files excluded outright), BDL-063 (style checks for reader-facing docs, where the same language question returns).
+
 208. [2026-08-26] [LOW] A module docstring can describe code that no longer exists, and nothing in this project can see it
 
     **Severity:** low individually; the point is that the class has no checker at all
