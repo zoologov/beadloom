@@ -83,3 +83,15 @@ docs_audit:
     - path: docs/services/cli.md
       fact: version
       value: "v2.2.0"
+    # architecture-model guide: "the alternative shipped in 3.0.0 was worse"
+    # names the behaviour a PRIOR release had, in a passage explaining why
+    # `graph-summary-facts` ships at `error`. The sentence is permanently true
+    # and can only ever be read as stale, because `_extract_versions` matches
+    # every `\bv?\d+\.\d+\.\d+\b` and has no notion of a past tense
+    # (BDL-UX #205, the general form). Same shape and same justification as the
+    # two multi-agent-development triples above. It goes inert only if that
+    # passage is deleted, and `TestEverySuppressionStillSuppresses` reports it
+    # the day it does.
+    - path: docs/guides/architecture-model.md
+      fact: version
+      value: "3.0.0"

@@ -35,6 +35,29 @@
 
 ## Open Issues
 
+210. [2026-08-27] [MEDIUM] `active-sync` resolves no row when a bead id is written as a Markdown code span, and blames the id
+
+    **Severity:** medium (the reconcile exists so ACTIVE.md cannot drift from the tracker by hand; where it is inert, the drift it prevents is exactly what happens)
+    **Command:** `beadloom active-sync [--check]`
+    **Context:** found by `beadloom-viaj.8` while bringing BDL-062's own ACTIVE.md current before the 3.0.1 tag. The table said three closed beads were `blocked` and did not list `.10`, `.12` or `.13` at all — the drift the reconcile was built to stop, in the epic that shipped it.
+
+    `_reconcile_one` passes `cells[0]` to `resolve_row_bead_id` verbatim, and `split_table_row` strips whitespace only. A bead id written as `` `beadloom-viaj.1` `` therefore arrives with its backticks and matches neither `bd_statuses` nor `_SHORT_ID`:
+
+    ```
+    resolve_row_bead_id("beadloom-viaj.1",   {...})  -> ('beadloom-viaj.1', None)
+    resolve_row_bead_id("`beadloom-viaj.1`", {...})  -> (None, 'is not a bead id in either form')
+    ```
+
+    **Measured across this repository: of 29 ACTIVE tables carrying rows, 13 resolve NONE.** BDL-061's table resolves 81 of 84 because it writes `.1` bare; BDL-062's resolved 0 of 12 because it writes `` `.1` ``. The shipped template (`commands/templates.md.txt`) writes `BEAD-01` bare, so a project that never edits the template is unaffected — which is why this survived: it bites the house style, not the scaffold.
+
+    **The message is the second half of the defect.** It says the cell *is not a bead id*, which sends the reader to the tracker. The cause is formatting, and the message can see the backticks it is complaining about.
+
+    **Fix mode exits 0 while doing nothing.** `--check` returns 1 on drift, but plain `active-sync` — the form the pre-commit hook runs — returns 0 whether it reconciled 15 rows or 0, so a table that resolves nothing is indistinguishable at the hook from a table that was already coherent. Same shape as BDL-062's own subject one layer out: *unchecked is not clean, and the checker must say which.*
+
+    **Expected:** strip a surrounding code span before resolving (one `strip("`")` on the cell); when a cell resolves only after stripping, say so rather than reporting it as an unknown id; and make a run that resolved zero of N rows reachable at the hook rather than reported at exit 0.
+
+    **Workaround, applied to BDL-062's ACTIVE.md here:** write bead ids bare in the first column. Measured after the change: `resolved 15 of 15 row(s)`, 15 rows updated to the tracker's statuses.
+
 209. [2026-08-27] [HIGH] `docs audit` verifies nothing in a non-English document and counts it as scanned anyway
 
     **Severity:** high (for an adopter who documents in their own language the fact check is inert, and nothing says so)

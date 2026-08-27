@@ -5,6 +5,242 @@ All notable changes to Beadloom are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.1] - 2026-08-27
+
+**A patch that grew past its scope, and says so.** BDL-062 set out to close one gap — the graph's
+own metadata was the last surface nothing checked — and found, on the way, that `beadloom docs
+audit` had been reporting facts about *Beadloom* as facts about *the adopter's project* since the
+audit existed. Three mechanisms ship, one defect every adopter had is fixed, and two behaviour
+changes land that an upgrader has to know about before running the Gate. The version is a
+**patch** because no interface moved: every command keeps its flags, every JSON key a 3.0.0
+consumer parses is still emitted, and nothing an adopter wrote stops loading. What can change is
+the *verdict* a graph gets, and both cases are stated below with their one-key opt-out.
+
+The release exists because of the item that sounds smallest. The package description on the PyPI
+project page still read `Context Oracle + Doc Sync Engine for AI-assisted development` — the 1.x
+sentence, unchanged across three major releases, on the page that is the first thing anybody
+reads. A metadata field is only published by publishing.
+
+### Added
+
+- **`graph_summary_facts` — a number or version stated in a node `summary` is checked against the
+  fact the project computes.** A `summary` is the sentence every other surface quotes: `beadloom
+  ctx`, `prime`, the generated site, the agent adapters. Until this rule nothing compared it
+  against anything, and the measurement that opened the bead is the argument for it — on *this*
+  repository the root node claimed `v1.5.0` against a computed `3.0.0` and `mcp-server` claimed
+  `14 tools` against a catalogue of 18, both wrong across three major releases with no check going
+  red. The rule owns neither the extraction nor the comparison: `DocScanner.scan_line` reads the
+  claim and `compare_facts` judges it, so the version pattern, the keyword table, the clause-scoped
+  proximity and the per-fact tolerances are the documentation audit's single answer rather than a
+  second one. It takes no configuration keys and the loader rejects an unknown one. Four outcomes
+  are counted apart: agrees, states no claim, disagrees (a finding at the rule's severity), and
+  `unverifiable` — a claim naming a fact the project declined to compute, which reports the reason
+  and names its node. Enable it with a `summary_facts: {}` block in `.beadloom/_graph/rules.yml`;
+  `beadloom init` does not write it for you. Measured on this repository at release: of 84 node
+  summaries, **2 state a checkable fact and both agree, 0 disagree, 0 are unverifiable and 82 state
+  no number at all** — which is itself the fact worth knowing, and see **Changed** for what it now
+  costs a graph where that last number is all 84.
+
+- **`doc_area_coherence` — a node documents itself where the graph's own convention says it
+  should.** The convention is **derived from the graph under test, never hardcoded**: the source
+  root is found by descending while exactly one next segment is supported, the source area is the
+  segment below it, and the documentation area is the segment at the depth where documentation
+  paths name source areas. No directory literal appears anywhere in the rule, and an AST test fails
+  the build if one is introduced — which is why it holds on a Feature-Sliced Design tree exactly as
+  it holds on a Domain-Driven Design one, without either layout being named in the code. A graph
+  with no dominant mapping is reported as having checked nothing rather than passed. `min_support`
+  (default 2) exists because without it an area holding one documented node is unanimous at one
+  observation, so a six-node graph would report a clean sweep having compared nothing; the loader
+  rejects `threshold <= 0.5` and `min_support < 2`, both being configuration that reads as a rule
+  and behaves as a silence. It ships `warn`, because a convention check that blocks an adopter's
+  first run on their own house style is a rule they switch off. Measured on this repository at
+  release: **79 placements compared under 8 dominant mappings, 3 rootless, 3 with no segment at the
+  area depth, 0 outside the source root.**
+
+- **`docs audit` reports three populations instead of one.** A declared fact is now *verified*,
+  *not applicable to this project*, or *declared and unverified*, and each not-applicable fact
+  carries the reason it could not be computed plus the `docs_audit.extra_facts` key that would let
+  the project declare its own. `N mention(s) fresh` counts what the audit found and says nothing
+  about the facts it found nothing for, which is how a report covering one fact of nine printed as
+  a clean bill of health. The `--json` payload gains `verified_facts`, `not_applicable` and
+  `summary.not_applicable_count`, and **every top-level key 3.0.0 emitted is still emitted** — a
+  test pins the literal 3.0.0 key set, so a lost key fails rather than a changed shape passing.
+  Measured on this repository: 9 facts declared, 5 verified, 0 not applicable.
+
+### Fixed
+
+- **`docs audit` declared two facts about Beadloom as facts about the audited project (BDL-062
+  `.3`).** `_collect_mcp_tool_count(self, facts)` took no `project_root` at all, and
+  `_collect_cli_command_count` counted the commands of the Click group in the *running* process. On
+  any project that is not Beadloom, both answered anyway. Captured on the published 3.0.0 wheel in
+  a fresh virtual environment, against a Python project created from scratch outside this
+  repository and declaring itself `invoice-svc`:
+
+  ```
+  3.0.0   facts declared: 9   mcp_tool_count = 18  (source: MCP tool catalog)
+                              cli_command_count = 43 (source: CLI)
+  ```
+
+  Both surfaces are now gated on identity — the project under audit must declare itself as the
+  distribution whose surfaces this process can introspect, read from `pyproject.toml`,
+  `package.json` or `Cargo.toml` with **no directory-name fallback**, because a clone in a
+  directory called `beadloom` is not Beadloom. Verified on the same project with this release:
+
+  ```
+  3.0.1   facts declared: 7   mcp_tool_count, cli_command_count: absent from `facts`,
+                              reported as NOT APPLICABLE with the identity clause and the
+                              `docs_audit.extra_facts` key that would declare the project's own
+  ```
+
+  The denominator moved 9 → 7 and the report says so. On Beadloom itself the human output is
+  byte-identical, because the not-applicable population is named only when it is non-empty.
+
+- **`framework_count` is renamed `nodes_with_framework`, and its keywords now mean nodes rather
+  than frameworks (BDL-UX #193).** The old name read "12 web frameworks the route extractor parses"
+  as a claim about `COUNT(*)` of nodes declaring a test framework — two different quantities under
+  one name. **A consumer reading `framework_count` out of the `docs audit --json` payload must read
+  `nodes_with_framework` instead**; it is the one fact name that moved. Whether the fact keeps the
+  count floor is decided by `scanner.is_count_fact()` rather than by the `_count` suffix, so the
+  rename did not silently take it out of the floor.
+
+- **A module docstring that described a function deleted the same morning (BDL-062 `.11`).**
+  `graph/rules/doc_area.py` documented `_common_prefix`, which `_source_root` had replaced, while
+  `docs/domains/graph/README.md` described the replacement correctly — the project's thesis
+  inverted. A docstring lives inside the file whose hash defines its pair's freshness, so **a file
+  is always fresh with respect to itself** and `sync-check` cannot see this class by construction.
+  All 11 modules under `graph/rules/` were swept and the 32 symbols their docstrings name resolved;
+  `tests/test_rules_docstring_references.py` now pins that.
+
+- **A single misplaced node could veto the derived source root (BDL-062 `.9`).** `doc_area`'s first
+  derivation took the longest common prefix of every node source, so one node outside the tree
+  collapsed the root and the rule reported 7 false errors while comparing 0 and leaving 86 nodes
+  unnamed. A threshold-based descent was tried first and discarded, and the reason is worth
+  recording: at 0.60 a modal prefix of 6/10 is accepted, so the root deepens by one level and stops
+  being a root. A root is the level *above* where the areas start, so the dial is `min_support`, not
+  `threshold`.
+
+### Changed
+
+Two changes alter a verdict without altering an interface. Both are stated with the remedy.
+
+- **`graph_summary_facts` ships at `error` severity, so a graph whose summaries state no checkable
+  number goes red the first time it is enabled.** The rule is new, so nothing regresses — but a
+  total stand-down is a blocking finding rather than a note, and that is deliberate: a summary
+  contradicting the project it describes is wrong in every house style, so there is no adopter
+  preference to respect, and the value being checked is in the graph the adopter wrote. The cost is
+  real and was measured before the change was made rather than argued about. On a two-module Python
+  project bootstrapped with `beadloom init --mode bootstrap`, with the rule enabled:
+
+  ```
+  Rule 'graph-summary-facts' checked nothing: none of the 3 node summaries in this graph
+  states a number or version that the project computes a fact for.
+  lint --strict -> rc 1     rules_inert: 1, error_count: 1
+  ```
+
+  The condition is narrower than "any bootstrap", and the boundary is worth knowing: the generated
+  root summary quotes the README's opening sentence, so a README that states a version gives the
+  rule one claim and the run stays green. The same project with `version 0.4.2` in that sentence
+  reported 0 violations. **The opt-out is one key** — `severity: warn` in the same `rules.yml`
+  entry that enabled the rule, measured to return `rc 0` with the stand-down still printed as a
+  warning.
+
+- **A rule that stands down over its *whole* population now carries the severity the project
+  declared for it.** `liveness_finding` hardcoded `severity = "warn"`, so a rule a project had
+  escalated to `error` could stop checking every one of its 86 pairs while `lint --strict` exited
+  0 — a green Gate describing the checker's ignorance rather than the code's health. `total` and
+  `partial` are two different facts and now reach the reader at two severities: a total stand-down
+  names no node and carries the declared severity, while **partial inertness stays `warn`** and
+  names the node it could not check. `beadloom lint`'s summary line reads `N rules evaluated, M of
+  them unable to check anything`. For a project whose rules all ship `warn`, nothing changes.
+
+- **Both READMEs are restructured as a landing page.** `README.md` 396 → **283** lines and
+  `README.ru.md` 397 → **283**, identical in structure — 18 headings each, section order matching
+  line for line, and a "Where to start" paragraph giving the reader one order and one first
+  command. The section order is graph → tools → what it solves → federation → Gate → agentic
+  workflow → no shadow code.
+
+- **All eleven guides brought to current functionality**, read in full — 4602 lines,
+  measured before the edits: 9 changed, 2 judged current without change. Four superseded behaviours were found by reading rather than by
+  any check — the pre-push Gate documented as 5 steps when it runs 8, two guides contradicting each
+  other on the composed adapter line counts (measured: 401 with the `ddd` and `python` overlays, 371
+  with neither), `module-coverage` described as "warn for now" when `rules.yml` sets `error`, and
+  the AI tech-writer listed as deferred when it shipped in BDL-047.
+
+- **The package description states what 3.x is.** `Context Oracle + Doc Sync Engine for
+  AI-assisted development` → `The architecture graph of your codebase, and the gate that holds
+  documentation, boundaries, cross-repo contracts and the agentic workflow to it`, in
+  `pyproject.toml` and in the package docstring, with a test pinning the two to agree. **Agreement
+  is checkable and currency is not** — the module says so in its own docstring, and reverting both
+  copies to the 1.x sentence leaves that test green. That is exactly how the old sentence survived
+  three major releases.
+
+### Known limitations
+
+Measured and open at release, listed here rather than left to be discovered. These six are the
+ones an adopter or a contributing agent will meet; the last was found by this release's own
+housekeeping.
+
+- **`docs audit` extracts zero facts from a non-English document and counts it as scanned anyway
+  (BDL-UX #209).** `DocScanner.FACT_KEYWORDS` is English by construction — `["MCP", "tool", "server
+  tool"]`, `["rule type", "rule kind", "rule"]` and so on — so a document written in another
+  language contains none of those tokens near its numbers and yields no claim. The document is not
+  excluded: it matches the `*.md` glob, enters the scan surface and is counted among the files
+  scanned. Measured on the two halves of this repository's own translation pair: `README.md` 1 fact
+  mention found, `README.ru.md` 0. Every number in the Russian README is therefore unverified, and
+  they are correct today because a person kept them correct. **Until it is fixed:** treat
+  `N mention(s) fresh` as a statement about the English surface only, and review non-English
+  documents by hand.
+
+- **A factually correct number can bind to a fact that computes something else (BDL-UX #205).**
+  Keyword-proximity binding has no notion of sense, so `supports 11 languages` binds to
+  `language_count` (which counts the languages the *project is written in*, 1 here) and `Rules
+  support 12 authoring keys` binds to `rule_type_count` (which is `COUNT(*) FROM rules`, 15). Both
+  sentences are true and both make the Gate exit 1, which punishes correcting documentation. The
+  edge is fine enough to be surprising: the same phrase is safe 254 lines earlier in
+  `architecture.md` because no `rule` token falls inside the five-word proximity window. **The
+  working rule is to measure the audit's answer rather than predict it**; the remedy for a genuine
+  collision is a `{path, fact, value}` triple under `docs_audit.ignore`, which silences exactly one
+  match and is reported when it goes inert.
+
+- **`docs/**/features/*/SPEC.md` is excluded from `docs audit` outright (BDL-UX #206).**
+  `scanner._EXCLUDE_PATTERNS` drops it from the audit surface entirely, so a SPEC — the document
+  where a node's contract is written — is the one class nothing fact-checks. Measured: three
+  forward references to a release that did not exist yet survived in SPEC files while the same
+  defect was being removed from a README hours earlier. "Excluded" and "verified" print the same
+  way in the coverage report.
+
+- **`bd merge-slot` is not an exclusion primitive (BDL-UX #194 — External, `steveyegge/beads`
+  1.0.4).** Two independent defects: the actor chain is `$BEADS_ACTOR` → `git user.name` → `$USER`,
+  so every concurrent agent under one git identity resolves to the same actor and `acquire` cannot
+  tell a sibling from the holder; and `release` accepts any caller, so one agent can free another's
+  hold. Observed again during this cycle — the slot was left held by a stale `coordinator` entry
+  with four waiters, three of which had finished hours earlier, and two agents polled it for 18 and
+  13 minutes. **Set `BEADS_ACTOR` per agent**, treat `acquire --wait` as capable of enqueuing
+  behind a holder that will never release, and do not poll indefinitely. The related gap on the
+  Beadloom side is #207: the pre-commit hook re-stages `.beads/issues.jsonl` even against an
+  explicit pathspec commit, so "commit only your own files by explicit path" cannot be satisfied by
+  an agent following it exactly.
+
+- **`beadloom active-sync` resolves no row when a bead id is written as a Markdown code span
+  (BDL-UX #210, filed by this release).** `_reconcile_one` passes the first cell to the resolver
+  verbatim, so `` `beadloom-viaj.1` `` matches neither a full id nor the short form and the run
+  reconciles nothing — while reporting that the cell *is not a bead id*, which sends the reader to
+  the tracker rather than to the formatting. Measured on this repository: of 29 `ACTIVE.md` tables
+  carrying rows, **13 resolve none**. The shipped template writes ids bare, so a project that has
+  not restyled it is unaffected. Plain `active-sync` — the form the pre-commit hook runs — exits 0
+  whether it reconciled every row or none, so at the hook an inert table is indistinguishable from
+  a coherent one. **Remedy:** write bead ids bare in the first column, and use `active-sync
+  --check`, which exits 1 on drift and names every row it could not resolve.
+- **A virgin `beadloom init --yes` still leaves `beadloom ci` red (BDL-UX #192, carried from
+  3.0.0).** Re-measured against this release on a scratch TypeScript project with one file under
+  `src/`: `beadloom init --yes --mode bootstrap` exits 0 over a graph of **2 nodes and 0 edges**,
+  then `beadloom lint --strict` and `beadloom ci` both exit 1 on `domain-needs-parent` — a rule the
+  same command wrote one step earlier. The classifier writes a `src` node of kind `domain` and no
+  edges at all, while the rule generator writes `domain-needs-parent` whenever any node is a
+  domain. **Remedy until it is fixed:** add the edge by hand — an `edges:` entry `{src: <domain>,
+  dst: <root ref_id>, kind: part_of}` in `.beadloom/_graph/services.yml` — and run `beadloom
+  reindex`. Plain `beadloom lint` without `--strict` exits 0 throughout.
+
 ## [3.0.0] - 2026-08-26
 
 **The flow is enforced, and what cannot be checked says so.** BDL-061 ships six slices and a
