@@ -165,7 +165,7 @@ Cursor's agent capabilities today are comparable with Claude Code's: its own sub
 
 Five mechanisms have been added to the cycle of "write code, write documentation, pass the Gate". Each has its own guide, and what is said here is only why the mechanism exists and where it stands.
 
-### Guards: a process rule stops being prose
+### Guards: a process rule becomes a check
 
 A guard answers one process question about one situation. Is this edit covered by a claimed task? Is the work happening outside a protected branch? The condition is declared in the `guards:` block of `.beadloom/flow.yml`, Beadloom computes it, and the tool adapter carries no logic of its own.
 
