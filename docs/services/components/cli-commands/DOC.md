@@ -60,7 +60,7 @@ silently.
 
 `init` renders its summary and then runs one more application call before it returns: the
 Gate's `lint_step` over the graph it has just written, exiting 1 when the graph fails the
-rules the same command wrote a step earlier (BDL-067, closing BDL-UX #192). The check stays
+rules on disk (BDL-067, closing BDL-UX #192). The check stays
 in the application layer and this module only calls it and renders its findings, so the rule
 above holds — but the exit code is a decision this command makes, and all three branches that
 write a graph make it: `--yes`, `--bootstrap`, and the default interactive wizard. The wizard
@@ -74,6 +74,22 @@ as rules; a `rules.yml` the loader refuses is rendered as the loader's complaint
 finding the Gate raises there carries the step's own name (`lint`) in `rule` and the reason in
 `why` — printing the name told an adopter with a hand-edited rules file that a rule called
 `lint` had failed.
+
+The evaluated-rule report also names **whose** rules failed, from the `rules_generated` count
+`bootstrap_project` returns. `bootstrap_project` writes `rules.yml` only when the file is not
+already there, so on a re-init, or over rules an earlier Beadloom or a hand edit left behind,
+the failing rule is the adopter's own. Only a run that authored the file calls the red a
+defect in Beadloom's bootstrap and asks for a report; the other says the file was already
+there and asks for nothing. `.6` established that fact and applied it to the unloadable-rules
+branch alone, which is how the evaluated-rules branch went on blaming Beadloom for a
+hand-written `service-needs-parent` until `.9` — measured by the review of `.8` on a scratch
+TypeScript project.
+
+Only the wizard branch prints `WITHDRAWN_COMPLETION_CLAIM` before the report. `interactive_init`
+prints `Initialization complete!` and its own `Next steps:` before it returns, so the wizard
+has claimed success by the time the verdict runs, while `--bootstrap` takes its verdict first
+and never makes the claim. One line withdraws it here rather than moving the check into
+`interactive_init`, which would put a services-layer decision in the onboarding domain.
 
 ## Related
 

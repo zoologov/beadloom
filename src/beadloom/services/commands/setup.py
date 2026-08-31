@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import click
 
@@ -722,8 +722,39 @@ def mcp_serve(*, project: Path | None) -> None:
     anyio.run(_run)
 
 
-def _verdict_on_the_generated_graph(project_root: Path) -> None:
-    """Exit non-zero when the graph `init` just wrote fails the rules it wrote.
+#: The line the wizard prints before its failure report, withdrawing the success
+#: it has already claimed. `interactive_init` prints `Initialization complete!`,
+#: `Generated:` and `Next steps:` before it returns, so by the time `init` takes
+#: the verdict the claim has been made; the `--bootstrap` branch takes its
+#: verdict first and never makes it, which is why only the wizard passes this.
+#: One line is cheaper than moving the verdict inside `interactive_init`, which
+#: would put a services-layer concern in the onboarding domain (the review of
+#: BDL-067 `.8`, minor 2). It is deliberately silent about who wrote the rules —
+#: `_report_rules_the_graph_fails` is where that distinction is made.
+WITHDRAWN_COMPLETION_CLAIM = (
+    "The scaffold above was written, but it does not pass the rules it is "
+    "checked against:"
+)
+
+
+def _wrote_the_rules_file(bootstrap_summary: dict[str, Any]) -> bool:
+    """Whether this run authored `rules.yml`, or merely found one on disk.
+
+    `bootstrap_project` returns `rules_generated`, which is 0 exactly when the
+    file was already there — the same condition, read off the result instead of
+    re-tested against the filesystem. An `init` that ran in `import` mode has no
+    bootstrap summary at all and wrote no rules, which the empty default covers.
+    """
+    return bool(bootstrap_summary.get("rules_generated", 0))
+
+
+def _verdict_on_the_generated_graph(
+    project_root: Path,
+    *,
+    bootstrap_wrote_the_rules: bool,
+    claim_to_withdraw: str | None = None,
+) -> None:
+    """Exit non-zero when the graph `init` just wrote fails the rules on disk.
 
     `init` writes the graph and then writes `rules.yml` from it, and until
     BDL-067 it never checked that the second agrees with the first: a virgin
@@ -735,18 +766,31 @@ def _verdict_on_the_generated_graph(project_root: Path) -> None:
     requires is visible here rather than at the adopter's first Gate run.
 
     The verdict is the Gate's own lint step, not a second implementation of it,
-    so the two cannot drift. The rc is non-zero rather than a loud zero because
-    the only rules `generate_rules` writes for an adopter are the two the
-    bootstrap's own post-condition satisfies: a red verdict over evaluated rules
-    can only mean Beadloom contradicted itself, and a zero would let a scripted
-    `init && ci` run on to the point where the cause is no longer in view. The
-    scaffold is left on disk either way — the rc reports the defect, it does not
-    withdraw the graph.
+    so the two cannot drift. The rc is non-zero rather than a loud zero because a
+    zero would let a scripted `init && ci` run on to the point where the cause is
+    no longer in view. The scaffold is left on disk either way — the rc reports
+    the state, it does not withdraw the graph.
+
+    WHOSE rules those are is a separate question, and `bootstrap_wrote_the_rules`
+    is the answer to it. `bootstrap_project` writes `rules.yml` only when the file
+    is not already there, so on a re-init, or over rules an earlier Beadloom or a
+    hand edit left behind, the failing rule is the adopter's own and none of this
+    command's business to be blamed for. `.6` established exactly that fact and
+    applied it to the unloadable-rules branch alone, which is how the evaluated-
+    rules branch went on telling adopters that their own hand-written
+    `service-needs-parent` was "a defect in Beadloom's bootstrap" — measured by
+    the review of `.8` on a scratch TypeScript project. Callers pass
+    `rules_generated`, not a second look at the filesystem, because the file
+    exists by the time the verdict runs either way.
 
     Two shapes of red reach this point and they are not the same news, so they
     are reported separately: rules that were evaluated and failed name their
     rules, and a `rules.yml` that would not load names the loader's complaint
     instead (`_report_rules_that_would_not_load`).
+
+    `claim_to_withdraw`, when given, is printed before the report. Only the
+    wizard branch passes it, because only the wizard has already claimed success
+    by the time it gets here.
 
     Called from every branch of `init` that writes a bootstrap graph — `--yes`,
     `--bootstrap`, and the default interactive wizard — which is three branches
@@ -761,33 +805,58 @@ def _verdict_on_the_generated_graph(project_root: Path) -> None:
         return
 
     click.echo("", err=True)
+    if claim_to_withdraw:
+        click.echo(claim_to_withdraw, err=True)
     if step.summary == RULES_CONFIG_ERROR:
         _report_rules_that_would_not_load(step)
     else:
-        _report_rules_the_graph_fails(step)
+        _report_rules_the_graph_fails(
+            step, bootstrap_wrote_the_rules=bootstrap_wrote_the_rules
+        )
     click.echo(f"`beadloom ci` will report this as: lint \u2014 {step.summary}.", err=True)
     sys.exit(1)
 
 
-def _report_rules_the_graph_fails(step: GateStep) -> None:
-    """Name each error-severity rule the graph `init` just wrote violates."""
+def _report_rules_the_graph_fails(
+    step: GateStep, *, bootstrap_wrote_the_rules: bool
+) -> None:
+    """Name each error-severity rule the graph `init` just wrote violates.
+
+    The rule names are the same either way; the sentence around them is not.
+    Telling an adopter that their own hand-written rule is "a defect in
+    Beadloom's bootstrap" costs them a bug report against a project that did not
+    write it, so the blame — and the request to report — are printed only when
+    this run authored `rules.yml`.
+    """
     rules = sorted(
         {str(f["rule"]) for f in step.findings if f.get("severity") == "error"}
     )
-    click.echo(
-        "Error: the graph this command just wrote does not pass the rules "
-        "this command wrote alongside it.",
-        err=True,
-    )
+    if bootstrap_wrote_the_rules:
+        headline = (
+            "Error: the graph this command just wrote does not pass the rules "
+            "this command wrote alongside it."
+        )
+        advice = (
+            "The scaffold is on disk and can be edited by hand "
+            "(.beadloom/_graph/services.yml, .beadloom/_graph/rules.yml). This is a "
+            "defect in Beadloom's bootstrap rather than in your project \u2014 please "
+            "report it with the rule name(s) above."
+        )
+    else:
+        headline = (
+            "Error: the graph this command just wrote does not pass the rules "
+            "already in .beadloom/_graph/rules.yml."
+        )
+        advice = (
+            "This command did not write .beadloom/_graph/rules.yml \u2014 the file was "
+            "already there \u2014 so the rule(s) above are your project's. The scaffold "
+            "is on disk: edit .beadloom/_graph/services.yml to satisfy them, or the "
+            "rules file to match your architecture."
+        )
+    click.echo(headline, err=True)
     for rule in rules:
         click.echo(f"  {rule}", err=True)
-    click.echo(
-        "The scaffold is on disk and can be edited by hand "
-        "(.beadloom/_graph/services.yml, .beadloom/_graph/rules.yml). This is a "
-        "defect in Beadloom's bootstrap rather than in your project \u2014 please "
-        "report it with the rule name(s) above.",
-        err=True,
-    )
+    click.echo(advice, err=True)
 
 
 def _report_rules_that_would_not_load(step: GateStep) -> None:
@@ -897,7 +966,10 @@ def init(
             click.echo(f"  Index: {ri['symbols']} symbols, {ri['imports']} imports")
         if result.get("import"):
             click.echo(f"  Imported: {len(result['import'])} documents")
-        _verdict_on_the_generated_graph(project_root)
+        _verdict_on_the_generated_graph(
+            project_root,
+            bootstrap_wrote_the_rules=_wrote_the_rules_file(result.get("bootstrap", {})),
+        )
         return
 
     if bootstrap:
@@ -965,7 +1037,10 @@ def init(
         if ri.symbols_indexed == 0:
             _warn_missing_parsers(project_root)
 
-        _verdict_on_the_generated_graph(project_root)
+        _verdict_on_the_generated_graph(
+            project_root,
+            bootstrap_wrote_the_rules=_wrote_the_rules_file(result),
+        )
 
         click.echo("")
         click.echo("Next steps:")
@@ -1003,4 +1078,12 @@ def init(
     # agreement, and nothing has re-indexed since. Judging it there would report a
     # state the user is in the middle of leaving.
     if result["mode"] in ("bootstrap", "both") and result.get("review") != "edit":
-        _verdict_on_the_generated_graph(project_root)
+        # `claim_to_withdraw` is passed here and nowhere else: `interactive_init`
+        # prints `Initialization complete!` before it returns, so this branch —
+        # and only this branch — reports a failure under a success it has already
+        # announced (the review of `.8`, minor 2).
+        _verdict_on_the_generated_graph(
+            project_root,
+            bootstrap_wrote_the_rules=_wrote_the_rules_file(result.get("bootstrap", {})),
+            claim_to_withdraw=WITHDRAWN_COMPLETION_CLAIM,
+        )

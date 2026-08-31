@@ -39,6 +39,13 @@ from click.testing import CliRunner
 
 from beadloom.onboarding.scanner.bootstrap import bootstrap_project
 from beadloom.services.cli import main
+
+#: The line the wizard prints to withdraw its completion claim, imported rather
+#: than spelled again here: a reword should not leave this module asserting the
+#: presence and the position of a string nobody prints.
+from beadloom.services.commands.setup import (
+    WITHDRAWN_COMPLETION_CLAIM as THE_WITHDRAWAL,
+)
 from tests.adopter_project import typescript_project
 
 if TYPE_CHECKING:
@@ -111,6 +118,74 @@ UNLOADABLE_RULES = "rules:\n  - name: hand-edited\n    require:\n      match: {}
 
 #: The part of the loader's complaint an adopter needs to see.
 THE_PARSE_ERROR = "missing required 'version' field"
+
+#: A `rules.yml` the ADOPTER wrote: valid, loadable, and failed by any graph the
+#: bootstrap writes. `generate_rules` dropped `service-needs-parent` for exactly
+#: the reason it fails here — the root service node has no parent by definition
+#: — so a project carrying a hand-written rule of that name is a project whose
+#: red verdict is its own. This is the review's reproduction of BDL-067 `.9`,
+#: moved into the suite.
+THE_ADOPTERS_RULE = "service-needs-parent"
+A_RULES_FILE_THE_ADOPTER_WROTE = """\
+version: 1
+rules:
+  - name: service-needs-parent
+    description: Every service must have a part_of edge
+    require:
+      for:
+        kind: service
+      has_edge_to: {}
+      edge_kind: part_of
+"""
+
+#: The sentence that is true only when the bootstrap authored `rules.yml`, and
+#: the request that follows it. Both are asserted present in one class and absent
+#: in another, so the fix has to DISTINGUISH the two cases rather than delete the
+#: sentence.
+THE_BLAME = "defect in Beadloom's bootstrap"
+THE_BUG_REPORT_REQUEST = "please report it"
+
+#: What the adopter is told instead: the file was already there, so the rule is
+#: theirs. The path is named because it is the file they have to open.
+THE_RULES_PATH = ".beadloom/_graph/rules.yml"
+THE_FILE_WAS_ALREADY_THERE = "did not write"
+
+#: The wizard's success claim, printed by `interactive_init` before `init` takes
+#: the verdict, and therefore printed even when the verdict is red.
+THE_COMPLETION_CLAIM = "Initialization complete!"
+
+#: The first word of the failure report, used to place the withdrawal line.
+THE_FAILURE_REPORT = "Error:"
+
+#: The branches that can meet a `rules.yml` this command did not write. `--yes`
+#: is not one of them and cannot be made into one: `non_interactive_init` returns
+#: `skipped` when `.beadloom/` is already there, and under `--force` it deletes
+#: the whole directory, so the rules file that branch meets is always the one it
+#: just wrote. The wizard answers the re-init prompt with `overwrite`, which
+#: keeps the directory and the rules file inside it.
+THE_BRANCHES_OVER_AN_ADOPTERS_RULES_FILE = (
+    InitBranch("--bootstrap", ("--bootstrap",), PACKAGE_BINDING, ("bootstrap",)),
+    InitBranch(
+        "wizard", (), INIT_FLOW_BINDING, (), prompts=("overwrite", "bootstrap", "yes")
+    ),
+)
+
+ADOPTER_BRANCH_IDS = [b.name for b in THE_BRANCHES_OVER_AN_ADOPTERS_RULES_FILE]
+
+
+def _a_rules_file_the_adopter_wrote(project_root: Path) -> None:
+    """Put a valid rules file in place before `init` runs.
+
+    That is the whole fixture: nothing is patched, the real `bootstrap_project`
+    and the real linter run. `bootstrap_project` writes `rules.yml` only when the
+    file is not already there, so the rule that fails is one this command did not
+    write — which is the case the message got wrong.
+    """
+    graph_dir = project_root / ".beadloom" / "_graph"
+    graph_dir.mkdir(parents=True, exist_ok=True)
+    (graph_dir / "rules.yml").write_text(
+        A_RULES_FILE_THE_ADOPTER_WROTE, encoding="utf-8"
+    )
 
 
 def _strip_part_of_edges(project_root: Path) -> None:
@@ -390,3 +465,160 @@ class TestTheOneBootstrapPathThatTakesNoVerdict:
 
         assert result.exit_code != 0, result.output
         assert THE_RULE in result.output
+
+
+@pytest.mark.parametrize(
+    "branch", THE_BRANCHES_OVER_AN_ADOPTERS_RULES_FILE, ids=ADOPTER_BRANCH_IDS
+)
+class TestInitOverARulesFileTheAdopterWrote:
+    """The rules the graph fails are the adopter's, so Beadloom is not to blame.
+
+    BDL-067 `.9`, the review's major 1 on `.8`. `bootstrap_project` writes
+    `rules.yml` only when the file is not already there, so on a re-init — or on
+    a project whose rules came from an earlier Beadloom or from a hand edit — the
+    failing rule is the adopter's own. `init` told them it was "a defect in
+    Beadloom's bootstrap" and asked them to report it. `.6` already held the fact
+    this rests on and wrote it down for the unloadable-rules branch
+    (`_report_rules_that_would_not_load`) without carrying it across to the
+    branch it invalidates.
+
+    Nothing here is patched. The graph the bootstrap writes is correct and would
+    pass its own rules; what fails is a rule the command did not write.
+    """
+
+    def test_the_command_still_does_not_exit_zero(
+        self, tmp_path: Path, branch: InitBranch
+    ) -> None:
+        """The verdict is about agreement with the Gate, not about authorship."""
+        project = typescript_project(tmp_path / "orders-web")
+        _a_rules_file_the_adopter_wrote(project.root)
+
+        result = _init(project.root, branch)
+
+        assert result.exit_code != 0, result.output
+
+    def test_it_names_the_rule_the_adopter_wrote(
+        self, tmp_path: Path, branch: InitBranch
+    ) -> None:
+        project = typescript_project(tmp_path / "orders-web")
+        _a_rules_file_the_adopter_wrote(project.root)
+
+        result = _init(project.root, branch)
+
+        assert THE_ADOPTERS_RULE in result.output, result.output
+
+    def test_it_does_not_blame_the_bootstrap(
+        self, tmp_path: Path, branch: InitBranch
+    ) -> None:
+        project = typescript_project(tmp_path / "orders-web")
+        _a_rules_file_the_adopter_wrote(project.root)
+
+        result = _the_branch_reported(_init(project.root, branch))
+
+        assert THE_BLAME not in result.output, result.output
+
+    def test_it_does_not_ask_for_a_bug_report(
+        self, tmp_path: Path, branch: InitBranch
+    ) -> None:
+        """The cost the finding names: adopters filing our tracker with their own rules."""
+        project = typescript_project(tmp_path / "orders-web")
+        _a_rules_file_the_adopter_wrote(project.root)
+
+        result = _the_branch_reported(_init(project.root, branch))
+
+        assert THE_BUG_REPORT_REQUEST not in result.output, result.output
+
+    def test_it_says_the_rules_file_was_already_there(
+        self, tmp_path: Path, branch: InitBranch
+    ) -> None:
+        """Dropping the blame is half an answer; the adopter needs the reason."""
+        project = typescript_project(tmp_path / "orders-web")
+        _a_rules_file_the_adopter_wrote(project.root)
+
+        result = _the_branch_reported(_init(project.root, branch))
+
+        assert THE_FILE_WAS_ALREADY_THERE in result.output, result.output
+        assert THE_RULES_PATH in result.output, result.output
+
+    def test_the_graph_is_still_on_disk_to_be_repaired(
+        self, tmp_path: Path, branch: InitBranch
+    ) -> None:
+        project = typescript_project(tmp_path / "orders-web")
+        _a_rules_file_the_adopter_wrote(project.root)
+
+        _the_branch_reported(_init(project.root, branch))
+
+        assert (project.root / ".beadloom" / "_graph" / "services.yml").is_file()
+
+
+@pytest.mark.parametrize("branch", THE_BRANCHES, ids=BRANCH_IDS)
+class TestInitOverRulesTheBootstrapItselfWrote:
+    """The other side of the distinction: when it IS ours, it still says so.
+
+    Without this the fix could be "delete the sentence", which loses the one
+    thing the sentence is for. Here `bootstrap_project` runs on a virgin project
+    and writes `rules.yml` itself, so `rules_generated` is non-zero and the graph
+    it wrote alongside those rules is the thing at fault.
+    """
+
+    def test_it_does_blame_the_bootstrap(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, branch: InitBranch
+    ) -> None:
+        project = typescript_project(tmp_path / "orders-web")
+        _a_bootstrap_that_forgets_the_edge(monkeypatch, branch.binding)
+
+        result = _the_branch_reported(_init(project.root, branch))
+
+        assert THE_BLAME in result.output, result.output
+        assert THE_BUG_REPORT_REQUEST in result.output, result.output
+
+
+class TestTheWizardWithdrawsItsCompletionClaim:
+    """`Initialization complete!` is printed, and then the command exits 1.
+
+    BDL-067 `.9`, the review's minor 2. `interactive_init` prints its own tail —
+    `Initialization complete!`, `Generated:`, `Next steps:` — before it returns,
+    and only then does `init` take the verdict. The `--bootstrap` branch takes
+    its verdict before its `Next steps`, so the two branches read differently and
+    the wizard makes a success claim it immediately withdraws. The rc is right
+    and the error is last, so the fix is one line that withdraws the claim rather
+    than a move of the check into `interactive_init`, which would cross a layer.
+    """
+
+    def _wizard_over_a_failing_graph(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> Any:
+        project = typescript_project(tmp_path / "orders-web")
+        _a_bootstrap_that_forgets_the_edge(monkeypatch, INIT_FLOW_BINDING)
+        return _the_branch_reported(_init(project.root, THE_BRANCHES[-1]))
+
+    def test_the_claim_it_withdraws_is_actually_made(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Anti-vacuity: a wizard that never claimed completion needs no withdrawal."""
+        result = self._wizard_over_a_failing_graph(tmp_path, monkeypatch)
+
+        assert THE_COMPLETION_CLAIM in result.output, result.output
+
+    def test_the_claim_is_withdrawn_before_the_failure_is_reported(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        result = self._wizard_over_a_failing_graph(tmp_path, monkeypatch)
+
+        claimed = result.output.index(THE_COMPLETION_CLAIM)
+        withdrawn = result.output.find(THE_WITHDRAWAL)
+        reported = result.output.index(THE_FAILURE_REPORT)
+
+        assert withdrawn != -1, result.output
+        assert claimed < withdrawn < reported, result.output
+
+    def test_a_green_wizard_withdraws_nothing(
+        self, tmp_path: Path
+    ) -> None:
+        """The withdrawal is part of the failure report, not part of the tail."""
+        project = typescript_project(tmp_path / "orders-web")
+
+        result = _init(project.root, THE_BRANCHES[-1])
+
+        assert result.exit_code == 0, result.output
+        assert THE_WITHDRAWAL not in result.output, result.output

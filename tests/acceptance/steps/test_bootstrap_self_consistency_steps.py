@@ -43,6 +43,7 @@ from beadloom.application.reindex import incremental_reindex
 from beadloom.graph.linter import lint
 from beadloom.onboarding.scanner import bootstrap_project
 from beadloom.services.cli import main
+from beadloom.services.commands.setup import WITHDRAWN_COMPLETION_CLAIM
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -69,6 +70,35 @@ THE_LOADER_COMPLAINT = "missing required 'version' field"
 #: The gate step's own name, which its `LintError` finding carries in `rule`.
 #: Printed as though it were a rule, it names a rule no rules file contains.
 THE_STEP_NAME = "lint"
+
+#: A rules file the ADOPTER wrote — valid, loadable, and failed by any graph the
+#: bootstrap writes. `generate_rules` dropped `service-needs-parent` for exactly
+#: the reason it fails here: the root service node has no parent by definition.
+THE_ADOPTERS_RULE = "service-needs-parent"
+THE_ADOPTERS_RULES_FILE = """\
+version: 1
+rules:
+  - name: service-needs-parent
+    description: Every service must have a part_of edge
+    require:
+      for:
+        kind: service
+      has_edge_to: {}
+      edge_kind: part_of
+"""
+
+#: The sentence that is true only when the bootstrap authored `rules.yml`, and
+#: the request that follows it.
+THE_BLAME = "defect in Beadloom's bootstrap"
+THE_BUG_REPORT_REQUEST = "please report it"
+
+#: What the adopter is told instead, and the file they have to open.
+THE_FILE_WAS_ALREADY_THERE = "did not write"
+THE_RULES_PATH = ".beadloom/_graph/rules.yml"
+
+#: The wizard's success claim, and the first word of the report that follows it.
+THE_COMPLETION_CLAIM = "Initialization complete!"
+THE_FAILURE_REPORT = "Error:"
 
 
 @pytest.fixture()
@@ -338,3 +368,77 @@ def _then_init_asks_for_a_reindex(world: dict[str, Any]) -> None:
     """
     result = world["init"]
     assert "beadloom reindex" in result.output, result.output
+
+
+@given("a rules file the adopter wrote that the bootstrap graph fails")
+def _given_the_adopters_own_rules(world: dict[str, Any]) -> None:
+    """Put a valid rules file on disk before `init` runs, and patch nothing.
+
+    `bootstrap_project` writes `rules.yml` only when the file is not already
+    there, so this one file is the entire fixture: the real bootstrap runs, the
+    real linter runs, and the rule that fails is one the command did not write.
+    `generate_rules` dropped `service-needs-parent` for exactly the reason it
+    fails here — the root service node has no parent by definition — so a project
+    carrying a hand-written rule of that name is a project whose red is its own.
+    """
+    graph_dir = world["project"] / ".beadloom" / "_graph"
+    graph_dir.mkdir(parents=True, exist_ok=True)
+    (graph_dir / "rules.yml").write_text(THE_ADOPTERS_RULES_FILE, encoding="utf-8")
+
+
+@when("beadloom init is run with the bootstrap flag")
+def _when_init_bootstrap_is_run(world: dict[str, Any]) -> None:
+    """`init --bootstrap`, which keeps a `.beadloom/` that is already there.
+
+    `--yes` cannot reach this case and is not asked to: `non_interactive_init`
+    returns `skipped` over an existing `.beadloom/` and deletes the whole
+    directory under `--force`, so the rules file that branch meets is always the
+    one it just wrote.
+    """
+    world["init"] = CliRunner().invoke(
+        main, ["init", "--bootstrap", "--project", str(world["project"])]
+    )
+
+
+@then("the command names the rule the adopter wrote")
+def _then_init_names_the_adopters_rule(world: dict[str, Any]) -> None:
+    result = world["init"]
+    assert THE_ADOPTERS_RULE in result.output, result.output
+
+
+@then("the command does not blame Beadloom's bootstrap")
+def _then_init_does_not_blame_us(world: dict[str, Any]) -> None:
+    result = world["init"]
+    # Anti-vacuity: a command that printed nothing satisfies a negative claim.
+    assert result.exit_code != 0, result.output
+    assert THE_BLAME not in result.output, result.output
+
+
+@then("the command does not ask for a bug report")
+def _then_init_does_not_ask_for_a_report(world: dict[str, Any]) -> None:
+    """The cost of the defect: a tracker filled with adopters' own rules."""
+    result = world["init"]
+    assert result.exit_code != 0, result.output
+    assert THE_BUG_REPORT_REQUEST not in result.output, result.output
+
+
+@then("the command says the rules file was already there")
+def _then_init_says_the_file_predates_it(world: dict[str, Any]) -> None:
+    """Withholding the blame is half an answer; the adopter needs the reason."""
+    result = world["init"]
+    assert THE_FILE_WAS_ALREADY_THERE in result.output, result.output
+    assert THE_RULES_PATH in result.output, result.output
+
+
+@then("the completion claim is withdrawn before the failure is reported")
+def _then_the_claim_is_withdrawn(world: dict[str, Any]) -> None:
+    """The wizard claims success, so it has to take the claim back in place."""
+    output = world["init"].output
+    # Anti-vacuity: with no claim there is nothing to withdraw and the ordering
+    # below would be a statement about two lines that never appeared.
+    assert THE_COMPLETION_CLAIM in output, output
+    claimed = output.index(THE_COMPLETION_CLAIM)
+    withdrawn = output.find(WITHDRAWN_COMPLETION_CLAIM)
+    reported = output.index(THE_FAILURE_REPORT)
+    assert withdrawn != -1, output
+    assert claimed < withdrawn < reported, output

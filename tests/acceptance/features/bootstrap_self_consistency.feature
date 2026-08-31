@@ -97,3 +97,32 @@ Feature: the bootstrap writes a graph that satisfies the rules it writes
     When beadloom init is run with no flags and the graph review is answered with edit
     Then the command reports success
     And the command tells the user to re-index after editing
+
+  # BDL-067 `.9`, the review's major 1 on `.8`. `bootstrap_project` writes
+  # `rules.yml` only when the file is not already there, so on a re-init — or
+  # over rules an earlier Beadloom or a hand edit left behind — the rule that
+  # fails is the adopter's own, and `init` told them it was ours and asked them
+  # to report it. Nothing below is patched: the bootstrap and the linter are the
+  # real ones, and the fixture is a rules file that was on disk first.
+  @bead:beadloom-e8s4.9
+  Scenario: a rule the command did not write is not reported as a Beadloom defect
+    Given a project whose only source file sits directly in its source directory
+    And a rules file the adopter wrote that the bootstrap graph fails
+    When beadloom init is run with the bootstrap flag
+    Then the command does not report success
+    And the command names the rule the adopter wrote
+    And the command does not blame Beadloom's bootstrap
+    And the command does not ask for a bug report
+    And the command says the rules file was already there
+
+  # BDL-067 `.9`, the review's minor 2. `interactive_init` prints its own tail
+  # before returning, so the wizard announced `Initialization complete!` and then
+  # exited 1 — a success claim withdrawn one line later. The `--bootstrap` branch
+  # takes its verdict before its `Next steps` and never makes the claim.
+  @bead:beadloom-e8s4.9
+  Scenario: the wizard withdraws its completion claim before reporting the failure
+    Given a project whose only source file sits directly in its source directory
+    And a bootstrap that writes the graph and then forgets the edge its rules require
+    When beadloom init is run with no flags and its prompts are answered
+    Then the command does not report success
+    And the completion claim is withdrawn before the failure is reported
