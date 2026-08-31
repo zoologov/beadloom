@@ -21,8 +21,8 @@ errors, and the invariant holds for every preset the module can select.
 - [x] Branch `features/BDL-067` cut from `main`
 - [x] Wave 1 — `.1` dev (closed; `lint --strict` rc 1 -> rc 0 and `ci` rc 1 -> rc 0 on a virgin adopter project)
 - [x] Wave 2 — `.2` dev (closed 2026-08-31, commit `e52aa06`)
-- [x] Wave 3 — `.3` test (subagent launched)
-- [ ] Wave 4 — `.4` review
+- [x] Wave 3 — `.3` test (closed 2026-08-31, commits `e870b0b`, `fee64db`)
+- [x] Wave 4 — `.4` review (subagent launched)
 - [ ] Wave 5 — `.5` tech-writer
 - [ ] Gate green, PR opened
 
@@ -32,8 +32,8 @@ errors, and the invariant holds for every preset the module can select.
 |------|--------|---------|
 | `beadloom-e8s4.1` | Done | post-condition `_missing_domain_parent_edges` in `bootstrap.py`; 4 scenarios + 11 unit tests; green in a clean room over 6 files |
 | `beadloom-e8s4.2` | ✓ done | `init` now takes a verdict on the graph it wrote, in both the `--yes` and interactive `--bootstrap` branches, using the Gate's own `has_errors` semantics. 15 tests. The divergence is CONSTRUCTED — `part_of` edges are stripped back out of `services.yml` after the real bootstrap wrote the real rules — so the case does not depend on `.1` still leaving a naturally-broken graph. API change: `gate._step_lint` → public `lint_step`. Commit `e52aa06`. |
-| `beadloom-e8s4.3` | In Progress | wave 3, test subagent launched |
-| `beadloom-e8s4.4` | Pending | blocked by .3 |
+| `beadloom-e8s4.3` | ✓ done | the three suite defects closed. All five assertions verified RED against the pre-fix source (`git archive af26750 src` imported via `PYTHONPATH`, the override confirmed by `gate.lint_step` being absent there): pre-fix 5 failed / 20 passed, post-fix 25 passed, no pre-existing test turned red. Coverage 97% / 93% / 91% on the changed modules. Commits `e870b0b`, `fee64db`. |
+| `beadloom-e8s4.4` | In Progress | wave 4, review subagent launched |
 | `beadloom-e8s4.5` | Pending | blocked by .4 |
 
 ## Notes
@@ -83,12 +83,22 @@ The pre-commit hook also warned `mypy type errors in this commit` on a tests-onl
 The subagent reported two measurements that read as a contradiction — one clean-room failure and
 `beadloom ci` rc 0 on the tree — so both were re-measured in the main loop:
 
-| Claim | Coordinator's measurement |
-|---|---|
-| `beadloom ci` rc 0 on the tree | confirmed, rc 0, zero `::error` lines (warnings only) |
-| `test_all_new_node_pairs_are_fresh` fails only in the clean room | confirmed, passes on the tree — the clean room has no index for it to compare against |
-| 7341 passing | confirmed, `7341 passed, 11 skipped, 1 xfailed`, 0 failed |
+- Claim: `beadloom ci` rc 0 on the tree. Re-measured without a pipe: rc 0, no error-level lines, warnings only.
+- Claim: `test_all_new_node_pairs_are_fresh` fails only in the clean room. Re-measured: it passes on the tree; the clean room has no index for it to compare against.
+- Claim: 7341 passing. Re-measured: `7341 passed, 11 skipped, 1 xfailed`, none failed.
 
 The first Gate run in the main loop was itself misread: `beadloom ci | tail` reports `tail`'s exit
 code, not the Gate's. Re-run without the pipe before believing it — the coordinator playbook warns
 about exactly this and it still happened once here.
+
+**Wave 3 verified by the coordinator**
+
+Re-measured in the main loop, without a pipe: `beadloom ci` rc 0; full suite
+`7346 passed, 11 skipped, 1 xfailed`, none failed — the count the subagent reported.
+
+**A false positive the Gate raised against this very document.** The coordinator's wave-2
+verification was written as a two-column table, and `docs quality` read it as a decision table,
+reporting `decision-reason: the decision carries no reason` against a row that records a
+measurement rather than a decision. Rewritten as a list, and the Gate went quiet. Worth noting
+before it is filed: a table of claims and their measurements is a shape this repository will
+write again, and nothing distinguishes it from a decision table but the words in the header.
