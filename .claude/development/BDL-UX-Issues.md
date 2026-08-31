@@ -35,88 +35,6 @@
 
 ## Open Issues
 
-211. ~~[2026-08-27] [HIGH] The 1.x description was fixed in two copies of four, and `beadloom --help` still shows the old one~~ **CLOSED (BDL-062 `.15`, released in 3.0.2)**
-
-    **Severity:** high (`beadloom --help` is the sentence every CLI user reads first, and 3.0.1 was released specifically to replace this sentence)
-    **Command:** `beadloom --help`
-    **Context:** found by `beadloom-viaj.8` verifying the PUBLISHED 3.0.1 wheel in a fresh virtual environment — the check that was the reason for the release.
-
-    **Measured on the published artifact**, not the local build:
-
-    ```
-    importlib.metadata.metadata('beadloom')['Summary']
-      -> The architecture graph of your codebase, and the gate that holds ...   CORRECT
-    beadloom --help, line 3
-      -> Beadloom - Context Oracle + Doc Sync Engine.                           THE 1.x SENTENCE
-    ```
-
-    **Four copies of the product's one-line description exist. `.4` found two.**
-
-    | Copy | State after 3.0.1 | Who reads it |
-    |---|---|---|
-    | `pyproject.toml` `description` | corrected | the PyPI project page |
-    | `beadloom/__init__.py` docstring | corrected | `help(beadloom)` |
-    | `services/commands/_root.py:44` | **still 1.x** | `beadloom --help` |
-    | `onboarding/templates/docs/core/beadloom-readme.md.txt:9` | **still 1.x** | every project scaffolded by `beadloom init` |
-
-    **The check that exists could not have caught it, and its own docstring predicted why.**
-    `tests/test_package_description.py` asserts that the manifest and the package docstring
-    AGREE, and states plainly that agreement is checkable while currency is not — "both copies
-    were in perfect agreement while both were three majors out of date". The residual it did not
-    name is the one that bit: **agreement over a subset of the copies.** Two were corrected
-    together, the test compared exactly those two, and it went green over a product whose most
-    visible surface still said the retired sentence.
-
-    Worse for an adopter than for us: the fourth copy is a **template**, so every project
-    `beadloom init` scaffolds from 3.0.1 onward is seeded with the 1.x sentence in its own
-    documentation.
-
-    **Expected:** the description has one home and the others are derived from it, or the check
-    enumerates every copy rather than the two it was written against. `_root.py`'s Click group
-    docstring cannot import the manifest cheaply, but it can read `beadloom.__doc__`, which is
-    already one of the checked copies.
-
-    **CLOSED in 3.0.2** (`beadloom-viaj.15`), and the closing measurement is on the PUBLISHED
-    artifact rather than the local build, because that distinction is what this issue is about.
-    Fresh virtual environment, `beadloom==3.0.2` installed from PyPI:
-
-    ```
-    beadloom --version           -> beadloom, version 3.0.2
-    beadloom --help, line 3      -> Beadloom - the architecture graph of your codebase, ...  CORRECT
-    importlib.metadata Summary   -> The architecture graph of your codebase, ...             CORRECT
-    grep 'Context Oracle + Doc Sync Engine' over the installed package (269 files) -> 0 hits
-    ```
-
-    **The count in this entry was wrong, and that is the finding rather than a correction.** It said
-    FOUR copies. Sweeping 372 files found **five**: the fifth is this repository's own
-    `.beadloom/README.md`, which `init` had scaffolded from the same template. An issue about a
-    check that read a smaller population than the fact had was itself written from a population
-    somebody had listed by hand.
-
-    **Three copies were removed rather than corrected**, which is why this is not a typo fix.
-    `_root.py` derives `help=` from the package docstring; the scaffold template takes
-    `{{beadloom_description}}` and `{{mcp_tool_list}}`, filled by `beadloom_readme_values()` from
-    the package docstring and `MCP_TOOL_CATALOG`; and `.beadloom/README.md` is generator output.
-    Two literal copies remain — the manifest and the package docstring — which the pre-existing
-    agreement test already holds together.
-
-    **Reading the scaffold end to end**, which nobody had done this cycle, found three more items of
-    the same class: it named **8 of the 18** MCP tools as though that were the list (and states no
-    number, so `mcp_tool_count` could never have bound to it), `Directory Contents` omitted
-    `AGENTS.md`, and `Essential Commands` omitted `prime` and `ci`. Verified on the published wheel
-    by scaffolding a project with it: all 18 tools, `AGENTS.md` present, both commands present.
-
-    **What is still NOT checked, measured rather than asserted.** Setting the manifest and the
-    package docstring to `A cloud-hosted spreadsheet for tracking invoices` and regenerating the
-    scaffold leaves all 7 checks green. Currency has no test and this issue did not give it one. The
-    check now guards a banned phrase, agreement across every copy the sweep finds, and the SIZE of
-    the population — and that last is what closes the class, because a sixth copy stating the
-    correct sentence turns the suite red until somebody records it.
-
-    **What an adopter still has to do.** `.beadloom/README.md` is written once and never
-    overwritten, so a project scaffolded on 3.0.0 or 3.0.1 keeps the 1.x sentence and the 8-tool
-    list until that file is deleted and regenerated. Named in the 3.0.2 CHANGELOG under Upgrading.
-
 210. [2026-08-27] [MEDIUM] `active-sync` resolves no row when a bead id is written as a Markdown code span, and blames the id
 
     **Severity:** medium (the reconcile exists so ACTIVE.md cannot drift from the tracker by hand; where it is inert, the drift it prevents is exactly what happens)
@@ -388,46 +306,6 @@
 
     **Related:** #195 (the measured half), #172 (rule liveness), BDL-062.
 
-195. ~~[2026-08-26] [HIGH] One node whose source lies outside the common source root collapses `doc-area-coherence` for the whole graph~~ **CLOSED (BDL-062 `.9`)**
-
-    **Severity:** high (a rule the project declared blocking could stand down over its entire population while the Gate stayed green)
-    **Command:** `beadloom lint --strict`
-    **Context:** opened by BDL-062 `.4` while deciding whether the `vitepress-site` node should carry a document; **rewritten after the coordinator failed to reproduce it and both measurements were compared.**
-
-    **The trigger.** `doc_area._placements` derived the source root as the longest directory prefix EVERY node/doc pair's source shares. That is a unanimity rule, and unanimity hands each individual source a veto. `vitepress-site`'s source is `site/`, which shares no prefix with `src/beadloom/...`, so attaching any document to it dropped the root from `src/beadloom` to nothing in one step — for all 85 other pairs. `min_support` guarded the dominant-mapping half; nothing guarded the prefix.
-
-    **Two faces, and which one you see depends only on where the minority node's document sits.** Measured on the same tree, same commit, by two people who then disagreed:
-
-    ```
-    doc at site/vitepress-site/DOC.md   -> the doc path carries the outlier's own
-                                           segment, an area depth is still found, a
-                                           bogus convention is derived:
-                                           84 compared, 7 nodes reported WRONG at error
-                                           (bd-seam, beadloom, cli, cli-commands,
-                                            guard-probes, mcp-server, tui)
-
-    doc at guides/vitepress-site.md     -> no doc path carries any segment of the
-                                           collapsed vocabulary, no area depth exists:
-                                           0 compared, 86 unnamed,
-                                           rule reports it CHECKED NOTHING
-    ```
-
-    **The second face is the worse one and it is why this was HIGH.** That report went out through `liveness_finding`, which hardcoded `severity="warn"` whatever the rule declared. This repository escalates `doc-area-coherence` to `error`; the escalation evaporated at exactly the moment the rule stopped working, and `lint --strict` exited 0 over a check that had run on nothing. Filtering `lint --format json` by `rule_type == doc_area_coherence` cannot see it either, because the stand-down carries `rule_type: rule_liveness` — filter by `rule_name` instead.
-
-    **STRUCK — the evidence line in the original filing was false.** It read *"4 true findings become 6 false ones"*. There were no 4. The `services.yml` backup taken immediately before the probe shows the four misfiled nodes were **already corrected**, so the measured baseline was **0 doc-area findings**, and the 6 were manufactured from a clean graph. The original compared against `.2`'s pre-correction baseline rather than the one actually measured — a green count that was not a checked count, inside the issue filed about green counts that are not checked counts. Recorded rather than quietly replaced, because the wrong number was acted on.
-
-    **Not exotic:** any project with a `site/`, `scripts/`, `tooling/` or a second package root meets this on first contact.
-
-    > **CLOSED — the root tolerates a minority, and a total stand-down is no longer silent.**
-    >
-    > `_source_root` replaces `_common_prefix`. It descends one segment while there is **exactly one supported way down**, where supported means `min_support` sources agree on the next segment — the dial the dominant-mapping half already declares, not a second threshold. A genuine fork ends the descent (that is where the areas begin); no supported segment at all ends it too; and a source too short to have that depth is `rootless` rather than a veto. Measured on this repository, both faces now give the identical answer: **derivable, 8 dominant areas, 0 contradicting, `outside_root` 1**, against a baseline of the same 8 areas and `outside_root` 0. A pair outside the root is excluded from comparison and **counted** — `Convention.population()` ends `"; N sit outside the source root"`, and `examined` adds up to the pairs the graph offered.
-    >
-    > `liveness_finding` gained a keyword-only `severity`, defaulting to `warn` so every existing caller is byte-identical. A **total** stand-down passes the rule's declared severity; a **partial** inertness stays advisory. The distinction is the point: a dead glob beside nine live ones is a configuration smell, while a rule that checked none of its population is indistinguishable from a rule that never ran. This costs an adopter nothing — the rule ships `warn`, so a small graph still reports `warn` and no first `beadloom ci` goes red.
-    >
-    > `tests/test_source_root_minority.py::TestATotalStandDownCarriesTheDeclaredSeverity::test_the_gate_cannot_pass_while_the_rule_checked_nothing` runs the real linter and fails if a blocking rule stands down without `has_errors` being set. Both document paths are kept as permanent fixtures in `TestBothFacesOfTheCollapse`: one cause, two observables, and nothing but the doc path varies between them.
-    >
-    > **Residual, deliberately not fixed here and worth its own decision (#197):** `summary_facts` and `scenario_coverage` report their own total stand-down through the same seam and still hardcode `warn`. Only `doc_area_coherence` was measured, and escalating five rule types on one bead's evidence would be shipping four untested changes.
-
 194. [2026-08-26] [HIGH] [External: bd 1.0.4] `bd merge-slot` is not an exclusion primitive — every agent is the same actor, and `release` is not owner-checked
 
     **Severity:** high (CLAUDE.md mandates this primitive before every commit in a shared working tree; it cannot deliver what it is relied on for)
@@ -576,65 +454,6 @@
     **Expected:** treat a version as a claim about THIS project only when the mention is attributive — near a project-version keyword, or in a line that does not already name another subject — the same clause-scoping `.45` gave the count facts. Failing that, an explicit inline escape (a fenced block, or a marker) so a doc can quote a foreign version without a tolerance entry.
     **Related:** #169 (the token boundary for counts), #161, BDL-057 (the audit surface).
 
-189. ~~[2026-08-23] [MEDIUM] `beadloom sync-update <doc> --check` WRITES — a check flag that re-baselines the thing it was asked to report on~~ **CLOSED (BDL-061 S3b, `.58`)**
-
-    **Severity:** medium (it silences the warning it was asked to describe, and it is the defect class this epic exists to remove)
-    **Command:** `beadloom sync-update <doc-path> --check`
-    **Measured** on this repository while inspecting surface drift before deciding whether to re-attest. `beadloom sync-update docs/services/cli.md --check` printed `Re-baselined reference doc docs/services/cli.md.` and the following `sync-check --json` reported **6** surface-drift references where the previous run reported **7**. The flag asked for a report and got a write.
-    **Cause:** `services/commands/docsync.py` — in the non-`--yes` path the reference-doc branch (`mark_reference_synced`) is reached at line ~983, *before* the `if check_only:` guard at line ~994. `--check` is therefore honoured only when the argument resolves to symbol pairs; when it resolves to a reference doc's path, the branch that handles it never sees the flag.
-    **Why it matters beyond the one file:** a reviewer or an agent inspecting drift with `--check` — the flag whose whole contract is "tell me, do not change anything" — destroys the evidence it was inspecting, and the next `sync-check` reads clean for a reason nobody recorded. That is BDL-UX #147 (`lint` mutating the index) in a different command, and #163 (re-attesting can silence the check without evidence) reached by accident rather than by choice.
-    **Expected:** move the `check_only` guard above the reference-doc branch, and have `--check` on a reference doc print its `watches` set and its drift status instead of re-baselining it.
-    **Related:** #147 (a check that writes what it checks), #163 (re-attestation without evidence), BDL-057 (the reference surface).
-
-    > **CLOSED — the guard runs first, and the answer is read-only.** `check_only` is now honoured above the reference-doc branch, and `doc_sync.engine.describe_reference_doc()` answers it: one `SELECT`, one recomputed aggregate hash, no `UPDATE`, no `commit`. `beadloom sync-update <doc> --check` prints `  [surface drift] <doc> watches cli, graph` and the `reference_state` row is byte-identical afterwards (asserted on `(doc_path, aggregate_hash, status)` before and after, not on the absence of the word "Re-baselined"). The non-`--check` path still re-baselines — asserted too, so the guard cannot silently disable the command it guards.
-    > Checked while there, since the entry raised the class rather than the line: `check_sync()` contains zero `UPDATE`/`INSERT`/`commit` in its own body, so `--check` on a SYMBOL pair was already clean. Stated as a measured result rather than left as an absence.
-
-188. ~~[2026-08-23] [HIGH] The orphan report and the migration guidance are computed on every scaffold and printed by nothing — NO CALLER, NO CAPABILITY~~ **CLOSED (BDL-061 S3b, `.58`)**
-
-    **Severity:** high (two shipped criteria are met by the library and not by the command anybody runs)
-    **Command:** `beadloom setup-agentic-flow`
-    **Measured** on a temp project carrying a pre-BDL-048 layout (`.claude/commands/{dev,test,review,tech-writer,epic-init}.md`) and a hand-edited `.claude/commands/coordinator.md`. `orphaned_flow_files()` returns five entries, each naming the file, where the role now lives, and the exact `rm -f` command. `ScaffoldResult.migration_notes` returns the note naming `.beadloom/flow/commands/coordinator.md` as the place the edit belongs. The command's own output loop covers only `commands_written`, `commands_skipped` and `claude_md`, so **neither list reaches stdout**. `grep -rn 'orphans\|migration_notes\|orphaned_flow_files' src/` finds no reader anywhere outside `agentic_flow_setup.py` itself.
-    **What the user sees instead:** `Skipped .claude/commands/coordinator.md (hand-edited; use --force)` — which advises the destructive flag and never mentions the project layer, the one place the edit could safely go.
-    **Why it matters:** BDL-UX #137 is recorded as closed by the orphan report, and BDL-061 S3's criterion "a hand-edited vendored file is reported with migration guidance" is recorded as met. Both claims are true of `scaffold()` and false of `beadloom setup-agentic-flow`. This is CONTEXT's own standing rule NO CALLER, NO CAPABILITY: a function nothing calls reads as "the feature exists".
-    **Expected:** print the orphan list (with its `rm -f` commands) and the migration notes after the write summary, the way `hooks.guards_registered` and `ignore.added` are printed.
-    **Related:** #137 (the orphan report), #151 (the destructive `--fix` this guidance replaced), #186.
-
-    > **CLOSED — `_echo_scaffold_findings()` is the caller.** `migration_notes` prints under *"Left alone (N) — your edits are the only copy of an intent"* with the `.beadloom/flow/<kind>/<name>.md` path, and `orphans` under *"Left by an older flow layout (N) — reported, never deleted"* with each `rm -f`. **`(hand-edited; use --force)` is gone** — the line advised the destructive flag and named nowhere safe, which was the actual harm; the migration note replaces it. Both assertions bite: removing the call takes both tests from passed to FAILED (measured).
-    > `ScaffoldResult.flow_config_written` was added in the same pass and printed the same way, so the file every composed artifact is built from is named on the run that creates it (#187).
-
-187. ~~[2026-08-23] [MEDIUM] A virgin `setup-agentic-flow` leaves `config-check` red — four errors on a repository nobody has touched~~ **CLOSED (BDL-061 S3b, `.58`)**
-
-    **Severity:** medium (it is a first-contact experience, and it is the exact "green project goes red" shape the slice is built to avoid)
-    **Command:** `beadloom setup-agentic-flow` then `beadloom config-check`
-    **Measured** on a fresh TypeScript project (`package.json`, one `.ts` file, `beadloom init --yes --mode bootstrap`, then `setup-agentic-flow` with no flags). `config-check` exits **1** with four errors, one per role adapter: *"scaffolded agentic-flow file drifted from the shipped template … this repo has no .beadloom/flow.yml, so the role files are the plain vendored scaffold"*. Writing a three-key `.beadloom/flow.yml` and re-running gives `Agent-config in sync — no blocking drift`, rc **0**.
-    **Cause:** `setup-agentic-flow` resolves the config through `resolve_flow_config` (auto-detecting `stack: typescript`) and composes the role adapters from it, but never **writes** a `flow.yml`. `config-check` without one takes the no-flow.yml branch and expects the plain vendored role files, which the composed ones are not.
-    **Why it is not cosmetic:** the command's own closing advice is *"1) `beadloom config-check` keeps the scaffolded flow + CLAUDE.md auto-regions honest"*. Following it immediately produces four errors on an untouched repository, with a remediation that tells the reader to add a `flow.yml` — which is the right answer, arrived at through a failure.
-    **Expected:** either persist the resolved selection as `.beadloom/flow.yml` on scaffold (it is the file the whole feature is configured by, and the command already knows every value), or have `config-check` compare against the same resolution the scaffold used. The first is the smaller change and makes the configuration visible.
-    **Related:** #184 (the same command family answering an expected state with a failure shape), #186.
-
-    > **CLOSED by the first of the two options — the selection is written down.** `flow_config.persist_flow_config()` writes the resolved config to `.beadloom/flow.yml` on a first scaffold and **never** over an existing one (that file is the adopter's policy — `language` and `overlays.suppress` have no flag and live only there). Measured end to end on a fresh TypeScript project: `init` → `setup-agentic-flow` → `config-check` **rc 0**, where it was rc 1 with four errors. The command names the file it wrote.
-    > **A second defect fell out of the fix and is worth more than the first.** `scaffold()` re-resolved the config from disk with `resolve_flow_config(project_root)` — **ignoring the CLI flags** — while the command resolved its own for `generate_adapters`. So `beadloom setup-agentic-flow --architecture fsd` composed the four ROLE adapters as `fsd` and the slash commands and `CLAUDE.md` as `ddd`, in one run, silently. The caller's resolved config is now threaded in (`scaffold(config=…)`) and a test asserts the flag reaches both.
-
-186. ~~[2026-08-23] [HIGH] 🔴 `config-check --fix` deletes a hand edit in a role adapter — one line after the check printed "It will NOT be rewritten"~~ **CLOSED (BDL-061 S3, `.59`)**
-
-    **Severity:** high (it destroys unrecoverable user text, and it does so by following the command's own printed advice)
-    **Command:** `beadloom config-check` then `beadloom config-check --fix`
-    **Measured** by sha256 in a clean temp repository (`init` → `flow.yml` → `setup-agentic-flow`, then a four-line append to `.claude/agents/dev.md`):
-
-        scaffolded  999889b630259ffc5a46380f333c27f10603d6e640d30f63cf11cd8a41e5e748
-        edited      27a6ffbc81d249ac928001db2f6f3fd577f2792388b12c52eb3af585f521e7af
-        after --fix 999889b630259ffc5a46380f333c27f10603d6e640d30f63cf11cd8a41e5e748
-
-    **The contradiction is inside one command's output.** `config-check` reports: *"hand-edited: the body differs from the composition AND from what Beadloom last wrote. It will NOT be rewritten → move the additions to .beadloom/flow/roles/dev.md"*, and then closes with the generic *"Run `beadloom setup-rules --refresh` (or `config-check --fix`) to fix."* Doing what the last line says undoes what the line above promised.
-    **Cause:** `config_sync.refresh_composed_adapters` calls `generate_adapters` unconditionally. Its sibling `refresh_agentic_flow_files` was deliberately made non-forcing for the slash commands and `CLAUDE.md` (BDL-UX #151); the role-adapter path did not get the same treatment, and BDL-061 `.10`/`.11` measured the fixed path rather than this one.
-    **Why it is the sharpest of the three:** every other finding in this family is a message that is missing or wrong. This one is data loss, in the exact scenario BDL-UX #139 and #152 exist to end — a team putting its standing engineering practice in a role file.
-    **Expected:** `refresh_composed_adapters` must skip an adapter whose flow-manifest state is `hand_edited` (leaving the finding standing), and the generic remediation line must not name `--fix` when the findings include a hand edit.
-    **Related:** #151 (the destructive `--fix` this was supposed to have ended), #139, #152, #188.
-
-    > **CLOSED by option (a) — `--fix` honours the sentence.** `refresh_composed_adapters` classifies each adapter first and hands the unowned ones to `generate_adapters(preserve=…)`, which neither writes **nor records** them (recording a digest we did not write would make the next run believe the edit was ours). Re-measured on a clean temp repository: scaffolded `77dfc84f…` → edited `26a0da67…` → **after `--fix` `26a0da67…`**, exit 1, the file named under *Declined to rewrite*. Option (b) — qualifying the sentence — was rejected: it is cheaper and honest, and it leaves a documented data-loss path in a command whose name promises repair.
-    > Three things beyond the one file. (1) **`unverified` is declined too**, not just `hand_edited`: it is a `warn`, so overwriting one would have destroyed content and then printed "no blocking drift" at exit 0 with no red anywhere. The rule is one phrase — *`--fix` rewrites only what Beadloom can prove it wrote.* (2) **The run says what it did**: `apply_config_fixes` digests the artifact surface before and after the writers and names every file created or rewritten, with the count on the summary line — measured against the disk rather than trusting the writers, several of which over-report. (3) **The closing advice stops offering `--fix`** for a finding it will decline (`ConfigDrift.fixable`).
-    > One pre-existing misclassification had to go first, measured not argued: on a repo scaffolded **before** adopting a `flow.yml`, all four `.claude/agents/*` read `hand_edited` (`_scaffold_vendored` writes those bytes and never records a digest). Declining them would have made `--fix` refuse for ever to recompose files Beadloom itself wrote. The vendored body is now an `alternate`, so it reads `stale` and recomposes — **unowned is not the same as somebody's only copy**.
-
 185. [2026-08-23] [LOW] SUSPECTED: a byte-identity assertion over a WAL-mode database may accuse the wrong thing — one occurrence, not attributable
 
     **Severity:** low, and deliberately filed as a SUSPICION rather than a defect
@@ -654,45 +473,6 @@
     **Why it is worse than an ugly traceback:** an uninitialised project is a *legitimate, expected* state for this command, since `config-check` is one of the first things anyone runs. So the most likely first-contact experience with the command is a silent failure that reads as "your config is wrong" rather than "there is no index yet, run `beadloom init`".
     **Expected:** an absent index is an answer, not an exception — say so and exit on a code that means it (this is `unverifiable is not clean` again, from the caller's side rather than the checker's). At minimum, never exit non-zero with both streams empty: a verdict nobody can read is not a verdict.
     **Related:** #175 (a rebuilt index has nothing to compare against), #174, #146 — the same family, and this is the entry point.
-
-183. ~~[2026-08-23] [HIGH] 🔴 Every adopter's `CLAUDE.md` states **Beadloom's** version as the project's own — and it reads as correct on the one repo where it is~~ **CLOSED (BDL-061 S3b, `.58`)**
-
-    **Severity:** high (a false fact written into the file an agent treats as authoritative, in a section describing the adopter's project)
-    **Command:** `beadloom setup-agentic-flow`, `beadloom init`
-    **Context:** found by review `.11` and reproduced by the coordinator. `onboarding/scanner/claude_md.py:125` calls `application.doctor.get_actual_version()`, which returns **`beadloom.__version__`** — Beadloom's own version, correctly and deliberately so, since it exists to diagnose Beadloom's version drift (#92). That value is then rendered into the composed `CLAUDE.md` as `- **Current version:** …` inside the section describing *the adopter's project*. A JavaScript project at `0.4.1` gets `Current version: 2.2.0`.
-    **Why it survived:** on this repository the fact is *true by coincidence* — we are Beadloom, so our project version and Beadloom's version are the same string. Every check, every review and every dogfood run has read a correct line. The defect is only visible from a project that is not Beadloom, and we have never rendered one.
-    **This is the class BDL-UX #177 named, still open after #177's mechanism was fixed.** #177 was about our project-local *text* reaching adopters through a test that rewrote the shipped template; that leg is closed and now structurally prevented. This is our project-local *facts* reaching adopters through composition, and nothing prevents it. Closing #177 on the strength of the first leg was premature — the coordinator did that, and this entry is the correction.
-    **Expected:**
-    - Read the adopter's version from the adopter's project (`pyproject.toml`, `package.json`, `Cargo.toml`, a VCS tag), and render nothing rather than something false when it cannot be determined — *unknown is not zero*, the rule this epic has applied to every other reading.
-    - Audit the whole composed output the same way, not just this line: **which other rendered facts are computed about Beadloom rather than about the project?** One was found by reading; nobody has swept the rest.
-    - A test that renders `CLAUDE.md` for a **non-Beadloom** fixture project would have caught this and would catch the next one. There is no such fixture today, which is why a correct-looking line survived four slices of scrutiny.
-    **Related:** #177 (same class, different mechanism), #92 (why `get_actual_version` is right about Beadloom), #139/#152.
-
-    > **CLOSED — and the one-line fix was the least of it.** The deliverable is `tests/adopter_project.py`: five projects that are **not** Beadloom (TypeScript `0.4.1`, Rust `1.2.3`, Python `3.7.0`, Poetry `0.9.2`, and one declaring no version at all), rendered in `tests/test_adopter_projects.py`. Without a fixture the tool cannot be accidentally right about, the next instance survives exactly as this one did. Mutation-checked: restoring `get_actual_version()` and the hardcoded `DDD packages` takes 15 of 16 tests from passed to FAILED.
-    > **THE SWEEP, stated with what was checked and not only with what was found.** Checked: the composed `CLAUDE.md`, all four composed slash commands, all four composed role adapters, both auto-regions, and every `doctor` check that reads an adopter's `CLAUDE.md`. **The four role adapters are CLEAN** — a checked result, not an absence. Found, beyond the version line:
-    > - `- **Architecture:** DDD packages` was a **constant**. An `fsd` project was told it was DDD. It now follows the declared architecture and claims no methodology when none is declared.
-    > - The `Stack` bullet matched the target's manifest against **Beadloom's own dependency names** (`sqlite`, `click`, `rich`, `tree-sitter`) and printed `Python 3.10+` — *our* floor — for a project on `>=3.12`. It now names the project's declared stack, its `requires-python` verbatim, and its own first six declared dependencies.
-    > - `_get_actual_packages()` fell back to scanning `<adopter>/src/beadloom/` — our layout, looked for inside their tree. Deleted; `detect_source_packages()` scans theirs.
-    > - The shipped `CLAUDE.md` template **seeded** the auto-region with our stack, our nine DDD packages and `Current version: 2.2.0` — the bytes an adopter holds until the first refresh. Now a neutral one-line placeholder.
-    > - Our identifiers still shipped in the composed text: `BDL-037` and `BDL-UX-Issues #97` in the core, `BDL-036` twice and our issue-log filename three times in the coordinator command. That is #177's third "Expected" item, which its closure claimed and its check never covered.
-    > **The biggest catch was not the renderer.** `application/doctor.py::_check_agent_instructions` **audits four claims in the adopter's `CLAUDE.md` against BEADLOOM's state**: version vs `get_actual_version()`, packages vs a scan for `src/beadloom/`, stack vs the literal `{python, sqlite}`, test framework vs the literal `pytest`. All four read OK here by the same coincidence. Fixing only the renderer would have turned **every adopter's `doctor` red on upgrade** (their correct `0.4.1` against our `2.2.0`) — the precise constraint this epic is built on, reached from the other side. Each check now reads the project, and a fact the project does not declare is `INFO … not verified`, never a drift verdict.
-    > `get_actual_version()` is **unchanged**: it is right about Beadloom (#92) and the defect was always its caller.
-    > **The general half, so the class does not need re-finding:** `beadloom_local_facts_in(text)` is a deny-list of this repository's own identifiers — our epic key, our issue numbers, our issue-log filename, bead ids, `src/beadloom`, our `__version__`, our package names — asserted over every composed artifact, and it names the offender it found rather than failing bare.
-
-182. ~~[2026-08-23] [HIGH] 🔴 `symbols_changed` is computed per node, so one changed file marks every pair of that node stale — and the only way through is bulk re-attestation~~ **CLOSED (BDL-061 S6, `beadloom-mr2l.78`)** — `sync_state` gained `file_symbols_hash`, the symbol surface of a pair's OWN code file, beside the per-node `symbols_hash`. Only the file-level fact can make a pair `stale`; a pair whose sibling moved is `unverified` with the reason `sibling_symbols_changed` and NAMES the file that moved, and `sync-update` is not offered for it. *Stale, unverified and ok are three states*, and the epic's existing vocabulary supplies the second one — no fifth word was invented (#174/#175 `missing`/`unverified`, `.76` `excused`, `.77` `null`). Measured in two clean rooms off `e255a21` differing only in this change: appending one function to `application/architecture_view.py` produced **69 stale pairs, 67 naming a file nobody touched**; the same perturbation now produces **2 stale and 67 `unverified/sibling_symbols_changed`**, each carrying `details: architecture_view.py`. Both exit 2 — the gate still bites, on the pairs somebody can act on. A row with an empty `file_symbols_hash` keeps the node-level answer, and the file fact carries the same provenance as the node fact or is not written, so an existing index sees NO change on the reindex that adds the column and moves to file granularity at its first attestation.
-
-    **This defect was filed three times** — #105 (2026-06-01), #133 (2026-06-15) and #182 (2026-08-23) — over eleven weeks, each time from a fresh measurement and each time without the earlier one being found. Three reports of one root is itself the finding: the log is searched by symptom (`symbols_changed`, `worktree`, `re-baseline`) and the three symptoms share no word.
-
-    **Severity:** high (it manufactures the exact situation #163 warns about, on every doc pass, and the tool's own remediation is the unsafe act)
-    **Command:** `beadloom sync-check`, `beadloom sync-update`
-    **Context:** measured on BDL-061 S2b's doc pass. The gate reported **28 stale pairs** on `docs/domains/onboarding/README.md`. Exactly **one** of them had a changed file (`services/commands/docs.py`). The other 27 read `symbols_changed` while their files were untouched, because `symbols_hash` is stored per `ref_id` rather than per file: one file's symbols move, the node's hash moves, and every pair the node owns goes stale together.
-    **Why it is worse than noise:** the writer is handed 28 pairs, told they are stale, and given `sync-update` as the remedy. Twenty-seven of them cannot be revised, because nothing about their files changed — so the only available action is to re-attest in bulk. That is precisely the "attested but never revised" hazard #163 was filed for, and here the tool *requires* it rather than merely permitting it. The honest pass on this repo was 1 revision and 27 deliberate re-attestations, and there was no better answer available.
-    **Compounding:** because the 28 print as 28 near-identical gate lines (#167), the one pair that genuinely needed attention is indistinguishable from the 27 that did not — the signal is diluted by exactly the factor of the defect.
-    **Expected:**
-    - Compute the staleness fact at the granularity of the thing that changed. A pair is stale when *its* file's symbols moved, not when a sibling's did.
-    - If per-node hashing is deliberate (it is cheaper), then the pairs that follow from it must be reported differently — `unaffected` or `sibling_changed`, never the same word as a pair whose own file moved. This is the same distinction the rest of this slice turned on: **unverifiable, unaffected and stale are three states and they must not print one word.**
-    - Whatever the fix, `sync-update` should not be the recommended action for a pair nobody can revise.
-    **Related:** #163 (re-attesting without evidence — this is the mechanism that forces it), #167 (28 identical lines), #146/#174/#175 (one word for several states).
 
 181. [2026-08-23] [MEDIUM] Clean-room verification is the right technique and structurally cannot see a cross-bead interaction — nothing runs the combined tree until a human does
 
@@ -773,27 +553,6 @@
     **Expected:** an infrastructure failure is not a pass. Either fail the job (so the required check blocks and a human re-runs it), or report `neutral`/`skipped` so it is visibly not a verification — never `success`. If the intent is "do not block on flaky infra", that is a decision about whether the check should be required at all, and it should be made explicitly rather than implemented by exiting 0.
     **Related:** #174, #175 — same equation (*unverifiable is not clean*), this time in our own CI rather than in the tool.
 
-177. ~~[2026-08-23] [HIGH] 🔴 Editing our own `CLAUDE.md` silently ships the edit to every adopter — the propagation loop~~ **CLOSED (BDL-061 S3, `.9`)** — the direction is reversed: the shipped core is authored package data, `.claude/CLAUDE.md` is COMPOSED from it plus this repo's own `.beadloom/flow/claude/CLAUDE.md`, and a local divergence is reported instead of flowing outward. Three corrections to the entry, all measured. (a) **The propagator was a TEST, not the pre-commit hook** — `tests/test_cli_setup_agentic_flow.py::TestSyncAgenticFlow::test_sync_round_trips_live_source` called `sync_agentic_flow(live)`, which rewrote the shipped template from the live file; in a clean room from HEAD one run moved its sha256 from `f360bc60…` to `6fcae821…` and the test PASSED while doing it. `pytest` runs inside `beadloom ci` and pre-push runs `beadloom ci`, hence "every commit". `sync_agentic_flow` now refreshes the AGENT assets only. (b) **The open question is answered, and worse than asked:** `config-check` was not "correct by design under the composition-result rule" — the `CLAUDE.md` body was verified by NOTHING. Measured on a scaffolded project: appending a paragraph → 0 drifts; deleting all of §7 → 0 drifts; replacing the whole file with `# gone` → 0 drifts, with the Gate printing `PASS: agent-config in sync`. It now compares against the composition result. (c) The third "Expected" item shipped: `test_no_bead_id_or_issue_number_in_the_shipped_templates` scans everything under `templates/` for a bead id. It was demonstrated to bite — a sabotage that re-enabled the snapshot put `beadloom-mr2l.42` back into the clean room's template and the test caught it.
-
-    **Severity:** high (project-local context leaves the project without anyone deciding that it should, and the propagation happens inside a commit rather than at a review point)
-    **Command:** the `install-hooks` pre-commit coherence step; `beadloom config-check`
-    **Context:** the coordinator added a warning to `.claude/CLAUDE.md` §6 saying `setup-branch-protection` is not safe to re-run *in this repository right now*. Committing it left `src/beadloom/onboarding/templates/agentic_flow/CLAUDE.md.txt` modified — the hook had copied the paragraph into the shipped template **verbatim**, including the bead id `beadloom-mr2l.42` and the claim "`main`'s live protection has **seven**".
-    **Issue:** both of those are facts about *this* repository. A bead id means nothing to an adopter, and the seven-contexts claim is simply false for them — a freshly scaffolded project gets nine contexts and a workflow that produces all nine, so the warning that is urgent for us is wrong for them. Caught only because `git status` was read after the commit; nothing announced the propagation.
-    **The deeper problem is that there is no separation to enforce.** `.claude/CLAUDE.md` is simultaneously this project's instructions and the artifact we distribute, so every project-specific sentence is a shipping decision made by accident. This is exactly what BDL-061 S3 (`compose(core, architecture, stack, project)` with a project overlay) exists to fix, and this entry is the concrete case for it: the failure is not hypothetical drift, it is our own bead identifiers reaching adopters' onboarding text.
-    **Expected:**
-    - Until the overlay lands, the propagation must be **announced, not silent** — a hook that rewrites a distributed artifact should say so and require confirmation, the same standard we hold `sync-update` to (#163).
-    - The direction should be explicit. Today a local edit flows *outward* by default; the safe default is that the shipped template is the source and a local divergence is reported, with promotion to the template a deliberate act.
-    - Add a check that no project-local identifier — bead ids, our issue numbers, our repo's measured facts — appears in anything under `templates/`. Cheap, and it would have caught this at the commit.
-    **Related:** #139/#152 (a project has no supported place for its own additions — the same gap from the adopter's side), #163 (re-attesting without evidence).
-    **CORRECTION, one commit later: this is a LOOP, not an instance, and "fixed for this instance" was wrong.** The template was rewritten to an adopter-true paragraph and committed. The very next commit's pre-commit hook **re-propagated the project-local text over it**, restoring the bead id and the seven-contexts claim in the working tree. The hook enforces *template == our `CLAUDE.md`* in one direction, so the shipped artifact cannot diverge from this project's own instructions by construction — any correction survives exactly until the next commit. It reached `main` intact only because the re-propagation landed in the working tree and was never staged; a single `git add -A` would have shipped it. The severity is therefore not "a paragraph leaked once" but "the distributed artifact is permanently pinned to one project's local text, and the mechanism silently undoes attempts to separate them".
-    **Open question, noticed while fixing this and deliberately not chased here:** after the two files were made to differ on purpose, `beadloom ci` still reported `config-check PASS: agent-config in sync`. That is plausibly correct by design — CONTEXT's decision is that `config-check` verifies the *composition result*, not file bytes — but it has not been verified, and "in sync" printed over two files that demonstrably differ is the exact shape this slice spent itself on. Whoever takes S3's composition work should establish which it is before relying on that green.
-    **SECOND CORRECTION — the mechanism was misattributed, by the coordinator, twice.** It is not the pre-commit hook. `beadloom-mr2l.9` traced it to a **test**: `TestSyncAgenticFlow::test_sync_round_trips_live_source` rewrote the shipped template from this project's live `.claude/CLAUDE.md` (sha256 `f360bc60…` → `6fcae821…` in one clean-room run) and **passed while doing it**. `pytest` runs inside `beadloom ci`, and `beadloom ci` is what the pre-push hook runs — which is why it looked like a commit-time hook. The phenomenon was real and reproduced twice; the cause named in this entry was wrong both times.
-    **That makes it a worse defect than filed, in a different way.** A test that mutates a tracked source file as a side effect and reports success is not a propagation policy anyone chose — it is an invisible write from the one part of the system whose entire job is to observe without changing. It also means the shipped artifact was, in effect, regenerated from one project's local text every time anyone ran the suite. Fixed in S3 (`beadloom-mr2l.9`); verified by the coordinator: running that test now leaves the template byte-identical (`046c1839…` before and after, `git status` clean).
-    **The lesson worth keeping is about the diagnosis, not the code:** the coordinator observed the effect at commit time and named the nearest plausible cause twice without isolating it. REPORTS ARE NOT EVIDENCE applies to the coordinator's own reports.
-    **THIRD FINDING, and it closes the entry: the role leg was still live after the `CLAUDE.md` leg was fixed.** `.10` found three tests writing to four tracked files (`TestSyncAgenticFlow` → `templates/agentic_flow/agents/*.md.txt`) and proved in a clean room that an edited live role file ships after a *failing* run as well as a passing one. It was invisible to `git status` for a reason worth stating plainly: **the write is undetectable whenever it happens to be byte-identical — and it ships whatever it is not.** So "is the tree dirty afterwards?" was never a sound test for this defect, which is why two rounds of looking at `git status` missed it.
-    **Now structural rather than fixed case-by-case** — the shape this epic keeps having to reach for. `tests/tracked_write_guard.py` plus a `conftest` call-phase hook fails any test that writes a git-tracked file. Verified by the coordinator: a probe test that writes and restores `README.md` fails with the guard's own explanation, and `README.md` is left clean. A fourth instance of this defect can no longer be written without the suite rejecting it.
-    **The MECHANISM is closed; the CLASS is not.** See #183: our project-local *facts* still reach adopters through composition — every adopter's `CLAUDE.md` renders Beadloom's version as the project's own. Marking this entry resolved on the strength of the test-write fix was premature.
-
 176. [2026-08-23] [LOW] An incremental `reindex` prints `Imports: 0` and `Rules: 0` on the run that refreshed them
 
     **Severity:** low (cosmetic, but it is a zero printed by the command whose honesty BDL-061 S2 restored)
@@ -802,54 +561,6 @@
     **Issue:** `ReindexResult.imports_indexed` and `.rules_loaded` are only populated on the `--full` path (`application/reindex/full.py`), while the incremental path calls `reindex_file_imports()` without recording a count, so the CLI's `Imports:` / `Rules:` lines print the dataclass defaults. A reader cannot distinguish "no imports were touched" from "imports were refreshed and nobody counted them".
     **Expected:** either backfill both counters to the live DB totals on the incremental path — the fix #112 already applied to `Symbols:` for exactly this reason — or label them as per-run deltas and omit them when the path does not compute one. Same shape as #148: a number whose meaning depends on which path produced it.
     **Related:** #112 (closed, BDL-047 — the identical defect on `Symbols:`), #148.
-
-175. [2026-08-22] [CRITICAL] 🔴 A clean-database `beadloom ci` is structurally blind to doc staleness — the rebuild adopts the current tree as its own baseline
-
-    **Severity:** critical (the freshness gate reports PASS for work it cannot have checked, and the blindness is *caused by* the practice this project recommends for a different defect)
-    **Command:** `beadloom reindex` on a fresh DB, then `beadloom sync-check` / `beadloom ci`
-    **Context:** found by the S2 review bead, reproduced by the coordinator. One modified source file (`graph/linter.py`), its paired doc untouched, measured by exit code:
-
-    ```
-    incremental reindex → sync-check   exit 2   (stale — correct)
-    rm beadloom.db; reindex → sync-check exit 0   (blind)
-                            → beadloom ci exit 0
-    ```
-
-    **Issue:** a fresh database holds no prior baseline, so the rebuild records the current hashes *as* the baseline. Nothing is stale relative to a baseline created a second ago. `sync-check` then reports every pair fresh and the gate exits 0.
-    **Why it is worse than an ordinary false green:** the blindness is produced by following this project's own advice. Standing rule CLEAN-DB LINT told every agent to lint on a clean database, because incremental reindex did not refresh import edges (#142). That workaround silently made the *freshness* leg vacuous. **A workaround for one lying check created another** — and the coordinator ran the gate that way all through BDL-061 S1 and S2, reporting the results as authoritative verification each time.
-    **Pre-existing at `main`** (`7c5fa7d`), not introduced by S2 — verified by the reviewer against `main`'s own code.
-    **Expected:**
-    - A rebuild must not silently establish a baseline. Either it preserves the prior baseline where one exists, or `sync-check` must report "no baseline — not checked" rather than "fresh". The distinction is the same one #174 and #146 turn on: *unverifiable* is not *clean*.
-    - `beadloom ci` should know whether the index it just built has a usable baseline, and say so in the sync-check line rather than printing a count that means nothing.
-    - Once fixed, delete the practice too: with #142 retired in BDL-061 S2, "lint on a clean DB" is no longer needed, and leaving the habit in place keeps the hazard alive.
-    **Related:** #174 (the gate passes when a declared doc is deleted), #146, #172, #173. Same theme, and this entry is the one that explains why nobody noticed the others sooner.
-    > **FIXED in BDL-061 (`beadloom-mr2l.47`, one fix with #174).** The load-bearing decision was WHERE the baseline lives: `.beadloom/beadloom.db` is a derived cache — git-ignored, per-machine, dropped by every rebuild and absent on every fresh CI checkout — so a baseline kept only there is destroyed by the act that most needs it. It now lives in **git**, which is committed by construction and cannot be lost. Each pair records its baseline's provenance (`baseline_source`: `index_build` / `carried` / `attested`, carried verbatim across a reindex and never promoted); a pair whose baseline was fabricated at index-build time and would otherwise read `ok` is corroborated against `HEAD`, and where git cannot answer it reads `unverified` — reported by name, never counted as fresh, `beadloom ci` prints the step **WARN**. MEASURED on the repro: edit `graph/linter.py`, leave its doc, `rm beadloom.db`, reindex → `stale` at exit 2 (was: 0 stale at exit 0). The practice is retired with the defect: nothing in `CONTEXT.md`, the guides or any role template now asks for a clean database before checking freshness.
-
-174. [2026-08-22] [CRITICAL] 🔴 The documentation gate is defeated by deleting documentation — `beadloom ci` exits 0 with every step PASS
-
-    **Severity:** critical (the product's central promise — "no code reaches `main` without current docs" — is satisfiable by removing the docs)
-    **Command:** `beadloom ci`, `beadloom sync-check`, `beadloom doctor`
-    **Context:** found by the S2 verification bead and reproduced by the coordinator through the real CLI before filing. Delete one SPEC that the graph declares, run the gate on a clean DB:
-
-    ```
-    rm docs/domains/graph/features/rule-engine/SPEC.md
-    beadloom ci
-      lint         PASS: 12 rules, 0 violations
-      sync-check   PASS: 269 pair(s) fresh     ← was 275
-      docs-audit   PASS: 13 mention(s) fresh
-      doctor       PASS: 21 check(s) clean     ← was 20
-      exit 0
-    ```
-
-    **Issue:** six declared pairs vanished and the gate called the result fresh. The `doctor` check count *rose* while a file was being deleted. Nothing anywhere reported that the declared surface had shrunk.
-    **Why it outranks every other false-green in this log:** the others make a check unreliable about what it examined. This one lets the thing being examined disappear. The cheapest way to pass the gate is now to delete the document rather than update it — and an agent under time pressure, a careless rebase, or a merge that drops a file all produce green.
-    **It is the exact shape of the `component`-node defect (#146), one level up.** That one said "clean" means "no pairs exist" rather than "docs are fresh", for a node kind. The same equation survives for whole DOCUMENTS. A pair whose doc is gone is not fresh — it is unverifiable, and those two must not print the same word. `sync-check` calling a pair `ok` when the file is gone is the same defect from the other side.
-    **Expected — the third item is the one that makes it durable:**
-    - A declared doc that does not exist is a failure, not an absence; *missing* and *stale* are different facts and should read differently.
-    - The declared-pair **count** is part of the contract. A run whose count fell since the last run must say so — the silent 275 → 269 was the available signal and it was discarded.
-    - **Nothing may pass by having less to check.** Audit every gate step against that sentence, not only `sync-check`: `doctor` reported 21 clean while a file vanished, and its `20 check(s) clean` separately counts 9 warnings and 1 "not verified". A count that grows when the tree shrinks is not a count of anything.
-    **Related:** #146 (same equation, node kind), #172 (a rule that cannot match reads clean), #173 (the audit affirms one fact thirteen times). Together these four are one theme: *a green result that describes the checker's ignorance rather than the code's health.*
-    > **FIXED in BDL-061 (`beadloom-mr2l.46`, one fix with #175 — both are "unverifiable is not clean", and they diverge only in the verdict each earns).** Three parts. (1) A pair whose doc or code file is gone is `missing`, not `ok`. (2) The DECLARED surface is checked against the tree: every doc a node names in its `docs:` list is cached in the new `declared_docs` table at reindex, so a declaration outlives the file it names and `declared_doc_missing` fails the gate by NAME after a reindex has removed the pairs — `missing` and `stale` read differently, because restoring a file and updating a doc are different actions. (3) The count is part of the contract: `sync-check --record-surface` writes the committed `.beadloom/sync-surface.json`, and a later run whose declared surface FELL says so with both numbers (warning, not a verdict — the cause that matters fails on its own). `doctor`'s count was audited too: `run_checks` returns one entry per FINDING, so `len(checks)` counted problems and rose 20 → 21 while a file was being deleted; the summary now counts the CHECKS that ran, by severity, and prints *clean* only when every check is OK.
 
 173. [2026-08-23] [HIGH] 🔴 `docs audit` reports green about facts it never checked — three measured false-negative classes, and one of them printed a false claim as *verified*
 
@@ -867,21 +578,6 @@
     - Only then revisit the `<10` threshold and the modifier window: with coverage reported, their cost is visible instead of invisible.
     **Related:** #170's third piece ("report the surface, not just the firings") is the identical defect on the guard binding; #161 and #169 are the same audit being confident about text it misparsed. Tracked as `beadloom-mr2l.45`.
     > **FIXED in BDL-061 (`beadloom-mr2l.45`).** Not three parser fixes — the audit now REPORTS WHAT IT DID NOT VERIFY, which is the same equation as #174/#175 (`unverifiable is not clean`) and #172 (a rule that cannot match reports itself). Three parts. (1) **Per-fact coverage.** Every declared fact carries `verified` / `not_covered` / `unreadable`, printed against the fact in the `Ground Truth` block and summarised on the one line everybody reads — including the `beadloom ci` step line: `14 mention(s) fresh; 2/9 declared fact(s) verified, NOT VERIFIED: cli_command_count, edge_count, ...`. A fact nothing was found for is never counted as passing, and a mention hidden by a `docs_audit.ignore` rule is NOT coverage. (2) **Clause-scoped matching** fixes the modifier class: both the modifier window and the keyword window stop at `,` `;` `:` and the dashes, so `316 edges, one per import` is read and the `14` in `exposes 18 tools: 14 over the graph` is not. The separator set was chosen by MEASUREMENT — parentheses are deliberately excluded because they cost the true verification in `MCP tools (18):`, and a lost true positive is the very silent false negative being fixed. Repo-wide: 0 mentions gained, 5 lost, all five confirmed false positives; three more `docs_audit.ignore` entries went dead and were retired. (3) **The scan surface is published** — all 33 unread documents named with the pattern that skipped them, plus the count-suppressed ones, in `--verbose` and in `--json`. The single-digit floor was RE-MEASURED and KEPT: removing it yields 14 extra mentions on this repo of which 13 are ordinals, table cells and category breakdowns, several of which would have failed the Gate. Trading a silent false negative for a loud false positive that then needs a suppression entry is the wrong trade — so the floor stays and `language_count` (value 1) is now reported `unreadable` by name instead of reading green. Coverage is reported, not enforced (a WARN every project would carry on every run would spend the channel `sync-check` needs); `docs audit --fail-if unverified>N` is the opt-in. MEASURED after the fix: **2 of 9 declared facts verifiable-and-verified on this repo, 6 `not_covered` because no document states them, 1 `unreadable`** — and every one of those seven is now named in the output.
-
-172. [2026-08-22] [HIGH] 🔴 `from:` and `to:` are matched against two different vocabularies, so a `src/`-prefixed `to:` silently disables the rule — and the reference taught the broken form
-
-    **Severity:** high (the architecture gate printed a green count computed over rules incapable of firing; a required CI check, both git hooks, and the review role all read that count)
-    **Command:** `beadloom lint --strict`, `beadloom ci`
-    **Context:** found during BDL-061 S2 while fixing #142/#146/#147, and reproduced end-to-end through the real CLI. Two of this project's own twelve rules — `tui-no-direct-infra`, `onboarding-no-direct-infra` — could not match anything, while `lint --strict` reported `12 rules, 0 violations`.
-    **Issue:** `from:` is matched against the **repo-relative source file path as indexed** (`src/beadloom/tui/app.py`, source root included). `to:` is matched against the **dotted import path with dots replaced by slashes** (`beadloom.infrastructure.db` → `beadloom/infrastructure/db`) — no source root, no extension, because an import names a module rather than a file. A `to:` written `src/beadloom/infrastructure/**` therefore matches nothing, ever. Two engineers wrote the `src/`-prefixed form into `rules.yml` and neither noticed, because **the rules reference itself documented that form**. The defect is in the documentation as much as in the four lines of YAML.
-    **A second, independent defect in the same area:** a `to:` glob covering a package did not cover a *bare import of the package*. `from pkg.infrastructure import db` is indexed with `import_path == "pkg.infrastructure"` — the target is the package, not the module — so the most common Python reach-in form was invisible. The probe injected to reproduce this issue (`from beadloom.infrastructure import db` in the TUI) fired under **no** glob form until this was fixed, which is why the first reproduction attempt wrongly concluded all four rules were dead.
-    **Measured:** repairing rule 1 alone surfaces 1 violation (`tui/data_providers.py:284`); repairing rules 1 and 2 surfaces 7 (1 tui + 6 onboarding). The two `ai_agents` rules already carried the correct dotted `to:` and their zero was truthful — 11 of 221 indexed targets match them.
-    **Expected, and the third part is the one that matters:**
-    - State the two vocabularies in the rules reference, in one sentence, with an example of each. (Done in this fix.)
-    - Make a `to:` covering a package cover a bare import of it, while leaving sibling names (`pkg/infrastructure_docs`) unmatched.
-    - **Report a rule that cannot match.** A glob matching zero candidate imports across the whole graph is a `rule_liveness` warning, as is an exemption that suppresses nothing. This is the S1 guard lesson — *a check that can never fail is not a check* — applied to the linter, and it is what makes the fix permanent rather than a one-time correction.
-    **Related:** #142/#146/#147 make `lint` unreliable; this made a third of it inert. Same family, higher severity.
-    > Fixed in BDL-061 S2 (`beadloom-mr2l.43`).
 
 171. [2026-08-22] [MEDIUM] Concurrent `bd create` shifts the id out from under the id written in the title — and the wrong dependency edge is then perfectly valid
 
@@ -1013,26 +709,6 @@
     **Expected:** a separate cardinality key for the second question rather than overloading `max_symbols` — e.g. `max_subtree_symbols` (all symbols under the node's source, the old semantics) and/or `max_children` (how many nodes are `part_of` it). Keeping them distinct is the point: a threshold that silently answers whichever question happens to be convenient is how a metric stops meaning anything.
     > Deliberately NOT folded into the `domain-size-limit` threshold when it was recalibrated 290 → 180.
 
-152. ~~[2026-08-18] [MEDIUM] A project cannot extend a composed role adapter — overlays resolve only INSIDE the installed package~~ **CLOSED (BDL-061 S3, `.9`)** — proposal (a), with the drift-guard kept. A project layer at `.beadloom/flow/{roles,commands,claude}/<name>.md` composes AFTER the shipped overlays, and `config-check` verifies the **composition result**, so the addition is part of the expected output rather than drift. The minimum bar is also met and then some: `--fix` no longer deletes non-empty hand-authored content at all — a hand-edited file is reported with the project-layer path it belongs in and left exactly as it is.
-
-    **Severity:** medium (structural; it is the reason a downstream project's gate ends up depending on an unreleased upstream change — see #151)
-    **Command:** `beadloom setup-agentic-flow` / `config-check`
-    **Context:** Dogfood on a downstream project that treats its role adapters as the project's agent contract and refines them with project-specific engineering standards.
-    **Issue:** `role_composer.compose_role()` reads fragments from `roles_templates_root()` = `Path(__file__).parent / "templates" / "roles"` — `CORE` + one `architecture` overlay + `stack` overlays, all **inside the installed package**. `flow.yml` selects *which shipped overlays* compose; it cannot point at project-local ones. So a project that wants a standing paradigm in its `dev`/`review` roles has no supported place to put it: any local edit is reported as drift by `config-check`, and `--fix` removes it (no diff shown, no confirmation).
-    **Observed consequence:** the downstream project's paradigm was therefore contributed **upstream into Beadloom's own core templates** (the only durable option). That worked — and then made the project's CI gate depend on the change being *published*, which it was not (#151). A project-level overlay would have decoupled the two entirely.
-    **Expected / proposal:** (a) a project-local overlay directory (e.g. `.beadloom/roles/<role>.md.txt`) appended after the shipped overlays, so project additions survive recomposition **and** the composed part still gets drift-checked; or (b) marker-delimited hand-authored regions inside the generated file — the pattern already used for the auto-managed CLAUDE.md sections (`<!-- beadloom:auto-start -->`) — with `config-check` diffing only outside them. Minimum bar regardless: `--fix` should print the diff and refuse to delete non-empty hand-authored content without an explicit flag.
-
-151. [2026-08-18] [HIGH] 🔴 The published release lags `main`: role templates codified in BDL-059 are unreleased, so every fresh install reports `config-check` drift against projects scaffolded from `main`
-
-    **Severity:** high (a downstream CI gate cannot pass, and the remedy the tool steers you toward is destructive)
-    **Command:** `beadloom config-check` / `config-check --fix`
-    **Context:** Dogfood on a downstream project wiring the Beadloom gate into GitHub Actions. With the segfault of #150 fixed, `beadloom ci` finally executed and reported `config-check FAIL: 3 drifted artifact(s)` for `.claude/agents/dev.md`, `.claude/agents/review.md`, `.claude/commands/coordinator.md`.
-    **Issue:** the drifted content is the **cohesion-driven design** section in the dev/review roles and the **autonomy/permission posture** section in the coordinator — all three codified into Beadloom's OWN shipped templates by BDL-059 (`68e53ff`, `faa83bc`, present in `main`). The published PyPI **2.1.0 does not contain them**, and the version was not bumped afterwards. So the project's files match the *newer* composition while a fresh install checks them against the *older* one.
-    **Diagnostic trap worth noting** — this cost the downstream investigation a wrong first diagnosis, recorded here because the shape is general: `config-check` returned **exit 1 in a sandbox clone and exit 0 in the working repo**, with the three files byte-identical (`cmp`) and both reporting version `2.1.0`. The difference was invisible from the outside: the working repo's `beadloom` was installed **from the source checkout**, the sandbox's **from PyPI**. Two installs that self-report the same version disagreed about what the correct output is. A version string that does not distinguish "released 2.1.0" from "`main` after BDL-059, still called 2.1.0" makes environment skew undiagnosable — the same silhouette as #150, where the discriminating variable was install *date* rather than install *source*.
-    **🔴 The remedy is destructive here:** `config-check --fix` would rewrite the files back to the **older** templates — measured at **42 deletions, 0 insertions** in a sandbox clone — silently deleting a standing engineering paradigm the project relies on. The remedy string (`run `beadloom setup-agentic-flow` to recompose`) reads like a safe re-sync, so the operator is steered straight at it.
-    **Expected:** cut a release containing BDL-059 (and bump the version so source-installs and released installs are distinguishable); make `config-check` name the template-set version it compared against, so a drift report can be read as "your files are newer than my templates" rather than "your files are wrong"; and have `--fix` show the diff before deleting hand-authored content.
-    **Workaround adopted downstream:** run the gate as `beadloom ci` **minus** `config-check` (`reindex`/`lint --strict`/`sync-check`/`docs audit`/`doctor` as blocking steps), with `config-check` kept as a separate informational step whose comment names both the cause and an explicit **exit condition** — it rejoins the blocking gate as soon as a release containing BDL-059 exists.
-
 147. [2026-08-05] [HIGH] 🔴 `beadloom lint` MUTATES the index — a read-only-sounding verb writes to `beadloom.db`, and there is no read-only mode without `--no-reindex`
 
     **Severity:** high (a verification verb has a side effect on the artifact it verifies; blocks any least-privilege/read-only integration)
@@ -1065,17 +741,6 @@
     **Expected:** exit non-zero (or print an explicit note) when `--scope` resolves to a node with no contained nodes, so the caller can fall back to a neighbourhood view and say why.
     **Workaround:** downstream detects the degenerate output and falls back to the node's neighbourhood diagram plus an honest note to the reader.
 
-146. [2026-08-03] [HIGH] `component` nodes are absent from `sync-check` pairs entirely — their docs are NEVER checked for staleness, and the green result reads as "docs fresh" when it means "nothing was looked at"
-
-    **Severity:** high (false-green on a freshness gate; same class as #142 — the gate reports success for a check it never performed)
-    **Command:** `beadloom sync-check` / `beadloom ci`
-    **Context:** Dogfood on a downstream DDD project. A slice landed a new capability inside a `kind: component` node whose `services.yml` entry declares `docs:` and whose SPEC carries `<!-- beadloom:track= -->` markers. The dev wave reported "sync-check by node `<component>` — clean" and the coordinator accepted it. A later tech-writer wave discovered the node is not in the sync set **at all**: `sync-check --json` returns pairs for every `kind: feature` node plus the top `service`, and for **none** of the four `kind: component` nodes in the graph. "Clean" meant "zero pairs exist", not "docs match code".
-    **Issue:** Pair construction appears to be keyed on node kind (feature/service) rather than on "node declares `docs:`". A component's docs can therefore rot indefinitely with a permanently green gate — and, worse, the operator/agent is actively misled, because the same command prints an OK line for feature nodes right next to the silent gap. There is no "N nodes declare docs but contribute no pairs" warning anywhere in `sync-check`, `doctor`, or `ci`.
-    **Expected:** Build sync pairs for ANY node that declares `docs:` (kind-independent), or — if components are deliberately out of scope — say so explicitly in the output (`skipped: 4 component nodes`) and flag it in `doctor`. A freshness gate must never return green for files it did not examine.
-    **Workaround:** Verify component docs by reading the code; do not trust `sync-check` for them. Detect the gap with `sync-check --json` and compare the set of `ref_id`s against the nodes that declare `docs:` in `services.yml`.
-    > **Fixed in BDL-061 S2 (`beadloom-mr2l.5`), verified in `.6` and `.7`.** Pairing was never keyed on node kind — it read annotations only, which is why the kinds whose sources carry no `# beadloom:` comment looked exempt. `build_sync_state` now falls back to the files a node's `source:` OWNS when annotations yield none, `check_sync` no longer short-circuits on an empty `sync_state`, and `find_unchecked_doc_nodes` NAMES every node that still contributes no pair, with a reason (`no_indexed_code`, `files_owned_by_nested_nodes`, `no_source`) — advisory, never changing the exit code. Measured on this repository: 272 → 275 pairs, all 22 `component` nodes covered, 4 nodes named as not-checked where the gate previously printed nothing.
-    > **Residue:** one of those reasons names the wrong cause. `graph-reads` is reported `no_indexed_code` for a file that IS indexed; what is absent is ANNOTATED symbols, because the module's annotations sit inside its docstring, which `extract_symbols` does not read. Bead `beadloom-mr2l.50`.
-
 145. [2026-08-03] [MEDIUM] `ctx <ref> --json` returns the REPO-WIDE `code_symbols` array, not the focused node's — an agent sizing/inspecting a node from its own context bundle reads every other package's symbols
 
     **Severity:** medium (agent-facing correctness; silently wrong data, not an error)
@@ -1094,15 +759,6 @@
     **Expected:** Group the stale report by ref/doc with a count (`conversation: 41 stale`, `application: 118 stale`, …) + a one-line total, so the fix target (`sync-update <ref>`) is obvious at a glance. Optionally a `--summary` mode. Per-occurrence detail behind `--verbose`.
     **Workaround:** `beadloom sync-check --json` and group client-side; defer to the tech-writer `sync-update` wave regardless of the noise.
 
-139. ~~[2026-07-29] [MEDIUM] Composed role adapters are byte-identical drift-guarded with no methodology/quality overlay slot~~ **CLOSED (BDL-061 S3, `.9`)** — a standing team practice now has a home: `.beadloom/flow/roles/<role>.md` is composed into the adapter and is part of the drift baseline, so `beadloom ci` stays green and the role subagents' own system prompts carry it (no per-launch injection needed). The workaround this entry recorded — keep it in CLAUDE.md prose — is retired; `.beadloom/flow/claude/CLAUDE.md` is the supported equivalent for the entry point itself.
-
-    **Severity:** medium (blocks `beadloom ci` → blocks merge on a PR-gated main; forces a standing team practice OUT of the role adapters)
-    **Command:** `beadloom config-check` / `beadloom setup-agentic-flow` / `beadloom ci`
-    **Context:** A team adopting the vendored multi-agent flow wanted extra engineering paradigms to be **standing across all development** — BDD acceptance (Gherkin) and mutation testing — by hand-editing the four composed role adapters (`dev`/`test`/`review`/`tech-writer`) so each role's protocol carries the added discipline.
-    **Issue:** The role adapters are drift-guarded **byte-identical** against `CORE + <arch> + <stack>` composition, and the overlay set is a fixed enum (architecture `ddd`/`fsd` × stack `python`/…). There is **no project-local "extra"/"append" overlay slot** for role adapters. So ANY hand-edit trips `config-check` → `beadloom ci` goes red. The only offered remedy (`config-check --fix` / `setup-agentic-flow`) **destructively recomposes to canonical**, stripping the added methodology. Net: a standing team practice cannot live in the role adapters at all — it can only sit in `CLAUDE.md` user-prose, so the role subagents' own system prompts never carry it (it reaches them only if the orchestrator injects it per-launch or the agent happens to read a project doc).
-    **Expected:** A project-local, drift-**tolerated** extension point for role adapters — e.g. a `flow.yml` `overlays.custom:` / per-role `append:` slot (analogous to `CLAUDE.md`'s preserved user-prose regions), composed INTO the adapter and INCLUDED in the drift baseline — so a team can add standing practices to `dev`/`test`/`review`/`tech-writer` protocols without tripping `config-check`.
-    **Workaround:** Keep the methodology in `CLAUDE.md` preserved user-prose (outside auto-regions — not drift-checked) + have the orchestrator inject the extra discipline into each subagent's launch prompt; revert the adapters to canonical (`git checkout <pre-edit> -- .claude/agents/*.md`) to restore a green `config-check`.
-
 138. [2026-07-02] [MEDIUM] `docs generate` silently no-ops on a coarse graph; no monolith-drift guard; `component`→`DOC.md` not generated
 
     **Severity:** medium (product docs rot silently; no signal to the agent)
@@ -1118,24 +774,6 @@
     - Generate a `DOC.md` skeleton for `kind: component` (parity with feature SPEC).
     **Workaround (the downstream project-side):** re-annotate source with granular `beadloom:feature=`/`component=` tags + rebuild `services.yml` with feature/component nodes, then `docs generate` + migrate `architecture.md` sections (tracked as the downstream project-Issues #1–#4).
 
-132. ~~[2026-06-15] [MEDIUM] `setup-agentic-flow --force` corrupts the vendored `CLAUDE.md` placeholder when run in Beadloom's own repo~~ **CLOSED (BDL-061 S3, `.9`)** — fixed by construction rather than by a guard: nothing writes the `CLAUDE.md` core any more. `sync_agentic_flow` no longer re-vendors it from the live copy, so `--force` cannot substitute a project name over `__BEADLOOM_PROJECT_NAME__`. The "do NOT run `--force` in the Beadloom repo" workaround is retired.
-
-    **Severity:** medium
-    **Command:** `beadloom setup-agentic-flow --force`
-    **Context:** Observed during BDL-056 while recomposing the role adapters after editing the CORE tech-writer role.
-    **Issue:** Running `--force` inside the Beadloom repo re-vendors the flow snapshot FROM the live composition. The live `.claude/CLAUDE.md` §0.1 has Beadloom's concrete project facts substituted in, so the re-vendor wrote `## 0.1 Project: beadloom` into the packaged `src/beadloom/onboarding/templates/agentic_flow/CLAUDE.md.txt`, **replacing the `__BEADLOOM_PROJECT_NAME__` placeholder**. That breaks the project-name substitution for every downstream adopter (the `TestClaudeMdRegionsPerProject` tests fail). It is a self-referential footgun: Beadloom is the source of the vendored template, so `--force` overwrites the template with the substituted instance.
-    **Expected:** Re-vendoring should preserve the `__BEADLOOM_PROJECT_NAME__` placeholder (re-tokenize the project name on re-vendor), or `--force` should refuse to re-vendor the CLAUDE.md asset from a substituted live copy. Until fixed, do NOT run `setup-agentic-flow --force` in the Beadloom repo to recompose only role adapters — recompose the adapter files without re-vendoring CLAUDE.md, or revert the CLAUDE.md asset afterward.
-    **Workaround:** After `--force`, `git checkout` the vendored `agentic_flow/CLAUDE.md.txt` (and the live `.claude/CLAUDE.md`) to restore the placeholder (done in BDL-056).
-
-133. ~~[2026-06-15] [LOW] Per-worktree `beadloom.db` baseline causes mass false re-baseline when integrating parallel worktree waves~~ **CLOSED (BDL-061 S6, `beadloom-mr2l.78`)** — the same root as #182, judged and fixed together (as `.46`/`.47` did for their pair): the per-worktree baseline is the OCCASION, the per-node hash is the CAUSE. Integrating a wave changes some of a node's files, the node hash moves, and every pair the node owns — including modules the integration never touched — read `symbols_changed`, so the only remedy was the blanket `sync-update --yes --all` this entry recommends as a workaround. With the fact stored per file, only the pairs whose own file the integration changed are stale and the untouched pairs keep the baseline they were integrated with. The per-file baseline is CARRIED across a reindex rather than recomputed, because recomputing it would re-baseline against the tree just indexed, which is how the integration erased the drift it brought in. Pinned by the executable scenario `Integrating a parallel wave does not re-baseline untouched doc pairs` (`tests/acceptance/features/sibling_baseline.feature`, PRD US-6 criterion 4).
-
-    **Severity:** low
-    **Command:** `beadloom sync-check` (after integrating worktree-isolated dev beads)
-    **Context:** BDL-057 coordinator integration. Two dev beads ran in isolated git worktrees (`isolation: worktree`); each has its OWN `.beadloom/beadloom.db` (a working-tree path). After file-checkout-integrating their code into the main branch, the main repo's `beadloom.db` still held pre-change baselines, so `sync-check` reported ~38 stale pairs (incl. modules the integration didn't touch) until a `sync-update --yes --all` + reindex fixpoint re-baselined.
-    **Issue:** The doc-freshness baseline (`sync_state`) lives in the per-worktree DB, so it does not travel with the file-checkout integration. The integrator must re-run the mark-synced→reindex fixpoint to reconcile — extra friction, and a risk of masking genuine drift if done blindly. Relates to #118 (parallel-dev tree friction).
-    **Expected:** Either document the "re-baseline after worktree integration" step in the coordinator merge flow, or make the baseline reconcilable from the integrated code state without a blanket `--all` (e.g. recompute only the pairs whose code actually changed in the integration diff).
-    **Workaround:** After integrating worktree branches, run `beadloom sync-update --yes --all && beadloom reindex` to a stable `sync-check` 0 (the F4.1 fixpoint loop), then verify no genuine prose drift via the dev beads' API-CHANGE notes.
-
 134. [2026-06-16] [LOW] `sync-update --yes --all` never reaches fixpoint for `reference` (`watches=`) docs — surface_drift re-flagged every run
 
     **Severity:** low (warn-only — does NOT block the Gate or `sync-check` exit code)
@@ -1144,103 +782,6 @@
     **Issue:** The `reference_state` surface signature does not "stick" after `sync-update` (re-computed signature differs from the just-stored one, or `--all` doesn't persist the reference-doc re-attestation the way it persists symbol pairs). Because `surface_drift` is warn-only, `beadloom ci` and `sync-check` still exit 0 — so it is cosmetic, but it breaks the fixpoint invariant the F4.1 loop relies on and is noisy on every integration.
     **Expected:** `sync-update --all` should re-attest `reference` docs so a subsequent `sync-check`/`sync-update` reports them fresh (0 re-baselined on the second pass), matching symbol-pair behavior.
     **Workaround:** None needed for the Gate (warn-only, exit 0). Ignore the repeated count; confirm `beadloom ci` rc0 + the `TestSyncCheckNewPairs` test green as the real signal.
-
-135. [2026-06-18] [HIGH] `beadloom init` crashes with `UnicodeDecodeError` on a repo containing binary assets / a stray virtualenv
-
-    **Severity:** high (hard crash — "broken out of the box" on any repo with binary assets or a stray venv)
-    **Command:** `beadloom init -y`
-    **Context:** Dogfood on an adopter repo that contains a large binary-asset directory (image/model files — PNG, `.safetensors`, ~2 GB) with a stray virtualenv left inside it (`<assets>/tools/.venv*`).
-    **Issue:** Auto-detect added the binary-asset directory to `scan_paths` (alongside `src`) because it found a few `.py` files under it (including inside the stray venv). The reindex code-indexer then called `file_path.read_text(encoding="utf-8")` on a non-UTF-8/binary file and raised `UnicodeDecodeError: 'utf-8' codec can't decode byte 0xa4 in position 64` → full traceback, and `init` aborted half-done (`.beadloom/` was created, but the reindex step crashed). Call chain: `application/reindex/full.py:149` → `application/reindex/indexing.py:122` `_index_code_files` → `context_oracle/code_indexer.py:373` `extract_symbols` (`read_text(encoding="utf-8")` with no guard).
-    **Expected:** (a) the indexer must **skip non-UTF-8/binary files gracefully** (try/except → warn + skip; never abort the whole `init` over one file); (b) auto-detect should exclude virtualenvs (`.venv*`, `site-packages`) and binary-asset directories from `scan_paths`; (c) support `exclude_paths` (overlaps the existing `exclude_paths` improvement request). A single binary file must never abort `init`.
-    **Workaround:** manually narrow `.beadloom/config.yml` `scan_paths` to source-only, delete the stray venv(s), then `beadloom reindex`.
-
-136. ~~[2026-06-18] [MEDIUM] Scaffolded flow is English-only and not overlay-aware~~ **CLOSED (BDL-061 S3, `.9`)** — all three parts. (a) `language:` is a `flow.yml` field, a peer of `architecture`/`stack`, validated for shape rather than against a closed list; every composition layer prefers a `<name>.<lang>.md.txt` fragment and a missing localisation falls back **with a note** rather than silently. (b) The hardcoded facts left the cores: `templates.md`'s "Python 3.10+" and testing/linting rows now come from `templates/commands/stack/<stack>/`, and "Modular architecture | CLI → Core → Storage" from `templates/commands/architecture/{ddd,fsd}/`. (c) The commands and `CLAUDE.md` are composable exactly like the role agents, so an adopter adapts them without breaking the drift-guard. The "ALL documents MUST be written in English" line is now the `doc-language` auto-region, rendered from `language:`.
-
-    **Severity:** medium
-    **Command:** `beadloom setup-agentic-flow` / `/templates` / `/task-init`
-    **Context:** Adopting the flow on a non-CLI async-service project with DDD architecture whose documentation is maintained in a non-English language.
-    **Issue:** The vendored `templates.md` + `task-init.md` hardcode: (a) **English** doc language ("ALL documents MUST be written in English") — `flow.yml` has `tools`/`architecture`/`stack`/`quality` but **no `language`** field; (b) **"Python 3.10+"** in the CONTEXT/RFC templates regardless of the project's actual Python version; (c) **"Modular architecture | CLI → Core → Storage"** in the CONTEXT template — that is Beadloom's OWN architecture, not derived from the project's `architecture: ddd|fsd` overlay. Because these files are drift-guarded byte-identical to upstream, an adopter cannot edit them without turning `beadloom ci` red, so they must override the defaults in CLAUDE.md prose. Same root cause as #77 (CLAUDE.md not adapted to the target stack), but for the vendored commands/templates after the BDL-052 configurator split.
-    **Expected:** (a) add a `language` field to `flow.yml` (a peer of `architecture`/`stack`), threaded into the composed/vendored docs so docs scaffold in the project's language; (b) make the templates' architecture/stack facts overlay-derived (DDD/FSD layer names; the project's Python from `pyproject.toml`) instead of the hardcoded "CLI → Core → Storage" / "3.10+"; or at minimum (c) make the templates composable (CORE + overlays) like the role agents, so they adapt per-project without breaking the drift-guard.
-    **Workaround:** override the defaults at project level in CLAUDE.md (a project-level rule beats the vendored default).
-
-137. ~~[2026-06-18] [LOW] Cross-major flow re-init leaves orphaned command files and skips changed vendored commands as "hand-edited"~~ **CLOSED (BDL-061 S3, `.9`)** — the "at least a printed warning" option, plus the reason the surgical migration was needed in the first place. (a) `orphaned_flow_files()` reports every file a prior layout left in `.claude/commands/` — the four role files and `epic-init.md` — each with the exact `rm -f` command and, for a role, where it moved to; they are reported, never deleted. (b) A changed vendored command is no longer an undifferentiated "hand-edited; use --force": the flow manifest separates *stale* (Beadloom wrote it, the composition moved → recomposed in place) from *hand_edited* (reported with the `.beadloom/flow/commands/<name>.md` path, never rewritten), so a cross-major re-init recomposes what it owns without `--force`. (c) `--force` no longer clobbers a customised `CLAUDE.md` body either, because the customisation belongs in the project layer, which composes on top. **Closure amended (BDL-061 `.12`, 2026-08-23): (a) is true of the LIBRARY and not of the command.** `orphaned_flow_files()` computes the list and `beadloom setup-agentic-flow` prints nothing from it — measured, no caller anywhere in `src/`. (b) and (c) hold as written. The unprinted half is re-opened as #188; this entry is left closed for the parts that shipped rather than reverted wholesale, because the mechanism is right and only its output is missing.
-
-    **Severity:** low
-    **Command:** `beadloom setup-agentic-flow` (on a repo scaffolded by an older major flow version)
-    **Context:** Re-initializing the agentic flow on a repo whose `.claude/` was scaffolded by an older layout (roles were slash commands in `commands/`); the current layout puts roles in `agents/`.
-    **Issue:** `setup-agentic-flow` wrote the new `agents/*` and re-vendored `templates.md`, but (a) **left the old role files orphaned** in `.claude/commands/` (`dev.md`/`test.md`/`review.md`/`tech-writer.md` + the deprecated `epic-init.md`) — it does not remove files from a previous layout; and (b) **skipped** `coordinator`/`task-init`/`checkpoint` as "hand-edited; use --force" because their old-version content differed from the new canonical (a safety refusal). The adopter had to manually delete the orphans and delete+regenerate the changed commands — and `--force` also overwrites the base CLAUDE.md, so a surgical migration needs manual glue. Broader than the documented "orphaned adapters" limitation (which is about a dropped *tool*); this is a changed *role layout* across a major version.
-    **Expected:** a migration path — e.g. `setup-agentic-flow --migrate` that removes superseded command files from a prior layout and re-vendors changed commands without clobbering the CLAUDE.md body; or at least a printed warning listing the orphaned/skipped files with the exact cleanup commands.
-    **Workaround:** manually `rm` the orphaned `commands/*` role files + `epic-init.md`, delete the 3 skipped command files, then re-run `setup-agentic-flow` (so they are written fresh) — avoiding `--force` to preserve a customized CLAUDE.md.
-
-122. ~~[2026-06-04] [HIGH] No data-access layer + `open_db` without context-managers (connection leaks)~~ **CLOSED (BDL-059 S2, #22)** — `infrastructure/repository.py` (typed graph-index reads; centralizes the 16× `SELECT ref_id, kind, summary FROM nodes`) + `infrastructure/db.py::connection()` context-manager; `tui/` now reads through the `application/graph_reads.py` facade (no raw SQLite in presentation). Leaks/ResourceWarnings addressed via the CM + S1 conftest yield/finally fixtures.
-
-    **Severity:** high
-    **Source:** REVIEW-2 §2 #1/#2 (verified at HEAD) · ROADMAP Technical-debt
-    **Issue:** Raw `conn.execute("SELECT…")` is spread across **36 files** in all domains incl. `tui/data_providers.py` (presentation reads SQLite directly — a layer leak); the exact `SELECT ref_id, kind, summary FROM nodes` is hardcoded **16×**. `open_db` is called with **no `with`/`contextlib.closing` anywhere** → connection leaks on exceptions (SQLite write-lock risk) + ResourceWarnings in tests.
-    **Expected:** Introduce `infrastructure/repository.py` (one place for queries); `tui` goes through the application layer only; wrap connections in a context-manager. Fixes both HIGHs at once. _(Note: the review's "53 open_db" figure is off — 27 in src / 232 total; the leak pattern is real.)_
-
-123. ~~[2026-06-04] [HIGH] N+1 + non-indexable LIKE in `doc_sync/engine.py` `check_source_coverage`~~ **CLOSED (BDL-059 S2, #22)** — `check_source_coverage` de-N+1'd: ~5N per-node/child queries + `LIKE '%…%'` replaced by 5 set-based prefetch queries + an indexable `json_each` match; golden parity (frozen oracle + AST guard).
-
-    **Severity:** high
-    **Source:** REVIEW-2 §2 #3 (verified, `engine.py:451-525`) · ROADMAP Technical-debt
-    **Issue:** Nested per-node and per-child queries plus `LIKE '%…%'` (cannot use an index) → quadratic on a large graph.
-    **Expected:** Prefetch with a single JOIN / `IN (...)`; consider a normalized annotations table.
-
-124. ~~[2026-06-04] [MEDIUM] Cycle detection re-explores from every node (no global visited)~~ **CLOSED (BDL-059 S3, #23)** — cycle detection rewritten WHITE/GREY/BLACK with path-as-set O(1) membership (`graph/rules/cycles.py`); golden-parity test reproduces the pre-refactor output byte-identically.
-
-    **Severity:** medium
-    **Source:** REVIEW-2 §2 #4 (verified, `rule_engine.py:1141-1209`) · ROADMAP Technical-debt
-    **Issue:** `evaluate_cycle_rules` runs DFS from each node with no global `visited`; `neighbor in path` is O(n) list membership; bounded only by `max_depth=10`. Exponential risk on a dense microservice graph. (A per-rule `seen_cycles` dedup exists, but no global visited.)
-    **Expected:** Tarjan/Johnson SCC, or DFS with WHITE/GREY/BLACK + a shared visited set; `path` as a set.
-
-125. ~~[2026-06-04] [MEDIUM] God-domain `graph/` should split out `federation` + `rules`~~ **CLOSED (BDL-059 S3, #23)** — `rule_engine.py` (2249)→`graph/rules/` package + `federation.py` (1000)→`graph/federation/` package, by cohesion (public import paths byte-stable). The `domain-size-limit` graph warning (was #119) was resolved by the owner-decided recalibration 200→280 (documented in `rules.yml`) — recalibration, NOT gaming (an in-domain split can't lower a domain's symbol count).
-
-    **Severity:** medium
-    **Source:** REVIEW-2 §2 #5 (verified) · extends #119 · ROADMAP Technical-debt
-    **Issue:** `graph/` is 6439 lines (rule_engine 1743 + federation 1000 + import_resolver 929) and mixes several concerns; `application/` is 233 symbols. Both trip the `domain-size-limit` warning (graph 202, application 233 vs 200).
-    **Expected:** Extract `federation` and `rules` into their own packages (clears the graph-202 warning of #119); reduce `application/`.
-
-126. ~~[2026-06-04] [MEDIUM] God-functions carry business logic in the wrong layer~~ **CLOSED (BDL-059 S4, #24)** — `cli.py:status` data-gathering moved to `application/status.py` (presentation/logic split); `cli.py` (3985)→`services/commands/` package; `scanner.py` (2770)→`onboarding/scanner/` package; `reindex.py` (1352)→`application/reindex/` package — the god-functions decomposed by responsibility.
-
-    **Severity:** medium
-    **Source:** REVIEW-2 §2 #6 (verified) · ROADMAP Technical-debt
-    **Issue:** `cli.py:status` ~283 lines (business logic in the CLI layer); `scanner.bootstrap_project` ~260; `reindex.incremental_reindex` ~216; `scanner.interactive_init` ~203.
-    **Expected:** Extract `cli.py:status` → `application/status.py`; decompose the scanner/reindex god-functions.
-
-127. ~~[2026-06-04] [LOW] `Any` concentration + exception swallowing in onboarding~~ **CLOSED (BDL-047)** — the `doc_generator.py` `except sqlite3.OperationalError: pass` swallows are gone (the handlers now bind `as exc` and surface/raise the error instead of silently passing). **Remaining (out of this epic's scope):** `infrastructure/git_activity.py:251` still has an `except ValueError: pass` on date parsing, and the broader `Any` concentration in onboarding is the larger type-safety item — both now **CLOSED (BDL-059 S5, #25)** — `git_activity.py` broad except narrowed to specific types (subprocess/`OSError`/`TimeoutExpired`); onboarding scanner dicts → `TypedDict` (new `onboarding/scanner/types.py`), a net `Any` reduction, mypy --strict clean.
-
-    **Severity:** low
-    **Source:** REVIEW-2 §2 #7/#8 (verified) · ROADMAP Technical-debt
-    **Issue:** 172 `Any` total, concentrated in onboarding (`doc_generator.py` 49, `scanner.py` 25, `config_reader.py` 19) — disables type-safety in the most error-prone layer. 7 spots of `except…: pass` (incl. `doc_generator.py:274,311` `except sqlite3.OperationalError: pass`) hide real DB errors.
-    **Expected:** TypedDict/dataclass for parsed structures; narrow the exceptions and/or log at debug.
-
-128. ~~[2026-06-04] [MEDIUM] L2 context cache not wired into `build_context`~~ **CLOSED (BDL-059 S5, #25)** — `build_context` now routes through the `SqliteCache` (transparent ETag cache; identical bundle on hit vs miss, proven by golden + HIT-never-recomputes tests).
-
-    **Severity:** medium
-    **Source:** REVIEW §4.4 (verified `builder.py`) · ROADMAP Technical-debt
-    **Issue:** `build_context` issues `SELECT * FROM code_symbols` per bundle and never calls the existing L2 `bundle_cache` (`cache.py`) → latency risk on 50K-symbol monorepos.
-    **Expected:** Wire `build_context` through the L2 cache; avoid the per-bundle full symbol scan.
-
-129. ~~[2026-06-04] [MEDIUM] Test-suite hygiene gaps~~ **CLOSED (BDL-059 S1, #21)** — `pytest-randomly` added (immediately exposed + fixed a latent live-DB order-dependence via a session-scoped `live_repo_reindexed` conftest fixture); conftest yield/finally db fixtures (ResourceWarnings); a grammar-guard test that FAILS-not-skips when tree-sitter grammars are absent (gated `BEADLOOM_REQUIRE_LANGUAGE_GRAMMARS=1` in CI); tests decoupled from production internals (the private-attribute coupling reduced ahead of the S2–S5 refactors).
-
-    **Severity:** medium
-    **Source:** REVIEW-2 §3 + REVIEW §4.3 (verified) · ROADMAP Technical-debt
-    **Issue:** (a) ResourceWarnings from unclosed SQLite connections — suite goes red under `filterwarnings=error::ResourceWarning`; (b) tree-sitter grammars are silently skipped if absent → TS/Go/Rust can pass CI untested; (c) almost no parametrization (10 across 3211 tests); (d) **372** private-attribute (`._x`) couplings block refactors; (e) TUI smoke tests without asserts; (f) no `pytest-randomly` (order-dependence undetected).
-    **Expected:** conftest yield+finally db fixtures; make grammars mandatory in CI (or a guard test); parametrize hotspots (rule_engine, language suites); de-couple from private attrs before large refactors; add asserts to TUI tests; add `pytest-randomly`.
-
-130. ~~[2026-06-04] [HIGH] Docs list rule types as dataclass names, not real YAML keys (internal contradiction)~~ **CLOSED (BDL-057)** — the SPEC-fill rewrote `architecture.md` to a correct YAML-key table (`deny, require, forbid, layers, forbid_cycles, forbid_import, check`), matching the dispatch (`rule_engine.py`); `getting-started.md` no longer lists rule types; `README.md` was already correct. No `forbid_edge`/`cycle_detection`/`import_boundary`/`cardinality` strings remain in `docs/`.
-
-    **Severity:** high
-    **Source:** REVIEW-2 §4 #1 (verified) · ROADMAP Technical-debt
-    **Issue:** `getting-started.md:127` and `architecture.md` (×4: L83,113-119,153,253) list rule types as `require, deny, forbid_edge, layer, cycle_detection, import_boundary, cardinality` — these are **dataclass names**, not YAML keys. Real keys (dispatch `rule_engine.py:662-724`): `deny, require, forbid, forbid_cycles, forbid_import, layers, check`. `README.md:186` has the CORRECT list — an internal contradiction. A user who copies `forbid_edge:` gets a rule that silently never fires.
-    **Expected:** Single source of truth for rule-type keys; fix getting-started.md + architecture.md to match the dispatch (and README).
-
-131. ~~[2026-06-04] [LOW] Doc accuracy nits: non-existent flag, miscount, placeholders~~ **CLOSED (v2.1.0 release)** — all three fixed: `getting-started.md` drops the non-existent `--non-interactive` flag (now `--yes`/`-y` only); `architecture.md` DDD domain count corrected (six domains + application + two interface layers); `CONTRIBUTING.md` `your-org`→`zoologov` placeholder fixed + a Release Process section added.
-
-    **Severity:** low
-    **Source:** REVIEW-2 §4 #2/#3/#4 (verified) · ROADMAP Technical-debt
-    **Issue:** `getting-started.md:29` documents a non-existent flag `--non-interactive` (only `-y/--yes` exists); `architecture.md:9` says "six DDD domains" but lists five; `CONTRIBUTING.md` has `your-org` placeholders and no release-process section (PyPI/versioning/tag).
-    **Expected:** Drop `--non-interactive`; fix the domain count; replace placeholders with `zoologov/beadloom` + add a release section.
 
 114. [2026-06-02] [LOW] Committed VitePress scaffold ships no `package-lock.json` — `npm ci` cannot run on a fresh checkout
 
@@ -1251,32 +792,6 @@
     **Expected:** Either commit a `package-lock.json` alongside `package.json` (so `npm ci` works + the build is reproducible/pinned), or change the documented first-run command to `npm install`. Committing the lockfile is preferable — it pins the transitive dep tree for a deterministic dogfood/CI build.
     **Workaround:** Use `npm install` for the first build; commit the resulting `package-lock.json` so subsequent `npm ci` works.
     **Resolution (BEAD-05 follow-up):** `site/package-lock.json` is now committed (generated by `npm install`), so `npm ci` works on a fresh checkout and the dogfood build is reproducible/pinned. `site/node_modules` + `site/.vitepress/dist` stay gitignored.
-
-112. ~~[2026-06-02] [INFO/LOW] Incremental reindex displays `Symbols: 0` — per-run delta, not backfilled to the live total~~ **CLOSED (BDL-047)** — the incremental path now backfills `symbols_indexed` to the true live-DB symbol total (`SELECT count(*) FROM code_symbols`), mirroring the #88 nodes/edges fix, so a docs-only reindex no longer prints "Symbols: 0" on an intact index (`application/reindex.py:1330-1334`, comment cites #112).
-
-    **Severity:** info / low (cosmetic display only — zero gate impact)
-    **Command:** `beadloom reindex` (incremental path)
-    **Context:** Observed during BDL-039 F3 tech-writer doc edits. After #88 was fixed, the incremental reindex now backfills `nodes`/`edges` to the true live-DB totals on the docs/code-only path. The `symbols_indexed` counter, however, still reports only the **per-run delta** (symbols touched this run), so a CLI run that changes only docs can print "Symbols: 0" while the DB actually holds all indexed symbols.
-    **Issue:** Inconsistent reporting semantics between counters: `nodes`/`edges` show the live total (per #88), but `symbols_indexed` shows the run delta. A reader can misread "Symbols: 0" as "no symbols indexed."
-    **Expected:** Either backfill `symbols_indexed` to the live DB symbol total on the incremental path (consistent with nodes/edges per #88), or label it explicitly as a delta ("Symbols indexed this run: 0").
-    **Impact:** None on correctness or any gate — `sync-check` / `lint` / `doctor` / `beadloom ci` all read the DB, not this counter. Purely a cosmetic CLI-display artifact.
-
-105. ~~[2026-06-01] [MEDIUM] Adding a new source file to a domain re-stales the domain doc against ALL its member files~~ **CLOSED (BDL-061 S6, `beadloom-mr2l.78`)** — the earliest filing of the defect #182 re-found eleven weeks later. Its **Expected** was right in 2026-06 and is what shipped: "`symbols_changed` should fire only for the pair(s) whose own code symbols changed". A file that ARRIVES on a node whose baseline is carried gets no file-level fact of its own, because its arrival is part of what moved the node hash — so a genuinely-new module is still reported, and its unrelated siblings are not.
-
-    **Severity:** medium
-    **Command:** `beadloom reindex && beadloom sync-check`
-    **Context:** BDL-038 BEAD-01 added one new module (`src/beadloom/graph/contracts.py`) to the `graph` domain and edited one sibling (`federation.py`). Before the change `sync-check` was honest 0; after, it reported **8 stale pairs** for `domains/graph/README.md` — including files I never touched (`diff.py`, `snapshot.py`, `linter.py`, `rule_engine.py`, `import_resolver.py`, `cli.py`), all with reason `symbols_changed`. Verified by stashing the change: at HEAD the same pairs are clean.
-    **Issue:** The domain doc's symbol-drift baseline appears to be keyed on the domain's **aggregate** symbol set, so adding any symbol anywhere in the domain invalidates the `symbols_hash` for **every** doc↔file pair in that node — not just the pair whose code actually changed. One new file → N false `symbols_changed` pairs.
-    **Expected:** `symbols_changed` should fire only for the pair(s) whose own code symbols changed. A genuinely-new module should surface as a single `untracked_files` signal on the doc, not re-stale every unrelated sibling pair. (Compare #89: per-file granularity was the fix there too.)
-    **Workaround:** Document the new module in the domain README, then `mark_synced_by_ref(conn, '<domain>', root)` to re-baseline all pairs, then re-run to fixpoint (see #106).
-
-106. ~~[2026-06-01] [LOW] No non-interactive CLI to attest sync baseline (`mark_synced`) — only the interactive `sync-update`~~ **CLOSED (BDL-047 W1)** — `beadloom sync-update [REF] --yes` (and `--all` with `--yes`) now re-baselines freshness non-interactively (recomputes hashes + `symbols_hash`, sets `status='ok'`, no editor/prompt), wrapping `mark_synced_by_ref`. This is the primitive the F4.1 AI-tech-writer fixpoint loop uses; agents no longer reach past the CLI into the engine.
-
-    **Severity:** low
-    **Command:** `beadloom sync-update <ref>` (interactive: `click.confirm` + `click.edit`)
-    **Context:** After a doc refresh, re-baselining the sync state requires `mark_synced` / `mark_synced_by_ref` (`doc_sync.engine`). The only CLI surface is `sync-update`, which opens an editor and prompts — unusable in an agent/CI flow. BEAD-01 had to call the engine directly via `uv run python -c "...mark_synced_by_ref..."`.
-    **Issue:** There is no `beadloom sync-update <ref> --mark-synced` (or `beadloom sync-mark <ref>`) for non-interactive attestation. Agents must reach past the CLI into the engine.
-    **Expected:** A non-interactive attest flag/command, e.g. `beadloom sync-update <ref> --mark-synced` or `beadloom sync-mark [--ref R | --all]`, that recomputes hashes + `symbols_hash` and sets `status='ok'` without an editor. Pairs with the F4.1 AI-tech-writer loop (STRATEGY-3) which must attest non-interactively. Re-running `reindex && sync-check` after attest to a stable 0 is mandatory (F4.1 loop invariant — clearing `symbols_changed` surfaces masked `untracked_files`, as it did for `contracts.py` here).
 
 71. [2026-03-10] [MEDIUM] `beadloom init --bootstrap` generates rules that immediately produce lint violations
 
@@ -1324,26 +839,6 @@
     **Issue:** After saving `services.yml` with flow-style edges, `beadloom reindex` returned `Nodes: 0, Edges: 0` — a complete silent failure. No error, no warning. The YAML parser appears to not handle inline mapping syntax for edge entries. Rewriting all edges in block format (`- src: X\n  dst: Y\n  kind: Z`) fixed the issue immediately (18 nodes returned).
     **Expected:** Either (a) the YAML parser should correctly handle flow-style mappings (they are valid YAML), or (b) if the parser has limitations, it should detect the issue and emit a clear error: `"Error: edges at line N use unsupported inline format. Use block format instead."` Silent 0-node results are the worst possible failure mode — the user thinks the graph is empty.
     **Workaround:** Always use YAML block format for edges. Never use `- { key: value }` inline format in `services.yml`.
-
-91. [2026-05-28] [CRITICAL] Beadloom violates its own architecture rules; `lint --strict` is configured to pass anyway
-
-    **Severity:** critical
-    **Command:** `beadloom lint --strict` (exits 0) vs. actual graph state
-    **Context:** Self-audit during the comprehensive architecture/code review (2026-05-28). The product's core value proposition is enforcing architecture boundaries and catching dependency cycles.
-    **Issue:** `beadloom lint --strict` exits **0** on Beadloom itself despite **12 real violations** (verified live). Two compounding problems:
-    - (1) **The coupling is real.** `infrastructure` is a god-package: `infrastructure/reindex.py` (~1296 LOC) orchestrates every domain and imports them at module level (`infrastructure/reindex.py:14-16` → `context_oracle`, `doc_sync`, `graph`). Meanwhile `graph/linter.py:98` and `graph/import_resolver.py:820,882` import back into `infrastructure.reindex`, creating cycles. The cycle is openly acknowledged in a code comment (`graph/linter.py:95-96`: *"Lazy import to avoid circular dependency…"*) and worked around with function-local lazy imports instead of being fixed. Per the layer rule, `infrastructure` sits BELOW domains yet imports all of them.
-    - (2) **The alarm is silenced.** In `.beadloom/_graph/rules.yml`, `no-dependency-cycles` (line 39) and `architecture-layers` (line 45) are set `severity: warn`. `--strict` only fails on `error`-severity, so a graph full of cycles passes green.
-    **Expected:** A tool that sells architecture enforcement must pass its own enforcement. (a) Break the `infrastructure` god-package — extract reindex orchestration into a `services`-layer module, or invert the dependency so `infrastructure` stops importing domains; (b) restore `no-dependency-cycles`/`architecture-layers` to `severity: error`. Until then this is a credibility hole reproducible by any skeptic in two commands.
-    **Workaround:** None — structural issue, not a usage issue.
-
-92. [2026-05-28] [HIGH] `doctor` reports false "Version drift" on Beadloom itself (reads stale `importlib.metadata`, not `__version__`)
-
-    **Severity:** high
-    **Command:** `beadloom doctor`
-    **Context:** Self-audit (2026-05-28). Distinct from #73 (which is about doctor reading the user-authored `.claude/CLAUDE.md` on an *external* project). This is about doctor's notion of the "actual" version being wrong even on Beadloom's own repo.
-    **Issue:** `doctor` reports *"Version drift: CLAUDE.md claims 1.9.0, actual is 1.7.0"* while `src/beadloom/__init__.py:3` is `__version__ = "1.9.0"` and `status` shows 1.9.0. Root cause: `_get_actual_version()` (`infrastructure/doctor.py:274-281`) returns `importlib.metadata.version("beadloom")` first — stale editable-install metadata — and only falls back to source `__version__` on `PackageNotFoundError`. A diagnostic that confidently emits a wrong diagnosis erodes trust in all of doctor's output.
-    **Expected:** Treat the in-tree `__version__` as the source of truth for "actual version" (or compare directly against it). Installed-package metadata must not override the source version.
-    **Workaround:** Reinstall the package to refresh metadata; ignore the warning.
 
 93. [2026-05-28] [LOW] `AGENTS.md` MCP tool list is stale (documents 13 tools, actual is 14)
 
@@ -2000,6 +1495,543 @@
 ---
 
 ## Closed Issues
+
+### Verified fixed during the 2026-08-31 tracker cleanup
+
+Each entry below was checked against current behaviour before being closed, not
+assumed from the epic that was supposed to have fixed it. Two entries from the same
+sweep were checked and found STILL LIVE — #147 (`lint` mutates the index) and #160
+(AsyncAPI extraction has zero callers outside its own module) — and remain open.
+
+175. ~~[2026-08-22] [CRITICAL] 🔴 A clean-database `beadloom ci` is structurally blind to doc staleness — the rebuild adopts the current tree as its own baseline~~ **CLOSED (verified 2026-08-31)**
+
+    **Verified fixed:** a rebuilt index no longer declares everything fresh — 363 pairs come back `unverified` without a git work tree (measured 2026-08-31).
+
+    **Severity:** critical (the freshness gate reports PASS for work it cannot have checked, and the blindness is *caused by* the practice this project recommends for a different defect)
+    **Command:** `beadloom reindex` on a fresh DB, then `beadloom sync-check` / `beadloom ci`
+    **Context:** found by the S2 review bead, reproduced by the coordinator. One modified source file (`graph/linter.py`), its paired doc untouched, measured by exit code:
+
+    ```
+    incremental reindex → sync-check   exit 2   (stale — correct)
+    rm beadloom.db; reindex → sync-check exit 0   (blind)
+                            → beadloom ci exit 0
+    ```
+
+    **Issue:** a fresh database holds no prior baseline, so the rebuild records the current hashes *as* the baseline. Nothing is stale relative to a baseline created a second ago. `sync-check` then reports every pair fresh and the gate exits 0.
+    **Why it is worse than an ordinary false green:** the blindness is produced by following this project's own advice. Standing rule CLEAN-DB LINT told every agent to lint on a clean database, because incremental reindex did not refresh import edges (#142). That workaround silently made the *freshness* leg vacuous. **A workaround for one lying check created another** — and the coordinator ran the gate that way all through BDL-061 S1 and S2, reporting the results as authoritative verification each time.
+    **Pre-existing at `main`** (`7c5fa7d`), not introduced by S2 — verified by the reviewer against `main`'s own code.
+    **Expected:**
+    - A rebuild must not silently establish a baseline. Either it preserves the prior baseline where one exists, or `sync-check` must report "no baseline — not checked" rather than "fresh". The distinction is the same one #174 and #146 turn on: *unverifiable* is not *clean*.
+    - `beadloom ci` should know whether the index it just built has a usable baseline, and say so in the sync-check line rather than printing a count that means nothing.
+    - Once fixed, delete the practice too: with #142 retired in BDL-061 S2, "lint on a clean DB" is no longer needed, and leaving the habit in place keeps the hazard alive.
+    **Related:** #174 (the gate passes when a declared doc is deleted), #146, #172, #173. Same theme, and this entry is the one that explains why nobody noticed the others sooner.
+    > **FIXED in BDL-061 (`beadloom-mr2l.47`, one fix with #174).** The load-bearing decision was WHERE the baseline lives: `.beadloom/beadloom.db` is a derived cache — git-ignored, per-machine, dropped by every rebuild and absent on every fresh CI checkout — so a baseline kept only there is destroyed by the act that most needs it. It now lives in **git**, which is committed by construction and cannot be lost. Each pair records its baseline's provenance (`baseline_source`: `index_build` / `carried` / `attested`, carried verbatim across a reindex and never promoted); a pair whose baseline was fabricated at index-build time and would otherwise read `ok` is corroborated against `HEAD`, and where git cannot answer it reads `unverified` — reported by name, never counted as fresh, `beadloom ci` prints the step **WARN**. MEASURED on the repro: edit `graph/linter.py`, leave its doc, `rm beadloom.db`, reindex → `stale` at exit 2 (was: 0 stale at exit 0). The practice is retired with the defect: nothing in `CONTEXT.md`, the guides or any role template now asks for a clean database before checking freshness.
+
+174. ~~[2026-08-22] [CRITICAL] 🔴 The documentation gate is defeated by deleting documentation — `beadloom ci` exits 0 with every step PASS~~ **CLOSED (verified 2026-08-31)**
+
+    **Verified fixed:** deleting a declared SPEC now yields `[missing]` and `sync-check` rc 2; restoring it returns rc 0 (measured 2026-08-31).
+
+    **Severity:** critical (the product's central promise — "no code reaches `main` without current docs" — is satisfiable by removing the docs)
+    **Command:** `beadloom ci`, `beadloom sync-check`, `beadloom doctor`
+    **Context:** found by the S2 verification bead and reproduced by the coordinator through the real CLI before filing. Delete one SPEC that the graph declares, run the gate on a clean DB:
+
+    ```
+    rm docs/domains/graph/features/rule-engine/SPEC.md
+    beadloom ci
+      lint         PASS: 12 rules, 0 violations
+      sync-check   PASS: 269 pair(s) fresh     ← was 275
+      docs-audit   PASS: 13 mention(s) fresh
+      doctor       PASS: 21 check(s) clean     ← was 20
+      exit 0
+    ```
+
+    **Issue:** six declared pairs vanished and the gate called the result fresh. The `doctor` check count *rose* while a file was being deleted. Nothing anywhere reported that the declared surface had shrunk.
+    **Why it outranks every other false-green in this log:** the others make a check unreliable about what it examined. This one lets the thing being examined disappear. The cheapest way to pass the gate is now to delete the document rather than update it — and an agent under time pressure, a careless rebase, or a merge that drops a file all produce green.
+    **It is the exact shape of the `component`-node defect (#146), one level up.** That one said "clean" means "no pairs exist" rather than "docs are fresh", for a node kind. The same equation survives for whole DOCUMENTS. A pair whose doc is gone is not fresh — it is unverifiable, and those two must not print the same word. `sync-check` calling a pair `ok` when the file is gone is the same defect from the other side.
+    **Expected — the third item is the one that makes it durable:**
+    - A declared doc that does not exist is a failure, not an absence; *missing* and *stale* are different facts and should read differently.
+    - The declared-pair **count** is part of the contract. A run whose count fell since the last run must say so — the silent 275 → 269 was the available signal and it was discarded.
+    - **Nothing may pass by having less to check.** Audit every gate step against that sentence, not only `sync-check`: `doctor` reported 21 clean while a file vanished, and its `20 check(s) clean` separately counts 9 warnings and 1 "not verified". A count that grows when the tree shrinks is not a count of anything.
+    **Related:** #146 (same equation, node kind), #172 (a rule that cannot match reads clean), #173 (the audit affirms one fact thirteen times). Together these four are one theme: *a green result that describes the checker's ignorance rather than the code's health.*
+    > **FIXED in BDL-061 (`beadloom-mr2l.46`, one fix with #175 — both are "unverifiable is not clean", and they diverge only in the verdict each earns).** Three parts. (1) A pair whose doc or code file is gone is `missing`, not `ok`. (2) The DECLARED surface is checked against the tree: every doc a node names in its `docs:` list is cached in the new `declared_docs` table at reindex, so a declaration outlives the file it names and `declared_doc_missing` fails the gate by NAME after a reindex has removed the pairs — `missing` and `stale` read differently, because restoring a file and updating a doc are different actions. (3) The count is part of the contract: `sync-check --record-surface` writes the committed `.beadloom/sync-surface.json`, and a later run whose declared surface FELL says so with both numbers (warning, not a verdict — the cause that matters fails on its own). `doctor`'s count was audited too: `run_checks` returns one entry per FINDING, so `len(checks)` counted problems and rose 20 → 21 while a file was being deleted; the summary now counts the CHECKS that ran, by severity, and prints *clean* only when every check is OK.
+
+172. ~~[2026-08-22] [HIGH] 🔴 `from:` and `to:` are matched against two different vocabularies, so a `src/`-prefixed `to:` silently disables the rule — and the reference taught the broken form~~ **CLOSED (verified 2026-08-31)**
+
+    **Verified fixed:** the shipped `forbid_import` rule matches and no rule reports itself inert (`rule_liveness` count 0, measured 2026-08-31).
+
+    **Severity:** high (the architecture gate printed a green count computed over rules incapable of firing; a required CI check, both git hooks, and the review role all read that count)
+    **Command:** `beadloom lint --strict`, `beadloom ci`
+    **Context:** found during BDL-061 S2 while fixing #142/#146/#147, and reproduced end-to-end through the real CLI. Two of this project's own twelve rules — `tui-no-direct-infra`, `onboarding-no-direct-infra` — could not match anything, while `lint --strict` reported `12 rules, 0 violations`.
+    **Issue:** `from:` is matched against the **repo-relative source file path as indexed** (`src/beadloom/tui/app.py`, source root included). `to:` is matched against the **dotted import path with dots replaced by slashes** (`beadloom.infrastructure.db` → `beadloom/infrastructure/db`) — no source root, no extension, because an import names a module rather than a file. A `to:` written `src/beadloom/infrastructure/**` therefore matches nothing, ever. Two engineers wrote the `src/`-prefixed form into `rules.yml` and neither noticed, because **the rules reference itself documented that form**. The defect is in the documentation as much as in the four lines of YAML.
+    **A second, independent defect in the same area:** a `to:` glob covering a package did not cover a *bare import of the package*. `from pkg.infrastructure import db` is indexed with `import_path == "pkg.infrastructure"` — the target is the package, not the module — so the most common Python reach-in form was invisible. The probe injected to reproduce this issue (`from beadloom.infrastructure import db` in the TUI) fired under **no** glob form until this was fixed, which is why the first reproduction attempt wrongly concluded all four rules were dead.
+    **Measured:** repairing rule 1 alone surfaces 1 violation (`tui/data_providers.py:284`); repairing rules 1 and 2 surfaces 7 (1 tui + 6 onboarding). The two `ai_agents` rules already carried the correct dotted `to:` and their zero was truthful — 11 of 221 indexed targets match them.
+    **Expected, and the third part is the one that matters:**
+    - State the two vocabularies in the rules reference, in one sentence, with an example of each. (Done in this fix.)
+    - Make a `to:` covering a package cover a bare import of it, while leaving sibling names (`pkg/infrastructure_docs`) unmatched.
+    - **Report a rule that cannot match.** A glob matching zero candidate imports across the whole graph is a `rule_liveness` warning, as is an exemption that suppresses nothing. This is the S1 guard lesson — *a check that can never fail is not a check* — applied to the linter, and it is what makes the fix permanent rather than a one-time correction.
+    **Related:** #142/#146/#147 make `lint` unreliable; this made a third of it inert. Same family, higher severity.
+    > Fixed in BDL-061 S2 (`beadloom-mr2l.43`).
+
+151. ~~[2026-08-18] [HIGH] 🔴 The published release lags `main`: role templates codified in BDL-059 are unreleased, so every fresh install reports `config-check` drift against projects scaffolded from `main`~~ **CLOSED (verified 2026-08-31)**
+
+    **Verified fixed:** `main` and PyPI both at 3.0.2, verified on the downloaded wheel 2026-08-30.
+
+    **Severity:** high (a downstream CI gate cannot pass, and the remedy the tool steers you toward is destructive)
+    **Command:** `beadloom config-check` / `config-check --fix`
+    **Context:** Dogfood on a downstream project wiring the Beadloom gate into GitHub Actions. With the segfault of #150 fixed, `beadloom ci` finally executed and reported `config-check FAIL: 3 drifted artifact(s)` for `.claude/agents/dev.md`, `.claude/agents/review.md`, `.claude/commands/coordinator.md`.
+    **Issue:** the drifted content is the **cohesion-driven design** section in the dev/review roles and the **autonomy/permission posture** section in the coordinator — all three codified into Beadloom's OWN shipped templates by BDL-059 (`68e53ff`, `faa83bc`, present in `main`). The published PyPI **2.1.0 does not contain them**, and the version was not bumped afterwards. So the project's files match the *newer* composition while a fresh install checks them against the *older* one.
+    **Diagnostic trap worth noting** — this cost the downstream investigation a wrong first diagnosis, recorded here because the shape is general: `config-check` returned **exit 1 in a sandbox clone and exit 0 in the working repo**, with the three files byte-identical (`cmp`) and both reporting version `2.1.0`. The difference was invisible from the outside: the working repo's `beadloom` was installed **from the source checkout**, the sandbox's **from PyPI**. Two installs that self-report the same version disagreed about what the correct output is. A version string that does not distinguish "released 2.1.0" from "`main` after BDL-059, still called 2.1.0" makes environment skew undiagnosable — the same silhouette as #150, where the discriminating variable was install *date* rather than install *source*.
+    **🔴 The remedy is destructive here:** `config-check --fix` would rewrite the files back to the **older** templates — measured at **42 deletions, 0 insertions** in a sandbox clone — silently deleting a standing engineering paradigm the project relies on. The remedy string (`run `beadloom setup-agentic-flow` to recompose`) reads like a safe re-sync, so the operator is steered straight at it.
+    **Expected:** cut a release containing BDL-059 (and bump the version so source-installs and released installs are distinguishable); make `config-check` name the template-set version it compared against, so a drift report can be read as "your files are newer than my templates" rather than "your files are wrong"; and have `--fix` show the diff before deleting hand-authored content.
+    **Workaround adopted downstream:** run the gate as `beadloom ci` **minus** `config-check` (`reindex`/`lint --strict`/`sync-check`/`docs audit`/`doctor` as blocking steps), with `config-check` kept as a separate informational step whose comment names both the cause and an explicit **exit condition** — it rejoins the blocking gate as soon as a release containing BDL-059 exists.
+
+146. ~~[2026-08-03] [HIGH] `component` nodes are absent from `sync-check` pairs entirely — their docs are NEVER checked for staleness, and the green result reads as "docs fresh" when it means "nothing was looked at"~~ **CLOSED (verified 2026-08-31)**
+
+    **Verified fixed:** 43 of 367 sync-check pairs are component documents (measured 2026-08-31).
+
+    **Severity:** high (false-green on a freshness gate; same class as #142 — the gate reports success for a check it never performed)
+    **Command:** `beadloom sync-check` / `beadloom ci`
+    **Context:** Dogfood on a downstream DDD project. A slice landed a new capability inside a `kind: component` node whose `services.yml` entry declares `docs:` and whose SPEC carries `<!-- beadloom:track= -->` markers. The dev wave reported "sync-check by node `<component>` — clean" and the coordinator accepted it. A later tech-writer wave discovered the node is not in the sync set **at all**: `sync-check --json` returns pairs for every `kind: feature` node plus the top `service`, and for **none** of the four `kind: component` nodes in the graph. "Clean" meant "zero pairs exist", not "docs match code".
+    **Issue:** Pair construction appears to be keyed on node kind (feature/service) rather than on "node declares `docs:`". A component's docs can therefore rot indefinitely with a permanently green gate — and, worse, the operator/agent is actively misled, because the same command prints an OK line for feature nodes right next to the silent gap. There is no "N nodes declare docs but contribute no pairs" warning anywhere in `sync-check`, `doctor`, or `ci`.
+    **Expected:** Build sync pairs for ANY node that declares `docs:` (kind-independent), or — if components are deliberately out of scope — say so explicitly in the output (`skipped: 4 component nodes`) and flag it in `doctor`. A freshness gate must never return green for files it did not examine.
+    **Workaround:** Verify component docs by reading the code; do not trust `sync-check` for them. Detect the gap with `sync-check --json` and compare the set of `ref_id`s against the nodes that declare `docs:` in `services.yml`.
+    > **Fixed in BDL-061 S2 (`beadloom-mr2l.5`), verified in `.6` and `.7`.** Pairing was never keyed on node kind — it read annotations only, which is why the kinds whose sources carry no `# beadloom:` comment looked exempt. `build_sync_state` now falls back to the files a node's `source:` OWNS when annotations yield none, `check_sync` no longer short-circuits on an empty `sync_state`, and `find_unchecked_doc_nodes` NAMES every node that still contributes no pair, with a reason (`no_indexed_code`, `files_owned_by_nested_nodes`, `no_source`) — advisory, never changing the exit code. Measured on this repository: 272 → 275 pairs, all 22 `component` nodes covered, 4 nodes named as not-checked where the gate previously printed nothing.
+    > **Residue:** one of those reasons names the wrong cause. `graph-reads` is reported `no_indexed_code` for a file that IS indexed; what is absent is ANNOTATED symbols, because the module's annotations sit inside its docstring, which `extract_symbols` does not read. Bead `beadloom-mr2l.50`.
+
+135. ~~[2026-06-18] [HIGH] `beadloom init` crashes with `UnicodeDecodeError` on a repo containing binary assets / a stray virtualenv~~ **CLOSED (verified 2026-08-31)**
+
+    **Verified fixed:** 14 `UnicodeDecodeError` handlers in `onboarding/`; the ambient-decode work of BDL-061 covers this path.
+
+    **Severity:** high (hard crash — "broken out of the box" on any repo with binary assets or a stray venv)
+    **Command:** `beadloom init -y`
+    **Context:** Dogfood on an adopter repo that contains a large binary-asset directory (image/model files — PNG, `.safetensors`, ~2 GB) with a stray virtualenv left inside it (`<assets>/tools/.venv*`).
+    **Issue:** Auto-detect added the binary-asset directory to `scan_paths` (alongside `src`) because it found a few `.py` files under it (including inside the stray venv). The reindex code-indexer then called `file_path.read_text(encoding="utf-8")` on a non-UTF-8/binary file and raised `UnicodeDecodeError: 'utf-8' codec can't decode byte 0xa4 in position 64` → full traceback, and `init` aborted half-done (`.beadloom/` was created, but the reindex step crashed). Call chain: `application/reindex/full.py:149` → `application/reindex/indexing.py:122` `_index_code_files` → `context_oracle/code_indexer.py:373` `extract_symbols` (`read_text(encoding="utf-8")` with no guard).
+    **Expected:** (a) the indexer must **skip non-UTF-8/binary files gracefully** (try/except → warn + skip; never abort the whole `init` over one file); (b) auto-detect should exclude virtualenvs (`.venv*`, `site-packages`) and binary-asset directories from `scan_paths`; (c) support `exclude_paths` (overlaps the existing `exclude_paths` improvement request). A single binary file must never abort `init`.
+    **Workaround:** manually narrow `.beadloom/config.yml` `scan_paths` to source-only, delete the stray venv(s), then `beadloom reindex`.
+
+91. ~~[2026-05-28] [CRITICAL] Beadloom violates its own architecture rules; `lint --strict` is configured to pass anyway~~ **CLOSED (verified 2026-08-31)**
+
+    **Verified fixed:** `lint --strict` exits 1 on a real violation — exercised repeatedly during BDL-062, most recently by `doc_area_coherence` finding four nodes.
+
+    **Severity:** critical
+    **Command:** `beadloom lint --strict` (exits 0) vs. actual graph state
+    **Context:** Self-audit during the comprehensive architecture/code review (2026-05-28). The product's core value proposition is enforcing architecture boundaries and catching dependency cycles.
+    **Issue:** `beadloom lint --strict` exits **0** on Beadloom itself despite **12 real violations** (verified live). Two compounding problems:
+    - (1) **The coupling is real.** `infrastructure` is a god-package: `infrastructure/reindex.py` (~1296 LOC) orchestrates every domain and imports them at module level (`infrastructure/reindex.py:14-16` → `context_oracle`, `doc_sync`, `graph`). Meanwhile `graph/linter.py:98` and `graph/import_resolver.py:820,882` import back into `infrastructure.reindex`, creating cycles. The cycle is openly acknowledged in a code comment (`graph/linter.py:95-96`: *"Lazy import to avoid circular dependency…"*) and worked around with function-local lazy imports instead of being fixed. Per the layer rule, `infrastructure` sits BELOW domains yet imports all of them.
+    - (2) **The alarm is silenced.** In `.beadloom/_graph/rules.yml`, `no-dependency-cycles` (line 39) and `architecture-layers` (line 45) are set `severity: warn`. `--strict` only fails on `error`-severity, so a graph full of cycles passes green.
+    **Expected:** A tool that sells architecture enforcement must pass its own enforcement. (a) Break the `infrastructure` god-package — extract reindex orchestration into a `services`-layer module, or invert the dependency so `infrastructure` stops importing domains; (b) restore `no-dependency-cycles`/`architecture-layers` to `severity: error`. Until then this is a credibility hole reproducible by any skeptic in two commands.
+    **Workaround:** None — structural issue, not a usage issue.
+
+92. ~~[2026-05-28] [HIGH] `doctor` reports false "Version drift" on Beadloom itself (reads stale `importlib.metadata`, not `__version__`)~~ **CLOSED (verified 2026-08-31)**
+
+    **Verified fixed:** `doctor` reports version drift 0 times on this repository (measured 2026-08-31).
+
+    **Severity:** high
+    **Command:** `beadloom doctor`
+    **Context:** Self-audit (2026-05-28). Distinct from #73 (which is about doctor reading the user-authored `.claude/CLAUDE.md` on an *external* project). This is about doctor's notion of the "actual" version being wrong even on Beadloom's own repo.
+    **Issue:** `doctor` reports *"Version drift: CLAUDE.md claims 1.9.0, actual is 1.7.0"* while `src/beadloom/__init__.py:3` is `__version__ = "1.9.0"` and `status` shows 1.9.0. Root cause: `_get_actual_version()` (`infrastructure/doctor.py:274-281`) returns `importlib.metadata.version("beadloom")` first — stale editable-install metadata — and only falls back to source `__version__` on `PackageNotFoundError`. A diagnostic that confidently emits a wrong diagnosis erodes trust in all of doctor's output.
+    **Expected:** Treat the in-tree `__version__` as the source of truth for "actual version" (or compare directly against it). Installed-package metadata must not override the source version.
+    **Workaround:** Reinstall the package to refresh metadata; ignore the warning.
+
+
+
+### Residue closed by BDL-061 / BDL-062 (moved 2026-08-31)
+
+Entries that were already struck through in Open Issues while still sitting in that
+section. Moved verbatim, nothing rewritten — a third of the "open" list was not open.
+
+211. ~~[2026-08-27] [HIGH] The 1.x description was fixed in two copies of four, and `beadloom --help` still shows the old one~~ **CLOSED (BDL-062 `.15`, released in 3.0.2)**
+
+    **Severity:** high (`beadloom --help` is the sentence every CLI user reads first, and 3.0.1 was released specifically to replace this sentence)
+    **Command:** `beadloom --help`
+    **Context:** found by `beadloom-viaj.8` verifying the PUBLISHED 3.0.1 wheel in a fresh virtual environment — the check that was the reason for the release.
+
+    **Measured on the published artifact**, not the local build:
+
+    ```
+    importlib.metadata.metadata('beadloom')['Summary']
+      -> The architecture graph of your codebase, and the gate that holds ...   CORRECT
+    beadloom --help, line 3
+      -> Beadloom - Context Oracle + Doc Sync Engine.                           THE 1.x SENTENCE
+    ```
+
+    **Four copies of the product's one-line description exist. `.4` found two.**
+
+    | Copy | State after 3.0.1 | Who reads it |
+    |---|---|---|
+    | `pyproject.toml` `description` | corrected | the PyPI project page |
+    | `beadloom/__init__.py` docstring | corrected | `help(beadloom)` |
+    | `services/commands/_root.py:44` | **still 1.x** | `beadloom --help` |
+    | `onboarding/templates/docs/core/beadloom-readme.md.txt:9` | **still 1.x** | every project scaffolded by `beadloom init` |
+
+    **The check that exists could not have caught it, and its own docstring predicted why.**
+    `tests/test_package_description.py` asserts that the manifest and the package docstring
+    AGREE, and states plainly that agreement is checkable while currency is not — "both copies
+    were in perfect agreement while both were three majors out of date". The residual it did not
+    name is the one that bit: **agreement over a subset of the copies.** Two were corrected
+    together, the test compared exactly those two, and it went green over a product whose most
+    visible surface still said the retired sentence.
+
+    Worse for an adopter than for us: the fourth copy is a **template**, so every project
+    `beadloom init` scaffolds from 3.0.1 onward is seeded with the 1.x sentence in its own
+    documentation.
+
+    **Expected:** the description has one home and the others are derived from it, or the check
+    enumerates every copy rather than the two it was written against. `_root.py`'s Click group
+    docstring cannot import the manifest cheaply, but it can read `beadloom.__doc__`, which is
+    already one of the checked copies.
+
+    **CLOSED in 3.0.2** (`beadloom-viaj.15`), and the closing measurement is on the PUBLISHED
+    artifact rather than the local build, because that distinction is what this issue is about.
+    Fresh virtual environment, `beadloom==3.0.2` installed from PyPI:
+
+    ```
+    beadloom --version           -> beadloom, version 3.0.2
+    beadloom --help, line 3      -> Beadloom - the architecture graph of your codebase, ...  CORRECT
+    importlib.metadata Summary   -> The architecture graph of your codebase, ...             CORRECT
+    grep 'Context Oracle + Doc Sync Engine' over the installed package (269 files) -> 0 hits
+    ```
+
+    **The count in this entry was wrong, and that is the finding rather than a correction.** It said
+    FOUR copies. Sweeping 372 files found **five**: the fifth is this repository's own
+    `.beadloom/README.md`, which `init` had scaffolded from the same template. An issue about a
+    check that read a smaller population than the fact had was itself written from a population
+    somebody had listed by hand.
+
+    **Three copies were removed rather than corrected**, which is why this is not a typo fix.
+    `_root.py` derives `help=` from the package docstring; the scaffold template takes
+    `{{beadloom_description}}` and `{{mcp_tool_list}}`, filled by `beadloom_readme_values()` from
+    the package docstring and `MCP_TOOL_CATALOG`; and `.beadloom/README.md` is generator output.
+    Two literal copies remain — the manifest and the package docstring — which the pre-existing
+    agreement test already holds together.
+
+    **Reading the scaffold end to end**, which nobody had done this cycle, found three more items of
+    the same class: it named **8 of the 18** MCP tools as though that were the list (and states no
+    number, so `mcp_tool_count` could never have bound to it), `Directory Contents` omitted
+    `AGENTS.md`, and `Essential Commands` omitted `prime` and `ci`. Verified on the published wheel
+    by scaffolding a project with it: all 18 tools, `AGENTS.md` present, both commands present.
+
+    **What is still NOT checked, measured rather than asserted.** Setting the manifest and the
+    package docstring to `A cloud-hosted spreadsheet for tracking invoices` and regenerating the
+    scaffold leaves all 7 checks green. Currency has no test and this issue did not give it one. The
+    check now guards a banned phrase, agreement across every copy the sweep finds, and the SIZE of
+    the population — and that last is what closes the class, because a sixth copy stating the
+    correct sentence turns the suite red until somebody records it.
+
+    **What an adopter still has to do.** `.beadloom/README.md` is written once and never
+    overwritten, so a project scaffolded on 3.0.0 or 3.0.1 keeps the 1.x sentence and the 8-tool
+    list until that file is deleted and regenerated. Named in the 3.0.2 CHANGELOG under Upgrading.
+
+195. ~~[2026-08-26] [HIGH] One node whose source lies outside the common source root collapses `doc-area-coherence` for the whole graph~~ **CLOSED (BDL-062 `.9`)**
+
+    **Severity:** high (a rule the project declared blocking could stand down over its entire population while the Gate stayed green)
+    **Command:** `beadloom lint --strict`
+    **Context:** opened by BDL-062 `.4` while deciding whether the `vitepress-site` node should carry a document; **rewritten after the coordinator failed to reproduce it and both measurements were compared.**
+
+    **The trigger.** `doc_area._placements` derived the source root as the longest directory prefix EVERY node/doc pair's source shares. That is a unanimity rule, and unanimity hands each individual source a veto. `vitepress-site`'s source is `site/`, which shares no prefix with `src/beadloom/...`, so attaching any document to it dropped the root from `src/beadloom` to nothing in one step — for all 85 other pairs. `min_support` guarded the dominant-mapping half; nothing guarded the prefix.
+
+    **Two faces, and which one you see depends only on where the minority node's document sits.** Measured on the same tree, same commit, by two people who then disagreed:
+
+    ```
+    doc at site/vitepress-site/DOC.md   -> the doc path carries the outlier's own
+                                           segment, an area depth is still found, a
+                                           bogus convention is derived:
+                                           84 compared, 7 nodes reported WRONG at error
+                                           (bd-seam, beadloom, cli, cli-commands,
+                                            guard-probes, mcp-server, tui)
+
+    doc at guides/vitepress-site.md     -> no doc path carries any segment of the
+                                           collapsed vocabulary, no area depth exists:
+                                           0 compared, 86 unnamed,
+                                           rule reports it CHECKED NOTHING
+    ```
+
+    **The second face is the worse one and it is why this was HIGH.** That report went out through `liveness_finding`, which hardcoded `severity="warn"` whatever the rule declared. This repository escalates `doc-area-coherence` to `error`; the escalation evaporated at exactly the moment the rule stopped working, and `lint --strict` exited 0 over a check that had run on nothing. Filtering `lint --format json` by `rule_type == doc_area_coherence` cannot see it either, because the stand-down carries `rule_type: rule_liveness` — filter by `rule_name` instead.
+
+    **STRUCK — the evidence line in the original filing was false.** It read *"4 true findings become 6 false ones"*. There were no 4. The `services.yml` backup taken immediately before the probe shows the four misfiled nodes were **already corrected**, so the measured baseline was **0 doc-area findings**, and the 6 were manufactured from a clean graph. The original compared against `.2`'s pre-correction baseline rather than the one actually measured — a green count that was not a checked count, inside the issue filed about green counts that are not checked counts. Recorded rather than quietly replaced, because the wrong number was acted on.
+
+    **Not exotic:** any project with a `site/`, `scripts/`, `tooling/` or a second package root meets this on first contact.
+
+    > **CLOSED — the root tolerates a minority, and a total stand-down is no longer silent.**
+    >
+    > `_source_root` replaces `_common_prefix`. It descends one segment while there is **exactly one supported way down**, where supported means `min_support` sources agree on the next segment — the dial the dominant-mapping half already declares, not a second threshold. A genuine fork ends the descent (that is where the areas begin); no supported segment at all ends it too; and a source too short to have that depth is `rootless` rather than a veto. Measured on this repository, both faces now give the identical answer: **derivable, 8 dominant areas, 0 contradicting, `outside_root` 1**, against a baseline of the same 8 areas and `outside_root` 0. A pair outside the root is excluded from comparison and **counted** — `Convention.population()` ends `"; N sit outside the source root"`, and `examined` adds up to the pairs the graph offered.
+    >
+    > `liveness_finding` gained a keyword-only `severity`, defaulting to `warn` so every existing caller is byte-identical. A **total** stand-down passes the rule's declared severity; a **partial** inertness stays advisory. The distinction is the point: a dead glob beside nine live ones is a configuration smell, while a rule that checked none of its population is indistinguishable from a rule that never ran. This costs an adopter nothing — the rule ships `warn`, so a small graph still reports `warn` and no first `beadloom ci` goes red.
+    >
+    > `tests/test_source_root_minority.py::TestATotalStandDownCarriesTheDeclaredSeverity::test_the_gate_cannot_pass_while_the_rule_checked_nothing` runs the real linter and fails if a blocking rule stands down without `has_errors` being set. Both document paths are kept as permanent fixtures in `TestBothFacesOfTheCollapse`: one cause, two observables, and nothing but the doc path varies between them.
+    >
+    > **Residual, deliberately not fixed here and worth its own decision (#197):** `summary_facts` and `scenario_coverage` report their own total stand-down through the same seam and still hardcode `warn`. Only `doc_area_coherence` was measured, and escalating five rule types on one bead's evidence would be shipping four untested changes.
+
+189. ~~[2026-08-23] [MEDIUM] `beadloom sync-update <doc> --check` WRITES — a check flag that re-baselines the thing it was asked to report on~~ **CLOSED (BDL-061 S3b, `.58`)**
+
+    **Severity:** medium (it silences the warning it was asked to describe, and it is the defect class this epic exists to remove)
+    **Command:** `beadloom sync-update <doc-path> --check`
+    **Measured** on this repository while inspecting surface drift before deciding whether to re-attest. `beadloom sync-update docs/services/cli.md --check` printed `Re-baselined reference doc docs/services/cli.md.` and the following `sync-check --json` reported **6** surface-drift references where the previous run reported **7**. The flag asked for a report and got a write.
+    **Cause:** `services/commands/docsync.py` — in the non-`--yes` path the reference-doc branch (`mark_reference_synced`) is reached at line ~983, *before* the `if check_only:` guard at line ~994. `--check` is therefore honoured only when the argument resolves to symbol pairs; when it resolves to a reference doc's path, the branch that handles it never sees the flag.
+    **Why it matters beyond the one file:** a reviewer or an agent inspecting drift with `--check` — the flag whose whole contract is "tell me, do not change anything" — destroys the evidence it was inspecting, and the next `sync-check` reads clean for a reason nobody recorded. That is BDL-UX #147 (`lint` mutating the index) in a different command, and #163 (re-attesting can silence the check without evidence) reached by accident rather than by choice.
+    **Expected:** move the `check_only` guard above the reference-doc branch, and have `--check` on a reference doc print its `watches` set and its drift status instead of re-baselining it.
+    **Related:** #147 (a check that writes what it checks), #163 (re-attestation without evidence), BDL-057 (the reference surface).
+
+    > **CLOSED — the guard runs first, and the answer is read-only.** `check_only` is now honoured above the reference-doc branch, and `doc_sync.engine.describe_reference_doc()` answers it: one `SELECT`, one recomputed aggregate hash, no `UPDATE`, no `commit`. `beadloom sync-update <doc> --check` prints `  [surface drift] <doc> watches cli, graph` and the `reference_state` row is byte-identical afterwards (asserted on `(doc_path, aggregate_hash, status)` before and after, not on the absence of the word "Re-baselined"). The non-`--check` path still re-baselines — asserted too, so the guard cannot silently disable the command it guards.
+    > Checked while there, since the entry raised the class rather than the line: `check_sync()` contains zero `UPDATE`/`INSERT`/`commit` in its own body, so `--check` on a SYMBOL pair was already clean. Stated as a measured result rather than left as an absence.
+
+188. ~~[2026-08-23] [HIGH] The orphan report and the migration guidance are computed on every scaffold and printed by nothing — NO CALLER, NO CAPABILITY~~ **CLOSED (BDL-061 S3b, `.58`)**
+
+    **Severity:** high (two shipped criteria are met by the library and not by the command anybody runs)
+    **Command:** `beadloom setup-agentic-flow`
+    **Measured** on a temp project carrying a pre-BDL-048 layout (`.claude/commands/{dev,test,review,tech-writer,epic-init}.md`) and a hand-edited `.claude/commands/coordinator.md`. `orphaned_flow_files()` returns five entries, each naming the file, where the role now lives, and the exact `rm -f` command. `ScaffoldResult.migration_notes` returns the note naming `.beadloom/flow/commands/coordinator.md` as the place the edit belongs. The command's own output loop covers only `commands_written`, `commands_skipped` and `claude_md`, so **neither list reaches stdout**. `grep -rn 'orphans\|migration_notes\|orphaned_flow_files' src/` finds no reader anywhere outside `agentic_flow_setup.py` itself.
+    **What the user sees instead:** `Skipped .claude/commands/coordinator.md (hand-edited; use --force)` — which advises the destructive flag and never mentions the project layer, the one place the edit could safely go.
+    **Why it matters:** BDL-UX #137 is recorded as closed by the orphan report, and BDL-061 S3's criterion "a hand-edited vendored file is reported with migration guidance" is recorded as met. Both claims are true of `scaffold()` and false of `beadloom setup-agentic-flow`. This is CONTEXT's own standing rule NO CALLER, NO CAPABILITY: a function nothing calls reads as "the feature exists".
+    **Expected:** print the orphan list (with its `rm -f` commands) and the migration notes after the write summary, the way `hooks.guards_registered` and `ignore.added` are printed.
+    **Related:** #137 (the orphan report), #151 (the destructive `--fix` this guidance replaced), #186.
+
+    > **CLOSED — `_echo_scaffold_findings()` is the caller.** `migration_notes` prints under *"Left alone (N) — your edits are the only copy of an intent"* with the `.beadloom/flow/<kind>/<name>.md` path, and `orphans` under *"Left by an older flow layout (N) — reported, never deleted"* with each `rm -f`. **`(hand-edited; use --force)` is gone** — the line advised the destructive flag and named nowhere safe, which was the actual harm; the migration note replaces it. Both assertions bite: removing the call takes both tests from passed to FAILED (measured).
+    > `ScaffoldResult.flow_config_written` was added in the same pass and printed the same way, so the file every composed artifact is built from is named on the run that creates it (#187).
+
+187. ~~[2026-08-23] [MEDIUM] A virgin `setup-agentic-flow` leaves `config-check` red — four errors on a repository nobody has touched~~ **CLOSED (BDL-061 S3b, `.58`)**
+
+    **Severity:** medium (it is a first-contact experience, and it is the exact "green project goes red" shape the slice is built to avoid)
+    **Command:** `beadloom setup-agentic-flow` then `beadloom config-check`
+    **Measured** on a fresh TypeScript project (`package.json`, one `.ts` file, `beadloom init --yes --mode bootstrap`, then `setup-agentic-flow` with no flags). `config-check` exits **1** with four errors, one per role adapter: *"scaffolded agentic-flow file drifted from the shipped template … this repo has no .beadloom/flow.yml, so the role files are the plain vendored scaffold"*. Writing a three-key `.beadloom/flow.yml` and re-running gives `Agent-config in sync — no blocking drift`, rc **0**.
+    **Cause:** `setup-agentic-flow` resolves the config through `resolve_flow_config` (auto-detecting `stack: typescript`) and composes the role adapters from it, but never **writes** a `flow.yml`. `config-check` without one takes the no-flow.yml branch and expects the plain vendored role files, which the composed ones are not.
+    **Why it is not cosmetic:** the command's own closing advice is *"1) `beadloom config-check` keeps the scaffolded flow + CLAUDE.md auto-regions honest"*. Following it immediately produces four errors on an untouched repository, with a remediation that tells the reader to add a `flow.yml` — which is the right answer, arrived at through a failure.
+    **Expected:** either persist the resolved selection as `.beadloom/flow.yml` on scaffold (it is the file the whole feature is configured by, and the command already knows every value), or have `config-check` compare against the same resolution the scaffold used. The first is the smaller change and makes the configuration visible.
+    **Related:** #184 (the same command family answering an expected state with a failure shape), #186.
+
+    > **CLOSED by the first of the two options — the selection is written down.** `flow_config.persist_flow_config()` writes the resolved config to `.beadloom/flow.yml` on a first scaffold and **never** over an existing one (that file is the adopter's policy — `language` and `overlays.suppress` have no flag and live only there). Measured end to end on a fresh TypeScript project: `init` → `setup-agentic-flow` → `config-check` **rc 0**, where it was rc 1 with four errors. The command names the file it wrote.
+    > **A second defect fell out of the fix and is worth more than the first.** `scaffold()` re-resolved the config from disk with `resolve_flow_config(project_root)` — **ignoring the CLI flags** — while the command resolved its own for `generate_adapters`. So `beadloom setup-agentic-flow --architecture fsd` composed the four ROLE adapters as `fsd` and the slash commands and `CLAUDE.md` as `ddd`, in one run, silently. The caller's resolved config is now threaded in (`scaffold(config=…)`) and a test asserts the flag reaches both.
+
+186. ~~[2026-08-23] [HIGH] 🔴 `config-check --fix` deletes a hand edit in a role adapter — one line after the check printed "It will NOT be rewritten"~~ **CLOSED (BDL-061 S3, `.59`)**
+
+    **Severity:** high (it destroys unrecoverable user text, and it does so by following the command's own printed advice)
+    **Command:** `beadloom config-check` then `beadloom config-check --fix`
+    **Measured** by sha256 in a clean temp repository (`init` → `flow.yml` → `setup-agentic-flow`, then a four-line append to `.claude/agents/dev.md`):
+
+        scaffolded  999889b630259ffc5a46380f333c27f10603d6e640d30f63cf11cd8a41e5e748
+        edited      27a6ffbc81d249ac928001db2f6f3fd577f2792388b12c52eb3af585f521e7af
+        after --fix 999889b630259ffc5a46380f333c27f10603d6e640d30f63cf11cd8a41e5e748
+
+    **The contradiction is inside one command's output.** `config-check` reports: *"hand-edited: the body differs from the composition AND from what Beadloom last wrote. It will NOT be rewritten → move the additions to .beadloom/flow/roles/dev.md"*, and then closes with the generic *"Run `beadloom setup-rules --refresh` (or `config-check --fix`) to fix."* Doing what the last line says undoes what the line above promised.
+    **Cause:** `config_sync.refresh_composed_adapters` calls `generate_adapters` unconditionally. Its sibling `refresh_agentic_flow_files` was deliberately made non-forcing for the slash commands and `CLAUDE.md` (BDL-UX #151); the role-adapter path did not get the same treatment, and BDL-061 `.10`/`.11` measured the fixed path rather than this one.
+    **Why it is the sharpest of the three:** every other finding in this family is a message that is missing or wrong. This one is data loss, in the exact scenario BDL-UX #139 and #152 exist to end — a team putting its standing engineering practice in a role file.
+    **Expected:** `refresh_composed_adapters` must skip an adapter whose flow-manifest state is `hand_edited` (leaving the finding standing), and the generic remediation line must not name `--fix` when the findings include a hand edit.
+    **Related:** #151 (the destructive `--fix` this was supposed to have ended), #139, #152, #188.
+
+    > **CLOSED by option (a) — `--fix` honours the sentence.** `refresh_composed_adapters` classifies each adapter first and hands the unowned ones to `generate_adapters(preserve=…)`, which neither writes **nor records** them (recording a digest we did not write would make the next run believe the edit was ours). Re-measured on a clean temp repository: scaffolded `77dfc84f…` → edited `26a0da67…` → **after `--fix` `26a0da67…`**, exit 1, the file named under *Declined to rewrite*. Option (b) — qualifying the sentence — was rejected: it is cheaper and honest, and it leaves a documented data-loss path in a command whose name promises repair.
+    > Three things beyond the one file. (1) **`unverified` is declined too**, not just `hand_edited`: it is a `warn`, so overwriting one would have destroyed content and then printed "no blocking drift" at exit 0 with no red anywhere. The rule is one phrase — *`--fix` rewrites only what Beadloom can prove it wrote.* (2) **The run says what it did**: `apply_config_fixes` digests the artifact surface before and after the writers and names every file created or rewritten, with the count on the summary line — measured against the disk rather than trusting the writers, several of which over-report. (3) **The closing advice stops offering `--fix`** for a finding it will decline (`ConfigDrift.fixable`).
+    > One pre-existing misclassification had to go first, measured not argued: on a repo scaffolded **before** adopting a `flow.yml`, all four `.claude/agents/*` read `hand_edited` (`_scaffold_vendored` writes those bytes and never records a digest). Declining them would have made `--fix` refuse for ever to recompose files Beadloom itself wrote. The vendored body is now an `alternate`, so it reads `stale` and recomposes — **unowned is not the same as somebody's only copy**.
+
+183. ~~[2026-08-23] [HIGH] 🔴 Every adopter's `CLAUDE.md` states **Beadloom's** version as the project's own — and it reads as correct on the one repo where it is~~ **CLOSED (BDL-061 S3b, `.58`)**
+
+    **Severity:** high (a false fact written into the file an agent treats as authoritative, in a section describing the adopter's project)
+    **Command:** `beadloom setup-agentic-flow`, `beadloom init`
+    **Context:** found by review `.11` and reproduced by the coordinator. `onboarding/scanner/claude_md.py:125` calls `application.doctor.get_actual_version()`, which returns **`beadloom.__version__`** — Beadloom's own version, correctly and deliberately so, since it exists to diagnose Beadloom's version drift (#92). That value is then rendered into the composed `CLAUDE.md` as `- **Current version:** …` inside the section describing *the adopter's project*. A JavaScript project at `0.4.1` gets `Current version: 2.2.0`.
+    **Why it survived:** on this repository the fact is *true by coincidence* — we are Beadloom, so our project version and Beadloom's version are the same string. Every check, every review and every dogfood run has read a correct line. The defect is only visible from a project that is not Beadloom, and we have never rendered one.
+    **This is the class BDL-UX #177 named, still open after #177's mechanism was fixed.** #177 was about our project-local *text* reaching adopters through a test that rewrote the shipped template; that leg is closed and now structurally prevented. This is our project-local *facts* reaching adopters through composition, and nothing prevents it. Closing #177 on the strength of the first leg was premature — the coordinator did that, and this entry is the correction.
+    **Expected:**
+    - Read the adopter's version from the adopter's project (`pyproject.toml`, `package.json`, `Cargo.toml`, a VCS tag), and render nothing rather than something false when it cannot be determined — *unknown is not zero*, the rule this epic has applied to every other reading.
+    - Audit the whole composed output the same way, not just this line: **which other rendered facts are computed about Beadloom rather than about the project?** One was found by reading; nobody has swept the rest.
+    - A test that renders `CLAUDE.md` for a **non-Beadloom** fixture project would have caught this and would catch the next one. There is no such fixture today, which is why a correct-looking line survived four slices of scrutiny.
+    **Related:** #177 (same class, different mechanism), #92 (why `get_actual_version` is right about Beadloom), #139/#152.
+
+    > **CLOSED — and the one-line fix was the least of it.** The deliverable is `tests/adopter_project.py`: five projects that are **not** Beadloom (TypeScript `0.4.1`, Rust `1.2.3`, Python `3.7.0`, Poetry `0.9.2`, and one declaring no version at all), rendered in `tests/test_adopter_projects.py`. Without a fixture the tool cannot be accidentally right about, the next instance survives exactly as this one did. Mutation-checked: restoring `get_actual_version()` and the hardcoded `DDD packages` takes 15 of 16 tests from passed to FAILED.
+    > **THE SWEEP, stated with what was checked and not only with what was found.** Checked: the composed `CLAUDE.md`, all four composed slash commands, all four composed role adapters, both auto-regions, and every `doctor` check that reads an adopter's `CLAUDE.md`. **The four role adapters are CLEAN** — a checked result, not an absence. Found, beyond the version line:
+    > - `- **Architecture:** DDD packages` was a **constant**. An `fsd` project was told it was DDD. It now follows the declared architecture and claims no methodology when none is declared.
+    > - The `Stack` bullet matched the target's manifest against **Beadloom's own dependency names** (`sqlite`, `click`, `rich`, `tree-sitter`) and printed `Python 3.10+` — *our* floor — for a project on `>=3.12`. It now names the project's declared stack, its `requires-python` verbatim, and its own first six declared dependencies.
+    > - `_get_actual_packages()` fell back to scanning `<adopter>/src/beadloom/` — our layout, looked for inside their tree. Deleted; `detect_source_packages()` scans theirs.
+    > - The shipped `CLAUDE.md` template **seeded** the auto-region with our stack, our nine DDD packages and `Current version: 2.2.0` — the bytes an adopter holds until the first refresh. Now a neutral one-line placeholder.
+    > - Our identifiers still shipped in the composed text: `BDL-037` and `BDL-UX-Issues #97` in the core, `BDL-036` twice and our issue-log filename three times in the coordinator command. That is #177's third "Expected" item, which its closure claimed and its check never covered.
+    > **The biggest catch was not the renderer.** `application/doctor.py::_check_agent_instructions` **audits four claims in the adopter's `CLAUDE.md` against BEADLOOM's state**: version vs `get_actual_version()`, packages vs a scan for `src/beadloom/`, stack vs the literal `{python, sqlite}`, test framework vs the literal `pytest`. All four read OK here by the same coincidence. Fixing only the renderer would have turned **every adopter's `doctor` red on upgrade** (their correct `0.4.1` against our `2.2.0`) — the precise constraint this epic is built on, reached from the other side. Each check now reads the project, and a fact the project does not declare is `INFO … not verified`, never a drift verdict.
+    > `get_actual_version()` is **unchanged**: it is right about Beadloom (#92) and the defect was always its caller.
+    > **The general half, so the class does not need re-finding:** `beadloom_local_facts_in(text)` is a deny-list of this repository's own identifiers — our epic key, our issue numbers, our issue-log filename, bead ids, `src/beadloom`, our `__version__`, our package names — asserted over every composed artifact, and it names the offender it found rather than failing bare.
+
+182. ~~[2026-08-23] [HIGH] 🔴 `symbols_changed` is computed per node, so one changed file marks every pair of that node stale — and the only way through is bulk re-attestation~~ **CLOSED (BDL-061 S6, `beadloom-mr2l.78`)** — `sync_state` gained `file_symbols_hash`, the symbol surface of a pair's OWN code file, beside the per-node `symbols_hash`. Only the file-level fact can make a pair `stale`; a pair whose sibling moved is `unverified` with the reason `sibling_symbols_changed` and NAMES the file that moved, and `sync-update` is not offered for it. *Stale, unverified and ok are three states*, and the epic's existing vocabulary supplies the second one — no fifth word was invented (#174/#175 `missing`/`unverified`, `.76` `excused`, `.77` `null`). Measured in two clean rooms off `e255a21` differing only in this change: appending one function to `application/architecture_view.py` produced **69 stale pairs, 67 naming a file nobody touched**; the same perturbation now produces **2 stale and 67 `unverified/sibling_symbols_changed`**, each carrying `details: architecture_view.py`. Both exit 2 — the gate still bites, on the pairs somebody can act on. A row with an empty `file_symbols_hash` keeps the node-level answer, and the file fact carries the same provenance as the node fact or is not written, so an existing index sees NO change on the reindex that adds the column and moves to file granularity at its first attestation.
+
+    **This defect was filed three times** — #105 (2026-06-01), #133 (2026-06-15) and #182 (2026-08-23) — over eleven weeks, each time from a fresh measurement and each time without the earlier one being found. Three reports of one root is itself the finding: the log is searched by symptom (`symbols_changed`, `worktree`, `re-baseline`) and the three symptoms share no word.
+
+    **Severity:** high (it manufactures the exact situation #163 warns about, on every doc pass, and the tool's own remediation is the unsafe act)
+    **Command:** `beadloom sync-check`, `beadloom sync-update`
+    **Context:** measured on BDL-061 S2b's doc pass. The gate reported **28 stale pairs** on `docs/domains/onboarding/README.md`. Exactly **one** of them had a changed file (`services/commands/docs.py`). The other 27 read `symbols_changed` while their files were untouched, because `symbols_hash` is stored per `ref_id` rather than per file: one file's symbols move, the node's hash moves, and every pair the node owns goes stale together.
+    **Why it is worse than noise:** the writer is handed 28 pairs, told they are stale, and given `sync-update` as the remedy. Twenty-seven of them cannot be revised, because nothing about their files changed — so the only available action is to re-attest in bulk. That is precisely the "attested but never revised" hazard #163 was filed for, and here the tool *requires* it rather than merely permitting it. The honest pass on this repo was 1 revision and 27 deliberate re-attestations, and there was no better answer available.
+    **Compounding:** because the 28 print as 28 near-identical gate lines (#167), the one pair that genuinely needed attention is indistinguishable from the 27 that did not — the signal is diluted by exactly the factor of the defect.
+    **Expected:**
+    - Compute the staleness fact at the granularity of the thing that changed. A pair is stale when *its* file's symbols moved, not when a sibling's did.
+    - If per-node hashing is deliberate (it is cheaper), then the pairs that follow from it must be reported differently — `unaffected` or `sibling_changed`, never the same word as a pair whose own file moved. This is the same distinction the rest of this slice turned on: **unverifiable, unaffected and stale are three states and they must not print one word.**
+    - Whatever the fix, `sync-update` should not be the recommended action for a pair nobody can revise.
+    **Related:** #163 (re-attesting without evidence — this is the mechanism that forces it), #167 (28 identical lines), #146/#174/#175 (one word for several states).
+
+177. ~~[2026-08-23] [HIGH] 🔴 Editing our own `CLAUDE.md` silently ships the edit to every adopter — the propagation loop~~ **CLOSED (BDL-061 S3, `.9`)** — the direction is reversed: the shipped core is authored package data, `.claude/CLAUDE.md` is COMPOSED from it plus this repo's own `.beadloom/flow/claude/CLAUDE.md`, and a local divergence is reported instead of flowing outward. Three corrections to the entry, all measured. (a) **The propagator was a TEST, not the pre-commit hook** — `tests/test_cli_setup_agentic_flow.py::TestSyncAgenticFlow::test_sync_round_trips_live_source` called `sync_agentic_flow(live)`, which rewrote the shipped template from the live file; in a clean room from HEAD one run moved its sha256 from `f360bc60…` to `6fcae821…` and the test PASSED while doing it. `pytest` runs inside `beadloom ci` and pre-push runs `beadloom ci`, hence "every commit". `sync_agentic_flow` now refreshes the AGENT assets only. (b) **The open question is answered, and worse than asked:** `config-check` was not "correct by design under the composition-result rule" — the `CLAUDE.md` body was verified by NOTHING. Measured on a scaffolded project: appending a paragraph → 0 drifts; deleting all of §7 → 0 drifts; replacing the whole file with `# gone` → 0 drifts, with the Gate printing `PASS: agent-config in sync`. It now compares against the composition result. (c) The third "Expected" item shipped: `test_no_bead_id_or_issue_number_in_the_shipped_templates` scans everything under `templates/` for a bead id. It was demonstrated to bite — a sabotage that re-enabled the snapshot put `beadloom-mr2l.42` back into the clean room's template and the test caught it.
+
+    **Severity:** high (project-local context leaves the project without anyone deciding that it should, and the propagation happens inside a commit rather than at a review point)
+    **Command:** the `install-hooks` pre-commit coherence step; `beadloom config-check`
+    **Context:** the coordinator added a warning to `.claude/CLAUDE.md` §6 saying `setup-branch-protection` is not safe to re-run *in this repository right now*. Committing it left `src/beadloom/onboarding/templates/agentic_flow/CLAUDE.md.txt` modified — the hook had copied the paragraph into the shipped template **verbatim**, including the bead id `beadloom-mr2l.42` and the claim "`main`'s live protection has **seven**".
+    **Issue:** both of those are facts about *this* repository. A bead id means nothing to an adopter, and the seven-contexts claim is simply false for them — a freshly scaffolded project gets nine contexts and a workflow that produces all nine, so the warning that is urgent for us is wrong for them. Caught only because `git status` was read after the commit; nothing announced the propagation.
+    **The deeper problem is that there is no separation to enforce.** `.claude/CLAUDE.md` is simultaneously this project's instructions and the artifact we distribute, so every project-specific sentence is a shipping decision made by accident. This is exactly what BDL-061 S3 (`compose(core, architecture, stack, project)` with a project overlay) exists to fix, and this entry is the concrete case for it: the failure is not hypothetical drift, it is our own bead identifiers reaching adopters' onboarding text.
+    **Expected:**
+    - Until the overlay lands, the propagation must be **announced, not silent** — a hook that rewrites a distributed artifact should say so and require confirmation, the same standard we hold `sync-update` to (#163).
+    - The direction should be explicit. Today a local edit flows *outward* by default; the safe default is that the shipped template is the source and a local divergence is reported, with promotion to the template a deliberate act.
+    - Add a check that no project-local identifier — bead ids, our issue numbers, our repo's measured facts — appears in anything under `templates/`. Cheap, and it would have caught this at the commit.
+    **Related:** #139/#152 (a project has no supported place for its own additions — the same gap from the adopter's side), #163 (re-attesting without evidence).
+    **CORRECTION, one commit later: this is a LOOP, not an instance, and "fixed for this instance" was wrong.** The template was rewritten to an adopter-true paragraph and committed. The very next commit's pre-commit hook **re-propagated the project-local text over it**, restoring the bead id and the seven-contexts claim in the working tree. The hook enforces *template == our `CLAUDE.md`* in one direction, so the shipped artifact cannot diverge from this project's own instructions by construction — any correction survives exactly until the next commit. It reached `main` intact only because the re-propagation landed in the working tree and was never staged; a single `git add -A` would have shipped it. The severity is therefore not "a paragraph leaked once" but "the distributed artifact is permanently pinned to one project's local text, and the mechanism silently undoes attempts to separate them".
+    **Open question, noticed while fixing this and deliberately not chased here:** after the two files were made to differ on purpose, `beadloom ci` still reported `config-check PASS: agent-config in sync`. That is plausibly correct by design — CONTEXT's decision is that `config-check` verifies the *composition result*, not file bytes — but it has not been verified, and "in sync" printed over two files that demonstrably differ is the exact shape this slice spent itself on. Whoever takes S3's composition work should establish which it is before relying on that green.
+    **SECOND CORRECTION — the mechanism was misattributed, by the coordinator, twice.** It is not the pre-commit hook. `beadloom-mr2l.9` traced it to a **test**: `TestSyncAgenticFlow::test_sync_round_trips_live_source` rewrote the shipped template from this project's live `.claude/CLAUDE.md` (sha256 `f360bc60…` → `6fcae821…` in one clean-room run) and **passed while doing it**. `pytest` runs inside `beadloom ci`, and `beadloom ci` is what the pre-push hook runs — which is why it looked like a commit-time hook. The phenomenon was real and reproduced twice; the cause named in this entry was wrong both times.
+    **That makes it a worse defect than filed, in a different way.** A test that mutates a tracked source file as a side effect and reports success is not a propagation policy anyone chose — it is an invisible write from the one part of the system whose entire job is to observe without changing. It also means the shipped artifact was, in effect, regenerated from one project's local text every time anyone ran the suite. Fixed in S3 (`beadloom-mr2l.9`); verified by the coordinator: running that test now leaves the template byte-identical (`046c1839…` before and after, `git status` clean).
+    **The lesson worth keeping is about the diagnosis, not the code:** the coordinator observed the effect at commit time and named the nearest plausible cause twice without isolating it. REPORTS ARE NOT EVIDENCE applies to the coordinator's own reports.
+    **THIRD FINDING, and it closes the entry: the role leg was still live after the `CLAUDE.md` leg was fixed.** `.10` found three tests writing to four tracked files (`TestSyncAgenticFlow` → `templates/agentic_flow/agents/*.md.txt`) and proved in a clean room that an edited live role file ships after a *failing* run as well as a passing one. It was invisible to `git status` for a reason worth stating plainly: **the write is undetectable whenever it happens to be byte-identical — and it ships whatever it is not.** So "is the tree dirty afterwards?" was never a sound test for this defect, which is why two rounds of looking at `git status` missed it.
+    **Now structural rather than fixed case-by-case** — the shape this epic keeps having to reach for. `tests/tracked_write_guard.py` plus a `conftest` call-phase hook fails any test that writes a git-tracked file. Verified by the coordinator: a probe test that writes and restores `README.md` fails with the guard's own explanation, and `README.md` is left clean. A fourth instance of this defect can no longer be written without the suite rejecting it.
+    **The MECHANISM is closed; the CLASS is not.** See #183: our project-local *facts* still reach adopters through composition — every adopter's `CLAUDE.md` renders Beadloom's version as the project's own. Marking this entry resolved on the strength of the test-write fix was premature.
+
+152. ~~[2026-08-18] [MEDIUM] A project cannot extend a composed role adapter — overlays resolve only INSIDE the installed package~~ **CLOSED (BDL-061 S3, `.9`)** — proposal (a), with the drift-guard kept. A project layer at `.beadloom/flow/{roles,commands,claude}/<name>.md` composes AFTER the shipped overlays, and `config-check` verifies the **composition result**, so the addition is part of the expected output rather than drift. The minimum bar is also met and then some: `--fix` no longer deletes non-empty hand-authored content at all — a hand-edited file is reported with the project-layer path it belongs in and left exactly as it is.
+
+    **Severity:** medium (structural; it is the reason a downstream project's gate ends up depending on an unreleased upstream change — see #151)
+    **Command:** `beadloom setup-agentic-flow` / `config-check`
+    **Context:** Dogfood on a downstream project that treats its role adapters as the project's agent contract and refines them with project-specific engineering standards.
+    **Issue:** `role_composer.compose_role()` reads fragments from `roles_templates_root()` = `Path(__file__).parent / "templates" / "roles"` — `CORE` + one `architecture` overlay + `stack` overlays, all **inside the installed package**. `flow.yml` selects *which shipped overlays* compose; it cannot point at project-local ones. So a project that wants a standing paradigm in its `dev`/`review` roles has no supported place to put it: any local edit is reported as drift by `config-check`, and `--fix` removes it (no diff shown, no confirmation).
+    **Observed consequence:** the downstream project's paradigm was therefore contributed **upstream into Beadloom's own core templates** (the only durable option). That worked — and then made the project's CI gate depend on the change being *published*, which it was not (#151). A project-level overlay would have decoupled the two entirely.
+    **Expected / proposal:** (a) a project-local overlay directory (e.g. `.beadloom/roles/<role>.md.txt`) appended after the shipped overlays, so project additions survive recomposition **and** the composed part still gets drift-checked; or (b) marker-delimited hand-authored regions inside the generated file — the pattern already used for the auto-managed CLAUDE.md sections (`<!-- beadloom:auto-start -->`) — with `config-check` diffing only outside them. Minimum bar regardless: `--fix` should print the diff and refuse to delete non-empty hand-authored content without an explicit flag.
+
+139. ~~[2026-07-29] [MEDIUM] Composed role adapters are byte-identical drift-guarded with no methodology/quality overlay slot~~ **CLOSED (BDL-061 S3, `.9`)** — a standing team practice now has a home: `.beadloom/flow/roles/<role>.md` is composed into the adapter and is part of the drift baseline, so `beadloom ci` stays green and the role subagents' own system prompts carry it (no per-launch injection needed). The workaround this entry recorded — keep it in CLAUDE.md prose — is retired; `.beadloom/flow/claude/CLAUDE.md` is the supported equivalent for the entry point itself.
+
+    **Severity:** medium (blocks `beadloom ci` → blocks merge on a PR-gated main; forces a standing team practice OUT of the role adapters)
+    **Command:** `beadloom config-check` / `beadloom setup-agentic-flow` / `beadloom ci`
+    **Context:** A team adopting the vendored multi-agent flow wanted extra engineering paradigms to be **standing across all development** — BDD acceptance (Gherkin) and mutation testing — by hand-editing the four composed role adapters (`dev`/`test`/`review`/`tech-writer`) so each role's protocol carries the added discipline.
+    **Issue:** The role adapters are drift-guarded **byte-identical** against `CORE + <arch> + <stack>` composition, and the overlay set is a fixed enum (architecture `ddd`/`fsd` × stack `python`/…). There is **no project-local "extra"/"append" overlay slot** for role adapters. So ANY hand-edit trips `config-check` → `beadloom ci` goes red. The only offered remedy (`config-check --fix` / `setup-agentic-flow`) **destructively recomposes to canonical**, stripping the added methodology. Net: a standing team practice cannot live in the role adapters at all — it can only sit in `CLAUDE.md` user-prose, so the role subagents' own system prompts never carry it (it reaches them only if the orchestrator injects it per-launch or the agent happens to read a project doc).
+    **Expected:** A project-local, drift-**tolerated** extension point for role adapters — e.g. a `flow.yml` `overlays.custom:` / per-role `append:` slot (analogous to `CLAUDE.md`'s preserved user-prose regions), composed INTO the adapter and INCLUDED in the drift baseline — so a team can add standing practices to `dev`/`test`/`review`/`tech-writer` protocols without tripping `config-check`.
+    **Workaround:** Keep the methodology in `CLAUDE.md` preserved user-prose (outside auto-regions — not drift-checked) + have the orchestrator inject the extra discipline into each subagent's launch prompt; revert the adapters to canonical (`git checkout <pre-edit> -- .claude/agents/*.md`) to restore a green `config-check`.
+
+132. ~~[2026-06-15] [MEDIUM] `setup-agentic-flow --force` corrupts the vendored `CLAUDE.md` placeholder when run in Beadloom's own repo~~ **CLOSED (BDL-061 S3, `.9`)** — fixed by construction rather than by a guard: nothing writes the `CLAUDE.md` core any more. `sync_agentic_flow` no longer re-vendors it from the live copy, so `--force` cannot substitute a project name over `__BEADLOOM_PROJECT_NAME__`. The "do NOT run `--force` in the Beadloom repo" workaround is retired.
+
+    **Severity:** medium
+    **Command:** `beadloom setup-agentic-flow --force`
+    **Context:** Observed during BDL-056 while recomposing the role adapters after editing the CORE tech-writer role.
+    **Issue:** Running `--force` inside the Beadloom repo re-vendors the flow snapshot FROM the live composition. The live `.claude/CLAUDE.md` §0.1 has Beadloom's concrete project facts substituted in, so the re-vendor wrote `## 0.1 Project: beadloom` into the packaged `src/beadloom/onboarding/templates/agentic_flow/CLAUDE.md.txt`, **replacing the `__BEADLOOM_PROJECT_NAME__` placeholder**. That breaks the project-name substitution for every downstream adopter (the `TestClaudeMdRegionsPerProject` tests fail). It is a self-referential footgun: Beadloom is the source of the vendored template, so `--force` overwrites the template with the substituted instance.
+    **Expected:** Re-vendoring should preserve the `__BEADLOOM_PROJECT_NAME__` placeholder (re-tokenize the project name on re-vendor), or `--force` should refuse to re-vendor the CLAUDE.md asset from a substituted live copy. Until fixed, do NOT run `setup-agentic-flow --force` in the Beadloom repo to recompose only role adapters — recompose the adapter files without re-vendoring CLAUDE.md, or revert the CLAUDE.md asset afterward.
+    **Workaround:** After `--force`, `git checkout` the vendored `agentic_flow/CLAUDE.md.txt` (and the live `.claude/CLAUDE.md`) to restore the placeholder (done in BDL-056).
+
+133. ~~[2026-06-15] [LOW] Per-worktree `beadloom.db` baseline causes mass false re-baseline when integrating parallel worktree waves~~ **CLOSED (BDL-061 S6, `beadloom-mr2l.78`)** — the same root as #182, judged and fixed together (as `.46`/`.47` did for their pair): the per-worktree baseline is the OCCASION, the per-node hash is the CAUSE. Integrating a wave changes some of a node's files, the node hash moves, and every pair the node owns — including modules the integration never touched — read `symbols_changed`, so the only remedy was the blanket `sync-update --yes --all` this entry recommends as a workaround. With the fact stored per file, only the pairs whose own file the integration changed are stale and the untouched pairs keep the baseline they were integrated with. The per-file baseline is CARRIED across a reindex rather than recomputed, because recomputing it would re-baseline against the tree just indexed, which is how the integration erased the drift it brought in. Pinned by the executable scenario `Integrating a parallel wave does not re-baseline untouched doc pairs` (`tests/acceptance/features/sibling_baseline.feature`, PRD US-6 criterion 4).
+
+    **Severity:** low
+    **Command:** `beadloom sync-check` (after integrating worktree-isolated dev beads)
+    **Context:** BDL-057 coordinator integration. Two dev beads ran in isolated git worktrees (`isolation: worktree`); each has its OWN `.beadloom/beadloom.db` (a working-tree path). After file-checkout-integrating their code into the main branch, the main repo's `beadloom.db` still held pre-change baselines, so `sync-check` reported ~38 stale pairs (incl. modules the integration didn't touch) until a `sync-update --yes --all` + reindex fixpoint re-baselined.
+    **Issue:** The doc-freshness baseline (`sync_state`) lives in the per-worktree DB, so it does not travel with the file-checkout integration. The integrator must re-run the mark-synced→reindex fixpoint to reconcile — extra friction, and a risk of masking genuine drift if done blindly. Relates to #118 (parallel-dev tree friction).
+    **Expected:** Either document the "re-baseline after worktree integration" step in the coordinator merge flow, or make the baseline reconcilable from the integrated code state without a blanket `--all` (e.g. recompute only the pairs whose code actually changed in the integration diff).
+    **Workaround:** After integrating worktree branches, run `beadloom sync-update --yes --all && beadloom reindex` to a stable `sync-check` 0 (the F4.1 fixpoint loop), then verify no genuine prose drift via the dev beads' API-CHANGE notes.
+
+136. ~~[2026-06-18] [MEDIUM] Scaffolded flow is English-only and not overlay-aware~~ **CLOSED (BDL-061 S3, `.9`)** — all three parts. (a) `language:` is a `flow.yml` field, a peer of `architecture`/`stack`, validated for shape rather than against a closed list; every composition layer prefers a `<name>.<lang>.md.txt` fragment and a missing localisation falls back **with a note** rather than silently. (b) The hardcoded facts left the cores: `templates.md`'s "Python 3.10+" and testing/linting rows now come from `templates/commands/stack/<stack>/`, and "Modular architecture | CLI → Core → Storage" from `templates/commands/architecture/{ddd,fsd}/`. (c) The commands and `CLAUDE.md` are composable exactly like the role agents, so an adopter adapts them without breaking the drift-guard. The "ALL documents MUST be written in English" line is now the `doc-language` auto-region, rendered from `language:`.
+
+    **Severity:** medium
+    **Command:** `beadloom setup-agentic-flow` / `/templates` / `/task-init`
+    **Context:** Adopting the flow on a non-CLI async-service project with DDD architecture whose documentation is maintained in a non-English language.
+    **Issue:** The vendored `templates.md` + `task-init.md` hardcode: (a) **English** doc language ("ALL documents MUST be written in English") — `flow.yml` has `tools`/`architecture`/`stack`/`quality` but **no `language`** field; (b) **"Python 3.10+"** in the CONTEXT/RFC templates regardless of the project's actual Python version; (c) **"Modular architecture | CLI → Core → Storage"** in the CONTEXT template — that is Beadloom's OWN architecture, not derived from the project's `architecture: ddd|fsd` overlay. Because these files are drift-guarded byte-identical to upstream, an adopter cannot edit them without turning `beadloom ci` red, so they must override the defaults in CLAUDE.md prose. Same root cause as #77 (CLAUDE.md not adapted to the target stack), but for the vendored commands/templates after the BDL-052 configurator split.
+    **Expected:** (a) add a `language` field to `flow.yml` (a peer of `architecture`/`stack`), threaded into the composed/vendored docs so docs scaffold in the project's language; (b) make the templates' architecture/stack facts overlay-derived (DDD/FSD layer names; the project's Python from `pyproject.toml`) instead of the hardcoded "CLI → Core → Storage" / "3.10+"; or at minimum (c) make the templates composable (CORE + overlays) like the role agents, so they adapt per-project without breaking the drift-guard.
+    **Workaround:** override the defaults at project level in CLAUDE.md (a project-level rule beats the vendored default).
+
+137. ~~[2026-06-18] [LOW] Cross-major flow re-init leaves orphaned command files and skips changed vendored commands as "hand-edited"~~ **CLOSED (BDL-061 S3, `.9`)** — the "at least a printed warning" option, plus the reason the surgical migration was needed in the first place. (a) `orphaned_flow_files()` reports every file a prior layout left in `.claude/commands/` — the four role files and `epic-init.md` — each with the exact `rm -f` command and, for a role, where it moved to; they are reported, never deleted. (b) A changed vendored command is no longer an undifferentiated "hand-edited; use --force": the flow manifest separates *stale* (Beadloom wrote it, the composition moved → recomposed in place) from *hand_edited* (reported with the `.beadloom/flow/commands/<name>.md` path, never rewritten), so a cross-major re-init recomposes what it owns without `--force`. (c) `--force` no longer clobbers a customised `CLAUDE.md` body either, because the customisation belongs in the project layer, which composes on top. **Closure amended (BDL-061 `.12`, 2026-08-23): (a) is true of the LIBRARY and not of the command.** `orphaned_flow_files()` computes the list and `beadloom setup-agentic-flow` prints nothing from it — measured, no caller anywhere in `src/`. (b) and (c) hold as written. The unprinted half is re-opened as #188; this entry is left closed for the parts that shipped rather than reverted wholesale, because the mechanism is right and only its output is missing.
+
+    **Severity:** low
+    **Command:** `beadloom setup-agentic-flow` (on a repo scaffolded by an older major flow version)
+    **Context:** Re-initializing the agentic flow on a repo whose `.claude/` was scaffolded by an older layout (roles were slash commands in `commands/`); the current layout puts roles in `agents/`.
+    **Issue:** `setup-agentic-flow` wrote the new `agents/*` and re-vendored `templates.md`, but (a) **left the old role files orphaned** in `.claude/commands/` (`dev.md`/`test.md`/`review.md`/`tech-writer.md` + the deprecated `epic-init.md`) — it does not remove files from a previous layout; and (b) **skipped** `coordinator`/`task-init`/`checkpoint` as "hand-edited; use --force" because their old-version content differed from the new canonical (a safety refusal). The adopter had to manually delete the orphans and delete+regenerate the changed commands — and `--force` also overwrites the base CLAUDE.md, so a surgical migration needs manual glue. Broader than the documented "orphaned adapters" limitation (which is about a dropped *tool*); this is a changed *role layout* across a major version.
+    **Expected:** a migration path — e.g. `setup-agentic-flow --migrate` that removes superseded command files from a prior layout and re-vendors changed commands without clobbering the CLAUDE.md body; or at least a printed warning listing the orphaned/skipped files with the exact cleanup commands.
+    **Workaround:** manually `rm` the orphaned `commands/*` role files + `epic-init.md`, delete the 3 skipped command files, then re-run `setup-agentic-flow` (so they are written fresh) — avoiding `--force` to preserve a customized CLAUDE.md.
+
+122. ~~[2026-06-04] [HIGH] No data-access layer + `open_db` without context-managers (connection leaks)~~ **CLOSED (BDL-059 S2, #22)** — `infrastructure/repository.py` (typed graph-index reads; centralizes the 16× `SELECT ref_id, kind, summary FROM nodes`) + `infrastructure/db.py::connection()` context-manager; `tui/` now reads through the `application/graph_reads.py` facade (no raw SQLite in presentation). Leaks/ResourceWarnings addressed via the CM + S1 conftest yield/finally fixtures.
+
+    **Severity:** high
+    **Source:** REVIEW-2 §2 #1/#2 (verified at HEAD) · ROADMAP Technical-debt
+    **Issue:** Raw `conn.execute("SELECT…")` is spread across **36 files** in all domains incl. `tui/data_providers.py` (presentation reads SQLite directly — a layer leak); the exact `SELECT ref_id, kind, summary FROM nodes` is hardcoded **16×**. `open_db` is called with **no `with`/`contextlib.closing` anywhere** → connection leaks on exceptions (SQLite write-lock risk) + ResourceWarnings in tests.
+    **Expected:** Introduce `infrastructure/repository.py` (one place for queries); `tui` goes through the application layer only; wrap connections in a context-manager. Fixes both HIGHs at once. _(Note: the review's "53 open_db" figure is off — 27 in src / 232 total; the leak pattern is real.)_
+
+123. ~~[2026-06-04] [HIGH] N+1 + non-indexable LIKE in `doc_sync/engine.py` `check_source_coverage`~~ **CLOSED (BDL-059 S2, #22)** — `check_source_coverage` de-N+1'd: ~5N per-node/child queries + `LIKE '%…%'` replaced by 5 set-based prefetch queries + an indexable `json_each` match; golden parity (frozen oracle + AST guard).
+
+    **Severity:** high
+    **Source:** REVIEW-2 §2 #3 (verified, `engine.py:451-525`) · ROADMAP Technical-debt
+    **Issue:** Nested per-node and per-child queries plus `LIKE '%…%'` (cannot use an index) → quadratic on a large graph.
+    **Expected:** Prefetch with a single JOIN / `IN (...)`; consider a normalized annotations table.
+
+124. ~~[2026-06-04] [MEDIUM] Cycle detection re-explores from every node (no global visited)~~ **CLOSED (BDL-059 S3, #23)** — cycle detection rewritten WHITE/GREY/BLACK with path-as-set O(1) membership (`graph/rules/cycles.py`); golden-parity test reproduces the pre-refactor output byte-identically.
+
+    **Severity:** medium
+    **Source:** REVIEW-2 §2 #4 (verified, `rule_engine.py:1141-1209`) · ROADMAP Technical-debt
+    **Issue:** `evaluate_cycle_rules` runs DFS from each node with no global `visited`; `neighbor in path` is O(n) list membership; bounded only by `max_depth=10`. Exponential risk on a dense microservice graph. (A per-rule `seen_cycles` dedup exists, but no global visited.)
+    **Expected:** Tarjan/Johnson SCC, or DFS with WHITE/GREY/BLACK + a shared visited set; `path` as a set.
+
+125. ~~[2026-06-04] [MEDIUM] God-domain `graph/` should split out `federation` + `rules`~~ **CLOSED (BDL-059 S3, #23)** — `rule_engine.py` (2249)→`graph/rules/` package + `federation.py` (1000)→`graph/federation/` package, by cohesion (public import paths byte-stable). The `domain-size-limit` graph warning (was #119) was resolved by the owner-decided recalibration 200→280 (documented in `rules.yml`) — recalibration, NOT gaming (an in-domain split can't lower a domain's symbol count).
+
+    **Severity:** medium
+    **Source:** REVIEW-2 §2 #5 (verified) · extends #119 · ROADMAP Technical-debt
+    **Issue:** `graph/` is 6439 lines (rule_engine 1743 + federation 1000 + import_resolver 929) and mixes several concerns; `application/` is 233 symbols. Both trip the `domain-size-limit` warning (graph 202, application 233 vs 200).
+    **Expected:** Extract `federation` and `rules` into their own packages (clears the graph-202 warning of #119); reduce `application/`.
+
+126. ~~[2026-06-04] [MEDIUM] God-functions carry business logic in the wrong layer~~ **CLOSED (BDL-059 S4, #24)** — `cli.py:status` data-gathering moved to `application/status.py` (presentation/logic split); `cli.py` (3985)→`services/commands/` package; `scanner.py` (2770)→`onboarding/scanner/` package; `reindex.py` (1352)→`application/reindex/` package — the god-functions decomposed by responsibility.
+
+    **Severity:** medium
+    **Source:** REVIEW-2 §2 #6 (verified) · ROADMAP Technical-debt
+    **Issue:** `cli.py:status` ~283 lines (business logic in the CLI layer); `scanner.bootstrap_project` ~260; `reindex.incremental_reindex` ~216; `scanner.interactive_init` ~203.
+    **Expected:** Extract `cli.py:status` → `application/status.py`; decompose the scanner/reindex god-functions.
+
+127. ~~[2026-06-04] [LOW] `Any` concentration + exception swallowing in onboarding~~ **CLOSED (BDL-047)** — the `doc_generator.py` `except sqlite3.OperationalError: pass` swallows are gone (the handlers now bind `as exc` and surface/raise the error instead of silently passing). **Remaining (out of this epic's scope):** `infrastructure/git_activity.py:251` still has an `except ValueError: pass` on date parsing, and the broader `Any` concentration in onboarding is the larger type-safety item — both now **CLOSED (BDL-059 S5, #25)** — `git_activity.py` broad except narrowed to specific types (subprocess/`OSError`/`TimeoutExpired`); onboarding scanner dicts → `TypedDict` (new `onboarding/scanner/types.py`), a net `Any` reduction, mypy --strict clean.
+
+    **Severity:** low
+    **Source:** REVIEW-2 §2 #7/#8 (verified) · ROADMAP Technical-debt
+    **Issue:** 172 `Any` total, concentrated in onboarding (`doc_generator.py` 49, `scanner.py` 25, `config_reader.py` 19) — disables type-safety in the most error-prone layer. 7 spots of `except…: pass` (incl. `doc_generator.py:274,311` `except sqlite3.OperationalError: pass`) hide real DB errors.
+    **Expected:** TypedDict/dataclass for parsed structures; narrow the exceptions and/or log at debug.
+
+128. ~~[2026-06-04] [MEDIUM] L2 context cache not wired into `build_context`~~ **CLOSED (BDL-059 S5, #25)** — `build_context` now routes through the `SqliteCache` (transparent ETag cache; identical bundle on hit vs miss, proven by golden + HIT-never-recomputes tests).
+
+    **Severity:** medium
+    **Source:** REVIEW §4.4 (verified `builder.py`) · ROADMAP Technical-debt
+    **Issue:** `build_context` issues `SELECT * FROM code_symbols` per bundle and never calls the existing L2 `bundle_cache` (`cache.py`) → latency risk on 50K-symbol monorepos.
+    **Expected:** Wire `build_context` through the L2 cache; avoid the per-bundle full symbol scan.
+
+129. ~~[2026-06-04] [MEDIUM] Test-suite hygiene gaps~~ **CLOSED (BDL-059 S1, #21)** — `pytest-randomly` added (immediately exposed + fixed a latent live-DB order-dependence via a session-scoped `live_repo_reindexed` conftest fixture); conftest yield/finally db fixtures (ResourceWarnings); a grammar-guard test that FAILS-not-skips when tree-sitter grammars are absent (gated `BEADLOOM_REQUIRE_LANGUAGE_GRAMMARS=1` in CI); tests decoupled from production internals (the private-attribute coupling reduced ahead of the S2–S5 refactors).
+
+    **Severity:** medium
+    **Source:** REVIEW-2 §3 + REVIEW §4.3 (verified) · ROADMAP Technical-debt
+    **Issue:** (a) ResourceWarnings from unclosed SQLite connections — suite goes red under `filterwarnings=error::ResourceWarning`; (b) tree-sitter grammars are silently skipped if absent → TS/Go/Rust can pass CI untested; (c) almost no parametrization (10 across 3211 tests); (d) **372** private-attribute (`._x`) couplings block refactors; (e) TUI smoke tests without asserts; (f) no `pytest-randomly` (order-dependence undetected).
+    **Expected:** conftest yield+finally db fixtures; make grammars mandatory in CI (or a guard test); parametrize hotspots (rule_engine, language suites); de-couple from private attrs before large refactors; add asserts to TUI tests; add `pytest-randomly`.
+
+130. ~~[2026-06-04] [HIGH] Docs list rule types as dataclass names, not real YAML keys (internal contradiction)~~ **CLOSED (BDL-057)** — the SPEC-fill rewrote `architecture.md` to a correct YAML-key table (`deny, require, forbid, layers, forbid_cycles, forbid_import, check`), matching the dispatch (`rule_engine.py`); `getting-started.md` no longer lists rule types; `README.md` was already correct. No `forbid_edge`/`cycle_detection`/`import_boundary`/`cardinality` strings remain in `docs/`.
+
+    **Severity:** high
+    **Source:** REVIEW-2 §4 #1 (verified) · ROADMAP Technical-debt
+    **Issue:** `getting-started.md:127` and `architecture.md` (×4: L83,113-119,153,253) list rule types as `require, deny, forbid_edge, layer, cycle_detection, import_boundary, cardinality` — these are **dataclass names**, not YAML keys. Real keys (dispatch `rule_engine.py:662-724`): `deny, require, forbid, forbid_cycles, forbid_import, layers, check`. `README.md:186` has the CORRECT list — an internal contradiction. A user who copies `forbid_edge:` gets a rule that silently never fires.
+    **Expected:** Single source of truth for rule-type keys; fix getting-started.md + architecture.md to match the dispatch (and README).
+
+131. ~~[2026-06-04] [LOW] Doc accuracy nits: non-existent flag, miscount, placeholders~~ **CLOSED (v2.1.0 release)** — all three fixed: `getting-started.md` drops the non-existent `--non-interactive` flag (now `--yes`/`-y` only); `architecture.md` DDD domain count corrected (six domains + application + two interface layers); `CONTRIBUTING.md` `your-org`→`zoologov` placeholder fixed + a Release Process section added.
+
+    **Severity:** low
+    **Source:** REVIEW-2 §4 #2/#3/#4 (verified) · ROADMAP Technical-debt
+    **Issue:** `getting-started.md:29` documents a non-existent flag `--non-interactive` (only `-y/--yes` exists); `architecture.md:9` says "six DDD domains" but lists five; `CONTRIBUTING.md` has `your-org` placeholders and no release-process section (PyPI/versioning/tag).
+    **Expected:** Drop `--non-interactive`; fix the domain count; replace placeholders with `zoologov/beadloom` + add a release section.
+
+112. ~~[2026-06-02] [INFO/LOW] Incremental reindex displays `Symbols: 0` — per-run delta, not backfilled to the live total~~ **CLOSED (BDL-047)** — the incremental path now backfills `symbols_indexed` to the true live-DB symbol total (`SELECT count(*) FROM code_symbols`), mirroring the #88 nodes/edges fix, so a docs-only reindex no longer prints "Symbols: 0" on an intact index (`application/reindex.py:1330-1334`, comment cites #112).
+
+    **Severity:** info / low (cosmetic display only — zero gate impact)
+    **Command:** `beadloom reindex` (incremental path)
+    **Context:** Observed during BDL-039 F3 tech-writer doc edits. After #88 was fixed, the incremental reindex now backfills `nodes`/`edges` to the true live-DB totals on the docs/code-only path. The `symbols_indexed` counter, however, still reports only the **per-run delta** (symbols touched this run), so a CLI run that changes only docs can print "Symbols: 0" while the DB actually holds all indexed symbols.
+    **Issue:** Inconsistent reporting semantics between counters: `nodes`/`edges` show the live total (per #88), but `symbols_indexed` shows the run delta. A reader can misread "Symbols: 0" as "no symbols indexed."
+    **Expected:** Either backfill `symbols_indexed` to the live DB symbol total on the incremental path (consistent with nodes/edges per #88), or label it explicitly as a delta ("Symbols indexed this run: 0").
+    **Impact:** None on correctness or any gate — `sync-check` / `lint` / `doctor` / `beadloom ci` all read the DB, not this counter. Purely a cosmetic CLI-display artifact.
+
+105. ~~[2026-06-01] [MEDIUM] Adding a new source file to a domain re-stales the domain doc against ALL its member files~~ **CLOSED (BDL-061 S6, `beadloom-mr2l.78`)** — the earliest filing of the defect #182 re-found eleven weeks later. Its **Expected** was right in 2026-06 and is what shipped: "`symbols_changed` should fire only for the pair(s) whose own code symbols changed". A file that ARRIVES on a node whose baseline is carried gets no file-level fact of its own, because its arrival is part of what moved the node hash — so a genuinely-new module is still reported, and its unrelated siblings are not.
+
+    **Severity:** medium
+    **Command:** `beadloom reindex && beadloom sync-check`
+    **Context:** BDL-038 BEAD-01 added one new module (`src/beadloom/graph/contracts.py`) to the `graph` domain and edited one sibling (`federation.py`). Before the change `sync-check` was honest 0; after, it reported **8 stale pairs** for `domains/graph/README.md` — including files I never touched (`diff.py`, `snapshot.py`, `linter.py`, `rule_engine.py`, `import_resolver.py`, `cli.py`), all with reason `symbols_changed`. Verified by stashing the change: at HEAD the same pairs are clean.
+    **Issue:** The domain doc's symbol-drift baseline appears to be keyed on the domain's **aggregate** symbol set, so adding any symbol anywhere in the domain invalidates the `symbols_hash` for **every** doc↔file pair in that node — not just the pair whose code actually changed. One new file → N false `symbols_changed` pairs.
+    **Expected:** `symbols_changed` should fire only for the pair(s) whose own code symbols changed. A genuinely-new module should surface as a single `untracked_files` signal on the doc, not re-stale every unrelated sibling pair. (Compare #89: per-file granularity was the fix there too.)
+    **Workaround:** Document the new module in the domain README, then `mark_synced_by_ref(conn, '<domain>', root)` to re-baseline all pairs, then re-run to fixpoint (see #106).
+
+106. ~~[2026-06-01] [LOW] No non-interactive CLI to attest sync baseline (`mark_synced`) — only the interactive `sync-update`~~ **CLOSED (BDL-047 W1)** — `beadloom sync-update [REF] --yes` (and `--all` with `--yes`) now re-baselines freshness non-interactively (recomputes hashes + `symbols_hash`, sets `status='ok'`, no editor/prompt), wrapping `mark_synced_by_ref`. This is the primitive the F4.1 AI-tech-writer fixpoint loop uses; agents no longer reach past the CLI into the engine.
+
+    **Severity:** low
+    **Command:** `beadloom sync-update <ref>` (interactive: `click.confirm` + `click.edit`)
+    **Context:** After a doc refresh, re-baselining the sync state requires `mark_synced` / `mark_synced_by_ref` (`doc_sync.engine`). The only CLI surface is `sync-update`, which opens an editor and prompts — unusable in an agent/CI flow. BEAD-01 had to call the engine directly via `uv run python -c "...mark_synced_by_ref..."`.
+    **Issue:** There is no `beadloom sync-update <ref> --mark-synced` (or `beadloom sync-mark <ref>`) for non-interactive attestation. Agents must reach past the CLI into the engine.
+    **Expected:** A non-interactive attest flag/command, e.g. `beadloom sync-update <ref> --mark-synced` or `beadloom sync-mark [--ref R | --all]`, that recomputes hashes + `symbols_hash` and sets `status='ok'` without an editor. Pairs with the F4.1 AI-tech-writer loop (STRATEGY-3) which must attest non-interactively. Re-running `reindex && sync-check` after attest to a stable 0 is mandatory (F4.1 loop invariant — clearing `symbols_changed` surfaces masked `untracked_files`, as it did for `contracts.py` here).
+
+
 
 ### Import extraction depth — #159 (2026-08-20)
 

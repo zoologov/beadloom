@@ -9,7 +9,7 @@
 
 | Bead | Role | Status | Note |
 |---|---|---|---|
-| beadloom-viaj | feature | ready | parent |
+| beadloom-viaj | feature | ✓ done | parent |
 | beadloom-viaj.1 | dev | ✓ done | `graph_summary_facts` — RED captured on 3 nodes; 32 tests; 12 neuterings verified |
 | beadloom-viaj.2 | dev | ✓ done | `doc_area_coherence` — names exactly the four drifting nodes; 9 live-repo tests left red for `.4` |
 | beadloom-viaj.3 | dev | ✓ done | audit stops describing itself — three populations; `FactRegistry.collect_set()` is `.1`'s contract |
