@@ -11,17 +11,29 @@ The fix renames the generated rule to ``feature-needs-parent`` with an empty
 ``has_edge_to`` matcher, so features are valid under either a domain or a
 service parent.  These tests reproduce the feature-under-service layout and
 assert lint is genuinely clean.
+
+BDL-067 (BDL-UX #192) added the second layout.  The assertion in this file was
+always the right one — ``not has_errors`` *and* ``violations == []`` — but every
+source directory in the #71 fixture has code-bearing subdirectories, so the
+bootstrap's cluster loop attached every node it wrote and the fallback branch
+was never entered.  A layout that enters it shipped a domain with no ``part_of``
+edge for two major releases while this file stayed green.  The lint assertion is
+now parametrised over both layouts, so the branch that forgot the edge is under
+the check that was written to catch exactly this.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
+
 from beadloom.application.reindex import incremental_reindex
 from beadloom.graph.linter import lint
 from beadloom.onboarding.scanner import bootstrap_project
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
 
@@ -46,12 +58,45 @@ def _make_feature_under_service_project(root: Path) -> None:
     (root / "billing" / "models" / "user.py").write_text("class User:\n    pass\n")
 
 
+def _make_flat_single_source_dir_project(root: Path) -> None:
+    """Create a project whose only source file sits directly in its source dir.
+
+    The shape BDL-UX #192 was reported against, and the one the fixture above
+    cannot reach: ``src`` holds a module and no code-bearing subdirectory, so
+    ``_cluster_with_children`` yields nothing and the bootstrap takes its
+    fallback branch — one node per source dir at the preset's default kind
+    (``domain`` under MONOLITH).  Before BDL-067 that node left the bootstrap
+    with no ``part_of`` edge, and ``domain-needs-parent`` — written by the same
+    command, one step later — failed over it.
+    """
+    (root / "pyproject.toml").write_text(
+        '[project]\nname = "flat-app"\nversion = "0.1.0"\n', encoding="utf-8"
+    )
+    src = root / "src"
+    src.mkdir(parents=True)
+    (src / "app.py").write_text("def run() -> int:\n    return 1\n", encoding="utf-8")
+
+
 class TestCleanBootstrapLint:
     """A fresh bootstrap passes ``lint --strict`` with zero violations."""
 
-    def test_feature_under_service_lint_is_clean(self, tmp_path: Path) -> None:
-        """Bootstrap (features under services) -> lint -> zero violations."""
-        _make_feature_under_service_project(tmp_path)
+    @pytest.mark.parametrize(
+        "make_project",
+        [_make_feature_under_service_project, _make_flat_single_source_dir_project],
+        ids=["feature-under-service", "flat-single-source-dir"],
+    )
+    def test_bootstrap_lint_is_clean(
+        self, tmp_path: Path, make_project: Callable[[Path], None]
+    ) -> None:
+        """Bootstrap -> lint -> zero violations, on each layout that reaches a branch.
+
+        The first leg is #71 (features nested under services).  The second is
+        BDL-UX #192 (a flat source directory), and it is the leg this assertion
+        could not make before BDL-067: pointed only at the nested layout, the
+        check passed while a virgin bootstrap wrote a graph that failed its own
+        ``domain-needs-parent``.
+        """
+        make_project(tmp_path)
 
         bootstrap_project(tmp_path, preset_name="monolith")
 
@@ -98,6 +143,28 @@ class TestCleanBootstrapLint:
             "expected a feature whose part_of edge targets a service "
             f"(graph kinds={kinds}, edges={edges})"
         )
+
+    def test_flat_layout_reaches_the_branch_that_forgot_the_edge(
+        self, tmp_path: Path
+    ) -> None:
+        """Guard + regression: the flat leg writes a domain, and it is parented.
+
+        The first two assertions are the guard.  If a preset change stopped
+        classifying a bare source directory as a ``domain``, the flat leg of the
+        lint test above would pass without exercising #192 at all, which is the
+        failure mode this whole file exists to avoid.  The third assertion is
+        the regression: it names the edge, so a fix that satisfied the linter by
+        some other route would still have to say where the domain belongs.
+        """
+        _make_flat_single_source_dir_project(tmp_path)
+
+        result = bootstrap_project(tmp_path, preset_name="monolith")
+
+        kinds = {n["ref_id"]: n["kind"] for n in result["nodes"]}
+        assert kinds.get("src") == "domain", kinds
+        assert kinds.get("flat-app") == "service", kinds
+        part_of = [(e["src"], e["dst"]) for e in result["edges"] if e["kind"] == "part_of"]
+        assert part_of == [("src", "flat-app")], result["edges"]
 
     def test_rule_is_feature_needs_parent(self, tmp_path: Path) -> None:
         """The generated rule is the parent-agnostic ``feature-needs-parent``."""

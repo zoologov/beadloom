@@ -88,3 +88,57 @@ class TestAVirginScaffoldIsGreen:
         _scaffolded(project.root)
 
         assert (project.root / FLOW_CONFIG_RELPATH).read_text(encoding="utf-8") == declared
+
+
+class TestAVirginScaffoldSurvivesItsOwnGate:
+    """The assertion this file did not make, and BDL-UX #192 lived in the gap.
+
+    Everything above runs the real ``init --yes --mode bootstrap`` on exactly the
+    fixture that reproduced #192 — ``typescript_project``, a Node manifest and a
+    single flat ``src/index.ts`` — and then asks ``config-check`` whether the
+    *agent configuration* is in sync. Nothing ever linted the *graph*. So the
+    suite bootstrapped a self-contradicting graph on every CI run for two major
+    releases and could not see it: ``init`` exited 0, ``config-check`` exited 0,
+    and the one command that disagreed was never invoked.
+
+    Measured on the pre-BDL-067 code with this fixture: ``init`` rc 0 printing
+    ``Graph: 2 nodes, 0 edges``, then ``lint --strict`` rc 1 on
+    ``domain-needs-parent`` and ``ci`` rc 1. The same run is now ``1 edges`` and
+    rc 0 / rc 0 / rc 0.
+    """
+
+    def test_lint_strict_is_clean_straight_after_the_first_scaffold(
+        self, tmp_path: Path
+    ) -> None:
+        """``--strict``, because bare ``lint`` cannot fail on an error violation.
+
+        Without the flag the command keeps exit code 0 when error-severity
+        violations are found and only prints a warning
+        (``services/commands/federation.py``). It is therefore not a gate, and a
+        test that used it here would re-create the false green this slice removes
+        from ``test_integration_onboarding.py``.
+        """
+        project = typescript_project(tmp_path / "orders-web")
+        runner = _scaffolded(project.root)
+
+        result = runner.invoke(main, ["lint", "--strict", "--project", str(project.root)])
+
+        assert result.exit_code == 0, result.output
+
+    def test_the_whole_gate_is_green_straight_after_the_first_scaffold(
+        self, tmp_path: Path
+    ) -> None:
+        """``beadloom ci``, not one step of it — the verdict the adopter meets next.
+
+        The check above says the rules pass. This says the whole Gate does, which
+        is the claim #192 falsified and the one the BRIEF asks to be measured end
+        to end rather than asserted about a part. It also covers the opposite
+        defect: any gate step that turns red on a project holding nothing but a
+        fresh scaffold.
+        """
+        project = typescript_project(tmp_path / "orders-web")
+        runner = _scaffolded(project.root)
+
+        result = runner.invoke(main, ["ci", "--project", str(project.root)])
+
+        assert result.exit_code == 0, result.output
