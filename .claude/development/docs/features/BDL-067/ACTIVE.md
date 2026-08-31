@@ -130,4 +130,4 @@ longer name `ACTIVE.md`.
 
 **Routing.** Major 1 + Minor 4 → `.6`/`.7`/`.8`. Major 2 + Minor 5 → named into `.5`'s notes.
 Minor 3 (two nodes share one `ref_id` on `src/<project>/`, the loader keeps one, the rule goes
-inert and `ci` stays green) → filed on its own as `beadloom-7c6k` / BDL-UX #211, by owner decision.
+inert and `ci` stays green) → filed on its own as `beadloom-7c6k` / BDL-UX #214, by owner decision.
