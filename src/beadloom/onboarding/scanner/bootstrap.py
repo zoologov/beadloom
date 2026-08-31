@@ -32,6 +32,46 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+def _missing_domain_parent_edges(
+    nodes: list[dict[str, str]],
+    edges: list[dict[str, str]],
+    root_ref_id: str,
+) -> list[dict[str, str]]:
+    """Name the `part_of` edges the domain-parent post-condition is still short of.
+
+    `bootstrap_project` writes `domain-needs-parent` into the adopter's
+    `rules.yml` whenever it writes a node of kind `domain` (`rules_gen.py`), so
+    a domain it writes without an outgoing `part_of` edge fails a rule the same
+    command authored one step earlier — `init` exits 0 and `ci` exits 1
+    (BDL-UX #192). The post-condition is therefore stated over the function's
+    whole output rather than over the branch that was reported:
+
+        every node written with kind `domain` carries at least one outgoing
+        `part_of` edge — to its classified parent where one exists, to the root
+        service node otherwise.
+
+    A branch that forgets the edge is closed by this pass whether or not anyone
+    remembers it exists. Two nodes are deliberately left alone: a domain that
+    already has a `part_of` edge keeps the parent its classifier chose, and a
+    domain whose ref_id collides with the root's gets nothing, because an edge
+    from a node to itself is not a parent.
+
+    *root_ref_id* must be the value written into the root node, not a name
+    recomputed from the project: cluster refs pass through `_sanitize_ref_id`
+    and the root ref does not, so a recomputed destination silently resolves to
+    nothing for a project whose name contains parentheses.
+    """
+    parented = {edge["src"] for edge in edges if edge["kind"] == "part_of"}
+    missing: list[dict[str, str]] = []
+    for node in nodes:
+        ref_id = node["ref_id"]
+        if node["kind"] != "domain" or ref_id in parented or ref_id == root_ref_id:
+            continue
+        missing.append({"src": ref_id, "dst": root_ref_id, "kind": "part_of"})
+        parented.add(ref_id)
+    return missing
+
+
 def bootstrap_project(
     project_root: Path,
     *,
@@ -227,6 +267,11 @@ def bootstrap_project(
             sanitized_cluster = _sanitize_ref_id(cluster_name)
             if sanitized_cluster != project_name:
                 edges.append({"src": sanitized_cluster, "dst": project_name, "kind": "part_of"})
+
+        # Post-condition: no domain leaves this function without a parent.
+        # The loop above only reaches nodes that came from `clusters`; this
+        # reaches every domain the function wrote, whichever branch wrote it.
+        edges.extend(_missing_domain_parent_edges(nodes, edges, root_node["ref_id"]))
 
     # Write YAML graph.
     if nodes:

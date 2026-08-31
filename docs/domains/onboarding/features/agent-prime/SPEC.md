@@ -15,7 +15,18 @@ Cross-IDE context injection via a three-layer architecture.
    the result is returned as `ignore_added` / `ignore_skipped_reason`, and `beadloom init`
    prints it. See the [ignore-block component](../../components/ignore-block/DOC.md).
 
-4. **`beadloom prime`** (dynamic) — CLI command and MCP tool that queries the DB for current project state: architecture summary, stale docs, lint violations, domain list.
+4. **The domain-parent post-condition** (one invariant) — every node `bootstrap_project()`
+   writes with `kind: domain` leaves the function with at least one outgoing `part_of` edge,
+   to its classified parent where one exists and to the root service node otherwise. The
+   same call writes `domain-needs-parent` into the adopter's `rules.yml` whenever it writes a
+   domain, so a domain without that edge makes `init` exit 0 over a graph the very next
+   `lint --strict` rejects — measured as rc 0 then rc 1 on a flat TypeScript project
+   (BDL-UX #192). `_missing_domain_parent_edges(nodes, edges, root_ref_id)` enforces it over
+   the whole node list rather than inside the branch that was reported, and reads
+   *root_ref_id* back from the root node instead of recomputing it, because cluster refs pass
+   through `_sanitize_ref_id` and the root ref does not.
+
+5. **`beadloom prime`** (dynamic) — CLI command and MCP tool that queries the DB for current project state: architecture summary, stale docs, lint violations, domain list.
 
 ## API
 

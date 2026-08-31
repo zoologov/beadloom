@@ -1,0 +1,172 @@
+"""Step implementations for `features/bootstrap_self_consistency.feature`.
+
+BDL-067 `.1`, closing BDL-UX #192. The steps run the real `bootstrap_project`
+and the real linter over real directories; nothing is stubbed, because a stub
+would agree with whatever the bootstrap currently writes and that is the thing
+under test.
+
+**FAKES PROVE FAKES.** Every fixture here is a project that is not Beadloom —
+`orders-web`, `orders (web)`, `supply-chain/src/platform/orders`. None of those
+names exists in this repository, so a fix that worked by recognising our own
+tree would fail these.
+
+The fixtures are built here rather than imported from `tests.adopter_project`,
+which holds the same TypeScript shape. `tests/test_bead14_s4_binding.py` copies
+`tests/acceptance/` out of the repository and runs it standalone to prove a
+broken step binding reddens the suite, and in that copy the `tests` package is
+not importable — an import of it turns that sabotage into a collection failure,
+which proves nothing about the binding.
+
+The module is named `test_*` so default pytest collection picks the scenarios up.
+"""
+
+from __future__ import annotations
+
+import json
+from typing import TYPE_CHECKING, Any
+
+import pytest
+from pytest_bdd import given, parsers, scenarios, then, when
+
+from beadloom.application.reindex import incremental_reindex
+from beadloom.graph.linter import lint
+from beadloom.onboarding.scanner import bootstrap_project
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+scenarios("../features/bootstrap_self_consistency.feature")
+
+#: A project name that survives `_sanitize_ref_id` only by losing characters.
+#: The root's ref_id is written unsanitised, so an edge that recomputes the
+#: name from the project instead of reading the node points at nothing.
+PARENTHESISED_NAME = "orders (web)"
+
+
+@pytest.fixture()
+def world() -> dict[str, Any]:
+    return {}
+
+
+def _flat_project(root: Path) -> Path:
+    """One source file directly under `src/` — no code-bearing subdirectory.
+
+    The shape BDL-UX #192 was reported against, and the same shape
+    `tests.adopter_project.typescript_project` builds: a Node manifest whose
+    name the root node takes, and a single flat `src/index.ts`.
+    """
+    project = root / "orders-web"
+    (project / "src").mkdir(parents=True)
+    (project / "package.json").write_text(
+        json.dumps({"name": "orders-web", "version": "0.4.1"}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    (project / "src" / "index.ts").write_text("export const orders = [];\n", encoding="utf-8")
+    return project
+
+
+def _parenthesised_project(root: Path) -> Path:
+    """The same flat shape under a name `_sanitize_ref_id` would rewrite.
+
+    No manifest, so `_detect_project_name` falls back to the directory name and
+    the root node's ref_id keeps its parentheses.
+    """
+    project = root / PARENTHESISED_NAME
+    (project / "src").mkdir(parents=True)
+    (project / "src" / "index.ts").write_text("export const orders = [];\n", encoding="utf-8")
+    return project
+
+
+def _nested_project(root: Path) -> Path:
+    """A source dir with a code-bearing subdirectory whose child is a domain.
+
+    `platform` and `orders` match no preset pattern, so both classify at the
+    MONOLITH default kind `domain`. `orders` therefore has a classified parent
+    and must keep it.
+    """
+    project = root / "supply-chain"
+    orders = project / "src" / "platform" / "orders"
+    orders.mkdir(parents=True)
+    boot = project / "src" / "platform" / "boot.ts"
+    boot.write_text("export const b = 1;\n", encoding="utf-8")
+    (orders / "orders.ts").write_text("export const o = 1;\n", encoding="utf-8")
+    return project
+
+
+@given("a project whose only source file sits directly in its source directory")
+def _given_flat(world: dict[str, Any], tmp_path: Path) -> None:
+    world["project"] = _flat_project(tmp_path)
+
+
+@given(
+    "a project whose name carries parentheses and whose source file sits "
+    "directly in its source directory"
+)
+def _given_parenthesised(world: dict[str, Any], tmp_path: Path) -> None:
+    world["project"] = _parenthesised_project(tmp_path)
+
+
+@given("a project whose source directory has code-bearing subdirectories")
+def _given_nested(world: dict[str, Any], tmp_path: Path) -> None:
+    world["project"] = _nested_project(tmp_path)
+
+
+@when("the project is bootstrapped")
+def _when_bootstrapped(world: dict[str, Any]) -> None:
+    world["result"] = bootstrap_project(world["project"])
+
+
+@when("the bootstrapped graph is linted")
+def _when_linted(world: dict[str, Any]) -> None:
+    world["lint"] = lint(world["project"], reindex=incremental_reindex)
+
+
+@then("the lint reports no error-severity violation")
+def _then_no_errors(world: dict[str, Any]) -> None:
+    result = world["lint"]
+    assert not result.has_errors, [
+        (v.rule_name, v.from_ref_id, v.message) for v in result.violations
+    ]
+
+
+@then(parsers.parse("every node written with kind {kind} has an outgoing part_of edge"))
+def _then_every_node_of_kind_is_parented(world: dict[str, Any], kind: str) -> None:
+    nodes = world["result"]["nodes"]
+    parented = {e["src"] for e in world["result"]["edges"] if e["kind"] == "part_of"}
+    orphans = [n["ref_id"] for n in nodes if n["kind"] == kind and n["ref_id"] not in parented]
+    assert not orphans, f"{kind} nodes with no part_of edge: {orphans}"
+    # Guard: a graph with no node of this kind would pass the assertion above
+    # without exercising anything.
+    assert any(n["kind"] == kind for n in nodes), f"fixture produced no {kind} node"
+
+
+@then("each of those edges names the root node by the ref_id the bootstrap wrote")
+def _then_dst_is_the_written_root(world: dict[str, Any]) -> None:
+    nodes = world["result"]["nodes"]
+    root_ref_id = next(n["ref_id"] for n in nodes if n["kind"] == "service")
+    domains = {n["ref_id"] for n in nodes if n["kind"] == "domain"}
+    dsts = {
+        e["dst"]
+        for e in world["result"]["edges"]
+        if e["kind"] == "part_of" and e["src"] in domains
+    }
+    assert dsts == {root_ref_id}, f"expected part_of -> {root_ref_id!r}, got {sorted(dsts)}"
+
+
+@then("every edge the bootstrap wrote points at a node the bootstrap wrote")
+def _then_edges_resolve(world: dict[str, Any]) -> None:
+    ref_ids = {n["ref_id"] for n in world["result"]["nodes"]}
+    dangling = [e for e in world["result"]["edges"] if e["dst"] not in ref_ids]
+    assert not dangling, f"edges pointing at no node: {dangling}"
+
+
+@then("no domain is attached to the root when its classifier already gave it a parent")
+def _then_classified_parent_is_kept(world: dict[str, Any]) -> None:
+    nodes = world["result"]["nodes"]
+    root_ref_id = next(n["ref_id"] for n in nodes if n["kind"] == "service")
+    part_of = [e for e in world["result"]["edges"] if e["kind"] == "part_of"]
+    nested = [e for e in part_of if e["dst"] != root_ref_id]
+    assert nested, f"fixture produced no classified parent: {part_of}"
+    for edge in nested:
+        siblings = [e for e in part_of if e["src"] == edge["src"]]
+        assert len(siblings) == 1, f"{edge['src']} was attached twice: {siblings}"
