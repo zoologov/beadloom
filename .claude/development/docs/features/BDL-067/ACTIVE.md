@@ -22,8 +22,9 @@ errors, and the invariant holds for every preset the module can select.
 - [x] Wave 1 — `.1` dev (closed; `lint --strict` rc 1 -> rc 0 and `ci` rc 1 -> rc 0 on a virgin adopter project)
 - [x] Wave 2 — `.2` dev (closed 2026-08-31, commit `e52aa06`)
 - [x] Wave 3 — `.3` test (closed 2026-08-31, commits `e870b0b`, `fee64db`)
-- [x] Wave 4 — `.4` review (subagent launched)
-- [ ] Wave 5 — `.5` tech-writer
+- [x] Wave 4 — `.4` review (closed 2026-08-31, verdict ISSUES: 0 critical, 2 major)
+- [ ] Wave 4b — `.6` dev / `.7` test / `.8` re-review (fix cycle)
+- [ ] Wave 5 — `.5` tech-writer (re-pointed to depend on `.8`)
 - [ ] Gate green, PR opened
 
 ## Results
@@ -33,8 +34,11 @@ errors, and the invariant holds for every preset the module can select.
 | `beadloom-e8s4.1` | Done | post-condition `_missing_domain_parent_edges` in `bootstrap.py`; 4 scenarios + 11 unit tests; green in a clean room over 6 files |
 | `beadloom-e8s4.2` | ✓ done | `init` now takes a verdict on the graph it wrote, in both the `--yes` and interactive `--bootstrap` branches, using the Gate's own `has_errors` semantics. 15 tests. The divergence is CONSTRUCTED — `part_of` edges are stripped back out of `services.yml` after the real bootstrap wrote the real rules — so the case does not depend on `.1` still leaving a naturally-broken graph. API change: `gate._step_lint` → public `lint_step`. Commit `e52aa06`. |
 | `beadloom-e8s4.3` | ✓ done | the three suite defects closed. All five assertions verified RED against the pre-fix source (`git archive af26750 src` imported via `PYTHONPATH`, the override confirmed by `gate.lint_step` being absent there): pre-fix 5 failed / 20 passed, post-fix 25 passed, no pre-existing test turned red. Coverage 97% / 93% / 91% on the changed modules. Commits `e870b0b`, `fee64db`. |
-| `beadloom-e8s4.4` | In Progress | wave 4, review subagent launched |
-| `beadloom-e8s4.5` | Pending | blocked by .4 |
+| `beadloom-e8s4.4` | ✓ done | REVIEW ISSUES: 0 critical, 2 major. Verified green independently: the #192 reproduction on a scratch adopter (`2 nodes, 1 edges`, `lint --strict` rc 0, `ci` rc 0) against the same fixture on pre-fix source (`2 nodes, 0 edges`, no `edges:` key); the deliverable is an invariant (`_missing_domain_parent_edges` runs over the whole node list after every edge producer); the edge uses `root_node["ref_id"]` as written; `rules_gen.py` diff is empty. |
+| `beadloom-e8s4.5` | Pending | re-pointed: now blocked by `.8`. Doc surface named by the review, not to be guessed. |
+| `beadloom-e8s4.6` | Pending | fix cycle — the third `init` branch |
+| `beadloom-e8s4.7` | Pending | blocked by `.6` |
+| `beadloom-e8s4.8` | Pending | blocked by `.7` |
 
 ## Notes
 
@@ -102,3 +106,26 @@ reporting `decision-reason: the decision carries no reason` against a row that r
 measurement rather than a decision. Rewritten as a list, and the Gate went quiet. Worth noting
 before it is filed: a table of claims and their measurements is a shape this repository will
 write again, and nothing distinguishes it from a decision table but the words in the header.
+
+**Wave 4 — the review found what four green waves did not**
+
+`_verdict_on_the_generated_graph` has two call sites, `--yes` and `--bootstrap`. The **default
+interactive wizard** — plain `beadloom init`, the branch a human adopter meets first — calls
+`bootstrap_project` through `interactive_init`, prints `Initialization complete!` and returns with
+no verdict at all. The reviewer reproduced #192's exact shape there: wizard rc 0, `lint --strict`
+rc 1, `ci` rc 1.
+
+What hid it is worth more than the patch. The test module's own comment reads *"The two ways
+`init` reaches the bootstrap"* — true of monkeypatch **bindings**, since the wizard shares the
+`--yes` binding, and false of **branches**. Everyone downstream of that sentence, including this
+coordinator, counted two and stopped.
+
+**Independence was defeated, and only the reviewer could see it.** `review-brief` withheld 0
+comments and was right — the authors' accounts were not in bead comments, they were in this file's
+Results table, and the launch prompt named this file as required reading. The playbook prescribes
+both halves. Logged as BDL-UX #212; practice changed by owner decision — review launch prompts no
+longer name `ACTIVE.md`.
+
+**Routing.** Major 1 + Minor 4 → `.6`/`.7`/`.8`. Major 2 + Minor 5 → named into `.5`'s notes.
+Minor 3 (two nodes share one `ref_id` on `src/<project>/`, the loader keeps one, the rule goes
+inert and `ci` stays green) → filed on its own as `beadloom-7c6k` / BDL-UX #211, by owner decision.

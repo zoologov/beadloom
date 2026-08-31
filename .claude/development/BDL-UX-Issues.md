@@ -35,6 +35,44 @@
 
 ## Open Issues
 
+213. [2026-08-31] [LOW] `decision-reason` reads a table of claims-and-measurements as a table of decisions
+
+    **Severity:** low (a warning, not a block — but it is a false positive against honest documentation, and those teach people to stop reading the output)
+    **Command:** `beadloom ci` (the `docs quality` step)
+    **Context:** the BDL-067 coordinator wrote its verification of a subagent's report as a two-column table — the claim in one column, what re-measuring it produced in the other — in `ACTIVE.md`.
+    **Issue:** the check reported `decision-reason: the decision carries no reason` against a row that records a *measurement*, not a decision. Rewriting the same content as a bulleted list silenced it, with no change in meaning. A table of "claim → what I measured" is a shape this repository will keep writing, because the playbook asks a coordinator to verify rather than believe its subagents, and nothing distinguishes it from a decision table but the words in the header.
+    **Expected:** either recognise a verification table by its header vocabulary, or scope `decision-reason` to a section the document declares as decisions rather than to any two-column table.
+    **Related:** the same run showed a second-order version of the problem — the coordinator counted error-level lines with `grep -c "::error"` and matched its own prose, because the text quoted the token. A substring count is not a measurement of severity.
+
+212. [2026-08-31] [HIGH] The review's withholding is defeated by the epic document the playbook itself mandates
+
+    **Severity:** high (the withholding is the whole mechanism; where it is ceremonial, the review's independence is asserted and not held)
+    **Command:** `beadloom review-brief <bead-id>` + the `/coordinator` review-launch prompt
+    **Context:** BDL-067, review bead `beadloom-e8s4.4`. The launch prompt carried no author summary — deliberately, per the playbook's own rule that a review prompt carries the bead id and nothing else about the change.
+    **Issue:** `review-brief` reported **0 comments withheld** and was correct: the authors' accounts were not in bead comments. They were in `ACTIVE.md` — the per-bead Results table, carrying the `gate._step_lint -> lint_step` API change, the red-verification counts and the coverage numbers — and the launch prompt named `ACTIVE.md` as required reading, because the playbook says a role subagent gets `CONTEXT.md` + `ACTIVE.md`. So the coordinator withheld the author's account through one channel and handed it over through another, in the same prompt. **The reviewer detected this and declared it unprompted**, which is the only reason it is written down; nothing in the tooling could have reported it.
+    **Expected:** the review launch prompt must not name `ACTIVE.md` (fixed as practice on 2026-08-31), and `review-brief` should be able to say that a document the reviewer was told to read carries author accounts — a withholding that a neighbouring file defeats is withholding nobody performed.
+    **Related:** #204 (`review-brief` reports "0 withheld" and cannot know what the coordinator's prompt contained) — this is that issue arriving with a measured instance, and the instance is worse than the issue as written: the leak came not from a careless prompt but from the prompt the playbook prescribes.
+
+211. [2026-08-31] [HIGH] `init` writes two nodes with the same `ref_id` on the classic Python src-layout, and the loader silently keeps one
+
+    **Severity:** high (the most common Python layout there is, and the failure is silent in both directions — a node disappears and the gate stays green)
+    **Command:** `beadloom init --yes --mode bootstrap`
+    **Context:** measured during the BDL-067 review by the review subagent, on a fresh `ledger` project laid out as `src/ledger/`.
+    **Measured:**
+
+    ```
+    beadloom init --yes --mode bootstrap  ->  rc 0   Graph: 2 nodes, 0 edges
+    services.yml                              TWO nodes with ref_id `ledger` — one service (root), one domain
+    the loader                                keeps ONE
+    beadloom lint --strict                ->  domain-needs-parent:rule_liveness:warn
+    beadloom ci                           ->  rc 0
+    ```
+
+    **Issue:** the root `ref_id` comes from `_detect_project_name` (the `pyproject`/`package.json` name) and the domain `ref_id` comes from the source directory; on `src/<project>/` those are the same string. The graph loses a node, and because the surviving node is the root, `domain-needs-parent` goes **inert** rather than failing — so the gate reports a warning about rule liveness and exits 0. The adopter is told nothing.
+    **Not a regression, and not caused by BDL-067:** pre-fix behaviour is identical. BDL-067 deliberately carves out a domain whose `ref_id` equals the root's (`onboarding/scanner/bootstrap.py:69`), because a self-edge is not a parent — that carve-out is right, and the defect is upstream of it.
+    **Expected:** unique `ref_id`s, not an edge. Disambiguate the colliding node, and make a duplicate `ref_id` in a *generated* graph something the writer refuses rather than something the loader silently resolves.
+    **Tracker:** `beadloom-7c6k`. Filed separately from BDL-067 by owner decision — a different defect with a different fix, deserving its own measurement rather than a line at the end of another PR.
+
 210. [2026-08-27] [MEDIUM] `active-sync` resolves no row when a bead id is written as a Markdown code span, and blames the id
 
     **Severity:** medium (the reconcile exists so ACTIVE.md cannot drift from the tracker by hand; where it is inert, the drift it prevents is exactly what happens)
