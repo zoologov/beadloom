@@ -376,11 +376,11 @@ class TestADeclaredKindIsNotShadowedByADefaultList:
         spaces = resolve_doc_spaces(REPO_ROOT)
         populations = _populations(REPO_ROOT, spaces)
 
-        # 190 -> 194 in BDL-062, -> 198 in BDL-066: each feature's own PRD, RFC,
+        # 190 -> 194 in BDL-062, -> 198 in BDL-066, -> 199 in BDL-067: each feature's own PRD, RFC,
         # CONTEXT and PLAN. This literal has been hand-edited once per feature since
         # it was written, which is the class `mr2l.72` exists to remove: a count a
         # human maintains where the tool could compute it. Recorded in ROADMAP.md.
-        assert populations[SPACE_TO_BE] == 198
+        assert populations[SPACE_TO_BE] == 199
         # 93 -> 94 -> 95 -> 96 in S6: `docs/domains/application/features/wave-plan/SPEC.md`,
         # then `docs/domains/application/features/review-brief/SPEC.md`, then
         # `docs/guides/parallel-waves.md` in the documentation pass `.24`. 96 -> 98 in
@@ -390,8 +390,8 @@ class TestADeclaredKindIsNotShadowedByADefaultList:
         # when this repository gains a document, which is what makes it a denominator
         # rather than a constant.
         assert populations[SPACE_AS_IS] == 100
-        # 55 -> 56 in BDL-062: this feature's ACTIVE.md.
-        assert len(spaces.working_documents(REPO_ROOT)) == 56
+        # 55 -> 56 in BDL-062, -> 57 in BDL-067: this feature's ACTIVE.md.
+        assert len(spaces.working_documents(REPO_ROOT)) == 57
 
 
 class TestEachDeclaredHalfReportsWhatItReached:

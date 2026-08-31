@@ -93,7 +93,7 @@ class TestAnUndecodableDocumentLeavesAReport:
 
 class TestTheRepositorysOwnPopulationIsUnchanged:
     def test_no_document_this_project_ships_becomes_unreadable_or_lost(self) -> None:
-        """33 references before the false-positive removal, and 33 after."""
+        """33 references before the false-positive removal, 36 once BDL-067 landed."""
         globs = (
             ".claude/development/docs/features/**/PRD.md",
             ".claude/development/docs/features/**/BRIEF.md",
@@ -103,7 +103,7 @@ class TestTheRepositorysOwnPopulationIsUnchanged:
 
         assert found.unreadable == ()
         assert found.dead_globs == ()
-        assert len(found.references) == 33
+        assert len(found.references) == 36
 
 
 # --------------------------------------------------------------------------- #
