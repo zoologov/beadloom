@@ -96,13 +96,28 @@ of the others.
 claim the trace happens not to cover reports *unsupported*, not *contradicted* —
 FAKES PROVE FAKES applies to the fixture that proves this.
 
-## S3 — Brief delta
+## S3 — Brief delta, and model delta
 
 Constraints present in a subagent's `tool_input` and absent from the bead
 description.
 
-**Acceptance:** replaying the 2026-08-27 heading-lock brief against its bead
-names the added constraint. A brief that adds nothing reports nothing.
+**The same trace answers a second question that nothing checks today.** Every role
+file declares `model: opus`, in this repository and in the shipped templates. The
+launch can override that — the orchestrator's tool takes a `model` parameter which
+takes precedence over the role file. Nothing compares the two, so a coordinator
+running `dev` on a lower-grade model leaves no trace but a worse result.
+
+That is the ROADMAP's principle 10 — no tiering, quality across every role — which
+has been prose since it was written. The trace carries the launch, the role file
+carries the declaration, and the comparison is a subtraction.
+
+Distinct from a **role runtime**, which is declared in `flow.yml` and is the
+supported way to run a role on a different executor. A declared runtime is not a
+finding. An undeclared model override is.
+
+**Acceptance:** replaying the 2026-08-27 heading-lock brief against its bead names
+the added constraint. A brief that adds nothing reports nothing. A launch that
+overrides the declared model is named; a launch matching a declared runtime is not.
 
 ## S4 — The result side
 

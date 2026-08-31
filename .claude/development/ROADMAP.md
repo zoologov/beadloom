@@ -70,7 +70,8 @@ recipe and a machine check. Configurable per project. Target 3.1.0: editing a
 CORE role template changes what `setup-agentic-flow` composes in every adopter's
 repository.
 
-**BDL-065 — Goose+Qwen as the tech-writer role, local and optional.** Measured
+**BDL-065 — Goose+Qwen as the tech-writer role, local and optional.** The mechanism is a
+**role runtime**: `flow.yml` names which executor runs a role, defaulting to the harness. Measured
 2026-08-31: Qwen rewrote all 14 sections of the multi-agent guide and the owner
 judged the result clearly better — "небо и земля". Two findings from that run
 belong in the bead: the endpoint drops long generations unless `stream: true`,
@@ -176,33 +177,38 @@ top-tier models, no tiering by role.
 
 ---
 
-## P2 — Deepen federation + team coordination (serves "b")
+## Backlog — deferred, not ranked in the list above (serves "b")
 
-- **[P2] Ownership from CODEOWNERS + drift-check.** `owner`/`team` derived from CODEOWNERS/git-blame (not a rotting `catalog-info.yaml`); owner-vs-reality detection. Answers "who to call when a contract breaks." _REVIEW-2 §6.2._
-- **[P2] PR-bot / GitHub App.** Inline comment: "edge X→Y violates a layer rule" / "contract Z became BREAKING for @backend". Pairs with F4.1. _REVIEW-2 §5, REVIEW §6.3._
-- **[P2] REST/OpenAPI contract source.** The most-requested deferred contract type. _F1 §8, STRATEGY-3 F2._
-- **[P2] Federation-MCP server.** Neighbouring-service/contract context to an agent via MCP. _REVIEW-2 §5._
-- **[P2] Blast radius:** `beadloom why <contract> --landscape` — who breaks across all repos. _REVIEW-2 §5._
-- **[P2] Arch/governance scorecard.** Per-service readiness from existing inputs (lint/debt/doc-freshness/verdicts/cycles). Do NOT pull in Sonar/PagerDuty/SLO. _REVIEW-2 §6.2._
-- **[P2] Architecture drift over time (decay report)** on top of snapshot+metrics_history. _REVIEW-2 §5._
-- **[P2] Auto-bootstrap graph from code (finish the WIP)** — hybrid "inferred + intent layer", tied to `unverified`. _REVIEW-2 §5._
-- **[P2] Schema-migration framework (versioned)** — currently ad-hoc bumps. _STRATEGY-2 Ph15.2._
+- **Ownership from CODEOWNERS + drift-check.** `owner`/`team` derived from CODEOWNERS/git-blame (not a rotting `catalog-info.yaml`); owner-vs-reality detection. Answers "who to call when a contract breaks." _REVIEW-2 §6.2._
+- **PR-bot / GitHub App.** Inline comment: "edge X→Y violates a layer rule" / "contract Z became BREAKING for @backend". Pairs with F4.1. _REVIEW-2 §5, REVIEW §6.3._
+- **REST/OpenAPI contract source.** The most-requested deferred contract type. _F1 §8, STRATEGY-3 F2._
+- **Federation-MCP server.** Neighbouring-service/contract context to an agent via MCP. _REVIEW-2 §5._
+- **Blast radius:** `beadloom why <contract> --landscape` — who breaks across all repos. _REVIEW-2 §5._
+- **Arch/governance scorecard.** Per-service readiness from existing inputs (lint/debt/doc-freshness/verdicts/cycles). Do NOT pull in Sonar/PagerDuty/SLO. _REVIEW-2 §6.2._
+- **Architecture drift over time (decay report)** on top of snapshot+metrics_history. _REVIEW-2 §5._
+- **Auto-bootstrap graph from code (finish the WIP)** — hybrid "inferred + intent layer", tied to `unverified`. _REVIEW-2 §5._
+- **Schema-migration framework (versioned)** — currently ad-hoc bumps. _STRATEGY-2 Ph15.2._
 
 ---
 
-## P3 — Off-north-star / on demand (consciously demoted)
+## Off-north-star — raise only on a concrete need
 
 > Serve adoption/market or hygiene, not (a)/(b) directly. Raise only if a concrete need appears.
 
-- **[P3] Import intent from import-linter/ArchUnit/dependency-cruiser** (lower the manual-YAML barrier). _REVIEW §6.6._
-- **[P3] Guides & demos** (onboarding/multi-agent/keep-docs-alive + demo). _STRATEGY-1/2 Ph7._
-- **[P3] Semantic search** (sqlite-vec/fastembed) — only at scale (1000+ nodes). _STRATEGY-2 Ph14._
-- **[P3] Semantic docs audit** — the `docs audit` detector is still English-keyword-proximity based (`doc_sync/audit.py`), so it mislabels numbers semantically (e.g. "12 supported languages" → `language_count`; the `.ru` "14 инструментов" → `cli_command_count`). BDL-057 shipped a *workaround*, not a fix: `docs_audit.ignore` triples + per-fact tolerances in `.beadloom/config.yml` (currently 15 suppressions) silence specific instances. A true fix needs semantic/contextual classification. _STRATEGY-2 Ph14.8; workaround landed BDL-057._
-- **[P3] Misc (market/hygiene/on-demand):** publish GH Action to marketplace · VS Code extension · gRPC/AsyncAPI/proto sources · monorepo workspace · richer-viz beyond P1 · TUI graph view / ASCII graph · plugin system · daemon · pre-commit-framework hook · Bitbucket recipes · property-based tests · perf benchmarks · re-export resolution · CLI "did-you-mean" · code similarity · data-ownership/ER · cross-system user-flow · per-system C4 decomposition · remote graph refs / full federation protocol.
+- **Import intent from import-linter/ArchUnit/dependency-cruiser** (lower the manual-YAML barrier). _REVIEW §6.6._
+- **Guides & demos** (onboarding/multi-agent/keep-docs-alive + demo). _STRATEGY-1/2 Ph7._
+- **Semantic search** (sqlite-vec/fastembed) — only at scale (1000+ nodes). _STRATEGY-2 Ph14._
+- **Semantic docs audit** — the `docs audit` detector is still English-keyword-proximity based (`doc_sync/audit.py`), so it mislabels numbers semantically (e.g. "12 supported languages" → `language_count`; the `.ru` "14 инструментов" → `cli_command_count`). BDL-057 shipped a *workaround*, not a fix: `docs_audit.ignore` triples + per-fact tolerances in `.beadloom/config.yml` (**6 suppressions**, measured 2026-08-31 — the figure this document carried, 15, was hand-written and wrong, which is the argument for `mr2l.72`) silence specific instances.
+
+  Three measured instances make the shape concrete: **#205** — a factually *correct* number binds to a fact computing something else ("supports 11 languages" → `language_count`, which is the number of languages the project is *written in*, 1); **#206** — `docs/**/features/*/SPEC.md` is excluded from the audit outright, so three references to a release that did not exist survived there; **#209** — the English-*word* half of the keyword table is dead in a non-English document, while Latin-script tokens and the version regex still bind, so one page is checked and its neighbour is not with nothing distinguishing them. A true fix needs semantic classification. _STRATEGY-2 Ph14.8; workaround landed BDL-057._
+- **Misc (market/hygiene/on-demand):** publish GH Action to marketplace · VS Code extension · gRPC/AsyncAPI/proto sources · monorepo workspace · richer-viz beyond P1 · TUI graph view / ASCII graph · plugin system · daemon · pre-commit-framework hook · Bitbucket recipes · property-based tests · perf benchmarks · re-export resolution · CLI "did-you-mean" · code similarity · data-ownership/ER · cross-system user-flow · per-system C4 decomposition · remote graph refs / full federation protocol.
 
 ---
 
-## Technical debt & bugfixes (→ tracked in BDL-UX-Issues.md; registry + cross-refs here)
+## Historical — the BDL-059 debt registry (June 2026, all shipped)
+
+> Kept as the record of what that epic closed. It is not forward-looking work and it is
+> duplicated in `BDL-UX-Issues.md`. Nothing here needs doing.
 
 > Pure debt/bugs live in BDL-UX-Issues.md. **The whole Code + Tests block below is ✅ RESOLVED by BDL-059 (#20–#25, 2026-06-17)** — it was the "close the growth-gating debt before the next product step" epic. Kept here (struck through) as the registry of what shipped.
 
@@ -231,7 +237,24 @@ in the Gate (so these can't silently rot again); the *classifier* weakness remai
 ## Won't do (anti-scope)
 
 - Built-in LLM / bundled weights (F4.1 = external model only).
-- Model tiering / downgrading roles to cheaper models (principle 10 — risks drift/quality gaps).
+- **Model tiering** — the same job on a cheaper model, to save cost. Principle 10:
+  quality across every role is the goal, and downgrading risks drift and coverage gaps.
+  Still live and now **checkable**: every role file declares `model: opus`, the launch
+  can override it, and nothing compares the two. BDL-066 turns that into a check.
+
+  **Not the same thing as a role runtime.** Tiering is *the same requirement, a cheaper
+  model*. A role runtime is *a different requirement, a different executor* — declared in
+  `flow.yml` and verified, not chosen silently to save money:
+
+  ```yaml
+  roles:
+    tech-writer:
+      runtime: goose        # default: the harness itself
+  ```
+
+  The Russian documentation case is the first instance: Qwen was chosen because its
+  Russian is better for this audience, measured by the owner over three sections and
+  then the whole guide, and it costs more attention rather than less.
 - Live web app / SaaS hub (the portal is static, CI-generated; federation is a pull-based CI pattern).
 - Plugin marketplace.
 - DSL/OPA-Rego rules; autofix patches; Slack/Discord; a separate cross-reference report (covered by `why`).
@@ -240,8 +263,12 @@ in the Gate (so these can't silently rot again); the *classifier* weakness remai
 
 ---
 
-## Close formally (spec-vs-reality / superseded)
+## Close formally — done, kept as the record
 
-- **`sync-update --auto` + `llm:` config** — built then removed (v0.6), replaced by agent-native MCP write tools. Remove from specs.
-- **`init --scope`** — specified (PRD §4.1 / RFC §5.4) but never built. **Decision: not building it.** Superseded by a future Goose-based `init` (an agent with its own scenarios/rules). Remove `--scope` from the spec.
-- **BACKLOG.md** is stale (frozen at v1.5.0) — superseded by this ROADMAP; archived.
+All three were verified complete on 2026-08-31 and need no further action.
+
+- **`sync-update --auto` + `llm:` config** — built then removed in v0.6, replaced by
+  agent-native MCP write tools. No occurrence remains in `docs/` or `src/`.
+- **`init --scope`** — specified but never built, and the decision was not to build it.
+  No occurrence remains outside the unrelated `graph --scope` flag.
+- **`BACKLOG.md`** — superseded by this file. The file is gone.
