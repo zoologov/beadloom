@@ -1,18 +1,19 @@
 # ACTIVE: BDL-067 — A virgin `beadloom init` leaves the Gate red
 
-> **Last updated:** 2026-08-31
+> **Last updated:** 2026-09-01
 > **Phase:** Development
 
 ---
 
 ## Current Bead
 
-**Bead:** `beadloom-e8s4.6` — the third `init` branch: the default interactive wizard takes no verdict
-**Goal:** all three branches of `init` that write a bootstrap graph take the verdict, not two: the
-wizard's rc goes 0 → 1 on the sabotaged fixture the other two already fail on.
-**Done when:** the covering module is parametrised over branches rather than bindings and runs 33
-cases where it ran 14, every new assertion is verified red against the pre-fix source, and
-`beadloom ci` is rc 0.
+**Bead:** `beadloom-e8s4.7` — the wizard branch, and a test that distinguishes a binding from a branch
+**Goal:** the branch count `THE_BRANCHES` claims is read out of `init`'s own source rather than
+maintained by hand, so a FOURTH branch that bootstraps without a verdict fails a test on the day it
+is written instead of shipping unguarded as the third one did.
+**Done when:** the enumeration is demonstrated to fail on a command that has such a branch, the
+three assertions `.6` declared vacuous either fail against the pre-`.6` source or are declared with
+a reason, and `beadloom ci` is rc 0.
 
 ## Progress
 
@@ -25,7 +26,7 @@ cases where it ran 14, every new assertion is verified red against the pre-fix s
 - [x] Wave 3 — `.3` test (closed 2026-08-31, commits `e870b0b`, `fee64db`)
 - [x] Wave 4 — `.4` review (closed 2026-08-31, verdict ISSUES: 0 critical, 2 major)
 - [x] Wave 4b — `.6` dev (closed; wizard rc 0 → rc 1 on the sabotaged fixture, `beadloom ci` rc 0)
-- [ ] Wave 4b — `.7` test / `.8` re-review (fix cycle)
+- [ ] Wave 4b — `.7` test (closed) / `.8` re-review (fix cycle)
 - [ ] Wave 5 — `.5` tech-writer (re-pointed to depend on `.8`)
 - [ ] Gate green, PR opened
 
@@ -39,7 +40,7 @@ cases where it ran 14, every new assertion is verified red against the pre-fix s
 | `beadloom-e8s4.4` | ✓ done | REVIEW ISSUES: 0 critical, 2 major. Verified green independently: the #192 reproduction on a scratch adopter (`2 nodes, 1 edges`, `lint --strict` rc 0, `ci` rc 0) against the same fixture on pre-fix source (`2 nodes, 0 edges`, no `edges:` key); the deliverable is an invariant (`_missing_domain_parent_edges` runs over the whole node list after every edge producer); the edge uses `root_node["ref_id"]` as written; `rules_gen.py` diff is empty. |
 | `beadloom-e8s4.5` | Pending | re-pointed: now blocked by `.8`. Doc surface named by the review, not to be guessed. |
 | `beadloom-e8s4.6` | ✓ done | the wizard now takes the verdict (guarded on `mode in (bootstrap, both)` and skipped on the `edit` review answer, where the graph has just been handed to the user). The covering module is parametrised over the three BRANCHES instead of the two bindings: 14 cases → 33. Minor 4 closed — an unloadable `rules.yml` now prints the loader's complaint instead of the gate step's own name, and does not blame the bootstrap for a file the bootstrap does not rewrite. 21 new tests (19 unit + 2 scenarios); 13 of them verified RED against `git archive HEAD src` on PYTHONPATH. Minor 3 wording corrected in all three prose copies of the post-condition sentence (BRIEF, onboarding README, agent-prime SPEC); the fourth copy was this file's goal line and is replaced above. API change: `gate.RULES_CONFIG_ERROR`. |
-| `beadloom-e8s4.7` | Pending | blocked by `.6` |
+| `beadloom-e8s4.7` | ✓ done | the branch count is now READ from `init`'s source, not written down: `tests/test_init_branches_that_reach_the_bootstrap.py` derives the callables that reach `bootstrap_project`, finds every call to one of them in the command body, and asserts each is followed by a reachable verdict. Demonstrated capable of failing on three mutant trees (a fourth branch with no verdict — 2 red; a fourth branch WITH one — 1 red, the coverage assertion; a renamed guard — 2 red), and red against the pre-`.6` source. The three cases `.6` declared vacuous at `[wizard]` now carry an anti-vacuity guard and are red there too (pre-`.6`: 13 red → 16 red). 12 new tests (11 unit + 1 scenario, the `edit` carve-out). 7367 → 7379 passed, `beadloom ci` rc 0. |
 | `beadloom-e8s4.8` | Pending | blocked by `.7` |
 
 ## Notes

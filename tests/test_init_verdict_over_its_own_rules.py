@@ -74,6 +74,12 @@ class InitBranch:
     argv: tuple[str, ...]
     #: The name of `bootstrap_project` this branch calls.
     binding: str
+    #: The `if` conditions in `init`'s body the branch sits under, as the source
+    #: spells them, outermost first. Empty for the fallthrough wizard. This is
+    #: what `tests/test_init_branches_that_reach_the_bootstrap.py` matches the
+    #: tuple below against the command's own source, so a fourth branch fails a
+    #: test instead of merely going untested (BDL-067 `.7`).
+    guard: tuple[str, ...]
     #: The wizard's answers, in order: init mode, then the graph review.
     prompts: tuple[str, ...] = field(default_factory=tuple)
 
@@ -81,9 +87,19 @@ class InitBranch:
 #: Every branch of `init` that reaches `bootstrap_project`. Three branches, two
 #: bindings. A fourth branch belongs in this tuple on the day it is written.
 THE_BRANCHES = (
-    InitBranch("--yes", ("--yes", "--mode", "bootstrap"), INIT_FLOW_BINDING),
-    InitBranch("--bootstrap", ("--bootstrap",), PACKAGE_BINDING),
-    InitBranch("wizard", (), INIT_FLOW_BINDING, prompts=("bootstrap", "yes")),
+    InitBranch(
+        "--yes", ("--yes", "--mode", "bootstrap"), INIT_FLOW_BINDING, ("non_interactive",)
+    ),
+    InitBranch("--bootstrap", ("--bootstrap",), PACKAGE_BINDING, ("bootstrap",)),
+    InitBranch("wizard", (), INIT_FLOW_BINDING, (), prompts=("bootstrap", "yes")),
+)
+
+#: The same branch as `wizard`, answering the graph review with `edit` — the one
+#: bootstrap path `init` deliberately takes no verdict on. It is not in
+#: `THE_BRANCHES` because it is not a fourth branch: it is the third one, asked a
+#: different question.
+THE_WIZARD_THAT_EDITS = InitBranch(
+    "wizard-edit", (), INIT_FLOW_BINDING, (), prompts=("bootstrap", "edit")
 )
 
 BRANCH_IDS = [branch.name for branch in THE_BRANCHES]
@@ -173,6 +189,24 @@ def _init(project_root: Path, branch: InitBranch) -> Any:
         )
 
 
+def _the_branch_reported(result: Any) -> Any:
+    """Fail unless the branch reported at all, then hand the result back.
+
+    Three of the cases below are negative claims — what the output does NOT say —
+    and against the pre-`.6` tree the wizard branch printed nothing whatsoever.
+    A negative claim about an empty string holds for free, so those three passed
+    over the unfixed wizard while saying nothing about it (named by `.6`'s own
+    completion note, closed here as BDL-067 `.7`). A non-zero rc is the cheapest
+    proof that the reporter ran, and it is what turns the assertion that follows
+    into a claim.
+    """
+    assert result.exit_code != 0, (
+        "the branch exited 0, so it reported nothing and the assertion below "
+        f"would hold vacuously. Output: {result.output!r}"
+    )
+    return result
+
+
 def _lint_strict(project_root: Path) -> int:
     return CliRunner().invoke(
         main, ["lint", "--strict", "--project", str(project_root)]
@@ -222,7 +256,7 @@ class TestInitOverAGraphThatFailsItsOwnRules:
         project = typescript_project(tmp_path / "orders-web")
         _a_bootstrap_that_forgets_the_edge(monkeypatch, branch.binding)
 
-        _init(project.root, branch)
+        _the_branch_reported(_init(project.root, branch))
 
         assert (project.root / ".beadloom" / "_graph" / "services.yml").is_file()
         assert (project.root / ".beadloom" / "_graph" / "rules.yml").is_file()
@@ -288,7 +322,7 @@ class TestInitOverARulesFileThatWillNotLoad:
         project = typescript_project(tmp_path / "orders-web")
         _a_bootstrap_whose_rules_file_will_not_load(monkeypatch, branch.binding)
 
-        result = _init(project.root, branch)
+        result = _the_branch_reported(_init(project.root, branch))
 
         assert "  lint" not in result.output.splitlines()
 
@@ -299,7 +333,7 @@ class TestInitOverARulesFileThatWillNotLoad:
         project = typescript_project(tmp_path / "orders-web")
         _a_bootstrap_whose_rules_file_will_not_load(monkeypatch, branch.binding)
 
-        result = _init(project.root, branch)
+        result = _the_branch_reported(_init(project.root, branch))
 
         assert "defect in Beadloom's bootstrap" not in result.output
 
@@ -312,3 +346,47 @@ class TestInitOverARulesFileThatWillNotLoad:
         result = _init(project.root, branch)
 
         assert result.exit_code != 0, result.output
+
+
+class TestTheOneBootstrapPathThatTakesNoVerdict:
+    """`edit` is a deliberate carve-out, and a deliberate thing is testable.
+
+    Answering the wizard's graph review with `edit` hands `services.yml` to the
+    user, tells them to run `beadloom reindex` and returns before anything has
+    re-indexed. Judging the tree there would report a state the user is in the
+    middle of leaving, so `init` skips the verdict on exactly that answer and on
+    nothing else (BDL-067 `.6`). Written down here so the carve-out is a decision
+    with a test rather than a condition someone can delete or widen unnoticed.
+
+    Declared, because it matters more than it costs: this case does NOT fail
+    against the pre-`.6` tree and cannot be made to. There the wizard took no
+    verdict on any answer, so its behaviour on `edit` was identical and there is
+    no edit to the old source that this case distinguishes. It guards the future,
+    not the fix — and its companion, `test_the_command_does_not_exit_zero`
+    parametrised at `wizard`, is what proves the other answers are judged.
+    """
+
+    def test_the_edit_answer_exits_zero_over_a_graph_that_fails_its_rules(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        project = typescript_project(tmp_path / "orders-web")
+        _a_bootstrap_that_forgets_the_edge(monkeypatch, THE_WIZARD_THAT_EDITS.binding)
+
+        result = _init(project.root, THE_WIZARD_THAT_EDITS)
+
+        # Anti-vacuity: an rc of 0 from a wizard that never reached the review
+        # prompt would prove nothing about the carve-out.
+        assert "beadloom reindex" in result.output, result.output
+        assert result.exit_code == 0, result.output
+
+    def test_the_same_answers_but_yes_are_judged(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The carve-out is the answer, not the wizard: `yes` still gets a verdict."""
+        project = typescript_project(tmp_path / "orders-web")
+        _a_bootstrap_that_forgets_the_edge(monkeypatch, THE_WIZARD_THAT_EDITS.binding)
+
+        result = _init(project.root, THE_BRANCHES[-1])
+
+        assert result.exit_code != 0, result.output
+        assert THE_RULE in result.output

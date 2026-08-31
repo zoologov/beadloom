@@ -82,3 +82,18 @@ Feature: the bootstrap writes a graph that satisfies the rules it writes
     Then the command does not report success
     And the command says what the loader could not read
     And the command does not offer the gate step's own name as a rule
+
+  # BDL-067 `.7`. The carve-out, written down as a decision instead of living
+  # only in a condition. `init` skips the verdict on exactly one bootstrap path:
+  # the wizard's `edit` answer, which has just handed `services.yml` to the user
+  # and told them to re-index, so nothing has settled to be judged. The scenario
+  # above is the other half — same fixture, same sabotage, the `yes` answer — and
+  # neither half states the claim alone: one says the wizard is judged, this one
+  # says which single answer is not.
+  @bead:beadloom-e8s4.7
+  Scenario: the wizard's edit answer hands the graph back instead of judging it
+    Given a project whose only source file sits directly in its source directory
+    And a bootstrap that writes the graph and then forgets the edge its rules require
+    When beadloom init is run with no flags and the graph review is answered with edit
+    Then the command reports success
+    And the command tells the user to re-index after editing

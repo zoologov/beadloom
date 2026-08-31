@@ -302,3 +302,39 @@ def _then_init_does_not_name_the_step(world: dict[str, Any]) -> None:
     result = world["init"]
     named = [line for line in result.output.splitlines() if line == f"  {THE_STEP_NAME}"]
     assert not named, result.output
+
+
+@when("beadloom init is run with no flags and the graph review is answered with edit")
+def _when_the_wizard_is_asked_to_edit(world: dict[str, Any]) -> None:
+    """Plain `beadloom init`, choosing to edit the graph by hand.
+
+    The same wizard and the same sabotage as the scenario above. Only the answer
+    to the graph review differs, which is what makes the pair a claim about the
+    answer rather than about the branch.
+    """
+    with (
+        patch("rich.prompt.Prompt.ask", side_effect=["bootstrap", "edit"]),
+        patch("rich.prompt.Confirm.ask", return_value=False),
+    ):
+        world["init"] = CliRunner().invoke(
+            main, ["init", "--project", str(world["project"])]
+        )
+
+
+@then("the command reports success")
+def _then_init_succeeded(world: dict[str, Any]) -> None:
+    result = world["init"]
+    assert result.exit_code == 0, result.output
+
+
+@then("the command tells the user to re-index after editing")
+def _then_init_asks_for_a_reindex(world: dict[str, Any]) -> None:
+    """Also the guard against a vacuous green.
+
+    A zero from a wizard that fell over before the review prompt would satisfy
+    the assertion above while saying nothing about the carve-out. The re-index
+    instruction is printed only on the `edit` answer, so it is the evidence that
+    the branch under test is the branch that ran.
+    """
+    result = world["init"]
+    assert "beadloom reindex" in result.output, result.output
