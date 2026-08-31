@@ -114,7 +114,7 @@ the record kept here and the detail readable through `bd show <id>`.
 | `mr2l.67` | the decode sweep: 29 narrow handlers, 49 unguarded decoding reads |
 | `mr2l.69` | the shared writing standard names `beadloom lint` where the checks live in `docs quality` |
 | `mr2l.71` | a closed epic's goal cannot be made measurable retroactively |
-| `mr2l.72` | ROADMAP and issue-log document KINDS, with counts the tool computes rather than a human tallies |
+| `mr2l.72` | ROADMAP and issue-log document KINDS, with counts the tool computes rather than a human tallies. **A concrete instance found on 2026-08-31:** `tests/test_bead77_kind_and_root_disagree.py` pins the TO-BE population as a literal and has been hand-edited once per feature — 190, then 194, then 198. Every feature that writes a PRD reddens CI until someone updates the number by hand |
 | `mr2l.81` | the commit gate cannot see a neighbour's hunk inside a file the committer touched |
 | `mr2l.82` | the commit-scoped hook type-checks a surface the project never declared typed |
 | `mr2l.88` | an ignore block keeps the pre-rotation pattern |

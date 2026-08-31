@@ -376,8 +376,11 @@ class TestADeclaredKindIsNotShadowedByADefaultList:
         spaces = resolve_doc_spaces(REPO_ROOT)
         populations = _populations(REPO_ROOT, spaces)
 
-        # 190 -> 194 in BDL-062: this feature's own PRD, RFC, CONTEXT and PLAN.
-        assert populations[SPACE_TO_BE] == 194
+        # 190 -> 194 in BDL-062, -> 198 in BDL-066: each feature's own PRD, RFC,
+        # CONTEXT and PLAN. This literal has been hand-edited once per feature since
+        # it was written, which is the class `mr2l.72` exists to remove: a count a
+        # human maintains where the tool could compute it. Recorded in ROADMAP.md.
+        assert populations[SPACE_TO_BE] == 198
         # 93 -> 94 -> 95 -> 96 in S6: `docs/domains/application/features/wave-plan/SPEC.md`,
         # then `docs/domains/application/features/review-brief/SPEC.md`, then
         # `docs/guides/parallel-waves.md` in the documentation pass `.24`. 96 -> 98 in
