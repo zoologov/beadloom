@@ -18,6 +18,7 @@ import click
 from beadloom.services.commands._root import _warn_missing_parsers, main
 
 if TYPE_CHECKING:
+    from beadloom.application.gate import GateStep
     from beadloom.onboarding.agentic_flow_setup import ScaffoldResult
     from beadloom.onboarding.config_sync import ConfigDrift, FixReport
 
@@ -736,22 +737,43 @@ def _verdict_on_the_generated_graph(project_root: Path) -> None:
     The verdict is the Gate's own lint step, not a second implementation of it,
     so the two cannot drift. The rc is non-zero rather than a loud zero because
     the only rules `generate_rules` writes for an adopter are the two the
-    bootstrap's own post-condition satisfies: a red verdict here can only mean
-    Beadloom contradicted itself, and a zero would let a scripted
+    bootstrap's own post-condition satisfies: a red verdict over evaluated rules
+    can only mean Beadloom contradicted itself, and a zero would let a scripted
     `init && ci` run on to the point where the cause is no longer in view. The
     scaffold is left on disk either way — the rc reports the defect, it does not
     withdraw the graph.
+
+    Two shapes of red reach this point and they are not the same news, so they
+    are reported separately: rules that were evaluated and failed name their
+    rules, and a `rules.yml` that would not load names the loader's complaint
+    instead (`_report_rules_that_would_not_load`).
+
+    Called from every branch of `init` that writes a bootstrap graph — `--yes`,
+    `--bootstrap`, and the default interactive wizard — which is three branches
+    reached through two bindings of `bootstrap_project`. The wizard shipped
+    unguarded for exactly as long as those two numbers were confused for one
+    another (BDL-067 `.6`).
     """
-    from beadloom.application.gate import lint_step
+    from beadloom.application.gate import RULES_CONFIG_ERROR, lint_step
 
     step = lint_step(project_root)
     if step.passed:
         return
 
+    click.echo("", err=True)
+    if step.summary == RULES_CONFIG_ERROR:
+        _report_rules_that_would_not_load(step)
+    else:
+        _report_rules_the_graph_fails(step)
+    click.echo(f"`beadloom ci` will report this as: lint \u2014 {step.summary}.", err=True)
+    sys.exit(1)
+
+
+def _report_rules_the_graph_fails(step: GateStep) -> None:
+    """Name each error-severity rule the graph `init` just wrote violates."""
     rules = sorted(
         {str(f["rule"]) for f in step.findings if f.get("severity") == "error"}
     )
-    click.echo("", err=True)
     click.echo(
         "Error: the graph this command just wrote does not pass the rules "
         "this command wrote alongside it.",
@@ -759,7 +781,6 @@ def _verdict_on_the_generated_graph(project_root: Path) -> None:
     )
     for rule in rules:
         click.echo(f"  {rule}", err=True)
-    click.echo(f"`beadloom ci` will report this as: lint \u2014 {step.summary}.", err=True)
     click.echo(
         "The scaffold is on disk and can be edited by hand "
         "(.beadloom/_graph/services.yml, .beadloom/_graph/rules.yml). This is a "
@@ -767,7 +788,33 @@ def _verdict_on_the_generated_graph(project_root: Path) -> None:
         "report it with the rule name(s) above.",
         err=True,
     )
-    sys.exit(1)
+
+
+def _report_rules_that_would_not_load(step: GateStep) -> None:
+    """Say what is wrong with `rules.yml`, which is not the name of a rule.
+
+    The Gate reports an unloadable rules file through its `LintError` branch, and
+    that finding's `rule` is the literal `lint` — the step's own name — while the
+    loader's complaint sits in `why`. Printing the name the way the rule branch
+    does told an adopter whose hand-edited `rules.yml` will not parse that a rule
+    called `lint` had failed, and never showed them the parse error (BDL-067 `.6`,
+    the review's minor 4). `bootstrap_project` leaves an existing rules file
+    alone, so the file that did not load is usually the adopter's own edit: this
+    branch names neither a rule nor the bootstrap, because nothing was evaluated
+    and nothing is known to be wrong with the graph.
+    """
+    click.echo(
+        "Error: .beadloom/_graph/rules.yml could not be read, so the graph this "
+        "command wrote was not checked against it.",
+        err=True,
+    )
+    for finding in step.findings:
+        click.echo(f"  {finding['why']}", err=True)
+    click.echo(
+        "No rule was evaluated, so the graph is unchecked rather than wrong. "
+        "Repair .beadloom/_graph/rules.yml and run `beadloom lint --strict` again.",
+        err=True,
+    )
 
 
 # beadloom:domain=onboarding
@@ -942,3 +989,18 @@ def init(
     result = interactive_init(project_root)
     if result["mode"] == "cancelled":
         sys.exit(0)
+    # The third branch that writes a bootstrap graph, and the one a human adopter
+    # meets first. It was left out when the verdict landed (BDL-067 `.2`) because
+    # the test that covered the other two was parametrised over the two BINDINGS
+    # of `bootstrap_project` — and the wizard shares the `--yes` binding, so two
+    # bindings read as two branches and this one was never counted. The review of
+    # `.4` reproduced #192's exact shape here: wizard rc 0, `lint --strict` rc 1,
+    # `ci` rc 1.
+    #
+    # `review == "edit"` is the one bootstrap path that takes no verdict: the
+    # wizard has just handed the graph to the user to edit by hand and told them
+    # to run `beadloom reindex` afterwards, so the tree is unfinished by
+    # agreement, and nothing has re-indexed since. Judging it there would report a
+    # state the user is in the middle of leaving.
+    if result["mode"] in ("bootstrap", "both") and result.get("review") != "edit":
+        _verdict_on_the_generated_graph(project_root)

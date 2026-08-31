@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 from typing import TYPE_CHECKING, Any
+from unittest.mock import patch
 
 import pytest
 import yaml
@@ -58,6 +59,16 @@ PARENTHESISED_NAME = "orders (web)"
 #: scenario asserts this exact string: "the command failed" is not the fact the
 #: adopter needs, the name they will meet again in the Gate's output is.
 THE_RULE = "domain-needs-parent"
+
+#: A `rules.yml` the loader refuses, and the part of its complaint an adopter
+#: needs to read. `bootstrap_project` never rewrites a rules file that is already
+#: there, so a hand edit that will not parse is a file `init` can meet.
+UNLOADABLE_RULES = "rules:\n  - name: hand-edited\n    require:\n      match: {}\n"
+THE_LOADER_COMPLAINT = "missing required 'version' field"
+
+#: The gate step's own name, which its `LintError` finding carries in `rule`.
+#: Printed as though it were a rule, it names a rule no rules file contains.
+THE_STEP_NAME = "lint"
 
 
 @pytest.fixture()
@@ -241,3 +252,53 @@ def _then_init_failed(world: dict[str, Any]) -> None:
 def _then_init_names_the_rule(world: dict[str, Any]) -> None:
     result = world["init"]
     assert THE_RULE in result.output, result.output
+
+
+@given("a bootstrap that leaves behind a rules file the loader will not read")
+def _given_an_unreadable_rules_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The graph is untouched; what fails is reading the rules at all.
+
+    That is the gate's `LintError` branch, where the finding's `rule` is the step
+    name and the loader's complaint is in `why` — the shape `init` used to render
+    as a rule name, telling the adopter a rule called `lint` had failed.
+    """
+    real = bootstrap_project
+
+    def with_broken_rules(project_root: Path, **kwargs: Any) -> dict[str, Any]:
+        result = real(project_root, **kwargs)
+        rules = project_root / ".beadloom" / "_graph" / "rules.yml"
+        rules.write_text(UNLOADABLE_RULES, encoding="utf-8")
+        return result
+
+    monkeypatch.setattr(
+        "beadloom.onboarding.scanner.init_flow.bootstrap_project", with_broken_rules
+    )
+
+
+@when("beadloom init is run with no flags and its prompts are answered")
+def _when_the_wizard_is_run(world: dict[str, Any]) -> None:
+    """Plain `beadloom init`: choose the bootstrap mode, accept the graph.
+
+    The doc-skeleton prompt is declined, which keeps the scenario about the
+    verdict and off the skeleton writer.
+    """
+    with (
+        patch("rich.prompt.Prompt.ask", side_effect=["bootstrap", "yes"]),
+        patch("rich.prompt.Confirm.ask", return_value=False),
+    ):
+        world["init"] = CliRunner().invoke(
+            main, ["init", "--project", str(world["project"])]
+        )
+
+
+@then("the command says what the loader could not read")
+def _then_init_names_the_loader_complaint(world: dict[str, Any]) -> None:
+    result = world["init"]
+    assert THE_LOADER_COMPLAINT in result.output, result.output
+
+
+@then("the command does not offer the gate step's own name as a rule")
+def _then_init_does_not_name_the_step(world: dict[str, Any]) -> None:
+    result = world["init"]
+    named = [line for line in result.output.splitlines() if line == f"  {THE_STEP_NAME}"]
+    assert not named, result.output

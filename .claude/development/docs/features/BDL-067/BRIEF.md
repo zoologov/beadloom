@@ -98,7 +98,15 @@ about the code.
 forget it again. So the fix is a stated post-condition of `bootstrap_project`:
 
 > Every node the bootstrap writes with `kind: domain` carries at least one outgoing `part_of`
-> edge, to its classified parent where one exists and to the root service node otherwise.
+> edge, to its classified parent where one exists and to the root service node otherwise —
+> except a domain whose `ref_id` is the root's own, which gets none, because an edge from a
+> node to itself is not a parent.
+
+That exception is the docstring's, and it is reachable: the classic Python `src/<project>/`
+layout hands the root service and the single domain the same `ref_id`, the loader keeps one of
+the two nodes, and `domain-needs-parent` goes inert rather than red. The collision is a
+different defect with a different fix — a unique `ref_id`, not an edge — and is tracked on its
+own as `beadloom-7c6k` rather than corrected here.
 
 The edge must use the root node's **actual** `ref_id` value as written, not a recomputed one:
 cluster refs pass through `_sanitize_ref_id` (`bootstrap.py:227-228`,

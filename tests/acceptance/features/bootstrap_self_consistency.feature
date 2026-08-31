@@ -56,3 +56,29 @@ Feature: the bootstrap writes a graph that satisfies the rules it writes
     When beadloom init is run on the project
     Then the command does not report success
     And the command names the rule the gate will name
+
+  # BDL-067 `.6` — the third branch, and the one a human adopter meets first.
+  # `.2` guarded `--yes` and `--bootstrap` and stopped there, because the tests
+  # that covered them were parametrised over the two BINDINGS of
+  # `bootstrap_project` and the wizard shares the `--yes` one. The Given below is
+  # the same step the scenario above uses, unchanged, which is the whole point:
+  # the sabotage could always reach this branch, and nothing ran it.
+  @bead:beadloom-e8s4.6
+  Scenario: the default wizard does not report success over such a graph either
+    Given a project whose only source file sits directly in its source directory
+    And a bootstrap that writes the graph and then forgets the edge its rules require
+    When beadloom init is run with no flags and its prompts are answered
+    Then the command does not report success
+    And the command names the rule the gate will name
+
+  # BDL-067 `.6`, the review's minor 4. Nothing here is wrong with the graph: the
+  # rules file cannot be read at all, and the gate reports that through a finding
+  # whose rule name is the gate step's own.
+  @bead:beadloom-e8s4.6
+  Scenario: a rules file that will not load is reported as what is wrong with the file
+    Given a project whose only source file sits directly in its source directory
+    And a bootstrap that leaves behind a rules file the loader will not read
+    When beadloom init is run on the project
+    Then the command does not report success
+    And the command says what the loader could not read
+    And the command does not offer the gate step's own name as a rule

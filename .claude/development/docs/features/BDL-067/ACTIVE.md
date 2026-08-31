@@ -7,11 +7,12 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-e8s4.1` — bootstrap post-condition: no domain node is written without a `part_of` edge
-**Goal:** every node `bootstrap_project` writes with `kind: domain` carries at least one outgoing
-`part_of` edge — to its classified parent where one exists, to the root service node otherwise.
-**Done when:** `bootstrap_project` over `typescript_project` yields a graph with no `lint --strict`
-errors, and the invariant holds for every preset the module can select.
+**Bead:** `beadloom-e8s4.6` — the third `init` branch: the default interactive wizard takes no verdict
+**Goal:** all three branches of `init` that write a bootstrap graph take the verdict, not two: the
+wizard's rc goes 0 → 1 on the sabotaged fixture the other two already fail on.
+**Done when:** the covering module is parametrised over branches rather than bindings and runs 33
+cases where it ran 14, every new assertion is verified red against the pre-fix source, and
+`beadloom ci` is rc 0.
 
 ## Progress
 
@@ -23,7 +24,8 @@ errors, and the invariant holds for every preset the module can select.
 - [x] Wave 2 — `.2` dev (closed 2026-08-31, commit `e52aa06`)
 - [x] Wave 3 — `.3` test (closed 2026-08-31, commits `e870b0b`, `fee64db`)
 - [x] Wave 4 — `.4` review (closed 2026-08-31, verdict ISSUES: 0 critical, 2 major)
-- [ ] Wave 4b — `.6` dev / `.7` test / `.8` re-review (fix cycle)
+- [x] Wave 4b — `.6` dev (closed; wizard rc 0 → rc 1 on the sabotaged fixture, `beadloom ci` rc 0)
+- [ ] Wave 4b — `.7` test / `.8` re-review (fix cycle)
 - [ ] Wave 5 — `.5` tech-writer (re-pointed to depend on `.8`)
 - [ ] Gate green, PR opened
 
@@ -36,7 +38,7 @@ errors, and the invariant holds for every preset the module can select.
 | `beadloom-e8s4.3` | ✓ done | the three suite defects closed. All five assertions verified RED against the pre-fix source (`git archive af26750 src` imported via `PYTHONPATH`, the override confirmed by `gate.lint_step` being absent there): pre-fix 5 failed / 20 passed, post-fix 25 passed, no pre-existing test turned red. Coverage 97% / 93% / 91% on the changed modules. Commits `e870b0b`, `fee64db`. |
 | `beadloom-e8s4.4` | ✓ done | REVIEW ISSUES: 0 critical, 2 major. Verified green independently: the #192 reproduction on a scratch adopter (`2 nodes, 1 edges`, `lint --strict` rc 0, `ci` rc 0) against the same fixture on pre-fix source (`2 nodes, 0 edges`, no `edges:` key); the deliverable is an invariant (`_missing_domain_parent_edges` runs over the whole node list after every edge producer); the edge uses `root_node["ref_id"]` as written; `rules_gen.py` diff is empty. |
 | `beadloom-e8s4.5` | Pending | re-pointed: now blocked by `.8`. Doc surface named by the review, not to be guessed. |
-| `beadloom-e8s4.6` | Pending | fix cycle — the third `init` branch |
+| `beadloom-e8s4.6` | ✓ done | the wizard now takes the verdict (guarded on `mode in (bootstrap, both)` and skipped on the `edit` review answer, where the graph has just been handed to the user). The covering module is parametrised over the three BRANCHES instead of the two bindings: 14 cases → 33. Minor 4 closed — an unloadable `rules.yml` now prints the loader's complaint instead of the gate step's own name, and does not blame the bootstrap for a file the bootstrap does not rewrite. 21 new tests (19 unit + 2 scenarios); 13 of them verified RED against `git archive HEAD src` on PYTHONPATH. Minor 3 wording corrected in all three prose copies of the post-condition sentence (BRIEF, onboarding README, agent-prime SPEC); the fourth copy was this file's goal line and is replaced above. API change: `gate.RULES_CONFIG_ERROR`. |
 | `beadloom-e8s4.7` | Pending | blocked by `.6` |
 | `beadloom-e8s4.8` | Pending | blocked by `.7` |
 

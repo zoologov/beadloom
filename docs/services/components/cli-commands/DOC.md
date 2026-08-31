@@ -62,8 +62,18 @@ silently.
 Gate's `lint_step` over the graph it has just written, exiting 1 when the graph fails the
 rules the same command wrote a step earlier (BDL-067, closing BDL-UX #192). The check stays
 in the application layer and this module only calls it and renders its findings, so the rule
-above holds — but the exit code is a decision this command makes, and both the `--yes` and
-the `--bootstrap` branch make it.
+above holds — but the exit code is a decision this command makes, and all three branches that
+write a graph make it: `--yes`, `--bootstrap`, and the default interactive wizard. The wizard
+was added in BDL-067 `.6` — the verdict shipped at two call sites because the covering tests
+counted the two **bindings** of `bootstrap_project` rather than the branches, and the wizard
+shares the `--yes` binding. It is skipped on exactly one path, the wizard's `edit` review
+answer, where the graph has just been handed to the user to edit and nothing has re-indexed.
+
+Two shapes of failure are rendered separately. Rules that were evaluated and failed are named
+as rules; a `rules.yml` the loader refuses is rendered as the loader's complaint, because the
+finding the Gate raises there carries the step's own name (`lint`) in `rule` and the reason in
+`why` — printing the name told an adopter with a hand-edited rules file that a rule called
+`lint` had failed.
 
 ## Related
 

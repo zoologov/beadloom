@@ -58,6 +58,14 @@ if TYPE_CHECKING:
 # A single finding in the shared, agent-actionable shape (see linter._finding).
 Finding = dict[str, object]
 
+#: The ``lint`` step's summary when ``rules.yml`` could not be loaded at all.
+#: Named rather than spelled twice because that step is the one case where the
+#: finding's ``rule`` is this step's own name instead of a rule's, so a reader of
+#: the findings has to branch on it (BDL-067 `.6`): ``beadloom init`` prints the
+#: loader's complaint here and the rule names everywhere else. Two copies of the
+#: string in two modules is exactly how the two would drift apart.
+RULES_CONFIG_ERROR = "rules configuration error"
+
 
 def _run_doctor_checks(
     conn: sqlite3.Connection, *, project_root: Path | None = None
@@ -236,7 +244,7 @@ def lint_step(project_root: Path) -> GateStep:
             "lint",
             passed=False,
             findings=[_simple_finding("lint", "error", str(exc), None)],
-            summary="rules configuration error",
+            summary=RULES_CONFIG_ERROR,
         )
     findings = [_finding(v) for v in result.violations]
     passed = not result.has_errors

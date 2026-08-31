@@ -17,7 +17,11 @@ Cross-IDE context injection via a three-layer architecture.
 
 4. **The domain-parent post-condition** (one invariant) — every node `bootstrap_project()`
    writes with `kind: domain` leaves the function with at least one outgoing `part_of` edge,
-   to its classified parent where one exists and to the root service node otherwise. The
+   to its classified parent where one exists and to the root service node otherwise. One
+   node is carved out and the sentence says so since BDL-067 `.6`: a domain whose `ref_id`
+   is the root's own gets no edge, because an edge from a node to itself is not a parent.
+   That `ref_id` collision (reachable on `src/<project>/`) is tracked as its own defect,
+   `beadloom-7c6k`, since its fix is a unique `ref_id` rather than an edge. The
    same call writes `domain-needs-parent` into the adopter's `rules.yml` whenever it writes a
    domain, so a domain without that edge makes `init` exit 0 over a graph the very next
    `lint --strict` rejects — measured as rc 0 then rc 1 on a flat TypeScript project
