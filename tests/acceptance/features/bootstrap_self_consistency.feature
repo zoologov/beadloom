@@ -42,3 +42,17 @@ Feature: the bootstrap writes a graph that satisfies the rules it writes
     Given a project whose source directory has code-bearing subdirectories
     When the project is bootstrapped
     Then no domain is attached to the root when its classifier already gave it a parent
+
+  # BDL-067 `.2` — the other half, and the reason it is stated over `init` rather
+  # than over the bootstrap: `.1` fixed the instance, so this scenario has to
+  # CONSTRUCT a divergence instead of waiting for one. The step below writes the
+  # real graph and the real rules and then takes the `part_of` edges back out, so
+  # what `init` faces is exactly the shape #192 reported — on a bootstrap that is
+  # no longer capable of producing it by itself.
+  @bead:beadloom-e8s4.2
+  Scenario: init does not report success over a graph that fails the rules it just wrote
+    Given a project whose only source file sits directly in its source directory
+    And a bootstrap that writes the graph and then forgets the edge its rules require
+    When beadloom init is run on the project
+    Then the command does not report success
+    And the command names the rule the gate will name

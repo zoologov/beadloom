@@ -56,6 +56,15 @@ Every module carries `# beadloom:component=cli-commands`, so a module added here
 without one is reported by `module-coverage` rather than joining the graph
 silently.
 
+## The one command that ends in a verdict
+
+`init` renders its summary and then runs one more application call before it returns: the
+Gate's `lint_step` over the graph it has just written, exiting 1 when the graph fails the
+rules the same command wrote a step earlier (BDL-067, closing BDL-UX #192). The check stays
+in the application layer and this module only calls it and renders its findings, so the rule
+above holds — but the exit code is a decision this command makes, and both the `--yes` and
+the `--bootstrap` branch make it.
+
 ## Related
 
 - `cli` — the registration shell this component is wired into

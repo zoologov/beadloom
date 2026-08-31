@@ -423,7 +423,7 @@ both documents stale:
 - `setup_agentic_flow(*, project, force, tools, architecture, stack)` -- compose and write the agentic dev flow; selection is flag over `flow.yml` over default
 - `setup_branch_protection(*, repo_slug, branch, contexts, dry_run)` -- apply branch protection via `gh api`; `--dry-run` prints the call and payload without touching GitHub
 - `config_check(*, fix, project)` -- report agent-config drift. Warnings print `! <file>: <reason>` with a `-> <remediation>` line and **do not block**; the command exits 1 only on error-severity drift, and a clean run says `Agent-config in sync — no blocking drift` with the warning count appended when there is one
-- `init(*, bootstrap, preset, import_path, init_mode, non_interactive, force, project)` -- project initialization; also appends Beadloom's generated working set to the project's `.gitignore`, once
+- `init(*, bootstrap, preset, import_path, init_mode, non_interactive, force, project)` -- project initialization; also appends Beadloom's generated working set to the project's `.gitignore`, once. Both the `--yes` and the `--bootstrap` branch end by running the Gate's `lint_step` over the graph they just wrote and exit 1 when it does not pass, so the command cannot report success over a graph that fails the rules the same command wrote (BDL-067, closing BDL-UX #192)
 
 ## Testing
 

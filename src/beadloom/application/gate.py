@@ -178,7 +178,7 @@ def run_ci_gate(
     # `sync-check` measured. Order is behaviour here, not layout.
     steps: list[GateStep] = [
         _step_reindex(project_root, no_reindex=no_reindex),
-        _step_lint(project_root),
+        lint_step(project_root),
     ]
     sync = _step_sync_check(project_root)
     steps.append(sync)
@@ -214,8 +214,17 @@ def _step_reindex(project_root: Path, *, no_reindex: bool) -> GateStep:
     return GateStep("reindex", summary=summary)
 
 
-def _step_lint(project_root: Path) -> GateStep:
-    """``lint --strict`` — boundary rules at error severity."""
+def lint_step(project_root: Path) -> GateStep:
+    """``lint --strict`` — boundary rules at error severity.
+
+    Public, unlike its sibling steps, because ``beadloom init`` calls it to check
+    the graph it has just written before it reports success (BDL-067 `.2`). The
+    alternative — restating ``passed = not result.has_errors`` at the init site —
+    is a second copy of the Gate's verdict, and the defect this closes
+    (BDL-UX #192) is precisely two halves of one command disagreeing about
+    whether a tree is green. Sharing the function makes that disagreement
+    unrepresentable rather than merely unlikely.
+    """
     from beadloom.graph.linter import LintError, _finding, _suppressed_note
     from beadloom.graph.linter import lint as run_lint
 

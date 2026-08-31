@@ -458,9 +458,9 @@ class TestTheGateSaysItToo:
     """
 
     def _lint_step_summary(self, project: Path) -> str:
-        from beadloom.application.gate import _step_lint
+        from beadloom.application.gate import lint_step
 
-        return _step_lint(project).summary
+        return lint_step(project).summary
 
     def test_the_clean_gate_line_says_what_was_excused(self, tmp_path: Path) -> None:
         summary = self._lint_step_summary(_project(tmp_path, until=FAR_FUTURE))

@@ -721,6 +721,55 @@ def mcp_serve(*, project: Path | None) -> None:
     anyio.run(_run)
 
 
+def _verdict_on_the_generated_graph(project_root: Path) -> None:
+    """Exit non-zero when the graph `init` just wrote fails the rules it wrote.
+
+    `init` writes the graph and then writes `rules.yml` from it, and until
+    BDL-067 it never checked that the second agrees with the first: a virgin
+    `init --yes --mode bootstrap` printed `Graph: 2 nodes, 0 edges`, returned 0,
+    and the adopter's next command — `beadloom ci` — was red on
+    `domain-needs-parent`, a rule that same command had written one step earlier
+    (BDL-UX #192). `.1` closed that instance in the bootstrap; this closes the
+    class, so the next divergence between what `init` writes and what `init`
+    requires is visible here rather than at the adopter's first Gate run.
+
+    The verdict is the Gate's own lint step, not a second implementation of it,
+    so the two cannot drift. The rc is non-zero rather than a loud zero because
+    the only rules `generate_rules` writes for an adopter are the two the
+    bootstrap's own post-condition satisfies: a red verdict here can only mean
+    Beadloom contradicted itself, and a zero would let a scripted
+    `init && ci` run on to the point where the cause is no longer in view. The
+    scaffold is left on disk either way — the rc reports the defect, it does not
+    withdraw the graph.
+    """
+    from beadloom.application.gate import lint_step
+
+    step = lint_step(project_root)
+    if step.passed:
+        return
+
+    rules = sorted(
+        {str(f["rule"]) for f in step.findings if f.get("severity") == "error"}
+    )
+    click.echo("", err=True)
+    click.echo(
+        "Error: the graph this command just wrote does not pass the rules "
+        "this command wrote alongside it.",
+        err=True,
+    )
+    for rule in rules:
+        click.echo(f"  {rule}", err=True)
+    click.echo(f"`beadloom ci` will report this as: lint \u2014 {step.summary}.", err=True)
+    click.echo(
+        "The scaffold is on disk and can be edited by hand "
+        "(.beadloom/_graph/services.yml, .beadloom/_graph/rules.yml). This is a "
+        "defect in Beadloom's bootstrap rather than in your project \u2014 please "
+        "report it with the rule name(s) above.",
+        err=True,
+    )
+    sys.exit(1)
+
+
 # beadloom:domain=onboarding
 @main.command()
 @click.option("--bootstrap", is_flag=True, help="Bootstrap: generate graph from code.")
@@ -801,6 +850,7 @@ def init(
             click.echo(f"  Index: {ri['symbols']} symbols, {ri['imports']} imports")
         if result.get("import"):
             click.echo(f"  Imported: {len(result['import'])} documents")
+        _verdict_on_the_generated_graph(project_root)
         return
 
     if bootstrap:
@@ -867,6 +917,8 @@ def init(
         # Warn about missing language parsers when symbols == 0.
         if ri.symbols_indexed == 0:
             _warn_missing_parsers(project_root)
+
+        _verdict_on_the_generated_graph(project_root)
 
         click.echo("")
         click.echo("Next steps:")

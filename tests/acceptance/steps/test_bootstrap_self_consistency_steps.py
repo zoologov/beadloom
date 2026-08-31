@@ -1,9 +1,17 @@
 """Step implementations for `features/bootstrap_self_consistency.feature`.
 
-BDL-067 `.1`, closing BDL-UX #192. The steps run the real `bootstrap_project`
-and the real linter over real directories; nothing is stubbed, because a stub
-would agree with whatever the bootstrap currently writes and that is the thing
-under test.
+BDL-067, closing BDL-UX #192. The `.1` steps run the real `bootstrap_project`
+and the real linter over real directories; nothing there is stubbed, because a
+stub would agree with whatever the bootstrap currently writes and that is the
+thing under test.
+
+The one `.2` step that does patch — `a bootstrap that writes the graph and then
+forgets the edge its rules require` — patches for the opposite reason. `.1` made
+a self-contradicting graph impossible to obtain honestly, so the divergence
+`init` is asked to notice has to be CONSTRUCTED. It is constructed at the graph
+only: the real bootstrap runs, the real `generate_rules` writes
+`domain-needs-parent`, and the `part_of` edges are then taken back out of
+`services.yml`. Nothing about `init`'s verdict is faked.
 
 **FAKES PROVE FAKES.** Every fixture here is a project that is not Beadloom —
 `orders-web`, `orders (web)`, `supply-chain/src/platform/orders`. None of those
@@ -26,11 +34,14 @@ import json
 from typing import TYPE_CHECKING, Any
 
 import pytest
+import yaml
+from click.testing import CliRunner
 from pytest_bdd import given, parsers, scenarios, then, when
 
 from beadloom.application.reindex import incremental_reindex
 from beadloom.graph.linter import lint
 from beadloom.onboarding.scanner import bootstrap_project
+from beadloom.services.cli import main
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -41,6 +52,12 @@ scenarios("../features/bootstrap_self_consistency.feature")
 #: The root's ref_id is written unsanitised, so an edge that recomputes the
 #: name from the project instead of reading the node points at nothing.
 PARENTHESISED_NAME = "orders (web)"
+
+#: The rule `generate_rules` writes for any graph holding a domain, and the rule
+#: BDL-UX #192's reporter read out of `lint --strict` after a green `init`. The
+#: scenario asserts this exact string: "the command failed" is not the fact the
+#: adopter needs, the name they will meet again in the Gate's output is.
+THE_RULE = "domain-needs-parent"
 
 
 @pytest.fixture()
@@ -170,3 +187,57 @@ def _then_classified_parent_is_kept(world: dict[str, Any]) -> None:
     for edge in nested:
         siblings = [e for e in part_of if e["src"] == edge["src"]]
         assert len(siblings) == 1, f"{edge['src']} was attached twice: {siblings}"
+
+
+@given("a bootstrap that writes the graph and then forgets the edge its rules require")
+def _given_a_forgetful_bootstrap(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Re-create #192's shape on a bootstrap that can no longer produce it.
+
+    Only the graph half is sabotaged: the real `generate_rules` still writes
+    `domain-needs-parent`, and the real `bootstrap_project` still runs. The
+    `part_of` edges are taken back out of `services.yml` afterwards, which is
+    what makes this a test of `init`'s verdict rather than a second test of `.1`.
+
+    `init --yes` binds `bootstrap_project` at import time in `init_flow`, so that
+    binding is the one the patch has to reach.
+    """
+    real = bootstrap_project
+
+    def forgetful(project_root: Path, **kwargs: Any) -> dict[str, Any]:
+        result = real(project_root, **kwargs)
+        services = project_root / ".beadloom" / "_graph" / "services.yml"
+        data = yaml.safe_load(services.read_text(encoding="utf-8"))
+        # `bootstrap_project` writes no `edges:` key when there are none, so the
+        # sabotaged file keeps the shape the bug was reported against.
+        data.pop("edges", None)
+        services.write_text(
+            yaml.safe_dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
+        result["edges"] = []
+        result["edges_generated"] = 0
+        return result
+
+    monkeypatch.setattr(
+        "beadloom.onboarding.scanner.init_flow.bootstrap_project", forgetful
+    )
+
+
+@when("beadloom init is run on the project")
+def _when_init_is_run(world: dict[str, Any]) -> None:
+    world["init"] = CliRunner().invoke(
+        main,
+        ["init", "--yes", "--mode", "bootstrap", "--project", str(world["project"])],
+    )
+
+
+@then("the command does not report success")
+def _then_init_failed(world: dict[str, Any]) -> None:
+    result = world["init"]
+    assert result.exit_code != 0, result.output
+
+
+@then("the command names the rule the gate will name")
+def _then_init_names_the_rule(world: dict[str, Any]) -> None:
+    result = world["init"]
+    assert THE_RULE in result.output, result.output
