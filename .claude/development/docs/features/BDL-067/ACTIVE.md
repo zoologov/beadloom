@@ -20,8 +20,8 @@ errors, and the invariant holds for every preset the module can select.
 - [x] Wave shape decided by `beadloom waves` (exit 0): `.1` and `.2` serialised on `shared_node: agent-prime`
 - [x] Branch `features/BDL-067` cut from `main`
 - [x] Wave 1 — `.1` dev (closed; `lint --strict` rc 1 -> rc 0 and `ci` rc 1 -> rc 0 on a virgin adopter project)
-- [ ] Wave 2 — `.2` dev
-- [ ] Wave 3 — `.3` test
+- [x] Wave 2 — `.2` dev (closed 2026-08-31, commit `e52aa06`)
+- [x] Wave 3 — `.3` test (subagent launched)
 - [ ] Wave 4 — `.4` review
 - [ ] Wave 5 — `.5` tech-writer
 - [ ] Gate green, PR opened
@@ -31,8 +31,8 @@ errors, and the invariant holds for every preset the module can select.
 | Bead | Status | Details |
 |------|--------|---------|
 | `beadloom-e8s4.1` | Done | post-condition `_missing_domain_parent_edges` in `bootstrap.py`; 4 scenarios + 11 unit tests; green in a clean room over 6 files |
-| `beadloom-e8s4.2` | Pending | wave 2 |
-| `beadloom-e8s4.3` | Pending | blocked by .1, .2 |
+| `beadloom-e8s4.2` | ✓ done | `init` now takes a verdict on the graph it wrote, in both the `--yes` and interactive `--bootstrap` branches, using the Gate's own `has_errors` semantics. 15 tests. The divergence is CONSTRUCTED — `part_of` edges are stripped back out of `services.yml` after the real bootstrap wrote the real rules — so the case does not depend on `.1` still leaving a naturally-broken graph. API change: `gate._step_lint` → public `lint_step`. Commit `e52aa06`. |
+| `beadloom-e8s4.3` | In Progress | wave 3, test subagent launched |
 | `beadloom-e8s4.4` | Pending | blocked by .3 |
 | `beadloom-e8s4.5` | Pending | blocked by .4 |
 
@@ -62,3 +62,33 @@ both fail on the working tree because `BRIEF.md` is there. The natural owner is 
 `.2` declares `onboarding, cli`). The verdict is conservative and therefore safe, but the output
 does not let an operator tell a transitive expansion from a parse error. Confirm during the wave
 before logging.
+
+**Wave 1 aftermath — `mr2l.72` measured a third time**
+
+The dev subagent on `.1` reported the tree red on two baseline tests it did not own and
+correctly refused to edit them. Verified in the main loop: BDL-067's own `BRIEF.md` and
+`ACTIVE.md` moved the TO-BE population 198 → 199 and the working-document count 56 → 57
+(`tests/test_bead77_kind_and_root_disagree.py`), and the BRIEF's three acceptance-criteria
+scenario references moved the PRD/BRIEF reference count 33 → 36
+(`tests/test_reference_leg_syntax.py`). Bumped by the coordinator in `e83bc65` and recorded on
+`beadloom-mr2l.72`. **Cost per feature is now three hand edits, not one** — the literals the
+ROADMAP describes as moving 190 → 194 → 198 are three literals, not one.
+
+The pre-commit hook also warned `mypy type errors in this commit` on a tests-only commit;
+`uv run mypy src/` is clean over 225 files and `ruff check src/ tests/` passes. That is
+`mr2l.82` — the commit-scoped hook type-checks a surface the project never declared typed.
+
+**Wave 2 verified by the coordinator, not taken on report**
+
+The subagent reported two measurements that read as a contradiction — one clean-room failure and
+`beadloom ci` rc 0 on the tree — so both were re-measured in the main loop:
+
+| Claim | Coordinator's measurement |
+|---|---|
+| `beadloom ci` rc 0 on the tree | confirmed, rc 0, zero `::error` lines (warnings only) |
+| `test_all_new_node_pairs_are_fresh` fails only in the clean room | confirmed, passes on the tree — the clean room has no index for it to compare against |
+| 7341 passing | confirmed, `7341 passed, 11 skipped, 1 xfailed`, 0 failed |
+
+The first Gate run in the main loop was itself misread: `beadloom ci | tail` reports `tail`'s exit
+code, not the Gate's. Re-run without the pipe before believing it — the coordinator playbook warns
+about exactly this and it still happened once here.
