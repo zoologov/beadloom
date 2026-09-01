@@ -35,6 +35,23 @@
 
 ## Open Issues
 
+215. [2026-09-01] [MEDIUM] The Gate reports an index problem as a rules configuration error
+
+    **Severity:** medium (the headline names a file that is fine, the detail names the real cause, and the adopter reads the headline)
+    **Command:** `beadloom ci --no-reindex`
+    **Context:** found by the `beadloom-e8s4.12` sweep during BDL-067, on a scratch adopter with a **valid** `rules.yml` and no index.
+    **Measured:**
+
+    ```
+    beadloom ci --no-reindex  ->  lint FAIL: rules configuration error
+                                  (the same run's `why` carries `index not found at ...`)
+    ```
+
+    **Issue:** `application/gate.py:242-248` stamps `summary=RULES_CONFIG_ERROR` on **all three** `LintError` raise sites in `graph/linter.py`, and two of them are index problems rather than rules problems. The same prose appears in `src/beadloom/application/gate.py:61`, `docs/domains/application/README.md` and `docs/domains/application/features/ci-gate/SPEC.md:23` — the wrong summary is **documented as the behaviour**, which is how it survived review.
+    **Expected:** the summary names what actually failed. Either distinguish the rules-parse raise site from the index raise sites in `graph/linter.py`, or derive the summary from the raise instead of stamping one constant on all three. The two documents are corrected in the same change; they currently certify the defect.
+    **Why it is recorded as a class and not a typo:** BDL-067 found three instances of *a user-facing message asserting a fact the code knows to be false* — a comment counting monkeypatch bindings and calling them branches (#192 fix cycle 1), a message blaming Beadloom for the adopter's own rules (cycle 2), a withdrawal claiming a rule failed where none was evaluated (cycle 3). Each arrived the same way: careful reasoning about one shape, not carried across to the neighbouring shape. This is the fourth, one layer up, in the Gate every adopter runs. Three reviews found three of them and each was found only after the previous was fixed, which says the sweep is the deliverable and the individual fix is not.
+    **Tracker:** `beadloom-uz8x`. Filed separately from BDL-067 by the same reasoning the owner applied to #214: a different defect on a different surface, deserving its own measurement.
+
 214. [2026-08-31] [HIGH] `init` writes two nodes with the same `ref_id` on the classic Python src-layout, and the loader silently keeps one
 
     **Severity:** high (the most common Python layout there is, and the failure is silent in both directions — a node disappears and the gate stays green)

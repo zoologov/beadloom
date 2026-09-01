@@ -27,7 +27,9 @@ a reason, and `beadloom ci` is rc 0.
 - [x] Wave 4 — `.4` review (closed 2026-08-31, verdict ISSUES: 0 critical, 2 major)
 - [x] Wave 4b — `.6` dev (closed; wizard rc 0 → rc 1 on the sabotaged fixture, `beadloom ci` rc 0)
 - [ ] Wave 4b — `.7` test (closed) / `.8` re-review (fix cycle)
-- [ ] Wave 5 — `.5` tech-writer (re-pointed to depend on `.8`)
+- [x] Wave 4c — `.9` dev (`9eac01f`) / `.10` test (`28f1cd2`) / `.11` review (launched)
+- [x] Wave 4d — `.12` dev (`5bdd1b0`) / `.13` review (launched)
+- [ ] Wave 5 — `.5` tech-writer (re-pointed a third time: now depends on `.13`)
 - [ ] Gate green, PR opened
 
 ## Results
@@ -41,7 +43,12 @@ a reason, and `beadloom ci` is rc 0.
 | `beadloom-e8s4.5` | Pending | re-pointed: now blocked by `.8`. Doc surface named by the review, not to be guessed. |
 | `beadloom-e8s4.6` | ✓ done | the wizard now takes the verdict (guarded on `mode in (bootstrap, both)` and skipped on the `edit` review answer, where the graph has just been handed to the user). The covering module is parametrised over the three BRANCHES instead of the two bindings: 14 cases → 33. Minor 4 closed — an unloadable `rules.yml` now prints the loader's complaint instead of the gate step's own name, and does not blame the bootstrap for a file the bootstrap does not rewrite. 21 new tests (19 unit + 2 scenarios); 13 of them verified RED against `git archive HEAD src` on PYTHONPATH. Minor 3 wording corrected in all three prose copies of the post-condition sentence (BRIEF, onboarding README, agent-prime SPEC); the fourth copy was this file's goal line and is replaced above. API change: `gate.RULES_CONFIG_ERROR`. |
 | `beadloom-e8s4.7` | ✓ done | the branch count is now READ from `init`'s source, not written down: `tests/test_init_branches_that_reach_the_bootstrap.py` derives the callables that reach `bootstrap_project`, finds every call to one of them in the command body, and asserts each is followed by a reachable verdict. Demonstrated capable of failing on three mutant trees (a fourth branch with no verdict — 2 red; a fourth branch WITH one — 1 red, the coverage assertion; a renamed guard — 2 red), and red against the pre-`.6` source. The three cases `.6` declared vacuous at `[wizard]` now carry an anti-vacuity guard and are red there too (pre-`.6`: 13 red → 16 red). 12 new tests (11 unit + 1 scenario, the `edit` carve-out). 7367 → 7379 passed, `beadloom ci` rc 0. |
-| `beadloom-e8s4.8` | Pending | blocked by `.7` |
+| `beadloom-e8s4.8` | ✓ done | REVIEW ISSUES: 0 critical, 1 major. Confirmed closed by measurement: the wizard verdict, the `why` in the `LintError` branch, and both wording findings. Verified the enumeration test against the REAL `init` mutated three ways. |
+| `beadloom-e8s4.9` | ✓ done | the failure message distinguishes a rule the bootstrap authored from one already in `rules.yml`; the report request is dropped in the second case; the docstring premise corrected. The premise sweep found the SAME false statement in three documents (`cli-commands/DOC.md`, `services/mcp.md`, `onboarding/README.md`) and nowhere else in `src/` or `tests/`. 20 tests. Commit `9eac01f`. |
+| `beadloom-e8s4.10` | ✓ done | audit rather than quota. `.9`'s negative assertions already existed and their red was re-derived independently against `9eac01f^` (9 failed / 54 passed). **`.9`'s claim that all 20 were red is overstated — 11 are guards that cannot fail.** Added 3 tests: one kills a mutant the whole suite survived; two make `.9`'s comment-only exclusion executable and are declared guards. Commit `28f1cd2`. |
+| `beadloom-e8s4.11` | ✓ done | REVIEW ISSUES: 0 critical, 1 major — the withdrawal line on the unloadable-rules branch. Confirmed `.10`'s routed finding by running the wizard on five scratch projects. |
+| `beadloom-e8s4.12` | ✓ done | the shared withdrawal now reads "The scaffold above was written, but the check that follows it did not pass." — no rule claim, no colon. One assertion pair + one acceptance scenario, both red before the fix. **The sweep found a FOURTH instance and reported it instead of widening the commit.** Commit `5bdd1b0`. |
+| `beadloom-e8s4.13` | In Progress | fourth-pass review launched, with no path named |
 
 ## Notes
 
@@ -132,3 +139,94 @@ longer name `ACTIVE.md`.
 **Routing.** Major 1 + Minor 4 → `.6`/`.7`/`.8`. Major 2 + Minor 5 → named into `.5`'s notes.
 Minor 3 (two nodes share one `ref_id` on `src/<project>/`, the loader keeps one, the rule goes
 inert and `ci` stays green) → filed on its own as `beadloom-7c6k` / BDL-UX #214, by owner decision.
+
+**Fix cycle — what closed and how it was measured**
+
+Coordinator's own measurements on the tree, without a pipe: after `.6`, `7367 passed, 0 failed`,
+Gate rc 0; after `.7`, `7379 passed, 0 failed`, Gate rc 0. Both match what the subagents reported.
+
+`.7`'s deliverable is the part worth keeping. It does not add the third case — it derives the
+bootstrap-reaching callables from the onboarding source, locates every call to them in `init`'s
+body together with its guard path, and requires a reachable verdict after each. A fourth branch
+added later fails this test rather than shipping. It was verified against three deliberately
+mutated trees rather than only against the pre-fix one, which is the difference between a test
+that passes and a test that would have caught this.
+
+**A numbering collision, caught by a subagent and missed by the coordinator.** The new defect was
+first filed as BDL-UX #211. That number belongs to the closed 1.x-description issue of 2026-08-27
+and is cited four times in shipped documents. The coordinator had checked for a collision with
+`grep -nE '^21[0-9]\. \['`, which cannot match a closed entry — those are written `211. ~~[` —
+so the check returned "free" and was believed. Renumbered to #214. The mechanism, not the number,
+is the finding: a duplicate-detection pattern that duplicates need not match. `mr2l.91` exists
+because this log already carries two issues numbered 187.
+
+**Re-review — the fix cycle closed its findings and produced one more**
+
+Everything routed to `.6`/`.7` is closed, and the reviewer confirmed it by running the commands
+rather than by reading the beads. The wizard now exits 1 over a graph that fails its own rules and
+stays 0 over one that does not, so the check is a verdict rather than a permanent red.
+
+**The new Major is the same species as the last one.** When the graph fails an evaluated rule,
+`init` says *"This is a defect in Beadloom's bootstrap rather than in your project — please report
+it"*. That holds only when the bootstrap authored `rules.yml`, and `bootstrap_project` writes that
+file **only if it is absent**. On a re-init, or on a project whose rules came from an earlier
+Beadloom or a hand edit, the failing rule is the adopter's own and Beadloom asks to be blamed for
+it. The docstring justifying the non-zero rc carries the same false premise and reads as verified.
+
+What makes it worth recording rather than just fixing: `.6` already knew this. It wrote the fact
+down — *"`bootstrap_project` leaves an existing rules file alone, so the file that did not load is
+usually the adopter's own edit"* — in the message immediately next door, and did not carry it
+across to the message it invalidates. Two neighbouring sentences, one correct.
+
+Routed to `.9`/`.10`/`.11`; Minor 3 (prose) added to `.5`'s named surface. `.5` re-pointed to `.11`.
+
+**Second fix cycle — the audit was worth more than the tests it added**
+
+Coordinator's measurements on the tree, without a pipe: after `.9`, `7399 passed, 0 failed`,
+Gate rc 0; after `.10`, `7402 passed, 0 failed`, Gate rc 0. Both match the subagents' reports.
+
+`.10` was re-scoped by the coordinator before launch, because `.9` had already written the
+differential tests this bead was created to demand. Asking for them again would have produced
+tests written to justify a bead — the exact failure this epic exists to remove. It was sent to
+audit instead, and the audit is what paid:
+
+- `.9`'s summary said all 20 of its assertions were red before the fix. **Eleven are guards that
+  cannot fail.** The nine that can were re-derived independently against `9eac01f^`. The claim was
+  not false in a way that changes the fix; it was imprecise in exactly the direction that this
+  project keeps finding expensive.
+- One mutant the entire suite survived is now killed — the withdrawal line on the
+  unloadable-`rules.yml` path.
+- Two of the three tests it added are **declared guards**, said so in the open rather than counted
+  as coverage.
+- It measured *"green in a clean room over 1 file — 75 passed over the three affected modules,
+  scoped, not the full suite"*, which is the narrowest and most accurate claim any subagent has
+  made in this epic. The full-suite number came from the coordinator.
+
+It also routed a finding rather than fixing it: on the wizard + unloadable-rules path, the
+withdrawal line says the graph "does not pass" rules that the next two lines say were never
+evaluated. Passed to `.11` as a finding to judge, not as a verdict to adopt.
+
+**Third fix cycle — and the finding that the sweep is the deliverable**
+
+Coordinator's measurements on the tree, without a pipe: `7403 passed, 0 failed`, Gate rc 0.
+
+`.12` was asked to fix the wording and then sweep the other user-facing strings this epic touched
+against the branches that can actually reach them. It found a **fourth** instance of the class and
+**reported it rather than fixing it**, which is what the bead asked for:
+`application/gate.py:242-248` stamps `RULES_CONFIG_ERROR` on all three `LintError` raise sites in
+`graph/linter.py`, two of which are index problems. Measured on a scratch adopter with a valid
+`rules.yml` and no index: `beadloom ci --no-reindex` prints `lint FAIL: rules configuration error`
+while the same run carries `index not found at ...`. The same prose sits in two documents, so the
+wrong summary is *documented as the behaviour* — which is how it survived review.
+
+Filed as `beadloom-uz8x` / BDL-UX #215, separately, on the precedent the owner set for #214.
+
+**The pattern is the finding.** Three reviews found three instances of one class, and each was
+found only after the previous had been fixed — a sweep by a bead that was told to sweep found the
+fourth in one pass. That says the individual fix was never the deliverable. Recorded here rather
+than left as an impression.
+
+**The fourth review's prompt names no path.** The third reviewer declared that my prompt had been
+convergent — it named the one path holding the only finding, and it could not claim it would have
+reached that path unaided from a 25-file diff. So this one states the class and nothing about
+where. The cost of the previous choice is on `beadloom-e8s4.11`.
