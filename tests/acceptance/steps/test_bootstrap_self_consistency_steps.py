@@ -31,6 +31,7 @@ The module is named `test_*` so default pytest collection picks the scenarios up
 from __future__ import annotations
 
 import json
+import shutil
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
@@ -606,3 +607,105 @@ def _then_the_graph_on_disk_is_clean(world: dict[str, Any]) -> None:
     # Anti-vacuity: a project whose rules file never loaded evaluates nothing
     # and has no errors to report.
     assert result.rules_evaluated > 0, "no rule was evaluated, so nothing was checked"
+
+
+# ---------------------------------------------------------------------------
+# BDL-067 `.15` — the mode this epic never varied, and the two entry points
+# that have to agree about it
+# ---------------------------------------------------------------------------
+
+#: The mode both scenarios run. Every scenario above pins `bootstrap`, which is
+#: how `.14`'s defect stayed invisible: it lived in the mode that runs the second
+#: writer as well as the first.
+THE_MODE = "both"
+
+
+def _the_wizard_answering(mode: str) -> list[str]:
+    """The wizard's answers for *mode*: the mode, then the graph review.
+
+    The review prompt is shown only when the run produced nodes to review, which
+    is the modes that bootstrap. `edit` is the one answer that takes no verdict
+    and has its own scenario above, so the answer here is `yes`.
+    """
+    return [mode, "yes"] if mode in ("bootstrap", "both") else [mode]
+
+
+@when(
+    "the project is initialised twice over, once with the mode flag and once "
+    "through the wizard"
+)
+def _when_initialised_through_both_entry_points(
+    world: dict[str, Any], tmp_path: Path
+) -> None:
+    """Two copies of one project, one entry point each.
+
+    Copied before either run so the two start from the same bytes: a difference
+    in the fixture would make the comparison say nothing. The wizard's copy
+    declines the doc-skeleton prompt, which keeps the scenario about the verdict.
+    """
+    by_flag = tmp_path / "through-the-flag" / world["project"].name
+    by_wizard = tmp_path / "through-the-wizard" / world["project"].name
+    shutil.copytree(world["project"], by_flag)
+    shutil.copytree(world["project"], by_wizard)
+
+    world["by_flag"] = by_flag
+    world["by_wizard"] = by_wizard
+    world["flag_run"] = CliRunner().invoke(
+        main, ["init", "--yes", "--mode", THE_MODE, "--project", str(by_flag)]
+    )
+    with (
+        patch("rich.prompt.Prompt.ask", side_effect=_the_wizard_answering(THE_MODE)),
+        patch("rich.prompt.Confirm.ask", return_value=False),
+    ):
+        world["wizard_run"] = CliRunner().invoke(
+            main, ["init", "--project", str(by_wizard)]
+        )
+
+
+@then("the two runs report the same verdict")
+def _then_the_two_runs_agree(world: dict[str, Any]) -> None:
+    """Neither run is asserted to be right. What is asserted is that they agree.
+
+    Measured on the pre-`.14` tree over this fixture: the flag exited 0 and the
+    wizard exited 1, because only one of the two had re-indexed after the last
+    graph file the run wrote.
+    """
+    flag_run = world["flag_run"]
+    wizard_run = world["wizard_run"]
+    assert flag_run.exit_code == wizard_run.exit_code, (
+        f"`init --yes --mode {THE_MODE}` exited {flag_run.exit_code} and the "
+        f"wizard answering {THE_MODE!r} exited {wizard_run.exit_code} over the "
+        f"same project.\n--- the flag ---\n{flag_run.output}\n"
+        f"--- the wizard ---\n{wizard_run.output}"
+    )
+
+
+@then("each run leaves a graph that passes the rules on disk beside it")
+def _then_both_trees_are_clean(world: dict[str, Any]) -> None:
+    """The adopter's next command, on each of the two trees.
+
+    Agreement alone would be satisfied by two runs that are wrong together, so
+    the trees are linted as they stand on disk — with a reindex, which is exactly
+    the difference the finding turned on.
+    """
+    for root in (world["by_flag"], world["by_wizard"]):
+        result = lint(root, reindex=incremental_reindex)
+        assert not result.has_errors, (
+            root.parent.name,
+            [(v.rule_name, v.from_ref_id, v.message) for v in result.violations],
+        )
+        # Anti-vacuity: a project whose rules file never loaded evaluates
+        # nothing and has no errors to report.
+        assert result.rules_evaluated > 0, root.parent.name
+
+
+@then("neither run reports success")
+def _then_neither_run_succeeded(world: dict[str, Any]) -> None:
+    for label in ("flag_run", "wizard_run"):
+        assert world[label].exit_code != 0, (label, world[label].output)
+
+
+@then("each run names the rule the gate will name")
+def _then_both_runs_name_the_rule(world: dict[str, Any]) -> None:
+    for label in ("flag_run", "wizard_run"):
+        assert THE_RULE in world[label].output, (label, world[label].output)

@@ -263,3 +263,44 @@ node, because none of them creates one: `generate_rules` writes `rules.yml` and 
 change its `kind`; `_patch_docs_field` adds `docs:`; the `link` command adds `links:`. So the
 class has no third instance today — and nothing in the suite would notice a third writer on the
 day it is added, which is the gap `.15` exists to close.
+
+**Sixth cycle — `.15`: the mode axis, and an enumerator seeded from every writer**
+
+Baseline measured on the tree before starting, without a pipe: `7425 passed, 0 failed`,
+`beadloom ci` rc 0. After: `7500 passed, 0 failed`, `beadloom ci` rc 0.
+
+The deliverable is not more cases. 112 tests across this epic's seven files were green while
+`.14`'s defect was live on two modes, and every one of them pinned `--mode bootstrap`. So the
+instrument was the thing missing, on two axes.
+
+**The mode axis.** `tests/test_init_agrees_across_its_modes.py` (63 cases) runs
+`--mode {bootstrap, import, both}` — read off the flag's own `click.Choice`, so a fourth mode
+joins the parametrisation on the day it is declared — through both entry points that pick a mode:
+the `--yes` flag and the wizard's first prompt. **13 of the 63 fail against the pre-`.14` tree**,
+all in `--mode both`, measured by running the new module against `975b87f` with `.14`'s test files
+copied in. The assertion the fourth review named is among them and needs no sabotage at all: over
+a virgin project with a `docs/` directory, `--yes --mode both` exited 0 and the wizard answering
+`both` exited 1, on fixtures that differ in nothing.
+
+**The writer axis.** `tests/test_init_branches_that_reach_the_bootstrap.py` seeded its
+reachability scan from `bootstrap_project` alone while its docstring claimed to cover the graph,
+which is how `import_docs` stayed outside the instrument for five waves. It is now seeded from
+`write_yaml_atomic` — the one commit point every graph YAML routes through, which
+`infrastructure/atomic_io.py` states as its purpose — so the writers are rediscovered from the
+source rather than listed. The scan finds exactly the six `.14`'s sweep found by hand, and a
+seventh fails a case. Measured directly on the shipped pre-`.15` module: over a synthetic command
+whose fourth branch writes a graph file without bootstrapping, the old seed reported
+`unguarded: []` and the new one reports `[('rescan',)]`.
+
+**Declared.** The enumerator's ten new cases do NOT fail against the pre-`.14` tree and cannot:
+that defect was a blind verdict, not a missing one, and no branch of `init` at that commit reached
+a writer without a verdict call. Their bite is demonstrated on synthetic mutants, which is the
+only honest way to test an instrument against a defect that does not exist yet. The syntactic
+ceiling is now written into both modules: it answers "could this branch report", never "does it
+report", and each module cites the other so neither is read as the whole claim.
+
+**Reported, not decided here.** Under `--mode both` the two entry points do not leave the same
+graph: `--yes` generates its doc skeletons inside the bootstrap block, so the import step that
+follows classifies the skeletons the same run just wrote and the graph gains `architecture`
+(domain) and `readme` (feature) nodes the wizard's graph does not have. Both graphs pass their own
+rules, so it is not a defect this epic reported. It is raised on `beadloom-e8s4.15` for the review.

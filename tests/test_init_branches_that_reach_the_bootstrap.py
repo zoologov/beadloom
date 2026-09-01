@@ -1,4 +1,4 @@
-"""Every branch of `init` that reaches the bootstrap, read out of the source.
+"""Every branch of `init` that writes a graph file, read out of the source.
 
 BDL-067 `.7`, covering `.6`. The defect `.6` fixed was that the default wizard
 took no verdict over the graph it had just written. The defect *this* module
@@ -18,30 +18,56 @@ a human adopter meets first was never run.
 larger number: `THE_BRANCHES` is a tuple somebody maintains, and a fourth branch
 added to the command joins the code without joining the tuple. So nothing here
 is written out by hand. The command's own source is parsed, every call that
-reaches `bootstrap_project` is found, and each one is asserted to be followed by
-the Gate's verdict. A fourth branch fails these tests on the day it is written,
+reaches a graph write is found, and each one is asserted to be followed by the
+Gate's verdict. A fourth branch fails these tests on the day it is written,
 whether or not anyone remembers this file.
+
+BDL-067 `.15` WIDENED THE SEED, and the reason is the claim the paragraph above
+used to make about a *writer*. Until `.15` the reachability scan started at
+`bootstrap_project` alone, so it enumerated the branches that reach ONE writer
+and its docstring promised the branches that reach the graph. `import_docs` —
+the second function that creates `domain` nodes, in `.beadloom/_graph/
+imported.yml` — was outside the instrument for the whole of this epic, which is
+how `.14`'s defect reached a fifth wave with 112 green tests over it. The scan is
+now seeded from the one commit point every graph YAML routes through
+(`infrastructure.atomic_io.write_yaml_atomic`, which says so in its own
+docstring), so "writes a graph file" is derived from the source rather than
+listed here, and a THIRD writer joins the instrument on the day it is written.
+The seed's soundness is itself checked: `TestNoGraphFileIsWrittenPastTheCommitPoint`
+fails if a writer ever serialises YAML to disk without going through it, because
+such a writer would be invisible to every scan below.
 
 The instrument is tested before it is trusted (`TestTheEnumeratorItself`): a
 scan that silently found nothing would make every assertion below pass while
 asserting nothing, which is the exact failure mode this bead is about. The
 synthetic commands there are mutants of the real shape — a fourth branch with no
-verdict, a fourth branch with one, and a verdict written after the `return` that
-makes it unreachable — and the enumerator's verdict on each is asserted.
+verdict, a fourth branch with one, a verdict written after the `return` that
+makes it unreachable, and (from `.15`) a fourth branch that writes a graph file
+WITHOUT bootstrapping, which the old seed reported as clean and the new one
+reports. That last case is where the two seeds disagree, so it is stated as a
+difference between them rather than as a story about one.
 
 Known limits, stated rather than discovered later:
 
-- The reachability scan is over the package that owns `bootstrap_project`
-  (`beadloom.onboarding`). A branch that reached the bootstrap through some
-  *other* package would not be seen. That boundary is the DDD layering — the
-  bootstrap is onboarding's, and `services/commands` calls into it — but it is
-  an assumption, not a proof.
 - Reachability is matched on the callee's *name*, not on a resolved import, so
   two same-named functions in the package are one name here. The set it produces
-  is asserted to contain the three names that actually matter.
+  is asserted to contain the names that actually matter. `.15` widened the scan
+  from `beadloom.onboarding` to the whole `beadloom` package, which removes the
+  older limit that a branch reaching a writer through another package would not
+  be seen — `link` and `update_node_in_yaml` are writers outside onboarding —
+  and it was measured not to change the bootstrap-seeded call sites.
 - A verdict call anywhere in a following statement counts, including inside an
   `if` whose condition is some unrelated path. The enumerator answers "could
   this branch report", not "does it report on every path".
+- **The check is syntactic, and that is its ceiling.** It reads a verdict call
+  after a branch; it cannot read what the verdict SEES. `--yes --mode both`
+  carried the call and passed this module while judging an index written before
+  the run's last graph file, and reported clean over a tree the adopter's next
+  `lint --strict` failed. Nothing here could have caught that, and nothing here
+  can. The behavioural half is `tests/test_init_agrees_across_its_modes.py`,
+  which runs the modes and compares the verdict against the Gate; this module is
+  cited there and that module is cited here so neither is read as the whole
+  claim.
 """
 
 from __future__ import annotations
@@ -54,7 +80,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from beadloom import onboarding
+import beadloom
+from beadloom.infrastructure.atomic_io import write_yaml_atomic
 from beadloom.onboarding.scanner.bootstrap import bootstrap_project
 from beadloom.services.commands import setup as init_command
 from tests.test_init_verdict_over_its_own_rules import THE_BRANCHES
@@ -68,21 +95,52 @@ if TYPE_CHECKING:
 #: as unguarded.
 THE_VERDICT = init_command._verdict_on_the_generated_graph.__name__
 
-#: The function every reachability question here is seeded from.
+#: The narrow seed: one writer, and the one this epic started from.
 THE_BOOTSTRAP = bootstrap_project.__name__
+
+#: The wide seed, and the reason `.15` exists. Every graph YAML in the product
+#: is committed by this one function — `infrastructure/atomic_io.py` states that
+#: as its purpose and `TestNoGraphFileIsWrittenPastTheCommitPoint` checks it — so
+#: "this function writes a graph file" is answerable from the source instead of
+#: from a list. Read off the function object for the same reason `THE_VERDICT`
+#: is: a rename must fail at import rather than leave a scan that finds nothing.
+THE_GRAPH_COMMIT_POINT = write_yaml_atomic.__name__
 
 #: The command under examination, by the name it has in its module.
 THE_COMMAND = "init"
 
+#: The functions that call the commit point directly, as BDL-067 `.14`'s sweep
+#: of `src/` enumerated them by hand. It is asserted against the DERIVED set
+#: rather than used as one: the scan has to rediscover these six on its own, and
+#: a seventh must fail here so that somebody asks whether `init` reaches it.
+#: Exactly two of them create nodes (`bootstrap_project`, `import_docs`) and both
+#: carry the domain-parent post-condition; the other four patch a node that
+#: already exists or write rules, and cannot produce an unparented node.
+THE_WRITERS_THE_SWEEP_FOUND = frozenset(
+    {
+        "bootstrap_project",  # services.yml — creates nodes
+        "import_docs",  # imported.yml — creates nodes
+        "generate_rules",  # rules.yml — no nodes
+        "update_node_in_yaml",  # patches summary/source on an existing node
+        "_patch_docs_field",  # adds `docs:` to an existing node
+        "link",  # adds/removes `links:` on an existing node
+    }
+)
+
 
 @dataclass(frozen=True)
-class BootstrapCallSite:
-    """One call inside `init` that ends in a bootstrap, and what follows it.
+class GraphWritingCallSite:
+    """One call inside `init` that ends in a graph write, and what follows it.
 
     ``guard`` is the chain of `if` conditions the call sits under, outermost
     first, as the source spells them. It is the branch's identity: the empty
     tuple is the fallthrough (the default interactive wizard), which is exactly
     the branch a binding-shaped count cannot see.
+
+    The type serves both seeds. Under `THE_BOOTSTRAP` the call ends in
+    `bootstrap_project`; under `THE_GRAPH_COMMIT_POINT` it ends in any of the six
+    writers, which is a superset and is why the name says "graph writing" rather
+    than "bootstrap".
     """
 
     #: The name called, e.g. ``bootstrap_project`` or ``interactive_init``.
@@ -93,6 +151,48 @@ class BootstrapCallSite:
     takes_verdict: bool
     #: Line number in the command's module, so a failure names a place.
     lineno: int
+    #: The source of everything that still runs after the call in this branch.
+    #: A branch that takes no verdict has to say something to the adopter
+    #: instead, and this is what that claim is checked against.
+    follows: str = ""
+
+
+@dataclass(frozen=True)
+class DeferredBranch:
+    """A branch that writes a graph file and deliberately takes no verdict.
+
+    One exists, and a declared exception is only worth the check that follows it,
+    so both halves are here: `because` is the reason a human has to agree with,
+    and `tells_the_adopter` is a string the branch's own remaining source must
+    contain. A deferral that stopped telling the adopter what to do next stops
+    being a deferral and becomes a silent skip, and fails
+    `test_every_deferred_branch_hands_the_work_back_to_the_adopter`.
+    """
+
+    #: The `if` conditions the branch sits under, as `init`'s source spells them.
+    guard: tuple[str, ...]
+    #: Why judging this branch would report a state nobody is in yet.
+    because: str
+    #: What the branch must still tell the adopter, since it judges nothing.
+    tells_the_adopter: str
+
+
+#: The one deferral, and it is the same shape as the wizard's `edit` answer:
+#: the branch has written a file and handed the work back, so there is no settled
+#: state to judge. BDL-067 `.14` decided this explicitly and put it in
+#: `docs/services/mcp.md` as a fact rather than papering over it.
+THE_DEFERRED_BRANCHES = (
+    DeferredBranch(
+        guard=("import_path",),
+        because=(
+            "`init --import` re-indexes nothing and tells the adopter to run "
+            "`beadloom reindex`, so there is no index of its own output for a "
+            "verdict to read. Judging the stale index instead is precisely the "
+            "defect BDL-067 `.14` closed on `--yes --mode both`."
+        ),
+        tells_the_adopter="beadloom reindex",
+    ),
+)
 
 
 def _called_names(node: ast.AST) -> set[str]:
@@ -125,15 +225,15 @@ def _functions_to_their_calls(package: ModuleType) -> dict[str, set[str]]:
     return calls
 
 
-def _callables_that_reach_the_bootstrap(package: ModuleType) -> frozenset[str]:
-    """Names that end in a `bootstrap_project` call, directly or through others.
+def _callables_that_reach(package: ModuleType, seed: str) -> frozenset[str]:
+    """Names that end in a *seed* call, directly or through other functions.
 
-    A least fixed point over *package*: seeded with the bootstrap itself, then
-    grown with anything that calls something already in the set. `init` reaching
-    any of these names is `init` reaching the bootstrap.
+    A least fixed point over *package*: seeded with one name, then grown with
+    anything that calls something already in the set. `init` reaching any of
+    these names is `init` reaching *seed*.
     """
     calls = _functions_to_their_calls(package)
-    reaching = {THE_BOOTSTRAP}
+    reaching = {seed}
     growing = True
     while growing:
         growing = False
@@ -142,6 +242,13 @@ def _callables_that_reach_the_bootstrap(package: ModuleType) -> frozenset[str]:
                 reaching.add(name)
                 growing = True
     return frozenset(reaching)
+
+
+def _direct_callers_of(package: ModuleType, name: str) -> frozenset[str]:
+    """The functions in *package* whose own body calls *name*."""
+    return frozenset(
+        caller for caller, called in _functions_to_their_calls(package).items() if name in called
+    )
 
 
 def _statement_trail(
@@ -196,6 +303,22 @@ def _verdict_follows(node: ast.AST, parents: dict[ast.AST, ast.AST]) -> bool:
     return False
 
 
+def _what_follows(node: ast.AST, parents: dict[ast.AST, ast.AST]) -> str:
+    """The source of everything that still runs after *node*, in this branch.
+
+    The same walk `_verdict_follows` does, unparsed instead of searched, so a
+    claim about what a branch TELLS the adopter can be read off the branch rather
+    than restated in a comment here.
+    """
+    written: list[str] = []
+    for block, index in reversed(_statement_trail(node, parents)):
+        for statement in block[index + 1 :]:
+            written.append(ast.unparse(statement))
+            if isinstance(statement, ast.Return | ast.Raise):
+                return "\n".join(written)
+    return "\n".join(written)
+
+
 def _function_named(name: str, tree: ast.Module) -> ast.FunctionDef:
     """The one function called *name* in *tree*. A missing one is a failure."""
     found = [
@@ -207,7 +330,7 @@ def _function_named(name: str, tree: ast.Module) -> ast.FunctionDef:
     return found[0]
 
 
-def _call_sites_in(source: str, reaching: frozenset[str]) -> tuple[BootstrapCallSite, ...]:
+def _call_sites_in(source: str, reaching: frozenset[str]) -> tuple[GraphWritingCallSite, ...]:
     """Every call in *source*'s `init` that reaches the bootstrap, in order."""
     command = _function_named(THE_COMMAND, ast.parse(source))
     parents: dict[ast.AST, ast.AST] = {
@@ -216,11 +339,12 @@ def _call_sites_in(source: str, reaching: frozenset[str]) -> tuple[BootstrapCall
         for child in ast.iter_child_nodes(parent)
     }
     sites = [
-        BootstrapCallSite(
+        GraphWritingCallSite(
             callee=_callee_name(node),
             guard=_guard_path(node, parents),
             takes_verdict=_verdict_follows(node, parents),
             lineno=node.lineno,
+            follows=_what_follows(node, parents),
         )
         for node in ast.walk(command)
         if isinstance(node, ast.Call) and _callee_name(node) in reaching
@@ -235,14 +359,31 @@ def _the_commands_source() -> str:
 
 @pytest.fixture(scope="module")
 def reaching() -> frozenset[str]:
-    """The names that end in a bootstrap, derived from onboarding's source."""
-    return _callables_that_reach_the_bootstrap(onboarding)
+    """The names that end in a bootstrap, derived from the package's source."""
+    return _callables_that_reach(beadloom, THE_BOOTSTRAP)
 
 
 @pytest.fixture(scope="module")
-def call_sites(reaching: frozenset[str]) -> tuple[BootstrapCallSite, ...]:
+def writing() -> frozenset[str]:
+    """The names that end in a graph-file write, derived the same way.
+
+    A superset of `reaching`: the bootstrap is one writer among six, so every
+    branch the narrow seed finds is found here too, and the branches that reach
+    some OTHER writer are found only here.
+    """
+    return _callables_that_reach(beadloom, THE_GRAPH_COMMIT_POINT)
+
+
+@pytest.fixture(scope="module")
+def call_sites(reaching: frozenset[str]) -> tuple[GraphWritingCallSite, ...]:
     """Every bootstrap-reaching call in the real `init`, in source order."""
     return _call_sites_in(_the_commands_source(), reaching)
+
+
+@pytest.fixture(scope="module")
+def writer_call_sites(writing: frozenset[str]) -> tuple[GraphWritingCallSite, ...]:
+    """Every call in the real `init` that ends in a graph-file write."""
+    return _call_sites_in(_the_commands_source(), writing)
 
 
 #: A command with the shape the real one has: two flag branches that return, and
@@ -295,6 +436,19 @@ A_VERDICT_BELOW_THE_RETURN = A_COMMAND_LIKE_INIT.replace(
     f"        {THE_VERDICT}(project_root)\n        return\n",
     f"        return\n        {THE_VERDICT}(project_root)\n",
     1,
+)
+
+#: BDL-067 `.15`. A fourth branch that writes a graph file WITHOUT bootstrapping
+#: — the shape `import_docs` already has in the real command — and takes no
+#: verdict. It is the case the two seeds disagree about, and it is written here
+#: as a synthetic mutant rather than measured on `init` itself because the real
+#: deferral is a decision: this one is the same shape with the decision removed.
+A_FOURTH_BRANCH_THAT_WRITES_WITHOUT_BOOTSTRAPPING = A_COMMAND_LIKE_INIT.replace(
+    "    result = interactive_init(project_root)",
+    "    if rescan:\n"
+    "        result = import_docs(project_root, project_root)\n"
+    "        return\n"
+    "    result = interactive_init(project_root)",
 )
 
 
@@ -357,12 +511,226 @@ class TestTheEnumeratorItself:
 
         assert [site.guard for site in sites if not site.takes_verdict] == [("non_interactive",)]
 
+    def test_the_writer_seed_finds_the_writers_the_sweep_found_by_hand(
+        self, writing: frozenset[str]
+    ) -> None:
+        """The scan rediscovers BDL-067 `.14`'s enumeration of `src/`.
+
+        Equality rather than containment, deliberately. A seventh function that
+        commits a graph file fails here, and the failure asks the one question
+        `.14`'s sweep had to be run by hand to answer: does `init` reach it, and
+        does that branch take a verdict? Containment would let the seventh writer
+        arrive in silence, which is the defect this module is named after one
+        level down.
+        """
+        committing = _direct_callers_of(beadloom, THE_GRAPH_COMMIT_POINT)
+
+        assert committing == THE_WRITERS_THE_SWEEP_FOUND, (
+            "the set of functions that commit a graph file has changed. Added: "
+            f"{sorted(committing - THE_WRITERS_THE_SWEEP_FOUND)}; gone: "
+            f"{sorted(THE_WRITERS_THE_SWEEP_FOUND - committing)}. A new writer "
+            "needs the domain-parent post-condition if it creates nodes, and "
+            "every branch of `init` that reaches it needs a verdict."
+        )
+
+    def test_the_writer_seed_reports_a_branch_the_bootstrap_seed_calls_clean(
+        self,
+        reaching: frozenset[str],
+        writing: frozenset[str],
+    ) -> None:
+        """BDL-067 `.15`, stated as the difference between the two seeds.
+
+        The same synthetic command, read twice. Seeded from `bootstrap_project`
+        the fourth branch is invisible — it writes `imported.yml` and never
+        bootstraps — and the module would have reported the command clean while
+        its docstring claimed to cover "a fourth branch". Seeded from the commit
+        point it is found. That gap is what let `import_docs` sit outside the
+        instrument for the whole epic.
+        """
+        assert (
+            A_FOURTH_BRANCH_THAT_WRITES_WITHOUT_BOOTSTRAPPING != A_COMMAND_LIKE_INIT
+        ), "the anchor the mutation edits is gone"
+
+        by_bootstrap = _call_sites_in(
+            A_FOURTH_BRANCH_THAT_WRITES_WITHOUT_BOOTSTRAPPING, reaching
+        )
+        by_writer = _call_sites_in(
+            A_FOURTH_BRANCH_THAT_WRITES_WITHOUT_BOOTSTRAPPING, writing
+        )
+
+        assert ("rescan",) not in [site.guard for site in by_bootstrap], (
+            "the narrow seed now sees the writer branch, so this case no longer "
+            "states the difference it was written for"
+        )
+        assert [site.guard for site in by_writer if not site.takes_verdict] == [
+            ("rescan",)
+        ]
+
+
+class TestNoGraphFileIsWrittenPastTheCommitPoint:
+    """The wide seed is only sound while the commit point is the only way out.
+
+    `write_yaml_atomic` is documented as the single commit point for every graph
+    YAML, and the scans above are seeded from that documented fact. A writer that
+    serialised YAML and wrote it itself would be invisible to all of them — the
+    enumerator would report clean over a command that writes a graph file on an
+    unjudged branch, which is the failure mode this module exists to prevent.
+    So the fact is checked rather than trusted.
+    """
+
+    #: The names a function calls when it serialises YAML, and when it puts bytes
+    #: on disk. A function that does both without the commit point is a writer
+    #: the seed cannot see.
+    SERIALISES = frozenset({"dump", "safe_dump"})
+    WRITES = frozenset({"write_text", "write_bytes", "open"})
+
+    #: The one function that legitimately does both. It writes
+    #: `.beadloom/flow.yml` — the role-configurator's file, read by
+    #: `setup-agentic-flow` — which is not a graph file and holds no node, so no
+    #: scan here needs to reach it.
+    THE_DECLARED_EXCEPTION = frozenset({"persist_flow_config"})
+
+    def _functions_that_serialise_yaml_to_disk(self) -> dict[str, str]:
+        root = Path(inspect.getfile(beadloom)).parent
+        found: dict[str, str] = {}
+        for path in sorted(root.rglob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+                    continue
+                called = _called_names(node)
+                if self.SERIALISES & called and self.WRITES & called:
+                    found[node.name] = f"{path.relative_to(root)}:{node.lineno}"
+        return found
+
+    def test_the_scan_finds_something_to_judge(self) -> None:
+        """Anti-vacuity: a scan that matched nothing would pass the next case."""
+        assert _direct_callers_of(beadloom, THE_GRAPH_COMMIT_POINT), (
+            f"no function calls {THE_GRAPH_COMMIT_POINT!r}, so the wide seed is "
+            "empty and every writer-seeded assertion below asserts nothing"
+        )
+
+    def test_every_yaml_written_to_disk_goes_through_the_commit_point(self) -> None:
+        found = self._functions_that_serialise_yaml_to_disk()
+        bypassing = {
+            name: where
+            for name, where in found.items()
+            if name not in self.THE_DECLARED_EXCEPTION
+            and name != THE_GRAPH_COMMIT_POINT
+        }
+
+        assert not bypassing, (
+            "these functions serialise YAML and write it themselves, so the "
+            f"commit-point seed cannot see them: {bypassing}. If any of them "
+            "writes under `.beadloom/_graph/`, route it through "
+            f"{THE_GRAPH_COMMIT_POINT!r}; if none does, declare it here with the "
+            "file it writes and why that file is not a graph file."
+        )
+
+    def test_the_declared_exception_still_exists(self) -> None:
+        """A carve-out for a function nobody has fails nothing and hides that."""
+        found = self._functions_that_serialise_yaml_to_disk()
+
+        assert set(found) >= self.THE_DECLARED_EXCEPTION, (
+            "declared exceptions that no longer serialise YAML to disk: "
+            f"{sorted(self.THE_DECLARED_EXCEPTION - set(found))}"
+        )
+
+
+class TestEveryBranchOfInitThatWritesAGraphFileTakesAVerdict:
+    """The claim the class below makes about the bootstrap, made about the graph.
+
+    BDL-067 `.15`. `init` writes graph files through more than one function, and
+    the branch that reaches the second one was outside every scan in this module
+    until now.
+    """
+
+    def test_the_scan_finds_branches_to_judge(
+        self, writer_call_sites: tuple[GraphWritingCallSite, ...]
+    ) -> None:
+        """Anti-vacuity: an empty scan would pass every assertion below it."""
+        assert writer_call_sites, (
+            f"no call reaching {THE_GRAPH_COMMIT_POINT} was found in "
+            f"`{THE_COMMAND}` — the enumeration below would assert nothing"
+        )
+
+    def test_it_sees_branches_the_bootstrap_seeded_scan_does_not(
+        self,
+        call_sites: tuple[GraphWritingCallSite, ...],
+        writer_call_sites: tuple[GraphWritingCallSite, ...],
+    ) -> None:
+        """Measured on the real command, so the widening is not just intended.
+
+        If this ever stops holding, the two seeds have converged and one of them
+        is redundant — which is a thing to decide, not to discover.
+        """
+        narrow = {(site.callee, site.lineno) for site in call_sites}
+        wide = {(site.callee, site.lineno) for site in writer_call_sites}
+
+        assert narrow < wide, (
+            "the writer seed no longer sees more of `init` than the bootstrap "
+            f"seed: narrow={sorted(narrow)}, wide={sorted(wide)}"
+        )
+
+    def test_no_branch_writes_a_graph_file_without_a_verdict_or_a_declared_deferral(
+        self, writer_call_sites: tuple[GraphWritingCallSite, ...]
+    ) -> None:
+        """A third writer reached from an unjudged branch fails here.
+
+        The deferral is named by its guard rather than by the function it calls,
+        because the decision is about the branch: `import_docs` runs under
+        `--yes --mode both` too, and there it is judged.
+        """
+        deferred = {branch.guard for branch in THE_DEFERRED_BRANCHES}
+        unguarded = [
+            f"{site.callee} at line {site.lineno} under {site.guard or '<no flag>'}"
+            for site in writer_call_sites
+            if not site.takes_verdict and site.guard not in deferred
+        ]
+
+        assert unguarded == [], (
+            "a branch of `init` writes a file into `.beadloom/_graph/` and never "
+            f"checks it against the rules on disk beside it: {unguarded}"
+        )
+
+    def test_no_deferral_is_declared_for_a_branch_the_source_does_not_have(
+        self, writer_call_sites: tuple[GraphWritingCallSite, ...]
+    ) -> None:
+        """A carve-out for a branch that was deleted excuses nothing and hides that."""
+        found = {site.guard for site in writer_call_sites if not site.takes_verdict}
+        declared = {branch.guard for branch in THE_DEFERRED_BRANCHES}
+
+        assert declared <= found, (
+            "these deferrals name a branch that either no longer exists or now "
+            f"takes a verdict: {sorted(declared - found)}"
+        )
+
+    def test_every_deferred_branch_hands_the_work_back_to_the_adopter(
+        self, writer_call_sites: tuple[GraphWritingCallSite, ...]
+    ) -> None:
+        """A deferral that says nothing is a silent skip under a better name.
+
+        `init --import` is allowed to judge nothing because it has re-indexed
+        nothing and says so. Read off the branch's own remaining source, so
+        deleting the instruction turns the deferral into the defect it is a
+        carve-out from.
+        """
+        by_guard = {site.guard: site for site in writer_call_sites}
+
+        for branch in THE_DEFERRED_BRANCHES:
+            site = by_guard.get(branch.guard)
+            assert site is not None, f"no branch under {branch.guard}: {branch.because}"
+            assert branch.tells_the_adopter in site.follows, (
+                f"the branch under {branch.guard} takes no verdict and no longer "
+                f"tells the adopter {branch.tells_the_adopter!r}: {site.follows!r}"
+            )
+
 
 class TestEveryBranchOfInitThatBootstrapsTakesAVerdict:
     """Read off `init`'s own source, so a branch added later is counted here."""
 
     def test_the_scan_finds_branches_to_judge(
-        self, call_sites: tuple[BootstrapCallSite, ...]
+        self, call_sites: tuple[GraphWritingCallSite, ...]
     ) -> None:
         """Anti-vacuity: an empty scan would pass every assertion below it."""
         assert call_sites, (
@@ -371,7 +739,7 @@ class TestEveryBranchOfInitThatBootstrapsTakesAVerdict:
         )
 
     def test_no_branch_reaches_the_bootstrap_without_taking_a_verdict(
-        self, call_sites: tuple[BootstrapCallSite, ...]
+        self, call_sites: tuple[GraphWritingCallSite, ...]
     ) -> None:
         """The claim `.2` made about two branches, made about all of them.
 
@@ -401,7 +769,7 @@ class TestTheParametrisedCasesCoverTheBranchesTheSourceHas:
     """
 
     def test_every_branch_in_the_source_has_a_case(
-        self, call_sites: tuple[BootstrapCallSite, ...]
+        self, call_sites: tuple[GraphWritingCallSite, ...]
     ) -> None:
         declared = {branch.guard for branch in THE_BRANCHES}
         found = {site.guard for site in call_sites}
@@ -412,7 +780,7 @@ class TestTheParametrisedCasesCoverTheBranchesTheSourceHas:
         )
 
     def test_no_case_claims_a_branch_the_source_does_not_have(
-        self, call_sites: tuple[BootstrapCallSite, ...]
+        self, call_sites: tuple[GraphWritingCallSite, ...]
     ) -> None:
         """A case for a branch that was deleted tests nothing and says it does."""
         declared = {branch.guard for branch in THE_BRANCHES}

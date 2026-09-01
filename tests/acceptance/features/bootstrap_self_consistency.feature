@@ -190,3 +190,37 @@ Feature: the bootstrap writes a graph that satisfies the rules it writes
     When beadloom init is run with the import flag
     Then every domain in the graph on disk has an outgoing part_of edge
     And the graph on disk passes the rules on disk beside it
+
+  # BDL-067 `.15`, the review's major 2 on `.14`. Every scenario above pins one
+  # mode, and `.14`'s defect lived in another: 112 tests across this epic's seven
+  # files were green while `init --yes --mode both` reported success over a tree
+  # its own `lint --strict` failed. The wizard, answering `both` on the same
+  # project, reported the failure — two halves of one command disagreeing about
+  # one tree. That disagreement is the assertion the review named, and it needs
+  # no sabotage: a virgin project with a `docs/` directory produced it on its own.
+  # Neither run is asserted to be right here. What is asserted is that they agree,
+  # which is a claim that was false while every exit-code assertion in this file
+  # was true.
+  @bead:beadloom-e8s4.15
+  Scenario: the wizard and the non-interactive run agree over the code and the docs together
+    Given a project whose only source file sits directly in its source directory
+    And a docs directory whose documents the classifier reads as domains
+    When the project is initialised twice over, once with the mode flag and once through the wizard
+    Then the two runs report the same verdict
+    And each run leaves a graph that passes the rules on disk beside it
+
+  # BDL-067 `.15`. The same agreement where the honest answer is red. Without it
+  # the scenario above would be satisfied by two entry points that report success
+  # unconditionally, which is the state `--yes --mode both` was in. The divergence
+  # is applied to the import step because that is the writer whose output the two
+  # entry points saw differently: `--yes` re-indexed before it ran, the wizard
+  # after.
+  @bead:beadloom-e8s4.15
+  Scenario: the wizard and the non-interactive run agree over a graph the rules reject
+    Given a project whose only source file sits directly in its source directory
+    And a docs directory whose documents the classifier reads as domains
+    And an import step that adds a domain the rules will not accept without a parent
+    When the project is initialised twice over, once with the mode flag and once through the wizard
+    Then the two runs report the same verdict
+    And neither run reports success
+    And each run names the rule the gate will name
