@@ -126,3 +126,21 @@ Feature: the bootstrap writes a graph that satisfies the rules it writes
     When beadloom init is run with no flags and its prompts are answered
     Then the command does not report success
     And the completion claim is withdrawn before the failure is reported
+
+  # BDL-067 `.12`, the review's major 1 on `.11`. The withdrawal is one string
+  # shared by the two shapes of red the wizard can reach, and it was written for
+  # one of them. Over a `rules.yml` the loader will not read, no rule is
+  # evaluated at all, so a headline saying the graph does not pass its rules is
+  # denied by the two lines printed under it — and its colon promises a list of
+  # failing rules where a parse error follows. The unloadable file is covered
+  # above only on the `--bootstrap` branch, which prints no withdrawal, so this
+  # contradiction could not appear there.
+  @bead:beadloom-e8s4.12
+  Scenario: the wizard withdraws its completion claim without naming rules that never ran
+    Given a project whose only source file sits directly in its source directory
+    And a bootstrap that leaves behind a rules file the loader will not read
+    When beadloom init is run with no flags and its prompts are answered
+    Then the command does not report success
+    And the completion claim is withdrawn before the failure is reported
+    And the withdrawal does not say a rule failed
+    And the command says what the loader could not read

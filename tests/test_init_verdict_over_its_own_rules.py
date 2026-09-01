@@ -617,7 +617,7 @@ class TestTheWizardWithdrawsItsCompletionClaim:
     def test_the_claim_is_withdrawn_over_a_rules_file_that_will_not_load_too(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The other shape of red the wizard can reach, and the same false claim.
+        """The other shape of red the wizard can reach, and the same withdrawal.
 
         `_verdict_on_the_generated_graph` prints the withdrawal before it chooses
         between the two report shapes, so an unloadable `rules.yml` gets it as
@@ -625,6 +625,14 @@ class TestTheWizardWithdrawsItsCompletionClaim:
         the withdrawal into the `else` would have left the wizard announcing
         `Initialization complete!` and then reporting that the rules file could
         not be read, which is the same defect on the branch `.6` was written for.
+
+        The last two assertions are BDL-067 `.12`, the review's major 1 on `.11`.
+        Until then this test owned only the line's POSITION, and the wording it
+        was pinning in place said the graph "does not pass the rules it is
+        checked against" — on the one branch where no rule is evaluated at all
+        and where the next two lines say so. They are stated over the line as the
+        adopter reads it rather than over the imported constant, so that a second
+        withdrawal string introduced later is judged too.
         """
         project = typescript_project(tmp_path / "orders-web")
         _a_bootstrap_whose_rules_file_will_not_load(monkeypatch, INIT_FLOW_BINDING)
@@ -641,6 +649,10 @@ class TestTheWizardWithdrawsItsCompletionClaim:
 
         assert withdrawn != -1, result.output
         assert claimed < withdrawn < reported, result.output
+
+        the_line = result.output[withdrawn:].splitlines()[0]
+        assert "rule" not in the_line.lower(), the_line
+        assert not the_line.rstrip().endswith(":"), the_line
 
     def test_a_green_wizard_withdraws_nothing(
         self, tmp_path: Path

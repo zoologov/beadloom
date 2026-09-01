@@ -442,3 +442,21 @@ def _then_the_claim_is_withdrawn(world: dict[str, Any]) -> None:
     reported = output.index(THE_FAILURE_REPORT)
     assert withdrawn != -1, output
     assert claimed < withdrawn < reported, output
+
+
+@then("the withdrawal does not say a rule failed")
+def _then_the_withdrawal_names_no_rule(world: dict[str, Any]) -> None:
+    """On this branch the rules file never loaded, so no rule was evaluated.
+
+    Read off the line the adopter sees rather than off the constant, so that a
+    second withdrawal string added later is judged by the same claim. The
+    trailing colon is part of the same defect: it promises the list of failing
+    rules that `_report_rules_the_graph_fails` prints and this branch does not.
+    """
+    output = world["init"].output
+    withdrawn = output.find(WITHDRAWN_COMPLETION_CLAIM)
+    # Anti-vacuity: an output with no withdrawal satisfies any claim about it.
+    assert withdrawn != -1, output
+    the_line = output[withdrawn:].splitlines()[0]
+    assert "rule" not in the_line.lower(), the_line
+    assert not the_line.rstrip().endswith(":"), the_line

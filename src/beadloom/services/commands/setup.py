@@ -729,11 +729,22 @@ def mcp_serve(*, project: Path | None) -> None:
 #: verdict first and never makes it, which is why only the wizard passes this.
 #: One line is cheaper than moving the verdict inside `interactive_init`, which
 #: would put a services-layer concern in the onboarding domain (the review of
-#: BDL-067 `.8`, minor 2). It is deliberately silent about who wrote the rules —
-#: `_report_rules_the_graph_fails` is where that distinction is made.
+#: BDL-067 `.8`, minor 2).
+#:
+#: One string precedes BOTH report shapes, so it may say only what is true of
+#: both. It is silent about who wrote the rules, because
+#: `_report_rules_the_graph_fails` is where that distinction is made; and silent
+#: about whether any rule was evaluated, because over a `rules.yml` that will not
+#: load none was. Until BDL-067 `.12` it read "it does not pass the rules it is
+#: checked against:" and opened the unloadable-rules report, whose next two lines
+#: say the graph was not checked and that nothing was evaluated — the review of
+#: `.11`, major 1, measured on two different unloadable files. The colon went with
+#: it: it promised the list of failing rules that `_report_rules_the_graph_fails`
+#: prints, and what follows on the other branch is a parse error. What is true of
+#: both shapes is that the check did not pass, which is also the fact the rc
+#: reports.
 WITHDRAWN_COMPLETION_CLAIM = (
-    "The scaffold above was written, but it does not pass the rules it is "
-    "checked against:"
+    "The scaffold above was written, but the check that follows it did not pass."
 )
 
 

@@ -91,6 +91,17 @@ has claimed success by the time the verdict runs, while `--bootstrap` takes its 
 and never makes the claim. One line withdraws it here rather than moving the check into
 `interactive_init`, which would put a services-layer decision in the onboarding domain.
 
+That one line precedes **both** report shapes, so it states only what is true of both: the
+check did not pass. Until BDL-067 `.12` it read `it does not pass the rules it is checked
+against:` and opened the unloadable-rules report, whose next two lines say the graph was not
+checked and that no rule was evaluated — the review of `.11` measured the contradiction on two
+different unloadable files, so it was the branch and not one parse error. The colon went with
+the claim: it promised the list of failing rules that `_report_rules_the_graph_fails` prints
+and this branch does not. A second withdrawal string for the second shape was rejected for the
+reason `RULES_CONFIG_ERROR` is shared at all — two strings to keep in step is how they drift.
+The assertions that hold this are stated over the line as printed rather than over the
+constant, so a second string added later is judged by the same claim.
+
 ## Related
 
 - `cli` — the registration shell this component is wired into
