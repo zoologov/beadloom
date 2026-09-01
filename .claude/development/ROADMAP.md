@@ -26,6 +26,63 @@
 
 ## What is being worked on now
 
+### P0 — nothing can check the mutation duty this project ships
+
+**Not yet a bead. Needs `/task-init`.** Ranked first: the item below it is in flight and
+closing, this one has not started.
+
+BDL-061 S4 (`beadloom-mr2l.13`) put a mutation-testing **duty** into every composed role
+core, on the stated ground that owning a runner would break tool-agnosticism. So the
+convention shipped and the enforcement did not. Nothing in this repository can tell a
+performed mutation check from a sentence claiming one.
+
+**The case is measured, this week, on this branch.** BDL-067 ran five review passes over
+`init`. In the fourth, `beadloom init --yes --mode both` exited 0 over a graph that
+`lint --strict` then failed on three counts — #192's own signature, still live — while
+**112 tests across the epic's seven files passed and none of them could see it**. Four
+beads in that epic each reported doing "mutation checking", by four different hand methods,
+and every result exists only as prose in a bead comment. One of those beads, sent to audit
+another, found that a reported "all 20 assertions red before the fix" was eleven guards
+that cannot fail.
+
+A suite that cannot fail is the thing this project exists to detect, and it is currently
+detected by a person reading bead comments.
+
+**The tool is decided: `mutmut`.** Researched 2026-09-01 against `cosmic-ray`,
+`pytest-gremlins`, `poodle`, `mutatest`, `MutPy` and `mutahunter`. The deciding property is
+per-mutant test selection from coverage, which only `mutmut` and `pytest-gremlins` have:
+mutation cost is mutants × time-per-run, and on a 215-second suite over `graph/rules/`
+(4 465 code lines, order 2 000–4 000 mutants) selection is what separates ninety minutes
+from a week. `cosmic-ray` runs the configured `test-command` for every mutant and answers
+cost with horizontal distribution — which this project already declined once, when
+`beadloom-mr2l.64` withdrew `tests-windows` over runner minutes. `pytest-gremlins` is
+architecturally the most advanced of the four and far too young for a gate (51 stars,
+v1.9.0), and its published benchmark is a synthetic project on which its sequential mode is
+slower than `mutmut`.
+
+Worth recording because it nearly propagated: three separate sources justify themselves by
+calling `mutmut` unmaintained — including a peer-reviewed paper stating "last commits 2–6
+years ago" and "460K downloads, far exceeding alternatives". `mutmut` released 3.7.0 on
+2026-07-31 and takes 4.4M downloads a month; 460K is `cosmic-ray`'s own figure. The claim
+reads as a measurement and is not one.
+
+**First slice: `graph/rules/` only.** Eleven modules, the rule evaluation and liveness
+logic. It is where a false green costs most — if `evaluators.py` lets a violation through,
+the whole Gate is theatre — and it is deterministic branch-and-comparison code, which is
+what the standard operator set is strongest against. Explicitly out of scope: `services/`,
+`tui/`, `ai_agents/`, `infrastructure/`, and message-rendering code anywhere. BDL-067 found
+four defects in user-facing message text; mutation would have caught none of them, because
+one string substituted for another is equivalent almost always.
+
+**Two conditions that would overturn this**, stated now so the decision can be lost rather
+than defended: the first slice producing incomplete results from `mutmut` — the one
+reproduced finding against it in the literature — or `pytest-gremlins` publishing a
+reproducible benchmark on a real codebase.
+
+**Done when** a mutation score is produced by a command in CI rather than asserted in a
+bead comment, and a declared mutation target outside the configured source paths is
+reported rather than silently scoring zero.
+
 ### P0 — A virgin `beadloom init` leaves the Gate red
 
 **`beadloom-e8s4` · BDL-UX #192 · the adopter-facing blocker.**
