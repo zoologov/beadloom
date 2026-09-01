@@ -162,7 +162,9 @@ THE_FAILURE_REPORT = "Error:"
 #: `skipped` when `.beadloom/` is already there, and under `--force` it deletes
 #: the whole directory, so the rules file that branch meets is always the one it
 #: just wrote. The wizard answers the re-init prompt with `overwrite`, which
-#: keeps the directory and the rules file inside it.
+#: keeps the directory and the rules file inside it. Both halves of that
+#: exclusion are tested in `TestWhyTheYesBranchCannotMeetAnAdoptersRulesFile`,
+#: so this tuple is short for a checked reason rather than for a stated one.
 THE_BRANCHES_OVER_AN_ADOPTERS_RULES_FILE = (
     InitBranch("--bootstrap", ("--bootstrap",), PACKAGE_BINDING, ("bootstrap",)),
     InitBranch(
@@ -612,6 +614,34 @@ class TestTheWizardWithdrawsItsCompletionClaim:
         assert withdrawn != -1, result.output
         assert claimed < withdrawn < reported, result.output
 
+    def test_the_claim_is_withdrawn_over_a_rules_file_that_will_not_load_too(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The other shape of red the wizard can reach, and the same false claim.
+
+        `_verdict_on_the_generated_graph` prints the withdrawal before it chooses
+        between the two report shapes, so an unloadable `rules.yml` gets it as
+        well. Only the evaluated-rules shape was covered by BDL-067 `.9`: moving
+        the withdrawal into the `else` would have left the wizard announcing
+        `Initialization complete!` and then reporting that the rules file could
+        not be read, which is the same defect on the branch `.6` was written for.
+        """
+        project = typescript_project(tmp_path / "orders-web")
+        _a_bootstrap_whose_rules_file_will_not_load(monkeypatch, INIT_FLOW_BINDING)
+
+        result = _the_branch_reported(_init(project.root, THE_BRANCHES[-1]))
+
+        # Anti-vacuity: with no claim there is nothing to withdraw, and the
+        # ordering below would be a statement about lines that never appeared.
+        assert THE_COMPLETION_CLAIM in result.output, result.output
+        assert THE_PARSE_ERROR in result.output, result.output
+        claimed = result.output.index(THE_COMPLETION_CLAIM)
+        withdrawn = result.output.find(THE_WITHDRAWAL)
+        reported = result.output.index(THE_FAILURE_REPORT)
+
+        assert withdrawn != -1, result.output
+        assert claimed < withdrawn < reported, result.output
+
     def test_a_green_wizard_withdraws_nothing(
         self, tmp_path: Path
     ) -> None:
@@ -622,3 +652,73 @@ class TestTheWizardWithdrawsItsCompletionClaim:
 
         assert result.exit_code == 0, result.output
         assert THE_WITHDRAWAL not in result.output, result.output
+
+
+#: `--yes`, spelled with `--force`. Not a fourth branch and not in
+#: `THE_BRANCHES`: it is the first one, given the flag that changes what it finds
+#: on disk rather than which path it takes.
+THE_YES_BRANCH_THAT_FORCES = InitBranch(
+    "--yes --force",
+    ("--yes", "--force", "--mode", "bootstrap"),
+    INIT_FLOW_BINDING,
+    ("non_interactive",),
+)
+
+
+class TestWhyTheYesBranchCannotMeetAnAdoptersRulesFile:
+    """The exclusion above is a claim about `init`, so it is tested like one.
+
+    `THE_BRANCHES_OVER_AN_ADOPTERS_RULES_FILE` holds two of the three branches,
+    and the reason the third is absent lives in a comment. That is the shape of
+    the mistake this whole epic came from: BDL-067 `.6` exists because a comment
+    calling two bindings "the two ways `init` reaches the bootstrap" was believed
+    for four waves while the branch a human adopter meets first went unjudged.
+    `.7` answered it by checking the branch list against `init`'s own source.
+    These two cases do the same for the exclusion — if either half of it stops
+    holding, the next author is told to widen the parametrisation instead of
+    inheriting a comment that is no longer true.
+
+    Declared, because the bead asks for it: neither case fails against the
+    pre-`.9` tree, and neither can be made to. `.9` changed what the verdict
+    prints, and both cases are about a branch that reaches no verdict at all
+    (`skipped` returns first) or that meets a rules file it wrote itself. They
+    guard the exclusion, not the fix.
+    """
+
+    def test_yes_over_an_existing_beadloom_directory_takes_no_verdict(
+        self, tmp_path: Path
+    ) -> None:
+        """Half one: it returns on `skipped`, before the verdict is taken."""
+        project = typescript_project(tmp_path / "orders-web")
+        _a_rules_file_the_adopter_wrote(project.root)
+        # Anti-vacuity: the tree this runs over is demonstrably red, so a green
+        # `--yes` is the absence of a verdict rather than the absence of a fault.
+        red = _the_branch_reported(
+            _init(project.root, THE_BRANCHES_OVER_AN_ADOPTERS_RULES_FILE[0])
+        )
+        assert THE_ADOPTERS_RULE in red.output, red.output
+
+        result = _init(project.root, THE_BRANCHES[0])
+
+        assert result.exit_code == 0, result.output
+        assert "already exists" in result.output, result.output
+        assert THE_ADOPTERS_RULE not in result.output, result.output
+
+    def test_yes_with_force_replaces_the_adopters_rules_file_with_its_own(
+        self, tmp_path: Path
+    ) -> None:
+        """Half two: `--force` deletes `.beadloom/`, rules file included.
+
+        So the rules this branch is judged against are always the ones it just
+        wrote, which is why it belongs in `TestInitOverRulesTheBootstrapItselfWrote`
+        and not in the adopter-authored cases.
+        """
+        project = typescript_project(tmp_path / "orders-web")
+        _a_rules_file_the_adopter_wrote(project.root)
+        rules = project.root / ".beadloom" / "_graph" / "rules.yml"
+        assert THE_ADOPTERS_RULE in rules.read_text(encoding="utf-8")
+
+        result = _init(project.root, THE_YES_BRANCH_THAT_FORCES)
+
+        assert result.exit_code == 0, result.output
+        assert THE_ADOPTERS_RULE not in rules.read_text(encoding="utf-8")
