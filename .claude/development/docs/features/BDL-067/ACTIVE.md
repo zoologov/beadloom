@@ -230,3 +230,36 @@ than left as an impression.
 convergent — it named the one path holding the only finding, and it could not claim it would have
 reached that path unaided from a 25-file diff. So this one states the class and nothing about
 where. The cost of the previous choice is on `beadloom-e8s4.11`.
+
+**Fifth fix cycle — `.14`: the second writer, and a verdict judging a stale index**
+
+Baseline measured on the tree before starting, without a pipe: `7403 passed, 0 failed`,
+`beadloom ci` rc 0.
+
+The reviewer's reproduction was re-run end to end on a scratch adopter (`orders-web`: flat
+`src/index.ts`, `docs/payments.md`, `docs/billing.md`), first to confirm it, then to close it:
+
+| command | before | after |
+|---|---|---|
+| `beadloom init --yes --mode both` | rc 0 | rc 0 |
+| `beadloom lint --strict --no-reindex` (what `init` judged) | rc 0 | rc 0 |
+| `beadloom lint --strict` (what the adopter sees) | **rc 1**, `domain-needs-parent` ×3 | rc 0 |
+| `beadloom ci` | **lint FAIL: 3 error(s)** | rc 0 |
+
+And the second reproduction, `beadloom init --import docs/` on an already-initialised project:
+rc 0 then `lint --strict` **rc 1** before, rc 0 then rc 0 after.
+
+Both causes are closed at the level the epic states them at. `import_docs` now holds the same
+post-condition `bootstrap_project` was given in `.1` — every node it writes carries a `part_of`
+edge to the graph's root, read off the root node as written — and `non_interactive_init`
+re-indexes after **every** block that writes a graph file rather than inside the bootstrap block,
+so the verdict can no longer judge an index older than the last file the command wrote.
+
+**The sweep the bead asked for, reported rather than acted on.** Every writer into
+`.beadloom/_graph/` was enumerated. Exactly two create nodes: `bootstrap_project` (has the
+invariant since `.1`) and `import_docs` (has it now). The other four cannot produce an unparented
+node, because none of them creates one: `generate_rules` writes `rules.yml` and no nodes;
+`update_node_in_yaml` writes only `summary` and `source` on a node that already exists and cannot
+change its `kind`; `_patch_docs_field` adds `docs:`; the `link` command adds `links:`. So the
+class has no third instance today — and nothing in the suite would notice a third writer on the
+day it is added, which is the gap `.15` exists to close.

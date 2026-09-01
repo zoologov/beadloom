@@ -751,10 +751,15 @@ WITHDRAWN_COMPLETION_CLAIM = (
 def _wrote_the_rules_file(bootstrap_summary: dict[str, Any]) -> bool:
     """Whether this run authored `rules.yml`, or merely found one on disk.
 
-    `bootstrap_project` returns `rules_generated`, which is 0 exactly when the
-    file was already there — the same condition, read off the result instead of
-    re-tested against the filesystem. An `init` that ran in `import` mode has no
-    bootstrap summary at all and wrote no rules, which the empty default covers.
+    `bootstrap_project` returns `rules_generated`, read off the result instead of
+    re-tested against the filesystem. A positive count means this run wrote the
+    file. Zero does NOT mean the file was already there: it is also 0 when the
+    bootstrap wrote no nodes at all, and when `generate_rules` found no `domain`
+    and no `feature` kind to write a rule about (`rules_gen.py:29-73`). What zero
+    supports is the only claim made on it — this run did not author the rules —
+    and in both of the extra cases no `rules.yml` exists for a rule to fail from,
+    so no message follows. An `init` that ran in `import` mode has no bootstrap
+    summary at all, which the empty default covers.
     """
     return bool(bootstrap_summary.get("rules_generated", 0))
 
@@ -809,7 +814,7 @@ def _verdict_on_the_generated_graph(
     unguarded for exactly as long as those two numbers were confused for one
     another (BDL-067 `.6`).
     """
-    from beadloom.application.gate import RULES_CONFIG_ERROR, lint_step
+    from beadloom.application.gate import RULES_CONFIG_ERROR, gate_step_line, lint_step
 
     step = lint_step(project_root)
     if step.passed:
@@ -822,14 +827,66 @@ def _verdict_on_the_generated_graph(
         _report_rules_that_would_not_load(step)
     else:
         _report_rules_the_graph_fails(
-            step, bootstrap_wrote_the_rules=bootstrap_wrote_the_rules
+            step,
+            project_root=project_root,
+            bootstrap_wrote_the_rules=bootstrap_wrote_the_rules,
         )
-    click.echo(f"`beadloom ci` will report this as: lint \u2014 {step.summary}.", err=True)
+    click.echo(f"`beadloom ci` will report this as: {gate_step_line(step)}", err=True)
     sys.exit(1)
 
 
+def _graph_file_of_each_node(project_root: Path) -> dict[str, str]:
+    """Map every node in `.beadloom/_graph/` to the file that holds it.
+
+    Read off the files rather than off any writer's return value, because the
+    point is to cover writers this function does not know about. A file that is
+    not readable YAML is skipped: the adopter is being handed a failure report,
+    and a traceback from the reporter is a worse answer than one unattributed
+    node.
+    """
+    import yaml
+
+    graph_dir = project_root / ".beadloom" / "_graph"
+    source_of: dict[str, str] = {}
+    for yml in sorted(graph_dir.glob("*.yml")):
+        if yml.name == "rules.yml":
+            continue
+        try:
+            data = yaml.safe_load(yml.read_text(encoding="utf-8")) or {}
+        except (yaml.YAMLError, UnicodeDecodeError, OSError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        for node in data.get("nodes") or []:
+            ref_id = node.get("ref_id")
+            if ref_id and ref_id not in source_of:
+                source_of[str(ref_id)] = f".beadloom/_graph/{yml.name}"
+    return source_of
+
+
+def _failing_rule_lines(step: GateStep, source_of: dict[str, str]) -> list[str]:
+    """One line per error-severity finding: the rule, the node, and its file.
+
+    A finding that is about no single node keeps the bare rule name, and a node
+    no graph file claims keeps the rule and the node: an unattributed line is
+    still true, and a guessed file is not.
+    """
+    lines: set[str] = set()
+    for finding in step.findings:
+        if finding.get("severity") != "error":
+            continue
+        rule = str(finding["rule"])
+        node = finding.get("node")
+        if not node:
+            lines.add(rule)
+            continue
+        where = source_of.get(str(node))
+        lines.add(f"{rule}: {node} ({where})" if where else f"{rule}: {node}")
+    return sorted(lines)
+
+
 def _report_rules_the_graph_fails(
-    step: GateStep, *, bootstrap_wrote_the_rules: bool
+    step: GateStep, *, project_root: Path, bootstrap_wrote_the_rules: bool
 ) -> None:
     """Name each error-severity rule the graph `init` just wrote violates.
 
@@ -838,18 +895,25 @@ def _report_rules_the_graph_fails(
     Beadloom's bootstrap" costs them a bug report against a project that did not
     write it, so the blame — and the request to report — are printed only when
     this run authored `rules.yml`.
+
+    Each line also names the graph file its node came from, and the advice sends
+    the adopter to those files rather than to `services.yml` by habit. The review
+    of BDL-067 `.13` measured the habit: the failing node was `payments`, written
+    into `imported.yml` by the import step, and the report pointed at
+    `services.yml` and `rules.yml`, neither of which contains it. `.14` closed
+    that case in the writer; naming the file closes the shape for the next writer
+    as well.
     """
-    rules = sorted(
-        {str(f["rule"]) for f in step.findings if f.get("severity") == "error"}
-    )
+    source_of = _graph_file_of_each_node(project_root)
+    rules = _failing_rule_lines(step, source_of)
     if bootstrap_wrote_the_rules:
         headline = (
             "Error: the graph this command just wrote does not pass the rules "
             "this command wrote alongside it."
         )
         advice = (
-            "The scaffold is on disk and can be edited by hand "
-            "(.beadloom/_graph/services.yml, .beadloom/_graph/rules.yml). This is a "
+            "The scaffold is on disk and can be edited by hand \u2014 the graph file "
+            "named beside each node above, or .beadloom/_graph/rules.yml. This is a "
             "defect in Beadloom's bootstrap rather than in your project \u2014 please "
             "report it with the rule name(s) above."
         )
@@ -861,8 +925,8 @@ def _report_rules_the_graph_fails(
         advice = (
             "This command did not write .beadloom/_graph/rules.yml \u2014 the file was "
             "already there \u2014 so the rule(s) above are your project's. The scaffold "
-            "is on disk: edit .beadloom/_graph/services.yml to satisfy them, or the "
-            "rules file to match your architecture."
+            "is on disk: edit the graph file named beside each node above to satisfy "
+            "them, or the rules file to match your architecture."
         )
     click.echo(headline, err=True)
     for rule in rules:
@@ -977,10 +1041,18 @@ def init(
             click.echo(f"  Index: {ri['symbols']} symbols, {ri['imports']} imports")
         if result.get("import"):
             click.echo(f"  Imported: {len(result['import'])} documents")
-        _verdict_on_the_generated_graph(
-            project_root,
-            bootstrap_wrote_the_rules=_wrote_the_rules_file(result.get("bootstrap", {})),
-        )
+        # Only a run that bootstrapped has a graph this command wrote for the
+        # verdict to speak about: both of its headlines open with "the graph this
+        # command just wrote", and `--mode import` wrote no graph and no rules.
+        # The call was harmless in effect only because an import-only run leaves
+        # no `rules.yml`, so the linter returns clean before it reads the index —
+        # an accident of another module rather than a decision here (the review
+        # of BDL-067 `.13`, minor 2).
+        if "bootstrap" in result:
+            _verdict_on_the_generated_graph(
+                project_root,
+                bootstrap_wrote_the_rules=_wrote_the_rules_file(result["bootstrap"]),
+            )
         return
 
     if bootstrap:

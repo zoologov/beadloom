@@ -42,6 +42,7 @@ from pytest_bdd import given, parsers, scenarios, then, when
 from beadloom.application.reindex import incremental_reindex
 from beadloom.graph.linter import lint
 from beadloom.onboarding.scanner import bootstrap_project
+from beadloom.onboarding.scanner.doc_classify import import_docs
 from beadloom.services.cli import main
 from beadloom.services.commands.setup import WITHDRAWN_COMPLETION_CLAIM
 
@@ -460,3 +461,148 @@ def _then_the_withdrawal_names_no_rule(world: dict[str, Any]) -> None:
     the_line = output[withdrawn:].splitlines()[0]
     assert "rule" not in the_line.lower(), the_line
     assert not the_line.rstrip().endswith(":"), the_line
+
+
+# ---------------------------------------------------------------------------
+# BDL-067 `.14` — the second writer of `domain` nodes, and the stale index
+# ---------------------------------------------------------------------------
+
+#: Documents whose text matches none of `classify_doc`'s three patterns, so each
+#: one falls through to the `other` branch and is written as a `domain` node.
+#: Deliberately free of the words that would classify them otherwise — no
+#: "decision", no "feature"/"requirement"/"spec", no "architecture"/"deployment"
+#: — because the defect lives on exactly that fallthrough.
+UNCLASSIFIABLE_DOCS = {
+    "payments.md": "# Payments\n\nHow money moves through the shop.\n",
+    "billing.md": "# Billing\n\nWho is charged, and when.\n",
+}
+
+#: The orphan the import sabotage adds to `imported.yml`. It is ADDED rather
+#: than carved out of what `import_docs` writes, so the instrument says the same
+#: thing before and after the post-condition lands.
+THE_ADDED_ORPHAN = "ledger"
+
+
+def _write_unclassifiable_docs(project: Path) -> None:
+    docs = project / "docs"
+    docs.mkdir(parents=True, exist_ok=True)
+    for name, text in UNCLASSIFIABLE_DOCS.items():
+        (docs / name).write_text(text, encoding="utf-8")
+
+
+def _graph_on_disk(project: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Every node and edge in `.beadloom/_graph/`, whichever file wrote it.
+
+    Read off the files rather than off any writer's return value: the finding
+    this covers is that one writer's post-condition said nothing about the
+    other's output, and a fixture that asked `bootstrap_project` what it wrote
+    would repeat that mistake.
+    """
+    graph_dir = project / ".beadloom" / "_graph"
+    nodes: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
+    for yml in sorted(graph_dir.glob("*.yml")):
+        if yml.name == "rules.yml":
+            continue
+        data = yaml.safe_load(yml.read_text(encoding="utf-8")) or {}
+        nodes.extend(data.get("nodes") or [])
+        edges.extend(data.get("edges") or [])
+    return nodes, edges
+
+
+@given("a docs directory whose documents the classifier reads as domains")
+def _given_unclassifiable_docs(world: dict[str, Any]) -> None:
+    _write_unclassifiable_docs(world["project"])
+
+
+@given("the project has already been initialised from its code")
+def _given_already_initialised(world: dict[str, Any]) -> None:
+    result = CliRunner().invoke(
+        main,
+        ["init", "--yes", "--mode", "bootstrap", "--project", str(world["project"])],
+    )
+    assert result.exit_code == 0, result.output
+
+
+@given("an import step that adds a domain the rules will not accept without a parent")
+def _given_an_import_that_adds_an_orphan(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Append one parentless `domain` to `imported.yml` after the real import.
+
+    `init` writes `domain-needs-parent` at error severity in the same run, so a
+    verdict that reads everything `init` wrote must exit 1 here. A verdict that
+    reads an index taken before the import step ran sees nothing and exits 0,
+    which is the defect (`imported.yml` was written after the reindex).
+    """
+    real = import_docs
+
+    def adds_an_orphan(project_root: Path, docs_dir: Path) -> list[dict[str, str]]:
+        results = real(project_root, docs_dir)
+        imported = project_root / ".beadloom" / "_graph" / "imported.yml"
+        data = yaml.safe_load(imported.read_text(encoding="utf-8")) if imported.exists() else {}
+        data = data or {"nodes": []}
+        data.setdefault("nodes", []).append(
+            {
+                "ref_id": THE_ADDED_ORPHAN,
+                "kind": "domain",
+                "summary": "A domain with no parent, added after the import.",
+            }
+        )
+        imported.write_text(
+            yaml.safe_dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
+        return results
+
+    monkeypatch.setattr("beadloom.onboarding.scanner.init_flow.import_docs", adds_an_orphan)
+
+
+@when("beadloom init is run over the code and the docs together")
+def _when_init_both_is_run(world: dict[str, Any]) -> None:
+    world["init"] = CliRunner().invoke(
+        main,
+        ["init", "--yes", "--mode", "both", "--project", str(world["project"])],
+    )
+
+
+@when("beadloom init is run with the import flag")
+def _when_init_import_is_run(world: dict[str, Any]) -> None:
+    world["init"] = CliRunner().invoke(
+        main,
+        [
+            "init",
+            "--import",
+            str(world["project"] / "docs"),
+            "--project",
+            str(world["project"]),
+        ],
+    )
+    assert world["init"].exit_code == 0, world["init"].output
+
+
+@then("every domain in the graph on disk has an outgoing part_of edge")
+def _then_every_domain_on_disk_is_parented(world: dict[str, Any]) -> None:
+    nodes, edges = _graph_on_disk(world["project"])
+    parented = {e["src"] for e in edges if e["kind"] == "part_of"}
+    domains = [n["ref_id"] for n in nodes if n.get("kind") == "domain"]
+    orphans = [ref for ref in domains if ref not in parented]
+    assert not orphans, f"domain nodes with no part_of edge: {orphans}"
+    # Anti-vacuity: a graph holding no domain would satisfy the claim above
+    # without the import step having written one.
+    assert len(domains) > 1, f"fixture produced no imported domain: {domains}"
+
+
+@then("the graph on disk passes the rules on disk beside it")
+def _then_the_graph_on_disk_is_clean(world: dict[str, Any]) -> None:
+    """The adopter's next command, not the one `init` took its verdict from.
+
+    `lint` is run with a reindex so what is judged is the graph as it stands on
+    disk. That is precisely the difference the finding turned on: `init` read an
+    index written before its last graph file, and reported clean over it.
+    """
+    result = lint(world["project"], reindex=incremental_reindex)
+    assert not result.has_errors, [
+        (v.rule_name, v.from_ref_id, v.message) for v in result.violations
+    ]
+    # Anti-vacuity: a project whose rules file never loaded evaluates nothing
+    # and has no errors to report.
+    assert result.rules_evaluated > 0, "no rule was evaluated, so nothing was checked"

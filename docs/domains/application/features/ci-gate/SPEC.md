@@ -209,6 +209,9 @@ Module `src/beadloom/application/gate.py`:
 
 - `GateStep` — one step: `name`, `passed`, `skipped`, `findings`, `summary`,
   `not_verified`, and the `status` property (`PASS` / `WARN` / `FAIL` / `SKIP`).
+- `gate_step_line(step) -> str` — the step's own report line, `[STATUS] name: summary`.
+  `_format_gate_rich` renders it and `beadloom init` quotes it, so the line `init`
+  attributes to `beadloom ci` is the line `beadloom ci` prints (BDL-067 `.14`).
 - `GateResult` — aggregate: `steps`, plus the `ok` and `findings` properties.
 - `run_ci_gate(project_root, *, fail_on, hub_exports, no_reindex) -> GateResult`
   — run every gate step and aggregate the result.

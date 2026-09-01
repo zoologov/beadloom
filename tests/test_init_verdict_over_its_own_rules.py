@@ -734,3 +734,228 @@ class TestWhyTheYesBranchCannotMeetAnAdoptersRulesFile:
 
         assert result.exit_code == 0, result.output
         assert THE_ADOPTERS_RULE not in rules.read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# BDL-067 `.14` — the run that writes a SECOND graph file, and the words the
+# report uses about it. The review of `.13`, minors 1, 2 and 3.
+# ---------------------------------------------------------------------------
+
+#: A document whose text matches none of `classify_doc`'s patterns, so it falls
+#: through to the `other` branch and is written as a `domain` node.
+AN_UNCLASSIFIABLE_DOCUMENT = "# Payments\n\nHow money moves through the shop.\n"
+
+#: The graph file the import step writes, and the file the report used to point
+#: away from: a node from `imported.yml` was reported against `services.yml`.
+THE_IMPORT_FILE = ".beadloom/_graph/imported.yml"
+THE_BOOTSTRAP_FILE = ".beadloom/_graph/services.yml"
+
+#: The orphan the import sabotage adds. Added rather than carved out of what
+#: `import_docs` writes, so the instrument says the same thing before and after
+#: the post-condition landed.
+THE_ADDED_ORPHAN = "ledger"
+
+
+def _docs_the_classifier_cannot_place(project_root: Path) -> None:
+    docs = project_root / "docs"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / "payments.md").write_text(AN_UNCLASSIFIABLE_DOCUMENT, encoding="utf-8")
+
+
+def _an_import_that_adds_an_orphan(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Append one parentless `domain` to `imported.yml` after the real import.
+
+    `init` writes `domain-needs-parent` at error severity in the same run, so a
+    verdict that reads everything `init` wrote must exit 1. The reindex used to
+    sit inside the bootstrap block, ahead of the file this writes, so the verdict
+    judged an index that predated it and reported clean.
+    """
+    from beadloom.onboarding.scanner.doc_classify import import_docs as real
+
+    def adds_an_orphan(project_root: Path, docs_dir: Path) -> list[dict[str, str]]:
+        results = real(project_root, docs_dir)
+        imported = project_root / ".beadloom" / "_graph" / "imported.yml"
+        data = yaml.safe_load(imported.read_text(encoding="utf-8")) if imported.exists() else {}
+        data = data or {"nodes": []}
+        data.setdefault("nodes", []).append(
+            {"ref_id": THE_ADDED_ORPHAN, "kind": "domain", "summary": "No parent."}
+        )
+        imported.write_text(
+            yaml.safe_dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
+        return results
+
+    monkeypatch.setattr("beadloom.onboarding.scanner.init_flow.import_docs", adds_an_orphan)
+
+
+def _init_over_code_and_docs(project_root: Path) -> Any:
+    return CliRunner().invoke(
+        main, ["init", "--yes", "--mode", "both", "--project", str(project_root)]
+    )
+
+
+class TestTheVerdictSeesEveryGraphFileTheCommandWrote:
+    """`--mode both` writes two graph files, and both are judged.
+
+    The defect this closes is not a missing check but a check pointed at a stale
+    index: `lint_step` reads the index without re-indexing, and the reindex ran
+    before the import step wrote its file. The wizard, which re-indexes after
+    importing, exited 1 on the same project shape where `--yes` exited 0 — two
+    halves of one command disagreeing, which is what `lint_step` was made public
+    to prevent.
+    """
+
+    def test_a_graph_the_import_step_wrote_is_not_reported_clean(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        project = typescript_project(tmp_path / "orders-web").root
+        _docs_the_classifier_cannot_place(project)
+        _an_import_that_adds_an_orphan(monkeypatch)
+
+        result = _init_over_code_and_docs(project)
+
+        assert result.exit_code != 0, result.output
+        assert THE_RULE in result.output, result.output
+
+    def test_the_verdict_agrees_with_lint_strict_on_the_same_tree(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The adopter's next command, which is where the disagreement showed."""
+        project = typescript_project(tmp_path / "orders-web").root
+        _docs_the_classifier_cannot_place(project)
+        _an_import_that_adds_an_orphan(monkeypatch)
+
+        verdict = _init_over_code_and_docs(project).exit_code
+
+        assert verdict != 0
+        assert _lint_strict(project) != 0
+
+    def test_an_unsabotaged_run_over_code_and_docs_is_green_both_ways(
+        self, tmp_path: Path
+    ) -> None:
+        """The reviewer's reproduction, end to end: rc 0 and then rc 0."""
+        project = typescript_project(tmp_path / "orders-web").root
+        _docs_the_classifier_cannot_place(project)
+
+        result = _init_over_code_and_docs(project)
+
+        assert result.exit_code == 0, result.output
+        assert "Imported:" in result.output, result.output
+        assert _lint_strict(project) == 0
+
+
+class TestOnlyARunThatWroteAGraphIsJudged:
+    """The report's headline says "the graph this command just wrote".
+
+    `--mode import` writes no bootstrap graph and no rules, so there is no such
+    graph to speak about. The call was unreachable in effect only because an
+    import-only run leaves no `rules.yml` and the linter returns clean before it
+    reads the index — an accident of another module, not a decision here.
+    """
+
+    def _verdicts_taken(self, monkeypatch: pytest.MonkeyPatch) -> list[Path]:
+        taken: list[Path] = []
+
+        def record(project_root: Path, **kwargs: Any) -> None:
+            taken.append(project_root)
+
+        monkeypatch.setattr(
+            "beadloom.services.commands.setup._verdict_on_the_generated_graph", record
+        )
+        return taken
+
+    def test_an_import_only_run_takes_no_verdict(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        project = typescript_project(tmp_path / "orders-web").root
+        _docs_the_classifier_cannot_place(project)
+        taken = self._verdicts_taken(monkeypatch)
+
+        result = CliRunner().invoke(
+            main, ["init", "--yes", "--mode", "import", "--project", str(project)]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert taken == [], "an import-only run judged a graph it did not write"
+
+    def test_a_run_that_bootstraps_as_well_is_judged(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Anti-vacuity: the recorder records when there is something to record."""
+        project = typescript_project(tmp_path / "orders-web").root
+        _docs_the_classifier_cannot_place(project)
+        taken = self._verdicts_taken(monkeypatch)
+
+        result = _init_over_code_and_docs(project)
+
+        assert result.exit_code == 0, result.output
+        assert taken == [project]
+
+
+class TestTheReportNamesTheFileEachViolatingNodeCameFrom:
+    """Where to open, per node, rather than one file named by habit.
+
+    Measured by the review of `.13`: the violating node was `payments`, from
+    `imported.yml`, and the report sent the adopter to `services.yml` and
+    `rules.yml`, neither of which contains it. The post-condition above removes
+    that case; naming the file removes the shape, so the next writer's node is
+    reported against its own file rather than the bootstrap's.
+    """
+
+    def test_a_node_from_the_import_file_is_reported_against_that_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        project = typescript_project(tmp_path / "orders-web").root
+        _docs_the_classifier_cannot_place(project)
+        _an_import_that_adds_an_orphan(monkeypatch)
+
+        result = _the_branch_reported(_init_over_code_and_docs(project))
+
+        named = [
+            line for line in result.output.splitlines() if THE_ADDED_ORPHAN in line
+        ]
+        assert named, result.output
+        assert all(THE_IMPORT_FILE in line for line in named), named
+
+    def test_a_node_from_the_bootstrap_file_is_reported_against_that_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The other file, so the claim is about attribution and not a constant."""
+        project = typescript_project(tmp_path / "orders-web").root
+        _a_bootstrap_that_forgets_the_edge(monkeypatch, INIT_FLOW_BINDING)
+
+        result = _the_branch_reported(
+            _init(project, THE_BRANCHES[0])
+        )
+
+        named = [line for line in result.output.splitlines() if THE_RULE in line]
+        assert named, result.output
+        assert any(THE_BOOTSTRAP_FILE in line for line in named), named
+
+
+class TestTheReportQuotesTheLineTheGateWillPrint:
+    """The line exists to pre-empt the adopter's next command, so it must quote it.
+
+    `ci` renders `[FAIL] lint: <summary>`; the report said `lint — <summary>`,
+    which nothing prints. The expected text is rendered by `ci`'s own formatter
+    here rather than spelled again, so a reworded gate line fails this test
+    instead of quietly making the report wrong a second time.
+    """
+
+    def test_the_quoted_line_is_the_one_the_gate_renders(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from beadloom.application.gate import GateResult, lint_step
+        from beadloom.services.commands.federation import _format_gate_rich
+
+        project = typescript_project(tmp_path / "orders-web").root
+        _a_bootstrap_that_forgets_the_edge(monkeypatch, INIT_FLOW_BINDING)
+
+        result = _the_branch_reported(_init(project, THE_BRANCHES[0]))
+
+        rendered = _format_gate_rich(GateResult(steps=[lint_step(project)]))
+        the_gate_line = next(
+            line.strip() for line in rendered.splitlines() if "] lint:" in line
+        )
+        assert the_gate_line in result.output, (the_gate_line, result.output)

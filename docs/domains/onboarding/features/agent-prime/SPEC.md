@@ -15,7 +15,8 @@ Cross-IDE context injection via a three-layer architecture.
    the result is returned as `ignore_added` / `ignore_skipped_reason`, and `beadloom init`
    prints it. See the [ignore-block component](../../components/ignore-block/DOC.md).
 
-4. **The domain-parent post-condition** (one invariant) — every node `bootstrap_project()`
+4. **The domain-parent post-condition** (one invariant, two writers) — every node
+   `bootstrap_project()`
    writes with `kind: domain` leaves the function with at least one outgoing `part_of` edge,
    to its classified parent where one exists and to the root service node otherwise. One
    node is carved out and the sentence says so since BDL-067 `.6`: a domain whose `ref_id`
@@ -29,6 +30,20 @@ Cross-IDE context injection via a three-layer architecture.
    the whole node list rather than inside the branch that was reported, and reads
    *root_ref_id* back from the root node instead of recomputing it, because cluster refs pass
    through `_sanitize_ref_id` and the root ref does not.
+
+   `import_docs()` is the **second** writer of `domain` nodes and did not receive the
+   invariant until BDL-067 `.14`: every document the classifier could not place became a
+   domain with no parent, in `imported.yml`, in the same run that wrote
+   `domain-needs-parent` at error severity — so `init --yes --mode both` exited 0 and the
+   next `lint --strict` exited 1 on three nodes, BDL-UX #192's signature on a branch the
+   epic had declared covered. `doc_classify._missing_parent_edges(nodes, root_ref_id,
+   parented)` states it over that writer's output, and `_existing_graph(graph_dir)` finds
+   the root by reading the graph on disk: the one node of kind `service` that no `part_of`
+   edge leaves. It attaches every kind, not only the two the generated rules require a
+   parent for, because a post-condition that tracked today's rule set would go stale the
+   next time `generate_rules` gains a rule. With no single root — an import-only run on a
+   virgin project, or a graph with two unparented services — no parent is named rather than
+   one guessed, and no rule the command wrote is on disk to fail.
 
 5. **`beadloom prime`** (dynamic) — CLI command and MCP tool that queries the DB for current project state: architecture summary, stale docs, lint violations, domain list.
 

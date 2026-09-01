@@ -63,11 +63,28 @@ Gate's `lint_step` over the graph it has just written, exiting 1 when the graph 
 rules on disk (BDL-067, closing BDL-UX #192). The check stays
 in the application layer and this module only calls it and renders its findings, so the rule
 above holds — but the exit code is a decision this command makes, and all three branches that
-write a graph make it: `--yes`, `--bootstrap`, and the default interactive wizard. The wizard
+write a **bootstrap** graph make it: `--yes` (in `bootstrap` or `both` mode), `--bootstrap`,
+and the default interactive wizard. `--import` writes a graph file too — `imported.yml` — and
+takes no verdict: it re-indexes nothing and tells the adopter to run `beadloom reindex` next,
+so there is no index of its own output to judge. `--yes --mode import` takes none either,
+gated on `"bootstrap" in result` since BDL-067 `.14`: both headlines open with *the graph this
+command just wrote*, and that run wrote no bootstrap graph and no rules. It had been harmless
+only because an import-only run leaves no `rules.yml`, so the linter returned clean before it
+read the index — an accident of another module rather than a decision here. The wizard
 was added in BDL-067 `.6` — the verdict shipped at two call sites because the covering tests
 counted the two **bindings** of `bootstrap_project` rather than the branches, and the wizard
 shares the `--yes` binding. It is skipped on exactly one path, the wizard's `edit` review
 answer, where the graph has just been handed to the user to edit and nothing has re-indexed.
+
+Each evaluated-rule line names the rule, the violating node, and the graph file that node was
+written into, read off `.beadloom/_graph/*.yml` rather than off any writer's return value. It
+named `services.yml` by habit until BDL-067 `.14`, and the review of `.13` measured the cost:
+the failing node was `payments`, written by the import step into `imported.yml`, and the
+adopter was sent to two files that do not contain it. The `node` key the line reads comes from
+the shared finding shape; before `.14` the node was named only inside the English of `why`.
+The line that pre-empts the adopter's next command is rendered by that command's own
+formatter (`application.gate.gate_step_line`), because it said `lint - <summary>` where
+`beadloom ci` prints `[FAIL] lint: <summary>`.
 
 Two shapes of failure are rendered separately. Rules that were evaluated and failed are named
 as rules; a `rules.yml` the loader refuses is rendered as the loader's complaint, because the

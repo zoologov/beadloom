@@ -92,16 +92,6 @@ def non_interactive_init(
         docs_result = generate_skeletons(project_root, nodes, edges)
         result["docs_generated"] = docs_result
 
-        # Auto-reindex to populate import analysis and depends_on edges.
-        from beadloom.application.reindex import reindex as do_reindex
-
-        ri = do_reindex(project_root)
-        result["reindex"] = {
-            "symbols": ri.symbols_indexed,
-            "imports": ri.imports_indexed,
-            "edges": ri.edges_loaded,
-        }
-
     if mode in ("import", "both"):
         docs_dir = project_root / "docs"
         if docs_dir.is_dir():
@@ -113,6 +103,25 @@ def non_interactive_init(
     # Generate AGENTS.md.
     generate_agents_md(project_root)
     result["agents_md_created"] = True
+
+    # Auto-reindex to populate import analysis and depends_on edges. It runs
+    # after EVERY block that writes a graph file, not inside the bootstrap block
+    # it used to sit in: the import step writes `imported.yml`, and `init` takes
+    # its verdict through `gate.lint_step`, which reads the index without
+    # re-indexing. With the reindex in the bootstrap block, `--mode both` judged
+    # an index that predated the last graph file the command wrote — rc 0 from
+    # `init`, rc 1 from the adopter's next `lint --strict` (BDL-067 `.14`). The
+    # wizard already ran its reindex here, which is why the wizard reported the
+    # failure that `--yes` reported clean: the two halves of one command
+    # disagreed because only one of them had re-indexed.
+    from beadloom.application.reindex import reindex as do_reindex
+
+    ri = do_reindex(project_root)
+    result["reindex"] = {
+        "symbols": ri.symbols_indexed,
+        "imports": ri.imports_indexed,
+        "edges": ri.edges_loaded,
+    }
 
     return result
 

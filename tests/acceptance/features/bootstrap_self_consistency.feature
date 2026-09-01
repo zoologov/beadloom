@@ -144,3 +144,49 @@ Feature: the bootstrap writes a graph that satisfies the rules it writes
     And the completion claim is withdrawn before the failure is reported
     And the withdrawal does not say a rule failed
     And the command says what the loader could not read
+
+  # BDL-067 `.14`, the review's major 1 on `.13`. `.1` stated the domain-parent
+  # post-condition over `bootstrap_project`'s output, and `import_docs` is a
+  # SECOND writer of `domain` nodes that never received it: every document it
+  # cannot classify becomes a domain with no `part_of` edge, in `imported.yml`,
+  # in the same run that writes `domain-needs-parent` at error severity.
+  # Measured on this fixture before the fix: `init --yes --mode both` rc 0,
+  # `lint --strict` rc 1 on three nodes.
+  @bead:beadloom-e8s4.14
+  Scenario: importing documents alongside the code leaves a graph that passes its own rules
+    Given a project whose only source file sits directly in its source directory
+    And a docs directory whose documents the classifier reads as domains
+    When beadloom init is run over the code and the docs together
+    Then the command reports success
+    And every domain in the graph on disk has an outgoing part_of edge
+    And the graph on disk passes the rules on disk beside it
+
+  # BDL-067 `.14`, the second half of the same finding. The verdict read an index
+  # written BEFORE the import step wrote `imported.yml`, because the reindex sat
+  # inside the bootstrap block, so `init` judged a graph it had not finished
+  # writing. The divergence is ADDED to the import step rather than taken out of
+  # it, so the instrument does not depend on what `import_docs` writes: a
+  # sabotage that removed edges would be a no-op on the defect it is meant to
+  # expose, and would go green for the wrong reason.
+  @bead:beadloom-e8s4.14
+  Scenario: the verdict sees the graph file the import step wrote after the reindex
+    Given a project whose only source file sits directly in its source directory
+    And a docs directory whose documents the classifier reads as domains
+    And an import step that adds a domain the rules will not accept without a parent
+    When beadloom init is run over the code and the docs together
+    Then the command does not report success
+    And the command names the rule the gate will name
+
+  # BDL-067 `.14`. The reviewer's second reproduction, and the one that needs no
+  # bootstrap at all: over a project that is already initialised, `init --import`
+  # writes `imported.yml` against rules that are already on disk. It takes no
+  # verdict, so nothing here asserts an exit code — the claim is that the file it
+  # leaves behind does not fail those rules.
+  @bead:beadloom-e8s4.14
+  Scenario: importing into a graph that already exists attaches the imported nodes to its root
+    Given a project whose only source file sits directly in its source directory
+    And a docs directory whose documents the classifier reads as domains
+    And the project has already been initialised from its code
+    When beadloom init is run with the import flag
+    Then every domain in the graph on disk has an outgoing part_of edge
+    And the graph on disk passes the rules on disk beside it

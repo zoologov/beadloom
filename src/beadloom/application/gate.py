@@ -140,6 +140,19 @@ class GateStep:
         return "WARN" if self.not_verified else "PASS"
 
 
+def gate_step_line(step: GateStep) -> str:
+    """The one line the Gate prints about a step: ``[STATUS] name: summary``.
+
+    Lives here rather than in the renderer because two commands quote it and one
+    of them is not the Gate: ``init`` tells the adopter what ``beadloom ci`` will
+    say about the graph it just judged, and it said ``lint - <summary>``, which
+    nothing prints (BDL-067 `.14`, the review of `.13`'s minor 3). A line that
+    pre-empts another command's output has to be produced by that command's own
+    formatter, or it drifts the first time either is reworded.
+    """
+    return f"[{step.status}] {step.name}: {step.summary}"
+
+
 @dataclass
 class GateResult:
     """Aggregate of every gate step. ``ok`` only when every step passed."""

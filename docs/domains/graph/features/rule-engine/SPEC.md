@@ -464,6 +464,13 @@ the same reason: every caller that has no node to name keeps its output byte for
 liveness finding is usually about a rule that could not run and a node id there would be an
 invention.
 
+**And the projected finding carries it too, since BDL-067 `.14`.** `linter._finding` now emits
+`node` beside `kind`, `rule`, `severity`, `locations`, `why` and `remediation`, reading
+`Violation.from_ref_id`. The value was already in the shape's prose — `why` opens with
+`Node '<ref_id>' (kind=…)` — and nowhere a reader could take it from, so `beadloom init`, naming
+the graph file an adopter has to open, would have had to parse an English sentence. `null` for a
+finding about no single node.
+
 **The `not_applicable` fallback in `collect_claims` serves the injected `FactSet`, not the
 registry's.** A `FactSet` the registry builds covers every name `DocScanner` scans for — measured
 across five project shapes, including a database with no schema at all, where the set difference
