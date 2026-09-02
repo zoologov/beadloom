@@ -65,6 +65,25 @@ diagnosis attached rather than by luck.
 have, how many ways does it terminate*. Those three questions are what the whole epic turned out
 to be. `beadloom waves` already does the analogous job for a set of beads, so the shape is known.
 
+**The constraint that decides whether this helps or harms: `impact` is NOT `why` at a new name.**
+`why` walks `part_of` / `depends_on` between graph nodes, and **not one axis this epic needed is a
+fact of the graph** — which functions write into `.beadloom/_graph/`, how many branches `init` has
+and how many ways it terminates, how many modes and renderers, which functions parse YAML and under
+what policy. Every one of those lives *inside* a single node. An `impact` built as a graph walk
+would answer confidently and miss all of them, which is a green describing the checker's ignorance —
+the class this project exists to remove, shipped as a feature. **Axes come from the source (AST);
+the graph supplies the boundary** — which domain a found call site belongs to, and therefore when a
+change crosses out of one. That boundary is what made BDL-UX #220 legible at all: its readers sit in
+four different domains, and without the graph that finding is a flat list of files.
+
+**Three working prototypes already exist, written as tests inside BDL-067**, which is most of why
+this is cheaper than it looks: `tests/test_init_branches_that_reach_the_bootstrap.py` (30 cases)
+derives `init`'s writing branches from `init`'s own source; `tests/test_one_parent_post_condition_over_every_writer.py`
+(25) derives the graph writers by shape; `tests/test_graph_files_are_read_under_one_policy.py` (15)
+derives the readers as a shape — *lists a directory and parses YAML* — over six listing verbs and
+six loaders, with five evasion spellings measured and closed. Lifting those out of the suite into a
+command is the bulk of the work.
+
 **The role: `Explore` given a protocol, positioned inside `/task-init` as step 0.5.** It is the
 only role in this flow with no file in `.claude/agents/`, and the one time this epic used it, it
 returned an excellent trace of the defect and nothing about axes — because nobody had written
