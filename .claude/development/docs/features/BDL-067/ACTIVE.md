@@ -7,16 +7,15 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-e8s4.24` — the three regressions this epic introduced, and the attribution
-instrument
-**Goal:** cycle 8 fixes only what this epic broke or was asked to decide — major 3 (the traceback
-`.21` introduced, and the four readers of `.beadloom/_graph/` behind it), major 4 (the attribution
-instrument, per the seventh review's own decision), major 5 (the stale `generate_skeletons`
-signature at `docs/domains/onboarding/README.md:206`) and the `parent_edges` annotation minor.
-Majors 1 and 2 and the `setup.py:1210` minor are re-planned onto `beadloom-6i5q` / BDL-UX #218.
-**Done when:** the four readers are one body with one stated policy and a derived test that fails
-on a fifth, the attribution's graph half is keyed on the node rather than on the file with both
-outcomes measured, the signature line agrees with the code, and `beadloom ci` is rc 0.
+**Bead:** `beadloom-e8s4.25` — the reader policy as one axis, and the attribution corners after
+the swap
+**Goal:** cover `.24`. The reader population must be derived so a fifth reader fails on the day it
+is written; the unreadable-file case must be stated over every branch of `init`; and the two
+attribution corners must record what was MEASURED rather than what the bead predicted, since `.24`
+measured that they do not swap.
+**Done when:** each new assertion is demonstrated capable of failing against a tree without the
+fix it covers (or declared, with the reason), no cell `.19`/`.21`/`.22`/`.24` already cover is
+duplicated, and `beadloom ci` is rc 0.
 
 ## Progress
 
@@ -36,6 +35,7 @@ outcomes measured, the signature line agrees with the code, and `beadloom ci` is
 - [x] Wave 4f — `.17` dev (`8d87735`, consolidation) / `.18` dev (`52f52ae`) / `.19` test (the one table)
 - [x] Wave 4g — `.20` review (sixth pass, closed, 3 majors + 1 minor)
 - [ ] Wave 4h — `.21` dev (the writing side) / `.22` test (the three as axes) / `.23` seventh review
+- [ ] Wave 4i — `.24` dev (`9e61988`) / `.25` test (the reader axis and the attribution instrument) / `.26` eighth review
 - [ ] Wave 5 — `.5` tech-writer (re-pointed a third time)
 - [ ] Gate green, PR opened
 
@@ -67,6 +67,7 @@ outcomes measured, the signature line agrees with the code, and `beadloom ci` is
 | `beadloom-e8s4.22` | ✓ done | the three axes, each demonstrated capable of failing, plus the attribution question `.21` reported. **Axis 1:** the writer scan had no mutants — the equality case only fails if the scan SEES the third writer, and nothing established that it can; `TestTheWriterScanReportsAThirdWriter` now reads five synthetic modules (a third writer found, a patcher excluded, a delegating writer declared as the ceiling, a public-named copy caught by the import check, a private-named copy caught by the call check and the underscore-stripping definition scan). **Axis 2:** new module over every caller of `generate_skeletons` — the set is derived, every call site is asserted to hand over the project root (the signature says ONE argument, not WHICH), and a caller that re-indexes at all must re-index AFTER the skeletons, which is `.18`'s defect stated over the callers. The universal "no re-index before" rule was measured FALSE on the product first: `interactive_init` re-indexes before and again after under `files_created > 0`. **Axis 3:** covered twice by `.21` and by `THE_BRANCHES`, re-audited and not duplicated; the same for the non-virgin entry-point invariant the bead named, which `.21` had already landed. **FINDING for `.23`:** with one call shape in, `--bootstrap` patches `docs:` into inherited graph files, so a docs-less inherited orphan now prints `(True, True)` — "a defect in Beadloom's bootstrap ... please report it" — for a node no writer in this run produced, while the same tree with the `docs:` field prints `(False, True)`. Both corners asserted as today's answers, neither endorsed. 20 new tests, 7790 → 7810 passed, `beadloom ci` rc 0. |
 | `beadloom-e8s4.23` | ✓ done | seventh-pass review: 0 critical, 5 major. The three converted axes hold and the divergence moved off all three: every instrument this epic built ranges over one SYMBOL's callers, and nothing ranges over one entry point's STEPS. Owner decision — cycle 8 fixes only what this epic broke; majors 1 and 2 are re-planned onto `beadloom-6i5q` / BDL-UX #218. |
 | `beadloom-e8s4.24` | ✓ done | **Major 3:** `onboarding/graph_files.each_graph_file` holds the one skip policy — name, read, parse and mapping — and all four readers plus the new node sampler are converted; a derived test (a function that both globs `*.yml` and calls `yaml.safe_load`) fails on a fifth body. MEASURED and stated rather than claimed away: `init --bootstrap` on the review's own tree STILL ends in a `ParserError`, one frame later, from `reindex/indexing.read_declared_docs` — another domain, reachable before `.21`, so outside this cycle and pinned so it cannot read as closed. **Major 4:** implemented as `.23` decided (`GraphSample`, `_graph_nodes_now`, created-or-changed per ref_id) and MEASURED against what the decision predicted: the two pinned cases did NOT swap, because the annotation goes into the failing node's own entry. What the finer grain does close is the annotated-SIBLING case, `(True, True)` → `(False, True)`, pinned in a new class. **Major 5:** the signature line, plus line 31's `services.yml` in the same entry. **Minor:** annotations after the docstring. 13 new tests (11 unit + 2 scenarios), 7810 → 7823 passed, `beadloom ci` rc 0. |
+| `beadloom-e8s4.25` | ✓ done | audit first: item 1 was DELIVERED by `.24` and item 3's stated outcome is FALSE, so neither was rewritten. **Item 1's remainder:** the reader derivation is widened from `glob("*.yml")` + `yaml.safe_load` to LISTS a directory + PARSES YAML — five bodies that read `.beadloom/_graph/` passed the narrow shape untouched, each now a case, each verified red against it; the wide shape names the same one body on this tree, so nothing is exempted. **Item 2, as measured:** one table over `.19`'s 8 cells by 3 shapes of hand-edited graph file. Every branch that can meet the file still tracebacks — the residue is exactly two frames, `reindex/indexing.read_declared_docs` and `graph/loader.load_graph`, both outside `onboarding` — and `--yes` is green only because it declines to look, which the case asserts by message AND by the file's bytes. A THIRD shape found: `added: 2026-09-02` loads as a `date` and dies in `load_graph`. **Item 3:** the corners were NOT forced to swap; what `.24` left unasserted was the instrument's error direction, so a node this run REWROTE into failing (an inherited `services.yml`, #192's own shape on a re-init) is pinned at `(True, True)` and verified red against a created-only mutant. 38 new tests, 7823 → 7861 passed, `beadloom ci` rc 0. |
 
 ## Notes
 

@@ -27,9 +27,11 @@ from __future__ import annotations
 
 import ast
 import traceback
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import pytest
 import yaml
 from click.testing import CliRunner
 
@@ -40,8 +42,15 @@ from beadloom.services.cli import main
 from beadloom.services.commands.setup import _graph_file_of_each_node
 from tests.adopter_project import typescript_project
 
+# `init`'s own entry-point-by-mode table, imported rather than restated: BDL-067
+# `.19` derives it from the command's source and checks it there, so a fifth
+# branch or a third mode arrives in the cases below already carrying a run.
+from tests.test_init_one_table_over_every_axis import THE_TABLE, Cell, _answering
+
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from _pytest.tmpdir import TempPathFactory
 
 #: The file that does not parse. A hand-edited graph file is the reproduction
 #: the review measured, and the one `init` meets in the field.
@@ -166,12 +175,87 @@ class TestNoReaderTracebacksOnAFileItCannotParse:
         assert "read_declared_docs" in frames, frames
 
 
+#: A fifth reader, written five ways that `.24`'s derivation did not see. Each
+#: body lists `.beadloom/_graph/` and parses what it finds, which is the whole of
+#: what makes something a reader — and not one of them spells the two calls the
+#: way `each_graph_file` happens to spell them. They are synthetic sources rather
+#: than files in the tree because the point is what the DETECTOR does with a body
+#: nobody has written yet.
+A_FIFTH_READER_SPELLED_ANOTHER_WAY: dict[str, str] = {
+    "iterdir": """
+import yaml
+def read(graph_dir):
+    for path in graph_dir.iterdir():
+        yaml.safe_load(path.read_text())
+""",
+    "rglob": """
+import yaml
+def read(graph_dir):
+    for path in graph_dir.rglob("*.yml"):
+        yaml.safe_load(path.read_text())
+""",
+    "a glob pattern held in a variable": """
+import yaml
+def read(graph_dir):
+    pattern = "*.yml"
+    for path in graph_dir.glob(pattern):
+        yaml.safe_load(path.read_text())
+""",
+    "os.listdir": """
+import os
+import yaml
+def read(graph_dir):
+    for name in os.listdir(graph_dir):
+        yaml.safe_load((graph_dir / name).read_text())
+""",
+    "yaml.load with a loader": """
+import yaml
+def read(graph_dir):
+    for path in graph_dir.glob("*.yml"):
+        yaml.load(path.read_text(), Loader=yaml.SafeLoader)
+""",
+}
+
+#: Bodies that hold ONE half of the shape and must NOT be reported. A detector
+#: that reports these is a detector whose failures are noise, and a noisy
+#: derivation is one somebody exempts their way out of.
+ONE_HALF_OF_THE_SHAPE: dict[str, str] = {
+    "lists the directory and parses nothing": """
+def read(graph_dir):
+    return sorted(graph_dir.glob("*.yml"))
+""",
+    "parses YAML and lists nothing": """
+import yaml
+def read(path):
+    return yaml.safe_load(path.read_text())
+""",
+}
+
+
 class TestTheSkipPolicyLivesInOneBody:
     """Derived from the source, so a fifth policy cannot be added quietly.
 
-    A graph-file reader is a function that both walks `glob("*.yml")` and calls
-    `yaml.safe_load` — the two halves of the shape, which is what makes this a
-    derivation rather than a list of four names somebody keeps up to date.
+    A graph-file reader is a function that both LISTS a directory and PARSES
+    YAML — the two halves of the shape, which is what makes this a derivation
+    rather than a list of four names somebody keeps up to date.
+
+    BDL-067 `.25` WIDENED both halves, and the reason is the bead's own claim
+    that a fifth reader must fail here "on the day it is written". `.24` asked
+    for `glob` with the literal `"*.yml"` and for `yaml.safe_load` by name, which
+    is how `each_graph_file` is spelled and not what makes a body a reader:
+    MEASURED, five bodies that read the directory pass that detector untouched
+    (`A_FIFTH_READER_SPELLED_ANOTHER_WAY`), and each of them would carry a sixth
+    skip policy into the product.
+
+    The trade-off, stated because widening a derivation is not free. The narrow
+    form UNDER-reports — measured above, five routes — and an under-reporting
+    derivation ships the defect. The wide form may OVER-report: a body that lists
+    a directory of documents and parses YAML front matter for some other purpose
+    would be named here. MEASURED on this tree: it names exactly the same one
+    body the narrow form does, so there is nothing to exempt today, and an
+    over-report fails in front of the person adding the body rather than at an
+    adopter. If a genuine non-reader is named later, the answer is an exemption
+    recorded with its reason, not a narrower shape.
     """
 
     #: Where `init`'s own readers live. `rules_gen` and `agents_md` parse
@@ -183,28 +267,32 @@ class TestTheSkipPolicyLivesInOneBody:
     )
     THE_ONE_BODY = Path("src/beadloom/onboarding/graph_files.py")
 
-    def _readers_in(self, module: Path) -> list[str]:
-        tree = ast.parse(module.read_text(encoding="utf-8"))
+    #: Listing a directory, by every name the standard library offers for it.
+    LISTS_A_DIRECTORY = frozenset({"glob", "rglob", "iterdir", "listdir", "scandir", "walk"})
+    #: Parsing YAML, by every loader PyYAML offers. `load` and `unsafe_load` are
+    #: in the set for the same reason `safe_load` is: what matters here is that
+    #: the body turns a graph file into data, and this project's own rule against
+    #: `yaml.load` is enforced elsewhere.
+    PARSES_YAML = frozenset(
+        {"safe_load", "safe_load_all", "load", "load_all", "full_load", "unsafe_load"}
+    )
+
+    def _readers_in_source(self, source: str, label: str) -> list[str]:
+        tree = ast.parse(source)
         found: list[str] = []
         for fn in ast.walk(tree):
             if not isinstance(fn, ast.FunctionDef | ast.AsyncFunctionDef):
                 continue
             calls = [n for n in ast.walk(fn) if isinstance(n, ast.Call)]
-            walks = any(
-                isinstance(c.func, ast.Attribute)
-                and c.func.attr == "glob"
-                and any(
-                    isinstance(a, ast.Constant) and a.value == "*.yml" for a in c.args
-                )
-                for c in calls
-            )
-            parses = any(
-                isinstance(c.func, ast.Attribute) and c.func.attr == "safe_load"
-                for c in calls
-            )
+            attributes = {c.func.attr for c in calls if isinstance(c.func, ast.Attribute)}
+            walks = bool(attributes & self.LISTS_A_DIRECTORY)
+            parses = bool(attributes & self.PARSES_YAML)
             if walks and parses:
-                found.append(f"{module}::{fn.name}")
+                found.append(f"{label}::{fn.name}")
         return found
+
+    def _readers_in(self, module: Path) -> list[str]:
+        return self._readers_in_source(module.read_text(encoding="utf-8"), str(module))
 
     def _every_module(self) -> list[Path]:
         modules: list[Path] = []
@@ -215,6 +303,18 @@ class TestTheSkipPolicyLivesInOneBody:
     def test_the_derivation_finds_the_shared_reader(self) -> None:
         """Anti-vacuity: the detector detects the one body that should match."""
         assert self._readers_in(self.THE_ONE_BODY), self.THE_ONE_BODY
+
+    @pytest.mark.parametrize("spelling", sorted(A_FIFTH_READER_SPELLED_ANOTHER_WAY))
+    def test_a_reader_spelled_another_way_is_still_a_reader(self, spelling: str) -> None:
+        """The five routes `.24`'s narrower shape let through, one case each."""
+        source = A_FIFTH_READER_SPELLED_ANOTHER_WAY[spelling]
+
+        assert self._readers_in_source(source, spelling) == [f"{spelling}::read"]
+
+    @pytest.mark.parametrize("spelling", sorted(ONE_HALF_OF_THE_SHAPE))
+    def test_half_the_shape_is_not_a_reader(self, spelling: str) -> None:
+        """The other side of widening: what it must still refuse to name."""
+        assert self._readers_in_source(ONE_HALF_OF_THE_SHAPE[spelling], spelling) == []
 
     def test_no_other_module_walks_the_graph_directory_and_parses_it(self) -> None:
         elsewhere = [
@@ -284,3 +384,256 @@ class TestTheOneDifferenceBetweenCallersIsAParameter:
 
         assert [name for name, _ in yielded] == ["a.yml", "d.yml"]
         assert all(isinstance(data, dict) for _, data in yielded)
+
+
+#: A graph file carrying a value YAML types and JSON does not. `added: 2026-09-02`
+#: loads as a `datetime.date`, and it is a shape a hand-edited graph file really
+#: takes. It is not unreadable — `each_graph_file` yields it, and the four
+#: readers above are fine with it — so it belongs to this class for a different
+#: reason: it is the third way one hand-edited file ends `init` in a traceback,
+#: and it dies in a different reader from the other two.
+A_DATE_YAML_TYPES_AND_JSON_DOES_NOT = (
+    "nodes:\n"
+    "  - ref_id: ledger\n"
+    "    kind: domain\n"
+    "    summary: Dated by hand.\n"
+    "    added: 2026-09-02\n"
+)
+
+
+@dataclass(frozen=True)
+class AGraphFileInitCannotSurvive:
+    """One hand-edited graph file, and where `init` ends up because of it."""
+
+    #: How it is spelled, for the test id.
+    name: str
+    #: What is in the file.
+    text: str
+    #: What reaches the adopter.
+    raises: type[BaseException]
+    #: The frame it is raised in, as the traceback spells it. Named rather than
+    #: merely counted, because the finding is that it is ONE reader for the two
+    #: unreadable shapes and a second for the third — not four readers, and not
+    #: any of `init`'s own.
+    the_reader_it_dies_in: str
+
+
+THE_SHAPES = (
+    AGraphFileInitCannotSurvive(
+        name="does-not-parse",
+        text=UNPARSEABLE_YAML,
+        raises=yaml.YAMLError,
+        the_reader_it_dies_in="read_declared_docs",
+    ),
+    AGraphFileInitCannotSurvive(
+        name="a-top-level-list",
+        text=A_TOP_LEVEL_LIST,
+        raises=AttributeError,
+        the_reader_it_dies_in="read_declared_docs",
+    ),
+    AGraphFileInitCannotSurvive(
+        name="a-date-scalar",
+        text=A_DATE_YAML_TYPES_AND_JSON_DOES_NOT,
+        raises=TypeError,
+        the_reader_it_dies_in="load_graph",
+    ),
+)
+
+#: `init`'s own four readers, by the names a traceback would carry. None of them
+#: may appear in a frame below: that is the half of this class that measures what
+#: `.24` fixed, as opposed to the half that measures what it did not.
+THE_READERS_THIS_EPIC_CONSOLIDATED = (
+    "_load_graph_from_yaml",
+    "_patch_docs_field",
+    "_graph_file_of_each_node",
+    "_existing_graph",
+)
+
+THE_RUNS = tuple((cell, shape) for cell in THE_TABLE for shape in THE_SHAPES)
+RUN_IDS = [f"{cell.name}-{shape.name}" for cell, shape in THE_RUNS]
+
+
+def _a_tree_every_branch_can_be_pointed_at(tmp_path: Path, text: str) -> Path:
+    """The tree above, plus the `docs/` the `--import` branch is given.
+
+    `EntryPoint.argv` hands `--import` a path, and click checks it exists, so a
+    branch axis that omits the directory measures the flag parser rather than the
+    command.
+    """
+    project = _a_tree_holding_one_unreadable_graph_file(tmp_path, text)
+    docs = project / "docs"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / "payments.md").write_text("# Payments\n\nAn adopter's doc.\n", encoding="utf-8")
+    return project
+
+
+@dataclass(frozen=True)
+class BranchOutcome:
+    """What one branch did with one hand-edited file."""
+
+    exit_code: int
+    output: str
+    raised: BaseException | None
+    frames: tuple[str, ...]
+    #: The file's bytes afterwards, so "it refused the tree" can be told apart
+    #: from "it read the tree and survived".
+    the_file_afterwards: str | None
+
+
+def _perform(project_root: Path, cell: Cell, shape: AGraphFileInitCannotSurvive) -> BranchOutcome:
+    with _answering(cell, reinit=True):
+        result = CliRunner().invoke(
+            main,
+            ["init", *cell.entry.argv(cell.mode, project_root), "--project", str(project_root)],
+        )
+    raised = result.exception
+    frames = (
+        tuple(frame.name for frame in traceback.extract_tb(raised.__traceback__))
+        if raised is not None and not isinstance(raised, SystemExit)
+        else ()
+    )
+    unreadable = project_root / ".beadloom" / "_graph" / THE_UNREADABLE_FILE
+    return BranchOutcome(
+        exit_code=result.exit_code,
+        output=str(result.output),
+        raised=raised,
+        frames=frames,
+        the_file_afterwards=(
+            unreadable.read_text(encoding="utf-8") if unreadable.is_file() else None
+        ),
+    )
+
+
+@pytest.fixture(scope="module")
+def branch_runs(tmp_path_factory: TempPathFactory) -> dict[str, BranchOutcome]:
+    """Every (branch, shape), run once and read from several angles.
+
+    Module-scoped for the reason the sibling table gives: a cell costs a full
+    `init`, and each case below reads an immutable record of a completed run
+    rather than sharing state with the others.
+    """
+    performed: dict[str, BranchOutcome] = {}
+    for (cell, shape), run_id in zip(THE_RUNS, RUN_IDS, strict=True):
+        root = _a_tree_every_branch_can_be_pointed_at(
+            tmp_path_factory.mktemp(run_id.replace("-", "_")), shape.text
+        )
+        performed[run_id] = _perform(root, cell, shape)
+    return performed
+
+
+class TestWhatEveryBranchOfInitDoesWithAFileItCannotHandle:
+    """The branch axis of BDL-067 `.25`'s major 2, stated as what was measured.
+
+    The bead asks for a case in which a project carrying an unreadable
+    `.beadloom/_graph/*.yml` "must not traceback out of ANY init branch". That is
+    not what the product does, and this class says so rather than asserting it.
+    MEASURED, over every cell of `init`'s own entry-point by mode table: every
+    branch that can meet a graph file it did not write — `--bootstrap`,
+    `--import` and both modes of the wizard — still ends in a traceback, on all
+    three shapes, and always in a reader that is not one of the four this epic
+    consolidated. `--yes` cannot meet the file at all, and says so.
+
+    So the residue `.24` pinned for ONE branch and ONE shape is here pinned as
+    the class it is: 12 runs, two frames, both outside `onboarding`
+    (`application/reindex/indexing.read_declared_docs` and `graph/loader
+    .load_graph`). It is filed as `beadloom-l22o` / BDL-UX #220 and is out of
+    this bead's scope; these cases exist so that closing it fails a test with a
+    measurement attached, and so the epic cannot be read as though `init` had
+    stopped tracebacking on a hand-edited graph file.
+
+    The axis is `THE_TABLE`, imported rather than restated, so a fifth branch or
+    a third mode arrives here already carrying a case — and that table is itself
+    checked against `init`'s own source by the module it comes from.
+    """
+
+    def test_every_cell_of_the_table_has_a_run(
+        self, branch_runs: dict[str, BranchOutcome]
+    ) -> None:
+        """The two enumerations, bound: no branch and no shape goes unrun."""
+        assert set(branch_runs) == set(RUN_IDS)
+        assert {cell.name for cell in THE_TABLE} == {cell.name for cell, _ in THE_RUNS}
+        assert len(branch_runs) == len(THE_TABLE) * len(THE_SHAPES)
+
+    @pytest.mark.parametrize(
+        ("cell", "shape"),
+        [(cell, shape) for cell, shape in THE_RUNS if cell.entry.can_meet_a_file_it_did_not_write],
+        ids=[
+            run_id
+            for (cell, _), run_id in zip(THE_RUNS, RUN_IDS, strict=True)
+            if cell.entry.can_meet_a_file_it_did_not_write
+        ],
+    )
+    def test_a_branch_that_meets_the_file_dies_outside_this_epics_readers(
+        self,
+        branch_runs: dict[str, BranchOutcome],
+        cell: Cell,
+        shape: AGraphFileInitCannotSurvive,
+    ) -> None:
+        """Both halves in one case: what `.24` fixed, and what it did not reach.
+
+        The frames are asserted rather than the message because there is no
+        message — a traceback is what the adopter is handed. The day
+        `beadloom-l22o` is closed this case fails, which is the point of it.
+        """
+        outcome = branch_runs[f"{cell.name}-{shape.name}"]
+
+        assert isinstance(outcome.raised, shape.raises), outcome.output
+        assert shape.the_reader_it_dies_in in outcome.frames, outcome.frames
+        for reader in THE_READERS_THIS_EPIC_CONSOLIDATED:
+            assert reader not in outcome.frames, (reader, outcome.frames)
+
+    def test_the_whole_residue_is_two_readers_and_neither_is_ours(
+        self, branch_runs: dict[str, BranchOutcome]
+    ) -> None:
+        """The class, counted: 12 runs, two frames, no branch of its own.
+
+        Stated as a set rather than per run because the finding is that the
+        branch does not matter — every branch that reads the tree reaches the
+        same two unguarded readers, which is why this is one planning decision
+        and not four.
+        """
+        died_in = {
+            shape.the_reader_it_dies_in
+            for cell, shape in THE_RUNS
+            if cell.entry.can_meet_a_file_it_did_not_write
+            for outcome in [branch_runs[f"{cell.name}-{shape.name}"]]
+            if outcome.raised is not None
+        }
+
+        assert died_in == {"read_declared_docs", "load_graph"}
+
+    @pytest.mark.parametrize(
+        ("cell", "shape"),
+        [
+            (cell, shape)
+            for cell, shape in THE_RUNS
+            if not cell.entry.can_meet_a_file_it_did_not_write
+        ],
+        ids=[
+            run_id
+            for (cell, _), run_id in zip(THE_RUNS, RUN_IDS, strict=True)
+            if not cell.entry.can_meet_a_file_it_did_not_write
+        ],
+    )
+    def test_the_branch_that_cannot_meet_the_file_says_so_and_leaves_it_alone(
+        self,
+        branch_runs: dict[str, BranchOutcome],
+        cell: Cell,
+        shape: AGraphFileInitCannotSurvive,
+    ) -> None:
+        """`--yes` is green here for a reason that is not a guard working.
+
+        It refuses the tree: `non_interactive_init` returns `skipped` when
+        `.beadloom/` is already there, so the file is never read. The message is
+        asserted, and so is the file's content afterwards — a run that had read
+        the tree and survived would be a different fact from a run that declined
+        to look, and only the second one is true.
+        """
+        outcome = branch_runs[f"{cell.name}-{shape.name}"]
+
+        assert outcome.raised is None, outcome.frames
+        assert outcome.exit_code == 0, outcome.output
+        assert "Warning: .beadloom/ already exists. Use --force to overwrite." in outcome.output, (
+            outcome.output
+        )
+        assert outcome.the_file_afterwards == shape.text

@@ -39,6 +39,7 @@ from beadloom.services.commands.setup import (
     _GRAPH_HALF,
     _RULES_HALF,
     _graph_file_of_each_node,
+    _graph_nodes_now,
 )
 from tests.adopter_project import python_project, typescript_project
 from tests.test_init_verdict_over_its_own_rules import (
@@ -793,3 +794,211 @@ class TestTheGraphHalfIsAskedOfTheNodeAndNotOfTheFile:
         assert self._corners_printed(output) == [(False, True)], output
         assert _GRAPH_HALF[False] in output, output
         assert f".beadloom/_graph/{THE_INHERITED_FILE}" in output, output
+
+
+#: An inherited `services.yml` — the one graph file `bootstrap_project` rewrites
+#: wholesale. Its two ref_ids are the ones the bootstrap computes for this
+#: fixture (`orders-web` from `package.json`, `src` from the source dir), so the
+#: run does not add nodes beside these: it REWRITES them. That is the only way a
+#: node can be both older than the run and produced by it, and it is an ordinary
+#: state — it is what a re-init meets on every project that has been initialised
+#: once.
+AN_INHERITED_FILE_THE_BOOTSTRAP_REWRITES = {
+    "nodes": [
+        {
+            "ref_id": "orders-web",
+            "kind": "service",
+            "summary": "The root an earlier run wrote.",
+        },
+        {
+            "ref_id": "src",
+            "kind": "domain",
+            "summary": "An earlier run's domain, and it had its parent.",
+            "source": "src/",
+        },
+    ],
+    "edges": [{"src": "src", "dst": "orders-web", "kind": "part_of"}],
+}
+
+#: The node in it this run rewrites into failing, and the file it stays in.
+THE_REWRITTEN_NODE = "src"
+THE_FILE_THE_BOOTSTRAP_REWRITES = "services.yml"
+
+
+def _a_tree_this_run_rewrites(tmp_path: Path) -> Path:
+    """A project that has been initialised before, carrying no rules file.
+
+    No `rules.yml`, so this run writes `domain-needs-parent` itself and the rules
+    half is `True` — which leaves the graph half as the only thing the cases
+    below can move, the same way `_a_tree_carrying_an_undocumented_orphan` does.
+    """
+    project = typescript_project(tmp_path).root
+    _write_graph_file(
+        project, THE_FILE_THE_BOOTSTRAP_REWRITES, AN_INHERITED_FILE_THE_BOOTSTRAP_REWRITES
+    )
+    return project
+
+
+class TestANodeThisRunRewroteIntoFailingIsThisRunS:
+    """The error direction of the node grain — BDL-067 `.25`, covering `.24`.
+
+    `.24` moved the graph half from the file's bytes to a per-node
+    CREATED-OR-CHANGED sample, and its docstring states why the second half of
+    that name is there: created ALONE fixes the annotated-sibling corner and
+    mis-attributes in the opposite direction, so the instrument's error direction
+    would become "hide our own defect". Nothing asserted it. Both of `.24`'s
+    corner cases move a node this run CREATED or a node it left alone; neither
+    reaches a node that was already there and that this run rewrote.
+
+    This is that node, and the arrangement is BDL-UX #192's own shape on a
+    RE-INIT rather than on a virgin tree: an `services.yml` an earlier run left,
+    holding the two ref_ids the bootstrap computes for this project, and the
+    sabotage `.17` uses — a `bootstrap_project` that writes the nodes and forgets
+    the `part_of` edge. The run rewrites `src` into a domain with no parent and
+    then fails its own `domain-needs-parent` over it.
+
+    MEASURED, on this tree. Today: `(True, True)` — "This is a defect in
+    Beadloom's bootstrap rather than in your project — please report it".
+    With `_nodes_this_run_wrote` reduced to CREATED alone, the same run prints
+    `(False, True)` — "the graph already in .beadloom/_graph/ ... predates them"
+    — about a node it had just written itself, and the adopter is told to go and
+    fix a file Beadloom broke. That is the direction this epic exists because of,
+    and it is what these two cases hold shut.
+    """
+
+    def _corners_printed(self, output: str) -> list[Any]:
+        return [key for key, sentence in _ATTRIBUTION.items() if sentence in output]
+
+    def test_the_run_rewrites_a_node_that_was_already_on_disk(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The premise, read off the tree rather than off the instrument.
+
+        The ref_id is in the file before and after — so it is not created — and
+        its content is not what it was, and the edge that made it pass is gone.
+        Measured with `yaml` directly and not with `setup._graph_nodes_now`: a
+        premise checked with the instrument under test agrees with it by
+        construction.
+        """
+        project = _a_tree_this_run_rewrites(tmp_path)
+        path = project / ".beadloom" / "_graph" / THE_FILE_THE_BOOTSTRAP_REWRITES
+        before = yaml.safe_load(path.read_text(encoding="utf-8"))
+
+        _a_bootstrap_that_forgets_the_edge(monkeypatch, PACKAGE_BINDING)
+        _bootstrap(project)
+
+        after = yaml.safe_load(path.read_text(encoding="utf-8"))
+        was = {node["ref_id"]: node for node in before["nodes"]}
+        now = {node["ref_id"]: node for node in after["nodes"]}
+        assert THE_REWRITTEN_NODE in was, before
+        assert THE_REWRITTEN_NODE in now, after
+        assert now[THE_REWRITTEN_NODE] != was[THE_REWRITTEN_NODE]
+        assert [e for e in after.get("edges") or [] if e["kind"] == "part_of"] == []
+
+    def test_it_is_attributed_to_this_run_and_asks_for_the_bug_report(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The corner: our own defect, on a tree that was not virgin."""
+        project = _a_tree_this_run_rewrites(tmp_path)
+
+        _a_bootstrap_that_forgets_the_edge(monkeypatch, PACKAGE_BINDING)
+        result = _bootstrap(project)
+
+        assert result.exit_code == 1, result.output
+        assert self._corners_printed(result.output) == [(True, True)], result.output
+        assert _GRAPH_HALF[True] in result.output, result.output
+        assert (
+            f"domain-needs-parent: {THE_REWRITTEN_NODE} "
+            f"(.beadloom/_graph/{THE_FILE_THE_BOOTSTRAP_REWRITES})" in result.output
+        ), result.output
+
+
+class TestTheNodeSampleTheGraphHalfIsReadFrom:
+    """`setup._graph_nodes_now`, at its own grain — BDL-067 `.25`, covering `.24`.
+
+    The sampler is what the graph half of `_ATTRIBUTION` is computed from, and
+    `.24` shipped it with no case that reaches it directly: the two corner cases
+    exercise it end to end, where a wrong answer is visible only as a sentence.
+    Two of its decisions are load-bearing and one of its limitations is reachable
+    in this product, so all three are stated here as cases.
+
+    The rendering decisions are asserted rather than the digest's value: what a
+    node hashes to is not a fact anybody depends on, and what two nodes hash the
+    SAME to is the whole instrument.
+    """
+
+    def _sample(self, tmp_path: Path, files: dict[str, str]) -> dict[str, str]:
+        graph_dir = tmp_path / ".beadloom" / "_graph"
+        graph_dir.mkdir(parents=True, exist_ok=True)
+        for name, text in files.items():
+            (graph_dir / name).write_text(text, encoding="utf-8")
+        return _graph_nodes_now(tmp_path)
+
+    def test_the_order_the_keys_are_written_in_is_not_a_change(self, tmp_path: Path) -> None:
+        """Without this the node grain collapses back into the file grain.
+
+        Every writer in the product rewrites a node's mapping rather than editing
+        it in place, so if key order counted as content, every node in a file any
+        writer touched would read as this run's — which is exactly the file-grain
+        answer `.23` decided against.
+        """
+        one = self._sample(
+            tmp_path / "one",
+            {"a.yml": "nodes:\n  - ref_id: ledger\n    kind: domain\n    summary: One\n"},
+        )
+        reordered = self._sample(
+            tmp_path / "two",
+            {"a.yml": "nodes:\n  - summary: One\n    kind: domain\n    ref_id: ledger\n"},
+        )
+
+        assert one == reordered
+
+    def test_a_value_yaml_types_and_json_does_not_is_sampled_rather_than_raised_on(
+        self, tmp_path: Path
+    ) -> None:
+        """`added: 2026-09-02` loads as a `datetime.date`, which JSON cannot carry.
+
+        The sample is taken in `init` before any writer runs, so a `TypeError`
+        here would end the command before it had printed a line, on a graph file
+        an adopter edited by hand. `default=str` is what prevents it, and nothing
+        else asserted that.
+
+        `init` still does not survive this file — `graph/loader.load_graph`
+        renders the same value into JSON without a default and raises there, on
+        every branch that reads the tree. That is measured and pinned in
+        `tests/test_graph_files_are_read_under_one_policy.py`, and it belongs to
+        `beadloom-l22o` rather than here. What this case holds is that the
+        REPORT's instrument is not the thing that breaks.
+        """
+        sampled = self._sample(
+            tmp_path,
+            {"a.yml": ("nodes:\n  - ref_id: ledger\n    kind: domain\n    added: 2026-09-02\n")},
+        )
+
+        assert set(sampled) == {"ledger"}
+
+    def test_two_files_declaring_one_ref_id_leave_one_entry(self, tmp_path: Path) -> None:
+        """A limitation, recorded rather than endorsed, and reachable here.
+
+        The sample is keyed by ref_id across the whole directory, so two files
+        declaring the same ref_id collapse to whichever sorts last — and the
+        report's attribution for that node then follows a file it may not be in.
+        This is not hypothetical: the classic `src/<project>/` layout hands the
+        root service and its single domain the same ref_id, which BDL-067's brief
+        names and tracks as `beadloom-7c6k`. Stated as a case so that fixing the
+        collision, or keying the sample by (file, ref_id), fails here rather than
+        changing an unstated answer.
+        """
+        sampled = self._sample(
+            tmp_path,
+            {
+                "a.yml": "nodes:\n  - ref_id: ledger\n    kind: domain\n",
+                "b.yml": "nodes:\n  - ref_id: ledger\n    kind: service\n",
+            },
+        )
+        only_b = self._sample(
+            tmp_path / "only_b", {"b.yml": "nodes:\n  - ref_id: ledger\n    kind: service\n"}
+        )
+
+        assert set(sampled) == {"ledger"}
+        assert sampled == only_b
