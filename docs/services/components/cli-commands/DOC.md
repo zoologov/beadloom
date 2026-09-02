@@ -62,19 +62,32 @@ silently.
 Gate's `lint_step` over the graph it has just written, exiting 1 when the graph fails the
 rules on disk (BDL-067, closing BDL-UX #192). The check stays
 in the application layer and this module only calls it and renders its findings, so the rule
-above holds — but the exit code is a decision this command makes, and all three branches that
-write a **bootstrap** graph make it: `--yes` (in `bootstrap` or `both` mode), `--bootstrap`,
-and the default interactive wizard. `--import` writes a graph file too — `imported.yml` — and
-takes no verdict: it re-indexes nothing and tells the adopter to run `beadloom reindex` next,
-so there is no index of its own output to judge. `--yes --mode import` takes none either,
-gated on `"bootstrap" in result` since BDL-067 `.14`: both headlines open with *the graph this
-command just wrote*, and that run wrote no bootstrap graph and no rules. It had been harmless
-only because an import-only run leaves no `rules.yml`, so the linter returned clean before it
-read the index — an accident of another module rather than a decision here. The wizard
-was added in BDL-067 `.6` — the verdict shipped at two call sites because the covering tests
-counted the two **bindings** of `bootstrap_project` rather than the branches, and the wizard
-shares the `--yes` binding. It is skipped on exactly one path, the wizard's `edit` review
-answer, where the graph has just been handed to the user to edit and nothing has re-indexed.
+above holds — but the exit code is a decision this command makes, and every branch that writes
+a file under `.beadloom/_graph/` makes it: `--yes` in any mode, `--bootstrap`, `--import`, and
+the default interactive wizard.
+
+The enumeration is over branches that WRITE rather than over branches that bootstrap, since
+BDL-067 `.17`. Until then the guard was `"bootstrap" in result` and `--import` was carved out
+on a stated reason — it re-indexed nothing, so there was no index of its own output to judge —
+while `--yes --mode import` was carved out on another: both headlines opened with *the graph
+this command just wrote*, and that run wrote no bootstrap graph and no rules. Both reasons
+held only until the next `init` on the same tree. The wizard's re-init does not delete
+`.beadloom/`, so an `imported.yml` from an earlier run survived into a later bootstrap that
+wrote `domain-needs-parent` and met the unparented nodes — reported by a run that had written
+neither them nor `import_docs` (the review of `.16`, major 2). The `--import` branch now
+re-indexes what it wrote before judging it, which removes the reason rather than the check.
+
+Stated because it is the limit of that change: judging every writing run does not make the
+import-only run report its own orphans. On a virgin tree it writes no `rules.yml`, so
+`lint_step` evaluates nothing and passes honestly. What the change buys is that no branch is
+excluded by an accident of another module, and that the run which does meet the rule describes
+it truthfully.
+
+The wizard was added in BDL-067 `.6` — the verdict shipped at two call sites because the
+covering tests counted the two **bindings** of `bootstrap_project` rather than the branches,
+and the wizard shares the `--yes` binding. It is skipped on exactly one path, the wizard's
+`edit` review answer, where the graph has just been handed to the user to edit and nothing has
+re-indexed.
 
 Each evaluated-rule line names the rule, the violating node, and the graph file that node was
 written into, read off `.beadloom/_graph/*.yml` rather than off any writer's return value. It
@@ -82,9 +95,15 @@ named `services.yml` by habit until BDL-067 `.14`, and the review of `.13` measu
 the failing node was `payments`, written by the import step into `imported.yml`, and the
 adopter was sent to two files that do not contain it. The `node` key the line reads comes from
 the shared finding shape; before `.14` the node was named only inside the English of `why`.
-The line that pre-empts the adopter's next command is rendered by that command's own
-formatter (`application.gate.gate_step_line`), because it said `lint - <summary>` where
-`beadloom ci` prints `[FAIL] lint: <summary>`.
+The line that pre-empts the adopter's next command states the step's name and its summary —
+`` `beadloom ci` will fail its lint step: <summary>`` — rather than quoting a rendering of it.
+`ci` picks `rich` only on a TTY and `github` otherwise, and the github renderer builds its own
+step line instead of calling `gate_step_line`, so quoting `gate_step_line` was wrong in exactly
+the scripted context `--yes` serves: one non-TTY shell had `init` promise
+`[FAIL] lint: 2 error(s), 0 warning(s)` where `ci` printed
+`::notice::lint FAIL: 2 error(s), 0 warning(s)` (the review of `.16`, the minor). The name and
+the summary are the two fields every renderer reads off the step, so a sentence built from them
+survives all three and any renderer added later.
 
 Two shapes of failure are rendered separately. Rules that were evaluated and failed are named
 as rules; a `rules.yml` the loader refuses is rendered as the loader's complaint, because the
@@ -92,21 +111,41 @@ finding the Gate raises there carries the step's own name (`lint`) in `rule` and
 `why` — printing the name told an adopter with a hand-edited rules file that a rule called
 `lint` had failed.
 
-The evaluated-rule report also names **whose** rules failed, from the `rules_generated` count
-`bootstrap_project` returns. `bootstrap_project` writes `rules.yml` only when the file is not
-already there, so on a re-init, or over rules an earlier Beadloom or a hand edit left behind,
-the failing rule is the adopter's own. Only a run that authored the file calls the red a
-defect in Beadloom's bootstrap and asks for a report; the other says the file was already
-there and asks for nothing. `.6` established that fact and applied it to the unloadable-rules
-branch alone, which is how the evaluated-rules branch went on blaming Beadloom for a
-hand-written `service-needs-parent` until `.9` — measured by the review of `.8` on a scratch
-TypeScript project.
+The evaluated-rule report also names **whose** the failure is, from two facts about the tree
+rather than from one boolean about a writer's return value. `init` digests
+`.beadloom/_graph/` before any writer runs (`_graph_files_now`) and again at verdict time; the
+difference is the set of files this run wrote. The headline's two halves and the sentence under
+them are then chosen from `(this run wrote the graph file the failing node came from, this run
+wrote rules.yml)` through `_GRAPH_HALF`, `_RULES_HALF` and `_ATTRIBUTION` — tables over the full
+product, so a corner cannot be left unwritten. Only the corner where both are this run's calls
+the red a defect in Beadloom's bootstrap and asks for a report; the other three name what was
+already on disk and ask for nothing.
 
-Only the wizard branch prints `WITHDRAWN_COMPLETION_CLAIM` before the report. `interactive_init`
-prints `Initialization complete!` and its own `Next steps:` before it returns, so the wizard
-has claimed success by the time the verdict runs, while `--bootstrap` takes its verdict first
-and never makes the claim. One line withdraws it here rather than moving the check into
-`interactive_init`, which would put a services-layer decision in the onboarding domain.
+Until BDL-067 `.17` a single boolean about `rules.yml` chose both sentences, and there was no
+counterpart for the node: a run that bootstrapped over an inherited `imported.yml` said *the
+graph this command just wrote* about nodes it had not written and asked the adopter to file a
+bug against `import_docs`, which had not run (the review of `.16`, major 2). The digest is read
+off the directory rather than off any writer's return value for the same reason
+`_graph_file_of_each_node` reads the files: the point is to cover writers this module does not
+know about, and `init` gained a second one four waves into this epic. Its two limitations are
+stated in the docstring. A file rewritten byte-for-byte with what was already there reads as one
+this run did not write — and in that case both answers name the same rules and the same nodes. A
+file that cannot be read is left out of the digest rather than digested, so a file unreadable
+before the run and readable after it reads as one this run wrote. `.6` established the rules half and applied it to the unloadable-rules branch alone,
+which is how the evaluated-rules branch went on blaming Beadloom for a hand-written
+`service-needs-parent` until `.9` — measured by the review of `.8` on a scratch TypeScript
+project.
+
+`WITHDRAWN_COMPLETION_CLAIM` is printed by the verdict itself, so no branch can decline it.
+Every branch has announced a scaffold by the time the verdict runs: the wizard's
+`Initialization complete!` and `Next steps:`, `--bootstrap`'s four check marks, `--yes`'s
+`Initialized beadloom (mode: ...)` and summary, `--import`'s `Classified N documents`. Until
+BDL-067 `.17` it was a `claim_to_withdraw` argument that one of the call sites passed, under a
+docstring asserting that the `--bootstrap` branch took its verdict first and never made the
+claim — it makes it, four check marks and then the error with no withdrawal, measured by the
+review of `.16` (major 3). That false sentence is why the omission read as a decision for two
+waves. The line is printed here rather than inside `interactive_init`, which would put a
+services-layer decision in the onboarding domain.
 
 That one line precedes **both** report shapes, so it states only what is true of both: the
 check did not pass. Until BDL-067 `.12` it read `it does not pass the rules it is checked

@@ -32,12 +32,12 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def _missing_domain_parent_edges(
+def _missing_parent_edges(
     nodes: list[dict[str, str]],
     edges: list[dict[str, str]],
     root_ref_id: str,
 ) -> list[dict[str, str]]:
-    """Name the `part_of` edges the domain-parent post-condition is still short of.
+    """Name the `part_of` edges the parent post-condition is still short of.
 
     `bootstrap_project` writes `domain-needs-parent` into the adopter's
     `rules.yml` whenever it writes a node of kind `domain` (`rules_gen.py`), so
@@ -46,15 +46,26 @@ def _missing_domain_parent_edges(
     (BDL-UX #192). The post-condition is therefore stated over the function's
     whole output rather than over the branch that was reported:
 
-        every node written with kind `domain` carries at least one outgoing
+        every node written by the bootstrap carries at least one outgoing
         `part_of` edge — to its classified parent where one exists, to the root
         service node otherwise.
 
     A branch that forgets the edge is closed by this pass whether or not anyone
-    remembers it exists. Two nodes are deliberately left alone: a domain that
+    remembers it exists. Two nodes are deliberately left alone: a node that
     already has a `part_of` edge keeps the parent its classifier chose, and a
-    domain whose ref_id collides with the root's gets nothing, because an edge
+    node whose ref_id collides with the root's gets nothing, because an edge
     from a node to itself is not a parent.
+
+    The pass runs over every kind, not only `domain`. Until BDL-067 `.17` it was
+    scoped to `domain` because that is the kind the generated rules require a
+    parent for, and `generate_rules` also writes `feature-needs-parent` — so the
+    two writers of this same post-condition disagreed about it, the importer's
+    (`doc_classify._missing_parent_edges`) covering every kind and this one two
+    (the review of `.16`, minor 2). The cluster loop above already attaches
+    top-level nodes of EVERY kind to the root, so the narrow scope was not the
+    bootstrap's rule; it was the fallback branch missing it. A post-condition
+    that tracked the current rule set would go stale the next time a rule is
+    added, which is how this epic's first fix came to need a second one.
 
     *root_ref_id* must be the value written into the root node, not a name
     recomputed from the project: cluster refs pass through `_sanitize_ref_id`
@@ -65,7 +76,7 @@ def _missing_domain_parent_edges(
     missing: list[dict[str, str]] = []
     for node in nodes:
         ref_id = node["ref_id"]
-        if node["kind"] != "domain" or ref_id in parented or ref_id == root_ref_id:
+        if ref_id in parented or ref_id == root_ref_id:
             continue
         missing.append({"src": ref_id, "dst": root_ref_id, "kind": "part_of"})
         parented.add(ref_id)
@@ -268,10 +279,10 @@ def bootstrap_project(
             if sanitized_cluster != project_name:
                 edges.append({"src": sanitized_cluster, "dst": project_name, "kind": "part_of"})
 
-        # Post-condition: no domain leaves this function without a parent.
+        # Post-condition: no node leaves this function without a parent.
         # The loop above only reaches nodes that came from `clusters`; this
-        # reaches every domain the function wrote, whichever branch wrote it.
-        edges.extend(_missing_domain_parent_edges(nodes, edges, root_node["ref_id"]))
+        # reaches every node the function wrote, whichever branch wrote it.
+        edges.extend(_missing_parent_edges(nodes, edges, root_node["ref_id"]))
 
     # Write YAML graph.
     if nodes:

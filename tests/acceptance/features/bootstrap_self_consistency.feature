@@ -117,8 +117,11 @@ Feature: the bootstrap writes a graph that satisfies the rules it writes
 
   # BDL-067 `.9`, the review's minor 2. `interactive_init` prints its own tail
   # before returning, so the wizard announced `Initialization complete!` and then
-  # exited 1 — a success claim withdrawn one line later. The `--bootstrap` branch
-  # takes its verdict before its `Next steps` and never makes the claim.
+  # exited 1 — a success claim withdrawn one line later. The sentence that stood
+  # here until `.17` went on to say that the `--bootstrap` branch takes its
+  # verdict first and never makes the claim. It makes it, four check marks before
+  # the error, and that false reason is why only the wizard withdrew anything for
+  # two waves. The `--bootstrap` half is its own scenario below.
   @bead:beadloom-e8s4.9
   Scenario: the wizard withdraws its completion claim before reporting the failure
     Given a project whose only source file sits directly in its source directory
@@ -126,6 +129,7 @@ Feature: the bootstrap writes a graph that satisfies the rules it writes
     When beadloom init is run with no flags and its prompts are answered
     Then the command does not report success
     And the completion claim is withdrawn before the failure is reported
+    And the claim withdrawn is the wizard's own completion line
 
   # BDL-067 `.12`, the review's major 1 on `.11`. The withdrawal is one string
   # shared by the two shapes of red the wizard can reach, and it was written for
@@ -224,3 +228,71 @@ Feature: the bootstrap writes a graph that satisfies the rules it writes
     Then the two runs report the same verdict
     And neither run reports success
     And each run names the rule the gate will name
+
+  # BDL-067 `.17`, the review's major 1 on `.16`, and a release blocker. The
+  # import step attaches what it writes to the graph's single root, and "single"
+  # was counted over node ENTRIES rather than over ref_ids. `bootstrap_project`
+  # writes the root service node under the project name and its top-level
+  # attachment loop skips the cluster whose sanitized name equals that name, so a
+  # repository named after one of its own source directories leaves two
+  # unparented `service` entries under one ref_id. The import read that as two
+  # candidates, attached nothing, and every run of `init --yes --mode both`
+  # exited 1 on a rule the same command had just written. `core`, `api`, `web`
+  # and `app` are ordinary repository names.
+  @bead:beadloom-e8s4.17
+  Scenario: a project named after one of its own source directories initialises green
+    Given a project named after one of its own source directories
+    And a docs directory whose documents the classifier reads as domains
+    When beadloom init is run over the code and the docs together
+    Then the command reports success
+    And every domain in the graph on disk has an outgoing part_of edge
+    And the graph on disk passes the rules on disk beside it
+
+  # BDL-067 `.17`, the review's major 2 on `.16`. The report chose both halves of
+  # its headline and the sentence under them from ONE boolean — whether this run
+  # authored `rules.yml` — with no counterpart for the node. A run that
+  # bootstrapped over an `imported.yml` an earlier run had left behind therefore
+  # said "the graph this command just wrote" about nodes it had not written, and
+  # sent the adopter to file a bug against a writer that had not run in this
+  # command at all. The graph file here is put on disk BEFORE the command, so
+  # nothing about the run can make it this run's.
+  @bead:beadloom-e8s4.17
+  Scenario: a graph file this run did not write is not reported as this run's own
+    Given a project whose only source file sits directly in its source directory
+    And a graph file an earlier run left behind holding a domain with no parent
+    When beadloom init is run with the bootstrap flag
+    Then the command does not report success
+    And the command says the graph file was already there
+    And the command does not blame Beadloom's bootstrap
+    And the command does not ask for a bug report
+
+  # BDL-067 `.17`, the review's major 3 on `.16`. Every branch announces a
+  # scaffold before the verdict runs — the wizard its `Initialization complete!`,
+  # `--bootstrap` its four check marks — and only the wizard withdrew it, under a
+  # docstring asserting that `--bootstrap` took its verdict first and never made
+  # the claim. It makes it. The scenario is stated over `--bootstrap` because
+  # that is the branch the claim was false about.
+  @bead:beadloom-e8s4.17
+  Scenario: the bootstrap flag withdraws the scaffold it announced before reporting the failure
+    Given a project whose only source file sits directly in its source directory
+    And a bootstrap that writes the graph and then forgets the edge its rules require
+    When beadloom init is run with the bootstrap flag
+    Then the command does not report success
+    And the command announced a scaffold before it withdrew the claim
+    And the completion claim is withdrawn before the failure is reported
+
+  # BDL-067 `.17`, the review's minor on `.16`. The report pre-empts the
+  # adopter's next command, so what it promises has to survive whichever
+  # rendering that command chooses: `beadloom ci` picks `rich` only on a TTY and
+  # `github` otherwise, and the github renderer builds its own step line. The
+  # promise is stated as the step's name and its summary, which every renderer
+  # prints, rather than as one renderer's spelling of them.
+  @bead:beadloom-e8s4.17
+  Scenario: what the report promises about the gate is printed by every rendering of the gate
+    Given a project whose only source file sits directly in its source directory
+    And a bootstrap that writes the graph and then forgets the edge its rules require
+    When beadloom init is run with the bootstrap flag
+    Then the command does not report success
+    And the command names the failing gate step and what it will say
+    And every rendering the gate offers prints both of those
+    And the command quotes no rendering's own step line

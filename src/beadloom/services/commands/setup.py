@@ -8,16 +8,19 @@ plus ``config-check``, ``mcp-serve``, and ``init``.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import click
 
 from beadloom.services.commands._root import _warn_missing_parsers, main
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from beadloom.application.gate import GateStep
     from beadloom.onboarding.agentic_flow_setup import ScaffoldResult
     from beadloom.onboarding.config_sync import ConfigDrift, FixReport
@@ -722,14 +725,21 @@ def mcp_serve(*, project: Path | None) -> None:
     anyio.run(_run)
 
 
-#: The line the wizard prints before its failure report, withdrawing the success
-#: it has already claimed. `interactive_init` prints `Initialization complete!`,
-#: `Generated:` and `Next steps:` before it returns, so by the time `init` takes
-#: the verdict the claim has been made; the `--bootstrap` branch takes its
-#: verdict first and never makes it, which is why only the wizard passes this.
-#: One line is cheaper than moving the verdict inside `interactive_init`, which
-#: would put a services-layer concern in the onboarding domain (the review of
-#: BDL-067 `.8`, minor 2).
+#: The line `init` prints before its failure report, withdrawing the success it
+#: has already claimed. EVERY branch has claimed something by the time the
+#: verdict runs: the wizard prints `Initialization complete!`, `--bootstrap`
+#: prints four check marks, `--yes` prints `Initialized beadloom (mode: ...)` and
+#: its summary, and `--import` prints `Classified N documents`. So the withdrawal
+#: is printed by `_verdict_on_the_generated_graph` itself rather than passed in
+#: by a caller that remembers to.
+#:
+#: Until BDL-067 `.17` it was a `claim_to_withdraw` argument, and one of the four
+#: call sites passed it. The docstring here justified the other three by asserting
+#: that `--bootstrap` "takes its verdict first and never makes the claim" — it
+#: makes it, four check marks before the error, measured by the review of `.16`
+#: (major 3), and `--yes` makes it too. An instrument that answers a question
+#: about one call site is how the omission looked deliberate for two waves; this
+#: one ranges over every caller because no caller can decline it.
 #:
 #: One string precedes BOTH report shapes, so it may say only what is true of
 #: both. It is silent about who wrote the rules, because
@@ -748,27 +758,101 @@ WITHDRAWN_COMPLETION_CLAIM = (
 )
 
 
-def _wrote_the_rules_file(bootstrap_summary: dict[str, Any]) -> bool:
-    """Whether this run authored `rules.yml`, or merely found one on disk.
+def _graph_files_now(project_root: Path) -> dict[str, str]:
+    """Digest every file under `.beadloom/_graph/`, keyed by file name.
 
-    `bootstrap_project` returns `rules_generated`, read off the result instead of
-    re-tested against the filesystem. A positive count means this run wrote the
-    file. Zero does NOT mean the file was already there: it is also 0 when the
-    bootstrap wrote no nodes at all, and when `generate_rules` found no `domain`
-    and no `feature` kind to write a rule about (`rules_gen.py:29-73`). What zero
-    supports is the only claim made on it — this run did not author the rules —
-    and in both of the extra cases no `rules.yml` exists for a rule to fail from,
-    so no message follows. An `init` that ran in `import` mode has no bootstrap
-    summary at all, which the empty default covers.
+    Sampled once before `init` writes anything and once when it takes its
+    verdict; the difference is the set of graph files THIS RUN wrote. Read off
+    the directory rather than off any writer's return value, for the reason
+    `_graph_file_of_each_node` gives: the point is to cover writers this module
+    does not know about, and `init` gained a second one (`import_docs`) four
+    waves into BDL-067 without this side of the question noticing.
+
+    Nothing here parses YAML: the question is whether the bytes changed, so the
+    digest is taken over the bytes.
+
+    Two limitations, stated because both are real. A file this run rewrote
+    byte-for-byte with what was already there reads as one it did not write —
+    in that case the file this run would have written and the file on disk hold
+    the same content, so the two answers name the same rules and the same nodes.
+    And a file that cannot be read is left OUT of the mapping rather than
+    digested, so a file unreadable before the run and readable after it reads as
+    one this run wrote. A missing directory is an empty mapping, which is the
+    virgin case and the common one.
     """
-    return bool(bootstrap_summary.get("rules_generated", 0))
+    graph_dir = project_root / ".beadloom" / "_graph"
+    digests: dict[str, str] = {}
+    if not graph_dir.is_dir():
+        return digests
+    for yml in sorted(graph_dir.glob("*.yml")):
+        try:
+            digests[yml.name] = hashlib.sha256(yml.read_bytes()).hexdigest()
+        except OSError:
+            continue
+    return digests
+
+
+def _graph_files_this_run_wrote(
+    before: Mapping[str, str], after: Mapping[str, str]
+) -> frozenset[str]:
+    """The `_graph/*.yml` names whose bytes this run created or changed."""
+    return frozenset(name for name, digest in after.items() if before.get(name) != digest)
+
+
+#: The headline's two halves, each chosen by one fact about the tree rather than
+#: by the branch that is reporting. Keyed by "this run wrote it": the graph file
+#: the failing node came from, and `rules.yml`. Written as a mapping over the
+#: full product so that a case cannot be left out — the report used to carry two
+#: sentences chosen by one boolean, which said "the graph this command just
+#: wrote" about nodes from a file written by an earlier run (the review of
+#: BDL-067 `.16`, major 2, measured over `init --yes --mode import` followed by
+#: the wizard).
+_GRAPH_HALF = {
+    True: "the graph this command just wrote",
+    False: "the graph already in .beadloom/_graph/",
+}
+_RULES_HALF = {
+    True: "the rules this command wrote alongside it",
+    False: "the rules already in .beadloom/_graph/rules.yml",
+}
+
+#: What follows the rule lines, keyed by `(this run wrote the graph file the
+#: failing node came from, this run wrote rules.yml)`. Only the corner where both
+#: are this run's is a contradiction Beadloom produced, and only that corner asks
+#: for a bug report: an adopter sent to file one about a writer that did not run
+#: pays for our attribution error.
+_ATTRIBUTION = {
+    (True, True): (
+        "This is a defect in Beadloom's bootstrap rather than in your project "
+        "\u2014 please report it with the rule name(s) above."
+    ),
+    (True, False): (
+        "This command did not write .beadloom/_graph/rules.yml \u2014 the file was "
+        "already there \u2014 so the rule(s) above are your project's."
+    ),
+    (False, True): (
+        "This command did not write the graph file(s) named beside the node(s) "
+        "above \u2014 they were already on disk \u2014 so the rule(s) this command "
+        "wrote are meeting a graph that predates them."
+    ),
+    (False, False): (
+        "This command wrote neither the rule(s) above nor the graph file(s) they "
+        "name \u2014 both were already on disk \u2014 so nothing this run produced "
+        "is what fails."
+    ),
+}
+
+#: Where to go next, true of every corner of the table above.
+_REPAIR_ADVICE = (
+    "The scaffold is on disk and can be edited by hand \u2014 the graph file named "
+    "beside each node above, or .beadloom/_graph/rules.yml."
+)
 
 
 def _verdict_on_the_generated_graph(
     project_root: Path,
     *,
-    bootstrap_wrote_the_rules: bool,
-    claim_to_withdraw: str | None = None,
+    graph_before: Mapping[str, str],
 ) -> None:
     """Exit non-zero when the graph `init` just wrote fails the rules on disk.
 
@@ -787,51 +871,64 @@ def _verdict_on_the_generated_graph(
     no longer in view. The scaffold is left on disk either way — the rc reports
     the state, it does not withdraw the graph.
 
-    WHOSE rules those are is a separate question, and `bootstrap_wrote_the_rules`
-    is the answer to it. `bootstrap_project` writes `rules.yml` only when the file
-    is not already there, so on a re-init, or over rules an earlier Beadloom or a
-    hand edit left behind, the failing rule is the adopter's own and none of this
-    command's business to be blamed for. `.6` established exactly that fact and
-    applied it to the unloadable-rules branch alone, which is how the evaluated-
-    rules branch went on telling adopters that their own hand-written
-    `service-needs-parent` was "a defect in Beadloom's bootstrap" — measured by
-    the review of `.8` on a scratch TypeScript project. Callers pass
-    `rules_generated`, not a second look at the filesystem, because the file
-    exists by the time the verdict runs either way.
+    *graph_before* is the digest of `.beadloom/_graph/` taken before this run
+    wrote anything, and it answers WHOSE the failure is — for `rules.yml` and for
+    the file each failing node came from, with one instrument rather than two.
+    Until BDL-067 `.17` the caller passed a single boolean about `rules.yml`,
+    read off `bootstrap_project`'s return value, and there was no counterpart for
+    the node: an `init` that bootstrapped over an `imported.yml` a previous run
+    had left behind announced "the graph this command just wrote" about nodes it
+    had not written and asked the adopter to report a bootstrap defect for a
+    writer that had not run (the review of `.16`, major 2). Sampling the
+    directory covers writers this module does not know about, which is the same
+    reason `_graph_file_of_each_node` reads the files rather than a return value.
 
     Two shapes of red reach this point and they are not the same news, so they
     are reported separately: rules that were evaluated and failed name their
     rules, and a `rules.yml` that would not load names the loader's complaint
     instead (`_report_rules_that_would_not_load`).
 
-    `claim_to_withdraw`, when given, is printed before the report. Only the
-    wizard branch passes it, because only the wizard has already claimed success
-    by the time it gets here.
+    The completion claim is withdrawn here rather than by the caller. Every
+    branch that reaches this point has already announced a scaffold above it, so
+    there is no branch for which the withdrawal would be false, and no branch
+    that can forget to ask for it.
 
-    Called from every branch of `init` that writes a bootstrap graph — `--yes`,
-    `--bootstrap`, and the default interactive wizard — which is three branches
-    reached through two bindings of `bootstrap_project`. The wizard shipped
-    unguarded for exactly as long as those two numbers were confused for one
-    another (BDL-067 `.6`).
+    Called from every branch of `init` that writes a scaffold — `--yes`,
+    `--bootstrap`, `--import`, and the default interactive wizard. The
+    enumeration is over branches that WRITE, not over branches that bootstrap:
+    `--mode import` writes `imported.yml` into a tree whose `rules.yml` may
+    already be there, and the run that created an unparented node is the run that
+    should report it.
     """
-    from beadloom.application.gate import RULES_CONFIG_ERROR, gate_step_line, lint_step
+    from beadloom.application.gate import RULES_CONFIG_ERROR, lint_step
 
     step = lint_step(project_root)
     if step.passed:
         return
 
+    written = _graph_files_this_run_wrote(graph_before, _graph_files_now(project_root))
+
     click.echo("", err=True)
-    if claim_to_withdraw:
-        click.echo(claim_to_withdraw, err=True)
+    click.echo(WITHDRAWN_COMPLETION_CLAIM, err=True)
     if step.summary == RULES_CONFIG_ERROR:
         _report_rules_that_would_not_load(step)
     else:
         _report_rules_the_graph_fails(
             step,
             project_root=project_root,
-            bootstrap_wrote_the_rules=bootstrap_wrote_the_rules,
+            files_this_run_wrote=written,
         )
-    click.echo(f"`beadloom ci` will report this as: {gate_step_line(step)}", err=True)
+    # The fact, not one renderer's spelling of it. `ci` picks `rich` on a TTY and
+    # `github` otherwise, and the github renderer builds its own step line, so the
+    # quoted `[FAIL] lint: ...` was wrong in exactly the scripted context `--yes`
+    # serves: the same tree printed `::notice::lint FAIL: ...` (the review of
+    # BDL-067 `.16`, the minor). The step's name and summary are what every
+    # renderer reads, so a sentence built from those two survives all of them and
+    # any renderer added later.
+    click.echo(
+        f"`beadloom ci` will fail its {step.name} step: {step.summary}",
+        err=True,
+    )
     sys.exit(1)
 
 
@@ -885,53 +982,78 @@ def _failing_rule_lines(step: GateStep, source_of: dict[str, str]) -> list[str]:
     return sorted(lines)
 
 
-def _report_rules_the_graph_fails(
-    step: GateStep, *, project_root: Path, bootstrap_wrote_the_rules: bool
-) -> None:
-    """Name each error-severity rule the graph `init` just wrote violates.
+def _this_run_wrote_the_graph_that_fails(
+    step: GateStep,
+    source_of: Mapping[str, str],
+    files_this_run_wrote: frozenset[str],
+) -> bool:
+    """Whether a failing node came out of a graph file this run wrote.
 
-    The rule names are the same either way; the sentence around them is not.
-    Telling an adopter that their own hand-written rule is "a defect in
+    The finest attribution the report has is per node: `source_of` names the
+    graph file each node was read from, and *files_this_run_wrote* names the
+    files whose bytes this run produced. When no error-severity finding names a
+    node any graph file claims — a rule-level finding, or a node no file holds —
+    there is nothing to attribute at that grain, and the question falls back to
+    the coarsest fact available: did this run write any graph file at all. On a
+    virgin bootstrap it did, which is the answer a rule-level finding needs.
+    """
+    attributable = [
+        source_of[str(finding["node"])]
+        for finding in step.findings
+        if finding.get("severity") == "error"
+        and finding.get("node")
+        and str(finding["node"]) in source_of
+    ]
+    if not attributable:
+        return bool(files_this_run_wrote)
+    return any(Path(where).name in files_this_run_wrote for where in attributable)
+
+
+def _report_rules_the_graph_fails(
+    step: GateStep,
+    *,
+    project_root: Path,
+    files_this_run_wrote: frozenset[str],
+) -> None:
+    """Name each error-severity rule the graph violates, and say whose it is.
+
+    The rule names are the same whoever wrote them; the sentence around them is
+    not. Telling an adopter that their own hand-written rule is "a defect in
     Beadloom's bootstrap" costs them a bug report against a project that did not
-    write it, so the blame — and the request to report — are printed only when
-    this run authored `rules.yml`.
+    write it, and telling them "the graph this command just wrote" about a node
+    an earlier run left in `imported.yml` costs them the same twice over.
+
+    Both halves of the headline and the sentence under it are chosen from the
+    same pair of facts — did this run write `rules.yml`, and did it write the
+    graph file the failing node came from — through `_GRAPH_HALF`, `_RULES_HALF`
+    and `_ATTRIBUTION`. A table over the product cannot leave a corner unwritten,
+    which the previous shape did: one boolean about `rules.yml` chose both
+    sentences, so the corner where the rule is ours and the node is not printed
+    the corner where both are (the review of BDL-067 `.16`, major 2, measured by
+    running `init --yes --mode import` and then the wizard over one tree).
 
     Each line also names the graph file its node came from, and the advice sends
     the adopter to those files rather than to `services.yml` by habit. The review
     of BDL-067 `.13` measured the habit: the failing node was `payments`, written
     into `imported.yml` by the import step, and the report pointed at
-    `services.yml` and `rules.yml`, neither of which contains it. `.14` closed
-    that case in the writer; naming the file closes the shape for the next writer
-    as well.
+    `services.yml` and `rules.yml`, neither of which contains it.
     """
     source_of = _graph_file_of_each_node(project_root)
     rules = _failing_rule_lines(step, source_of)
-    if bootstrap_wrote_the_rules:
-        headline = (
-            "Error: the graph this command just wrote does not pass the rules "
-            "this command wrote alongside it."
-        )
-        advice = (
-            "The scaffold is on disk and can be edited by hand \u2014 the graph file "
-            "named beside each node above, or .beadloom/_graph/rules.yml. This is a "
-            "defect in Beadloom's bootstrap rather than in your project \u2014 please "
-            "report it with the rule name(s) above."
-        )
-    else:
-        headline = (
-            "Error: the graph this command just wrote does not pass the rules "
-            "already in .beadloom/_graph/rules.yml."
-        )
-        advice = (
-            "This command did not write .beadloom/_graph/rules.yml \u2014 the file was "
-            "already there \u2014 so the rule(s) above are your project's. The scaffold "
-            "is on disk: edit the graph file named beside each node above to satisfy "
-            "them, or the rules file to match your architecture."
-        )
-    click.echo(headline, err=True)
+    graph_is_this_run_s = _this_run_wrote_the_graph_that_fails(
+        step, source_of, files_this_run_wrote
+    )
+    rules_are_this_run_s = "rules.yml" in files_this_run_wrote
+
+    click.echo(
+        f"Error: {_GRAPH_HALF[graph_is_this_run_s]} does not pass "
+        f"{_RULES_HALF[rules_are_this_run_s]}.",
+        err=True,
+    )
     for rule in rules:
         click.echo(f"  {rule}", err=True)
-    click.echo(advice, err=True)
+    click.echo(_ATTRIBUTION[graph_is_this_run_s, rules_are_this_run_s], err=True)
+    click.echo(_REPAIR_ADVICE, err=True)
 
 
 def _report_rules_that_would_not_load(step: GateStep) -> None:
@@ -1016,6 +1138,11 @@ def init(
     from beadloom.onboarding import bootstrap_project, import_docs
 
     project_root = project or Path.cwd()
+    # Sampled before any writer runs, in ONE place, so every branch below is
+    # judged by the same instrument: the difference against the same directory
+    # at verdict time is the set of graph files this run wrote. See
+    # `_graph_files_now`.
+    graph_before = _graph_files_now(project_root)
 
     # Non-interactive mode: --yes / -y flag.
     if non_interactive:
@@ -1041,18 +1168,17 @@ def init(
             click.echo(f"  Index: {ri['symbols']} symbols, {ri['imports']} imports")
         if result.get("import"):
             click.echo(f"  Imported: {len(result['import'])} documents")
-        # Only a run that bootstrapped has a graph this command wrote for the
-        # verdict to speak about: both of its headlines open with "the graph this
-        # command just wrote", and `--mode import` wrote no graph and no rules.
-        # The call was harmless in effect only because an import-only run leaves
-        # no `rules.yml`, so the linter returns clean before it reads the index —
-        # an accident of another module rather than a decision here (the review
-        # of BDL-067 `.13`, minor 2).
-        if "bootstrap" in result:
-            _verdict_on_the_generated_graph(
-                project_root,
-                bootstrap_wrote_the_rules=_wrote_the_rules_file(result["bootstrap"]),
-            )
+        # Every mode is judged, `import` included. The guard used to be
+        # `if "bootstrap" in result`, which asked whether one writer had run
+        # rather than whether this run had written anything: `--mode import`
+        # leaves unparented nodes in `imported.yml`, the wizard's re-init does
+        # not delete `.beadloom/`, and the NEXT run wrote the rule those nodes
+        # fail — so #192's shape was deferred by one command instead of
+        # prevented, and reported by a run that had not written the nodes (the
+        # review of BDL-067 `.16`, major 2). `non_interactive_init` re-indexes
+        # after every mode, so the verdict reads an index that holds what this
+        # run wrote.
+        _verdict_on_the_generated_graph(project_root, graph_before=graph_before)
         return
 
     if bootstrap:
@@ -1120,10 +1246,7 @@ def init(
         if ri.symbols_indexed == 0:
             _warn_missing_parsers(project_root)
 
-        _verdict_on_the_generated_graph(
-            project_root,
-            bootstrap_wrote_the_rules=_wrote_the_rules_file(result),
-        )
+        _verdict_on_the_generated_graph(project_root, graph_before=graph_before)
 
         click.echo("")
         click.echo("Next steps:")
@@ -1138,7 +1261,17 @@ def init(
         for r in results:
             click.echo(f"  [{r['kind']}] {r['path']}")
         click.echo("")
-        click.echo("Next: review .beadloom/_graph/imported.yml, then run `beadloom reindex`")
+        click.echo("Next: review .beadloom/_graph/imported.yml")
+        # This branch writes a graph file, so it is judged like the other three.
+        # It re-indexes first for the reason `.14` established: `lint_step` reads
+        # the index without rebuilding it, and a verdict over an index that
+        # predates the file this branch just wrote is the stale-index defect
+        # again. Every other branch already re-indexed before returning; this was
+        # the one that told the adopter to do it by hand instead.
+        from beadloom.application.reindex import reindex as do_reindex
+
+        do_reindex(project_root)
+        _verdict_on_the_generated_graph(project_root, graph_before=graph_before)
         return
 
     # Default: interactive mode.
@@ -1147,26 +1280,20 @@ def init(
     result = interactive_init(project_root)
     if result["mode"] == "cancelled":
         sys.exit(0)
-    # The third branch that writes a bootstrap graph, and the one a human adopter
-    # meets first. It was left out when the verdict landed (BDL-067 `.2`) because
-    # the test that covered the other two was parametrised over the two BINDINGS
-    # of `bootstrap_project` — and the wizard shares the `--yes` binding, so two
-    # bindings read as two branches and this one was never counted. The review of
-    # `.4` reproduced #192's exact shape here: wizard rc 0, `lint --strict` rc 1,
-    # `ci` rc 1.
+    # The branch a human adopter meets first. It was left out when the verdict
+    # landed (BDL-067 `.2`) because the test that covered the other two was
+    # parametrised over the two BINDINGS of `bootstrap_project` — and the wizard
+    # shares the `--yes` binding, so two bindings read as two branches and this
+    # one was never counted. The review of `.4` reproduced #192's exact shape
+    # here: wizard rc 0, `lint --strict` rc 1, `ci` rc 1.
     #
-    # `review == "edit"` is the one bootstrap path that takes no verdict: the
-    # wizard has just handed the graph to the user to edit by hand and told them
-    # to run `beadloom reindex` afterwards, so the tree is unfinished by
-    # agreement, and nothing has re-indexed since. Judging it there would report a
-    # state the user is in the middle of leaving.
-    if result["mode"] in ("bootstrap", "both") and result.get("review") != "edit":
-        # `claim_to_withdraw` is passed here and nowhere else: `interactive_init`
-        # prints `Initialization complete!` before it returns, so this branch —
-        # and only this branch — reports a failure under a success it has already
-        # announced (the review of `.8`, minor 2).
-        _verdict_on_the_generated_graph(
-            project_root,
-            bootstrap_wrote_the_rules=_wrote_the_rules_file(result.get("bootstrap", {})),
-            claim_to_withdraw=WITHDRAWN_COMPLETION_CLAIM,
-        )
+    # The mode is no longer part of the guard. `import` writes `imported.yml` and
+    # the wizard re-indexes after every mode, so an import-only wizard run is a
+    # run that wrote a graph file and is judged like any other (the review of
+    # `.16`, major 2). `review == "edit"` stays the one carve-out: the wizard has
+    # just handed the graph to the user to edit by hand and told them to run
+    # `beadloom reindex` afterwards, so the tree is unfinished by agreement and
+    # nothing has re-indexed since. Judging it there would report a state the
+    # user is in the middle of leaving.
+    if result.get("review") != "edit":
+        _verdict_on_the_generated_graph(project_root, graph_before=graph_before)

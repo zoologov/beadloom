@@ -1,19 +1,23 @@
 # ACTIVE: BDL-067 — A virgin `beadloom init` leaves the Gate red
 
-> **Last updated:** 2026-09-01
+> **Last updated:** 2026-09-02
 > **Phase:** Development
 
 ---
 
 ## Current Bead
 
-**Bead:** `beadloom-e8s4.7` — the wizard branch, and a test that distinguishes a binding from a branch
-**Goal:** the branch count `THE_BRANCHES` claims is read out of `init`'s own source rather than
-maintained by hand, so a FOURTH branch that bootstraps without a verdict fails a test on the day it
-is written instead of shipping unguarded as the third one did.
-**Done when:** the enumeration is demonstrated to fail on a command that has such a branch, the
-three assertions `.6` declared vacuous either fail against the pre-`.6` source or are declared with
-a reason, and `beadloom ci` is rc 0.
+**Bead:** `beadloom-e8s4.17` — consolidation: replace the per-shape instruments with tree-level ones
+**Goal:** five review passes returned 2, 1, 1, 3, 4 majors — rising — because every cycle fixed its
+finding by introducing an instrument scoped to one shape, and the next review found the neighbouring
+shape. The deliverable is instruments that range over the set that actually varies: distinct ref_ids
+rather than node occurrences, every kind rather than the kinds today's rules name, every caller
+rather than the one that remembers, every renderer rather than the one a TTY selects, every branch
+that WRITES rather than the ones that bootstrap.
+**Done when:** a project named after one of its own source directories no longer gets rc 1 from
+`init` on every run; the report's attribution is chosen from the full product of two facts about the
+tree; each rewritten test is verified RED against `HEAD`; `sync-check` back to rc 0 and
+`beadloom ci` rc 0.
 
 ## Progress
 
@@ -28,8 +32,10 @@ a reason, and `beadloom ci` is rc 0.
 - [x] Wave 4b — `.6` dev (closed; wizard rc 0 → rc 1 on the sabotaged fixture, `beadloom ci` rc 0)
 - [ ] Wave 4b — `.7` test (closed) / `.8` re-review (fix cycle)
 - [x] Wave 4c — `.9` dev (`9eac01f`) / `.10` test (`28f1cd2`) / `.11` review (launched)
-- [x] Wave 4d — `.12` dev (`5bdd1b0`) / `.13` review (launched)
-- [ ] Wave 5 — `.5` tech-writer (re-pointed a third time: now depends on `.13`)
+- [x] Wave 4d — `.12` dev (`5bdd1b0`) / `.13` review (closed, 3 majors)
+- [x] Wave 4e — `.14` dev (`b68ebb2`) / `.15` test (`6989d5d`) / `.16` review (closed, 4 majors)
+- [ ] Wave 4f — `.17` dev (consolidation) / `.18` dev (`--yes --mode both` imports its own skeletons)
+- [ ] Wave 5 — `.5` tech-writer (re-pointed a third time)
 - [ ] Gate green, PR opened
 
 ## Results
@@ -48,7 +54,11 @@ a reason, and `beadloom ci` is rc 0.
 | `beadloom-e8s4.10` | ✓ done | audit rather than quota. `.9`'s negative assertions already existed and their red was re-derived independently against `9eac01f^` (9 failed / 54 passed). **`.9`'s claim that all 20 were red is overstated — 11 are guards that cannot fail.** Added 3 tests: one kills a mutant the whole suite survived; two make `.9`'s comment-only exclusion executable and are declared guards. Commit `28f1cd2`. |
 | `beadloom-e8s4.11` | ✓ done | REVIEW ISSUES: 0 critical, 1 major — the withdrawal line on the unloadable-rules branch. Confirmed `.10`'s routed finding by running the wizard on five scratch projects. |
 | `beadloom-e8s4.12` | ✓ done | the shared withdrawal now reads "The scaffold above was written, but the check that follows it did not pass." — no rule claim, no colon. One assertion pair + one acceptance scenario, both red before the fix. **The sweep found a FOURTH instance and reported it instead of widening the commit.** Commit `5bdd1b0`. |
-| `beadloom-e8s4.13` | In Progress | fourth-pass review launched, with no path named |
+| `beadloom-e8s4.13` | ✓ done | fourth-pass review: 0 critical, 3 major — the stale index on `--mode both`, the report naming `services.yml` for a node from `imported.yml`, and the `docs/services/cli.md` surface drift (routed to `.5`). |
+| `beadloom-e8s4.14` | ✓ done | `import_docs` received the domain-parent post-condition, and the reindex moved to the end of `non_interactive_init` so the verdict stops judging an index that predates the run's last graph file. Commit `b68ebb2`. |
+| `beadloom-e8s4.15` | ✓ done | the mode axis, and the branch enumerator re-seeded from `write_yaml_atomic` — the one commit point every graph YAML routes through — so a second writer joins the instrument on the day it is written. Commit `6989d5d`. |
+| `beadloom-e8s4.16` | ✓ done | fifth-pass review: 0 critical, 4 major. The root guard counting occurrences (a release blocker), the `--mode import` carve-out that survives one command, the withdrawal bound to one branch of three, and `--yes --mode both` importing its own skeletons (routed to `.18`). |
+| `beadloom-e8s4.17` | ✓ done | the common cause, not four instances. Root candidates counted by DISTINCT ref_id; the bootstrap post-condition over every kind; the verdict taken by every branch that writes a graph file, with `--import` re-indexing what it wrote; attribution chosen from a table over the full `(graph, rules)` product sampled off the tree by digest rather than off one writer's return value; the withdrawal printed by the verdict so no caller can decline it; the `ci` line stating the step's name and summary instead of quoting one of three renderings. Resumed from an authentication-killed attempt: its uncommitted work was read, judged sound and built on, with one false docstring sentence in it corrected. |
 
 ## Notes
 

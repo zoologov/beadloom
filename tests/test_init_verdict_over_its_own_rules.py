@@ -39,6 +39,7 @@ from click.testing import CliRunner
 
 from beadloom.onboarding.scanner.bootstrap import bootstrap_project
 from beadloom.services.cli import main
+from beadloom.services.commands import setup as init_command
 
 #: The line the wizard prints to withdraw its completion claim, imported rather
 #: than spelled again here: a reword should not leave this module asserting the
@@ -110,6 +111,28 @@ THE_WIZARD_THAT_EDITS = InitBranch(
 )
 
 BRANCH_IDS = [branch.name for branch in THE_BRANCHES]
+
+
+def _the_modes_the_flag_offers() -> tuple[str, ...]:
+    """The `--mode` values, read off the command's own `click.Choice`.
+
+    Not written out, for the reason `THE_BRANCHES` is checked against `init`'s
+    source in `tests/test_init_branches_that_reach_the_bootstrap.py`: a mode
+    added to the flag and not to a tuple here would be a mode with no case, and
+    a case that is not written is a case that does not fail.
+
+    It lives in this module rather than in `tests/test_init_agrees_across_its_
+    modes.py`, which is where BDL-067 `.15` wrote it, because `.17` needs the
+    same axis here and that module already imports from this one. One derivation
+    of one fact, in the module the other imports.
+    """
+    option = next(p for p in init_command.init.params if p.name == "init_mode")
+    choices = getattr(option.type, "choices", ())
+    return tuple(str(choice) for choice in choices)
+
+
+#: Every mode `init` accepts, derived once at import.
+THE_MODES = _the_modes_the_flag_offers()
 
 #: A `rules.yml` the loader refuses: no `version` key. This is what a hand edit
 #: leaves behind, and `bootstrap_project` never rewrites a rules file that is
@@ -575,56 +598,77 @@ class TestInitOverRulesTheBootstrapItselfWrote:
         assert THE_BUG_REPORT_REQUEST in result.output, result.output
 
 
-class TestTheWizardWithdrawsItsCompletionClaim:
-    """`Initialization complete!` is printed, and then the command exits 1.
+@pytest.mark.parametrize("branch", THE_BRANCHES, ids=BRANCH_IDS)
+class TestEveryBranchWithdrawsTheClaimItHasAlreadyMade:
+    """Each branch announces a scaffold above the verdict, so each withdraws it.
 
-    BDL-067 `.9`, the review's minor 2. `interactive_init` prints its own tail —
-    `Initialization complete!`, `Generated:`, `Next steps:` — before it returns,
-    and only then does `init` take the verdict. The `--bootstrap` branch takes
-    its verdict before its `Next steps`, so the two branches read differently and
-    the wizard makes a success claim it immediately withdraws. The rc is right
-    and the error is last, so the fix is one line that withdraws the claim rather
-    than a move of the check into `interactive_init`, which would cross a layer.
+    BDL-067 `.17`, the review of `.16`'s major 3. Until `.17` the withdrawal was
+    a `claim_to_withdraw` argument and one of the call sites passed it, and the
+    constant's own docstring said the `--bootstrap` branch "takes its verdict
+    first and never makes the claim". It makes it: four check marks, then the
+    error, no withdrawal — measured by the review over an adopter's own
+    `rules.yml`. `--yes` makes it too, `Initialized beadloom (mode: ...)` and its
+    summary. The false sentence is why the omission read as a decision for two
+    waves.
+
+    So this class is parametrised over `THE_BRANCHES` rather than written about
+    the wizard, and the line is printed by `_verdict_on_the_generated_graph`
+    itself rather than passed in — a caller that forgets it is not a shape the
+    code has.
+
+    The claim each branch makes is spelled differently in each branch, so it is
+    not written out per branch here: the anti-vacuity case asserts only that the
+    branch printed SOMETHING before the withdrawal, which is the fact the
+    withdrawal depends on and the one a fourth branch would also have to fail.
+    `THE_COMPLETION_CLAIM` stays as the wizard's own case, because that exact
+    string is what BDL-067 `.9` was reported against.
     """
 
-    def _wizard_over_a_failing_graph(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    def _over_a_failing_graph(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, branch: InitBranch
     ) -> Any:
         project = typescript_project(tmp_path / "orders-web")
-        _a_bootstrap_that_forgets_the_edge(monkeypatch, INIT_FLOW_BINDING)
-        return _the_branch_reported(_init(project.root, THE_BRANCHES[-1]))
+        _a_bootstrap_that_forgets_the_edge(monkeypatch, branch.binding)
+        return _the_branch_reported(_init(project.root, branch))
 
-    def test_the_claim_it_withdraws_is_actually_made(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    def test_the_branch_claims_something_before_the_withdrawal(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, branch: InitBranch
     ) -> None:
-        """Anti-vacuity: a wizard that never claimed completion needs no withdrawal."""
-        result = self._wizard_over_a_failing_graph(tmp_path, monkeypatch)
+        """Anti-vacuity: a branch that announced nothing needs no withdrawal."""
+        result = self._over_a_failing_graph(tmp_path, monkeypatch, branch)
 
-        assert THE_COMPLETION_CLAIM in result.output, result.output
+        withdrawn = result.output.find(THE_WITHDRAWAL)
+        assert withdrawn != -1, result.output
+        announced = [
+            line for line in result.output[:withdrawn].splitlines() if line.strip()
+        ]
+        assert announced, (
+            f"the {branch.name} branch printed nothing before the withdrawal, so "
+            "there is no claim for it to withdraw and this case asserts nothing"
+        )
 
     def test_the_claim_is_withdrawn_before_the_failure_is_reported(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, branch: InitBranch
     ) -> None:
-        result = self._wizard_over_a_failing_graph(tmp_path, monkeypatch)
+        result = self._over_a_failing_graph(tmp_path, monkeypatch, branch)
 
-        claimed = result.output.index(THE_COMPLETION_CLAIM)
         withdrawn = result.output.find(THE_WITHDRAWAL)
         reported = result.output.index(THE_FAILURE_REPORT)
 
         assert withdrawn != -1, result.output
-        assert claimed < withdrawn < reported, result.output
+        assert withdrawn < reported, result.output
 
     def test_the_claim_is_withdrawn_over_a_rules_file_that_will_not_load_too(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, branch: InitBranch
     ) -> None:
-        """The other shape of red the wizard can reach, and the same withdrawal.
+        """The other shape of red, and the same withdrawal, on every branch.
 
         `_verdict_on_the_generated_graph` prints the withdrawal before it chooses
         between the two report shapes, so an unloadable `rules.yml` gets it as
         well. Only the evaluated-rules shape was covered by BDL-067 `.9`: moving
-        the withdrawal into the `else` would have left the wizard announcing
-        `Initialization complete!` and then reporting that the rules file could
-        not be read, which is the same defect on the branch `.6` was written for.
+        the withdrawal into the `else` would have left `init` announcing a
+        scaffold and then reporting that the rules file could not be read, which
+        is the same defect on the branch `.6` was written for.
 
         The last two assertions are BDL-067 `.12`, the review's major 1 on `.11`.
         Until then this test owned only the line's POSITION, and the wording it
@@ -635,35 +679,59 @@ class TestTheWizardWithdrawsItsCompletionClaim:
         withdrawal string introduced later is judged too.
         """
         project = typescript_project(tmp_path / "orders-web")
-        _a_bootstrap_whose_rules_file_will_not_load(monkeypatch, INIT_FLOW_BINDING)
+        _a_bootstrap_whose_rules_file_will_not_load(monkeypatch, branch.binding)
+
+        result = _the_branch_reported(_init(project.root, branch))
+
+        # Anti-vacuity: with no parse error there is nothing to place the line
+        # against, and the ordering below would be about lines that never came.
+        assert THE_PARSE_ERROR in result.output, result.output
+        withdrawn = result.output.find(THE_WITHDRAWAL)
+        reported = result.output.index(THE_FAILURE_REPORT)
+
+        assert withdrawn != -1, result.output
+        assert withdrawn < reported, result.output
+
+        the_line = result.output[withdrawn:].splitlines()[0]
+        assert "rule" not in the_line.lower(), the_line
+        assert not the_line.rstrip().endswith(":"), the_line
+
+    def test_a_green_run_withdraws_nothing(
+        self, tmp_path: Path, branch: InitBranch
+    ) -> None:
+        """The withdrawal is part of the failure report, not part of the tail."""
+        project = typescript_project(tmp_path / "orders-web")
+
+        result = _init(project.root, branch)
+
+        assert result.exit_code == 0, result.output
+        assert THE_WITHDRAWAL not in result.output, result.output
+
+
+class TestTheWizardsOwnCompletionClaimIsTheOneItWithdraws:
+    """The wizard's tail is the string BDL-067 `.9` was reported against.
+
+    Kept as its own case after the class above widened to every branch: the
+    generic claim there is "the branch printed something first", and this one
+    names what the wizard printed, so a wizard that stopped saying
+    `Initialization complete!` before a red verdict is still a change somebody
+    has to notice.
+    """
+
+    def test_the_claim_it_withdraws_is_actually_made(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        project = typescript_project(tmp_path / "orders-web")
+        _a_bootstrap_that_forgets_the_edge(monkeypatch, INIT_FLOW_BINDING)
 
         result = _the_branch_reported(_init(project.root, THE_BRANCHES[-1]))
 
-        # Anti-vacuity: with no claim there is nothing to withdraw, and the
-        # ordering below would be a statement about lines that never appeared.
-        assert THE_COMPLETION_CLAIM in result.output, result.output
-        assert THE_PARSE_ERROR in result.output, result.output
         claimed = result.output.index(THE_COMPLETION_CLAIM)
         withdrawn = result.output.find(THE_WITHDRAWAL)
         reported = result.output.index(THE_FAILURE_REPORT)
 
         assert withdrawn != -1, result.output
         assert claimed < withdrawn < reported, result.output
-
-        the_line = result.output[withdrawn:].splitlines()[0]
-        assert "rule" not in the_line.lower(), the_line
-        assert not the_line.rstrip().endswith(":"), the_line
-
-    def test_a_green_wizard_withdraws_nothing(
-        self, tmp_path: Path
-    ) -> None:
-        """The withdrawal is part of the failure report, not part of the tail."""
-        project = typescript_project(tmp_path / "orders-web")
-
-        result = _init(project.root, THE_BRANCHES[-1])
-
-        assert result.exit_code == 0, result.output
-        assert THE_WITHDRAWAL not in result.output, result.output
 
 
 #: `--yes`, spelled with `--force`. Not a fourth branch and not in
@@ -789,6 +857,19 @@ def _an_import_that_adds_an_orphan(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("beadloom.onboarding.scanner.init_flow.import_docs", adds_an_orphan)
 
 
+def _the_nodes_the_index_holds(project_root: Path) -> set[str]:
+    """The ref_ids in the SQLite index, which is what `lint_step` reads.
+
+    Read off the index rather than off the YAML on disk: the two disagree
+    exactly when a run wrote a graph file and did not re-index, which is the
+    state a verdict must not be taken in.
+    """
+    import sqlite3
+
+    with sqlite3.connect(project_root / ".beadloom" / "beadloom.db") as conn:
+        return {row[0] for row in conn.execute("SELECT ref_id FROM nodes")}
+
+
 def _init_over_code_and_docs(project_root: Path) -> Any:
     return CliRunner().invoke(
         main, ["init", "--yes", "--mode", "both", "--project", str(project_root)]
@@ -845,13 +926,38 @@ class TestTheVerdictSeesEveryGraphFileTheCommandWrote:
         assert _lint_strict(project) == 0
 
 
-class TestOnlyARunThatWroteAGraphIsJudged:
-    """The report's headline says "the graph this command just wrote".
+class TestEveryRunThatWroteAGraphFileIsJudged:
+    """A run is judged because it WROTE a graph file, not because it bootstrapped.
 
-    `--mode import` writes no bootstrap graph and no rules, so there is no such
-    graph to speak about. The call was unreachable in effect only because an
-    import-only run leaves no `rules.yml` and the linter returns clean before it
-    reads the index — an accident of another module, not a decision here.
+    BDL-067 `.17`, the review of `.16`'s major 2. The guard used to be
+    `if "bootstrap" in result`, and the class it replaces here asserted that an
+    import-only run took no verdict. The reason given was the report's headline —
+    both halves of it opened with "the graph this command just wrote", so a run
+    that wrote no bootstrap graph had nothing to speak about. That reason is now
+    gone: the headline is chosen from what this run actually wrote, so a run may
+    report on a graph it did not write and say so.
+
+    What the old guard cost was measured, two commands on one tree:
+    `init --yes --mode import` left unparented domains in `imported.yml` and
+    exited 0; the wizard's re-init does not delete `.beadloom/`, so the next run
+    wrote `domain-needs-parent` and met them. #192's shape was deferred by one
+    command rather than prevented, and the run that reported it was not the run
+    that wrote the nodes.
+
+    The population is every mode the flag offers, read off the flag, plus the
+    `--import` branch, which is a branch of the command rather than a mode. The
+    old class ranged over one mode and one alternative, which is how it read as a
+    decision about `import` rather than as a decision about writers.
+
+    STATED LIMIT, because part 2(a) does not reach its own stated goal. Judging
+    every writing run does not make the import-only run report its own orphans:
+    on a virgin tree that run writes no `rules.yml`, so `lint_step` evaluates
+    nothing and passes. The verdict is taken and is honestly green. What the
+    change buys is that no branch is excluded by an accident of another module,
+    and that the run which does meet the rule describes it truthfully. Closing
+    the deferral itself needs the parent post-condition stated over the graph on
+    disk rather than over each writer's own output, which is a behaviour change
+    beyond this bead.
     """
 
     def _verdicts_taken(self, monkeypatch: pytest.MonkeyPatch) -> list[Path]:
@@ -865,32 +971,66 @@ class TestOnlyARunThatWroteAGraphIsJudged:
         )
         return taken
 
-    def test_an_import_only_run_takes_no_verdict(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    def test_the_modes_axis_is_not_empty(self) -> None:
+        """Anti-vacuity: an empty `THE_MODES` would run no case below."""
+        assert set(THE_MODES) >= {"bootstrap", "import", "both"}, THE_MODES
+
+    @pytest.mark.parametrize("mode", THE_MODES, ids=list(THE_MODES))
+    def test_every_mode_takes_a_verdict(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
     ) -> None:
         project = typescript_project(tmp_path / "orders-web").root
         _docs_the_classifier_cannot_place(project)
         taken = self._verdicts_taken(monkeypatch)
 
         result = CliRunner().invoke(
-            main, ["init", "--yes", "--mode", "import", "--project", str(project)]
+            main, ["init", "--yes", "--mode", mode, "--project", str(project)]
         )
 
         assert result.exit_code == 0, result.output
-        assert taken == [], "an import-only run judged a graph it did not write"
+        # Anti-vacuity: the run wrote a graph file, so "it was judged" is a claim
+        # about a writing run and not about one that did nothing.
+        assert list((project / ".beadloom" / "_graph").glob("*.yml")), result.output
+        assert taken == [project], f"mode {mode!r} wrote a graph file unjudged"
 
-    def test_a_run_that_bootstraps_as_well_is_judged(
+    def test_the_import_branch_takes_a_verdict_too(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Anti-vacuity: the recorder records when there is something to record."""
+        """`--import` is a branch, not a mode, and it writes `imported.yml`."""
         project = typescript_project(tmp_path / "orders-web").root
         _docs_the_classifier_cannot_place(project)
         taken = self._verdicts_taken(monkeypatch)
 
-        result = _init_over_code_and_docs(project)
+        result = CliRunner().invoke(
+            main, ["init", "--import", str(project / "docs"), "--project", str(project)]
+        )
 
         assert result.exit_code == 0, result.output
-        assert taken == [project]
+        assert (project / ".beadloom" / "_graph" / "imported.yml").is_file(), result.output
+        assert taken == [project], result.output
+
+    def test_the_import_branch_reindexes_what_it_wrote_before_judging_it(
+        self, tmp_path: Path
+    ) -> None:
+        """The verdict is only worth the index it reads.
+
+        `lint_step` reads the index without rebuilding it, so a branch that
+        writes a graph file and judges an index that predates it reports on a
+        tree nobody has. That is the stale-index defect BDL-067 `.14` closed on
+        `--yes --mode both`, and the `--import` branch carried it until `.17`
+        gave it a verdict at all — it used to tell the adopter to re-index by
+        hand instead. Stated over the node the run wrote, so the claim is that
+        the index HOLDS it rather than that some command ran.
+        """
+        project = typescript_project(tmp_path / "orders-web").root
+        _docs_the_classifier_cannot_place(project)
+
+        result = CliRunner().invoke(
+            main, ["init", "--import", str(project / "docs"), "--project", str(project)]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "payments" in _the_nodes_the_index_holds(project)
 
 
 class TestTheReportNamesTheFileEachViolatingNodeCameFrom:
@@ -934,28 +1074,108 @@ class TestTheReportNamesTheFileEachViolatingNodeCameFrom:
         assert any(THE_BOOTSTRAP_FILE in line for line in named), named
 
 
-class TestTheReportQuotesTheLineTheGateWillPrint:
-    """The line exists to pre-empt the adopter's next command, so it must quote it.
+def _the_formats_ci_offers() -> tuple[str, ...]:
+    """The `--format` values, read off `ci`'s own `click.Choice`.
 
-    `ci` renders `[FAIL] lint: <summary>`; the report said `lint — <summary>`,
-    which nothing prints. The expected text is rendered by `ci`'s own formatter
-    here rather than spelled again, so a reworded gate line fails this test
-    instead of quietly making the report wrong a second time.
+    Derived for the reason `THE_MODES` is: a fourth renderer added to the flag
+    and not to a list here would be a renderer with no case, and `init`'s promise
+    about what `beadloom ci` prints is a promise about whichever one runs.
+    """
+    from beadloom.services.commands.federation import ci
+
+    option = next(p for p in ci.params if p.name == "fmt")
+    choices = getattr(option.type, "choices", ())
+    return tuple(str(choice) for choice in choices)
+
+
+#: Every rendering `beadloom ci` can produce, derived once at import.
+THE_GATE_FORMATS = _the_formats_ci_offers()
+
+
+class TestTheReportPromisesWhatEveryRendererPrints:
+    """The line pre-empts the adopter's next command, so it must survive it.
+
+    BDL-067 `.17`, the review of `.16`'s minor. The class this replaces rendered
+    the Gate through `_format_gate_rich` and asserted `init` quoted that line
+    back. `ci` picks `rich` only on a TTY and `github` otherwise, and the github
+    renderer builds its own step line rather than calling `gate_step_line` — so
+    the instrument introduced to stop this line drifting was itself scoped to one
+    of three renderings, and wrong in exactly the scripted context `--yes` serves.
+    Measured in one non-TTY shell: `init` promised
+    `[FAIL] lint: 2 error(s), 0 warning(s)`; `ci` on the same tree printed
+    `::notice::lint FAIL: 2 error(s), 0 warning(s)`.
+
+    So the report states the two FACTS every renderer reads off the step — its
+    name and its summary — instead of quoting one renderer's spelling, and the
+    cases below range over every format the flag offers. A renderer that stopped
+    printing the step's summary would fail here rather than making the promise
+    false for whoever met it.
     """
 
-    def test_the_quoted_line_is_the_one_the_gate_renders(
+    def _a_failing_step(self, project_root: Path) -> Any:
+        from beadloom.application.gate import lint_step
+
+        step = lint_step(project_root)
+        assert not step.passed, "the fixture is green, so there is no promise to check"
+        return step
+
+    def _the_report(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
+        project = typescript_project(tmp_path / "orders-web")
+        _a_bootstrap_that_forgets_the_edge(monkeypatch, INIT_FLOW_BINDING)
+        return project.root, _the_branch_reported(_init(project.root, THE_BRANCHES[0]))
+
+    def test_the_format_axis_is_not_empty(self) -> None:
+        """Anti-vacuity: one renderer is the assumption this class was written for."""
+        assert len(THE_GATE_FORMATS) > 1, THE_GATE_FORMATS
+
+    def test_the_report_states_the_step_name_and_its_summary(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from beadloom.application.gate import GateResult, lint_step
-        from beadloom.services.commands.federation import _format_gate_rich
+        project_root, result = self._the_report(tmp_path, monkeypatch)
+        step = self._a_failing_step(project_root)
 
-        project = typescript_project(tmp_path / "orders-web").root
-        _a_bootstrap_that_forgets_the_edge(monkeypatch, INIT_FLOW_BINDING)
+        assert step.name in result.output, result.output
+        assert step.summary in result.output, result.output
 
-        result = _the_branch_reported(_init(project, THE_BRANCHES[0]))
+    @pytest.mark.parametrize("fmt", THE_GATE_FORMATS, ids=list(THE_GATE_FORMATS))
+    def test_every_renderer_prints_the_facts_the_report_promised(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fmt: str
+    ) -> None:
+        from beadloom.application.gate import GateResult
+        from beadloom.services.commands.federation import _format_gate
 
-        rendered = _format_gate_rich(GateResult(steps=[lint_step(project)]))
-        the_gate_line = next(
-            line.strip() for line in rendered.splitlines() if "] lint:" in line
-        )
-        assert the_gate_line in result.output, (the_gate_line, result.output)
+        project_root, _ = self._the_report(tmp_path, monkeypatch)
+        step = self._a_failing_step(project_root)
+
+        rendered = _format_gate(GateResult(steps=[step]), fmt)
+
+        assert step.name in rendered, (fmt, rendered)
+        assert step.summary in rendered, (fmt, rendered)
+
+    @pytest.mark.parametrize("fmt", THE_GATE_FORMATS, ids=list(THE_GATE_FORMATS))
+    def test_the_report_quotes_no_renderer_s_own_step_line(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fmt: str
+    ) -> None:
+        """The defect, stated directly: a quoted spelling is one renderer's.
+
+        Any line a renderer builds for the step is that renderer's shape, and
+        quoting it makes the promise false wherever a different one runs. This
+        fails against the pre-`.17` report for `github` and `json`, which is the
+        case the review measured.
+        """
+        from beadloom.application.gate import GateResult
+        from beadloom.services.commands.federation import _format_gate
+
+        project_root, result = self._the_report(tmp_path, monkeypatch)
+        step = self._a_failing_step(project_root)
+
+        rendered = _format_gate(GateResult(steps=[step]), fmt)
+        lines_about_the_step = [
+            line.strip() for line in rendered.splitlines() if step.name in line.strip()
+        ]
+        # Anti-vacuity: a renderer that never mentions the step would make the
+        # claim below hold over an empty list.
+        assert lines_about_the_step, (fmt, rendered)
+
+        quoted = [line for line in lines_about_the_step if line in result.output]
+        assert quoted == [], (fmt, quoted, result.output)

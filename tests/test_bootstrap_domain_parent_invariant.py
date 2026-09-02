@@ -19,7 +19,7 @@ import pytest
 
 from beadloom.onboarding.presets import PRESETS
 from beadloom.onboarding.scanner.bootstrap import (
-    _missing_domain_parent_edges,
+    _missing_parent_edges,
     bootstrap_project,
 )
 
@@ -81,7 +81,7 @@ class TestTheInvariantHoldsForEveryPreset:
 
 
 class TestTheHelperStatesThePostCondition:
-    """`_missing_domain_parent_edges` names exactly the domains that lack a parent."""
+    """`_missing_parent_edges` names exactly the nodes that lack a parent."""
 
     def test_a_parentless_domain_gets_one_edge_to_the_root(self) -> None:
         nodes = [
@@ -89,7 +89,7 @@ class TestTheHelperStatesThePostCondition:
             {"ref_id": "src", "kind": "domain"},
         ]
 
-        missing = _missing_domain_parent_edges(nodes, [], "orders (web)")
+        missing = _missing_parent_edges(nodes, [], "orders (web)")
 
         assert missing == [{"src": "src", "dst": "orders (web)", "kind": "part_of"}]
 
@@ -105,7 +105,7 @@ class TestTheHelperStatesThePostCondition:
             {"src": "platform-orders", "dst": "platform", "kind": "part_of"},
         ]
 
-        assert _missing_domain_parent_edges(nodes, edges, "supply-chain") == []
+        assert _missing_parent_edges(nodes, edges, "supply-chain") == []
 
     def test_a_depends_on_edge_does_not_count_as_a_parent(self) -> None:
         """`domain-needs-parent` requires `part_of`; any other kind leaves it violated."""
@@ -116,7 +116,7 @@ class TestTheHelperStatesThePostCondition:
         ]
         edges = [{"src": "billing", "dst": "audit", "kind": "depends_on"}]
 
-        missing = _missing_domain_parent_edges(nodes, edges, "ledger")
+        missing = _missing_parent_edges(nodes, edges, "ledger")
 
         assert {e["src"] for e in missing} == {"billing", "audit"}
 
@@ -128,13 +128,26 @@ class TestTheHelperStatesThePostCondition:
         """
         nodes = [{"ref_id": "ledger", "kind": "service"}, {"ref_id": "ledger", "kind": "domain"}]
 
-        assert _missing_domain_parent_edges(nodes, [], "ledger") == []
+        assert _missing_parent_edges(nodes, [], "ledger") == []
 
-    def test_nodes_of_other_kinds_are_not_this_rule_s_business(self) -> None:
+    def test_nodes_of_every_kind_are_attached_not_only_domains(self) -> None:
+        """BDL-067 `.17`, the review of `.16`'s minor 2.
+
+        The pass was scoped to `kind == "domain"` — today's ruled kind — while
+        the cluster loop that attaches top-level nodes to the root reads no kind
+        at all, and the importer's statement of the same post-condition
+        (`doc_classify._missing_parent_edges`) covers every kind and says why.
+        Two writers of one invariant disagreed about its population, and
+        `generate_rules` already writes `feature-needs-parent` for the kind this
+        one skipped.
+        """
         nodes = [
             {"ref_id": "ledger", "kind": "service"},
             {"ref_id": "models", "kind": "entity"},
             {"ref_id": "rest", "kind": "feature"},
         ]
 
-        assert _missing_domain_parent_edges(nodes, [], "ledger") == []
+        missing = _missing_parent_edges(nodes, [], "ledger")
+
+        assert {e["src"] for e in missing} == {"models", "rest"}
+        assert {e["dst"] for e in missing} == {"ledger"}

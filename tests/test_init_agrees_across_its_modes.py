@@ -64,7 +64,6 @@ from click.testing import CliRunner
 from beadloom.application.gate import lint_step
 from beadloom.onboarding.scanner import init_flow
 from beadloom.services.cli import main
-from beadloom.services.commands import setup as init_command
 from tests.adopter_project import typescript_project
 
 # The divergences are the sibling module's, imported rather than re-written: two
@@ -73,6 +72,7 @@ from tests.adopter_project import typescript_project
 from tests.test_init_verdict_over_its_own_rules import (
     INIT_FLOW_BINDING,
     THE_ADDED_ORPHAN,
+    THE_MODES,
     THE_RULE,
     _a_bootstrap_that_forgets_the_edge,
     _an_import_that_adds_an_orphan,
@@ -93,19 +93,6 @@ UNCLASSIFIABLE_DOCS = {
 #: The two graph files `init` can write, by the name each writer gives it.
 THE_BOOTSTRAP_FILE = "services.yml"
 THE_IMPORT_FILE = "imported.yml"
-
-
-def _the_modes_the_flag_offers() -> tuple[str, ...]:
-    """The `--mode` values, read off the command's own `click.Choice`.
-
-    Not written out here for the same reason `THE_BRANCHES` is checked against
-    `init`'s source in `tests/test_init_branches_that_reach_the_bootstrap.py`: a
-    mode added to the flag and not to this tuple would be a mode with no case,
-    and a case that is not written is a case that does not fail.
-    """
-    option = next(p for p in init_command.init.params if p.name == "init_mode")
-    choices = getattr(option.type, "choices", ())
-    return tuple(str(choice) for choice in choices)
 
 
 def _the_modes_the_wizard_offers() -> frozenset[str]:
@@ -140,8 +127,11 @@ def _the_modes_the_wizard_offers() -> frozenset[str]:
     return frozenset(offered)
 
 
-#: Every mode `init` accepts, derived once at import.
-THE_MODES = _the_modes_the_flag_offers()
+#: `THE_MODES` — every mode `init` accepts, read off the flag's own
+#: `click.Choice` — is imported from the sibling module above rather than derived
+#: a second time here. BDL-067 `.17` moved the derivation there because it needs
+#: the same axis and this module already imports from it; two derivations of one
+#: fact are two things that can disagree.
 
 #: The modes that run the bootstrap, and therefore the modes in which `init`
 #: writes `rules.yml` and takes a verdict. Written here and bound to behaviour by
@@ -712,12 +702,18 @@ class TestTheReportNamesTheNodeTheSecondWriterLeftUnparented:
 class TestAnImportOnlyRunOnAVirginProjectNamesNoParent:
     """The green above, with its reason checked instead of assumed.
 
-    `--mode import` reaches no verdict at all — `init` takes one only when the
-    run bootstrapped, since both of the report's headlines open with "the graph
-    this command just wrote". The tree it leaves is clean for a second and
-    independent reason: no `rules.yml` is on disk, so `lint --strict` evaluates
-    nothing. If either of those ever stops holding, an import-only run can leave
-    a red tree behind a green exit code, and this case is where that is noticed.
+    ONE reason holds it up, since BDL-067 `.17`. `--mode import` now takes the
+    verdict like every other mode — the guard is what this run WROTE, not which
+    writer ran — so the tree it leaves is clean for a single reason: no
+    `rules.yml` is on disk, and `lint --strict` evaluates nothing. Until `.17`
+    there were two, and the first of them was a carve-out whose stated reason
+    ("both of the report's headlines open with *the graph this command just
+    wrote*") held only until the next `init` on the same tree, which is the
+    review of `.16`'s major 2.
+
+    That leaves the green resting on one fact rather than two, so it is the fact
+    this class checks. If a rules file ever reaches an import-only run, the
+    verdict is there to meet it and this case is where the change is noticed.
     """
 
     def test_an_import_only_run_writes_no_rules_file(self, tmp_path: Path) -> None:
@@ -742,6 +738,13 @@ class TestAnImportOnlyRunOnAVirginProjectNamesNoParent:
         decision was to name no parent rather than guess a destination the graph
         does not contain, and it is safe because no `rules.yml` this command
         wrote is on disk to fail — which the case above measures.
+
+        "No single root" ranges over distinct ref_ids since BDL-067 `.17`: a
+        graph that names one root twice is one candidate, and the bootstrap
+        produces exactly that on a project named after one of its own source
+        directories (the review of `.16`, major 1). It is not this fixture's
+        shape — there is no root here at all — and it is stated in
+        `tests/test_import_docs_parents_what_it_writes.py`.
 
         Pinned here so that giving `import_docs` a guessed root, or writing rules
         into an import-only run, fails a case instead of quietly re-opening

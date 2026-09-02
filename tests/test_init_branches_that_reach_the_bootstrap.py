@@ -177,22 +177,51 @@ class DeferredBranch:
     tells_the_adopter: str
 
 
-#: The one deferral, and it is the same shape as the wizard's `edit` answer:
-#: the branch has written a file and handed the work back, so there is no settled
-#: state to judge. BDL-067 `.14` decided this explicitly and put it in
-#: `docs/services/mcp.md` as a fact rather than papering over it.
-THE_DEFERRED_BRANCHES = (
-    DeferredBranch(
-        guard=("import_path",),
-        because=(
-            "`init --import` re-indexes nothing and tells the adopter to run "
-            "`beadloom reindex`, so there is no index of its own output for a "
-            "verdict to read. Judging the stale index instead is precisely the "
-            "defect BDL-067 `.14` closed on `--yes --mode both`."
-        ),
-        tells_the_adopter="beadloom reindex",
-    ),
-)
+#: No branch of `init` defers any more, and that is the whole of BDL-067 `.17`'s
+#: part 2(a). The one entry here was `--import`, deferred because it re-indexed
+#: nothing and told the adopter to run `beadloom reindex` — so there was no index
+#: of its own output for a verdict to read. `.17` gave that branch the reindex
+#: instead of the instruction, which removes the reason rather than the check.
+#:
+#: The carve-out was safe only until the next `init` on the same tree. The
+#: wizard's re-init does not delete `.beadloom/`, so `imported.yml` survived into
+#: a later bootstrap that wrote `domain-needs-parent` and met nodes an earlier run
+#: had left unparented — reported by a run that had written neither (the review of
+#: `.16`, major 2). A deferral is a decision about ONE branch, and this epic's
+#: standing lesson is that a decision about one branch is the shape the next
+#: neighbour is found in.
+#:
+#: The machinery stays. An empty tuple makes the two cases below vacuous, so both
+#: are stated as functions and exercised against a synthetic declaration in
+#: `TestTheDeferralChecksStillBite`: a deferral declared tomorrow is checked by
+#: code that was checked today.
+THE_DEFERRED_BRANCHES: tuple[DeferredBranch, ...] = ()
+
+
+def _deferrals_naming_a_branch_that_is_gone(
+    sites: tuple[GraphWritingCallSite, ...], declared: tuple[DeferredBranch, ...]
+) -> set[tuple[str, ...]]:
+    """Declared guards that no unjudged branch of the source has."""
+    unjudged = {site.guard for site in sites if not site.takes_verdict}
+    return {branch.guard for branch in declared} - unjudged
+
+
+def _deferrals_that_tell_the_adopter_nothing(
+    sites: tuple[GraphWritingCallSite, ...], declared: tuple[DeferredBranch, ...]
+) -> list[str]:
+    """Declared deferrals whose branch no longer carries its own instruction."""
+    by_guard = {site.guard: site for site in sites}
+    silent: list[str] = []
+    for branch in declared:
+        site = by_guard.get(branch.guard)
+        if site is None:
+            silent.append(f"no branch under {branch.guard}: {branch.because}")
+        elif branch.tells_the_adopter not in site.follows:
+            silent.append(
+                f"the branch under {branch.guard} takes no verdict and no longer "
+                f"tells the adopter {branch.tells_the_adopter!r}: {site.follows!r}"
+            )
+    return silent
 
 
 def _called_names(node: ast.AST) -> set[str]:
@@ -452,6 +481,21 @@ A_FOURTH_BRANCH_THAT_WRITES_WITHOUT_BOOTSTRAPPING = A_COMMAND_LIKE_INIT.replace(
 )
 
 
+#: BDL-067 `.17`. The same fourth branch, deferring OUT LOUD: it writes a graph
+#: file, takes no verdict, and tells the adopter what to run instead. This is the
+#: shape a declared deferral has to have, and `TestTheDeferralChecksStillBite`
+#: uses it because `THE_DEFERRED_BRANCHES` is now empty and the real command has
+#: no such branch left to read the check against.
+A_FOURTH_BRANCH_THAT_DEFERS_AND_SAYS_SO = A_COMMAND_LIKE_INIT.replace(
+    "    result = interactive_init(project_root)",
+    "    if rescan:\n"
+    "        result = import_docs(project_root, project_root)\n"
+    "        click.echo('Next: run beadloom reindex')\n"
+    "        return\n"
+    "    result = interactive_init(project_root)",
+)
+
+
 class TestTheEnumeratorItself:
     """The instrument, before anything is trusted to it.
 
@@ -697,12 +741,13 @@ class TestEveryBranchOfInitThatWritesAGraphFileTakesAVerdict:
         self, writer_call_sites: tuple[GraphWritingCallSite, ...]
     ) -> None:
         """A carve-out for a branch that was deleted excuses nothing and hides that."""
-        found = {site.guard for site in writer_call_sites if not site.takes_verdict}
-        declared = {branch.guard for branch in THE_DEFERRED_BRANCHES}
+        stale = _deferrals_naming_a_branch_that_is_gone(
+            writer_call_sites, THE_DEFERRED_BRANCHES
+        )
 
-        assert declared <= found, (
+        assert stale == set(), (
             "these deferrals name a branch that either no longer exists or now "
-            f"takes a verdict: {sorted(declared - found)}"
+            f"takes a verdict: {sorted(stale)}"
         )
 
     def test_every_deferred_branch_hands_the_work_back_to_the_adopter(
@@ -710,20 +755,108 @@ class TestEveryBranchOfInitThatWritesAGraphFileTakesAVerdict:
     ) -> None:
         """A deferral that says nothing is a silent skip under a better name.
 
-        `init --import` is allowed to judge nothing because it has re-indexed
-        nothing and says so. Read off the branch's own remaining source, so
-        deleting the instruction turns the deferral into the defect it is a
-        carve-out from.
+        Vacuous today, and deliberately kept: `THE_DEFERRED_BRANCHES` is empty
+        since BDL-067 `.17`, so there is nothing to judge here until somebody
+        declares a deferral again. `TestTheDeferralChecksStillBite` runs the same
+        function over a synthetic declaration so that the check is known to work
+        on the day it is next needed.
         """
-        by_guard = {site.guard: site for site in writer_call_sites}
+        silent = _deferrals_that_tell_the_adopter_nothing(
+            writer_call_sites, THE_DEFERRED_BRANCHES
+        )
 
-        for branch in THE_DEFERRED_BRANCHES:
-            site = by_guard.get(branch.guard)
-            assert site is not None, f"no branch under {branch.guard}: {branch.because}"
-            assert branch.tells_the_adopter in site.follows, (
-                f"the branch under {branch.guard} takes no verdict and no longer "
-                f"tells the adopter {branch.tells_the_adopter!r}: {site.follows!r}"
-            )
+        assert silent == [], silent
+
+    def test_no_branch_defers(
+        self, writer_call_sites: tuple[GraphWritingCallSite, ...]
+    ) -> None:
+        """BDL-067 `.17`, part 2(a), stated as the fact it is.
+
+        Every branch of `init` that writes a graph file takes a verdict, so the
+        declaration above is empty because the source has nothing to declare —
+        not because somebody deleted an entry. Both halves are asserted: a
+        branch that stops taking its verdict fails the first, and an entry
+        re-added without a branch to match fails the second.
+        """
+        assert [
+            site.guard for site in writer_call_sites if not site.takes_verdict
+        ] == []
+        assert THE_DEFERRED_BRANCHES == ()
+
+
+class TestTheDeferralChecksStillBite:
+    """The two checks above, run over a declaration that is not empty.
+
+    BDL-067 `.17`. `THE_DEFERRED_BRANCHES` is empty, so both cases in the class
+    above assert over nothing. Deleting them would leave the next author to
+    write the check again; keeping them silent would leave a carve-out unchecked
+    on the day one is declared. So the checks are functions, and here they are
+    given the two shapes they exist to reject — a deferral naming a branch that
+    takes its verdict, and one whose branch tells the adopter nothing — plus the
+    shape they must accept.
+
+    The sites are the enumerator's own reading of the synthetic commands defined
+    above, so what these cases judge is the same data the real ones judge.
+    """
+
+    #: A deferral for a branch that exists, takes no verdict, and says what to do.
+    A_HONEST_DEFERRAL = DeferredBranch(
+        guard=("rescan",),
+        because="synthetic: the branch writes a file and hands the work back",
+        tells_the_adopter="beadloom reindex",
+    )
+
+    def _sites(self, writing: frozenset[str]) -> tuple[GraphWritingCallSite, ...]:
+        assert A_FOURTH_BRANCH_THAT_DEFERS_AND_SAYS_SO != A_COMMAND_LIKE_INIT, (
+            "the anchor the mutation edits is gone, so these cases judge the "
+            "unmutated command and the branch they name never existed"
+        )
+        return _call_sites_in(A_FOURTH_BRANCH_THAT_DEFERS_AND_SAYS_SO, writing)
+
+    def test_a_deferral_matching_an_unjudged_branch_is_accepted(
+        self, writing: frozenset[str]
+    ) -> None:
+        sites = self._sites(writing)
+
+        assert _deferrals_naming_a_branch_that_is_gone(
+            sites, (self.A_HONEST_DEFERRAL,)
+        ) == set()
+
+    def test_a_deferral_for_a_branch_that_takes_its_verdict_is_reported(
+        self, writing: frozenset[str]
+    ) -> None:
+        """The stale carve-out: `non_interactive` is judged in every mutant."""
+        sites = self._sites(writing)
+        stale = DeferredBranch(
+            guard=("non_interactive",), because="synthetic", tells_the_adopter="x"
+        )
+
+        assert _deferrals_naming_a_branch_that_is_gone(sites, (stale,)) == {
+            ("non_interactive",)
+        }
+
+    def test_a_deferral_whose_branch_says_nothing_is_reported(
+        self, writing: frozenset[str]
+    ) -> None:
+        """A silent skip under a better name is what the second check rejects."""
+        sites = self._sites(writing)
+        silent = DeferredBranch(
+            guard=("rescan",),
+            because="synthetic",
+            tells_the_adopter="a sentence this branch does not contain",
+        )
+
+        assert _deferrals_that_tell_the_adopter_nothing(sites, (silent,)) != []
+
+    def test_a_deferral_whose_branch_speaks_is_accepted(
+        self, writing: frozenset[str]
+    ) -> None:
+        """Anti-vacuity: the check must not reject every deferral."""
+        sites = self._sites(writing)
+
+        assert _deferrals_that_tell_the_adopter_nothing(
+            sites, (self.A_HONEST_DEFERRAL,)
+        ) == []
 
 
 class TestEveryBranchOfInitThatBootstrapsTakesAVerdict:

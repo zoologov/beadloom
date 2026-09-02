@@ -241,8 +241,14 @@ def _given_a_forgetful_bootstrap(monkeypatch: pytest.MonkeyPatch) -> None:
     `part_of` edges are taken back out of `services.yml` afterwards, which is
     what makes this a test of `init`'s verdict rather than a second test of `.1`.
 
-    `init --yes` binds `bootstrap_project` at import time in `init_flow`, so that
-    binding is the one the patch has to reach.
+    BOTH bindings are patched, since BDL-067 `.17`. `init --yes` and the wizard
+    reach `bootstrap_project` through the name `init_flow` binds at import time;
+    `init --bootstrap` imports it from the package inside the command body. Only
+    the first was patched here, so this step silently did nothing on the
+    `--bootstrap` branch and any scenario written over that branch would have run
+    an unsabotaged bootstrap and passed for the wrong reason. Confusing the two
+    bindings for the two branches is what let the wizard ship unguarded through
+    four green waves (BDL-067 `.6`), and it was still in this fixture.
     """
     real = bootstrap_project
 
@@ -261,9 +267,11 @@ def _given_a_forgetful_bootstrap(monkeypatch: pytest.MonkeyPatch) -> None:
         result["edges_generated"] = 0
         return result
 
-    monkeypatch.setattr(
-        "beadloom.onboarding.scanner.init_flow.bootstrap_project", forgetful
-    )
+    for binding in (
+        "beadloom.onboarding.scanner.init_flow.bootstrap_project",
+        "beadloom.onboarding.bootstrap_project",
+    ):
+        monkeypatch.setattr(binding, forgetful)
 
 
 @when("beadloom init is run on the project")
@@ -434,11 +442,35 @@ def _then_init_says_the_file_predates_it(world: dict[str, Any]) -> None:
 
 @then("the completion claim is withdrawn before the failure is reported")
 def _then_the_claim_is_withdrawn(world: dict[str, Any]) -> None:
-    """The wizard claims success, so it has to take the claim back in place."""
+    """Every branch claims something, so every branch has to take it back.
+
+    Written without naming any one branch's wording, since BDL-067 `.17`. It
+    used to assert the wizard's `Initialization complete!`, which made it a step
+    only the wizard could satisfy — the same shape as the code it covers, where
+    the withdrawal was passed in by the one caller that remembered. What every
+    branch shares is that it printed something above the withdrawal, and that is
+    what the anti-vacuity assertion is stated over. The wizard's own string keeps
+    its own step below.
+    """
     output = world["init"].output
-    # Anti-vacuity: with no claim there is nothing to withdraw and the ordering
-    # below would be a statement about two lines that never appeared.
-    assert THE_COMPLETION_CLAIM in output, output
+    withdrawn = output.find(WITHDRAWN_COMPLETION_CLAIM)
+    reported = output.index(THE_FAILURE_REPORT)
+    assert withdrawn != -1, output
+    # Anti-vacuity: with nothing announced there is nothing to withdraw, and the
+    # ordering below would be a statement about lines that never appeared.
+    assert [line for line in output[:withdrawn].splitlines() if line.strip()], output
+    assert withdrawn < reported, output
+
+
+@then("the claim withdrawn is the wizard's own completion line")
+def _then_the_wizards_claim_is_the_one_withdrawn(world: dict[str, Any]) -> None:
+    """`Initialization complete!` is the string BDL-067 `.9` was reported against.
+
+    Kept as its own step after the one above widened to every branch: a wizard
+    that stopped printing it before a red verdict is still a change somebody has
+    to notice.
+    """
+    output = world["init"].output
     claimed = output.index(THE_COMPLETION_CLAIM)
     withdrawn = output.find(WITHDRAWN_COMPLETION_CLAIM)
     reported = output.index(THE_FAILURE_REPORT)
@@ -709,3 +741,180 @@ def _then_neither_run_succeeded(world: dict[str, Any]) -> None:
 def _then_both_runs_name_the_rule(world: dict[str, Any]) -> None:
     for label in ("flag_run", "wizard_run"):
         assert THE_RULE in world[label].output, (label, world[label].output)
+
+
+# --- BDL-067 `.17` — the consolidation cycle ------------------------------
+#
+# Four findings with one cause: an instrument scoped to one shape, met by the
+# neighbouring shape. The steps below are each stated over the population that
+# actually varies — the distinct ref_ids in a graph, the graph files a run did
+# and did not write, the branches that announce a scaffold, and the renderings
+# `beadloom ci` can choose between.
+
+#: A project whose name is also the name of one of its own source directories.
+#: `bootstrap_project` writes the root service node under the project name and
+#: its top-level attachment loop skips the cluster whose sanitized name equals
+#: that name, so this shape — and only this shape — leaves two unparented
+#: `service` entries under one ref_id.
+A_NAME_THAT_IS_ALSO_A_SOURCE_DIR = "core"
+
+#: A second source directory, so the project has a cluster the loop does attach.
+#: Without it the graph would hold nothing for the import to be measured against.
+A_SECOND_SOURCE_DIR = "orders"
+
+#: The graph file an earlier run leaves behind, and the unparented domain in it.
+#: Written directly rather than by running `init` twice: the claim is about a
+#: file this run did not write, and a file put there by another command of ours
+#: is the same fact with a slower fixture.
+AN_EARLIER_RUNS_GRAPH_FILE = "imported.yml"
+THE_INHERITED_ORPHAN = "payments"
+
+#: What the report says when the failing node came out of a file the run found
+#: rather than wrote, and the path it names so the adopter can check it.
+THE_GRAPH_FILE_WAS_ALREADY_THERE = "did not write the graph file"
+THE_INHERITED_GRAPH_PATH = ".beadloom/_graph/imported.yml"
+
+
+def _project_named_after_a_source_dir(root: Path) -> Path:
+    """A repository called `core` that also holds `src/core/`.
+
+    `core`, `api`, `web` and `app` are ordinary repository names, which is why
+    the review called the root-counting defect a release blocker rather than a
+    corner: every run of `init` on such a project exited 1.
+    """
+    project = root / A_NAME_THAT_IS_ALSO_A_SOURCE_DIR
+    for source_dir in (A_NAME_THAT_IS_ALSO_A_SOURCE_DIR, A_SECOND_SOURCE_DIR):
+        (project / "src" / source_dir).mkdir(parents=True)
+        (project / "src" / source_dir / "index.ts").write_text(
+            "export const x = 1;\n", encoding="utf-8"
+        )
+    (project / "package.json").write_text(
+        json.dumps(
+            {"name": A_NAME_THAT_IS_ALSO_A_SOURCE_DIR, "version": "0.4.1"}, indent=2
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return project
+
+
+@given("a project named after one of its own source directories")
+def _given_a_project_named_after_its_own_source_dir(
+    world: dict[str, Any], tmp_path: Path
+) -> None:
+    world["project"] = _project_named_after_a_source_dir(tmp_path)
+
+
+@given("a graph file an earlier run left behind holding a domain with no parent")
+def _given_an_inherited_graph_file(world: dict[str, Any]) -> None:
+    graph_dir = world["project"] / ".beadloom" / "_graph"
+    graph_dir.mkdir(parents=True, exist_ok=True)
+    (graph_dir / AN_EARLIER_RUNS_GRAPH_FILE).write_text(
+        yaml.safe_dump(
+            {
+                "nodes": [
+                    {
+                        "ref_id": THE_INHERITED_ORPHAN,
+                        "kind": "domain",
+                        "summary": "Imported from payments.md",
+                    }
+                ]
+            },
+            default_flow_style=False,
+            allow_unicode=True,
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+
+@then("the command says the graph file was already there")
+def _then_init_says_the_graph_file_predates_it(world: dict[str, Any]) -> None:
+    """The counterpart of "the rules file was already there", for the node.
+
+    The report had the first and not the second, so a run that met an inherited
+    graph said the opposite of the truth about it.
+    """
+    result = world["init"]
+    assert result.exit_code != 0, result.output
+    assert THE_GRAPH_FILE_WAS_ALREADY_THERE in result.output, result.output
+    assert THE_INHERITED_GRAPH_PATH in result.output, result.output
+    assert THE_INHERITED_ORPHAN in result.output, result.output
+
+
+@then("the command announced a scaffold before it withdrew the claim")
+def _then_the_branch_announced_something(world: dict[str, Any]) -> None:
+    """Anti-vacuity, stated without naming any one branch's wording.
+
+    Each branch spells its claim differently, and a step that spelled one would
+    be the same instrument the finding is about. What every branch shares is
+    that it printed something before the withdrawal.
+    """
+    result = world["init"]
+    withdrawn = result.output.find(WITHDRAWN_COMPLETION_CLAIM)
+    assert withdrawn != -1, result.output
+    announced = [line for line in result.output[:withdrawn].splitlines() if line.strip()]
+    assert announced, result.output
+
+
+@then("the command names the failing gate step and what it will say")
+def _then_init_names_the_step_and_its_summary(world: dict[str, Any]) -> None:
+    from beadloom.application.gate import lint_step
+
+    step = lint_step(world["project"])
+    assert not step.passed, "the fixture is green, so there is no promise to check"
+    world["gate_step"] = step
+    result = world["init"]
+    assert step.name in result.output, result.output
+    assert step.summary in result.output, result.output
+
+
+@then("every rendering the gate offers prints both of those")
+def _then_every_renderer_prints_them(world: dict[str, Any]) -> None:
+    """Read off `ci`'s own `click.Choice`, so a fourth renderer is covered.
+
+    `ci` picks `rich` only on a TTY and `github` otherwise, and the github
+    renderer builds its own step line, so a report that quoted one rendering was
+    false in exactly the scripted context `--yes` serves.
+    """
+    from beadloom.application.gate import GateResult
+    from beadloom.services.commands.federation import _format_gate, ci
+
+    option = next(p for p in ci.params if p.name == "fmt")
+    formats = tuple(str(choice) for choice in getattr(option.type, "choices", ()))
+    assert len(formats) > 1, formats
+
+    step = world["gate_step"]
+    for fmt in formats:
+        rendered = _format_gate(GateResult(steps=[step]), fmt)
+        assert step.name in rendered, (fmt, rendered)
+        assert step.summary in rendered, (fmt, rendered)
+
+
+@then("the command quotes no rendering's own step line")
+def _then_no_renderers_line_is_quoted(world: dict[str, Any]) -> None:
+    """Stating the fact and quoting a spelling of it are different promises.
+
+    A line a renderer builds is that renderer's shape, so quoting it makes the
+    promise false wherever a different renderer runs. Until BDL-067 `.17` the
+    report quoted `gate_step_line`, which is what `rich` prints and what a
+    non-TTY `beadloom ci` never does.
+    """
+    from beadloom.application.gate import GateResult
+    from beadloom.services.commands.federation import _format_gate, ci
+
+    option = next(p for p in ci.params if p.name == "fmt")
+    formats = tuple(str(choice) for choice in getattr(option.type, "choices", ()))
+    output = world["init"].output
+    step = world["gate_step"]
+
+    for fmt in formats:
+        rendered = _format_gate(GateResult(steps=[step]), fmt)
+        lines_about_the_step = [
+            line.strip() for line in rendered.splitlines() if step.name in line.strip()
+        ]
+        # Anti-vacuity: a renderer that never mentions the step would make the
+        # claim below hold over an empty list.
+        assert lines_about_the_step, (fmt, rendered)
+        quoted = [line for line in lines_about_the_step if line in output]
+        assert quoted == [], (fmt, quoted, output)

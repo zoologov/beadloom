@@ -50,6 +50,20 @@ def _existing_graph(graph_dir: Path) -> tuple[str | None, set[str]]:
     parent by guessing between candidates would write an edge that claims
     something the graph does not say.
 
+    "More than one" counts distinct ref_ids, not node entries. The graph
+    identifies a node by its ref_id — the loader keeps one node per ref_id, and
+    `parented` and `_missing_parent_edges`' `seen` are both sets of ref_ids — so
+    a single root written twice is a single candidate. Until BDL-067 `.17` the
+    candidates were collected into a list and counted there, and
+    `bootstrap_project` produces the duplicate on an ordinary project shape: it
+    writes the root service node under the project name and its top-level
+    attachment loop skips the cluster whose sanitized name equals that name
+    (`bootstrap.py`), so a repository named after one of its own source
+    directories yields two unparented `service` entries under one ref_id. The
+    import then attached nothing and `init --yes --mode both` exited 1 on every
+    run — measured on a project named `core` holding `src/core/` and
+    `src/orders/` (the review of BDL-067 `.16`, major 1).
+
     The ref_id is read off the node as written rather than recomputed from the
     project name. Cluster refs pass through `_sanitize_ref_id` and the root ref
     does not, so a recomputed destination silently resolves to nothing for a
@@ -76,11 +90,13 @@ def _existing_graph(graph_dir: Path) -> tuple[str | None, set[str]]:
             for e in (data.get("edges") or [])
             if e.get("kind") == "part_of" and e.get("src")
         )
-    roots = [
-        str(n["ref_id"])
-        for n in nodes
-        if n.get("kind") == "service" and n.get("ref_id") not in parented
-    ]
+    roots = sorted(
+        {
+            str(n["ref_id"])
+            for n in nodes
+            if n.get("kind") == "service" and n.get("ref_id") not in parented
+        }
+    )
     return (roots[0] if len(roots) == 1 else None), parented
 
 

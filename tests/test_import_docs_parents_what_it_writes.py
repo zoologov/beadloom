@@ -236,3 +236,82 @@ class TestTheRootIsTheNodeNoPartOfEdgeLeaves:
         import_docs(tmp_path, _write_docs(tmp_path))
 
         assert {e["dst"] for e in _imported(tmp_path)["edges"]} == {"orders-web"}
+
+
+class TestTheRootIsCountedByRefIdNotByOccurrence:
+    """One root named twice is one root.
+
+    BDL-067 `.17`, part 1 — the review of `.16`'s major 1, and a release blocker.
+    `_existing_graph` collected root candidates into a LIST of ref_ids and asked
+    `len(roots) == 1`, so a graph holding one root ref_id in two node entries
+    read as two candidates and the import attached nothing. The graph identifies
+    a node by its ref_id — the loader keeps one node per ref_id, and every other
+    set in this module (`parented`, `seen`) is a set of ref_ids — so the
+    population the uniqueness test ranges over is the distinct ref_ids, not the
+    node entries that carry them.
+
+    `bootstrap_project` produces exactly that graph on a project named after one
+    of its own source directories: it writes the root service node with the
+    project name, and its top-level attachment loop skips the cluster whose
+    sanitized name equals that name, leaving a second unparented `service` entry
+    under the same ref_id. Measured before the fix on a `package.json` named
+    `core` with `src/core/` and `src/orders/`: `init --yes --mode both` exited 1
+    on every run, naming `domain-needs-parent` for both imported documents.
+    `core`, `api`, `web` and `app` are ordinary repository names.
+
+    The neighbouring case — two DISTINCT unparented services — is
+    `TestWhenThereIsNoRootToAttachTo`, and stays as it was: two candidates, no
+    guess.
+    """
+
+    def _graph_naming_one_root_twice(self, root_ref_id: str = "core") -> dict[str, Any]:
+        """What the bootstrap writes for a project named after a source dir."""
+        return {
+            "nodes": [
+                {"ref_id": root_ref_id, "kind": "service", "summary": f"Root: {root_ref_id}"},
+                {"ref_id": root_ref_id, "kind": "service", "summary": "Source dir"},
+                {"ref_id": "orders", "kind": "domain", "summary": "Source dir"},
+            ],
+            "edges": [{"src": "orders", "dst": root_ref_id, "kind": "part_of"}],
+        }
+
+    def test_one_root_written_twice_is_still_a_root_to_attach_to(
+        self, tmp_path: Path
+    ) -> None:
+        _write_graph(tmp_path, self._graph_naming_one_root_twice())
+        import_docs(tmp_path, _write_docs(tmp_path))
+
+        data = _imported(tmp_path)
+        assert {e["dst"] for e in data.get("edges", [])} == {"core"}, data
+        parented = {e["src"] for e in data.get("edges", []) if e["kind"] == "part_of"}
+        assert [n["ref_id"] for n in data["nodes"] if n["ref_id"] not in parented] == []
+
+    def test_the_two_entries_may_sit_in_different_graph_files(self, tmp_path: Path) -> None:
+        """The duplicate is not a property of one file, so neither is the count."""
+        _write_graph(
+            tmp_path,
+            {"nodes": [{"ref_id": "core", "kind": "service", "summary": "Root: core"}]},
+        )
+        _write_graph(
+            tmp_path,
+            {"nodes": [{"ref_id": "core", "kind": "service", "summary": "Source dir"}]},
+            name="extra.yml",
+        )
+        import_docs(tmp_path, _write_docs(tmp_path))
+
+        assert {e["dst"] for e in _imported(tmp_path)["edges"]} == {"core"}
+
+    def test_a_second_ref_id_is_still_two_candidates_and_neither_is_chosen(
+        self, tmp_path: Path
+    ) -> None:
+        """Anti-vacuity: counting ref_ids must not collapse to counting nothing.
+
+        A test that only ever sees one distinct ref_id passes against a guard
+        that returns the first candidate unconditionally.
+        """
+        graph = self._graph_naming_one_root_twice()
+        graph["nodes"].append({"ref_id": "api", "kind": "service", "summary": "Source dir"})
+        _write_graph(tmp_path, graph)
+        import_docs(tmp_path, _write_docs(tmp_path))
+
+        assert "edges" not in _imported(tmp_path)

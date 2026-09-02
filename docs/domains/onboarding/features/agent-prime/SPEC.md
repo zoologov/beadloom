@@ -17,16 +17,20 @@ Cross-IDE context injection via a three-layer architecture.
 
 4. **The domain-parent post-condition** (one invariant, two writers) — every node
    `bootstrap_project()`
-   writes with `kind: domain` leaves the function with at least one outgoing `part_of` edge,
-   to its classified parent where one exists and to the root service node otherwise. One
-   node is carved out and the sentence says so since BDL-067 `.6`: a domain whose `ref_id`
-   is the root's own gets no edge, because an edge from a node to itself is not a parent.
+   writes leaves the function with at least one outgoing `part_of` edge, to its classified
+   parent where one exists and to the root service node otherwise. It reads no kind since
+   BDL-067 `.17`: until then it said `kind: domain`, the kind today's generated rules require
+   a parent for, while `generate_rules` also writes `feature-needs-parent` and the sibling
+   statement in `import_docs` already covered every kind — two writers of one invariant
+   disagreeing about its population (the review of `.16`, minor 2). One node is carved out
+   and the sentence says so since BDL-067 `.6`: a node whose `ref_id` is the root's own gets
+   no edge, because an edge from a node to itself is not a parent.
    That `ref_id` collision (reachable on `src/<project>/`) is tracked as its own defect,
    `beadloom-7c6k`, since its fix is a unique `ref_id` rather than an edge. The
    same call writes `domain-needs-parent` into the adopter's `rules.yml` whenever it writes a
    domain, so a domain without that edge makes `init` exit 0 over a graph the very next
    `lint --strict` rejects — measured as rc 0 then rc 1 on a flat TypeScript project
-   (BDL-UX #192). `_missing_domain_parent_edges(nodes, edges, root_ref_id)` enforces it over
+   (BDL-UX #192). `_missing_parent_edges(nodes, edges, root_ref_id)` enforces it over
    the whole node list rather than inside the branch that was reported, and reads
    *root_ref_id* back from the root node instead of recomputing it, because cluster refs pass
    through `_sanitize_ref_id` and the root ref does not.
@@ -43,7 +47,26 @@ Cross-IDE context injection via a three-layer architecture.
    parent for, because a post-condition that tracked today's rule set would go stale the
    next time `generate_rules` gains a rule. With no single root — an import-only run on a
    virgin project, or a graph with two unparented services — no parent is named rather than
-   one guessed, and no rule the command wrote is on disk to fail.
+   one guessed.
+
+   "No single root" counts DISTINCT ref_ids since BDL-067 `.17`. The candidates were
+   collected into a list and counted there, and `bootstrap_project` produces one root under
+   two node entries on an ordinary project shape: it writes the root service node under the
+   project name and its top-level attachment loop skips the cluster whose sanitized name
+   equals that name. A repository named after one of its own source directories therefore
+   read as two candidates, the import attached nothing, and `init --yes --mode both` exited 1
+   on every run — measured on a project named `core` holding `src/core/` and `src/orders/`
+   (the review of `.16`, major 1). The graph identifies a node by its ref_id and the loader
+   keeps one node per ref_id, so the population the uniqueness test ranges over is the
+   distinct ref_ids.
+
+   An import-only run on a virgin project leaves those domains unparented and is green,
+   which rests on one fact and no longer on two: no `rules.yml` is on disk, so `lint --strict`
+   evaluates nothing. The second reason — that `--mode import` reached no verdict at all —
+   was withdrawn in `.17`. It held only until the next `init` on the same tree, because the
+   wizard's re-init does not delete `.beadloom/`, so `imported.yml` survived into a later
+   bootstrap that wrote the rule and met the nodes. Every branch of `init` that writes a file
+   under `.beadloom/_graph/` now takes the verdict.
 
 5. **`beadloom prime`** (dynamic) — CLI command and MCP tool that queries the DB for current project state: architecture summary, stale docs, lint violations, domain list.
 
