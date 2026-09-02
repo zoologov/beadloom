@@ -927,21 +927,32 @@ def format_polish_text(data: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def generate_skeletons(
-    project_root: Path,
-    nodes: list[dict[str, Any]] | None = None,
-    edges: list[dict[str, Any]] | None = None,
-) -> dict[str, int]:
-    """Generate doc skeletons from graph nodes and edges.
+def generate_skeletons(project_root: Path) -> dict[str, int]:
+    """Generate doc skeletons from the graph on disk.
 
     Uses ``docs:`` paths from graph nodes when available, falls back to
     convention-based paths.  Features use ``docs/domains/{parent}/features/``
     layout.  Never overwrites existing files.
 
+    THE GRAPH IS READ FROM `.beadloom/_graph/`, ALWAYS. Until BDL-067 `.21` this
+    function also accepted a node list, and a caller that passed one got a
+    whole-tree document describing part of the tree: ``docs/architecture.md``
+    carries a Domains table over every node, so rendering it from one writer's
+    output silently omits every node the other writers left. That is BDL-UX #216.
+    `.18` closed it between ``init --yes`` and the wizard by changing one call,
+    and the review of `.20` measured it still open on the third entry point —
+    ``init --bootstrap`` — where the same one-line fix had not been applied. Two
+    of three callers reading the tree and one passing a list is not a divergence
+    that gets fixed once; the parameter is what makes it available.
+
+    Nothing was lost with it. Every caller in the product already read the tree,
+    and a caller that wants skeletons for nodes it has just written writes them
+    first — which every caller does, since the graph file is the thing being
+    documented.
+
     Returns ``{"files_created": N, "files_skipped": M}``.
     """
-    if nodes is None or edges is None:
-        nodes, edges = _load_graph_from_yaml(project_root)
+    nodes, edges = _load_graph_from_yaml(project_root)
 
     # Detect project name and root node.
     root_node = _find_root_node(nodes, edges)

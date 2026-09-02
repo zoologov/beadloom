@@ -89,6 +89,18 @@ and the wizard shares the `--yes` binding. It is skipped on exactly one path, th
 `edit` review answer, where the graph has just been handed to the user to edit and nothing has
 re-indexed.
 
+Whether a verdict is owed is asked of the TREE, not of the branch, since BDL-067 `.21`: the
+verdict returns without linting when nothing under `.beadloom/_graph/` changed between the
+start of the run and the verdict, using the digest it already takes to answer whose failure it
+is. That replaced a branch answering the same question by its position in the source, which is
+how the wizard's `cancel` answer came to write `services.yml` and `rules.yml` — both are
+written before "Proceed with this graph?" is asked — and then exit 0 through `sys.exit(0)`
+with no verdict at all (the review of `.20`, major 2). `init` now contains no `sys.exit`, so
+the cancelled result reaches the same guard as every other wizard answer, and the wizard's
+OTHER cancelled answer, the re-init prompt asked before any writer runs, is correctly left
+unjudged: reporting there would name an existing tree's failures under a withdrawal line
+stating that a scaffold was written.
+
 Each evaluated-rule line names the rule, the violating node, and the graph file that node was
 written into, read off `.beadloom/_graph/*.yml` rather than off any writer's return value. It
 named `services.yml` by habit until BDL-067 `.14`, and the review of `.13` measured the cost:

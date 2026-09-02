@@ -18,6 +18,7 @@ from beadloom.onboarding.scanner.agents_md import (
 from beadloom.onboarding.scanner.constants import _sanitize_ref_id
 from beadloom.onboarding.scanner.entry_points import _discover_entry_points
 from beadloom.onboarding.scanner.import_scan import _quick_import_scan
+from beadloom.onboarding.scanner.parent_edges import missing_parent_edges, parented_by
 from beadloom.onboarding.scanner.project_scan import (
     _cluster_with_children,
     _detect_project_name,
@@ -30,57 +31,6 @@ from beadloom.onboarding.scanner.summary import _build_contextual_summary
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-
-def _missing_parent_edges(
-    nodes: list[dict[str, str]],
-    edges: list[dict[str, str]],
-    root_ref_id: str,
-) -> list[dict[str, str]]:
-    """Name the `part_of` edges the parent post-condition is still short of.
-
-    `bootstrap_project` writes `domain-needs-parent` into the adopter's
-    `rules.yml` whenever it writes a node of kind `domain` (`rules_gen.py`), so
-    a domain it writes without an outgoing `part_of` edge fails a rule the same
-    command authored one step earlier — `init` exits 0 and `ci` exits 1
-    (BDL-UX #192). The post-condition is therefore stated over the function's
-    whole output rather than over the branch that was reported:
-
-        every node written by the bootstrap carries at least one outgoing
-        `part_of` edge — to its classified parent where one exists, to the root
-        service node otherwise.
-
-    A branch that forgets the edge is closed by this pass whether or not anyone
-    remembers it exists. Two nodes are deliberately left alone: a node that
-    already has a `part_of` edge keeps the parent its classifier chose, and a
-    node whose ref_id collides with the root's gets nothing, because an edge
-    from a node to itself is not a parent.
-
-    The pass runs over every kind, not only `domain`. Until BDL-067 `.17` it was
-    scoped to `domain` because that is the kind the generated rules require a
-    parent for, and `generate_rules` also writes `feature-needs-parent` — so the
-    two writers of this same post-condition disagreed about it, the importer's
-    (`doc_classify._missing_parent_edges`) covering every kind and this one two
-    (the review of `.16`, minor 2). The cluster loop above already attaches
-    top-level nodes of EVERY kind to the root, so the narrow scope was not the
-    bootstrap's rule; it was the fallback branch missing it. A post-condition
-    that tracked the current rule set would go stale the next time a rule is
-    added, which is how this epic's first fix came to need a second one.
-
-    *root_ref_id* must be the value written into the root node, not a name
-    recomputed from the project: cluster refs pass through `_sanitize_ref_id`
-    and the root ref does not, so a recomputed destination silently resolves to
-    nothing for a project whose name contains parentheses.
-    """
-    parented = {edge["src"] for edge in edges if edge["kind"] == "part_of"}
-    missing: list[dict[str, str]] = []
-    for node in nodes:
-        ref_id = node["ref_id"]
-        if ref_id in parented or ref_id == root_ref_id:
-            continue
-        missing.append({"src": ref_id, "dst": root_ref_id, "kind": "part_of"})
-        parented.add(ref_id)
-    return missing
 
 
 def bootstrap_project(
@@ -282,7 +232,17 @@ def bootstrap_project(
         # Post-condition: no node leaves this function without a parent.
         # The loop above only reaches nodes that came from `clusters`; this
         # reaches every node the function wrote, whichever branch wrote it.
-        edges.extend(_missing_parent_edges(nodes, edges, root_node["ref_id"]))
+        # The rule itself lives in `parent_edges` and is shared with the other
+        # writer of nodes (`doc_classify.import_docs`), because the two of them
+        # held one invariant in two bodies and had already drifted apart once
+        # (the review of BDL-067 `.20`, major 3). What stays here is the only
+        # part that is this writer's own: which ref_ids already have a parent.
+        # The bootstrap produces the whole graph, so it reads that off the edges
+        # it is about to write; the importer adds to a graph and reads it off
+        # the one on disk.
+        edges.extend(
+            missing_parent_edges(nodes, root_node["ref_id"], parented_by(edges))
+        )
 
     # Write YAML graph.
     if nodes:

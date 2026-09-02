@@ -807,8 +807,24 @@ def _given_a_project_named_after_its_own_source_dir(
 
 @given("a graph file an earlier run left behind holding a domain with no parent")
 def _given_an_inherited_graph_file(world: dict[str, Any]) -> None:
-    graph_dir = world["project"] / ".beadloom" / "_graph"
+    """The file `import_docs` writes, and the document its node points at.
+
+    Both halves, because the earlier run writes both: every node `import_docs`
+    creates carries a `docs:` field naming the document it was classified from.
+    Leaving that field out made the fixture a state no writer produces, and after
+    BDL-067 `.21` it made the scenario measure something else — `init
+    --bootstrap` now generates skeletons from the whole graph on disk, as the
+    other two entry points always did, so a node with no doc gets one and the
+    `docs:` field is patched back into the file the node is in. This run would
+    then genuinely have written the inherited file, and the report would be right
+    to say so.
+    """
+    project = world["project"]
+    graph_dir = project / ".beadloom" / "_graph"
     graph_dir.mkdir(parents=True, exist_ok=True)
+    docs = project / "docs"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / "payments.md").write_text("# Payments\n", encoding="utf-8")
     (graph_dir / AN_EARLIER_RUNS_GRAPH_FILE).write_text(
         yaml.safe_dump(
             {
@@ -817,6 +833,7 @@ def _given_an_inherited_graph_file(world: dict[str, Any]) -> None:
                         "ref_id": THE_INHERITED_ORPHAN,
                         "kind": "domain",
                         "summary": "Imported from payments.md",
+                        "docs": ["docs/payments.md"],
                     }
                 ]
             },
@@ -1098,3 +1115,93 @@ def _when_init_import_is_run_over_a_tree_it_must_judge(world: dict[str, Any]) ->
             str(world["project"]),
         ],
     )
+
+
+# ---------------------------------------------------------------------------
+# BDL-067 `.21` — the writing side: one verdict however a run ends, and one
+# whole-tree document whichever entry point renders it
+# ---------------------------------------------------------------------------
+
+
+@when("beadloom init is run with no flags and the graph review is answered with cancel")
+def _when_the_wizard_is_cancelled_at_the_review(world: dict[str, Any]) -> None:
+    """`overwrite` first: the adopter's rules file means `.beadloom/` is there.
+
+    Overwrite is the answer that KEEPS that file, which is what makes the run
+    meet a rule it did not write. `--force` would delete the directory and the
+    rule with it.
+    """
+    with (
+        patch("rich.prompt.Prompt.ask", side_effect=["overwrite", "bootstrap", "cancel"]),
+        patch("rich.prompt.Confirm.ask", return_value=False),
+    ):
+        world["init"] = CliRunner().invoke(
+            main, ["init", "--project", str(world["project"])]
+        )
+
+
+@then("the command says where the graph it had already written is")
+def _then_the_cancel_names_the_graph_directory(world: dict[str, Any]) -> None:
+    """"Cancelled." on its own was false about the one thing that costs money."""
+    assert ".beadloom/_graph/" in world["init"].output, world["init"].output
+
+
+@when("the bootstrap flag and the wizard are each run over that tree")
+def _when_both_entry_points_run_over_the_inherited_tree(world: dict[str, Any]) -> None:
+    """Two copies of one arranged tree, one entry point each.
+
+    Copied rather than re-arranged, so the two runs cannot differ because the
+    arrangement did.
+    """
+    arranged = world["project"]
+    world["runs"] = {}
+    for name in ("bootstrap-flag", "wizard"):
+        project = arranged.parent / f"{arranged.name}-{name}"
+        shutil.copytree(arranged, project)
+        if name == "bootstrap-flag":
+            result = CliRunner().invoke(
+                main, ["init", "--bootstrap", "--project", str(project)]
+            )
+        else:
+            with (
+                patch(
+                    "rich.prompt.Prompt.ask",
+                    side_effect=["overwrite", "bootstrap", "yes"],
+                ),
+                patch("rich.prompt.Confirm.ask", return_value=True),
+            ):
+                result = CliRunner().invoke(main, ["init", "--project", str(project)])
+        world["runs"][name] = (project, result)
+
+
+@then("both runs document the domain the earlier run left")
+def _then_both_runs_document_the_inherited_domain(world: dict[str, Any]) -> None:
+    for name, (project, result) in world["runs"].items():
+        readme = (
+            project
+            / "docs"
+            / "domains"
+            / THE_UNPARENTED_INHERITED_DOMAIN
+            / "README.md"
+        )
+        assert readme.is_file(), (name, result.output, sorted(project.rglob("docs/**/*.md")))
+        assert THE_UNPARENTED_INHERITED_DOMAIN in (
+            project / "docs" / "architecture.md"
+        ).read_text(encoding="utf-8"), name
+
+
+@then("the two runs leave the same graph and the same documents")
+def _then_the_two_runs_leave_the_same_tree(world: dict[str, Any]) -> None:
+    left = {}
+    for name, (project, _) in world["runs"].items():
+        nodes, edges = _graph_on_disk(project)
+        left[name] = (
+            sorted(json.dumps(node, sort_keys=True) for node in nodes),
+            sorted(json.dumps(edge, sort_keys=True) for edge in edges),
+            sorted(str(path.relative_to(project)) for path in (project / "docs").rglob("*.md")),
+        )
+    # Anti-vacuity: two empty trees would agree cheaply.
+    assert all(nodes for nodes, _, _ in left.values()), left
+    first, *rest = sorted(left)
+    for name in rest:
+        assert left[name] == left[first], (name, first, left)

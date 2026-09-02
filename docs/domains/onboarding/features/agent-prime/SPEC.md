@@ -30,8 +30,8 @@ Cross-IDE context injection via a three-layer architecture.
    same call writes `domain-needs-parent` into the adopter's `rules.yml` whenever it writes a
    domain, so a domain without that edge makes `init` exit 0 over a graph the very next
    `lint --strict` rejects — measured as rc 0 then rc 1 on a flat TypeScript project
-   (BDL-UX #192). `_missing_parent_edges(nodes, edges, root_ref_id)` enforces it over
-   the whole node list rather than inside the branch that was reported, and reads
+   (BDL-UX #192). `parent_edges.missing_parent_edges(nodes, root_ref_id, parented)` enforces
+   it over the whole node list rather than inside the branch that was reported, and reads
    *root_ref_id* back from the root node instead of recomputing it, because cluster refs pass
    through `_sanitize_ref_id` and the root ref does not.
 
@@ -40,14 +40,28 @@ Cross-IDE context injection via a three-layer architecture.
    domain with no parent, in `imported.yml`, in the same run that wrote
    `domain-needs-parent` at error severity — so `init --yes --mode both` exited 0 and the
    next `lint --strict` exited 1 on three nodes, BDL-UX #192's signature on a branch the
-   epic had declared covered. `doc_classify._missing_parent_edges(nodes, root_ref_id,
-   parented)` states it over that writer's output, and `_existing_graph(graph_dir)` finds
-   the root by reading the graph on disk: the one node of kind `service` that no `part_of`
-   edge leaves. It attaches every kind, not only the two the generated rules require a
-   parent for, because a post-condition that tracked today's rule set would go stale the
-   next time `generate_rules` gains a rule. With no single root — an import-only run on a
-   virgin project, or a graph with two unparented services — no parent is named rather than
-   one guessed.
+   epic had declared covered. It calls the SAME function `bootstrap_project` calls, and
+   `_existing_graph(graph_dir)` finds the root by reading the graph on disk: the one node of
+   kind `service` that no `part_of` edge leaves. It attaches every kind, not only the two the
+   generated rules require a parent for, because a post-condition that tracked today's rule
+   set would go stale the next time `generate_rules` gains a rule. With no single root — an
+   import-only run on a virgin project, or a graph with two unparented services — no parent
+   is named rather than one guessed.
+
+   One post-condition, one implementation, since BDL-067 `.21`. Until then the two writers
+   carried the same private name in two modules with the same loop body, differing in a
+   `str()` call and in their parameter order, and the only thing binding them was a docstring
+   naming a symbol `.17` had renamed away. They had already drifted once and been repaired by
+   editing both — one covered every kind, the other only `domain` (the review of `.16`, minor
+   2; the review of `.20`, major 3). `scanner/parent_edges.py` now holds
+   `missing_parent_edges(nodes, root_ref_id, parented)` and `parented_by(edges)`, and both
+   writers import them. What stays each writer's own is the one thing that genuinely differs:
+   where `parented` comes from. The bootstrap produces the whole graph and reads it off the
+   edges it is about to write; the importer adds to a graph and reads it off the one on disk.
+   A THIRD writer of nodes is caught rather than repaired afterwards:
+   `tests/test_one_parent_post_condition_over_every_writer.py` derives the writers from the
+   source — every function that reaches `write_yaml_atomic` and builds a payload holding
+   `nodes` — and fails when that set changes.
 
    "No single root" counts DISTINCT ref_ids since BDL-067 `.17`. The candidates were
    collected into a list and counted there, and `bootstrap_project` produces one root under
@@ -70,9 +84,9 @@ Cross-IDE context injection via a three-layer architecture.
 
 5. **`beadloom prime`** (dynamic) — CLI command and MCP tool that queries the DB for current project state: architecture summary, stale docs, lint violations, domain list.
 
-6. **One order for both entry points** (BDL-067 `.18`, BDL-UX #216) — `init` bootstraps,
-   then imports, then generates the doc skeletons, whether the mode arrived through
-   `--yes --mode` or through the wizard's prompt. `non_interactive_init()` used to generate
+6. **One order for all three entry points** (BDL-067 `.18` and `.21`, BDL-UX #216) — `init`
+   bootstraps, then imports, then generates the doc skeletons, whether the mode arrived
+   through `--yes --mode`, through `--bootstrap` or through the wizard's prompt. `non_interactive_init()` used to generate
    the skeletons inside its bootstrap block and import after them, so under `--mode both` it
    classified the documents it had written seconds earlier. Measured on a project with
    `src/orders/`, `src/catalog/` and one document of the adopter's own: `--yes --mode both`
@@ -81,17 +95,29 @@ Cross-IDE context injection via a three-layer architecture.
    and the two `readme` nodes are a single ref_id, because the importer names a node after
    the file stem and the loader keeps one node per ref_id: that graph had already dropped a
    document it claimed to describe. The defect predates this epic, and `.14` changed its
-   character — `doc_classify._missing_parent_edges` gives every imported node a `part_of`
-   edge to the root, so the wrong graph became structurally valid and both runs exited 0.
+   character — the parent post-condition gives every imported node a `part_of` edge to the
+   root, so the wrong graph became structurally valid and both runs exited 0.
 
    The ORDER fixes it rather than a filter over the import scan. An exclusion would have to
    name `docs/architecture.md` and `docs/domains/*/README.md`, and those are the ADOPTER's
    documents whenever the adopter wrote them first — `generate_skeletons()` never overwrites
    an existing file — so a filter would drop a real document from the graph and leave the two
-   entry points disagreeing about a different population. `generate_skeletons()` is now also
-   called with no node list, the way the wizard calls it, so it reads every graph file on
-   disk: passing the bootstrap's nodes rendered `docs/architecture.md` from a graph that was
-   missing the imported ones, which is the same divergence one file further on.
+   entry points disagreeing about a different population. `generate_skeletons()` reads every
+   graph file on disk: rendering `docs/architecture.md` from the bootstrap's nodes alone
+   produced a whole-tree document describing part of the tree, which is the same divergence
+   one file further on.
+
+   `.18` closed that between `--yes` and the wizard by changing one call. There are three
+   entry points, and `--bootstrap` still passed its node list: on a tree carrying a graph
+   file an earlier run had left, `init --bootstrap` and the wizard answering `bootstrap`
+   left different trees — only the wizard wrote `docs/domains/ledger/README.md`, only the
+   wizard's `docs/architecture.md` named `ledger`, and only the wizard's run patched that
+   node's `docs:` field back into the file holding it (the review of `.20`, major 1).
+   BDL-067 `.21` closed it by REMOVING the parameter rather than by editing the third call
+   site: `generate_skeletons(project_root)` takes the project root and nothing else, so a
+   document about the whole tree cannot be handed part of the tree by any caller, including
+   one written later. That is an API change for anyone importing
+   `beadloom.onboarding.generate_skeletons`.
 
 ## API
 

@@ -17,7 +17,7 @@ structured data for AI agents to enrich those skeletons. Part of the
 
 | Function | Description |
 |----------|-------------|
-| `generate_skeletons(project_root, nodes?, edges?)` | Create `docs/` tree from graph: architecture.md, domain READMEs, service pages, feature SPECs. Loads symbols from SQLite for Public API sections. Writes `docs:` field back to `services.yml` via `_patch_docs_field()`. |
+| `generate_skeletons(project_root)` | Create `docs/` tree from the graph on disk: architecture.md, domain READMEs, service pages, feature SPECs. Loads symbols from SQLite for Public API sections. Writes `docs:` field back to the graph file each node came from, via `_patch_docs_field()`. Takes the project root and nothing else since BDL-067 `.21`: it also accepted a node list, and `docs/architecture.md` is a document about the WHOLE graph, so a caller that passed one got a whole-tree document describing part of the tree. Three of four callers read the tree and one passed a list, which left `init --bootstrap` and the wizard leaving different documents on a project that already carried a graph file (BDL-UX #216, the review of BDL-067 `.20`, major 1). Removing the parameter closes it for callers written later as well; it is an API change for anyone importing `beadloom.onboarding.generate_skeletons`. |
 | `generate_polish_data(project_root, ref_id?)` | Return structured JSON (nodes with symbols/deps/existing docs, Mermaid diagram, AI enrichment prompt). Enriches with SQLite dependency edges via `_enrich_edges_from_sqlite()`. |
 | `format_polish_text(data)` | Render polish data as multi-line human-readable text with node details, symbols, deps, doc status. |
 

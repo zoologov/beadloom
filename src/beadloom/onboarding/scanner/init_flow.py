@@ -248,7 +248,8 @@ def interactive_init(project_root: Path) -> dict[str, Any]:
         console.print(f"  Preset: {preset_name}")
         console.print(f"  Generated {len(nodes)} nodes, {len(edges)} edges")
 
-        # Interactive review.
+        # Interactive review. The graph is on disk already: the answers below
+        # decide what happens NEXT, not whether anything was written.
         if nodes:
             console.print(f"\n{_format_review_table(nodes, edges)}")
             console.print("")
@@ -258,7 +259,19 @@ def interactive_init(project_root: Path) -> dict[str, Any]:
                 default="yes",
             )
             if review == "cancel":
-                console.print("Cancelled.")
+                # "Cancelled." on its own was false here, and false in the one
+                # way that costs an adopter something: `bootstrap_project` has
+                # already written the graph and the rules by the time this
+                # prompt is put, so the answer stops the REST of the run and not
+                # the part that touched the tree (the review of BDL-067 `.20`,
+                # major 2). The message names what is on disk and how to undo
+                # it; `init` takes the verdict on it either way, because a run
+                # that wrote a graph file is judged however it ends.
+                console.print(
+                    "Cancelled — the graph was written before this prompt. "
+                    ".beadloom/_graph/ holds it: delete .beadloom/ to undo, or "
+                    "edit those files and run [bold]beadloom reindex[/bold]."
+                )
                 result["mode"] = "cancelled"
                 return result
             if review == "edit":

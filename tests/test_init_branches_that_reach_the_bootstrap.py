@@ -74,9 +74,12 @@ from __future__ import annotations
 
 import ast
 import inspect
+import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, NoReturn
 
 import pytest
 
@@ -280,6 +283,88 @@ def _direct_callers_of(package: ModuleType, name: str) -> frozenset[str]:
     )
 
 
+#: The two exits that end a Python function without returning from it and carry
+#: no return annotation at runtime, so they are resolved by IDENTITY rather than
+#: read off a signature. `sys.exit` is here because `init` used to call it — the
+#: wizard's `cancel` answer left through it and the walk below stepped over it,
+#: so the identical defect read guarded when the terminator was `sys.exit` and
+#: unguarded when it was `return` (the review of BDL-067 `.20`, major 2).
+#: `os._exit` is here because it is the same act with the same shape, and a
+#: terminator this walk does not know is not reported as a defect — it is read as
+#: a branch that takes its verdict, which is the failure mode that cost this epic
+#: a wave. Both are PROBED in `TestTheTerminatorClassifierItself` rather than
+#: assumed.
+THE_EXITS_THAT_CARRY_NO_ANNOTATION = (sys.exit, os._exit)
+
+#: How `typing.NoReturn` reaches this module. `services/commands/setup.py` uses
+#: `from __future__ import annotations`, so a return annotation there is a
+#: STRING at runtime and comparing against the object alone would silently match
+#: nothing.
+THE_NO_RETURN_ANNOTATIONS = frozenset(
+    {NoReturn, "NoReturn", "Never", "typing.NoReturn", "typing.Never"}
+)
+
+
+def _dotted_name(call: ast.Call) -> str:
+    """The callee as the source writes it: `sys.exit`, not `exit`.
+
+    `_callee_name` deliberately drops what a call is an attribute of, because
+    the reachability scan matches on bare names. This one keeps it, because the
+    question here is which object is being called and `exit` alone answers it for
+    two different functions.
+    """
+    parts: list[str] = []
+    node: ast.expr = call.func
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if isinstance(node, ast.Name):
+        parts.append(node.id)
+    return ".".join(reversed(parts))
+
+
+def _never_returns(dotted: str, module: object = init_command) -> bool:
+    """Whether calling *dotted* ends the function it is called from.
+
+    Derived rather than listed. The name is resolved through the module the
+    command lives in and the object is ASKED: a callable annotated `NoReturn` is
+    the language's own statement that control does not come back, so a helper
+    written tomorrow joins the terminator set by being annotated rather than by
+    being added to a tuple in a test file. The two stdlib exits that predate
+    annotations are matched by identity above.
+
+    The ceiling, stated because it is real: a way out this classifier does not
+    recognise is read as a branch that continues, and a verdict written below it
+    then counts. The behavioural half — every answer the wizard offers, RUN, and
+    each one that leaves a graph file asserted to be judged — is
+    `tests/test_every_wizard_answer_is_judged.py`, and it answers the same
+    question without reading any terminator at all.
+    """
+    head, *rest = dotted.split(".")
+    target: object | None = getattr(module, head, None)
+    for part in rest:
+        if target is None:
+            return False
+        target = getattr(target, part, None)
+    if target is None:
+        return False
+    if any(target is exiting for exiting in THE_EXITS_THAT_CARRY_NO_ANNOTATION):
+        return True
+    annotation = getattr(target, "__annotations__", {}).get("return")
+    return annotation in THE_NO_RETURN_ANNOTATIONS
+
+
+def _ends_the_branch(statement: ast.stmt) -> bool:
+    """Whether nothing after *statement* runs in the branch it sits in."""
+    if isinstance(statement, ast.Return | ast.Raise):
+        return True
+    return (
+        isinstance(statement, ast.Expr)
+        and isinstance(statement.value, ast.Call)
+        and _never_returns(_dotted_name(statement.value))
+    )
+
+
 def _statement_trail(
     node: ast.AST, parents: dict[ast.AST, ast.AST]
 ) -> list[tuple[list[ast.stmt], int]]:
@@ -319,15 +404,21 @@ def _verdict_follows(node: ast.AST, parents: dict[ast.AST, ast.AST]) -> bool:
     """Whether the verdict can still run after *node*, in execution order.
 
     Walks what comes after the call: the rest of its own block first, then the
-    rest of each enclosing block. A bare `return` or `raise` at any of those
-    levels ends the walk — nothing after it in that branch runs, so a verdict
-    written below it is not a verdict this branch takes.
+    rest of each enclosing block. A statement that ends the branch at any of
+    those levels ends the walk — nothing after it in that branch runs, so a
+    verdict written below it is not a verdict this branch takes.
+
+    "Ends the branch" is `_ends_the_branch`, and it is three forms rather than
+    two. Until BDL-067 `.21` it was `Return | Raise`, and `init` terminated one
+    writing path with `sys.exit(0)`: the walk stepped over the wizard's `cancel`
+    answer and found the verdict below it, so a branch that wrote `services.yml`
+    and `rules.yml` and exited 0 read as guarded here for two waves.
     """
     for block, index in reversed(_statement_trail(node, parents)):
         for statement in block[index + 1 :]:
             if THE_VERDICT in _called_names(statement):
                 return True
-            if isinstance(statement, ast.Return | ast.Raise):
+            if _ends_the_branch(statement):
                 return False
     return False
 
@@ -343,7 +434,7 @@ def _what_follows(node: ast.AST, parents: dict[ast.AST, ast.AST]) -> str:
     for block, index in reversed(_statement_trail(node, parents)):
         for statement in block[index + 1 :]:
             written.append(ast.unparse(statement))
-            if isinstance(statement, ast.Return | ast.Raise):
+            if _ends_the_branch(statement):
                 return "\n".join(written)
     return "\n".join(written)
 
@@ -467,6 +558,19 @@ A_VERDICT_BELOW_THE_RETURN = A_COMMAND_LIKE_INIT.replace(
     1,
 )
 
+#: BDL-067 `.21`. The same defect as `A_VERDICT_BELOW_THE_RETURN`, leaving
+#: through `sys.exit` instead of `return` — the shape the real `init` had, and
+#: the reason this module reported the wizard's `cancel` answer as guarded. It
+#: is written as a mutant rather than measured on `init` because `init` no
+#: longer contains a `sys.exit`: `.21` removed the one it had rather than
+#: leaving the instrument to be the only thing standing between an adopter and
+#: a graph nobody checked. The mutant is what keeps the classifier honest after
+#: the call site it was written for is gone.
+A_VERDICT_BELOW_A_SYS_EXIT = A_VERDICT_BELOW_THE_RETURN.replace(
+    "        return\n", "        sys.exit(0)\n", 1
+)
+
+
 #: BDL-067 `.15`. A fourth branch that writes a graph file WITHOUT bootstrapping
 #: — the shape `import_docs` already has in the real command — and takes no
 #: verdict. It is the case the two seeds disagree about, and it is written here
@@ -555,6 +659,44 @@ class TestTheEnumeratorItself:
 
         assert [site.guard for site in sites if not site.takes_verdict] == [("non_interactive",)]
 
+    def test_it_does_not_count_a_verdict_a_sys_exit_above_it_makes_unreachable(
+        self, reaching: frozenset[str]
+    ) -> None:
+        """The same claim as the case above, for the other way out.
+
+        Measured by the review of `.20` against this module's own helpers:
+        `A_VERDICT_BELOW_THE_RETURN` reported `[('non_interactive', False), ...]`
+        and the same shape with `sys.exit(0)` reported `[('non_interactive',
+        True), ...]`. One defect, read two ways, according to which word the
+        branch used to leave.
+        """
+        assert A_VERDICT_BELOW_A_SYS_EXIT != A_VERDICT_BELOW_THE_RETURN, (
+            "the anchor the mutation edits is gone, so this case is judging the "
+            "`return` mutant and the exit it names never happened"
+        )
+
+        sites = _call_sites_in(A_VERDICT_BELOW_A_SYS_EXIT, reaching)
+
+        assert [site.guard for site in sites if not site.takes_verdict] == [
+            ("non_interactive",)
+        ]
+
+    def test_the_two_ways_out_are_read_the_same_way(
+        self, reaching: frozenset[str]
+    ) -> None:
+        """Anti-vacuity for the case above: the difference must be the WORD.
+
+        The two mutants differ in one statement and in nothing else, so if they
+        ever read differently again, the classifier has started answering a
+        question about spelling rather than about control flow.
+        """
+        by_return = _call_sites_in(A_VERDICT_BELOW_THE_RETURN, reaching)
+        by_exit = _call_sites_in(A_VERDICT_BELOW_A_SYS_EXIT, reaching)
+
+        assert [site.takes_verdict for site in by_return] == [
+            site.takes_verdict for site in by_exit
+        ]
+
     def test_the_writer_seed_finds_the_writers_the_sweep_found_by_hand(
         self, writing: frozenset[str]
     ) -> None:
@@ -609,6 +751,49 @@ class TestTheEnumeratorItself:
         assert [site.guard for site in by_writer if not site.takes_verdict] == [
             ("rescan",)
         ]
+
+
+class TestTheTerminatorClassifierItself:
+    """`_ends_the_branch` is the walk's only claim about control flow.
+
+    A terminator it fails to recognise does not fail anything: it is read as a
+    statement the branch continues past, so a verdict written below it counts and
+    the branch reads guarded. That is not a hypothetical — it is exactly what
+    happened, and the two cases here are the two ways the classifier can answer.
+    """
+
+    def test_sys_exit_really_does_not_return(self) -> None:
+        """Probed, not assumed. The classifier's premise is a runtime fact."""
+        with pytest.raises(SystemExit):
+            sys.exit(0)
+
+        assert _never_returns("sys.exit")
+
+    def test_a_callable_annotated_no_return_is_a_terminator(self) -> None:
+        """The derivation, over a callable this module did not name anywhere.
+
+        This is what makes the set derived rather than listed: a helper written
+        tomorrow joins it by carrying the annotation.
+        """
+
+        def stop() -> NoReturn:
+            raise SystemExit(1)
+
+        assert _never_returns("stop", SimpleNamespace(stop=stop))
+
+    def test_a_call_the_command_continues_past_is_not_a_terminator(self) -> None:
+        """Anti-vacuity: a classifier that said yes to everything would pass."""
+        assert not _never_returns("click.echo")
+
+    def test_a_name_the_command_module_does_not_have_is_not_a_terminator(self) -> None:
+        """An unresolvable name is read as continuing, and that is the ceiling.
+
+        Stated as a case rather than as a sentence in a docstring: a way out
+        this module cannot resolve is read as a branch that carries on, so the
+        behavioural axis in `tests/test_every_wizard_answer_is_judged.py` is
+        what covers the forms this one cannot enumerate.
+        """
+        assert not _never_returns("nothing_by_this_name.exit")
 
 
 class TestNoGraphFileIsWrittenPastTheCommitPoint:

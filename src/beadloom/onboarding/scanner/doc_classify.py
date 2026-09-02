@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from beadloom.infrastructure.atomic_io import write_yaml_atomic
+from beadloom.onboarding.scanner.parent_edges import missing_parent_edges, parented_by
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -52,7 +53,7 @@ def _existing_graph(graph_dir: Path) -> tuple[str | None, set[str]]:
 
     "More than one" counts distinct ref_ids, not node entries. The graph
     identifies a node by its ref_id — the loader keeps one node per ref_id, and
-    `parented` and `_missing_parent_edges`' `seen` are both sets of ref_ids — so
+    `parented` and `parent_edges.missing_parent_edges`' `seen` are both sets of ref_ids — so
     a single root written twice is a single candidate. Until BDL-067 `.17` the
     candidates were collected into a list and counted there, and
     `bootstrap_project` produces the duplicate on an ordinary project shape: it
@@ -85,11 +86,7 @@ def _existing_graph(graph_dir: Path) -> tuple[str | None, set[str]]:
         if not isinstance(data, dict):
             continue
         nodes.extend(data.get("nodes") or [])
-        parented.update(
-            str(e["src"])
-            for e in (data.get("edges") or [])
-            if e.get("kind") == "part_of" and e.get("src")
-        )
+        parented.update(parented_by(data.get("edges") or []))
     roots = sorted(
         {
             str(n["ref_id"])
@@ -98,43 +95,6 @@ def _existing_graph(graph_dir: Path) -> tuple[str | None, set[str]]:
         }
     )
     return (roots[0] if len(roots) == 1 else None), parented
-
-
-def _missing_parent_edges(
-    nodes: list[dict[str, Any]],
-    root_ref_id: str,
-    parented: set[str],
-) -> list[dict[str, str]]:
-    """Name the `part_of` edges the imported nodes are still short of.
-
-    The same post-condition `bootstrap_project` holds over its own output
-    (`bootstrap._missing_domain_parent_edges`), stated here because `import_docs`
-    is the SECOND writer of `domain` nodes and the first statement of it never
-    reached this one: every document the classifier cannot place became a
-    `domain` with no parent, in the same run that wrote `domain-needs-parent` at
-    error severity, so `init --yes --mode both` exited 0 and the adopter's next
-    `lint --strict` exited 1 (BDL-067 `.14`, reproducing BDL-UX #192 on a branch
-    the epic had declared covered).
-
-    The edge is written for every kind, not only for the two the generated rules
-    require a parent for. An imported node is part of the project whatever the
-    classifier called it, and a post-condition that tracked the current rule set
-    would go stale the next time a rule is added.
-
-    Two nodes are left alone: one whose ref_id already carries a `part_of` edge
-    somewhere in the graph keeps the parent it has, and one whose ref_id is the
-    root's own gets nothing, because an edge from a node to itself is not a
-    parent.
-    """
-    edges: list[dict[str, str]] = []
-    seen = set(parented)
-    for node in nodes:
-        ref_id = str(node["ref_id"])
-        if ref_id == root_ref_id or ref_id in seen:
-            continue
-        edges.append({"src": ref_id, "dst": root_ref_id, "kind": "part_of"})
-        seen.add(ref_id)
-    return edges
 
 
 def import_docs(
@@ -146,6 +106,16 @@ def import_docs(
     Post-condition, and the reason this function reads the graph before it
     writes one: every node written here carries an outgoing `part_of` edge to
     the graph's root, unless the graph has no single root to attach it to.
+
+    This is the SECOND writer of `domain` nodes, and the post-condition it holds
+    is the same object `bootstrap_project` holds — `parent_edges` — rather than a
+    second statement of it. Until BDL-067 `.21` there were two functions with one
+    name in two modules, and their only stated connection was a docstring here
+    naming a symbol that had been renamed away. They had already drifted once and
+    were repaired by editing both (the review of `.16`, minor 2; the review of
+    `.20`, major 3). What this writer computes for itself is `parented`, read off
+    the graph already on disk, because it is adding to a graph rather than
+    producing one.
 
     Returns list of dicts with path, kind for each classified doc.
     """
@@ -177,7 +147,7 @@ def import_docs(
         root_ref_id, parented = _existing_graph(graph_dir)
         graph_data: dict[str, Any] = {"nodes": nodes}
         if root_ref_id is not None:
-            edges = _missing_parent_edges(nodes, root_ref_id, parented)
+            edges = missing_parent_edges(nodes, root_ref_id, parented)
             if edges:
                 graph_data["edges"] = edges
         write_yaml_atomic(

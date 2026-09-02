@@ -334,3 +334,36 @@ Feature: the bootstrap writes a graph that satisfies the rules it writes
     Then the command does not report success
     And the completion claim is withdrawn before the failure is reported
     And the command does not ask for a bug report
+
+  # BDL-067 `.21`, the review's major 2 on `.20` — BDL-UX #192's sixth instance,
+  # on the branch a human adopter meets first. `interactive_init` writes
+  # `services.yml` and leaves the adopter's `rules.yml` in place BEFORE it asks
+  # "Proceed with this graph?", so `cancel` never meant "nothing was written":
+  # it meant the graph was on disk and the command said nothing about whether it
+  # passes the rules beside it. Measured by the review: the wizard answering
+  # cancel exited 0 while `lint --strict` on the same tree exited 1. The verdict
+  # is now taken by any run that wrote a graph file, however it ends, and the
+  # message says what is on disk instead of "Cancelled." over it.
+  @bead:beadloom-e8s4.21
+  Scenario: cancelling the graph review still judges the graph already written
+    Given a project whose only source file sits directly in its source directory
+    And a rules file the adopter wrote that the bootstrap graph fails
+    When beadloom init is run with no flags and the graph review is answered with cancel
+    Then the command does not report success
+    And the command names the rule the adopter wrote
+    And the command says where the graph it had already written is
+
+  # BDL-067 `.21`, the review's major 1 on `.20` — BDL-UX #216 standing on the
+  # third entry point. `docs/architecture.md` is a document about the WHOLE
+  # graph, and `init --bootstrap` rendered it from the bootstrap's own nodes,
+  # so on a tree carrying a graph file from an earlier run it documented part of
+  # the tree and wrote no skeleton for the rest. The wizard, which passes no node
+  # list, documented all of it. One declared mode, two entry points, two
+  # different trees.
+  @bead:beadloom-e8s4.21
+  Scenario: every entry point documents the whole graph it found, not only its own part
+    Given a project whose only source file sits directly in its source directory
+    And a graph file no writer rewrites, holding a root and a domain with no parent
+    When the bootstrap flag and the wizard are each run over that tree
+    Then both runs document the domain the earlier run left
+    And the two runs leave the same graph and the same documents

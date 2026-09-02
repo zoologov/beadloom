@@ -49,25 +49,30 @@ THE INVARIANTS, one per class, asserted in every cell the arrangement reaches:
   5. The entry points that offer one declared mode leave one graph
      (`TestTheEntryPointsLeaveOneGraphForOneDeclaredMode`).
 
-THE FINDING THIS TABLE PRODUCED, recorded rather than asserted away, because closing
-it is a behaviour change and this is a test bead. On a tree that already carries a
+THE FINDING THIS TABLE PRODUCED, and what closed it. On a tree that already carried a
 graph file an earlier run left, `beadloom init --bootstrap` and the wizard answering
-`bootstrap` leave DIFFERENT graphs. Measured on a project with `.beadloom/_graph/
+`bootstrap` left DIFFERENT graphs. Measured on a project with `.beadloom/_graph/
 legacy.yml` holding one service root and one domain `ledger`:
 
-    only `--bootstrap` leaves:  ledger with no `docs:` field
-    only the wizard leaves:     ledger with docs: ['docs/domains/ledger/README.md'],
-                                and that file
+    only `--bootstrap` left:  ledger with no `docs:` field
+    only the wizard left:     ledger with docs: ['docs/domains/ledger/README.md'],
+                              and that file, and `ledger` in the Domains table of
+                              docs/architecture.md
 
-The cause is one argument. The `--bootstrap` branch calls `generate_skeletons(root,
-result["nodes"], result["edges"])`; `interactive_init` calls `generate_skeletons(root)`
-with no node list, so it writes skeletons for nodes an earlier run left. That is
-BDL-UX #216 -- the divergence `.18` closed on `non_interactive_init` -- standing on the
-third entry point, and it changes the failure report's headline between two runs of
-one declared mode. It is invisible on a virgin tree, which is why
-`TestTheEntryPointsLeaveOneGraphForOneDeclaredMode` is stated over one and passes:
-what it asserts is true, and the case it does not reach is named here and routed to
-the sixth-pass review.
+The cause was one argument. The `--bootstrap` branch called `generate_skeletons(root,
+result["nodes"], result["edges"])`; the other callers call `generate_skeletons(root)`
+with no node list, so they write skeletons for every node on disk. That is BDL-UX #216
+-- the divergence `.18` closed on `non_interactive_init` -- standing on the third
+entry point. This table recorded it rather than asserting it away, because closing it
+was a behaviour change and `.19` was a test bead; the review of `.20` raised it as a
+major and BDL-067 `.21` closed it by taking the parameter off the function rather than
+by editing the third call site, since a document about the whole tree that can be
+handed part of the tree is a defect one caller at a time. The case that measures it is
+`test_every_branch_leaves_the_same_thing_on_a_tree_it_did_not_start`, and the case that
+prevents the next caller is `test_the_skeleton_writer_cannot_be_handed_a_subset_of_the
+_tree`. Both were measured red before the parameter came off: the docs differed by
+`docs/domains/ledger/README.md` and the architecture document by whether it named
+`ledger` at all.
 
 RED PROVED, not asserted. Each invariant was measured against a tree without the fix
 it covers, one single-edit mutant of `services/commands/setup.py` at a time, and each
@@ -120,6 +125,7 @@ Beadloom's own tree would fail these.
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -129,6 +135,7 @@ import yaml
 from click.testing import CliRunner
 
 from beadloom.application.gate import GateResult, GateStep, lint_step
+from beadloom.onboarding.doc_generator import generate_skeletons
 from beadloom.services.cli import main
 from beadloom.services.commands.federation import _format_gate
 from beadloom.services.commands.setup import (
@@ -944,6 +951,26 @@ THE_MODES_MORE_THAN_ONE_BRANCH_OFFERS = tuple(
     if len([entry for entry in THE_ENTRY_POINTS if mode in entry.modes]) > 1
 )
 
+#: The modes more than one branch can run over a tree that already carries a
+#: graph file. Narrower than the tuple above, and derived from the same two
+#: facts rather than written down: `--yes` refuses such a tree (`skipped`) or
+#: deletes it (`--force`), so for a mode only `--yes` and the wizard offer there
+#: is one branch left and nothing to compare. `test_which_modes_have_two
+#: _branches_that_can_re_run` states which modes those are, so a mode leaving or
+#: joining this set is visible rather than silently untested.
+THE_MODES_MORE_THAN_ONE_BRANCH_CAN_RE_RUN = tuple(
+    mode
+    for mode in THE_MODES
+    if len(
+        [
+            entry
+            for entry in THE_ENTRY_POINTS
+            if mode in entry.modes and entry.can_meet_a_file_it_did_not_write
+        ]
+    )
+    > 1
+)
+
 
 class TestTheEntryPointsLeaveOneGraphForOneDeclaredMode:
     """INVARIANT 5. One command, one declared mode, one graph -- over all branches.
@@ -962,13 +989,16 @@ class TestTheEntryPointsLeaveOneGraphForOneDeclaredMode:
     `.18` closed was green on both sides and would have passed any comparison of
     exit codes.
 
-    STATED LIMIT, and it is the finding in this module's docstring: this holds on
-    a VIRGIN tree, and the measurement that produced it is a virgin tree. On a
-    tree that already carries a graph file, `--bootstrap` and the wizard do NOT
-    leave the same graph -- the wizard writes a README for the inherited node and
-    patches its `docs:` field, `--bootstrap` does neither, because the two call
-    `generate_skeletons` with different arguments. Asserting that away is a
-    behaviour change and belongs to a dev bead with its own UX number.
+    THE LIMIT THIS CLASS DECLARED, now closed. Until BDL-067 `.21` every case
+    here ran on a VIRGIN tree, and the invariant was false on a tree that already
+    carried a graph file: the wizard wrote a README for the inherited node and
+    patched its `docs:` field, `--bootstrap` did neither, because the two called
+    `generate_skeletons` with different arguments. That was BDL-UX #216 standing
+    on the third entry point, and `.21` closed it by removing the argument rather
+    than by fixing the call -- `generate_skeletons` no longer accepts a node
+    list, so the whole-tree document it renders cannot be rendered from a subset
+    of the tree by any caller. The last case below is that measurement, and it is
+    stated over the tree the divergence needed: the inherited one.
     """
 
     def _graph_left_by(self, tmp_path: Path, entry: EntryPoint, mode: str) -> Any:
@@ -989,6 +1019,45 @@ class TestTheEntryPointsLeaveOneGraphForOneDeclaredMode:
             sorted(json.dumps(node, sort_keys=True) for node in nodes),
             sorted(json.dumps(edge, sort_keys=True) for edge in edges),
         )
+
+    def _left_by(
+        self,
+        tmp_path: Path,
+        entry: EntryPoint,
+        mode: str,
+        *,
+        arrange: Any,
+        reinit: bool,
+    ) -> Any:
+        """Everything one branch leaves behind: the graph, the docs, the rc.
+
+        Unlike `_graph_left_by` this does not require a green run. On the
+        inherited tree every branch is red -- `ledger` has no parent and the
+        rules file says it must -- and what is being compared is what the
+        branches LEAVE, which the exit code does not answer.
+        """
+        project = arrange(tmp_path)
+        with _answering(Cell(entry, mode), reinit=reinit):
+            result = CliRunner().invoke(
+                main, ["init", *entry.argv(mode, project), "--project", str(project)]
+            )
+        nodes, edges = _graph_on_disk(project)
+        architecture = project / "docs" / "architecture.md"
+        return {
+            "rc": result.exit_code,
+            "nodes": sorted(json.dumps(node, sort_keys=True) for node in nodes),
+            "edges": sorted(json.dumps(edge, sort_keys=True) for edge in edges),
+            "docs": sorted(
+                str(path.relative_to(project))
+                for path in (project / "docs").rglob("*.md")
+            ),
+            "the inherited node is in the architecture document": (
+                THE_ORPHAN_IN_THE_INHERITED_FILE
+                in architecture.read_text(encoding="utf-8")
+                if architecture.is_file()
+                else None
+            ),
+        }
 
     def test_every_mode_is_offered_by_more_than_one_branch(self) -> None:
         """Anti-vacuity: a mode with one branch would be compared against itself."""
@@ -1021,6 +1090,95 @@ class TestTheEntryPointsLeaveOneGraphForOneDeclaredMode:
         }
         # Anti-vacuity: an empty graph would make every branch agree cheaply.
         assert all(nodes for nodes, _ in left.values()), left
+
+        first, *rest = offering
+        for entry in rest:
+            assert left[entry.name] == left[first.name], (
+                mode,
+                entry.name,
+                first.name,
+                left,
+            )
+
+    def test_the_skeleton_writer_cannot_be_handed_a_subset_of_the_tree(self) -> None:
+        """The fix, stated over the signature rather than over the call sites.
+
+        `generate_skeletons` renders `docs/architecture.md`, a document about the
+        WHOLE graph. While it accepted a node list, a caller could hand it part
+        of the tree and get a whole-tree document describing that part — and one
+        caller of four did, which is what the case below measured. Fixing the
+        call site would have left the next caller free to make the same mistake:
+        `.18` fixed one and the review of `.20` found the third still open,
+        quoting `.18`'s own comment stating the rule it had not applied there.
+
+        A case over the call sites would have to be re-derived whenever a fifth
+        appears. A renderer that takes only the project root cannot be handed a
+        subset by any caller, including one written tomorrow.
+        """
+        parameters = list(inspect.signature(generate_skeletons).parameters)
+
+        assert parameters == ["project_root"], (
+            "`generate_skeletons` renders a whole-tree document and has grown a "
+            f"way to be given part of the tree: {parameters}"
+        )
+
+    def test_which_modes_have_two_branches_that_can_re_run(self) -> None:
+        """The population of the case below, stated so its absence is visible.
+
+        `both` is offered by `--yes` and the wizard only, and `--yes` cannot meet
+        a file it did not write, so no two branches run `both` over an inherited
+        tree and there is nothing to compare there. `bootstrap` and `import` each
+        have a third entry point, which is exactly where the divergence was.
+        """
+        assert THE_MODES_MORE_THAN_ONE_BRANCH_CAN_RE_RUN == ("bootstrap", "import"), (
+            THE_MODES_MORE_THAN_ONE_BRANCH_CAN_RE_RUN
+        )
+
+    @pytest.mark.parametrize(
+        "mode",
+        THE_MODES_MORE_THAN_ONE_BRANCH_CAN_RE_RUN,
+        ids=list(THE_MODES_MORE_THAN_ONE_BRANCH_CAN_RE_RUN),
+    )
+    def test_every_branch_leaves_the_same_thing_on_a_tree_it_did_not_start(
+        self, tmp_path: Path, mode: str
+    ) -> None:
+        """The case the class's stated limit named, run on the tree it named.
+
+        MEASURED before the fix, by the review of `.20`, on two identical trees
+        each carrying `.beadloom/_graph/legacy.yml`: only the wizard's tree
+        gained `docs/domains/ledger/README.md`, only the wizard's tree listed
+        `ledger` in the Domains table of `docs/architecture.md`, and only the
+        wizard's `legacy.yml` gained a `docs:` field on that node. One declared
+        mode, two entry points, two different trees.
+
+        The docs are compared as well as the graph because that is where the
+        divergence showed first: `generate_skeletons` renders `architecture.md`
+        from the nodes it is given, so a caller that hands it a subset of the
+        tree gets a whole-tree document describing part of the tree.
+        """
+        offering = [
+            entry
+            for entry in THE_ENTRY_POINTS
+            if mode in entry.modes and entry.can_meet_a_file_it_did_not_write
+        ]
+        # Anti-vacuity: one branch would be compared against itself. `--yes` is
+        # excluded for a measured reason and not for a stated one -- it returns
+        # `skipped` over an existing `.beadloom/` and deletes the directory under
+        # `--force`, so it never MEETS an inherited file, which is what
+        # `TestWhichBranchesCanMeetAFileTheyDidNotWrite` establishes.
+        assert len(offering) > 1, offering
+        left = {
+            entry.name: self._left_by(
+                tmp_path / entry.name.strip("-"),
+                entry,
+                mode,
+                arrange=_a_project_carrying_an_earlier_runs_graph,
+                reinit=True,
+            )
+            for entry in offering
+        }
+        # And an empty graph would make every branch agree cheaply.
+        assert all(outcome["nodes"] for outcome in left.values()), left
 
         first, *rest = offering
         for entry in rest:

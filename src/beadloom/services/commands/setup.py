@@ -799,6 +799,28 @@ def _graph_files_this_run_wrote(
     return frozenset(name for name, digest in after.items() if before.get(name) != digest)
 
 
+def _this_run_wrote_a_graph_file(project_root: Path, graph_before: Mapping[str, str]) -> bool:
+    """Whether anything under `.beadloom/_graph/` changed since the run started.
+
+    The precondition of the verdict, asked of the TREE rather than of the branch
+    that is about to take it. `init` used to answer it by position — a branch
+    that wrote called the verdict, a branch that did not returned above it — and
+    that is how the wizard's `cancel` answer came to write `services.yml` and
+    `rules.yml`, exit 0 and report nothing (BDL-UX #192's sixth instance, the
+    review of BDL-067 `.20`, major 2). It is also why `interactive_init`'s OTHER
+    cancelled answer must not be judged: the re-init prompt is put before any
+    writer runs, so answering it leaves the adopter's tree exactly as it was, and
+    a report there would name an existing tree's failures under a withdrawal line
+    that says a scaffold was written.
+
+    One fact, read in one place, so a branch cannot get it wrong by forgetting to
+    return.
+    """
+    return bool(
+        _graph_files_this_run_wrote(graph_before, _graph_files_now(project_root))
+    )
+
+
 #: The headline's two halves, each chosen by one fact about the tree rather than
 #: by the branch that is reporting. Keyed by "this run wrote it": the graph file
 #: the failing node came from, and `rules.yml`. Written as a mapping over the
@@ -902,11 +924,13 @@ def _verdict_on_the_generated_graph(
     """
     from beadloom.application.gate import RULES_CONFIG_ERROR, lint_step
 
+    written = _graph_files_this_run_wrote(graph_before, _graph_files_now(project_root))
+    if not written:
+        return
+
     step = lint_step(project_root)
     if step.passed:
         return
-
-    written = _graph_files_this_run_wrote(graph_before, _graph_files_now(project_root))
 
     click.echo("", err=True)
     click.echo(WITHDRAWN_COMPLETION_CLAIM, err=True)
@@ -1184,10 +1208,15 @@ def init(
     if bootstrap:
         result = bootstrap_project(project_root, preset_name=preset)
 
-        # Generate doc skeletons.
+        # Generate doc skeletons. From the tree, like every other caller: this
+        # branch passed `result["nodes"], result["edges"]` until BDL-067 `.21`,
+        # so on a project that already carried a graph file it rendered
+        # `docs/architecture.md` from the bootstrap's nodes alone and wrote no
+        # skeleton for anything an earlier run had left. One declared mode, two
+        # entry points, two different trees (BDL-UX #216, the review of `.20`).
         from beadloom.onboarding.doc_generator import generate_skeletons
 
-        docs_result = generate_skeletons(project_root, result["nodes"], result["edges"])
+        docs_result = generate_skeletons(project_root)
 
         # Auto-reindex to populate import analysis and depends_on edges.
         from beadloom.application.reindex import reindex as do_reindex
@@ -1278,8 +1307,6 @@ def init(
     from beadloom.onboarding import interactive_init
 
     result = interactive_init(project_root)
-    if result["mode"] == "cancelled":
-        sys.exit(0)
     # The branch a human adopter meets first. It was left out when the verdict
     # landed (BDL-067 `.2`) because the test that covered the other two was
     # parametrised over the two BINDINGS of `bootstrap_project` — and the wizard
@@ -1296,4 +1323,17 @@ def init(
     # nothing has re-indexed since. Judging it there would report a state the
     # user is in the middle of leaving.
     if result.get("review") != "edit":
+        # The wizard can return above the reindex it ends with — `cancel` at the
+        # graph review does — and `lint_step` reads the index read-only, so a
+        # verdict there would judge an index that predates the graph already on
+        # disk. That is `.14`'s stale-index defect from the other side. The
+        # question is put to the wizard's own return value rather than to the
+        # answer that caused it: `reindex` is recorded when the reindex ran, so
+        # a fourth review answer that leaves early is covered by this same line.
+        if "reindex" not in result and _this_run_wrote_a_graph_file(
+            project_root, graph_before
+        ):
+            from beadloom.application.reindex import reindex as do_reindex
+
+            do_reindex(project_root)
         _verdict_on_the_generated_graph(project_root, graph_before=graph_before)

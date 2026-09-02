@@ -72,13 +72,31 @@ def _basic_nodes() -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
+def _a_project_whose_graph_holds(
+    root: Path, nodes: list[dict[str, Any]], edges: list[dict[str, Any]]
+) -> Path:
+    """Write *nodes* and *edges* into the graph directory and return *root*.
+
+    `generate_skeletons` reads `.beadloom/_graph/` and takes nothing else, since
+    BDL-067 `.21` — a whole-tree document rendered from a subset of the tree was
+    BDL-UX #216, and the parameter that allowed it is gone. These cases therefore
+    arrange the graph the way the product does, which is also the path the
+    product runs.
+    """
+    graph_dir = root / ".beadloom" / "_graph"
+    graph_dir.mkdir(parents=True, exist_ok=True)
+    (graph_dir / "services.yml").write_text(
+        yaml.dump({"nodes": nodes, "edges": edges}, default_flow_style=False),
+        encoding="utf-8",
+    )
+    return root
+
+
 class TestGenerateSkeletons:
     """Tests for :func:`generate_skeletons`."""
 
     def test_creates_architecture_md(self, tmp_path: Path) -> None:
-        nodes = _basic_nodes()
-        edges = _basic_edges()
-        generate_skeletons(tmp_path, nodes=nodes, edges=edges)
+        generate_skeletons(_a_project_whose_graph_holds(tmp_path, _basic_nodes(), _basic_edges()))
 
         arch = tmp_path / "docs" / "architecture.md"
         assert arch.exists()
@@ -88,9 +106,7 @@ class TestGenerateSkeletons:
         assert "## Services" in content
 
     def test_creates_domain_readme(self, tmp_path: Path) -> None:
-        nodes = _basic_nodes()
-        edges = _basic_edges()
-        generate_skeletons(tmp_path, nodes=nodes, edges=edges)
+        generate_skeletons(_a_project_whose_graph_holds(tmp_path, _basic_nodes(), _basic_edges()))
 
         readme = tmp_path / "docs" / "domains" / "auth" / "README.md"
         assert readme.exists()
@@ -99,17 +115,13 @@ class TestGenerateSkeletons:
         assert "## Source" in content
 
     def test_creates_service_md(self, tmp_path: Path) -> None:
-        nodes = _basic_nodes()
-        edges = _basic_edges()
-        generate_skeletons(tmp_path, nodes=nodes, edges=edges)
+        generate_skeletons(_a_project_whose_graph_holds(tmp_path, _basic_nodes(), _basic_edges()))
 
         svc = tmp_path / "docs" / "services" / "cli.md"
         assert svc.exists()
 
     def test_creates_feature_spec(self, tmp_path: Path) -> None:
-        nodes = _basic_nodes()
-        edges = _basic_edges()
-        generate_skeletons(tmp_path, nodes=nodes, edges=edges)
+        generate_skeletons(_a_project_whose_graph_holds(tmp_path, _basic_nodes(), _basic_edges()))
 
         # Features go under their parent domain directory.
         spec = tmp_path / "docs" / "domains" / "auth" / "features" / "auth-api" / "SPEC.md"
@@ -119,9 +131,7 @@ class TestGenerateSkeletons:
         assert "auth" in content
 
     def test_skips_root_service(self, tmp_path: Path) -> None:
-        nodes = _basic_nodes()
-        edges = _basic_edges()
-        generate_skeletons(tmp_path, nodes=nodes, edges=edges)
+        generate_skeletons(_a_project_whose_graph_holds(tmp_path, _basic_nodes(), _basic_edges()))
 
         # Root node "myproject" has no part_of edge — no service file expected.
         root_svc = tmp_path / "docs" / "services" / "myproject.md"
@@ -133,18 +143,18 @@ class TestGenerateSkeletons:
         sentinel = "DO NOT OVERWRITE"
         (docs / "architecture.md").write_text(sentinel, encoding="utf-8")
 
-        nodes = _basic_nodes()
-        edges = _basic_edges()
-        result = generate_skeletons(tmp_path, nodes=nodes, edges=edges)
+        result = generate_skeletons(
+            _a_project_whose_graph_holds(tmp_path, _basic_nodes(), _basic_edges())
+        )
 
         # File content must be preserved.
         assert (docs / "architecture.md").read_text(encoding="utf-8") == sentinel
         assert result["files_skipped"] >= 1
 
     def test_returns_counts(self, tmp_path: Path) -> None:
-        nodes = _basic_nodes()
-        edges = _basic_edges()
-        result = generate_skeletons(tmp_path, nodes=nodes, edges=edges)
+        result = generate_skeletons(
+            _a_project_whose_graph_holds(tmp_path, _basic_nodes(), _basic_edges())
+        )
 
         assert result["files_created"] > 0
         assert result["files_skipped"] == 0
@@ -174,18 +184,14 @@ class TestGenerateSkeletons:
         assert readme.exists()
 
     def test_mermaid_in_architecture(self, tmp_path: Path) -> None:
-        nodes = _basic_nodes()
-        edges = _basic_edges()
-        generate_skeletons(tmp_path, nodes=nodes, edges=edges)
+        generate_skeletons(_a_project_whose_graph_holds(tmp_path, _basic_nodes(), _basic_edges()))
 
         arch = tmp_path / "docs" / "architecture.md"
         content = arch.read_text(encoding="utf-8")
         assert "```mermaid" in content
 
     def test_enrich_marker(self, tmp_path: Path) -> None:
-        nodes = _basic_nodes()
-        edges = _basic_edges()
-        generate_skeletons(tmp_path, nodes=nodes, edges=edges)
+        generate_skeletons(_a_project_whose_graph_holds(tmp_path, _basic_nodes(), _basic_edges()))
 
         arch = tmp_path / "docs" / "architecture.md"
         content = arch.read_text(encoding="utf-8")
@@ -426,12 +432,14 @@ class TestPatchDocsField:
         assert nodes_by_id["billing"]["docs"] == ["docs/domains/billing/README.md"]
 
     def test_no_graph_dir_does_not_crash(self, tmp_path: Path) -> None:
-        """When called with explicit nodes/edges and no graph dir, no crash."""
-        nodes = _basic_nodes()
-        edges = _basic_edges()
-        # No .beadloom/_graph/ directory — should not raise.
-        result = generate_skeletons(tmp_path, nodes=nodes, edges=edges)
-        assert result["files_created"] > 0
+        """A project with no `.beadloom/_graph/` at all: an empty graph, no raise."""
+        result = generate_skeletons(tmp_path)
+
+        # `docs/architecture.md` is written for an empty graph too — the tree it
+        # describes is empty, which is a true document about a project with no
+        # graph and is what the next `beadloom docs generate` would rewrite.
+        assert result == {"files_created": 1, "files_skipped": 0}
+        assert (tmp_path / "docs" / "architecture.md").is_file()
 
 
 # ---------------------------------------------------------------------------

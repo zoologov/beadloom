@@ -38,8 +38,9 @@ from beadloom.services.commands.setup import (
     _ATTRIBUTION,
     _GRAPH_HALF,
     _RULES_HALF,
+    _graph_file_of_each_node,
 )
-from tests.adopter_project import typescript_project
+from tests.adopter_project import python_project, typescript_project
 from tests.test_init_verdict_over_its_own_rules import (
     PACKAGE_BINDING,
     _a_bootstrap_that_forgets_the_edge,
@@ -90,12 +91,43 @@ AN_IMPORT_FILE_FROM_AN_EARLIER_RUN = {
             "ref_id": "payments",
             "kind": "domain",
             "summary": "Imported from payments.md",
+            # `import_docs` writes this field for every node it creates, and the
+            # fixture omitted it until BDL-067 `.21`. It matters: a node with no
+            # doc gets a skeleton, and writing that skeleton patches `docs:` back
+            # into the file the node is in — so THIS run would have written the
+            # inherited file and two of the four corners would stop being the
+            # corners they are named after. That is not a fixture detail, it is
+            # what `.21` changed on the `--bootstrap` branch: `generate_skeletons`
+            # now reads the whole tree there too, so it reaches inherited nodes
+            # the way it always did from the wizard.
+            "docs": ["docs/payments.md"],
         }
     ]
 }
 
 #: The node in that file, and the one every report below has to name.
 THE_INHERITED_ORPHAN = "payments"
+
+#: A rule the adopter wrote whose findings name NO node. `forbid_import`
+#: violations carry `from_ref_id=None` (`graph/rules/evaluators.py`), so they
+#: reach the report as a finding about a file crossing rather than about a graph
+#: node — and `bootstrap_project` never rewrites a rules file already on disk, so
+#: an adopter's own boundary rule survives into `init --bootstrap` and produces
+#: exactly that. The review of `.20` reasoned this path out and could not stage
+#: it (no tree-sitter Python grammar in that environment, so the `from:` glob
+#: matched nothing and the rule went inert); it is staged here.
+A_BOUNDARY_RULE_THE_ADOPTER_WROTE = """\
+version: 1
+rules:
+  - name: no-billing-to-ledger
+    description: "Billing must not import ledger directly"
+    forbid_import:
+      from: "src/invoice_svc/billing/**"
+      to: "invoice_svc/ledger**"
+"""
+
+#: Its name, which is the whole of the line the report prints for it.
+THE_BOUNDARY_RULE = "no-billing-to-ledger"
 
 
 def _write_graph_file(project_root: Path, name: str, data: dict[str, Any]) -> None:
@@ -105,6 +137,19 @@ def _write_graph_file(project_root: Path, name: str, data: dict[str, Any]) -> No
         yaml.safe_dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False),
         encoding="utf-8",
     )
+
+
+def _an_earlier_import_run_left_a_graph_file(project_root: Path) -> None:
+    """Write `imported.yml` and the document its node points at.
+
+    Both halves, because `import_docs` writes both: a node whose `docs:` names a
+    file that is not there is not a state any writer in the product produces, and
+    it is the state in which this run would rewrite the inherited file.
+    """
+    _write_graph_file(project_root, "imported.yml", AN_IMPORT_FILE_FROM_AN_EARLIER_RUN)
+    docs = project_root / "docs"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / "payments.md").write_text("# Payments\n", encoding="utf-8")
 
 
 def _write_rules(project_root: Path, text: str) -> None:
@@ -156,7 +201,7 @@ def _graph_theirs_rules_ours(project: Path, monkeypatch: pytest.MonkeyPatch) -> 
     `imported.yml` holds an unparented domain, no `rules.yml` is on disk, and the
     wizard's bootstrap writes `domain-needs-parent` and meets it.
     """
-    _write_graph_file(project, "imported.yml", AN_IMPORT_FILE_FROM_AN_EARLIER_RUN)
+    _an_earlier_import_run_left_a_graph_file(project)
     return _wizard(project, "overwrite", "bootstrap", "yes")
 
 
@@ -169,7 +214,7 @@ def _neither_ours(project: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
     write, under a rule this run did not write.
     """
     _write_rules(project, A_DOMAIN_RULE_THE_ADOPTER_WROTE)
-    _write_graph_file(project, "imported.yml", AN_IMPORT_FILE_FROM_AN_EARLIER_RUN)
+    _an_earlier_import_run_left_a_graph_file(project)
     return _bootstrap(project)
 
 
@@ -328,3 +373,131 @@ class TestTheWithdrawalIsNotAnAdmissionOfFault:
         output = _the_report(typescript_project(tmp_path / "orders-web").root, monkeypatch, corner)
 
         assert WITHDRAWN_COMPLETION_CLAIM in output, (corner, output)
+
+
+def _a_project_whose_own_boundary_rule_it_breaks(root: Path) -> Path:
+    """A Python project that is not us, with one import its own rule forbids.
+
+    Two packages under `src/invoice_svc/` and one crossing between them, so the
+    adopter's `forbid_import` rule has something to match. The rule is on disk
+    before `init` runs, which is what makes it theirs: `generate_rules` writes
+    `rules.yml` only when there is none.
+    """
+    project = python_project(root).root
+    ledger = project / "src" / "invoice_svc" / "ledger"
+    billing = project / "src" / "invoice_svc" / "billing"
+    (ledger / "entries.py").write_text("def book() -> int:\n    return 1\n", encoding="utf-8")
+    (billing / "service.py").write_text(
+        "from invoice_svc.ledger.entries import book\n\n\ndef charge() -> int:\n"
+        "    return book()\n",
+        encoding="utf-8",
+    )
+    _write_rules(project, A_BOUNDARY_RULE_THE_ADOPTER_WROTE)
+    return project
+
+
+class TestAFindingAboutNoNodeIsStillAttributed:
+    """The report's coarsest grain, over the finding that has no finer one.
+
+    Every case above is about a finding that names a node, because that is what
+    a `require` rule produces and `generate_rules` writes nothing else. A
+    `forbid_import` violation names a FILE and a line, and carries no node at
+    all — so `_failing_rule_lines` prints the bare rule name and
+    `_this_run_wrote_the_graph_that_fails` has nothing to attribute per node and
+    falls back to "did this run write any graph file". Until this case, nothing
+    in the suite reached either branch, and the review of `.20` recorded that as
+    the one measurement it could not complete.
+
+    The corner is `(True, False)`: this run wrote a graph file and did not write
+    `rules.yml`. The corner that would misattribute — `(True, True)` with a
+    node-less finding — is unreachable, because `generate_rules` writes only
+    `require` rules and every finding of those names a node.
+    """
+
+    def test_the_run_is_red_on_the_adopters_own_boundary_rule(
+        self, tmp_path: Path
+    ) -> None:
+        """The premise: the rule is live, not inert, and it fails."""
+        project = _a_project_whose_own_boundary_rule_it_breaks(tmp_path)
+
+        result = _bootstrap(project)
+
+        assert result.exit_code == 1, result.output
+
+    def test_the_line_is_the_bare_rule_name(self, tmp_path: Path) -> None:
+        """A finding about no single node keeps the rule and names nothing else.
+
+        An unattributed line is still true; a guessed node would not be.
+        """
+        project = _a_project_whose_own_boundary_rule_it_breaks(tmp_path)
+
+        output = _bootstrap(project).output
+
+        assert f"  {THE_BOUNDARY_RULE}\n" in output, output
+        assert f"{THE_BOUNDARY_RULE}:" not in output, output
+
+    def test_it_prints_the_corner_the_tree_is_in(self, tmp_path: Path) -> None:
+        """`(True, False)` — this run wrote a graph file, the rules are theirs."""
+        project = _a_project_whose_own_boundary_rule_it_breaks(tmp_path)
+
+        output = _bootstrap(project).output
+
+        assert _ATTRIBUTION[True, False] in output, output
+
+    def test_no_other_corner_s_sentence_is_printed(self, tmp_path: Path) -> None:
+        """The case that bites: three corners share most of their wording."""
+        project = _a_project_whose_own_boundary_rule_it_breaks(tmp_path)
+
+        output = _bootstrap(project).output
+
+        for corner, sentence in _ATTRIBUTION.items():
+            if corner != (True, False):
+                assert sentence not in output, (corner, output)
+
+
+class TestAGraphFileThatCannotBeReadIsSkipped:
+    """`_graph_file_of_each_node` hands the adopter a report, not a traceback.
+
+    It is reading `.beadloom/_graph/` at the moment a failure is being explained,
+    and `init` can meet a hand-edited file there. A file it cannot parse costs
+    one unattributed node; raising on it would replace the whole report.
+    """
+
+    def _graph_dir(self, tmp_path: Path) -> Path:
+        graph_dir = tmp_path / ".beadloom" / "_graph"
+        graph_dir.mkdir(parents=True)
+        return graph_dir
+
+    def test_a_readable_file_is_mapped(self, tmp_path: Path) -> None:
+        """Anti-vacuity: a scan that mapped nothing would pass the two below."""
+        graph_dir = self._graph_dir(tmp_path)
+        (graph_dir / "services.yml").write_text(
+            "nodes:\n  - ref_id: billing\n    kind: domain\n", encoding="utf-8"
+        )
+
+        assert _graph_file_of_each_node(tmp_path) == {
+            "billing": ".beadloom/_graph/services.yml"
+        }
+
+    def test_a_file_that_is_not_readable_yaml_is_skipped(self, tmp_path: Path) -> None:
+        graph_dir = self._graph_dir(tmp_path)
+        (graph_dir / "services.yml").write_text(
+            "nodes:\n  - ref_id: billing\n    kind: domain\n", encoding="utf-8"
+        )
+        (graph_dir / "hand-edited.yml").write_text("nodes: [oops\n", encoding="utf-8")
+
+        assert _graph_file_of_each_node(tmp_path) == {
+            "billing": ".beadloom/_graph/services.yml"
+        }
+
+    def test_a_file_that_is_not_a_mapping_is_skipped(self, tmp_path: Path) -> None:
+        """Valid YAML, wrong shape — a list where a mapping was expected."""
+        graph_dir = self._graph_dir(tmp_path)
+        (graph_dir / "services.yml").write_text(
+            "nodes:\n  - ref_id: billing\n    kind: domain\n", encoding="utf-8"
+        )
+        (graph_dir / "a-list.yml").write_text("- billing\n- ledger\n", encoding="utf-8")
+
+        assert _graph_file_of_each_node(tmp_path) == {
+            "billing": ".beadloom/_graph/services.yml"
+        }

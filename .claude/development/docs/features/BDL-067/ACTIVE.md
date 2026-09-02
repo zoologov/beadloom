@@ -7,16 +7,15 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-e8s4.19` — one enumeration over branches x modes x renderers
-**Goal:** stop adding one-axis enumerations. The suite already enumerates branches (`.7`) and then
-modes (`.15`), and the fifth review still returned four majors — three of them on axes no
-enumeration covered: which branch withdraws the completion claim, which renderer the quoted `ci`
-line matches, and which run wrote the failing node. A third one-axis enumeration would repeat that
-at a larger number.
-**Done when:** one table over (entry point x mode) with the renderer varied inside it asserts the
-five invariants in every cell it reaches, every new assertion is measured red against a tree
-without the fix it covers, every assertion that cannot fail is declared with its reason, and
-`beadloom ci` is rc 0.
+**Bead:** `beadloom-e8s4.21` — convert the WRITING side, the way `.17` converted the reporting side
+**Goal:** `.17` and `.19` converted the REPORTING side — attribution from a digest of the whole
+graph directory, a table over the full product, one verdict shared with the Gate, branches derived
+from `init`'s own source — and nobody converted the WRITING side, where all three of the sixth
+review's majors live: one writer, one caller and one exit form each doing its own thing.
+**Done when:** the three majors and the minor are closed so that a new one of each KIND fails a
+test on the day it is written rather than being found by the seventh review — the reviewer's
+prediction being a third writer of graph nodes, a fourth caller of `generate_skeletons`, or a fifth
+way out of `init` that is not `return` — and `beadloom ci` is rc 0.
 
 ## Progress
 
@@ -34,7 +33,8 @@ without the fix it covers, every assertion that cannot fail is declared with its
 - [x] Wave 4d — `.12` dev (`5bdd1b0`) / `.13` review (closed, 3 majors)
 - [x] Wave 4e — `.14` dev (`b68ebb2`) / `.15` test (`6989d5d`) / `.16` review (closed, 4 majors)
 - [x] Wave 4f — `.17` dev (`8d87735`, consolidation) / `.18` dev (`52f52ae`) / `.19` test (the one table)
-- [ ] Wave 4g — `.20` review (sixth pass, after the consolidation)
+- [x] Wave 4g — `.20` review (sixth pass, closed, 3 majors + 1 minor)
+- [ ] Wave 4h — `.21` dev (the writing side) / `.22` test (the three as axes) / `.23` seventh review
 - [ ] Wave 5 — `.5` tech-writer (re-pointed a third time)
 - [ ] Gate green, PR opened
 
@@ -61,6 +61,8 @@ without the fix it covers, every assertion that cannot fail is declared with its
 | `beadloom-e8s4.17` | ✓ done | the common cause, not four instances. Root candidates counted by DISTINCT ref_id; the bootstrap post-condition over every kind; the verdict taken by every branch that writes a graph file, with `--import` re-indexing what it wrote; attribution chosen from a table over the full `(graph, rules)` product sampled off the tree by digest rather than off one writer's return value; the withdrawal printed by the verdict so no caller can decline it; the `ci` line stating the step's name and summary instead of quoting one of three renderings. Resumed from an authentication-killed attempt: its uncommitted work was read, judged sound and built on, with one false docstring sentence in it corrected. |
 | `beadloom-e8s4.18` | ✓ done | the doc skeletons are generated LAST, after the import step — the order `interactive_init` has always run. `--yes --mode both` no longer classifies the documents it wrote seconds earlier: measured on twin scratch projects, `imported.yml`, `services.yml` and the whole `docs/` tree are now identical between the flag and the wizard, and `doctor`'s two `Node catalog/orders has no doc linked` warnings are gone. Chosen over excluding the run's own files from the import scan, because such a filter would have to name `docs/architecture.md` and `docs/domains/*/README.md` — the ADOPTER's documents whenever the adopter wrote them first. 13 tests (12 unit + 1 scenario), all verified RED with the source change reverted. |
 | `beadloom-e8s4.19` | ✓ done | ONE table over (entry point x mode), with the renderer varied inside it, replacing a third one-axis enumeration. 8 cells derived from `init`'s own source — the four guards `.7`'s enumerator finds, times the modes each branch offers, with a one-mode branch's declared mode checked against the writers under its guard. 10 red runs; the report's attribution is MEASURED off `.beadloom/_graph/` by this module's own digest rather than read back from the report or taken from the product's instrument. 169 tests (168 unit + 1 scenario, the `--import` branch's verdict, which `.17` introduced and no scenario stated). Red proved per invariant against four single-edit mutants of `setup.py` (10 / 4 / 10 / 7 failures) and against `52f52ae^` for invariant 5. Five classes declared as guards that cannot fail, with reasons. Collapsed five constants that were about to exist in a third module. |
+| `beadloom-e8s4.20` | ✓ done | sixth-pass review: 0 critical, 3 major. The diagnosis rather than the count is the deliverable — a conversion completed on the reporting side and not started on the writing side — plus the prediction `.21` exists to falsify. |
+| `beadloom-e8s4.21` | ✓ done | the writing side converted. **Major 3:** one post-condition, one implementation — `scanner/parent_edges.py` (`missing_parent_edges` + `parented_by`), imported by both writers; the writers are DERIVED from the source (reach `write_yaml_atomic`, build a payload holding `nodes`), so a third one fails on the day it is written. **Major 1:** `generate_skeletons` no longer accepts a node list at all — a whole-tree document that cannot be handed part of the tree by any caller, present or later. **Major 2:** `init` contains no `sys.exit`; the wizard's `cancel` answer is judged like every other, the verdict asks the TREE whether a verdict is owed, the enumerator's terminator set resolves a callee and reads its return annotation, and the review answers are read off the wizard's own prompt and RUN. **Minor:** the node-less `forbid_import` finding staged end to end (the measurement `.20` could not complete) and the unreadable-YAML guards covered. 50 new tests, 7740 → 7790 passed. Two acceptance scenarios, both measured red by re-applying the two reversions. `beadloom ci` rc 0. |
 
 ## Notes
 
