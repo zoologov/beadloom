@@ -131,8 +131,16 @@ grain (`_graph_nodes_now`, a digest of each node as written, keyed by ref_id). T
 halves and the sentence under them are then chosen from `(this run wrote the failing node, this
 run wrote rules.yml)` through `_GRAPH_HALF`, `_RULES_HALF` and `_ATTRIBUTION` — tables over the
 full product, so a corner cannot be left unwritten. Only the corner where both are this run's
-calls the red a defect in Beadloom's bootstrap and asks for a report; the other three name what
-was already on disk and ask for nothing.
+calls the red a defect in Beadloom's bootstrap and asks for a report. The other three name what
+was already there and ask for nothing.
+
+Each of those three denials is made at the grain its own half of the key is read at, which is
+what keeps it checkable against the tree: the two corners chosen by the NODE deny writing the
+node, and the corner chosen by `rules.yml` denies writing that file. Both node-chosen sentences
+said `graph file(s)` until BDL-067 `.27` — `.24` moved the key to the node and left the words
+behind, so the claim no longer followed from what selected it. MEASURED by the review of `.26`,
+twice: a run that rewrote an inherited graph file in order to annotate the failing node's
+sibling then told the adopter it had not written that file, while `git diff` showed it modified.
 
 The two grains answer different questions and neither can answer the other's, which is why they
 are sampled together in one place rather than separately. The FILE grain answers the verdict's

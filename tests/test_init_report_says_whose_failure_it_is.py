@@ -796,6 +796,109 @@ class TestTheGraphHalfIsAskedOfTheNodeAndNotOfTheFile:
         assert f".beadloom/_graph/{THE_INHERITED_FILE}" in output, output
 
 
+class TestEachSentenceSpeaksAtTheGrainItsKeyIsReadAt:
+    """A sentence and the fact that selected it cannot disagree.
+
+    BDL-067 `.27`, the review of `.26`'s major 1. Before `.24` the graph half's
+    sentences were true BY CONSTRUCTION: the corner was selected by the BYTES of
+    the file the failing node came from, so a claim about that file could not
+    disagree with what selected it. `.24` moved the key to the NODE — created or
+    changed — and left both denials saying `graph file(s)`, so the claim became
+    independent of the fact behind it, and on the very corner `.24` created it is
+    false. MEASURED by the review, twice, on the tree
+    `_a_tree_whose_annotated_node_is_not_the_failing_one` builds: the run rewrote
+    `legacy.yml` (the sibling gained a `docs:` field and every entry was
+    re-serialised) while the report said "This command did not write the graph
+    file(s) named beside the node(s) above — they were already on disk". An
+    adopter's `git diff` shows the file modified and the sentence denying it.
+
+    So the property here is not a wording preference, and the fix is not to
+    reword until it reads well. Each half of the key is read at one grain, and
+    the sentence that half selects claims things at that grain and no other:
+
+        graph half   `_graph_nodes_now` / `_nodes_this_run_wrote`, per ref_id
+                     -> its denials are about NODES
+        rules half   `_graph_files_now` / `_graph_files_this_run_wrote`, per file
+                     -> its denial is about a FILE, and the file is `rules.yml`
+
+    Restated as the property that makes the sentence uncheckable-against-nothing:
+    a corner whose graph half is `False` was selected because the failing node's
+    entry is byte-identical to the one that was there before the run, so "this
+    command did not write the node" is again true by construction — while "this
+    command did not write the file" is a claim nothing in the key supports.
+
+    The table is checked as a table and the printed sentence is checked on the
+    tree that falsifies the old one, because the epic's own history is that four
+    of six defect instances were a sentence that was true of one shape while a
+    neighbouring shape existed.
+    """
+
+    #: The one file a sentence may name while denying authorship: the rules half
+    #: IS read at the file grain (`"rules.yml" in files_this_run_wrote`), so a
+    #: claim about that file is a claim its key supports. Removed before the
+    #: graph half's own claim is inspected, so that a future wording which denies
+    #: both halves in one sentence is not read as a file claim about the graph.
+    THE_FILE_THE_RULES_HALF_IS_READ_AT = ".beadloom/_graph/rules.yml"
+
+    #: The corners whose graph half denies authorship. Named rather than
+    #: filtered inline so the anti-vacuity case below can assert it is not empty.
+    THE_CORNERS_THAT_DENY_WRITING_THE_GRAPH = tuple(
+        corner for corner in _ATTRIBUTION if not corner[0]
+    )
+
+    def _the_graph_claim(self, sentence: str) -> str:
+        return sentence.replace(self.THE_FILE_THE_RULES_HALF_IS_READ_AT, "")
+
+    def test_there_are_corners_that_deny_writing_the_graph(self) -> None:
+        """Anti-vacuity: an empty selection would pass both cases below."""
+        assert self.THE_CORNERS_THAT_DENY_WRITING_THE_GRAPH == (
+            (False, True),
+            (False, False),
+        ), self.THE_CORNERS_THAT_DENY_WRITING_THE_GRAPH
+
+    def test_a_denial_the_node_key_selected_is_a_denial_about_a_node(self) -> None:
+        for corner in self.THE_CORNERS_THAT_DENY_WRITING_THE_GRAPH:
+            assert "node" in _ATTRIBUTION[corner], (corner, _ATTRIBUTION[corner])
+
+    def test_no_sentence_the_node_key_selected_claims_anything_about_a_file(self) -> None:
+        """The case that bites, and the one that was red when it was written.
+
+        Both `(False, True)` and `(False, False)` said `graph file(s)` about a
+        corner chosen by a node.
+        """
+        for corner in self.THE_CORNERS_THAT_DENY_WRITING_THE_GRAPH:
+            claim = self._the_graph_claim(_ATTRIBUTION[corner])
+            assert "file" not in claim, (corner, _ATTRIBUTION[corner])
+            assert ".yml" not in claim, (corner, _ATTRIBUTION[corner])
+
+    def test_the_printed_sentence_denies_only_what_the_tree_bears_out(
+        self, tmp_path: Path
+    ) -> None:
+        """The review's measurement, as an assertion, end to end.
+
+        The premise is measured here rather than assumed: the file the report
+        names beside the failing node IS rewritten by this run, so a sentence
+        denying that this command wrote that file is false about this tree. That
+        the failing node's own entry did not move is measured by
+        `test_the_run_annotates_the_file_without_touching_the_failing_node`
+        above, on the same fixture.
+        """
+        project = _a_tree_whose_annotated_node_is_not_the_failing_one(tmp_path)
+        path = project / ".beadloom" / "_graph" / THE_INHERITED_FILE
+        before = path.read_bytes()
+
+        output = _bootstrap(project).output
+
+        assert path.read_bytes() != before, (
+            "the premise: this run rewrote the file the report names, so a "
+            "denial about that file would be false about this tree"
+        )
+        printed = [sentence for sentence in _ATTRIBUTION.values() if sentence in output]
+        assert printed == [_ATTRIBUTION[False, True]], output
+        assert "file" not in self._the_graph_claim(printed[0]), output
+        assert "node" in printed[0], output
+
+
 #: An inherited `services.yml` — the one graph file `bootstrap_project` rewrites
 #: wholesale. Its two ref_ids are the ones the bootstrap computes for this
 #: fixture (`orders-web` from `package.json`, `src` from the source dir), so the

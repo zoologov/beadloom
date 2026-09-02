@@ -7,15 +7,15 @@
 
 ## Current Bead
 
-**Bead:** `beadloom-e8s4.25` — the reader policy as one axis, and the attribution corners after
-the swap
-**Goal:** cover `.24`. The reader population must be derived so a fifth reader fails on the day it
-is written; the unreadable-file case must be stated over every branch of `init`; and the two
-attribution corners must record what was MEASURED rather than what the bead predicted, since `.24`
-measured that they do not swap.
-**Done when:** each new assertion is demonstrated capable of failing against a tree without the
-fix it covers (or declared, with the reason), no cell `.19`/`.21`/`.22`/`.24` already cover is
-duplicated, and `beadloom ci` is rc 0.
+**Bead:** `beadloom-e8s4.27` — the attribution sentence says FILE while the fact behind it is a
+NODE
+**Goal:** make each attribution sentence say what the key that selects it actually asks. `.24`
+moved the graph half of the key from the FILE the failing node came from to the NODE and left both
+denials saying `graph file(s)`, so a claim that used to be true by construction became independent
+of what selects it — and the review of `.26` measured it false on the corner `.24` created.
+**Done when:** the two sentences and the acceptance step deny at the node grain, the assertions
+that bind them to their key were verified red first, the `graph-files` DOC states the detector
+`.25` shipped rather than the one `.24` shipped, and `beadloom ci` is rc 0.
 
 ## Progress
 
@@ -36,6 +36,7 @@ duplicated, and `beadloom ci` is rc 0.
 - [x] Wave 4g — `.20` review (sixth pass, closed, 3 majors + 1 minor)
 - [ ] Wave 4h — `.21` dev (the writing side) / `.22` test (the three as axes) / `.23` seventh review
 - [ ] Wave 4i — `.24` dev (`9e61988`) / `.25` test (the reader axis and the attribution instrument) / `.26` eighth review
+- [ ] Wave 4j — `.27` dev (the sentence at the grain of its key) / `.28` ninth review
 - [ ] Wave 5 — `.5` tech-writer (re-pointed a third time)
 - [ ] Gate green, PR opened
 
@@ -68,6 +69,8 @@ duplicated, and `beadloom ci` is rc 0.
 | `beadloom-e8s4.23` | ✓ done | seventh-pass review: 0 critical, 5 major. The three converted axes hold and the divergence moved off all three: every instrument this epic built ranges over one SYMBOL's callers, and nothing ranges over one entry point's STEPS. Owner decision — cycle 8 fixes only what this epic broke; majors 1 and 2 are re-planned onto `beadloom-6i5q` / BDL-UX #218. |
 | `beadloom-e8s4.24` | ✓ done | **Major 3:** `onboarding/graph_files.each_graph_file` holds the one skip policy — name, read, parse and mapping — and all four readers plus the new node sampler are converted; a derived test (a function that both globs `*.yml` and calls `yaml.safe_load`) fails on a fifth body. MEASURED and stated rather than claimed away: `init --bootstrap` on the review's own tree STILL ends in a `ParserError`, one frame later, from `reindex/indexing.read_declared_docs` — another domain, reachable before `.21`, so outside this cycle and pinned so it cannot read as closed. **Major 4:** implemented as `.23` decided (`GraphSample`, `_graph_nodes_now`, created-or-changed per ref_id) and MEASURED against what the decision predicted: the two pinned cases did NOT swap, because the annotation goes into the failing node's own entry. What the finer grain does close is the annotated-SIBLING case, `(True, True)` → `(False, True)`, pinned in a new class. **Major 5:** the signature line, plus line 31's `services.yml` in the same entry. **Minor:** annotations after the docstring. 13 new tests (11 unit + 2 scenarios), 7810 → 7823 passed, `beadloom ci` rc 0. |
 | `beadloom-e8s4.25` | ✓ done | audit first: item 1 was DELIVERED by `.24` and item 3's stated outcome is FALSE, so neither was rewritten. **Item 1's remainder:** the reader derivation is widened from `glob("*.yml")` + `yaml.safe_load` to LISTS a directory + PARSES YAML — five bodies that read `.beadloom/_graph/` passed the narrow shape untouched, each now a case, each verified red against it; the wide shape names the same one body on this tree, so nothing is exempted. **Item 2, as measured:** one table over `.19`'s 8 cells by 3 shapes of hand-edited graph file. Every branch that can meet the file still tracebacks — the residue is exactly two frames, `reindex/indexing.read_declared_docs` and `graph/loader.load_graph`, both outside `onboarding` — and `--yes` is green only because it declines to look, which the case asserts by message AND by the file's bytes. A THIRD shape found: `added: 2026-09-02` loads as a `date` and dies in `load_graph`. **Item 3:** the corners were NOT forced to swap; what `.24` left unasserted was the instrument's error direction, so a node this run REWROTE into failing (an inherited `services.yml`, #192's own shape on a re-init) is pinned at `(True, True)` and verified red against a created-only mutant. 38 new tests, 7823 → 7861 passed, `beadloom ci` rc 0. |
+| `beadloom-e8s4.26` | ✓ done | eighth-pass review: 0 critical, 2 major. Majors 3 and 5 and the annotation minor of `.23` are closed by measurement, and the reader consolidation is judged to hold BETTER than the writers' version because it derives over a SHAPE rather than over one symbol's callers. **Major 1:** the attribution sentences still say `file(s)` while the key now asks about a NODE, measured twice as false on the corner cycle 8 created — routed to `.27` with minor 1. **Major 2:** the open question answered NO and routed to `beadloom-0mb5` / BDL-UX #221 on the reviewer's own recommendation. Minor 2 recorded, not changed: the observable sentence would be false today. |
+| `beadloom-e8s4.27` | ✓ done | **Major 1:** the two denials are made at the grain their key is read at — `(False, True)` and `(False, False)` now say "did not write the node(s) ... they were already in `.beadloom/_graph/`", which is again true BY CONSTRUCTION, since that corner is selected by the failing node's entry being the one that was already there. The key comments and the acceptance step ("the command says the failing node was already there", two scenarios) moved with them. **Minor 1:** the `graph-files` DOC states `.25`'s detector (LISTS a directory and PARSES YAML, by any name) instead of `.24`'s. **Minor 2:** left alone, as instructed. 4 new tests, 3 verified red first; 7861 → 7865 passed, `beadloom ci` rc 0. Two findings REPORTED rather than widened into the commit: the headline halves make a claim about "the graph" that no tree can falsify, and the independent cross-check in `test_init_one_table_over_every_axis.py` still computes the corner at the FILE grain. |
 
 ## Notes
 

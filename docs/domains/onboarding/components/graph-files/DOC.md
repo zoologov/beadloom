@@ -84,7 +84,11 @@ planning decision rather than a fix.
 
 `tests/test_graph_files_are_read_under_one_policy.py` asks every reader the same two
 questions over the same tree — a file that does not parse, and a file that is not a
-mapping — and derives the reader population from the source: a function that both globs
-`*.yml` and calls `yaml.safe_load` is a graph-file reader, and this module is the only
-one under `onboarding/` or in `setup.py`. It also pins the residue above, so the case
-fails as soon as somebody closes it.
+mapping — and derives the reader population from the source: a function that both LISTS
+a directory and PARSES YAML, by any name the standard library or PyYAML offers for
+either, is a graph-file reader, and this module is the only one under `onboarding/` or
+in `setup.py`. Both halves were widened at BDL-067 `.25` after five bodies that read the
+directory were measured passing the narrower detector `.24` shipped, which asked for
+`glob` with the literal `"*.yml"` and for `yaml.safe_load` by name — the spelling
+`each_graph_file` happens to use rather than what makes a body a reader. It also pins
+the residue above, so the case fails as soon as somebody closes it.

@@ -903,13 +903,12 @@ def _this_run_wrote_a_graph_file(project_root: Path, graph_before: GraphSample) 
 
 
 #: The headline's two halves, each chosen by one fact about the tree rather than
-#: by the branch that is reporting. Keyed by "this run wrote it": the graph file
-#: the failing node came from, and `rules.yml`. Written as a mapping over the
-#: full product so that a case cannot be left out — the report used to carry two
-#: sentences chosen by one boolean, which said "the graph this command just
-#: wrote" about nodes from a file written by an earlier run (the review of
-#: BDL-067 `.16`, major 2, measured over `init --yes --mode import` followed by
-#: the wizard).
+#: by the branch that is reporting. Keyed by "this run wrote it": the failing
+#: node, and `rules.yml`. Written as a mapping over the full product so that a
+#: case cannot be left out — the report used to carry two sentences chosen by one
+#: boolean, which said "the graph this command just wrote" about nodes from a
+#: file written by an earlier run (the review of BDL-067 `.16`, major 2, measured
+#: over `init --yes --mode import` followed by the wizard).
 _GRAPH_HALF = {
     True: "the graph this command just wrote",
     False: "the graph already in .beadloom/_graph/",
@@ -919,11 +918,24 @@ _RULES_HALF = {
     False: "the rules already in .beadloom/_graph/rules.yml",
 }
 
-#: What follows the rule lines, keyed by `(this run wrote the graph file the
-#: failing node came from, this run wrote rules.yml)`. Only the corner where both
-#: are this run's is a contradiction Beadloom produced, and only that corner asks
-#: for a bug report: an adopter sent to file one about a writer that did not run
-#: pays for our attribution error.
+#: What follows the rule lines, keyed by `(this run wrote the failing node, this
+#: run wrote rules.yml)`. Only the corner where both are this run's is a
+#: contradiction Beadloom produced, and only that corner asks for a bug report:
+#: an adopter sent to file one about a writer that did not run pays for our
+#: attribution error.
+#:
+#: EACH SENTENCE CLAIMS THINGS AT THE GRAIN ITS OWN HALF IS READ AT, which is a
+#: property rather than a matter of wording. Until BDL-067 `.24` the graph half
+#: was read off the BYTES of the file the failing node came from, so a sentence
+#: about that file could not disagree with what selected it. `.24` moved the key
+#: to the node and left both denials saying `graph file(s)`, and the review of
+#: `.26` measured the consequence twice: on a tree whose inherited graph file this
+#: run rewrote — a sibling node gained a `docs:` field — while the failing node's
+#: own entry did not move, the report denied writing a file `git diff` shows
+#: modified. The graph half's denials therefore speak of NODES, which is again
+#: true by construction, since that corner is selected by the failing node's entry
+#: being the one that was already there. The rules half's denial is the only one
+#: that may name a file, because a file is the grain its own key is read at.
 _ATTRIBUTION = {
     (True, True): (
         "This is a defect in Beadloom's bootstrap rather than in your project "
@@ -934,14 +946,14 @@ _ATTRIBUTION = {
         "already there \u2014 so the rule(s) above are your project's."
     ),
     (False, True): (
-        "This command did not write the graph file(s) named beside the node(s) "
-        "above \u2014 they were already on disk \u2014 so the rule(s) this command "
-        "wrote are meeting a graph that predates them."
+        "This command did not write the node(s) named above \u2014 they were "
+        "already in .beadloom/_graph/ \u2014 so the rule(s) this command wrote are "
+        "meeting a graph that predates them."
     ),
     (False, False): (
-        "This command wrote neither the rule(s) above nor the graph file(s) they "
-        "name \u2014 both were already on disk \u2014 so nothing this run produced "
-        "is what fails."
+        "This command wrote neither the rule(s) above nor the node(s) they name "
+        "\u2014 both were already in .beadloom/_graph/ \u2014 so nothing this run "
+        "produced is what fails."
     ),
 }
 

@@ -770,9 +770,15 @@ A_SECOND_SOURCE_DIR = "orders"
 AN_EARLIER_RUNS_GRAPH_FILE = "imported.yml"
 THE_INHERITED_ORPHAN = "payments"
 
-#: What the report says when the failing node came out of a file the run found
-#: rather than wrote, and the path it names so the adopter can check it.
-THE_GRAPH_FILE_WAS_ALREADY_THERE = "did not write the graph file"
+#: What the report says when the failing node is one an earlier run wrote, and
+#: the path it names beside that node so the adopter can check it.
+#:
+#: The claim is about the NODE, not about the file it sits in: the corner is
+#: selected by the node's entry being the one that was already there, and BDL-067
+#: `.27` moved the sentence to that grain after the review of `.26` measured the
+#: file claim false on the second scenario below — this run rewrites
+#: `imported.yml` there, because the failing node's sibling gets annotated.
+THE_FAILING_NODE_WAS_ALREADY_THERE = "did not write the node"
 THE_INHERITED_GRAPH_PATH = ".beadloom/_graph/imported.yml"
 
 
@@ -846,16 +852,21 @@ def _given_an_inherited_graph_file(world: dict[str, Any]) -> None:
     )
 
 
-@then("the command says the graph file was already there")
-def _then_init_says_the_graph_file_predates_it(world: dict[str, Any]) -> None:
+@then("the command says the failing node was already there")
+def _then_init_says_the_failing_node_predates_it(world: dict[str, Any]) -> None:
     """The counterpart of "the rules file was already there", for the node.
 
     The report had the first and not the second, so a run that met an inherited
     graph said the opposite of the truth about it.
+
+    The step said "the graph file was already there" until BDL-067 `.27`, and on
+    the second scenario that used it the claim was false: this run rewrites
+    `imported.yml` to annotate the failing node's sibling. The node is what the
+    corner is selected by, so the node is what the sentence and this step assert.
     """
     result = world["init"]
     assert result.exit_code != 0, result.output
-    assert THE_GRAPH_FILE_WAS_ALREADY_THERE in result.output, result.output
+    assert THE_FAILING_NODE_WAS_ALREADY_THERE in result.output, result.output
     assert THE_INHERITED_GRAPH_PATH in result.output, result.output
     assert THE_INHERITED_ORPHAN in result.output, result.output
 

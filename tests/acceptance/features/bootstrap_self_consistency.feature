@@ -262,7 +262,7 @@ Feature: the bootstrap writes a graph that satisfies the rules it writes
     And a graph file an earlier run left behind holding a domain with no parent
     When beadloom init is run with the bootstrap flag
     Then the command does not report success
-    And the command says the graph file was already there
+    And the command says the failing node was already there
     And the command does not blame Beadloom's bootstrap
     And the command does not ask for a bug report
 
@@ -406,4 +406,4 @@ Feature: the bootstrap writes a graph that satisfies the rules it writes
     Then this run annotates the undocumented node and leaves the failing one alone
     And the command does not report success
     And the command does not ask for a bug report
-    And the command says the graph file was already there
+    And the command says the failing node was already there
