@@ -61,16 +61,38 @@ worse than the ignorance we have now.
 - **A check that cannot fail must not be added.** Each slice states, per check, the tree on
   which it goes red.
 
-### Affected Areas
+## Axes
 
-Discovered through `beadloom ctx`; every node named here resolves today.
+Derived, never authored. An epic is not a single `impact` target: its axes are the UNION of its
+slices' axes, and each slice's rows are derived when that slice begins. The rows below are S1's,
+derived on 2026-09-02 after `c7591a8`. S2–S6 add theirs at their own start, which is the same rule
+as beads being created per slice.
 
-- `review-brief`, `wave-plan` — the orchestration surface the flow reads.
-- `guard-hooks`, `ci-gate`, `sync-check`, `doc-quality`, `docs-audit`, `mutation-scope`,
-  `scenario-binding` — the checks.
-- `flow-config`, `flow-composer`, `role-composer`, `role-adapters`, `flow-manifest`,
-  `flow-suppression`, `agentic-flow-setup`, `config-check` — what composes into an adopter.
-- A new node for the impact derivation; kind decided in PLAN.
+> **Derived by:** `beadloom impact` over `onboarding/role_composer.py`, `doc_sync/axes_section.py`
+> and `services/commands/impact.py` — the three surfaces S1 changed
+> **Seed:** `none`, under the rule `reaches-an-effect-sink`, on all three. Every axis below the
+> seed is therefore unresolved and not empty — S1's surfaces are composition and rendering, and
+> none of them reaches a declared effect sink.
+> **Unresolved:** co-writers, on all three targets — no declared effect rule found a sink these
+> targets reach, so there is no commit point to ask who else writes through. Measured on
+> 2026-09-02 at `c7591a8`, macOS, `beadloom impact` in the foreground.
+
+| Axis | Node | Sites | In scope | Why |
+|------|------|-------|----------|-----|
+| co-writers | — | unresolved (no seed on any of the three targets) | no | Nothing can be taken into scope until a seed resolves, so the decision is `no` and not `n/a` — an undecided row is what the check reads as a derivation nobody acted on. When a later slice's target does reach a sink, this row is re-derived and decided then. It is recorded rather than dropped so the blank is not read as "nothing writes here" |
+| callers | `config-check` | 2, first `_composed_corpus` (`onboarding/config_sync.py:808`) | yes | `.5` had to make the composed role visible to it, which is BDL-UX #191's shape |
+| callers | `role-adapters` | 1, `generate_adapters` (`onboarding/role_adapters.py:107`) | yes | The fifth role file is written through it |
+| callers | `ci-gate` | 1, `_step_doc_spaces` (`application/gate.py:590`) | yes | The `## Axes` checks report through the Gate step |
+| callers | `flow-guards` | 3, first `_unanswerable` (`application/guards/invocation.py:473`) | yes | S4's slice is these guards; S1 already reaches them |
+| callers | `planning-report` | 1, `planning_report` (`application/planning_report.py:136`) | yes | Where the section is read back |
+| callers | `work-item-type` | 1, `_collect` (`doc_sync/work_item_type.py:121`) | yes | `.5` routes the type decision through it |
+| callers | `impact` | 3, first `_rows` (`application/impact/section.py:92`) | yes | The command rendering its own section |
+| callers | `cli-commands` | 1, `axes` (`services/commands/impact.py:88`) | yes | The command surface |
+
+**The scope decision.** Every caller row is in scope for this epic because each is a surface a
+later slice edits — S4 is the guards, S6 is the composer and `config-check`. Nothing is excluded,
+which is a decision and not an omission: an epic that declared a narrower scope than its own
+slices would make `.6` red on its second commit.
 
 ## Proposed Solution
 
